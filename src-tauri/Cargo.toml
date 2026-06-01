@@ -1,0 +1,38 @@
+[package]
+name = "voyavpn"
+description = "VoyaVPN desktop shell"
+default-run = "voyavpn"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lib]
+name = "voyavpn_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "voyavpn"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+specta.workspace = true
+specta-typescript.workspace = true
+tauri.workspace = true
+tauri-plugin-global-shortcut = "2.3.2"
+tauri-plugin-updater = "2.10.1"
+tauri-specta.workspace = true
+tracing.workspace = true
+voya-app.workspace = true
+voya-core.workspace = true
+voya-db.workspace = true
+voya-platform.workspace = true
+
+[lints]
+workspace = true

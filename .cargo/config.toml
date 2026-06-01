@@ -1,0 +1,2 @@
+[alias]
+workspace-metadata = "metadata --format-version 1 --no-deps"

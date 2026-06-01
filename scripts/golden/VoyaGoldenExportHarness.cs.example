@@ -1,0 +1,52 @@
+// Copy this file into a temporary copy of:
+//   /Users/afu/Dev/refs/v2rayN/v2rayN/ServiceLib.Tests/CoreConfig/Export/
+//
+// Do not add it directly to the read-only reference checkout. Set VOYA_GOLDEN_OUT
+// to a scratch directory, run the selected xUnit tests, then review and copy
+// canonicalized JSON into VoyaVPN/tests/golden.
+
+using ServiceLib.Common;
+using ServiceLib.Enums;
+using ServiceLib.Models;
+using ServiceLib.Services.CoreConfig;
+using Xunit;
+
+namespace ServiceLib.Tests.CoreConfig.Export;
+
+public sealed class VoyaGoldenExportHarness
+{
+    [Fact(Skip = "Manual export harness. Remove Skip only in a temporary reference copy.")]
+    public void ExportBasicXrayAndSingboxConfigs()
+    {
+        var outputRoot = Environment.GetEnvironmentVariable("VOYA_GOLDEN_OUT");
+        Assert.False(string.IsNullOrWhiteSpace(outputRoot));
+        Directory.CreateDirectory(outputRoot!);
+
+        ExportXray(Path.Combine(outputRoot!, "xray-basic.reference.json"));
+        ExportSingbox(Path.Combine(outputRoot!, "singbox-basic.reference.json"));
+    }
+
+    private static void ExportXray(string outputPath)
+    {
+        var config = CoreConfigTestFactory.CreateConfig(ECoreType.Xray);
+        CoreConfigTestFactory.BindAppManagerConfig(config);
+        var node = CoreConfigTestFactory.CreateVmessNode(ECoreType.Xray, "xray-basic", "xray-basic");
+        var context = CoreConfigTestFactory.CreateContext(config, node, ECoreType.Xray);
+
+        var result = new CoreConfigV2rayService(context).GenerateClientConfigContent();
+        Assert.True(result.Success, result.Msg);
+        File.WriteAllText(outputPath, JsonUtils.Serialize(JsonUtils.Deserialize<object>(result.Data!.ToString())));
+    }
+
+    private static void ExportSingbox(string outputPath)
+    {
+        var config = CoreConfigTestFactory.CreateConfig(ECoreType.sing_box);
+        CoreConfigTestFactory.BindAppManagerConfig(config);
+        var node = CoreConfigTestFactory.CreateSocksNode(ECoreType.sing_box, "singbox-basic", "singbox-basic");
+        var context = CoreConfigTestFactory.CreateContext(config, node, ECoreType.sing_box);
+
+        var result = new CoreConfigSingboxService(context).GenerateClientConfigContent();
+        Assert.True(result.Success, result.Msg);
+        File.WriteAllText(outputPath, JsonUtils.Serialize(JsonUtils.Deserialize<object>(result.Data!.ToString())));
+    }
+}

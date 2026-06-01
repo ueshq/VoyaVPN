@@ -1,0 +1,633 @@
+use std::{
+    collections::BTreeMap,
+    fs, io,
+    path::{Path, PathBuf},
+};
+
+use thiserror::Error;
+use voya_core::{
+    generate_singbox_config_json, generate_xray_config_json, AppConfig, ConfigType,
+    ContextBuildError, CoreConfigContext, CoreConfigContextBuilder, CoreGenEnv, CoreGenPlatform,
+    CoreType, DnsItem, FullConfigTemplateItem, InboundProtocol, ProfileItem, RoutingItem, SubItem,
+};
+use voya_db::{Database, DbError};
+use voya_platform::{
+    coreinfo::{
+        all_core_infos, discover_executable, get_core_info, CoreInfo, CoreInfoError, CoreLaunch,
+        TargetOs,
+    },
+    paths::{AppPaths, PathError},
+};
+
+use crate::supervisor::{
+    CoreProcessSpec, CoreSupervisor, SupervisorError, SupervisorSnapshot, SupervisorStartRequest,
+};
+use crate::updates::local_singbox_ruleset_paths;
+
+pub const MAIN_CONFIG_FILE_NAME: &str = "config.json";
+pub const PRE_CONFIG_FILE_NAME: &str = "configPre.json";
+const SUDO_SCRIPT_DIR_NAME: &str = "sudo";
+
+#[must_use]
+pub fn supported_core_infos() -> &'static [CoreInfo] {
+    all_core_infos()
+}
+
+#[must_use]
+pub fn core_launch_plan(
+    core_type: CoreType,
+    executable: impl Into<PathBuf>,
+    paths: &AppPaths,
+    config_file: impl AsRef<Path>,
+) -> Option<CoreLaunch> {
+    get_core_info(core_type)
+        .map(|core_info| core_info.resolve_launch(executable, paths, config_file))
+}
+
+#[derive(Clone)]
+pub struct RuntimeManager<'runtime> {
+    database: &'runtime Database,
+    paths: AppPaths,
+    supervisor: CoreSupervisor,
+    target_os: TargetOs,
+}
+
+impl<'runtime> RuntimeManager<'runtime> {
+    #[must_use]
+    pub fn new(database: &'runtime Database, paths: AppPaths, supervisor: CoreSupervisor) -> Self {
+        Self::with_target_os(database, paths, supervisor, TargetOs::current())
+    }
+
+    #[must_use]
+    pub fn with_target_os(
+        database: &'runtime Database,
+        paths: AppPaths,
+        supervisor: CoreSupervisor,
+        target_os: TargetOs,
+    ) -> Self {
+        Self {
+            database,
+            paths,
+            supervisor,
+            target_os,
+        }
+    }
+
+    pub async fn connect(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
+        self.paths.ensure_dirs()?;
+
+        let active_profile_id = config.index_id.trim();
+        if active_profile_id.is_empty() {
+            return Err(RuntimeError::MissingActiveProfileId);
+        }
+
+        let active_profile = self
+            .database
+            .profiles()
+            .get(active_profile_id)
+            .await?
+            .ok_or_else(|| RuntimeError::ActiveProfileNotFound(active_profile_id.to_string()))?;
+
+        let env =
+            RuntimeCoreGenEnv::load(self.database, &self.paths, config, self.target_os).await?;
+        let contexts = CoreConfigContextBuilder::new(&env).build_all(config, &active_profile);
+        if !contexts.success() {
+            let validation = contexts.combined_validator_result();
+            return Err(RuntimeError::Validation {
+                errors: validation.errors,
+                warnings: validation.warnings,
+            });
+        }
+
+        let main_config_path = write_runtime_config(
+            &self.paths,
+            MAIN_CONFIG_FILE_NAME,
+            &contexts.main_result.context,
+        )?;
+        let main_spec = self.process_spec(&contexts.main_result.context, MAIN_CONFIG_FILE_NAME)?;
+
+        let pre = if let Some(pre_result) = &contexts.pre_socks_result {
+            write_runtime_config(&self.paths, PRE_CONFIG_FILE_NAME, &pre_result.context)?;
+            Some(self.process_spec(&pre_result.context, PRE_CONFIG_FILE_NAME)?)
+        } else {
+            cleanup_config_file(&self.paths, PRE_CONFIG_FILE_NAME)?;
+            None
+        };
+
+        let request = SupervisorStartRequest {
+            active_profile_id: Some(active_profile.index_id.clone()),
+            main: main_spec,
+            pre,
+            tun_enabled: config.tun_mode_item.enable_tun,
+            sudo_script_dir: self.paths.temp_dir().join(SUDO_SCRIPT_DIR_NAME),
+            restart_on_crash: true,
+        };
+
+        match self.supervisor.start(request).await {
+            Ok(snapshot) => Ok(snapshot),
+            Err(error) => {
+                let _ = fs::remove_file(main_config_path);
+                let _ = cleanup_config_file(&self.paths, PRE_CONFIG_FILE_NAME);
+                Err(error.into())
+            }
+        }
+    }
+
+    pub async fn restart(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
+        self.connect(config).await
+    }
+
+    pub async fn disconnect(&self) -> Result<SupervisorSnapshot, RuntimeError> {
+        let snapshot = self.supervisor.stop().await?;
+        cleanup_runtime_state(&self.paths)?;
+
+        Ok(snapshot)
+    }
+
+    pub async fn status(&self) -> Result<SupervisorSnapshot, RuntimeError> {
+        self.supervisor.status().await.map_err(Into::into)
+    }
+
+    fn process_spec(
+        &self,
+        context: &CoreConfigContext,
+        config_file_name: &str,
+    ) -> Result<CoreProcessSpec, RuntimeError> {
+        let core_type = context.run_core_type;
+        let core_info = get_core_info(core_type).ok_or(RuntimeError::MissingCoreInfo(core_type))?;
+        let executable = discover_executable(&self.paths, core_info)?;
+        let launch = core_launch_plan(core_type, executable, &self.paths, config_file_name)
+            .ok_or(RuntimeError::MissingCoreInfo(core_type))?;
+
+        Ok(CoreProcessSpec::new(core_type, launch)
+            .with_display_log(context.node.display_log)
+            .with_may_need_sudo(true))
+    }
+}
+
+fn write_runtime_config(
+    paths: &AppPaths,
+    file_name: &str,
+    context: &CoreConfigContext,
+) -> Result<PathBuf, RuntimeError> {
+    let json = if context.run_core_type == CoreType::sing_box {
+        generate_singbox_config_json(context)
+    } else {
+        generate_xray_config_json(context)
+    };
+    let path = paths.bin_config_file(file_name);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| RuntimeError::CreateConfigDir {
+            path: parent.to_path_buf(),
+            source,
+        })?;
+    }
+    fs::write(&path, json).map_err(|source| RuntimeError::WriteConfig {
+        path: path.clone(),
+        source,
+    })?;
+
+    Ok(path)
+}
+
+fn cleanup_runtime_state(paths: &AppPaths) -> Result<(), RuntimeError> {
+    cleanup_config_file(paths, MAIN_CONFIG_FILE_NAME)?;
+    cleanup_config_file(paths, PRE_CONFIG_FILE_NAME)?;
+
+    Ok(())
+}
+
+fn cleanup_config_file(paths: &AppPaths, file_name: &str) -> Result<(), RuntimeError> {
+    let path = paths.bin_config_file(file_name);
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(RuntimeError::RemoveConfig { path, source }),
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum RuntimeError {
+    #[error("active profile id is empty")]
+    MissingActiveProfileId,
+    #[error("active profile {0} was not found")]
+    ActiveProfileNotFound(String),
+    #[error("runtime validation failed: {errors:?}; warnings: {warnings:?}")]
+    Validation {
+        errors: Vec<String>,
+        warnings: Vec<String>,
+    },
+    #[error("no core info entry for {0:?}")]
+    MissingCoreInfo(CoreType),
+    #[error("failed to create runtime config directory {path}: {source}")]
+    CreateConfigDir { path: PathBuf, source: io::Error },
+    #[error("failed to write runtime config {path}: {source}")]
+    WriteConfig { path: PathBuf, source: io::Error },
+    #[error("failed to remove runtime config {path}: {source}")]
+    RemoveConfig { path: PathBuf, source: io::Error },
+    #[error(transparent)]
+    ContextBuild(#[from] ContextBuildError),
+    #[error(transparent)]
+    CoreInfo(#[from] CoreInfoError),
+    #[error(transparent)]
+    Database(#[from] DbError),
+    #[error(transparent)]
+    Path(#[from] PathError),
+    #[error(transparent)]
+    Supervisor(#[from] SupervisorError),
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeCoreGenEnv {
+    core_type_items: Vec<(ConfigType, CoreType)>,
+    local_socks_port: i32,
+    platform: CoreGenPlatform,
+    profiles: Vec<ProfileItem>,
+    routings: Vec<RoutingItem>,
+    dns_items: Vec<DnsItem>,
+    subs: Vec<SubItem>,
+    singbox_ruleset_paths: BTreeMap<String, String>,
+}
+
+impl RuntimeCoreGenEnv {
+    async fn load(
+        database: &Database,
+        paths: &AppPaths,
+        config: &AppConfig,
+        target_os: TargetOs,
+    ) -> Result<Self, DbError> {
+        Ok(Self {
+            core_type_items: config
+                .core_type_item
+                .iter()
+                .map(|item| (item.config_type, item.core_type))
+                .collect(),
+            local_socks_port: config
+                .inbound
+                .first()
+                .map_or(voya_core::DEFAULT_LOCAL_PORT, |inbound| inbound.local_port),
+            platform: core_gen_platform(target_os),
+            profiles: database.profiles().list().await?,
+            routings: database.routings().list().await?,
+            dns_items: database.dns().list().await?,
+            subs: database.subscriptions().list().await?,
+            singbox_ruleset_paths: local_singbox_ruleset_paths(paths),
+        })
+    }
+}
+
+impl CoreGenEnv for RuntimeCoreGenEnv {
+    fn platform(&self) -> CoreGenPlatform {
+        self.platform
+    }
+
+    fn get_core_type(&self, profile: &ProfileItem, config_type: ConfigType) -> CoreType {
+        profile
+            .core_type
+            .or_else(|| {
+                self.core_type_items
+                    .iter()
+                    .find_map(|(candidate, core_type)| {
+                        (*candidate == config_type).then_some(*core_type)
+                    })
+            })
+            .unwrap_or_else(|| default_core_type(config_type))
+    }
+
+    fn get_profile_by_index_id(&self, index_id: &str) -> Option<ProfileItem> {
+        self.profiles
+            .iter()
+            .find(|profile| profile.index_id == index_id)
+            .cloned()
+    }
+
+    fn get_profile_by_remarks(&self, remarks: &str) -> Option<ProfileItem> {
+        self.profiles
+            .iter()
+            .find(|profile| profile.remarks == remarks)
+            .cloned()
+    }
+
+    fn get_profile_items_ordered_by_index_ids(&self, index_ids: &[String]) -> Vec<ProfileItem> {
+        index_ids
+            .iter()
+            .filter_map(|index_id| self.get_profile_by_index_id(index_id))
+            .collect()
+    }
+
+    fn get_profile_items_by_subid(&self, subid: &str) -> Vec<ProfileItem> {
+        self.profiles
+            .iter()
+            .filter(|profile| profile.subid == subid)
+            .cloned()
+            .collect()
+    }
+
+    fn get_sub_item(&self, subid: &str) -> Option<SubItem> {
+        self.subs.iter().find(|sub| sub.id == subid).cloned()
+    }
+
+    fn get_full_config_template_item(
+        &self,
+        _core_type: CoreType,
+    ) -> Option<FullConfigTemplateItem> {
+        None
+    }
+
+    fn get_dns_item(&self, core_type: CoreType) -> Option<DnsItem> {
+        self.dns_items
+            .iter()
+            .find(|item| item.core_type == core_type)
+            .cloned()
+    }
+
+    fn get_default_routing(&self, config: &AppConfig) -> Option<RoutingItem> {
+        self.routings
+            .iter()
+            .find(|routing| {
+                routing.is_active || routing.id == config.routing_basic_item.routing_index_id
+            })
+            .or_else(|| self.routings.first())
+            .cloned()
+    }
+
+    fn get_local_port(&self, protocol: InboundProtocol) -> i32 {
+        match protocol {
+            InboundProtocol::socks => self.local_socks_port,
+            _ => self.local_socks_port + protocol.as_i32(),
+        }
+    }
+
+    fn get_singbox_ruleset_paths(&self) -> BTreeMap<String, String> {
+        self.singbox_ruleset_paths.clone()
+    }
+
+    fn next_virtual_chain_id(&self, node: &ProfileItem, child_index_ids: &[String]) -> String {
+        format!("inner-{}-{}", node.index_id, child_index_ids.join("-"))
+    }
+}
+
+const fn core_gen_platform(target_os: TargetOs) -> CoreGenPlatform {
+    match target_os {
+        TargetOs::Windows => CoreGenPlatform::Windows,
+        TargetOs::Macos => CoreGenPlatform::MacOS,
+        TargetOs::Linux | TargetOs::Other => CoreGenPlatform::Linux,
+    }
+}
+
+const fn default_core_type(config_type: ConfigType) -> CoreType {
+    match config_type {
+        ConfigType::TUIC | ConfigType::Anytls | ConfigType::Naive => CoreType::sing_box,
+        _ => CoreType::Xray,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        sync::{Arc, Mutex},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use voya_core::{CoreType, DnsItem, RoutingItem, RuleType, RulesItem};
+    use voya_db::Database;
+    use voya_platform::{
+        coreinfo::{
+            core_type_dir_name, MIERU_CONFIG_ENV, XRAY_LOCAL_ASSET_ENV, XRAY_LOCAL_CERT_ENV,
+        },
+        paths::{AppPaths, StorageMode},
+        process::{
+            ProcessError, ProcessHandle, ProcessOutput, ProcessRole, ProcessRunner, ProcessSpawn,
+        },
+    };
+
+    use super::*;
+    use crate::supervisor::SupervisorDeps;
+
+    #[test]
+    fn coreinfo_app_layer_exposes_full_platform_table() {
+        let infos = supported_core_infos();
+
+        assert_eq!(infos.len(), 15);
+        assert!(infos.iter().any(|info| info.core_type == CoreType::Xray));
+        assert!(infos
+            .iter()
+            .any(|info| info.core_type == CoreType::sing_box));
+        assert!(infos.iter().any(|info| info.core_type == CoreType::v2rayN));
+    }
+
+    #[test]
+    fn coreinfo_app_layer_resolves_launch_command_and_env() {
+        let paths = AppPaths::new("/tmp/VoyaVPN", StorageMode::Portable);
+        let launch = core_launch_plan(
+            CoreType::Xray,
+            "/tmp/VoyaVPN/bin/xray/xray",
+            &paths,
+            "config.json",
+        )
+        .expect("xray launch plan");
+
+        assert_eq!(launch.arguments, "run -c config.json");
+        assert_eq!(launch.working_dir, paths.bin_config_dir());
+        assert_eq!(
+            launch.environment.get(XRAY_LOCAL_ASSET_ENV),
+            Some(&"/tmp/VoyaVPN/bin".to_string())
+        );
+        assert_eq!(
+            launch.environment.get(XRAY_LOCAL_CERT_ENV),
+            Some(&"/tmp/VoyaVPN/bin".to_string())
+        );
+
+        let mieru = core_launch_plan(
+            CoreType::mieru,
+            "/tmp/VoyaVPN/bin/mieru/mieru",
+            &paths,
+            "config.json",
+        )
+        .expect("mieru launch plan");
+        assert_eq!(mieru.arguments, "run");
+        assert_eq!(
+            mieru.environment.get(MIERU_CONFIG_ENV),
+            Some(&"config.json".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn runtime_dns_context_env_loads_persisted_dns_items() {
+        let database = Database::connect_in_memory().await.unwrap();
+        let item = DnsItem {
+            id: "dns-xray".to_string(),
+            remarks: "Xray".to_string(),
+            enabled: true,
+            core_type: CoreType::Xray,
+            normal_dns: Some(r#"{"servers":["1.1.1.1"]}"#.to_string()),
+            ..DnsItem::default()
+        };
+        database.dns().upsert(&item).await.unwrap();
+
+        let paths = temp_paths();
+        let env =
+            RuntimeCoreGenEnv::load(&database, &paths, &AppConfig::default(), TargetOs::Linux)
+                .await
+                .unwrap();
+
+        assert_eq!(env.get_dns_item(CoreType::Xray), Some(item));
+    }
+
+    #[derive(Clone, Default)]
+    struct RecordingRunner {
+        spawns: Arc<Mutex<Vec<ProcessSpawn>>>,
+        stops: Arc<Mutex<Vec<u32>>>,
+    }
+
+    impl ProcessRunner for RecordingRunner {
+        fn spawn(&self, request: ProcessSpawn) -> Result<ProcessHandle, ProcessError> {
+            self.spawns.lock().expect("spawns").push(request);
+            Ok(ProcessHandle::new(10, ProcessRole::Main))
+        }
+
+        fn run_oneshot(&self, _request: ProcessSpawn) -> Result<ProcessOutput, ProcessError> {
+            Ok(ProcessOutput {
+                status_code: Some(0),
+                stdout: String::new(),
+                stderr: String::new(),
+            })
+        }
+
+        fn stop(&self, handle: &ProcessHandle) -> Result<(), ProcessError> {
+            self.stops.lock().expect("stops").push(handle.id());
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn runtime_connect_writes_generated_config_and_starts_supervisor_path() {
+        let database = Database::connect_in_memory().await.unwrap();
+        let paths = temp_paths();
+        paths.ensure_dirs().unwrap();
+        write_fake_core_executable(&paths, CoreType::Xray);
+        let runner = RecordingRunner::default();
+        let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
+            Arc::new(runner.clone()),
+            Arc::new(voya_platform::elevation::SudoPasswordStore::new()),
+        ));
+        let manager =
+            RuntimeManager::with_target_os(&database, paths.clone(), supervisor, TargetOs::Linux);
+        let mut config = AppConfig {
+            index_id: "active".to_string(),
+            ..AppConfig::default()
+        };
+        let profile = ProfileItem {
+            index_id: "active".to_string(),
+            config_type: ConfigType::VLESS,
+            core_type: Some(CoreType::Xray),
+            remarks: "Runtime".to_string(),
+            address: "example.test".to_string(),
+            port: 443,
+            password: "00000000-0000-0000-0000-000000000000".to_string(),
+            network: "tcp".to_string(),
+            ..ProfileItem::default()
+        };
+        database.profiles().upsert(&profile).await.unwrap();
+
+        let connected = manager.connect(&config).await.unwrap();
+
+        assert_eq!(connected.active_profile_id.as_deref(), Some("active"));
+        assert!(paths.bin_config_file(MAIN_CONFIG_FILE_NAME).exists());
+        assert_eq!(runner.spawns.lock().expect("spawns").len(), 1);
+        assert_eq!(
+            runner.spawns.lock().expect("spawns")[0].arguments,
+            ["run", "-c", MAIN_CONFIG_FILE_NAME]
+        );
+
+        let disconnected = manager.disconnect().await.unwrap();
+
+        assert_eq!(
+            disconnected.state,
+            crate::supervisor::SupervisorConnectionState::Disconnected
+        );
+        assert!(!paths.bin_config_file(MAIN_CONFIG_FILE_NAME).exists());
+        assert_eq!(runner.stops.lock().expect("stops").as_slice(), [10]);
+        config.index_id.clear();
+    }
+
+    #[tokio::test]
+    async fn runtime_connect_uses_active_routing_rules_from_database() {
+        let database = Database::connect_in_memory().await.unwrap();
+        let paths = temp_paths();
+        paths.ensure_dirs().unwrap();
+        write_fake_core_executable(&paths, CoreType::Xray);
+        let runner = RecordingRunner::default();
+        let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
+            Arc::new(runner),
+            Arc::new(voya_platform::elevation::SudoPasswordStore::new()),
+        ));
+        let manager =
+            RuntimeManager::with_target_os(&database, paths.clone(), supervisor, TargetOs::Linux);
+        let config = AppConfig {
+            index_id: "active".to_string(),
+            ..AppConfig::default()
+        };
+        let profile = ProfileItem {
+            index_id: "active".to_string(),
+            config_type: ConfigType::VLESS,
+            core_type: Some(CoreType::Xray),
+            remarks: "Runtime".to_string(),
+            address: "example.test".to_string(),
+            port: 443,
+            password: "00000000-0000-0000-0000-000000000000".to_string(),
+            network: "tcp".to_string(),
+            ..ProfileItem::default()
+        };
+        let routing = RoutingItem {
+            id: "routing-active".to_string(),
+            remarks: "Active routing".to_string(),
+            is_active: true,
+            rule_set: vec![RulesItem {
+                id: "rule-direct".to_string(),
+                outbound_tag: Some(voya_core::DIRECT_TAG.to_string()),
+                domain: Some(vec!["full:direct.example.com".to_string()]),
+                rule_type: Some(RuleType::Routing),
+                ..RulesItem::default()
+            }],
+            ..RoutingItem::default()
+        };
+        database.profiles().upsert(&profile).await.unwrap();
+        database.routings().upsert(&routing).await.unwrap();
+
+        manager.connect(&config).await.unwrap();
+
+        let generated = fs::read_to_string(paths.bin_config_file(MAIN_CONFIG_FILE_NAME)).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&generated).unwrap();
+        let rules = json["routing"]["rules"].as_array().unwrap();
+        assert!(rules.iter().any(|rule| {
+            rule["outboundTag"] == "direct"
+                && rule["domain"].as_array().is_some_and(|domains| {
+                    domains
+                        .iter()
+                        .any(|domain| domain == "full:direct.example.com")
+                })
+        }));
+    }
+
+    fn temp_paths() -> AppPaths {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        AppPaths::new(
+            std::env::temp_dir()
+                .join("voyavpn-runtime-tests")
+                .join(format!("{}-{nanos}", std::process::id())),
+            StorageMode::Portable,
+        )
+    }
+
+    fn write_fake_core_executable(paths: &AppPaths, core_type: CoreType) {
+        let core_info = get_core_info(core_type).expect("core info");
+        let executable_name = core_info.executable_names()[0];
+        let executable = paths.core_bin_file(core_type_dir_name(core_type), executable_name);
+        fs::create_dir_all(executable.parent().expect("core dir")).unwrap();
+        fs::write(executable, b"fake").unwrap();
+    }
+}

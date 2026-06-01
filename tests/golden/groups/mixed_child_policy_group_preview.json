@@ -1,0 +1,101 @@
+{
+  "singboxRoutes": [
+    {
+      "detour": null,
+      "dialerProxy": null,
+      "downloadDialerProxy": null,
+      "kind": "selector",
+      "outbounds": [
+        "proxy-auto",
+        "proxy-1-Leaf A",
+        "proxy-2-Nested Chain"
+      ],
+      "tag": "proxy"
+    },
+    {
+      "detour": null,
+      "dialerProxy": null,
+      "downloadDialerProxy": null,
+      "kind": "urltest",
+      "outbounds": [
+        "proxy-1-Leaf A",
+        "proxy-2-Nested Chain"
+      ],
+      "tag": "proxy-auto"
+    },
+    {
+      "detour": null,
+      "dialerProxy": null,
+      "downloadDialerProxy": null,
+      "kind": "vless",
+      "outbounds": [],
+      "tag": "proxy-1-Leaf A"
+    },
+    {
+      "detour": "chain-proxy-2-Nested Chain-1-Leaf B",
+      "dialerProxy": null,
+      "downloadDialerProxy": null,
+      "kind": "vless",
+      "outbounds": [],
+      "tag": "proxy-2-Nested Chain"
+    },
+    {
+      "detour": null,
+      "dialerProxy": null,
+      "downloadDialerProxy": null,
+      "kind": "vless",
+      "outbounds": [],
+      "tag": "chain-proxy-2-Nested Chain-1-Leaf B"
+    }
+  ],
+  "validation": {
+    "childIndexIds": [
+      "leaf-a",
+      "chain"
+    ],
+    "errors": [],
+    "normalizedChildItems": "leaf-a,chain",
+    "valid": true,
+    "warnings": []
+  },
+  "xrayBalancers": [
+    {
+      "fallbackTag": null,
+      "selectors": [
+        "proxy"
+      ],
+      "strategy": "leastPing",
+      "tag": "proxy-balancer"
+    }
+  ],
+  "xrayBurstObservatorySelectors": [],
+  "xrayObservatorySelectors": [
+    "proxy"
+  ],
+  "xrayRoutes": [
+    {
+      "detour": null,
+      "dialerProxy": null,
+      "downloadDialerProxy": null,
+      "kind": "vless",
+      "outbounds": [],
+      "tag": "proxy-1-Leaf A"
+    },
+    {
+      "detour": null,
+      "dialerProxy": "chain-proxy-2-Nested Chain-1-Leaf B",
+      "downloadDialerProxy": null,
+      "kind": "vless",
+      "outbounds": [],
+      "tag": "proxy-2-Nested Chain"
+    },
+    {
+      "detour": null,
+      "dialerProxy": null,
+      "downloadDialerProxy": null,
+      "kind": "vless",
+      "outbounds": [],
+      "tag": "chain-proxy-2-Nested Chain-1-Leaf B"
+    }
+  ]
+}

@@ -1,0 +1,682 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  Database,
+  FilePlus2,
+  FolderInput,
+  Globe2,
+  HelpCircle,
+  Languages,
+  Monitor,
+  Moon,
+  Network,
+  Palette,
+  Plug,
+  QrCode,
+  RefreshCw,
+  Route,
+  ScrollText,
+  Settings,
+  Shield,
+  Sun,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
+import { ModalHost } from "@/components/app-shell/modal-host";
+import { StatusBar } from "@/components/app-shell/status-bar";
+import { Toaster } from "@/components/app-shell/toaster";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Menubar,
+  MenubarContent,
+  MenubarItem,
+  MenubarMenu,
+  MenubarRadioGroup,
+  MenubarRadioItem,
+  MenubarSeparator,
+  MenubarSub,
+  MenubarSubContent,
+  MenubarSubTrigger,
+  MenubarTrigger,
+} from "@/components/ui/menubar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { applyDocumentLocale } from "@/i18n";
+import { useI18n } from "@/i18n/use-i18n";
+import { ProfilesScreen } from "@/features/profiles";
+import { RoutingScreen } from "@/features/routing";
+import { DnsScreen } from "@/features/dns";
+import { ClashConnectionsScreen, ClashProxiesScreen } from "@/features/clash";
+import { LogsScreen } from "@/features/logs";
+import { applyRegionalPreset, loadAppConfig, saveAppConfig } from "@/ipc";
+import type { AppConfig_Deserialize, PresetType } from "@/ipc/bindings";
+import {
+  accentToConfig,
+  type Accent,
+  fontFamilyToCss,
+  resolveThemeMode,
+  themeModeToConfig,
+  type ThemeMode,
+  usePreferencesStore,
+} from "@/stores/preferences-store";
+import { type ShellTab, useShellStore } from "@/stores/shell-store";
+import { useModalStore } from "@/stores/modal-store";
+import { useToastStore } from "@/stores/toast-store";
+
+type ShellTabConfig = {
+  emptyKey: string;
+  icon: LucideIcon;
+  primaryActionKey?: string;
+  secondaryActionKey?: string;
+  titleKey: string;
+  value: ShellTab;
+};
+
+const shellTabs: ShellTabConfig[] = [
+  {
+    emptyKey: "panes.profiles.empty",
+    icon: Shield,
+    primaryActionKey: "actions.addProfile",
+    secondaryActionKey: "actions.import",
+    titleKey: "tabs.profiles",
+    value: "profiles",
+  },
+  {
+    emptyKey: "panes.routing.empty",
+    icon: Route,
+    primaryActionKey: "actions.refresh",
+    titleKey: "tabs.routing",
+    value: "routing",
+  },
+  {
+    emptyKey: "panes.dns.empty",
+    icon: Database,
+    primaryActionKey: "actions.refresh",
+    titleKey: "tabs.dns",
+    value: "dns",
+  },
+  {
+    emptyKey: "panes.clashProxies.empty",
+    icon: Network,
+    primaryActionKey: "actions.refresh",
+    titleKey: "tabs.clashProxies",
+    value: "clash-proxies",
+  },
+  {
+    emptyKey: "panes.clashConnections.empty",
+    icon: Plug,
+    primaryActionKey: "actions.refresh",
+    secondaryActionKey: "actions.clear",
+    titleKey: "tabs.clashConnections",
+    value: "clash-connections",
+  },
+  {
+    emptyKey: "panes.logs.empty",
+    icon: ScrollText,
+    primaryActionKey: "actions.pause",
+    secondaryActionKey: "actions.clear",
+    titleKey: "tabs.logs",
+    value: "logs",
+  },
+];
+
+const themeMenuOptions: Array<{ icon: LucideIcon; labelKey: string; value: ThemeMode }> = [
+  { icon: Monitor, labelKey: "menu.themeSystem", value: "system" },
+  { icon: Sun, labelKey: "menu.themeLight", value: "light" },
+  { icon: Moon, labelKey: "menu.themeDark", value: "dark" },
+];
+
+const accentMenuOptions: Array<{ labelKey: string; value: Accent }> = [
+  { labelKey: "menu.accentTeal", value: "teal" },
+  { labelKey: "menu.accentBlue", value: "blue" },
+  { labelKey: "menu.accentRose", value: "rose" },
+];
+
+type RegionalPresetOption = {
+  descriptionKey: string;
+  labelKey: string;
+  value: PresetType;
+};
+
+const regionalPresetOptions: RegionalPresetOption[] = [
+  {
+    descriptionKey: "modal.regionalPresetDefaultDescription",
+    labelKey: "menu.regionalPresetDefault",
+    value: 0,
+  },
+  {
+    descriptionKey: "modal.regionalPresetRussiaDescription",
+    labelKey: "menu.regionalPresetRussia",
+    value: 1,
+  },
+  {
+    descriptionKey: "modal.regionalPresetIranDescription",
+    labelKey: "menu.regionalPresetIran",
+    value: 2,
+  },
+];
+
+export function AppShell() {
+  const queryClient = useQueryClient();
+  const { direction, language, localeOptions, setLocale, t } = useI18n();
+  const accent = usePreferencesStore((state) => state.accent);
+  const fontFamily = usePreferencesStore((state) => state.fontFamily);
+  const fontSize = usePreferencesStore((state) => state.fontSize);
+  const activeTab = useShellStore((state) => state.activeTab);
+  const openModal = useModalStore((state) => state.openModal);
+  const pushToast = useToastStore((state) => state.pushToast);
+  const setAccent = usePreferencesStore((state) => state.setAccent);
+  const setActiveTab = useShellStore((state) => state.setActiveTab);
+  const setThemeMode = usePreferencesStore((state) => state.setThemeMode);
+  const themeMode = usePreferencesStore((state) => state.themeMode);
+  const [pendingPreset, setPendingPreset] = useState<RegionalPresetOption | null>(null);
+
+  usePersistedPreferences(language);
+  useThemeEffects(themeMode, accent, fontFamily, fontSize);
+
+  useEffect(() => {
+    applyDocumentLocale(language);
+  }, [language]);
+
+  async function handleRegionalPresetApplied(fallbackCustomDnsEnabled: boolean) {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["app-config"] }),
+      queryClient.invalidateQueries({ queryKey: ["dns"] }),
+      queryClient.invalidateQueries({ queryKey: ["routings"] }),
+    ]);
+    pushToast({
+      description: fallbackCustomDnsEnabled
+        ? t("modal.regionalPresetAppliedFallback")
+        : t("modal.regionalPresetAppliedDescription"),
+      title: t("modal.regionalPresetApplied"),
+    });
+  }
+
+  return (
+    <main className="min-h-screen bg-background text-foreground" dir={direction}>
+      <div className="flex h-screen min-h-[34rem] flex-col overflow-hidden">
+        <header className="shrink-0 border-b bg-card">
+          <div className="flex h-14 items-center gap-3 px-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
+                <Shield className="size-4" aria-hidden="true" />
+              </div>
+              <h1 className="truncate text-sm font-semibold leading-none">{t("app.name")}</h1>
+            </div>
+
+            <Menubar className="ms-2 hidden lg:flex">
+              <MenubarMenu>
+                <MenubarTrigger>{t("menu.file")}</MenubarTrigger>
+                <MenubarContent>
+                  <MenubarItem disabled>
+                    <FilePlus2 className="size-4" aria-hidden="true" />
+                    {t("menu.newProfile")}
+                  </MenubarItem>
+                  <MenubarItem disabled>
+                    <FolderInput className="size-4" aria-hidden="true" />
+                    {t("menu.import")}
+                  </MenubarItem>
+                  <MenubarSeparator />
+                  <MenubarItem disabled>{t("menu.quit")}</MenubarItem>
+                </MenubarContent>
+              </MenubarMenu>
+
+              <MenubarMenu>
+                <MenubarTrigger>{t("menu.view")}</MenubarTrigger>
+                <MenubarContent>
+                  <MenubarSub>
+                    <MenubarSubTrigger>
+                      <Languages className="size-4" aria-hidden="true" />
+                      {t("menu.language")}
+                    </MenubarSubTrigger>
+                    <MenubarSubContent>
+                      <MenubarRadioGroup
+                        onValueChange={(value) => void setLocale(value as typeof language)}
+                        value={language}
+                      >
+                        {localeOptions.map((locale) => (
+                          <MenubarRadioItem key={locale.code} value={locale.code}>
+                            {locale.label}
+                          </MenubarRadioItem>
+                        ))}
+                      </MenubarRadioGroup>
+                    </MenubarSubContent>
+                  </MenubarSub>
+                  <MenubarSub>
+                    <MenubarSubTrigger>
+                      <Monitor className="size-4" aria-hidden="true" />
+                      {t("menu.theme")}
+                    </MenubarSubTrigger>
+                    <MenubarSubContent>
+                      <MenubarRadioGroup
+                        onValueChange={(value) => setThemeMode(value as ThemeMode)}
+                        value={themeMode}
+                      >
+                        {themeMenuOptions.map((option) => {
+                          const Icon = option.icon;
+
+                          return (
+                            <MenubarRadioItem key={option.value} value={option.value}>
+                              <Icon className="size-4" aria-hidden="true" />
+                              {t(option.labelKey)}
+                            </MenubarRadioItem>
+                          );
+                        })}
+                      </MenubarRadioGroup>
+                    </MenubarSubContent>
+                  </MenubarSub>
+                  <MenubarSub>
+                    <MenubarSubTrigger>
+                      <Palette className="size-4" aria-hidden="true" />
+                      {t("menu.accent")}
+                    </MenubarSubTrigger>
+                    <MenubarSubContent>
+                      <MenubarRadioGroup onValueChange={(value) => setAccent(value as Accent)} value={accent}>
+                        {accentMenuOptions.map((option) => (
+                          <MenubarRadioItem key={option.value} value={option.value}>
+                            {t(option.labelKey)}
+                          </MenubarRadioItem>
+                        ))}
+                      </MenubarRadioGroup>
+                    </MenubarSubContent>
+                  </MenubarSub>
+                </MenubarContent>
+              </MenubarMenu>
+
+              <MenubarMenu>
+                <MenubarTrigger>{t("menu.tools")}</MenubarTrigger>
+                <MenubarContent>
+                  <MenubarItem onSelect={() => setActiveTab("routing")}>
+                    <Route className="size-4" aria-hidden="true" />
+                    {t("menu.routing")}
+                  </MenubarItem>
+                  <MenubarItem onSelect={() => setActiveTab("dns")}>
+                    <Database className="size-4" aria-hidden="true" />
+                    {t("menu.dns")}
+                  </MenubarItem>
+                  <MenubarSub>
+                    <MenubarSubTrigger>
+                      <Globe2 className="size-4" aria-hidden="true" />
+                      {t("menu.regionalPresets")}
+                    </MenubarSubTrigger>
+                    <MenubarSubContent>
+                      {regionalPresetOptions.map((option) => (
+                        <MenubarItem key={option.value} onSelect={() => setPendingPreset(option)}>
+                          {t(option.labelKey)}
+                        </MenubarItem>
+                      ))}
+                    </MenubarSubContent>
+                  </MenubarSub>
+                  <MenubarItem disabled>{t("menu.systemProxy")}</MenubarItem>
+                  <MenubarItem disabled>{t("menu.tun")}</MenubarItem>
+                  <MenubarItem disabled>{t("menu.clash")}</MenubarItem>
+                  <MenubarItem onSelect={() => openModal("backup")}>
+                    <Database className="size-4" aria-hidden="true" />
+                    {t("menu.backup")}
+                  </MenubarItem>
+                  <MenubarItem onSelect={() => openModal("updates")}>
+                    <RefreshCw className="size-4" aria-hidden="true" />
+                    {t("menu.checkUpdates")}
+                  </MenubarItem>
+                  <MenubarItem onSelect={() => openModal("qr")}>
+                    <QrCode className="size-4" aria-hidden="true" />
+                    {t("menu.qr")}
+                  </MenubarItem>
+                </MenubarContent>
+              </MenubarMenu>
+
+              <MenubarMenu>
+                <MenubarTrigger>{t("menu.help")}</MenubarTrigger>
+                <MenubarContent>
+                  <MenubarItem onSelect={() => openModal("about")}>
+                    <HelpCircle className="size-4" aria-hidden="true" />
+                    {t("menu.about")}
+                  </MenubarItem>
+                </MenubarContent>
+              </MenubarMenu>
+            </Menubar>
+
+            <div className="ms-auto flex min-w-0 items-center gap-2">
+              <div className="hidden rounded-md border bg-background p-0.5 md:flex" aria-label={t("menu.language")}>
+                {localeOptions.map((locale) => (
+                  <Button
+                    key={locale.code}
+                    aria-pressed={language === locale.code}
+                    className="h-7 px-2 text-xs"
+                    onClick={() => void setLocale(locale.code)}
+                    type="button"
+                    variant={language === locale.code ? "secondary" : "ghost"}
+                  >
+                    {locale.label}
+                  </Button>
+                ))}
+              </div>
+              <Button
+                aria-label={t("actions.settings")}
+                className="gap-2"
+                onClick={() => openModal("settings")}
+                size="sm"
+                variant="outline"
+              >
+                <Settings className="size-4" aria-hidden="true" />
+                <span className="hidden sm:inline">{t("actions.settings")}</span>
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        <Tabs
+          className="flex min-h-0 flex-1 flex-col"
+          onValueChange={(value) => setActiveTab(value as ShellTab)}
+          value={activeTab}
+        >
+          <div className="shrink-0 overflow-x-auto border-b bg-background px-4">
+            <TabsList aria-label={t("tabs.aria")} className="h-12 min-w-max">
+              {shellTabs.map((tab) => {
+                const Icon = tab.icon;
+
+                return (
+                  <TabsTrigger key={tab.value} value={tab.value}>
+                    <Icon className="size-4" aria-hidden="true" />
+                    <span>{t(tab.titleKey)}</span>
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </div>
+
+          <div className="min-h-0 flex-1 bg-background">
+            {shellTabs.map((tab) => (
+              <TabsContent key={tab.value} className="m-0 h-full" value={tab.value}>
+                {tab.value === "profiles" ? (
+                  <ProfilesScreen />
+                ) : tab.value === "routing" ? (
+                  <RoutingScreen />
+                ) : tab.value === "dns" ? (
+                  <DnsScreen />
+                ) : tab.value === "clash-proxies" ? (
+                  <ClashProxiesScreen />
+                ) : tab.value === "clash-connections" ? (
+                  <ClashConnectionsScreen />
+                ) : tab.value === "logs" ? (
+                  <LogsScreen />
+                ) : (
+                  <ShellPane tab={tab} />
+                )}
+              </TabsContent>
+            ))}
+          </div>
+        </Tabs>
+
+        <StatusBar />
+      </div>
+
+      <ModalHost />
+      <RegionalPresetConfirmDialog
+        onApplied={(fallbackCustomDnsEnabled) => void handleRegionalPresetApplied(fallbackCustomDnsEnabled)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingPreset(null);
+          }
+        }}
+        preset={pendingPreset}
+      />
+      <Toaster />
+    </main>
+  );
+}
+
+function RegionalPresetConfirmDialog({
+  onApplied,
+  onOpenChange,
+  preset,
+}: {
+  onApplied: (fallbackCustomDnsEnabled: boolean) => void;
+  onOpenChange: (open: boolean) => void;
+  preset: RegionalPresetOption | null;
+}) {
+  const { t } = useI18n();
+  const [error, setError] = useState<string | null>(null);
+  const [isApplying, setIsApplying] = useState(false);
+  const open = Boolean(preset);
+  const title = useMemo(
+    () => (preset ? t("modal.regionalPresetTitle", { preset: t(preset.labelKey) }) : ""),
+    [preset, t],
+  );
+
+  async function confirmApply() {
+    if (!preset) {
+      return;
+    }
+
+    setIsApplying(true);
+    setError(null);
+    try {
+      const result = await applyRegionalPreset(preset.value, true, null);
+      onApplied(result.fallbackCustomDnsEnabled);
+      onOpenChange(false);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsApplying(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!isApplying) {
+          setError(null);
+          onOpenChange(nextOpen);
+        }
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Globe2 className="size-4" aria-hidden="true" />
+            {title}
+          </DialogTitle>
+          <DialogDescription>
+            {preset ? t(preset.descriptionKey) : t("modal.regionalPresetDescription")}
+          </DialogDescription>
+        </DialogHeader>
+
+        {error ? (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </div>
+        ) : null}
+
+        <DialogFooter>
+          <Button disabled={isApplying} onClick={() => onOpenChange(false)} type="button" variant="outline">
+            {t("actions.close")}
+          </Button>
+          <Button disabled={!preset || isApplying} onClick={() => void confirmApply()} type="button">
+            {isApplying ? t("modal.regionalPresetApplying") : t("modal.regionalPresetApply")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ShellPane({ tab }: { tab: ShellTabConfig }) {
+  const { t } = useI18n();
+  const Icon = tab.icon;
+
+  return (
+    <section className="flex h-full min-h-0 flex-col">
+      <div className="flex h-12 shrink-0 items-center gap-3 border-b px-4">
+        <h2 className="text-sm font-semibold">{t(tab.titleKey)}</h2>
+        <div className="ms-auto flex items-center gap-2">
+          {tab.secondaryActionKey ? (
+            <Button disabled size="sm" type="button" variant="outline">
+              {t(tab.secondaryActionKey)}
+            </Button>
+          ) : null}
+          {tab.primaryActionKey ? (
+            <Button disabled size="sm" type="button" variant="secondary">
+              {t(tab.primaryActionKey)}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid min-h-0 flex-1 place-items-center p-6">
+        <div className="grid justify-items-center gap-3 text-center">
+          <div className="flex size-10 items-center justify-center rounded-md border bg-card">
+            <Icon className="size-5 text-muted-foreground" aria-hidden="true" />
+          </div>
+          <p className="text-sm font-medium">{t(tab.emptyKey)}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function usePersistedPreferences(language: string) {
+  const accent = usePreferencesStore((state) => state.accent);
+  const appConfigLoaded = usePreferencesStore((state) => state.appConfigLoaded);
+  const fontFamily = usePreferencesStore((state) => state.fontFamily);
+  const fontSize = usePreferencesStore((state) => state.fontSize);
+  const hydrateFromConfig = usePreferencesStore((state) => state.hydrateFromConfig);
+  const themeMode = usePreferencesStore((state) => state.themeMode);
+  const languageRef = useRef(language);
+  const lastPersistedKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
+
+  useEffect(() => {
+    let disposed = false;
+
+    void loadAppConfig()
+      .then((config) => {
+        if (disposed) {
+          return;
+        }
+
+        hydrateFromConfig(config.UIItem);
+        lastPersistedKeyRef.current = preferenceConfigKey({
+          accent: usePreferencesStore.getState().accent,
+          fontFamily: usePreferencesStore.getState().fontFamily,
+          fontSize: usePreferencesStore.getState().fontSize,
+          language: languageRef.current,
+          themeMode: usePreferencesStore.getState().themeMode,
+        });
+      })
+      .catch(() => undefined);
+
+    return () => {
+      disposed = true;
+    };
+  }, [hydrateFromConfig]);
+
+  useEffect(() => {
+    if (!appConfigLoaded) {
+      return undefined;
+    }
+
+    const persistKey = preferenceConfigKey({ accent, fontFamily, fontSize, language, themeMode });
+    if (lastPersistedKeyRef.current === persistKey) {
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => {
+      void persistPreferenceConfig({ accent, fontFamily, fontSize, language, themeMode }).then(() => {
+        lastPersistedKeyRef.current = persistKey;
+      });
+    }, 250);
+
+    return () => window.clearTimeout(timeout);
+  }, [accent, appConfigLoaded, fontFamily, fontSize, language, themeMode]);
+}
+
+function preferenceConfigKey({
+  accent,
+  fontFamily,
+  fontSize,
+  language,
+  themeMode,
+}: {
+  accent: Accent;
+  fontFamily: string;
+  fontSize: number;
+  language: string;
+  themeMode: ThemeMode;
+}) {
+  return JSON.stringify({
+    accent,
+    fontFamily: fontFamily.trim(),
+    fontSize,
+    language,
+    themeMode,
+  });
+}
+
+async function persistPreferenceConfig({
+  accent,
+  fontFamily,
+  fontSize,
+  language,
+  themeMode,
+}: {
+  accent: Accent;
+  fontFamily: string;
+  fontSize: number;
+  language: string;
+  themeMode: ThemeMode;
+}) {
+  const config = await loadAppConfig();
+  const nextConfig = {
+    ...config,
+    UIItem: {
+      ...config.UIItem,
+      ColorPrimaryName: accentToConfig(accent),
+      CurrentFontFamily: fontFamily.trim(),
+      CurrentFontSize: fontSize,
+      CurrentLanguage: language,
+      CurrentTheme: themeModeToConfig(themeMode),
+    },
+  } satisfies AppConfig_Deserialize;
+
+  await saveAppConfig(nextConfig);
+}
+
+function useThemeEffects(themeMode: ThemeMode, accent: Accent, fontFamily: string, fontSize: number) {
+  useEffect(() => {
+    const root = document.documentElement;
+    const media =
+      typeof window.matchMedia === "function" ? window.matchMedia("(prefers-color-scheme: dark)") : undefined;
+
+    const applyTheme = () => {
+      const resolvedTheme = resolveThemeMode(themeMode);
+
+      root.classList.toggle("dark", resolvedTheme === "dark");
+      root.dataset.accent = accent;
+      root.style.colorScheme = resolvedTheme;
+      root.style.setProperty("--app-font-family", fontFamilyToCss(fontFamily));
+      root.style.setProperty("--app-font-size", `${fontSize}px`);
+    };
+
+    applyTheme();
+
+    if (themeMode !== "system" || !media) {
+      return undefined;
+    }
+
+    media.addEventListener("change", applyTheme);
+
+    return () => media.removeEventListener("change", applyTheme);
+  }, [accent, fontFamily, fontSize, themeMode]);
+}

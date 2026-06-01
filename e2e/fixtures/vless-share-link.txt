@@ -1,0 +1,1 @@
+vless://00000000-0000-4000-8000-000000000002@imported.example.test:443?encryption=none&security=tls&type=ws&host=cdn.example.test&path=%2Fws#Smoke%20Imported%20VLESS

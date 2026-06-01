@@ -1,0 +1,121 @@
+{
+  "threeHop": {
+    "singboxRoutes": [
+      {
+        "detour": "chain-proxy-1-Leaf B",
+        "dialerProxy": null,
+        "downloadDialerProxy": null,
+        "kind": "vless",
+        "outbounds": [],
+        "tag": "proxy"
+      },
+      {
+        "detour": "chain-proxy-2-Leaf A",
+        "dialerProxy": null,
+        "downloadDialerProxy": null,
+        "kind": "vless",
+        "outbounds": [],
+        "tag": "chain-proxy-1-Leaf B"
+      },
+      {
+        "detour": null,
+        "dialerProxy": null,
+        "downloadDialerProxy": null,
+        "kind": "vless",
+        "outbounds": [],
+        "tag": "chain-proxy-2-Leaf A"
+      }
+    ],
+    "validation": {
+      "childIndexIds": [
+        "leaf-a",
+        "leaf-b",
+        "leaf-c"
+      ],
+      "errors": [],
+      "normalizedChildItems": "leaf-a,leaf-b,leaf-c",
+      "valid": true,
+      "warnings": []
+    },
+    "xrayBalancers": [],
+    "xrayBurstObservatorySelectors": [],
+    "xrayObservatorySelectors": [],
+    "xrayRoutes": [
+      {
+        "detour": null,
+        "dialerProxy": "chain-proxy-1-Leaf B",
+        "downloadDialerProxy": null,
+        "kind": "vless",
+        "outbounds": [],
+        "tag": "proxy"
+      },
+      {
+        "detour": null,
+        "dialerProxy": "chain-proxy-2-Leaf A",
+        "downloadDialerProxy": null,
+        "kind": "vless",
+        "outbounds": [],
+        "tag": "chain-proxy-1-Leaf B"
+      },
+      {
+        "detour": null,
+        "dialerProxy": null,
+        "downloadDialerProxy": null,
+        "kind": "vless",
+        "outbounds": [],
+        "tag": "chain-proxy-2-Leaf A"
+      }
+    ]
+  },
+  "twoHop": {
+    "singboxRoutes": [
+      {
+        "detour": "chain-proxy-1-Leaf A",
+        "dialerProxy": null,
+        "downloadDialerProxy": null,
+        "kind": "vless",
+        "outbounds": [],
+        "tag": "proxy"
+      },
+      {
+        "detour": null,
+        "dialerProxy": null,
+        "downloadDialerProxy": null,
+        "kind": "vless",
+        "outbounds": [],
+        "tag": "chain-proxy-1-Leaf A"
+      }
+    ],
+    "validation": {
+      "childIndexIds": [
+        "leaf-a",
+        "leaf-b"
+      ],
+      "errors": [],
+      "normalizedChildItems": "leaf-a,leaf-b",
+      "valid": true,
+      "warnings": []
+    },
+    "xrayBalancers": [],
+    "xrayBurstObservatorySelectors": [],
+    "xrayObservatorySelectors": [],
+    "xrayRoutes": [
+      {
+        "detour": null,
+        "dialerProxy": "chain-proxy-1-Leaf A",
+        "downloadDialerProxy": null,
+        "kind": "vless",
+        "outbounds": [],
+        "tag": "proxy"
+      },
+      {
+        "detour": null,
+        "dialerProxy": null,
+        "downloadDialerProxy": null,
+        "kind": "vless",
+        "outbounds": [],
+        "tag": "chain-proxy-1-Leaf A"
+      }
+    ]
+  }
+}

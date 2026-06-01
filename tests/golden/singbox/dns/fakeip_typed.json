@@ -1,0 +1,295 @@
+{
+  "servers": [
+    {
+      "type": "udp",
+      "tag": "local_local",
+      "server": "119.29.29.29"
+    },
+    {
+      "type": "https",
+      "tag": "remote_dns",
+      "server": "cloudflare-dns.com",
+      "domain_resolver": "hosts_dns",
+      "path": "/dns-query",
+      "detour": "proxy"
+    },
+    {
+      "type": "https",
+      "tag": "direct_dns",
+      "server": "resolver.example",
+      "domain_resolver": "hosts_dns",
+      "path": "/dns-query"
+    },
+    {
+      "type": "hosts",
+      "tag": "hosts_dns",
+      "predefined": {
+        "1dot1dot1dot1.cloudflare-dns.com": [
+          "1.1.1.1",
+          "1.0.0.1",
+          "2606:4700:4700::1111",
+          "2606:4700:4700::1001"
+        ],
+        "block.test": [],
+        "cloudflare-dns.com": [
+          "104.16.249.249",
+          "104.16.248.249",
+          "2606:4700::6810:f8f9",
+          "2606:4700::6810:f9f9"
+        ],
+        "cname.test": [],
+        "dns.alidns.com": [
+          "223.5.5.5",
+          "223.6.6.6",
+          "2400:3200::1",
+          "2400:3200:baba::1"
+        ],
+        "dns.cloudflare.com": [
+          "104.16.132.229",
+          "104.16.133.229",
+          "2606:4700::6810:84e5",
+          "2606:4700::6810:85e5"
+        ],
+        "dns.google": [
+          "8.8.8.8",
+          "8.8.4.4",
+          "2001:4860:4860::8888",
+          "2001:4860:4860::8844"
+        ],
+        "dns.quad9.net": [
+          "9.9.9.9",
+          "149.112.112.112",
+          "2620:fe::fe",
+          "2620:fe::9"
+        ],
+        "dns.sb": [
+          "185.222.222.222",
+          "2a09::"
+        ],
+        "dns.sse.cisco.com": [
+          "208.67.220.220",
+          "208.67.222.222",
+          "2620:119:35::35",
+          "2620:119:53::53"
+        ],
+        "dns.umbrella.com": [
+          "208.67.220.220",
+          "208.67.222.222",
+          "2620:119:35::35",
+          "2620:119:53::53"
+        ],
+        "dns.yandex.net": [
+          "77.88.8.8",
+          "77.88.8.1",
+          "2a02:6b8::feed:0ff",
+          "2a02:6b8:0:1::feed:0ff"
+        ],
+        "doh.pub": [
+          "1.12.12.12",
+          "120.53.53.53"
+        ],
+        "dot.pub": [
+          "1.12.12.12",
+          "120.53.53.53"
+        ],
+        "engage.cloudflareclient.com": [
+          "162.159.192.1"
+        ],
+        "one.one.one.one": [
+          "1.1.1.1",
+          "1.0.0.1",
+          "2606:4700:4700::1111",
+          "2606:4700:4700::1001"
+        ],
+        "resolver.example": [
+          "1.1.1.1"
+        ]
+      }
+    },
+    {
+      "type": "fakeip",
+      "tag": "fake_dns",
+      "inet4_range": "198.18.0.0/15",
+      "inet6_range": "fc00::/18"
+    }
+  ],
+  "rules": [
+    {
+      "server": "hosts_dns",
+      "ip_accept_any": true
+    },
+    {
+      "server": "remote_dns",
+      "clash_mode": "Global",
+      "strategy": "prefer_ipv6"
+    },
+    {
+      "server": "direct_dns",
+      "clash_mode": "Direct",
+      "strategy": "prefer_ipv4"
+    },
+    {
+      "action": "predefined",
+      "domain": [
+        "block.test"
+      ],
+      "rcode": "NXDOMAIN",
+      "query_type": [
+        1,
+        5,
+        28
+      ]
+    },
+    {
+      "action": "predefined",
+      "domain": [
+        "cname.test"
+      ],
+      "rcode": "NOERROR",
+      "query_type": [
+        1,
+        5,
+        28
+      ],
+      "answer": [
+        "*. IN CNAME target.example."
+      ]
+    },
+    {
+      "action": "predefined",
+      "rcode": "NOERROR",
+      "query_type": [
+        64,
+        65
+      ]
+    },
+    {
+      "server": "fake_dns",
+      "type": "logical",
+      "mode": "and",
+      "rewrite_ttl": 1,
+      "rules": [
+        {
+          "query_type": [
+            1,
+            28
+          ]
+        },
+        {
+          "invert": true,
+          "domain": [
+            "amobile.music.tc.qq.com",
+            "api-jooxtt.sanook.com",
+            "api.joox.com",
+            "aqqmusic.tc.qq.com",
+            "dl.stream.qqmusic.qq.com",
+            "ff.dorado.sdo.com",
+            "heartbeat.belkin.com",
+            "isure.stream.qqmusic.qq.com",
+            "joox.com",
+            "lens.l.google.com",
+            "localhost.ptlogin2.qq.com",
+            "localhost.sec.qq.com",
+            "mesu.apple.com",
+            "mobileoc.music.tc.qq.com",
+            "music.taihe.com",
+            "musicapi.taihe.com",
+            "na.b.g-tun.com",
+            "proxy.golang.org",
+            "ps.res.netease.com",
+            "shark007.net",
+            "songsearch.kugou.com",
+            "static.adtidy.org",
+            "streamoc.music.tc.qq.com",
+            "swcdn.apple.com",
+            "swdist.apple.com",
+            "swdownload.apple.com",
+            "swquery.apple.com",
+            "swscan.apple.com",
+            "turn.cloudflare.com",
+            "trackercdn.kugou.com",
+            "xnotify.xboxlive.com"
+          ],
+          "domain_suffix": [
+            "126.net",
+            "3gppnetwork.org",
+            "battle.net",
+            "battlenet.com.cn",
+            "cdn.nintendo.net",
+            "cmbchina.com",
+            "cmbimg.com",
+            "ff14.sdo.com",
+            "ffxiv.com",
+            "finalfantasyxiv.com",
+            "gcloudcs.com",
+            "home.arpa",
+            "invalid",
+            "kuwo.cn",
+            "lan",
+            "linksys.com",
+            "linksyssmartwifi.com",
+            "local",
+            "localdomain",
+            "localhost",
+            "market.xiaomi.com",
+            "mcdn.bilivideo.cn",
+            "media.dssott.com",
+            "msftconnecttest.com",
+            "msftncsi.com",
+            "music.163.com",
+            "music.migu.cn",
+            "n0808.com",
+            "nflxvideo.net",
+            "oray.com",
+            "orayimg.com",
+            "router.asus.com",
+            "sandai.net",
+            "square-enix.com",
+            "srv.nintendo.net",
+            "steamcontent.com",
+            "uu.163.com",
+            "wargaming.net",
+            "wggames.cn",
+            "wotgame.cn",
+            "wowsgame.cn",
+            "xiami.com",
+            "y.qq.com"
+          ],
+          "domain_keyword": [
+            "ntp",
+            "stun",
+            "time"
+          ],
+          "domain_regex": [
+            "^[^.]+$",
+            "^[^.]+\\.[^.]+\\.xboxlive\\.com$",
+            "^localhost\\.[^.]+\\.weixin\\.qq\\.com$",
+            "^mijia\\scloud$",
+            "^xbox\\.[^.]+\\.microsoft\\.com$",
+            "^xbox\\.[^.]+\\.[^.]+\\.microsoft\\.com$"
+          ]
+        }
+      ]
+    },
+    {
+      "server": "direct_dns",
+      "ip_cidr": [
+        "192.0.2.0/24"
+      ],
+      "rule_set": [
+        "geosite-cn",
+        "geoip-cn"
+      ],
+      "strategy": "prefer_ipv4"
+    },
+    {
+      "server": "remote_dns",
+      "rule_set": [
+        "geosite-google"
+      ],
+      "strategy": "prefer_ipv6"
+    }
+  ],
+  "final": "remote_dns",
+  "independent_cache": true
+}

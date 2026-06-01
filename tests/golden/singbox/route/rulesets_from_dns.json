@@ -1,0 +1,23 @@
+[
+  {
+    "tag": "geoip-cn",
+    "type": "remote",
+    "format": "binary",
+    "url": "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-geoip/geoip-cn.srs",
+    "download_detour": "proxy"
+  },
+  {
+    "tag": "geosite-cn",
+    "type": "remote",
+    "format": "binary",
+    "url": "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-geosite/geosite-cn.srs",
+    "download_detour": "proxy"
+  },
+  {
+    "tag": "geosite-google",
+    "type": "remote",
+    "format": "binary",
+    "url": "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-geosite/geosite-google.srs",
+    "download_detour": "proxy"
+  }
+]

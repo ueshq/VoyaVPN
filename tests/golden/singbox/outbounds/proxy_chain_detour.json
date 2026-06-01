@@ -1,0 +1,25 @@
+[
+  {
+    "type": "socks",
+    "tag": "proxy",
+    "server": "127.0.0.1",
+    "server_port": 1080,
+    "password": "pass",
+    "username": "user",
+    "version": "5",
+    "detour": "chain-proxy-1-node-1"
+  },
+  {
+    "type": "socks",
+    "tag": "chain-proxy-1-node-1",
+    "server": "127.0.0.1",
+    "server_port": 1080,
+    "password": "pass",
+    "username": "user",
+    "version": "5"
+  },
+  {
+    "type": "direct",
+    "tag": "direct"
+  }
+]

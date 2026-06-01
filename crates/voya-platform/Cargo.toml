@@ -1,0 +1,16 @@
+[package]
+name = "voya-platform"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+tracing.workspace = true
+voya-core.workspace = true
+zeroize.workspace = true
+
+[lints]
+workspace = true

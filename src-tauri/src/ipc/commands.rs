@@ -1,0 +1,2360 @@
+use std::{
+    collections::BTreeSet,
+    fs,
+    path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+use serde::Serialize;
+use specta::Type;
+use tauri::Manager;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_specta::Event;
+use voya_app::autostart::{AutostartManager, AutostartManagerError, AutostartStatus};
+use voya_app::backup::{
+    BackupManager, BackupManagerError, BackupOperationResult, BackupRemoteResult,
+    BackupRestoreResult, BackupStatus,
+};
+use voya_app::clash::{
+    ClashConnectionsSnapshot, ClashDelayTestResult, ClashManager, ClashManagerError,
+    ClashMonitorStatus, ClashProxiesSnapshot,
+};
+use voya_app::dns::{DnsManager, DnsManagerError, DnsSettings, DnsValidationIssue};
+use voya_app::groups::{GroupManager, GroupManagerError};
+use voya_app::hotkeys::{
+    GlobalHotkeyBinding, HotkeyManager, HotkeyManagerError, HotkeyRegistrar, HotkeyStatus,
+};
+use voya_app::presets::{PresetApplyOptions, PresetApplyResult, PresetManager, PresetManagerError};
+use voya_app::profiles::{ProfileManager, ProfileManagerError};
+use voya_app::qr::{QrCodeImage, QrCodeManager};
+use voya_app::routing::{RoutingManager, RoutingManagerError};
+use voya_app::runtime::RuntimeManager;
+use voya_app::speedtest::{
+    SpeedTestResult, SpeedtestError, SpeedtestManager, SpeedtestRunResult, SpeedtestStatus,
+};
+use voya_app::subscriptions::{SubscriptionManager, SubscriptionManagerError};
+use voya_app::sudo::{SudoCollectionError, SudoCollectionStatus};
+use voya_app::supervisor::{SupervisorConnectionState, SupervisorSnapshot};
+use voya_app::sysproxy::SystemProxyManagerError;
+use voya_app::tun::{TunManager, TunManagerError, TunStatus};
+use voya_app::updates::{
+    RulesetGeoSourceSettings, UpdateManager, UpdateManagerError, UpdateRequestOptions,
+    UpdateRunResult, UpdateStatus,
+};
+use voya_core::{
+    AppConfig, CoreType, GlobalHotkey, GroupChildCandidate, GroupPreview, GroupValidationResult,
+    ImportProfilesResult, KeyEventItem, MoveAction, PresetType, ProfileDedupeResult, ProfileItem,
+    ProfileListItem, ProfileSortKey, RoutingItem, RuleMode, RulesItem, SubItem,
+    SubscriptionUpdateResult, SysProxyType, WebDavItem,
+};
+use voya_platform::sysproxy::SystemProxyStatus;
+
+use super::events::{
+    AppEvent, AppNotice, AppNoticeLevel, CoreState, CoreStateEvent, DemoRequest, DemoResponse,
+    InvalidateEvent, LogLevel, LogLineEvent, QueryInvalidation, TransientStreamEvent,
+};
+use crate::AppState;
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(tag = "kind", content = "message", rename_all = "camelCase")]
+pub enum AppError {
+    EventEmit(String),
+    Autostart(String),
+    ConfigLoad(String),
+    ConfigSave(String),
+    Backup(String),
+    Clash(String),
+    Database(String),
+    Dns(DnsCommandError),
+    Group(String),
+    Hotkey(String),
+    Preset(String),
+    Profile(String),
+    Qr(String),
+    Runtime(String),
+    Routing(String),
+    Speedtest(String),
+    Sudo(String),
+    Subscription(String),
+    SysProxy(String),
+    State(String),
+    Tun(String),
+    Update(String),
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DnsCommandError {
+    pub message: String,
+    pub issues: Vec<DnsValidationIssue>,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum SudoCollectionState {
+    Ready,
+    Required,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SudoCollectionResponse {
+    pub state: SudoCollectionState,
+    pub request_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum RuntimeConnectionState {
+    Disconnected,
+    Connected,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeStatusResponse {
+    pub state: RuntimeConnectionState,
+    pub active_profile_id: Option<String>,
+    pub main_pid: Option<u32>,
+    pub pre_pid: Option<u32>,
+    pub running_core_type: Option<CoreType>,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemProxyStatusResponse {
+    pub requested_mode: SysProxyType,
+    pub effective_mode: SysProxyType,
+    pub pac_available: bool,
+    pub proxy: Option<String>,
+    pub exceptions: String,
+    pub pac_url: Option<String>,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn app_health() -> Result<String, AppError> {
+    Ok("ok".to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn load_app_config(state: tauri::State<'_, AppState>) -> Result<AppConfig, AppError> {
+    let config = state
+        .config_store()
+        .load()
+        .map_err(|error| AppError::ConfigLoad(error.to_string()))?;
+    let mut guard = state
+        .config()
+        .write()
+        .map_err(|_| AppError::State("app config lock is poisoned".to_string()))?;
+
+    *guard = config.clone();
+
+    Ok(config)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn save_app_config(
+    state: tauri::State<'_, AppState>,
+    config: AppConfig,
+) -> Result<AppConfig, AppError> {
+    state
+        .config_store()
+        .save(&config)
+        .map_err(|error| AppError::ConfigSave(error.to_string()))?;
+    let mut guard = state
+        .config()
+        .write()
+        .map_err(|_| AppError::State("app config lock is poisoned".to_string()))?;
+
+    *guard = config.clone();
+
+    Ok(config)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn autostart_status(state: tauri::State<'_, AppState>) -> Result<AutostartStatus, AppError> {
+    let config = current_config(&state)?;
+
+    AutostartManager::new()
+        .status(&config)
+        .map_err(autostart_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_autostart_enabled<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    enabled: bool,
+) -> Result<AutostartStatus, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let status = AutostartManager::new()
+        .set_enabled(&mut config, enabled)
+        .map_err(autostart_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_app_config_invalidation(&app, "autostart-updated")?;
+
+    Ok(status)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn global_hotkey_status(state: tauri::State<'_, AppState>) -> Result<HotkeyStatus, AppError> {
+    let config = current_config(&state)?;
+
+    HotkeyManager::new(std::sync::Arc::new(voya_app::hotkeys::NoopHotkeyRegistrar))
+        .status(&config)
+        .map_err(hotkey_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn save_global_hotkeys<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    settings: Vec<KeyEventItem>,
+) -> Result<HotkeyStatus, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let registrar = std::sync::Arc::new(TauriHotkeyRegistrar { app: app.clone() });
+    let status = HotkeyManager::new(registrar)
+        .save_settings(&mut config, settings)
+        .map_err(hotkey_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_app_config_invalidation(&app, "global-hotkeys-updated")?;
+
+    Ok(status)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn generate_qr_code(content: String) -> Result<QrCodeImage, AppError> {
+    QrCodeManager
+        .generate_svg(&content)
+        .map_err(|error| AppError::Qr(error.to_string()))
+}
+
+pub(crate) fn register_global_hotkeys_for_config<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    config: &AppConfig,
+) -> Result<HotkeyStatus, AppError> {
+    let registrar = std::sync::Arc::new(TauriHotkeyRegistrar { app: app.clone() });
+
+    HotkeyManager::new(registrar)
+        .register_from_config(config)
+        .map_err(hotkey_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn sudo_begin_collection(
+    state: tauri::State<'_, AppState>,
+) -> Result<SudoCollectionResponse, AppError> {
+    state
+        .sudo_password_collector()
+        .begin_collection()
+        .map(sudo_collection_response)
+        .map_err(sudo_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn sudo_submit_password(
+    state: tauri::State<'_, AppState>,
+    request_id: String,
+    password: String,
+) -> Result<SudoCollectionResponse, AppError> {
+    let request_id = request_id
+        .parse::<u64>()
+        .map_err(|_| AppError::Sudo("invalid sudo password request id".to_string()))?;
+
+    state
+        .sudo_password_collector()
+        .submit_password(request_id, password)
+        .map(sudo_collection_response)
+        .map_err(sudo_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn sudo_clear_password(state: tauri::State<'_, AppState>) -> Result<(), AppError> {
+    state
+        .sudo_password_collector()
+        .clear_password()
+        .map_err(sudo_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn sudo_has_password(state: tauri::State<'_, AppState>) -> Result<bool, AppError> {
+    state
+        .sudo_password_collector()
+        .store()
+        .has_password()
+        .map_err(|error| AppError::Sudo(error.to_string()))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn connect_active_profile<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+) -> Result<RuntimeStatusResponse, AppError> {
+    let config = current_config(&state)?;
+    emit_runtime_log(&app, LogLevel::Info, "Connecting active profile")?;
+    emit_core_state(
+        &app,
+        CoreState::Connecting,
+        Some(config.index_id.clone()).filter(|value| !value.is_empty()),
+        None,
+    )?;
+
+    match runtime_manager(&state).connect(&config).await {
+        Ok(snapshot) => {
+            emit_runtime_log(&app, LogLevel::Info, "Core supervisor started")?;
+            emit_core_state(&app, CoreState::Connected, None, Some(&snapshot))?;
+            match apply_system_proxy(&app, &state, &config, false) {
+                Ok(status) => emit_sysproxy_changed(&app, &status)?,
+                Err(error) => emit_runtime_log(
+                    &app,
+                    LogLevel::Warn,
+                    &format!("System proxy apply failed: {error}"),
+                )?,
+            }
+            Ok(runtime_status_response(snapshot))
+        }
+        Err(error) => {
+            let message = error.to_string();
+            emit_runtime_log(&app, LogLevel::Error, &message)?;
+            emit_core_state(&app, CoreState::Disconnected, None, None)?;
+            Err(AppError::Runtime(message))
+        }
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn disconnect_core<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+) -> Result<RuntimeStatusResponse, AppError> {
+    emit_runtime_log(&app, LogLevel::Info, "Disconnecting core supervisor")?;
+    emit_core_state(&app, CoreState::Disconnecting, None, None)?;
+
+    match runtime_manager(&state).disconnect().await {
+        Ok(snapshot) => {
+            match restore_system_proxy(&app, &state) {
+                Ok(status) => emit_sysproxy_changed(&app, &status)?,
+                Err(error) => emit_runtime_log(
+                    &app,
+                    LogLevel::Warn,
+                    &format!("System proxy restore failed: {error:?}"),
+                )?,
+            }
+            emit_runtime_log(&app, LogLevel::Info, "Core supervisor stopped")?;
+            emit_core_state(&app, CoreState::Disconnected, None, Some(&snapshot))?;
+            emit_statistics_zero(&app)?;
+            Ok(runtime_status_response(snapshot))
+        }
+        Err(error) => {
+            let message = error.to_string();
+            emit_runtime_log(&app, LogLevel::Error, &message)?;
+            Err(AppError::Runtime(message))
+        }
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn restart_core<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+) -> Result<RuntimeStatusResponse, AppError> {
+    let config = current_config(&state)?;
+    emit_runtime_log(&app, LogLevel::Info, "Restarting active profile")?;
+    emit_core_state(
+        &app,
+        CoreState::Connecting,
+        Some(config.index_id.clone()).filter(|value| !value.is_empty()),
+        None,
+    )?;
+
+    match runtime_manager(&state).restart(&config).await {
+        Ok(snapshot) => {
+            emit_runtime_log(&app, LogLevel::Info, "Core supervisor restarted")?;
+            emit_core_state(&app, CoreState::Connected, None, Some(&snapshot))?;
+            match apply_system_proxy(&app, &state, &config, false) {
+                Ok(status) => emit_sysproxy_changed(&app, &status)?,
+                Err(error) => emit_runtime_log(
+                    &app,
+                    LogLevel::Warn,
+                    &format!("System proxy apply failed: {error}"),
+                )?,
+            }
+            Ok(runtime_status_response(snapshot))
+        }
+        Err(error) => {
+            let message = error.to_string();
+            emit_runtime_log(&app, LogLevel::Error, &message)?;
+            emit_core_state(&app, CoreState::Disconnected, None, None)?;
+            Err(AppError::Runtime(message))
+        }
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn runtime_status(
+    state: tauri::State<'_, AppState>,
+) -> Result<RuntimeStatusResponse, AppError> {
+    runtime_manager(&state)
+        .status()
+        .await
+        .map(runtime_status_response)
+        .map_err(|error| AppError::Runtime(error.to_string()))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn system_proxy_status(
+    state: tauri::State<'_, AppState>,
+) -> Result<SystemProxyStatusResponse, AppError> {
+    let config = current_config(&state)?;
+
+    state
+        .system_proxy_manager()
+        .status(&config)
+        .map(system_proxy_status_response)
+        .map_err(sysproxy_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_system_proxy_mode<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    mode: SysProxyType,
+) -> Result<SystemProxyStatusResponse, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let status = state
+        .system_proxy_manager()
+        .set_mode(&mut config, mode)
+        .map_err(sysproxy_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_sysproxy_changed(&app, &status)?;
+    crate::refresh_tray_menu(&app).map_err(|error| AppError::State(error.to_string()))?;
+
+    Ok(system_proxy_status_response(status))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn tun_status(state: tauri::State<'_, AppState>) -> Result<TunStatus, AppError> {
+    let config = current_config(&state)?;
+
+    tun_manager(&state).status(&config).map_err(tun_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_tun_enabled<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    enabled: bool,
+) -> Result<TunStatus, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let status = tun_manager(&state)
+        .set_enabled(&mut config, enabled)
+        .map_err(tun_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_tun_changed(&app, status.enabled)?;
+    restart_if_connected_after_config_change(&app, &state, &config, "TUN changed").await?;
+
+    Ok(status)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn load_dns_settings(state: tauri::State<'_, AppState>) -> Result<DnsSettings, AppError> {
+    let config = current_config(&state)?;
+
+    DnsManager::new(state.database())
+        .load_settings(&config.simple_dns_item)
+        .await
+        .map_err(dns_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn save_dns_settings<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    settings: DnsSettings,
+) -> Result<DnsSettings, AppError> {
+    let original = current_config(&state)?;
+    let saved = DnsManager::new(state.database())
+        .save_settings(settings)
+        .await
+        .map_err(dns_error)?;
+    let mut config = original.clone();
+    config.simple_dns_item = saved.simple_dns_item.clone();
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_dns_invalidation(&app, "dns-settings-saved")?;
+    restart_if_connected_after_config_change(&app, &state, &config, "DNS changed").await?;
+
+    Ok(saved)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_profiles(
+    state: tauri::State<'_, AppState>,
+    subid: Option<String>,
+    filter: Option<String>,
+) -> Result<Vec<ProfileListItem>, AppError> {
+    let config = current_config(&state)?;
+
+    ProfileManager::new(state.database())
+        .list_profiles(&config, subid.as_deref(), filter.as_deref())
+        .await
+        .map_err(profile_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_profile(
+    state: tauri::State<'_, AppState>,
+    index_id: String,
+) -> Result<Option<ProfileListItem>, AppError> {
+    let config = current_config(&state)?;
+
+    ProfileManager::new(state.database())
+        .get_profile(&config, &index_id)
+        .await
+        .map_err(profile_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn save_profile<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    profile: ProfileItem,
+) -> Result<ProfileListItem, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let result = ProfileManager::new(state.database())
+        .save_profile(&mut config, profile)
+        .await
+        .map_err(profile_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_profile_invalidation(
+        &app,
+        "profile-saved",
+        [result.profile.index_id.clone()],
+        original.index_id != config.index_id,
+    )?;
+
+    Ok(result)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_profiles<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    index_ids: Vec<String>,
+) -> Result<u32, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let deleted = ProfileManager::new(state.database())
+        .delete_profiles(&mut config, &index_ids)
+        .await
+        .map_err(profile_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_profile_invalidation(
+        &app,
+        "profiles-deleted",
+        index_ids,
+        original.index_id != config.index_id,
+    )?;
+
+    Ok(u32::try_from(deleted).unwrap_or(u32::MAX))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn copy_profiles<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    index_ids: Vec<String>,
+) -> Result<Vec<ProfileListItem>, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let copied = ProfileManager::new(state.database())
+        .copy_profiles(&mut config, &index_ids)
+        .await
+        .map_err(profile_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_profile_invalidation(
+        &app,
+        "profiles-copied",
+        copied
+            .iter()
+            .map(|item| item.profile.index_id.clone())
+            .collect::<Vec<_>>(),
+        original.index_id != config.index_id,
+    )?;
+
+    Ok(copied)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_active_profile<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    index_id: String,
+) -> Result<ProfileListItem, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let active = ProfileManager::new(state.database())
+        .set_active_profile(&mut config, &index_id)
+        .await
+        .map_err(profile_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_profile_invalidation(&app, "active-profile-changed", [index_id], true)?;
+
+    Ok(active)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn move_profile<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    subid: Option<String>,
+    index_id: String,
+    action: MoveAction,
+    position: Option<i32>,
+) -> Result<Vec<ProfileListItem>, AppError> {
+    let config = current_config(&state)?;
+    let profiles = ProfileManager::new(state.database())
+        .move_profile(&config, subid.as_deref(), &index_id, action, position)
+        .await
+        .map_err(profile_error)?;
+
+    emit_profile_invalidation(&app, "profile-moved", [index_id], false)?;
+
+    Ok(profiles)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn sort_profiles<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    subid: Option<String>,
+    sort_key: ProfileSortKey,
+    ascending: bool,
+) -> Result<Vec<ProfileListItem>, AppError> {
+    let config = current_config(&state)?;
+    let profiles = ProfileManager::new(state.database())
+        .sort_profiles(&config, subid.as_deref(), sort_key, ascending)
+        .await
+        .map_err(profile_error)?;
+
+    emit_profile_invalidation(
+        &app,
+        "profiles-sorted",
+        profiles
+            .iter()
+            .map(|item| item.profile.index_id.clone())
+            .collect::<Vec<_>>(),
+        false,
+    )?;
+
+    Ok(profiles)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn move_profiles_to_group<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    index_ids: Vec<String>,
+    subid: String,
+) -> Result<u32, AppError> {
+    let updated = ProfileManager::new(state.database())
+        .move_profiles_to_group(&index_ids, &subid)
+        .await
+        .map_err(profile_error)?;
+
+    emit_profile_invalidation(&app, "profiles-moved-to-group", index_ids, false)?;
+
+    Ok(u32::try_from(updated).unwrap_or(u32::MAX))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn dedupe_profiles<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    subid: Option<String>,
+    keep_older: Option<bool>,
+) -> Result<ProfileDedupeResult, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let result = ProfileManager::new(state.database())
+        .dedupe_profiles(&mut config, subid.as_deref(), keep_older.unwrap_or(false))
+        .await
+        .map_err(profile_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_profile_invalidation(
+        &app,
+        "profiles-deduped",
+        result.removed_index_ids.clone(),
+        original.index_id != config.index_id,
+    )?;
+
+    Ok(result)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_group_child_candidates(
+    state: tauri::State<'_, AppState>,
+    current_index_id: Option<String>,
+    filter: Option<String>,
+) -> Result<Vec<GroupChildCandidate>, AppError> {
+    GroupManager::new(state.database())
+        .list_child_candidates(current_index_id.as_deref(), filter.as_deref())
+        .await
+        .map_err(group_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn validate_group_profile(
+    state: tauri::State<'_, AppState>,
+    profile: ProfileItem,
+) -> Result<GroupValidationResult, AppError> {
+    GroupManager::new(state.database())
+        .validate_group_profile(&profile)
+        .await
+        .map_err(group_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn preview_group_profile(
+    state: tauri::State<'_, AppState>,
+    profile: ProfileItem,
+) -> Result<GroupPreview, AppError> {
+    let config = current_config(&state)?;
+
+    GroupManager::new(state.database())
+        .preview_group_profile(&config, &profile)
+        .await
+        .map_err(group_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn save_group_profile<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    profile: ProfileItem,
+) -> Result<ProfileListItem, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let result = GroupManager::new(state.database())
+        .save_group_profile(&mut config, profile)
+        .await
+        .map_err(group_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_profile_invalidation(
+        &app,
+        "group-profile-saved",
+        [result.profile.index_id.clone()],
+        original.index_id != config.index_id,
+    )?;
+
+    Ok(result)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_subscriptions(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<SubItem>, AppError> {
+    SubscriptionManager::new(state.database())
+        .list_subscriptions()
+        .await
+        .map_err(subscription_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_subscription(
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<Option<SubItem>, AppError> {
+    SubscriptionManager::new(state.database())
+        .get_subscription(&id)
+        .await
+        .map_err(subscription_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn save_subscription<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    item: SubItem,
+) -> Result<SubItem, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let saved = SubscriptionManager::new(state.database())
+        .save_subscription(&mut config, item)
+        .await
+        .map_err(subscription_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_subscription_invalidation(&app, "subscription-saved", false, original != config)?;
+
+    Ok(saved)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_subscriptions<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    ids: Vec<String>,
+) -> Result<u32, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let deleted = SubscriptionManager::new(state.database())
+        .delete_subscriptions(&mut config, &ids)
+        .await
+        .map_err(subscription_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_subscription_invalidation(&app, "subscriptions-deleted", true, original != config)?;
+
+    Ok(deleted)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn import_profiles_from_text<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    text: String,
+    subid: Option<String>,
+    is_sub: bool,
+) -> Result<ImportProfilesResult, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let result = SubscriptionManager::new(state.database())
+        .import_profiles_from_text(&mut config, &text, subid.as_deref(), is_sub)
+        .await
+        .map_err(subscription_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_subscription_invalidation(&app, "profiles-imported", true, original != config)?;
+
+    Ok(result)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn import_profiles_from_file<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    path: String,
+    subid: Option<String>,
+    is_sub: bool,
+) -> Result<ImportProfilesResult, AppError> {
+    let text = fs::read_to_string(&path).map_err(|error| {
+        AppError::Subscription(format!("failed to read import file {path}: {error}"))
+    })?;
+
+    import_profiles_from_text(app, state, text, subid, is_sub).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn update_subscriptions<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    subid: Option<String>,
+    prefer_proxy: bool,
+    proxy_url: Option<String>,
+) -> Result<SubscriptionUpdateResult, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let result = SubscriptionManager::new(state.database())
+        .update_subscriptions(
+            &mut config,
+            subid.as_deref(),
+            prefer_proxy,
+            proxy_url.as_deref(),
+            current_unix_time(),
+        )
+        .await
+        .map_err(subscription_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_subscription_invalidation(&app, "subscriptions-updated", true, original != config)?;
+
+    Ok(result)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn run_due_subscription_updates<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    prefer_proxy: bool,
+    proxy_url: Option<String>,
+) -> Result<SubscriptionUpdateResult, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let result = SubscriptionManager::new(state.database())
+        .run_due_updates(
+            &mut config,
+            current_unix_time(),
+            prefer_proxy,
+            proxy_url.as_deref(),
+        )
+        .await
+        .map_err(subscription_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_subscription_invalidation(&app, "due-subscriptions-updated", true, original != config)?;
+
+    Ok(result)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_routings(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<RoutingItem>, AppError> {
+    RoutingManager::new(state.database())
+        .list_routings()
+        .await
+        .map_err(routing_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_routing(
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<Option<RoutingItem>, AppError> {
+    RoutingManager::new(state.database())
+        .get_routing(&id)
+        .await
+        .map_err(routing_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn save_routing<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    item: RoutingItem,
+) -> Result<RoutingItem, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let saved = RoutingManager::new(state.database())
+        .save_routing(&mut config, item)
+        .await
+        .map_err(routing_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_routing_invalidation(
+        &app,
+        "routing-saved",
+        [saved.id.clone()],
+        original != config,
+    )?;
+    restart_if_connected_after_routing_change(&app, &state, &config).await?;
+
+    Ok(saved)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_routings<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    ids: Vec<String>,
+) -> Result<u32, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let deleted = RoutingManager::new(state.database())
+        .delete_routings(&mut config, &ids)
+        .await
+        .map_err(routing_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_routing_invalidation(&app, "routings-deleted", ids, original != config)?;
+    restart_if_connected_after_routing_change(&app, &state, &config).await?;
+
+    Ok(deleted)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_active_routing<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<RoutingItem, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let active = RoutingManager::new(state.database())
+        .set_active_routing(&mut config, &id)
+        .await
+        .map_err(routing_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_routing_invalidation(&app, "active-routing-changed", [id], true)?;
+    restart_if_connected_after_routing_change(&app, &state, &config).await?;
+
+    Ok(active)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn save_routing_rule<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    routing_id: String,
+    rule: RulesItem,
+) -> Result<RoutingItem, AppError> {
+    let config = current_config(&state)?;
+    let saved = RoutingManager::new(state.database())
+        .save_rule(&routing_id, rule)
+        .await
+        .map_err(routing_error)?;
+
+    emit_routing_invalidation(&app, "routing-rule-saved", [routing_id], false)?;
+    restart_if_connected_after_routing_change(&app, &state, &config).await?;
+
+    Ok(saved)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_routing_rules<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    routing_id: String,
+    rule_ids: Vec<String>,
+) -> Result<RoutingItem, AppError> {
+    let config = current_config(&state)?;
+    let saved = RoutingManager::new(state.database())
+        .delete_rules(&routing_id, &rule_ids)
+        .await
+        .map_err(routing_error)?;
+
+    emit_routing_invalidation(&app, "routing-rules-deleted", [routing_id], false)?;
+    restart_if_connected_after_routing_change(&app, &state, &config).await?;
+
+    Ok(saved)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn move_routing_rule<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    routing_id: String,
+    rule_id: String,
+    action: MoveAction,
+    position: Option<i32>,
+) -> Result<RoutingItem, AppError> {
+    let config = current_config(&state)?;
+    let saved = RoutingManager::new(state.database())
+        .move_rule(&routing_id, &rule_id, action, position)
+        .await
+        .map_err(routing_error)?;
+
+    emit_routing_invalidation(&app, "routing-rule-moved", [routing_id], false)?;
+    restart_if_connected_after_routing_change(&app, &state, &config).await?;
+
+    Ok(saved)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn import_routing_templates<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    prefer_proxy: bool,
+    proxy_url: Option<String>,
+    import_advanced_rules: bool,
+) -> Result<Vec<RoutingItem>, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let imported = RoutingManager::new(state.database())
+        .import_routing_templates(
+            &mut config,
+            prefer_proxy,
+            proxy_url.as_deref(),
+            import_advanced_rules,
+        )
+        .await
+        .map_err(routing_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_routing_invalidation(
+        &app,
+        "routing-templates-imported",
+        imported
+            .iter()
+            .map(|item| item.id.clone())
+            .collect::<Vec<_>>(),
+        original != config,
+    )?;
+    restart_if_connected_after_routing_change(&app, &state, &config).await?;
+
+    Ok(imported)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn apply_regional_preset<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    preset_type: PresetType,
+    prefer_proxy: bool,
+    proxy_url: Option<String>,
+) -> Result<PresetApplyResult, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let result = PresetManager::new(state.database())
+        .apply(
+            &mut config,
+            preset_type,
+            PresetApplyOptions {
+                prefer_proxy,
+                proxy_url,
+            },
+        )
+        .await
+        .map_err(preset_error)?;
+
+    persist_config_if_changed(&state, &original, &config)?;
+    emit_preset_invalidation(&app, "regional-preset-applied")?;
+    restart_if_connected_after_config_change(&app, &state, &config, "Regional preset changed")
+        .await?;
+
+    Ok(result)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn clash_list_proxies(
+    state: tauri::State<'_, AppState>,
+) -> Result<ClashProxiesSnapshot, AppError> {
+    let config = current_config(&state)?;
+
+    ClashManager::new()
+        .proxies(&config)
+        .await
+        .map_err(clash_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn clash_test_delay(
+    state: tauri::State<'_, AppState>,
+    proxy_names: Vec<String>,
+) -> Result<Vec<ClashDelayTestResult>, AppError> {
+    let config = current_config(&state)?;
+
+    ClashManager::new()
+        .test_delay(&config, proxy_names)
+        .await
+        .map_err(clash_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn clash_select_proxy<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    group_name: String,
+    proxy_name: String,
+) -> Result<ClashProxiesSnapshot, AppError> {
+    let config = current_config(&state)?;
+    let snapshot = ClashManager::new()
+        .select_proxy(&config, &group_name, &proxy_name)
+        .await
+        .map_err(clash_error)?;
+
+    emit_clash_invalidation(&app, "clash-proxy-selected")?;
+
+    Ok(snapshot)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn clash_list_connections(
+    state: tauri::State<'_, AppState>,
+) -> Result<ClashConnectionsSnapshot, AppError> {
+    let config = current_config(&state)?;
+
+    ClashManager::new()
+        .connections(&config)
+        .await
+        .map_err(clash_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn clash_close_connection<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    connection_id: Option<String>,
+) -> Result<ClashConnectionsSnapshot, AppError> {
+    let config = current_config(&state)?;
+    let snapshot = ClashManager::new()
+        .close_connection(&config, connection_id.as_deref())
+        .await
+        .map_err(clash_error)?;
+
+    emit_clash_invalidation(&app, "clash-connection-closed")?;
+
+    Ok(snapshot)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn clash_set_rule_mode<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    mode: RuleMode,
+) -> Result<AppConfig, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    if config.clash_ui_item.rule_mode != mode {
+        if mode != RuleMode::Unchanged {
+            ClashManager::new()
+                .set_rule_mode(&config, mode)
+                .await
+                .map_err(clash_error)?;
+        }
+        config.clash_ui_item.rule_mode = mode;
+        persist_config_if_changed(&state, &original, &config)?;
+    }
+
+    emit_clash_invalidation(&app, "clash-rule-mode-changed")?;
+
+    Ok(config)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn clash_reload_config<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    path: Option<String>,
+) -> Result<(), AppError> {
+    let config = current_config(&state)?;
+
+    ClashManager::new()
+        .reload_config(&config, path.as_deref())
+        .await
+        .map_err(clash_error)?;
+    emit_clash_invalidation(&app, "clash-config-reloaded")?;
+
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn clash_start_monitor(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<ClashMonitorStatus, AppError> {
+    let config = current_config(&state)?;
+
+    state
+        .clash_monitor_controller()
+        .start(
+            &config,
+            std::sync::Arc::new(crate::TauriClashEventSink { app: app.clone() }),
+        )
+        .map_err(clash_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn clash_stop_monitor(
+    state: tauri::State<'_, AppState>,
+) -> Result<ClashMonitorStatus, AppError> {
+    state.clash_monitor_controller().stop().map_err(clash_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn run_speedtest<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    action: voya_core::SpeedActionType,
+    index_ids: Vec<String>,
+) -> Result<SpeedtestRunResult, AppError> {
+    let config = current_config(&state)?;
+    let manager = speedtest_manager(&state);
+    let emit_app = app.clone();
+    let result = manager
+        .run_with_callback(
+            state.database(),
+            &config,
+            action,
+            index_ids,
+            move |result| {
+                if let Err(error) = emit_speedtest_result(&emit_app, &result) {
+                    tracing::warn!(?error, "failed to emit speedtest result");
+                }
+            },
+        )
+        .await
+        .map_err(speedtest_error)?;
+
+    let changed_ids = result
+        .results
+        .iter()
+        .map(|item| item.index_id.clone())
+        .collect::<Vec<_>>();
+    emit_profile_invalidation(&app, "speedtest-updated", changed_ids, false)?;
+
+    Ok(result)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn cancel_speedtest<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+) -> Result<SpeedtestStatus, AppError> {
+    let cancelled = speedtest_manager(&state)
+        .cancel()
+        .map_err(speedtest_error)?;
+    if cancelled {
+        emit_runtime_log(&app, LogLevel::Info, "Speedtest cancellation requested")?;
+    }
+
+    speedtest_manager(&state).status().map_err(speedtest_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn speedtest_status(state: tauri::State<'_, AppState>) -> Result<SpeedtestStatus, AppError> {
+    speedtest_manager(&state).status().map_err(speedtest_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn update_status(state: tauri::State<'_, AppState>) -> Result<UpdateStatus, AppError> {
+    let config = current_config(&state)?;
+
+    Ok(update_manager(&state).status(&config))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn save_update_preferences(
+    state: tauri::State<'_, AppState>,
+    pre_release: bool,
+    selected_target_ids: Vec<String>,
+) -> Result<UpdateStatus, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let manager = update_manager(&state);
+    manager.save_preferences(&mut config, pre_release, selected_target_ids);
+    persist_config_if_changed(&state, &original, &config)?;
+
+    Ok(manager.status(&config))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn load_ruleset_geo_sources(
+    state: tauri::State<'_, AppState>,
+) -> Result<RulesetGeoSourceSettings, AppError> {
+    let config = current_config(&state)?;
+
+    Ok(update_manager(&state).source_settings(&config))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn save_ruleset_geo_sources(
+    state: tauri::State<'_, AppState>,
+    settings: RulesetGeoSourceSettings,
+) -> Result<RulesetGeoSourceSettings, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let manager = update_manager(&state);
+    let saved = manager.save_source_settings(&mut config, settings);
+    persist_config_if_changed(&state, &original, &config)?;
+
+    Ok(saved)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn check_updates(
+    state: tauri::State<'_, AppState>,
+    pre_release: bool,
+    selected_target_ids: Vec<String>,
+    prefer_proxy: bool,
+    proxy_url: Option<String>,
+) -> Result<UpdateRunResult, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let manager = update_manager(&state);
+    manager.save_preferences(&mut config, pre_release, selected_target_ids.clone());
+    persist_config_if_changed(&state, &original, &config)?;
+
+    manager
+        .check_updates(
+            &config,
+            &UpdateRequestOptions {
+                pre_release,
+                selected_target_ids,
+                prefer_proxy,
+                proxy_url,
+            },
+        )
+        .await
+        .map_err(update_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn download_updates(
+    state: tauri::State<'_, AppState>,
+    pre_release: bool,
+    selected_target_ids: Vec<String>,
+    prefer_proxy: bool,
+    proxy_url: Option<String>,
+) -> Result<UpdateRunResult, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let manager = update_manager(&state);
+    manager.save_preferences(&mut config, pre_release, selected_target_ids.clone());
+    persist_config_if_changed(&state, &original, &config)?;
+
+    manager
+        .download_updates(
+            &config,
+            &UpdateRequestOptions {
+                pre_release,
+                selected_target_ids,
+                prefer_proxy,
+                proxy_url,
+            },
+        )
+        .await
+        .map_err(update_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn backup_status(state: tauri::State<'_, AppState>) -> Result<BackupStatus, AppError> {
+    let config = current_config(&state)?;
+
+    Ok(backup_manager(&state).status(&config))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn backup_save_webdav_settings(
+    state: tauri::State<'_, AppState>,
+    settings: WebDavItem,
+) -> Result<WebDavItem, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    let saved = backup_manager(&state).save_webdav_settings(&mut config, settings);
+    persist_config_if_changed(&state, &original, &config)?;
+
+    Ok(saved)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn backup_create_local(
+    state: tauri::State<'_, AppState>,
+    output_path: Option<String>,
+) -> Result<BackupOperationResult, AppError> {
+    let config = current_config(&state)?;
+    let output_path = output_path
+        .filter(|path| !path.trim().is_empty())
+        .map(PathBuf::from);
+
+    backup_manager(&state)
+        .create_local_backup(&config, output_path.as_deref())
+        .await
+        .map_err(backup_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn backup_restore_local<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    input_path: String,
+) -> Result<BackupRestoreResult, AppError> {
+    let input_path = PathBuf::from(input_path);
+    let result = backup_manager(&state)
+        .restore_local_backup(&input_path)
+        .await
+        .map_err(backup_error)?;
+    replace_current_config(&state, &result.restored_config)?;
+    emit_backup_invalidation(&app, "backup-restored")?;
+
+    Ok(result)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn backup_webdav_check(
+    state: tauri::State<'_, AppState>,
+    settings: WebDavItem,
+) -> Result<BackupOperationResult, AppError> {
+    let config = save_webdav_settings_for_operation(&state, settings)?;
+
+    backup_manager(&state)
+        .webdav_check(&config.web_dav_item)
+        .await
+        .map_err(backup_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn backup_webdav_push(
+    state: tauri::State<'_, AppState>,
+    settings: WebDavItem,
+) -> Result<BackupRemoteResult, AppError> {
+    let config = save_webdav_settings_for_operation(&state, settings)?;
+
+    backup_manager(&state)
+        .webdav_push(&config, &config.web_dav_item)
+        .await
+        .map_err(backup_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn backup_webdav_pull<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    settings: WebDavItem,
+) -> Result<BackupRestoreResult, AppError> {
+    let config = save_webdav_settings_for_operation(&state, settings)?;
+    let result = backup_manager(&state)
+        .webdav_pull(&config.web_dav_item)
+        .await
+        .map_err(backup_error)?;
+    replace_current_config(&state, &result.restored_config)?;
+    emit_backup_invalidation(&app, "backup-webdav-restored")?;
+
+    Ok(result)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn ipc_demo_round_trip<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    request: DemoRequest,
+) -> Result<DemoResponse, AppError> {
+    let response = DemoResponse {
+        echoed_message: request.message.clone(),
+        message_length: u32::try_from(request.message.chars().count()).unwrap_or(u32::MAX),
+    };
+
+    InvalidateEvent {
+        keys: vec![QueryInvalidation {
+            query_key: vec!["ipc-demo".to_string()],
+            reason: "demo-round-trip".to_string(),
+        }],
+    }
+    .emit(&app)
+    .map_err(|error| AppError::EventEmit(error.to_string()))?;
+
+    TransientStreamEvent::LogLine(LogLineEvent {
+        level: LogLevel::Info,
+        line: format!("IPC demo echoed {} characters", response.message_length),
+    })
+    .emit(&app)
+    .map_err(|error| AppError::EventEmit(error.to_string()))?;
+
+    TransientStreamEvent::CoreState(CoreStateEvent {
+        state: CoreState::Disconnected,
+        active_profile_id: None,
+        main_pid: None,
+        pre_pid: None,
+        running_core_type: None,
+    })
+    .emit(&app)
+    .map_err(|error| AppError::EventEmit(error.to_string()))?;
+
+    AppEvent::Notice(AppNotice {
+        level: AppNoticeLevel::Info,
+        title: "IPC demo".to_string(),
+        message: Some("Typed command and event bridge are connected.".to_string()),
+    })
+    .emit(&app)
+    .map_err(|error| AppError::EventEmit(error.to_string()))?;
+
+    Ok(response)
+}
+
+fn current_config(state: &AppState) -> Result<AppConfig, AppError> {
+    state
+        .config()
+        .read()
+        .map_err(|_| AppError::State("app config lock is poisoned".to_string()))
+        .map(|guard| guard.clone())
+}
+
+fn runtime_manager(state: &AppState) -> RuntimeManager<'_> {
+    RuntimeManager::new(
+        state.database(),
+        state.runtime_paths().clone(),
+        state.supervisor(),
+    )
+}
+
+fn speedtest_manager(state: &AppState) -> SpeedtestManager {
+    state.speedtest_manager()
+}
+
+fn tun_manager(state: &AppState) -> TunManager {
+    TunManager::new(state.sudo_password_collector().store())
+}
+
+fn update_manager(state: &AppState) -> UpdateManager<'_> {
+    UpdateManager::new(state.database(), state.runtime_paths().clone())
+}
+
+fn backup_manager(state: &AppState) -> BackupManager<'_> {
+    BackupManager::new(
+        state.database(),
+        state.config_store(),
+        state.runtime_paths().clone(),
+    )
+}
+
+struct TauriHotkeyRegistrar<R: tauri::Runtime> {
+    app: tauri::AppHandle<R>,
+}
+
+impl<R> HotkeyRegistrar for TauriHotkeyRegistrar<R>
+where
+    R: tauri::Runtime + 'static,
+{
+    fn unregister_all(&self) -> Result<(), HotkeyManagerError> {
+        self.app
+            .global_shortcut()
+            .unregister_all()
+            .map_err(|error| HotkeyManagerError::Register(error.to_string()))
+    }
+
+    fn register(&self, bindings: &[GlobalHotkeyBinding]) -> Result<(), HotkeyManagerError> {
+        for binding in bindings {
+            let action = binding.action;
+            self.app
+                .global_shortcut()
+                .on_shortcut(
+                    binding.accelerator.as_str(),
+                    move |app, _shortcut, event| {
+                        if event.state == ShortcutState::Pressed {
+                            handle_global_hotkey(app, action);
+                        }
+                    },
+                )
+                .map_err(|error| HotkeyManagerError::Register(error.to_string()))?;
+        }
+
+        Ok(())
+    }
+}
+
+fn handle_global_hotkey<R: tauri::Runtime>(app: &tauri::AppHandle<R>, action: GlobalHotkey) {
+    match action {
+        GlobalHotkey::ShowForm => toggle_main_window(app),
+        GlobalHotkey::SystemProxyClear => {
+            spawn_global_hotkey_proxy_mode(app, SysProxyType::ForcedClear);
+        }
+        GlobalHotkey::SystemProxySet => {
+            spawn_global_hotkey_proxy_mode(app, SysProxyType::ForcedChange);
+        }
+        GlobalHotkey::SystemProxyUnchanged => {
+            spawn_global_hotkey_proxy_mode(app, SysProxyType::Unchanged);
+        }
+        GlobalHotkey::SystemProxyPac => {
+            spawn_global_hotkey_proxy_mode(app, SysProxyType::Pac);
+        }
+    }
+}
+
+fn toggle_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+
+    match window.is_visible() {
+        Ok(true) => {
+            if let Err(error) = window.hide() {
+                tracing::warn!(?error, "failed to hide main window from global hotkey");
+            }
+        }
+        Ok(false) | Err(_) => {
+            if let Err(error) = window.show() {
+                tracing::warn!(?error, "failed to show main window from global hotkey");
+            }
+            if let Err(error) = window.set_focus() {
+                tracing::warn!(?error, "failed to focus main window from global hotkey");
+            }
+        }
+    }
+}
+
+fn spawn_global_hotkey_proxy_mode<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    mode: SysProxyType,
+) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<AppState>();
+        if let Err(error) = set_system_proxy_mode(app.clone(), state, mode) {
+            tracing::warn!(?error, "global hotkey system proxy mode switch failed");
+        }
+    });
+}
+
+fn apply_system_proxy<R>(
+    _app: &tauri::AppHandle<R>,
+    state: &AppState,
+    config: &AppConfig,
+    force_disable: bool,
+) -> Result<SystemProxyStatus, SystemProxyManagerError>
+where
+    R: tauri::Runtime,
+{
+    state
+        .system_proxy_manager()
+        .apply_config(config, force_disable)
+}
+
+pub(crate) fn restore_system_proxy<R>(
+    _app: &tauri::AppHandle<R>,
+    state: &AppState,
+) -> Result<SystemProxyStatus, AppError>
+where
+    R: tauri::Runtime,
+{
+    let config = current_config(state)?;
+
+    state
+        .system_proxy_manager()
+        .restore(&config)
+        .map_err(sysproxy_error)
+}
+
+fn runtime_status_response(snapshot: SupervisorSnapshot) -> RuntimeStatusResponse {
+    RuntimeStatusResponse {
+        state: match snapshot.state {
+            SupervisorConnectionState::Disconnected => RuntimeConnectionState::Disconnected,
+            SupervisorConnectionState::Connected => RuntimeConnectionState::Connected,
+        },
+        active_profile_id: snapshot.active_profile_id,
+        main_pid: snapshot.main_pid,
+        pre_pid: snapshot.pre_pid,
+        running_core_type: snapshot.running_core_type,
+    }
+}
+
+fn system_proxy_status_response(status: SystemProxyStatus) -> SystemProxyStatusResponse {
+    SystemProxyStatusResponse {
+        requested_mode: status.requested_type,
+        effective_mode: status.effective_type,
+        pac_available: status.pac_available,
+        proxy: status.proxy,
+        exceptions: status.exceptions,
+        pac_url: status.pac_url,
+    }
+}
+
+fn emit_runtime_log<R>(
+    app: &tauri::AppHandle<R>,
+    level: LogLevel,
+    line: &str,
+) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    TransientStreamEvent::LogLine(LogLineEvent {
+        level,
+        line: line.to_string(),
+    })
+    .emit(app)
+    .map_err(|error| AppError::EventEmit(error.to_string()))
+}
+
+fn emit_core_state<R>(
+    app: &tauri::AppHandle<R>,
+    state: CoreState,
+    active_profile_id: Option<String>,
+    snapshot: Option<&SupervisorSnapshot>,
+) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    TransientStreamEvent::CoreState(core_state_event(state, active_profile_id, snapshot))
+        .emit(app)
+        .map_err(|error| AppError::EventEmit(error.to_string()))
+}
+
+fn emit_statistics_zero<R>(app: &tauri::AppHandle<R>) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    TransientStreamEvent::Statistics(super::events::StatisticsSnapshot {
+        active_profile_id: None,
+        proxy_upload_bytes_per_second: 0.0,
+        proxy_download_bytes_per_second: 0.0,
+        direct_upload_bytes_per_second: 0.0,
+        direct_download_bytes_per_second: 0.0,
+        upload_bytes_per_second: 0.0,
+        download_bytes_per_second: 0.0,
+        server_stat: None,
+    })
+    .emit(app)
+    .map_err(|error| AppError::EventEmit(error.to_string()))
+}
+
+fn emit_speedtest_result<R>(
+    app: &tauri::AppHandle<R>,
+    result: &SpeedTestResult,
+) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    TransientStreamEvent::SpeedtestResult(result.clone())
+        .emit(app)
+        .map_err(|error| AppError::EventEmit(error.to_string()))
+}
+
+fn core_state_event(
+    state: CoreState,
+    active_profile_id: Option<String>,
+    snapshot: Option<&SupervisorSnapshot>,
+) -> CoreStateEvent {
+    CoreStateEvent {
+        state,
+        active_profile_id: snapshot
+            .and_then(|snapshot| snapshot.active_profile_id.clone())
+            .or(active_profile_id),
+        main_pid: snapshot.and_then(|snapshot| snapshot.main_pid),
+        pre_pid: snapshot.and_then(|snapshot| snapshot.pre_pid),
+        running_core_type: snapshot.and_then(|snapshot| snapshot.running_core_type),
+    }
+}
+
+fn persist_config_if_changed(
+    state: &AppState,
+    original: &AppConfig,
+    updated: &AppConfig,
+) -> Result<(), AppError> {
+    if original == updated {
+        return Ok(());
+    }
+
+    state
+        .config_store()
+        .save(updated)
+        .map_err(|error| AppError::ConfigSave(error.to_string()))?;
+    let mut guard = state
+        .config()
+        .write()
+        .map_err(|_| AppError::State("app config lock is poisoned".to_string()))?;
+    *guard = updated.clone();
+
+    Ok(())
+}
+
+fn replace_current_config(state: &AppState, config: &AppConfig) -> Result<(), AppError> {
+    let mut guard = state
+        .config()
+        .write()
+        .map_err(|_| AppError::State("app config lock is poisoned".to_string()))?;
+    *guard = config.clone();
+
+    Ok(())
+}
+
+fn save_webdav_settings_for_operation(
+    state: &AppState,
+    settings: WebDavItem,
+) -> Result<AppConfig, AppError> {
+    let original = current_config(state)?;
+    let mut config = original.clone();
+    backup_manager(state).save_webdav_settings(&mut config, settings);
+    persist_config_if_changed(state, &original, &config)?;
+
+    Ok(config)
+}
+
+fn profile_error(error: ProfileManagerError) -> AppError {
+    match error {
+        ProfileManagerError::Database(error) => AppError::Database(error.to_string()),
+        error => AppError::Profile(error.to_string()),
+    }
+}
+
+fn group_error(error: GroupManagerError) -> AppError {
+    match error {
+        GroupManagerError::Database(error) => AppError::Database(error.to_string()),
+        GroupManagerError::Profile(error) => profile_error(error),
+        error => AppError::Group(error.to_string()),
+    }
+}
+
+fn subscription_error(error: SubscriptionManagerError) -> AppError {
+    match error {
+        SubscriptionManagerError::Database(error) => AppError::Database(error.to_string()),
+        error => AppError::Subscription(error.to_string()),
+    }
+}
+
+fn routing_error(error: RoutingManagerError) -> AppError {
+    match error {
+        RoutingManagerError::Database(error) => AppError::Database(error.to_string()),
+        error => AppError::Routing(error.to_string()),
+    }
+}
+
+fn speedtest_error(error: SpeedtestError) -> AppError {
+    AppError::Speedtest(error.to_string())
+}
+
+fn preset_error(error: PresetManagerError) -> AppError {
+    match error {
+        PresetManagerError::Database(error) => AppError::Database(error.to_string()),
+        error => AppError::Preset(error.to_string()),
+    }
+}
+
+fn clash_error(error: ClashManagerError) -> AppError {
+    AppError::Clash(error.to_string())
+}
+
+fn dns_error(error: DnsManagerError) -> AppError {
+    match error {
+        DnsManagerError::Database(error) => AppError::Database(error.to_string()),
+        DnsManagerError::Validation(issues) => AppError::Dns(DnsCommandError {
+            message: "DNS settings validation failed".to_string(),
+            issues,
+        }),
+        error => AppError::Dns(DnsCommandError {
+            message: error.to_string(),
+            issues: Vec::new(),
+        }),
+    }
+}
+
+fn autostart_error(error: AutostartManagerError) -> AppError {
+    AppError::Autostart(error.to_string())
+}
+
+fn hotkey_error(error: HotkeyManagerError) -> AppError {
+    AppError::Hotkey(error.to_string())
+}
+
+fn sysproxy_error(error: SystemProxyManagerError) -> AppError {
+    AppError::SysProxy(error.to_string())
+}
+
+fn tun_error(error: TunManagerError) -> AppError {
+    match error {
+        TunManagerError::SudoPasswordRequired | TunManagerError::SudoPassword(_) => {
+            AppError::Sudo(error.to_string())
+        }
+        TunManagerError::UnsupportedPlatform => AppError::Tun(error.to_string()),
+    }
+}
+
+fn update_error(error: UpdateManagerError) -> AppError {
+    match error {
+        UpdateManagerError::Database(error) => AppError::Database(error.to_string()),
+        error => AppError::Update(error.to_string()),
+    }
+}
+
+fn backup_error(error: BackupManagerError) -> AppError {
+    match error {
+        BackupManagerError::Database(error) => AppError::Database(error.to_string()),
+        error => AppError::Backup(error.to_string()),
+    }
+}
+
+fn sudo_error(error: SudoCollectionError) -> AppError {
+    AppError::Sudo(error.to_string())
+}
+
+fn sudo_collection_response(status: SudoCollectionStatus) -> SudoCollectionResponse {
+    match status {
+        SudoCollectionStatus::Ready => SudoCollectionResponse {
+            state: SudoCollectionState::Ready,
+            request_id: None,
+        },
+        SudoCollectionStatus::Required { request_id } => SudoCollectionResponse {
+            state: SudoCollectionState::Required,
+            request_id: Some(request_id.to_string()),
+        },
+    }
+}
+
+fn current_unix_time() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| {
+            i64::try_from(duration.as_secs()).unwrap_or(i64::MAX)
+        })
+}
+
+fn emit_profile_invalidation<R, I>(
+    app: &tauri::AppHandle<R>,
+    reason: &str,
+    affected_index_ids: I,
+    active_changed: bool,
+) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+    I: IntoIterator<Item = String>,
+{
+    let mut keys = BTreeSet::new();
+    keys.insert(vec!["profiles".to_string()]);
+    keys.insert(vec!["profile-ex".to_string()]);
+    if active_changed {
+        keys.insert(vec!["active-profile".to_string()]);
+    }
+    for index_id in affected_index_ids {
+        if !index_id.is_empty() {
+            keys.insert(vec!["profile".to_string(), index_id]);
+        }
+    }
+
+    InvalidateEvent {
+        keys: keys
+            .into_iter()
+            .map(|query_key| QueryInvalidation {
+                query_key,
+                reason: reason.to_string(),
+            })
+            .collect(),
+    }
+    .emit(app)
+    .map_err(|error| AppError::EventEmit(error.to_string()))
+}
+
+fn emit_subscription_invalidation<R>(
+    app: &tauri::AppHandle<R>,
+    reason: &str,
+    profiles_changed: bool,
+    config_changed: bool,
+) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    let mut keys = BTreeSet::new();
+    keys.insert(vec!["subscriptions".to_string()]);
+    if profiles_changed {
+        keys.insert(vec!["profiles".to_string()]);
+        keys.insert(vec!["profile-ex".to_string()]);
+    }
+    if config_changed {
+        keys.insert(vec!["active-profile".to_string()]);
+    }
+
+    InvalidateEvent {
+        keys: keys
+            .into_iter()
+            .map(|query_key| QueryInvalidation {
+                query_key,
+                reason: reason.to_string(),
+            })
+            .collect(),
+    }
+    .emit(app)
+    .map_err(|error| AppError::EventEmit(error.to_string()))
+}
+
+fn emit_routing_invalidation<R, I>(
+    app: &tauri::AppHandle<R>,
+    reason: &str,
+    affected_ids: I,
+    active_changed: bool,
+) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+    I: IntoIterator<Item = String>,
+{
+    let mut keys = BTreeSet::new();
+    keys.insert(vec!["routings".to_string()]);
+    if active_changed {
+        keys.insert(vec!["active-routing".to_string()]);
+    }
+    for id in affected_ids {
+        if !id.is_empty() {
+            keys.insert(vec!["routing".to_string(), id]);
+        }
+    }
+
+    InvalidateEvent {
+        keys: keys
+            .into_iter()
+            .map(|query_key| QueryInvalidation {
+                query_key,
+                reason: reason.to_string(),
+            })
+            .collect(),
+    }
+    .emit(app)
+    .map_err(|error| AppError::EventEmit(error.to_string()))
+}
+
+fn emit_dns_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    InvalidateEvent {
+        keys: [
+            vec!["dns".to_string()],
+            vec!["app-config".to_string()],
+            vec!["active-dns".to_string()],
+        ]
+        .into_iter()
+        .map(|query_key| QueryInvalidation {
+            query_key,
+            reason: reason.to_string(),
+        })
+        .collect(),
+    }
+    .emit(app)
+    .map_err(|error| AppError::EventEmit(error.to_string()))
+}
+
+fn emit_preset_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    InvalidateEvent {
+        keys: [
+            vec!["dns".to_string()],
+            vec!["app-config".to_string()],
+            vec!["active-dns".to_string()],
+            vec!["routings".to_string()],
+            vec!["active-routing".to_string()],
+        ]
+        .into_iter()
+        .map(|query_key| QueryInvalidation {
+            query_key,
+            reason: reason.to_string(),
+        })
+        .collect(),
+    }
+    .emit(app)
+    .map_err(|error| AppError::EventEmit(error.to_string()))
+}
+
+fn emit_clash_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    InvalidateEvent {
+        keys: [
+            vec!["clash".to_string()],
+            vec!["clash-proxies".to_string()],
+            vec!["clash-connections".to_string()],
+            vec!["app-config".to_string()],
+        ]
+        .into_iter()
+        .map(|query_key| QueryInvalidation {
+            query_key,
+            reason: reason.to_string(),
+        })
+        .collect(),
+    }
+    .emit(app)
+    .map_err(|error| AppError::EventEmit(error.to_string()))
+}
+
+fn emit_backup_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    InvalidateEvent {
+        keys: [
+            vec!["app-config".to_string()],
+            vec!["backup".to_string()],
+            vec!["profiles".to_string()],
+            vec!["profile-ex".to_string()],
+            vec!["subscriptions".to_string()],
+            vec!["routings".to_string()],
+            vec!["dns".to_string()],
+        ]
+        .into_iter()
+        .map(|query_key| QueryInvalidation {
+            query_key,
+            reason: reason.to_string(),
+        })
+        .collect(),
+    }
+    .emit(app)
+    .map_err(|error| AppError::EventEmit(error.to_string()))
+}
+
+fn emit_app_config_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    InvalidateEvent {
+        keys: [vec!["app-config".to_string()]]
+            .into_iter()
+            .map(|query_key| QueryInvalidation {
+                query_key,
+                reason: reason.to_string(),
+            })
+            .collect(),
+    }
+    .emit(app)
+    .map_err(|error| AppError::EventEmit(error.to_string()))
+}
+
+fn emit_tun_changed<R>(app: &tauri::AppHandle<R>, enabled: bool) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    TransientStreamEvent::TunChanged(super::events::TunChanged { enabled })
+        .emit(app)
+        .map_err(|error| AppError::EventEmit(error.to_string()))
+}
+
+async fn restart_if_connected_after_routing_change<R>(
+    app: &tauri::AppHandle<R>,
+    state: &AppState,
+    config: &AppConfig,
+) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    restart_if_connected_after_config_change(app, state, config, "Routing changed").await
+}
+
+async fn restart_if_connected_after_config_change<R>(
+    app: &tauri::AppHandle<R>,
+    state: &AppState,
+    config: &AppConfig,
+    reason: &str,
+) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    let status = runtime_manager(state)
+        .status()
+        .await
+        .map_err(|error| AppError::Runtime(error.to_string()))?;
+    if status.state != SupervisorConnectionState::Connected {
+        return Ok(());
+    }
+
+    emit_runtime_log(app, LogLevel::Info, &format!("{reason}; restarting core"))?;
+    emit_core_state(
+        app,
+        CoreState::Connecting,
+        Some(config.index_id.clone()).filter(|value| !value.is_empty()),
+        None,
+    )?;
+
+    match runtime_manager(state).restart(config).await {
+        Ok(snapshot) => {
+            emit_runtime_log(
+                app,
+                LogLevel::Info,
+                &format!("Core supervisor restarted after {reason}"),
+            )?;
+            emit_core_state(app, CoreState::Connected, None, Some(&snapshot))?;
+            match apply_system_proxy(app, state, config, false) {
+                Ok(status) => emit_sysproxy_changed(app, &status)?,
+                Err(error) => emit_runtime_log(
+                    app,
+                    LogLevel::Warn,
+                    &format!("System proxy apply failed: {error}"),
+                )?,
+            }
+            Ok(())
+        }
+        Err(error) => {
+            let message = error.to_string();
+            emit_runtime_log(app, LogLevel::Error, &message)?;
+            emit_core_state(app, CoreState::Disconnected, None, None)?;
+            Err(AppError::Runtime(message))
+        }
+    }
+}
+
+fn emit_sysproxy_changed<R>(
+    app: &tauri::AppHandle<R>,
+    status: &SystemProxyStatus,
+) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    TransientStreamEvent::SysProxyChanged(super::events::SysProxyChanged {
+        requested_mode: sysproxy_mode(status.requested_type),
+        effective_mode: sysproxy_mode(status.effective_type),
+        pac_available: status.pac_available,
+        proxy: status.proxy.clone(),
+    })
+    .emit(app)
+    .map_err(|error| AppError::EventEmit(error.to_string()))
+}
+
+fn sysproxy_mode(mode: SysProxyType) -> super::events::SysProxyMode {
+    match mode {
+        SysProxyType::ForcedClear => super::events::SysProxyMode::ForcedClear,
+        SysProxyType::ForcedChange => super::events::SysProxyMode::ForcedChange,
+        SysProxyType::Unchanged => super::events::SysProxyMode::Unchanged,
+        SysProxyType::Pac => super::events::SysProxyMode::Pac,
+    }
+}

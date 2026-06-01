@@ -1,0 +1,98 @@
+{
+  "default_domain_resolver": {
+    "server": "direct_dns"
+  },
+  "auto_detect_interface": true,
+  "rules": [
+    {
+      "action": "reject",
+      "network": [
+        "udp"
+      ],
+      "port": [
+        135,
+        137,
+        138,
+        139,
+        5353
+      ]
+    },
+    {
+      "action": "reject",
+      "ip_cidr": [
+        "224.0.0.0/3",
+        "ff00::/8"
+      ]
+    },
+    {
+      "action": "hijack-dns",
+      "port": [
+        53
+      ],
+      "process_name": [
+        "xray",
+        "v2ray",
+        "wv2ray",
+        "hysteria",
+        "hysteria-windows-amd64",
+        "hysteria-linux-amd64",
+        "hysteria-darwin-amd64",
+        "hysteria-darwin-arm64",
+        "naive",
+        "naiveproxy",
+        "tuic-client",
+        "juicity-client",
+        "mieru"
+      ]
+    },
+    {
+      "outbound": "direct",
+      "process_name": [
+        "xray",
+        "v2ray",
+        "wv2ray",
+        "hysteria",
+        "hysteria-windows-amd64",
+        "hysteria-linux-amd64",
+        "hysteria-darwin-amd64",
+        "hysteria-darwin-arm64",
+        "naive",
+        "naiveproxy",
+        "tuic-client",
+        "juicity-client",
+        "mieru",
+        "sing-box",
+        "mihomo"
+      ]
+    },
+    {
+      "action": "sniff"
+    },
+    {
+      "type": "logical",
+      "mode": "or",
+      "action": "hijack-dns",
+      "rules": [
+        {
+          "port": [
+            53
+          ]
+        },
+        {
+          "protocol": [
+            "dns"
+          ]
+        }
+      ]
+    },
+    {
+      "outbound": "direct",
+      "clash_mode": "Direct"
+    },
+    {
+      "outbound": "proxy",
+      "clash_mode": "Global"
+    }
+  ],
+  "final": "proxy"
+}

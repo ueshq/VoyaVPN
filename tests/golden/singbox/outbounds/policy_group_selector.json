@@ -1,0 +1,44 @@
+[
+  {
+    "type": "selector",
+    "tag": "proxy",
+    "outbounds": [
+      "proxy-auto",
+      "proxy-1-node-1",
+      "proxy-2-node-2"
+    ],
+    "interrupt_exist_connections": false
+  },
+  {
+    "type": "urltest",
+    "tag": "proxy-auto",
+    "outbounds": [
+      "proxy-1-node-1",
+      "proxy-2-node-2"
+    ],
+    "interrupt_exist_connections": false,
+    "tolerance": 5000
+  },
+  {
+    "type": "socks",
+    "tag": "proxy-1-node-1",
+    "server": "127.0.0.1",
+    "server_port": 1080,
+    "password": "pass",
+    "username": "user",
+    "version": "5"
+  },
+  {
+    "type": "socks",
+    "tag": "proxy-2-node-2",
+    "server": "127.0.0.1",
+    "server_port": 1080,
+    "password": "pass",
+    "username": "user",
+    "version": "5"
+  },
+  {
+    "type": "direct",
+    "tag": "direct"
+  }
+]

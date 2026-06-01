@@ -1,0 +1,102 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "VoyaVPN",
+  "version": "0.1.0",
+  "identifier": "app.voyavpn.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build",
+    "devUrl": "http://127.0.0.1:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "VoyaVPN",
+        "width": 1180,
+        "height": 760,
+        "minWidth": 960,
+        "minHeight": 640
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "publisher": "VoyaVPN",
+    "homepage": "https://github.com/voyavpn/voyavpn",
+    "category": "DeveloperTool",
+    "shortDescription": "Cross-platform proxy client",
+    "longDescription": "VoyaVPN is a cross-platform desktop proxy client with separate app and core update flows.",
+    "license": "MIT",
+    "copyright": "Copyright (c) VoyaVPN contributors",
+    "icon": ["icons/icon.png"],
+    "targets": ["app", "dmg", "nsis", "msi", "deb", "rpm", "appimage"],
+    "createUpdaterArtifacts": false,
+    "resources": {
+      "../docs/release/THIRD_PARTY_NOTICES.md": "release/THIRD_PARTY_NOTICES.md"
+    },
+    "externalBin": [],
+    "macOS": {
+      "bundleName": "VoyaVPN",
+      "minimumSystemVersion": "10.15",
+      "hardenedRuntime": true,
+      "dmg": {
+        "windowSize": {
+          "width": 660,
+          "height": 400
+        },
+        "appPosition": {
+          "x": 180,
+          "y": 170
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 170
+        }
+      }
+    },
+    "windows": {
+      "allowDowngrades": false,
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["English"],
+        "displayLanguageSelector": false
+      },
+      "wix": {
+        "upgradeCode": "81f9b48c-cd6b-566b-9904-9f89ac741525",
+        "language": "en-US"
+      }
+    },
+    "linux": {
+      "deb": {
+        "section": "net",
+        "priority": "optional"
+      },
+      "rpm": {
+        "release": "1"
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "VOYAVPN_UPDATER_PUBLIC_KEY_PLACEHOLDER_REPLACE_BEFORE_RELEASE",
+      "endpoints": [
+        "https://updates.voyavpn.example/{{target}}/{{arch}}/{{current_version}}?channel=beta"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

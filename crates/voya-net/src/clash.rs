@@ -1,0 +1,718 @@
+use std::{collections::BTreeMap, future::Future, pin::Pin};
+
+use futures_util::StreamExt;
+use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
+use reqwest::Method;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use thiserror::Error;
+use tokio::net::TcpStream;
+use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
+
+const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &CONTROLS
+    .add(b' ')
+    .add(b'"')
+    .add(b'#')
+    .add(b'%')
+    .add(b'/')
+    .add(b'<')
+    .add(b'>')
+    .add(b'?')
+    .add(b'`')
+    .add(b'{')
+    .add(b'}');
+const QUERY_VALUE_ENCODE_SET: &AsciiSet = &PATH_SEGMENT_ENCODE_SET
+    .add(b'&')
+    .add(b'+')
+    .add(b':')
+    .add(b'=');
+
+pub type Result<T> = std::result::Result<T, ClashError>;
+
+#[derive(Debug, Error)]
+pub enum ClashError {
+    #[error("Clash request failed: {0}")]
+    Request(String),
+    #[error("Clash response decode failed: {0}")]
+    Decode(String),
+    #[error("Clash websocket failed: {0}")]
+    WebSocket(String),
+    #[error("Clash websocket closed")]
+    WebSocketClosed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClashApiEndpoint {
+    pub host: String,
+    pub port: u16,
+    pub secret: Option<String>,
+}
+
+impl ClashApiEndpoint {
+    #[must_use]
+    pub fn loopback(port: u16) -> Self {
+        Self {
+            host: "127.0.0.1".to_string(),
+            port,
+            secret: None,
+        }
+    }
+
+    #[must_use]
+    pub fn http_url(&self, path_and_query: &str) -> String {
+        format!(
+            "http://{}:{}{}",
+            normalize_host(&self.host),
+            self.port,
+            normalize_path(path_and_query)
+        )
+    }
+
+    #[must_use]
+    pub fn ws_url(&self, path_and_query: &str) -> String {
+        format!(
+            "ws://{}:{}{}",
+            normalize_host(&self.host),
+            self.port,
+            normalize_path(path_and_query)
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClashHttpMethod {
+    Get,
+    Put,
+    Patch,
+    Delete,
+}
+
+impl From<ClashHttpMethod> for Method {
+    fn from(value: ClashHttpMethod) -> Self {
+        match value {
+            ClashHttpMethod::Get => Self::GET,
+            ClashHttpMethod::Put => Self::PUT,
+            ClashHttpMethod::Patch => Self::PATCH,
+            ClashHttpMethod::Delete => Self::DELETE,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClashHttpRequest {
+    pub method: ClashHttpMethod,
+    pub url: String,
+    pub body: Option<Value>,
+    pub bearer_token: Option<String>,
+}
+
+pub trait ClashHttpTransport: Clone + Send + Sync + 'static {
+    fn send_json<'transport>(
+        &'transport self,
+        request: ClashHttpRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<Value>> + Send + 'transport>>;
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ReqwestClashHttpTransport {
+    client: reqwest::Client,
+}
+
+impl ReqwestClashHttpTransport {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            client: reqwest::Client::new(),
+        }
+    }
+}
+
+impl ClashHttpTransport for ReqwestClashHttpTransport {
+    fn send_json<'transport>(
+        &'transport self,
+        request: ClashHttpRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<Value>> + Send + 'transport>> {
+        Box::pin(async move {
+            let mut builder = self
+                .client
+                .request(Method::from(request.method), &request.url);
+            if let Some(token) = request
+                .bearer_token
+                .as_deref()
+                .filter(|value| !value.is_empty())
+            {
+                builder = builder.bearer_auth(token);
+            }
+            if let Some(body) = &request.body {
+                builder = builder.json(body);
+            }
+
+            let response = builder
+                .send()
+                .await
+                .map_err(|error| ClashError::Request(error.to_string()))?
+                .error_for_status()
+                .map_err(|error| ClashError::Request(error.to_string()))?;
+
+            let text = response
+                .text()
+                .await
+                .map_err(|error| ClashError::Request(error.to_string()))?;
+            if text.trim().is_empty() {
+                Ok(Value::Null)
+            } else {
+                serde_json::from_str(&text).map_err(|error| ClashError::Decode(error.to_string()))
+            }
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ClashRestClient<T = ReqwestClashHttpTransport> {
+    endpoint: ClashApiEndpoint,
+    transport: T,
+}
+
+impl ClashRestClient<ReqwestClashHttpTransport> {
+    #[must_use]
+    pub fn new(endpoint: ClashApiEndpoint) -> Self {
+        Self::with_transport(endpoint, ReqwestClashHttpTransport::new())
+    }
+}
+
+impl<T> ClashRestClient<T>
+where
+    T: ClashHttpTransport,
+{
+    #[must_use]
+    pub fn with_transport(endpoint: ClashApiEndpoint, transport: T) -> Self {
+        Self {
+            endpoint,
+            transport,
+        }
+    }
+
+    #[must_use]
+    pub fn endpoint(&self) -> &ClashApiEndpoint {
+        &self.endpoint
+    }
+
+    pub async fn get_proxies(&self) -> Result<ClashProxiesResponse> {
+        self.request(ClashHttpMethod::Get, "/proxies", None).await
+    }
+
+    pub async fn get_proxy_providers(&self) -> Result<ClashProvidersResponse> {
+        self.request(ClashHttpMethod::Get, "/providers/proxies", None)
+            .await
+    }
+
+    pub async fn get_connections(&self) -> Result<ClashConnections> {
+        self.request(ClashHttpMethod::Get, "/connections", None)
+            .await
+    }
+
+    pub async fn delay_proxy(
+        &self,
+        proxy_name: &str,
+        timeout_ms: u32,
+        test_url: &str,
+    ) -> Result<ClashDelayResponse> {
+        let path = format!(
+            "/proxies/{}/delay?timeout={timeout_ms}&url={}",
+            encode_segment(proxy_name),
+            encode_query_value(test_url)
+        );
+
+        self.request(ClashHttpMethod::Get, &path, None).await
+    }
+
+    pub async fn select_proxy(&self, group_name: &str, proxy_name: &str) -> Result<()> {
+        let path = format!("/proxies/{}", encode_segment(group_name));
+        self.request_value(
+            ClashHttpMethod::Put,
+            &path,
+            Some(json!({
+                "name": proxy_name,
+            })),
+        )
+        .await
+        .map(drop)
+    }
+
+    pub async fn patch_configs(&self, body: Value) -> Result<()> {
+        self.request_value(ClashHttpMethod::Patch, "/configs", Some(body))
+            .await
+            .map(drop)
+    }
+
+    pub async fn set_rule_mode(&self, mode: &str) -> Result<()> {
+        self.patch_configs(json!({ "mode": mode })).await
+    }
+
+    pub async fn reload_config(&self, path: Option<&str>) -> Result<()> {
+        let body = path
+            .filter(|path| !path.trim().is_empty())
+            .map(|path| json!({ "path": path }))
+            .unwrap_or_else(|| json!({}));
+
+        self.request_value(ClashHttpMethod::Put, "/configs?force=true", Some(body))
+            .await
+            .map(drop)
+    }
+
+    pub async fn close_connection(&self, connection_id: Option<&str>) -> Result<()> {
+        let path = connection_id
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .map(|id| format!("/connections/{}", encode_segment(id)))
+            .unwrap_or_else(|| "/connections".to_string());
+
+        self.request_value(ClashHttpMethod::Delete, &path, None)
+            .await
+            .map(drop)
+    }
+
+    async fn request<R>(
+        &self,
+        method: ClashHttpMethod,
+        path_and_query: &str,
+        body: Option<Value>,
+    ) -> Result<R>
+    where
+        R: for<'de> Deserialize<'de>,
+    {
+        let value = self.request_value(method, path_and_query, body).await?;
+        serde_json::from_value(value).map_err(|error| ClashError::Decode(error.to_string()))
+    }
+
+    async fn request_value(
+        &self,
+        method: ClashHttpMethod,
+        path_and_query: &str,
+        body: Option<Value>,
+    ) -> Result<Value> {
+        self.transport
+            .send_json(ClashHttpRequest {
+                method,
+                url: self.endpoint.http_url(path_and_query),
+                body,
+                bearer_token: self.endpoint.secret.clone(),
+            })
+            .await
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClashWebSocketResource {
+    Traffic,
+    Connections,
+}
+
+#[derive(Debug)]
+pub struct ClashWebSocketClient {
+    endpoint: ClashApiEndpoint,
+}
+
+impl ClashWebSocketClient {
+    #[must_use]
+    pub fn new(endpoint: ClashApiEndpoint) -> Self {
+        Self { endpoint }
+    }
+
+    #[must_use]
+    pub fn url(&self, resource: ClashWebSocketResource) -> String {
+        self.endpoint.ws_url(match resource {
+            ClashWebSocketResource::Traffic => "/traffic",
+            ClashWebSocketResource::Connections => "/connections",
+        })
+    }
+
+    pub async fn connect(&self, resource: ClashWebSocketResource) -> Result<ClashWebSocketSession> {
+        let (stream, _) = connect_async(self.url(resource))
+            .await
+            .map_err(|error| ClashError::WebSocket(error.to_string()))?;
+
+        Ok(ClashWebSocketSession { resource, stream })
+    }
+}
+
+pub struct ClashWebSocketSession {
+    resource: ClashWebSocketResource,
+    stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
+}
+
+impl ClashWebSocketSession {
+    pub async fn next_event(&mut self) -> Result<ClashWebSocketEvent> {
+        loop {
+            let Some(message) = self.stream.next().await else {
+                return Err(ClashError::WebSocketClosed);
+            };
+            let message = message.map_err(|error| ClashError::WebSocket(error.to_string()))?;
+            match message {
+                Message::Text(text) => return decode_ws_event(self.resource, &text),
+                Message::Binary(bytes) => {
+                    let text = String::from_utf8(bytes.to_vec())
+                        .map_err(|error| ClashError::Decode(error.to_string()))?;
+                    return decode_ws_event(self.resource, &text);
+                }
+                Message::Close(_) => return Err(ClashError::WebSocketClosed),
+                Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {}
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ClashProxiesResponse {
+    pub proxies: BTreeMap<String, ClashProxy>,
+}
+
+impl Default for ClashProxiesResponse {
+    fn default() -> Self {
+        Self {
+            proxies: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ClashProxy {
+    pub all: Vec<String>,
+    pub history: Vec<ClashHistoryItem>,
+    pub name: Option<String>,
+    #[serde(rename = "type")]
+    pub proxy_type: String,
+    pub udp: bool,
+    pub now: Option<String>,
+    pub delay: i32,
+}
+
+impl Default for ClashProxy {
+    fn default() -> Self {
+        Self {
+            all: Vec::new(),
+            history: Vec::new(),
+            name: None,
+            proxy_type: String::new(),
+            udp: false,
+            now: None,
+            delay: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ClashHistoryItem {
+    pub time: String,
+    pub delay: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ClashProvidersResponse {
+    pub providers: BTreeMap<String, ClashProvider>,
+}
+
+impl Default for ClashProvidersResponse {
+    fn default() -> Self {
+        Self {
+            providers: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ClashProvider {
+    pub name: Option<String>,
+    pub proxies: Vec<ClashProxy>,
+    #[serde(rename = "type")]
+    pub provider_type: Option<String>,
+    pub vehicle_type: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ClashDelayResponse {
+    pub delay: Option<i32>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ClashConnections {
+    pub download_total: u64,
+    pub upload_total: u64,
+    pub connections: Vec<ClashConnection>,
+}
+
+impl Default for ClashConnections {
+    fn default() -> Self {
+        Self {
+            download_total: 0,
+            upload_total: 0,
+            connections: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ClashConnection {
+    pub id: Option<String>,
+    pub metadata: ClashConnectionMetadata,
+    pub upload: u64,
+    pub download: u64,
+    pub start: String,
+    pub chains: Vec<String>,
+    pub rule: Option<String>,
+    pub rule_payload: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ClashConnectionMetadata {
+    pub network: Option<String>,
+    #[serde(rename = "type")]
+    pub metadata_type: Option<String>,
+    #[serde(rename = "sourceIP", alias = "sourceIp")]
+    pub source_ip: Option<String>,
+    #[serde(rename = "destinationIP", alias = "destinationIp")]
+    pub destination_ip: Option<String>,
+    pub source_port: Option<String>,
+    pub destination_port: Option<String>,
+    pub host: Option<String>,
+    pub ns_mode: Option<String>,
+    pub uid: Option<Value>,
+    pub process: Option<String>,
+    pub process_path: Option<String>,
+    pub remote_destination: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "PascalCase")]
+pub struct ClashTraffic {
+    #[serde(alias = "up")]
+    pub up: u64,
+    #[serde(alias = "down")]
+    pub down: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClashWebSocketEvent {
+    Traffic(ClashTraffic),
+    Connections(ClashConnections),
+}
+
+#[must_use]
+pub fn decode_traffic_message(source: &str) -> Option<ClashTraffic> {
+    serde_json::from_str(source).ok()
+}
+
+#[must_use]
+pub fn decode_connections_message(source: &str) -> Option<ClashConnections> {
+    serde_json::from_str(source).ok()
+}
+
+fn decode_ws_event(resource: ClashWebSocketResource, source: &str) -> Result<ClashWebSocketEvent> {
+    match resource {
+        ClashWebSocketResource::Traffic => decode_traffic_message(source)
+            .map(ClashWebSocketEvent::Traffic)
+            .ok_or_else(|| ClashError::Decode("invalid Clash traffic event".to_string())),
+        ClashWebSocketResource::Connections => decode_connections_message(source)
+            .map(ClashWebSocketEvent::Connections)
+            .ok_or_else(|| ClashError::Decode("invalid Clash connections event".to_string())),
+    }
+}
+
+fn normalize_host(host: &str) -> String {
+    if host.contains(':') && !host.starts_with('[') {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    }
+}
+
+fn normalize_path(path_and_query: &str) -> String {
+    if path_and_query.starts_with('/') {
+        path_and_query.to_string()
+    } else {
+        format!("/{path_and_query}")
+    }
+}
+
+fn encode_segment(value: &str) -> String {
+    utf8_percent_encode(value, PATH_SEGMENT_ENCODE_SET).to_string()
+}
+
+fn encode_query_value(value: &str) -> String {
+    utf8_percent_encode(value, QUERY_VALUE_ENCODE_SET).to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use super::*;
+
+    #[derive(Clone, Default)]
+    struct MockTransport {
+        requests: Arc<Mutex<Vec<ClashHttpRequest>>>,
+        responses: Arc<Mutex<BTreeMap<String, Value>>>,
+    }
+
+    impl MockTransport {
+        fn respond(&self, path: &str, value: Value) {
+            self.responses
+                .lock()
+                .expect("responses lock")
+                .insert(format!("http://127.0.0.1:9090{path}"), value);
+        }
+
+        fn requests(&self) -> Vec<ClashHttpRequest> {
+            self.requests.lock().expect("requests lock").clone()
+        }
+    }
+
+    impl ClashHttpTransport for MockTransport {
+        fn send_json<'transport>(
+            &'transport self,
+            request: ClashHttpRequest,
+        ) -> Pin<Box<dyn Future<Output = Result<Value>> + Send + 'transport>> {
+            Box::pin(async move {
+                self.requests
+                    .lock()
+                    .expect("requests lock")
+                    .push(request.clone());
+                self.responses
+                    .lock()
+                    .expect("responses lock")
+                    .get(&request.url)
+                    .cloned()
+                    .ok_or_else(|| ClashError::Request(format!("no response for {}", request.url)))
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn clash_rule_mode_uses_patch_configs() {
+        let transport = MockTransport::default();
+        transport.respond("/configs", Value::Null);
+        let client =
+            ClashRestClient::with_transport(ClashApiEndpoint::loopback(9090), transport.clone());
+
+        client
+            .set_rule_mode("direct")
+            .await
+            .expect("rule mode patch");
+
+        let requests = transport.requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].method, ClashHttpMethod::Patch);
+        assert_eq!(requests[0].url, "http://127.0.0.1:9090/configs");
+        assert_eq!(requests[0].body, Some(json!({ "mode": "direct" })));
+    }
+
+    #[tokio::test]
+    async fn clash_reload_uses_force_query() {
+        let transport = MockTransport::default();
+        transport.respond("/configs?force=true", Value::Null);
+        let client =
+            ClashRestClient::with_transport(ClashApiEndpoint::loopback(9090), transport.clone());
+
+        client
+            .reload_config(Some("/tmp/config.yaml"))
+            .await
+            .expect("reload");
+
+        let requests = transport.requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].method, ClashHttpMethod::Put);
+        assert_eq!(requests[0].url, "http://127.0.0.1:9090/configs?force=true");
+        assert_eq!(
+            requests[0].body,
+            Some(json!({ "path": "/tmp/config.yaml" }))
+        );
+    }
+
+    #[tokio::test]
+    async fn clash_delay_test_encodes_proxy_name_and_url() {
+        let transport = MockTransport::default();
+        transport.respond(
+            "/proxies/HK%20%2F%201/delay?timeout=10000&url=https%3A%2F%2Fexample.com%2Fgenerate_204",
+            json!({ "delay": 42 }),
+        );
+        let client =
+            ClashRestClient::with_transport(ClashApiEndpoint::loopback(9090), transport.clone());
+
+        let delay = client
+            .delay_proxy("HK / 1", 10_000, "https://example.com/generate_204")
+            .await
+            .expect("delay");
+
+        assert_eq!(delay.delay, Some(42));
+        let requests = transport.requests();
+        assert_eq!(requests[0].method, ClashHttpMethod::Get);
+    }
+
+    #[test]
+    fn clash_websocket_decodes_traffic_and_connections() {
+        let traffic = decode_traffic_message(r#"{ "Up": 12, "Down": 34 }"#).expect("traffic event");
+        assert_eq!(traffic, ClashTraffic { up: 12, down: 34 });
+
+        let connections = decode_connections_message(
+            r#"{
+                "downloadTotal": 100,
+                "uploadTotal": 50,
+                "connections": [{
+                    "id": "abc",
+                    "metadata": {
+                        "network": "tcp",
+                        "type": "HTTP",
+                        "sourceIP": "127.0.0.1",
+                        "destinationIP": "93.184.216.34",
+                        "destinationPort": "443",
+                        "host": "example.com"
+                    },
+                    "upload": 1,
+                    "download": 2,
+                    "start": "2026-06-01T00:00:00Z",
+                    "chains": ["proxy"],
+                    "rule": "MATCH"
+                }]
+            }"#,
+        )
+        .expect("connections event");
+
+        assert_eq!(connections.download_total, 100);
+        assert_eq!(
+            connections.connections[0].metadata.host.as_deref(),
+            Some("example.com")
+        );
+        assert_eq!(
+            connections.connections[0]
+                .metadata
+                .destination_ip
+                .as_deref(),
+            Some("93.184.216.34")
+        );
+    }
+
+    #[test]
+    fn clash_websocket_client_builds_resource_urls() {
+        let endpoint = ClashApiEndpoint::loopback(9090);
+        let client = ClashWebSocketClient::new(endpoint);
+
+        assert_eq!(
+            client.url(ClashWebSocketResource::Traffic),
+            "ws://127.0.0.1:9090/traffic"
+        );
+        assert_eq!(
+            client.url(ClashWebSocketResource::Connections),
+            "ws://127.0.0.1:9090/connections"
+        );
+    }
+}

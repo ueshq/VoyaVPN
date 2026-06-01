@@ -1,0 +1,222 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Release channel label used for artifact names and updater metadata.
+        required: true
+        default: beta
+        type: choice
+        options:
+          - beta
+          - stable
+      build_profile:
+        description: Use debug for credential-free validation; release is for prepared signing environments.
+        required: true
+        default: debug
+        type: choice
+        options:
+          - debug
+          - release
+      dry_run:
+        description: Keep true for validation runs without real updater signatures or publication.
+        required: true
+        default: true
+        type: boolean
+      updater_metadata:
+        description: Generate latest.json from signed updater artifacts or dry-run placeholders.
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  NODE_VERSION: "22"
+  PNPM_VERSION: "11.5.0"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  tests:
+    name: Test And Drift Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux Tauri dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            wget
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run release validation checks
+        run: pnpm run verify:ci
+
+      - name: Validate non-dry-run updater signing secret
+        if: ${{ inputs.dry_run == false }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "::error title=Missing secret::TAURI_SIGNING_PRIVATE_KEY is required when dry_run is false."
+            exit 1
+          fi
+
+  package:
+    name: Package ${{ matrix.release_target }}
+    needs: tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-13
+            release_target: darwin-x86_64
+          - os: windows-latest
+            release_target: windows-x86_64
+          - os: ubuntu-latest
+            release_target: linux-x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux Tauri dependencies
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            wget
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri package
+        env:
+          CI: "true"
+          RELEASE_PROFILE: ${{ inputs.build_profile }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ "$RELEASE_PROFILE" = "debug" ]; then
+            pnpm tauri:build --debug
+          else
+            pnpm tauri:build
+          fi
+
+      - name: Normalize artifacts and write checksums
+        env:
+          RELEASE_PROFILE: ${{ inputs.build_profile }}
+        run: |
+          node scripts/release-artifacts.mjs \
+            --input "target/${RELEASE_PROFILE}/bundle" \
+            --output "dist/release/${{ matrix.release_target }}" \
+            --target "${{ matrix.release_target }}" \
+            --channel "${{ inputs.channel }}"
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: voyavpn-${{ inputs.channel }}-${{ matrix.release_target }}-${{ inputs.build_profile }}
+          path: dist/release/${{ matrix.release_target }}
+          if-no-files-found: error
+
+  updater-metadata:
+    name: Updater Metadata
+    if: ${{ inputs.updater_metadata == true }}
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/downloaded-release-artifacts
+
+      - name: Generate latest.json
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          RELEASE_VERSION: ${{ github.ref_name }}
+          VOYAVPN_UPDATES_BASE_URL: ${{ vars.VOYAVPN_UPDATES_BASE_URL }}
+        run: |
+          base_url="${VOYAVPN_UPDATES_BASE_URL:-https://updates.voyavpn.example/${CHANNEL}}"
+          placeholder_flag=""
+          if [ "$DRY_RUN" = "true" ]; then
+            placeholder_flag="--placeholder-signatures"
+          fi
+
+          node scripts/release-updater-metadata.mjs \
+            --input dist/downloaded-release-artifacts \
+            --out dist/updater/latest.json \
+            --channel "$CHANNEL" \
+            --base-url "$base_url" \
+            $placeholder_flag
+
+      - name: Upload updater metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: voyavpn-${{ inputs.channel }}-updater-metadata-${{ inputs.build_profile }}
+          path: dist/updater
+          if-no-files-found: error

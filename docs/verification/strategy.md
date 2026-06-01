@@ -1,0 +1,150 @@
+# Verification Strategy
+
+Batch: `00-03-verification-scaffold-plan`
+
+Reference root: `/Users/afu/Dev/refs/v2rayN/v2rayN`
+
+This document defines the verification map for the VoyaVPN rewrite. Local checks must be deterministic and runnable without mutating the host OS or requiring external core binaries. Real OS checks, signing, notarization, and release-machine evidence are tracked separately in `docs/verification/manual-os-smoke.md`.
+
+## Source References
+
+- Rollout specification: `.agents/rollouts/voyavpn-full-rewrite/spec.md`
+- Rollout plan: `.agents/rollouts/voyavpn-full-rewrite/plan.md`
+- Architecture notes: `/Users/afu/.claude/plans/typescript-shadcn-tauri-silly-marble.md`
+- Reference logic: `ServiceLib`
+- Reference tests: `ServiceLib.Tests`
+- Reference GUI behavior: `v2rayN` and `v2rayN.Desktop`
+- Target inventory and hotspots: `docs/source-inventory.md`, `docs/fidelity-hotspots.md`, `docs/adr/*.md`
+
+## Verification Layers
+
+| Layer | Local deterministic gate | Manual or external evidence |
+|---|---|---|
+| Rust unit and integration | `cargo test --workspace --all-targets` once the workspace exists | None unless a test is explicitly marked OS-mutating |
+| Config golden parity | Rust golden tests compare canonical generated Xray and sing-box JSON against `tests/golden` fixtures | Optional core binary acceptance when `xray` or `sing-box` binaries are available |
+| IPC drift | Regenerate specta/tauri-specta bindings and fail on git diff | None |
+| Frontend | `pnpm typecheck`, `pnpm test -- --run`, `pnpm lint` | Visual/manual smoke for real Tauri windows only |
+| Platform behavior | Mocked or fake-adapter tests for platform traits; non-mutating path/process tests | Windows, Linux, and macOS smoke evidence in `manual-os-smoke.md` |
+| Packaging | Tauri config validation and unsigned package build where CI supports it | Signing, notarization, installer launch, updater credentials, and legal approval evidence |
+
+## Local Deterministic Checks
+
+### Rust
+
+Rust tests should stay headless by default:
+
+- `voya-core`: pure model, enum, parser, routing, DNS, context-builder, config-generation, canonicalization, and golden tests. No OS APIs, process spawning, network clients, Tauri APIs, or sqlx pools.
+- `voya-db`: temp SQLite integration tests for migrations, repositories, JSON blob boundaries, ordering, defaults, and schema snapshots. There is no v2rayN migration test because VoyaVPN uses a fresh schema only.
+- `voya-platform`: unit tests use fake adapters or fixture files. Tests that mutate registry, proxy settings, routes, autostart, hotkeys, TUN, or elevation must be ignored or feature-gated and moved into manual smoke evidence.
+- `voya-net`: HTTP, WebDAV, update, Clash, subscription, ruleset, and regional preset tests use local mock servers and deterministic payloads.
+- `voya-app`: orchestration tests use mocked repositories, platform adapters, process handles, clocks, and event sinks.
+- `voya-udptest`: protocol and parser units should avoid public network dependencies unless explicitly feature-gated.
+
+The default Rust gate after scaffold is:
+
+```sh
+cargo test --workspace --all-targets
+```
+
+### Golden Config Parity
+
+Golden parity is the primary acceptance gate for Xray and sing-box config generation. The tests must assert on generated core JSON, not only on entity snapshots, normalized profile structs, or intermediate context objects.
+
+The golden flow is:
+
+1. Export reference configs from v2rayN behavior using the read-only `ServiceLib` and `ServiceLib.Tests` patterns.
+2. Store reference core JSON and case metadata under `tests/golden`.
+3. Build the same VoyaVPN input case using live model fields only.
+4. Generate Xray or sing-box JSON from `voya-core`.
+5. Canonicalize both generated and reference JSON.
+6. Diff the canonical JSON and fail on mismatch.
+7. If core binaries are discoverable, run core acceptance against the generated config.
+
+Coverage must include the high-risk parity points in `docs/fidelity-hotspots.md`: finalmask, policy group ordering, proxy chains, DNS final/direct detection, TUN, pre-socks, stats config, templates, per-rule outbounds, Clash PATCH behavior where config output is involved, and QR generation/import separation where applicable.
+
+Core acceptance is additive. Missing binaries must not fail ordinary local golden parity. The test runner should discover binaries in this order:
+
+1. Explicit environment variables: `VOYA_XRAY_BIN`, `VOYA_SING_BOX_BIN`
+2. Test configuration path, if introduced later
+3. VoyaVPN app binary directory, if the scaffold has one
+4. `PATH`
+
+When a binary is missing, the acceptance subtest records a skip reason such as `xray binary not found; JSON golden parity still ran`. When a binary exists, Xray configs run through `xray run -test` and sing-box configs run through `sing-box check -c`.
+
+### IPC Drift
+
+Rust command inputs, outputs, DTOs, errors, and event payloads are the source of truth. `src/ipc/bindings.ts` is generated by specta and tauri-specta.
+
+The drift gate after the IPC scaffold is:
+
+```sh
+pnpm bindings:check
+```
+
+The frontend boundary rule is checked independently:
+
+```sh
+rg "@tauri-apps/api" src | rg -v "^src/ipc/" -q && exit 1 || exit 0
+```
+
+Generated IPC DTOs must not be hand-written in feature code. App code imports typed wrappers from `src/ipc`, not raw Tauri APIs.
+
+### Frontend
+
+Frontend tests should use mocked IPC wrappers and deterministic event streams:
+
+- Component and screen tests cover table behavior, forms, modal-stack flows, status bar controls, logs, Clash views, options, and error states.
+- Store tests cover Zustand reducers, transient stream coalescing, event routing, and TanStack Query invalidation.
+- Schema tests cover per-protocol zod forms and import validation.
+- Accessibility and layout regressions should be covered by component tests and later Playwright/Tauri-driver smoke where practical.
+
+The default frontend gates after scaffold are:
+
+```sh
+pnpm typecheck
+pnpm test -- --run
+pnpm lint
+```
+
+### Platform And Packaging
+
+Local automated platform tests should stop at non-mutating behavior: path resolution, command construction, generated shell/PAC text, process adapter state machines with fake handles, and config that would be passed to OS APIs.
+
+The following are manual evidence, not default local gates:
+
+- Windows registry or WinINet proxy mutation
+- Linux/macOS proxy shell execution
+- PAC server integration with the OS proxy setting
+- TUN device setup, route mutation, sudo, UAC, or driver cleanup
+- Autostart registration
+- Global hotkey registration
+- Real process-tree kill behavior on each OS
+- Signing, notarization, installer trust prompts, updater credentials, and release publishing
+
+Packaging verification should be split:
+
+- Deterministic CI: Tauri config syntax, capability files, sidecar policy, unsigned package build where the runner supports it, and checks that GPL/AGPL core binaries are not bundled by default.
+- Manual release evidence: signed Windows installer, notarized macOS app or DMG, Linux package install, updater metadata, and first-run core acquisition.
+
+## Evidence Policy
+
+Each verification layer should produce concise evidence:
+
+- Command run and result
+- Commit or working tree identifier when available
+- Fixture or case IDs for golden failures
+- Core binary paths and versions when acceptance runs
+- Explicit skip reason for external checks
+- Link or path to manual OS smoke notes for OS-mutating checks
+
+Phase `00-baseline` only requires documentation evidence. This batch intentionally does not run cargo, pnpm, golden, or core acceptance checks because the Rust workspace, frontend package, IPC generator, golden fixtures, and external core binaries are not present yet. Follow-up implementation batches must add the commands above as soon as their scaffolds exist.
+
+## Current Batch Gate
+
+The required local checks for this batch are:
+
+```sh
+test -f docs/verification/strategy.md
+test -f tests/golden/README.md
+test -f docs/verification/manual-os-smoke.md
+```

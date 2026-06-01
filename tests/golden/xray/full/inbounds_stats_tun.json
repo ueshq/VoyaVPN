@@ -1,0 +1,111 @@
+{
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "port": 12000,
+      "protocol": "mixed",
+      "settings": {
+        "allowTransparent": false,
+        "auth": "noauth",
+        "udp": true
+      },
+      "sniffing": {
+        "destOverride": [
+          "http",
+          "tls"
+        ],
+        "enabled": true,
+        "routeOnly": false
+      },
+      "tag": "socks"
+    },
+    {
+      "listen": "127.0.0.1",
+      "port": 12001,
+      "protocol": "mixed",
+      "settings": {
+        "allowTransparent": false,
+        "auth": "noauth",
+        "udp": true
+      },
+      "sniffing": {
+        "destOverride": [
+          "http",
+          "tls"
+        ],
+        "enabled": true,
+        "routeOnly": false
+      },
+      "tag": "socks2"
+    },
+    {
+      "listen": "0.0.0.0",
+      "port": 12002,
+      "protocol": "mixed",
+      "settings": {
+        "accounts": [
+          {
+            "pass": "lan-pass",
+            "user": "lan-user"
+          }
+        ],
+        "allowTransparent": false,
+        "auth": "password",
+        "udp": true
+      },
+      "sniffing": {
+        "destOverride": [
+          "http",
+          "tls"
+        ],
+        "enabled": true,
+        "routeOnly": false
+      },
+      "tag": "socks3"
+    },
+    {
+      "protocol": "tun",
+      "settings": {
+        "MTU": 1408,
+        "autoOutboundsInterface": "eth0",
+        "autoSystemRoutingTable": [
+          "0.0.0.0/0",
+          "::/0"
+        ],
+        "gateway": [
+          "172.18.0.1/30"
+        ],
+        "name": "xray_tun"
+      },
+      "sniffing": {
+        "destOverride": [
+          "http",
+          "tls"
+        ],
+        "enabled": true,
+        "routeOnly": false
+      },
+      "tag": "tun"
+    },
+    {
+      "listen": "127.0.0.1",
+      "port": 12004,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1"
+      },
+      "tag": "api"
+    }
+  ],
+  "metrics": {
+    "tag": "api"
+  },
+  "policy": {
+    "system": {
+      "statsOutboundDownlink": true,
+      "statsOutboundUplink": true
+    }
+  },
+  "stats": {},
+  "tunDnsOutbound": true
+}
