@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, future::Future, pin::Pin};
 use futures_util::StreamExt;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use reqwest::Method;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use thiserror::Error;
 use tokio::net::TcpStream;
@@ -444,8 +444,11 @@ pub struct ClashDelayResponse {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ClashConnections {
+    #[serde(deserialize_with = "deserialize_u64_lossy")]
     pub download_total: u64,
+    #[serde(deserialize_with = "deserialize_u64_lossy")]
     pub upload_total: u64,
+    #[serde(deserialize_with = "deserialize_connections_lossy")]
     pub connections: Vec<ClashConnection>,
 }
 
@@ -462,42 +465,69 @@ impl Default for ClashConnections {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ClashConnection {
+    #[serde(deserialize_with = "deserialize_optional_string_lossy")]
     pub id: Option<String>,
+    #[serde(deserialize_with = "deserialize_metadata_lossy")]
     pub metadata: ClashConnectionMetadata,
+    #[serde(deserialize_with = "deserialize_u64_lossy")]
     pub upload: u64,
+    #[serde(deserialize_with = "deserialize_u64_lossy")]
     pub download: u64,
+    #[serde(deserialize_with = "deserialize_string_lossy")]
     pub start: String,
+    #[serde(deserialize_with = "deserialize_string_vec_lossy")]
     pub chains: Vec<String>,
+    #[serde(deserialize_with = "deserialize_optional_string_lossy")]
     pub rule: Option<String>,
+    #[serde(deserialize_with = "deserialize_optional_string_lossy")]
     pub rule_payload: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ClashConnectionMetadata {
+    #[serde(deserialize_with = "deserialize_optional_string_lossy")]
     pub network: Option<String>,
-    #[serde(rename = "type")]
+    #[serde(
+        rename = "type",
+        deserialize_with = "deserialize_optional_string_lossy"
+    )]
     pub metadata_type: Option<String>,
-    #[serde(rename = "sourceIP", alias = "sourceIp")]
+    #[serde(
+        rename = "sourceIP",
+        alias = "sourceIp",
+        deserialize_with = "deserialize_optional_string_lossy"
+    )]
     pub source_ip: Option<String>,
-    #[serde(rename = "destinationIP", alias = "destinationIp")]
+    #[serde(
+        rename = "destinationIP",
+        alias = "destinationIp",
+        deserialize_with = "deserialize_optional_string_lossy"
+    )]
     pub destination_ip: Option<String>,
+    #[serde(deserialize_with = "deserialize_optional_string_lossy")]
     pub source_port: Option<String>,
+    #[serde(deserialize_with = "deserialize_optional_string_lossy")]
     pub destination_port: Option<String>,
+    #[serde(deserialize_with = "deserialize_optional_string_lossy")]
     pub host: Option<String>,
+    #[serde(deserialize_with = "deserialize_optional_string_lossy")]
     pub ns_mode: Option<String>,
     pub uid: Option<Value>,
+    #[serde(deserialize_with = "deserialize_optional_string_lossy")]
     pub process: Option<String>,
+    #[serde(deserialize_with = "deserialize_optional_string_lossy")]
     pub process_path: Option<String>,
+    #[serde(deserialize_with = "deserialize_optional_string_lossy")]
     pub remote_destination: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(default, rename_all = "PascalCase")]
 pub struct ClashTraffic {
-    #[serde(alias = "up")]
+    #[serde(alias = "up", deserialize_with = "deserialize_u64_lossy")]
     pub up: u64,
-    #[serde(alias = "down")]
+    #[serde(alias = "down", deserialize_with = "deserialize_u64_lossy")]
     pub down: u64,
 }
 
@@ -526,6 +556,107 @@ fn decode_ws_event(resource: ClashWebSocketResource, source: &str) -> Result<Cla
             .map(ClashWebSocketEvent::Connections)
             .ok_or_else(|| ClashError::Decode("invalid Clash connections event".to_string())),
     }
+}
+
+fn deserialize_connections_lossy<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Vec<ClashConnection>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<Value>::deserialize(deserializer).map(|value| match value {
+        Some(Value::Array(items)) => items
+            .into_iter()
+            .filter_map(|item| serde_json::from_value(item).ok())
+            .collect(),
+        _ => Vec::new(),
+    })
+}
+
+fn deserialize_metadata_lossy<'de, D>(
+    deserializer: D,
+) -> std::result::Result<ClashConnectionMetadata, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<Value>::deserialize(deserializer).map(|value| {
+        value
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default()
+    })
+}
+
+fn deserialize_optional_string_lossy<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<Value>::deserialize(deserializer).map(|value| value.and_then(value_to_string))
+}
+
+fn deserialize_string_lossy<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    deserialize_optional_string_lossy(deserializer).map(|value| value.unwrap_or_default())
+}
+
+fn deserialize_u64_lossy<'de, D>(deserializer: D) -> std::result::Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<Value>::deserialize(deserializer).map(|value| {
+        value
+            .and_then(|value| match value {
+                Value::Number(number) => number
+                    .as_u64()
+                    .or_else(|| number.as_i64().and_then(|value| u64::try_from(value).ok()))
+                    .or_else(|| number.as_f64().and_then(f64_to_u64)),
+                Value::String(value) => parse_u64_string(&value),
+                _ => None,
+            })
+            .unwrap_or_default()
+    })
+}
+
+fn deserialize_string_vec_lossy<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<Value>::deserialize(deserializer).map(|value| match value {
+        Some(Value::Array(items)) => items.into_iter().filter_map(value_to_string).collect(),
+        Some(value) => value_to_string(value).into_iter().collect(),
+        None => Vec::new(),
+    })
+}
+
+fn value_to_string(value: Value) -> Option<String> {
+    match value {
+        Value::Null => None,
+        Value::String(value) => Some(value),
+        Value::Number(value) => Some(value.to_string()),
+        Value::Bool(value) => Some(value.to_string()),
+        Value::Array(_) | Value::Object(_) => Some(value.to_string()),
+    }
+}
+
+fn parse_u64_string(value: &str) -> Option<u64> {
+    let value = value.trim();
+    value
+        .parse::<u64>()
+        .ok()
+        .or_else(|| value.parse::<f64>().ok().and_then(f64_to_u64))
+}
+
+fn f64_to_u64(value: f64) -> Option<u64> {
+    value
+        .is_finite()
+        .then_some(value)
+        .filter(|value| *value >= 0.0 && *value <= u64::MAX as f64)
+        .map(|value| value.trunc() as u64)
 }
 
 fn normalize_host(host: &str) -> String {
@@ -699,6 +830,61 @@ mod tests {
                 .as_deref(),
             Some("93.184.216.34")
         );
+    }
+
+    #[test]
+    fn clash_connections_decode_lossy_runtime_field_variants() {
+        let connections = decode_connections_message(
+            r#"{
+                "downloadTotal": "2048",
+                "uploadTotal": 50.9,
+                "connections": [{
+                    "id": 42,
+                    "metadata": {
+                        "network": "tcp",
+                        "type": null,
+                        "sourceIP": "127.0.0.1",
+                        "destinationIP": "93.184.216.34",
+                        "sourcePort": 61558,
+                        "destinationPort": 443,
+                        "host": 12345,
+                        "process": 6789
+                    },
+                    "upload": "12",
+                    "download": null,
+                    "start": null,
+                    "chains": ["proxy", 1, null],
+                    "rule": null,
+                    "rulePayload": 99
+                }, {
+                    "metadata": null,
+                    "chains": null
+                }]
+            }"#,
+        )
+        .expect("connections event");
+
+        assert_eq!(connections.download_total, 2048);
+        assert_eq!(connections.upload_total, 50);
+        assert_eq!(connections.connections.len(), 2);
+
+        let first = &connections.connections[0];
+        assert_eq!(first.id.as_deref(), Some("42"));
+        assert_eq!(first.upload, 12);
+        assert_eq!(first.download, 0);
+        assert_eq!(first.start, "");
+        assert_eq!(first.chains, vec!["proxy".to_string(), "1".to_string()]);
+        assert_eq!(first.rule_payload.as_deref(), Some("99"));
+        assert_eq!(first.metadata.source_port.as_deref(), Some("61558"));
+        assert_eq!(first.metadata.destination_port.as_deref(), Some("443"));
+        assert_eq!(first.metadata.host.as_deref(), Some("12345"));
+        assert_eq!(first.metadata.process.as_deref(), Some("6789"));
+
+        assert_eq!(
+            connections.connections[1].metadata,
+            ClashConnectionMetadata::default()
+        );
+        assert!(connections.connections[1].chains.is_empty());
     }
 
     #[test]

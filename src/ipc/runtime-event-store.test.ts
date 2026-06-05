@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 
@@ -11,6 +11,10 @@ describe("runtime event store", () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("stores Clash traffic websocket events", () => {
     useRuntimeEventStore.getState().pushTransientEvent({
       kind: "clashTraffic",
@@ -21,7 +25,9 @@ describe("runtime event store", () => {
     expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("clashTraffic");
   });
 
-  it("stores Clash connection websocket events", () => {
+  it("coalesces Clash connection websocket events into the next frame", async () => {
+    vi.useFakeTimers();
+
     useRuntimeEventStore.getState().pushTransientEvent({
       kind: "clashConnections",
       payload: {
@@ -47,12 +53,40 @@ describe("runtime event store", () => {
         uploadTotal: 100,
       },
     });
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "clashConnections",
+      payload: {
+        connections: [
+          {
+            chains: ["Direct"],
+            connectionType: "HTTP",
+            destination: "93.184.216.34:443",
+            download: 400,
+            host: "latest.example.com:443",
+            id: "connection-2",
+            network: "tcp",
+            process: "browser",
+            processPath: "/usr/bin/browser",
+            rule: "MATCH",
+            rulePayload: null,
+            source: "127.0.0.1:53000",
+            start: "2026-06-01T00:00:00Z",
+            upload: 300,
+          },
+        ],
+        downloadTotal: 400,
+        uploadTotal: 300,
+      },
+    });
+
+    expect(useRuntimeEventStore.getState().clashConnections).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(20);
 
     const snapshot = useRuntimeEventStore.getState().clashConnections;
 
-    expect(snapshot?.connections[0]?.host).toBe("example.com:443");
-    expect(snapshot?.downloadTotal).toBe(200);
+    expect(snapshot?.connections[0]?.host).toBe("latest.example.com:443");
+    expect(snapshot?.downloadTotal).toBe(400);
     expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("clashConnections");
   });
 });
-

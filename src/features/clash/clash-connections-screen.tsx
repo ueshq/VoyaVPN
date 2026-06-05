@@ -1,17 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Activity, PlugZap, RefreshCw, Search, Trash2, XCircle } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/i18n/use-i18n";
 import {
   clashCloseConnection,
   clashListConnections,
-  clashStartMonitor,
-  clashStopMonitor,
   useRuntimeEventStore,
 } from "@/ipc";
 import type { ClashConnectionItem, ClashConnectionsSnapshot } from "@/ipc/bindings";
@@ -29,30 +29,60 @@ export function ClashConnectionsScreen() {
   const storeSnapshot = useRuntimeEventStore((state) => state.clashConnections);
   const setClashConnections = useRuntimeEventStore((state) => state.setClashConnections);
   const [filter, setFilter] = useState("");
+  const [queryEnabled, setQueryEnabled] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  useClashMonitor();
-
   const connectionsQuery = useQuery({
+    enabled: queryEnabled,
+    placeholderData: () => queryClient.getQueryData<ClashConnectionsSnapshot>(["clash-connections"]),
     queryFn: clashListConnections,
     queryKey: ["clash-connections"],
+    staleTime: 3_000,
   });
   const snapshot = storeSnapshot ?? connectionsQuery.data ?? emptySnapshot;
+  const hasSnapshot = Boolean(storeSnapshot ?? connectionsQuery.data);
   const filteredConnections = useMemo(
     () => filterConnections(snapshot.connections, filter),
     [filter, snapshot.connections],
   );
-  const selectedConnection = filteredConnections.find((connection) => connection.id === selectedId) ?? null;
+  const selectedConnection = selectedId
+    ? (filteredConnections.find((connection) => connection.id === selectedId) ?? null)
+    : null;
   const effectiveSelectedId = selectedConnection?.id ?? null;
 
   const closeMutation = useMutation({
     mutationFn: clashCloseConnection,
-    onSuccess: async (nextSnapshot) => {
+    onSuccess: (nextSnapshot) => {
       setClashConnections(nextSnapshot);
       queryClient.setQueryData(["clash-connections"], nextSnapshot);
-      await queryClient.invalidateQueries({ queryKey: ["clash-connections"] });
     },
   });
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: filteredConnections.length,
+    estimateSize: () => 40,
+    getScrollElement: () => viewportRef.current,
+    initialRect: { height: 520, width: 1152 },
+    overscan: 10,
+  });
+  const visibleRows = rowVirtualizer.getVirtualItems();
+  const renderedRows =
+    visibleRows.length > 0
+      ? visibleRows
+      : filteredConnections.slice(0, Math.min(filteredConnections.length, 30)).map((_, index) => ({
+          index,
+          key: `initial-${index}`,
+          start: index * 40,
+        }));
+  const showSkeletonRows = !hasSnapshot && (connectionsQuery.isPending || connectionsQuery.isFetching || !queryEnabled);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setQueryEnabled(true);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   function closeSelected() {
     if (!effectiveSelectedId) {
@@ -110,7 +140,10 @@ export function ClashConnectionsScreen() {
         <Button
           aria-label={t("actions.refresh")}
           disabled={connectionsQuery.isFetching}
-          onClick={() => void connectionsQuery.refetch()}
+          onClick={() => {
+            setQueryEnabled(true);
+            void connectionsQuery.refetch();
+          }}
           size="icon"
           type="button"
           variant="secondary"
@@ -127,7 +160,7 @@ export function ClashConnectionsScreen() {
         </Alert>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-auto" ref={viewportRef}>
         <div className="grid min-w-[72rem] grid-cols-[2.75rem_minmax(14rem,1.2fr)_9rem_11rem_11rem_8rem_8rem_minmax(13rem,1fr)_9rem] border-b bg-muted/40 px-4 py-2 text-xs font-medium uppercase text-muted-foreground">
           <span />
           <span>{t("clash.host")}</span>
@@ -139,52 +172,100 @@ export function ClashConnectionsScreen() {
           <span>{t("clash.chain")}</span>
           <span>{t("clash.process")}</span>
         </div>
-        {filteredConnections.length ? (
-          filteredConnections.map((connection) => {
-            const networkLabel = [connection.network, connection.connectionType].filter(Boolean).join(" ");
+        {showSkeletonRows ? (
+          <ConnectionSkeletonRows />
+        ) : filteredConnections.length ? (
+          <div className="relative min-w-[72rem]" style={{ height: rowVirtualizer.getTotalSize() }}>
+            {renderedRows.map((virtualRow) => {
+              const connection = filteredConnections[virtualRow.index];
 
-            return (
-              <button
-                key={connection.id ?? `${connection.host}-${connection.start}`}
-                className={cn(
-                  "grid min-w-[72rem] grid-cols-[2.75rem_minmax(14rem,1.2fr)_9rem_11rem_11rem_8rem_8rem_minmax(13rem,1fr)_9rem] items-center border-b px-4 py-2 text-start text-sm outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                  effectiveSelectedId === connection.id && "bg-muted text-foreground",
-                )}
-                onClick={() => setSelectedId(connection.id)}
-                type="button"
-              >
-                <span>
-                  {effectiveSelectedId === connection.id ? (
-                    <PlugZap className="size-4 text-foreground" aria-hidden="true" />
-                  ) : (
-                    <span className="block size-4 rounded-full border bg-background" aria-hidden="true" />
-                  )}
-                </span>
-                <span className="min-w-0 truncate font-medium">{connection.host}</span>
-                {networkLabel ? (
-                  <Badge
-                    className="max-w-full justify-start truncate bg-background px-1.5 py-0 text-muted-foreground"
-                    variant="outline"
-                  >
-                    {networkLabel}
-                  </Badge>
-                ) : (
-                  <span />
-                )}
-                <span className="min-w-0 truncate text-muted-foreground">{connection.source}</span>
-                <span className="min-w-0 truncate text-muted-foreground">{connection.destination}</span>
-                <span className="tabular-nums">{formatBytes(connection.upload)}</span>
-                <span className="tabular-nums">{formatBytes(connection.download)}</span>
-                <span className="min-w-0 truncate text-muted-foreground">{connectionChain(connection)}</span>
-                <span className="min-w-0 truncate text-muted-foreground">{connection.process ?? ""}</span>
-              </button>
-            );
-          })
+              return (
+                <ConnectionRow
+                  connection={connection}
+                  key={connection.id ?? `${connection.host}-${connection.start}-${virtualRow.index}`}
+                  onSelect={setSelectedId}
+                  selected={effectiveSelectedId !== null && effectiveSelectedId === connection.id}
+                  start={virtualRow.start}
+                />
+              );
+            })}
+          </div>
         ) : (
           <p className="px-4 py-8 text-center text-sm text-muted-foreground">{t("panes.clashConnections.empty")}</p>
         )}
       </div>
     </section>
+  );
+}
+
+const ConnectionRow = memo(function ConnectionRow({
+  connection,
+  onSelect,
+  selected,
+  start,
+}: {
+  connection: ClashConnectionItem;
+  onSelect: (id: string | null) => void;
+  selected: boolean;
+  start: number;
+}) {
+  const networkLabel = [connection.network, connection.connectionType].filter(Boolean).join(" ");
+
+  return (
+    <button
+      className={cn(
+        "absolute start-0 top-0 grid h-10 min-w-[72rem] grid-cols-[2.75rem_minmax(14rem,1.2fr)_9rem_11rem_11rem_8rem_8rem_minmax(13rem,1fr)_9rem] items-center border-b px-4 text-start text-sm outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        selected && "bg-muted text-foreground",
+      )}
+      onClick={() => onSelect(connection.id ?? null)}
+      style={{ transform: `translateY(${start}px)` }}
+      type="button"
+    >
+      <span>
+        {selected ? (
+          <PlugZap className="size-4 text-foreground" aria-hidden="true" />
+        ) : (
+          <span className="block size-4 rounded-full border bg-background" aria-hidden="true" />
+        )}
+      </span>
+      <span className="min-w-0 truncate font-medium">{connection.host}</span>
+      {networkLabel ? (
+        <Badge className="max-w-full justify-start truncate bg-background px-1.5 py-0 text-muted-foreground" variant="outline">
+          {networkLabel}
+        </Badge>
+      ) : (
+        <span />
+      )}
+      <span className="min-w-0 truncate text-muted-foreground">{connection.source}</span>
+      <span className="min-w-0 truncate text-muted-foreground">{connection.destination}</span>
+      <span className="tabular-nums">{formatBytes(connection.upload)}</span>
+      <span className="tabular-nums">{formatBytes(connection.download)}</span>
+      <span className="min-w-0 truncate text-muted-foreground">{connectionChain(connection)}</span>
+      <span className="min-w-0 truncate text-muted-foreground">{connection.process ?? ""}</span>
+    </button>
+  );
+});
+
+function ConnectionSkeletonRows() {
+  return (
+    <div className="min-w-[72rem]" role="status">
+      {Array.from({ length: 8 }).map((_, index) => (
+        <div
+          className="grid h-10 grid-cols-[2.75rem_minmax(14rem,1.2fr)_9rem_11rem_11rem_8rem_8rem_minmax(13rem,1fr)_9rem] items-center border-b px-4"
+          key={index}
+        >
+          <span className="block size-4 rounded-full border bg-background" aria-hidden="true" />
+          <Skeleton className="h-4 w-4/5" />
+          <Skeleton className="h-5 w-16" />
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-4 w-14" />
+          <Skeleton className="h-4 w-14" />
+          <Skeleton className="h-4 w-36" />
+          <Skeleton className="h-4 w-20" />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -202,7 +283,7 @@ function filterConnections(connections: ClashConnectionItem[], filter: string) {
       connection.rule ?? "",
       connection.process ?? "",
       connection.processPath ?? "",
-      connection.chains.join(" "),
+      connectionChains(connection).join(" "),
     ]
       .join(" ")
       .toLowerCase()
@@ -212,9 +293,13 @@ function filterConnections(connections: ClashConnectionItem[], filter: string) {
 
 function connectionChain(connection: ClashConnectionItem) {
   const rule = [connection.rule, connection.rulePayload].filter(Boolean).join(" ");
-  const chain = connection.chains.join(" -> ");
+  const chain = connectionChains(connection).join(" -> ");
 
   return [rule, chain].filter(Boolean).join(" , ");
+}
+
+function connectionChains(connection: ClashConnectionItem) {
+  return Array.isArray(connection.chains) ? connection.chains : [];
 }
 
 function formatBytes(value: number | null | undefined) {
@@ -227,22 +312,4 @@ function formatBytes(value: number | null | undefined) {
   }
 
   return `${bytes.toFixed(0)} B`;
-}
-
-function useClashMonitor() {
-  useEffect(() => {
-    if (!isTauriRuntime()) {
-      return undefined;
-    }
-
-    void clashStartMonitor().catch(() => undefined);
-
-    return () => {
-      void clashStopMonitor().catch(() => undefined);
-    };
-  }, []);
-}
-
-function isTauriRuntime() {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }

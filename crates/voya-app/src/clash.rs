@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use thiserror::Error;
 use tokio::{
+    runtime::Handle,
     sync::watch,
     task::JoinHandle,
     time::{self, MissedTickBehavior},
@@ -54,6 +55,8 @@ pub enum ClashManagerError {
     InvalidRuleMode(RuleMode),
     #[error("Clash monitor lock is poisoned")]
     MonitorLockPoisoned,
+    #[error("Clash monitor requires a Tokio runtime")]
+    MonitorRuntimeUnavailable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
@@ -316,25 +319,34 @@ impl ClashMonitorController {
             .handle
             .lock()
             .map_err(|_| ClashManagerError::MonitorLockPoisoned)?;
+        let endpoint = clash_endpoint(config);
+        if guard
+            .as_ref()
+            .is_some_and(|handle| handle.endpoint == endpoint)
+        {
+            return Ok(ClashMonitorStatus { running: true });
+        }
+        let runtime =
+            Handle::try_current().map_err(|_| ClashManagerError::MonitorRuntimeUnavailable)?;
         if let Some(handle) = guard.take() {
             handle.stop();
         }
 
-        let endpoint = clash_endpoint(config);
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
-        let traffic_task = tokio::spawn(run_clash_ws_monitor(
+        let traffic_task = runtime.spawn(run_clash_ws_monitor(
             endpoint.clone(),
             ClashWebSocketResource::Traffic,
             Arc::clone(&sink),
             shutdown_rx.clone(),
         ));
-        let connections_task = tokio::spawn(run_clash_ws_monitor(
-            endpoint,
+        let connections_task = runtime.spawn(run_clash_ws_monitor(
+            endpoint.clone(),
             ClashWebSocketResource::Connections,
             sink,
             shutdown_rx,
         ));
         *guard = Some(ClashMonitorHandle {
+            endpoint,
             shutdown: shutdown_tx,
             tasks: vec![traffic_task, connections_task],
         });
@@ -362,6 +374,7 @@ pub struct ClashMonitorStatus {
 }
 
 struct ClashMonitorHandle {
+    endpoint: ClashApiEndpoint,
     shutdown: watch::Sender<bool>,
     tasks: Vec<JoinHandle<()>>,
 }
@@ -867,5 +880,78 @@ mod tests {
         );
         let connections = sink.connections.lock().expect("connections lock");
         assert_eq!(connections[0].connections[0].host, "example.com:443");
+    }
+
+    #[test]
+    fn clash_monitor_start_without_tokio_runtime_returns_error() {
+        let controller = ClashMonitorController::new();
+
+        let error = controller
+            .start(&config(), Arc::new(NoopClashEventSink))
+            .expect_err("monitor start should require a runtime");
+
+        assert!(matches!(
+            error,
+            ClashManagerError::MonitorRuntimeUnavailable
+        ));
+    }
+
+    #[tokio::test]
+    async fn clash_monitor_starts_inside_tokio_runtime() {
+        let controller = ClashMonitorController::new();
+
+        let status = controller
+            .start(&config(), Arc::new(NoopClashEventSink))
+            .expect("monitor start");
+
+        assert!(status.running);
+        assert!(!controller.stop().expect("monitor stop").running);
+    }
+
+    #[tokio::test]
+    async fn clash_monitor_start_is_idempotent_for_same_endpoint() {
+        let controller = ClashMonitorController::new();
+
+        controller
+            .start(&config(), Arc::new(NoopClashEventSink))
+            .expect("first monitor start");
+        let first_shutdown = controller
+            .handle
+            .lock()
+            .expect("monitor lock")
+            .as_ref()
+            .expect("monitor handle")
+            .shutdown
+            .clone();
+
+        controller
+            .start(&config(), Arc::new(NoopClashEventSink))
+            .expect("second monitor start");
+        let second_shutdown = controller
+            .handle
+            .lock()
+            .expect("monitor lock")
+            .as_ref()
+            .expect("monitor handle")
+            .shutdown
+            .clone();
+
+        assert!(first_shutdown.same_channel(&second_shutdown));
+        assert!(!controller.stop().expect("monitor stop").running);
+
+        controller
+            .start(&config(), Arc::new(NoopClashEventSink))
+            .expect("restart after stop");
+        let restarted_shutdown = controller
+            .handle
+            .lock()
+            .expect("monitor lock")
+            .as_ref()
+            .expect("monitor handle")
+            .shutdown
+            .clone();
+
+        assert!(!first_shutdown.same_channel(&restarted_shutdown));
+        assert!(!controller.stop().expect("monitor stop").running);
     }
 }

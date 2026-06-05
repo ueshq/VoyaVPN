@@ -1,13 +1,13 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { vi } from "vitest";
+import { afterEach, vi } from "vitest";
 
 import { App } from "./App";
 import { fontToCss } from "./config/fonts";
 import { changeLocale } from "./i18n";
-import { loadAppConfig, saveAppConfig } from "@/ipc";
-import type { AppConfig_Serialize, UiItem_Serialize } from "@/ipc/bindings";
+import { clashListConnections, clashStartMonitor, clashStopMonitor, loadAppConfig, saveAppConfig } from "@/ipc";
+import type { AppConfig_Serialize, ClashConnectionItem, UiItem_Serialize } from "@/ipc/bindings";
 
 vi.mock("@/ipc", () => ({
   connectActiveProfile: vi.fn(),
@@ -269,15 +269,29 @@ function renderApp() {
 
 describe("App", () => {
   beforeEach(async () => {
+    vi.useRealTimers();
+    resetTestDom();
     window.localStorage.clear();
     document.documentElement.className = "";
     document.documentElement.style.removeProperty("--app-font-family");
     document.documentElement.style.removeProperty("--app-font-size");
     vi.mocked(loadAppConfig).mockClear();
     vi.mocked(saveAppConfig).mockClear();
+    vi.mocked(clashListConnections).mockClear();
+    vi.mocked(clashStartMonitor).mockClear();
+    vi.mocked(clashStopMonitor).mockClear();
+    vi.mocked(clashListConnections).mockResolvedValue({ connections: [], downloadTotal: 0, uploadTotal: 0 });
+    vi.mocked(clashStartMonitor).mockResolvedValue({ running: true });
+    vi.mocked(clashStopMonitor).mockResolvedValue({ running: false });
     vi.mocked(loadAppConfig).mockResolvedValue(makeAppConfig());
     vi.mocked(saveAppConfig).mockImplementation(async (config) => config as AppConfig_Serialize);
     await changeLocale("en");
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    resetTestDom();
+    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   });
 
   it("renders the app shell tabs and status bar", () => {
@@ -338,8 +352,75 @@ describe("App", () => {
       });
       expect(savedConfig?.UIItem).not.toHaveProperty("ColorPrimaryName");
     });
+
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("shows Clash Connections immediately and defers monitor plus query work", async () => {
+    vi.useFakeTimers();
+    (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
+
+    renderApp();
+
+    await activateTab(/Clash Connections/);
+
+    expect(screen.getByRole("heading", { name: "Clash Connections" })).toBeInTheDocument();
+    expect(clashStartMonitor).not.toHaveBeenCalled();
+    expect(clashListConnections).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20);
+    });
+    expect(clashListConnections).toHaveBeenCalledTimes(1);
+    expect(clashStartMonitor).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(80);
+    });
+    expect(clashStartMonitor).toHaveBeenCalledTimes(1);
+
+    await activateTab(/Profiles/);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_999);
+    });
+    expect(clashStopMonitor).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(clashStopMonitor).toHaveBeenCalledTimes(1);
+  });
+
+  it("virtualizes large Clash Connections result sets", async () => {
+    const user = userEvent.setup();
+    vi.mocked(clashListConnections).mockResolvedValue({
+      connections: makeConnections(200),
+      downloadTotal: 200,
+      uploadTotal: 100,
+    });
+
+    renderApp();
+
+    await user.click(screen.getByRole("tab", { name: /Clash Connections/ }));
+
+    await waitFor(() => expect(screen.getByText("bulk-0.example:443")).toBeInTheDocument());
+    expect(screen.queryAllByText(/bulk-\d+\.example:443/).length).toBeLessThan(80);
   });
 });
+
+async function activateTab(name: RegExp) {
+  await act(async () => {
+    fireEvent.mouseDown(screen.getByRole("tab", { name }), { button: 0, ctrlKey: false });
+  });
+}
+
+function resetTestDom() {
+  cleanup();
+  document.body.innerHTML = "";
+  document.body.removeAttribute("data-scroll-locked");
+  document.body.style.removeProperty("pointer-events");
+}
 
 function makeAppConfig(overrides: Partial<AppConfig_Serialize> = {}): AppConfig_Serialize {
   return {
@@ -371,4 +452,23 @@ function makeUiItem(overrides: Partial<UiItem_Serialize> = {}): UiItem_Serialize
     WindowSizeItem: [],
     ...overrides,
   };
+}
+
+function makeConnections(count: number): ClashConnectionItem[] {
+  return Array.from({ length: count }, (_, index) => ({
+    chains: ["Proxy"],
+    connectionType: "HTTP",
+    destination: "93.184.216.34:443",
+    download: index,
+    host: `bulk-${index}.example:443`,
+    id: `connection-${index}`,
+    network: "tcp",
+    process: "browser",
+    processPath: "/usr/bin/browser",
+    rule: "MATCH",
+    rulePayload: null,
+    source: "127.0.0.1:53000",
+    start: "2026-06-01T00:00:00Z",
+    upload: index,
+  }));
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Check, Gauge, RefreshCw, RotateCw, Wifi, WifiOff } from "lucide-react";
 
@@ -12,8 +12,6 @@ import {
   clashReloadConfig,
   clashSelectProxy,
   clashSetRuleMode,
-  clashStartMonitor,
-  clashStopMonitor,
   clashTestDelay,
   useRuntimeEventStore,
 } from "@/ipc";
@@ -37,8 +35,6 @@ export function ClashProxiesScreen() {
   const traffic = useRuntimeEventStore((state) => state.clashTraffic);
   const [delayResults, setDelayResults] = useState<Record<string, ClashDelayTestResult>>({});
   const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null);
-
-  useClashMonitor();
 
   const proxiesQuery = useQuery({
     queryFn: clashListProxies,
@@ -351,22 +347,4 @@ function formatBytes(value: number | null | undefined) {
   }
 
   return `${bytes.toFixed(0)} B`;
-}
-
-function useClashMonitor() {
-  useEffect(() => {
-    if (!isTauriRuntime()) {
-      return undefined;
-    }
-
-    void clashStartMonitor().catch(() => undefined);
-
-    return () => {
-      void clashStopMonitor().catch(() => undefined);
-    };
-  }, []);
-}
-
-function isTauriRuntime() {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Database,
@@ -56,7 +56,7 @@ import { RoutingScreen } from "@/features/routing";
 import { DnsScreen } from "@/features/dns";
 import { ClashConnectionsScreen, ClashProxiesScreen } from "@/features/clash";
 import { LogsScreen } from "@/features/logs";
-import { applyRegionalPreset, loadAppConfig, saveAppConfig } from "@/ipc";
+import { applyRegionalPreset, clashStartMonitor, clashStopMonitor, loadAppConfig, saveAppConfig } from "@/ipc";
 import type { AppConfig_Deserialize, PresetType } from "@/ipc/bindings";
 import {
   type Font,
@@ -178,6 +178,7 @@ export function AppShell() {
 
   usePersistedPreferences(language);
   useThemeEffects(themeMode, font, fontSize);
+  useClashMonitorLifecycle(activeTab);
 
   useEffect(() => {
     applyDocumentLocale(language);
@@ -619,6 +620,97 @@ function usePersistedPreferences(language: string) {
 
     return () => window.clearTimeout(timeout);
   }, [appConfigLoaded, font, fontSize, language, themeMode]);
+}
+
+function useClashMonitorLifecycle(activeTab: ShellTab) {
+  const startTimerRef = useRef<number | null>(null);
+  const stopTimerRef = useRef<number | null>(null);
+  const runningRef = useRef(false);
+  const startingRef = useRef(false);
+  const wantsMonitorRef = useRef(false);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) {
+      return undefined;
+    }
+
+    wantsMonitorRef.current = isClashTab(activeTab);
+    clearTimer(startTimerRef);
+    clearTimer(stopTimerRef);
+
+    if (wantsMonitorRef.current) {
+      startTimerRef.current = window.setTimeout(() => {
+        startTimerRef.current = null;
+        if (runningRef.current || startingRef.current) {
+          return;
+        }
+
+        startingRef.current = true;
+        void clashStartMonitor()
+          .then(() => {
+            runningRef.current = true;
+            if (!wantsMonitorRef.current) {
+              scheduleClashMonitorStop(stopTimerRef, runningRef);
+            }
+          })
+          .catch(() => {
+            runningRef.current = false;
+          })
+          .finally(() => {
+            startingRef.current = false;
+          });
+      }, 100);
+
+      return undefined;
+    }
+
+    if (runningRef.current || startingRef.current) {
+      scheduleClashMonitorStop(stopTimerRef, runningRef);
+    }
+
+    return undefined;
+  }, [activeTab]);
+
+  useEffect(
+    () => () => {
+      clearTimer(startTimerRef);
+      clearTimer(stopTimerRef);
+      if (runningRef.current) {
+        void clashStopMonitor().catch(() => undefined);
+      }
+    },
+    [],
+  );
+}
+
+function scheduleClashMonitorStop(
+  stopTimerRef: MutableRefObject<number | null>,
+  runningRef: MutableRefObject<boolean>,
+) {
+  clearTimer(stopTimerRef);
+  stopTimerRef.current = window.setTimeout(() => {
+    stopTimerRef.current = null;
+    void clashStopMonitor()
+      .catch(() => undefined)
+      .finally(() => {
+        runningRef.current = false;
+      });
+  }, 2_000);
+}
+
+function clearTimer(timerRef: MutableRefObject<number | null>) {
+  if (timerRef.current !== null) {
+    window.clearTimeout(timerRef.current);
+    timerRef.current = null;
+  }
+}
+
+function isClashTab(tab: ShellTab) {
+  return tab === "clash-proxies" || tab === "clash-connections";
+}
+
+function isTauriRuntime() {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
 function preferenceConfigKey({

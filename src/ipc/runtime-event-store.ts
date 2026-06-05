@@ -33,6 +33,12 @@ type RuntimeEventState = {
   tun: TunChanged | null;
 };
 
+type ClashConnectionsEvent = Extract<TransientStreamEvent, { kind: "clashConnections" }>;
+type FrameHandle = number | ReturnType<typeof setTimeout>;
+
+let pendingClashConnectionsEvent: ClashConnectionsEvent | null = null;
+let pendingClashConnectionsFrame: FrameHandle | null = null;
+
 export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
   clearLogs: () => set({ logLines: [] }),
   clashConnections: null,
@@ -40,7 +46,22 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
   coreState: null,
   lastTransientEvent: null,
   logLines: [],
-  pushTransientEvent: (event) =>
+  pushTransientEvent: (event) => {
+    if (event.kind === "clashConnections") {
+      pendingClashConnectionsEvent = event;
+      if (pendingClashConnectionsFrame === null) {
+        pendingClashConnectionsFrame = scheduleFrame(() => {
+          const nextEvent = pendingClashConnectionsEvent;
+          pendingClashConnectionsEvent = null;
+          pendingClashConnectionsFrame = null;
+          if (nextEvent) {
+            set({ clashConnections: nextEvent.payload, lastTransientEvent: nextEvent });
+          }
+        });
+      }
+      return;
+    }
+
     set((state) => {
       switch (event.kind) {
         case "logLine":
@@ -69,8 +90,6 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
           return { lastTransientEvent: event, tun: event.payload };
         case "clashTraffic":
           return { clashTraffic: event.payload, lastTransientEvent: event };
-        case "clashConnections":
-          return { clashConnections: event.payload, lastTransientEvent: event };
         case "speedtestResult":
           return {
             lastTransientEvent: event,
@@ -80,7 +99,8 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
             },
           };
       }
-  }),
+    });
+  },
   setClashConnections: (clashConnections) => set({ clashConnections }),
   setClashTraffic: (clashTraffic) => set({ clashTraffic }),
   setCoreState: (coreState) => set({ coreState }),
@@ -92,3 +112,11 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
   sysProxy: null,
   tun: null,
 }));
+
+function scheduleFrame(callback: () => void): FrameHandle {
+  if (typeof window !== "undefined" && window.requestAnimationFrame) {
+    return window.requestAnimationFrame(callback);
+  }
+
+  return setTimeout(callback, 16);
+}

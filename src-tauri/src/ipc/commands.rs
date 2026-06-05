@@ -1298,7 +1298,7 @@ pub async fn clash_reload_config<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub fn clash_start_monitor(
+pub async fn clash_start_monitor(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<ClashMonitorStatus, AppError> {
