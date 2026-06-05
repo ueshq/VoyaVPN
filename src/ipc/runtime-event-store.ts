@@ -2,6 +2,8 @@ import { create } from "zustand";
 
 import type {
   ClashConnectionsSnapshot,
+  ClashMonitorState,
+  ClashMonitorStatus,
   ClashTrafficEvent,
   CoreStateEvent,
   LogLineEvent,
@@ -13,9 +15,19 @@ import type {
   TunChanged,
 } from "@/ipc/bindings";
 
+export type RuntimeClashMonitorState = "starting" | ClashMonitorState;
+
+export type RuntimeClashMonitorStatus = {
+  message: string | null;
+  running: boolean;
+  stale: boolean;
+  state: RuntimeClashMonitorState;
+};
+
 type RuntimeEventState = {
   clearLogs: () => void;
   clashConnections: ClashConnectionsSnapshot | null;
+  clashMonitorStatus: RuntimeClashMonitorStatus;
   clashTraffic: ClashTrafficEvent | null;
   coreState: CoreStateEvent | null;
   lastTransientEvent: TransientStreamEvent | null;
@@ -24,6 +36,11 @@ type RuntimeEventState = {
   serverStatsByProfileId: Record<string, ServerStatItem>;
   speedtestResultsByProfileId: Record<string, SpeedTestResult>;
   setClashConnections: (snapshot: ClashConnectionsSnapshot) => void;
+  setClashMonitorFailed: (message?: string | null) => void;
+  setClashMonitorRunning: (message?: string | null) => void;
+  setClashMonitorStarting: (message?: string | null) => void;
+  setClashMonitorStatus: (status: ClashMonitorStatus) => void;
+  setClashMonitorStopped: (message?: string | null) => void;
   setClashTraffic: (event: ClashTrafficEvent) => void;
   setCoreState: (event: CoreStateEvent) => void;
   setSysProxy: (event: SysProxyChanged) => void;
@@ -39,9 +56,17 @@ type FrameHandle = number | ReturnType<typeof setTimeout>;
 let pendingClashConnectionsEvent: ClashConnectionsEvent | null = null;
 let pendingClashConnectionsFrame: FrameHandle | null = null;
 
+const initialClashMonitorStatus: RuntimeClashMonitorStatus = {
+  message: null,
+  running: false,
+  stale: true,
+  state: "stopped",
+};
+
 export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
   clearLogs: () => set({ logLines: [] }),
   clashConnections: null,
+  clashMonitorStatus: initialClashMonitorStatus,
   clashTraffic: null,
   coreState: null,
   lastTransientEvent: null,
@@ -55,7 +80,11 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
           pendingClashConnectionsEvent = null;
           pendingClashConnectionsFrame = null;
           if (nextEvent) {
-            set({ clashConnections: nextEvent.payload, lastTransientEvent: nextEvent });
+            set({
+              clashConnections: nextEvent.payload,
+              clashMonitorStatus: markClashDataFresh(),
+              lastTransientEvent: nextEvent,
+            });
           }
         });
       }
@@ -88,8 +117,17 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
           return { lastTransientEvent: event, sysProxy: event.payload };
         case "tunChanged":
           return { lastTransientEvent: event, tun: event.payload };
+        case "clashMonitorStatus":
+          return {
+            clashMonitorStatus: toRuntimeClashMonitorStatus(event.payload),
+            lastTransientEvent: event,
+          };
         case "clashTraffic":
-          return { clashTraffic: event.payload, lastTransientEvent: event };
+          return {
+            clashMonitorStatus: markClashDataFresh(),
+            clashTraffic: event.payload,
+            lastTransientEvent: event,
+          };
         case "speedtestResult":
           return {
             lastTransientEvent: event,
@@ -102,6 +140,18 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
     });
   },
   setClashConnections: (clashConnections) => set({ clashConnections }),
+  setClashMonitorFailed: (message = null) =>
+    set({ clashMonitorStatus: makeClashMonitorStatus("failed", false, true, message) }),
+  setClashMonitorRunning: (message = null) =>
+    set({ clashMonitorStatus: makeClashMonitorStatus("running", true, false, message) }),
+  setClashMonitorStarting: (message = null) =>
+    set((state) => ({
+      clashMonitorStatus: makeClashMonitorStatus("starting", false, state.clashMonitorStatus.stale, message),
+    })),
+  setClashMonitorStatus: (clashMonitorStatus) =>
+    set({ clashMonitorStatus: toRuntimeClashMonitorStatus(clashMonitorStatus) }),
+  setClashMonitorStopped: (message = null) =>
+    set({ clashMonitorStatus: makeClashMonitorStatus("stopped", false, true, message) }),
   setClashTraffic: (clashTraffic) => set({ clashTraffic }),
   setCoreState: (coreState) => set({ coreState }),
   setSysProxy: (sysProxy) => set({ sysProxy }),
@@ -112,6 +162,28 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
   sysProxy: null,
   tun: null,
 }));
+
+function toRuntimeClashMonitorStatus(status: ClashMonitorStatus): RuntimeClashMonitorStatus {
+  return {
+    message: status.message,
+    running: status.running,
+    stale: status.stale,
+    state: status.state,
+  };
+}
+
+function makeClashMonitorStatus(
+  state: RuntimeClashMonitorState,
+  running: boolean,
+  stale: boolean,
+  message: string | null,
+): RuntimeClashMonitorStatus {
+  return { message, running, stale, state };
+}
+
+function markClashDataFresh(): RuntimeClashMonitorStatus {
+  return makeClashMonitorStatus("running", true, false, null);
+}
 
 function scheduleFrame(callback: () => void): FrameHandle {
   if (typeof window !== "undefined" && window.requestAnimationFrame) {

@@ -24,6 +24,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_app::clash::ClashConnectionsSnapshot>()
         .typ::<voya_app::clash::ClashConnectionItem>()
         .typ::<voya_app::clash::ClashTrafficEvent>()
+        .typ::<voya_app::clash::ClashMonitorState>()
         .typ::<voya_app::clash::ClashMonitorStatus>()
         .typ::<voya_app::speedtest::SpeedTestResult>()
         .typ::<voya_app::speedtest::SpeedtestRunResult>()

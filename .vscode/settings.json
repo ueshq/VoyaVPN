@@ -1,0 +1,14 @@
+{
+  "claudeCode.allowDangerouslySkipPermissions": true,
+  "claudeCode.initialPermissionMode": "bypassPermissions",
+  "claudeCode.model": "opus",
+  "claudeCode.effortLevel": "max",
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    {
+      "text": "Generate commit messages in Chinese. Use conventional commits format (feat/fix/refactor/docs/style/chore) as prefix, followed by Chinese description."
+    }
+  ],
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "gradle.nestedProjects": ["apps/meetin-mobile/android"],
+  "java.compile.nullAnalysis.mode": "automatic"
+}

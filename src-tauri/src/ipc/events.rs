@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri_specta::Event;
 use voya_app::{
-    clash::{ClashConnectionsSnapshot, ClashTrafficEvent},
+    clash::{ClashConnectionsSnapshot, ClashMonitorStatus, ClashTrafficEvent},
     speedtest::SpeedTestResult,
 };
 use voya_core::{CoreType, ServerStatItem};
@@ -114,6 +114,7 @@ pub enum TransientStreamEvent {
     Statistics(StatisticsSnapshot),
     SysProxyChanged(SysProxyChanged),
     TunChanged(TunChanged),
+    ClashMonitorStatus(ClashMonitorStatus),
     ClashTraffic(ClashTrafficEvent),
     ClashConnections(ClashConnectionsSnapshot),
     SpeedtestResult(SpeedTestResult),

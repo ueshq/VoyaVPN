@@ -324,7 +324,7 @@ impl ClashMonitorController {
             .as_ref()
             .is_some_and(|handle| handle.endpoint == endpoint)
         {
-            return Ok(ClashMonitorStatus { running: true });
+            return Ok(ClashMonitorStatus::running());
         }
         let runtime =
             Handle::try_current().map_err(|_| ClashManagerError::MonitorRuntimeUnavailable)?;
@@ -351,7 +351,7 @@ impl ClashMonitorController {
             tasks: vec![traffic_task, connections_task],
         });
 
-        Ok(ClashMonitorStatus { running: true })
+        Ok(ClashMonitorStatus::running())
     }
 
     pub fn stop(&self) -> Result<ClashMonitorStatus> {
@@ -363,14 +363,57 @@ impl ClashMonitorController {
             handle.stop();
         }
 
-        Ok(ClashMonitorStatus { running: false })
+        Ok(ClashMonitorStatus::stopped())
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ClashMonitorState {
+    Running,
+    Stopped,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ClashMonitorStatus {
+    pub state: ClashMonitorState,
     pub running: bool,
+    pub stale: bool,
+    pub message: Option<String>,
+}
+
+impl ClashMonitorStatus {
+    #[must_use]
+    pub fn running() -> Self {
+        Self {
+            state: ClashMonitorState::Running,
+            running: true,
+            stale: false,
+            message: None,
+        }
+    }
+
+    #[must_use]
+    pub fn stopped() -> Self {
+        Self {
+            state: ClashMonitorState::Stopped,
+            running: false,
+            stale: true,
+            message: None,
+        }
+    }
+
+    #[must_use]
+    pub fn failed(message: impl Into<String>) -> Self {
+        Self {
+            state: ClashMonitorState::Failed,
+            running: false,
+            stale: true,
+            message: Some(message.into()),
+        }
+    }
 }
 
 struct ClashMonitorHandle {
@@ -746,6 +789,34 @@ mod tests {
         }
     }
 
+    fn config_with_local_port(local_port: i32) -> AppConfig {
+        let mut config = config();
+        config
+            .inbound
+            .first_mut()
+            .expect("default config has an inbound")
+            .local_port = local_port;
+        config
+    }
+
+    fn monitor_handle_snapshot(
+        controller: &ClashMonitorController,
+    ) -> (ClashApiEndpoint, watch::Sender<bool>) {
+        let guard = controller.handle.lock().expect("monitor lock");
+        let handle = guard.as_ref().expect("monitor handle");
+        (handle.endpoint.clone(), handle.shutdown.clone())
+    }
+
+    fn monitor_handle_is_none(controller: &ClashMonitorController) -> bool {
+        controller.handle.lock().expect("monitor lock").is_none()
+    }
+
+    fn shutdown_requested(shutdown: &watch::Sender<bool>) -> bool {
+        let receiver = shutdown.subscribe();
+        let requested = *receiver.borrow();
+        requested
+    }
+
     #[tokio::test]
     async fn clash_manager_rule_mode_uses_patch_configs() {
         let transport = MockTransport::default();
@@ -894,6 +965,52 @@ mod tests {
             error,
             ClashManagerError::MonitorRuntimeUnavailable
         ));
+        assert!(monitor_handle_is_none(&controller));
+    }
+
+    #[test]
+    fn clash_monitor_status_contract_marks_stale_states() {
+        assert_eq!(
+            ClashMonitorStatus::running(),
+            ClashMonitorStatus {
+                state: ClashMonitorState::Running,
+                running: true,
+                stale: false,
+                message: None,
+            }
+        );
+        assert_eq!(
+            ClashMonitorStatus::stopped(),
+            ClashMonitorStatus {
+                state: ClashMonitorState::Stopped,
+                running: false,
+                stale: true,
+                message: None,
+            }
+        );
+        assert_eq!(
+            ClashMonitorStatus::failed("start failed"),
+            ClashMonitorStatus {
+                state: ClashMonitorState::Failed,
+                running: false,
+                stale: true,
+                message: Some("start failed".to_string()),
+            }
+        );
+    }
+
+    #[test]
+    fn clash_monitor_stop_is_idempotent_and_stale() {
+        let controller = ClashMonitorController::new();
+
+        assert_eq!(
+            controller.stop().expect("first monitor stop"),
+            ClashMonitorStatus::stopped()
+        );
+        assert_eq!(
+            controller.stop().expect("second monitor stop"),
+            ClashMonitorStatus::stopped()
+        );
     }
 
     #[tokio::test]
@@ -904,54 +1021,122 @@ mod tests {
             .start(&config(), Arc::new(NoopClashEventSink))
             .expect("monitor start");
 
-        assert!(status.running);
-        assert!(!controller.stop().expect("monitor stop").running);
+        assert_eq!(status, ClashMonitorStatus::running());
+        assert_eq!(
+            controller.stop().expect("monitor stop"),
+            ClashMonitorStatus::stopped()
+        );
     }
 
     #[tokio::test]
     async fn clash_monitor_start_is_idempotent_for_same_endpoint() {
         let controller = ClashMonitorController::new();
 
+        assert_eq!(
+            controller
+                .start(&config(), Arc::new(NoopClashEventSink))
+                .expect("first monitor start"),
+            ClashMonitorStatus::running()
+        );
+        let (first_endpoint, first_shutdown) = monitor_handle_snapshot(&controller);
+
+        assert_eq!(
+            controller
+                .start(&config(), Arc::new(NoopClashEventSink))
+                .expect("second monitor start"),
+            ClashMonitorStatus::running()
+        );
+        let (second_endpoint, second_shutdown) = monitor_handle_snapshot(&controller);
+
+        assert_eq!(first_endpoint, second_endpoint);
+        assert!(first_shutdown.same_channel(&second_shutdown));
+        assert!(!shutdown_requested(&first_shutdown));
+        assert_eq!(
+            controller.stop().expect("monitor stop"),
+            ClashMonitorStatus::stopped()
+        );
+    }
+
+    #[tokio::test]
+    async fn clash_monitor_start_after_stop_creates_fresh_handle() {
+        let controller = ClashMonitorController::new();
+
         controller
             .start(&config(), Arc::new(NoopClashEventSink))
             .expect("first monitor start");
-        let first_shutdown = controller
-            .handle
-            .lock()
-            .expect("monitor lock")
-            .as_ref()
-            .expect("monitor handle")
-            .shutdown
-            .clone();
+        let (first_endpoint, first_shutdown) = monitor_handle_snapshot(&controller);
+        assert_eq!(
+            controller.stop().expect("monitor stop"),
+            ClashMonitorStatus::stopped()
+        );
+        assert!(monitor_handle_is_none(&controller));
+        assert!(shutdown_requested(&first_shutdown));
 
-        controller
-            .start(&config(), Arc::new(NoopClashEventSink))
-            .expect("second monitor start");
-        let second_shutdown = controller
-            .handle
-            .lock()
-            .expect("monitor lock")
-            .as_ref()
-            .expect("monitor handle")
-            .shutdown
-            .clone();
+        assert_eq!(
+            controller
+                .start(&config(), Arc::new(NoopClashEventSink))
+                .expect("restart after stop"),
+            ClashMonitorStatus::running()
+        );
+        let (restarted_endpoint, restarted_shutdown) = monitor_handle_snapshot(&controller);
 
-        assert!(first_shutdown.same_channel(&second_shutdown));
-        assert!(!controller.stop().expect("monitor stop").running);
-
-        controller
-            .start(&config(), Arc::new(NoopClashEventSink))
-            .expect("restart after stop");
-        let restarted_shutdown = controller
-            .handle
-            .lock()
-            .expect("monitor lock")
-            .as_ref()
-            .expect("monitor handle")
-            .shutdown
-            .clone();
-
+        assert_eq!(first_endpoint, restarted_endpoint);
         assert!(!first_shutdown.same_channel(&restarted_shutdown));
-        assert!(!controller.stop().expect("monitor stop").running);
+        assert!(!shutdown_requested(&restarted_shutdown));
+        assert_eq!(
+            controller.stop().expect("monitor stop"),
+            ClashMonitorStatus::stopped()
+        );
+    }
+
+    #[tokio::test]
+    async fn clash_monitor_different_endpoint_replaces_previous_handle() {
+        let controller = ClashMonitorController::new();
+        let initial_config = config();
+        let replacement_config = config_with_local_port(DEFAULT_LOCAL_PORT + 100);
+
+        assert_eq!(
+            controller
+                .start(&initial_config, Arc::new(NoopClashEventSink))
+                .expect("initial monitor start"),
+            ClashMonitorStatus::running()
+        );
+        let (initial_endpoint, initial_shutdown) = monitor_handle_snapshot(&controller);
+
+        assert_eq!(
+            controller
+                .start(&replacement_config, Arc::new(NoopClashEventSink))
+                .expect("replacement monitor start"),
+            ClashMonitorStatus::running()
+        );
+        let (replacement_endpoint, replacement_shutdown) = monitor_handle_snapshot(&controller);
+
+        assert_eq!(initial_endpoint, clash_endpoint(&initial_config));
+        assert_eq!(replacement_endpoint, clash_endpoint(&replacement_config));
+        assert_ne!(initial_endpoint, replacement_endpoint);
+        assert!(shutdown_requested(&initial_shutdown));
+        assert!(!initial_shutdown.same_channel(&replacement_shutdown));
+        assert!(!shutdown_requested(&replacement_shutdown));
+        assert_eq!(
+            controller.stop().expect("monitor stop"),
+            ClashMonitorStatus::stopped()
+        );
+    }
+
+    #[tokio::test]
+    async fn clash_monitor_clones_share_handle_state() {
+        let controller = ClashMonitorController::new();
+        let clone = controller.clone();
+
+        clone
+            .start(&config(), Arc::new(NoopClashEventSink))
+            .expect("monitor start through clone");
+        assert!(!monitor_handle_is_none(&controller));
+
+        assert_eq!(
+            controller.stop().expect("monitor stop through original"),
+            ClashMonitorStatus::stopped()
+        );
+        assert!(monitor_handle_is_none(&clone));
     }
 }

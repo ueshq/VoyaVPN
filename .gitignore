@@ -1,9 +1,96 @@
-/target/
-/node_modules/
-/dist/
-/src-tauri/target/
-/.idea/
-/.vscode/
-*.log
-*.tmp
+# Operating system
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Editors and local workspace state
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+*.swp
+*.swo
+*~
+*.code-workspace
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Dependencies and package-manager state
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/
+.pnp.*
+
+# Framework and tool caches
+.turbo/
+.swc/
+.docusaurus/
+.vite/
+apps/web/.output/
+.expo/
+.expo-shared/
+.cache/
+.parcel-cache/
+.gradle/
+.cxx/
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+apps/extension/scripts/.build-analysis/
+
+# Build and package output
+dist/
+build/
+storybook-static/
+web-build/
+dist-pack/
+packages/native/lib/
+target/
+*.tgz
+
+# Test and coverage output
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+*.lcov
+junit.xml
+*.junit.xml
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Temporary files
+.tmp/
+tmp/
+*.tmp
+*.temp
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local agent workspaces
+.agents/
+.claude/

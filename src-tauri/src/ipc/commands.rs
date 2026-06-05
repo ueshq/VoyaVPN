@@ -1302,23 +1302,50 @@ pub async fn clash_start_monitor(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<ClashMonitorStatus, AppError> {
-    let config = current_config(&state)?;
+    let config = match current_config(&state) {
+        Ok(config) => config,
+        Err(error) => {
+            emit_clash_monitor_status(
+                &app,
+                &ClashMonitorStatus::failed("Clash monitor failed to read current config"),
+            );
+            return Err(error);
+        }
+    };
 
-    state
-        .clash_monitor_controller()
-        .start(
-            &config,
-            std::sync::Arc::new(crate::TauriClashEventSink { app: app.clone() }),
-        )
-        .map_err(clash_error)
+    match state.clash_monitor_controller().start(
+        &config,
+        std::sync::Arc::new(crate::TauriClashEventSink { app: app.clone() }),
+    ) {
+        Ok(status) => {
+            emit_clash_monitor_status(&app, &status);
+            Ok(status)
+        }
+        Err(error) => {
+            let message = error.to_string();
+            emit_clash_monitor_status(&app, &ClashMonitorStatus::failed(message));
+            Err(clash_error(error))
+        }
+    }
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn clash_stop_monitor(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<ClashMonitorStatus, AppError> {
-    state.clash_monitor_controller().stop().map_err(clash_error)
+    match state.clash_monitor_controller().stop() {
+        Ok(status) => {
+            emit_clash_monitor_status(&app, &status);
+            Ok(status)
+        }
+        Err(error) => {
+            let message = error.to_string();
+            emit_clash_monitor_status(&app, &ClashMonitorStatus::failed(message));
+            Err(clash_error(error))
+        }
+    }
 }
 
 #[tauri::command]
@@ -2217,6 +2244,15 @@ where
     }
     .emit(app)
     .map_err(|error| AppError::EventEmit(error.to_string()))
+}
+
+fn emit_clash_monitor_status<R>(app: &tauri::AppHandle<R>, status: &ClashMonitorStatus)
+where
+    R: tauri::Runtime,
+{
+    if let Err(error) = TransientStreamEvent::ClashMonitorStatus(status.clone()).emit(app) {
+        tracing::warn!(?error, ?status, "failed to emit Clash monitor status event");
+    }
 }
 
 fn emit_backup_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str) -> Result<(), AppError>

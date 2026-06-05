@@ -56,8 +56,15 @@ import { RoutingScreen } from "@/features/routing";
 import { DnsScreen } from "@/features/dns";
 import { ClashConnectionsScreen, ClashProxiesScreen } from "@/features/clash";
 import { LogsScreen } from "@/features/logs";
-import { applyRegionalPreset, clashStartMonitor, clashStopMonitor, loadAppConfig, saveAppConfig } from "@/ipc";
-import type { AppConfig_Deserialize, PresetType } from "@/ipc/bindings";
+import {
+  applyRegionalPreset,
+  clashStartMonitor,
+  clashStopMonitor,
+  loadAppConfig,
+  saveAppConfig,
+  useRuntimeEventStore,
+} from "@/ipc";
+import type { AppConfig_Deserialize, ClashMonitorStatus, PresetType } from "@/ipc/bindings";
 import {
   type Font,
   fontToClassName,
@@ -623,10 +630,12 @@ function usePersistedPreferences(language: string) {
 }
 
 function useClashMonitorLifecycle(activeTab: ShellTab) {
+  const pushToast = useToastStore((state) => state.pushToast);
   const startTimerRef = useRef<number | null>(null);
   const stopTimerRef = useRef<number | null>(null);
   const runningRef = useRef(false);
   const startingRef = useRef(false);
+  const stoppingRef = useRef(false);
   const wantsMonitorRef = useRef(false);
 
   useEffect(() => {
@@ -639,42 +648,41 @@ function useClashMonitorLifecycle(activeTab: ShellTab) {
     clearTimer(stopTimerRef);
 
     if (wantsMonitorRef.current) {
-      startTimerRef.current = window.setTimeout(() => {
-        startTimerRef.current = null;
-        if (runningRef.current || startingRef.current) {
-          return;
-        }
-
-        startingRef.current = true;
-        void clashStartMonitor()
-          .then(() => {
-            runningRef.current = true;
-            if (!wantsMonitorRef.current) {
-              scheduleClashMonitorStop(stopTimerRef, runningRef);
-            }
-          })
-          .catch(() => {
-            runningRef.current = false;
-          })
-          .finally(() => {
-            startingRef.current = false;
-          });
-      }, 100);
+      if (!runningRef.current && !startingRef.current && !stoppingRef.current) {
+        scheduleClashMonitorStart({
+          pushToast,
+          runningRef,
+          startingRef,
+          startTimerRef,
+          stoppingRef,
+          stopTimerRef,
+          wantsMonitorRef,
+        });
+      }
 
       return undefined;
     }
 
-    if (runningRef.current || startingRef.current) {
-      scheduleClashMonitorStop(stopTimerRef, runningRef);
+    if (runningRef.current || startingRef.current || stoppingRef.current) {
+      scheduleClashMonitorStop({
+        pushToast,
+        runningRef,
+        startingRef,
+        startTimerRef,
+        stoppingRef,
+        stopTimerRef,
+        wantsMonitorRef,
+      });
     }
 
     return undefined;
-  }, [activeTab]);
+  }, [activeTab, pushToast]);
 
   useEffect(
     () => () => {
       clearTimer(startTimerRef);
       clearTimer(stopTimerRef);
+      wantsMonitorRef.current = false;
       if (runningRef.current) {
         void clashStopMonitor().catch(() => undefined);
       }
@@ -683,19 +691,123 @@ function useClashMonitorLifecycle(activeTab: ShellTab) {
   );
 }
 
-function scheduleClashMonitorStop(
-  stopTimerRef: MutableRefObject<number | null>,
-  runningRef: MutableRefObject<boolean>,
-) {
+type PushToast = ReturnType<typeof useToastStore.getState>["pushToast"];
+
+type ClashMonitorLifecycleRefs = {
+  runningRef: MutableRefObject<boolean>;
+  startingRef: MutableRefObject<boolean>;
+  startTimerRef: MutableRefObject<number | null>;
+  stoppingRef: MutableRefObject<boolean>;
+  stopTimerRef: MutableRefObject<number | null>;
+  wantsMonitorRef: MutableRefObject<boolean>;
+};
+
+function scheduleClashMonitorStart({
+  pushToast,
+  runningRef,
+  startingRef,
+  startTimerRef,
+  stoppingRef,
+  stopTimerRef,
+  wantsMonitorRef,
+}: ClashMonitorLifecycleRefs & { pushToast: PushToast }) {
+  clearTimer(startTimerRef);
+  startTimerRef.current = window.setTimeout(() => {
+    startTimerRef.current = null;
+    if (!wantsMonitorRef.current || runningRef.current || startingRef.current || stoppingRef.current) {
+      return;
+    }
+
+    startingRef.current = true;
+    useRuntimeEventStore.getState().setClashMonitorStarting();
+    void clashStartMonitor()
+      .then((status) => {
+        applyClashMonitorStatus(status, runningRef);
+        if (!wantsMonitorRef.current && status.running) {
+          scheduleClashMonitorStop({
+            pushToast,
+            runningRef,
+            startingRef,
+            startTimerRef,
+            stoppingRef,
+            stopTimerRef,
+            wantsMonitorRef,
+          });
+        }
+      })
+      .catch((error) => {
+        const message = clashMonitorErrorMessage(error, "Unable to start Clash monitor.");
+
+        runningRef.current = false;
+        useRuntimeEventStore.getState().setClashMonitorFailed(message);
+        pushToast({ description: message, title: "Clash" });
+      })
+      .finally(() => {
+        startingRef.current = false;
+      });
+  }, 100);
+}
+
+function scheduleClashMonitorStop({
+  pushToast,
+  runningRef,
+  startingRef,
+  startTimerRef,
+  stoppingRef,
+  stopTimerRef,
+  wantsMonitorRef,
+}: ClashMonitorLifecycleRefs & { pushToast: PushToast }) {
   clearTimer(stopTimerRef);
   stopTimerRef.current = window.setTimeout(() => {
     stopTimerRef.current = null;
+    if (!runningRef.current && !startingRef.current && !stoppingRef.current) {
+      return;
+    }
+
+    stoppingRef.current = true;
     void clashStopMonitor()
-      .catch(() => undefined)
-      .finally(() => {
+      .then((status) => {
+        applyClashMonitorStatus(status, runningRef);
+      })
+      .catch((error) => {
+        const message = clashMonitorErrorMessage(error, "Unable to stop Clash monitor.");
+
         runningRef.current = false;
+        useRuntimeEventStore.getState().setClashMonitorFailed(message);
+        pushToast({ description: message, title: "Clash" });
+      })
+      .finally(() => {
+        stoppingRef.current = false;
+        if (wantsMonitorRef.current && !runningRef.current && !startingRef.current) {
+          scheduleClashMonitorStart({
+            pushToast,
+            runningRef,
+            startingRef,
+            startTimerRef,
+            stoppingRef,
+            stopTimerRef,
+            wantsMonitorRef,
+          });
+        }
       });
   }, 2_000);
+}
+
+function applyClashMonitorStatus(status: ClashMonitorStatus, runningRef: MutableRefObject<boolean>) {
+  runningRef.current = status.running;
+  useRuntimeEventStore.getState().setClashMonitorStatus(status);
+}
+
+function clashMonitorErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error) {
+    return error;
+  }
+
+  return fallback;
 }
 
 function clearTimer(timerRef: MutableRefObject<number | null>) {

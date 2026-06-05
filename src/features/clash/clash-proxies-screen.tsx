@@ -22,6 +22,7 @@ import type {
   RuleMode,
 } from "@/ipc/bindings";
 import { cn } from "@/lib/utils";
+import { ClashMonitorStatusBadge } from "@/features/clash/clash-monitor-status-badge";
 
 const ruleModeOptions: Array<{ labelKey: string; value: RuleMode }> = [
   { labelKey: "clash.ruleModeRule", value: 0 },
@@ -32,6 +33,7 @@ const ruleModeOptions: Array<{ labelKey: string; value: RuleMode }> = [
 export function ClashProxiesScreen() {
   const queryClient = useQueryClient();
   const { t } = useI18n();
+  const monitorStatus = useRuntimeEventStore((state) => state.clashMonitorStatus);
   const traffic = useRuntimeEventStore((state) => state.clashTraffic);
   const [delayResults, setDelayResults] = useState<Record<string, ClashDelayTestResult>>({});
   const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null);
@@ -95,14 +97,15 @@ export function ClashProxiesScreen() {
 
   return (
     <section className="flex h-full min-h-0 flex-col">
-      <div className="flex h-12 shrink-0 items-center gap-3 border-b px-4">
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
         <h2 className="text-sm font-semibold">{t("tabs.clashProxies")}</h2>
         <Badge className="gap-2 bg-background px-2 py-1 font-normal text-muted-foreground" variant="outline">
           <Activity className="size-4 text-muted-foreground" aria-hidden="true" />
           <span className="tabular-nums">{t("status.upload", { speed: formatRate(traffic?.up) })}</span>
           <span className="tabular-nums">{t("status.download", { speed: formatRate(traffic?.down) })}</span>
         </Badge>
-        <div className="ms-auto flex items-center gap-2">
+        <ClashMonitorStatusBadge className="max-w-[15rem]" status={monitorStatus} />
+        <div className="ms-auto flex shrink-0 items-center gap-2">
           <div className="hidden h-9 items-center rounded-lg bg-muted p-[3px] md:flex">
             {ruleModeOptions.map((option) => (
               <Button

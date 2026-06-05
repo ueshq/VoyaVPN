@@ -16,16 +16,19 @@ import {
 } from "@/ipc";
 import type { ClashConnectionItem, ClashConnectionsSnapshot } from "@/ipc/bindings";
 import { cn } from "@/lib/utils";
+import { ClashMonitorStatusBadge } from "@/features/clash/clash-monitor-status-badge";
 
 const emptySnapshot: ClashConnectionsSnapshot = {
   connections: [],
   downloadTotal: 0,
   uploadTotal: 0,
 };
+const clashConnectionsQueryKey = ["clash-connections"] as const;
 
 export function ClashConnectionsScreen() {
   const queryClient = useQueryClient();
   const { t } = useI18n();
+  const monitorStatus = useRuntimeEventStore((state) => state.clashMonitorStatus);
   const storeSnapshot = useRuntimeEventStore((state) => state.clashConnections);
   const setClashConnections = useRuntimeEventStore((state) => state.setClashConnections);
   const [filter, setFilter] = useState("");
@@ -34,9 +37,9 @@ export function ClashConnectionsScreen() {
 
   const connectionsQuery = useQuery({
     enabled: queryEnabled,
-    placeholderData: () => queryClient.getQueryData<ClashConnectionsSnapshot>(["clash-connections"]),
+    placeholderData: () => queryClient.getQueryData<ClashConnectionsSnapshot>(clashConnectionsQueryKey),
     queryFn: clashListConnections,
-    queryKey: ["clash-connections"],
+    queryKey: clashConnectionsQueryKey,
     staleTime: 3_000,
   });
   const snapshot = storeSnapshot ?? connectionsQuery.data ?? emptySnapshot;
@@ -52,10 +55,7 @@ export function ClashConnectionsScreen() {
 
   const closeMutation = useMutation({
     mutationFn: clashCloseConnection,
-    onSuccess: (nextSnapshot) => {
-      setClashConnections(nextSnapshot);
-      queryClient.setQueryData(["clash-connections"], nextSnapshot);
-    },
+    onSuccess: syncConnectionsSnapshot,
   });
   const viewportRef = useRef<HTMLDivElement>(null);
   const rowVirtualizer = useVirtualizer({
@@ -84,6 +84,12 @@ export function ClashConnectionsScreen() {
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
+  useEffect(() => {
+    if (selectedId && !filteredConnections.some((connection) => connection.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [filteredConnections, selectedId]);
+
   function closeSelected() {
     if (!effectiveSelectedId) {
       return;
@@ -95,15 +101,30 @@ export function ClashConnectionsScreen() {
     void closeMutation.mutateAsync(null);
   }
 
+  function syncConnectionsSnapshot(nextSnapshot: ClashConnectionsSnapshot) {
+    setClashConnections(nextSnapshot);
+    queryClient.setQueryData(clashConnectionsQueryKey, nextSnapshot);
+  }
+
+  async function refreshConnections() {
+    setQueryEnabled(true);
+    const result = await connectionsQuery.refetch();
+
+    if (result.data) {
+      syncConnectionsSnapshot(result.data);
+    }
+  }
+
   return (
     <section className="flex h-full min-h-0 flex-col">
-      <div className="flex h-12 shrink-0 items-center gap-3 border-b px-4">
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
         <h2 className="text-sm font-semibold">{t("tabs.clashConnections")}</h2>
         <Badge className="gap-2 bg-background px-2 py-1 font-normal text-muted-foreground" variant="outline">
           <Activity className="size-4 text-muted-foreground" aria-hidden="true" />
           <span className="tabular-nums">{t("status.upload", { speed: formatBytes(snapshot.uploadTotal) })}</span>
           <span className="tabular-nums">{t("status.download", { speed: formatBytes(snapshot.downloadTotal) })}</span>
         </Badge>
+        <ClashMonitorStatusBadge className="max-w-[16rem]" status={monitorStatus} />
         <div className="relative ms-auto w-64 max-w-[40vw]">
           <Search
             className="pointer-events-none absolute start-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -141,8 +162,7 @@ export function ClashConnectionsScreen() {
           aria-label={t("actions.refresh")}
           disabled={connectionsQuery.isFetching}
           onClick={() => {
-            setQueryEnabled(true);
-            void connectionsQuery.refetch();
+            void refreshConnections();
           }}
           size="icon"
           type="button"

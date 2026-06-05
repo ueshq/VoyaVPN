@@ -290,8 +290,13 @@ export type ClashDelayTestResult = {
 	message: string | null,
 };
 
+export type ClashMonitorState = "running" | "stopped" | "failed";
+
 export type ClashMonitorStatus = {
+	state: ClashMonitorState,
 	running: boolean,
+	stale: boolean,
+	message: string | null,
 };
 
 export type ClashProxiesSnapshot = {
@@ -1292,7 +1297,7 @@ export type SystemProxyStatusResponse = {
 	pacUrl: string | null,
 };
 
-export type TransientStreamEvent = { kind: "logLine"; payload: LogLineEvent } | { kind: "coreState"; payload: CoreStateEvent } | { kind: "statistics"; payload: StatisticsSnapshot } | { kind: "sysProxyChanged"; payload: SysProxyChanged } | { kind: "tunChanged"; payload: TunChanged } | { kind: "clashTraffic"; payload: ClashTrafficEvent } | { kind: "clashConnections"; payload: ClashConnectionsSnapshot } | { kind: "speedtestResult"; payload: SpeedTestResult };
+export type TransientStreamEvent = { kind: "logLine"; payload: LogLineEvent } | { kind: "coreState"; payload: CoreStateEvent } | { kind: "statistics"; payload: StatisticsSnapshot } | { kind: "sysProxyChanged"; payload: SysProxyChanged } | { kind: "tunChanged"; payload: TunChanged } | { kind: "clashMonitorStatus"; payload: ClashMonitorStatus } | { kind: "clashTraffic"; payload: ClashTrafficEvent } | { kind: "clashConnections"; payload: ClashConnectionsSnapshot } | { kind: "speedtestResult"; payload: SpeedTestResult };
 
 export type TransportExtraItem = TransportExtraItem_Serialize | TransportExtraItem_Deserialize;
 
