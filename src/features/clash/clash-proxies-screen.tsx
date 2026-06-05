@@ -258,7 +258,7 @@ function ProxyNodeGrid({
   const { t } = useI18n();
 
   return (
-    <ScrollArea className="min-h-0 flex-1" orientation="both">
+    <div className="min-h-0 flex-1 overflow-auto">
       <div className="grid min-w-[44rem] grid-cols-[2.75rem_minmax(12rem,1fr)_8rem_7rem_5rem_6rem] border-b bg-muted/40 px-4 py-2 text-xs font-medium uppercase text-muted-foreground">
         <span />
         <span>{t("clash.node")}</span>
@@ -321,7 +321,7 @@ function ProxyNodeGrid({
       ) : (
         <p className="px-4 py-8 text-center text-sm text-muted-foreground">{t("panes.clashProxies.empty")}</p>
       )}
-    </ScrollArea>
+    </div>
   );
 }
 

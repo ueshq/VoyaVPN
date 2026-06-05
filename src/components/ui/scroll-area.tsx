@@ -3,16 +3,13 @@ import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 
 import { cn } from "@/lib/utils";
 
-type ScrollAreaOrientation = "vertical" | "horizontal" | "both";
+type ScrollAreaOrientation = "vertical" | "horizontal";
 
 interface ScrollAreaProps extends React.ComponentProps<typeof ScrollAreaPrimitive.Root> {
   orientation?: ScrollAreaOrientation;
 }
 
 function ScrollArea({ className, children, orientation = "vertical", ...props }: ScrollAreaProps) {
-  const showVerticalScrollBar = orientation === "vertical" || orientation === "both";
-  const showHorizontalScrollBar = orientation === "horizontal" || orientation === "both";
-
   return (
     <ScrollAreaPrimitive.Root data-slot="scroll-area" className={cn("relative", className)} {...props}>
       <ScrollAreaPrimitive.Viewport
@@ -20,13 +17,11 @@ function ScrollArea({ className, children, orientation = "vertical", ...props }:
         className={cn(
           "size-full rounded-[inherit] outline-none transition-[color,box-shadow] focus-visible:outline-1 focus-visible:ring-[3px] focus-visible:ring-ring/50",
           orientation === "horizontal" && "overflow-x-auto!",
-          orientation === "both" && "overflow-auto!",
         )}
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
-      {showVerticalScrollBar ? <ScrollBar orientation="vertical" /> : null}
-      {showHorizontalScrollBar ? <ScrollBar orientation="horizontal" /> : null}
+      <ScrollBar orientation={orientation} />
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
   );

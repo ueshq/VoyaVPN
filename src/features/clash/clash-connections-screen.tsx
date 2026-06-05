@@ -6,7 +6,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useI18n } from "@/i18n/use-i18n";
 import {
   clashCloseConnection,
@@ -128,7 +127,7 @@ export function ClashConnectionsScreen() {
         </Alert>
       ) : null}
 
-      <ScrollArea className="min-h-0 flex-1" orientation="both">
+      <div className="min-h-0 flex-1 overflow-auto">
         <div className="grid min-w-[72rem] grid-cols-[2.75rem_minmax(14rem,1.2fr)_9rem_11rem_11rem_8rem_8rem_minmax(13rem,1fr)_9rem] border-b bg-muted/40 px-4 py-2 text-xs font-medium uppercase text-muted-foreground">
           <span />
           <span>{t("clash.host")}</span>
@@ -184,7 +183,7 @@ export function ClashConnectionsScreen() {
         ) : (
           <p className="px-4 py-8 text-center text-sm text-muted-foreground">{t("panes.clashConnections.empty")}</p>
         )}
-      </ScrollArea>
+      </div>
     </section>
   );
 }
