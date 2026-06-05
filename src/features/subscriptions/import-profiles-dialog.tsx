@@ -2,7 +2,10 @@ import { useMemo, useState } from "react";
 import { ClipboardPaste, FileUp, Upload } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -11,6 +14,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { importProfilesFromText, listSubscriptions } from "@/ipc";
 
 type ImportProfilesDialogProps = {
@@ -18,6 +30,8 @@ type ImportProfilesDialogProps = {
   onOpenChange: (open: boolean) => void;
   open: boolean;
 };
+
+const EMPTY_SELECT_VALUE = "__voyavpn_manual_import__";
 
 export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportProfilesDialogProps) {
   const [error, setError] = useState<string | null>(null);
@@ -83,56 +97,101 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
           <DialogDescription className="sr-only">Import share links, subscription URLs, or JSON payloads.</DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="grid min-w-56 gap-1 text-sm">
-              <span className="text-xs font-medium text-muted-foreground">Target</span>
-              <select
-                className="h-9 rounded-md border bg-background px-2"
-                onChange={(event) => setSelectedSubid(event.target.value)}
-                value={selectedSubid}
-              >
-                <option value="">Manual import</option>
-                {subscriptions.map((item) => (
-                  <option key={item.Id} value={item.Id}>
-                    {item.Remarks || item.Url}
-                  </option>
-                ))}
-              </select>
-            </label>
+        <Card className="gap-3 rounded-md bg-background p-3 shadow-none">
+          <CardContent className="grid gap-3 p-0">
+            <div className="grid gap-3 md:grid-cols-[minmax(14rem,1fr)_12rem_auto_auto] md:items-end">
+              <div className="grid min-w-0 gap-1">
+                <Label className="text-xs text-muted-foreground" htmlFor="import-target">
+                  Target
+                </Label>
+                <Select
+                  onValueChange={(value) => setSelectedSubid(decodeSelectValue(value))}
+                  value={encodeSelectValue(selectedSubid)}
+                >
+                  <SelectTrigger className="w-full bg-card" id="import-target">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={EMPTY_SELECT_VALUE}>Manual import</SelectItem>
+                    {subscriptions.map((item) => (
+                      <SelectItem key={item.Id} value={item.Id}>
+                        {item.Remarks || item.Url}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <Button className="mt-5" onClick={() => void handlePaste()} type="button" variant="outline">
-              <ClipboardPaste className="size-4" aria-hidden="true" />
-              Paste
-            </Button>
+              <div className="grid min-w-0 gap-1">
+                <Label className="text-xs text-muted-foreground" htmlFor="import-subscription-target">
+                  Mode
+                </Label>
+                <div className="flex h-9 items-center rounded-md border bg-card px-3 shadow-xs">
+                  <Label
+                    className="h-full min-w-0 cursor-pointer text-xs font-medium text-muted-foreground"
+                    htmlFor="import-subscription-target"
+                  >
+                    <Checkbox
+                      checked={Boolean(selectedSubid)}
+                      disabled={subscriptions.length === 0}
+                      id="import-subscription-target"
+                      onCheckedChange={(checked) => {
+                        if (checked === true) {
+                          setSelectedSubid((current) => current || subscriptions[0]?.Id || "");
+                          return;
+                        }
 
-            <label className="mt-5 inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm">
-              <FileUp className="size-4" aria-hidden="true" />
-              File
+                        setSelectedSubid("");
+                      }}
+                    />
+                    <span className="truncate">Subscription target</span>
+                  </Label>
+                </div>
+              </div>
+
+              <Button onClick={() => void handlePaste()} type="button" variant="outline">
+                <ClipboardPaste className="size-4" aria-hidden="true" />
+                Paste
+              </Button>
+
+              <Button asChild variant="outline">
+                <Label className="cursor-pointer" htmlFor="import-payload-file">
+                  <FileUp className="size-4" aria-hidden="true" />
+                  File
+                </Label>
+              </Button>
               <input
                 className="sr-only"
+                id="import-payload-file"
                 onChange={(event) => void handleFile(event.target.files?.[0] ?? null)}
                 type="file"
               />
-            </label>
-          </div>
+            </div>
 
-          <label className="grid gap-1 text-sm">
-            <span className="text-xs font-medium text-muted-foreground">Import payload</span>
-            <textarea
-              className="min-h-72 resize-y rounded-md border bg-background p-3 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
-              onChange={(event) => setText(event.target.value)}
-              value={text}
-            />
-          </label>
+            <div className="grid gap-1">
+              <Label className="text-xs text-muted-foreground" htmlFor="import-payload">
+                Import payload
+              </Label>
+              <Textarea
+                className="min-h-72 resize-y bg-card font-mono text-xs"
+                id="import-payload"
+                onChange={(event) => setText(event.target.value)}
+                value={text}
+              />
+            </div>
 
-          {resultText ? <p className="text-sm text-muted-foreground">{resultText}</p> : null}
-          {error ? (
-            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
-              {error}
-            </p>
-          ) : null}
-        </div>
+            {resultText ? (
+              <Alert role="status">
+                <AlertDescription>{resultText}</AlertDescription>
+              </Alert>
+            ) : null}
+            {error ? (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
+          </CardContent>
+        </Card>
 
         <DialogFooter>
           <Button onClick={() => onOpenChange(false)} type="button" variant="outline">
@@ -145,4 +204,12 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
       </DialogContent>
     </Dialog>
   );
+}
+
+function encodeSelectValue(value: string) {
+  return value === "" ? EMPTY_SELECT_VALUE : value;
+}
+
+function decodeSelectValue(value: string) {
+  return value === EMPTY_SELECT_VALUE ? "" : value;
 }

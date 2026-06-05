@@ -1,16 +1,26 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { json } from "@codemirror/lang-json";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Braces, Database, RefreshCw, RotateCcw, Save, ServerCog, ShieldCheck, TriangleAlert } from "lucide-react";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { IpcCommandError, loadDnsSettings, saveDnsSettings } from "@/ipc";
 import type { DnsItem_Serialize, DnsSettings_Deserialize, DnsSettings_Serialize } from "@/ipc/bindings";
 import { cn } from "@/lib/utils";
 
 const STRATEGIES = ["", "AsIs", "UseIP", "UseIPv4", "UseIPv6", "ForceIPv4", "ForceIPv6"];
+const EMPTY_SELECT_VALUE = "__voyavpn_empty_select_value__";
 const editorExtensions = [json()];
 
 type ErrorMap = Record<string, string>;
@@ -116,14 +126,14 @@ export function DnsScreen() {
         <div className="flex min-w-0 items-center gap-2">
           <Database className="size-4 text-muted-foreground" aria-hidden="true" />
           <h2 className="text-sm font-semibold">DNS</h2>
-          <span className="rounded-md border px-2 py-1 text-xs text-muted-foreground">
+          <Badge variant="outline">
             {form?.simpleDnsItem.FakeIP ? "FakeIP" : "Standard"}
-          </span>
+          </Badge>
           {issueCount ? (
-            <span className="inline-flex items-center gap-1 rounded-md border border-destructive/40 px-2 py-1 text-xs text-destructive">
+            <Badge variant="destructive">
               <TriangleAlert className="size-3.5" aria-hidden="true" />
               {issueCount} errors
-            </span>
+            </Badge>
           ) : null}
         </div>
 
@@ -140,16 +150,25 @@ export function DnsScreen() {
       </div>
 
       {operationError ? (
-        <div className="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">{operationError}</div>
+        <div className="border-b px-4 py-2">
+          <Alert className="py-2" variant="destructive">
+            <TriangleAlert aria-hidden="true" />
+            <AlertDescription>{operationError}</AlertDescription>
+          </Alert>
+        </div>
       ) : null}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[22rem_1fr]">
-        <aside className="min-h-0 overflow-auto border-b p-4 lg:border-b-0 lg:border-e">
-          {form ? (
-            <SimpleDnsForm errors={fieldErrors} settings={form} updateSimple={updateSimple} />
-          ) : (
-            <div className="text-sm text-muted-foreground">Loading DNS settings</div>
-          )}
+        <aside className="min-h-0 border-b lg:border-b-0 lg:border-e">
+          <ScrollArea className="h-[32rem] lg:h-full">
+            <div className="p-4">
+              {form ? (
+                <SimpleDnsForm errors={fieldErrors} settings={form} updateSimple={updateSimple} />
+              ) : (
+                <div className="text-sm text-muted-foreground">Loading DNS settings</div>
+              )}
+            </div>
+          </ScrollArea>
         </aside>
 
         <div className="min-h-0 overflow-hidden">
@@ -214,93 +233,96 @@ function SimpleDnsForm({
   const simple = settings.simpleDnsItem;
 
   return (
-    <div className="grid gap-4">
-      <div className="flex items-center gap-2">
-        <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
-        <h3 className="text-sm font-semibold">Simple DNS</h3>
-      </div>
+    <Card className="gap-3 rounded-md bg-background p-3 shadow-none">
+      <CardHeader className="p-0">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
+          Simple DNS
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-4 p-0">
+        <div className="grid gap-2">
+          <CheckboxField
+            checked={Boolean(simple.UseSystemHosts)}
+            label="System hosts"
+            onChange={(value) => updateSimple({ UseSystemHosts: value })}
+          />
+          <CheckboxField
+            checked={Boolean(simple.AddCommonHosts)}
+            label="Common hosts"
+            onChange={(value) => updateSimple({ AddCommonHosts: value })}
+          />
+          <CheckboxField
+            checked={Boolean(simple.BlockBindingQuery)}
+            label="Block HTTPS/SVCB"
+            onChange={(value) => updateSimple({ BlockBindingQuery: value })}
+          />
+          <CheckboxField
+            checked={Boolean(simple.ServeStale)}
+            label="Serve stale"
+            onChange={(value) => updateSimple({ ServeStale: value })}
+          />
+          <CheckboxField
+            checked={Boolean(simple.ParallelQuery)}
+            label="Parallel query"
+            onChange={(value) => updateSimple({ ParallelQuery: value })}
+          />
+          <CheckboxField
+            checked={Boolean(simple.FakeIP)}
+            label="FakeIP"
+            onChange={(value) => updateSimple({ FakeIP: value })}
+          />
+          <CheckboxField
+            checked={Boolean(simple.GlobalFakeIp)}
+            disabled={!simple.FakeIP}
+            label="Global FakeIP"
+            onChange={(value) => updateSimple({ GlobalFakeIp: value })}
+          />
+        </div>
 
-      <div className="grid gap-2">
-        <CheckboxField
-          checked={Boolean(simple.UseSystemHosts)}
-          label="System hosts"
-          onChange={(value) => updateSimple({ UseSystemHosts: value })}
+        <TextField
+          label="Direct DNS"
+          onChange={(value) => updateSimple({ DirectDNS: value })}
+          value={simple.DirectDNS ?? ""}
         />
-        <CheckboxField
-          checked={Boolean(simple.AddCommonHosts)}
-          label="Common hosts"
-          onChange={(value) => updateSimple({ AddCommonHosts: value })}
+        <TextField
+          label="Remote DNS"
+          onChange={(value) => updateSimple({ RemoteDNS: value })}
+          value={simple.RemoteDNS ?? ""}
         />
-        <CheckboxField
-          checked={Boolean(simple.BlockBindingQuery)}
-          label="Block HTTPS/SVCB"
-          onChange={(value) => updateSimple({ BlockBindingQuery: value })}
+        <TextField
+          label="Bootstrap DNS"
+          onChange={(value) => updateSimple({ BootstrapDNS: value })}
+          value={simple.BootstrapDNS ?? ""}
         />
-        <CheckboxField
-          checked={Boolean(simple.ServeStale)}
-          label="Serve stale"
-          onChange={(value) => updateSimple({ ServeStale: value })}
-        />
-        <CheckboxField
-          checked={Boolean(simple.ParallelQuery)}
-          label="Parallel query"
-          onChange={(value) => updateSimple({ ParallelQuery: value })}
-        />
-        <CheckboxField
-          checked={Boolean(simple.FakeIP)}
-          label="FakeIP"
-          onChange={(value) => updateSimple({ FakeIP: value })}
-        />
-        <CheckboxField
-          checked={Boolean(simple.GlobalFakeIp)}
-          disabled={!simple.FakeIP}
-          label="Global FakeIP"
-          onChange={(value) => updateSimple({ GlobalFakeIp: value })}
-        />
-      </div>
 
-      <TextField
-        label="Direct DNS"
-        onChange={(value) => updateSimple({ DirectDNS: value })}
-        value={simple.DirectDNS ?? ""}
-      />
-      <TextField
-        label="Remote DNS"
-        onChange={(value) => updateSimple({ RemoteDNS: value })}
-        value={simple.RemoteDNS ?? ""}
-      />
-      <TextField
-        label="Bootstrap DNS"
-        onChange={(value) => updateSimple({ BootstrapDNS: value })}
-        value={simple.BootstrapDNS ?? ""}
-      />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+          <SelectField
+            label="Direct strategy"
+            onChange={(value) => updateSimple({ Strategy4Freedom: value || null })}
+            value={simple.Strategy4Freedom ?? ""}
+          />
+          <SelectField
+            label="Proxy strategy"
+            onChange={(value) => updateSimple({ Strategy4Proxy: value || null })}
+            value={simple.Strategy4Proxy ?? ""}
+          />
+        </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-        <SelectField
-          label="Direct strategy"
-          onChange={(value) => updateSimple({ Strategy4Freedom: value || null })}
-          value={simple.Strategy4Freedom ?? ""}
+        <TextAreaField
+          error={errors["simpleDnsItem.hosts"]}
+          label="Hosts"
+          onChange={(value) => updateSimple({ Hosts: value })}
+          value={simple.Hosts ?? ""}
         />
-        <SelectField
-          label="Proxy strategy"
-          onChange={(value) => updateSimple({ Strategy4Proxy: value || null })}
-          value={simple.Strategy4Proxy ?? ""}
+        <TextAreaField
+          error={errors["simpleDnsItem.directExpectedIPs"]}
+          label="Expected IPs"
+          onChange={(value) => updateSimple({ DirectExpectedIPs: value })}
+          value={simple.DirectExpectedIPs ?? ""}
         />
-      </div>
-
-      <TextAreaField
-        error={errors["simpleDnsItem.hosts"]}
-        label="Hosts"
-        onChange={(value) => updateSimple({ Hosts: value })}
-        value={simple.Hosts ?? ""}
-      />
-      <TextAreaField
-        error={errors["simpleDnsItem.directExpectedIPs"]}
-        label="Expected IPs"
-        onChange={(value) => updateSimple({ DirectExpectedIPs: value })}
-        value={simple.DirectExpectedIPs ?? ""}
-      />
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -325,45 +347,49 @@ function AdvancedDnsEditor({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <label className="ms-auto flex items-center gap-2 text-sm">
-          <input checked={item.Enabled} onChange={(event) => onChange({ Enabled: event.target.checked })} type="checkbox" />
-          Enabled
-        </label>
+        <CheckboxField
+          checked={item.Enabled}
+          className="ms-auto"
+          label="Enabled"
+          onChange={(value) => onChange({ Enabled: value })}
+        />
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-4 overflow-auto p-4 xl:grid-cols-2">
-        <JsonEditorField
-          error={errors[`${fieldPrefix}.normalDNS`]}
-          label="Normal DNS"
-          onChange={(value) => onChange({ NormalDNS: value })}
-          onReset={() => onChange({ NormalDNS: defaults.normal })}
-          value={item.NormalDNS ?? ""}
-        />
-        <JsonEditorField
-          error={errors[`${fieldPrefix}.tunDNS`]}
-          label="TUN DNS"
-          onChange={(value) => onChange({ TunDNS: value })}
-          onReset={() => onChange({ TunDNS: defaults.tun })}
-          value={item.TunDNS ?? ""}
-        />
-        <TextField
-          label="Direct strategy"
-          onChange={(value) => onChange({ DomainStrategy4Freedom: value || null })}
-          value={item.DomainStrategy4Freedom ?? ""}
-        />
-        <TextField
-          label="Domain DNS address"
-          onChange={(value) => onChange({ DomainDNSAddress: value || null })}
-          value={item.DomainDNSAddress ?? ""}
-        />
-        {showSystemHosts ? (
-          <CheckboxField
-            checked={item.UseSystemHosts}
-            label="System hosts"
-            onChange={(value) => onChange({ UseSystemHosts: value })}
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="grid gap-4 p-4 xl:grid-cols-2">
+          <JsonEditorField
+            error={errors[`${fieldPrefix}.normalDNS`]}
+            label="Normal DNS"
+            onChange={(value) => onChange({ NormalDNS: value })}
+            onReset={() => onChange({ NormalDNS: defaults.normal })}
+            value={item.NormalDNS ?? ""}
           />
-        ) : null}
-      </div>
+          <JsonEditorField
+            error={errors[`${fieldPrefix}.tunDNS`]}
+            label="TUN DNS"
+            onChange={(value) => onChange({ TunDNS: value })}
+            onReset={() => onChange({ TunDNS: defaults.tun })}
+            value={item.TunDNS ?? ""}
+          />
+          <TextField
+            label="Direct strategy"
+            onChange={(value) => onChange({ DomainStrategy4Freedom: value || null })}
+            value={item.DomainStrategy4Freedom ?? ""}
+          />
+          <TextField
+            label="Domain DNS address"
+            onChange={(value) => onChange({ DomainDNSAddress: value || null })}
+            value={item.DomainDNSAddress ?? ""}
+          />
+          {showSystemHosts ? (
+            <CheckboxField
+              checked={item.UseSystemHosts}
+              label="System hosts"
+              onChange={(value) => onChange({ UseSystemHosts: value })}
+            />
+          ) : null}
+        </div>
+      </ScrollArea>
     </div>
   );
 }
@@ -382,49 +408,70 @@ function JsonEditorField({
   value: string;
 }) {
   return (
-    <label className="grid min-h-[22rem] gap-2 text-sm">
-      <span className="flex items-center gap-2 font-medium">
-        <Braces className="size-4 text-muted-foreground" aria-hidden="true" />
-        {label}
-        <Button className="ms-auto h-7 px-2" onClick={onReset} type="button" variant="outline">
-          <RotateCcw className="size-3.5" aria-hidden="true" />
-          Default
-        </Button>
-      </span>
-      <div className={cn("overflow-hidden rounded-md border", error ? "border-destructive" : "")}>
-        <CodeMirror
-          basicSetup={{
-            foldGutter: true,
-            highlightActiveLine: true,
-            lineNumbers: true,
-          }}
-          extensions={editorExtensions}
-          height="20rem"
-          onChange={onChange}
-          value={value}
-        />
-      </div>
-      {error ? <span className="text-xs text-destructive">{error}</span> : null}
-    </label>
+    <Card className="min-h-[22rem] gap-3 rounded-md bg-background p-3 shadow-none">
+      <CardHeader className="p-0">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Braces className="size-4 text-muted-foreground" aria-hidden="true" />
+          {label}
+          <Button className="ms-auto h-7 px-2" onClick={onReset} type="button" variant="outline">
+            <RotateCcw className="size-3.5" aria-hidden="true" />
+            Default
+          </Button>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-2 p-0">
+        <div
+          aria-invalid={error ? true : undefined}
+          className={cn(
+            "overflow-hidden rounded-md border border-input bg-background shadow-xs transition-[color,box-shadow] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 dark:bg-input/30",
+            error ? "border-destructive ring-destructive/20 dark:ring-destructive/40" : "",
+          )}
+        >
+          <CodeMirror
+            basicSetup={{
+              foldGutter: true,
+              highlightActiveLine: true,
+              lineNumbers: true,
+            }}
+            extensions={editorExtensions}
+            height="20rem"
+            onChange={onChange}
+            value={value}
+          />
+        </div>
+        {error ? <span className="text-xs text-destructive">{error}</span> : null}
+      </CardContent>
+    </Card>
   );
 }
 
 function CheckboxField({
   checked,
+  className,
   disabled = false,
   label,
   onChange,
 }: {
   checked: boolean;
+  className?: string;
   disabled?: boolean;
   label: string;
   onChange: (value: boolean) => void;
 }) {
+  const id = useId();
+
   return (
-    <label className={cn("flex items-center gap-2 text-sm", disabled ? "opacity-55" : "")}>
-      <input checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} type="checkbox" />
-      {label}
-    </label>
+    <div className={cn("flex items-center gap-2", disabled ? "opacity-55" : "", className)}>
+      <Checkbox
+        checked={checked}
+        disabled={disabled}
+        id={id}
+        onCheckedChange={(nextChecked) => onChange(nextChecked === true)}
+      />
+      <Label className={cn("text-sm", disabled ? "cursor-not-allowed" : "cursor-pointer")} htmlFor={id}>
+        {label}
+      </Label>
+    </div>
   );
 }
 
@@ -437,15 +484,17 @@ function TextField({
   onChange: (value: string) => void;
   value: string;
 }) {
+  const id = useId();
+
   return (
-    <label className="grid gap-1.5 text-sm">
-      <span className="font-medium">{label}</span>
-      <input
-        className="h-9 rounded-md border bg-background px-3 outline-none focus:border-ring"
+    <div className="grid gap-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
         onChange={(event) => onChange(event.target.value)}
         value={value}
       />
-    </label>
+    </div>
   );
 }
 
@@ -458,21 +507,28 @@ function SelectField({
   onChange: (value: string) => void;
   value: string;
 }) {
+  const id = useId();
+  const selectValue = value === "" ? EMPTY_SELECT_VALUE : value;
+
   return (
-    <label className="grid gap-1.5 text-sm">
-      <span className="font-medium">{label}</span>
-      <select
-        className="h-9 rounded-md border bg-background px-3 outline-none focus:border-ring"
-        onChange={(event) => onChange(event.target.value)}
-        value={value}
+    <div className="grid gap-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Select
+        onValueChange={(nextValue) => onChange(nextValue === EMPTY_SELECT_VALUE ? "" : nextValue)}
+        value={selectValue}
       >
-        {STRATEGIES.map((strategy) => (
-          <option key={strategy || "default"} value={strategy}>
-            {strategy || "default"}
-          </option>
-        ))}
-      </select>
-    </label>
+        <SelectTrigger className="w-full" id={id}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {STRATEGIES.map((strategy) => (
+            <SelectItem key={strategy || EMPTY_SELECT_VALUE} value={strategy || EMPTY_SELECT_VALUE}>
+              {strategy || "default"}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 
@@ -487,15 +543,25 @@ function TextAreaField({
   onChange: (value: string) => void;
   value: string;
 }) {
+  const id = useId();
+  const errorId = `${id}-error`;
+
   return (
-    <label className="grid gap-1.5 text-sm">
-      <span className="font-medium">{label}</span>
-      <textarea
-        className={cn("min-h-24 resize-y rounded-md border bg-background px-3 py-2 outline-none focus:border-ring", error ? "border-destructive" : "")}
+    <div className="grid gap-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Textarea
+        aria-describedby={error ? errorId : undefined}
+        aria-invalid={error ? true : undefined}
+        className="min-h-24 resize-y"
+        id={id}
         onChange={(event) => onChange(event.target.value)}
         value={value}
       />
-      {error ? <span className="text-xs text-destructive">{error}</span> : null}
-    </label>
+      {error ? (
+        <span className="text-xs text-destructive" id={errorId}>
+          {error}
+        </span>
+      ) : null}
+    </div>
   );
 }

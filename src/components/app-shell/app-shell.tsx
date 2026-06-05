@@ -10,7 +10,6 @@ import {
   Monitor,
   Moon,
   Network,
-  Palette,
   Plug,
   QrCode,
   RefreshCw,
@@ -19,12 +18,14 @@ import {
   Settings,
   Shield,
   Sun,
+  Type,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { ModalHost } from "@/components/app-shell/modal-host";
 import { StatusBar } from "@/components/app-shell/status-bar";
 import { Toaster } from "@/components/app-shell/toaster";
+import { fontOptions, fonts } from "@/config/fonts";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -58,16 +59,18 @@ import { LogsScreen } from "@/features/logs";
 import { applyRegionalPreset, loadAppConfig, saveAppConfig } from "@/ipc";
 import type { AppConfig_Deserialize, PresetType } from "@/ipc/bindings";
 import {
-  accentToConfig,
-  type Accent,
-  fontFamilyToCss,
+  type Font,
+  fontToClassName,
+  fontToCss,
+  fontToFamilyString,
   resolveThemeMode,
   themeModeToConfig,
   type ThemeMode,
+  uiItemWithoutLegacyColor,
   usePreferencesStore,
 } from "@/stores/preferences-store";
 import { type ShellTab, useShellStore } from "@/stores/shell-store";
-import { useModalStore } from "@/stores/modal-store";
+import { type ModalKind, useModalStore } from "@/stores/modal-store";
 import { useToastStore } from "@/stores/toast-store";
 
 type ShellTabConfig = {
@@ -133,12 +136,6 @@ const themeMenuOptions: Array<{ icon: LucideIcon; labelKey: string; value: Theme
   { icon: Moon, labelKey: "menu.themeDark", value: "dark" },
 ];
 
-const accentMenuOptions: Array<{ labelKey: string; value: Accent }> = [
-  { labelKey: "menu.accentTeal", value: "teal" },
-  { labelKey: "menu.accentBlue", value: "blue" },
-  { labelKey: "menu.accentRose", value: "rose" },
-];
-
 type RegionalPresetOption = {
   descriptionKey: string;
   labelKey: string;
@@ -166,20 +163,21 @@ const regionalPresetOptions: RegionalPresetOption[] = [
 export function AppShell() {
   const queryClient = useQueryClient();
   const { direction, language, localeOptions, setLocale, t } = useI18n();
-  const accent = usePreferencesStore((state) => state.accent);
-  const fontFamily = usePreferencesStore((state) => state.fontFamily);
+  const font = usePreferencesStore((state) => state.font);
   const fontSize = usePreferencesStore((state) => state.fontSize);
   const activeTab = useShellStore((state) => state.activeTab);
   const openModal = useModalStore((state) => state.openModal);
   const pushToast = useToastStore((state) => state.pushToast);
-  const setAccent = usePreferencesStore((state) => state.setAccent);
   const setActiveTab = useShellStore((state) => state.setActiveTab);
+  const setFont = usePreferencesStore((state) => state.setFont);
   const setThemeMode = usePreferencesStore((state) => state.setThemeMode);
   const themeMode = usePreferencesStore((state) => state.themeMode);
+  const [activeMenu, setActiveMenu] = useState("");
   const [pendingPreset, setPendingPreset] = useState<RegionalPresetOption | null>(null);
+  const fontLabel = t("menu.font");
 
   usePersistedPreferences(language);
-  useThemeEffects(themeMode, accent, fontFamily, fontSize);
+  useThemeEffects(themeMode, font, fontSize);
 
   useEffect(() => {
     applyDocumentLocale(language);
@@ -199,19 +197,38 @@ export function AppShell() {
     });
   }
 
+  function openShellModal(kind: ModalKind) {
+    setActiveMenu("");
+    openModal(kind);
+  }
+
+  function selectMenuTab(tab: ShellTab) {
+    setActiveMenu("");
+    setActiveTab(tab);
+  }
+
+  function selectRegionalPreset(option: RegionalPresetOption) {
+    setActiveMenu("");
+    setPendingPreset(option);
+  }
+
   return (
     <main className="min-h-screen bg-background text-foreground" dir={direction}>
       <div className="flex h-screen min-h-[34rem] flex-col overflow-hidden">
-        <header className="shrink-0 border-b bg-card">
-          <div className="flex h-14 items-center gap-3 px-4">
+        <header className="shrink-0 border-b border-border bg-card text-card-foreground">
+          <div className="flex h-14 items-center gap-2 px-4">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground">
                 <Shield className="size-4" aria-hidden="true" />
               </div>
               <h1 className="truncate text-sm font-semibold leading-none">{t("app.name")}</h1>
             </div>
 
-            <Menubar className="ms-2 hidden lg:flex">
+            <Menubar
+              className="ms-2 hidden h-8 shrink-0 p-0.5 lg:flex"
+              onValueChange={setActiveMenu}
+              value={activeMenu}
+            >
               <MenubarMenu>
                 <MenubarTrigger>{t("menu.file")}</MenubarTrigger>
                 <MenubarContent>
@@ -274,14 +291,14 @@ export function AppShell() {
                   </MenubarSub>
                   <MenubarSub>
                     <MenubarSubTrigger>
-                      <Palette className="size-4" aria-hidden="true" />
-                      {t("menu.accent")}
+                      <Type className="size-4" aria-hidden="true" />
+                      {fontLabel}
                     </MenubarSubTrigger>
                     <MenubarSubContent>
-                      <MenubarRadioGroup onValueChange={(value) => setAccent(value as Accent)} value={accent}>
-                        {accentMenuOptions.map((option) => (
+                      <MenubarRadioGroup onValueChange={(value) => setFont(value as Font)} value={font}>
+                        {fontOptions.map((option) => (
                           <MenubarRadioItem key={option.value} value={option.value}>
-                            {t(option.labelKey)}
+                            <span className={fontToClassName(option.value)}>{option.label}</span>
                           </MenubarRadioItem>
                         ))}
                       </MenubarRadioGroup>
@@ -293,11 +310,11 @@ export function AppShell() {
               <MenubarMenu>
                 <MenubarTrigger>{t("menu.tools")}</MenubarTrigger>
                 <MenubarContent>
-                  <MenubarItem onSelect={() => setActiveTab("routing")}>
+                  <MenubarItem onSelect={() => selectMenuTab("routing")}>
                     <Route className="size-4" aria-hidden="true" />
                     {t("menu.routing")}
                   </MenubarItem>
-                  <MenubarItem onSelect={() => setActiveTab("dns")}>
+                  <MenubarItem onSelect={() => selectMenuTab("dns")}>
                     <Database className="size-4" aria-hidden="true" />
                     {t("menu.dns")}
                   </MenubarItem>
@@ -308,7 +325,7 @@ export function AppShell() {
                     </MenubarSubTrigger>
                     <MenubarSubContent>
                       {regionalPresetOptions.map((option) => (
-                        <MenubarItem key={option.value} onSelect={() => setPendingPreset(option)}>
+                        <MenubarItem key={option.value} onSelect={() => selectRegionalPreset(option)}>
                           {t(option.labelKey)}
                         </MenubarItem>
                       ))}
@@ -317,15 +334,15 @@ export function AppShell() {
                   <MenubarItem disabled>{t("menu.systemProxy")}</MenubarItem>
                   <MenubarItem disabled>{t("menu.tun")}</MenubarItem>
                   <MenubarItem disabled>{t("menu.clash")}</MenubarItem>
-                  <MenubarItem onSelect={() => openModal("backup")}>
+                  <MenubarItem onSelect={() => openShellModal("backup")}>
                     <Database className="size-4" aria-hidden="true" />
                     {t("menu.backup")}
                   </MenubarItem>
-                  <MenubarItem onSelect={() => openModal("updates")}>
+                  <MenubarItem onSelect={() => openShellModal("updates")}>
                     <RefreshCw className="size-4" aria-hidden="true" />
                     {t("menu.checkUpdates")}
                   </MenubarItem>
-                  <MenubarItem onSelect={() => openModal("qr")}>
+                  <MenubarItem onSelect={() => openShellModal("qr")}>
                     <QrCode className="size-4" aria-hidden="true" />
                     {t("menu.qr")}
                   </MenubarItem>
@@ -335,7 +352,7 @@ export function AppShell() {
               <MenubarMenu>
                 <MenubarTrigger>{t("menu.help")}</MenubarTrigger>
                 <MenubarContent>
-                  <MenubarItem onSelect={() => openModal("about")}>
+                  <MenubarItem onSelect={() => openShellModal("about")}>
                     <HelpCircle className="size-4" aria-hidden="true" />
                     {t("menu.about")}
                   </MenubarItem>
@@ -344,13 +361,17 @@ export function AppShell() {
             </Menubar>
 
             <div className="ms-auto flex min-w-0 items-center gap-2">
-              <div className="hidden rounded-md border bg-background p-0.5 md:flex" aria-label={t("menu.language")}>
+              <div
+                className="hidden shrink-0 rounded-md border border-border bg-background p-0.5 md:flex"
+                aria-label={t("menu.language")}
+              >
                 {localeOptions.map((locale) => (
                   <Button
                     key={locale.code}
                     aria-pressed={language === locale.code}
-                    className="h-7 px-2 text-xs"
+                    className="h-7 min-w-7 px-2 text-xs"
                     onClick={() => void setLocale(locale.code)}
+                    title={locale.code}
                     type="button"
                     variant={language === locale.code ? "secondary" : "ghost"}
                   >
@@ -360,25 +381,25 @@ export function AppShell() {
               </div>
               <Button
                 aria-label={t("actions.settings")}
-                className="gap-2"
+                className="h-8 shrink-0 gap-2 px-3"
                 onClick={() => openModal("settings")}
                 size="sm"
                 variant="outline"
               >
                 <Settings className="size-4" aria-hidden="true" />
-                <span className="hidden sm:inline">{t("actions.settings")}</span>
+                <span className="hidden max-w-28 truncate sm:inline">{t("actions.settings")}</span>
               </Button>
             </div>
           </div>
         </header>
 
         <Tabs
-          className="flex min-h-0 flex-1 flex-col"
+          className="flex min-h-0 flex-1 flex-col gap-0"
           onValueChange={(value) => setActiveTab(value as ShellTab)}
           value={activeTab}
         >
-          <div className="shrink-0 overflow-x-auto border-b bg-background px-4">
-            <TabsList aria-label={t("tabs.aria")} className="h-12 min-w-max">
+          <div className="shrink-0 overflow-x-auto border-b border-border bg-card px-4 py-1.5">
+            <TabsList aria-label={t("tabs.aria")} className="min-w-max">
               {shellTabs.map((tab) => {
                 const Icon = tab.icon;
 
@@ -515,7 +536,7 @@ function ShellPane({ tab }: { tab: ShellTabConfig }) {
 
   return (
     <section className="flex h-full min-h-0 flex-col">
-      <div className="flex h-12 shrink-0 items-center gap-3 border-b px-4">
+      <div className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-card px-4">
         <h2 className="text-sm font-semibold">{t(tab.titleKey)}</h2>
         <div className="ms-auto flex items-center gap-2">
           {tab.secondaryActionKey ? (
@@ -533,7 +554,7 @@ function ShellPane({ tab }: { tab: ShellTabConfig }) {
 
       <div className="grid min-h-0 flex-1 place-items-center p-6">
         <div className="grid justify-items-center gap-3 text-center">
-          <div className="flex size-10 items-center justify-center rounded-md border bg-card">
+          <div className="flex size-10 items-center justify-center rounded-md border border-border bg-card">
             <Icon className="size-5 text-muted-foreground" aria-hidden="true" />
           </div>
           <p className="text-sm font-medium">{t(tab.emptyKey)}</p>
@@ -544,9 +565,8 @@ function ShellPane({ tab }: { tab: ShellTabConfig }) {
 }
 
 function usePersistedPreferences(language: string) {
-  const accent = usePreferencesStore((state) => state.accent);
   const appConfigLoaded = usePreferencesStore((state) => state.appConfigLoaded);
-  const fontFamily = usePreferencesStore((state) => state.fontFamily);
+  const font = usePreferencesStore((state) => state.font);
   const fontSize = usePreferencesStore((state) => state.fontSize);
   const hydrateFromConfig = usePreferencesStore((state) => state.hydrateFromConfig);
   const themeMode = usePreferencesStore((state) => state.themeMode);
@@ -568,8 +588,7 @@ function usePersistedPreferences(language: string) {
 
         hydrateFromConfig(config.UIItem);
         lastPersistedKeyRef.current = preferenceConfigKey({
-          accent: usePreferencesStore.getState().accent,
-          fontFamily: usePreferencesStore.getState().fontFamily,
+          font: usePreferencesStore.getState().font,
           fontSize: usePreferencesStore.getState().fontSize,
           language: languageRef.current,
           themeMode: usePreferencesStore.getState().themeMode,
@@ -587,37 +606,34 @@ function usePersistedPreferences(language: string) {
       return undefined;
     }
 
-    const persistKey = preferenceConfigKey({ accent, fontFamily, fontSize, language, themeMode });
+    const persistKey = preferenceConfigKey({ font, fontSize, language, themeMode });
     if (lastPersistedKeyRef.current === persistKey) {
       return undefined;
     }
 
     const timeout = window.setTimeout(() => {
-      void persistPreferenceConfig({ accent, fontFamily, fontSize, language, themeMode }).then(() => {
+      void persistPreferenceConfig({ font, fontSize, language, themeMode }).then(() => {
         lastPersistedKeyRef.current = persistKey;
       });
     }, 250);
 
     return () => window.clearTimeout(timeout);
-  }, [accent, appConfigLoaded, fontFamily, fontSize, language, themeMode]);
+  }, [appConfigLoaded, font, fontSize, language, themeMode]);
 }
 
 function preferenceConfigKey({
-  accent,
-  fontFamily,
+  font,
   fontSize,
   language,
   themeMode,
 }: {
-  accent: Accent;
-  fontFamily: string;
+  font: Font;
   fontSize: number;
   language: string;
   themeMode: ThemeMode;
 }) {
   return JSON.stringify({
-    accent,
-    fontFamily: fontFamily.trim(),
+    font,
     fontSize,
     language,
     themeMode,
@@ -625,14 +641,12 @@ function preferenceConfigKey({
 }
 
 async function persistPreferenceConfig({
-  accent,
-  fontFamily,
+  font,
   fontSize,
   language,
   themeMode,
 }: {
-  accent: Accent;
-  fontFamily: string;
+  font: Font;
   fontSize: number;
   language: string;
   themeMode: ThemeMode;
@@ -641,9 +655,8 @@ async function persistPreferenceConfig({
   const nextConfig = {
     ...config,
     UIItem: {
-      ...config.UIItem,
-      ColorPrimaryName: accentToConfig(accent),
-      CurrentFontFamily: fontFamily.trim(),
+      ...uiItemWithoutLegacyColor(config.UIItem),
+      CurrentFontFamily: fontToFamilyString(font),
       CurrentFontSize: fontSize,
       CurrentLanguage: language,
       CurrentTheme: themeModeToConfig(themeMode),
@@ -653,7 +666,7 @@ async function persistPreferenceConfig({
   await saveAppConfig(nextConfig);
 }
 
-function useThemeEffects(themeMode: ThemeMode, accent: Accent, fontFamily: string, fontSize: number) {
+function useThemeEffects(themeMode: ThemeMode, font: Font, fontSize: number) {
   useEffect(() => {
     const root = document.documentElement;
     const media =
@@ -663,9 +676,10 @@ function useThemeEffects(themeMode: ThemeMode, accent: Accent, fontFamily: strin
       const resolvedTheme = resolveThemeMode(themeMode);
 
       root.classList.toggle("dark", resolvedTheme === "dark");
-      root.dataset.accent = accent;
+      root.classList.remove(...fonts.map(fontToClassName));
+      root.classList.add(fontToClassName(font));
       root.style.colorScheme = resolvedTheme;
-      root.style.setProperty("--app-font-family", fontFamilyToCss(fontFamily));
+      root.style.setProperty("--app-font-family", fontToCss(font));
       root.style.setProperty("--app-font-size", `${fontSize}px`);
     };
 
@@ -678,5 +692,5 @@ function useThemeEffects(themeMode: ThemeMode, accent: Accent, fontFamily: strin
     media.addEventListener("change", applyTheme);
 
     return () => media.removeEventListener("change", applyTheme);
-  }, [accent, fontFamily, fontSize, themeMode]);
+  }, [font, fontSize, themeMode]);
 }

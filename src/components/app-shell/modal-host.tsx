@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Info, KeyRound, Languages, Monitor, Moon, Palette, Settings, Sun, Type } from "lucide-react";
+import { Info, KeyRound, Languages, Monitor, Moon, Settings, Sun, Type } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -10,7 +10,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { fontOptions } from "@/config/fonts";
 import { BackupDialog } from "@/features/backup";
 import { IntegrationSettings, SourceSettings } from "@/features/options";
 import { QrDialog } from "@/features/qr";
@@ -24,11 +34,11 @@ import {
   useRuntimeEventStore,
 } from "@/ipc";
 import type { SudoCollectionResponse } from "@/ipc/bindings";
-import { cn } from "@/lib/utils";
 import {
   FONT_SIZE_MAX,
   FONT_SIZE_MIN,
-  type Accent,
+  type Font,
+  fontToClassName,
   type ThemeMode,
   usePreferencesStore,
 } from "@/stores/preferences-store";
@@ -38,12 +48,6 @@ const themeOptions: Array<{ icon: typeof Monitor; labelKey: string; value: Theme
   { icon: Monitor, labelKey: "menu.themeSystem", value: "system" },
   { icon: Sun, labelKey: "menu.themeLight", value: "light" },
   { icon: Moon, labelKey: "menu.themeDark", value: "dark" },
-];
-
-const accentOptions: Array<{ className: string; labelKey: string; value: Accent }> = [
-  { className: "bg-teal-600", labelKey: "menu.accentTeal", value: "teal" },
-  { className: "bg-sky-600", labelKey: "menu.accentBlue", value: "blue" },
-  { className: "bg-rose-600", labelKey: "menu.accentRose", value: "rose" },
 ];
 
 const fontSizeOptions = Array.from(
@@ -70,20 +74,18 @@ export function ModalHost() {
 
 function SettingsDialog() {
   const { language, localeOptions, setLocale, t } = useI18n();
-  const accent = usePreferencesStore((state) => state.accent);
-  const fontFamily = usePreferencesStore((state) => state.fontFamily);
+  const font = usePreferencesStore((state) => state.font);
   const fontSize = usePreferencesStore((state) => state.fontSize);
-  const setAccent = usePreferencesStore((state) => state.setAccent);
-  const setFontFamily = usePreferencesStore((state) => state.setFontFamily);
+  const setFont = usePreferencesStore((state) => state.setFont);
   const setFontSize = usePreferencesStore((state) => state.setFontSize);
   const setThemeMode = usePreferencesStore((state) => state.setThemeMode);
   const themeMode = usePreferencesStore((state) => state.themeMode);
-  const fontFamilyLabel = stripParenthetical(t("resx.TbSettingsCurrentFontFamily"));
-  const fontSizeLabel = t("resx.TbSettingsFontSize");
+  const fontLabel = t("modal.font");
+  const fontSizeLabel = t("modal.fontSize");
 
   return (
-    <DialogContent className="max-h-[90vh] w-[min(94vw,44rem)] overflow-y-auto">
-      <DialogHeader>
+    <DialogContent className="max-h-[90dvh] w-[calc(100vw-2rem)] max-w-3xl gap-0 overflow-hidden p-0">
+      <DialogHeader className="pe-12 px-6 pb-4 pt-6">
         <DialogTitle className="flex items-center gap-2">
           <Settings className="size-4" aria-hidden="true" />
           {t("modal.settings")}
@@ -91,8 +93,8 @@ function SettingsDialog() {
         <DialogDescription className="sr-only">{t("modal.settingsDescription")}</DialogDescription>
       </DialogHeader>
 
-      <div className="grid gap-5">
-        <section className="grid gap-2">
+      <div className="grid max-h-[calc(90dvh-5rem)] gap-5 overflow-y-auto px-6 pb-6">
+        <section className="grid gap-3">
           <h3 className="flex items-center gap-2 text-sm font-medium">
             <Monitor className="size-4" aria-hidden="true" />
             {t("modal.theme")}
@@ -105,7 +107,7 @@ function SettingsDialog() {
                 <Button
                   key={option.value}
                   aria-pressed={themeMode === option.value}
-                  className="min-w-0 justify-start"
+                  className="h-9 min-w-0 justify-start px-3"
                   onClick={() => setThemeMode(option.value)}
                   type="button"
                   variant={themeMode === option.value ? "secondary" : "outline"}
@@ -120,60 +122,41 @@ function SettingsDialog() {
 
         <Separator />
 
-        <section className="grid gap-2">
-          <h3 className="flex items-center gap-2 text-sm font-medium">
-            <Palette className="size-4" aria-hidden="true" />
-            {t("modal.accent")}
-          </h3>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {accentOptions.map((option) => (
-              <Button
-                key={option.value}
-                aria-pressed={accent === option.value}
-                className="min-w-0 justify-start"
-                onClick={() => setAccent(option.value)}
-                type="button"
-                variant={accent === option.value ? "secondary" : "outline"}
-              >
-                <span className={cn("size-3 rounded-full", option.className)} aria-hidden="true" />
-                <span className="truncate">{t(option.labelKey)}</span>
-              </Button>
-            ))}
-          </div>
-        </section>
-
-        <Separator />
-
         <section className="grid gap-3">
           <h3 className="flex items-center gap-2 text-sm font-medium">
             <Type className="size-4" aria-hidden="true" />
-            {fontSizeLabel}
+            {fontLabel}
           </h3>
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
-            <label className="grid min-w-0 gap-1 text-sm">
-              <span className="text-muted-foreground">{fontFamilyLabel}</span>
-              <input
-                aria-label={fontFamilyLabel}
-                className="h-9 min-w-0 rounded-md border bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-                onChange={(event) => setFontFamily(event.currentTarget.value)}
-                value={fontFamily}
-              />
-            </label>
-            <label className="grid min-w-0 gap-1 text-sm">
-              <span className="text-muted-foreground">{fontSizeLabel}</span>
-              <select
-                aria-label={fontSizeLabel}
-                className="h-9 min-w-0 rounded-md border bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-                onChange={(event) => setFontSize(Number(event.currentTarget.value))}
-                value={fontSize}
-              >
-                {fontSizeOptions.map((size) => (
-                  <option key={size} value={size}>
-                    {size}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div className="grid gap-3 sm:grid-cols-[1fr_10rem] sm:items-end">
+            <div className="grid gap-2 sm:grid-cols-3">
+              {fontOptions.map((option) => (
+                <Button
+                  key={option.value}
+                  aria-pressed={font === option.value}
+                  className="h-9 min-w-0 justify-start px-3"
+                  onClick={() => setFont(option.value as Font)}
+                  type="button"
+                  variant={font === option.value ? "secondary" : "outline"}
+                >
+                  <span className={`${fontToClassName(option.value)} truncate`}>{option.label}</span>
+                </Button>
+              ))}
+            </div>
+            <div className="grid min-w-0 gap-1 text-sm">
+              <Label className="text-muted-foreground">{fontSizeLabel}</Label>
+              <Select onValueChange={(value) => setFontSize(Number(value))} value={String(fontSize)}>
+                <SelectTrigger aria-label={fontSizeLabel} className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {fontSizeOptions.map((size) => (
+                    <SelectItem key={size} value={String(size)}>
+                      {size}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </section>
 
@@ -197,6 +180,7 @@ function SettingsDialog() {
               <Button
                 key={locale.code}
                 aria-pressed={language === locale.code}
+                className="h-8 min-w-12 px-2 text-xs"
                 onClick={() => void setLocale(locale.code)}
                 type="button"
                 variant={language === locale.code ? "secondary" : "outline"}
@@ -209,10 +193,6 @@ function SettingsDialog() {
       </div>
     </DialogContent>
   );
-}
-
-function stripParenthetical(value: string) {
-  return value.replace(/\s*[(（][^)）]*[)）]\s*$/u, "");
 }
 
 function AboutDialog() {
@@ -315,17 +295,17 @@ function SudoPromptDialog({ intent }: { intent?: "enableTun" }) {
       </DialogHeader>
 
       <form className="grid gap-4" onSubmit={(event) => void submitPassword(event)}>
-        <label className="grid gap-2 text-sm">
-          <span className="font-medium">{t("modal.sudoPassword")}</span>
-          <input
+        <div className="grid gap-2 text-sm">
+          <Label htmlFor="sudo-password">{t("modal.sudoPassword")}</Label>
+          <Input
             autoComplete="current-password"
-            className="h-9 rounded-md border bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
             disabled={collection?.state === "ready" || submitting}
+            id="sudo-password"
             onChange={(event) => setPassword(event.target.value)}
             type="password"
             value={password}
           />
-        </label>
+        </div>
 
         {collection?.state === "ready" ? (
           <p className="text-sm text-muted-foreground">{t("modal.sudoReady")}</p>

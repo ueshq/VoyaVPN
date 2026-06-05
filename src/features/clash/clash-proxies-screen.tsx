@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Check, Gauge, RefreshCw, RotateCw, Wifi, WifiOff } from "lucide-react";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useI18n } from "@/i18n/use-i18n";
 import {
   clashListProxies,
@@ -98,22 +101,25 @@ export function ClashProxiesScreen() {
     <section className="flex h-full min-h-0 flex-col">
       <div className="flex h-12 shrink-0 items-center gap-3 border-b px-4">
         <h2 className="text-sm font-semibold">{t("tabs.clashProxies")}</h2>
-        <div className="flex items-center gap-2 rounded-md border bg-background px-2 py-1 text-xs">
+        <Badge className="gap-2 bg-background px-2 py-1 font-normal text-muted-foreground" variant="outline">
           <Activity className="size-4 text-muted-foreground" aria-hidden="true" />
           <span className="tabular-nums">{t("status.upload", { speed: formatRate(traffic?.up) })}</span>
           <span className="tabular-nums">{t("status.download", { speed: formatRate(traffic?.down) })}</span>
-        </div>
+        </Badge>
         <div className="ms-auto flex items-center gap-2">
-          <div className="hidden rounded-md border bg-background p-0.5 md:flex">
+          <div className="hidden h-9 items-center rounded-lg bg-muted p-[3px] md:flex">
             {ruleModeOptions.map((option) => (
               <Button
                 key={option.value}
                 aria-pressed={snapshot?.ruleMode === option.value}
-                className="h-7 px-2 text-xs"
+                className={cn(
+                  "h-7 px-2 text-xs",
+                  snapshot?.ruleMode === option.value && "bg-background text-foreground shadow-sm hover:bg-background",
+                )}
                 disabled={ruleModeMutation.isPending}
                 onClick={() => void ruleModeMutation.mutateAsync(option.value)}
                 type="button"
-                variant={snapshot?.ruleMode === option.value ? "secondary" : "ghost"}
+                variant="ghost"
               >
                 {t(option.labelKey)}
               </Button>
@@ -153,9 +159,11 @@ export function ClashProxiesScreen() {
       </div>
 
       {proxiesQuery.error ? (
-        <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-          {proxiesQuery.error instanceof Error ? proxiesQuery.error.message : String(proxiesQuery.error)}
-        </div>
+        <Alert className="rounded-none border-x-0 border-t-0 px-4 py-2" variant="destructive">
+          <AlertDescription>
+            {proxiesQuery.error instanceof Error ? proxiesQuery.error.message : String(proxiesQuery.error)}
+          </AlertDescription>
+        </Alert>
       ) : null}
 
       <div className="grid min-h-0 flex-1 grid-cols-[18rem_minmax(0,1fr)] overflow-hidden">
@@ -164,31 +172,40 @@ export function ClashProxiesScreen() {
             <span className="text-xs font-medium uppercase text-muted-foreground">{t("clash.groups")}</span>
             <span className="text-xs tabular-nums text-muted-foreground">{snapshot?.groups.length ?? 0}</span>
           </div>
-          <div className="h-[calc(100%-2.5rem)] overflow-auto p-2">
-            {snapshot?.groups.length ? (
-              snapshot.groups.map((group) => (
-                <button
-                  key={group.name}
-                  className={cn(
-                    "mb-1 grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-md px-3 py-2 text-start text-sm transition-colors",
-                    selectedGroup?.name === group.name
-                      ? "bg-secondary text-secondary-foreground"
-                      : "hover:bg-accent hover:text-accent-foreground",
-                  )}
-                  onClick={() => setSelectedGroupName(group.name)}
-                  type="button"
-                >
-                  <span className="min-w-0 truncate font-medium">{group.name}</span>
-                  <span className="text-xs text-muted-foreground">{group.nodes.length}</span>
-                  <span className="col-span-2 min-w-0 truncate text-xs text-muted-foreground">
-                    {group.now ?? t("clash.noActive")}
-                  </span>
-                </button>
-              ))
-            ) : (
-              <p className="px-2 py-6 text-center text-sm text-muted-foreground">{t("panes.clashProxies.empty")}</p>
-            )}
-          </div>
+          <ScrollArea className="h-[calc(100%-2.5rem)]">
+            <div className="p-2">
+              {snapshot?.groups.length ? (
+                snapshot.groups.map((group) => (
+                  <button
+                    key={group.name}
+                    className={cn(
+                      "mb-1 grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-md border border-transparent px-3 py-2 text-start text-sm outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                      selectedGroup?.name === group.name && "border-border bg-muted text-foreground shadow-xs",
+                    )}
+                    onClick={() => setSelectedGroupName(group.name)}
+                    type="button"
+                  >
+                    <span className="min-w-0 truncate font-medium">{group.name}</span>
+                    <Badge
+                      className="justify-self-end bg-background tabular-nums text-muted-foreground"
+                      variant="outline"
+                    >
+                      {group.nodes.length}
+                    </Badge>
+                    <Badge
+                      className="col-span-2 max-w-full justify-start truncate bg-background text-muted-foreground"
+                      title={group.now ?? t("clash.noActive")}
+                      variant="outline"
+                    >
+                      {group.now ?? t("clash.noActive")}
+                    </Badge>
+                  </button>
+                ))
+              ) : (
+                <p className="px-2 py-6 text-center text-sm text-muted-foreground">{t("panes.clashProxies.empty")}</p>
+              )}
+            </div>
+          </ScrollArea>
         </aside>
 
         <div className="flex min-h-0 flex-col overflow-hidden">
@@ -196,7 +213,11 @@ export function ClashProxiesScreen() {
             <span className="min-w-0 truncate text-sm font-medium">
               {selectedGroup?.name ?? t("panes.clashProxies.title")}
             </span>
-            <span className="text-xs text-muted-foreground">{selectedGroup?.proxyType ?? ""}</span>
+            {selectedGroup?.proxyType ? (
+              <Badge className="bg-background text-muted-foreground" variant="outline">
+                {selectedGroup.proxyType}
+              </Badge>
+            ) : null}
             <div className="ms-auto flex items-center gap-2">
               <Button
                 disabled={!selectedGroup || delayMutation.isPending}
@@ -237,7 +258,7 @@ function ProxyNodeGrid({
   const { t } = useI18n();
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto">
+    <ScrollArea className="min-h-0 flex-1" orientation="both">
       <div className="grid min-w-[44rem] grid-cols-[2.75rem_minmax(12rem,1fr)_8rem_7rem_5rem_6rem] border-b bg-muted/40 px-4 py-2 text-xs font-medium uppercase text-muted-foreground">
         <span />
         <span>{t("clash.node")}</span>
@@ -255,9 +276,9 @@ function ProxyNodeGrid({
             <button
               key={node.name}
               className={cn(
-                "grid min-w-[44rem] grid-cols-[2.75rem_minmax(12rem,1fr)_8rem_7rem_5rem_6rem] items-center border-b px-4 py-2 text-start text-sm transition-colors",
-                selectable && !node.active ? "hover:bg-accent hover:text-accent-foreground" : "",
-                node.active && "bg-secondary/70",
+                "grid min-w-[44rem] grid-cols-[2.75rem_minmax(12rem,1fr)_8rem_7rem_5rem_6rem] items-center border-b px-4 py-2 text-start text-sm outline-none transition-colors focus-visible:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                selectable && !node.active ? "hover:bg-muted/60" : "",
+                node.active && "bg-muted text-foreground",
               )}
               disabled={!selectable || node.active}
               onClick={() => onSelect(node)}
@@ -265,25 +286,42 @@ function ProxyNodeGrid({
             >
               <span className="flex items-center">
                 {node.active ? (
-                  <span className="grid size-5 place-items-center rounded-full bg-primary text-primary-foreground">
+                  <span className="grid size-5 place-items-center rounded-full bg-foreground text-background">
                     <Check className="size-3" aria-hidden="true" />
                   </span>
                 ) : (
-                  <span className="size-5 rounded-full border" aria-hidden="true" />
+                  <span className="size-5 rounded-full border bg-background" aria-hidden="true" />
                 )}
               </span>
               <span className="min-w-0 truncate font-medium">{node.name}</span>
-              <span className="text-muted-foreground">{node.proxyType}</span>
+              <Badge
+                className="max-w-full justify-start truncate bg-background px-1.5 py-0 text-muted-foreground"
+                variant="outline"
+              >
+                {node.proxyType}
+              </Badge>
               <span className="tabular-nums">{delayLabel}</span>
-              <span>{node.udp ? <Wifi className="size-4" aria-hidden="true" /> : <WifiOff className="size-4" aria-hidden="true" />}</span>
-              <span className="text-xs text-muted-foreground">{node.active ? t("clash.active") : ""}</span>
+              <span className="text-muted-foreground">
+                {node.udp ? (
+                  <Wifi className="size-4" aria-hidden="true" />
+                ) : (
+                  <WifiOff className="size-4" aria-hidden="true" />
+                )}
+              </span>
+              <span>
+                {node.active ? (
+                  <Badge className="bg-background text-muted-foreground" variant="outline">
+                    {t("clash.active")}
+                  </Badge>
+                ) : null}
+              </span>
             </button>
           );
         })
       ) : (
         <p className="px-4 py-8 text-center text-sm text-muted-foreground">{t("panes.clashProxies.empty")}</p>
       )}
-    </div>
+    </ScrollArea>
   );
 }
 

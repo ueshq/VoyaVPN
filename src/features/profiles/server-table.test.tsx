@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { vi } from "vitest";
@@ -61,6 +61,18 @@ function renderProfiles() {
       <ProfilesScreen />
     </QueryClientProvider>,
   );
+}
+
+async function selectComboboxOption(label: string, optionLabel: string) {
+  const user = userEvent.setup();
+
+  await user.click(screen.getByRole("combobox", { name: label }));
+  const listbox = await screen.findByRole("listbox");
+  await user.click(within(listbox).getByRole("option", { name: new RegExp(`^${escapeRegExp(optionLabel)}`) }));
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 describe("ProfilesScreen", () => {
@@ -217,13 +229,15 @@ describe("ProfilesScreen", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
-    const protocolSelect = screen.getByLabelText("Protocol") as HTMLSelectElement;
-    expect([...protocolSelect.options].map((option) => option.textContent)).toEqual(
-      PROFILE_PROTOCOLS.map((protocol) => protocol.label),
-    );
+    await userEvent.click(screen.getByRole("combobox", { name: "Protocol" }));
+    const protocolOptions = within(await screen.findByRole("listbox")).getAllByRole("option");
+    expect(protocolOptions).toHaveLength(PROFILE_PROTOCOLS.length);
+    PROFILE_PROTOCOLS.forEach((protocol) => {
+      expect(screen.getByRole("option", { name: new RegExp(`^${escapeRegExp(protocol.label)}`) })).toBeInTheDocument();
+    });
 
-    fireEvent.change(protocolSelect, { target: { value: String(CONFIG_TYPES.WireGuard) } });
-    expect(screen.getByLabelText("Peer public key")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("option", { name: /^WireGuard/ }));
+    expect(await screen.findByLabelText("Peer public key")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Remarks"), { target: { value: "WireGuard test" } });
     fireEvent.change(screen.getByLabelText("Address"), { target: { value: "wg.example.test" } });
@@ -312,11 +326,9 @@ describe("ProfilesScreen", () => {
     renderProfiles();
 
     fireEvent.click(await screen.findByRole("button", { name: "Add" }));
-    fireEvent.change(screen.getByLabelText("Protocol"), {
-      target: { value: String(CONFIG_TYPES.PolicyGroup) },
-    });
+    await selectComboboxOption("Protocol", "Policy Group");
     fireEvent.change(screen.getByLabelText("Remarks"), { target: { value: "Mixed policy" } });
-    fireEvent.click(screen.getByRole("button", { name: "Choose children" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Choose children" }));
 
     fireEvent.click(await screen.findByRole("checkbox", { name: /Leaf A/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Chain A/ }));

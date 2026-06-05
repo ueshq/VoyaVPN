@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
-import { ImagePlus, QrCode, ScanLine } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ImagePlus, QrCode, ScanLine } from "lucide-react";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   DialogContent,
@@ -9,6 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/i18n/use-i18n";
 import { generateQrCode, importProfilesFromText } from "@/ipc";
 import type { QrCodeImage } from "@/ipc/bindings";
@@ -106,14 +109,17 @@ export function QrDialog() {
 
       <div className="grid gap-4">
         <section className="grid gap-2">
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">{t("qr.content")}</span>
-            <textarea
-              className="min-h-24 resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+          <div className="grid gap-1">
+            <Label className="text-xs text-muted-foreground" htmlFor="qr-content">
+              {t("qr.content")}
+            </Label>
+            <Textarea
+              className="min-h-24 resize-y bg-card"
+              id="qr-content"
               onChange={(event) => setContent(event.currentTarget.value)}
               value={content}
             />
-          </label>
+          </div>
           <Button disabled={!content.trim() || working} onClick={() => void generate()} type="button" variant="outline">
             <QrCode className="size-4" aria-hidden="true" />
             {t("qr.generate")}
@@ -146,16 +152,27 @@ export function QrDialog() {
               {t("qr.importDecoded")}
             </Button>
           </div>
-          <textarea
-            className="min-h-20 resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+          <Textarea
+            className="min-h-20 resize-y bg-card"
+            aria-label={t("qr.decodedPlaceholder")}
             onChange={(event) => setDecodedText(event.currentTarget.value)}
             placeholder={t("qr.decodedPlaceholder")}
             value={decodedText}
           />
         </section>
 
-        {importMessage ? <p className="text-sm text-muted-foreground">{importMessage}</p> : null}
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {importMessage ? (
+          <Alert role="status">
+            <CheckCircle2 aria-hidden="true" />
+            <AlertDescription>{importMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+        {error ? (
+          <Alert variant="destructive">
+            <AlertTriangle aria-hidden="true" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
       </div>
 
       <DialogFooter />

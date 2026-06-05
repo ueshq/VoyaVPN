@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Globe2, Save } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/use-i18n";
 import { loadRulesetGeoSources, saveRulesetGeoSources } from "@/ipc";
 
@@ -74,29 +76,33 @@ export function SourceSettings() {
         {t("options.sources")}
       </h3>
 
-      <label className="grid gap-1 text-sm">
-        <span className="text-muted-foreground">{t("options.geoSource")}</span>
-        <input
-          className="h-9 rounded-md border bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+      <div className="grid gap-1.5">
+        <Label className="text-muted-foreground" htmlFor="ruleset-geo-source-url">
+          {t("options.geoSource")}
+        </Label>
+        <Input
+          id="ruleset-geo-source-url"
           onChange={(event) => {
             setSaved(false);
             setForm((current) => ({ ...current, geoSourceUrl: event.currentTarget.value }));
           }}
           value={form.geoSourceUrl}
         />
-      </label>
+      </div>
 
-      <label className="grid gap-1 text-sm">
-        <span className="text-muted-foreground">{t("options.srsSource")}</span>
-        <input
-          className="h-9 rounded-md border bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+      <div className="grid gap-1.5">
+        <Label className="text-muted-foreground" htmlFor="ruleset-srs-source-url">
+          {t("options.srsSource")}
+        </Label>
+        <Input
+          id="ruleset-srs-source-url"
           onChange={(event) => {
             setSaved(false);
             setForm((current) => ({ ...current, srsSourceUrl: event.currentTarget.value }));
           }}
           value={form.srsSourceUrl}
         />
-      </label>
+      </div>
 
       <div className="flex items-center gap-2">
         <Button disabled={working} onClick={() => void save()} type="button" variant="outline">

@@ -1,8 +1,13 @@
 import { useState } from "react";
+import type * as React from "react";
 import { Plus, RefreshCw, Rss, Save, Trash2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -11,6 +16,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   deleteSubscriptions,
   listSubscriptions,
@@ -103,7 +111,7 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl">
+      <DialogContent className="max-h-[92vh] max-w-5xl grid-rows-[auto,minmax(0,1fr),auto] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Rss className="size-4" aria-hidden="true" />
@@ -112,125 +120,146 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
           <DialogDescription className="sr-only">Manage subscription sources and run updates.</DialogDescription>
         </DialogHeader>
 
-        <div className="grid min-h-[28rem] gap-4 lg:grid-cols-[18rem_1fr]">
-          <div className="min-h-0 overflow-hidden rounded-md border">
-            <div className="flex h-10 items-center justify-between border-b px-3">
-              <span className="text-sm font-medium">Sources</span>
+        <div className="grid min-h-0 gap-4 lg:grid-cols-[18rem_1fr]">
+          <Card className="min-h-0 gap-0 rounded-md bg-background p-0 shadow-none">
+            <CardHeader className="flex h-10 flex-row items-center justify-between border-b px-3 py-0">
+              <CardTitle className="text-sm">Sources</CardTitle>
               <Button
                 aria-label="New subscription"
-                className="size-7 p-0"
+                className="size-7"
                 onClick={() => {
                   setSelectedId("");
                   setForm(createBlankSubscription());
                 }}
+                size="icon"
                 type="button"
                 variant="ghost"
               >
                 <Plus className="size-4" aria-hidden="true" />
               </Button>
-            </div>
-            <div className="max-h-[24rem] overflow-auto p-1">
-              {subscriptions.length === 0 ? (
-                <p className="px-2 py-3 text-sm text-muted-foreground">No subscriptions</p>
-              ) : (
-                subscriptions.map((item) => (
-                  <button
-                    className={cn(
-                      "grid w-full gap-1 rounded-sm px-2 py-2 text-start text-sm outline-none hover:bg-accent",
-                      selectedId === item.Id ? "bg-accent" : null,
-                    )}
-                    key={item.Id}
-                    onClick={() => {
-                      setSelectedId(item.Id);
-                      setForm(item);
-                    }}
-                    type="button"
-                  >
-                    <span className="truncate font-medium">{item.Remarks || "Untitled"}</span>
-                    <span className="truncate text-xs text-muted-foreground">{item.Url}</span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
+            </CardHeader>
+            <CardContent className="min-h-0 p-0">
+              <ScrollArea className="h-[24rem]">
+                <div className="p-1">
+                  {subscriptions.length === 0 ? (
+                    <p className="px-2 py-3 text-sm text-muted-foreground">No subscriptions</p>
+                  ) : (
+                    subscriptions.map((item) => (
+                      <button
+                        className={cn(
+                          "grid w-full grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 rounded-md px-2 py-2 text-start text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                          selectedId === item.Id ? "bg-accent text-accent-foreground" : null,
+                        )}
+                        key={item.Id}
+                        onClick={() => {
+                          setSelectedId(item.Id);
+                          setForm(item);
+                        }}
+                        type="button"
+                      >
+                        <span className="truncate font-medium">{item.Remarks || "Untitled"}</span>
+                        <Badge className="self-start" variant={item.Enabled ? "secondary" : "outline"}>
+                          {item.Enabled ? "Enabled" : "Disabled"}
+                        </Badge>
+                        <span className="col-span-2 truncate text-xs text-muted-foreground">{item.Url}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
 
-          <div className="grid content-start gap-3">
-            <div className="grid gap-3 md:grid-cols-2">
+          <Card className="min-h-0 gap-3 rounded-md bg-background p-3 shadow-none">
+            <CardHeader className="p-0">
+              <CardTitle className="text-sm">Subscription details</CardTitle>
+            </CardHeader>
+            <CardContent className="grid content-start gap-3 p-0">
+              <div className="grid gap-3 md:grid-cols-2">
+                <TextField
+                  label="Remarks"
+                  onChange={(value) => setForm((current) => ({ ...current, Remarks: value }))}
+                  value={form.Remarks ?? ""}
+                />
+                <TextField
+                  label="User agent"
+                  onChange={(value) => setForm((current) => ({ ...current, UserAgent: value }))}
+                  value={form.UserAgent ?? ""}
+                />
+              </div>
               <TextField
-                label="Remarks"
-                onChange={(value) => setForm((current) => ({ ...current, Remarks: value }))}
-                value={form.Remarks ?? ""}
-              />
-              <TextField
-                label="User agent"
-                onChange={(value) => setForm((current) => ({ ...current, UserAgent: value }))}
-                value={form.UserAgent ?? ""}
-              />
-            </div>
-            <TextField
-              label="URL"
-              onChange={(value) => setForm((current) => ({ ...current, Url: value }))}
-              value={form.Url ?? ""}
-            />
-            <TextField
-              label="More URL"
-              onChange={(value) => setForm((current) => ({ ...current, MoreUrl: value }))}
-              value={form.MoreUrl ?? ""}
-            />
-            <div className="grid gap-3 md:grid-cols-3">
-              <TextField
-                label="Filter"
-                onChange={(value) => setForm((current) => ({ ...current, Filter: value || null }))}
-                value={form.Filter ?? ""}
+                label="URL"
+                onChange={(value) => setForm((current) => ({ ...current, Url: value }))}
+                value={form.Url ?? ""}
               />
               <TextField
-                label="Convert target"
-                onChange={(value) => setForm((current) => ({ ...current, ConvertTarget: value || null }))}
-                value={form.ConvertTarget ?? ""}
+                label="More URL"
+                onChange={(value) => setForm((current) => ({ ...current, MoreUrl: value }))}
+                value={form.MoreUrl ?? ""}
               />
-              <TextField
-                label="Auto update minutes"
-                onChange={(value) => setForm((current) => ({ ...current, AutoUpdateInterval: Number(value) || 0 }))}
-                type="number"
-                value={String(form.AutoUpdateInterval ?? 0)}
-              />
-            </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                checked={form.Enabled ?? true}
-                className="size-4 accent-primary"
-                onChange={(event) => setForm((current) => ({ ...current, Enabled: event.target.checked }))}
-                type="checkbox"
-              />
-              Enabled
-            </label>
+              <div className="grid gap-3 md:grid-cols-3">
+                <TextField
+                  label="Filter"
+                  onChange={(value) => setForm((current) => ({ ...current, Filter: value || null }))}
+                  value={form.Filter ?? ""}
+                />
+                <TextField
+                  label="Convert target"
+                  onChange={(value) => setForm((current) => ({ ...current, ConvertTarget: value || null }))}
+                  value={form.ConvertTarget ?? ""}
+                />
+                <TextField
+                  label="Auto update minutes"
+                  onChange={(value) => setForm((current) => ({ ...current, AutoUpdateInterval: Number(value) || 0 }))}
+                  type="number"
+                  value={String(form.AutoUpdateInterval ?? 0)}
+                />
+              </div>
+              <div className="flex h-9 items-center rounded-md border bg-card px-3 shadow-xs">
+                <Label
+                  className="h-full w-fit cursor-pointer text-xs font-medium text-muted-foreground"
+                  htmlFor="subscription-enabled"
+                >
+                  <Checkbox
+                    checked={form.Enabled ?? true}
+                    id="subscription-enabled"
+                    onCheckedChange={(checked) => setForm((current) => ({ ...current, Enabled: checked === true }))}
+                  />
+                  Enabled
+                </Label>
+              </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={() => void handleSave()} type="button">
-                <Save className="size-4" aria-hidden="true" />
-                Save
-              </Button>
-              <Button disabled={!selectedId} onClick={() => void handleDelete()} type="button" variant="outline">
-                <Trash2 className="size-4" aria-hidden="true" />
-                Delete
-              </Button>
-              <Button disabled={!selectedId} onClick={() => void handleUpdate(selectedId)} type="button" variant="outline">
-                <RefreshCw className="size-4" aria-hidden="true" />
-                Update selected
-              </Button>
-              <Button onClick={() => void handleUpdate(null)} type="button" variant="outline">
-                <RefreshCw className="size-4" aria-hidden="true" />
-                Update all
-              </Button>
-            </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => void handleSave()} type="button">
+                  <Save className="size-4" aria-hidden="true" />
+                  Save
+                </Button>
+                <Button disabled={!selectedId} onClick={() => void handleDelete()} type="button" variant="outline">
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  Delete
+                </Button>
+                <Button disabled={!selectedId} onClick={() => void handleUpdate(selectedId)} type="button" variant="outline">
+                  <RefreshCw className="size-4" aria-hidden="true" />
+                  Update selected
+                </Button>
+                <Button onClick={() => void handleUpdate(null)} type="button" variant="outline">
+                  <RefreshCw className="size-4" aria-hidden="true" />
+                  Update all
+                </Button>
+              </div>
 
-            {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
-            {error ? (
-              <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
-                {error}
-              </p>
-            ) : null}
-          </div>
+              {message ? (
+                <Alert role="status">
+                  <AlertDescription>{message}</AlertDescription>
+                </Alert>
+              ) : null}
+              {error ? (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              ) : null}
+            </CardContent>
+          </Card>
         </div>
 
         <DialogFooter>
@@ -244,25 +273,37 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
 }
 
 function TextField({
+  className,
+  id,
   label,
   onChange,
   type = "text",
   value,
-}: {
+  ...props
+}: Omit<React.ComponentProps<typeof Input>, "onChange" | "value"> & {
   label: string;
   onChange: (value: string) => void;
-  type?: "number" | "text";
   value: string;
 }) {
+  const inputId = id ?? `subscription-${fieldId(label)}`;
+
   return (
-    <label className="grid gap-1 text-sm">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <input
-        className="h-9 rounded-md border bg-background px-2 outline-none focus:ring-2 focus:ring-ring"
+    <div className="grid min-w-0 gap-1">
+      <Label className="text-xs text-muted-foreground" htmlFor={inputId}>
+        <span className="truncate">{label}</span>
+      </Label>
+      <Input
+        className={cn("bg-card", className)}
+        id={inputId}
         onChange={(event) => onChange(event.target.value)}
         type={type}
         value={value}
+        {...props}
       />
-    </label>
+    </div>
   );
+}
+
+function fieldId(label: string) {
+  return label.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replaceAll(/^-|-$/g, "");
 }

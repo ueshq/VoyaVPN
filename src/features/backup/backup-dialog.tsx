@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
+import type * as React from "react";
 import { AlertTriangle, CheckCircle2, Database, Download, RefreshCw, Upload } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DialogContent,
   DialogDescription,
@@ -10,7 +14,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/use-i18n";
+import { cn } from "@/lib/utils";
 import {
   backupCreateLocal,
   backupRestoreLocal,
@@ -131,109 +138,117 @@ export function BackupDialog() {
 
       <div className="grid gap-5">
         {message ? (
-          <div className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            <span>{message}</span>
-          </div>
+          <Alert
+            className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+            role="status"
+          >
+            <CheckCircle2 aria-hidden="true" />
+            <AlertDescription className="text-current">{message}</AlertDescription>
+          </Alert>
         ) : null}
         {error ? (
-          <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            <span>{error}</span>
-          </div>
+          <Alert variant="destructive">
+            <AlertTriangle aria-hidden="true" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         ) : null}
 
-        <section className="grid gap-3">
-          <div className="flex items-center gap-2">
-            <Database className="size-4 text-muted-foreground" aria-hidden="true" />
-            <h3 className="text-sm font-medium">{t("backup.local")}</h3>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-            <label className="grid gap-1 text-sm">
-              <span className="font-medium">{t("backup.outputPath")}</span>
-              <input
-                className="h-9 rounded-md border bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-                onChange={(event) => setLocalOutputPath(event.target.value)}
+        <Card className="gap-3 rounded-md bg-background p-3 shadow-none">
+          <CardHeader className="p-0">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Database className="size-4 text-muted-foreground" aria-hidden="true" />
+              {t("backup.local")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 p-0">
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+              <TextField
+                label={t("backup.outputPath")}
+                onChange={setLocalOutputPath}
                 value={localOutputPath}
               />
-            </label>
-            <Button
-              className="self-end"
-              disabled={working !== null}
-              onClick={() => void run("localBackup")}
-              type="button"
-            >
-              <Database className="size-4" aria-hidden="true" />
-              {working === "localBackup" ? t("backup.working") : t("backup.createLocal")}
-            </Button>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-            <label className="grid gap-1 text-sm">
-              <span className="font-medium">{t("backup.restorePath")}</span>
-              <input
-                className="h-9 rounded-md border bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-                onChange={(event) => setRestorePath(event.target.value)}
+              <Button
+                className="self-end"
+                disabled={working !== null}
+                onClick={() => void run("localBackup")}
+                type="button"
+              >
+                <Database className="size-4" aria-hidden="true" />
+                {working === "localBackup" ? t("backup.working") : t("backup.createLocal")}
+              </Button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+              <TextField
+                label={t("backup.restorePath")}
+                onChange={setRestorePath}
                 value={restorePath}
               />
-            </label>
-            <Button
-              className="self-end"
-              disabled={working !== null || !restorePath.trim()}
-              onClick={() => void run("localRestore")}
-              type="button"
-              variant="outline"
-            >
-              <Download className="size-4" aria-hidden="true" />
-              {working === "localRestore" ? t("backup.working") : t("backup.restoreLocal")}
-            </Button>
-          </div>
-          {status?.backupDir ? <p className="text-xs text-muted-foreground">{status.backupDir}</p> : null}
-        </section>
+              <Button
+                className="self-end"
+                disabled={working !== null || !restorePath.trim()}
+                onClick={() => void run("localRestore")}
+                type="button"
+                variant="outline"
+              >
+                <Download className="size-4" aria-hidden="true" />
+                {working === "localRestore" ? t("backup.working") : t("backup.restoreLocal")}
+              </Button>
+            </div>
+            {status?.backupDir ? (
+              <Badge className="max-w-full justify-start truncate" title={status.backupDir} variant="outline">
+                {status.backupDir}
+              </Badge>
+            ) : null}
+          </CardContent>
+        </Card>
 
-        <section className="grid gap-3 border-t pt-4">
-          <div className="flex items-center gap-2">
-            <Upload className="size-4 text-muted-foreground" aria-hidden="true" />
-            <h3 className="text-sm font-medium">{t("backup.webdav")}</h3>
-          </div>
+        <Card className="gap-3 rounded-md bg-background p-3 shadow-none">
+          <CardHeader className="p-0">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Upload className="size-4 text-muted-foreground" aria-hidden="true" />
+              {t("backup.webdav")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 p-0">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TextField label={t("backup.webdavUrl")} onChange={(value) => updateWebDav("Url", value)} value={webDav.Url} />
+              <TextField
+                label={t("backup.webdavDir")}
+                onChange={(value) => updateWebDav("DirName", value)}
+                value={webDav.DirName}
+              />
+              <TextField
+                label={t("backup.webdavUser")}
+                onChange={(value) => updateWebDav("UserName", value)}
+                value={webDav.UserName}
+              />
+              <TextField
+                label={t("backup.webdavPassword")}
+                onChange={(value) => updateWebDav("Password", value)}
+                type="password"
+                value={webDav.Password}
+              />
+            </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <TextField label={t("backup.webdavUrl")} onChange={(value) => updateWebDav("Url", value)} value={webDav.Url} />
-            <TextField
-              label={t("backup.webdavDir")}
-              onChange={(value) => updateWebDav("DirName", value)}
-              value={webDav.DirName}
-            />
-            <TextField
-              label={t("backup.webdavUser")}
-              onChange={(value) => updateWebDav("UserName", value)}
-              value={webDav.UserName}
-            />
-            <TextField
-              label={t("backup.webdavPassword")}
-              onChange={(value) => updateWebDav("Password", value)}
-              type="password"
-              value={webDav.Password}
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button disabled={working !== null} onClick={() => void run("save")} type="button" variant="outline">
-              {working === "save" ? t("backup.working") : t("actions.save")}
-            </Button>
-            <Button disabled={working !== null} onClick={() => void run("webdavCheck")} type="button" variant="outline">
-              <RefreshCw className="size-4" aria-hidden="true" />
-              {working === "webdavCheck" ? t("backup.working") : t("backup.webdavCheck")}
-            </Button>
-            <Button disabled={working !== null} onClick={() => void run("webdavPush")} type="button">
-              <Upload className="size-4" aria-hidden="true" />
-              {working === "webdavPush" ? t("backup.working") : t("backup.webdavPush")}
-            </Button>
-            <Button disabled={working !== null} onClick={() => void run("webdavPull")} type="button" variant="secondary">
-              <Download className="size-4" aria-hidden="true" />
-              {working === "webdavPull" ? t("backup.working") : t("backup.webdavPull")}
-            </Button>
-          </div>
-        </section>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button disabled={working !== null} onClick={() => void run("save")} type="button" variant="outline">
+                {working === "save" ? t("backup.working") : t("actions.save")}
+              </Button>
+              <Button disabled={working !== null} onClick={() => void run("webdavCheck")} type="button" variant="outline">
+                <RefreshCw className="size-4" aria-hidden="true" />
+                {working === "webdavCheck" ? t("backup.working") : t("backup.webdavCheck")}
+              </Button>
+              <Button disabled={working !== null} onClick={() => void run("webdavPush")} type="button">
+                <Upload className="size-4" aria-hidden="true" />
+                {working === "webdavPush" ? t("backup.working") : t("backup.webdavPush")}
+              </Button>
+              <Button disabled={working !== null} onClick={() => void run("webdavPull")} type="button" variant="secondary">
+                <Download className="size-4" aria-hidden="true" />
+                {working === "webdavPull" ? t("backup.working") : t("backup.webdavPull")}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <DialogFooter />
@@ -242,26 +257,36 @@ export function BackupDialog() {
 }
 
 function TextField({
+  className,
+  id,
   label,
   onChange,
   type = "text",
   value,
-}: {
+  ...props
+}: Omit<React.ComponentProps<typeof Input>, "onChange" | "value"> & {
   label: string;
   onChange: (value: string) => void;
   type?: "password" | "text";
   value?: string | null;
 }) {
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
+
   return (
-    <label className="grid gap-1 text-sm">
-      <span className="font-medium">{label}</span>
-      <input
-        className="h-9 rounded-md border bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+    <div className="grid min-w-0 gap-1">
+      <Label className="text-xs text-muted-foreground" htmlFor={inputId}>
+        <span className="truncate">{label}</span>
+      </Label>
+      <Input
+        className={cn("bg-card", className)}
+        id={inputId}
         onChange={(event) => onChange(event.target.value)}
         type={type}
         value={value ?? ""}
+        {...props}
       />
-    </label>
+    </div>
   );
 }
 

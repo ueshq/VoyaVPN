@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import type * as React from "react";
 import type {
   Control,
@@ -20,7 +20,11 @@ import {
   X,
 } from "lucide-react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +33,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   listGroupChildCandidates,
   previewGroupProfile,
@@ -75,9 +89,11 @@ export function GroupBuilder({
   const [preview, setPreview] = useState<GroupPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const multipleLoadId = useId();
   const values = useWatch({ control }) as ProfileFormValues;
   const childItems = (values.ProtocolExtra?.ChildItems ?? "") as string;
   const currentIndexId = (values.IndexId ?? "") || null;
+  const multipleLoad = values.ProtocolExtra?.MultipleLoad;
   const selectedIds = useMemo(() => splitIds(childItems), [childItems]);
   const candidatesQuery = useQuery({
     queryFn: () => listGroupChildCandidates(currentIndexId, null),
@@ -97,6 +113,12 @@ export function GroupBuilder({
       setValue("ProtocolExtra.GroupType", groupType, { shouldDirty: true });
     }
   }, [isProxyChain, setValue, values.ProtocolExtra?.GroupType]);
+
+  useEffect(() => {
+    if (multipleLoad == null) {
+      setValue("ProtocolExtra.MultipleLoad", 0);
+    }
+  }, [multipleLoad, setValue]);
 
   function setSelectedIds(ids: string[]) {
     setValue("ProtocolExtra.ChildItems", ids.join(","), {
@@ -141,21 +163,29 @@ export function GroupBuilder({
       <div className="grid gap-3 lg:grid-cols-[1fr_1fr_10rem]">
         <LabeledField label={isProxyChain ? "Chain marker" : "Group marker"} {...register("ProtocolExtra.GroupType")} />
         <LabeledField label="Subscription child group" {...register("ProtocolExtra.SubChildItems")} />
-        <label className="grid gap-1 text-sm">
-          <span className="font-medium">Load mode</span>
-          <select
-            className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-            {...register("ProtocolExtra.MultipleLoad", {
-              setValueAs: optionalNumber,
-            })}
+        <div className="grid gap-1.5">
+          <Label htmlFor={multipleLoadId}>Load mode</Label>
+          <Select
+            onValueChange={(value) => {
+              setValue("ProtocolExtra.MultipleLoad", optionalNumber(value) ?? 0, {
+                shouldDirty: true,
+                shouldValidate: true,
+              });
+            }}
+            value={String(multipleLoad ?? 0)}
           >
-            {multipleLoadOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger className="w-full" id={multipleLoadId}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {multipleLoadOptions.map((option) => (
+                <SelectItem key={option.value} value={String(option.value)}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-[1fr_13rem]">
@@ -189,7 +219,7 @@ export function GroupBuilder({
         </div>
 
         {selectedIds.length === 0 ? (
-          <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+          <div className="rounded-lg border border-dashed bg-card px-3 py-6 text-center text-sm text-muted-foreground">
             No child profiles selected
           </div>
         ) : (
@@ -198,7 +228,7 @@ export function GroupBuilder({
               const candidate = candidatesById.get(indexId);
 
               return (
-                <div className="grid grid-cols-[1.5rem_1fr_auto] items-center gap-2 rounded-md border px-3 py-2" key={`${indexId}-${index}`}>
+                <div className="grid grid-cols-[1.5rem_1fr_auto] items-center gap-2 rounded-lg border bg-card px-3 py-2" key={`${indexId}-${index}`}>
                   <span className="text-xs tabular-nums text-muted-foreground">{index + 1}</span>
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium">
@@ -270,6 +300,8 @@ function ServerPickerDialog({
   open: boolean;
 }) {
   const [filter, setFilter] = useState("");
+  const searchId = useId();
+  const pickerId = useId();
   const filtered = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     if (!needle) {
@@ -310,18 +342,28 @@ function ServerPickerDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <label className="flex h-9 items-center gap-2 rounded-md border bg-background px-3 text-sm">
-          <Search className="size-4 text-muted-foreground" aria-hidden="true" />
-          <span className="sr-only">Filter child profiles</span>
-          <input
-            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
-            onChange={(event) => setFilter(event.target.value)}
-            placeholder="Filter child profiles"
-            value={filter}
-          />
-        </label>
+        <div className="grid gap-1.5">
+          <Label className="sr-only" htmlFor={searchId}>
+            Filter child profiles
+          </Label>
+          <div className="relative">
+            <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Input
+              className="ps-9"
+              id={searchId}
+              name="group-child-filter"
+              type="search"
+              autoComplete="off"
+              aria-controls={pickerId}
+              aria-label="Filter child profiles"
+              onChange={(event) => setFilter(event.target.value)}
+              placeholder="Filter child profiles"
+              value={filter}
+            />
+          </div>
+        </div>
 
-        <div className="min-h-0 overflow-y-auto rounded-md border">
+        <ScrollArea className="min-h-0 overflow-hidden rounded-md border" id={pickerId}>
           {loading ? (
             <div className="grid h-40 place-items-center text-sm text-muted-foreground">Loading profiles</div>
           ) : filtered.length === 0 ? (
@@ -330,21 +372,22 @@ function ServerPickerDialog({
             <div className="divide-y">
               {filtered.map((candidate) => {
                 const checked = draftIds.includes(candidate.indexId);
+                const checkboxId = `${pickerId}-${toDomId(candidate.indexId)}`;
 
                 return (
-                  <label
+                  <Label
                     className={cn(
-                      "grid cursor-default grid-cols-[1.5rem_1fr_auto] items-center gap-3 px-3 py-2 text-sm",
+                      "grid cursor-default grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-sm leading-normal",
                       candidate.selectable ? "hover:bg-accent" : "text-muted-foreground",
                     )}
+                    htmlFor={checkboxId}
                     key={candidate.indexId}
                   >
-                    <input
+                    <Checkbox
                       checked={checked}
-                      className="size-4 accent-primary"
                       disabled={!candidate.selectable}
-                      onChange={(event) => toggleCandidate(candidate, event.target.checked)}
-                      type="checkbox"
+                      id={checkboxId}
+                      onCheckedChange={(nextChecked) => toggleCandidate(candidate, nextChecked === true)}
                     />
                     <span className="min-w-0">
                       <span className="block truncate font-medium">{candidate.remarks || candidate.indexId}</span>
@@ -352,15 +395,15 @@ function ServerPickerDialog({
                         {candidate.indexId} · {candidate.address || "group"}
                       </span>
                     </span>
-                    <span className="rounded-md border px-2 py-1 text-xs text-muted-foreground">
+                    <Badge className="justify-self-end bg-background text-muted-foreground" variant="outline">
                       {candidate.isGroup ? "Nested" : getProtocolLabel(candidate.configType)}
-                    </span>
-                  </label>
+                    </Badge>
+                  </Label>
                 );
               })}
             </div>
           )}
-        </div>
+        </ScrollArea>
 
         <DialogFooter>
           <Button onClick={() => onOpenChange(false)} type="button" variant="outline">
@@ -396,7 +439,7 @@ function GroupPreviewPanel({ preview }: { preview: GroupPreview }) {
   const singboxRoutes = preview.singboxRoutes ?? [];
 
   return (
-    <div className="grid gap-3 rounded-md border bg-muted/30 p-3">
+    <Card className="grid gap-3 rounded-lg bg-muted/30 p-3 shadow-none">
       {validation.valid ? (
         <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
           <CheckCircle2 className="size-4" aria-hidden="true" />
@@ -427,7 +470,7 @@ function GroupPreviewPanel({ preview }: { preview: GroupPreview }) {
         />
         <PreviewList routes={singboxRoutes} title="sing-box selector/urltest + detour" />
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -446,13 +489,13 @@ function PreviewList({
       {details.length > 0 ? (
         <div className="flex flex-wrap gap-1">
           {details.map((detail) => (
-            <span className="rounded-md border bg-background px-2 py-1 text-xs text-muted-foreground" key={detail}>
+            <Badge className="bg-background text-muted-foreground" key={detail} variant="outline">
               {detail}
-            </span>
+            </Badge>
           ))}
         </div>
       ) : null}
-      <div className="max-h-48 overflow-y-auto rounded-md border bg-background">
+      <ScrollArea className="h-48 rounded-md border bg-background">
         {routes.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">No generated routes</div>
         ) : (
@@ -461,7 +504,9 @@ function PreviewList({
               <div className="grid gap-1 px-3 py-2 text-xs" key={`${route.tag}-${route.kind}`}>
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="truncate font-medium">{route.tag}</span>
-                  <span className="rounded-sm bg-muted px-1.5 py-0.5 text-muted-foreground">{route.kind}</span>
+                  <Badge className="rounded-sm px-1.5 py-0 text-muted-foreground" variant="secondary">
+                    {route.kind}
+                  </Badge>
                 </div>
                 <div className="truncate text-muted-foreground">
                   {route.dialerProxy ? `dialerProxy -> ${route.dialerProxy}` : null}
@@ -473,7 +518,7 @@ function PreviewList({
             ))}
           </div>
         )}
-      </div>
+      </ScrollArea>
     </section>
   );
 }
@@ -490,40 +535,41 @@ function ValidationMessage({
   }
 
   return (
-    <div
+    <Alert
       className={cn(
-        "grid gap-1 rounded-md border px-3 py-2 text-sm",
+        "gap-1 px-3 py-2",
         tone === "error" ? "border-destructive/40 bg-destructive/10 text-destructive" : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200",
       )}
       role={tone === "error" ? "alert" : "status"}
+      variant={tone === "error" ? "destructive" : "default"}
     >
-      <div className="flex items-center gap-2 font-medium">
-        <AlertTriangle className="size-4" aria-hidden="true" />
+      <AlertTriangle className="size-4" aria-hidden="true" />
+      <AlertTitle>
         {tone === "error" ? "Validation failed" : "Validation warnings"}
-      </div>
-      {messages.map((message) => (
-        <div key={message}>{message}</div>
-      ))}
-    </div>
+      </AlertTitle>
+      <AlertDescription>
+        {messages.map((message) => (
+          <div key={message}>{message}</div>
+        ))}
+      </AlertDescription>
+    </Alert>
   );
 }
 
 function LabeledField({
   className,
+  id,
   label,
   ...props
 }: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
+
   return (
-    <label className="grid gap-1 text-sm">
-      <span className="font-medium">{label}</span>
-      <input
-        className={cn(
-          "h-9 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring",
-          className,
-        )}
-        {...props}
-      />
-    </label>
+    <div className="grid gap-1.5">
+      <Label htmlFor={inputId}>{label}</Label>
+      <Input className={className} id={inputId} {...props} />
+    </div>
   );
 }
 
@@ -567,4 +613,8 @@ function optionalNumber(value: unknown) {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function toDomId(value: string) {
+  return value.replace(/[^A-Za-z0-9_-]/g, "_");
 }

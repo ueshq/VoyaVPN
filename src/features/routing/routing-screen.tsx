@@ -1,5 +1,4 @@
-import { useMemo, useState } from "react";
-import type * as React from "react";
+import { useId, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -11,11 +10,15 @@ import {
   Plus,
   Route,
   Save,
+  TriangleAlert,
   Trash2,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +27,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import {
   deleteRoutingRules,
   deleteRoutings,
@@ -159,21 +181,27 @@ export function RoutingScreen() {
         <div className="flex min-w-0 items-center gap-2">
           <Route className="size-4 text-muted-foreground" aria-hidden="true" />
           <h2 className="text-sm font-semibold">Routing</h2>
-          <span className="rounded-md border px-2 py-1 text-xs text-muted-foreground">
-            {routings.length.toLocaleString()} profiles
-          </span>
+          <Badge variant="outline">{routings.length.toLocaleString()} profiles</Badge>
         </div>
 
-        <label className="ms-auto flex h-9 min-w-[18rem] max-w-xl flex-1 items-center gap-2 rounded-md border bg-card px-3 text-sm md:flex-none">
-          <Globe2 className="size-4 text-muted-foreground" aria-hidden="true" />
-          <span className="sr-only">Template URL</span>
-          <input
-            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
-            onChange={(event) => setTemplateUrlDraft(event.target.value)}
-            placeholder="RouteRulesTemplateSourceUrl"
-            value={templateUrl}
-          />
-        </label>
+        <div className="ms-auto min-w-[18rem] max-w-xl flex-1 md:flex-none">
+          <Label className="sr-only" htmlFor="routing-template-url">
+            Template URL
+          </Label>
+          <div className="relative">
+            <Globe2
+              className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              className="ps-9"
+              id="routing-template-url"
+              onChange={(event) => setTemplateUrlDraft(event.target.value)}
+              placeholder="RouteRulesTemplateSourceUrl"
+              value={templateUrl}
+            />
+          </div>
+        </div>
         <Button onClick={() => void handleImportTemplates()} size="sm" type="button" variant="outline">
           <FilePlus2 className="size-4" aria-hidden="true" />
           Import templates
@@ -222,7 +250,12 @@ export function RoutingScreen() {
       </div>
 
       {operationError ? (
-        <div className="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">{operationError}</div>
+        <div className="border-b px-4 py-2">
+          <Alert className="py-2" variant="destructive">
+            <TriangleAlert aria-hidden="true" />
+            <AlertDescription>{operationError}</AlertDescription>
+          </Alert>
+        </div>
       ) : null}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[21rem_1fr]">
@@ -230,32 +263,43 @@ export function RoutingScreen() {
           <div className="h-10 border-b px-4 py-2 text-xs font-medium uppercase text-muted-foreground">
             Profiles
           </div>
-          <div className="h-[18rem] overflow-auto lg:h-full">
-            {routings.map((routing) => (
-              <button
-                className={cn(
-                  "flex min-h-14 w-full items-center gap-3 border-b px-4 py-2 text-start hover:bg-accent",
-                  selectedRouting?.Id === routing.Id ? "bg-accent text-accent-foreground" : "",
-                )}
-                key={routing.Id}
-                onClick={() => {
-                  setSelectedRoutingId(routing.Id);
-                  setSelectedRuleId(null);
-                }}
-                type="button"
-              >
-                <span className="grid size-6 shrink-0 place-items-center rounded-md border bg-background">
-                  {routing.IsActive ? <CheckCircle2 className="size-4 text-primary" aria-hidden="true" /> : null}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{routing.Remarks || "Untitled routing"}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {routing.RuleNum} rules · {routing.DomainStrategy || "AsIs"}
+          <ScrollArea className="h-[18rem] lg:h-full">
+            {routings.length > 0 ? (
+              routings.map((routing) => (
+                <button
+                  className={cn(
+                    "flex min-h-14 w-full items-center gap-3 border-b px-4 py-2 text-start hover:bg-accent",
+                    selectedRouting?.Id === routing.Id ? "bg-accent text-accent-foreground" : "",
+                  )}
+                  key={routing.Id}
+                  onClick={() => {
+                    setSelectedRoutingId(routing.Id);
+                    setSelectedRuleId(null);
+                  }}
+                  type="button"
+                >
+                  <span className="grid size-6 shrink-0 place-items-center rounded-md border bg-background">
+                    {routing.IsActive ? <CheckCircle2 className="size-4 text-primary" aria-hidden="true" /> : null}
                   </span>
-                </span>
-              </button>
-            ))}
-          </div>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{routing.Remarks || "Untitled routing"}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {routing.RuleNum} rules · {routing.DomainStrategy || "AsIs"}
+                    </span>
+                  </span>
+                  {routing.IsActive ? (
+                    <Badge className="shrink-0" variant="secondary">
+                      Active
+                    </Badge>
+                  ) : null}
+                </button>
+              ))
+            ) : (
+              <div className="grid h-full place-items-center px-4 py-8 text-center text-sm text-muted-foreground">
+                No routing profiles
+              </div>
+            )}
+          </ScrollArea>
         </aside>
 
         <div className="flex min-h-0 flex-col">
@@ -332,44 +376,70 @@ export function RoutingScreen() {
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto">
-            <table className="w-full min-w-[58rem] border-collapse text-sm">
-              <thead className="sticky top-0 z-10 bg-background text-xs text-muted-foreground">
-                <tr className="border-b">
-                  <th className="w-12 px-3 py-2 text-start">#</th>
-                  <th className="px-3 py-2 text-start">Remarks</th>
-                  <th className="px-3 py-2 text-start">Outbound</th>
-                  <th className="px-3 py-2 text-start">Type</th>
-                  <th className="px-3 py-2 text-start">Domain</th>
-                  <th className="px-3 py-2 text-start">IP</th>
-                  <th className="px-3 py-2 text-start">Port</th>
-                  <th className="px-3 py-2 text-start">Network</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(selectedRouting?.RuleSet ?? []).map((rule, index) => (
-                  <tr
-                    className={cn(
-                      "cursor-default border-b hover:bg-accent/70",
-                      selectedRule?.Id === rule.Id ? "bg-accent" : "",
-                      !rule.Enabled ? "opacity-55" : "",
-                    )}
-                    key={rule.Id}
-                    onClick={() => setSelectedRuleId(rule.Id)}
-                  >
-                    <td className="px-3 py-2 tabular-nums text-muted-foreground">{index + 1}</td>
-                    <td className="max-w-52 truncate px-3 py-2 font-medium">{rule.Remarks ?? ""}</td>
-                    <td className="px-3 py-2">{rule.OutboundTag ?? ""}</td>
-                    <td className="px-3 py-2">{formatRuleType(rule.RuleType)}</td>
-                    <td className="max-w-72 truncate px-3 py-2">{formatList(rule.Domain)}</td>
-                    <td className="max-w-56 truncate px-3 py-2">{formatList(rule.Ip)}</td>
-                    <td className="px-3 py-2">{rule.Port ?? ""}</td>
-                    <td className="px-3 py-2">{rule.Network ?? ""}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ScrollArea className="min-h-0 flex-1">
+            <Table className="min-w-[58rem]">
+              <TableHeader className="sticky top-0 z-10 bg-background text-xs">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-12 px-3 text-muted-foreground" scope="col">
+                    #
+                  </TableHead>
+                  <TableHead className="px-3 text-muted-foreground" scope="col">
+                    Remarks
+                  </TableHead>
+                  <TableHead className="px-3 text-muted-foreground" scope="col">
+                    Outbound
+                  </TableHead>
+                  <TableHead className="px-3 text-muted-foreground" scope="col">
+                    Type
+                  </TableHead>
+                  <TableHead className="px-3 text-muted-foreground" scope="col">
+                    Domain
+                  </TableHead>
+                  <TableHead className="px-3 text-muted-foreground" scope="col">
+                    IP
+                  </TableHead>
+                  <TableHead className="px-3 text-muted-foreground" scope="col">
+                    Port
+                  </TableHead>
+                  <TableHead className="px-3 text-muted-foreground" scope="col">
+                    Network
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(selectedRouting?.RuleSet ?? []).length > 0 ? (
+                  (selectedRouting?.RuleSet ?? []).map((rule, index) => (
+                    <TableRow
+                      className={cn(
+                        "cursor-default hover:bg-accent/70",
+                        selectedRule?.Id === rule.Id ? "bg-accent" : "",
+                        !rule.Enabled ? "opacity-55" : "",
+                      )}
+                      key={rule.Id}
+                      onClick={() => setSelectedRuleId(rule.Id)}
+                    >
+                      <TableCell className="px-3 py-2 tabular-nums text-muted-foreground">{index + 1}</TableCell>
+                      <TableCell className="max-w-52 truncate px-3 py-2 font-medium">{rule.Remarks ?? ""}</TableCell>
+                      <TableCell className="px-3 py-2">{rule.OutboundTag ?? ""}</TableCell>
+                      <TableCell className="px-3 py-2">
+                        <RuleTypeBadge ruleType={rule.RuleType} />
+                      </TableCell>
+                      <TableCell className="max-w-72 truncate px-3 py-2">{formatList(rule.Domain)}</TableCell>
+                      <TableCell className="max-w-56 truncate px-3 py-2">{formatList(rule.Ip)}</TableCell>
+                      <TableCell className="px-3 py-2">{rule.Port ?? ""}</TableCell>
+                      <TableCell className="px-3 py-2">{rule.Network ?? ""}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell className="h-28 text-center text-muted-foreground" colSpan={8}>
+                      No routing rules
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </ScrollArea>
         </div>
       </div>
 
@@ -436,25 +506,18 @@ function RoutingProfileDialog({
             <SelectField
               label="Xray domain strategy"
               onChange={(value) => setForm((current) => ({ ...current, DomainStrategy: value }))}
+              options={DOMAIN_STRATEGIES.map((strategy) => ({ label: strategy, value: strategy }))}
               value={form.DomainStrategy ?? "AsIs"}
-            >
-              {DOMAIN_STRATEGIES.map((strategy) => (
-                <option key={strategy} value={strategy}>
-                  {strategy}
-                </option>
-              ))}
-            </SelectField>
+            />
             <SelectField
               label="sing-box domain strategy"
               onChange={(value) => setForm((current) => ({ ...current, DomainStrategy4Singbox: value }))}
+              options={SINGBOX_DOMAIN_STRATEGIES.map((strategy) => ({
+                label: strategy || "default",
+                value: strategy,
+              }))}
               value={form.DomainStrategy4Singbox ?? ""}
-            >
-              {SINGBOX_DOMAIN_STRATEGIES.map((strategy) => (
-                <option key={strategy || "default"} value={strategy}>
-                  {strategy || "default"}
-                </option>
-              ))}
-            </SelectField>
+            />
           </div>
           <TextField
             label="Ruleset path for sing-box"
@@ -466,14 +529,11 @@ function RoutingProfileDialog({
             onChange={(value) => setForm((current) => ({ ...current, Url: value }))}
             value={form.Url ?? ""}
           />
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              checked={form.Enabled ?? true}
-              onChange={(event) => setForm((current) => ({ ...current, Enabled: event.target.checked }))}
-              type="checkbox"
-            />
-            Enabled
-          </label>
+          <CheckboxField
+            checked={form.Enabled ?? true}
+            label="Enabled"
+            onCheckedChange={(checked) => setForm((current) => ({ ...current, Enabled: checked }))}
+          />
         </form>
 
         <DialogFooter>
@@ -533,12 +593,13 @@ function RoutingRuleDialog({
             <SelectField
               label="Rule type"
               onChange={(value) => setForm((current) => ({ ...current, RuleType: Number(value) }))}
+              options={[
+                { label: "All", value: String(RULE_TYPES.All) },
+                { label: "Routing", value: String(RULE_TYPES.Routing) },
+                { label: "DNS", value: String(RULE_TYPES.Dns) },
+              ]}
               value={String(form.RuleType)}
-            >
-              <option value={RULE_TYPES.All}>All</option>
-              <option value={RULE_TYPES.Routing}>Routing</option>
-              <option value={RULE_TYPES.Dns}>DNS</option>
-            </SelectField>
+            />
             <TextField
               label="Outbound"
               onChange={(value) => setForm((current) => ({ ...current, OutboundTag: value }))}
@@ -589,14 +650,11 @@ function RoutingRuleDialog({
               value={form.InboundTag}
             />
           </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              checked={form.Enabled}
-              onChange={(event) => setForm((current) => ({ ...current, Enabled: event.target.checked }))}
-              type="checkbox"
-            />
-            Enabled
-          </label>
+          <CheckboxField
+            checked={form.Enabled}
+            label="Enabled"
+            onCheckedChange={(checked) => setForm((current) => ({ ...current, Enabled: checked }))}
+          />
         </form>
 
         <DialogFooter>
@@ -729,6 +787,13 @@ function formToRule(form: RuleFormState): RulePayload {
   };
 }
 
+type SelectOption = {
+  label: string;
+  value: string;
+};
+
+const EMPTY_SELECT_VALUE = "__voyavpn_empty_select_value__";
+
 function TextField({
   label,
   onChange,
@@ -738,40 +803,56 @@ function TextField({
   onChange: (value: string) => void;
   value: string;
 }) {
+  const id = useId();
+
   return (
-    <label className="grid gap-1.5 text-sm">
-      <span className="font-medium">{label}</span>
-      <input
-        className="h-9 rounded-md border bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+    <div className="grid gap-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
         onChange={(event) => onChange(event.target.value)}
         value={value}
       />
-    </label>
+    </div>
   );
 }
 
 function SelectField({
-  children,
   label,
   onChange,
+  options,
   value,
 }: {
-  children: React.ReactNode;
   label: string;
   onChange: (value: string) => void;
+  options: SelectOption[];
   value: string;
 }) {
+  const id = useId();
+  const selectValue = value === "" ? EMPTY_SELECT_VALUE : value;
+
   return (
-    <label className="grid gap-1.5 text-sm">
-      <span className="font-medium">{label}</span>
-      <select
-        className="h-9 rounded-md border bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-        onChange={(event) => onChange(event.target.value)}
-        value={value}
+    <div className="grid gap-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Select
+        onValueChange={(nextValue) => onChange(nextValue === EMPTY_SELECT_VALUE ? "" : nextValue)}
+        value={selectValue}
       >
-        {children}
-      </select>
-    </label>
+        <SelectTrigger className="w-full" id={id}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem
+              key={option.value || EMPTY_SELECT_VALUE}
+              value={option.value === "" ? EMPTY_SELECT_VALUE : option.value}
+            >
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 
@@ -784,15 +865,49 @@ function TextAreaField({
   onChange: (value: string) => void;
   value: string;
 }) {
+  const id = useId();
+
   return (
-    <label className="grid gap-1.5 text-sm">
-      <span className="font-medium">{label}</span>
-      <textarea
-        className="min-h-24 resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+    <div className="grid gap-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Textarea
+        className="min-h-24 resize-y"
+        id={id}
         onChange={(event) => onChange(event.target.value)}
         value={value}
       />
-    </label>
+    </div>
+  );
+}
+
+function CheckboxField({
+  checked,
+  label,
+  onCheckedChange,
+}: {
+  checked: boolean;
+  label: string;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  const id = useId();
+
+  return (
+    <div className="flex items-center gap-2">
+      <Checkbox
+        checked={checked}
+        id={id}
+        onCheckedChange={(nextChecked) => onCheckedChange(nextChecked === true)}
+      />
+      <Label htmlFor={id}>{label}</Label>
+    </div>
+  );
+}
+
+function RuleTypeBadge({ ruleType }: { ruleType: number | null | undefined }) {
+  return (
+    <Badge className="bg-background" variant="outline">
+      {formatRuleType(ruleType)}
+    </Badge>
   );
 }
 

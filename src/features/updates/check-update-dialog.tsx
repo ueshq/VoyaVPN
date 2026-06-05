@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Download, PackageCheck, RefreshCw } from "lucide-react";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DialogContent,
   DialogDescription,
@@ -9,6 +12,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useI18n } from "@/i18n/use-i18n";
 import { checkUpdates, downloadUpdates, saveUpdatePreferences, updateStatus } from "@/ipc";
 import type { UpdateCheckResult, UpdateResultStatus, UpdateStatus } from "@/ipc/bindings";
@@ -114,15 +127,16 @@ export function CheckUpdateDialog() {
 
       <div className="grid gap-4">
         <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-sm">
-            <input
+          <div className="flex items-center gap-2">
+            <Checkbox
               checked={preRelease}
-              className="size-4 accent-primary"
-              onChange={(event) => togglePreRelease(event.currentTarget.checked)}
-              type="checkbox"
+              id="updates-pre-release"
+              onCheckedChange={(checked) => togglePreRelease(checked === true)}
             />
-            <span>{t("updates.preRelease")}</span>
-          </label>
+            <Label className="cursor-pointer text-sm font-normal" htmlFor="updates-pre-release">
+              {t("updates.preRelease")}
+            </Label>
+          </div>
           <div className="ms-auto flex items-center gap-2">
             <Button
               disabled={working !== null || selectedIds.size === 0}
@@ -145,62 +159,61 @@ export function CheckUpdateDialog() {
         </div>
 
         {error ? (
-          <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            <span>{error}</span>
-          </div>
+          <Alert variant="destructive">
+            <AlertTriangle aria-hidden="true" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         ) : null}
 
-        <div className="max-h-[24rem] overflow-auto rounded-md border">
-          <table className="w-full border-collapse text-sm">
-            <thead className="sticky top-0 bg-card text-left">
-              <tr className="border-b">
-                <th className="w-12 px-3 py-2" scope="col">
+        <ScrollArea className="h-[24rem] rounded-md border">
+          <Table className="min-w-[42rem]">
+            <TableHeader className="sticky top-0 z-10 bg-card">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-12 px-3" scope="col">
                   <span className="sr-only">{t("updates.selected")}</span>
-                </th>
-                <th className="px-3 py-2 font-medium" scope="col">
+                </TableHead>
+                <TableHead className="px-3" scope="col">
                   {t("updates.target")}
-                </th>
-                <th className="px-3 py-2 font-medium" scope="col">
+                </TableHead>
+                <TableHead className="px-3" scope="col">
                   {t("updates.version")}
-                </th>
-                <th className="px-3 py-2 font-medium" scope="col">
+                </TableHead>
+                <TableHead className="px-3" scope="col">
                   {t("updates.status")}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {(status?.targets ?? []).map((target) => {
                 const result = resultByTarget.get(target.id);
 
                 return (
-                  <tr key={target.id} className="border-b last:border-b-0">
-                    <td className="px-3 py-2 align-top">
-                      <input
+                  <TableRow key={target.id}>
+                    <TableCell className="px-3 py-2 align-top">
+                      <Checkbox
+                        aria-label={`${t("updates.selected")} ${target.name}`}
                         checked={selectedIds.has(target.id)}
-                        className="size-4 accent-primary"
-                        onChange={(event) => toggleTarget(target.id, event.currentTarget.checked)}
-                        type="checkbox"
+                        onCheckedChange={(checked) => toggleTarget(target.id, checked === true)}
                       />
-                    </td>
-                    <td className="min-w-48 px-3 py-2 align-top">
+                    </TableCell>
+                    <TableCell className="min-w-48 whitespace-normal px-3 py-2 align-top">
                       <div className="grid gap-1">
                         <span className="font-medium">{target.name}</span>
                         <span className="text-xs text-muted-foreground">{target.remarks}</span>
                       </div>
-                    </td>
-                    <td className="px-3 py-2 align-top text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="px-3 py-2 align-top text-muted-foreground">
                       {result?.remoteVersion ?? result?.currentVersion ?? "-"}
-                    </td>
-                    <td className="min-w-56 px-3 py-2 align-top">
+                    </TableCell>
+                    <TableCell className="min-w-56 px-3 py-2 align-top">
                       <UpdateResultBadge result={result} />
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </ScrollArea>
       </div>
 
       <DialogFooter />
@@ -212,20 +225,20 @@ function UpdateResultBadge({ result }: { result: UpdateCheckResult | undefined }
   const { t } = useI18n();
 
   if (!result) {
-    return <span className="text-sm text-muted-foreground">{t("updates.waiting")}</span>;
+    return <Badge variant="secondary">{t("updates.waiting")}</Badge>;
   }
 
   const tone = statusTone(result.status);
 
   return (
-    <div className={cn("inline-flex max-w-full items-center gap-2 rounded-md border px-2 py-1", tone)}>
+    <Badge className={cn("max-w-full justify-start gap-2 px-2 py-1", tone)} variant="outline">
       {result.status === "upToDate" || result.status === "downloaded" ? (
-        <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
+        <CheckCircle2 className="shrink-0" aria-hidden="true" />
       ) : result.status === "error" ? (
-        <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
+        <AlertTriangle className="shrink-0" aria-hidden="true" />
       ) : null}
       <span className="truncate">{result.message}</span>
-    </div>
+    </Badge>
   );
 }
 
@@ -239,6 +252,6 @@ function statusTone(status: UpdateResultStatus) {
     case "error":
       return "border-destructive/40 bg-destructive/10 text-destructive";
     case "skipped":
-      return "bg-muted text-muted-foreground";
+      return "border-transparent bg-muted text-muted-foreground";
   }
 }

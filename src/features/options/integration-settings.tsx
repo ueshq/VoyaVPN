@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { Keyboard, Power, Save } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { useI18n } from "@/i18n/use-i18n";
 import {
   autostartStatus,
@@ -106,96 +108,109 @@ export function IntegrationSettings() {
 
   return (
     <section className="grid gap-4">
-      <div className="grid gap-2">
-        <h3 className="flex items-center gap-2 text-sm font-medium">
-          <Power className="size-4" aria-hidden="true" />
-          {t("options.autostart")}
-        </h3>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button disabled={!autostart || working} onClick={() => void toggleAutostart()} type="button" variant="outline">
-            {autostart?.enabled ? t("options.disableAutostart") : t("options.enableAutostart")}
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            {autostart?.enabled ? t("options.autostartOn") : t("options.autostartOff")}
-          </span>
-        </div>
-        {artifact ? <p className="break-all text-xs text-muted-foreground">{artifact}</p> : null}
-      </div>
+      <Card className="gap-3 rounded-md bg-background p-3 shadow-none">
+        <CardHeader className="p-0">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Power className="size-4 text-muted-foreground" aria-hidden="true" />
+            {t("options.autostart")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-2 p-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              disabled={!autostart || working}
+              onClick={() => void toggleAutostart()}
+              type="button"
+              variant="outline"
+            >
+              {autostart?.enabled ? t("options.disableAutostart") : t("options.enableAutostart")}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {autostart?.enabled ? t("options.autostartOn") : t("options.autostartOff")}
+            </span>
+          </div>
+          {artifact ? <p className="break-all text-xs text-muted-foreground">{artifact}</p> : null}
+        </CardContent>
+      </Card>
 
-      <div className="grid gap-2">
-        <h3 className="flex items-center gap-2 text-sm font-medium">
-          <Keyboard className="size-4" aria-hidden="true" />
-          {t("options.hotkeys")}
-        </h3>
-        <div className="grid gap-2">
-          {hotkeys?.actions.map((action) => {
-            const setting = settings.find((item) => item.EGlobalHotkey === action.action);
+      <Card className="gap-3 rounded-md bg-background p-3 shadow-none">
+        <CardHeader className="p-0">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Keyboard className="size-4 text-muted-foreground" aria-hidden="true" />
+            {t("options.hotkeys")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 p-0">
+          <div className="grid gap-2">
+            {hotkeys?.actions.map((action) => {
+              const setting = settings.find((item) => item.EGlobalHotkey === action.action);
 
-            if (!setting) {
-              return null;
-            }
+              if (!setting) {
+                return null;
+              }
 
-            return (
-              <div key={action.action} className="grid gap-2 rounded-md border p-2 text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{hotkeyLabel(action.action, action.label, t)}</span>
-                  <Button
-                    className="h-7 px-2 text-xs"
-                    onClick={() => patchSetting(action.action, { KeyCode: null })}
-                    type="button"
-                    variant="ghost"
-                  >
-                    {t("actions.clear")}
-                  </Button>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-[1fr_9rem]">
-                  <div className="flex flex-wrap gap-2">
-                    <ModifierButton
-                      active={setting.Control}
-                      label="Ctrl"
-                      onClick={() => patchSetting(action.action, { Control: !setting.Control })}
-                    />
-                    <ModifierButton
-                      active={setting.Alt}
-                      label="Alt"
-                      onClick={() => patchSetting(action.action, { Alt: !setting.Alt })}
-                    />
-                    <ModifierButton
-                      active={setting.Shift}
-                      label="Shift"
-                      onClick={() => patchSetting(action.action, { Shift: !setting.Shift })}
+              return (
+                <div key={action.action} className="grid gap-2 rounded-md border bg-muted/30 p-2 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium">{hotkeyLabel(action.action, action.label, t)}</span>
+                    <Button
+                      className="h-7 px-2 text-xs"
+                      onClick={() => patchSetting(action.action, { KeyCode: null })}
+                      type="button"
+                      variant="ghost"
+                    >
+                      {t("actions.clear")}
+                    </Button>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-[1fr_9rem]">
+                    <div className="flex flex-wrap gap-2">
+                      <ModifierButton
+                        active={setting.Control}
+                        label="Ctrl"
+                        onClick={() => patchSetting(action.action, { Control: !setting.Control })}
+                      />
+                      <ModifierButton
+                        active={setting.Alt}
+                        label="Alt"
+                        onClick={() => patchSetting(action.action, { Alt: !setting.Alt })}
+                      />
+                      <ModifierButton
+                        active={setting.Shift}
+                        label="Shift"
+                        onClick={() => patchSetting(action.action, { Shift: !setting.Shift })}
+                      />
+                    </div>
+                    <Input
+                      aria-label={t("options.hotkeyKey")}
+                      className="h-8 px-2 text-sm"
+                      onKeyDown={(event) => {
+                        const keyCode = keyCodeFromEvent(event);
+                        if (keyCode !== null) {
+                          patchSetting(action.action, { KeyCode: keyCode });
+                        }
+                      }}
+                      readOnly
+                      value={keyCodeLabel(setting.KeyCode)}
                     />
                   </div>
-                  <input
-                    aria-label={t("options.hotkeyKey")}
-                    className="h-8 rounded-md border bg-background px-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-                    onKeyDown={(event) => {
-                      const keyCode = keyCodeFromEvent(event);
-                      if (keyCode !== null) {
-                        patchSetting(action.action, { KeyCode: keyCode });
-                      }
-                    }}
-                    readOnly
-                    value={keyCodeLabel(setting.KeyCode)}
-                  />
                 </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button disabled={!hotkeys || working} onClick={() => void saveHotkeys()} type="button" variant="outline">
-            <Save className="size-4" aria-hidden="true" />
-            {t("actions.save")}
-          </Button>
-          {saved ? <span className="text-xs text-muted-foreground">{t("options.saved")}</span> : null}
-          {hotkeys ? (
-            <span className="text-xs text-muted-foreground">
-              {t("options.hotkeysRegistered", { count: hotkeys.registered.length })}
-            </span>
-          ) : null}
-        </div>
-      </div>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button disabled={!hotkeys || working} onClick={() => void saveHotkeys()} type="button" variant="outline">
+              <Save className="size-4" aria-hidden="true" />
+              {t("actions.save")}
+            </Button>
+            {saved ? <span className="text-xs text-muted-foreground">{t("options.saved")}</span> : null}
+            {hotkeys ? (
+              <span className="text-xs text-muted-foreground">
+                {t("options.hotkeysRegistered", { count: hotkeys.registered.length })}
+              </span>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
 
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </section>

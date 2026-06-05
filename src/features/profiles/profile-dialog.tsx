@@ -1,16 +1,20 @@
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 import type * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Save, Server, ShieldCheck } from "lucide-react";
-import { useForm, useWatch } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import type {
   Control,
+  FieldPath,
   UseFormGetValues,
   UseFormRegister,
   UseFormSetValue,
 } from "react-hook-form";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +23,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import type { ProfileListItem_Serialize } from "@/ipc/bindings";
 import { cn } from "@/lib/utils";
 import { GroupBuilder } from "@/features/groups";
@@ -93,41 +107,31 @@ export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile }: P
             <Panel title="Profile">
               <div className="grid gap-3 lg:grid-cols-[14rem_1fr_8rem]">
                 <SelectField
+                  control={form.control}
                   label="Protocol"
-                  {...register("ConfigType", {
-                    onChange: (event) => {
-                      const next = Number(event.target.value) as ProfileProtocol;
+                  name="ConfigType"
+                  onValueChange={(value) => {
+                    const next = Number(value) as ProfileProtocol;
 
-                      if (next === CONFIG_TYPES.PolicyGroup && !getValues("Address")) {
-                        setValue("Address", "group");
-                      }
-                      if (next === CONFIG_TYPES.ProxyChain && !getValues("Address")) {
-                        setValue("Address", "chain");
-                      }
-                    },
-                    valueAsNumber: true,
-                  })}
-                >
-                  {PROFILE_PROTOCOLS.map((protocol) => (
-                    <option key={protocol.value} value={protocol.value}>
-                      {protocol.label}
-                    </option>
-                  ))}
-                </SelectField>
+                    if (next === CONFIG_TYPES.PolicyGroup && !getValues("Address")) {
+                      setValue("Address", "group");
+                    }
+                    if (next === CONFIG_TYPES.ProxyChain && !getValues("Address")) {
+                      setValue("Address", "chain");
+                    }
+                  }}
+                  options={PROFILE_PROTOCOLS}
+                  parseValue={(value) => Number(value)}
+                />
 
                 <TextField error={errors.Remarks?.message} label="Remarks" {...register("Remarks")} />
                 <SelectField
+                  control={form.control}
                   label="Core"
-                  {...register("CoreType", {
-                    setValueAs: (value) => (value === "" ? null : Number(value)),
-                  })}
-                >
-                  {CORE_TYPE_OPTIONS.map((core) => (
-                    <option key={core.value} value={core.value}>
-                      {core.label}
-                    </option>
-                  ))}
-                </SelectField>
+                  name="CoreType"
+                  options={CORE_TYPE_OPTIONS}
+                  parseValue={(value) => (value === "" ? null : Number(value))}
+                />
               </div>
 
               <div className="grid gap-3 lg:grid-cols-[1fr_7rem_12rem]">
@@ -150,12 +154,12 @@ export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile }: P
               register={register}
               setValue={setValue}
             />
-            <TransportPanel register={register} />
-            <SecurityPanel register={register} security={security} />
+            <TransportPanel control={form.control} register={register} />
+            <SecurityPanel control={form.control} register={register} security={security} />
             <MuxPanel
               allowInsecure={allowInsecure}
+              control={form.control}
               muxEnabled={muxEnabled}
-              register={register}
               setAllowInsecure={(enabled) => setValue("AllowInsecure", enabled ? "true" : "false")}
               setMuxEnabled={(enabled) => setValue("MuxEnabled", enabled)}
             />
@@ -177,6 +181,7 @@ export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile }: P
 }
 
 type Register = UseFormRegister<ProfileFormValues>;
+type ProfileFormControl = Control<ProfileFormValues, unknown, ParsedProfileFormValues>;
 
 function ProtocolPanel({
   configType,
@@ -186,7 +191,7 @@ function ProtocolPanel({
   setValue,
 }: {
   configType: ProfileProtocol;
-  control: Control<ProfileFormValues, unknown, ParsedProfileFormValues>;
+  control: ProfileFormControl;
   getValues: UseFormGetValues<ProfileFormValues>;
   register: Register;
   setValue: UseFormSetValue<ProfileFormValues>;
@@ -236,7 +241,7 @@ function ProtocolPanel({
         {configType === CONFIG_TYPES.Shadowsocks ? (
           <>
             <TextField label="Method" placeholder="2022-blake3-aes-128-gcm" {...register("ProtocolExtra.SsMethod")} />
-            <CheckboxField label="UDP over TCP" {...register("ProtocolExtra.Uot")} />
+            <CheckboxField control={control} label="UDP over TCP" name="ProtocolExtra.Uot" />
           </>
         ) : null}
         {configType === CONFIG_TYPES.Hysteria2 ? (
@@ -283,23 +288,19 @@ function ProtocolPanel({
             />
           </>
         ) : null}
-        {configType === CONFIG_TYPES.Naive ? <CheckboxField label="QUIC" {...register("ProtocolExtra.NaiveQuic")} /> : null}
+        {configType === CONFIG_TYPES.Naive ? (
+          <CheckboxField control={control} label="QUIC" name="ProtocolExtra.NaiveQuic" />
+        ) : null}
       </div>
     </Panel>
   );
 }
 
-function TransportPanel({ register }: { register: Register }) {
+function TransportPanel({ control, register }: { control: ProfileFormControl; register: Register }) {
   return (
     <Panel title="Transport">
       <div className="grid gap-3 lg:grid-cols-4">
-        <SelectField label="Network" {...register("Network")}>
-          {NETWORK_OPTIONS.map((network) => (
-            <option key={network.value} value={network.value}>
-              {network.label}
-            </option>
-          ))}
-        </SelectField>
+        <SelectField control={control} label="Network" name="Network" options={NETWORK_OPTIONS} />
         <TextField label="Host" {...register("TransportExtra.Host")} />
         <TextField label="Path" {...register("TransportExtra.Path")} />
         <TextField label="Raw header" placeholder="none" {...register("TransportExtra.RawHeaderType")} />
@@ -321,19 +322,21 @@ function TransportPanel({ register }: { register: Register }) {
   );
 }
 
-function SecurityPanel({ register, security }: { register: Register; security: string }) {
+function SecurityPanel({
+  control,
+  register,
+  security,
+}: {
+  control: ProfileFormControl;
+  register: Register;
+  security: string;
+}) {
   const reality = security === "reality";
 
   return (
     <Panel title="Security">
       <div className="grid gap-3 lg:grid-cols-4">
-        <SelectField label="TLS mode" {...register("StreamSecurity")}>
-          {SECURITY_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </SelectField>
+        <SelectField control={control} label="TLS mode" name="StreamSecurity" options={SECURITY_OPTIONS} />
         <TextField label="SNI" {...register("Sni")} />
         <TextField label="ALPN" {...register("Alpn")} />
         <TextField label="Fingerprint" {...register("Fingerprint")} />
@@ -352,14 +355,14 @@ function SecurityPanel({ register, security }: { register: Register; security: s
 
 function MuxPanel({
   allowInsecure,
+  control,
   muxEnabled,
-  register,
   setAllowInsecure,
   setMuxEnabled,
 }: {
   allowInsecure: boolean;
+  control: ProfileFormControl;
   muxEnabled: boolean;
-  register: Register;
   setAllowInsecure: (enabled: boolean) => void;
   setMuxEnabled: (enabled: boolean) => void;
 }) {
@@ -378,7 +381,7 @@ function MuxPanel({
           label="Allow insecure TLS"
           onCheckedChange={setAllowInsecure}
         />
-        <CheckboxField label="Display log" {...register("DisplayLog")} />
+        <CheckboxField control={control} label="Display log" name="DisplayLog" />
       </div>
     </Panel>
   );
@@ -386,13 +389,15 @@ function MuxPanel({
 
 function Panel({ children, title }: { children: React.ReactNode; title: string }) {
   return (
-    <section className="grid gap-3 rounded-md border bg-background p-3">
-      <h3 className="flex items-center gap-2 text-sm font-semibold">
-        <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
-        {title}
-      </h3>
-      {children}
-    </section>
+    <Card className="gap-3 rounded-md bg-background p-3 shadow-none">
+      <CardHeader className="p-0">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">{children}</CardContent>
+    </Card>
   );
 }
 
@@ -403,66 +408,154 @@ type TextFieldProps = React.InputHTMLAttributes<HTMLInputElement> & {
 
 const TextField = ({ className, error, id, label, ...props }: TextFieldProps) => {
   const inputId = id ?? fieldId(label);
+  const errorId = `${inputId}-error`;
+  const {
+    "aria-describedby": ariaDescribedBy,
+    "aria-invalid": ariaInvalid,
+    ...inputProps
+  } = props;
 
   return (
-    <label className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground" htmlFor={inputId}>
-      <span className="truncate">{label}</span>
-      <input
-        className={cn(
-          "h-9 min-w-0 rounded-md border bg-card px-3 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/30",
-          error ? "border-destructive" : null,
-          className,
-        )}
+    <div className="grid min-w-0 gap-1">
+      <Label className="text-xs text-muted-foreground" htmlFor={inputId}>
+        <span className="truncate">{label}</span>
+      </Label>
+      <Input
+        aria-describedby={error ? mergeIds(ariaDescribedBy, errorId) : ariaDescribedBy}
+        aria-invalid={error ? true : ariaInvalid}
+        className={cn("bg-card", className)}
         id={inputId}
-        {...props}
+        {...inputProps}
       />
-      {error ? <span className="text-xs text-destructive">{error}</span> : null}
-    </label>
+      {error ? (
+        <span className="text-xs text-destructive" id={errorId}>
+          {error}
+        </span>
+      ) : null}
+    </div>
   );
 };
 
-type SelectFieldProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
+type SelectOption = {
+  description?: string;
   label: string;
+  value: number | string;
 };
 
-const SelectField = ({ children, className, id, label, ...props }: SelectFieldProps) => {
+type SelectFieldProps = {
+  className?: string;
+  control: ProfileFormControl;
+  error?: string;
+  id?: string;
+  label: string;
+  name: FieldPath<ProfileFormValues>;
+  onValueChange?: (value: string) => void;
+  options: SelectOption[];
+  parseValue?: (value: string) => unknown;
+};
+
+const SelectField = ({
+  className,
+  control,
+  error,
+  id,
+  label,
+  name,
+  onValueChange,
+  options,
+  parseValue,
+}: SelectFieldProps) => {
   const inputId = id ?? fieldId(label);
+  const errorId = `${inputId}-error`;
 
   return (
-    <label className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground" htmlFor={inputId}>
-      <span className="truncate">{label}</span>
-      <select
-        className={cn(
-          "h-9 min-w-0 rounded-md border bg-card px-2 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/30",
-          className,
-        )}
-        id={inputId}
-        {...props}
-      >
-        {children}
-      </select>
-    </label>
+    <Controller
+      control={control}
+      name={name}
+      render={({ field, fieldState }) => {
+        const invalid = Boolean(error ?? fieldState.error?.message);
+
+        return (
+          <div className="grid min-w-0 gap-1">
+            <Label className="text-xs text-muted-foreground" htmlFor={inputId}>
+              <span className="truncate">{label}</span>
+            </Label>
+            <Select
+              name={field.name}
+              onValueChange={(value) => {
+                const decoded = decodeSelectValue(value);
+
+                field.onChange(parseValue ? parseValue(decoded) : decoded);
+                onValueChange?.(decoded);
+              }}
+              value={encodeSelectValue(field.value)}
+            >
+              <SelectTrigger
+                aria-describedby={error ? errorId : undefined}
+                aria-invalid={invalid ? true : undefined}
+                className={cn("w-full bg-card", className)}
+                id={inputId}
+                onBlur={field.onBlur}
+                ref={field.ref}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((option) => (
+                  <SelectItem key={`${name}-${option.value}`} value={encodeSelectValue(option.value)}>
+                    <span>{option.label}</span>
+                    {option.description ? <span className="sr-only">{option.description}</span> : null}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {error ? (
+              <span className="text-xs text-destructive" id={errorId}>
+                {error}
+              </span>
+            ) : null}
+          </div>
+        );
+      }}
+    />
   );
 };
 
-type CheckboxFieldProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> & {
+type CheckboxFieldProps = {
+  className?: string;
+  control: ProfileFormControl;
+  id?: string;
   label: string;
+  name: FieldPath<ProfileFormValues>;
 };
 
-const CheckboxField = ({ className, id, label, ...props }: CheckboxFieldProps) => {
+const CheckboxField = ({ className, control, id, label, name }: CheckboxFieldProps) => {
   const inputId = id ?? fieldId(label);
 
   return (
-    <label
-      className={cn(
-        "flex h-9 min-w-0 items-center gap-2 rounded-md border bg-card px-3 text-xs font-medium text-muted-foreground",
-        className,
+    <Controller
+      control={control}
+      name={name}
+      render={({ field, fieldState }) => (
+        <Card className={cn("h-9 min-w-0 justify-center gap-0 rounded-md bg-card px-3 py-0 shadow-none", className)}>
+          <Label
+            className="h-full w-full min-w-0 cursor-pointer text-xs font-medium text-muted-foreground"
+            htmlFor={inputId}
+          >
+            <Checkbox
+              aria-invalid={fieldState.invalid ? true : undefined}
+              checked={field.value === true}
+              id={inputId}
+              name={field.name}
+              onBlur={field.onBlur}
+              onCheckedChange={(checked) => field.onChange(checked === true)}
+              ref={field.ref}
+            />
+            <span className="truncate">{label}</span>
+          </Label>
+        </Card>
       )}
-      htmlFor={inputId}
-    >
-      <input className="size-4 accent-primary" id={inputId} type="checkbox" {...props} />
-      <span className="truncate">{label}</span>
-    </label>
+    />
   );
 };
 
@@ -477,21 +570,27 @@ function ToggleButton({
   label: string;
   onCheckedChange: (enabled: boolean) => void;
 }) {
+  const generatedId = useId();
+  const inputId = `${fieldId(label)}-${generatedId}`;
+
   return (
-    <button
-      aria-checked={checked}
+    <Card
       className={cn(
-        "grid h-16 content-center gap-1 rounded-md border px-3 text-start text-xs transition-colors",
-        checked ? "border-primary bg-accent text-accent-foreground" : "bg-card text-muted-foreground",
+        "h-16 justify-center gap-0 rounded-md px-3 py-0 shadow-none transition-colors",
+        checked ? "border-primary bg-accent/60" : "bg-card",
       )}
-      onClick={() => onCheckedChange(!checked)}
-      role="switch"
       title={description}
-      type="button"
     >
-      <span className="font-medium text-foreground">{label}</span>
-      <span className="truncate">{checked ? "On" : "Off"}</span>
-    </button>
+      <Label className="h-full w-full min-w-0 cursor-pointer justify-between gap-3 text-xs" htmlFor={inputId}>
+        <span className="grid min-w-0 gap-1">
+          <span className="truncate font-medium text-foreground">{label}</span>
+          <Badge className="w-fit" variant={checked ? "default" : "secondary"}>
+            {checked ? "On" : "Off"}
+          </Badge>
+        </span>
+        <Switch aria-label={label} checked={checked} id={inputId} onCheckedChange={onCheckedChange} />
+      </Label>
+    </Card>
   );
 }
 
@@ -505,6 +604,22 @@ function optionalNumber(value: unknown) {
 
 function fieldId(label: string) {
   return label.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replaceAll(/^-|-$/g, "");
+}
+
+const EMPTY_SELECT_VALUE = "__voyavpn_empty__";
+
+function encodeSelectValue(value: unknown) {
+  const stringValue = value === null || value === undefined ? "" : String(value);
+
+  return stringValue === "" ? EMPTY_SELECT_VALUE : stringValue;
+}
+
+function decodeSelectValue(value: string) {
+  return value === EMPTY_SELECT_VALUE ? "" : value;
+}
+
+function mergeIds(...ids: Array<string | undefined>) {
+  return ids.filter(Boolean).join(" ") || undefined;
 }
 
 function addressLabel(configType: ProfileProtocol) {

@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, PlugZap, RefreshCw, Search, Trash2, XCircle } from "lucide-react";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useI18n } from "@/i18n/use-i18n";
 import {
   clashCloseConnection,
@@ -66,21 +70,24 @@ export function ClashConnectionsScreen() {
     <section className="flex h-full min-h-0 flex-col">
       <div className="flex h-12 shrink-0 items-center gap-3 border-b px-4">
         <h2 className="text-sm font-semibold">{t("tabs.clashConnections")}</h2>
-        <div className="flex items-center gap-2 rounded-md border bg-background px-2 py-1 text-xs">
+        <Badge className="gap-2 bg-background px-2 py-1 font-normal text-muted-foreground" variant="outline">
           <Activity className="size-4 text-muted-foreground" aria-hidden="true" />
           <span className="tabular-nums">{t("status.upload", { speed: formatBytes(snapshot.uploadTotal) })}</span>
           <span className="tabular-nums">{t("status.download", { speed: formatBytes(snapshot.downloadTotal) })}</span>
-        </div>
-        <label className="ms-auto flex h-8 w-64 max-w-[40vw] items-center gap-2 rounded-md border bg-background px-2">
-          <Search className="size-4 text-muted-foreground" aria-hidden="true" />
-          <input
+        </Badge>
+        <div className="relative ms-auto w-64 max-w-[40vw]">
+          <Search
+            className="pointer-events-none absolute start-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
             aria-label={t("clash.filterConnections")}
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="h-8 ps-8 text-sm"
             onChange={(event) => setFilter(event.target.value)}
             placeholder={t("clash.filterConnections")}
             value={filter}
           />
-        </label>
+        </div>
         <Button
           aria-label={t("actions.close")}
           disabled={!effectiveSelectedId || closeMutation.isPending}
@@ -114,12 +121,14 @@ export function ClashConnectionsScreen() {
       </div>
 
       {connectionsQuery.error ? (
-        <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-          {connectionsQuery.error instanceof Error ? connectionsQuery.error.message : String(connectionsQuery.error)}
-        </div>
+        <Alert className="rounded-none border-x-0 border-t-0 px-4 py-2" variant="destructive">
+          <AlertDescription>
+            {connectionsQuery.error instanceof Error ? connectionsQuery.error.message : String(connectionsQuery.error)}
+          </AlertDescription>
+        </Alert>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <ScrollArea className="min-h-0 flex-1" orientation="both">
         <div className="grid min-w-[72rem] grid-cols-[2.75rem_minmax(14rem,1.2fr)_9rem_11rem_11rem_8rem_8rem_minmax(13rem,1fr)_9rem] border-b bg-muted/40 px-4 py-2 text-xs font-medium uppercase text-muted-foreground">
           <span />
           <span>{t("clash.host")}</span>
@@ -132,39 +141,50 @@ export function ClashConnectionsScreen() {
           <span>{t("clash.process")}</span>
         </div>
         {filteredConnections.length ? (
-          filteredConnections.map((connection) => (
-            <button
-              key={connection.id ?? `${connection.host}-${connection.start}`}
-              className={cn(
-                "grid min-w-[72rem] grid-cols-[2.75rem_minmax(14rem,1.2fr)_9rem_11rem_11rem_8rem_8rem_minmax(13rem,1fr)_9rem] items-center border-b px-4 py-2 text-start text-sm transition-colors hover:bg-accent hover:text-accent-foreground",
-                effectiveSelectedId === connection.id && "bg-secondary text-secondary-foreground",
-              )}
-              onClick={() => setSelectedId(connection.id)}
-              type="button"
-            >
-              <span>
-                {effectiveSelectedId === connection.id ? (
-                  <PlugZap className="size-4 text-primary" aria-hidden="true" />
-                ) : (
-                  <span className="block size-4 rounded-full border" aria-hidden="true" />
+          filteredConnections.map((connection) => {
+            const networkLabel = [connection.network, connection.connectionType].filter(Boolean).join(" ");
+
+            return (
+              <button
+                key={connection.id ?? `${connection.host}-${connection.start}`}
+                className={cn(
+                  "grid min-w-[72rem] grid-cols-[2.75rem_minmax(14rem,1.2fr)_9rem_11rem_11rem_8rem_8rem_minmax(13rem,1fr)_9rem] items-center border-b px-4 py-2 text-start text-sm outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  effectiveSelectedId === connection.id && "bg-muted text-foreground",
                 )}
-              </span>
-              <span className="min-w-0 truncate font-medium">{connection.host}</span>
-              <span className="min-w-0 truncate text-muted-foreground">
-                {connection.network ?? ""} {connection.connectionType ?? ""}
-              </span>
-              <span className="min-w-0 truncate text-muted-foreground">{connection.source}</span>
-              <span className="min-w-0 truncate text-muted-foreground">{connection.destination}</span>
-              <span className="tabular-nums">{formatBytes(connection.upload)}</span>
-              <span className="tabular-nums">{formatBytes(connection.download)}</span>
-              <span className="min-w-0 truncate text-muted-foreground">{connectionChain(connection)}</span>
-              <span className="min-w-0 truncate text-muted-foreground">{connection.process ?? ""}</span>
-            </button>
-          ))
+                onClick={() => setSelectedId(connection.id)}
+                type="button"
+              >
+                <span>
+                  {effectiveSelectedId === connection.id ? (
+                    <PlugZap className="size-4 text-foreground" aria-hidden="true" />
+                  ) : (
+                    <span className="block size-4 rounded-full border bg-background" aria-hidden="true" />
+                  )}
+                </span>
+                <span className="min-w-0 truncate font-medium">{connection.host}</span>
+                {networkLabel ? (
+                  <Badge
+                    className="max-w-full justify-start truncate bg-background px-1.5 py-0 text-muted-foreground"
+                    variant="outline"
+                  >
+                    {networkLabel}
+                  </Badge>
+                ) : (
+                  <span />
+                )}
+                <span className="min-w-0 truncate text-muted-foreground">{connection.source}</span>
+                <span className="min-w-0 truncate text-muted-foreground">{connection.destination}</span>
+                <span className="tabular-nums">{formatBytes(connection.upload)}</span>
+                <span className="tabular-nums">{formatBytes(connection.download)}</span>
+                <span className="min-w-0 truncate text-muted-foreground">{connectionChain(connection)}</span>
+                <span className="min-w-0 truncate text-muted-foreground">{connection.process ?? ""}</span>
+              </button>
+            );
+          })
         ) : (
           <p className="px-4 py-8 text-center text-sm text-muted-foreground">{t("panes.clashConnections.empty")}</p>
         )}
-      </div>
+      </ScrollArea>
     </section>
   );
 }

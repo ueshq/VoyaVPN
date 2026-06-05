@@ -31,7 +31,11 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
   copyProfiles,
   cancelSpeedtest,
@@ -78,13 +82,14 @@ const serverColumns: ServerColumn[] = [
     cell: (item, rowNumber) => (
       <span className="flex items-center gap-2">
         {item.isActive ? (
-          <span
+          <Badge
             aria-label="Active profile"
-            className="grid size-5 place-items-center rounded-full bg-primary text-primary-foreground"
+            className="size-5 rounded-full border-border bg-muted p-0 text-muted-foreground"
             data-testid="active-profile-marker"
+            variant="secondary"
           >
             <Check className="size-3" aria-hidden="true" />
-          </span>
+          </Badge>
         ) : (
           <span className="size-5 rounded-full border" aria-hidden="true" />
         )}
@@ -96,7 +101,11 @@ const serverColumns: ServerColumn[] = [
     width: "5rem",
   },
   {
-    cell: (item) => getProtocolLabel(item.profile.ConfigType),
+    cell: (item) => (
+      <Badge className="max-w-full justify-start truncate text-muted-foreground" variant="outline">
+        <span className="truncate">{getProtocolLabel(item.profile.ConfigType)}</span>
+      </Badge>
+    ),
     id: "configType",
     label: "Protocol",
     sortKey: "configType",
@@ -251,6 +260,8 @@ export function ProfilesScreen() {
   const selected = profiles.filter((item) => selectedIds.has(item.profile.IndexId));
   const primarySelection = selected[0] ?? null;
   const allVisibleSelected = profiles.length > 0 && profiles.every((item) => selectedIds.has(item.profile.IndexId));
+  const someVisibleSelected = profiles.some((item) => selectedIds.has(item.profile.IndexId));
+  const allVisibleCheckboxState = allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false;
 
   async function runOperation(operation: () => Promise<unknown>) {
     setOperationError(null);
@@ -317,21 +328,25 @@ export function ProfilesScreen() {
         <div className="flex min-w-0 items-center gap-2">
           <Rows3 className="size-4 text-muted-foreground" aria-hidden="true" />
           <h2 className="text-sm font-semibold">Profiles</h2>
-          <span className="rounded-md border px-2 py-1 text-xs text-muted-foreground">
+          <Badge className="h-6 bg-background text-muted-foreground" variant="outline">
             {profiles.length.toLocaleString()} rows
-          </span>
+          </Badge>
         </div>
 
-        <label className="ms-auto flex h-9 min-w-[14rem] items-center gap-2 rounded-md border bg-card px-3 text-sm">
-          <Search className="size-4 text-muted-foreground" aria-hidden="true" />
-          <span className="sr-only">Filter profiles</span>
-          <input
-            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
+        <div className="relative ms-auto min-w-[14rem]">
+          <Search
+            className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            aria-label="Filter profiles"
+            className="h-9 ps-9"
             onChange={(event) => setFilterText(event.target.value)}
             placeholder="Filter remarks or address"
+            type="search"
             value={filterText}
           />
-        </label>
+        </div>
 
         <Button onClick={() => setDialogState({ mode: "create" })} size="sm" type="button">
           <FilePlus2 className="size-4" aria-hidden="true" />
@@ -451,9 +466,9 @@ export function ProfilesScreen() {
       </div>
 
       {operationError ? (
-        <div className="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive" role="alert">
-          {operationError}
-        </div>
+        <Alert className="rounded-none border-x-0 border-t-0 px-4 py-2" variant="destructive">
+          <AlertDescription>{operationError}</AlertDescription>
+        </Alert>
       ) : null}
 
       <div className="min-h-0 flex-1 overflow-hidden p-4">
@@ -477,12 +492,10 @@ export function ProfilesScreen() {
                 className="flex h-9 items-center justify-center border-e px-2"
                 role="columnheader"
               >
-                <input
+                <Checkbox
                   aria-label="Select all profiles"
-                  checked={allVisibleSelected}
-                  className="size-4 accent-primary"
-                  onChange={(event) => toggleAllVisible(event.target.checked)}
-                  type="checkbox"
+                  checked={allVisibleCheckboxState}
+                  onCheckedChange={(checked) => toggleAllVisible(checked === true)}
                 />
               </div>
               {serverColumns.map((column, columnIndex) => (
@@ -553,8 +566,12 @@ export function ProfilesScreen() {
                         aria-selected={isSelected}
                         className={cn(
                           "absolute start-0 grid h-[38px] min-w-[110rem] items-center border-b text-sm outline-none",
-                          item.isActive ? "bg-accent/70" : virtualRow.index % 2 === 0 ? "bg-card" : "bg-background",
-                          isSelected ? "ring-1 ring-inset ring-primary" : null,
+                          item.isActive || isSelected
+                            ? "bg-muted/70"
+                            : virtualRow.index % 2 === 0
+                              ? "bg-card"
+                              : "bg-background",
+                          isSelected ? "ring-1 ring-inset ring-border" : null,
                         )}
                         data-testid="server-row"
                         draggable
@@ -603,13 +620,11 @@ export function ProfilesScreen() {
                           className="flex h-full items-center justify-center border-e px-2"
                           role="cell"
                         >
-                          <input
+                          <Checkbox
                             aria-label={`Select ${item.profile.Remarks || indexId}`}
                             checked={isSelected}
-                            className="size-4 accent-primary"
-                            onChange={(event) => toggleSelection(indexId, event.target.checked)}
                             onClick={(event) => event.stopPropagation()}
-                            type="checkbox"
+                            onCheckedChange={(checked) => toggleSelection(indexId, checked === true)}
                           />
                         </div>
                         {serverColumns.map((column, columnIndex) => {

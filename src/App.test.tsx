@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { vi } from "vitest";
 
 import { App } from "./App";
+import { fontToCss } from "./config/fonts";
 import { changeLocale } from "./i18n";
 import { loadAppConfig, saveAppConfig } from "@/ipc";
 import type { AppConfig_Serialize, UiItem_Serialize } from "@/ipc/bindings";
@@ -270,7 +271,6 @@ describe("App", () => {
   beforeEach(async () => {
     window.localStorage.clear();
     document.documentElement.className = "";
-    document.documentElement.removeAttribute("data-accent");
     document.documentElement.style.removeProperty("--app-font-family");
     document.documentElement.style.removeProperty("--app-font-size");
     vi.mocked(loadAppConfig).mockClear();
@@ -304,13 +304,13 @@ describe("App", () => {
     expect(screen.getByRole("tab", { name: /نمایه/ })).toBeInTheDocument();
   });
 
-  it("hydrates and persists theme, accent, and font settings through app config", async () => {
+  it("hydrates and persists theme and strict font settings through app config", async () => {
     const user = userEvent.setup();
     vi.mocked(loadAppConfig).mockResolvedValue(
       makeAppConfig({
         UIItem: makeUiItem({
           ColorPrimaryName: "Rose",
-          CurrentFontFamily: "Georgia",
+          CurrentFontFamily: "Manrope",
           CurrentFontSize: 18,
           CurrentTheme: "Dark",
         }),
@@ -320,28 +320,24 @@ describe("App", () => {
     renderApp();
 
     await waitFor(() => expect(document.documentElement).toHaveClass("dark"));
-    expect(document.documentElement).toHaveAttribute("data-accent", "rose");
-    expect(document.documentElement.style.getPropertyValue("--app-font-family")).toBe("Georgia");
+    expect(document.documentElement).toHaveClass("font-manrope");
+    expect(document.documentElement.style.getPropertyValue("--app-font-family")).toBe(fontToCss("manrope"));
     expect(document.documentElement.style.getPropertyValue("--app-font-size")).toBe("18px");
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
     await user.click(screen.getByRole("button", { name: "Light" }));
-    await user.clear(screen.getByLabelText("Font family"));
-    await user.type(screen.getByLabelText("Font family"), "Arial");
-    await user.selectOptions(screen.getByLabelText("Font Size"), "17");
+    await user.click(screen.getByRole("button", { name: "Inter" }));
 
-    await waitFor(() =>
-      expect(saveAppConfig).toHaveBeenCalledWith(
-        expect.objectContaining({
-          UIItem: expect.objectContaining({
-            ColorPrimaryName: "Rose",
-            CurrentFontFamily: "Arial",
-            CurrentFontSize: 17,
-            CurrentTheme: "Light",
-          }),
-        }),
-      ),
-    );
+    await waitFor(() => {
+      const savedConfig = vi.mocked(saveAppConfig).mock.calls.at(-1)?.[0];
+
+      expect(savedConfig?.UIItem).toMatchObject({
+        CurrentFontFamily: "Inter",
+        CurrentFontSize: 18,
+        CurrentTheme: "Light",
+      });
+      expect(savedConfig?.UIItem).not.toHaveProperty("ColorPrimaryName");
+    });
   });
 });
 

@@ -1,6 +1,8 @@
 import { ScrollText, Trash2 } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useI18n } from "@/i18n/use-i18n";
 import { useRuntimeEventStore } from "@/ipc";
 import type { LogLevel } from "@/ipc/bindings";
@@ -27,26 +29,34 @@ export function LogsScreen() {
       {logLines.length === 0 ? (
         <div className="grid min-h-0 flex-1 place-items-center p-6">
           <div className="grid justify-items-center gap-3 text-center">
-            <div className="flex size-10 items-center justify-center rounded-md border bg-card">
-              <ScrollText className="size-5 text-muted-foreground" aria-hidden="true" />
+            <div className="flex size-10 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground shadow-xs">
+              <ScrollText className="size-5" aria-hidden="true" />
             </div>
             <p className="text-sm font-medium">{t("panes.logs.empty")}</p>
           </div>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto bg-muted/20">
+        <ScrollArea className="min-h-0 flex-1 bg-muted/20">
           <ol className="grid gap-px p-2 font-mono text-xs leading-5" data-testid="log-lines">
             {logLines.map((line, index) => (
               <li
-                className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 rounded-sm px-2 py-1 hover:bg-background"
+                className="grid grid-cols-[4.75rem_minmax(0,1fr)] gap-3 rounded-md px-2 py-1 transition-colors hover:bg-background/80"
                 key={`${index}-${line.line}`}
               >
-                <span className={cn("uppercase", logLevelClassName(line.level))}>{line.level}</span>
+                <Badge
+                  className={cn(
+                    "h-5 min-w-14 justify-center rounded-sm px-1.5 font-mono uppercase",
+                    logLevelClassName(line.level),
+                  )}
+                  variant="outline"
+                >
+                  {line.level}
+                </Badge>
                 <span className="break-words text-foreground">{line.line}</span>
               </li>
             ))}
           </ol>
-        </div>
+        </ScrollArea>
       )}
     </section>
   );
@@ -56,12 +66,12 @@ function logLevelClassName(level: LogLevel) {
   switch (level) {
     case "trace":
     case "debug":
-      return "text-muted-foreground";
+      return "border-transparent bg-muted text-muted-foreground";
     case "info":
-      return "text-foreground";
+      return "bg-background text-foreground";
     case "warn":
-      return "text-amber-700 dark:text-amber-400";
+      return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
     case "error":
-      return "text-destructive";
+      return "border-destructive/30 bg-destructive/10 text-destructive";
   }
 }

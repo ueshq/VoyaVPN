@@ -1,32 +1,34 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
+import {
+  DEFAULT_FONT,
+  type Font,
+  fontFromFamilyString,
+  fontToClassName,
+  fontToCss,
+  fontToFamilyString,
+  isFont,
+} from "@/config/fonts";
 import type { UiItem_Serialize } from "@/ipc/bindings";
 
 export type ThemeMode = "system" | "light" | "dark";
-export type Accent = "teal" | "blue" | "rose";
-
-export const DEFAULT_FONT_FAMILY =
-  'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 export const DEFAULT_FONT_SIZE = 16;
 export const FONT_SIZE_MAX = 20;
 export const FONT_SIZE_MIN = 8;
 
 type PersistedPreferences = {
-  accent: Accent;
-  fontFamily: string;
+  font: Font;
   fontSize: number;
   themeMode: ThemeMode;
 };
 
 type PreferencesState = {
-  accent: Accent;
   appConfigLoaded: boolean;
-  fontFamily: string;
+  font: Font;
   fontSize: number;
   hydrateFromConfig: (uiItem: UiItem_Serialize | null | undefined) => void;
-  setAccent: (accent: Accent) => void;
-  setFontFamily: (fontFamily: string) => void;
+  setFont: (font: Font) => void;
   setFontSize: (fontSize: number) => void;
   setThemeMode: (themeMode: ThemeMode) => void;
   themeMode: ThemeMode;
@@ -35,17 +37,15 @@ type PreferencesState = {
 export const usePreferencesStore = create<PreferencesState>()(
   persist(
     (set) => ({
-      accent: "teal",
       appConfigLoaded: false,
-      fontFamily: "",
+      font: DEFAULT_FONT,
       fontSize: DEFAULT_FONT_SIZE,
       hydrateFromConfig: (uiItem) =>
         set({
           ...preferencesFromConfig(uiItem),
           appConfigLoaded: true,
         }),
-      setAccent: (accent) => set({ accent }),
-      setFontFamily: (fontFamily) => set({ fontFamily }),
+      setFont: (font) => set({ font }),
       setFontSize: (fontSize) => set({ fontSize: normalizeFontSize(fontSize) }),
       setThemeMode: (themeMode) => set({ themeMode }),
       themeMode: "system",
@@ -53,11 +53,11 @@ export const usePreferencesStore = create<PreferencesState>()(
     {
       name: "voyavpn.preferences",
       partialize: (state): PersistedPreferences => ({
-        accent: state.accent,
-        fontFamily: state.fontFamily,
+        font: state.font,
         fontSize: state.fontSize,
         themeMode: state.themeMode,
       }),
+      merge: (persistedState, currentState) => mergePersistedPreferences(persistedState, currentState),
       storage: createJSONStorage(() => window.localStorage),
     },
   ),
@@ -79,11 +79,18 @@ export function preferencesFromConfig(
   uiItem: UiItem_Serialize | null | undefined,
 ): PersistedPreferences {
   return {
-    accent: accentFromConfig(uiItem?.ColorPrimaryName),
-    fontFamily: uiItem?.CurrentFontFamily?.trim() ?? "",
+    font: fontFromFamilyString(uiItem?.CurrentFontFamily),
     fontSize: normalizeFontSize(uiItem?.CurrentFontSize),
     themeMode: themeModeFromConfig(uiItem?.CurrentTheme),
   };
+}
+
+export function uiItemWithoutLegacyColor(
+  uiItem: UiItem_Serialize | null | undefined,
+): Partial<UiItem_Serialize> {
+  const nextUiItem: Partial<UiItem_Serialize> = { ...(uiItem ?? {}) };
+  delete nextUiItem.ColorPrimaryName;
+  return nextUiItem;
 }
 
 export function themeModeFromConfig(value: string | null | undefined): ThemeMode {
@@ -111,31 +118,6 @@ export function themeModeToConfig(themeMode: ThemeMode) {
   }
 }
 
-export function accentFromConfig(value: string | null | undefined): Accent {
-  switch ((value ?? "").trim().toLowerCase()) {
-    case "blue":
-    case "sky":
-      return "blue";
-    case "rose":
-    case "red":
-      return "rose";
-    case "teal":
-    default:
-      return "teal";
-  }
-}
-
-export function accentToConfig(accent: Accent) {
-  switch (accent) {
-    case "blue":
-      return "Blue";
-    case "rose":
-      return "Rose";
-    case "teal":
-      return "Teal";
-  }
-}
-
 export function normalizeFontSize(value: number | null | undefined) {
   if (!Number.isFinite(value) || !value) {
     return DEFAULT_FONT_SIZE;
@@ -144,6 +126,31 @@ export function normalizeFontSize(value: number | null | undefined) {
   return Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(value)));
 }
 
-export function fontFamilyToCss(fontFamily: string) {
-  return fontFamily.trim() || DEFAULT_FONT_FAMILY;
+function mergePersistedPreferences(persistedState: unknown, currentState: PreferencesState): PreferencesState {
+  if (!isRecord(persistedState)) {
+    return currentState;
+  }
+
+  const legacyFamily = typeof persistedState.fontFamily === "string" ? persistedState.fontFamily : undefined;
+  const persistedFont = persistedState.font;
+
+  return {
+    ...currentState,
+    font: isFont(persistedFont) ? persistedFont : fontFromFamilyString(legacyFamily),
+    fontSize: normalizeFontSize(typeof persistedState.fontSize === "number" ? persistedState.fontSize : undefined),
+    themeMode: typeof persistedState.themeMode === "string" ? themeModeFromConfig(persistedState.themeMode) : "system",
+  };
 }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export {
+  DEFAULT_FONT,
+  fontFromFamilyString,
+  fontToClassName,
+  fontToCss,
+  fontToFamilyString,
+};
+export type { Font };
