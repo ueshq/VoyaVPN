@@ -80,15 +80,146 @@ jobs:
       - name: Run release validation checks
         run: pnpm run verify:ci
 
+      - name: Reject stable dry runs
+        if: ${{ inputs.channel == 'stable' && inputs.dry_run == true }}
+        run: |
+          echo "::error title=Invalid stable dispatch::Stable releases must use signed updater artifacts and cannot run with dry_run=true."
+          exit 1
+
+      - name: Reject stable debug builds
+        if: ${{ inputs.channel == 'stable' && inputs.build_profile != 'release' }}
+        run: |
+          echo "::error title=Invalid stable dispatch::Stable releases must use build_profile=release."
+          exit 1
+
       - name: Validate non-dry-run updater signing secret
         if: ${{ inputs.dry_run == false }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PATH }}
         run: |
-          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
-            echo "::error title=Missing secret::TAURI_SIGNING_PRIVATE_KEY is required when dry_run is false."
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ] && [ -z "${TAURI_SIGNING_PRIVATE_KEY_PATH:-}" ]; then
+            echo "::error title=Missing secret::TAURI_SIGNING_PRIVATE_KEY or TAURI_SIGNING_PRIVATE_KEY_PATH is required when dry_run is false."
             exit 1
           fi
+
+      - name: Validate stable release prerequisites
+        if: ${{ inputs.channel == 'stable' && inputs.dry_run == false }}
+        env:
+          VOYAVPN_CDN_BASE_URL: ${{ vars.VOYAVPN_CDN_BASE_URL }}
+          VOYAVPN_UPDATES_BASE_URL: ${{ vars.VOYAVPN_UPDATES_BASE_URL }}
+          VOYAVPN_UPDATER_PUBLIC_KEY: ${{ vars.VOYAVPN_UPDATER_PUBLIC_KEY }}
+          VOYAVPN_DIAGNOSTICS_ENDPOINT: ${{ vars.VOYAVPN_DIAGNOSTICS_ENDPOINT }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PATH }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          node <<'NODE'
+          const placeholder = /placeholder|replace_before_release|replace-before-release|changeme|\btodo\b|\btbd\b|voyavpn\.example/i;
+
+          function requireValue(name) {
+            const value = process.env[name]?.trim() ?? "";
+            if (!value) {
+              throw new Error(`${name} is required for stable releases.`);
+            }
+            if (placeholder.test(value)) {
+              throw new Error(`${name} must not be a placeholder.`);
+            }
+            return value;
+          }
+
+          function requireOneOf(...names) {
+            const present = names.some((name) => (process.env[name]?.trim() ?? "").length > 0);
+            if (!present) {
+              throw new Error(`${names.join(" or ")} is required for stable releases.`);
+            }
+            for (const name of names) {
+              const value = process.env[name]?.trim() ?? "";
+              if (value && placeholder.test(value)) {
+                throw new Error(`${name} must not be a placeholder.`);
+              }
+            }
+          }
+
+          function forbiddenHost(hostname) {
+            const host = hostname.toLowerCase();
+            return (
+              host === "example.com" ||
+              host.endsWith(".example.com") ||
+              host.endsWith(".example") ||
+              host.includes("example") ||
+              host === "github.com" ||
+              host.endsWith(".github.com") ||
+              host === "githubusercontent.com" ||
+              host.endsWith(".githubusercontent.com") ||
+              host === "github.io" ||
+              host.endsWith(".github.io") ||
+              host === "localhost" ||
+              host === "127.0.0.1" ||
+              host === "::1" ||
+              host.endsWith(".test") ||
+              host.includes("placeholder") ||
+              host.includes(":") ||
+              /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)
+            );
+          }
+
+          function requireHttpsUrl(name, { diagnostics = false } = {}) {
+            const value = requireValue(name);
+            let parsed;
+            try {
+              parsed = new URL(value);
+            } catch {
+              throw new Error(`${name} must be a valid URL.`);
+            }
+            if (parsed.protocol !== "https:") {
+              throw new Error(`${name} must use https.`);
+            }
+            if (forbiddenHost(parsed.hostname)) {
+              throw new Error(`${name} must use an approved non-placeholder CDN or diagnostics host.`);
+            }
+            if (diagnostics && (parsed.username || parsed.password || parsed.search || parsed.hash)) {
+              throw new Error(`${name} must not include credentials, query strings, or fragments.`);
+            }
+          }
+
+          requireHttpsUrl("VOYAVPN_CDN_BASE_URL");
+          requireHttpsUrl("VOYAVPN_UPDATES_BASE_URL");
+          requireHttpsUrl("VOYAVPN_DIAGNOSTICS_ENDPOINT", { diagnostics: true });
+          const publicKey = requireValue("VOYAVPN_UPDATER_PUBLIC_KEY");
+          if (publicKey.length < 32) {
+            throw new Error("VOYAVPN_UPDATER_PUBLIC_KEY must be the approved Tauri updater public key.");
+          }
+          requireOneOf("TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PATH");
+          [
+            "APPLE_CERTIFICATE",
+            "APPLE_CERTIFICATE_PASSWORD",
+            "APPLE_ID",
+            "APPLE_PASSWORD",
+            "APPLE_TEAM_ID",
+            "WINDOWS_CERTIFICATE_BASE64",
+            "WINDOWS_CERTIFICATE_PASSWORD",
+          ].forEach(requireValue);
+          NODE
+
+          pnpm tauri:stable-updater-config
+          node scripts/check-release-readiness.mjs \
+            --mode stable \
+            --cdn-base-url "$VOYAVPN_CDN_BASE_URL" \
+            --updates-base-url "$VOYAVPN_UPDATES_BASE_URL" \
+            --diagnostics-endpoint "$VOYAVPN_DIAGNOSTICS_ENDPOINT" \
+            --release-artifacts tests/fixtures/release/artifacts \
+            --updater-artifacts tests/fixtures/release/signed-updater \
+            --core-assets tests/fixtures/release/core-assets.json \
+            --tauri-config target/release-config/tauri.updater.stable.generated.json \
+            --work-dir target/release-readiness
 
   package:
     name: Package ${{ matrix.release_target }}
@@ -98,12 +229,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-13
+          - os: macos-15-intel
             release_target: darwin-x86_64
-          - os: windows-latest
+            rust_target: x86_64-apple-darwin
+          - os: macos-15
+            release_target: darwin-aarch64
+            rust_target: aarch64-apple-darwin
+          - os: windows-2025
             release_target: windows-x86_64
-          - os: ubuntu-latest
+            rust_target: x86_64-pc-windows-msvc
+          - os: windows-11-arm
+            release_target: windows-aarch64
+            rust_target: aarch64-pc-windows-msvc
+          - os: ubuntu-24.04
             release_target: linux-x86_64
+            rust_target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            release_target: linux-aarch64
+            rust_target: aarch64-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v4
 
@@ -124,6 +267,9 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Install Rust target
+        run: rustup target add ${{ matrix.rust_target }}
+
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -139,8 +285,15 @@ jobs:
       - name: Build Tauri package
         env:
           CI: "true"
+          CHANNEL: ${{ inputs.channel }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          VOYAVPN_RELEASE_CHANNEL: ${{ inputs.channel }}
+          VOYAVPN_UPDATES_BASE_URL: ${{ vars.VOYAVPN_UPDATES_BASE_URL }}
+          VOYAVPN_UPDATER_PUBLIC_KEY: ${{ vars.VOYAVPN_UPDATER_PUBLIC_KEY }}
           RELEASE_PROFILE: ${{ inputs.build_profile }}
+          TAURI_TARGET: ${{ matrix.rust_target }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PATH }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -150,18 +303,27 @@ jobs:
           WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
+          build_args=(--target "$TAURI_TARGET")
           if [ "$RELEASE_PROFILE" = "debug" ]; then
-            pnpm tauri:build --debug
-          else
-            pnpm tauri:build
+            build_args+=(--debug)
           fi
 
+          pnpm tauri:build "${build_args[@]}"
+
+          bundle_dir="target/${TAURI_TARGET}/${RELEASE_PROFILE}/bundle"
+          if [ ! -d "$bundle_dir" ]; then
+            bundle_dir="target/${RELEASE_PROFILE}/bundle"
+          fi
+          if [ ! -d "$bundle_dir" ]; then
+            echo "::error title=Missing bundle directory::No Tauri bundle directory found for $TAURI_TARGET and profile $RELEASE_PROFILE."
+            exit 1
+          fi
+          echo "BUNDLE_DIR=$bundle_dir" >> "$GITHUB_ENV"
+
       - name: Normalize artifacts and write checksums
-        env:
-          RELEASE_PROFILE: ${{ inputs.build_profile }}
         run: |
           node scripts/release-artifacts.mjs \
-            --input "target/${RELEASE_PROFILE}/bundle" \
+            --input "$BUNDLE_DIR" \
             --output "dist/release/${{ matrix.release_target }}" \
             --target "${{ matrix.release_target }}" \
             --channel "${{ inputs.channel }}"
@@ -171,6 +333,50 @@ jobs:
         with:
           name: voyavpn-${{ inputs.channel }}-${{ matrix.release_target }}-${{ inputs.build_profile }}
           path: dist/release/${{ matrix.release_target }}
+          if-no-files-found: error
+
+  cdn-staging-metadata:
+    name: CDN Staging Metadata
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/downloaded-release-artifacts
+
+      - name: Generate CDN release index
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          VOYAVPN_CDN_BASE_URL: ${{ vars.VOYAVPN_CDN_BASE_URL }}
+        run: |
+          if [ "$CHANNEL" = "stable" ] && [ -z "${VOYAVPN_CDN_BASE_URL:-}" ]; then
+            echo "::error title=Missing variable::VOYAVPN_CDN_BASE_URL is required for stable CDN staging metadata."
+            exit 1
+          fi
+
+          base_url="${VOYAVPN_CDN_BASE_URL:-https://cdn.voyavpn.test/${CHANNEL}}"
+          node scripts/release-index.mjs \
+            --input dist/downloaded-release-artifacts \
+            --out dist/cdn-staging/release-index.json \
+            --channel "$CHANNEL" \
+            --base-url "$base_url"
+
+      - name: Upload CDN staging metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: voyavpn-${{ inputs.channel }}-cdn-staging-metadata-${{ inputs.build_profile }}
+          path: dist/cdn-staging
           if-no-files-found: error
 
   updater-metadata:
@@ -201,7 +407,16 @@ jobs:
           RELEASE_VERSION: ${{ github.ref_name }}
           VOYAVPN_UPDATES_BASE_URL: ${{ vars.VOYAVPN_UPDATES_BASE_URL }}
         run: |
-          base_url="${VOYAVPN_UPDATES_BASE_URL:-https://updates.voyavpn.example/${CHANNEL}}"
+          if [ "$CHANNEL" = "stable" ] && [ "$DRY_RUN" = "true" ]; then
+            echo "::error title=Invalid stable metadata::Stable updater metadata cannot use dry-run signatures."
+            exit 1
+          fi
+          if [ "$CHANNEL" = "stable" ] && [ -z "${VOYAVPN_UPDATES_BASE_URL:-}" ]; then
+            echo "::error title=Missing variable::VOYAVPN_UPDATES_BASE_URL is required for stable updater metadata."
+            exit 1
+          fi
+
+          base_url="${VOYAVPN_UPDATES_BASE_URL:-https://cdn.voyavpn.test/${CHANNEL}/updater}"
           placeholder_flag=""
           if [ "$DRY_RUN" = "true" ]; then
             placeholder_flag="--placeholder-signatures"

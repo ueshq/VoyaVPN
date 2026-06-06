@@ -1,0 +1,34 @@
+{
+  "productName": "VoyaVPN",
+  "version": "0.1.0",
+  "channel": "stable",
+  "target": "windows-x86_64",
+  "generatedAt": "2026-06-01T00:00:00.000Z",
+  "sourceBundleDir": "tests/fixtures/release/placeholder-updater/windows-x86_64",
+  "artifacts": [
+    {
+      "name": "voyavpn-0.1.0-stable-windows-x86-64-updater.zip",
+      "path": "voyavpn-0.1.0-stable-windows-x86-64-updater.zip",
+      "kind": "updater",
+      "target": "windows-x86_64",
+      "channel": "stable",
+      "version": "0.1.0",
+      "bytes": 55,
+      "sha256": "821b091afba310aa8ebe13ab67876bacb9d39d2268804d3b2a2fbbcc7e497203",
+      "originalName": "VoyaVPN_0.1.0_windows_x86_64.updater.zip",
+      "originalRelativePath": "updater/VoyaVPN_0.1.0_windows_x86_64.updater.zip"
+    },
+    {
+      "name": "voyavpn-0.1.0-stable-windows-x86-64-updater.zip.sig",
+      "path": "voyavpn-0.1.0-stable-windows-x86-64-updater.zip.sig",
+      "kind": "signature",
+      "target": "windows-x86_64",
+      "channel": "stable",
+      "version": "0.1.0",
+      "bytes": 53,
+      "sha256": "ff6fa3a5b81f35a267ee4eaa142c4635cdfa96d6db62d262dd71e3abdc346bb6",
+      "originalName": "VoyaVPN_0.1.0_windows_x86_64.updater.zip.sig",
+      "originalRelativePath": "updater/VoyaVPN_0.1.0_windows_x86_64.updater.zip.sig"
+    }
+  ]
+}

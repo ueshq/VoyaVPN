@@ -1,0 +1,34 @@
+{
+  "productName": "VoyaVPN",
+  "version": "0.1.0",
+  "channel": "stable",
+  "target": "linux-x86_64",
+  "generatedAt": "2026-06-01T00:00:00.000Z",
+  "sourceBundleDir": "tests/fixtures/release/signed-updater/linux-x86_64",
+  "artifacts": [
+    {
+      "name": "voyavpn-0.1.0-stable-linux-x86-64-updater.zip",
+      "path": "voyavpn-0.1.0-stable-linux-x86-64-updater.zip",
+      "kind": "updater",
+      "target": "linux-x86_64",
+      "channel": "stable",
+      "version": "0.1.0",
+      "bytes": 48,
+      "sha256": "ab1a6bef1a3c75259cec6e9b3e50f76b97b5d5dc4e2a0344a535bfe84976df37",
+      "originalName": "VoyaVPN_0.1.0_linux_x86_64.updater.zip",
+      "originalRelativePath": "updater/VoyaVPN_0.1.0_linux_x86_64.updater.zip"
+    },
+    {
+      "name": "voyavpn-0.1.0-stable-linux-x86-64-updater.zip.sig",
+      "path": "voyavpn-0.1.0-stable-linux-x86-64-updater.zip.sig",
+      "kind": "signature",
+      "target": "linux-x86_64",
+      "channel": "stable",
+      "version": "0.1.0",
+      "bytes": 125,
+      "sha256": "e20cde58a9cf928c1c4c41f8e662a3beb314745c2241d823288d2905b8c68d8d",
+      "originalName": "VoyaVPN_0.1.0_linux_x86_64.updater.zip.sig",
+      "originalRelativePath": "updater/VoyaVPN_0.1.0_linux_x86_64.updater.zip.sig"
+    }
+  ]
+}

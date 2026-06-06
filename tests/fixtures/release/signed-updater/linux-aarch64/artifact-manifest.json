@@ -1,0 +1,34 @@
+{
+  "productName": "VoyaVPN",
+  "version": "0.1.0",
+  "channel": "stable",
+  "target": "linux-aarch64",
+  "generatedAt": "2026-06-01T00:00:00.000Z",
+  "sourceBundleDir": "tests/fixtures/release/signed-updater/linux-aarch64",
+  "artifacts": [
+    {
+      "name": "voyavpn-0.1.0-stable-linux-aarch64-updater.zip",
+      "path": "voyavpn-0.1.0-stable-linux-aarch64-updater.zip",
+      "kind": "updater",
+      "target": "linux-aarch64",
+      "channel": "stable",
+      "version": "0.1.0",
+      "bytes": 49,
+      "sha256": "f2359f3088a8e8f68679ed79361b08f371462c9375c4b8b4911ebbc9a5b03fae",
+      "originalName": "VoyaVPN_0.1.0_linux_aarch64.updater.zip",
+      "originalRelativePath": "updater/VoyaVPN_0.1.0_linux_aarch64.updater.zip"
+    },
+    {
+      "name": "voyavpn-0.1.0-stable-linux-aarch64-updater.zip.sig",
+      "path": "voyavpn-0.1.0-stable-linux-aarch64-updater.zip.sig",
+      "kind": "signature",
+      "target": "linux-aarch64",
+      "channel": "stable",
+      "version": "0.1.0",
+      "bytes": 125,
+      "sha256": "001dbc10956fbf62f9b4ab1eff02c6b2a8931def651b185d50c2fb87a8e084ac",
+      "originalName": "VoyaVPN_0.1.0_linux_aarch64.updater.zip.sig",
+      "originalRelativePath": "updater/VoyaVPN_0.1.0_linux_aarch64.updater.zip.sig"
+    }
+  ]
+}

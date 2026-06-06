@@ -7,7 +7,7 @@ use std::{
 use thiserror::Error;
 use voya_core::CoreType;
 
-use crate::paths::AppPaths;
+use crate::paths::{core_seed_resource_dir, AppPaths};
 
 pub const GITHUB_URL: &str = "https://github.com";
 pub const GITHUB_API_URL: &str = "https://api.github.com/repos";
@@ -243,6 +243,8 @@ const CORE_INFOS: &[CoreInfo] = &[
     },
 ];
 
+const SEEDED_CORE_TYPES: &[CoreType] = &[CoreType::Xray, CoreType::mihomo, CoreType::sing_box];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CoreInfo {
     pub core_type: CoreType,
@@ -364,6 +366,23 @@ pub struct CoreLaunch {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CoreSeedCopyStatus {
+    SeedMissing,
+    AlreadyInstalled,
+    Copied,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreSeedCopyOutcome {
+    pub core_type: CoreType,
+    pub seed_dir: PathBuf,
+    pub target_dir: PathBuf,
+    pub status: CoreSeedCopyStatus,
+    pub copied_files: Vec<PathBuf>,
+    pub chmod_paths: Vec<PathBuf>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TargetOs {
     Windows,
     Linux,
@@ -401,6 +420,18 @@ pub enum CoreInfoError {
     CreateCoreBinDir { path: PathBuf, source: io::Error },
     #[error("failed to inspect executable {path}: {source}")]
     InspectExecutable { path: PathBuf, source: io::Error },
+    #[error("failed to inspect core seed resource {path}: {source}")]
+    InspectCoreSeed { path: PathBuf, source: io::Error },
+    #[error("core seed resource path is not a directory: {path}")]
+    InvalidCoreSeedDir { path: PathBuf },
+    #[error("failed to read core seed directory {path}: {source}")]
+    ReadCoreSeedDir { path: PathBuf, source: io::Error },
+    #[error("failed to copy core seed asset from {source_path} to {target_path}: {source}")]
+    CopyCoreSeedAsset {
+        source_path: PathBuf,
+        target_path: PathBuf,
+        source: io::Error,
+    },
     #[error("failed to update executable permissions for {path}: {source}")]
     ChmodExecutable { path: PathBuf, source: io::Error },
 }
@@ -424,6 +455,11 @@ pub fn get_core_info(core_type: CoreType) -> Option<&'static CoreInfo> {
     CORE_INFOS
         .iter()
         .find(|core_info| core_info.core_type == core_type)
+}
+
+#[must_use]
+pub fn seeded_core_types() -> &'static [CoreType] {
+    SEEDED_CORE_TYPES
 }
 
 #[must_use]
@@ -522,6 +558,218 @@ pub fn discover_executable(
     })
 }
 
+pub fn copy_seed_core_assets(
+    paths: &AppPaths,
+    seed_resources_dir: impl AsRef<Path>,
+) -> Result<Vec<CoreSeedCopyOutcome>, CoreInfoError> {
+    seeded_core_types()
+        .iter()
+        .map(|core_type| copy_seed_core_asset(paths, seed_resources_dir.as_ref(), *core_type))
+        .collect()
+}
+
+pub fn copy_seed_core_asset(
+    paths: &AppPaths,
+    seed_resources_dir: impl AsRef<Path>,
+    core_type: CoreType,
+) -> Result<CoreSeedCopyOutcome, CoreInfoError> {
+    let core_info = get_core_info(core_type).ok_or(CoreInfoError::MissingCoreInfo(core_type))?;
+    let seed_dir = core_seed_resource_dir(seed_resources_dir, core_type_dir_name(core_type));
+    let target_dir = paths.core_bin_dir(core_type_dir_name(core_type));
+
+    match seed_dir.try_exists() {
+        Ok(false) => {
+            return Ok(CoreSeedCopyOutcome {
+                core_type,
+                seed_dir,
+                target_dir,
+                status: CoreSeedCopyStatus::SeedMissing,
+                copied_files: Vec::new(),
+                chmod_paths: Vec::new(),
+            });
+        }
+        Ok(true) => {}
+        Err(source) => {
+            return Err(CoreInfoError::InspectCoreSeed {
+                path: seed_dir,
+                source,
+            });
+        }
+    }
+
+    if !seed_dir.is_dir() {
+        return Err(CoreInfoError::InvalidCoreSeedDir { path: seed_dir });
+    }
+
+    if existing_executable(paths, core_info)?.is_some() {
+        let chmod_paths = apply_executable_permission_plan(paths, core_info)?;
+        return Ok(CoreSeedCopyOutcome {
+            core_type,
+            seed_dir,
+            target_dir,
+            status: CoreSeedCopyStatus::AlreadyInstalled,
+            copied_files: Vec::new(),
+            chmod_paths,
+        });
+    }
+
+    fs::create_dir_all(&target_dir).map_err(|source| CoreInfoError::CreateCoreBinDir {
+        path: target_dir.clone(),
+        source,
+    })?;
+
+    let mut copied_files = Vec::new();
+    copy_seed_dir_contents(&seed_dir, &target_dir, &mut copied_files)?;
+    let chmod_paths = apply_executable_permission_plan(paths, core_info)?;
+
+    Ok(CoreSeedCopyOutcome {
+        core_type,
+        seed_dir,
+        target_dir,
+        status: CoreSeedCopyStatus::Copied,
+        copied_files,
+        chmod_paths,
+    })
+}
+
+#[must_use]
+pub fn executable_permission_plan_for_core(paths: &AppPaths, core_info: &CoreInfo) -> Vec<PathBuf> {
+    #[cfg(unix)]
+    {
+        core_info
+            .executable_names()
+            .iter()
+            .map(|name| {
+                paths.core_bin_file(
+                    core_type_dir_name(core_info.core_type),
+                    executable_name_for_current_os(name),
+                )
+            })
+            .collect()
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = paths;
+        let _ = core_info;
+        Vec::new()
+    }
+}
+
+fn existing_executable(
+    paths: &AppPaths,
+    core_info: &CoreInfo,
+) -> Result<Option<PathBuf>, CoreInfoError> {
+    let search_dir = paths.core_bin_dir(core_type_dir_name(core_info.core_type));
+    for name in core_info.executable_names() {
+        let executable_name = executable_name_for_current_os(name);
+        let candidate = search_dir.join(executable_name);
+        match candidate.try_exists() {
+            Ok(true) if candidate.is_file() => return Ok(Some(candidate)),
+            Ok(_) => {}
+            Err(source) => {
+                return Err(CoreInfoError::InspectExecutable {
+                    path: candidate,
+                    source,
+                });
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+fn apply_executable_permission_plan(
+    paths: &AppPaths,
+    core_info: &CoreInfo,
+) -> Result<Vec<PathBuf>, CoreInfoError> {
+    let mut chmod_paths = Vec::new();
+    for candidate in executable_permission_plan_for_core(paths, core_info) {
+        match candidate.try_exists() {
+            Ok(true) if candidate.is_file() => {
+                ensure_executable_permission(&candidate)?;
+                chmod_paths.push(candidate);
+            }
+            Ok(_) => {}
+            Err(source) => {
+                return Err(CoreInfoError::InspectExecutable {
+                    path: candidate,
+                    source,
+                });
+            }
+        }
+    }
+
+    Ok(chmod_paths)
+}
+
+fn copy_seed_dir_contents(
+    source_dir: &Path,
+    target_dir: &Path,
+    copied_files: &mut Vec<PathBuf>,
+) -> Result<(), CoreInfoError> {
+    let entries = fs::read_dir(source_dir).map_err(|source| CoreInfoError::ReadCoreSeedDir {
+        path: source_dir.to_path_buf(),
+        source,
+    })?;
+
+    for entry in entries {
+        let entry = entry.map_err(|source| CoreInfoError::ReadCoreSeedDir {
+            path: source_dir.to_path_buf(),
+            source,
+        })?;
+        let source_path = entry.path();
+        let target_path = target_dir.join(entry.file_name());
+        let file_type = entry
+            .file_type()
+            .map_err(|source| CoreInfoError::InspectCoreSeed {
+                path: source_path.clone(),
+                source,
+            })?;
+
+        if file_type.is_dir() {
+            fs::create_dir_all(&target_path).map_err(|source| CoreInfoError::CreateCoreBinDir {
+                path: target_path.clone(),
+                source,
+            })?;
+            copy_seed_dir_contents(&source_path, &target_path, copied_files)?;
+            continue;
+        }
+
+        if !file_type.is_file() {
+            continue;
+        }
+
+        match target_path.try_exists() {
+            Ok(true) => continue,
+            Ok(false) => {}
+            Err(source) => {
+                return Err(CoreInfoError::InspectExecutable {
+                    path: target_path,
+                    source,
+                });
+            }
+        }
+
+        if let Some(parent) = target_path.parent() {
+            fs::create_dir_all(parent).map_err(|source| CoreInfoError::CreateCoreBinDir {
+                path: parent.to_path_buf(),
+                source,
+            })?;
+        }
+        fs::copy(&source_path, &target_path).map_err(|source| {
+            CoreInfoError::CopyCoreSeedAsset {
+                source_path,
+                target_path: target_path.clone(),
+                source,
+            }
+        })?;
+        copied_files.push(target_path);
+    }
+
+    Ok(())
+}
+
 pub fn chmod_existing_core_executables(paths: &AppPaths) -> Result<Vec<PathBuf>, CoreInfoError> {
     let mut updated = Vec::new();
     for core_info in all_core_infos() {
@@ -598,14 +846,19 @@ pub fn quote_path(path: impl AsRef<Path>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
+    use std::{
+        env,
+        sync::atomic::{AtomicU64, Ordering},
+    };
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
-    use crate::paths::{AppPaths, StorageMode};
+    use crate::paths::{core_seed_resources_dir, AppPaths, StorageMode};
 
     use super::*;
+
+    static TEMP_ROOT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     #[test]
     fn coreinfo_table_covers_all_reference_core_types() {
@@ -752,6 +1005,119 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[test]
+    fn coreinfo_seed_copy_missing_seed_is_noop() {
+        let root = unique_temp_root("seed-missing");
+        let paths = AppPaths::new(root.join("VoyaVPN"), StorageMode::Portable);
+        let seed_root = core_seed_resources_dir(root.join("resources"));
+
+        let outcome =
+            copy_seed_core_asset(&paths, &seed_root, CoreType::Xray).expect("missing seed noop");
+
+        assert_eq!(outcome.status, CoreSeedCopyStatus::SeedMissing);
+        assert!(outcome.copied_files.is_empty());
+        assert!(!paths
+            .core_bin_dir(core_type_dir_name(CoreType::Xray))
+            .exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn coreinfo_seed_copy_copies_missing_core_into_app_data() {
+        let root = unique_temp_root("seed-copy");
+        let paths = AppPaths::new(root.join("VoyaVPN"), StorageMode::Portable);
+        let seed_root = core_seed_resources_dir(root.join("resources"));
+        let seed_exe = seed_root
+            .join(core_type_dir_name(CoreType::Xray))
+            .join(executable_name_for_current_os("xray"));
+        fs::create_dir_all(seed_exe.parent().expect("seed exe parent")).expect("create seed dir");
+        fs::write(&seed_exe, b"seed-xray").expect("write seed exe");
+
+        let outcome = copy_seed_core_asset(&paths, &seed_root, CoreType::Xray).expect("copy seed");
+        let app_data_exe = paths.core_bin_file(
+            core_type_dir_name(CoreType::Xray),
+            executable_name_for_current_os("xray"),
+        );
+
+        assert_eq!(outcome.status, CoreSeedCopyStatus::Copied);
+        assert_eq!(outcome.copied_files, vec![app_data_exe.clone()]);
+        assert_eq!(
+            fs::read(&app_data_exe).expect("read copied exe"),
+            b"seed-xray"
+        );
+        assert_eq!(
+            discover_executable(
+                &paths,
+                get_core_info(CoreType::Xray).expect("xray core info")
+            )
+            .expect("discover copied app data exe"),
+            app_data_exe
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn coreinfo_seed_copy_does_not_overwrite_existing_core() {
+        let root = unique_temp_root("seed-existing");
+        let paths = AppPaths::new(root.join("VoyaVPN"), StorageMode::Portable);
+        let seed_root = core_seed_resources_dir(root.join("resources"));
+        let executable_name = executable_name_for_current_os("xray");
+        let seed_exe = seed_root
+            .join(core_type_dir_name(CoreType::Xray))
+            .join(&executable_name);
+        let app_data_exe =
+            paths.core_bin_file(core_type_dir_name(CoreType::Xray), &executable_name);
+        fs::create_dir_all(seed_exe.parent().expect("seed exe parent")).expect("create seed dir");
+        fs::create_dir_all(app_data_exe.parent().expect("app data exe parent"))
+            .expect("create app data dir");
+        fs::write(&seed_exe, b"older-seed").expect("write seed exe");
+        fs::write(&app_data_exe, b"newer-installed").expect("write installed exe");
+
+        let outcome =
+            copy_seed_core_asset(&paths, &seed_root, CoreType::Xray).expect("skip existing");
+
+        assert_eq!(outcome.status, CoreSeedCopyStatus::AlreadyInstalled);
+        assert!(outcome.copied_files.is_empty());
+        assert_eq!(
+            fs::read(&app_data_exe).expect("read installed exe"),
+            b"newer-installed"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn coreinfo_seed_copy_applies_unix_chmod_plan() {
+        let root = unique_temp_root("seed-chmod");
+        let paths = AppPaths::new(root.join("VoyaVPN"), StorageMode::Portable);
+        let seed_root = core_seed_resources_dir(root.join("resources"));
+        let xray = get_core_info(CoreType::Xray).expect("xray core info");
+        let seed_exe = seed_root
+            .join(core_type_dir_name(CoreType::Xray))
+            .join("xray");
+        fs::create_dir_all(seed_exe.parent().expect("seed exe parent")).expect("create seed dir");
+        fs::write(&seed_exe, b"seed-xray").expect("write seed exe");
+        fs::set_permissions(&seed_exe, fs::Permissions::from_mode(0o600)).expect("set seed mode");
+
+        let plan = executable_permission_plan_for_core(&paths, xray);
+        let app_data_exe = paths.core_bin_file(core_type_dir_name(CoreType::Xray), "xray");
+        assert!(plan.contains(&app_data_exe));
+
+        let outcome = copy_seed_core_asset(&paths, &seed_root, CoreType::Xray).expect("copy seed");
+        let mode = fs::metadata(&app_data_exe)
+            .expect("stat copied exe")
+            .permissions()
+            .mode();
+
+        assert_eq!(outcome.chmod_paths, vec![app_data_exe]);
+        assert_ne!(mode & 0o111, 0);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
     #[cfg(unix)]
     #[test]
     fn coreinfo_discovery_chmods_unix_executables() {
@@ -793,8 +1159,9 @@ mod tests {
     }
 
     fn unique_temp_root(name: &str) -> PathBuf {
+        let counter = TEMP_ROOT_COUNTER.fetch_add(1, Ordering::Relaxed);
         env::temp_dir().join(format!(
-            "voyavpn-coreinfo-{name}-{}-{}",
+            "voyavpn-coreinfo-{name}-{}-{}-{counter}",
             std::process::id(),
             monotonic_nanos()
         ))

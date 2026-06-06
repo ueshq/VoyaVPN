@@ -87,16 +87,5 @@
         "bundleMediaFramework": false
       }
     }
-  },
-  "plugins": {
-    "updater": {
-      "pubkey": "VOYAVPN_UPDATER_PUBLIC_KEY_PLACEHOLDER_REPLACE_BEFORE_RELEASE",
-      "endpoints": [
-        "https://updates.voyavpn.example/{{target}}/{{arch}}/{{current_version}}?channel=beta"
-      ],
-      "windows": {
-        "installMode": "passive"
-      }
-    }
   }
 }

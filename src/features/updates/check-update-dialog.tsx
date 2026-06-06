@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Download, PackageCheck, RefreshCw } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  ExternalLink,
+  PackageCheck,
+  RefreshCw,
+} from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -22,33 +29,87 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  checkAppUpdatePaths,
+  installCheckedAppUpdate,
+  loadAppUpdatePaths,
+  type AppUpdatePaths,
+} from "@/features/updates/app-update-flow";
 import { useI18n } from "@/i18n/use-i18n";
-import { checkUpdates, downloadUpdates, saveUpdatePreferences, updateStatus } from "@/ipc";
-import type { UpdateCheckResult, UpdateResultStatus, UpdateStatus } from "@/ipc/bindings";
+import {
+  applyDownloadedCoreUpdate,
+  checkUpdates,
+  downloadUpdates,
+  saveUpdatePreferences,
+  updateStatus,
+} from "@/ipc";
+import type {
+  AppUpdateCheckResult,
+  AppUpdateInstallResult,
+  AppUpdaterStatus,
+  CoreUpdateApplyResult,
+  ManualAppUpdateDownload,
+  ManualAppUpdateLinks,
+  UpdateAcquisition,
+  UpdateCheckResult,
+  UpdateResultStatus,
+  UpdateStatus,
+  UpdateTarget,
+  UpdateTargetKind,
+} from "@/ipc/bindings";
 import { cn } from "@/lib/utils";
 
-type RunMode = "check" | "download";
+type CoreRunMode = "check" | "download";
+type RunMode = CoreRunMode | "app-check" | "app-install";
 
 export function CheckUpdateDialog() {
   const { t } = useI18n();
   const [error, setError] = useState<string | null>(null);
+  const [appUpdaterStatus, setAppUpdaterStatus] = useState<AppUpdaterStatus | null>(null);
+  const [appUpdaterCheck, setAppUpdaterCheck] = useState<AppUpdateCheckResult | null>(null);
+  const [appUpdaterError, setAppUpdaterError] = useState<string | null>(null);
+  const [appInstallResult, setAppInstallResult] = useState<AppUpdateInstallResult | null>(null);
+  const [appliedCoreResults, setAppliedCoreResults] = useState<Map<string, CoreUpdateApplyResult>>(
+    new Map(),
+  );
+  const [applyingCoreTargetId, setApplyingCoreTargetId] = useState<string | null>(null);
+  const [coreApplyErrors, setCoreApplyErrors] = useState<Map<string, string>>(new Map());
+  const [manualLinks, setManualLinks] = useState<ManualAppUpdateLinks | null>(null);
+  const [manualLinksError, setManualLinksError] = useState<string | null>(null);
   const [preRelease, setPreRelease] = useState(false);
   const [results, setResults] = useState<UpdateCheckResult[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState<UpdateStatus | null>(null);
   const [working, setWorking] = useState<RunMode | null>(null);
 
+  function applyAppUpdatePaths(paths: AppUpdatePaths) {
+    if (paths.updaterStatus) {
+      setAppUpdaterStatus(paths.updaterStatus);
+    }
+    if (paths.updaterCheck) {
+      setAppUpdaterCheck(paths.updaterCheck);
+      setAppInstallResult(null);
+    }
+    setManualLinks(paths.manualLinks);
+    setAppUpdaterError(paths.updaterError);
+    setManualLinksError(paths.manualError);
+  }
+
   useEffect(() => {
     let disposed = false;
 
     void updateStatus()
-      .then((nextStatus) => {
+      .then(async (nextStatus) => {
         if (disposed) {
           return;
         }
         setStatus(nextStatus);
         setPreRelease(nextStatus.preRelease);
         setSelectedIds(new Set(nextStatus.targets.filter((target) => target.selected).map((target) => target.id)));
+        const appPaths = await loadAppUpdatePaths(nextStatus.preRelease, true, null);
+        if (!disposed) {
+          applyAppUpdatePaths(appPaths);
+        }
       })
       .catch((error: unknown) => {
         if (!disposed) {
@@ -74,21 +135,102 @@ export function CheckUpdateDialog() {
     setSelectedIds(new Set(nextStatus.targets.filter((target) => target.selected).map((target) => target.id)));
   }
 
-  async function run(mode: RunMode) {
+  async function run(mode: CoreRunMode) {
     setWorking(mode);
     setError(null);
+    setAppliedCoreResults(new Map());
+    setCoreApplyErrors(new Map());
     try {
       await persistSelection();
-      const runResult =
+      const [runResult, appPaths] = await Promise.allSettled([
         mode === "check"
-          ? await checkUpdates(preRelease, selectedTargetIds, true, null)
-          : await downloadUpdates(preRelease, selectedTargetIds, true, null);
-      setStatus({ preRelease: runResult.preRelease, targets: runResult.targets });
-      setResults(runResult.results);
+          ? checkUpdates(preRelease, selectedTargetIds, true, null)
+          : downloadUpdates(preRelease, selectedTargetIds, true, null),
+        mode === "check"
+          ? checkAppUpdatePaths(preRelease, true, null)
+          : loadAppUpdatePaths(preRelease, true, null),
+      ]);
+
+      if (runResult.status === "fulfilled") {
+        setStatus({ preRelease: runResult.value.preRelease, targets: runResult.value.targets });
+        setResults(runResult.value.results);
+      } else {
+        setError(errorMessage(runResult.reason));
+      }
+
+      if (appPaths.status === "fulfilled") {
+        applyAppUpdatePaths(appPaths.value);
+      } else {
+        setAppUpdaterError(errorMessage(appPaths.reason));
+      }
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(errorMessage(error));
     } finally {
       setWorking(null);
+    }
+  }
+
+  async function runAppUpdaterCheck() {
+    setWorking("app-check");
+    setAppUpdaterError(null);
+    try {
+      applyAppUpdatePaths(await checkAppUpdatePaths(preRelease, true, null));
+    } catch (error) {
+      setAppUpdaterError(errorMessage(error));
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function installAppUpdate() {
+    setWorking("app-install");
+    setAppUpdaterError(null);
+    setAppInstallResult(null);
+    try {
+      setAppInstallResult(await installCheckedAppUpdate());
+    } catch (error) {
+      setAppUpdaterError(errorMessage(error));
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function applyCoreUpdate(result: UpdateCheckResult) {
+    if (!result.fileName || !result.sha256 || !result.remoteVersion) {
+      setError(t("updates.missingDownloadedFields"));
+      return;
+    }
+
+    setApplyingCoreTargetId(result.targetId);
+    setError(null);
+    setCoreApplyErrors((current) => withoutMapEntry(current, result.targetId));
+    try {
+      const applied = await applyDownloadedCoreUpdate({
+        targetId: result.targetId,
+        fileName: result.fileName,
+        sha256: result.sha256,
+        remoteVersion: result.remoteVersion,
+      });
+      setAppliedCoreResults((current) => new Map(current).set(result.targetId, applied));
+      setResults((current) =>
+        current.map((item) =>
+          item.targetId === result.targetId
+            ? {
+                ...item,
+                status: "upToDate",
+                message: item.message,
+                currentVersion: applied.appliedVersion,
+                remoteVersion: applied.appliedVersion,
+              }
+            : item,
+        ),
+      );
+    } catch (error) {
+      const message = errorMessage(error);
+      setCoreApplyErrors((current) => new Map(current).set(result.targetId, message));
+      setError(message);
+    } finally {
+      setApplyingCoreTargetId(null);
     }
   }
 
@@ -116,7 +258,7 @@ export function CheckUpdateDialog() {
   }
 
   return (
-    <DialogContent className="max-w-3xl">
+    <DialogContent className="sm:max-w-4xl">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <PackageCheck className="size-4" aria-hidden="true" />
@@ -158,12 +300,33 @@ export function CheckUpdateDialog() {
           </div>
         </div>
 
+        {selectedIds.size === 0 ? (
+          <Alert>
+            <AlertTriangle aria-hidden="true" />
+            <AlertDescription>{t("updates.noSelectedTargets")}</AlertDescription>
+          </Alert>
+        ) : null}
+
         {error ? (
           <Alert variant="destructive">
             <AlertTriangle aria-hidden="true" />
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription className="break-words">
+              {redactOperationalMessage(error, t)}
+            </AlertDescription>
           </Alert>
         ) : null}
+
+        <AppUpdatePanel
+          appInstallResult={appInstallResult}
+          appUpdaterCheck={appUpdaterCheck}
+          appUpdaterError={appUpdaterError}
+          appUpdaterStatus={appUpdaterStatus}
+          manualLinks={manualLinks}
+          manualLinksError={manualLinksError}
+          onCheck={() => void runAppUpdaterCheck()}
+          onInstall={() => void installAppUpdate()}
+          working={working}
+        />
 
         <ScrollArea className="h-[24rem] rounded-md border">
           <Table className="min-w-[42rem]">
@@ -186,6 +349,10 @@ export function CheckUpdateDialog() {
             <TableBody>
               {(status?.targets ?? []).map((target) => {
                 const result = resultByTarget.get(target.id);
+                const applied = appliedCoreResults.get(target.id) ?? null;
+                const applyError = coreApplyErrors.get(target.id) ?? null;
+                const canApplyCore =
+                  target.kind === "core" && result?.status === "downloaded" && !applied;
 
                 return (
                   <TableRow key={target.id}>
@@ -198,15 +365,45 @@ export function CheckUpdateDialog() {
                     </TableCell>
                     <TableCell className="min-w-48 whitespace-normal px-3 py-2 align-top">
                       <div className="grid gap-1">
-                        <span className="font-medium">{target.name}</span>
-                        <span className="text-xs text-muted-foreground">{target.remarks}</span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-medium">{target.name}</span>
+                          <TargetKindBadge kind={target.kind} />
+                          {target.kind === "app" ? (
+                            <ManualStateBadge manualLinks={manualLinks} manualLinksError={manualLinksError} />
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <AcquisitionBadge acquisition={target.acquisition} />
+                          {target.license ? <Badge variant="outline">{target.license}</Badge> : null}
+                        </div>
+                        <span className="break-words text-xs text-muted-foreground">{target.remarks}</span>
                       </div>
                     </TableCell>
                     <TableCell className="px-3 py-2 align-top text-muted-foreground">
-                      {result?.remoteVersion ?? result?.currentVersion ?? "-"}
+                      {applied?.appliedVersion ?? result?.remoteVersion ?? result?.currentVersion ?? "-"}
                     </TableCell>
                     <TableCell className="min-w-56 px-3 py-2 align-top">
-                      <UpdateResultBadge result={result} />
+                      <div className="flex flex-wrap items-start gap-2">
+                        <UpdateResultBadge applyError={applyError} applied={applied} result={result} target={target} />
+                        {canApplyCore ? (
+                          <Button
+                            disabled={applyingCoreTargetId !== null}
+                            onClick={() => void applyCoreUpdate(result)}
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            <PackageCheck
+                              className={cn(
+                                "size-4",
+                                applyingCoreTargetId === target.id && "animate-pulse",
+                              )}
+                              aria-hidden="true"
+                            />
+                            {t("updates.apply")}
+                          </Button>
+                        ) : null}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -221,25 +418,265 @@ export function CheckUpdateDialog() {
   );
 }
 
-function UpdateResultBadge({ result }: { result: UpdateCheckResult | undefined }) {
+function AppUpdatePanel({
+  appInstallResult,
+  appUpdaterCheck,
+  appUpdaterError,
+  appUpdaterStatus,
+  manualLinks,
+  manualLinksError,
+  onCheck,
+  onInstall,
+  working,
+}: {
+  appInstallResult: AppUpdateInstallResult | null;
+  appUpdaterCheck: AppUpdateCheckResult | null;
+  appUpdaterError: string | null;
+  appUpdaterStatus: AppUpdaterStatus | null;
+  manualLinks: ManualAppUpdateLinks | null;
+  manualLinksError: string | null;
+  onCheck: () => void;
+  onInstall: () => void;
+  working: RunMode | null;
+}) {
+  const { t } = useI18n();
+  const update = appUpdaterCheck?.update ?? null;
+  const statusMessage = appUpdaterStatus?.message
+    ? redactOperationalMessage(appUpdaterStatus.message, t)
+    : t("updates.appUpdaterReady");
+
+  return (
+    <div className="grid gap-3 rounded-md border p-3">
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="grid gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">{t("updates.appUpdater")}</span>
+            <Badge variant={appUpdaterStatus?.state === "ready" ? "secondary" : "outline"}>
+              {appUpdaterStatus
+                ? t(`updates.appUpdaterState.${appUpdaterStatus.state}`)
+                : t("updates.waiting")}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {update
+              ? t("updates.appUpdateAvailable", { version: update.version })
+              : appUpdaterCheck
+                ? t("updates.noAppUpdate")
+                : statusMessage}
+          </p>
+          {appInstallResult ? (
+            <p className="text-xs text-muted-foreground">
+              {appInstallResult.state === "installed" && appInstallResult.installedVersion
+                ? t("updates.appInstalled", { version: appInstallResult.installedVersion })
+                : t("updates.noAppUpdate")}
+            </p>
+          ) : null}
+        </div>
+        <div className="ms-auto flex flex-wrap items-center gap-2">
+          <Button
+            disabled={working !== null}
+            onClick={onCheck}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <RefreshCw
+              className={cn("size-4", working === "app-check" && "animate-spin")}
+              aria-hidden="true"
+            />
+            {t("updates.checkApp")}
+          </Button>
+          <Button
+            disabled={working !== null || !update}
+            onClick={onInstall}
+            size="sm"
+            type="button"
+          >
+            <PackageCheck
+              className={cn("size-4", working === "app-install" && "animate-pulse")}
+              aria-hidden="true"
+            />
+            {t("updates.installApp")}
+          </Button>
+        </div>
+      </div>
+
+      {appUpdaterError ? (
+        <p className="break-words text-xs text-destructive">
+          {redactOperationalMessage(appUpdaterError, t)}
+        </p>
+      ) : null}
+
+      <div className="grid gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium">{t("updates.manualDownloads")}</span>
+          {manualLinks ? (
+            <Badge variant={manualLinks.hasUpdate ? "secondary" : "outline"}>
+              {manualLinks.hasUpdate
+                ? t("updates.manualUpdateAvailable", {
+                    version: manualLinks.remoteVersion ?? manualLinks.currentVersion,
+                  })
+                : t("updates.manualCurrent")}
+            </Badge>
+          ) : null}
+        </div>
+
+        {manualLinks?.downloads.length ? (
+          <div className="flex flex-wrap gap-2">
+            {manualLinks.downloads.map((download) => (
+              <a
+                className="inline-flex h-8 max-w-full min-w-0 items-center gap-2 rounded-md border px-3 text-xs font-medium text-foreground hover:bg-accent hover:text-accent-foreground"
+                href={download.url}
+                key={`${download.kind}:${download.url}`}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <ExternalLink className="size-3.5" aria-hidden="true" />
+                <span className="truncate">{manualDownloadLabel(download)}</span>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p className="break-words text-xs text-muted-foreground">
+            {manualLinksError
+              ? redactOperationalMessage(manualLinksError, t)
+              : t("updates.manualLinksUnavailable")}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function UpdateResultBadge({
+  applyError,
+  applied,
+  result,
+  target,
+}: {
+  applyError: string | null;
+  applied: CoreUpdateApplyResult | null;
+  result: UpdateCheckResult | undefined;
+  target: UpdateTarget;
+}) {
   const { t } = useI18n();
 
   if (!result) {
     return <Badge variant="secondary">{t("updates.waiting")}</Badge>;
   }
 
-  const tone = statusTone(result.status);
+  const isFailed = Boolean(applyError) || result.status === "error";
+  const tone = isFailed
+    ? statusTone("error")
+    : applied
+      ? statusTone("downloaded")
+      : statusTone(result.status);
+  const label = updateResultLabel({ applyError, applied, result, target, t });
 
   return (
-    <Badge className={cn("max-w-full justify-start gap-2 px-2 py-1", tone)} variant="outline">
-      {result.status === "upToDate" || result.status === "downloaded" ? (
-        <CheckCircle2 className="shrink-0" aria-hidden="true" />
-      ) : result.status === "error" ? (
+    <Badge
+      className={cn(
+        "max-w-full items-start justify-start gap-2 whitespace-normal px-2 py-1 text-left",
+        tone,
+      )}
+      variant="outline"
+    >
+      {applied || result.status === "upToDate" || result.status === "downloaded" ? (
+        <CheckCircle2 className="mt-0.5 shrink-0" aria-hidden="true" />
+      ) : isFailed ? (
         <AlertTriangle className="shrink-0" aria-hidden="true" />
       ) : null}
-      <span className="truncate">{result.message}</span>
+      <span className="min-w-0 break-words">{label}</span>
     </Badge>
   );
+}
+
+function TargetKindBadge({ kind }: { kind: UpdateTargetKind }) {
+  const { t } = useI18n();
+
+  return <Badge variant="outline">{t(`updates.kind.${kind}`)}</Badge>;
+}
+
+function AcquisitionBadge({ acquisition }: { acquisition: UpdateAcquisition }) {
+  const { t } = useI18n();
+
+  return <Badge variant="outline">{t(`updates.acquisition.${acquisition}`)}</Badge>;
+}
+
+function ManualStateBadge({
+  manualLinks,
+  manualLinksError,
+}: {
+  manualLinks: ManualAppUpdateLinks | null;
+  manualLinksError: string | null;
+}) {
+  const { t } = useI18n();
+
+  if (manualLinks?.hasUpdate) {
+    return <Badge variant="secondary">{t("updates.manualState.available")}</Badge>;
+  }
+
+  if (manualLinks) {
+    return <Badge variant="outline">{t("updates.manualState.current")}</Badge>;
+  }
+
+  if (manualLinksError) {
+    return <Badge variant="outline">{t("updates.manualState.failed")}</Badge>;
+  }
+
+  return <Badge variant="outline">{t("updates.manualState.waiting")}</Badge>;
+}
+
+function updateResultLabel({
+  applyError,
+  applied,
+  result,
+  target,
+  t,
+}: {
+  applyError: string | null;
+  applied: CoreUpdateApplyResult | null;
+  result: UpdateCheckResult;
+  target: UpdateTarget;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  if (applyError) {
+    return t("updates.statusFailedMessage", {
+      message: redactOperationalMessage(applyError, t),
+    });
+  }
+
+  if (applied) {
+    return t("updates.statusAppliedVersion", { version: applied.appliedVersion });
+  }
+
+  switch (result.status) {
+    case "downloaded":
+      return result.remoteVersion
+        ? t("updates.statusDownloadedVersion", { version: result.remoteVersion })
+        : t("updates.statusDownloaded");
+    case "updateAvailable":
+      return result.remoteVersion
+        ? t("updates.statusUpdateAvailableVersion", { version: result.remoteVersion })
+        : t("updates.statusUpdateAvailable");
+    case "upToDate": {
+      const version = result.remoteVersion ?? result.currentVersion;
+
+      return version ? t("updates.statusCurrentVersion", { version }) : t("updates.statusCurrent");
+    }
+    case "skipped":
+      return target.selected ? t("updates.statusSkipped") : t("updates.statusNotSelected");
+    case "error":
+      return t("updates.statusFailedMessage", {
+        message: redactOperationalMessage(result.message, t),
+      });
+  }
+}
+
+function manualDownloadLabel(download: ManualAppUpdateDownload) {
+  const kind = download.kind.trim();
+
+  return kind ? `${kind.toUpperCase()} ${download.name}` : download.name;
 }
 
 function statusTone(status: UpdateResultStatus) {
@@ -254,4 +691,27 @@ function statusTone(status: UpdateResultStatus) {
     case "skipped":
       return "border-transparent bg-muted text-muted-foreground";
   }
+}
+
+function withoutMapEntry<T>(current: Map<string, T>, key: string) {
+  const next = new Map(current);
+  next.delete(key);
+
+  return next;
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function redactOperationalMessage(
+  message: string,
+  t: (key: string, options?: Record<string, unknown>) => string,
+) {
+  return message
+    .replace(
+      /\b(proxyUrl|proxy_url|proxy|HTTP_PROXY|HTTPS_PROXY)=\S+/gi,
+      (_match, key: string) => `${key}=${t("updates.redactedValue")}`,
+    )
+    .replace(/\bhttps?:\/\/[^\s<>"')\]]+/gi, t("updates.redactedUrl"));
 }

@@ -3,6 +3,9 @@ import type {
   AppConfig_Deserialize,
   AppConfig_Serialize,
   AppError,
+  AppUpdateCheckResult,
+  AppUpdateInstallResult,
+  AppUpdaterStatus,
   AutostartStatus,
   BackupOperationResult,
   BackupRemoteResult,
@@ -22,6 +25,7 @@ import type {
   HotkeyStatus_Serialize,
   ImportProfilesResult,
   KeyEventItem_Deserialize,
+  ManualAppUpdateLinks,
   MoveAction,
   PresetApplyResult,
   PresetType,
@@ -36,6 +40,9 @@ import type {
   RulesItem_Deserialize,
   RuntimeStatusResponse,
   RulesetGeoSourceSettings,
+  CoreUpdateApplyRequest,
+  CoreUpdateApplyResult,
+  DiagnosticsStatus,
   SpeedActionType,
   SpeedtestRunResult,
   SpeedtestStatus,
@@ -74,6 +81,14 @@ export async function loadAppConfig(): Promise<AppConfig_Serialize> {
 
 export async function saveAppConfig(config: AppConfig_Deserialize): Promise<AppConfig_Serialize> {
   return unwrapCommandResult(await commands.saveAppConfig(config));
+}
+
+export async function diagnosticsStatus(): Promise<DiagnosticsStatus> {
+  return unwrapCommandResult(await commands.diagnosticsStatus());
+}
+
+export async function setDiagnosticsEnabled(enabled: boolean): Promise<DiagnosticsStatus> {
+  return unwrapCommandResult(await commands.setDiagnosticsEnabled(enabled));
 }
 
 export async function autostartStatus(): Promise<AutostartStatus> {
@@ -398,6 +413,18 @@ export async function speedtestStatus(): Promise<SpeedtestStatus> {
   return unwrapCommandResult(await commands.speedtestStatus());
 }
 
+export async function appUpdateStatus(): Promise<AppUpdaterStatus> {
+  return unwrapCommandResult(await commands.appUpdateStatus());
+}
+
+export async function checkAppUpdate(): Promise<AppUpdateCheckResult> {
+  return unwrapCommandResult(await commands.checkAppUpdate());
+}
+
+export async function installAppUpdate(): Promise<AppUpdateInstallResult> {
+  return unwrapCommandResult(await commands.installAppUpdate());
+}
+
 export async function updateStatus(): Promise<UpdateStatus> {
   return unwrapCommandResult(await commands.updateStatus());
 }
@@ -439,6 +466,22 @@ export async function downloadUpdates(
   return unwrapCommandResult(
     await commands.downloadUpdates(preRelease, selectedTargetIds, preferProxy, proxyUrl),
   );
+}
+
+export async function manualAppUpdateLinks(
+  preRelease: boolean,
+  preferProxy = true,
+  proxyUrl: string | null = null,
+): Promise<ManualAppUpdateLinks> {
+  return unwrapCommandResult(
+    await commands.manualAppUpdateLinks(preRelease, preferProxy, proxyUrl),
+  );
+}
+
+export async function applyDownloadedCoreUpdate(
+  request: CoreUpdateApplyRequest,
+): Promise<CoreUpdateApplyResult> {
+  return unwrapCommandResult(await commands.applyDownloadedCoreUpdate(request));
 }
 
 export async function backupStatus(): Promise<BackupStatus_Serialize> {
@@ -513,6 +556,8 @@ function formatAppError(error: AppError): string {
       return error.message;
     case "qr":
       return error.message;
+    case "missingCore":
+      return error.message.message;
     case "runtime":
       return error.message;
     case "routing":

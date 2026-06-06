@@ -1,0 +1,22 @@
+{
+  "productName": "VoyaVPN",
+  "version": "0.1.0",
+  "channel": "stable",
+  "target": "linux-aarch64",
+  "generatedAt": "2026-06-01T00:00:00.000Z",
+  "sourceBundleDir": "tests/fixtures/release/bundles/linux-aarch64",
+  "artifacts": [
+    {
+      "name": "voyavpn-0.1.0-stable-linux-aarch64-appimage.AppImage",
+      "path": "voyavpn-0.1.0-stable-linux-aarch64-appimage.AppImage",
+      "kind": "appimage",
+      "target": "linux-aarch64",
+      "channel": "stable",
+      "version": "0.1.0",
+      "bytes": 90177536,
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "originalName": "voyavpn_0.1.0_arm64.AppImage",
+      "originalRelativePath": "appimage/voyavpn_0.1.0_arm64.AppImage"
+    }
+  ]
+}

@@ -9,6 +9,7 @@ use serde::Serialize;
 use specta::Type;
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_plugin_updater::UpdaterExt;
 use tauri_specta::Event;
 use voya_app::autostart::{AutostartManager, AutostartManagerError, AutostartStatus};
 use voya_app::backup::{
@@ -19,6 +20,11 @@ use voya_app::clash::{
     ClashConnectionsSnapshot, ClashDelayTestResult, ClashManager, ClashManagerError,
     ClashMonitorStatus, ClashProxiesSnapshot,
 };
+use voya_app::diagnostics::{
+    diagnostics_settings, prepare_diagnostics_settings, DiagnosticsClient, DiagnosticsErrorClass,
+    DiagnosticsEvent, DiagnosticsRecordStatus, DiagnosticsReleaseChannel, DiagnosticsResult,
+    DiagnosticsSettings,
+};
 use voya_app::dns::{DnsManager, DnsManagerError, DnsSettings, DnsValidationIssue};
 use voya_app::groups::{GroupManager, GroupManagerError};
 use voya_app::hotkeys::{
@@ -28,17 +34,19 @@ use voya_app::presets::{PresetApplyOptions, PresetApplyResult, PresetManager, Pr
 use voya_app::profiles::{ProfileManager, ProfileManagerError};
 use voya_app::qr::{QrCodeImage, QrCodeManager};
 use voya_app::routing::{RoutingManager, RoutingManagerError};
-use voya_app::runtime::RuntimeManager;
+use voya_app::runtime::{RuntimeError, RuntimeManager};
 use voya_app::speedtest::{
     SpeedTestResult, SpeedtestError, SpeedtestManager, SpeedtestRunResult, SpeedtestStatus,
 };
 use voya_app::subscriptions::{SubscriptionManager, SubscriptionManagerError};
 use voya_app::sudo::{SudoCollectionError, SudoCollectionStatus};
-use voya_app::supervisor::{SupervisorConnectionState, SupervisorSnapshot};
+use voya_app::supervisor::{SupervisorConnectionState, SupervisorError, SupervisorSnapshot};
 use voya_app::sysproxy::SystemProxyManagerError;
 use voya_app::tun::{TunManager, TunManagerError, TunStatus};
 use voya_app::updates::{
-    RulesetGeoSourceSettings, UpdateManager, UpdateManagerError, UpdateRequestOptions,
+    apply_downloaded_core_update_with_runtime, core_type_for_update_target_id,
+    CoreUpdateApplyRequest, CoreUpdateApplyResult, ManualAppUpdateLinks, RulesetGeoSourceSettings,
+    UpdateCheckResult, UpdateManager, UpdateManagerError, UpdateRequestOptions, UpdateResultStatus,
     UpdateRunResult, UpdateStatus,
 };
 use voya_core::{
@@ -47,7 +55,7 @@ use voya_core::{
     ProfileListItem, ProfileSortKey, RoutingItem, RuleMode, RulesItem, SubItem,
     SubscriptionUpdateResult, SysProxyType, WebDavItem,
 };
-use voya_platform::sysproxy::SystemProxyStatus;
+use voya_platform::{coreinfo::CoreInfoError, sysproxy::SystemProxyStatus};
 
 use super::events::{
     AppEvent, AppNotice, AppNoticeLevel, CoreState, CoreStateEvent, DemoRequest, DemoResponse,
@@ -71,6 +79,7 @@ pub enum AppError {
     Preset(String),
     Profile(String),
     Qr(String),
+    MissingCore(MissingCoreError),
     Runtime(String),
     Routing(String),
     Speedtest(String),
@@ -87,6 +96,16 @@ pub enum AppError {
 pub struct DnsCommandError {
     pub message: String,
     pub issues: Vec<DnsValidationIssue>,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct MissingCoreError {
+    pub message: String,
+    pub core_type: CoreType,
+    pub search_dir: String,
+    pub candidates: Vec<String>,
+    pub download_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -118,6 +137,64 @@ pub struct RuntimeStatusResponse {
     pub main_pid: Option<u32>,
     pub pre_pid: Option<u32>,
     pub running_core_type: Option<CoreType>,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum AppUpdaterState {
+    Ready,
+    Unconfigured,
+    Unsupported,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AppUpdaterStatus {
+    pub current_version: String,
+    pub state: AppUpdaterState,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AppUpdateInfo {
+    pub current_version: String,
+    pub version: String,
+    pub date: Option<String>,
+    pub body: Option<String>,
+    pub download_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AppUpdateCheckResult {
+    pub current_version: String,
+    pub update: Option<AppUpdateInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum AppUpdateInstallState {
+    Installed,
+    NoUpdate,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AppUpdateInstallResult {
+    pub state: AppUpdateInstallState,
+    pub current_version: String,
+    pub installed_version: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticsStatus {
+    pub enabled: bool,
+    pub delivery_configured: bool,
+    pub queued_events: u32,
+    pub queued_bytes: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -172,6 +249,39 @@ pub fn save_app_config(
     *guard = config.clone();
 
     Ok(config)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn diagnostics_status(
+    state: tauri::State<'_, AppState>,
+) -> Result<DiagnosticsStatus, AppError> {
+    let settings = current_diagnostics_settings(&state)?;
+    let client = state.diagnostics_client();
+    let client = client.lock().await;
+
+    Ok(diagnostics_status_response(&settings, &client))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_diagnostics_enabled(
+    state: tauri::State<'_, AppState>,
+    enabled: bool,
+) -> Result<DiagnosticsStatus, AppError> {
+    let original = current_config(&state)?;
+    let mut config = original.clone();
+    config.diagnostics_item.enabled = enabled;
+    let settings = diagnostics_settings_for_config(&mut config);
+    persist_config_if_changed(&state, &original, &config)?;
+
+    let client = state.diagnostics_client();
+    let mut client = client.lock().await;
+    if !enabled {
+        client.clear();
+    }
+
+    Ok(diagnostics_status_response(&settings, &client))
 }
 
 #[tauri::command]
@@ -334,7 +444,8 @@ pub async fn connect_active_profile<R: tauri::Runtime>(
             let message = error.to_string();
             emit_runtime_log(&app, LogLevel::Error, &message)?;
             emit_core_state(&app, CoreState::Disconnected, None, None)?;
-            Err(AppError::Runtime(message))
+            record_runtime_start_failure_diagnostics(&state, &config, &error);
+            Err(runtime_error(error))
         }
     }
 }
@@ -366,7 +477,7 @@ pub async fn disconnect_core<R: tauri::Runtime>(
         Err(error) => {
             let message = error.to_string();
             emit_runtime_log(&app, LogLevel::Error, &message)?;
-            Err(AppError::Runtime(message))
+            Err(runtime_error(error))
         }
     }
 }
@@ -404,7 +515,8 @@ pub async fn restart_core<R: tauri::Runtime>(
             let message = error.to_string();
             emit_runtime_log(&app, LogLevel::Error, &message)?;
             emit_core_state(&app, CoreState::Disconnected, None, None)?;
-            Err(AppError::Runtime(message))
+            record_runtime_start_failure_diagnostics(&state, &config, &error);
+            Err(runtime_error(error))
         }
     }
 }
@@ -418,7 +530,7 @@ pub async fn runtime_status(
         .status()
         .await
         .map(runtime_status_response)
-        .map_err(|error| AppError::Runtime(error.to_string()))
+        .map_err(runtime_error)
 }
 
 #[tauri::command]
@@ -1408,6 +1520,160 @@ pub fn speedtest_status(state: tauri::State<'_, AppState>) -> Result<SpeedtestSt
 
 #[tauri::command]
 #[specta::specta]
+pub fn app_update_status<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<AppUpdaterStatus, AppError> {
+    let current_version = app.package_info().version.to_string();
+
+    Ok(match app.updater() {
+        Ok(_) => AppUpdaterStatus {
+            current_version,
+            state: AppUpdaterState::Ready,
+            message: None,
+        },
+        Err(error) => AppUpdaterStatus {
+            current_version,
+            state: app_updater_state_for_error(&error),
+            message: Some(error.to_string()),
+        },
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn check_app_update<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+) -> Result<AppUpdateCheckResult, AppError> {
+    let diagnostics_config = current_config(&state)
+        .map_err(|error| {
+            tracing::debug!(?error, "failed to load config for app update diagnostics");
+            error
+        })
+        .ok();
+    let current_version = app.package_info().version.to_string();
+    let updater = match app.updater() {
+        Ok(updater) => updater,
+        Err(error) => {
+            record_diagnostics_event_if_config(
+                &state,
+                diagnostics_config.as_ref(),
+                DiagnosticsEvent::update_check(
+                    DiagnosticsResult::Failure,
+                    Some(diagnostics_error_class_for_app_updater_check(&error)),
+                ),
+            );
+            return Err(app_updater_error(error));
+        }
+    };
+    let update = match updater.check().await {
+        Ok(update) => update,
+        Err(error) => {
+            record_diagnostics_event_if_config(
+                &state,
+                diagnostics_config.as_ref(),
+                DiagnosticsEvent::update_check(
+                    DiagnosticsResult::Failure,
+                    Some(diagnostics_error_class_for_app_updater_check(&error)),
+                ),
+            );
+            return Err(app_updater_error(error));
+        }
+    };
+
+    record_diagnostics_event_if_config(
+        &state,
+        diagnostics_config.as_ref(),
+        DiagnosticsEvent::update_check(DiagnosticsResult::Success, None),
+    );
+
+    Ok(AppUpdateCheckResult {
+        current_version,
+        update: update.map(app_update_info),
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn install_app_update<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+) -> Result<AppUpdateInstallResult, AppError> {
+    let diagnostics_config = current_config(&state)
+        .map_err(|error| {
+            tracing::debug!(?error, "failed to load config for app install diagnostics");
+            error
+        })
+        .ok();
+    let current_version = app.package_info().version.to_string();
+    let updater = match app.updater() {
+        Ok(updater) => updater,
+        Err(error) => {
+            record_diagnostics_event_if_config(
+                &state,
+                diagnostics_config.as_ref(),
+                DiagnosticsEvent::app_update_install(
+                    DiagnosticsResult::Failure,
+                    Some(diagnostics_error_class_for_app_updater_install(&error)),
+                ),
+            );
+            return Err(app_updater_error(error));
+        }
+    };
+    let Some(update) = (match updater.check().await {
+        Ok(update) => update,
+        Err(error) => {
+            record_diagnostics_event_if_config(
+                &state,
+                diagnostics_config.as_ref(),
+                DiagnosticsEvent::app_update_install(
+                    DiagnosticsResult::Failure,
+                    Some(diagnostics_error_class_for_app_updater_install(&error)),
+                ),
+            );
+            return Err(app_updater_error(error));
+        }
+    }) else {
+        record_diagnostics_event_if_config(
+            &state,
+            diagnostics_config.as_ref(),
+            DiagnosticsEvent::app_update_install(DiagnosticsResult::Skipped, None),
+        );
+        return Ok(AppUpdateInstallResult {
+            state: AppUpdateInstallState::NoUpdate,
+            current_version,
+            installed_version: None,
+        });
+    };
+    let version = update.version.clone();
+
+    if let Err(error) = update.download_and_install(|_, _| {}, || {}).await {
+        record_diagnostics_event_if_config(
+            &state,
+            diagnostics_config.as_ref(),
+            DiagnosticsEvent::app_update_install(
+                DiagnosticsResult::Failure,
+                Some(diagnostics_error_class_for_app_updater_install(&error)),
+            ),
+        );
+        return Err(app_updater_error(error));
+    }
+
+    record_diagnostics_event_if_config(
+        &state,
+        diagnostics_config.as_ref(),
+        DiagnosticsEvent::app_update_install(DiagnosticsResult::Success, None),
+    );
+
+    Ok(AppUpdateInstallResult {
+        state: AppUpdateInstallState::Installed,
+        current_version,
+        installed_version: Some(version),
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn update_status(state: tauri::State<'_, AppState>) -> Result<UpdateStatus, AppError> {
     let config = current_config(&state)?;
 
@@ -1470,7 +1736,7 @@ pub async fn check_updates(
     manager.save_preferences(&mut config, pre_release, selected_target_ids.clone());
     persist_config_if_changed(&state, &original, &config)?;
 
-    manager
+    let result = manager
         .check_updates(
             &config,
             &UpdateRequestOptions {
@@ -1480,8 +1746,28 @@ pub async fn check_updates(
                 proxy_url,
             },
         )
-        .await
-        .map_err(update_error)
+        .await;
+
+    match &result {
+        Ok(run) => {
+            let (diagnostics_result, error_class) = diagnostics_result_for_update_run(run);
+            record_diagnostics_event(
+                &state,
+                &config,
+                DiagnosticsEvent::update_check(diagnostics_result, error_class),
+            );
+        }
+        Err(error) => record_diagnostics_event(
+            &state,
+            &config,
+            DiagnosticsEvent::update_check(
+                DiagnosticsResult::Failure,
+                Some(diagnostics_error_class_for_update_error(error)),
+            ),
+        ),
+    }
+
+    result.map_err(update_error)
 }
 
 #[tauri::command]
@@ -1496,10 +1782,11 @@ pub async fn download_updates(
     let original = current_config(&state)?;
     let mut config = original.clone();
     let manager = update_manager(&state);
+    let selected_for_diagnostics = selected_target_ids.clone();
     manager.save_preferences(&mut config, pre_release, selected_target_ids.clone());
     persist_config_if_changed(&state, &original, &config)?;
 
-    manager
+    let result = manager
         .download_updates(
             &config,
             &UpdateRequestOptions {
@@ -1509,8 +1796,104 @@ pub async fn download_updates(
                 proxy_url,
             },
         )
+        .await;
+
+    match &result {
+        Ok(run) => {
+            let (diagnostics_result, error_class) = diagnostics_result_for_update_run(run);
+            record_diagnostics_event(
+                &state,
+                &config,
+                DiagnosticsEvent::update_download(diagnostics_result, error_class),
+            );
+            record_core_download_diagnostics(&state, &config, &run.results);
+        }
+        Err(error) => {
+            let error_class = diagnostics_error_class_for_update_error(error);
+            record_diagnostics_event(
+                &state,
+                &config,
+                DiagnosticsEvent::update_download(DiagnosticsResult::Failure, Some(error_class)),
+            );
+            for target_id in &selected_for_diagnostics {
+                if let Some(core_type) = core_type_for_update_target_id(target_id) {
+                    record_diagnostics_event(
+                        &state,
+                        &config,
+                        DiagnosticsEvent::core_download(
+                            core_type,
+                            DiagnosticsResult::Failure,
+                            Some(error_class),
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
+    result.map_err(update_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn manual_app_update_links(
+    state: tauri::State<'_, AppState>,
+    pre_release: bool,
+    prefer_proxy: bool,
+    proxy_url: Option<String>,
+) -> Result<ManualAppUpdateLinks, AppError> {
+    let config = current_config(&state)?;
+
+    update_manager(&state)
+        .manual_app_update_links(
+            &config,
+            &UpdateRequestOptions {
+                pre_release,
+                selected_target_ids: vec!["app".to_string()],
+                prefer_proxy,
+                proxy_url,
+            },
+        )
         .await
         .map_err(update_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn apply_downloaded_core_update(
+    state: tauri::State<'_, AppState>,
+    request: CoreUpdateApplyRequest,
+) -> Result<CoreUpdateApplyResult, AppError> {
+    let config = current_config(&state)?;
+    let runtime = runtime_manager(&state);
+    let updates = update_manager(&state);
+
+    let core_type = core_type_for_update_target_id(&request.target_id);
+    let result =
+        apply_downloaded_core_update_with_runtime(&updates, &runtime, &config, &request).await;
+
+    match &result {
+        Ok(result) => record_diagnostics_event(
+            &state,
+            &config,
+            DiagnosticsEvent::core_apply(result.update.core_type, DiagnosticsResult::Success, None),
+        ),
+        Err(error) => {
+            if let Some(core_type) = core_type {
+                record_diagnostics_event(
+                    &state,
+                    &config,
+                    DiagnosticsEvent::core_apply(
+                        core_type,
+                        DiagnosticsResult::Failure,
+                        Some(diagnostics_error_class_for_update_error(error)),
+                    ),
+                );
+            }
+        }
+    }
+
+    result.map(|result| result.update).map_err(update_error)
 }
 
 #[tauri::command]
@@ -1672,12 +2055,275 @@ fn current_config(state: &AppState) -> Result<AppConfig, AppError> {
         .map(|guard| guard.clone())
 }
 
+pub(crate) fn diagnostics_release_channel() -> DiagnosticsReleaseChannel {
+    if cfg!(debug_assertions) {
+        DiagnosticsReleaseChannel::Debug
+    } else {
+        DiagnosticsReleaseChannel::Stable
+    }
+}
+
+pub(crate) fn record_app_start_diagnostics<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    let state = app.state::<AppState>();
+    match current_config(&state) {
+        Ok(config) => record_diagnostics_event(
+            &state,
+            &config,
+            DiagnosticsEvent::app_start(DiagnosticsResult::Success),
+        ),
+        Err(error) => tracing::debug!(?error, "failed to load config for app start diagnostics"),
+    }
+}
+
+fn current_diagnostics_settings(state: &AppState) -> Result<DiagnosticsSettings, AppError> {
+    let original = current_config(state)?;
+    let mut config = original.clone();
+    let settings = diagnostics_settings_for_config(&mut config);
+    persist_config_if_changed(state, &original, &config)?;
+
+    Ok(settings)
+}
+
+fn diagnostics_settings_for_config(config: &mut AppConfig) -> DiagnosticsSettings {
+    if config.diagnostics_item.enabled {
+        prepare_diagnostics_settings(
+            config,
+            env!("CARGO_PKG_VERSION"),
+            diagnostics_release_channel(),
+        )
+    } else {
+        diagnostics_settings(
+            config,
+            env!("CARGO_PKG_VERSION"),
+            diagnostics_release_channel(),
+        )
+    }
+}
+
+fn diagnostics_status_response(
+    settings: &DiagnosticsSettings,
+    client: &DiagnosticsClient,
+) -> DiagnosticsStatus {
+    DiagnosticsStatus {
+        enabled: settings.enabled(),
+        delivery_configured: settings.endpoint_url().is_some(),
+        queued_events: u32::try_from(client.queued_events()).unwrap_or(u32::MAX),
+        queued_bytes: u32::try_from(client.queued_bytes()).unwrap_or(u32::MAX),
+    }
+}
+
+fn record_diagnostics_event(state: &AppState, config: &AppConfig, event: DiagnosticsEvent) {
+    let settings = diagnostics_settings(
+        config,
+        env!("CARGO_PKG_VERSION"),
+        diagnostics_release_channel(),
+    );
+    let client = state.diagnostics_client();
+
+    tauri::async_runtime::spawn(async move {
+        let mut client = client.lock().await;
+        let outcome = client.record(&settings, event);
+        if outcome.status != DiagnosticsRecordStatus::Queued {
+            return;
+        }
+
+        let flush = client.flush(&settings).await;
+        tracing::debug!(
+            status = ?flush.status,
+            attempted_events = flush.attempted_events,
+            queued_events = flush.queued_events,
+            "diagnostics flush completed"
+        );
+    });
+}
+
+fn record_diagnostics_event_if_config(
+    state: &AppState,
+    config: Option<&AppConfig>,
+    event: DiagnosticsEvent,
+) {
+    if let Some(config) = config {
+        record_diagnostics_event(state, config, event);
+    }
+}
+
+fn diagnostics_result_for_update_run(
+    run: &UpdateRunResult,
+) -> (DiagnosticsResult, Option<DiagnosticsErrorClass>) {
+    if run
+        .results
+        .iter()
+        .any(|result| result.status == UpdateResultStatus::Error)
+    {
+        return (
+            DiagnosticsResult::Failure,
+            Some(DiagnosticsErrorClass::Unknown),
+        );
+    }
+
+    if run
+        .results
+        .iter()
+        .all(|result| result.status == UpdateResultStatus::Skipped)
+    {
+        return (DiagnosticsResult::Skipped, None);
+    }
+
+    (DiagnosticsResult::Success, None)
+}
+
+fn diagnostics_result_for_update_result(
+    result: &UpdateCheckResult,
+) -> (DiagnosticsResult, Option<DiagnosticsErrorClass>) {
+    match result.status {
+        UpdateResultStatus::Error => (
+            DiagnosticsResult::Failure,
+            Some(DiagnosticsErrorClass::Unknown),
+        ),
+        UpdateResultStatus::Skipped => (DiagnosticsResult::Skipped, None),
+        UpdateResultStatus::Downloaded
+        | UpdateResultStatus::UpToDate
+        | UpdateResultStatus::UpdateAvailable => (DiagnosticsResult::Success, None),
+    }
+}
+
+fn record_core_download_diagnostics(
+    state: &AppState,
+    config: &AppConfig,
+    results: &[UpdateCheckResult],
+) {
+    for result in results {
+        let Some(core_type) = core_type_for_update_target_id(&result.target_id) else {
+            continue;
+        };
+        let (diagnostics_result, error_class) = diagnostics_result_for_update_result(result);
+        record_diagnostics_event(
+            state,
+            config,
+            DiagnosticsEvent::core_download(core_type, diagnostics_result, error_class),
+        );
+    }
+}
+
+fn record_runtime_start_failure_diagnostics(
+    state: &AppState,
+    config: &AppConfig,
+    error: &RuntimeError,
+) {
+    record_diagnostics_event(
+        state,
+        config,
+        DiagnosticsEvent::runtime_start_failure(diagnostics_error_class_for_runtime_error(error)),
+    );
+
+    if let Some(core_type) = runtime_missing_core_type(error) {
+        record_diagnostics_event(state, config, DiagnosticsEvent::core_missing(core_type));
+    }
+}
+
+fn runtime_missing_core_type(error: &RuntimeError) -> Option<CoreType> {
+    match error {
+        RuntimeError::MissingCoreInfo(core_type)
+        | RuntimeError::CoreInfo(CoreInfoError::MissingCoreInfo(core_type))
+        | RuntimeError::CoreInfo(CoreInfoError::ExecutableNotFound { core_type, .. }) => {
+            Some(*core_type)
+        }
+        _ => None,
+    }
+}
+
+fn diagnostics_error_class_for_runtime_error(error: &RuntimeError) -> DiagnosticsErrorClass {
+    match error {
+        RuntimeError::MissingCoreInfo(_)
+        | RuntimeError::CoreInfo(CoreInfoError::MissingCoreInfo(_))
+        | RuntimeError::CoreInfo(CoreInfoError::ExecutableNotFound { .. }) => {
+            DiagnosticsErrorClass::CoreMissing
+        }
+        RuntimeError::CoreInfo(error) => diagnostics_error_class_for_core_info_error(error),
+        RuntimeError::Supervisor(SupervisorError::MissingSudoPassword(_)) => {
+            DiagnosticsErrorClass::PermissionDenied
+        }
+        RuntimeError::Supervisor(_) => DiagnosticsErrorClass::RuntimeStartFailed,
+        _ => DiagnosticsErrorClass::RuntimeStartFailed,
+    }
+}
+
+fn diagnostics_error_class_for_core_info_error(error: &CoreInfoError) -> DiagnosticsErrorClass {
+    match error {
+        CoreInfoError::MissingCoreInfo(_) | CoreInfoError::ExecutableNotFound { .. } => {
+            DiagnosticsErrorClass::CoreMissing
+        }
+        CoreInfoError::CreateCoreBinDir { source, .. }
+        | CoreInfoError::InspectExecutable { source, .. }
+        | CoreInfoError::InspectCoreSeed { source, .. }
+        | CoreInfoError::ReadCoreSeedDir { source, .. }
+        | CoreInfoError::CopyCoreSeedAsset { source, .. }
+        | CoreInfoError::ChmodExecutable { source, .. }
+            if source.kind() == std::io::ErrorKind::PermissionDenied =>
+        {
+            DiagnosticsErrorClass::PermissionDenied
+        }
+        _ => DiagnosticsErrorClass::Unknown,
+    }
+}
+
+fn diagnostics_error_class_for_update_error(error: &UpdateManagerError) -> DiagnosticsErrorClass {
+    match error {
+        UpdateManagerError::Download(_) => DiagnosticsErrorClass::NetworkUnavailable,
+        UpdateManagerError::Release(_) | UpdateManagerError::RulesetGeo(_) => {
+            DiagnosticsErrorClass::EndpointUnavailable
+        }
+        UpdateManagerError::Runtime(error) => diagnostics_error_class_for_runtime_error(error),
+        UpdateManagerError::ChecksumMismatch { .. } | UpdateManagerError::InvalidSha256(_) => {
+            DiagnosticsErrorClass::ChecksumMismatch
+        }
+        UpdateManagerError::CoreInfo(error) => diagnostics_error_class_for_core_info_error(error),
+        UpdateManagerError::MissingExtractedExecutable { .. } => DiagnosticsErrorClass::CoreMissing,
+        UpdateManagerError::ArchiveIo { source, .. }
+        | UpdateManagerError::SwapIo { source, .. }
+        | UpdateManagerError::VersionProbe { source, .. }
+            if source.kind() == std::io::ErrorKind::PermissionDenied =>
+        {
+            DiagnosticsErrorClass::PermissionDenied
+        }
+        _ => DiagnosticsErrorClass::Unknown,
+    }
+}
+
+fn diagnostics_error_class_for_app_updater_check(
+    error: &tauri_plugin_updater::Error,
+) -> DiagnosticsErrorClass {
+    match error {
+        tauri_plugin_updater::Error::EmptyEndpoints => DiagnosticsErrorClass::EndpointUnavailable,
+        tauri_plugin_updater::Error::UnsupportedArch
+        | tauri_plugin_updater::Error::UnsupportedOs => DiagnosticsErrorClass::Unknown,
+        _ => DiagnosticsErrorClass::EndpointUnavailable,
+    }
+}
+
+fn diagnostics_error_class_for_app_updater_install(
+    error: &tauri_plugin_updater::Error,
+) -> DiagnosticsErrorClass {
+    match error {
+        tauri_plugin_updater::Error::EmptyEndpoints => DiagnosticsErrorClass::EndpointUnavailable,
+        tauri_plugin_updater::Error::UnsupportedArch
+        | tauri_plugin_updater::Error::UnsupportedOs => DiagnosticsErrorClass::Unknown,
+        _ => DiagnosticsErrorClass::UpdaterInstallFailed,
+    }
+}
+
 fn runtime_manager(state: &AppState) -> RuntimeManager<'_> {
-    RuntimeManager::new(
+    let manager = RuntimeManager::new(
         state.database(),
         state.runtime_paths().clone(),
         state.supervisor(),
-    )
+    );
+
+    if let Some(seed_dir) = state.core_seed_resource_dir() {
+        manager.with_core_seed_resource_dir(seed_dir.to_path_buf())
+    } else {
+        manager
+    }
 }
 
 fn speedtest_manager(state: &AppState) -> SpeedtestManager {
@@ -1968,6 +2614,30 @@ fn profile_error(error: ProfileManagerError) -> AppError {
     }
 }
 
+fn runtime_error(error: RuntimeError) -> AppError {
+    let message = error.to_string();
+    match error {
+        RuntimeError::CoreInfo(CoreInfoError::ExecutableNotFound {
+            core_type,
+            search_dir,
+            candidates,
+            url,
+        }) => AppError::MissingCore(MissingCoreError {
+            message,
+            core_type,
+            search_dir: search_dir.to_string(),
+            candidates: candidates
+                .split(',')
+                .map(str::trim)
+                .filter(|candidate| !candidate.is_empty())
+                .map(ToString::to_string)
+                .collect(),
+            download_url: url.to_string(),
+        }),
+        _ => AppError::Runtime(message),
+    }
+}
+
 fn group_error(error: GroupManagerError) -> AppError {
     match error {
         GroupManagerError::Database(error) => AppError::Database(error.to_string()),
@@ -2038,6 +2708,29 @@ fn tun_error(error: TunManagerError) -> AppError {
         }
         TunManagerError::UnsupportedPlatform => AppError::Tun(error.to_string()),
     }
+}
+
+fn app_update_info(update: tauri_plugin_updater::Update) -> AppUpdateInfo {
+    AppUpdateInfo {
+        current_version: update.current_version,
+        version: update.version,
+        date: update.date.map(|date| date.to_string()),
+        body: update.body,
+        download_url: update.download_url.to_string(),
+    }
+}
+
+fn app_updater_state_for_error(error: &tauri_plugin_updater::Error) -> AppUpdaterState {
+    match error {
+        tauri_plugin_updater::Error::EmptyEndpoints => AppUpdaterState::Unconfigured,
+        tauri_plugin_updater::Error::UnsupportedArch
+        | tauri_plugin_updater::Error::UnsupportedOs => AppUpdaterState::Unsupported,
+        _ => AppUpdaterState::Error,
+    }
+}
+
+fn app_updater_error(error: tauri_plugin_updater::Error) -> AppError {
+    AppError::Update(error.to_string())
 }
 
 fn update_error(error: UpdateManagerError) -> AppError {
@@ -2329,7 +3022,7 @@ where
     let status = runtime_manager(state)
         .status()
         .await
-        .map_err(|error| AppError::Runtime(error.to_string()))?;
+        .map_err(runtime_error)?;
     if status.state != SupervisorConnectionState::Connected {
         return Ok(());
     }
@@ -2364,7 +3057,8 @@ where
             let message = error.to_string();
             emit_runtime_log(app, LogLevel::Error, &message)?;
             emit_core_state(app, CoreState::Disconnected, None, None)?;
-            Err(AppError::Runtime(message))
+            record_runtime_start_failure_diagnostics(state, config, &error);
+            Err(runtime_error(error))
         }
     }
 }

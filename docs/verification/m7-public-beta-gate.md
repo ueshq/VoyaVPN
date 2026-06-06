@@ -24,7 +24,7 @@ Covered release evidence:
 - The Rust workspace regression suite passed across `voya-core`, `voya-db`, `voya-platform`, `voya-net`, `voya-udptest`, `voya-app`, and `src-tauri`.
 - Frontend typecheck, Vitest, ESLint, and generated IPC binding drift checks all passed.
 - Tauri packaging configuration is present for macOS, Windows, and Linux, and default installers do not bundle GPL or AGPL proxy core binaries.
-- Release CI is configured as a manual `workflow_dispatch` flow with credential-free dry-run defaults for tests, package artifacts, checksums, and placeholder updater metadata.
+- Release CI is configured as a manual `workflow_dispatch` flow with credential-free dry-run defaults for tests, package artifacts, checksums, and non-publishable updater metadata.
 - Release runbooks document the manual signing, notarization, updater key, OS smoke, rollback, and publication checkpoints.
 
 ## Fixes Applied
@@ -84,7 +84,7 @@ node scripts/release-artifacts.mjs --input target/debug/bundle --output dist/rel
 node scripts/release-updater-metadata.mjs --input dist/release --out dist/updater/latest.json --target darwin-x86_64,windows-x86_64,linux-x86_64 --placeholder-signatures
 ```
 
-The generated artifacts from this path are for validation only. Unsigned debug packages and placeholder updater signatures are not publishable public beta artifacts.
+The generated artifacts from this path are for validation only. Unsigned debug packages and dry-run updater signatures are not publishable public beta artifacts.
 
 ## Deferred External Checks
 

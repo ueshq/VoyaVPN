@@ -33,6 +33,10 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_app::updates::UpdateTarget>()
         .typ::<voya_app::updates::UpdateRunResult>()
         .typ::<voya_app::updates::UpdateCheckResult>()
+        .typ::<voya_app::updates::ManualAppUpdateLinks>()
+        .typ::<voya_app::updates::ManualAppUpdateDownload>()
+        .typ::<voya_app::updates::CoreUpdateApplyRequest>()
+        .typ::<voya_app::updates::CoreUpdateApplyResult>()
         .typ::<voya_app::updates::UpdateTargetKind>()
         .typ::<voya_app::updates::UpdateAcquisition>()
         .typ::<voya_app::updates::UpdateResultStatus>()
@@ -68,6 +72,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             commands::app_health,
             commands::load_app_config,
             commands::save_app_config,
+            commands::diagnostics_status,
+            commands::set_diagnostics_enabled,
             commands::autostart_status,
             commands::set_autostart_enabled::<tauri::Wry>,
             commands::global_hotkey_status,
@@ -131,12 +137,17 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             commands::run_speedtest::<tauri::Wry>,
             commands::cancel_speedtest::<tauri::Wry>,
             commands::speedtest_status,
+            commands::app_update_status::<tauri::Wry>,
+            commands::check_app_update::<tauri::Wry>,
+            commands::install_app_update::<tauri::Wry>,
             commands::update_status,
             commands::save_update_preferences,
             commands::load_ruleset_geo_sources,
             commands::save_ruleset_geo_sources,
             commands::check_updates,
             commands::download_updates,
+            commands::manual_app_update_links,
+            commands::apply_downloaded_core_update,
             commands::backup_status,
             commands::backup_save_webdav_settings,
             commands::backup_create_local,

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { vi } from "vitest";
+import { afterEach, vi } from "vitest";
 
 import type { ProfileItem_Deserialize, ProfileListItem_Serialize } from "@/ipc/bindings";
 
@@ -49,12 +49,17 @@ const ipcMocks = vi.hoisted(() => ({
 
 vi.mock("@/ipc", () => ipcMocks);
 
+const queryClients = new Set<QueryClient>();
+
 function renderProfiles() {
   const queryClient = new QueryClient({
     defaultOptions: {
-      queries: { retry: false },
+      mutations: { retry: false },
+      queries: { gcTime: 0, retry: false },
     },
   });
+
+  queryClients.add(queryClient);
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -62,6 +67,11 @@ function renderProfiles() {
     </QueryClientProvider>,
   );
 }
+
+afterEach(() => {
+  queryClients.forEach((queryClient) => queryClient.clear());
+  queryClients.clear();
+});
 
 async function selectComboboxOption(label: string, optionLabel: string) {
   const user = userEvent.setup();
@@ -259,6 +269,8 @@ describe("ProfilesScreen", () => {
   });
 
   it("builds a policy group with child picker and generator preview", async () => {
+    const user = userEvent.setup();
+
     ipcMocks.listProfiles.mockResolvedValue([]);
     ipcMocks.listGroupChildCandidates.mockResolvedValue([
       {
@@ -325,20 +337,23 @@ describe("ProfilesScreen", () => {
 
     renderProfiles();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
+    await user.click(await screen.findByRole("button", { name: "Add" }));
     await selectComboboxOption("Protocol", "Policy Group");
     fireEvent.change(screen.getByLabelText("Remarks"), { target: { value: "Mixed policy" } });
-    fireEvent.click(await screen.findByRole("button", { name: "Choose children" }));
+    await user.click(await screen.findByRole("button", { name: "Choose children" }));
 
-    fireEvent.click(await screen.findByRole("checkbox", { name: /Leaf A/ }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /Chain A/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await user.click(await screen.findByRole("checkbox", { name: /Leaf A/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Chain A/ }));
+    await user.click(screen.getByRole("button", { name: "Apply" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    expect(await screen.findByText("Leaf A")).toBeInTheDocument();
+    expect(await screen.findByText("Chain A")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Preview" }));
     expect(await screen.findByText("Xray dialerProxy")).toBeInTheDocument();
     expect(await screen.findByText("sing-box selector/urltest + detour")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    await user.click(screen.getByRole("button", { name: /Save/ }));
 
     await waitFor(() =>
       expect(ipcMocks.saveGroupProfile).toHaveBeenCalledWith(
@@ -352,7 +367,7 @@ describe("ProfilesScreen", () => {
         }),
       ),
     );
-  });
+  }, 10_000);
 });
 
 function makeProfiles(count: number) {

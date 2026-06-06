@@ -73,12 +73,12 @@ Run the complete local CI parity suite:
 pnpm run verify:ci
 ```
 
-Run the final public beta gate checks individually:
+Run the final gate checks individually:
 
 ```sh
 cargo test --workspace --all-targets
 pnpm typecheck
-pnpm test -- --run
+pnpm test --run
 pnpm lint
 pnpm bindings:check
 ```
@@ -93,7 +93,7 @@ Run the credential-free release workflow equivalent locally:
 pnpm run verify:ci
 pnpm tauri:build --debug
 node scripts/release-artifacts.mjs --input target/debug/bundle --output dist/release/local --target local-debug --channel beta --allow-empty
-node scripts/release-updater-metadata.mjs --input dist/release --out dist/updater/latest.json --target darwin-x86_64,windows-x86_64,linux-x86_64 --placeholder-signatures
+node scripts/release-updater-metadata.mjs --input dist/release --out dist/updater/latest.json --target darwin-aarch64,darwin-x86_64,linux-aarch64,linux-x86_64,windows-aarch64,windows-x86_64 --placeholder-signatures
 ```
 
 The GitHub release workflow is manual-only:
@@ -103,4 +103,4 @@ The GitHub release workflow is manual-only:
 workflow_dispatch inputs: channel, build_profile, dry_run, updater_metadata
 ```
 
-Public beta publication still requires external signing identities, notarization credentials, updater private keys, platform smoke machines, and release hosting credentials. The release runbooks live under `docs/release/`, and the M7 gate report is `docs/verification/m7-public-beta-gate.md`.
+Production stable publication still requires external signing identities, notarization credentials, updater private keys, CDN publication control, diagnostics approval, platform smoke machines, and rollback readiness. The release runbooks live under `docs/release/`, and the stable gate report is `docs/verification/stable-release-gate.md`.

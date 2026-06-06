@@ -8,6 +8,8 @@ export const commands = {
 	appHealth: () => typedError<string, AppError>(__TAURI_INVOKE("app_health")),
 	loadAppConfig: () => typedError<AppConfig_Serialize, AppError>(__TAURI_INVOKE("load_app_config")),
 	saveAppConfig: (config: AppConfig_Deserialize) => typedError<AppConfig_Serialize, AppError>(__TAURI_INVOKE("save_app_config", { config })),
+	diagnosticsStatus: () => typedError<DiagnosticsStatus, AppError>(__TAURI_INVOKE("diagnostics_status")),
+	setDiagnosticsEnabled: (enabled: boolean) => typedError<DiagnosticsStatus, AppError>(__TAURI_INVOKE("set_diagnostics_enabled", { enabled })),
 	autostartStatus: () => typedError<AutostartStatus, AppError>(__TAURI_INVOKE("autostart_status")),
 	setAutostartEnabled: (enabled: boolean) => typedError<AutostartStatus, AppError>(__TAURI_INVOKE("set_autostart_enabled", { enabled })),
 	globalHotkeyStatus: () => typedError<HotkeyStatus_Serialize, AppError>(__TAURI_INVOKE("global_hotkey_status")),
@@ -106,12 +108,17 @@ export const commands = {
 	runSpeedtest: (action: SpeedActionType, indexIds: string[]) => typedError<SpeedtestRunResult, AppError>(__TAURI_INVOKE("run_speedtest", { action, indexIds })),
 	cancelSpeedtest: () => typedError<SpeedtestStatus, AppError>(__TAURI_INVOKE("cancel_speedtest")),
 	speedtestStatus: () => typedError<SpeedtestStatus, AppError>(__TAURI_INVOKE("speedtest_status")),
+	appUpdateStatus: () => typedError<AppUpdaterStatus, AppError>(__TAURI_INVOKE("app_update_status")),
+	checkAppUpdate: () => typedError<AppUpdateCheckResult, AppError>(__TAURI_INVOKE("check_app_update")),
+	installAppUpdate: () => typedError<AppUpdateInstallResult, AppError>(__TAURI_INVOKE("install_app_update")),
 	updateStatus: () => typedError<UpdateStatus, AppError>(__TAURI_INVOKE("update_status")),
 	saveUpdatePreferences: (preRelease: boolean, selectedTargetIds: string[]) => typedError<UpdateStatus, AppError>(__TAURI_INVOKE("save_update_preferences", { preRelease, selectedTargetIds })),
 	loadRulesetGeoSources: () => typedError<RulesetGeoSourceSettings, AppError>(__TAURI_INVOKE("load_ruleset_geo_sources")),
 	saveRulesetGeoSources: (settings: RulesetGeoSourceSettings) => typedError<RulesetGeoSourceSettings, AppError>(__TAURI_INVOKE("save_ruleset_geo_sources", { settings })),
 	checkUpdates: (preRelease: boolean, selectedTargetIds: string[], preferProxy: boolean, proxyUrl: string | null) => typedError<UpdateRunResult, AppError>(__TAURI_INVOKE("check_updates", { preRelease, selectedTargetIds, preferProxy, proxyUrl })),
 	downloadUpdates: (preRelease: boolean, selectedTargetIds: string[], preferProxy: boolean, proxyUrl: string | null) => typedError<UpdateRunResult, AppError>(__TAURI_INVOKE("download_updates", { preRelease, selectedTargetIds, preferProxy, proxyUrl })),
+	manualAppUpdateLinks: (preRelease: boolean, preferProxy: boolean, proxyUrl: string | null) => typedError<ManualAppUpdateLinks, AppError>(__TAURI_INVOKE("manual_app_update_links", { preRelease, preferProxy, proxyUrl })),
+	applyDownloadedCoreUpdate: (request: CoreUpdateApplyRequest) => typedError<CoreUpdateApplyResult, AppError>(__TAURI_INVOKE("apply_downloaded_core_update", { request })),
 	backupStatus: () => typedError<BackupStatus_Serialize, AppError>(__TAURI_INVOKE("backup_status")),
 	backupSaveWebdavSettings: (settings: WebDavItem_Deserialize) => typedError<WebDavItem_Serialize, AppError>(__TAURI_INVOKE("backup_save_webdav_settings", { settings })),
 	backupCreateLocal: (outputPath: string | null) => typedError<BackupOperationResult, AppError>(__TAURI_INVOKE("backup_create_local", { outputPath })),
@@ -152,6 +159,7 @@ export type AppConfig_Deserialize = {
 	SystemProxyItem?: SystemProxyItem_Deserialize,
 	WebDavItem?: WebDavItem_Deserialize,
 	CheckUpdateItem?: CheckUpdateItem_Deserialize,
+	DiagnosticsItem?: DiagnosticsItem_Deserialize,
 	Fragment4RayItem?: Fragment4RayItem_Deserialize,
 	Inbound?: InItem_Deserialize[],
 	GlobalHotkeys?: KeyEventItem_Deserialize[],
@@ -179,6 +187,7 @@ export type AppConfig_Serialize = {
 	SystemProxyItem: SystemProxyItem_Serialize,
 	WebDavItem: WebDavItem_Serialize,
 	CheckUpdateItem: CheckUpdateItem_Serialize,
+	DiagnosticsItem: DiagnosticsItem_Serialize,
 	Fragment4RayItem: Fragment4RayItem_Serialize,
 	Inbound: InItem_Serialize[],
 	GlobalHotkeys: KeyEventItem_Serialize[],
@@ -186,7 +195,7 @@ export type AppConfig_Serialize = {
 	SimpleDNSItem: SimpleDnsItem_Serialize,
 };
 
-export type AppError = { kind: "eventEmit"; message: string } | { kind: "autostart"; message: string } | { kind: "configLoad"; message: string } | { kind: "configSave"; message: string } | { kind: "backup"; message: string } | { kind: "clash"; message: string } | { kind: "database"; message: string } | { kind: "dns"; message: DnsCommandError } | { kind: "group"; message: string } | { kind: "hotkey"; message: string } | { kind: "preset"; message: string } | { kind: "profile"; message: string } | { kind: "qr"; message: string } | { kind: "runtime"; message: string } | { kind: "routing"; message: string } | { kind: "speedtest"; message: string } | { kind: "sudo"; message: string } | { kind: "subscription"; message: string } | { kind: "sysProxy"; message: string } | { kind: "state"; message: string } | { kind: "tun"; message: string } | { kind: "update"; message: string };
+export type AppError = { kind: "eventEmit"; message: string } | { kind: "autostart"; message: string } | { kind: "configLoad"; message: string } | { kind: "configSave"; message: string } | { kind: "backup"; message: string } | { kind: "clash"; message: string } | { kind: "database"; message: string } | { kind: "dns"; message: DnsCommandError } | { kind: "group"; message: string } | { kind: "hotkey"; message: string } | { kind: "preset"; message: string } | { kind: "profile"; message: string } | { kind: "qr"; message: string } | { kind: "missingCore"; message: MissingCoreError } | { kind: "runtime"; message: string } | { kind: "routing"; message: string } | { kind: "speedtest"; message: string } | { kind: "sudo"; message: string } | { kind: "subscription"; message: string } | { kind: "sysProxy"; message: string } | { kind: "state"; message: string } | { kind: "tun"; message: string } | { kind: "update"; message: string };
 
 export type AppEvent = { kind: "notice"; payload: AppNotice } | { kind: "selectTab"; payload: ShellTabTarget };
 
@@ -197,6 +206,35 @@ export type AppNotice = {
 };
 
 export type AppNoticeLevel = "info" | "warning" | "error";
+
+export type AppUpdateCheckResult = {
+	currentVersion: string,
+	update: AppUpdateInfo | null,
+};
+
+export type AppUpdateInfo = {
+	currentVersion: string,
+	version: string,
+	date: string | null,
+	body: string | null,
+	downloadUrl: string,
+};
+
+export type AppUpdateInstallResult = {
+	state: AppUpdateInstallState,
+	currentVersion: string,
+	installedVersion: string | null,
+};
+
+export type AppUpdateInstallState = "installed" | "noUpdate";
+
+export type AppUpdaterState = "ready" | "unconfigured" | "unsupported" | "error";
+
+export type AppUpdaterStatus = {
+	currentVersion: string,
+	state: AppUpdaterState,
+	message: string | null,
+};
 
 export type AutostartPlatform = "windows" | "linux" | "macos" | "other";
 
@@ -351,6 +389,9 @@ export type ConstItem = ConstItem_Serialize | ConstItem_Deserialize;
 
 export type ConstItem_Deserialize = {
 	SubConvertUrl?: string | null,
+	CdnBaseUrl?: string | null,
+	CdnReleaseIndexUrl?: string | null,
+	CdnCoreManifestUrl?: string | null,
 	GeoSourceUrl?: string | null,
 	SrsSourceUrl?: string | null,
 	RouteRulesTemplateSourceUrl?: string | null,
@@ -358,6 +399,9 @@ export type ConstItem_Deserialize = {
 
 export type ConstItem_Serialize = {
 	SubConvertUrl?: string | null,
+	CdnBaseUrl?: string | null,
+	CdnReleaseIndexUrl?: string | null,
+	CdnCoreManifestUrl?: string | null,
 	GeoSourceUrl?: string | null,
 	SrsSourceUrl?: string | null,
 	RouteRulesTemplateSourceUrl?: string | null,
@@ -408,6 +452,20 @@ export type CoreTypeItem = {
 	CoreType?: CoreType,
 };
 
+export type CoreUpdateApplyRequest = {
+	targetId: string,
+	fileName: string,
+	sha256: string,
+	remoteVersion: string,
+};
+
+export type CoreUpdateApplyResult = {
+	appliedVersion: string,
+	coreType: CoreType,
+	targetDir: string,
+	rollbackPath: string | null,
+};
+
 export type DemoRequest = {
 	message: string,
 };
@@ -415,6 +473,27 @@ export type DemoRequest = {
 export type DemoResponse = {
 	echoedMessage: string,
 	messageLength: number,
+};
+
+export type DiagnosticsItem = DiagnosticsItem_Serialize | DiagnosticsItem_Deserialize;
+
+export type DiagnosticsItem_Deserialize = {
+	Enabled?: boolean,
+	AnonymousInstallId?: string,
+	EndpointUrl?: string | null,
+};
+
+export type DiagnosticsItem_Serialize = {
+	Enabled: boolean,
+	AnonymousInstallId?: string,
+	EndpointUrl?: string | null,
+};
+
+export type DiagnosticsStatus = {
+	enabled: boolean,
+	deliveryConfigured: boolean,
+	queuedEvents: number,
+	queuedBytes: number,
 };
 
 export type DnsCommandError = {
@@ -693,6 +772,34 @@ export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
 export type LogLineEvent = {
 	level: LogLevel,
 	line: string,
+};
+
+export type ManualAppUpdateDownload = {
+	name: string,
+	kind: string,
+	version: string,
+	url: string,
+	sha256: string | null,
+	bytes: number | null,
+};
+
+export type ManualAppUpdateLinks = {
+	currentVersion: string,
+	remoteVersion: string | null,
+	hasUpdate: boolean,
+	releaseIndexUrl: string,
+	channel: string,
+	target: string,
+	arch: string,
+	downloads: ManualAppUpdateDownload[],
+};
+
+export type MissingCoreError = {
+	message: string,
+	coreType: CoreType,
+	searchDir: string,
+	candidates: string[],
+	downloadUrl: string,
 };
 
 export type MoveAction = number;
@@ -1415,6 +1522,8 @@ export type UpdateCheckResult = {
 	remoteVersion: string | null,
 	downloadUrl: string | null,
 	fileName: string | null,
+	sha256: string | null,
+	bytes: number | null,
 	usedProxy: boolean | null,
 };
 

@@ -43,6 +43,7 @@ pub struct AppConfig {
     pub system_proxy_item: SystemProxyItem,
     pub web_dav_item: WebDavItem,
     pub check_update_item: CheckUpdateItem,
+    pub diagnostics_item: DiagnosticsItem,
     pub fragment4_ray_item: Fragment4RayItem,
     pub inbound: Vec<InItem>,
     pub global_hotkeys: Vec<KeyEventItem>,
@@ -73,6 +74,7 @@ impl Default for AppConfig {
             system_proxy_item: SystemProxyItem::default(),
             web_dav_item: WebDavItem::default(),
             check_update_item: CheckUpdateItem::default(),
+            diagnostics_item: DiagnosticsItem::default(),
             fragment4_ray_item: Fragment4RayItem::default(),
             inbound: vec![InItem::default()],
             global_hotkeys: Vec::new(),
@@ -290,6 +292,12 @@ impl Default for UiItem {
 pub struct ConstItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sub_convert_url: Option<String>,
+    #[serde(rename = "CdnBaseUrl", skip_serializing_if = "Option::is_none")]
+    pub cdn_base_url: Option<String>,
+    #[serde(rename = "CdnReleaseIndexUrl", skip_serializing_if = "Option::is_none")]
+    pub cdn_release_index_url: Option<String>,
+    #[serde(rename = "CdnCoreManifestUrl", skip_serializing_if = "Option::is_none")]
+    pub cdn_core_manifest_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geo_source_url: Option<String>,
     #[serde(rename = "SrsSourceUrl", skip_serializing_if = "Option::is_none")]
@@ -493,6 +501,26 @@ pub struct CheckUpdateItem {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(default, rename_all = "PascalCase")]
+pub struct DiagnosticsItem {
+    pub enabled: bool,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub anonymous_install_id: String,
+    #[serde(rename = "EndpointUrl", skip_serializing_if = "Option::is_none")]
+    pub endpoint_url: Option<String>,
+}
+
+impl Default for DiagnosticsItem {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            anonymous_install_id: String::new(),
+            endpoint_url: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(default, rename_all = "PascalCase")]
 pub struct Fragment4RayItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub packets: Option<String>,
@@ -687,6 +715,9 @@ mod tests {
             config.simple_dns_item.remote_dns.as_deref(),
             Some(DEFAULT_REMOTE_DNS)
         );
+        assert!(config.diagnostics_item.enabled);
+        assert!(config.diagnostics_item.anonymous_install_id.is_empty());
+        assert_eq!(config.diagnostics_item.endpoint_url, None);
     }
 
     #[test]
@@ -716,5 +747,41 @@ mod tests {
             config.simple_dns_item.bootstrap_dns.as_deref(),
             Some(DEFAULT_BOOTSTRAP_DNS)
         );
+        assert!(config.diagnostics_item.enabled);
+    }
+
+    #[test]
+    fn diagnostics_config_is_default_on_and_backfilled() {
+        let config: AppConfig = serde_json::from_value(json!({})).unwrap();
+
+        assert!(config.diagnostics_item.enabled);
+        assert!(config.diagnostics_item.anonymous_install_id.is_empty());
+        assert_eq!(config.diagnostics_item.endpoint_url, None);
+    }
+
+    #[test]
+    fn diagnostics_config_persists_opt_out_install_id_and_endpoint() {
+        let config: AppConfig = serde_json::from_value(json!({
+            "DiagnosticsItem": {
+                "Enabled": false,
+                "AnonymousInstallId": "00000000-0000-4000-8000-000000000001",
+                "EndpointUrl": "https://diagnostics.voyavpn.test/ingest"
+            },
+            "CheckUpdateItem": {
+                "CheckPreReleaseUpdate": true
+            }
+        }))
+        .unwrap();
+
+        assert!(!config.diagnostics_item.enabled);
+        assert_eq!(
+            config.diagnostics_item.anonymous_install_id,
+            "00000000-0000-4000-8000-000000000001"
+        );
+        assert_eq!(
+            config.diagnostics_item.endpoint_url.as_deref(),
+            Some("https://diagnostics.voyavpn.test/ingest")
+        );
+        assert!(config.check_update_item.check_pre_release_update);
     }
 }

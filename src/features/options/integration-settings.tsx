@@ -1,18 +1,23 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { Keyboard, Power, Save } from "lucide-react";
+import { Activity, Keyboard, Power, Save } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useI18n } from "@/i18n/use-i18n";
 import {
   autostartStatus,
+  diagnosticsStatus,
   globalHotkeyStatus,
   saveGlobalHotkeys,
+  setDiagnosticsEnabled,
   setAutostartEnabled,
 } from "@/ipc";
 import type {
   AutostartStatus,
+  DiagnosticsStatus,
   GlobalHotkey,
   HotkeyStatus_Serialize,
   KeyEventItem_Deserialize,
@@ -27,6 +32,9 @@ type MutableKeyEventItem = Required<Pick<KeyEventItem_Deserialize, "Alt" | "Cont
 export function IntegrationSettings() {
   const { t } = useI18n();
   const [autostart, setAutostart] = useState<AutostartStatus | null>(null);
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsStatus | null>(null);
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
+  const [diagnosticsWorking, setDiagnosticsWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hotkeys, setHotkeys] = useState<HotkeyStatus_Serialize | null>(null);
   const [settings, setSettings] = useState<MutableKeyEventItem[]>([]);
@@ -48,6 +56,28 @@ export function IntegrationSettings() {
       .catch((error: unknown) => {
         if (!disposed) {
           setError(error instanceof Error ? error.message : String(error));
+        }
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+
+    void diagnosticsStatus()
+      .then((status) => {
+        if (disposed) {
+          return;
+        }
+        setDiagnostics(status);
+        setDiagnosticsError(null);
+      })
+      .catch((error: unknown) => {
+        if (!disposed) {
+          setDiagnosticsError(redactedErrorMessage(error));
         }
       });
 
@@ -80,6 +110,18 @@ export function IntegrationSettings() {
       setError(error instanceof Error ? error.message : String(error));
     } finally {
       setWorking(false);
+    }
+  }
+
+  async function toggleDiagnostics(enabled: boolean) {
+    setDiagnosticsWorking(true);
+    setDiagnosticsError(null);
+    try {
+      setDiagnostics(await setDiagnosticsEnabled(enabled));
+    } catch (error) {
+      setDiagnosticsError(redactedErrorMessage(error));
+    } finally {
+      setDiagnosticsWorking(false);
     }
   }
 
@@ -130,6 +172,33 @@ export function IntegrationSettings() {
             </span>
           </div>
           {artifact ? <p className="break-all text-xs text-muted-foreground">{artifact}</p> : null}
+        </CardContent>
+      </Card>
+
+      <Card className="gap-3 rounded-md bg-background p-3 shadow-none">
+        <CardHeader className="p-0">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Activity className="size-4 text-muted-foreground" aria-hidden="true" />
+            {t("options.diagnostics")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-2 p-0">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="grid min-w-0 gap-1">
+              <Label className="text-sm font-normal" htmlFor="diagnostics-enabled">
+                {diagnostics?.enabled ? t("options.diagnosticsOn") : t("options.diagnosticsOff")}
+              </Label>
+              <p className="text-xs text-muted-foreground">{t("options.diagnosticsScope")}</p>
+            </div>
+            <Switch
+              aria-label={t("options.diagnostics")}
+              checked={diagnostics?.enabled ?? true}
+              disabled={!diagnostics || diagnosticsWorking}
+              id="diagnostics-enabled"
+              onCheckedChange={(checked) => void toggleDiagnostics(checked)}
+            />
+          </div>
+          {diagnosticsError ? <p className="text-xs text-destructive">{diagnosticsError}</p> : null}
         </CardContent>
       </Card>
 
@@ -329,4 +398,18 @@ function keyCodeLabel(keyCode: number | null): string {
   };
 
   return labels[keyCode] ?? `#${keyCode}`;
+}
+
+function redactedErrorMessage(error: unknown) {
+  return redactOperationalMessage(error instanceof Error ? error.message : String(error));
+}
+
+function redactOperationalMessage(message: string) {
+  return message
+    .replace(
+      /\b(proxyUrl|proxy_url|proxy|HTTP_PROXY|HTTPS_PROXY)=\S+/gi,
+      (_match, key: string) => `${key}=[redacted]`,
+    )
+    .replace(/\b(vless|vmess|trojan|ss):\/\/[^\s<>"')\]]+/gi, "[redacted]")
+    .replace(/\bhttps?:\/\/[^\s<>"')\]]+/gi, "[redacted URL]");
 }

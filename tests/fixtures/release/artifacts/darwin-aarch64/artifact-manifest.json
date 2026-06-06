@@ -1,0 +1,22 @@
+{
+  "productName": "VoyaVPN",
+  "version": "0.1.0",
+  "channel": "stable",
+  "target": "darwin-aarch64",
+  "generatedAt": "2026-06-01T00:00:00.000Z",
+  "sourceBundleDir": "tests/fixtures/release/bundles/darwin-aarch64",
+  "artifacts": [
+    {
+      "name": "voyavpn-0.1.0-stable-darwin-aarch64-dmg.dmg",
+      "path": "voyavpn-0.1.0-stable-darwin-aarch64-dmg.dmg",
+      "kind": "dmg",
+      "target": "darwin-aarch64",
+      "channel": "stable",
+      "version": "0.1.0",
+      "bytes": 73400320,
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "originalName": "VoyaVPN_0.1.0_arm64.dmg",
+      "originalRelativePath": "dmg/VoyaVPN_0.1.0_arm64.dmg"
+    }
+  ]
+}

@@ -158,6 +158,7 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
 vi.mock("@/ipc", () => ({
   connectActiveProfile: vi.fn(),
   EventBridge: () => null,
+  appUpdateStatus: vi.fn(() => Promise.resolve({ currentVersion: "0.1.0", state: "unconfigured", message: null })),
   autostartStatus: vi.fn(() =>
     Promise.resolve({
       artifactKind: "linuxDesktopFile",
@@ -182,6 +183,14 @@ vi.mock("@/ipc", () => ({
   deleteProfiles: vi.fn(),
   deleteRoutingRules: vi.fn(),
   deleteRoutings: vi.fn(),
+  diagnosticsStatus: vi.fn(() =>
+    Promise.resolve({
+      deliveryConfigured: false,
+      enabled: true,
+      queuedBytes: 0,
+      queuedEvents: 0,
+    }),
+  ),
   disconnectCore: vi.fn(),
   generateQrCode: vi.fn(() => Promise.resolve({ mimeType: "image/svg+xml", svg: "<svg />" })),
   globalHotkeyStatus: vi.fn(() =>
@@ -292,6 +301,14 @@ vi.mock("@/ipc", () => ({
       platform: "linux",
     }),
   ),
+  setDiagnosticsEnabled: vi.fn((enabled) =>
+    Promise.resolve({
+      deliveryConfigured: false,
+      enabled,
+      queuedBytes: 0,
+      queuedEvents: 0,
+    }),
+  ),
   setSystemProxyMode: vi.fn(() =>
     Promise.resolve({
       effectiveMode: 0,
@@ -352,7 +369,23 @@ vi.mock("@/ipc", () => ({
     }),
   ),
   checkUpdates: vi.fn(() => Promise.resolve({ preRelease: false, results: [], targets: [] })),
+  checkAppUpdate: vi.fn(() => Promise.resolve({ currentVersion: "0.1.0", update: null })),
   downloadUpdates: vi.fn(() => Promise.resolve({ preRelease: false, results: [], targets: [] })),
+  installAppUpdate: vi.fn(() =>
+    Promise.resolve({ state: "noUpdate", currentVersion: "0.1.0", installedVersion: null }),
+  ),
+  manualAppUpdateLinks: vi.fn(() =>
+    Promise.resolve({
+      arch: "x64",
+      channel: "stable",
+      currentVersion: "0.1.0",
+      downloads: [],
+      hasUpdate: false,
+      releaseIndexUrl: "https://cdn.voyavpn.test/stable/release-index.json",
+      remoteVersion: null,
+      target: "linux",
+    }),
+  ),
   saveUpdatePreferences: vi.fn(() => Promise.resolve({ preRelease: false, targets: [] })),
   updateStatus: vi.fn(() =>
     Promise.resolve({

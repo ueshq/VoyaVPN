@@ -1,0 +1,34 @@
+{
+  "productName": "VoyaVPN",
+  "version": "0.1.0",
+  "channel": "stable",
+  "target": "darwin-x86_64",
+  "generatedAt": "2026-06-01T00:00:00.000Z",
+  "sourceBundleDir": "tests/fixtures/release/signed-updater/darwin-x86_64",
+  "artifacts": [
+    {
+      "name": "voyavpn-0.1.0-stable-darwin-x86-64-updater.zip",
+      "path": "voyavpn-0.1.0-stable-darwin-x86-64-updater.zip",
+      "kind": "updater",
+      "target": "darwin-x86_64",
+      "channel": "stable",
+      "version": "0.1.0",
+      "bytes": 49,
+      "sha256": "d974f2e391f5d70e527ab013577df78f32df26977863be8b3caa406bd6d28baf",
+      "originalName": "VoyaVPN_0.1.0_darwin_x86_64.updater.zip",
+      "originalRelativePath": "updater/VoyaVPN_0.1.0_darwin_x86_64.updater.zip"
+    },
+    {
+      "name": "voyavpn-0.1.0-stable-darwin-x86-64-updater.zip.sig",
+      "path": "voyavpn-0.1.0-stable-darwin-x86-64-updater.zip.sig",
+      "kind": "signature",
+      "target": "darwin-x86_64",
+      "channel": "stable",
+      "version": "0.1.0",
+      "bytes": 125,
+      "sha256": "b513e4f63ede3acd298976aace5a18bea8303ce2e11fe731a8705ea6576174bc",
+      "originalName": "VoyaVPN_0.1.0_darwin_x86_64.updater.zip.sig",
+      "originalRelativePath": "updater/VoyaVPN_0.1.0_darwin_x86_64.updater.zip.sig"
+    }
+  ]
+}

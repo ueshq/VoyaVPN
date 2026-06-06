@@ -1,0 +1,22 @@
+{
+  "productName": "VoyaVPN",
+  "version": "0.1.0",
+  "channel": "stable",
+  "target": "windows-x86_64",
+  "generatedAt": "2026-06-01T00:00:00.000Z",
+  "sourceBundleDir": "tests/fixtures/release/bundles/windows-x86_64",
+  "artifacts": [
+    {
+      "name": "voyavpn-0.1.0-stable-windows-x86-64-msi.msi",
+      "path": "voyavpn-0.1.0-stable-windows-x86-64-msi.msi",
+      "kind": "msi",
+      "target": "windows-x86_64",
+      "channel": "stable",
+      "version": "0.1.0",
+      "bytes": 84934656,
+      "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "originalName": "VoyaVPN_0.1.0_x64_en-US.msi",
+      "originalRelativePath": "msi/VoyaVPN_0.1.0_x64_en-US.msi"
+    }
+  ]
+}

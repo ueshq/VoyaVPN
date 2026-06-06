@@ -5,8 +5,13 @@ use voya_core::CoreType;
 
 use crate::{DownloadClient, DownloadError, DownloadRequest};
 
+// Legacy GitHub release metadata stays available for fixture tests and migration
+// compatibility. Production app/core checks use CDN manifests through
+// `CdnUpdateClient` and reject GitHub production download URLs.
 pub const VOYA_APP_RELEASES_API_URL: &str = "https://api.github.com/repos/voyavpn/voyavpn/releases";
 pub const VOYA_APP_RELEASES_URL: &str = "https://github.com/voyavpn/voyavpn/releases";
+pub const CDN_RELEASE_INDEX_FILE: &str = "release-index.json";
+pub const CDN_CORE_ASSET_MANIFEST_FILE: &str = "core-assets.json";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AssetOs {
@@ -151,6 +156,8 @@ pub struct GitHubRelease {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResolvedAssetSource {
+    CdnReleaseIndex,
+    CdnCoreManifest,
     ReleaseAsset,
     TemplateFallback,
 }
@@ -159,6 +166,8 @@ pub enum ResolvedAssetSource {
 pub struct ResolvedAsset {
     pub name: String,
     pub download_url: String,
+    pub sha256: Option<String>,
+    pub bytes: Option<u64>,
     pub source: ResolvedAssetSource,
 }
 
@@ -181,27 +190,425 @@ pub struct ReleaseCheck {
     pub asset: ResolvedAsset,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CdnReleaseIndex {
+    #[serde(default)]
+    pub product_name: String,
+    #[serde(default)]
+    pub channel: String,
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub base_url: String,
+    #[serde(default)]
+    pub generated_at: String,
+    #[serde(default)]
+    pub artifacts: Vec<CdnReleaseArtifact>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CdnReleaseArtifact {
+    #[serde(default)]
+    pub channel: String,
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub target: String,
+    #[serde(default)]
+    pub arch: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub bytes: u64,
+    #[serde(default)]
+    pub sha256: String,
+    #[serde(default)]
+    pub original_name: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub release_target: Option<String>,
+    #[serde(default)]
+    pub original_relative_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CdnCoreAssetManifest {
+    #[serde(default)]
+    pub product_name: String,
+    #[serde(default)]
+    pub manifest_version: u32,
+    #[serde(default)]
+    pub channel: String,
+    #[serde(default)]
+    pub base_url: String,
+    #[serde(default)]
+    pub generated_at: String,
+    #[serde(default)]
+    pub assets: Vec<CdnCoreAsset>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CdnCoreAsset {
+    #[serde(default)]
+    pub core_type: String,
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub license: String,
+    #[serde(default)]
+    pub os: String,
+    #[serde(default)]
+    pub arch: String,
+    #[serde(default)]
+    pub archive_format: String,
+    #[serde(default)]
+    pub executable_candidates: Vec<String>,
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub sha256: String,
+    #[serde(default)]
+    pub bytes: u64,
+    #[serde(default)]
+    pub upstream_url: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub path: String,
+}
+
 #[derive(Debug, Error)]
 pub enum ReleaseError {
     #[error(transparent)]
     Download(#[from] DownloadError),
-    #[error("failed to parse GitHub release JSON: {0}")]
+    #[error("failed to parse release metadata JSON: {0}")]
     Decode(#[from] serde_json::Error),
     #[error("no matching release found")]
     NoRelease,
     #[error("release tag {0:?} does not contain a semantic version")]
     InvalidVersion(String),
-    #[error("no asset template for {package_id} on {os:?}/{arch:?}")]
+    #[error("no update asset for {package_id} on {os:?}/{arch:?}")]
     UnsupportedAssetTarget {
         package_id: String,
         os: AssetOs,
         arch: AssetArch,
     },
+    #[error("CDN {manifest} URL is not configured")]
+    MissingCdnManifestUrl { manifest: &'static str },
+    #[error("production CDN URL is not allowed: {0}")]
+    ForbiddenProductionUrl(String),
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct GitHubReleaseClient {
     download: DownloadClient,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CdnUpdateClient {
+    download: DownloadClient,
+}
+
+impl CdnUpdateClient {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            download: DownloadClient::new(),
+        }
+    }
+
+    pub async fn fetch_release_index(
+        &self,
+        release_index_url: &str,
+        options: &ReleaseFetchOptions,
+    ) -> Result<CdnReleaseIndex, ReleaseError> {
+        ensure_production_url_allowed(release_index_url)?;
+        let response = self
+            .download
+            .download_text(DownloadRequest {
+                url: release_index_url.to_string(),
+                user_agent: Some(crate::USER_AGENT_PREFIX.to_string()),
+                prefer_proxy: options.prefer_proxy,
+                proxy_url: options.proxy_url.clone(),
+            })
+            .await?;
+
+        Ok(parse_cdn_release_index(&response.body)?)
+    }
+
+    pub async fn fetch_core_manifest(
+        &self,
+        core_manifest_url: &str,
+        options: &ReleaseFetchOptions,
+    ) -> Result<CdnCoreAssetManifest, ReleaseError> {
+        ensure_production_url_allowed(core_manifest_url)?;
+        let response = self
+            .download
+            .download_text(DownloadRequest {
+                url: core_manifest_url.to_string(),
+                user_agent: Some(crate::USER_AGENT_PREFIX.to_string()),
+                prefer_proxy: options.prefer_proxy,
+                proxy_url: options.proxy_url.clone(),
+            })
+            .await?;
+
+        Ok(parse_cdn_core_asset_manifest(&response.body)?)
+    }
+}
+
+#[must_use]
+pub fn cdn_manifest_url_from_base(base_url: &str, file_name: &str) -> Option<String> {
+    let base_url = base_url.trim().trim_end_matches('/');
+    (!base_url.is_empty()).then(|| format!("{base_url}/{file_name}"))
+}
+
+pub fn parse_cdn_release_index(input: &str) -> Result<CdnReleaseIndex, serde_json::Error> {
+    serde_json::from_str(input)
+}
+
+pub fn parse_cdn_core_asset_manifest(
+    input: &str,
+) -> Result<CdnCoreAssetManifest, serde_json::Error> {
+    serde_json::from_str(input)
+}
+
+pub fn check_app_from_cdn_release_index(
+    package: &ReleasePackage,
+    current_version: Option<&Version>,
+    os: AssetOs,
+    arch: AssetArch,
+    index: &CdnReleaseIndex,
+) -> Result<ReleaseCheck, ReleaseError> {
+    let artifact = resolve_cdn_release_artifact(package, os, arch, index)?;
+    ensure_production_url_allowed(&artifact.url)?;
+    let remote_version = parse_version(
+        (!artifact.version.trim().is_empty())
+            .then_some(artifact.version.as_str())
+            .unwrap_or(index.version.as_str()),
+    )
+    .ok_or_else(|| ReleaseError::InvalidVersion(artifact.version.clone()))?;
+    let has_update = current_version.is_none_or(|current| current < &remote_version);
+
+    Ok(ReleaseCheck {
+        package_id: package.id.to_string(),
+        target: package.target,
+        current_version: current_version.cloned(),
+        remote_version,
+        has_update,
+        prerelease: !index.channel.eq_ignore_ascii_case("stable"),
+        release_url: (!index.base_url.trim().is_empty()).then(|| index.base_url.clone()),
+        asset: ResolvedAsset {
+            name: asset_name(&artifact.name, &artifact.url),
+            download_url: artifact.url.clone(),
+            sha256: non_empty_string(&artifact.sha256),
+            bytes: (artifact.bytes > 0).then_some(artifact.bytes),
+            source: ResolvedAssetSource::CdnReleaseIndex,
+        },
+    })
+}
+
+pub fn app_release_artifacts_for_cdn_index(
+    package: &ReleasePackage,
+    os: AssetOs,
+    arch: AssetArch,
+    index: &CdnReleaseIndex,
+) -> Result<Vec<CdnReleaseArtifact>, ReleaseError> {
+    let artifacts = matching_cdn_release_artifacts(package, os, arch, index)?;
+
+    for artifact in &artifacts {
+        ensure_production_url_allowed(&artifact.url)?;
+    }
+
+    Ok(artifacts.into_iter().cloned().collect())
+}
+
+pub fn check_core_from_cdn_manifest(
+    package: &ReleasePackage,
+    current_version: Option<&Version>,
+    os: AssetOs,
+    arch: AssetArch,
+    manifest: &CdnCoreAssetManifest,
+) -> Result<ReleaseCheck, ReleaseError> {
+    let asset = resolve_cdn_core_asset(package, os, arch, manifest)?;
+    ensure_production_url_allowed(&asset.url)?;
+    let remote_version = parse_version(&asset.version)
+        .ok_or_else(|| ReleaseError::InvalidVersion(asset.version.clone()))?;
+    let has_update = current_version.is_none_or(|current| current < &remote_version);
+
+    Ok(ReleaseCheck {
+        package_id: package.id.to_string(),
+        target: package.target,
+        current_version: current_version.cloned(),
+        remote_version,
+        has_update,
+        prerelease: !manifest.channel.eq_ignore_ascii_case("stable"),
+        release_url: (!manifest.base_url.trim().is_empty()).then(|| manifest.base_url.clone()),
+        asset: ResolvedAsset {
+            name: asset_name(&asset.name, &asset.url),
+            download_url: asset.url.clone(),
+            sha256: non_empty_string(&asset.sha256),
+            bytes: (asset.bytes > 0).then_some(asset.bytes),
+            source: ResolvedAssetSource::CdnCoreManifest,
+        },
+    })
+}
+
+fn resolve_cdn_release_artifact<'a>(
+    package: &ReleasePackage,
+    os: AssetOs,
+    arch: AssetArch,
+    index: &'a CdnReleaseIndex,
+) -> Result<&'a CdnReleaseArtifact, ReleaseError> {
+    matching_cdn_release_artifacts(package, os, arch, index).and_then(|artifacts| {
+        artifacts
+            .into_iter()
+            .next()
+            .ok_or_else(|| ReleaseError::UnsupportedAssetTarget {
+                package_id: package.id.to_string(),
+                os,
+                arch,
+            })
+    })
+}
+
+fn matching_cdn_release_artifacts<'a>(
+    package: &ReleasePackage,
+    os: AssetOs,
+    arch: AssetArch,
+    index: &'a CdnReleaseIndex,
+) -> Result<Vec<&'a CdnReleaseArtifact>, ReleaseError> {
+    if package.target != PackageTarget::App {
+        return Err(ReleaseError::UnsupportedAssetTarget {
+            package_id: package.id.to_string(),
+            os,
+            arch,
+        });
+    }
+
+    let mut artifacts = index
+        .artifacts
+        .iter()
+        .filter(|artifact| {
+            manifest_os(&artifact.target) == Some(os) && manifest_arch(&artifact.arch) == Some(arch)
+        })
+        .collect::<Vec<_>>();
+    artifacts.sort_by_key(|artifact| app_artifact_kind_rank(os, &artifact.kind));
+
+    if artifacts.is_empty() {
+        Err(ReleaseError::UnsupportedAssetTarget {
+            package_id: package.id.to_string(),
+            os,
+            arch,
+        })
+    } else {
+        Ok(artifacts)
+    }
+}
+
+fn resolve_cdn_core_asset<'a>(
+    package: &ReleasePackage,
+    os: AssetOs,
+    arch: AssetArch,
+    manifest: &'a CdnCoreAssetManifest,
+) -> Result<&'a CdnCoreAsset, ReleaseError> {
+    let PackageTarget::Core(core_type) = package.target else {
+        return Err(ReleaseError::UnsupportedAssetTarget {
+            package_id: package.id.to_string(),
+            os,
+            arch,
+        });
+    };
+
+    manifest
+        .assets
+        .iter()
+        .find(|asset| {
+            manifest_core_type(&asset.core_type) == Some(core_type)
+                && manifest_os(&asset.os) == Some(os)
+                && manifest_arch(&asset.arch) == Some(arch)
+        })
+        .ok_or_else(|| ReleaseError::UnsupportedAssetTarget {
+            package_id: package.id.to_string(),
+            os,
+            arch,
+        })
+}
+
+fn app_artifact_kind_rank(os: AssetOs, kind: &str) -> u8 {
+    let kind = kind.trim().to_ascii_lowercase();
+    match (os, kind.as_str()) {
+        (AssetOs::Windows, "nsis") => 0,
+        (AssetOs::Windows, "msi") => 1,
+        (AssetOs::Windows, "zip") => 2,
+        (AssetOs::Macos, "dmg") => 0,
+        (AssetOs::Macos, "app") => 1,
+        (AssetOs::Linux, "appimage") => 0,
+        (AssetOs::Linux, "deb") => 1,
+        (AssetOs::Linux, "rpm") => 2,
+        _ => 10,
+    }
+}
+
+fn manifest_os(value: &str) -> Option<AssetOs> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "windows" | "win" | "win32" | "msvc" => Some(AssetOs::Windows),
+        "linux" => Some(AssetOs::Linux),
+        "macos" | "darwin" | "osx" | "apple" => Some(AssetOs::Macos),
+        _ => None,
+    }
+}
+
+fn manifest_arch(value: &str) -> Option<AssetArch> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "x64" | "x86_64" | "amd64" => Some(AssetArch::X64),
+        "arm64" | "aarch64" => Some(AssetArch::Arm64),
+        "riscv64" => Some(AssetArch::Riscv64),
+        _ => None,
+    }
+}
+
+fn manifest_core_type(value: &str) -> Option<CoreType> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "xray" => Some(CoreType::Xray),
+        "mihomo" => Some(CoreType::mihomo),
+        "sing_box" | "sing-box" => Some(CoreType::sing_box),
+        _ => None,
+    }
+}
+
+fn asset_name(name: &str, url: &str) -> String {
+    non_empty_string(name).unwrap_or_else(|| file_name_from_url(url))
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty()).then(|| value.to_string())
+}
+
+fn ensure_production_url_allowed(url: &str) -> Result<(), ReleaseError> {
+    let value = url.trim();
+    if value.is_empty() {
+        return Err(ReleaseError::ForbiddenProductionUrl(url.to_string()));
+    }
+
+    let lower = value.to_ascii_lowercase();
+    if lower.contains("placeholder")
+        || lower.contains("voyavpn.example")
+        || lower.contains("github.com")
+        || lower.contains("githubusercontent.com")
+        || lower.contains("github.io")
+    {
+        return Err(ReleaseError::ForbiddenProductionUrl(url.to_string()));
+    }
+
+    Ok(())
 }
 
 impl GitHubReleaseClient {
@@ -321,6 +728,8 @@ pub fn resolve_asset(
         return Ok(ResolvedAsset {
             name: asset.name.clone(),
             download_url: asset.browser_download_url.clone(),
+            sha256: None,
+            bytes: (asset.size > 0).then_some(asset.size),
             source: ResolvedAssetSource::ReleaseAsset,
         });
     }
@@ -328,6 +737,8 @@ pub fn resolve_asset(
     Ok(ResolvedAsset {
         name: expected_name,
         download_url,
+        sha256: None,
+        bytes: None,
         source: ResolvedAssetSource::TemplateFallback,
     })
 }
@@ -700,6 +1111,200 @@ mod tests {
             .expect("fallback asset");
         assert_eq!(fallback.source, ResolvedAssetSource::TemplateFallback);
         assert_eq!(fallback.name, "Xray-macos-64.zip");
+    }
+
+    #[test]
+    fn update_cdn_release_index_resolves_app_asset_with_checksum() {
+        let index = parse_cdn_release_index(
+            r#"{
+              "productName": "VoyaVPN",
+              "channel": "stable",
+              "version": "2.0.0",
+              "baseUrl": "https://cdn.voyavpn.test/stable",
+              "artifacts": [
+                {
+                  "channel": "stable",
+                  "version": "2.0.0",
+                  "target": "linux",
+                  "arch": "x64",
+                  "kind": "deb",
+                  "url": "https://cdn.voyavpn.test/stable/VoyaVPN-linux-x64.deb",
+                  "bytes": 20,
+                  "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "name": "VoyaVPN-linux-x64.deb",
+                  "originalName": "voya.deb"
+                },
+                {
+                  "channel": "stable",
+                  "version": "2.0.0",
+                  "target": "linux",
+                  "arch": "x64",
+                  "kind": "appimage",
+                  "url": "https://cdn.voyavpn.test/stable/VoyaVPN-linux-x64.AppImage",
+                  "bytes": 10,
+                  "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "name": "VoyaVPN-linux-x64.AppImage",
+                  "originalName": "voya.AppImage"
+                }
+              ]
+            }"#,
+        )
+        .expect("cdn release index");
+
+        let check = check_app_from_cdn_release_index(
+            &app_release_package(),
+            Some(&Version::new(1, 0, 0)),
+            AssetOs::Linux,
+            AssetArch::X64,
+            &index,
+        )
+        .expect("cdn app check");
+
+        assert!(check.has_update);
+        assert_eq!(check.remote_version, Version::new(2, 0, 0));
+        assert_eq!(check.asset.source, ResolvedAssetSource::CdnReleaseIndex);
+        assert_eq!(check.asset.name, "VoyaVPN-linux-x64.AppImage");
+        assert_eq!(
+            check.asset.download_url,
+            "https://cdn.voyavpn.test/stable/VoyaVPN-linux-x64.AppImage"
+        );
+        assert_eq!(
+            check.asset.sha256.as_deref(),
+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
+        assert_eq!(check.asset.bytes, Some(10));
+    }
+
+    #[test]
+    fn update_cdn_core_manifest_resolves_core_asset_with_checksum() {
+        let manifest = parse_cdn_core_asset_manifest(
+            r#"{
+              "productName": "VoyaVPN",
+              "manifestVersion": 1,
+              "channel": "stable",
+              "baseUrl": "https://cdn.voyavpn.test/stable",
+              "assets": [{
+                "coreType": "Xray",
+                "version": "1.8.24",
+                "license": "MPL-2.0",
+                "os": "linux",
+                "arch": "x64",
+                "archiveFormat": "zip",
+                "executableCandidates": ["xray"],
+                "url": "https://cdn.voyavpn.test/stable/cores/Xray/1.8.24/linux/x64/Xray-linux-64.zip",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "bytes": 11796480,
+                "upstreamUrl": "https://github.com/XTLS/Xray-core/releases/download/v1.8.24/Xray-linux-64.zip",
+                "name": "Xray-linux-64.zip",
+                "path": "cores/Xray/1.8.24/linux/x64/Xray-linux-64.zip"
+              }]
+            }"#,
+        )
+        .expect("cdn core manifest");
+        let package = release_package_for_core(CoreType::Xray).expect("xray package");
+
+        let check = check_core_from_cdn_manifest(
+            &package,
+            Some(&Version::new(1, 8, 0)),
+            AssetOs::Linux,
+            AssetArch::X64,
+            &manifest,
+        )
+        .expect("cdn core check");
+
+        assert!(check.has_update);
+        assert_eq!(check.remote_version, Version::new(1, 8, 24));
+        assert_eq!(check.asset.source, ResolvedAssetSource::CdnCoreManifest);
+        assert_eq!(check.asset.name, "Xray-linux-64.zip");
+        assert_eq!(
+            check.asset.sha256.as_deref(),
+            Some("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
+        );
+        assert_eq!(check.asset.bytes, Some(11796480));
+    }
+
+    #[test]
+    fn update_cdn_core_manifest_rejects_unsupported_target() {
+        let manifest = parse_cdn_core_asset_manifest(
+            r#"{
+              "productName": "VoyaVPN",
+              "manifestVersion": 1,
+              "channel": "stable",
+              "baseUrl": "https://cdn.voyavpn.test/stable",
+              "assets": [{
+                "coreType": "Xray",
+                "version": "1.8.24",
+                "license": "MPL-2.0",
+                "os": "linux",
+                "arch": "x64",
+                "archiveFormat": "zip",
+                "executableCandidates": ["xray"],
+                "url": "https://cdn.voyavpn.test/stable/Xray-linux-64.zip",
+                "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "bytes": 1,
+                "upstreamUrl": "https://github.com/XTLS/Xray-core/releases/download/v1.8.24/Xray-linux-64.zip",
+                "name": "Xray-linux-64.zip",
+                "path": "Xray-linux-64.zip"
+              }]
+            }"#,
+        )
+        .expect("cdn core manifest");
+        let package = release_package_for_core(CoreType::Xray).expect("xray package");
+
+        let error = check_core_from_cdn_manifest(
+            &package,
+            None,
+            AssetOs::Linux,
+            AssetArch::Riscv64,
+            &manifest,
+        )
+        .expect_err("unsupported first-stable target");
+
+        assert!(matches!(
+            error,
+            ReleaseError::UnsupportedAssetTarget {
+                package_id,
+                os: AssetOs::Linux,
+                arch: AssetArch::Riscv64
+            } if package_id == "core:xray"
+        ));
+    }
+
+    #[test]
+    fn update_cdn_manifest_rejects_github_production_download_url() {
+        let manifest = parse_cdn_core_asset_manifest(
+            r#"{
+              "productName": "VoyaVPN",
+              "manifestVersion": 1,
+              "channel": "stable",
+              "baseUrl": "https://cdn.voyavpn.test/stable",
+              "assets": [{
+                "coreType": "Xray",
+                "version": "1.8.24",
+                "license": "MPL-2.0",
+                "os": "linux",
+                "arch": "x64",
+                "archiveFormat": "zip",
+                "executableCandidates": ["xray"],
+                "url": "https://github.com/XTLS/Xray-core/releases/download/v1.8.24/Xray-linux-64.zip",
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "bytes": 1,
+                "upstreamUrl": "https://github.com/XTLS/Xray-core/releases/download/v1.8.24/Xray-linux-64.zip",
+                "name": "Xray-linux-64.zip",
+                "path": "Xray-linux-64.zip"
+              }]
+            }"#,
+        )
+        .expect("cdn core manifest");
+        let package = release_package_for_core(CoreType::Xray).expect("xray package");
+
+        let error =
+            check_core_from_cdn_manifest(&package, None, AssetOs::Linux, AssetArch::X64, &manifest)
+                .expect_err("github production URL");
+
+        assert!(
+            matches!(error, ReleaseError::ForbiddenProductionUrl(url) if url.contains("github.com"))
+        );
     }
 
     #[test]

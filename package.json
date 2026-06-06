@@ -25,9 +25,12 @@
     "verify:ci": "node scripts/verify-ci.mjs",
     "release:artifacts": "node scripts/release-artifacts.mjs",
     "release:updater": "node scripts/release-updater-metadata.mjs",
+    "check:release:dry-run": "node scripts/check-release-readiness.mjs --mode dry-run",
+    "check:release:stable": "node scripts/check-release-readiness.mjs --mode stable --tauri-config target/release-config/tauri.updater.stable.generated.json",
     "tauri": "node scripts/tauri.mjs",
     "tauri:dev": "tauri dev",
-    "tauri:build": "node scripts/tauri-build.mjs"
+    "tauri:build": "node scripts/tauri-build.mjs",
+    "tauri:stable-updater-config": "node scripts/tauri-build.mjs --write-stable-updater-config"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.2",

@@ -19,6 +19,7 @@ pub const BIN_CONFIG_DIR_NAME: &str = "binConfigs";
 pub const BACKUP_DIR_NAME: &str = "guiBackups";
 pub const LOG_DIR_NAME: &str = "guiLogs";
 pub const TEMP_DIR_NAME: &str = "guiTemps";
+pub const CORE_SEED_RESOURCE_DIR_NAME: &str = "core-seeds";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageMode {
@@ -149,6 +150,21 @@ impl AppPaths {
     }
 }
 
+#[must_use]
+pub fn core_seed_resources_dir(packaged_resources_dir: impl AsRef<Path>) -> PathBuf {
+    packaged_resources_dir
+        .as_ref()
+        .join(CORE_SEED_RESOURCE_DIR_NAME)
+}
+
+#[must_use]
+pub fn core_seed_resource_dir(
+    core_seed_resources_dir: impl AsRef<Path>,
+    core_type_dir: impl AsRef<Path>,
+) -> PathBuf {
+    core_seed_resources_dir.as_ref().join(core_type_dir)
+}
+
 #[derive(Debug, Error)]
 pub enum PathError {
     #[error("failed to create directory {path}: {source}")]
@@ -277,6 +293,21 @@ mod tests {
         assert_eq!(paths.bin_config_dir(), Path::new("/tmp/VoyaVPN/binConfigs"));
         assert_eq!(paths.log_dir(), Path::new("/tmp/VoyaVPN/guiLogs"));
         assert_eq!(paths.temp_dir(), Path::new("/tmp/VoyaVPN/guiTemps"));
+    }
+
+    #[test]
+    fn coreinfo_paths_locate_packaged_core_seed_resources() {
+        let resources_dir = Path::new("/tmp/VoyaVPN.app/Contents/Resources");
+        let seed_root = core_seed_resources_dir(resources_dir);
+
+        assert_eq!(
+            seed_root,
+            Path::new("/tmp/VoyaVPN.app/Contents/Resources/core-seeds")
+        );
+        assert_eq!(
+            core_seed_resource_dir(&seed_root, "xray"),
+            Path::new("/tmp/VoyaVPN.app/Contents/Resources/core-seeds/xray")
+        );
     }
 
     #[test]

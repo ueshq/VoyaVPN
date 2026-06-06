@@ -1,6 +1,6 @@
 use std::{
     error::Error,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
 
@@ -11,8 +11,10 @@ use tauri::{
     Manager, RunEvent,
 };
 use tauri_specta::Event;
+use tokio::sync::Mutex as AsyncMutex;
 use voya_app::{
     clash::{ClashConnectionsSnapshot, ClashEventSink, ClashMonitorController, ClashTrafficEvent},
+    diagnostics::{prepare_diagnostics_settings, DiagnosticsClient},
     speedtest::SpeedtestManager,
     statistics::{
         SharedAppConfigSource, StatisticsEventSink, StatisticsManager,
@@ -25,7 +27,8 @@ use voya_app::{
 use voya_core::{AppConfig, ProfileItem, SysProxyType};
 use voya_db::{AppConfigStore, Database, DATABASE_NAME};
 use voya_platform::{
-    paths::{AppPaths, StorageMode},
+    coreinfo::copy_seed_core_assets,
+    paths::{core_seed_resources_dir, AppPaths, StorageMode},
     process::{ProcessLogSink, ProcessOutputStream, ProcessRole, StdProcessRunner},
     sysproxy::{platform_pac_manager, SystemProxyService},
 };
@@ -48,12 +51,14 @@ pub(crate) struct AppState {
     config_store: AppConfigStore,
     config: Arc<RwLock<AppConfig>>,
     runtime_paths: AppPaths,
+    core_seed_resource_dir: Option<PathBuf>,
     sudo_password_collector: SudoPasswordCollector,
     supervisor: CoreSupervisor,
     statistics_manager: StatisticsManager,
     speedtest_manager: SpeedtestManager,
     system_proxy_manager: SystemProxyManager,
     clash_monitor_controller: ClashMonitorController,
+    diagnostics_client: Arc<AsyncMutex<DiagnosticsClient>>,
 }
 
 impl AppState {
@@ -62,24 +67,28 @@ impl AppState {
         config_store: AppConfigStore,
         config: Arc<RwLock<AppConfig>>,
         runtime_paths: AppPaths,
+        core_seed_resource_dir: Option<PathBuf>,
         sudo_password_collector: SudoPasswordCollector,
         supervisor: CoreSupervisor,
         statistics_manager: StatisticsManager,
         speedtest_manager: SpeedtestManager,
         system_proxy_manager: SystemProxyManager,
         clash_monitor_controller: ClashMonitorController,
+        diagnostics_client: Arc<AsyncMutex<DiagnosticsClient>>,
     ) -> Self {
         Self {
             database,
             config_store,
             config,
             runtime_paths,
+            core_seed_resource_dir,
             sudo_password_collector,
             supervisor,
             statistics_manager,
             speedtest_manager,
             system_proxy_manager,
             clash_monitor_controller,
+            diagnostics_client,
         }
     }
 
@@ -97,6 +106,10 @@ impl AppState {
 
     pub(crate) fn runtime_paths(&self) -> &AppPaths {
         &self.runtime_paths
+    }
+
+    pub(crate) fn core_seed_resource_dir(&self) -> Option<&Path> {
+        self.core_seed_resource_dir.as_deref()
     }
 
     pub(crate) fn sudo_password_collector(&self) -> &SudoPasswordCollector {
@@ -122,6 +135,10 @@ impl AppState {
     pub(crate) fn clash_monitor_controller(&self) -> ClashMonitorController {
         self.clash_monitor_controller.clone()
     }
+
+    pub(crate) fn diagnostics_client(&self) -> Arc<AsyncMutex<DiagnosticsClient>> {
+        Arc::clone(&self.diagnostics_client)
+    }
 }
 
 pub fn export_bindings(path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
@@ -145,7 +162,17 @@ pub fn run() {
         .setup(move |app| {
             let app_config_dir = app.path().app_config_dir()?;
             let config_store = AppConfigStore::new(app_config_dir.join("guiNConfig.json"));
-            let config = config_store.load()?;
+            let mut config = config_store.load()?;
+            let original_config = config.clone();
+            let app_version = app.package_info().version.to_string();
+            prepare_diagnostics_settings(
+                &mut config,
+                &app_version,
+                ipc::commands::diagnostics_release_channel(),
+            );
+            if original_config != config {
+                config_store.save(&config)?;
+            }
             let shared_config = Arc::new(RwLock::new(config.clone()));
             let database = tauri::async_runtime::block_on(Database::connect(
                 app_config_dir.join(DATABASE_NAME),
@@ -155,6 +182,15 @@ pub fn run() {
             )?;
             let runtime_paths = AppPaths::new(&app_config_dir, StorageMode::UserData);
             runtime_paths.ensure_dirs()?;
+            let core_seed_resource_dir = Some(core_seed_resources_dir(app.path().resource_dir()?));
+            if let Some(seed_dir) = &core_seed_resource_dir {
+                if let Err(error) = copy_seed_core_assets(&runtime_paths, seed_dir) {
+                    tracing::warn!(
+                        ?error,
+                        "failed to copy packaged core seed assets at startup"
+                    );
+                }
+            }
             let sudo_password_collector = SudoPasswordCollector::default_store();
             let runner = StdProcessRunner::with_log_sink(Arc::new(TauriProcessLogSink {
                 app: app.handle().clone(),
@@ -191,16 +227,19 @@ pub fn run() {
                 config_store,
                 shared_config,
                 runtime_paths,
+                core_seed_resource_dir,
                 sudo_password_collector,
                 supervisor,
                 statistics_manager,
                 SpeedtestManager::new(),
                 system_proxy_manager,
                 ClashMonitorController::new(),
+                Arc::new(AsyncMutex::new(DiagnosticsClient::new())),
             ));
 
             specta_builder.mount_events(app);
             setup_tray(app)?;
+            ipc::commands::record_app_start_diagnostics(app.handle());
 
             Ok(())
         })

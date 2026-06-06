@@ -6,6 +6,7 @@
 pub mod autostart;
 pub mod backup;
 pub mod clash;
+pub mod diagnostics;
 pub mod dns;
 pub mod groups;
 pub mod hotkeys;

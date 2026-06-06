@@ -1,8 +1,20 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const stableChannel = "stable";
+const stableTargets = [
+  "darwin-aarch64",
+  "darwin-x86_64",
+  "linux-aarch64",
+  "linux-x86_64",
+  "windows-aarch64",
+  "windows-x86_64",
+];
+const stableTargetSet = new Set(stableTargets);
 
 function parseArgs(argv) {
   const options = {
@@ -77,11 +89,13 @@ Options:
   --out <file>                 latest.json output path. Default: dist/release/latest.json
   --version <semver>           App version. Defaults to package.json version
   --channel <name>             Release channel. Default: beta
-  --base-url <url>             Public update asset base URL. Default: https://updates.voyavpn.example/<channel>
+  --base-url <url>             Public update asset base URL. Defaults to VOYAVPN_UPDATES_BASE_URL,
+                               then https://cdn.voyavpn.test/<channel>/updater for non-stable
   --notes <text>               Release notes string
   --pub-date <iso>             Publication timestamp. Default: current time
   --target <platform[,..]>     Platform key to include when no manifest exists
-  --placeholder-signatures     Emit dry-run placeholder updater URLs and signatures`);
+  --placeholder-signatures     Emit dry-run placeholder updater URLs and signatures.
+                               Stable rejects this option and requires signed payloads.`);
 }
 
 async function readPackageVersion() {
@@ -101,7 +115,7 @@ async function walkManifests(root) {
   }
 
   const manifests = [];
-  for (const entry of entries) {
+  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
     const path = join(root, entry.name);
     if (entry.isDirectory()) {
       manifests.push(...(await walkManifests(path)));
@@ -109,7 +123,76 @@ async function walkManifests(root) {
       manifests.push(path);
     }
   }
-  return manifests;
+  return manifests.sort((left, right) => left.localeCompare(right));
+}
+
+function isStable(channel) {
+  return channel.trim().toLowerCase() === stableChannel;
+}
+
+function isForbiddenStableHost(hostname) {
+  const host = hostname.toLowerCase();
+  return (
+    host === "example.com" ||
+    host.endsWith(".example.com") ||
+    host.endsWith(".example") ||
+    host.includes("example") ||
+    host === "github.com" ||
+    host.endsWith(".github.com") ||
+    host === "githubusercontent.com" ||
+    host.endsWith(".githubusercontent.com") ||
+    host === "github.io" ||
+    host.endsWith(".github.io")
+  );
+}
+
+function normalizeBaseUrl(baseUrl, channel) {
+  const value = (baseUrl ?? "").trim();
+  if (!value) {
+    throw new Error(
+      isStable(channel)
+        ? "Stable updater metadata requires --base-url or VOYAVPN_UPDATES_BASE_URL"
+        : "Updater metadata generation requires --base-url or VOYAVPN_UPDATES_BASE_URL",
+    );
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`Invalid updater base URL: ${value}`);
+  }
+
+  if (isStable(channel) && parsed.protocol !== "https:") {
+    throw new Error(`Stable updater base URL must use https: ${value}`);
+  }
+  if (!isStable(channel) && parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(`Updater base URL must use http or https: ${value}`);
+  }
+
+  parsed.hash = "";
+  parsed.search = "";
+
+  const normalized = parsed.toString().replace(/\/+$/g, "");
+  const stableUrlText = normalized.toLowerCase();
+  if (isStable(channel) && (isForbiddenStableHost(parsed.hostname) || stableUrlText.includes("placeholder"))) {
+    throw new Error(`Stable updater base URL must not use example, GitHub, or placeholder hosts: ${value}`);
+  }
+
+  return normalized;
+}
+
+function resolveBaseUrl(options) {
+  const configuredBaseUrl = options.baseUrl ?? process.env.VOYAVPN_UPDATES_BASE_URL;
+  if (configuredBaseUrl !== undefined && configuredBaseUrl !== null) {
+    return normalizeBaseUrl(configuredBaseUrl, options.channel);
+  }
+
+  if (isStable(options.channel)) {
+    return normalizeBaseUrl(null, options.channel);
+  }
+
+  return normalizeBaseUrl(`https://cdn.voyavpn.test/${options.channel}/updater`, options.channel);
 }
 
 function joinUrl(baseUrl, ...parts) {
@@ -139,6 +222,165 @@ function findSignatureArtifact(payload, artifacts) {
   });
 }
 
+function artifactPath(artifact, context) {
+  const value = artifact.path ?? artifact.name;
+  if (!value || typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${context} is missing path or name`);
+  }
+
+  const normalized = value.trim().replaceAll("\\", "/");
+  if (normalized.startsWith("/") || normalized.split("/").some((segment) => segment === "..")) {
+    throw new Error(`${context} has an unsafe artifact path: ${value}`);
+  }
+
+  return normalized;
+}
+
+function requiredString(value, field, context) {
+  if (!value || typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${context} is missing ${field}`);
+  }
+  return value.trim();
+}
+
+function requiredSha256(value, context) {
+  if (!value || typeof value !== "string" || !/^[a-fA-F0-9]{64}$/.test(value)) {
+    throw new Error(`${context} is missing a valid sha256`);
+  }
+  return value.toLowerCase();
+}
+
+function requiredBytes(value, context) {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${context} is missing valid bytes`);
+  }
+  return value;
+}
+
+function isPlaceholderSignature(signature) {
+  const value = signature.trim().toLowerCase();
+  return (
+    value.length === 0 ||
+    value.includes("placeholder") ||
+    value.includes("replace_before_release") ||
+    value.includes("replace-before-release") ||
+    value === "todo" ||
+    value === "tbd" ||
+    value === "changeme"
+  );
+}
+
+function assertStableSignature(signature, target) {
+  if (isPlaceholderSignature(signature)) {
+    throw new Error(`Stable updater signature for ${target} is a placeholder or empty value`);
+  }
+
+  if (signature.length < 32) {
+    throw new Error(`Stable updater signature for ${target} is too short to be a signed Tauri updater artifact`);
+  }
+}
+
+async function sha256(path) {
+  const hash = createHash("sha256");
+  await new Promise((resolvePromise, rejectPromise) => {
+    const stream = createReadStream(path);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("error", rejectPromise);
+    stream.on("end", resolvePromise);
+  });
+  return hash.digest("hex");
+}
+
+async function verifyArtifactFile(manifestDir, artifact, context, requireManifestMetadata) {
+  const path = artifactPath(artifact, context);
+  const fullPath = resolve(manifestDir, path);
+  let fileStat;
+  try {
+    fileStat = await stat(fullPath);
+  } catch (error) {
+    if (error && error.code === "ENOENT") {
+      throw new Error(`${context} file is missing: ${path}`, { cause: error });
+    }
+    throw error;
+  }
+
+  if (!fileStat.isFile()) {
+    throw new Error(`${context} is not a file: ${path}`);
+  }
+
+  const actualBytes = fileStat.size;
+  const actualSha256 = await sha256(fullPath);
+
+  if (requireManifestMetadata) {
+    const expectedBytes = requiredBytes(artifact.bytes, context);
+    const expectedSha256 = requiredSha256(artifact.sha256, context);
+    if (actualBytes !== expectedBytes) {
+      throw new Error(`${context} bytes do not match manifest: expected ${expectedBytes}, got ${actualBytes}`);
+    }
+    if (actualSha256 !== expectedSha256) {
+      throw new Error(`${context} sha256 does not match manifest: expected ${expectedSha256}, got ${actualSha256}`);
+    }
+  }
+
+  return {
+    path,
+    bytes: actualBytes,
+    sha256: actualSha256,
+  };
+}
+
+function assertStableArtifactMetadata(artifact, target, version, channel, context) {
+  requiredString(artifact.name, "name", context);
+  artifactPath(artifact, context);
+
+  if (requiredString(artifact.target, "target", context) !== target) {
+    throw new Error(`${context} target does not match manifest target ${target}`);
+  }
+  if (requiredString(artifact.channel, "channel", context) !== channel) {
+    throw new Error(`${context} channel does not match requested channel ${channel}`);
+  }
+  if (requiredString(artifact.version, "version", context) !== version) {
+    throw new Error(`${context} version does not match requested version ${version}`);
+  }
+}
+
+function assertStableTargetNames(platformKeys) {
+  const keys = [...platformKeys].sort((left, right) => left.localeCompare(right));
+  const unsupported = keys.filter((target) => !stableTargetSet.has(target));
+  if (unsupported.length > 0) {
+    throw new Error(`Stable updater metadata contains unsupported target(s): ${unsupported.join(", ")}`);
+  }
+}
+
+function assertStableTargetMatrix(platformKeys) {
+  const keys = [...platformKeys].sort((left, right) => left.localeCompare(right));
+  const missing = stableTargets.filter((target) => !keys.includes(target));
+  if (missing.length > 0) {
+    throw new Error(`Stable updater metadata is missing signed payloads for target(s): ${missing.join(", ")}`);
+  }
+}
+
+function assertStableDocuments(latest, evidenceDocument, baseUrl) {
+  const latestSerialized = JSON.stringify(latest).toLowerCase();
+  if (
+    latestSerialized.includes("github.com") ||
+    latestSerialized.includes("voyavpn.example") ||
+    latestSerialized.includes("placeholder")
+  ) {
+    throw new Error("Stable updater latest.json contains forbidden placeholder or GitHub content");
+  }
+
+  for (const [target, platform] of Object.entries(latest.platforms)) {
+    if (!platform.url.startsWith(`${baseUrl}/`)) {
+      throw new Error(`Stable updater URL for ${target} is not derived from base URL: ${platform.url}`);
+    }
+    assertStableSignature(platform.signature, target);
+    if (evidenceDocument.platforms[target]?.source !== "signed-artifact") {
+      throw new Error(`Stable updater evidence for ${target} does not map to a signed artifact`);
+    }
+  }
+}
+
 async function loadManifests(inputDir) {
   const manifests = [];
   for (const manifestPath of await walkManifests(inputDir)) {
@@ -153,14 +395,18 @@ async function loadManifests(inputDir) {
 }
 
 async function readSignature(manifestDir, signatureArtifact) {
-  const signaturePath = resolve(manifestDir, signatureArtifact.path);
+  const signaturePath = resolve(manifestDir, artifactPath(signatureArtifact, "signature artifact"));
   return (await readFile(signaturePath, "utf8")).trim();
 }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  if (isStable(options.channel) && options.placeholderSignatures) {
+    throw new Error("Stable updater metadata cannot use --placeholder-signatures; use a dry-run channel for placeholders.");
+  }
+
   const version = options.version ?? (await readPackageVersion());
-  const baseUrl = options.baseUrl ?? `https://updates.voyavpn.example/${options.channel}`;
+  const baseUrl = resolveBaseUrl(options);
   const notes = options.notes ?? `VoyaVPN ${version} ${options.channel} release`;
   const pubDate = options.pubDate ?? new Date().toISOString();
   const inputDir = resolve(repoRoot, options.input);
@@ -174,8 +420,15 @@ async function main() {
   }
 
   for (const loaded of loadedManifests) {
-    const target = loaded.manifest.target;
+    const manifestLabel = relative(repoRoot, loaded.manifestPath).replaceAll("\\", "/");
+    const target = requiredString(loaded.manifest.target, "target", manifestLabel);
+    if (!Array.isArray(loaded.manifest.artifacts)) {
+      throw new Error(`${manifestLabel} is missing artifacts[]`);
+    }
     const current = targets.get(target) ?? { target, artifacts: [], manifestDir: loaded.manifestDir };
+    if (isStable(options.channel) && current.manifestDir && current.manifestDir !== loaded.manifestDir) {
+      throw new Error(`Stable updater metadata has multiple manifests for target ${target}`);
+    }
     current.artifacts.push(...loaded.manifest.artifacts);
     current.manifestDir = loaded.manifestDir;
     targets.set(target, current);
@@ -185,8 +438,16 @@ async function main() {
     throw new Error("No target manifests found. Pass --target with --placeholder-signatures for dry-run metadata.");
   }
 
+  if (isStable(options.channel)) {
+    assertStableTargetNames(targets.keys());
+  }
+
   const platforms = {};
   const evidence = [];
+  const evidencePlatforms = {};
+  const sourceManifests = loadedManifests
+    .map((loaded) => relative(repoRoot, loaded.manifestPath).replaceAll("\\", "/"))
+    .sort((left, right) => left.localeCompare(right));
 
   for (const target of [...targets.keys()].sort()) {
     const targetArtifacts = targets.get(target);
@@ -194,11 +455,46 @@ async function main() {
     const signatureArtifact = payload ? findSignatureArtifact(payload, targetArtifacts.artifacts) : null;
 
     if (payload && signatureArtifact) {
+      const requireManifestMetadata = isStable(options.channel);
+      if (isStable(options.channel)) {
+        assertStableArtifactMetadata(payload, target, version, options.channel, `${target} updater payload`);
+        assertStableArtifactMetadata(signatureArtifact, target, version, options.channel, `${target} updater signature`);
+      }
+      const payloadEvidence = await verifyArtifactFile(
+        targetArtifacts.manifestDir,
+        payload,
+        `${target} updater payload`,
+        requireManifestMetadata,
+      );
+      const signatureEvidence = await verifyArtifactFile(
+        targetArtifacts.manifestDir,
+        signatureArtifact,
+        `${target} updater signature`,
+        requireManifestMetadata,
+      );
+      const signature = await readSignature(targetArtifacts.manifestDir, signatureArtifact);
+      if (isStable(options.channel)) {
+        assertStableSignature(signature, target);
+      }
+
+      const url = joinUrl(baseUrl, payload.name);
       platforms[target] = {
-        signature: await readSignature(targetArtifacts.manifestDir, signatureArtifact),
-        url: joinUrl(baseUrl, payload.name),
+        signature,
+        url,
       };
-      evidence.push({ target, source: "signed-artifact", artifact: payload.name });
+      const evidenceEntry = {
+        target,
+        source: "signed-artifact",
+        artifact: payload.name,
+        signatureArtifact: signatureArtifact.name,
+        url,
+        bytes: payloadEvidence.bytes,
+        sha256: payloadEvidence.sha256,
+        signatureBytes: signatureEvidence.bytes,
+        signatureSha256: signatureEvidence.sha256,
+      };
+      evidence.push(evidenceEntry);
+      evidencePlatforms[target] = evidenceEntry;
       continue;
     }
 
@@ -213,7 +509,14 @@ async function main() {
       signature: placeholderToken(target),
       url: joinUrl(baseUrl, version, placeholderName),
     };
-    evidence.push({ target, source: "placeholder", artifact: placeholderName });
+    const evidenceEntry = {
+      target,
+      source: "placeholder",
+      artifact: placeholderName,
+      url: platforms[target].url,
+    };
+    evidence.push(evidenceEntry);
+    evidencePlatforms[target] = evidenceEntry;
   }
 
   const latest = {
@@ -223,14 +526,46 @@ async function main() {
     platforms,
   };
 
+  if (isStable(options.channel)) {
+    assertStableTargetMatrix(Object.keys(platforms));
+  }
+
+  const generatedAt = new Date().toISOString();
+  const evidenceDocument = {
+    channel: options.channel,
+    version,
+    baseUrl,
+    generatedAt,
+    latestPath: outputPath,
+    sourceManifests,
+    platformCount: Object.keys(platforms).length,
+    validations: {
+      urlsDerivedFromBaseUrl: true,
+      signedArtifactsRequiredForStable: isStable(options.channel),
+      stableTargetMatrixComplete: isStable(options.channel),
+    },
+    evidence,
+    platforms: evidencePlatforms,
+  };
+
+  if (isStable(options.channel)) {
+    assertStableDocuments(latest, evidenceDocument, baseUrl);
+  }
+
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(latest, null, 2)}\n`);
   await writeFile(
     join(dirname(outputPath), "latest.evidence.json"),
-    `${JSON.stringify({ channel: options.channel, baseUrl, generatedAt: new Date().toISOString(), evidence }, null, 2)}\n`,
+    `${JSON.stringify(evidenceDocument, null, 2)}\n`,
   );
 
   console.log(`Wrote updater metadata to ${relative(repoRoot, outputPath)}`);
+  const signedEvidence = evidence.filter((entry) => entry.source === "signed-artifact");
+  if (signedEvidence.length > 0) {
+    console.log(`Signed updater artifacts: ${signedEvidence.map((entry) => `${entry.target}=${entry.artifact}`).join(", ")}`);
+  } else {
+    console.log(`Dry-run updater placeholders: ${evidence.map((entry) => `${entry.target}=${entry.artifact}`).join(", ")}`);
+  }
 }
 
 main().catch((error) => {

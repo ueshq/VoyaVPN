@@ -2,7 +2,7 @@
 
 Batch: `08-03-release-runbooks`
 
-This document records the manual credentialed steps required before public beta publication. Do not commit private keys, certificates, passwords, app-specific passwords, token exports, or production updater metadata.
+This document records the manual credentialed steps required before public beta or stable publication. Do not commit private keys, certificates, passwords, app-specific passwords, token exports, or production updater metadata.
 
 ## Evidence Links
 
@@ -18,14 +18,16 @@ This document records the manual credentialed steps required before public beta 
 | Apple signing credentials | macOS release owner | Apple Developer account, secure local keychain, or future GitHub secret import | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` are supplied only through approved secure storage. `security find-identity -v -p codesigning` shows the expected Developer ID identity on the signing machine. | Remove the certificate from the runner or keychain, revoke exposed credentials in Apple Developer, and rebuild from clean credentials. |
 | Windows signing credentials | Windows release owner | Authenticode certificate, hardware token, cloud signer, or future GitHub secret import | `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD` are supplied only through approved secure storage or the external signer. A test file signature verifies with Windows trust tooling. | Revoke or rotate the certificate if exposed. Remove signed artifacts from staging and regenerate packages. |
 | Tauri updater private key | Security owner | Offline key storage, CI secret, or local release machine | `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH` is available to the signing step; `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is set only when the key requires it. No private key material is printed. | Rotate the updater keypair, restore the previous trusted public key, and publish rollback metadata. |
-| Tauri updater public key | Release engineer | `src-tauri/tauri.conf.json` | Placeholder `VOYAVPN_UPDATER_PUBLIC_KEY_PLACEHOLDER_REPLACE_BEFORE_RELEASE` is replaced with the approved public key before real updater publication. | Revert to the previous approved public key or disable update metadata for the affected channel. |
-| Update hosting base URL | Release owner | GitHub Actions variable `VOYAVPN_UPDATES_BASE_URL` and beta update host | The generated `latest.json` URLs resolve to signed beta updater payloads and no longer use `updates.voyavpn.example` unless that host is the approved endpoint. | Restore the previous `latest.json`, remove bad payloads from the host, and rerun metadata generation. |
+| Tauri updater public key | Release engineer | `VOYAVPN_UPDATER_PUBLIC_KEY` or `TAURI_UPDATER_PUBLIC_KEY` | The generated stable overlay contains the approved public key, while `src-tauri/tauri.conf.json` remains credential-free. | Regenerate the overlay with the previous approved public key or disable update metadata for the affected channel. |
+| CDN release base URL | Release owner | GitHub Actions variable `VOYAVPN_CDN_BASE_URL` and stable CDN host | Generated `release-index.json`, core manifests, and staging evidence derive stable URLs from the approved CDN base URL. | Restore the previous release-index pointer and hold new app/core assets outside public paths. |
+| Update hosting base URL | Release owner | GitHub Actions variable `VOYAVPN_UPDATES_BASE_URL` and stable update host | The generated `latest.json` URLs resolve to signed stable updater payloads on the approved CDN endpoint. | Restore the previous `latest.json`, remove bad payloads from the host, and rerun metadata generation. |
+| Diagnostics endpoint | Privacy/security owner | GitHub Actions variable `VOYAVPN_DIAGNOSTICS_ENDPOINT` and approved HTTPS ingest host | Stable preflight validates that diagnostics delivery is configured without URL credentials, query strings, fragments, local hosts, source-control hosts, or fixture hosts. | Disable diagnostics delivery through the approved control path and hold stable publication until privacy approval is restored. |
 
 ## Updater Key Procedure
 
 Owner: security owner.
 
-System: Tauri signer, secure key storage, `src-tauri/tauri.conf.json`, and the beta update host.
+System: Tauri signer, secure key storage, `src-tauri/tauri.conf.json`, and the stable update host.
 
 1. Generate the updater keypair outside the repository:
 
@@ -35,21 +37,53 @@ System: Tauri signer, secure key storage, `src-tauri/tauri.conf.json`, and the b
 
 2. Store the private key in the approved secret system as `TAURI_SIGNING_PRIVATE_KEY` or make it available to the signing machine as `TAURI_SIGNING_PRIVATE_KEY_PATH`.
 3. Store `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` only if the generated key is password-protected.
-4. Replace the updater public key placeholder in `src-tauri/tauri.conf.json`.
-5. Enable updater artifact creation only through a release-controlled config overlay or signing step. The repository default keeps `bundle.createUpdaterArtifacts` set to `false` so debug packaging remains credential-free.
-6. Generate real updater metadata without `--placeholder-signatures`.
+4. Store the approved public key in `VOYAVPN_UPDATER_PUBLIC_KEY` or `TAURI_UPDATER_PUBLIC_KEY` for the release build.
+5. Enable updater artifact creation only through the generated stable overlay. The repository default keeps `bundle.createUpdaterArtifacts` set to `false` so debug packaging remains credential-free.
+6. Generate real updater metadata without dry-run signatures.
 
 Verification:
 
-- `latest.json` contains real signatures, not `VOYAVPN_UPDATER_SIGNATURE_PLACEHOLDER_*`.
+- `latest.json` contains real signatures from signed updater artifacts.
 - `latest.evidence.json` records signed-artifact sources for each target.
-- An older signed beta build discovers the update from the beta endpoint.
+- An older signed build discovers the update from the intended channel endpoint.
 
 Rollback:
 
 - Re-publish the previous `latest.json` for the channel.
 - Remove or quarantine the bad updater payloads.
 - Rotate the updater keypair if private key custody is uncertain.
+
+## Stable Tauri latest.json Generation
+
+Owner: release engineer.
+
+System: signed Tauri updater payloads, `.sig` files, stable CDN base URL, and `scripts/release-updater-metadata.mjs`.
+
+Stable inputs:
+
+- One signed updater payload and matching `.sig` file for each supported target: `darwin-aarch64`, `darwin-x86_64`, `linux-aarch64`, `linux-x86_64`, `windows-aarch64`, and `windows-x86_64`.
+- `artifact-manifest.json` entries for each payload and signature with `kind`, `target`, `channel`, `version`, `bytes`, `sha256`, `name`, `path`, `originalName`, and `originalRelativePath`.
+- A release-owner-approved HTTPS CDN base URL for the stable channel. Do not use example, GitHub, or placeholder hosts for stable.
+- Optional `--version`, `--notes`, and `--pub-date` values when the release record must override package defaults.
+
+Stable command shape:
+
+```sh
+node scripts/release-updater-metadata.mjs --input dist/release/signed-updater --out dist/updater/latest.json --channel stable --base-url <stable-cdn-base-url>
+```
+
+Stable outputs:
+
+- `latest.json`: Tauri updater metadata with `version`, `notes`, `pub_date`, and `platforms.<target>.url/signature` for every stable target.
+- `latest.evidence.json`: generated evidence mapping every target to `source: signed-artifact`, the updater artifact name, the signature artifact name, URL, payload bytes, payload SHA-256, signature bytes, and signature SHA-256.
+
+Stable fail-closed checks:
+
+- `--placeholder-signatures` is rejected for `--channel stable`.
+- Stable requires `--base-url` or `VOYAVPN_UPDATES_BASE_URL`; the URL must be HTTPS and must not point at example, GitHub, or placeholder hosts.
+- Every stable target must have a payload and matching `.sig` file on disk.
+- Manifest `bytes` and `sha256` values must match the payload and signature files.
+- Empty, short, replacement, or placeholder signature values are rejected before `latest.json` is written.
 
 ## macOS Signing And Notarization
 
@@ -94,7 +128,7 @@ System: `.deb`, `.rpm`, `.AppImage`, checksum host, and optional package reposit
 ## Publication Guardrails
 
 - Use `dry_run=true` until all signing inputs are ready.
-- Never publish artifacts generated with placeholder updater signatures.
+- Never publish artifacts generated with dry-run updater signatures.
 - Never publish unsigned Windows or macOS beta artifacts as public beta packages.
 - Do not bundle GPL or AGPL proxy cores in default installers unless legal approval is recorded outside the automated runner and reflected in notices.
 - Keep app updater metadata separate from core, geo, and ruleset update flows.

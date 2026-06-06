@@ -13,8 +13,8 @@ use voya_core::{
 use voya_db::{Database, DbError};
 use voya_platform::{
     coreinfo::{
-        all_core_infos, discover_executable, get_core_info, CoreInfo, CoreInfoError, CoreLaunch,
-        TargetOs,
+        all_core_infos, copy_seed_core_asset, discover_executable, get_core_info, CoreInfo,
+        CoreInfoError, CoreLaunch, CoreSeedCopyOutcome, TargetOs,
     },
     paths::{AppPaths, PathError},
 };
@@ -48,6 +48,7 @@ pub fn core_launch_plan(
 pub struct RuntimeManager<'runtime> {
     database: &'runtime Database,
     paths: AppPaths,
+    core_seed_resource_dir: Option<PathBuf>,
     supervisor: CoreSupervisor,
     target_os: TargetOs,
 }
@@ -68,9 +69,19 @@ impl<'runtime> RuntimeManager<'runtime> {
         Self {
             database,
             paths,
+            core_seed_resource_dir: None,
             supervisor,
             target_os,
         }
+    }
+
+    #[must_use]
+    pub fn with_core_seed_resource_dir(
+        mut self,
+        core_seed_resource_dir: impl Into<PathBuf>,
+    ) -> Self {
+        self.core_seed_resource_dir = Some(core_seed_resource_dir.into());
+        self
     }
 
     pub async fn connect(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
@@ -155,6 +166,7 @@ impl<'runtime> RuntimeManager<'runtime> {
     ) -> Result<CoreProcessSpec, RuntimeError> {
         let core_type = context.run_core_type;
         let core_info = get_core_info(core_type).ok_or(RuntimeError::MissingCoreInfo(core_type))?;
+        self.copy_seed_core_asset(core_type)?;
         let executable = discover_executable(&self.paths, core_info)?;
         let launch = core_launch_plan(core_type, executable, &self.paths, config_file_name)
             .ok_or(RuntimeError::MissingCoreInfo(core_type))?;
@@ -162,6 +174,19 @@ impl<'runtime> RuntimeManager<'runtime> {
         Ok(CoreProcessSpec::new(core_type, launch)
             .with_display_log(context.node.display_log)
             .with_may_need_sudo(true))
+    }
+
+    fn copy_seed_core_asset(
+        &self,
+        core_type: CoreType,
+    ) -> Result<Option<CoreSeedCopyOutcome>, RuntimeError> {
+        let Some(seed_resource_dir) = &self.core_seed_resource_dir else {
+            return Ok(None);
+        };
+
+        copy_seed_core_asset(&self.paths, seed_resource_dir, core_type)
+            .map(Some)
+            .map_err(Into::into)
     }
 }
 
@@ -385,7 +410,10 @@ const fn default_core_type(config_type: ConfigType) -> CoreType {
 #[cfg(test)]
 mod tests {
     use std::{
-        sync::{Arc, Mutex},
+        sync::{
+            atomic::{AtomicU64, Ordering},
+            Arc, Mutex,
+        },
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -393,9 +421,10 @@ mod tests {
     use voya_db::Database;
     use voya_platform::{
         coreinfo::{
-            core_type_dir_name, MIERU_CONFIG_ENV, XRAY_LOCAL_ASSET_ENV, XRAY_LOCAL_CERT_ENV,
+            core_type_dir_name, executable_name_for_current_os, MIERU_CONFIG_ENV,
+            XRAY_LOCAL_ASSET_ENV, XRAY_LOCAL_CERT_ENV,
         },
-        paths::{AppPaths, StorageMode},
+        paths::{core_seed_resources_dir, AppPaths, StorageMode},
         process::{
             ProcessError, ProcessHandle, ProcessOutput, ProcessRole, ProcessRunner, ProcessSpawn,
         },
@@ -403,6 +432,8 @@ mod tests {
 
     use super::*;
     use crate::supervisor::SupervisorDeps;
+
+    static TEMP_PATH_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     #[test]
     fn coreinfo_app_layer_exposes_full_platform_table() {
@@ -552,6 +583,75 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn coreinfo_runtime_connect_copies_seed_core_before_discovery() {
+        let database = Database::connect_in_memory().await.unwrap();
+        let paths = temp_paths();
+        let seed_root = core_seed_resources_dir(paths.app_dir().join("resources"));
+        let seed_exe = write_seed_core_executable(&seed_root, CoreType::Xray, b"seed-xray");
+        let runner = RecordingRunner::default();
+        let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
+            Arc::new(runner.clone()),
+            Arc::new(voya_platform::elevation::SudoPasswordStore::new()),
+        ));
+        let manager =
+            RuntimeManager::with_target_os(&database, paths.clone(), supervisor, TargetOs::Linux)
+                .with_core_seed_resource_dir(seed_root);
+        let config = AppConfig {
+            index_id: "active".to_string(),
+            ..AppConfig::default()
+        };
+        database
+            .profiles()
+            .upsert(&active_xray_profile("active"))
+            .await
+            .unwrap();
+
+        manager.connect(&config).await.unwrap();
+
+        let app_data_exe = paths.core_bin_file(
+            core_type_dir_name(CoreType::Xray),
+            executable_name_for_current_os("xray"),
+        );
+        let spawns = runner.spawns.lock().expect("spawns");
+        assert_eq!(spawns.len(), 1);
+        assert_eq!(spawns[0].executable, app_data_exe);
+        assert_ne!(spawns[0].executable, seed_exe);
+    }
+
+    #[tokio::test]
+    async fn coreinfo_runtime_connect_missing_seed_surfaces_typed_missing_core() {
+        let database = Database::connect_in_memory().await.unwrap();
+        let paths = temp_paths();
+        let seed_root = core_seed_resources_dir(paths.app_dir().join("resources"));
+        let runner = RecordingRunner::default();
+        let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
+            Arc::new(runner.clone()),
+            Arc::new(voya_platform::elevation::SudoPasswordStore::new()),
+        ));
+        let manager = RuntimeManager::with_target_os(&database, paths, supervisor, TargetOs::Linux)
+            .with_core_seed_resource_dir(seed_root);
+        let config = AppConfig {
+            index_id: "active".to_string(),
+            ..AppConfig::default()
+        };
+        database
+            .profiles()
+            .upsert(&active_xray_profile("active"))
+            .await
+            .unwrap();
+
+        let error = manager.connect(&config).await.expect_err("missing core");
+
+        match error {
+            RuntimeError::CoreInfo(CoreInfoError::ExecutableNotFound { core_type, .. }) => {
+                assert_eq!(core_type, CoreType::Xray);
+            }
+            other => panic!("expected typed missing core error, got {other:?}"),
+        }
+        assert!(runner.spawns.lock().expect("spawns").is_empty());
+    }
+
+    #[tokio::test]
     async fn runtime_connect_uses_active_routing_rules_from_database() {
         let database = Database::connect_in_memory().await.unwrap();
         let paths = temp_paths();
@@ -615,19 +715,49 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
+        let counter = TEMP_PATH_COUNTER.fetch_add(1, Ordering::Relaxed);
         AppPaths::new(
             std::env::temp_dir()
                 .join("voyavpn-runtime-tests")
-                .join(format!("{}-{nanos}", std::process::id())),
+                .join(format!("{}-{nanos}-{counter}", std::process::id())),
             StorageMode::Portable,
         )
     }
 
     fn write_fake_core_executable(paths: &AppPaths, core_type: CoreType) {
         let core_info = get_core_info(core_type).expect("core info");
-        let executable_name = core_info.executable_names()[0];
+        let executable_name = executable_name_for_current_os(core_info.executable_names()[0]);
         let executable = paths.core_bin_file(core_type_dir_name(core_type), executable_name);
         fs::create_dir_all(executable.parent().expect("core dir")).unwrap();
         fs::write(executable, b"fake").unwrap();
+    }
+
+    fn write_seed_core_executable(
+        seed_root: &Path,
+        core_type: CoreType,
+        contents: &[u8],
+    ) -> PathBuf {
+        let core_info = get_core_info(core_type).expect("core info");
+        let executable_name = executable_name_for_current_os(core_info.executable_names()[0]);
+        let executable = seed_root
+            .join(core_type_dir_name(core_type))
+            .join(executable_name);
+        fs::create_dir_all(executable.parent().expect("seed core dir")).unwrap();
+        fs::write(&executable, contents).unwrap();
+        executable
+    }
+
+    fn active_xray_profile(index_id: &str) -> ProfileItem {
+        ProfileItem {
+            index_id: index_id.to_string(),
+            config_type: ConfigType::VLESS,
+            core_type: Some(CoreType::Xray),
+            remarks: "Runtime".to_string(),
+            address: "example.test".to_string(),
+            port: 443,
+            password: "00000000-0000-0000-0000-000000000000".to_string(),
+            network: "tcp".to_string(),
+            ..ProfileItem::default()
+        }
     }
 }
