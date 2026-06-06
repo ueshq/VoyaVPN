@@ -166,6 +166,17 @@ Stable overlay and blocker-warning status after the final local sweep:
 - The committed default Tauri config does not include production updater config and keeps `bundle.createUpdaterArtifacts` disabled. This is an intentional repository posture, not a remaining repository blocker. Stable non-dry-run release must generate `target/release-config/tauri.updater.stable.generated.json` with `pnpm tauri:stable-updater-config` and use the approved updater public key plus updater signing input.
 - Dry-run readiness passes with zero stable-blocker warnings. Repository-controlled blockers for forbidden production URL fields, updater placeholders, and GitHub production download templates are resolved. CDN staging, signing, notarization, external smoke machines, legal approval, privacy approval, stable pointer promotion, and monitoring remain external stable gates.
 
+Repository-owned closure sweep captured on 2026-06-06 at 18:27-18:34 CST (Asia/Shanghai):
+
+- `pnpm lint`: PASS with 0 warnings and 0 errors after removing unused UI variant exports from `badge.tsx` and `button.tsx`, and scoping the known TanStack Virtual React Compiler warning in `clash-connections-screen.tsx` to the `useVirtualizer` call.
+- `pnpm release:record`: PASS. The generated fillable release-owner packet was written to `dist/release/stable-release-record.md` with version `0.1.0`, commit `b5d31342842a1bd3901ec0bc43968b4005e56adc`, branch `main`, required command evidence rows, six stable target artifact rows, CDN pointer rows, external gate rows, and Go/No-Go fields. The generated packet records the worktree as dirty until this closure change set is committed.
+- `pnpm exec vitest --run scripts/verify-release-staging.test.mjs scripts/check-release-readiness.test.mjs --reporter verbose`: PASS. The targeted release-script tests passed 2 files and 11 tests, including GitHub production URL rejection, upstream/source URL allowance, complete staging metadata acceptance, placeholder updater signature rejection, and core matrix rejection.
+- `scripts/verify-release-staging.mjs` fixture integration: PASS. Fixture-derived stable release index, signed updater metadata, and core manifest validated with `--allow-test-hosts`: 6 app artifacts across 6 stable targets, 6 updater platforms, and 18 core assets for Xray, mihomo, and sing-box. Network probing was intentionally skipped for fixture hosts.
+- `pnpm run verify:ci`: PASS. Rust formatting, strict Clippy, Rust workspace tests, frontend typecheck, Vitest, ESLint, and generated binding drift passed. Rust tests passed across 236 unit tests. Vitest passed 9 files and 52 tests. ESLint reported no warnings or errors. IPC bindings were up to date.
+- `pnpm run build`: PASS. TypeScript build and Vite production build completed, transforming 2069 modules. No Vite large-chunk warning was emitted; the Tailwind plugin timing notice remains informational.
+- `pnpm run smoke:frontend`: PASS. Playwright passed 3 Chromium smoke tests: app shell and dialogs, profile import/activation/fake runtime connect, and routing/DNS settings.
+- `pnpm run check:release:dry-run`: PASS. Dry-run readiness finished with 11 passes, 0 warnings, and 0 failures.
+
 External gates not completed by this local batch:
 
 - CDN staging, stable pointer promotion, cache purge, and CDN rollback verification were not run.

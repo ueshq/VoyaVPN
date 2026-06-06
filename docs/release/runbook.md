@@ -109,6 +109,26 @@ Required stable overlay inputs:
 
 The checker writes generated release index, updater metadata, core manifest, and evidence files to a temporary directory by default. It does not upload artifacts, access cloud consoles, sign packages, notarize apps, or approve external release gates.
 
+### Release Evidence Helpers
+
+Generate a fillable stable release record from the current commit before external signing and smoke work starts:
+
+```sh
+pnpm release:record
+```
+
+The default output is `dist/release/stable-release-record.md`. It records the current version, branch, commit, worktree status, required command evidence, target artifact rows, CDN pointer rows, external gate rows, and final Go/No-Go fields. It is evidence scaffolding only and does not approve any gate.
+
+Validate staged metadata before stable pointer promotion:
+
+```sh
+pnpm release:verify-staging -- --release-index <release-index.json> --updater-metadata <latest.json> --core-manifest <core-assets.json>
+pnpm release:verify-staging -- --release-index <release-index.json> --updater-metadata <latest.json> --core-manifest <core-assets.json> --probe
+pnpm release:verify-staging -- --release-index <release-index.json> --updater-metadata <latest.json> --core-manifest <core-assets.json> --download-and-hash
+```
+
+The staging verifier checks stable target completeness, approved HTTPS CDN hosts, no GitHub/example/local/test production artifact URLs, updater signature presence, core asset matrix completeness, byte sizes, and SHA-256 shape. `--probe` validates URL reachability without full downloads; `--download-and-hash` downloads referenced assets and verifies checksums. It does not upload, purge, mutate pointers, sign, notarize, or approve publication.
+
 ## Local Debug Packaging
 
 Owner: release engineer.

@@ -58,6 +58,7 @@ export function ClashConnectionsScreen() {
     onSuccess: syncConnectionsSnapshot,
   });
   const viewportRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual exposes scroll helpers that React Compiler cannot memoize safely.
   const rowVirtualizer = useVirtualizer({
     count: filteredConnections.length,
     estimateSize: () => 40,

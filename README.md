@@ -103,4 +103,11 @@ The GitHub release workflow is manual-only:
 workflow_dispatch inputs: channel, build_profile, dry_run, updater_metadata
 ```
 
+Generate release-owner evidence scaffolding and validate staged metadata:
+
+```sh
+pnpm release:record
+pnpm release:verify-staging -- --release-index <release-index.json> --updater-metadata <latest.json> --core-manifest <core-assets.json>
+```
+
 Production stable publication still requires external signing identities, notarization credentials, updater private keys, CDN publication control, diagnostics approval, platform smoke machines, and rollback readiness. The release runbooks live under `docs/release/`, and the stable gate report is `docs/verification/stable-release-gate.md`.
