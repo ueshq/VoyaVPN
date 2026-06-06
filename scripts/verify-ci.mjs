@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 
 const steps = [
   ["Rust formatting", "pnpm", ["run", "check:rust:fmt"]],
+  ["Rust Clippy", "pnpm", ["run", "check:rust:clippy"]],
   ["Rust tests", "pnpm", ["run", "check:rust:test"]],
   ["Frontend typecheck", "pnpm", ["run", "check:frontend:typecheck"]],
   ["Frontend tests", "pnpm", ["run", "check:frontend:test"]],

@@ -16,6 +16,14 @@ const coreTypes = new Map([
 const stableCoreTypes = ["Xray", "mihomo", "sing_box"];
 const stableOs = ["windows", "macos", "linux"];
 const stableArchs = ["x64", "arm64"];
+const stableTargetMatrix = [
+  { target: "windows-x64", releaseTarget: "windows-x86_64", os: "windows", arch: "x64" },
+  { target: "windows-arm64", releaseTarget: "windows-aarch64", os: "windows", arch: "arm64" },
+  { target: "macos-x64", releaseTarget: "darwin-x86_64", os: "macos", arch: "x64" },
+  { target: "macos-arm64", releaseTarget: "darwin-aarch64", os: "macos", arch: "arm64" },
+  { target: "linux-x64", releaseTarget: "linux-x86_64", os: "linux", arch: "x64" },
+  { target: "linux-arm64", releaseTarget: "linux-aarch64", os: "linux", arch: "arm64" },
+];
 const archiveFormats = new Set(["zip", "tar.gz", "gz"]);
 
 function parseArgs(argv) {
@@ -164,6 +172,25 @@ function defaultEvidencePath(outputPath) {
   const dot = name.lastIndexOf(".");
   const evidenceName = dot === -1 ? `${name}.evidence.json` : `${name.slice(0, dot)}.evidence.json`;
   return resolve(dirname(outputPath), evidenceName);
+}
+
+function displayRepoPath(path) {
+  return path.startsWith(repoRoot) ? path.slice(repoRoot.length + 1).replaceAll("\\", "/") || "." : path;
+}
+
+function sourceInputEvidence(inputPath) {
+  const relativePath = displayRepoPath(inputPath);
+  const isFixture = relativePath === "tests/fixtures" || relativePath.startsWith("tests/fixtures/");
+  return {
+    path: inputPath,
+    relativePath,
+    kind: isFixture ? "fixture" : "operator-supplied-core-assets",
+    nonPublishableFixture: isFixture,
+  };
+}
+
+function uniqueSorted(values) {
+  return [...new Set(values.filter(Boolean))].sort((left, right) => left.localeCompare(right));
 }
 
 function requiredString(value, field, context) {
@@ -416,6 +443,91 @@ function assertStableManifest(manifest, baseUrl) {
   }
 }
 
+function coreVersions(assets) {
+  return Object.fromEntries(
+    stableCoreTypes
+      .map((coreType) => {
+        const asset = assets.find((entry) => entry.coreType === coreType);
+        return asset ? [coreType, asset.version] : null;
+      })
+      .filter(Boolean),
+  );
+}
+
+function stableTargetForAsset(asset) {
+  return stableTargetMatrix.find((target) => target.os === asset.os && target.arch === asset.arch) ?? {
+    target: `${asset.os}-${asset.arch}`,
+    releaseTarget: null,
+    os: asset.os,
+    arch: asset.arch,
+  };
+}
+
+function stableTargetRank(targetName) {
+  const index = stableTargetMatrix.findIndex((target) => target.target === targetName);
+  return index === -1 ? stableTargetMatrix.length : index;
+}
+
+function buildTargetEvidence(assets) {
+  const byTarget = new Map();
+
+  for (const asset of assets) {
+    const target = stableTargetForAsset(asset);
+    const current = byTarget.get(target.target) ?? {
+      ...target,
+      assets: [],
+    };
+    current.assets.push(asset);
+    byTarget.set(target.target, current);
+  }
+
+  return [...byTarget.values()]
+    .sort((left, right) => {
+      const rankComparison = stableTargetRank(left.target) - stableTargetRank(right.target);
+      return rankComparison !== 0 ? rankComparison : left.target.localeCompare(right.target);
+    })
+    .map((target) => ({
+      target: target.target,
+      releaseTarget: target.releaseTarget,
+      os: target.os,
+      arch: target.arch,
+      assetCount: target.assets.length,
+      coreTypes: stableCoreTypes.filter((coreType) => target.assets.some((asset) => asset.coreType === coreType)),
+      sourceArtifactNames: uniqueSorted(target.assets.map((asset) => asset.name)),
+      checksums: target.assets.map((asset) => ({
+        coreType: asset.coreType,
+        version: asset.version,
+        name: asset.name,
+        sourceArtifactName: asset.name,
+        path: asset.path,
+        bytes: asset.bytes,
+        sha256: asset.sha256,
+      })),
+    }));
+}
+
+function buildCoreTargetEvidence(assets) {
+  return stableCoreTypes.map((coreType) => {
+    const coreAssets = assets.filter((asset) => asset.coreType === coreType);
+    const targets = buildTargetEvidence(coreAssets);
+    return {
+      coreType,
+      version: coreAssets[0]?.version ?? null,
+      license: coreAssets[0]?.license ?? null,
+      targetCount: targets.length,
+      sourceArtifactNames: uniqueSorted(coreAssets.map((asset) => asset.name)),
+      targets: targets.map((target) => ({
+        target: target.target,
+        releaseTarget: target.releaseTarget,
+        os: target.os,
+        arch: target.arch,
+        sourceArtifactNames: target.sourceArtifactNames,
+        checksums: target.checksums,
+      })),
+    };
+  });
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (!options.fixture) {
@@ -457,20 +569,36 @@ async function main() {
     assertStableManifest(manifest, baseUrl);
   }
 
+  const targetEvidence = buildTargetEvidence(assets);
+  const firstStableTargets = targetEvidence
+    .map((target) => target.target)
+    .filter((target) => stableTargetMatrix.some((stableTarget) => stableTarget.target === target));
   const evidence = {
     productName: options.product,
+    manifestVersion: manifest.manifestVersion,
     channel: options.channel,
+    versions: coreVersions(assets),
     baseUrl,
     generatedAt,
     coreManifestPath: outputPath,
+    evidencePath,
+    sourceInput: sourceInputEvidence(fixturePath),
     sourceFixture: fixturePath,
     assetCount: assets.length,
+    targetCount: targetEvidence.length,
+    firstStableTargetCount: firstStableTargets.length,
+    firstStableTargets,
+    coreTypeCount: uniqueSorted(assets.map((asset) => asset.coreType)).length,
+    checksumCount: assets.length,
+    sourceArtifactNames: uniqueSorted(assets.map((asset) => asset.name)),
     validations: {
       urlsDerivedFromBaseUrl: true,
       githubUrlsOnlyInUpstreamReferences: true,
       firstStableMatrixComplete: isStable(options.channel),
       requiredAssetFieldsPresent: true,
     },
+    targets: targetEvidence,
+    coreTargets: buildCoreTargetEvidence(assets),
     assets: assets.map((asset) => ({
       coreType: asset.coreType,
       version: asset.version,
@@ -479,6 +607,8 @@ async function main() {
       arch: asset.arch,
       archiveFormat: asset.archiveFormat,
       name: asset.name,
+      sourceArtifactName: asset.name,
+      sourceArtifactPath: asset.path,
       bytes: asset.bytes,
       sha256: asset.sha256,
       url: asset.url,

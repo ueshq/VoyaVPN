@@ -76,11 +76,12 @@ impl fmt::Display for EnumDiscriminantError {
 
 impl Error for EnumDiscriminantError {}
 
-#[allow(non_camel_case_types)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Type)]
 #[repr(i32)]
 #[specta(type = i32)]
 pub enum ConfigType {
+    #[default]
     VMess = 1,
     Custom = 2,
     Shadowsocks = 3,
@@ -126,18 +127,13 @@ impl ConfigType {
     }
 }
 
-impl Default for ConfigType {
-    fn default() -> Self {
-        Self::VMess
-    }
-}
-
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Type)]
 #[repr(i32)]
 #[specta(type = i32)]
 pub enum CoreType {
     v2fly = 1,
+    #[default]
     Xray = 2,
     v2fly_v5 = 4,
     mihomo = 13,
@@ -172,17 +168,12 @@ int_enum!(CoreType {
     v2rayN = 99,
 });
 
-impl Default for CoreType {
-    fn default() -> Self {
-        Self::Xray
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Type)]
 #[repr(i32)]
 #[specta(type = i32)]
 pub enum GridOrientation {
     Horizontal = 0,
+    #[default]
     Vertical = 1,
     Tab = 2,
 }
@@ -192,12 +183,6 @@ int_enum!(GridOrientation {
     Vertical = 1,
     Tab = 2,
 });
-
-impl Default for GridOrientation {
-    fn default() -> Self {
-        Self::Vertical
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[repr(i32)]
@@ -297,10 +282,11 @@ int_enum!(PresetType {
     Iran = 2,
 });
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Type)]
 #[repr(i32)]
 #[specta(type = i32)]
 pub enum RuleMode {
+    #[default]
     Rule = 0,
     Global = 1,
     Direct = 2,
@@ -313,12 +299,6 @@ int_enum!(RuleMode {
     Direct = 2,
     Unchanged = 3,
 });
-
-impl Default for RuleMode {
-    fn default() -> Self {
-        Self::Rule
-    }
-}
 
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Type)]
@@ -396,10 +376,11 @@ int_enum!(SpeedActionType {
     FastRealping = 5,
 });
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Type)]
 #[repr(i32)]
 #[specta(type = i32)]
 pub enum SysProxyType {
+    #[default]
     ForcedClear = 0,
     ForcedChange = 1,
     Unchanged = 2,
@@ -412,12 +393,6 @@ int_enum!(SysProxyType {
     Unchanged = 2,
     Pac = 3,
 });
-
-impl Default for SysProxyType {
-    fn default() -> Self {
-        Self::ForcedClear
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[repr(i32)]
@@ -584,9 +559,14 @@ mod tests {
 
     #[test]
     fn enum_json_uses_integer_discriminants() {
-        assert_eq!(serde_json::to_string(&ConfigType::VLESS).unwrap(), "5");
         assert_eq!(
-            serde_json::from_str::<CoreType>("24").unwrap(),
+            serde_json::to_string(&ConfigType::VLESS)
+                .expect("config type should serialize as integer discriminant"),
+            "5"
+        );
+        assert_eq!(
+            serde_json::from_str::<CoreType>("24")
+                .expect("core type integer discriminant should deserialize"),
             CoreType::sing_box
         );
     }

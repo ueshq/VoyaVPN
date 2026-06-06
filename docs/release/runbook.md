@@ -13,6 +13,7 @@ This runbook is the top-level release path for VoyaVPN production stable package
 - Diagnostics privacy contract: [diagnostics-privacy.md](diagnostics-privacy.md)
 - Release OS smoke matrix: [os-smoke-matrix.md](os-smoke-matrix.md)
 - Rollback procedures: [rollback.md](rollback.md)
+- Stable external evidence checklist: [external-evidence-checklist.md](external-evidence-checklist.md)
 - Stable release gate: [../verification/stable-release-gate.md](../verification/stable-release-gate.md)
 - Manual OS evidence template: [../verification/manual-os-smoke.md](../verification/manual-os-smoke.md)
 - Automated smoke coverage and gaps: [../verification/cross-platform-smoke.md](../verification/cross-platform-smoke.md)
@@ -52,17 +53,59 @@ pnpm check:release:stable
 
 Stable mode requires `VOYAVPN_CDN_BASE_URL` or `--cdn-base-url`, `VOYAVPN_DIAGNOSTICS_ENDPOINT` or `--diagnostics-endpoint`, signed updater artifacts, real Tauri updater signing input through `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH`, platform signing env names for macOS and Windows, a non-placeholder updater public key in the generated overlay, updater artifacts enabled, and no forbidden example, dry-run updater, or GitHub release/download URLs in production surfaces.
 
-Generate the stable Tauri updater overlay before stable readiness:
+### Prepared Stable Environment Preflight
+
+Release owners run this exact preflight only after external variables, signing secrets, and real artifact inputs already exist in the prepared release shell. Secret values stay in the approved secret system and must not be pasted into docs, commits, or logs.
+
+Required prepared names:
+
+| Input | Purpose |
+| --- | --- |
+| `VOYAVPN_RELEASE_CHANNEL` | Selects stable overlay generation for Tauri build wrappers. |
+| `VOYAVPN_CDN_BASE_URL` | Approved HTTPS stable CDN base URL for release index, manual downloads, core assets, and staging evidence. |
+| `VOYAVPN_UPDATES_BASE_URL` | Approved HTTPS stable updater CDN base URL used to derive `latest.json`. |
+| `VOYAVPN_UPDATER_PUBLIC_KEY` or `TAURI_UPDATER_PUBLIC_KEY` | Approved non-placeholder Tauri updater public key written into the generated overlay. |
+| `VOYAVPN_DIAGNOSTICS_ENDPOINT` | Approved HTTPS diagnostics ingest endpoint. |
+| `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH` | Updater private signing input supplied by the approved secret system or signing machine. |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Optional updater private-key password when the key requires one. |
+| `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` | macOS signing and notarization inputs required for stable readiness. |
+| `WINDOWS_CERTIFICATE_BASE64`, `WINDOWS_CERTIFICATE_PASSWORD` | Windows signing inputs required for stable readiness. |
+| `VOYAVPN_RELEASE_ARTIFACTS_DIR`, `VOYAVPN_SIGNED_UPDATER_DIR`, `VOYAVPN_CORE_ASSETS_FILE` | Optional stable artifact input paths when the prepared environment does not use the default `dist/release/...` paths. |
+
+Prepared release shell command sequence:
 
 ```sh
-VOYAVPN_RELEASE_CHANNEL=stable \
-VOYAVPN_UPDATES_BASE_URL=<stable-updater-cdn-base-url> \
-VOYAVPN_UPDATER_PUBLIC_KEY=<approved-public-key> \
-TAURI_SIGNING_PRIVATE_KEY_PATH=<secure-private-key-path> \
+export VOYAVPN_RELEASE_CHANNEL=stable
+pnpm tauri:stable-updater-config
+pnpm check:release:stable
+```
+
+`pnpm tauri:stable-updater-config` writes `target/release-config/tauri.updater.stable.generated.json`. `pnpm check:release:stable` then scans that overlay merged over `src-tauri/tauri.conf.json` and validates stable environment inputs, generated release index input, signed updater input, core asset source input, diagnostics endpoint config, and production URL blockers.
+
+Expected failures in an unprepared local shell are environment-only skips, not repository blockers: missing `VOYAVPN_CDN_BASE_URL`, missing `VOYAVPN_UPDATES_BASE_URL`, missing `VOYAVPN_UPDATER_PUBLIC_KEY`, missing `VOYAVPN_DIAGNOSTICS_ENDPOINT`, missing `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH`, missing Apple or Windows signing inputs, missing real stable artifact directories, fixture paths used in stable mode, placeholder updater signatures, or forbidden example, `.test`, localhost, placeholder, or GitHub production download URLs.
+
+Expected pass criteria in a prepared stable environment: the overlay exists at `target/release-config/tauri.updater.stable.generated.json`, it enables `bundle.createUpdaterArtifacts`, updater metadata uses the approved HTTPS updater CDN and real signatures, release/core metadata use only approved CDN-derived production URLs, stable artifact inputs are not fixtures, and `pnpm check:release:stable` exits successfully with zero failures. Stable pointer promotion must not begin until this prepared-environment check passes.
+
+Generate the stable Tauri updater overlay before stable readiness when inspecting the overlay directly from a prepared shell:
+
+```sh
+export VOYAVPN_RELEASE_CHANNEL=stable
 pnpm tauri:stable-updater-config
 ```
 
 The generated overlay path is `target/release-config/tauri.updater.stable.generated.json`. `pnpm check:release:stable` scans that overlay merged over `src-tauri/tauri.conf.json`.
+
+The committed Tauri config intentionally keeps `bundle.createUpdaterArtifacts` disabled and omits `plugins.updater` so repository-controlled builds do not contain updater credentials or generated release state. The stable overlay is the only release path that enables `createUpdaterArtifacts`; it is generated from environment variables, used by the package job through `--config`, and left uncommitted.
+
+Required stable overlay inputs:
+
+| Input | Purpose |
+| --- | --- |
+| `VOYAVPN_RELEASE_CHANNEL=stable` or `VOYAVPN_TAURI_UPDATER_CONFIG=stable` | Selects the stable updater overlay path in `scripts/tauri-build.mjs`. |
+| `VOYAVPN_UPDATES_BASE_URL` | Approved HTTPS updater CDN base URL used to derive `<base>/latest.json`. |
+| `VOYAVPN_UPDATER_PUBLIC_KEY` or `TAURI_UPDATER_PUBLIC_KEY` | Approved non-placeholder Tauri updater public key written into the generated overlay. |
+| `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH` | Private signing material or path supplied by the approved secret system. It is required for updater artifact creation and must not be committed. |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Optional password when the private key requires one. |
 
 The checker writes generated release index, updater metadata, core manifest, and evidence files to a temporary directory by default. It does not upload artifacts, access cloud consoles, sign packages, notarize apps, or approve external release gates.
 
@@ -107,7 +150,7 @@ Stable publication follows this order:
 11. Promote stable CDN pointers only after every staged verification passes: manual release index pointer, app updater `latest.json` pointer, core manifest pointer, geo/SRS manifest pointers, checksums, and notices. Record pointer object hashes before and after promotion.
 12. Monitor install, launch, updater smoke, manual download smoke, core smoke, diagnostics, and crash-class feedback for the approved window. Keep rollback owner and previous pointers on call until closeout.
 
-Verification: every external checkpoint below has owner, system, verification, and rollback or stop condition evidence attached to the stable gate.
+Verification: every external checkpoint below has owner, system, verification, rollback or stop condition, and artifact/hash evidence attached through [external-evidence-checklist.md](external-evidence-checklist.md) and linked from the stable gate.
 
 Rollback: execute [rollback.md](rollback.md). Stop updater exposure first, then manual download exposure, then core/geo/SRS manifest exposure, then diagnostics delivery if privacy or payload risk is involved. Quarantine bad artifacts with hashes instead of deleting the only evidence copy.
 
@@ -160,6 +203,7 @@ Publication is approved only when:
 - Platform signing and notarization evidence is attached where required.
 - Manual OS smoke evidence covers the supported stable x64 and arm64 matrix.
 - Updater metadata uses real signatures and approved CDN URLs.
+- The stable external evidence checklist has an entry for CDN staging, pointer promotion, signing/notarization, Windows signing, Linux package verification, updater smoke, manual download smoke, core smoke, diagnostics smoke, legal approval, privacy approval, rollback, and monitoring.
 - CDN staging, pointer promotion, updater smoke, manual download smoke, core smoke, diagnostics smoke, and rollback readiness are recorded.
 - Rollback owner and rollback assets are ready.
 - Xray, mihomo, and sing-box seed/core CDN redistribution has a recorded legal/source approval checkpoint when included.

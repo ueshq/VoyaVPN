@@ -38,8 +38,16 @@ System: Tauri signer, secure key storage, `src-tauri/tauri.conf.json`, and the s
 2. Store the private key in the approved secret system as `TAURI_SIGNING_PRIVATE_KEY` or make it available to the signing machine as `TAURI_SIGNING_PRIVATE_KEY_PATH`.
 3. Store `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` only if the generated key is password-protected.
 4. Store the approved public key in `VOYAVPN_UPDATER_PUBLIC_KEY` or `TAURI_UPDATER_PUBLIC_KEY` for the release build.
-5. Enable updater artifact creation only through the generated stable overlay. The repository default keeps `bundle.createUpdaterArtifacts` set to `false` so debug packaging remains credential-free.
-6. Generate real updater metadata without dry-run signatures.
+5. Enable updater artifact creation only through the generated stable overlay. The repository default keeps `bundle.createUpdaterArtifacts` set to `false` so debug packaging remains credential-free and the committed config does not contain updater endpoints, public keys, private-key paths, or generated release state.
+6. Generate the stable overlay at `target/release-config/tauri.updater.stable.generated.json` from a prepared shell where release-time environment names have already been supplied by the approved secret system or signing machine:
+
+   ```sh
+   export VOYAVPN_RELEASE_CHANNEL=stable
+   pnpm tauri:stable-updater-config
+   ```
+
+7. Keep the generated overlay and private signing material out of git. The overlay contains the approved public key and updater CDN endpoint; private key material comes only from `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH`.
+8. Generate real updater metadata without dry-run signatures.
 
 Verification:
 
@@ -69,7 +77,7 @@ Stable inputs:
 Stable command shape:
 
 ```sh
-node scripts/release-updater-metadata.mjs --input dist/release/signed-updater --out dist/updater/latest.json --channel stable --base-url <stable-cdn-base-url>
+node scripts/release-updater-metadata.mjs --input dist/release/signed-updater --out dist/updater/latest.json --channel stable --base-url "$VOYAVPN_UPDATES_BASE_URL"
 ```
 
 Stable outputs:

@@ -38,3 +38,40 @@ Before any stable package or CDN core manifest redistributes Xray, mihomo, or si
 ## Release Rule
 
 Do not add GPL, AGPL, or MPL core binaries to stable packages or CDN core manifests without recorded approval, source and license attribution, checksum evidence, and source availability evidence. GPL and AGPL obligations must not be summarized as "handled by upstream" unless the approval record ties the shipped binary to an exact upstream source tag or source archive and confirms that no VoyaVPN modifications were made.
+
+## Stable Core Redistribution Evidence Template
+
+Complete this template in the external release evidence tracker before publishing stable packages, seed assets, or CDN core manifest entries that redistribute Xray, mihomo, or sing-box binaries. This template is for approval evidence only; upstream GitHub URLs are allowed here only as source availability and attribution evidence, not as stable production download URLs consumed by clients.
+
+### Release-Level Legal Decision
+
+| Field | Value to record |
+| --- | --- |
+| Release version |  |
+| Frozen commit SHA |  |
+| Package matrix | Windows, macOS, and Linux x64/arm64 entries included in this release. |
+| Legal or release owner |  |
+| Approval record ID |  |
+| Decision | `approved` or `blocked` |
+| Third-party notices hash | SHA-256 of this notice file included with release packages. |
+| Core manifest hash | SHA-256 of the generated stable core manifest reviewed for publication. |
+| CDN staging evidence ID | Evidence record proving approved CDN-hosted core assets match the reviewed hashes and byte sizes. |
+| Unsupported core exclusion | Evidence that no unapproved GPL, AGPL, or other unsupported core is bundled as a seed asset or listed as a first-stable CDN core update asset. |
+| Source availability evidence location | External evidence folder, legal tracker, or public source reference for corresponding source, license files, notices, patches, and build scripts when applicable. |
+| Stop or rollback owner |  |
+| Residual risk notes |  |
+
+### Per-Core Asset Evidence
+
+Record one row for every redistributed archive, including each OS/architecture variant and each bundled seed or CDN-delivered core asset.
+
+| Core | Exact version | Target OS | Arch | Redistribution path | Archive name | Production CDN path or seed package path | License name/SPDX | Upstream source repository URL | Upstream release URL | Source tag or source archive URL | License file URL | sha256 | Byte size | Source availability evidence ID | GPL/MPL obligation evidence | Modified, rebuilt, or repackaged by VoyaVPN? | Approval status or blocker |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Xray |  |  |  | `seed`, `CDN`, or both |  |  | `MPL-2.0` |  |  |  |  |  |  |  | Source changes and build scripts published if modified or rebuilt; exact upstream source tied to the shipped binary if unmodified. |  |  |
+| mihomo |  |  |  | `seed`, `CDN`, or both |  |  | `GPL-3.0` |  |  |  |  |  |  |  | Corresponding source availability for the exact shipped binary, license text, patches, and build scripts when modified, rebuilt, or repackaged. |  |  |
+| sing-box |  |  |  | `seed`, `CDN`, or both |  |  | `GPL-3.0-or-later` |  |  |  |  |  |  |  | Corresponding source availability for the exact shipped binary, license text, patches, and build scripts when modified, rebuilt, or repackaged. |  |  |
+
+Minimum approval checks:
+
+- Exact core versions, licenses, source URLs, source tag or archive URLs, sha256 checksums, byte sizes, source availability records, and GPL obligations are complete for every redistributed core archive.
+- Legal or the release owner explicitly marks the decision as `approved` before seed assets or CDN core assets are exposed. Any `blocked` decision removes the affected core archive from stable packages and CDN manifests until corrected evidence is approved.

@@ -248,7 +248,7 @@ fn effective_child_ids(
                 && !candidate.config_type.is_complex_type()
                 && filter
                     .as_ref()
-                    .map_or(true, |filter| filter.is_match(&candidate.remarks))
+                    .is_none_or(|filter| filter.is_match(&candidate.remarks))
         }) {
             push_unique_child(&mut child_index_ids, &mut seen, &child.index_id, result);
         }
@@ -476,7 +476,7 @@ mod tests {
 
         let preview = build_preview(&group, &profiles, validation);
         assert_json_fixture(
-            &serde_json::to_value(preview).unwrap(),
+            &serde_json::to_value(preview).expect("group preview should serialize to JSON"),
             "../../../tests/golden/groups/mixed_child_policy_group_preview.json",
         );
     }
@@ -577,7 +577,8 @@ mod tests {
         } else {
             panic!("unknown fixture {fixture_path}");
         };
-        let expected: Value = serde_json::from_str(fixture).unwrap();
+        let expected: Value =
+            serde_json::from_str(fixture).expect("group golden fixture should parse as JSON");
 
         assert_eq!(actual, &expected);
     }

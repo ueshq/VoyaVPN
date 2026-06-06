@@ -17,6 +17,7 @@
     "i18n:import": "node scripts/import-resx-locales.mjs",
     "i18n:check": "node scripts/import-resx-locales.mjs --check",
     "check:rust:fmt": "cargo fmt --all --check",
+    "check:rust:clippy": "cargo clippy --workspace --all-targets -- -D warnings",
     "check:rust:test": "cargo test --workspace --all-targets",
     "check:frontend:typecheck": "pnpm typecheck",
     "check:frontend:test": "pnpm test --run",

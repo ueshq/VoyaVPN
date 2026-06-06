@@ -6,6 +6,15 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const stableChannel = "stable";
 const stableTargets = new Set(["windows", "macos", "linux"]);
 const stableArchs = new Set(["x64", "arm64"]);
+const stableReleaseTargets = [
+  { releaseTarget: "darwin-x86_64", target: "macos", arch: "x64" },
+  { releaseTarget: "darwin-aarch64", target: "macos", arch: "arm64" },
+  { releaseTarget: "windows-x86_64", target: "windows", arch: "x64" },
+  { releaseTarget: "windows-aarch64", target: "windows", arch: "arm64" },
+  { releaseTarget: "linux-x86_64", target: "linux", arch: "x64" },
+  { releaseTarget: "linux-aarch64", target: "linux", arch: "arm64" },
+];
+const stableReleaseTargetSet = new Set(stableReleaseTargets.map((target) => target.releaseTarget));
 
 function parseArgs(argv) {
   const options = {
@@ -239,6 +248,41 @@ function inferTarget(...values) {
   return null;
 }
 
+function uniqueSorted(values) {
+  return [...new Set(values.filter(Boolean))].sort((left, right) => left.localeCompare(right));
+}
+
+function displayRepoPath(path) {
+  return relative(repoRoot, path).replaceAll("\\", "/") || ".";
+}
+
+function sourceInputEvidence(inputPath) {
+  const relativePath = displayRepoPath(inputPath);
+  const isFixture = relativePath === "tests/fixtures" || relativePath.startsWith("tests/fixtures/");
+  return {
+    path: inputPath,
+    relativePath,
+    kind: isFixture ? "fixture" : "workflow-artifact",
+    nonPublishableFixture: isFixture,
+  };
+}
+
+function stableReleaseTargetFor(artifact) {
+  if (stableReleaseTargetSet.has(artifact.releaseTarget)) {
+    return artifact.releaseTarget;
+  }
+
+  const stableTarget = stableReleaseTargets.find(
+    (target) => target.target === artifact.target && target.arch === artifact.arch,
+  );
+  return stableTarget?.releaseTarget ?? `${artifact.target}-${artifact.arch}`;
+}
+
+function stableReleaseTargetRank(releaseTarget) {
+  const index = stableReleaseTargets.findIndex((target) => target.releaseTarget === releaseTarget);
+  return index === -1 ? stableReleaseTargets.length : index;
+}
+
 function requiredString(value, field, context) {
   if (!value || typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`${context} is missing ${field}`);
@@ -363,6 +407,53 @@ function defaultEvidencePath(outputPath) {
   return join(dirname(outputPath), evidenceName);
 }
 
+function buildTargetEvidence(artifacts) {
+  const byTarget = new Map();
+
+  for (const artifact of artifacts) {
+    const releaseTarget = stableReleaseTargetFor(artifact);
+    const current = byTarget.get(releaseTarget) ?? {
+      releaseTarget,
+      target: artifact.target,
+      arch: artifact.arch,
+      artifacts: [],
+    };
+    current.artifacts.push(artifact);
+    byTarget.set(releaseTarget, current);
+  }
+
+  return [...byTarget.values()]
+    .sort((left, right) => {
+      const rankComparison = stableReleaseTargetRank(left.releaseTarget) - stableReleaseTargetRank(right.releaseTarget);
+      return rankComparison !== 0 ? rankComparison : left.releaseTarget.localeCompare(right.releaseTarget);
+    })
+    .map((target) => ({
+      releaseTarget: target.releaseTarget,
+      target: target.target,
+      arch: target.arch,
+      artifactCount: target.artifacts.length,
+      artifactNames: uniqueSorted(target.artifacts.map((artifact) => artifact.name)),
+      sourceArtifactNames: uniqueSorted(target.artifacts.map((artifact) => artifact.originalName)),
+      checksums: target.artifacts.map((artifact) => ({
+        name: artifact.name,
+        sourceArtifactName: artifact.originalName,
+        bytes: artifact.bytes,
+        sha256: artifact.sha256,
+      })),
+    }));
+}
+
+function assertStableTargetMatrix(artifacts) {
+  const present = new Set(artifacts.map(stableReleaseTargetFor));
+  const missing = stableReleaseTargets
+    .map((target) => target.releaseTarget)
+    .filter((releaseTarget) => !present.has(releaseTarget));
+
+  if (missing.length > 0) {
+    throw new Error(`Stable release index is missing first-stable target(s): ${missing.join(", ")}`);
+  }
+}
+
 function assertStableIndex(index, baseUrl) {
   const serialized = JSON.stringify(index).toLowerCase();
   if (serialized.includes("github.com") || serialized.includes("voyavpn.example") || serialized.includes("placeholder")) {
@@ -374,6 +465,8 @@ function assertStableIndex(index, baseUrl) {
       throw new Error(`Artifact URL is not derived from CDN base URL: ${artifact.url}`);
     }
   }
+
+  assertStableTargetMatrix(index.artifacts);
 }
 
 async function main() {
@@ -415,6 +508,11 @@ async function main() {
     assertStableIndex(index, baseUrl);
   }
 
+  const targetEvidence = buildTargetEvidence(artifacts);
+  const firstStableTargets = targetEvidence
+    .map((target) => target.releaseTarget)
+    .filter((releaseTarget) => stableReleaseTargetSet.has(releaseTarget));
+
   const evidence = {
     productName: options.product,
     channel,
@@ -422,19 +520,31 @@ async function main() {
     baseUrl,
     generatedAt,
     releaseIndexPath: outputPath,
+    sourceInput: sourceInputEvidence(inputDir),
     sourceManifests,
     artifactCount: artifacts.length,
+    targetCount: targetEvidence.length,
+    firstStableTargetCount: firstStableTargets.length,
+    firstStableTargets,
+    checksumCount: artifacts.length,
+    sourceArtifactNames: uniqueSorted(artifacts.map((artifact) => artifact.originalName)),
     validations: {
       urlsDerivedFromBaseUrl: true,
       stableRejectsExampleAndGithubBaseUrls: isStable(channel),
+      stableFirstTargetMatrixComplete: isStable(channel),
       requiredArtifactFieldsPresent: true,
     },
+    targets: targetEvidence,
     artifacts: artifacts.map((artifact) => ({
+      releaseTarget: stableReleaseTargetFor(artifact),
       target: artifact.target,
       arch: artifact.arch,
       kind: artifact.kind,
       name: artifact.name,
+      sourceArtifactName: artifact.originalName,
+      sourceArtifactPath: artifact.originalRelativePath,
       originalName: artifact.originalName,
+      originalRelativePath: artifact.originalRelativePath,
       bytes: artifact.bytes,
       sha256: artifact.sha256,
       url: artifact.url,

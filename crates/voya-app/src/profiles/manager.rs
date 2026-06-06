@@ -62,7 +62,7 @@ impl<'db> ProfileManager<'db> {
         Ok(items
             .into_iter()
             .filter(|(profile, _)| {
-                filter.map_or(true, |filter| {
+                filter.is_none_or(|filter| {
                     contains_case_insensitive(&profile.remarks, filter)
                         || contains_case_insensitive(&profile.address, filter)
                 })
@@ -290,7 +290,7 @@ impl<'db> ProfileManager<'db> {
             self.profile_ex().set_sort(index_id, sort).await?;
         }
 
-        self.list_profiles(&config, subid, None).await
+        self.list_profiles(config, subid, None).await
     }
 
     pub async fn sort_profiles(
@@ -553,25 +553,30 @@ mod tests {
 
     #[tokio::test]
     async fn profile_crud_defaults_active_and_persists_order() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("profile manager test operation should succeed");
         let manager = ProfileManager::new(&database);
         let mut config = AppConfig::default();
 
         let first = manager
             .save_profile(&mut config, sample_profile("first", "A", 443))
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
         let second = manager
             .save_profile(&mut config, sample_profile("second", "B", 8443))
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
 
         assert_eq!(config.index_id, first.profile.index_id);
         assert_eq!(first.profile.config_version, 4);
         assert_eq!(first.profile.network, DEFAULT_NETWORK);
         assert!(first.profile_ex.sort < second.profile_ex.sort);
 
-        let listed = manager.list_profiles(&config, None, None).await.unwrap();
+        let listed = manager
+            .list_profiles(&config, None, None)
+            .await
+            .expect("profile manager test operation should succeed");
         assert_eq!(listed.len(), 2);
         assert!(listed[0].is_active);
         assert_eq!(listed[1].profile.remarks, "B");
@@ -579,53 +584,60 @@ mod tests {
 
     #[tokio::test]
     async fn profile_active_selection_moves_when_active_profile_is_deleted() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("profile manager test operation should succeed");
         let manager = ProfileManager::new(&database);
         let mut config = AppConfig::default();
         let first = manager
             .save_profile(&mut config, sample_profile("first", "A", 443))
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
         let second = manager
             .save_profile(&mut config, sample_profile("second", "B", 8443))
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
 
         manager
             .set_active_profile(&mut config, &second.profile.index_id)
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
         manager
             .delete_profiles(&mut config, &[second.profile.index_id])
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
 
         assert_eq!(config.index_id, first.profile.index_id);
     }
 
     #[tokio::test]
     async fn profile_copy_move_group_and_sort_update_profile_ex_state() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("profile manager test operation should succeed");
         let manager = ProfileManager::new(&database);
         let mut config = AppConfig::default();
         let a = manager
             .save_profile(&mut config, sample_profile("a", "A", 1000))
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
         let b = manager
             .save_profile(&mut config, sample_profile("b", "B", 2000))
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
         let c = manager
             .save_profile(&mut config, sample_profile("c", "C", 3000))
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
 
         manager
             .move_profile(&config, None, &c.profile.index_id, MoveAction::Top, None)
             .await
-            .unwrap();
-        let moved = manager.list_profiles(&config, None, None).await.unwrap();
+            .expect("profile manager test operation should succeed");
+        let moved = manager
+            .list_profiles(&config, None, None)
+            .await
+            .expect("profile manager test operation should succeed");
         assert_eq!(moved[0].profile.remarks, "C");
 
         database
@@ -639,11 +651,11 @@ mod tests {
                 date_now: 1,
             })
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
         let copied = manager
-            .copy_profiles(&mut config, &[a.profile.index_id.clone()])
+            .copy_profiles(&mut config, std::slice::from_ref(&a.profile.index_id))
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
         assert_eq!(copied[0].profile.remarks, "A-clone");
         assert_eq!(copied[0].server_stat.total_up, 100);
         assert_eq!(copied[0].server_stat.total_down, 200);
@@ -657,33 +669,41 @@ mod tests {
                 "group-1",
             )
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
         let group = manager
             .list_profiles(&config, Some("group-1"), None)
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
         assert_eq!(group.len(), 2);
 
         manager
             .sort_profiles(&config, None, ProfileSortKey::Port, false)
             .await
-            .unwrap();
-        let sorted = manager.list_profiles(&config, None, None).await.unwrap();
+            .expect("profile manager test operation should succeed");
+        let sorted = manager
+            .list_profiles(&config, None, None)
+            .await
+            .expect("profile manager test operation should succeed");
         assert_eq!(sorted[0].profile.remarks, "C");
     }
 
     #[tokio::test]
     async fn profile_dedupe_respects_keep_older_and_ignores_complex_profiles() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("profile manager test operation should succeed");
         let manager = ProfileManager::new(&database);
         let mut config = AppConfig::default();
         let old = manager
             .save_profile(&mut config, sample_profile("old", "Old", 443))
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
         let mut duplicate = sample_profile("new", "New", 443);
         duplicate.index_id = "new".to_string();
-        manager.save_profile(&mut config, duplicate).await.unwrap();
+        manager
+            .save_profile(&mut config, duplicate)
+            .await
+            .expect("profile manager test operation should succeed");
         let mut group = ProfileItem {
             index_id: "group".to_string(),
             config_type: ConfigType::PolicyGroup,
@@ -694,48 +714,58 @@ mod tests {
             child_items: Some(old.profile.index_id.clone()),
             ..ProtocolExtraItem::default()
         };
-        manager.save_profile(&mut config, group).await.unwrap();
+        manager
+            .save_profile(&mut config, group)
+            .await
+            .expect("profile manager test operation should succeed");
 
         let result = manager
             .dedupe_profiles(&mut config, None, true)
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
         assert_eq!(result.total, 3);
         assert_eq!(result.kept, 2);
         assert_eq!(result.removed_index_ids, vec!["new".to_string()]);
-        assert!(database.profiles().get("group").await.unwrap().is_some());
+        assert!(database
+            .profiles()
+            .get("group")
+            .await
+            .expect("profile manager test operation should succeed")
+            .is_some());
     }
 
     #[tokio::test]
     async fn profile_ex_manager_updates_delay_speed_message_and_ip_info() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("profile manager test operation should succeed");
         let manager = ProfileManager::new(&database);
         let mut config = AppConfig::default();
         let profile = manager
             .save_profile(&mut config, sample_profile("profile", "A", 443))
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
 
         manager
             .profile_ex()
             .set_test_delay(&profile.profile.index_id, 123)
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
         manager
             .profile_ex()
             .set_test_speed(&profile.profile.index_id, 45.0)
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
         manager
             .profile_ex()
             .set_test_message(&profile.profile.index_id, "ok")
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
         let updated = manager
             .profile_ex()
             .set_test_ip_info(&profile.profile.index_id, "US")
             .await
-            .unwrap();
+            .expect("profile manager test operation should succeed");
 
         assert_eq!(updated.delay, 123);
         assert_eq!(updated.speed, 45.0);

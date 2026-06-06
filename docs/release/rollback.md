@@ -13,6 +13,7 @@ The generated runner does not execute external publication or rollback. It can g
 - OS smoke evidence: [os-smoke-matrix.md](os-smoke-matrix.md)
 - Release workflow and secret names: [ci-secrets.md](ci-secrets.md)
 - Diagnostics privacy contract: [diagnostics-privacy.md](diagnostics-privacy.md)
+- Stable external evidence checklist: [external-evidence-checklist.md](external-evidence-checklist.md)
 - Stable release gate: [../verification/stable-release-gate.md](../verification/stable-release-gate.md)
 
 ## Rollback Triggers
@@ -37,6 +38,8 @@ Rollback is required when any of these occur after staging or publication:
 | Classify severity | Release owner | Issue tracker, smoke evidence, support reports, crash/log intake | Severity, affected platforms, affected versions, and user impact are recorded. | If user OS state or credentials are at risk, rollback immediately before waiting for a fix. |
 | Preserve evidence | Release engineer | Workflow run, artifacts, `latest.json`, logs, screenshots, package hashes | Copies of failing artifacts and metadata are retained in a private evidence location. | Do not delete evidence needed to reproduce or audit the incident. |
 | Choose rollback target | Release owner | Previous stable release-index, `latest.json`, core manifest, geo/SRS manifests, diagnostics control state, and package set | Previous known-good pointer hashes, artifact hashes, and metadata are available. | If no prior stable exists, remove updater/manual/core exposure and direct users to uninstall, disable affected features, or wait for a fixed build. |
+
+Rollback readiness is release-blocking before pointer promotion. The release owner records previous pointer hashes, cache purge evidence, diagnostics disablement control, quarantine location, monitoring thresholds, and rollback owner acknowledgement in [external-evidence-checklist.md](external-evidence-checklist.md).
 
 ## Rollback Actions
 

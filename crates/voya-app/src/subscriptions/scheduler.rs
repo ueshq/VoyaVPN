@@ -109,7 +109,10 @@ mod tests {
             }
         });
 
-        tick_tx.send(10).await.unwrap();
+        tick_tx
+            .send(10)
+            .await
+            .expect("subscription scheduler test operation should succeed");
         wait_for_len(&seen, 1).await;
         scheduler.stop().await;
         let _ = tick_tx.send(20).await;

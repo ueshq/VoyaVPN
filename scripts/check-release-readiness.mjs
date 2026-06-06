@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -48,6 +48,20 @@ const blockerScanFiles = [
   "crates/voya-net/src/update.rs",
 ];
 
+const urlTextRegex = /\bhttps?:\/\/[^\s"'`<>]+/gi;
+const githubDownloadPathRegex = /\/releases\/(?:latest\/)?download\/|\/latest\/download\//i;
+const exampleTextRegex = /\bhttps?:\/\/[^\s"'`<>)]*voyavpn\.example[^\s"'`<>)]*|\bvoyavpn\.example\b/i;
+const updaterPlaceholderRegex = /\bVOYAVPN_UPDATER_(?:PUBLIC_KEY|SIGNATURE)_PLACEHOLDER[A-Z0-9_]*\b/i;
+const productionFieldRegex =
+  /(?:^|[\s{[,("'])(?:url|urls|downloadUrl|download_url|download-url|cdnUrl|cdn_url|assetUrl|asset_url|artifactUrl|artifact_url|payloadUrl|payload_url|installerUrl|installer_url|manualDownloadUrl|manual_download_url|releaseIndexUrl|release_index_url|latestJsonUrl|latest_json_url|baseUrl|base_url|updatesBaseUrl|updates_base_url|endpoint|endpoints|downloadUrlTemplate|download_url_template|urlTemplate|url_template)["']?\s*[:=]|(?:^|\s)VOYAVPN_(?:CDN_BASE_URL|UPDATES_BASE_URL|DIAGNOSTICS_ENDPOINT)\s*=/i;
+const productionCliUrlRegex = /--(?:cdn-base-url|updates-base-url|diagnostics-endpoint|base-url)\s+\S+/i;
+const productionTemplateContextRegex =
+  /\b(?:ReleasePackage|AssetTemplates|downloadTemplates|download_templates|downloadUrlTemplate|download_url_template|urlTemplate|url_template|templates)\b/i;
+const sourceEvidenceContextRegex =
+  /\b(?:upstreamUrl|upstream_url|upstream|sourceUrl|source_url|SOURCE_URL|sourceBundleDir|sourceManifests|source reference|source evidence|release_api_url|release_url|html_url|repository|homepage|licenseUrl|license_url|UpstreamReleaseEvidence|UpstreamAssetTemplates|asset_templates)\b/i;
+const guardOrDefensiveContextRegex =
+  /\b(?:forbidden|rejects?|allowed only|must not|should not|contains|includes|placeholder\.test|throw new Error|expect_err|assert|no `?voyavpn\.example|no .*github|validation fails|fails when)\b/i;
+
 function parseArgs(argv) {
   const options = {
     mode: "dry-run",
@@ -57,6 +71,9 @@ function parseArgs(argv) {
     releaseArtifacts: null,
     updaterArtifacts: null,
     coreAssets: null,
+    releaseIndex: null,
+    updaterMetadata: null,
+    coreManifest: null,
     diagnosticsEndpoint: null,
     tauriConfig: defaultTauriConfig,
   };
@@ -94,6 +111,15 @@ function parseArgs(argv) {
         break;
       case "--core-assets":
         options.coreAssets = next();
+        break;
+      case "--release-index":
+        options.releaseIndex = next();
+        break;
+      case "--updater-metadata":
+        options.updaterMetadata = next();
+        break;
+      case "--core-manifest":
+        options.coreManifest = next();
         break;
       case "--diagnostics-endpoint":
         options.diagnosticsEndpoint = next();
@@ -134,7 +160,11 @@ Options:
                                 stable default: VOYAVPN_RELEASE_ARTIFACTS_DIR or dist/release/artifacts
   --updater-artifacts <dir>     Signed updater manifest root. Dry-run default: tests fixtures;
                                 stable default: VOYAVPN_SIGNED_UPDATER_DIR or dist/release/signed-updater
-  --core-assets <file>          Core asset fixture/source JSON. Default: tests/fixtures/release/core-assets.json
+  --core-assets <file>          Core asset source JSON. Dry-run default: tests fixtures;
+                                stable default: VOYAVPN_CORE_ASSETS_FILE or dist/release/core-assets/source-core-assets.json
+  --release-index <file>        Existing release-index.json artifact to validate as workflow evidence
+  --updater-metadata <file>     Existing latest.json artifact to validate as workflow evidence
+  --core-manifest <file>        Existing generated core-assets.json artifact to validate as workflow evidence
   --diagnostics-endpoint <url>  Approved diagnostics ingest endpoint. Stable defaults to
                                 VOYAVPN_DIAGNOSTICS_ENDPOINT; dry-run does not require one
   --tauri-config <file>         Tauri config or generated stable overlay to scan. Non-default
@@ -159,6 +189,29 @@ function resolveRepoPath(path) {
 
 function stableInputPath(options, explicit, envName, fallback) {
   return explicit ?? process.env[envName] ?? fallback;
+}
+
+function stableInputPathAny(explicit, envNames, fallback) {
+  if (explicit) {
+    return explicit;
+  }
+  for (const envName of envNames) {
+    if (process.env[envName]) {
+      return process.env[envName];
+    }
+  }
+  return fallback;
+}
+
+function assertStableEvidencePath(options, label, path) {
+  if (isDryRun(options)) {
+    return;
+  }
+
+  const normalized = relative(repoRoot, resolve(repoRoot, path)).replaceAll("\\", "/");
+  if (normalized === "tests/fixtures" || normalized.startsWith("tests/fixtures/")) {
+    throw new Error(`${label} must not use tests/fixtures in stable mode: ${normalized}`);
+  }
 }
 
 async function createWorkDir(options) {
@@ -301,6 +354,7 @@ async function loadTauriConfig(options) {
     return {
       config: baseConfig,
       label: displayPath(basePath),
+      isDefaultConfig: true,
     };
   }
 
@@ -308,6 +362,7 @@ async function loadTauriConfig(options) {
   return {
     config: mergeConfig(baseConfig, overlay),
     label: `${displayPath(basePath)} + ${displayPath(requestedPath)}`,
+    isDefaultConfig: false,
   };
 }
 
@@ -443,13 +498,20 @@ async function checkNotices(reporter) {
 }
 
 async function checkTauriConfig(reporter, options, updatesBaseUrl) {
-  const { config, label } = await loadTauriConfig(options);
+  const { config, label, isDefaultConfig } = await loadTauriConfig(options);
   const updater = config.plugins?.updater;
   const bundle = config.bundle ?? {};
   const detailsPrefix = label;
+  const defaultDryRunConfig = isDryRun(options) && isDefaultConfig;
 
   if (!updater || typeof updater !== "object") {
-    reporter.blocker("Tauri updater config", [`${detailsPrefix}: plugins.updater is missing`]);
+    if (defaultDryRunConfig) {
+      reporter.pass("Tauri updater config", [
+        `${detailsPrefix}: dry-run uses the credential-free base config; stable mode validates the generated updater overlay`,
+      ]);
+    } else {
+      reporter.blocker("Tauri updater config", [`${detailsPrefix}: plugins.updater is missing`]);
+    }
   } else {
     if (placeholderText(updater.pubkey)) {
       reporter.blocker("Tauri updater public key", [`${detailsPrefix}: plugins.updater.pubkey is empty or a placeholder`]);
@@ -502,6 +564,10 @@ async function checkTauriConfig(reporter, options, updatesBaseUrl) {
 
   if (bundle.createUpdaterArtifacts === true) {
     reporter.pass("Tauri updater artifact flag", [`${detailsPrefix}: bundle.createUpdaterArtifacts is enabled`]);
+  } else if (defaultDryRunConfig) {
+    reporter.pass("Tauri updater artifact flag", [
+      `${detailsPrefix}: disabled for credential-free dry runs; stable overlay must enable updater artifacts`,
+    ]);
   } else {
     reporter.blocker("Tauri updater artifact flag", [
       `${detailsPrefix}: bundle.createUpdaterArtifacts is not enabled; pass a stable overlay with updater artifacts enabled`,
@@ -570,23 +636,143 @@ async function checkDiagnosticsEndpoint(reporter, options, diagnosticsEndpoint) 
   ]);
 }
 
-async function scanProductionBlockers(reporter) {
-  const patterns = [
-    {
-      label: "example URL",
-      regex: /\bhttps?:\/\/[^\s"'`<>)]*voyavpn\.example[^\s"'`<>)]*|\bvoyavpn\.example\b/i,
-    },
-    {
-      label: "updater placeholder",
-      regex: /\bVOYAVPN_UPDATER_(?:PUBLIC_KEY|SIGNATURE)_PLACEHOLDER[A-Z0-9_]*\b/i,
-    },
-    {
-      label: "GitHub release/download URL",
-      regex:
-        /\bhttps?:\/\/(?:github\.com|[^/\s"'`<>)]*githubusercontent\.com|[^/\s"'`<>)]*github\.io)[^\s"'`<>)]*(?:\/releases\/download\/|\/releases\/latest\/download\/|\/latest\/download\/)/i,
-    },
-  ];
+function trimUrlText(value) {
+  return value.replace(/[),.;\]}]+$/g, "");
+}
 
+function extractUrls(line) {
+  return [...line.matchAll(urlTextRegex)].map((match) => trimUrlText(match[0]));
+}
+
+function isGithubStableHost(hostname) {
+  const host = hostname.toLowerCase();
+  return (
+    host === "github.com" ||
+    host.endsWith(".github.com") ||
+    host === "githubusercontent.com" ||
+    host.endsWith(".githubusercontent.com") ||
+    host === "github.io" ||
+    host.endsWith(".github.io")
+  );
+}
+
+function isGithubProductionUrl(url) {
+  try {
+    const parsed = new URL(url.replaceAll("{tag}", "v1.0.0").replaceAll("{version}", "1.0.0"));
+    return isGithubStableHost(parsed.hostname);
+  } catch {
+    return /github\.com|githubusercontent\.com|github\.io/i.test(url);
+  }
+}
+
+function isGithubReleaseDownloadUrl(url) {
+  return isGithubProductionUrl(url) && githubDownloadPathRegex.test(url);
+}
+
+function isSourceEvidenceContext(context) {
+  return sourceEvidenceContextRegex.test(context) || /SOURCE_URL/i.test(context);
+}
+
+function isSourceEvidenceRole(line, context) {
+  if (sourceEvidenceContextRegex.test(line) || /SOURCE_URL/i.test(line)) {
+    return true;
+  }
+  if (productionFieldRegex.test(line) || productionCliUrlRegex.test(line)) {
+    return false;
+  }
+  return isSourceEvidenceContext(context);
+}
+
+function isGuardOrDefensiveContext(context) {
+  return guardOrDefensiveContextRegex.test(context);
+}
+
+function firstRustTestLine(lines) {
+  return lines.findIndex((line) => /^\s*(?:pub\s+)?mod\s+tests\s*\{/.test(line));
+}
+
+function isTestSurface(file, lineIndex, firstRustTestIndex) {
+  const normalized = file.replaceAll("\\", "/");
+  return (
+    normalized.includes("/tests/") ||
+    normalized.startsWith("tests/") ||
+    /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(normalized) ||
+    (normalized.endsWith(".rs") && firstRustTestIndex !== -1 && lineIndex >= firstRustTestIndex)
+  );
+}
+
+function scanContext(lines, lineIndex) {
+  return lines.slice(Math.max(0, lineIndex - 4), lineIndex + 1).join("\n");
+}
+
+function hasProductionUrlRole(line, context, url) {
+  if (isSourceEvidenceRole(line, context)) {
+    return false;
+  }
+  if (productionFieldRegex.test(line) || productionFieldRegex.test(context)) {
+    return true;
+  }
+  if (productionCliUrlRegex.test(line) || productionCliUrlRegex.test(context)) {
+    return true;
+  }
+  if (productionTemplateContextRegex.test(context)) {
+    return true;
+  }
+  return isGithubReleaseDownloadUrl(url);
+}
+
+function classifyProductionBlocker(line, context) {
+  if (isGuardOrDefensiveContext(context)) {
+    return null;
+  }
+
+  if (updaterPlaceholderRegex.test(line) && !isSourceEvidenceRole(line, context)) {
+    return "updater placeholder";
+  }
+
+  if (exampleTextRegex.test(line)) {
+    return productionFieldRegex.test(line) || productionCliUrlRegex.test(line) ? "example production URL" : null;
+  }
+
+  for (const url of extractUrls(line)) {
+    if (!hasProductionUrlRole(line, context, url)) {
+      continue;
+    }
+    if (isGithubProductionUrl(url)) {
+      return isGithubReleaseDownloadUrl(url) ? "GitHub production download URL" : "GitHub production URL";
+    }
+    if (/voyavpn\.example/i.test(url)) {
+      return "example production URL";
+    }
+    if (/placeholder/i.test(url)) {
+      return "placeholder production URL";
+    }
+  }
+
+  return null;
+}
+
+export function findProductionBlockersInText(file, text) {
+  const matches = [];
+  const lines = text.split(/\r?\n/);
+  const firstRustTestIndex = file.endsWith(".rs") ? firstRustTestLine(lines) : -1;
+
+  lines.forEach((line, index) => {
+    if (isTestSurface(file, index, firstRustTestIndex)) {
+      return;
+    }
+
+    const context = scanContext(lines, index);
+    const label = classifyProductionBlocker(line, context);
+    if (label) {
+      matches.push(`${file}:${index + 1}: ${label}: ${line.trim()}`);
+    }
+  });
+
+  return matches;
+}
+
+async function scanProductionBlockers(reporter) {
   const matches = [];
   for (const file of blockerScanFiles) {
     const path = resolveRepoPath(file);
@@ -600,15 +786,7 @@ async function scanProductionBlockers(reporter) {
       throw error;
     }
 
-    const lines = text.split(/\r?\n/);
-    lines.forEach((line, index) => {
-      for (const pattern of patterns) {
-        if (pattern.regex.test(line)) {
-          matches.push(`${file}:${index + 1}: ${pattern.label}: ${line.trim()}`);
-          break;
-        }
-      }
-    });
+    matches.push(...findProductionBlockersInText(file, text));
   }
 
   if (matches.length > 0) {
@@ -616,7 +794,9 @@ async function scanProductionBlockers(reporter) {
     return;
   }
 
-  reporter.pass("production blocker scan", ["no example URLs, updater placeholders, or GitHub release/download URLs found"]);
+  reporter.pass("production blocker scan", [
+    "no forbidden production URL fields, updater placeholders, or GitHub production download templates found",
+  ]);
 }
 
 async function runGenerator(script, args, env) {
@@ -707,11 +887,10 @@ async function checkGeneratedManifests(reporter, options, cdnBaseUrl, updatesBas
     "VOYAVPN_SIGNED_UPDATER_DIR",
     isDryRun(options) ? "tests/fixtures/release/signed-updater" : "dist/release/signed-updater",
   );
-  const coreAssets = stableInputPath(
-    options,
+  const coreAssets = stableInputPathAny(
     options.coreAssets,
-    "VOYAVPN_CORE_ASSETS_FIXTURE",
-    "tests/fixtures/release/core-assets.json",
+    ["VOYAVPN_CORE_ASSETS_FILE", "VOYAVPN_CORE_ASSETS_FIXTURE"],
+    isDryRun(options) ? "tests/fixtures/release/core-assets.json" : "dist/release/core-assets/source-core-assets.json",
   );
 
   const releaseIndexOut = join(workDir, "release-index.json");
@@ -721,6 +900,28 @@ async function checkGeneratedManifests(reporter, options, cdnBaseUrl, updatesBas
     VOYAVPN_CDN_BASE_URL: cdnBaseUrl,
     VOYAVPN_UPDATES_BASE_URL: updatesBaseUrl,
   };
+
+  assertStableEvidencePath(options, "release artifacts", releaseArtifacts);
+  assertStableEvidencePath(options, "signed updater artifacts", updaterArtifacts);
+  assertStableEvidencePath(options, "core asset source", coreAssets);
+  if (options.releaseIndex) {
+    assertStableEvidencePath(options, "release index evidence", options.releaseIndex);
+    const releaseIndexEvidence = await readJson(resolveRepoPath(options.releaseIndex));
+    validateReleaseIndex(releaseIndexEvidence, cdnBaseUrl);
+    reporter.pass("workflow CDN staging metadata", [`validated ${options.releaseIndex}`]);
+  }
+  if (options.updaterMetadata) {
+    assertStableEvidencePath(options, "updater metadata evidence", options.updaterMetadata);
+    const updaterMetadataEvidence = await readJson(resolveRepoPath(options.updaterMetadata));
+    validateUpdaterMetadata(updaterMetadataEvidence, updatesBaseUrl);
+    reporter.pass("workflow updater metadata", [`validated ${options.updaterMetadata}`]);
+  }
+  if (options.coreManifest) {
+    assertStableEvidencePath(options, "core manifest evidence", options.coreManifest);
+    const coreManifestEvidence = await readJson(resolveRepoPath(options.coreManifest));
+    validateCoreManifest(coreManifestEvidence, cdnBaseUrl);
+    reporter.pass("workflow core manifest metadata", [`validated ${options.coreManifest}`]);
+  }
 
   const releaseOutput = await runGenerator(
     "scripts/release-index.mjs",
@@ -807,7 +1008,13 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exit(1);
-});
+function isCliEntrypoint() {
+  return process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href === import.meta.url : false;
+}
+
+if (isCliEntrypoint()) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exit(1);
+  });
+}

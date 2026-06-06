@@ -123,7 +123,7 @@ impl<'db> BackupManager<'db> {
             .ensure_dirs()
             .map_err(|source| BackupManagerError::Io {
                 path: self.paths.app_dir().to_path_buf(),
-                source: io::Error::new(io::ErrorKind::Other, source.to_string()),
+                source: io::Error::other(source.to_string()),
             })?;
         fs::create_dir_all(self.paths.backup_dir()).map_err(|source| BackupManagerError::Io {
             path: self.paths.backup_dir().to_path_buf(),

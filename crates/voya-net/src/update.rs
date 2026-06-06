@@ -85,7 +85,7 @@ pub enum PrereleasePolicy {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AssetTemplates {
+pub struct UpstreamAssetTemplates {
     pub windows_x64: Option<&'static str>,
     pub windows_arm64: Option<&'static str>,
     pub linux_x64: Option<&'static str>,
@@ -95,7 +95,7 @@ pub struct AssetTemplates {
     pub macos_arm64: Option<&'static str>,
 }
 
-impl AssetTemplates {
+impl UpstreamAssetTemplates {
     #[must_use]
     pub const fn template_for(self, os: AssetOs, arch: AssetArch) -> Option<&'static str> {
         match (os, arch) {
@@ -117,11 +117,15 @@ pub struct ReleasePackage {
     pub id: &'static str,
     pub name: &'static str,
     pub target: PackageTarget,
-    pub release_api_url: &'static str,
-    pub release_url: &'static str,
-    pub templates: AssetTemplates,
     pub prerelease_policy: PrereleasePolicy,
     pub policy: PackagePolicy,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UpstreamReleaseEvidence {
+    pub release_api_url: &'static str,
+    pub release_url: &'static str,
+    pub asset_templates: UpstreamAssetTemplates,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -388,12 +392,13 @@ pub fn check_app_from_cdn_release_index(
 ) -> Result<ReleaseCheck, ReleaseError> {
     let artifact = resolve_cdn_release_artifact(package, os, arch, index)?;
     ensure_production_url_allowed(&artifact.url)?;
-    let remote_version = parse_version(
-        (!artifact.version.trim().is_empty())
-            .then_some(artifact.version.as_str())
-            .unwrap_or(index.version.as_str()),
-    )
-    .ok_or_else(|| ReleaseError::InvalidVersion(artifact.version.clone()))?;
+    let version = if !artifact.version.trim().is_empty() {
+        artifact.version.as_str()
+    } else {
+        index.version.as_str()
+    };
+    let remote_version = parse_version(version)
+        .ok_or_else(|| ReleaseError::InvalidVersion(artifact.version.clone()))?;
     let has_update = current_version.is_none_or(|current| current < &remote_version);
 
     Ok(ReleaseCheck {
@@ -640,16 +645,25 @@ impl GitHubReleaseClient {
     pub async fn check_package(
         &self,
         package: &ReleasePackage,
+        upstream: &UpstreamReleaseEvidence,
         current_version: Option<&Version>,
         os: AssetOs,
         arch: AssetArch,
         options: &ReleaseFetchOptions,
     ) -> Result<ReleaseCheck, ReleaseError> {
         let releases = self
-            .fetch_releases(package.release_api_url, options)
+            .fetch_releases(upstream.release_api_url, options)
             .await?;
 
-        check_package_from_releases(package, current_version, os, arch, options, &releases)
+        check_package_from_releases(
+            package,
+            upstream,
+            current_version,
+            os,
+            arch,
+            options,
+            &releases,
+        )
     }
 }
 
@@ -663,6 +677,7 @@ pub fn parse_github_releases(input: &str) -> Result<Vec<GitHubRelease>, serde_js
 
 pub fn check_package_from_releases(
     package: &ReleasePackage,
+    upstream: &UpstreamReleaseEvidence,
     current_version: Option<&Version>,
     os: AssetOs,
     arch: AssetArch,
@@ -672,7 +687,7 @@ pub fn check_package_from_releases(
     let release = select_release(releases, effective_prerelease(package, options))?;
     let remote_version = parse_version(&release.tag_name)
         .ok_or_else(|| ReleaseError::InvalidVersion(release.tag_name.clone()))?;
-    let asset = resolve_asset(package, release, &remote_version, os, arch)?;
+    let asset = resolve_asset(package, upstream, release, &remote_version, os, arch)?;
     let has_update = current_version.is_none_or(|current| current < &remote_version);
 
     Ok(ReleaseCheck {
@@ -700,18 +715,20 @@ pub fn select_release(
 
 pub fn resolve_asset(
     package: &ReleasePackage,
+    upstream: &UpstreamReleaseEvidence,
     release: &GitHubRelease,
     version: &Version,
     os: AssetOs,
     arch: AssetArch,
 ) -> Result<ResolvedAsset, ReleaseError> {
-    let template = package.templates.template_for(os, arch).ok_or_else(|| {
-        ReleaseError::UnsupportedAssetTarget {
+    let template = upstream
+        .asset_templates
+        .template_for(os, arch)
+        .ok_or_else(|| ReleaseError::UnsupportedAssetTarget {
             package_id: package.id.to_string(),
             os,
             arch,
-        }
-    })?;
+        })?;
     let download_url = render_asset_template(template, &release.tag_name, version);
     let expected_name = file_name_from_url(&download_url);
 
@@ -779,31 +796,6 @@ pub fn app_release_package() -> ReleasePackage {
         id: "app",
         name: "VoyaVPN",
         target: PackageTarget::App,
-        release_api_url: VOYA_APP_RELEASES_API_URL,
-        release_url: VOYA_APP_RELEASES_URL,
-        templates: AssetTemplates {
-            windows_x64: Some(
-                "https://github.com/voyavpn/voyavpn/releases/download/{tag}/VoyaVPN-windows-x64.zip",
-            ),
-            windows_arm64: Some(
-                "https://github.com/voyavpn/voyavpn/releases/download/{tag}/VoyaVPN-windows-arm64.zip",
-            ),
-            linux_x64: Some(
-                "https://github.com/voyavpn/voyavpn/releases/download/{tag}/VoyaVPN-linux-x64.AppImage",
-            ),
-            linux_arm64: Some(
-                "https://github.com/voyavpn/voyavpn/releases/download/{tag}/VoyaVPN-linux-arm64.AppImage",
-            ),
-            linux_riscv64: Some(
-                "https://github.com/voyavpn/voyavpn/releases/download/{tag}/VoyaVPN-linux-riscv64.AppImage",
-            ),
-            macos_x64: Some(
-                "https://github.com/voyavpn/voyavpn/releases/download/{tag}/VoyaVPN-macos-x64.dmg",
-            ),
-            macos_arm64: Some(
-                "https://github.com/voyavpn/voyavpn/releases/download/{tag}/VoyaVPN-macos-arm64.dmg",
-            ),
-        },
         prerelease_policy: PrereleasePolicy::UserControlled,
         policy: PackagePolicy {
             license: Some("MIT"),
@@ -846,111 +838,30 @@ pub fn updatable_core_types() -> &'static [CoreType] {
 }
 
 fn xray_release_package() -> ReleasePackage {
-    let base = "https://github.com/XTLS/Xray-core/releases";
-
     ReleasePackage {
         id: "core:xray",
         name: "Xray",
         target: PackageTarget::Core(CoreType::Xray),
-        release_api_url: "https://api.github.com/repos/XTLS/Xray-core/releases",
-        release_url: base,
-        templates: AssetTemplates {
-            windows_x64: Some(
-                "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-windows-64.zip",
-            ),
-            windows_arm64: Some(
-                "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-windows-arm64-v8a.zip",
-            ),
-            linux_x64: Some(
-                "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-linux-64.zip",
-            ),
-            linux_arm64: Some(
-                "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-linux-arm64-v8a.zip",
-            ),
-            linux_riscv64: Some(
-                "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-linux-riscv64.zip",
-            ),
-            macos_x64: Some(
-                "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-macos-64.zip",
-            ),
-            macos_arm64: Some(
-                "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-macos-arm64-v8a.zip",
-            ),
-        },
         prerelease_policy: PrereleasePolicy::UserControlled,
         policy: core_acquisition_policy(CoreType::Xray),
     }
 }
 
 fn mihomo_release_package() -> ReleasePackage {
-    let base = "https://github.com/MetaCubeX/mihomo/releases";
-
     ReleasePackage {
         id: "core:mihomo",
         name: "mihomo",
         target: PackageTarget::Core(CoreType::mihomo),
-        release_api_url: "https://api.github.com/repos/MetaCubeX/mihomo/releases",
-        release_url: base,
-        templates: AssetTemplates {
-            windows_x64: Some(
-                "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-windows-amd64-v1-{tag}.zip",
-            ),
-            windows_arm64: Some(
-                "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-windows-arm64-{tag}.zip",
-            ),
-            linux_x64: Some(
-                "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-linux-amd64-v1-{tag}.gz",
-            ),
-            linux_arm64: Some(
-                "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-linux-arm64-{tag}.gz",
-            ),
-            linux_riscv64: Some(
-                "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-linux-riscv64-{tag}.gz",
-            ),
-            macos_x64: Some(
-                "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-darwin-amd64-v1-{tag}.gz",
-            ),
-            macos_arm64: Some(
-                "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-darwin-arm64-{tag}.gz",
-            ),
-        },
         prerelease_policy: PrereleasePolicy::StableOnly,
         policy: core_acquisition_policy(CoreType::mihomo),
     }
 }
 
 fn sing_box_release_package() -> ReleasePackage {
-    let base = "https://github.com/SagerNet/sing-box/releases";
-
     ReleasePackage {
         id: "core:sing_box",
         name: "sing-box",
         target: PackageTarget::Core(CoreType::sing_box),
-        release_api_url: "https://api.github.com/repos/SagerNet/sing-box/releases",
-        release_url: base,
-        templates: AssetTemplates {
-            windows_x64: Some(
-                "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-windows-amd64.zip",
-            ),
-            windows_arm64: Some(
-                "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-windows-arm64.zip",
-            ),
-            linux_x64: Some(
-                "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-linux-amd64.tar.gz",
-            ),
-            linux_arm64: Some(
-                "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-linux-arm64.tar.gz",
-            ),
-            linux_riscv64: Some(
-                "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-linux-riscv64.tar.gz",
-            ),
-            macos_x64: Some(
-                "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-darwin-amd64.tar.gz",
-            ),
-            macos_arm64: Some(
-                "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-darwin-arm64.tar.gz",
-            ),
-        },
         prerelease_policy: PrereleasePolicy::StableOnly,
         policy: core_acquisition_policy(CoreType::sing_box),
     }
@@ -995,9 +906,7 @@ fn version_candidate(input: &str) -> Option<String> {
 }
 
 fn normalize_semver(candidate: &str) -> Option<String> {
-    let split_at = candidate
-        .find(|ch| matches!(ch, '-' | '+'))
-        .unwrap_or(candidate.len());
+    let split_at = candidate.find(['-', '+']).unwrap_or(candidate.len());
     let core = &candidate[..split_at];
     let suffix = &candidate[split_at..];
     let parts = core
@@ -1059,8 +968,10 @@ mod tests {
         let version = parse_version("v1.2.3").expect("version");
 
         let xray = release_package_for_core(CoreType::Xray).expect("xray package");
+        let xray_upstream = xray_upstream_release_evidence();
         let xray_asset = resolve_asset(
             &xray,
+            &xray_upstream,
             &release,
             &version,
             AssetOs::Windows,
@@ -1070,14 +981,23 @@ mod tests {
         assert_eq!(xray_asset.name, "Xray-windows-arm64-v8a.zip");
 
         let mihomo = release_package_for_core(CoreType::mihomo).expect("mihomo package");
-        let mihomo_asset =
-            resolve_asset(&mihomo, &release, &version, AssetOs::Linux, AssetArch::X64)
-                .expect("mihomo asset");
+        let mihomo_upstream = mihomo_upstream_release_evidence();
+        let mihomo_asset = resolve_asset(
+            &mihomo,
+            &mihomo_upstream,
+            &release,
+            &version,
+            AssetOs::Linux,
+            AssetArch::X64,
+        )
+        .expect("mihomo asset");
         assert_eq!(mihomo_asset.name, "mihomo-linux-amd64-v1-v1.2.3.gz");
 
         let sing_box = release_package_for_core(CoreType::sing_box).expect("sing-box package");
+        let sing_box_upstream = sing_box_upstream_release_evidence();
         let sing_asset = resolve_asset(
             &sing_box,
+            &sing_box_upstream,
             &release,
             &version,
             AssetOs::Linux,
@@ -1090,6 +1010,7 @@ mod tests {
     #[test]
     fn update_asset_selection_prefers_release_asset_and_falls_back_to_template() {
         let package = release_package_for_core(CoreType::Xray).expect("xray package");
+        let upstream = xray_upstream_release_evidence();
         let version = parse_version("v1.8.7").expect("version");
         let release = GitHubRelease {
             tag_name: "v1.8.7".to_string(),
@@ -1102,13 +1023,27 @@ mod tests {
             ..fixture_release()
         };
 
-        let exact = resolve_asset(&package, &release, &version, AssetOs::Linux, AssetArch::X64)
-            .expect("exact asset");
+        let exact = resolve_asset(
+            &package,
+            &upstream,
+            &release,
+            &version,
+            AssetOs::Linux,
+            AssetArch::X64,
+        )
+        .expect("exact asset");
         assert_eq!(exact.source, ResolvedAssetSource::ReleaseAsset);
         assert_eq!(exact.download_url, "https://cdn.example/Xray-linux-64.zip");
 
-        let fallback = resolve_asset(&package, &release, &version, AssetOs::Macos, AssetArch::X64)
-            .expect("fallback asset");
+        let fallback = resolve_asset(
+            &package,
+            &upstream,
+            &release,
+            &version,
+            AssetOs::Macos,
+            AssetArch::X64,
+        )
+        .expect("fallback asset");
         assert_eq!(fallback.source, ResolvedAssetSource::TemplateFallback);
         assert_eq!(fallback.name, "Xray-macos-64.zip");
     }
@@ -1309,19 +1244,27 @@ mod tests {
 
     #[test]
     fn update_version_parser_accepts_tags_and_cli_output() {
-        assert_eq!(parse_version("v1.2.3").unwrap(), Version::new(1, 2, 3));
-        assert_eq!(parse_version("1.2").unwrap(), Version::new(1, 2, 0));
         assert_eq!(
-            parse_version("Xray 1.8.7 (Xray, Penetrates Everything.)").unwrap(),
+            parse_version("v1.2.3").expect("update test operation should succeed"),
+            Version::new(1, 2, 3)
+        );
+        assert_eq!(
+            parse_version("1.2").expect("update test operation should succeed"),
+            Version::new(1, 2, 0)
+        );
+        assert_eq!(
+            parse_version("Xray 1.8.7 (Xray, Penetrates Everything.)")
+                .expect("update test operation should succeed"),
             Version::new(1, 8, 7)
         );
         assert_eq!(
-            parse_version("mihomo v1.18.4 linux amd64").unwrap(),
+            parse_version("mihomo v1.18.4 linux amd64")
+                .expect("update test operation should succeed"),
             Version::new(1, 18, 4)
         );
         assert_eq!(
-            parse_version("v2.0.0-beta.1").unwrap(),
-            Version::parse("2.0.0-beta.1").unwrap()
+            parse_version("v2.0.0-beta.1").expect("update test operation should succeed"),
+            Version::parse("2.0.0-beta.1").expect("update test operation should succeed")
         );
     }
 
@@ -1365,13 +1308,107 @@ mod tests {
         }
     }
 
+    fn xray_upstream_release_evidence() -> UpstreamReleaseEvidence {
+        UpstreamReleaseEvidence {
+            release_api_url: "https://api.github.com/repos/XTLS/Xray-core/releases",
+            release_url: "https://github.com/XTLS/Xray-core/releases",
+            asset_templates: UpstreamAssetTemplates {
+                windows_x64: Some(
+                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-windows-64.zip",
+                ),
+                windows_arm64: Some(
+                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-windows-arm64-v8a.zip",
+                ),
+                linux_x64: Some(
+                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-linux-64.zip",
+                ),
+                linux_arm64: Some(
+                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-linux-arm64-v8a.zip",
+                ),
+                linux_riscv64: Some(
+                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-linux-riscv64.zip",
+                ),
+                macos_x64: Some(
+                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-macos-64.zip",
+                ),
+                macos_arm64: Some(
+                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-macos-arm64-v8a.zip",
+                ),
+            },
+        }
+    }
+
+    fn mihomo_upstream_release_evidence() -> UpstreamReleaseEvidence {
+        UpstreamReleaseEvidence {
+            release_api_url: "https://api.github.com/repos/MetaCubeX/mihomo/releases",
+            release_url: "https://github.com/MetaCubeX/mihomo/releases",
+            asset_templates: UpstreamAssetTemplates {
+                windows_x64: Some(
+                    "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-windows-amd64-v1-{tag}.zip",
+                ),
+                windows_arm64: Some(
+                    "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-windows-arm64-{tag}.zip",
+                ),
+                linux_x64: Some(
+                    "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-linux-amd64-v1-{tag}.gz",
+                ),
+                linux_arm64: Some(
+                    "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-linux-arm64-{tag}.gz",
+                ),
+                linux_riscv64: Some(
+                    "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-linux-riscv64-{tag}.gz",
+                ),
+                macos_x64: Some(
+                    "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-darwin-amd64-v1-{tag}.gz",
+                ),
+                macos_arm64: Some(
+                    "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-darwin-arm64-{tag}.gz",
+                ),
+            },
+        }
+    }
+
+    fn sing_box_upstream_release_evidence() -> UpstreamReleaseEvidence {
+        UpstreamReleaseEvidence {
+            release_api_url: "https://api.github.com/repos/SagerNet/sing-box/releases",
+            release_url: "https://github.com/SagerNet/sing-box/releases",
+            asset_templates: UpstreamAssetTemplates {
+                windows_x64: Some(
+                    "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-windows-amd64.zip",
+                ),
+                windows_arm64: Some(
+                    "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-windows-arm64.zip",
+                ),
+                linux_x64: Some(
+                    "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-linux-amd64.tar.gz",
+                ),
+                linux_arm64: Some(
+                    "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-linux-arm64.tar.gz",
+                ),
+                linux_riscv64: Some(
+                    "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-linux-riscv64.tar.gz",
+                ),
+                macos_x64: Some(
+                    "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-darwin-amd64.tar.gz",
+                ),
+                macos_arm64: Some(
+                    "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-darwin-arm64.tar.gz",
+                ),
+            },
+        }
+    }
+
     async fn spawn_http_fixture(
         routes: HashMap<String, String>,
         max_requests: usize,
         seen_user_agents: Arc<Mutex<Vec<String>>>,
     ) -> String {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("update test operation should succeed");
+        let address = listener
+            .local_addr()
+            .expect("update test operation should succeed");
         let routes = Arc::new(routes);
 
         tokio::spawn(async move {

@@ -9,6 +9,7 @@ These checks must run on real operating systems before production stable publica
 - Top-level release path: [runbook.md](runbook.md)
 - Signing and updater prerequisites: [signing-notarization.md](signing-notarization.md)
 - Rollback procedures: [rollback.md](rollback.md)
+- Stable external evidence checklist: [external-evidence-checklist.md](external-evidence-checklist.md)
 - Stable gate: [../verification/stable-release-gate.md](../verification/stable-release-gate.md)
 - Diagnostics privacy contract: [diagnostics-privacy.md](diagnostics-privacy.md)
 - Update subsystem evidence: [../verification/updates.md](../verification/updates.md)
@@ -31,7 +32,7 @@ Record:
 
 ## Stable Target Coverage
 
-The first production stable matrix covers x64 and arm64 for Windows, macOS, and Linux. Each target must have manual download smoke, updater smoke, core smoke, diagnostics smoke, and rollback readiness evidence before pointer promotion.
+The first production stable matrix covers x64 and arm64 for Windows, macOS, and Linux. Each target must have manual download smoke, updater smoke, core smoke, diagnostics smoke, and rollback readiness evidence before pointer promotion. Release owners record the target artifact names, SHA-256 values, signature/notarization evidence, smoke logs, screenshots, and stop or rollback decision in [external-evidence-checklist.md](external-evidence-checklist.md).
 
 | Stable target | Owner | System | Required verification | Rollback or stop condition |
 | --- | --- | --- | --- | --- |

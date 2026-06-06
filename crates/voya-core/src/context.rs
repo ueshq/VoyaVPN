@@ -205,7 +205,7 @@ impl Default for CoreConfigContextBuilderResult {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct CoreConfigContextBuilderAllResult {
     pub main_result: CoreConfigContextBuilderResult,
@@ -219,7 +219,7 @@ impl CoreConfigContextBuilderAllResult {
             && self
                 .pre_socks_result
                 .as_ref()
-                .map_or(true, CoreConfigContextBuilderResult::success)
+                .is_none_or(CoreConfigContextBuilderResult::success)
     }
 
     #[must_use]
@@ -230,15 +230,6 @@ impl CoreConfigContextBuilderAllResult {
                 .as_ref()
                 .map(|result| &result.validator_result),
         )
-    }
-}
-
-impl Default for CoreConfigContextBuilderAllResult {
-    fn default() -> Self {
-        Self {
-            main_result: CoreConfigContextBuilderResult::default(),
-            pre_socks_result: None,
-        }
     }
 }
 
@@ -665,7 +656,7 @@ where
                     && profile_is_valid(profile)
                     && filter
                         .as_ref()
-                        .map_or(true, |filter| filter.is_match(&profile.remarks))
+                        .is_none_or(|filter| filter.is_match(&profile.remarks))
             })
             .collect()
     }

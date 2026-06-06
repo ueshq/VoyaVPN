@@ -1282,7 +1282,7 @@ fn parse_shadowsocks_plugin(plugin: &str, item: &mut ProfileItem) -> Result<(), 
                 );
             }
         }
-        if plugin_parts.iter().any(|part| *part == "tls") {
+        if plugin_parts.contains(&"tls") {
             item.stream_security = STREAM_SECURITY_TLS.to_string();
             if let Some(cert) = plugin_parts
                 .iter()
@@ -1452,7 +1452,7 @@ fn parse_uri_with_schemes(
             field: "host",
         });
     }
-    let port = url.port().ok_or_else(|| ShareError::MissingField {
+    let port = url.port().ok_or(ShareError::MissingField {
         protocol,
         field: "port",
     })?;
@@ -1609,20 +1609,18 @@ fn to_uri_query(item: &ProfileItem, security_default: Option<&str>, query: &mut 
                 ));
             }
         }
-        "grpc" => {
-            if nonempty_option(&transport.grpc_service_name).is_some() {
-                query.push((
-                    "authority".to_string(),
-                    url_encode(transport.grpc_authority.as_deref().unwrap_or("")),
-                ));
-                query.push((
-                    "serviceName".to_string(),
-                    url_encode(transport.grpc_service_name.as_deref().unwrap_or("")),
-                ));
-                if let Some(mode) = nonempty_option(&transport.grpc_mode) {
-                    if mode == GRPC_GUN_MODE || mode == GRPC_MULTI_MODE {
-                        query.push(("mode".to_string(), url_encode(mode)));
-                    }
+        "grpc" if nonempty_option(&transport.grpc_service_name).is_some() => {
+            query.push((
+                "authority".to_string(),
+                url_encode(transport.grpc_authority.as_deref().unwrap_or("")),
+            ));
+            query.push((
+                "serviceName".to_string(),
+                url_encode(transport.grpc_service_name.as_deref().unwrap_or("")),
+            ));
+            if let Some(mode) = nonempty_option(&transport.grpc_mode) {
+                if mode == GRPC_GUN_MODE || mode == GRPC_MULTI_MODE {
+                    query.push(("mode".to_string(), url_encode(mode)));
                 }
             }
         }
@@ -2239,7 +2237,7 @@ fn base64_decode(input: &str, protocol: &'static str) -> Result<String, ShareErr
         .replace('-', "+");
     if normalized.len() % 4 != 0 {
         let pad = 4 - (normalized.len() % 4);
-        normalized.extend(std::iter::repeat('=').take(pad));
+        normalized.extend(std::iter::repeat_n('=', pad));
     }
     let bytes = STANDARD
         .decode(normalized.as_bytes())

@@ -346,12 +346,14 @@ mod tests {
 
     #[tokio::test]
     async fn dns_manager_persists_simple_and_raw_dns_settings() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("DNS manager test operation should succeed");
         let manager = DnsManager::new(&database);
         let mut settings = manager
             .load_settings(&SimpleDnsItem::default())
             .await
-            .unwrap();
+            .expect("DNS manager test operation should succeed");
 
         settings.simple_dns_item.fake_ip = Some(true);
         settings.simple_dns_item.global_fake_ip = Some(false);
@@ -363,15 +365,18 @@ mod tests {
         settings.singbox_dns_item.normal_dns =
             Some(r#"{"servers":[{"tag":"remote","type":"udp","server":"1.1.1.1"}]}"#.to_string());
 
-        let saved = manager.save_settings(settings.clone()).await.unwrap();
+        let saved = manager
+            .save_settings(settings.clone())
+            .await
+            .expect("DNS manager test operation should succeed");
         assert_eq!(saved.simple_dns_item.fake_ip, Some(true));
         assert_eq!(
             database
                 .dns()
                 .get_by_core_type(CoreType::Xray)
                 .await
-                .unwrap()
-                .unwrap()
+                .expect("DNS manager test operation should succeed")
+                .expect("DNS manager test operation should succeed")
                 .normal_dns,
             settings.xray_dns_item.normal_dns
         );
@@ -380,8 +385,8 @@ mod tests {
                 .dns()
                 .get_by_core_type(CoreType::sing_box)
                 .await
-                .unwrap()
-                .unwrap()
+                .expect("DNS manager test operation should succeed")
+                .expect("DNS manager test operation should succeed")
                 .normal_dns,
             settings.singbox_dns_item.normal_dns
         );
@@ -389,17 +394,22 @@ mod tests {
 
     #[tokio::test]
     async fn dns_manager_returns_typed_validation_errors_for_invalid_json() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("DNS manager test operation should succeed");
         let manager = DnsManager::new(&database);
         let mut settings = manager
             .load_settings(&SimpleDnsItem::default())
             .await
-            .unwrap();
+            .expect("DNS manager test operation should succeed");
         settings.xray_dns_item.normal_dns = Some(r#"{"servers":"#.to_string());
         settings.singbox_dns_item.normal_dns =
             Some(r#"{"servers":[{"tag":"remote"}]}"#.to_string());
 
-        let error = manager.save_settings(settings).await.unwrap_err();
+        let error = manager
+            .save_settings(settings)
+            .await
+            .expect_err("invalid DNS JSON should fail validation");
         let DnsManagerError::Validation(issues) = error else {
             panic!("expected validation errors");
         };

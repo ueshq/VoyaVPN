@@ -594,7 +594,7 @@ pub fn decode_base64_payload(input: &str) -> Option<String> {
 
     normalized = normalized.replace('_', "/").replace('-', "+");
     if normalized.len() % 4 != 0 {
-        normalized.extend(std::iter::repeat('=').take(4 - normalized.len() % 4));
+        normalized.extend(std::iter::repeat_n('=', 4 - normalized.len() % 4));
     }
 
     let bytes = STANDARD.decode(normalized.as_bytes()).ok()?;
@@ -911,8 +911,12 @@ mod tests {
         max_requests: usize,
         seen_user_agents: Arc<Mutex<Vec<String>>>,
     ) -> String {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("update test operation should succeed");
+        let address = listener
+            .local_addr()
+            .expect("update test operation should succeed");
         let routes = Arc::new(routes);
 
         tokio::spawn(async move {

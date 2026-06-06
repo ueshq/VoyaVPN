@@ -62,36 +62,6 @@ pub(crate) struct AppState {
 }
 
 impl AppState {
-    fn new(
-        database: Database,
-        config_store: AppConfigStore,
-        config: Arc<RwLock<AppConfig>>,
-        runtime_paths: AppPaths,
-        core_seed_resource_dir: Option<PathBuf>,
-        sudo_password_collector: SudoPasswordCollector,
-        supervisor: CoreSupervisor,
-        statistics_manager: StatisticsManager,
-        speedtest_manager: SpeedtestManager,
-        system_proxy_manager: SystemProxyManager,
-        clash_monitor_controller: ClashMonitorController,
-        diagnostics_client: Arc<AsyncMutex<DiagnosticsClient>>,
-    ) -> Self {
-        Self {
-            database,
-            config_store,
-            config,
-            runtime_paths,
-            core_seed_resource_dir,
-            sudo_password_collector,
-            supervisor,
-            statistics_manager,
-            speedtest_manager,
-            system_proxy_manager,
-            clash_monitor_controller,
-            diagnostics_client,
-        }
-    }
-
     pub(crate) fn database(&self) -> &Database {
         &self.database
     }
@@ -222,20 +192,20 @@ pub fn run() {
             {
                 tracing::warn!(?error, "failed to register persisted global hotkeys");
             }
-            app.manage(AppState::new(
+            app.manage(AppState {
                 database,
                 config_store,
-                shared_config,
+                config: shared_config,
                 runtime_paths,
                 core_seed_resource_dir,
                 sudo_password_collector,
                 supervisor,
                 statistics_manager,
-                SpeedtestManager::new(),
+                speedtest_manager: SpeedtestManager::new(),
                 system_proxy_manager,
-                ClashMonitorController::new(),
-                Arc::new(AsyncMutex::new(DiagnosticsClient::new())),
-            ));
+                clash_monitor_controller: ClashMonitorController::new(),
+                diagnostics_client: Arc::new(AsyncMutex::new(DiagnosticsClient::new())),
+            });
 
             specta_builder.mount_events(app);
             setup_tray(app)?;

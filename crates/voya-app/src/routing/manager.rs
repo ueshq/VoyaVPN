@@ -429,22 +429,13 @@ impl<'db> RoutingManager<'db> {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, rename_all = "PascalCase")]
 struct RoutingTemplate {
     #[serde(alias = "version")]
     version: String,
     #[serde(alias = "routingItems")]
     routing_items: Vec<TemplateRoutingItem>,
-}
-
-impl Default for RoutingTemplate {
-    fn default() -> Self {
-        Self {
-            version: String::new(),
-            routing_items: Vec::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -771,7 +762,9 @@ mod tests {
 
     #[tokio::test]
     async fn routing_manager_selects_active_and_moves_rules() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("routing manager test operation should succeed");
         let manager = RoutingManager::new(&database);
         let mut config = AppConfig::default();
 
@@ -791,7 +784,7 @@ mod tests {
                 },
             )
             .await
-            .unwrap();
+            .expect("routing manager test operation should succeed");
         let second = manager
             .save_routing(
                 &mut config,
@@ -808,14 +801,14 @@ mod tests {
                 },
             )
             .await
-            .unwrap();
+            .expect("routing manager test operation should succeed");
 
         assert_eq!(config.routing_basic_item.routing_index_id, first.id);
         assert!(
             manager
                 .set_active_routing(&mut config, &second.id)
                 .await
-                .unwrap()
+                .expect("routing manager test operation should succeed")
                 .is_active
         );
         assert_eq!(config.routing_basic_item.routing_index_id, second.id);
@@ -831,29 +824,31 @@ mod tests {
                 },
             )
             .await
-            .unwrap();
+            .expect("routing manager test operation should succeed");
         assert_eq!(added.rule_num, 2);
         let moved = manager
             .move_rule(&second.id, &added.rule_set[1].id, MoveAction::Top, None)
             .await
-            .unwrap();
+            .expect("routing manager test operation should succeed");
         assert_eq!(moved.rule_set[0].remarks.as_deref(), Some("C"));
     }
 
     #[tokio::test]
     async fn routing_manager_imports_builtin_templates_once_and_sets_active() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("routing manager test operation should succeed");
         let manager = RoutingManager::new(&database);
         let mut config = AppConfig::default();
 
         let imported = manager
             .import_routing_templates(&mut config, false, None, false)
             .await
-            .unwrap();
+            .expect("routing manager test operation should succeed");
         let skipped = manager
             .import_routing_templates(&mut config, false, None, false)
             .await
-            .unwrap();
+            .expect("routing manager test operation should succeed");
 
         assert_eq!(imported.len(), 3);
         assert!(skipped.is_empty());
@@ -862,7 +857,13 @@ mod tests {
             .routing_index_id
             .starts_with("routing-"));
         assert_eq!(
-            database.routings().active().await.unwrap().unwrap().remarks,
+            database
+                .routings()
+                .active()
+                .await
+                .expect("routing manager test operation should succeed")
+                .expect("routing manager test operation should succeed")
+                .remarks,
             "V4-Bypass mainland (Whitelist)"
         );
     }
@@ -880,18 +881,21 @@ mod tests {
               ]
             }"#,
         )
-        .unwrap();
+        .expect("routing manager test operation should succeed");
         let item = template
             .routing_items
             .into_iter()
             .next()
-            .unwrap()
+            .expect("routing manager test operation should succeed")
             .into_routing_item();
 
         assert_eq!(item.remarks, "split");
         assert_eq!(item.rule_set[0].outbound_tag.as_deref(), Some(DIRECT_TAG));
         assert_eq!(
-            item.rule_set[0].domain.as_ref().unwrap(),
+            item.rule_set[0]
+                .domain
+                .as_ref()
+                .expect("routing manager test operation should succeed"),
             &vec!["full:direct.example.com".to_string()]
         );
     }

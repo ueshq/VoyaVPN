@@ -20,7 +20,7 @@ pnpm tauri:build --debug
 
 The package script runs through `scripts/tauri-build.mjs`, which forwards all Tauri CLI arguments and normalizes `CI=1`/`CI=0` to the boolean strings required by the Tauri 2 CLI. This keeps local and runner debug packaging deterministic without requiring signing credentials.
 
-`bundle.createUpdaterArtifacts` is `false` by default so local debug packaging does not require updater private keys. Stable release jobs do not edit the committed config; `scripts/tauri-build.mjs` writes a generated overlay at `target/release-config/tauri.updater.stable.generated.json` when `VOYAVPN_RELEASE_CHANNEL=stable` or `VOYAVPN_TAURI_UPDATER_CONFIG=stable`.
+`bundle.createUpdaterArtifacts` stays `false` in the committed config by design. The base `src-tauri/tauri.conf.json` is credential-free and safe for local debug builds, CI dry runs, and code review because it does not contain updater endpoints, updater public keys, private-key paths, or generated release state. Stable release jobs do not edit the committed config; `scripts/tauri-build.mjs` writes a generated overlay at `target/release-config/tauri.updater.stable.generated.json` when `VOYAVPN_RELEASE_CHANNEL=stable` or `VOYAVPN_TAURI_UPDATER_CONFIG=stable`.
 
 ## Release Workflow Matrix
 
@@ -36,6 +36,21 @@ The release workflow packages six stable target entries and preserves these name
 | `linux-aarch64` | `aarch64-unknown-linux-gnu` | Requires hosted or self-hosted Ubuntu arm64 runner capacity. |
 
 The workflow uploads package artifacts, `SHA256SUMS`, `artifact-manifest.json`, updater metadata when requested, and CDN staging `release-index` evidence as GitHub Actions artifacts. It does not upload to the CDN, mutate stable pointers, purge caches, sign externally, or notarize; those remain release-owner gates.
+
+## Workflow CDN Staging Inputs
+
+For a stable, non-dry-run release, CDN staging starts from GitHub Actions artifacts produced by the `Release` workflow, not from `tests/fixtures`.
+
+The six package artifacts named `voyavpn-stable-<release_target>-release` are the app package inputs for manual CDN staging. Each package artifact contains the normalized package files, `SHA256SUMS`, and `artifact-manifest.json`; `scripts/release-index.mjs` and `scripts/release-updater-metadata.mjs` use those manifests as source evidence.
+
+The metadata artifacts are:
+
+- `voyavpn-stable-cdn-staging-metadata-release`: contains `release-index.json` and `release-index.evidence.json` generated from the downloaded package artifacts.
+- `voyavpn-stable-updater-metadata-release`: contains `latest.json` and `latest.evidence.json` generated from signed updater payloads and `.sig` files.
+- `voyavpn-stable-core-staging-metadata-release`: contains `source-core-assets.json`, `core-assets.json`, and `core-assets.evidence.json`; in stable mode, `source-core-assets.json` comes from `VOYAVPN_CORE_ASSETS_JSON`, not from the fixture file.
+- `voyavpn-stable-final-readiness-release`: contains final readiness output proving the workflow downloaded the package and metadata artifacts and validated them together. This is evidence, not a CDN upload input.
+
+The `*.evidence.json` files include channel, version or core-version summary, first-stable target counts, source artifact names, byte counts, and SHA-256 checksums. Evidence generated from `tests/fixtures` is labeled with `sourceInput.kind: "fixture"` and `sourceInput.nonPublishableFixture: true`; it proves script shape only and must not be used as production stable publication evidence.
 
 Local verification for this batch passed with unsigned debug artifacts:
 
@@ -129,6 +144,15 @@ Stable packaging uses the generated overlay from `scripts/tauri-build.mjs`:
 - `plugins.updater.endpoints`: `<VOYAVPN_UPDATES_BASE_URL>/latest.json`.
 - Windows updater install mode: `passive`.
 
+The overlay generation command is exact and should be run from a prepared shell where release-time environment names have already been supplied by the approved secret system or signing machine:
+
+```sh
+export VOYAVPN_RELEASE_CHANNEL=stable
+pnpm tauri:stable-updater-config
+```
+
+The command writes only `target/release-config/tauri.updater.stable.generated.json`. Do not commit that generated file, copy it into `src-tauri/tauri.conf.json`, or commit private updater keys. Private signing input is supplied through `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH`; it is required so updater artifacts can be created, but it is not written to the overlay.
+
 Before a real stable release:
 
 1. Generate the updater keypair outside the repo:
@@ -139,21 +163,13 @@ Before a real stable release:
 
 2. Store only the public key in `VOYAVPN_UPDATER_PUBLIC_KEY` or `TAURI_UPDATER_PUBLIC_KEY`; do not commit it into the base config.
 3. Store the private key in CI or local release secrets through `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH`. Store the key password in `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` when one is used.
-4. Set `VOYAVPN_UPDATES_BASE_URL` to the approved HTTPS stable updater CDN base URL.
-5. Generate and inspect the overlay before packaging:
-
-   ```sh
-   VOYAVPN_RELEASE_CHANNEL=stable \
-   VOYAVPN_UPDATES_BASE_URL=<stable-updater-cdn-base-url> \
-   VOYAVPN_UPDATER_PUBLIC_KEY=<approved-public-key> \
-   TAURI_SIGNING_PRIVATE_KEY_PATH=<secure-private-key-path> \
-   pnpm tauri:stable-updater-config
-   ```
+4. Set the prepared stable environment names described in [runbook.md](runbook.md), including `VOYAVPN_CDN_BASE_URL`, `VOYAVPN_UPDATES_BASE_URL`, `VOYAVPN_UPDATER_PUBLIC_KEY`, diagnostics, updater signing, platform signing, and real artifact input names.
+5. Generate and inspect the overlay before packaging with the command above.
 
 6. Run the stable readiness check against the generated overlay:
 
    ```sh
-   node scripts/check-release-readiness.mjs --mode stable --cdn-base-url <stable-cdn-base-url> --updates-base-url <stable-updater-cdn-base-url> --diagnostics-endpoint <stable-diagnostics-endpoint> --tauri-config target/release-config/tauri.updater.stable.generated.json
+   pnpm check:release:stable
    ```
 
 7. Build release packages with the same environment. The wrapper passes the generated overlay to `tauri build` through `--config`.

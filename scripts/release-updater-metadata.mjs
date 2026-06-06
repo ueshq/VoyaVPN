@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -20,6 +20,7 @@ function parseArgs(argv) {
   const options = {
     input: "dist/release",
     output: "dist/release/latest.json",
+    evidenceOutput: null,
     version: null,
     channel: "beta",
     baseUrl: null,
@@ -47,6 +48,9 @@ function parseArgs(argv) {
       case "--output":
       case "--out":
         options.output = next();
+        break;
+      case "--evidence-out":
+        options.evidenceOutput = next();
         break;
       case "--version":
         options.version = next();
@@ -87,6 +91,7 @@ function printHelp() {
 Options:
   --input <dir>                Directory containing artifact-manifest.json files. Default: dist/release
   --out <file>                 latest.json output path. Default: dist/release/latest.json
+  --evidence-out <file>        Evidence JSON output path. Default: sibling *.evidence.json
   --version <semver>           App version. Defaults to package.json version
   --channel <name>             Release channel. Default: beta
   --base-url <url>             Public update asset base URL. Defaults to VOYAVPN_UPDATES_BASE_URL,
@@ -199,6 +204,49 @@ function joinUrl(baseUrl, ...parts) {
   const cleanBase = baseUrl.replace(/\/+$/g, "");
   const cleanParts = parts.map((part) => encodeURIComponent(part).replaceAll("%2F", "/"));
   return [cleanBase, ...cleanParts].join("/");
+}
+
+function defaultEvidencePath(outputPath) {
+  const name = basename(outputPath);
+  const dot = name.lastIndexOf(".");
+  const evidenceName = dot === -1 ? `${name}.evidence.json` : `${name.slice(0, dot)}.evidence.json`;
+  return join(dirname(outputPath), evidenceName);
+}
+
+function displayRepoPath(path) {
+  return relative(repoRoot, path).replaceAll("\\", "/") || ".";
+}
+
+function sourceInputEvidence(inputPath) {
+  const relativePath = displayRepoPath(inputPath);
+  const isFixture = relativePath === "tests/fixtures" || relativePath.startsWith("tests/fixtures/");
+  return {
+    path: inputPath,
+    relativePath,
+    kind: isFixture ? "fixture" : "workflow-artifact",
+    nonPublishableFixture: isFixture,
+  };
+}
+
+function uniqueSorted(values) {
+  return [...new Set(values.filter(Boolean))].sort((left, right) => left.localeCompare(right));
+}
+
+function describeStableTarget(target) {
+  const details = {
+    "darwin-aarch64": { os: "macos", arch: "arm64" },
+    "darwin-x86_64": { os: "macos", arch: "x64" },
+    "linux-aarch64": { os: "linux", arch: "arm64" },
+    "linux-x86_64": { os: "linux", arch: "x64" },
+    "windows-aarch64": { os: "windows", arch: "arm64" },
+    "windows-x86_64": { os: "windows", arch: "x64" },
+  }[target];
+
+  return {
+    target,
+    os: details?.os ?? null,
+    arch: details?.arch ?? null,
+  };
 }
 
 function placeholderToken(target) {
@@ -331,6 +379,7 @@ async function verifyArtifactFile(manifestDir, artifact, context, requireManifes
 
 function assertStableArtifactMetadata(artifact, target, version, channel, context) {
   requiredString(artifact.name, "name", context);
+  requiredString(artifact.originalName, "originalName", context);
   artifactPath(artifact, context);
 
   if (requiredString(artifact.target, "target", context) !== target) {
@@ -381,6 +430,41 @@ function assertStableDocuments(latest, evidenceDocument, baseUrl) {
   }
 }
 
+function buildTargetEvidence(evidence) {
+  return evidence.map((entry) => {
+    const described = describeStableTarget(entry.target);
+    const artifactNames = [entry.artifact, entry.signatureArtifact].filter(Boolean);
+    const sourceArtifactNames = [entry.sourceArtifactName, entry.sourceSignatureArtifactName].filter(Boolean);
+    const checksums = [
+      entry.sha256
+        ? {
+            name: entry.artifact,
+            sourceArtifactName: entry.sourceArtifactName,
+            bytes: entry.bytes,
+            sha256: entry.sha256,
+          }
+        : null,
+      entry.signatureSha256
+        ? {
+            name: entry.signatureArtifact,
+            sourceArtifactName: entry.sourceSignatureArtifactName,
+            bytes: entry.signatureBytes,
+            sha256: entry.signatureSha256,
+          }
+        : null,
+    ].filter(Boolean);
+
+    return {
+      ...described,
+      source: entry.source,
+      artifactCount: artifactNames.length,
+      artifactNames,
+      sourceArtifactNames,
+      checksums,
+    };
+  });
+}
+
 async function loadManifests(inputDir) {
   const manifests = [];
   for (const manifestPath of await walkManifests(inputDir)) {
@@ -411,6 +495,7 @@ async function main() {
   const pubDate = options.pubDate ?? new Date().toISOString();
   const inputDir = resolve(repoRoot, options.input);
   const outputPath = resolve(repoRoot, options.output);
+  const evidencePath = resolve(repoRoot, options.evidenceOutput ?? defaultEvidencePath(outputPath));
 
   const loadedManifests = await loadManifests(inputDir);
   const targets = new Map();
@@ -487,11 +572,17 @@ async function main() {
         source: "signed-artifact",
         artifact: payload.name,
         signatureArtifact: signatureArtifact.name,
+        channel: options.channel,
+        version,
         url,
         bytes: payloadEvidence.bytes,
         sha256: payloadEvidence.sha256,
         signatureBytes: signatureEvidence.bytes,
         signatureSha256: signatureEvidence.sha256,
+        sourceArtifactName: payload.originalName ?? payload.name,
+        sourceArtifactPath: payload.originalRelativePath,
+        sourceSignatureArtifactName: signatureArtifact.originalName ?? signatureArtifact.name,
+        sourceSignatureArtifactPath: signatureArtifact.originalRelativePath,
       };
       evidence.push(evidenceEntry);
       evidencePlatforms[target] = evidenceEntry;
@@ -513,6 +604,8 @@ async function main() {
       target,
       source: "placeholder",
       artifact: placeholderName,
+      channel: options.channel,
+      version,
       url: platforms[target].url,
     };
     evidence.push(evidenceEntry);
@@ -531,19 +624,33 @@ async function main() {
   }
 
   const generatedAt = new Date().toISOString();
+  const targetEvidence = buildTargetEvidence(evidence);
+  const firstStableTargets = targetEvidence
+    .map((target) => target.target)
+    .filter((target) => stableTargetSet.has(target));
   const evidenceDocument = {
     channel: options.channel,
     version,
     baseUrl,
     generatedAt,
     latestPath: outputPath,
+    evidencePath,
+    sourceInput: sourceInputEvidence(inputDir),
     sourceManifests,
     platformCount: Object.keys(platforms).length,
+    targetCount: targetEvidence.length,
+    firstStableTargetCount: firstStableTargets.length,
+    firstStableTargets,
+    checksumCount: evidence.reduce((count, entry) => count + (entry.sha256 ? 1 : 0) + (entry.signatureSha256 ? 1 : 0), 0),
+    sourceArtifactNames: uniqueSorted(
+      evidence.flatMap((entry) => [entry.sourceArtifactName, entry.sourceSignatureArtifactName]),
+    ),
     validations: {
       urlsDerivedFromBaseUrl: true,
       signedArtifactsRequiredForStable: isStable(options.channel),
       stableTargetMatrixComplete: isStable(options.channel),
     },
+    targets: targetEvidence,
     evidence,
     platforms: evidencePlatforms,
   };
@@ -553,13 +660,12 @@ async function main() {
   }
 
   await mkdir(dirname(outputPath), { recursive: true });
+  await mkdir(dirname(evidencePath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(latest, null, 2)}\n`);
-  await writeFile(
-    join(dirname(outputPath), "latest.evidence.json"),
-    `${JSON.stringify(evidenceDocument, null, 2)}\n`,
-  );
+  await writeFile(evidencePath, `${JSON.stringify(evidenceDocument, null, 2)}\n`);
 
   console.log(`Wrote updater metadata to ${relative(repoRoot, outputPath)}`);
+  console.log(`Wrote updater evidence to ${relative(repoRoot, evidencePath)}`);
   const signedEvidence = evidence.filter((entry) => entry.source === "signed-artifact");
   if (signedEvidence.length > 0) {
     console.log(`Signed updater artifacts: ${signedEvidence.map((entry) => `${entry.target}=${entry.artifact}`).join(", ")}`);

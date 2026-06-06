@@ -606,7 +606,7 @@ mod autostart_tests {
             .apply(&request(TargetOs::Linux, false))
             .expect("autostart apply");
 
-        assert_eq!(plan.enabled, false);
+        assert!(!plan.enabled);
         assert_eq!(
             adapter.removes.lock().expect("removes").as_slice(),
             &[PathBuf::from(

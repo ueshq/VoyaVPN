@@ -362,21 +362,13 @@ impl ClashWebSocketSession {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ClashProxiesResponse {
     pub proxies: BTreeMap<String, ClashProxy>,
 }
 
-impl Default for ClashProxiesResponse {
-    fn default() -> Self {
-        Self {
-            proxies: BTreeMap::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ClashProxy {
     pub all: Vec<String>,
@@ -389,20 +381,6 @@ pub struct ClashProxy {
     pub delay: i32,
 }
 
-impl Default for ClashProxy {
-    fn default() -> Self {
-        Self {
-            all: Vec::new(),
-            history: Vec::new(),
-            name: None,
-            proxy_type: String::new(),
-            udp: false,
-            now: None,
-            delay: 0,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ClashHistoryItem {
@@ -410,18 +388,10 @@ pub struct ClashHistoryItem {
     pub delay: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ClashProvidersResponse {
     pub providers: BTreeMap<String, ClashProvider>,
-}
-
-impl Default for ClashProvidersResponse {
-    fn default() -> Self {
-        Self {
-            providers: BTreeMap::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
@@ -441,7 +411,7 @@ pub struct ClashDelayResponse {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ClashConnections {
     #[serde(deserialize_with = "deserialize_u64_lossy")]
@@ -450,16 +420,6 @@ pub struct ClashConnections {
     pub upload_total: u64,
     #[serde(deserialize_with = "deserialize_connections_lossy")]
     pub connections: Vec<ClashConnection>,
-}
-
-impl Default for ClashConnections {
-    fn default() -> Self {
-        Self {
-            download_total: 0,
-            upload_total: 0,
-            connections: Vec::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]

@@ -491,7 +491,9 @@ mod tests {
 
     #[tokio::test]
     async fn subscription_import_filters_dedupes_persists_and_updates_active_profile() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
         let manager = SubscriptionManager::new(&database);
         let mut config = AppConfig::default();
         let sub = manager
@@ -506,15 +508,19 @@ mod tests {
                 },
             )
             .await
-            .unwrap();
+            .expect("subscription manager test operation should succeed");
         let old = ProfileManager::new(&database)
             .save_profile(&mut config, sample_profile("old", "US old"))
             .await
-            .unwrap();
+            .expect("subscription manager test operation should succeed");
         let mut old_profile = old.profile.clone();
         old_profile.subid.clone_from(&sub.id);
         old_profile.is_sub = true;
-        database.profiles().upsert(&old_profile).await.unwrap();
+        database
+            .profiles()
+            .upsert(&old_profile)
+            .await
+            .expect("subscription manager test operation should succeed");
         config.index_id = old_profile.index_id.clone();
 
         let text = [
@@ -526,7 +532,7 @@ mod tests {
         let result = manager
             .import_profiles_from_text(&mut config, &text, Some(&sub.id), true)
             .await
-            .unwrap();
+            .expect("subscription manager test operation should succeed");
 
         assert_eq!(result.imported, 1);
         assert_eq!(result.skipped, 2);
@@ -535,7 +541,7 @@ mod tests {
             .profiles()
             .list_by_subid(Some(&sub.id))
             .await
-            .unwrap();
+            .expect("subscription manager test operation should succeed");
         assert_eq!(profiles.len(), 1);
         assert_eq!(profiles[0].remarks, "US node");
         assert_eq!(profiles[0].subid, sub.id);
@@ -559,7 +565,9 @@ mod tests {
             Arc::clone(&seen_user_agents),
         )
         .await;
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
         let manager = SubscriptionManager::new(&database);
         let mut config = AppConfig::default();
         config.const_item.sub_convert_url = Some(format!("{base}/convert?url={{0}}"));
@@ -576,7 +584,7 @@ mod tests {
                 },
             )
             .await
-            .unwrap();
+            .expect("subscription manager test operation should succeed");
         manager
             .save_subscription(
                 &mut config,
@@ -591,16 +599,20 @@ mod tests {
                 },
             )
             .await
-            .unwrap();
+            .expect("subscription manager test operation should succeed");
 
         let result = manager
             .update_subscriptions(&mut config, None, false, None, 900)
             .await
-            .unwrap();
+            .expect("subscription manager test operation should succeed");
         assert_eq!(result.updated, 2);
         assert_eq!(result.imported, 3);
 
-        let profiles = database.profiles().list().await.unwrap();
+        let profiles = database
+            .profiles()
+            .list()
+            .await
+            .expect("subscription manager test operation should succeed");
         assert_eq!(profiles.len(), 3);
         assert!(profiles.iter().any(|profile| profile.remarks == "US A"));
         assert!(profiles.iter().any(|profile| profile.remarks == "US B"));
@@ -610,8 +622,8 @@ mod tests {
                 .subscriptions()
                 .get("sub-plain")
                 .await
-                .unwrap()
-                .unwrap()
+                .expect("subscription manager test operation should succeed")
+                .expect("subscription manager test operation should succeed")
                 .update_time,
             900
         );
@@ -633,7 +645,9 @@ mod tests {
             Arc::clone(&seen_user_agents),
         )
         .await;
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
         let manager = SubscriptionManager::new(&database);
         let mut config = AppConfig::default();
         manager
@@ -649,7 +663,7 @@ mod tests {
                 },
             )
             .await
-            .unwrap();
+            .expect("subscription manager test operation should succeed");
         manager
             .save_subscription(
                 &mut config,
@@ -663,21 +677,31 @@ mod tests {
                 },
             )
             .await
-            .unwrap();
+            .expect("subscription manager test operation should succeed");
 
         let result = manager
             .run_due_updates(&mut config, 120, false, None)
             .await
-            .unwrap();
+            .expect("subscription manager test operation should succeed");
 
         assert_eq!(result.updated, 1);
         assert_eq!(result.imported, 1);
-        assert_eq!(database.profiles().list().await.unwrap().len(), 1);
+        assert_eq!(
+            database
+                .profiles()
+                .list()
+                .await
+                .expect("subscription manager test operation should succeed")
+                .len(),
+            1
+        );
     }
 
     #[tokio::test]
     async fn manual_import_accepts_full_json_custom_config() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
         let manager = SubscriptionManager::new(&database);
         let mut config = AppConfig::default();
         let json = r#"{"remarks":"custom-json","inbounds":[],"outbounds":[],"routing":{}}"#;
@@ -685,10 +709,14 @@ mod tests {
         let result = manager
             .import_profiles_from_text(&mut config, json, None, false)
             .await
-            .unwrap();
+            .expect("subscription manager test operation should succeed");
 
         assert_eq!(result.imported, 1);
-        let profiles = database.profiles().list().await.unwrap();
+        let profiles = database
+            .profiles()
+            .list()
+            .await
+            .expect("subscription manager test operation should succeed");
         assert_eq!(profiles[0].config_type, ConfigType::Custom);
         assert_eq!(profiles[0].remarks, "custom-json");
         assert_eq!(profiles[0].address, json);
@@ -712,8 +740,12 @@ mod tests {
         max_requests: usize,
         seen_user_agents: Arc<Mutex<Vec<String>>>,
     ) -> String {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("subscription manager test operation should succeed");
+        let address = listener
+            .local_addr()
+            .expect("subscription manager test operation should succeed");
         let routes = Arc::new(routes);
 
         tokio::spawn(async move {

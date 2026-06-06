@@ -1151,7 +1151,7 @@ fn fill_dns_servers(context: &CoreConfigContext, config: &mut XrayConfig) -> Vec
                 .or_else(|| ip.strip_prefix("GEOIP:"))
                 .filter(|region| !region.is_empty())
         })
-        .last()
+        .next_back()
         .map(str::to_string)
         .unwrap_or_default();
     let dns_server_domains = dns_server_domains(&direct_dns_addresses, &remote_dns_addresses);
@@ -3315,12 +3315,13 @@ mod tests {
         let expected: Value = serde_json::from_str(include_str!(
             "../../../tests/golden/xray/outbounds/vless_tls_xhttp_fragment.json"
         ))
-        .unwrap();
+        .expect("xray vless xhttp golden fixture should parse as JSON");
 
         golden::assert_json_eq(
             "xray-outbound-vless-tls-xhttp-fragment",
             &expected,
-            &serde_json::to_value(first_outbound).unwrap(),
+            &serde_json::to_value(first_outbound)
+                .expect("xray first outbound should serialize to JSON"),
         );
     }
 
@@ -3475,7 +3476,7 @@ mod tests {
         let expected: Value = serde_json::from_str(include_str!(
             "../../../tests/golden/xray/outbounds/policy_group_least_load.json"
         ))
-        .unwrap();
+        .expect("xray policy group golden fixture should parse as JSON");
 
         golden::assert_json_eq("xray-policy-group-least-load", &expected, &summary);
     }
@@ -3523,7 +3524,7 @@ mod tests {
         let expected: Value = serde_json::from_str(include_str!(
             "../../../tests/golden/xray/full/inbounds_stats_tun.json"
         ))
-        .unwrap();
+        .expect("xray inbounds stats golden fixture should parse as JSON");
 
         golden::assert_json_eq("xray-inbounds-stats-tun", &expected, &summary);
     }
@@ -3622,7 +3623,7 @@ mod tests {
         let expected: Value = serde_json::from_str(include_str!(
             "../../../tests/golden/xray/full/advanced_dns_routing.json"
         ))
-        .unwrap();
+        .expect("xray advanced dns golden fixture should parse as JSON");
 
         golden::assert_json_eq("xray-advanced-dns-routing", &expected, &summary);
     }
@@ -3750,7 +3751,7 @@ mod tests {
         let expected: Value = serde_json::from_str(include_str!(
             "../../../tests/golden/xray/full/template_tun_proxy_detour.json"
         ))
-        .unwrap();
+        .expect("xray template tun golden fixture should parse as JSON");
 
         golden::assert_json_eq("xray-template-tun-proxy-detour", &expected, &summary);
     }
@@ -3758,7 +3759,7 @@ mod tests {
     #[test]
     fn xray_outbound_serde_skips_null_but_keeps_mux_disabled_state() {
         let outbound = XrayOutbound::proxy_sample(PROXY_TAG);
-        let value = serde_json::to_value(outbound).unwrap();
+        let value = serde_json::to_value(outbound).expect("xray outbound should serialize to JSON");
 
         assert!(value.get("sendThrough").is_none());
         assert!(value.get("targetStrategy").is_none());

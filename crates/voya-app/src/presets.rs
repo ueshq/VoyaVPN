@@ -338,7 +338,9 @@ mod tests {
             Arc::clone(&seen_paths),
         )
         .await;
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("preset manager test operation should succeed");
         let manager = PresetManager::with_sources(&database, test_catalog(&base));
         let mut config = AppConfig::default();
 
@@ -352,20 +354,20 @@ mod tests {
                 },
             )
             .await
-            .unwrap();
+            .expect("preset manager test operation should succeed");
 
         let xray = database
             .dns()
             .get_by_core_type(CoreType::Xray)
             .await
-            .unwrap()
-            .unwrap();
+            .expect("preset manager test operation should succeed")
+            .expect("preset manager test operation should succeed");
         let singbox = database
             .dns()
             .get_by_core_type(CoreType::sing_box)
             .await
-            .unwrap()
-            .unwrap();
+            .expect("preset manager test operation should succeed")
+            .expect("preset manager test operation should succeed");
 
         assert_eq!(
             result.route_rules_template_source_url.as_deref(),
@@ -418,7 +420,9 @@ mod tests {
             Arc::clone(&seen_paths),
         )
         .await;
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("preset manager test operation should succeed");
         let manager = PresetManager::with_sources(&database, test_catalog(&base));
         let mut config = AppConfig::default();
 
@@ -432,20 +436,20 @@ mod tests {
                 },
             )
             .await
-            .unwrap();
+            .expect("preset manager test operation should succeed");
 
         let xray = database
             .dns()
             .get_by_core_type(CoreType::Xray)
             .await
-            .unwrap()
-            .unwrap();
+            .expect("preset manager test operation should succeed")
+            .expect("preset manager test operation should succeed");
         let singbox = database
             .dns()
             .get_by_core_type(CoreType::sing_box)
             .await
-            .unwrap()
-            .unwrap();
+            .expect("preset manager test operation should succeed")
+            .expect("preset manager test operation should succeed");
 
         assert_eq!(
             result.route_rules_template_source_url.as_deref(),
@@ -490,8 +494,12 @@ mod tests {
         max_requests: usize,
         seen_paths: Arc<Mutex<Vec<String>>>,
     ) -> String {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("preset manager test operation should succeed");
+        let address = listener
+            .local_addr()
+            .expect("preset manager test operation should succeed");
         let routes = Arc::new(routes);
 
         tokio::spawn(async move {

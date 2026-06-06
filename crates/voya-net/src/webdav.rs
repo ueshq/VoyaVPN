@@ -556,8 +556,12 @@ mod tests {
     }
 
     async fn spawn_webdav_fixture(requests: Arc<StdMutex<Vec<String>>>) -> String {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("update test operation should succeed");
+        let address = listener
+            .local_addr()
+            .expect("update test operation should succeed");
         let routes = Arc::new(HashMap::from([
             (
                 ("PROPFIND".to_string(), "/VoyaVPN_backup".to_string()),

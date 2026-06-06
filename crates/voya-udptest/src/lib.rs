@@ -667,22 +667,28 @@ mod tests {
 
     #[test]
     fn socks5_udp_packet_round_trips_domain_and_ip_addresses() {
-        let packet = build_socks5_udp_packet("example.com", 53, b"hello").unwrap();
-        let (remote, payload) = parse_socks5_udp_packet(&packet).unwrap();
+        let packet = build_socks5_udp_packet("example.com", 53, b"hello")
+            .expect("domain SOCKS5 UDP packet should build");
+        let (remote, payload) =
+            parse_socks5_udp_packet(&packet).expect("domain SOCKS5 UDP packet should parse");
         assert_eq!(remote.host, "example.com");
         assert_eq!(remote.port, 53);
         assert!(remote.is_domain);
         assert_eq!(payload, b"hello");
 
-        let packet = build_socks5_udp_packet("127.0.0.1", 8080, b"v4").unwrap();
-        let (remote, payload) = parse_socks5_udp_packet(&packet).unwrap();
+        let packet = build_socks5_udp_packet("127.0.0.1", 8080, b"v4")
+            .expect("IPv4 SOCKS5 UDP packet should build");
+        let (remote, payload) =
+            parse_socks5_udp_packet(&packet).expect("IPv4 SOCKS5 UDP packet should parse");
         assert_eq!(remote.host, "127.0.0.1");
         assert_eq!(remote.port, 8080);
         assert!(!remote.is_domain);
         assert_eq!(payload, b"v4");
 
-        let packet = build_socks5_udp_packet("2001:db8::1", 8081, b"v6").unwrap();
-        let (remote, payload) = parse_socks5_udp_packet(&packet).unwrap();
+        let packet = build_socks5_udp_packet("2001:db8::1", 8081, b"v6")
+            .expect("IPv6 SOCKS5 UDP packet should build");
+        let (remote, payload) =
+            parse_socks5_udp_packet(&packet).expect("IPv6 SOCKS5 UDP packet should parse");
         assert_eq!(remote.host, "2001:db8::1");
         assert_eq!(remote.port, 8081);
         assert!(!remote.is_domain);
@@ -720,42 +726,78 @@ mod tests {
 
     #[tokio::test]
     async fn socks5_udp_channel_uses_local_associate_relay() {
-        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
-        let tcp_port = listener.local_addr().unwrap().port();
-        let relay = UdpSocket::bind(("127.0.0.1", 0)).await.unwrap();
-        let relay_addr = relay.local_addr().unwrap();
+        let listener = TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("test SOCKS5 TCP listener should bind");
+        let tcp_port = listener
+            .local_addr()
+            .expect("test SOCKS5 TCP listener should expose local address")
+            .port();
+        let relay = UdpSocket::bind(("127.0.0.1", 0))
+            .await
+            .expect("test UDP relay should bind");
+        let relay_addr = relay
+            .local_addr()
+            .expect("test UDP relay should expose local address");
         let (ready_tx, ready_rx) = oneshot::channel();
 
         tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
+            let (mut stream, _) = listener
+                .accept()
+                .await
+                .expect("test SOCKS5 listener should accept client");
             let mut greeting = [0; 3];
-            stream.read_exact(&mut greeting).await.unwrap();
+            stream
+                .read_exact(&mut greeting)
+                .await
+                .expect("test SOCKS5 server should read greeting");
             assert_eq!(greeting, [SOCKS5_VERSION, 1, 0]);
-            stream.write_all(&[SOCKS5_VERSION, 0]).await.unwrap();
+            stream
+                .write_all(&[SOCKS5_VERSION, 0])
+                .await
+                .expect("test SOCKS5 server should write method response");
 
             let mut request = [0; 10];
-            stream.read_exact(&mut request).await.unwrap();
+            stream
+                .read_exact(&mut request)
+                .await
+                .expect("test SOCKS5 server should read UDP associate request");
             assert_eq!(
                 request[..4],
                 [SOCKS5_VERSION, SOCKS5_CMD_UDP_ASSOCIATE, 0, 1]
             );
 
             let mut reply = vec![SOCKS5_VERSION, 0, 0];
-            reply
-                .extend_from_slice(&encode_socks5_address("127.0.0.1", relay_addr.port()).unwrap());
-            stream.write_all(&reply).await.unwrap();
-            ready_tx.send(()).unwrap();
+            reply.extend_from_slice(
+                &encode_socks5_address("127.0.0.1", relay_addr.port())
+                    .expect("test UDP relay address should encode"),
+            );
+            stream
+                .write_all(&reply)
+                .await
+                .expect("test SOCKS5 server should write UDP associate response");
+            ready_tx
+                .send(())
+                .expect("test SOCKS5 server should notify readiness");
 
             let mut buffer = vec![0; 1024];
-            let (length, peer) = relay.recv_from(&mut buffer).await.unwrap();
+            let (length, peer) = relay
+                .recv_from(&mut buffer)
+                .await
+                .expect("test UDP relay should receive packet");
             buffer.truncate(length);
-            let (remote, payload) = parse_socks5_udp_packet(&buffer).unwrap();
+            let (remote, payload) =
+                parse_socks5_udp_packet(&buffer).expect("test UDP relay packet should parse");
             assert_eq!(remote.host, "example.com");
             assert_eq!(remote.port, 53);
             assert_eq!(payload, b"ping");
 
-            let response = build_socks5_udp_packet("example.com", 53, b"pong").unwrap();
-            relay.send_to(&response, peer).await.unwrap();
+            let response = build_socks5_udp_packet("example.com", 53, b"pong")
+                .expect("test UDP relay response should build");
+            relay
+                .send_to(&response, peer)
+                .await
+                .expect("test UDP relay should send response");
             let mut hold = [0; 1];
             let _ = stream.read(&mut hold).await;
         });
@@ -763,17 +805,19 @@ mod tests {
         let mut channel = Socks5UdpChannel::new("127.0.0.1", tcp_port);
         time::timeout(DEFAULT_TIMEOUT, channel.establish_udp_association())
             .await
-            .unwrap()
-            .unwrap();
-        ready_rx.await.unwrap();
+            .expect("UDP association should finish before timeout")
+            .expect("UDP association should succeed");
+        ready_rx
+            .await
+            .expect("test SOCKS5 server should signal readiness");
         channel
             .send_to_host("example.com", 53, b"ping")
             .await
-            .unwrap();
+            .expect("UDP channel should send packet to host");
         let (remote, payload) = time::timeout(DEFAULT_TIMEOUT, channel.receive())
             .await
-            .unwrap()
-            .unwrap();
+            .expect("UDP receive should finish before timeout")
+            .expect("UDP channel should receive response");
 
         assert_eq!(remote.host, "example.com");
         assert_eq!(payload, b"pong");

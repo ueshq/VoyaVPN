@@ -794,17 +794,19 @@ mod tests {
 
     #[tokio::test]
     async fn statistics_apply_sample_keys_persistence_to_active_server_and_sums_display() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("statistics test operation should succeed");
         database
             .profiles()
             .upsert(&sample_profile("active"))
             .await
-            .unwrap();
+            .expect("statistics test operation should succeed");
         database
             .profiles()
             .upsert(&sample_profile("inactive"))
             .await
-            .unwrap();
+            .expect("statistics test operation should succeed");
         let config = StatisticsConfigSnapshot {
             enable_statistics: true,
             display_real_time_speed: true,
@@ -825,30 +827,53 @@ mod tests {
             10,
         )
         .await
-        .unwrap()
+        .expect("statistics test operation should succeed")
         .expect("snapshot");
 
         assert_eq!(snapshot.upload_bytes_per_second, 1300.0);
         assert_eq!(snapshot.download_bytes_per_second, 2400.0);
-        assert_eq!(snapshot.server_stat.as_ref().unwrap().index_id, "active");
-        assert_eq!(snapshot.server_stat.as_ref().unwrap().total_up, 1000);
-        assert_eq!(snapshot.server_stat.as_ref().unwrap().total_down, 2000);
+        assert_eq!(
+            snapshot
+                .server_stat
+                .as_ref()
+                .expect("statistics test operation should succeed")
+                .index_id,
+            "active"
+        );
+        assert_eq!(
+            snapshot
+                .server_stat
+                .as_ref()
+                .expect("statistics test operation should succeed")
+                .total_up,
+            1000
+        );
+        assert_eq!(
+            snapshot
+                .server_stat
+                .as_ref()
+                .expect("statistics test operation should succeed")
+                .total_down,
+            2000
+        );
         assert!(database
             .server_stats()
             .get("inactive")
             .await
-            .unwrap()
+            .expect("statistics test operation should succeed")
             .is_none());
     }
 
     #[tokio::test]
     async fn statistics_apply_sample_rolls_today_at_date_boundary() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("statistics test operation should succeed");
         database
             .profiles()
             .upsert(&sample_profile("active"))
             .await
-            .unwrap();
+            .expect("statistics test operation should succeed");
         database
             .server_stats()
             .upsert(&ServerStatItem {
@@ -860,7 +885,7 @@ mod tests {
                 date_now: 1,
             })
             .await
-            .unwrap();
+            .expect("statistics test operation should succeed");
         let config = StatisticsConfigSnapshot {
             enable_statistics: true,
             display_real_time_speed: false,
@@ -881,9 +906,11 @@ mod tests {
             2,
         )
         .await
-        .unwrap()
+        .expect("statistics test operation should succeed")
         .expect("snapshot");
-        let stat = snapshot.server_stat.unwrap();
+        let stat = snapshot
+            .server_stat
+            .expect("statistics test operation should succeed");
 
         assert_eq!(stat.today_up, 5);
         assert_eq!(stat.today_down, 7);

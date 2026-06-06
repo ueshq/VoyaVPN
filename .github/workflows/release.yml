@@ -92,6 +92,12 @@ jobs:
           echo "::error title=Invalid stable dispatch::Stable releases must use build_profile=release."
           exit 1
 
+      - name: Reject stable without updater metadata
+        if: ${{ inputs.channel == 'stable' && inputs.updater_metadata != true }}
+        run: |
+          echo "::error title=Invalid stable dispatch::Stable releases must generate updater metadata evidence."
+          exit 1
+
       - name: Validate non-dry-run updater signing secret
         if: ${{ inputs.dry_run == false }}
         env:
@@ -110,6 +116,7 @@ jobs:
           VOYAVPN_UPDATES_BASE_URL: ${{ vars.VOYAVPN_UPDATES_BASE_URL }}
           VOYAVPN_UPDATER_PUBLIC_KEY: ${{ vars.VOYAVPN_UPDATER_PUBLIC_KEY }}
           VOYAVPN_DIAGNOSTICS_ENDPOINT: ${{ vars.VOYAVPN_DIAGNOSTICS_ENDPOINT }}
+          VOYAVPN_CORE_ASSETS_JSON: ${{ vars.VOYAVPN_CORE_ASSETS_JSON }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PATH }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -197,6 +204,10 @@ jobs:
           if (publicKey.length < 32) {
             throw new Error("VOYAVPN_UPDATER_PUBLIC_KEY must be the approved Tauri updater public key.");
           }
+          const coreAssets = JSON.parse(requireValue("VOYAVPN_CORE_ASSETS_JSON"));
+          if (!Array.isArray(coreAssets.assets) || coreAssets.assets.length === 0) {
+            throw new Error("VOYAVPN_CORE_ASSETS_JSON must contain a non-empty assets array.");
+          }
           requireOneOf("TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PATH");
           [
             "APPLE_CERTIFICATE",
@@ -210,16 +221,6 @@ jobs:
           NODE
 
           pnpm tauri:stable-updater-config
-          node scripts/check-release-readiness.mjs \
-            --mode stable \
-            --cdn-base-url "$VOYAVPN_CDN_BASE_URL" \
-            --updates-base-url "$VOYAVPN_UPDATES_BASE_URL" \
-            --diagnostics-endpoint "$VOYAVPN_DIAGNOSTICS_ENDPOINT" \
-            --release-artifacts tests/fixtures/release/artifacts \
-            --updater-artifacts tests/fixtures/release/signed-updater \
-            --core-assets tests/fixtures/release/core-assets.json \
-            --tauri-config target/release-config/tauri.updater.stable.generated.json \
-            --work-dir target/release-readiness
 
   package:
     name: Package ${{ matrix.release_target }}
@@ -434,4 +435,160 @@ jobs:
         with:
           name: voyavpn-${{ inputs.channel }}-updater-metadata-${{ inputs.build_profile }}
           path: dist/updater
+          if-no-files-found: error
+
+  core-staging-metadata:
+    name: Core Staging Metadata
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Generate core asset metadata
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          VOYAVPN_CDN_BASE_URL: ${{ vars.VOYAVPN_CDN_BASE_URL }}
+          VOYAVPN_CORE_ASSETS_JSON: ${{ vars.VOYAVPN_CORE_ASSETS_JSON }}
+        run: |
+          mkdir -p dist/core-staging
+
+          if [ "$CHANNEL" = "stable" ]; then
+            if [ -z "${VOYAVPN_CDN_BASE_URL:-}" ]; then
+              echo "::error title=Missing variable::VOYAVPN_CDN_BASE_URL is required for stable core staging metadata."
+              exit 1
+            fi
+            if [ -z "${VOYAVPN_CORE_ASSETS_JSON:-}" ]; then
+              echo "::error title=Missing variable::VOYAVPN_CORE_ASSETS_JSON is required for stable core staging metadata."
+              exit 1
+            fi
+            printf '%s\n' "$VOYAVPN_CORE_ASSETS_JSON" > dist/core-staging/source-core-assets.json
+          else
+            cp tests/fixtures/release/core-assets.json dist/core-staging/source-core-assets.json
+          fi
+
+          base_url="${VOYAVPN_CDN_BASE_URL:-https://cdn.voyavpn.test/${CHANNEL}}"
+          node scripts/core-assets.mjs \
+            --fixture dist/core-staging/source-core-assets.json \
+            --out dist/core-staging/core-assets.json \
+            --channel "$CHANNEL" \
+            --base-url "$base_url"
+
+      - name: Upload core staging metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: voyavpn-${{ inputs.channel }}-core-staging-metadata-${{ inputs.build_profile }}
+          path: dist/core-staging
+          if-no-files-found: error
+
+  final-stable-readiness:
+    name: Final Stable Readiness
+    if: ${{ inputs.channel == 'stable' && inputs.dry_run == false }}
+    needs:
+      - package
+      - cdn-staging-metadata
+      - updater-metadata
+      - core-staging-metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Download darwin x64 package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: voyavpn-${{ inputs.channel }}-darwin-x86_64-${{ inputs.build_profile }}
+          path: dist/final-readiness/packages/darwin-x86_64
+
+      - name: Download darwin arm64 package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: voyavpn-${{ inputs.channel }}-darwin-aarch64-${{ inputs.build_profile }}
+          path: dist/final-readiness/packages/darwin-aarch64
+
+      - name: Download Windows x64 package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: voyavpn-${{ inputs.channel }}-windows-x86_64-${{ inputs.build_profile }}
+          path: dist/final-readiness/packages/windows-x86_64
+
+      - name: Download Windows arm64 package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: voyavpn-${{ inputs.channel }}-windows-aarch64-${{ inputs.build_profile }}
+          path: dist/final-readiness/packages/windows-aarch64
+
+      - name: Download Linux x64 package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: voyavpn-${{ inputs.channel }}-linux-x86_64-${{ inputs.build_profile }}
+          path: dist/final-readiness/packages/linux-x86_64
+
+      - name: Download Linux arm64 package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: voyavpn-${{ inputs.channel }}-linux-aarch64-${{ inputs.build_profile }}
+          path: dist/final-readiness/packages/linux-aarch64
+
+      - name: Download CDN staging metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: voyavpn-${{ inputs.channel }}-cdn-staging-metadata-${{ inputs.build_profile }}
+          path: dist/final-readiness/cdn-staging-metadata
+
+      - name: Download updater metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: voyavpn-${{ inputs.channel }}-updater-metadata-${{ inputs.build_profile }}
+          path: dist/final-readiness/updater-metadata
+
+      - name: Download core staging metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: voyavpn-${{ inputs.channel }}-core-staging-metadata-${{ inputs.build_profile }}
+          path: dist/final-readiness/core-staging-metadata
+
+      - name: Validate final stable readiness
+        env:
+          VOYAVPN_CDN_BASE_URL: ${{ vars.VOYAVPN_CDN_BASE_URL }}
+          VOYAVPN_UPDATES_BASE_URL: ${{ vars.VOYAVPN_UPDATES_BASE_URL }}
+          VOYAVPN_UPDATER_PUBLIC_KEY: ${{ vars.VOYAVPN_UPDATER_PUBLIC_KEY }}
+          VOYAVPN_DIAGNOSTICS_ENDPOINT: ${{ vars.VOYAVPN_DIAGNOSTICS_ENDPOINT }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PATH }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          node scripts/tauri-build.mjs --write-stable-updater-config
+          node scripts/check-release-readiness.mjs \
+            --mode stable \
+            --cdn-base-url "$VOYAVPN_CDN_BASE_URL" \
+            --updates-base-url "$VOYAVPN_UPDATES_BASE_URL" \
+            --diagnostics-endpoint "$VOYAVPN_DIAGNOSTICS_ENDPOINT" \
+            --release-artifacts dist/final-readiness/packages \
+            --updater-artifacts dist/final-readiness/packages \
+            --core-assets dist/final-readiness/core-staging-metadata/source-core-assets.json \
+            --release-index dist/final-readiness/cdn-staging-metadata/release-index.json \
+            --updater-metadata dist/final-readiness/updater-metadata/latest.json \
+            --core-manifest dist/final-readiness/core-staging-metadata/core-assets.json \
+            --tauri-config target/release-config/tauri.updater.stable.generated.json \
+            --work-dir dist/final-readiness/readiness-output
+
+      - name: Upload final readiness evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: voyavpn-${{ inputs.channel }}-final-readiness-${{ inputs.build_profile }}
+          path: dist/final-readiness/readiness-output
           if-no-files-found: error

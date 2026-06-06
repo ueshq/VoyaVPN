@@ -396,9 +396,10 @@ impl Default for ProfileExItem {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ProfileSortKey {
+    #[default]
     Sort,
     ConfigType,
     Remarks,
@@ -410,12 +411,6 @@ pub enum ProfileSortKey {
     Speed,
     IpInfo,
     Subid,
-}
-
-impl Default for ProfileSortKey {
-    fn default() -> Self {
-        Self::Sort
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Type)]
@@ -577,8 +572,11 @@ mod tests {
 
     #[test]
     fn profile_item_serializes_live_fields_without_obsolete_profile_columns() {
-        let json = serde_json::to_value(ProfileItem::default()).unwrap();
-        let object = json.as_object().unwrap();
+        let json = serde_json::to_value(ProfileItem::default())
+            .expect("default profile item should serialize to JSON");
+        let object = json
+            .as_object()
+            .expect("default profile item JSON should be an object");
 
         for obsolete in [
             "HeaderType",
@@ -616,7 +614,7 @@ mod tests {
         };
 
         assert_eq!(
-            serde_json::to_string(&extra).unwrap(),
+            serde_json::to_string(&extra).expect("protocol extra should serialize to compact JSON"),
             r#"{"SsMethod":"2022-blake3-aes-256-gcm","MultipleLoad":4}"#
         );
     }

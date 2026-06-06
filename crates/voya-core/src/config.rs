@@ -722,8 +722,11 @@ mod tests {
 
     #[test]
     fn app_config_uses_v2rayn_acronym_property_names() {
-        let json = serde_json::to_value(AppConfig::default()).unwrap();
-        let object = json.as_object().unwrap();
+        let json = serde_json::to_value(AppConfig::default())
+            .expect("default app config should serialize to JSON");
+        let object = json
+            .as_object()
+            .expect("default app config JSON should be an object");
 
         assert!(object.contains_key("GUIItem"));
         assert!(object.contains_key("MsgUIItem"));
@@ -739,7 +742,7 @@ mod tests {
                 "Loglevel": "debug"
             }
         }))
-        .unwrap();
+        .expect("partial app config JSON should deserialize with defaults");
 
         assert_eq!(config.core_basic_item.loglevel, "debug");
         assert_eq!(config.inbound[0].local_port, DEFAULT_LOCAL_PORT);
@@ -752,7 +755,8 @@ mod tests {
 
     #[test]
     fn diagnostics_config_is_default_on_and_backfilled() {
-        let config: AppConfig = serde_json::from_value(json!({})).unwrap();
+        let config: AppConfig =
+            serde_json::from_value(json!({})).expect("empty app config JSON should deserialize");
 
         assert!(config.diagnostics_item.enabled);
         assert!(config.diagnostics_item.anonymous_install_id.is_empty());
@@ -771,7 +775,7 @@ mod tests {
                 "CheckPreReleaseUpdate": true
             }
         }))
-        .unwrap();
+        .expect("diagnostics app config JSON should deserialize");
 
         assert!(!config.diagnostics_item.enabled);
         assert_eq!(

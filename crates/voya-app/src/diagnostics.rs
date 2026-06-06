@@ -642,17 +642,9 @@ impl DiagnosticsQueue {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct DiagnosticsEndpointPolicy {
     allow_http_loopback: bool,
-}
-
-impl Default for DiagnosticsEndpointPolicy {
-    fn default() -> Self {
-        Self {
-            allow_http_loopback: false,
-        }
-    }
 }
 
 impl DiagnosticsEndpointPolicy {
@@ -997,8 +989,7 @@ fn normalize_endpoint(value: Option<&str>) -> Option<String> {
 }
 
 fn event_expired(queued_at: SystemTime, now: SystemTime, max_age: Duration) -> bool {
-    now.duration_since(queued_at)
-        .map_or(false, |age| age > max_age)
+    now.duration_since(queued_at).is_ok_and(|age| age > max_age)
 }
 
 fn is_client_error(status: StatusCode) -> bool {
@@ -1310,8 +1301,12 @@ mod tests {
         routes: HashMap<String, (String, String)>,
         bodies: Arc<Mutex<Vec<String>>>,
     ) -> String {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("diagnostics test operation should succeed");
+        let address = listener
+            .local_addr()
+            .expect("diagnostics test operation should succeed");
         let routes = Arc::new(routes);
 
         tokio::spawn(async move {

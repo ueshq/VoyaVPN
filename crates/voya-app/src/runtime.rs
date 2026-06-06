@@ -485,7 +485,9 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_dns_context_env_loads_persisted_dns_items() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("runtime test operation should succeed");
         let item = DnsItem {
             id: "dns-xray".to_string(),
             remarks: "Xray".to_string(),
@@ -494,13 +496,17 @@ mod tests {
             normal_dns: Some(r#"{"servers":["1.1.1.1"]}"#.to_string()),
             ..DnsItem::default()
         };
-        database.dns().upsert(&item).await.unwrap();
+        database
+            .dns()
+            .upsert(&item)
+            .await
+            .expect("runtime test operation should succeed");
 
         let paths = temp_paths();
         let env =
             RuntimeCoreGenEnv::load(&database, &paths, &AppConfig::default(), TargetOs::Linux)
                 .await
-                .unwrap();
+                .expect("runtime test operation should succeed");
 
         assert_eq!(env.get_dns_item(CoreType::Xray), Some(item));
     }
@@ -533,9 +539,13 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_connect_writes_generated_config_and_starts_supervisor_path() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("runtime test operation should succeed");
         let paths = temp_paths();
-        paths.ensure_dirs().unwrap();
+        paths
+            .ensure_dirs()
+            .expect("runtime test operation should succeed");
         write_fake_core_executable(&paths, CoreType::Xray);
         let runner = RecordingRunner::default();
         let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
@@ -559,9 +569,16 @@ mod tests {
             network: "tcp".to_string(),
             ..ProfileItem::default()
         };
-        database.profiles().upsert(&profile).await.unwrap();
+        database
+            .profiles()
+            .upsert(&profile)
+            .await
+            .expect("runtime test operation should succeed");
 
-        let connected = manager.connect(&config).await.unwrap();
+        let connected = manager
+            .connect(&config)
+            .await
+            .expect("runtime test operation should succeed");
 
         assert_eq!(connected.active_profile_id.as_deref(), Some("active"));
         assert!(paths.bin_config_file(MAIN_CONFIG_FILE_NAME).exists());
@@ -571,7 +588,10 @@ mod tests {
             ["run", "-c", MAIN_CONFIG_FILE_NAME]
         );
 
-        let disconnected = manager.disconnect().await.unwrap();
+        let disconnected = manager
+            .disconnect()
+            .await
+            .expect("runtime test operation should succeed");
 
         assert_eq!(
             disconnected.state,
@@ -584,7 +604,9 @@ mod tests {
 
     #[tokio::test]
     async fn coreinfo_runtime_connect_copies_seed_core_before_discovery() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("runtime test operation should succeed");
         let paths = temp_paths();
         let seed_root = core_seed_resources_dir(paths.app_dir().join("resources"));
         let seed_exe = write_seed_core_executable(&seed_root, CoreType::Xray, b"seed-xray");
@@ -604,9 +626,12 @@ mod tests {
             .profiles()
             .upsert(&active_xray_profile("active"))
             .await
-            .unwrap();
+            .expect("runtime test operation should succeed");
 
-        manager.connect(&config).await.unwrap();
+        manager
+            .connect(&config)
+            .await
+            .expect("runtime test operation should succeed");
 
         let app_data_exe = paths.core_bin_file(
             core_type_dir_name(CoreType::Xray),
@@ -620,7 +645,9 @@ mod tests {
 
     #[tokio::test]
     async fn coreinfo_runtime_connect_missing_seed_surfaces_typed_missing_core() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("runtime test operation should succeed");
         let paths = temp_paths();
         let seed_root = core_seed_resources_dir(paths.app_dir().join("resources"));
         let runner = RecordingRunner::default();
@@ -638,7 +665,7 @@ mod tests {
             .profiles()
             .upsert(&active_xray_profile("active"))
             .await
-            .unwrap();
+            .expect("runtime test operation should succeed");
 
         let error = manager.connect(&config).await.expect_err("missing core");
 
@@ -653,9 +680,13 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_connect_uses_active_routing_rules_from_database() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("runtime test operation should succeed");
         let paths = temp_paths();
-        paths.ensure_dirs().unwrap();
+        paths
+            .ensure_dirs()
+            .expect("runtime test operation should succeed");
         write_fake_core_executable(&paths, CoreType::Xray);
         let runner = RecordingRunner::default();
         let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
@@ -692,14 +723,29 @@ mod tests {
             }],
             ..RoutingItem::default()
         };
-        database.profiles().upsert(&profile).await.unwrap();
-        database.routings().upsert(&routing).await.unwrap();
+        database
+            .profiles()
+            .upsert(&profile)
+            .await
+            .expect("runtime test operation should succeed");
+        database
+            .routings()
+            .upsert(&routing)
+            .await
+            .expect("runtime test operation should succeed");
 
-        manager.connect(&config).await.unwrap();
+        manager
+            .connect(&config)
+            .await
+            .expect("runtime test operation should succeed");
 
-        let generated = fs::read_to_string(paths.bin_config_file(MAIN_CONFIG_FILE_NAME)).unwrap();
-        let json: serde_json::Value = serde_json::from_str(&generated).unwrap();
-        let rules = json["routing"]["rules"].as_array().unwrap();
+        let generated = fs::read_to_string(paths.bin_config_file(MAIN_CONFIG_FILE_NAME))
+            .expect("runtime test operation should succeed");
+        let json: serde_json::Value =
+            serde_json::from_str(&generated).expect("runtime test operation should succeed");
+        let rules = json["routing"]["rules"]
+            .as_array()
+            .expect("runtime test operation should succeed");
         assert!(rules.iter().any(|rule| {
             rule["outboundTag"] == "direct"
                 && rule["domain"].as_array().is_some_and(|domains| {
@@ -713,7 +759,7 @@ mod tests {
     fn temp_paths() -> AppPaths {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("runtime test operation should succeed")
             .as_nanos();
         let counter = TEMP_PATH_COUNTER.fetch_add(1, Ordering::Relaxed);
         AppPaths::new(
@@ -728,8 +774,9 @@ mod tests {
         let core_info = get_core_info(core_type).expect("core info");
         let executable_name = executable_name_for_current_os(core_info.executable_names()[0]);
         let executable = paths.core_bin_file(core_type_dir_name(core_type), executable_name);
-        fs::create_dir_all(executable.parent().expect("core dir")).unwrap();
-        fs::write(executable, b"fake").unwrap();
+        fs::create_dir_all(executable.parent().expect("core dir"))
+            .expect("runtime test operation should succeed");
+        fs::write(executable, b"fake").expect("runtime test operation should succeed");
     }
 
     fn write_seed_core_executable(
@@ -742,8 +789,9 @@ mod tests {
         let executable = seed_root
             .join(core_type_dir_name(core_type))
             .join(executable_name);
-        fs::create_dir_all(executable.parent().expect("seed core dir")).unwrap();
-        fs::write(&executable, contents).unwrap();
+        fs::create_dir_all(executable.parent().expect("seed core dir"))
+            .expect("runtime test operation should succeed");
+        fs::write(&executable, contents).expect("runtime test operation should succeed");
         executable
     }
 

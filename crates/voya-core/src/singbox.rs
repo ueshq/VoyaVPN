@@ -173,7 +173,7 @@ impl Default for SingboxLog {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, rename_all = "snake_case")]
 pub struct SingboxRoute {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -262,7 +262,7 @@ impl Default for SingboxDnsServer {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, rename_all = "snake_case")]
 pub struct SingboxRuleset {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -279,32 +279,6 @@ pub struct SingboxRuleset {
     pub download_detour: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub update_interval: Option<String>,
-}
-
-impl Default for SingboxRuleset {
-    fn default() -> Self {
-        Self {
-            tag: None,
-            r#type: None,
-            format: None,
-            path: None,
-            url: None,
-            download_detour: None,
-            update_interval: None,
-        }
-    }
-}
-
-impl Default for SingboxRoute {
-    fn default() -> Self {
-        Self {
-            default_domain_resolver: None,
-            auto_detect_interface: None,
-            rules: Vec::new(),
-            rule_set: None,
-            final_outbound: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
@@ -454,20 +428,11 @@ impl Default for SingboxInbound {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, rename_all = "snake_case")]
 pub struct SingboxUser {
     pub username: String,
     pub password: String,
-}
-
-impl Default for SingboxUser {
-    fn default() -> Self {
-        Self {
-            username: String::new(),
-            password: String::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -643,7 +608,7 @@ impl Default for SingboxEndpoint {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, rename_all = "snake_case")]
 pub struct SingboxPeer {
     pub address: String,
@@ -657,20 +622,6 @@ pub struct SingboxPeer {
     pub persistent_keepalive_interval: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reserved: Option<Vec<i32>>,
-}
-
-impl Default for SingboxPeer {
-    fn default() -> Self {
-        Self {
-            address: String::new(),
-            port: 0,
-            public_key: String::new(),
-            pre_shared_key: None,
-            allowed_ips: Vec::new(),
-            persistent_keepalive_interval: None,
-            reserved: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -786,7 +737,7 @@ impl Default for SingboxReality {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, rename_all = "snake_case")]
 pub struct SingboxTransport {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -809,23 +760,6 @@ pub struct SingboxTransport {
     pub max_early_data: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub early_data_header_name: Option<String>,
-}
-
-impl Default for SingboxTransport {
-    fn default() -> Self {
-        Self {
-            r#type: None,
-            host: None,
-            path: None,
-            headers: None,
-            service_name: None,
-            idle_timeout: None,
-            ping_timeout: None,
-            permit_without_stream: None,
-            max_early_data: None,
-            early_data_header_name: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
@@ -855,22 +789,13 @@ pub struct SingboxExperimental {
     pub clash_api: Option<SingboxClashApi>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, rename_all = "snake_case")]
 pub struct SingboxClashApi {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_controller: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub store_selected: Option<bool>,
-}
-
-impl Default for SingboxClashApi {
-    fn default() -> Self {
-        Self {
-            external_controller: None,
-            store_selected: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -898,8 +823,8 @@ impl Default for SingboxCacheFile {
 
 #[derive(Debug, Clone, PartialEq)]
 enum SingboxServer {
-    Outbound(SingboxOutbound),
-    Endpoint(SingboxEndpoint),
+    Outbound(Box<SingboxOutbound>),
+    Endpoint(Box<SingboxEndpoint>),
 }
 
 impl SingboxServer {
@@ -1106,12 +1031,12 @@ fn build_proxy_server(
     if node.config_type == ConfigType::WireGuard {
         let mut endpoint = build_wireguard_endpoint(node);
         endpoint.tag = base_tag_name.to_string();
-        return SingboxServer::Endpoint(endpoint);
+        return SingboxServer::Endpoint(Box::new(endpoint));
     }
 
     let mut outbound = build_outbound(context, node);
     outbound.tag = base_tag_name.to_string();
-    SingboxServer::Outbound(outbound)
+    SingboxServer::Outbound(Box::new(outbound))
 }
 
 fn build_group_proxy_servers(
@@ -1763,8 +1688,8 @@ fn build_selector_servers(
     };
 
     vec![
-        SingboxServer::Outbound(out_selector),
-        SingboxServer::Outbound(out_urltest),
+        SingboxServer::Outbound(Box::new(out_selector)),
+        SingboxServer::Outbound(Box::new(out_urltest)),
     ]
 }
 
@@ -1785,8 +1710,8 @@ fn prepend_servers(config: &mut SingboxConfig, servers: Vec<SingboxServer>) {
     let mut endpoints = Vec::new();
     for server in servers {
         match server {
-            SingboxServer::Outbound(outbound) => outbounds.push(outbound),
-            SingboxServer::Endpoint(endpoint) => endpoints.push(endpoint),
+            SingboxServer::Outbound(outbound) => outbounds.push(*outbound),
+            SingboxServer::Endpoint(endpoint) => endpoints.push(*endpoint),
         }
     }
     config.outbounds.splice(0..0, outbounds);
@@ -1796,8 +1721,8 @@ fn prepend_servers(config: &mut SingboxConfig, servers: Vec<SingboxServer>) {
 fn append_servers(config: &mut SingboxConfig, servers: Vec<SingboxServer>) {
     for server in servers {
         match server {
-            SingboxServer::Outbound(outbound) => config.outbounds.push(outbound),
-            SingboxServer::Endpoint(endpoint) => config.endpoints.push(endpoint),
+            SingboxServer::Outbound(outbound) => config.outbounds.push(*outbound),
+            SingboxServer::Endpoint(endpoint) => config.endpoints.push(*endpoint),
         }
     }
 }
@@ -3679,16 +3604,18 @@ mod tests {
             .iter()
             .find(|outbound| outbound.tag == PROXY_TAG)
             .expect("proxy outbound");
-        let value = serde_json::to_value(proxy).unwrap();
+        let value =
+            serde_json::to_value(proxy).expect("sing-box VLESS outbound should serialize to JSON");
         assert_no_nulls(&value);
 
         let expected: Value = serde_json::from_str(include_str!(
             "../../../tests/golden/singbox/outbounds/vless_ws_tls_mux.json"
         ))
-        .unwrap();
+        .expect("sing-box VLESS outbound golden fixture should parse as JSON");
         golden::assert_json_eq("singbox-outbound-vless-ws-tls-mux", &expected, &value);
 
-        let full_value = serde_json::to_value(generated).unwrap();
+        let full_value =
+            serde_json::to_value(generated).expect("sing-box config should serialize to JSON");
         assert_no_nulls(&full_value);
         assert_eq!(
             full_value.pointer("/experimental/clash_api/external_controller"),
@@ -3721,13 +3648,14 @@ mod tests {
         context.all_proxies_map.insert(n2.index_id.clone(), n2);
 
         let generated = generate_singbox_config(&context);
-        let value = serde_json::to_value(&generated.outbounds).unwrap();
+        let value = serde_json::to_value(&generated.outbounds)
+            .expect("sing-box proxy chain outbounds should serialize to JSON");
         assert_no_nulls(&value);
 
         let expected: Value = serde_json::from_str(include_str!(
             "../../../tests/golden/singbox/outbounds/proxy_chain_detour.json"
         ))
-        .unwrap();
+        .expect("sing-box proxy chain golden fixture should parse as JSON");
         golden::assert_json_eq("singbox-proxy-chain-detour", &expected, &value);
     }
 
@@ -3857,7 +3785,10 @@ mod tests {
                 .find(|outbound| outbound.tag == PROXY_TAG)
                 .expect("proxy outbound");
             assert_eq!(proxy.r#type, expected_type);
-            assert_no_nulls(&serde_json::to_value(proxy).unwrap());
+            assert_no_nulls(
+                &serde_json::to_value(proxy)
+                    .expect("sing-box protocol matrix outbound should serialize to JSON"),
+            );
         }
 
         let wireguard = ProfileItem {
@@ -3874,7 +3805,10 @@ mod tests {
         let generated = generate_singbox_config(&test_context(AppConfig::default(), wireguard));
         assert_eq!(generated.endpoints.len(), 1);
         assert_eq!(generated.endpoints[0].r#type, "wireguard");
-        assert_no_nulls(&serde_json::to_value(&generated.endpoints[0]).unwrap());
+        assert_no_nulls(
+            &serde_json::to_value(&generated.endpoints[0])
+                .expect("sing-box wireguard endpoint should serialize to JSON"),
+        );
     }
 
     #[test]
@@ -3899,13 +3833,14 @@ mod tests {
         context.all_proxies_map.insert(n2.index_id.clone(), n2);
 
         let generated = generate_singbox_config(&context);
-        let value = serde_json::to_value(&generated.outbounds).unwrap();
+        let value = serde_json::to_value(&generated.outbounds)
+            .expect("sing-box policy group outbounds should serialize to JSON");
         assert_no_nulls(&value);
 
         let expected: Value = serde_json::from_str(include_str!(
             "../../../tests/golden/singbox/outbounds/policy_group_selector.json"
         ))
-        .unwrap();
+        .expect("sing-box policy group golden fixture should parse as JSON");
         golden::assert_json_eq("singbox-policy-group-selector", &expected, &value);
     }
 
@@ -3913,20 +3848,32 @@ mod tests {
     fn singbox_dns_fakeip_typed_schema_and_rulesets_match_golden() {
         let (dns_context, _) = singbox_routing_dns_snapshot_contexts();
         let dns_generated = generate_singbox_config(&dns_context);
-        let dns_value = serde_json::to_value(dns_generated.dns.as_ref().unwrap()).unwrap();
+        let dns_value = serde_json::to_value(
+            dns_generated
+                .dns
+                .as_ref()
+                .expect("sing-box DNS config should be generated"),
+        )
+        .expect("sing-box DNS config should serialize to JSON");
         assert_no_nulls(&dns_value);
         let expected_dns: Value = serde_json::from_str(include_str!(
             "../../../tests/golden/singbox/dns/fakeip_typed.json"
         ))
-        .unwrap();
+        .expect("sing-box fakeip DNS golden fixture should parse as JSON");
         golden::assert_json_eq("singbox-dns-fakeip-typed", &expected_dns, &dns_value);
 
-        let ruleset_value =
-            serde_json::to_value(dns_generated.route.rule_set.as_ref().unwrap()).unwrap();
+        let ruleset_value = serde_json::to_value(
+            dns_generated
+                .route
+                .rule_set
+                .as_ref()
+                .expect("sing-box DNS rulesets should be generated"),
+        )
+        .expect("sing-box DNS rulesets should serialize to JSON");
         let expected_ruleset: Value = serde_json::from_str(include_str!(
             "../../../tests/golden/singbox/route/rulesets_from_dns.json"
         ))
-        .unwrap();
+        .expect("sing-box DNS ruleset golden fixture should parse as JSON");
         golden::assert_json_eq(
             "singbox-rulesets-from-dns",
             &expected_ruleset,
@@ -3987,26 +3934,30 @@ mod tests {
             rule.domain.as_ref() == Some(&vec!["ech.example".to_string()])
                 && rule.server.as_deref() == Some(SINGBOX_LOCAL_DNS_TAG)
         }));
-        assert_no_nulls(&serde_json::to_value(&dns).unwrap());
+        assert_no_nulls(
+            &serde_json::to_value(&dns).expect("sing-box raw DNS should serialize to JSON"),
+        );
     }
 
     #[test]
     fn singbox_tun_inbound_and_route_match_golden() {
         let (_, tun_context) = singbox_routing_dns_snapshot_contexts();
         let generated = generate_singbox_config(&tun_context);
-        let inbounds_value = serde_json::to_value(&generated.inbounds).unwrap();
+        let inbounds_value = serde_json::to_value(&generated.inbounds)
+            .expect("sing-box tun inbounds should serialize to JSON");
         assert_no_nulls(&inbounds_value);
         let expected_inbounds: Value = serde_json::from_str(include_str!(
             "../../../tests/golden/singbox/inbounds/tun.json"
         ))
-        .unwrap();
+        .expect("sing-box tun inbounds golden fixture should parse as JSON");
         golden::assert_json_eq("singbox-tun-inbounds", &expected_inbounds, &inbounds_value);
 
-        let route_value = serde_json::to_value(&generated.route).unwrap();
+        let route_value = serde_json::to_value(&generated.route)
+            .expect("sing-box route should serialize to JSON");
         assert_no_nulls(&route_value);
         let expected_route: Value =
             serde_json::from_str(include_str!("../../../tests/golden/singbox/route/tun.json"))
-                .unwrap();
+                .expect("sing-box tun route golden fixture should parse as JSON");
         golden::assert_json_eq("singbox-tun-route", &expected_route, &route_value);
     }
 

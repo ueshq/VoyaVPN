@@ -27,7 +27,7 @@ use voya_net::{
         release_package_for_core, supported_release_packages, updatable_core_types, AssetArch,
         AssetOs, BinaryAcquisition, CdnCoreAssetManifest, CdnReleaseIndex, CdnUpdateClient,
         PackageTarget, ReleaseCheck, ReleaseError, ReleaseFetchOptions, ReleasePackage,
-        CDN_CORE_ASSET_MANIFEST_FILE, CDN_RELEASE_INDEX_FILE,
+        UpstreamReleaseEvidence, CDN_CORE_ASSET_MANIFEST_FILE, CDN_RELEASE_INDEX_FILE,
     },
     DownloadClient, DownloadError, DownloadRequest,
 };
@@ -1350,9 +1350,9 @@ pub fn swap_staged_binary_dir(plan: &BinarySwapPlan) -> Result<BinarySwapOutcome
     })
 }
 
-#[must_use]
 pub fn check_package_fixture(
     package: &ReleasePackage,
+    upstream: &UpstreamReleaseEvidence,
     release_json: &str,
     current_version: Option<&Version>,
     os: AssetOs,
@@ -1362,6 +1362,7 @@ pub fn check_package_fixture(
     let releases = parse_github_releases(release_json).map_err(ReleaseError::from)?;
     let check = check_package_from_releases(
         package,
+        upstream,
         current_version,
         os,
         arch,
@@ -1659,6 +1660,7 @@ mod tests {
     use zip::{write::FileOptions, ZipWriter};
 
     use voya_core::{ConfigType, ProfileItem, RoutingItem, RuleType, RulesItem};
+    use voya_net::update::UpstreamAssetTemplates;
     use voya_platform::{
         coreinfo::{executable_name_for_current_os, TargetOs},
         elevation::SudoPasswordStore,
@@ -1708,8 +1710,10 @@ mod tests {
     #[test]
     fn update_check_fixture_selects_asset_and_marks_newer_version() {
         let package = release_package_for_core(CoreType::Xray).expect("xray package");
+        let upstream = xray_upstream_release_evidence();
         let result = check_package_fixture(
             &package,
+            &upstream,
             r#"[{
                 "tag_name": "v1.9.0",
                 "prerelease": false,
@@ -1730,6 +1734,36 @@ mod tests {
             result.download_url.as_deref(),
             Some("https://cdn.example/Xray-linux-64.zip")
         );
+    }
+
+    fn xray_upstream_release_evidence() -> UpstreamReleaseEvidence {
+        UpstreamReleaseEvidence {
+            release_api_url: "https://api.github.com/repos/XTLS/Xray-core/releases",
+            release_url: "https://github.com/XTLS/Xray-core/releases",
+            asset_templates: UpstreamAssetTemplates {
+                windows_x64: Some(
+                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-windows-64.zip",
+                ),
+                windows_arm64: Some(
+                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-windows-arm64-v8a.zip",
+                ),
+                linux_x64: Some(
+                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-linux-64.zip",
+                ),
+                linux_arm64: Some(
+                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-linux-arm64-v8a.zip",
+                ),
+                linux_riscv64: Some(
+                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-linux-riscv64.zip",
+                ),
+                macos_x64: Some(
+                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-macos-64.zip",
+                ),
+                macos_arm64: Some(
+                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-macos-arm64-v8a.zip",
+                ),
+            },
+        }
     }
 
     #[test]
@@ -1923,7 +1957,9 @@ mod tests {
 
         let mut config = AppConfig::default();
         config.const_item.cdn_base_url = Some(format!("{base}/stable"));
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("update manager test operation should succeed");
         let root = unique_temp_root("cdn-check");
         let manager = UpdateManager::new(&database, AppPaths::new(&root, StorageMode::Portable));
 
@@ -1978,7 +2014,9 @@ mod tests {
         let mut config = AppConfig::default();
         config.const_item.cdn_base_url =
             Some("https://github.com/voyavpn/voyavpn/releases".to_string());
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("update manager test operation should succeed");
         let manager = UpdateManager::new(
             &database,
             AppPaths::new("/tmp/VoyaVPN", StorageMode::Portable),
@@ -2045,7 +2083,9 @@ mod tests {
     #[tokio::test]
     async fn ruleset_source_settings_trim_blank_sources() {
         let mut config = AppConfig::default();
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("update manager test operation should succeed");
         let manager = UpdateManager::new(
             &database,
             AppPaths::new("/tmp/VoyaVPN", StorageMode::Portable),
@@ -2308,16 +2348,20 @@ mod tests {
 
     #[tokio::test]
     async fn updates_apply_with_runtime_stops_swaps_and_restarts_same_profile() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("update manager test operation should succeed");
         let root = unique_temp_root("runtime-apply");
         let paths = AppPaths::new(root.join("VoyaVPN"), StorageMode::Portable);
-        paths.ensure_dirs().unwrap();
+        paths
+            .ensure_dirs()
+            .expect("update manager test operation should succeed");
         let target_exe = write_fake_core_executable(&paths, CoreType::Xray, b"old-xray");
         database
             .profiles()
             .upsert(&active_xray_profile("active"))
             .await
-            .unwrap();
+            .expect("update manager test operation should succeed");
         let runner = RecordingRunner::default();
         let runtime = runtime_manager_for(&database, &paths, runner.clone());
         let updates = UpdateManager::new(&database, paths.clone());
@@ -2325,7 +2369,10 @@ mod tests {
             index_id: "active".to_string(),
             ..AppConfig::default()
         };
-        runtime.connect(&config).await.unwrap();
+        runtime
+            .connect(&config)
+            .await
+            .expect("update manager test operation should succeed");
         let archive = root.join("Xray-linux-64.zip");
         let exe_name = executable_name_for_current_os("xray");
         write_zip_archive(&archive, &[(&exe_name, b"new-xray".as_slice())]);
@@ -2364,16 +2411,20 @@ mod tests {
 
     #[tokio::test]
     async fn updates_apply_with_runtime_restarts_after_apply_failure() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("update manager test operation should succeed");
         let root = unique_temp_root("runtime-apply-failure");
         let paths = AppPaths::new(root.join("VoyaVPN"), StorageMode::Portable);
-        paths.ensure_dirs().unwrap();
+        paths
+            .ensure_dirs()
+            .expect("update manager test operation should succeed");
         let target_exe = write_fake_core_executable(&paths, CoreType::Xray, b"old-xray");
         database
             .profiles()
             .upsert(&active_xray_profile("active"))
             .await
-            .unwrap();
+            .expect("update manager test operation should succeed");
         let runner = RecordingRunner::default();
         let runtime = runtime_manager_for(&database, &paths, runner.clone());
         let updates = UpdateManager::new(&database, paths.clone());
@@ -2381,7 +2432,10 @@ mod tests {
             index_id: "active".to_string(),
             ..AppConfig::default()
         };
-        runtime.connect(&config).await.unwrap();
+        runtime
+            .connect(&config)
+            .await
+            .expect("update manager test operation should succeed");
         let archive = root.join("Xray-linux-64.zip");
         let exe_name = executable_name_for_current_os("xray");
         write_zip_archive(&archive, &[(&exe_name, b"new-xray".as_slice())]);
@@ -2409,10 +2463,14 @@ mod tests {
 
     #[tokio::test]
     async fn updates_apply_with_runtime_skips_stop_when_no_runtime_is_active() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("update manager test operation should succeed");
         let root = unique_temp_root("runtime-apply-disconnected");
         let paths = AppPaths::new(root.join("VoyaVPN"), StorageMode::Portable);
-        paths.ensure_dirs().unwrap();
+        paths
+            .ensure_dirs()
+            .expect("update manager test operation should succeed");
         let target_exe = write_fake_core_executable(&paths, CoreType::Xray, b"old-xray");
         let runner = RecordingRunner::default();
         let runtime = runtime_manager_for(&database, &paths, runner.clone());
@@ -2597,8 +2655,12 @@ mod tests {
     }
 
     async fn spawn_http_fixture(routes: HashMap<String, String>) -> String {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("update manager test operation should succeed");
+        let address = listener
+            .local_addr()
+            .expect("update manager test operation should succeed");
         let max_requests = routes.len();
         let routes = Arc::new(routes);
 

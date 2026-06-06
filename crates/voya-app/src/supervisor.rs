@@ -611,7 +611,7 @@ mod tests {
                 self.events.push(format!("spawn-fail:{:?}", request.role));
                 return Err(ProcessError::Spawn {
                     executable: request.executable,
-                    source: io::Error::new(io::ErrorKind::Other, "fake spawn failure"),
+                    source: io::Error::other("fake spawn failure"),
                 });
             }
 

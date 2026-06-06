@@ -57,8 +57,11 @@ mod tests {
             ..CoreConfigContext::default()
         };
 
-        let generated: Value = serde_json::from_str(&generate_xray_config_json(&context)).unwrap();
-        let rules = generated["routing"]["rules"].as_array().unwrap();
+        let generated: Value = serde_json::from_str(&generate_xray_config_json(&context))
+            .expect("generated xray config should parse as JSON");
+        let rules = generated["routing"]["rules"]
+            .as_array()
+            .expect("generated xray routing rules should be an array");
 
         assert!(rules.iter().any(|rule| {
             rule["outboundTag"] == DIRECT_TAG
@@ -98,9 +101,11 @@ mod tests {
             ..CoreConfigContext::default()
         };
 
-        let generated: Value =
-            serde_json::from_str(&generate_singbox_config_json(&context)).unwrap();
-        let rules = generated["route"]["rules"].as_array().unwrap();
+        let generated: Value = serde_json::from_str(&generate_singbox_config_json(&context))
+            .expect("generated sing-box config should parse as JSON");
+        let rules = generated["route"]["rules"]
+            .as_array()
+            .expect("generated sing-box route rules should be an array");
 
         assert!(rules.iter().any(|rule| {
             rule["outbound"] == DIRECT_TAG

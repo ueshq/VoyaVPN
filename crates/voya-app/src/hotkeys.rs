@@ -46,7 +46,6 @@ impl HotkeyManager {
         Self { registrar }
     }
 
-    #[must_use]
     pub fn status(&self, config: &AppConfig) -> Result<HotkeyStatus, HotkeyManagerError> {
         status_from_settings(&config.global_hotkeys)
     }

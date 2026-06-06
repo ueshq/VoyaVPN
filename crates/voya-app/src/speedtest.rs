@@ -818,7 +818,10 @@ mod tests {
 
     impl RecordingProbe {
         fn calls(&self) -> Vec<String> {
-            self.calls.lock().unwrap().clone()
+            self.calls
+                .lock()
+                .expect("speedtest test operation should succeed")
+                .clone()
         }
     }
 
@@ -833,7 +836,7 @@ mod tests {
             Box::pin(async move {
                 calls
                     .lock()
-                    .unwrap()
+                    .expect("speedtest test operation should succeed")
                     .push(format!("tcping:{}", item.index_id));
                 Ok(11)
             })
@@ -850,7 +853,7 @@ mod tests {
             Box::pin(async move {
                 calls
                     .lock()
-                    .unwrap()
+                    .expect("speedtest test operation should succeed")
                     .push(format!("realping:{}", item.index_id));
                 if block {
                     while !is_cancelled(&cancel) {
@@ -875,7 +878,7 @@ mod tests {
             Box::pin(async move {
                 calls
                     .lock()
-                    .unwrap()
+                    .expect("speedtest test operation should succeed")
                     .push(format!("speedtest:{}", item.index_id));
                 Ok(2048.0)
             })
@@ -889,7 +892,10 @@ mod tests {
         ) -> BoxFuture<'static, Result<i32>> {
             let calls = Arc::clone(&self.calls);
             Box::pin(async move {
-                calls.lock().unwrap().push(format!("udp:{}", item.index_id));
+                calls
+                    .lock()
+                    .expect("speedtest test operation should succeed")
+                    .push(format!("udp:{}", item.index_id));
                 Ok(55)
             })
         }
@@ -907,7 +913,9 @@ mod tests {
 
     #[tokio::test]
     async fn speedtest_manager_mixedtest_combines_realping_speedtest_and_udp() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
         insert_profile(&database, "a", 443).await;
         let probe = Arc::new(RecordingProbe::default());
         let manager = SpeedtestManager::with_probe(probe.clone());
@@ -921,7 +929,7 @@ mod tests {
                 vec!["a".to_string()],
             )
             .await
-            .unwrap();
+            .expect("speedtest test operation should succeed");
 
         assert!(!run.cancelled);
         assert_eq!(run.completed_count, 1);
@@ -933,7 +941,12 @@ mod tests {
                 "udp:a".to_string(),
             ]
         );
-        let profile_ex = database.profile_exs().get("a").await.unwrap().unwrap();
+        let profile_ex = database
+            .profile_exs()
+            .get("a")
+            .await
+            .expect("speedtest test operation should succeed")
+            .expect("speedtest test operation should succeed");
         assert_eq!(profile_ex.delay, 55);
         assert_eq!(profile_ex.speed, 2048.0);
         assert_eq!(profile_ex.ip_info.as_deref(), Some("US"));
@@ -941,7 +954,9 @@ mod tests {
 
     #[tokio::test]
     async fn speedtest_manager_fast_realping_uses_all_profiles_as_realping() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
         insert_profile(&database, "a", 443).await;
         insert_profile(&database, "b", 8443).await;
         let probe = Arc::new(RecordingProbe::default());
@@ -955,7 +970,7 @@ mod tests {
                 Vec::new(),
             )
             .await
-            .unwrap();
+            .expect("speedtest test operation should succeed");
 
         assert_eq!(run.selected_count, 2);
         assert_eq!(
@@ -966,7 +981,9 @@ mod tests {
 
     #[tokio::test]
     async fn speedtest_manager_speedtest_realpings_before_download() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
         insert_profile(&database, "a", 443).await;
         let probe = Arc::new(RecordingProbe::default());
         let manager = SpeedtestManager::with_probe(probe.clone());
@@ -979,7 +996,7 @@ mod tests {
                 vec!["a".to_string()],
             )
             .await
-            .unwrap();
+            .expect("speedtest test operation should succeed");
 
         assert_eq!(
             probe.calls(),
@@ -989,7 +1006,9 @@ mod tests {
 
     #[tokio::test]
     async fn speedtest_manager_cancel_stops_active_jobs() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
         insert_profile(&database, "a", 443).await;
         insert_profile(&database, "b", 8443).await;
         let probe = Arc::new(RecordingProbe {
@@ -1008,7 +1027,7 @@ mod tests {
                     Vec::new(),
                 )
                 .await
-                .unwrap()
+                .expect("speedtest test operation should succeed")
         });
 
         loop {
@@ -1018,13 +1037,22 @@ mod tests {
             time::sleep(Duration::from_millis(10)).await;
         }
 
-        assert!(manager.cancel().unwrap());
-        let run = handle.await.unwrap();
+        assert!(manager
+            .cancel()
+            .expect("speedtest test operation should succeed"));
+        let run = handle
+            .await
+            .expect("speedtest test operation should succeed");
 
         assert!(run.cancelled);
         assert_eq!(run.completed_count, 1);
         assert_eq!(probe.calls(), vec!["realping:a".to_string()]);
-        assert!(!manager.status().unwrap().running);
+        assert!(
+            !manager
+                .status()
+                .expect("speedtest test operation should succeed")
+                .running
+        );
     }
 
     async fn insert_profile(database: &Database, index_id: &str, port: i32) {
@@ -1050,6 +1078,6 @@ mod tests {
             .profiles()
             .upsert_with_profile_ex(&profile, &profile_ex)
             .await
-            .unwrap();
+            .expect("speedtest test operation should succeed");
     }
 }

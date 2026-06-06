@@ -74,24 +74,14 @@ impl<'db> GroupManager<'db> {
         let routings = self.database.routings().list().await?;
         let dns_items = self.database.dns().list().await?;
         let subs = self.database.subscriptions().list().await?;
-        let xray_value = self.preview_value(
-            config,
-            profile,
-            &profiles,
-            &routings,
-            &dns_items,
-            &subs,
-            CoreType::Xray,
-        );
-        let singbox_value = self.preview_value(
-            config,
-            profile,
-            &profiles,
-            &routings,
-            &dns_items,
-            &subs,
-            CoreType::sing_box,
-        );
+        let source = GroupPreviewSource {
+            profiles: &profiles,
+            routings: &routings,
+            dns_items: &dns_items,
+            subs: &subs,
+        };
+        let xray_value = self.preview_value(config, profile, &source, CoreType::Xray);
+        let singbox_value = self.preview_value(config, profile, &source, CoreType::sing_box);
 
         validation.warnings.extend(
             xray_value
@@ -152,10 +142,7 @@ impl<'db> GroupManager<'db> {
         &self,
         config: &AppConfig,
         profile: &ProfileItem,
-        profiles: &[ProfileItem],
-        routings: &[RoutingItem],
-        dns_items: &[DnsItem],
-        subs: &[SubItem],
+        source: &GroupPreviewSource<'_>,
         core_type: CoreType,
     ) -> PreviewValue {
         let mut node = profile.clone();
@@ -170,7 +157,8 @@ impl<'db> GroupManager<'db> {
                 .inbound
                 .first()
                 .map_or(voya_core::DEFAULT_LOCAL_PORT, |inbound| inbound.local_port),
-            profiles: profiles
+            profiles: source
+                .profiles
                 .iter()
                 .map(|candidate| {
                     if candidate.index_id == node.index_id {
@@ -180,9 +168,9 @@ impl<'db> GroupManager<'db> {
                     }
                 })
                 .collect(),
-            routings: routings.to_vec(),
-            dns_items: dns_items.to_vec(),
-            subs: subs.to_vec(),
+            routings: source.routings.to_vec(),
+            dns_items: source.dns_items.to_vec(),
+            subs: source.subs.to_vec(),
             core_type,
         };
         let mut preview_config = config.clone();
@@ -213,6 +201,14 @@ fn ensure_group_profile(profile: &ProfileItem) -> Result<()> {
 struct PreviewValue {
     value: serde_json::Value,
     builder_warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct GroupPreviewSource<'a> {
+    profiles: &'a [ProfileItem],
+    routings: &'a [RoutingItem],
+    dns_items: &'a [DnsItem],
+    subs: &'a [SubItem],
 }
 
 #[derive(Debug, Clone)]
@@ -322,16 +318,30 @@ mod tests {
 
     #[tokio::test]
     async fn group_manager_blocks_cycle_before_save() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("group manager test operation should succeed");
         let manager = GroupManager::new(&database);
         let mut config = AppConfig::default();
         let leaf = sample_leaf("leaf", "Leaf");
         let root = sample_group("root", "Root", "leaf,nested");
         let nested = sample_group("nested", "Nested", "root");
 
-        database.profiles().upsert(&leaf).await.unwrap();
-        database.profiles().upsert(&root).await.unwrap();
-        database.profiles().upsert(&nested).await.unwrap();
+        database
+            .profiles()
+            .upsert(&leaf)
+            .await
+            .expect("group manager test operation should succeed");
+        database
+            .profiles()
+            .upsert(&root)
+            .await
+            .expect("group manager test operation should succeed");
+        database
+            .profiles()
+            .upsert(&nested)
+            .await
+            .expect("group manager test operation should succeed");
 
         let error = manager
             .save_group_profile(&mut config, root)
@@ -343,20 +353,34 @@ mod tests {
 
     #[tokio::test]
     async fn group_manager_preview_exposes_xray_and_singbox_routes() {
-        let database = Database::connect_in_memory().await.unwrap();
+        let database = Database::connect_in_memory()
+            .await
+            .expect("group manager test operation should succeed");
         let manager = GroupManager::new(&database);
         let leaf_a = sample_leaf("leaf-a", "Leaf A");
         let leaf_b = sample_leaf("leaf-b", "Leaf B");
         let group = sample_group("group", "Group", "leaf-a,leaf-b");
 
-        database.profiles().upsert(&leaf_a).await.unwrap();
-        database.profiles().upsert(&leaf_b).await.unwrap();
-        database.profiles().upsert(&group).await.unwrap();
+        database
+            .profiles()
+            .upsert(&leaf_a)
+            .await
+            .expect("group manager test operation should succeed");
+        database
+            .profiles()
+            .upsert(&leaf_b)
+            .await
+            .expect("group manager test operation should succeed");
+        database
+            .profiles()
+            .upsert(&group)
+            .await
+            .expect("group manager test operation should succeed");
 
         let preview = manager
             .preview_group_profile(&AppConfig::default(), &group)
             .await
-            .unwrap();
+            .expect("group manager test operation should succeed");
 
         assert!(preview.validation.valid);
         assert!(preview
