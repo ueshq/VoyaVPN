@@ -25,7 +25,7 @@
     "verify:ci": "node scripts/verify-ci.mjs",
     "release:artifacts": "node scripts/release-artifacts.mjs",
     "release:updater": "node scripts/release-updater-metadata.mjs",
-    "tauri": "tauri",
+    "tauri": "node scripts/tauri.mjs",
     "tauri:dev": "tauri dev",
     "tauri:build": "node scripts/tauri-build.mjs"
   },
