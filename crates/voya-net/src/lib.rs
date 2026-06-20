@@ -42,6 +42,10 @@ pub const IRAN_DNS_TEMPLATE_SOURCE_URL: &str =
 
 pub(crate) const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 pub(crate) const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+pub const DEFAULT_TEXT_RESPONSE_LIMIT_BYTES: usize = 16 * 1024 * 1024;
+pub const DEFAULT_BINARY_RESPONSE_LIMIT_BYTES: usize = 512 * 1024 * 1024;
+const SUBSCRIPTION_RESPONSE_LIMIT_BYTES: usize = DEFAULT_TEXT_RESPONSE_LIMIT_BYTES;
+const PRESET_DNS_TEMPLATE_RESPONSE_LIMIT_BYTES: usize = 1024 * 1024;
 
 pub type Result<T> = std::result::Result<T, DownloadError>;
 
@@ -54,6 +58,15 @@ pub enum DownloadError {
         url: String,
         #[source]
         source: reqwest::Error,
+    },
+    #[error(
+        "download response for {url} exceeds {limit} bytes (content length: {content_length:?}, received: {received})"
+    )]
+    ResponseTooLarge {
+        url: String,
+        limit: usize,
+        content_length: Option<u64>,
+        received: usize,
     },
     #[error("all download attempts failed for {url}: {attempts:?}")]
     AttemptsFailed {
@@ -84,6 +97,7 @@ pub struct DownloadRequest {
     pub user_agent: Option<String>,
     pub prefer_proxy: bool,
     pub proxy_url: Option<String>,
+    pub response_body_limit: Option<usize>,
 }
 
 impl DownloadRequest {
@@ -94,7 +108,14 @@ impl DownloadRequest {
             user_agent: None,
             prefer_proxy: false,
             proxy_url: None,
+            response_body_limit: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_response_body_limit(mut self, limit: usize) -> Self {
+        self.response_body_limit = Some(limit);
+        self
     }
 }
 
@@ -220,6 +241,7 @@ impl PresetDnsTemplateClient {
                 user_agent: None,
                 prefer_proxy: options.prefer_proxy,
                 proxy_url: options.proxy_url.clone(),
+                response_body_limit: Some(PRESET_DNS_TEMPLATE_RESPONSE_LIMIT_BYTES),
             })
             .await
         {
@@ -255,6 +277,9 @@ impl DownloadClient {
 
     pub async fn download_text(&self, request: DownloadRequest) -> Result<DownloadResponse> {
         let mut attempts = Vec::new();
+        let response_body_limit = request
+            .response_body_limit
+            .unwrap_or(DEFAULT_TEXT_RESPONSE_LIMIT_BYTES);
 
         if request.prefer_proxy {
             if let Some(proxy_url) = request
@@ -264,8 +289,13 @@ impl DownloadClient {
             {
                 match self.proxy_client(&request.url, proxy_url) {
                     Ok(client) => {
-                        match request_text(&client, &request.url, request.user_agent.as_deref())
-                            .await
+                        match request_text(
+                            &client,
+                            &request.url,
+                            request.user_agent.as_deref(),
+                            response_body_limit,
+                        )
+                        .await
                         {
                             Ok(body) if !body.is_empty() => {
                                 attempts.push(DownloadAttempt {
@@ -321,7 +351,14 @@ impl DownloadClient {
             }
         };
 
-        match request_text(&client, &request.url, request.user_agent.as_deref()).await {
+        match request_text(
+            &client,
+            &request.url,
+            request.user_agent.as_deref(),
+            response_body_limit,
+        )
+        .await
+        {
             Ok(body) if !body.is_empty() => {
                 attempts.push(DownloadAttempt {
                     url: request.url.clone(),
@@ -349,22 +386,30 @@ impl DownloadClient {
                 })
             }
             Err(error) => {
+                let response_too_large = matches!(&error, DownloadError::ResponseTooLarge { .. });
                 attempts.push(DownloadAttempt {
                     url: request.url.clone(),
                     via_proxy: false,
                     bytes: 0,
                     error: Some(error.to_string()),
                 });
-                Err(DownloadError::AttemptsFailed {
-                    url: request.url,
-                    attempts,
-                })
+                if response_too_large {
+                    Err(error)
+                } else {
+                    Err(DownloadError::AttemptsFailed {
+                        url: request.url,
+                        attempts,
+                    })
+                }
             }
         }
     }
 
     pub async fn download_bytes(&self, request: DownloadRequest) -> Result<DownloadBytesResponse> {
         let mut attempts = Vec::new();
+        let response_body_limit = request
+            .response_body_limit
+            .unwrap_or(DEFAULT_BINARY_RESPONSE_LIMIT_BYTES);
 
         if request.prefer_proxy {
             if let Some(proxy_url) = request
@@ -374,8 +419,13 @@ impl DownloadClient {
             {
                 match self.proxy_client(&request.url, proxy_url) {
                     Ok(client) => {
-                        match request_bytes(&client, &request.url, request.user_agent.as_deref())
-                            .await
+                        match request_bytes(
+                            &client,
+                            &request.url,
+                            request.user_agent.as_deref(),
+                            response_body_limit,
+                        )
+                        .await
                         {
                             Ok(body) if !body.is_empty() => {
                                 attempts.push(DownloadAttempt {
@@ -431,7 +481,14 @@ impl DownloadClient {
             }
         };
 
-        match request_bytes(&client, &request.url, request.user_agent.as_deref()).await {
+        match request_bytes(
+            &client,
+            &request.url,
+            request.user_agent.as_deref(),
+            response_body_limit,
+        )
+        .await
+        {
             Ok(body) if !body.is_empty() => {
                 attempts.push(DownloadAttempt {
                     url: request.url.clone(),
@@ -459,16 +516,21 @@ impl DownloadClient {
                 })
             }
             Err(error) => {
+                let response_too_large = matches!(&error, DownloadError::ResponseTooLarge { .. });
                 attempts.push(DownloadAttempt {
                     url: request.url.clone(),
                     via_proxy: false,
                     bytes: 0,
                     error: Some(error.to_string()),
                 });
-                Err(DownloadError::AttemptsFailed {
-                    url: request.url,
-                    attempts,
-                })
+                if response_too_large {
+                    Err(error)
+                } else {
+                    Err(DownloadError::AttemptsFailed {
+                        url: request.url,
+                        attempts,
+                    })
+                }
             }
         }
     }
@@ -591,6 +653,7 @@ impl SubscriptionClient {
                 user_agent: nonempty(source.user_agent.clone()),
                 prefer_proxy: options.prefer_proxy,
                 proxy_url: options.proxy_url.clone(),
+                response_body_limit: Some(SUBSCRIPTION_RESPONSE_LIMIT_BYTES),
             })
             .await?;
         let mut content = if source
@@ -625,6 +688,7 @@ impl SubscriptionClient {
                     user_agent: nonempty(source.user_agent.clone()),
                     prefer_proxy: options.prefer_proxy,
                     proxy_url: options.proxy_url.clone(),
+                    response_body_limit: Some(SUBSCRIPTION_RESPONSE_LIMIT_BYTES),
                 })
                 .await?;
             let body =
@@ -723,41 +787,103 @@ pub(crate) fn build_http_client(
     builder.build()
 }
 
-async fn request_text(client: &Client, url: &str, user_agent: Option<&str>) -> Result<String> {
-    let user_agent = user_agent
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(USER_AGENT_PREFIX);
-
-    client
-        .get(url)
-        .header(reqwest::header::USER_AGENT, user_agent)
-        .send()
-        .await
-        .map_err(|source| DownloadError::Request {
-            url: url.to_string(),
-            source,
-        })?
-        .error_for_status()
-        .map_err(|source| DownloadError::Request {
-            url: url.to_string(),
-            source,
-        })?
-        .text()
-        .await
-        .map_err(|source| DownloadError::Request {
-            url: url.to_string(),
-            source,
-        })
+#[derive(Debug, Error)]
+pub(crate) enum LimitedBodyReadError {
+    #[error(
+        "response body exceeds {limit} bytes (content length: {content_length:?}, received: {received})"
+    )]
+    TooLarge {
+        limit: usize,
+        content_length: Option<u64>,
+        received: usize,
+    },
+    #[error("failed to read response body: {source}")]
+    Read {
+        #[source]
+        source: reqwest::Error,
+    },
 }
 
-async fn request_bytes(client: &Client, url: &str, user_agent: Option<&str>) -> Result<Vec<u8>> {
+pub(crate) async fn read_response_bytes_limited(
+    mut response: reqwest::Response,
+    limit: usize,
+) -> std::result::Result<Vec<u8>, LimitedBodyReadError> {
+    let content_length = response.content_length();
+    let limit_u64 = u64::try_from(limit).unwrap_or(u64::MAX);
+    if content_length.is_some_and(|length| length > limit_u64) {
+        return Err(LimitedBodyReadError::TooLarge {
+            limit,
+            content_length,
+            received: 0,
+        });
+    }
+
+    let capacity = match content_length {
+        Some(length) => match usize::try_from(length) {
+            Ok(length) => length.min(limit),
+            Err(_) => 0,
+        },
+        None => 0,
+    };
+    let mut body = Vec::with_capacity(capacity);
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|source| LimitedBodyReadError::Read { source })?
+    {
+        let received = body.len().saturating_add(chunk.len());
+        if received > limit {
+            return Err(LimitedBodyReadError::TooLarge {
+                limit,
+                content_length,
+                received,
+            });
+        }
+        body.extend_from_slice(&chunk);
+    }
+
+    Ok(body)
+}
+
+pub(crate) async fn read_response_text_limited(
+    response: reqwest::Response,
+    limit: usize,
+) -> std::result::Result<String, LimitedBodyReadError> {
+    let bytes = read_response_bytes_limited(response, limit).await?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+fn map_download_body_error(url: &str, error: LimitedBodyReadError) -> DownloadError {
+    match error {
+        LimitedBodyReadError::TooLarge {
+            limit,
+            content_length,
+            received,
+        } => DownloadError::ResponseTooLarge {
+            url: url.to_string(),
+            limit,
+            content_length,
+            received,
+        },
+        LimitedBodyReadError::Read { source } => DownloadError::Request {
+            url: url.to_string(),
+            source,
+        },
+    }
+}
+
+async fn request_text(
+    client: &Client,
+    url: &str,
+    user_agent: Option<&str>,
+    response_body_limit: usize,
+) -> Result<String> {
     let user_agent = user_agent
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or(USER_AGENT_PREFIX);
 
-    client
+    let response = client
         .get(url)
         .header(reqwest::header::USER_AGENT, user_agent)
         .send()
@@ -770,14 +896,42 @@ async fn request_bytes(client: &Client, url: &str, user_agent: Option<&str>) -> 
         .map_err(|source| DownloadError::Request {
             url: url.to_string(),
             source,
-        })?
-        .bytes()
+        })?;
+
+    read_response_text_limited(response, response_body_limit)
         .await
-        .map(|bytes| bytes.to_vec())
+        .map_err(|error| map_download_body_error(url, error))
+}
+
+async fn request_bytes(
+    client: &Client,
+    url: &str,
+    user_agent: Option<&str>,
+    response_body_limit: usize,
+) -> Result<Vec<u8>> {
+    let user_agent = user_agent
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(USER_AGENT_PREFIX);
+
+    let response = client
+        .get(url)
+        .header(reqwest::header::USER_AGENT, user_agent)
+        .send()
+        .await
         .map_err(|source| DownloadError::Request {
             url: url.to_string(),
             source,
-        })
+        })?
+        .error_for_status()
+        .map_err(|source| DownloadError::Request {
+            url: url.to_string(),
+            source,
+        })?;
+
+    read_response_bytes_limited(response, response_body_limit)
+        .await
+        .map_err(|error| map_download_body_error(url, error))
 }
 
 fn nonempty(value: String) -> Option<String> {
@@ -832,6 +986,7 @@ mod tests {
                 user_agent: Some("VoyaTest/1".to_string()),
                 prefer_proxy: true,
                 proxy_url: Some("http://127.0.0.1:9".to_string()),
+                response_body_limit: None,
             })
             .await
             .expect("download should fall back to direct");
@@ -840,6 +995,78 @@ mod tests {
         assert_eq!(response.attempts.len(), 2);
         assert_eq!(response.body, "vless://id@example.test:443#A");
         assert_eq!(seen_user_agents.lock().await.as_slice(), ["VoyaTest/1"]);
+    }
+
+    #[tokio::test]
+    async fn download_text_rejects_declared_response_above_limit() {
+        let base = spawn_raw_http_fixture(
+            HashMap::from([(
+                "/oversize".to_string(),
+                RawFixtureResponse {
+                    status: "200 OK".to_string(),
+                    content_length: Some(6),
+                    body: b"abcdef".to_vec(),
+                },
+            )]),
+            1,
+        )
+        .await;
+
+        let error = DownloadClient::new()
+            .download_text(
+                DownloadRequest::direct(format!("{base}/oversize")).with_response_body_limit(4),
+            )
+            .await
+            .expect_err("oversized response should fail");
+
+        assert!(
+            matches!(
+                error,
+                DownloadError::ResponseTooLarge {
+                    limit: 4,
+                    content_length: Some(6),
+                    received: 0,
+                    ..
+                }
+            ),
+            "{error:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn download_bytes_rejects_chunked_response_above_limit() {
+        let base = spawn_raw_http_fixture(
+            HashMap::from([(
+                "/stream".to_string(),
+                RawFixtureResponse {
+                    status: "200 OK".to_string(),
+                    content_length: None,
+                    body: b"abcdef".to_vec(),
+                },
+            )]),
+            1,
+        )
+        .await;
+
+        let error = DownloadClient::new()
+            .download_bytes(
+                DownloadRequest::direct(format!("{base}/stream")).with_response_body_limit(4),
+            )
+            .await
+            .expect_err("oversized response should fail");
+
+        assert!(
+            matches!(
+                error,
+                DownloadError::ResponseTooLarge {
+                    limit: 4,
+                    content_length: None,
+                    received,
+                    ..
+                } if received > 4
+            ),
+            "{error:?}"
+        );
     }
 
     #[tokio::test]
@@ -1040,6 +1267,64 @@ mod tests {
                         body.len()
                     );
                     let _ = socket.write_all(response.as_bytes()).await;
+                });
+            }
+        });
+
+        format!("http://{address}")
+    }
+
+    #[derive(Clone)]
+    struct RawFixtureResponse {
+        status: String,
+        content_length: Option<usize>,
+        body: Vec<u8>,
+    }
+
+    async fn spawn_raw_http_fixture(
+        routes: HashMap<String, RawFixtureResponse>,
+        max_requests: usize,
+    ) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("update test operation should succeed");
+        let address = listener
+            .local_addr()
+            .expect("update test operation should succeed");
+        let routes = Arc::new(routes);
+
+        tokio::spawn(async move {
+            for _ in 0..max_requests {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    break;
+                };
+                let routes = Arc::clone(&routes);
+                tokio::spawn(async move {
+                    let mut buffer = vec![0; 4096];
+                    let bytes_read = socket.read(&mut buffer).await.unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+                    let path = request
+                        .lines()
+                        .next()
+                        .and_then(|line| line.split_whitespace().nth(1))
+                        .and_then(|target| target.split('?').next())
+                        .unwrap_or("/");
+                    let response = routes.get(path).cloned().unwrap_or(RawFixtureResponse {
+                        status: "404 Not Found".to_string(),
+                        content_length: Some(9),
+                        body: b"not found".to_vec(),
+                    });
+                    let header = match response.content_length {
+                        Some(length) => format!(
+                            "HTTP/1.1 {}\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n",
+                            response.status
+                        ),
+                        None => {
+                            format!("HTTP/1.1 {}\r\nConnection: close\r\n\r\n", response.status)
+                        }
+                    };
+                    let _ = socket.write_all(header.as_bytes()).await;
+                    let _ = socket.write_all(&response.body).await;
                 });
             }
         });

@@ -26,6 +26,7 @@ const QUERY_VALUE_ENCODE_SET: &AsciiSet = &PATH_SEGMENT_ENCODE_SET
     .add(b'+')
     .add(b':')
     .add(b'=');
+const CLASH_HTTP_RESPONSE_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 
 pub type Result<T> = std::result::Result<T, ClashError>;
 
@@ -33,6 +34,15 @@ pub type Result<T> = std::result::Result<T, ClashError>;
 pub enum ClashError {
     #[error("Clash request failed: {0}")]
     Request(String),
+    #[error(
+        "Clash response body too large for {url}: limit {limit} bytes, content length {content_length:?}, received {received}"
+    )]
+    ResponseTooLarge {
+        url: String,
+        limit: usize,
+        content_length: Option<u64>,
+        received: usize,
+    },
     #[error("Clash response decode failed: {0}")]
     Decode(String),
     #[error("Clash websocket failed: {0}")]
@@ -161,16 +171,31 @@ impl ClashHttpTransport for ReqwestClashHttpTransport {
                 .error_for_status()
                 .map_err(|error| ClashError::Request(error.to_string()))?;
 
-            let text = response
-                .text()
+            let text = crate::read_response_text_limited(response, CLASH_HTTP_RESPONSE_LIMIT_BYTES)
                 .await
-                .map_err(|error| ClashError::Request(error.to_string()))?;
+                .map_err(|error| clash_body_error(&request.url, error))?;
             if text.trim().is_empty() {
                 Ok(Value::Null)
             } else {
                 serde_json::from_str(&text).map_err(|error| ClashError::Decode(error.to_string()))
             }
         })
+    }
+}
+
+fn clash_body_error(url: &str, error: crate::LimitedBodyReadError) -> ClashError {
+    match error {
+        crate::LimitedBodyReadError::TooLarge {
+            limit,
+            content_length,
+            received,
+        } => ClashError::ResponseTooLarge {
+            url: url.to_string(),
+            limit,
+            content_length,
+            received,
+        },
+        crate::LimitedBodyReadError::Read { source } => ClashError::Request(source.to_string()),
     }
 }
 
@@ -654,6 +679,11 @@ fn encode_query_value(value: &str) -> String {
 mod tests {
     use std::sync::{Arc, Mutex};
 
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+    };
+
     use super::*;
 
     #[derive(Clone, Default)]
@@ -754,6 +784,57 @@ mod tests {
         assert_eq!(delay.delay, Some(42));
         let requests = transport.requests();
         assert_eq!(requests[0].method, ClashHttpMethod::Get);
+    }
+
+    #[tokio::test]
+    async fn clash_reqwest_transport_reads_small_json_under_limit() {
+        let port = spawn_clash_http_response(
+            "/proxies",
+            "200 OK",
+            Some(r#"{"proxies":{}}"#.len()),
+            br#"{"proxies":{}}"#.to_vec(),
+        )
+        .await;
+        let client = ClashRestClient::new(ClashApiEndpoint::loopback(port));
+
+        let response = client.get_proxies().await.expect("proxies");
+
+        assert!(response.proxies.is_empty());
+    }
+
+    #[tokio::test]
+    async fn clash_reqwest_transport_rejects_declared_response_above_limit() {
+        let declared_length = CLASH_HTTP_RESPONSE_LIMIT_BYTES + 1;
+        let port = spawn_clash_http_response(
+            "/proxies",
+            "200 OK",
+            Some(declared_length),
+            br#"{"proxies":{}}"#.to_vec(),
+        )
+        .await;
+        let client = ClashRestClient::new(ClashApiEndpoint::loopback(port));
+
+        let error = client
+            .get_proxies()
+            .await
+            .expect_err("oversized Clash response should fail");
+
+        match error {
+            ClashError::ResponseTooLarge {
+                limit,
+                content_length,
+                received,
+                ..
+            } => {
+                assert_eq!(limit, CLASH_HTTP_RESPONSE_LIMIT_BYTES);
+                assert_eq!(
+                    content_length,
+                    Some(u64::try_from(declared_length).expect("declared length"))
+                );
+                assert_eq!(received, 0);
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 
     #[test]
@@ -867,5 +948,47 @@ mod tests {
             client.url(ClashWebSocketResource::Connections),
             "ws://127.0.0.1:9090/connections"
         );
+    }
+
+    async fn spawn_clash_http_response(
+        expected_path: &str,
+        status: &str,
+        content_length: Option<usize>,
+        body: Vec<u8>,
+    ) -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let port = listener.local_addr().expect("address").port();
+        let expected_path = expected_path.to_string();
+        let status = status.to_string();
+
+        tokio::spawn(async move {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            let mut buffer = vec![0; 4096];
+            let bytes_read = socket.read(&mut buffer).await.unwrap_or(0);
+            let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+            let path = request
+                .lines()
+                .next()
+                .and_then(|line| line.split_whitespace().nth(1))
+                .and_then(|target| target.split('?').next())
+                .unwrap_or("/");
+            let (status, body, content_length) = if path == expected_path {
+                (status, body, content_length)
+            } else {
+                ("404 Not Found".to_string(), b"not found".to_vec(), Some(9))
+            };
+            let header = match content_length {
+                Some(length) => {
+                    format!("HTTP/1.1 {status}\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n")
+                }
+                None => format!("HTTP/1.1 {status}\r\nConnection: close\r\n\r\n"),
+            };
+            let _ = socket.write_all(header.as_bytes()).await;
+            let _ = socket.write_all(&body).await;
+        });
+
+        port
     }
 }

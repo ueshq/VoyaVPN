@@ -5,6 +5,8 @@ use voya_core::CoreType;
 
 use crate::{DownloadClient, DownloadError, DownloadRequest};
 
+const RELEASE_METADATA_RESPONSE_LIMIT_BYTES: usize = 4 * 1024 * 1024;
+
 // Legacy GitHub release metadata stays available for fixture tests and migration
 // compatibility. Production app/core checks use CDN manifests through
 // `CdnUpdateClient` and reject GitHub production download URLs.
@@ -341,6 +343,7 @@ impl CdnUpdateClient {
                 user_agent: Some(crate::USER_AGENT_PREFIX.to_string()),
                 prefer_proxy: options.prefer_proxy,
                 proxy_url: options.proxy_url.clone(),
+                response_body_limit: Some(RELEASE_METADATA_RESPONSE_LIMIT_BYTES),
             })
             .await?;
 
@@ -360,6 +363,7 @@ impl CdnUpdateClient {
                 user_agent: Some(crate::USER_AGENT_PREFIX.to_string()),
                 prefer_proxy: options.prefer_proxy,
                 proxy_url: options.proxy_url.clone(),
+                response_body_limit: Some(RELEASE_METADATA_RESPONSE_LIMIT_BYTES),
             })
             .await?;
 
@@ -636,6 +640,7 @@ impl GitHubReleaseClient {
                 user_agent: Some(crate::USER_AGENT_PREFIX.to_string()),
                 prefer_proxy: options.prefer_proxy,
                 proxy_url: options.proxy_url.clone(),
+                response_body_limit: Some(RELEASE_METADATA_RESPONSE_LIMIT_BYTES),
             })
             .await?;
 
@@ -1283,6 +1288,7 @@ mod tests {
                 user_agent: Some("VoyaUpdateTest/1".to_string()),
                 prefer_proxy: true,
                 proxy_url: Some("http://127.0.0.1:9".to_string()),
+                response_body_limit: None,
             })
             .await
             .expect("download fallback");

@@ -10,6 +10,8 @@ use voya_core::{DnsItem, RoutingItem, RulesItem};
 
 use crate::{DownloadAttempt, DownloadClient, DownloadError, DownloadRequest, USER_AGENT_PREFIX};
 
+const RULESET_ASSET_RESPONSE_LIMIT_BYTES: usize = 256 * 1024 * 1024;
+
 pub const DEFAULT_GEO_SOURCE_URL: &str =
     "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/{0}.dat";
 pub const DEFAULT_SINGBOX_RULESET_URL: &str =
@@ -361,6 +363,7 @@ fn download_request(url: &str, options: &AssetAcquisitionOptions) -> DownloadReq
         user_agent: Some(USER_AGENT_PREFIX.to_string()),
         prefer_proxy: options.prefer_proxy,
         proxy_url: options.proxy_url.clone(),
+        response_body_limit: Some(RULESET_ASSET_RESPONSE_LIMIT_BYTES),
     }
 }
 
@@ -613,6 +616,58 @@ mod tests {
         let _ = fs::remove_dir_all(target_root);
     }
 
+    #[tokio::test]
+    async fn ruleset_client_rejects_asset_response_above_limit() {
+        let declared_length = RULESET_ASSET_RESPONSE_LIMIT_BYTES + 1;
+        let base = spawn_raw_http_fixture(
+            HashMap::from([(
+                "/geosite.dat".to_string(),
+                RawFixtureResponse {
+                    status: "200 OK".to_string(),
+                    content_length: Some(declared_length),
+                    body: b"dat".to_vec(),
+                },
+            )]),
+            1,
+        )
+        .await;
+        let target_root = unique_temp_root("ruleset-oversize");
+        let client = RulesetGeoClient::new();
+
+        let error = client
+            .acquire_geo_assets(
+                &[GeoAsset::new(
+                    "geosite",
+                    "geosite.dat",
+                    format!("{base}/geosite.dat"),
+                )],
+                &target_root,
+                &AssetAcquisitionOptions::default(),
+            )
+            .await
+            .expect_err("oversized ruleset asset should fail");
+
+        match error {
+            RulesetGeoError::Download(DownloadError::ResponseTooLarge {
+                limit,
+                content_length,
+                received,
+                ..
+            }) => {
+                assert_eq!(limit, RULESET_ASSET_RESPONSE_LIMIT_BYTES);
+                assert_eq!(
+                    content_length,
+                    Some(u64::try_from(declared_length).expect("declared length"))
+                );
+                assert_eq!(received, 0);
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+        assert!(!target_root.join("geosite.dat").exists());
+
+        let _ = fs::remove_dir_all(target_root);
+    }
+
     #[test]
     fn ruleset_local_discovery_maps_srs_stems_to_paths() {
         let root = unique_temp_root("ruleset-local");
@@ -686,6 +741,62 @@ mod tests {
                     );
                     let _ = socket.write_all(header.as_bytes()).await;
                     let _ = socket.write_all(&body).await;
+                });
+            }
+        });
+
+        format!("http://{address}")
+    }
+
+    #[derive(Clone)]
+    struct RawFixtureResponse {
+        status: String,
+        content_length: Option<usize>,
+        body: Vec<u8>,
+    }
+
+    async fn spawn_raw_http_fixture(
+        routes: HashMap<String, RawFixtureResponse>,
+        max_requests: usize,
+    ) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind fixture");
+        let address = listener.local_addr().expect("fixture address");
+        let routes = Arc::new(routes);
+
+        tokio::spawn(async move {
+            for _ in 0..max_requests {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    break;
+                };
+                let routes = Arc::clone(&routes);
+                tokio::spawn(async move {
+                    let mut buffer = vec![0; 4096];
+                    let bytes_read = socket.read(&mut buffer).await.unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+                    let path = request
+                        .lines()
+                        .next()
+                        .and_then(|line| line.split_whitespace().nth(1))
+                        .and_then(|target| target.split('?').next())
+                        .unwrap_or("/");
+                    let response = routes.get(path).cloned().unwrap_or(RawFixtureResponse {
+                        status: "404 Not Found".to_string(),
+                        content_length: Some(9),
+                        body: b"not found".to_vec(),
+                    });
+                    let header = match response.content_length {
+                        Some(length) => format!(
+                            "HTTP/1.1 {}\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n",
+                            response.status
+                        ),
+                        None => {
+                            format!("HTTP/1.1 {}\r\nConnection: close\r\n\r\n", response.status)
+                        }
+                    };
+                    let _ = socket.write_all(header.as_bytes()).await;
+                    let _ = socket.write_all(&response.body).await;
                 });
             }
         });

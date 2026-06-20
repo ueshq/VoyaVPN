@@ -307,6 +307,7 @@ impl<'db> RoutingManager<'db> {
                 user_agent: None,
                 prefer_proxy,
                 proxy_url: proxy_url.map(ToOwned::to_owned),
+                response_body_limit: None,
             })
             .await?;
         let template = parse_routing_template(&response.body)?;
@@ -358,6 +359,7 @@ impl<'db> RoutingManager<'db> {
                         user_agent: None,
                         prefer_proxy,
                         proxy_url: proxy_url.map(ToOwned::to_owned),
+                        response_body_limit: None,
                     })
                     .await?;
                 parse_rules(&response.body)?

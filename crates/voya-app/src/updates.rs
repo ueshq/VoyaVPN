@@ -405,6 +405,7 @@ impl<'db> UpdateManager<'db> {
                                 user_agent: Some(voya_net::USER_AGENT_PREFIX.to_string()),
                                 prefer_proxy: options.prefer_proxy,
                                 proxy_url: options.proxy_url.clone(),
+                                response_body_limit: None,
                             },
                             &target,
                         )

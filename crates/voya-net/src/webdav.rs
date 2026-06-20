@@ -6,6 +6,9 @@ use thiserror::Error;
 const DEFAULT_BACKUP_DIR: &str = "VoyaVPN_backup";
 const DEFAULT_BACKUP_FILE: &str = "backup.zip";
 const TEST_FILE: &str = "readme_test";
+const WEBDAV_PROPFIND_RESPONSE_LIMIT_BYTES: usize = 8 * 1024 * 1024;
+const WEBDAV_DOWNLOAD_RESPONSE_LIMIT_BYTES: usize = 128 * 1024 * 1024;
+const WEBDAV_STATUS_RESPONSE_LIMIT_BYTES: usize = 64 * 1024;
 const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b' ')
     .add(b'"')
@@ -51,6 +54,16 @@ pub enum WebDavError {
         url: String,
         status: StatusCode,
         body: String,
+    },
+    #[error(
+        "WebDAV response body too large for {method} {url}: limit {limit} bytes, content length {content_length:?}, received {received}"
+    )]
+    ResponseTooLarge {
+        method: String,
+        url: String,
+        limit: usize,
+        content_length: Option<u64>,
+        received: usize,
     },
     #[error("failed to parse WebDAV XML: {0}")]
     Xml(String),
@@ -235,14 +248,10 @@ impl WebDavClient {
         if !status.is_success() && status.as_u16() != 207 {
             return Err(status_error(method, &url, response).await);
         }
-        let text = response
-            .text()
-            .await
-            .map_err(|source| WebDavError::Request {
-                method: method.to_string(),
-                url: url.clone(),
-                source,
-            })?;
+        let text =
+            crate::read_response_text_limited(response, WEBDAV_PROPFIND_RESPONSE_LIMIT_BYTES)
+                .await
+                .map_err(|error| webdav_body_error(method, &url, error))?;
 
         parse_propfind_response(&text)
     }
@@ -291,15 +300,9 @@ impl WebDavClient {
             return Err(status_error(method, &url, response).await);
         }
 
-        response
-            .bytes()
+        crate::read_response_bytes_limited(response, WEBDAV_DOWNLOAD_RESPONSE_LIMIT_BYTES)
             .await
-            .map(|bytes| bytes.to_vec())
-            .map_err(|source| WebDavError::Request {
-                method: method.to_string(),
-                url,
-                source,
-            })
+            .map_err(|error| webdav_body_error(method, &url, error))
     }
 
     pub async fn delete(&self, path: &str) -> Result<()> {
@@ -439,13 +442,35 @@ fn custom_method(method: &str) -> Method {
 
 async fn status_error(method: &str, url: &str, response: reqwest::Response) -> WebDavError {
     let status = response.status();
-    let body = response.text().await.unwrap_or_default();
+    match crate::read_response_text_limited(response, WEBDAV_STATUS_RESPONSE_LIMIT_BYTES).await {
+        Ok(body) => WebDavError::Status {
+            method: method.to_string(),
+            url: url.to_string(),
+            status,
+            body,
+        },
+        Err(error) => webdav_body_error(method, url, error),
+    }
+}
 
-    WebDavError::Status {
-        method: method.to_string(),
-        url: url.to_string(),
-        status,
-        body,
+fn webdav_body_error(method: &str, url: &str, error: crate::LimitedBodyReadError) -> WebDavError {
+    match error {
+        crate::LimitedBodyReadError::TooLarge {
+            limit,
+            content_length,
+            received,
+        } => WebDavError::ResponseTooLarge {
+            method: method.to_string(),
+            url: url.to_string(),
+            limit,
+            content_length,
+            received,
+        },
+        crate::LimitedBodyReadError::Read { source } => WebDavError::Request {
+            method: method.to_string(),
+            url: url.to_string(),
+            source,
+        },
     }
 }
 
@@ -561,6 +586,47 @@ mod tests {
         assert!(seen.contains(&"DELETE /VoyaVPN_backup/backup.zip".to_string()));
     }
 
+    #[tokio::test]
+    async fn webdav_download_rejects_declared_response_above_limit() {
+        let declared_length = WEBDAV_DOWNLOAD_RESPONSE_LIMIT_BYTES + 1;
+        let base = spawn_webdav_single_response(
+            "GET",
+            "/VoyaVPN_backup/backup.zip",
+            "200 OK",
+            "application/zip",
+            Some(declared_length),
+            b"zip".to_vec(),
+        )
+        .await;
+        let config = WebDavConfig::new(base, "user", "pass", Some("VoyaVPN_backup".to_string()))
+            .expect("config");
+        let client = WebDavClient::new(config);
+
+        let error = client
+            .download_backup()
+            .await
+            .expect_err("oversized backup should fail");
+
+        match error {
+            WebDavError::ResponseTooLarge {
+                method,
+                limit,
+                content_length,
+                received,
+                ..
+            } => {
+                assert_eq!(method, "GET");
+                assert_eq!(limit, WEBDAV_DOWNLOAD_RESPONSE_LIMIT_BYTES);
+                assert_eq!(
+                    content_length,
+                    Some(u64::try_from(declared_length).expect("declared length"))
+                );
+                assert_eq!(received, 0);
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
     async fn spawn_webdav_fixture(requests: Arc<StdMutex<Vec<String>>>) -> String {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
@@ -634,6 +700,62 @@ mod tests {
                     let _ = socket.write_all(&body).await;
                 });
             }
+        });
+
+        format!("http://{address}")
+    }
+
+    async fn spawn_webdav_single_response(
+        expected_method: &str,
+        expected_path: &str,
+        status: &str,
+        content_type: &str,
+        content_length: Option<usize>,
+        body: Vec<u8>,
+    ) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("update test operation should succeed");
+        let address = listener
+            .local_addr()
+            .expect("update test operation should succeed");
+        let expected_method = expected_method.to_string();
+        let expected_path = expected_path.to_string();
+        let status = status.to_string();
+        let content_type = content_type.to_string();
+
+        tokio::spawn(async move {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            let mut buffer = vec![0; 8192];
+            let bytes_read = socket.read(&mut buffer).await.unwrap_or(0);
+            let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+            let first = request.lines().next().unwrap_or_default();
+            let mut parts = first.split_whitespace();
+            let method = parts.next().unwrap_or_default();
+            let path = parts.next().unwrap_or_default();
+            let (status, content_type, body, content_length) =
+                if method == expected_method && path == expected_path {
+                    (status, content_type, body, content_length)
+                } else {
+                    (
+                        "404 Not Found".to_string(),
+                        "text/plain".to_string(),
+                        b"not found".to_vec(),
+                        Some(9),
+                    )
+                };
+            let header = match content_length {
+                Some(length) => format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n"
+                ),
+                None => format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nConnection: close\r\n\r\n"
+                ),
+            };
+            let _ = socket.write_all(header.as_bytes()).await;
+            let _ = socket.write_all(&body).await;
         });
 
         format!("http://{address}")
