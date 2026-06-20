@@ -3,6 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { json } from "@codemirror/lang-json";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Braces, Database, RefreshCw, RotateCcw, Save, ServerCog, ShieldCheck, TriangleAlert } from "lucide-react";
+import { z } from "zod";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -19,9 +20,57 @@ import { IpcCommandError, loadDnsSettings, saveDnsSettings } from "@/ipc";
 import type { DnsItem_Serialize, DnsSettings_Deserialize, DnsSettings_Serialize } from "@/ipc/bindings";
 import { cn } from "@/lib/utils";
 
-const STRATEGIES = ["", "AsIs", "UseIP", "UseIPv4", "UseIPv6", "ForceIPv4", "ForceIPv6"];
+const STRATEGIES = ["", "AsIs", "UseIP", "UseIPv4", "UseIPv6", "ForceIPv4", "ForceIPv6"] as const;
 const EMPTY_SELECT_VALUE = "__voyavpn_empty_select_value__";
 const editorExtensions = [json()];
+const optionalNullableText = z.string().nullable().optional();
+
+const simpleDnsItemSchema = z.object({
+  UseSystemHosts: z.boolean().nullable().optional(),
+  AddCommonHosts: z.boolean().nullable().optional(),
+  FakeIP: z.boolean().nullable().optional(),
+  GlobalFakeIp: z.boolean().nullable().optional(),
+  BlockBindingQuery: z.boolean().nullable().optional(),
+  DirectDNS: optionalNullableText,
+  RemoteDNS: optionalNullableText,
+  BootstrapDNS: optionalNullableText,
+  Strategy4Freedom: z.enum(STRATEGIES).nullable().optional(),
+  Strategy4Proxy: z.enum(STRATEGIES).nullable().optional(),
+  ServeStale: z.boolean().nullable().optional(),
+  ParallelQuery: z.boolean().nullable().optional(),
+  Hosts: optionalNullableText.superRefine(validateHosts),
+  DirectExpectedIPs: optionalNullableText.superRefine(validateExpectedIps),
+});
+
+const dnsItemSchema = z.object({
+  Id: z.string().optional(),
+  Remarks: z.string().optional(),
+  Enabled: z.boolean().optional(),
+  CoreType: z.number().int().optional(),
+  UseSystemHosts: z.boolean().optional(),
+  NormalDNS: optionalNullableText,
+  TunDNS: optionalNullableText,
+  DomainStrategy4Freedom: optionalNullableText,
+  DomainDNSAddress: optionalNullableText,
+});
+
+const dnsSettingsSchema: z.ZodType<DnsSettings_Deserialize> = z.object({
+  simpleDnsItem: simpleDnsItemSchema,
+  xrayDnsItem: dnsItemSchema.extend({
+    NormalDNS: optionalNullableText.superRefine((value, context) => validateXrayDnsJson(value, context)),
+    TunDNS: optionalNullableText.superRefine((value, context) => validateXrayDnsJson(value, context)),
+  }),
+  singboxDnsItem: dnsItemSchema.extend({
+    NormalDNS: optionalNullableText.superRefine((value, context) => validateSingboxDnsJson(value, context)),
+    TunDNS: optionalNullableText.superRefine((value, context) => validateSingboxDnsJson(value, context)),
+  }),
+  defaults: z.object({
+    xrayNormalDns: z.string(),
+    xrayTunDns: z.string(),
+    singboxNormalDns: z.string(),
+    singboxTunDns: z.string(),
+  }),
+});
 
 type ErrorMap = Record<string, string>;
 type DnsCoreKey = "xrayDnsItem" | "singboxDnsItem";
@@ -59,12 +108,18 @@ export function DnsScreen() {
     setOperationError(null);
     setFieldErrors({});
     try {
-      const saved = await saveDnsSettings(form as DnsSettings_Deserialize);
+      const payload = dnsSettingsSchema.parse(form);
+      const saved = await saveDnsSettings(payload);
       queryClient.setQueryData(["dns"], saved);
       setDraft(null);
       await queryClient.invalidateQueries({ queryKey: ["dns"] });
       await queryClient.invalidateQueries({ queryKey: ["app-config"] });
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        setOperationError("DNS settings validation failed");
+        setFieldErrors(zodIssuesToErrorMap(error));
+        return;
+      }
       if (error instanceof IpcCommandError && error.appError.kind === "dns") {
         setOperationError(error.appError.message.message);
         setFieldErrors(
@@ -218,6 +273,119 @@ export function DnsScreen() {
         </div>
       </div>
     </section>
+  );
+}
+
+function validateHosts(value: string | null | undefined, context: z.RefinementCtx) {
+  if (!value) {
+    return;
+  }
+
+  value.split(/\r?\n/).forEach((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      return;
+    }
+    if (trimmed.split(/\s+/).length < 2) {
+      context.addIssue({
+        code: "custom",
+        message: `Host line ${index + 1} must contain a domain and at least one answer`,
+      });
+    }
+  });
+}
+
+function validateExpectedIps(value: string | null | undefined, context: z.RefinementCtx) {
+  if (!value) {
+    return;
+  }
+
+  if (
+    value
+      .split(",")
+      .map((part) => part.trim())
+      .some((part) => part !== "" && /\s/.test(part))
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "Expected IPs must be comma-separated without embedded whitespace",
+    });
+  }
+}
+
+function validateXrayDnsJson(value: string | null | undefined, context: z.RefinementCtx) {
+  const parsed = parseJsonObject(value, "Invalid Xray DNS JSON", context);
+  if (!parsed) {
+    return;
+  }
+  if (!("servers" in parsed)) {
+    context.addIssue({
+      code: "custom",
+      message: "Xray DNS JSON must contain a servers field",
+    });
+  }
+}
+
+function validateSingboxDnsJson(value: string | null | undefined, context: z.RefinementCtx) {
+  const parsed = parseJsonObject(value, "Invalid sing-box DNS JSON", context);
+  if (!parsed) {
+    return;
+  }
+
+  const servers = parsed.servers;
+  if (!Array.isArray(servers) || servers.length === 0) {
+    context.addIssue({
+      code: "custom",
+      message: "sing-box DNS JSON must contain at least one server",
+    });
+    return;
+  }
+
+  if (
+    servers.some(
+      (server) =>
+        !server ||
+        typeof server !== "object" ||
+        typeof (server as Record<string, unknown>).type !== "string" ||
+        (server as Record<string, unknown>).type === "",
+    )
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "Every sing-box DNS server must include a non-empty type",
+    });
+  }
+}
+
+function parseJsonObject(
+  value: string | null | undefined,
+  label: string,
+  context: z.RefinementCtx,
+) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      context.addIssue({ code: "custom", message: `${label}: expected a JSON object` });
+      return null;
+    }
+    return parsed as Record<string, unknown>;
+  } catch (error) {
+    context.addIssue({
+      code: "custom",
+      message: `${label}: ${error instanceof Error ? error.message : String(error)}`,
+    });
+    return null;
+  }
+}
+
+function zodIssuesToErrorMap(error: z.ZodError): ErrorMap {
+  return Object.fromEntries(
+    error.issues.map((issue) => [issue.path.join(".") || "form", issue.message]),
   );
 }
 

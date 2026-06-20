@@ -153,14 +153,7 @@ export function normalizeProfileForForm(profile: ProfileItem_Deserialize | Profi
 export function prepareProfileForSave(values: ProfileFormValues | ParsedProfileFormValues): ProfileItem_Deserialize {
   const parsed = profileFormSchema.parse(values);
 
-  return scrubEmptyStrings({
-    ...parsed,
-    CoreType: parsed.CoreType ?? null,
-    ConfigVersion: 4,
-    Port: Number(parsed.Port ?? 0),
-    ProtocolExtra: scrubEmptyStrings(parsed.ProtocolExtra ?? {}),
-    TransportExtra: scrubEmptyStrings(parsed.TransportExtra ?? {}),
-  }) as ProfileItem_Deserialize;
+  return parsedProfileToIpcPayload(parsed);
 }
 
 export function prepareGroupDraftForPreview(
@@ -182,7 +175,18 @@ export function prepareGroupDraftForPreview(
     },
   };
 
-  return scrubEmptyStrings(draft) as ProfileItem_Deserialize;
+  return parsedProfileToIpcPayload(profileFormSchema.parse(draft));
+}
+
+function parsedProfileToIpcPayload(parsed: ParsedProfileFormValues): ProfileItem_Deserialize {
+  return scrubEmptyStrings({
+    ...parsed,
+    CoreType: parsed.CoreType ?? null,
+    ConfigVersion: 4,
+    Port: Number(parsed.Port ?? 0),
+    ProtocolExtra: scrubEmptyStrings(parsed.ProtocolExtra ?? {}),
+    TransportExtra: scrubEmptyStrings(parsed.TransportExtra ?? {}),
+  }) as ProfileItem_Deserialize;
 }
 
 function createBaseProfile(configType: ProfileProtocol): ProfileItem_Deserialize {

@@ -1,4 +1,5 @@
 import { useId, useMemo, useState } from "react";
+import type * as React from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -60,12 +61,11 @@ import {
 } from "@/ipc";
 import type {
   AppConfig_Serialize,
-  RoutingItem_Deserialize,
   RoutingItem_Serialize,
-  RulesItem_Deserialize,
   RulesItem_Serialize,
 } from "@/ipc/bindings";
 import { cn } from "@/lib/utils";
+import { z } from "zod";
 
 const MOVE_ACTIONS = {
   Top: 1,
@@ -81,8 +81,47 @@ const RULE_TYPES = {
   Dns: 2,
 } as const;
 
-const DOMAIN_STRATEGIES = ["AsIs", "IPIfNonMatch", "IPOnDemand"];
-const SINGBOX_DOMAIN_STRATEGIES = ["", "prefer_ipv4", "prefer_ipv6", "ipv4_only", "ipv6_only"];
+const DOMAIN_STRATEGIES = ["AsIs", "IPIfNonMatch", "IPOnDemand"] as const;
+const SINGBOX_DOMAIN_STRATEGIES = ["", "prefer_ipv4", "prefer_ipv6", "ipv4_only", "ipv6_only"] as const;
+
+const optionalNullableText = z.string().trim().nullable().optional();
+const optionalStringList = z.array(z.string().trim().min(1, "List items cannot be empty")).nullable().optional();
+const routingRuleSchema = z.object({
+  Id: z.string().trim().optional(),
+  Type: optionalNullableText,
+  Port: optionalNullableText.superRefine(validatePortExpression),
+  Network: optionalNullableText.superRefine(validateNetworkExpression),
+  InboundTag: optionalStringList,
+  OutboundTag: optionalNullableText,
+  Ip: optionalStringList,
+  Domain: optionalStringList,
+  Protocol: optionalStringList,
+  Process: optionalStringList,
+  Enabled: z.boolean().optional(),
+  Remarks: optionalNullableText,
+  RuleType: z.union([z.literal(RULE_TYPES.All), z.literal(RULE_TYPES.Routing), z.literal(RULE_TYPES.Dns)]).nullable().optional(),
+});
+const optionalHttpsUrl = z.string().trim().superRefine(validateHttpsUrl);
+const routingProfileSchema = z.object({
+  Id: z.string().trim().optional(),
+  CustomIcon: z.string().optional(),
+  CustomRulesetPath4Singbox: z.string().trim(),
+  DomainStrategy: z.enum(DOMAIN_STRATEGIES),
+  DomainStrategy4Singbox: z.enum(SINGBOX_DOMAIN_STRATEGIES),
+  Enabled: z.boolean(),
+  IsActive: z.boolean().optional(),
+  Locked: z.boolean().optional(),
+  Remarks: z.string().trim().max(256, "Remarks must be 256 characters or fewer"),
+  RuleNum: z.number().int().nonnegative().optional(),
+  RuleSet: z.array(routingRuleSchema),
+  Sort: z.number().int().optional(),
+  Url: optionalHttpsUrl,
+});
+const routingTemplateUrlSchema = optionalHttpsUrl;
+
+type ErrorMap = Record<string, string>;
+type RoutingFormPayload = z.output<typeof routingProfileSchema>;
+type RoutingRulePayload = z.output<typeof routingRuleSchema>;
 
 type RoutingDialogState =
   | { mode: "create"; routing?: null }
@@ -102,6 +141,7 @@ export function RoutingScreen() {
   const [selectedRoutingId, setSelectedRoutingId] = useState<string | null>(null);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const [templateUrlDraft, setTemplateUrlDraft] = useState<string | null>(null);
+  const [templateUrlError, setTemplateUrlError] = useState<string | null>(null);
   const routingsQuery = useQuery({
     queryFn: listRoutings,
     queryKey: ["routings"],
@@ -130,8 +170,10 @@ export function RoutingScreen() {
     try {
       await operation();
       await queryClient.invalidateQueries({ queryKey: ["routings"] });
+      return true;
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : String(error));
+      return false;
     }
   }
 
@@ -141,7 +183,7 @@ export function RoutingScreen() {
       ...current,
       ConstItem: {
         ...current.ConstItem,
-        RouteRulesTemplateSourceUrl: url.trim() || null,
+        RouteRulesTemplateSourceUrl: url || null,
       },
     });
     setTemplateUrlDraft(url);
@@ -149,30 +191,42 @@ export function RoutingScreen() {
   }
 
   async function handleImportTemplates() {
+    const parsedTemplateUrl = routingTemplateUrlSchema.safeParse(templateUrl);
+    if (!parsedTemplateUrl.success) {
+      setTemplateUrlError(firstZodMessage(parsedTemplateUrl.error));
+      setOperationError("Routing template URL validation failed");
+      return;
+    }
+
+    setTemplateUrlError(null);
     await runOperation(async () => {
-      await saveTemplateUrl(configQuery.data, templateUrl);
+      await saveTemplateUrl(configQuery.data, parsedTemplateUrl.data);
       await importRoutingTemplates(false, null, false);
     });
   }
 
-  async function handleSaveRouting(routing: RoutingFormState) {
-    await runOperation(async () => {
-      const saved = await saveRouting(routing as RoutingItem_Deserialize);
+  async function handleSaveRouting(routing: RoutingFormPayload) {
+    const saved = await runOperation(async () => {
+      const saved = await saveRouting(routing);
       setSelectedRoutingId(saved.Id);
     });
-    setRoutingDialog(null);
+    if (saved) {
+      setRoutingDialog(null);
+    }
   }
 
-  async function handleSaveRule(rule: RulePayload) {
+  async function handleSaveRule(rule: RoutingRulePayload) {
     if (!selectedRouting) {
       return;
     }
-    await runOperation(async () => {
-      const saved = await saveRoutingRule(selectedRouting.Id, rule as RulesItem_Deserialize);
+    const saved = await runOperation(async () => {
+      const saved = await saveRoutingRule(selectedRouting.Id, rule);
       setSelectedRoutingId(saved.Id);
       setSelectedRuleId(rule.Id ?? saved.RuleSet.at(-1)?.Id ?? null);
     });
-    setRuleDialog(null);
+    if (saved) {
+      setRuleDialog(null);
+    }
   }
 
   return (
@@ -194,13 +248,23 @@ export function RoutingScreen() {
               aria-hidden="true"
             />
             <Input
+              aria-describedby={templateUrlError ? "routing-template-url-error" : undefined}
+              aria-invalid={templateUrlError ? true : undefined}
               className="ps-9"
               id="routing-template-url"
-              onChange={(event) => setTemplateUrlDraft(event.target.value)}
+              onChange={(event) => {
+                setTemplateUrlDraft(event.target.value);
+                setTemplateUrlError(null);
+              }}
               placeholder="RouteRulesTemplateSourceUrl"
               value={templateUrl}
             />
           </div>
+          {templateUrlError ? (
+            <span className="text-xs text-destructive" id="routing-template-url-error">
+              {templateUrlError}
+            </span>
+          ) : null}
         </div>
         <Button onClick={() => void handleImportTemplates()} size="sm" type="button" variant="outline">
           <FilePlus2 className="size-4" aria-hidden="true" />
@@ -472,11 +536,27 @@ function RoutingProfileDialog({
 }: {
   mode: "create" | "edit";
   onOpenChange: (open: boolean) => void;
-  onSubmit: (routing: RoutingFormState) => Promise<void>;
+  onSubmit: (routing: RoutingFormPayload) => Promise<void>;
   open: boolean;
   routing: RoutingItem_Serialize | null;
 }) {
   const [form, setForm] = useState<RoutingFormState>(() => routingToForm(routing));
+  const [fieldErrors, setFieldErrors] = useState<ErrorMap>({});
+
+  async function submitForm(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      const payload = routingProfileSchema.parse(form);
+      setFieldErrors({});
+      await onSubmit(payload);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        setFieldErrors(zodIssuesToErrorMap(error));
+        return;
+      }
+      throw error;
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -492,24 +572,24 @@ function RoutingProfileDialog({
         <form
           className="grid gap-4"
           id="routing-profile-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void onSubmit(form);
-          }}
+          onSubmit={(event) => void submitForm(event)}
         >
           <TextField
+            error={fieldErrors.Remarks}
             label="Remarks"
             onChange={(value) => setForm((current) => ({ ...current, Remarks: value }))}
             value={form.Remarks ?? ""}
           />
           <div className="grid gap-3 sm:grid-cols-2">
             <SelectField
+              error={fieldErrors.DomainStrategy}
               label="Xray domain strategy"
               onChange={(value) => setForm((current) => ({ ...current, DomainStrategy: value }))}
               options={DOMAIN_STRATEGIES.map((strategy) => ({ label: strategy, value: strategy }))}
               value={form.DomainStrategy ?? "AsIs"}
             />
             <SelectField
+              error={fieldErrors.DomainStrategy4Singbox}
               label="sing-box domain strategy"
               onChange={(value) => setForm((current) => ({ ...current, DomainStrategy4Singbox: value }))}
               options={SINGBOX_DOMAIN_STRATEGIES.map((strategy) => ({
@@ -520,11 +600,13 @@ function RoutingProfileDialog({
             />
           </div>
           <TextField
+            error={fieldErrors.CustomRulesetPath4Singbox}
             label="Ruleset path for sing-box"
             onChange={(value) => setForm((current) => ({ ...current, CustomRulesetPath4Singbox: value }))}
             value={form.CustomRulesetPath4Singbox ?? ""}
           />
           <TextField
+            error={fieldErrors.Url}
             label="Source URL"
             onChange={(value) => setForm((current) => ({ ...current, Url: value }))}
             value={form.Url ?? ""}
@@ -559,11 +641,27 @@ function RoutingRuleDialog({
 }: {
   mode: "create" | "edit";
   onOpenChange: (open: boolean) => void;
-  onSubmit: (rule: RulePayload) => Promise<void>;
+  onSubmit: (rule: RoutingRulePayload) => Promise<void>;
   open: boolean;
   rule: RulesItem_Serialize | null;
 }) {
   const [form, setForm] = useState<RuleFormState>(() => ruleToForm(rule));
+  const [fieldErrors, setFieldErrors] = useState<ErrorMap>({});
+
+  async function submitForm(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      const payload = routingRuleSchema.parse(formToRule(form));
+      setFieldErrors({});
+      await onSubmit(payload);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        setFieldErrors(zodIssuesToErrorMap(error));
+        return;
+      }
+      throw error;
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -579,18 +677,17 @@ function RoutingRuleDialog({
         <form
           className="grid min-h-0 gap-4 overflow-y-auto pe-1"
           id="routing-rule-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void onSubmit(formToRule(form));
-          }}
+          onSubmit={(event) => void submitForm(event)}
         >
           <div className="grid gap-3 sm:grid-cols-[1fr_10rem_10rem]">
             <TextField
+              error={fieldErrors.Remarks}
               label="Remarks"
               onChange={(value) => setForm((current) => ({ ...current, Remarks: value }))}
               value={form.Remarks}
             />
             <SelectField
+              error={fieldErrors.RuleType}
               label="Rule type"
               onChange={(value) => setForm((current) => ({ ...current, RuleType: Number(value) }))}
               options={[
@@ -601,6 +698,7 @@ function RoutingRuleDialog({
               value={String(form.RuleType)}
             />
             <TextField
+              error={fieldErrors.OutboundTag}
               label="Outbound"
               onChange={(value) => setForm((current) => ({ ...current, OutboundTag: value }))}
               value={form.OutboundTag}
@@ -608,16 +706,19 @@ function RoutingRuleDialog({
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <TextField
+              error={fieldErrors.Port}
               label="Port"
               onChange={(value) => setForm((current) => ({ ...current, Port: value }))}
               value={form.Port}
             />
             <TextField
+              error={fieldErrors.Network}
               label="Network"
               onChange={(value) => setForm((current) => ({ ...current, Network: value }))}
               value={form.Network}
             />
             <TextField
+              error={fieldErrors.Type}
               label="Type"
               onChange={(value) => setForm((current) => ({ ...current, Type: value }))}
               value={form.Type}
@@ -625,26 +726,31 @@ function RoutingRuleDialog({
           </div>
           <div className="grid gap-3 lg:grid-cols-2">
             <TextAreaField
+              error={fieldErrors.Domain}
               label="Domain"
               onChange={(value) => setForm((current) => ({ ...current, Domain: value }))}
               value={form.Domain}
             />
             <TextAreaField
+              error={fieldErrors.Ip}
               label="IP"
               onChange={(value) => setForm((current) => ({ ...current, Ip: value }))}
               value={form.Ip}
             />
             <TextAreaField
+              error={fieldErrors.Protocol}
               label="Protocol"
               onChange={(value) => setForm((current) => ({ ...current, Protocol: value }))}
               value={form.Protocol}
             />
             <TextAreaField
+              error={fieldErrors.Process}
               label="Process"
               onChange={(value) => setForm((current) => ({ ...current, Process: value }))}
               value={form.Process}
             />
             <TextAreaField
+              error={fieldErrors.InboundTag}
               label="Inbound tags"
               onChange={(value) => setForm((current) => ({ ...current, InboundTag: value }))}
               value={form.InboundTag}
@@ -795,40 +901,53 @@ type SelectOption = {
 const EMPTY_SELECT_VALUE = "__voyavpn_empty_select_value__";
 
 function TextField({
+  error,
   label,
   onChange,
   value,
 }: {
+  error?: string;
   label: string;
   onChange: (value: string) => void;
   value: string;
 }) {
   const id = useId();
+  const errorId = `${id}-error`;
 
   return (
     <div className="grid gap-1.5">
       <Label htmlFor={id}>{label}</Label>
       <Input
+        aria-describedby={error ? errorId : undefined}
+        aria-invalid={error ? true : undefined}
         id={id}
         onChange={(event) => onChange(event.target.value)}
         value={value}
       />
+      {error ? (
+        <span className="text-xs text-destructive" id={errorId}>
+          {error}
+        </span>
+      ) : null}
     </div>
   );
 }
 
 function SelectField({
+  error,
   label,
   onChange,
   options,
   value,
 }: {
+  error?: string;
   label: string;
   onChange: (value: string) => void;
   options: SelectOption[];
   value: string;
 }) {
   const id = useId();
+  const errorId = `${id}-error`;
   const selectValue = value === "" ? EMPTY_SELECT_VALUE : value;
 
   return (
@@ -838,7 +957,12 @@ function SelectField({
         onValueChange={(nextValue) => onChange(nextValue === EMPTY_SELECT_VALUE ? "" : nextValue)}
         value={selectValue}
       >
-        <SelectTrigger className="w-full" id={id}>
+        <SelectTrigger
+          aria-describedby={error ? errorId : undefined}
+          aria-invalid={error ? true : undefined}
+          className="w-full"
+          id={id}
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -852,30 +976,45 @@ function SelectField({
           ))}
         </SelectContent>
       </Select>
+      {error ? (
+        <span className="text-xs text-destructive" id={errorId}>
+          {error}
+        </span>
+      ) : null}
     </div>
   );
 }
 
 function TextAreaField({
+  error,
   label,
   onChange,
   value,
 }: {
+  error?: string;
   label: string;
   onChange: (value: string) => void;
   value: string;
 }) {
   const id = useId();
+  const errorId = `${id}-error`;
 
   return (
     <div className="grid gap-1.5">
       <Label htmlFor={id}>{label}</Label>
       <Textarea
+        aria-describedby={error ? errorId : undefined}
+        aria-invalid={error ? true : undefined}
         className="min-h-24 resize-y"
         id={id}
         onChange={(event) => onChange(event.target.value)}
         value={value}
       />
+      {error ? (
+        <span className="text-xs text-destructive" id={errorId}>
+          {error}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -944,4 +1083,84 @@ function emptyToNull(value: string) {
   const trimmed = value.trim();
 
   return trimmed ? trimmed : null;
+}
+
+function validateHttpsUrl(value: string, context: z.RefinementCtx) {
+  if (value === "") {
+    return;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch (error) {
+    context.addIssue({
+      code: "custom",
+      message: `URL must be valid: ${error instanceof Error ? error.message : String(error)}`,
+    });
+    return;
+  }
+
+  if (parsed.protocol !== "https:") {
+    context.addIssue({ code: "custom", message: "URL must use https://" });
+  }
+  if (!parsed.hostname) {
+    context.addIssue({ code: "custom", message: "URL host is required" });
+  }
+  if (parsed.username || parsed.password) {
+    context.addIssue({ code: "custom", message: "URL must not include credentials" });
+  }
+}
+
+function validatePortExpression(value: string | null | undefined, context: z.RefinementCtx) {
+  if (!value) {
+    return;
+  }
+
+  for (const token of value.split(",")) {
+    const part = token.trim();
+    const match = /^(\d{1,5})(?:-(\d{1,5}))?$/.exec(part);
+    if (!match) {
+      context.addIssue({
+        code: "custom",
+        message: "Port must be a comma-separated list of ports or ranges",
+      });
+      return;
+    }
+
+    const start = Number(match[1]);
+    const end = match[2] ? Number(match[2]) : start;
+    if (start > 65535 || end > 65535 || start > end) {
+      context.addIssue({
+        code: "custom",
+        message: "Port values must be between 0 and 65535 and ranges must ascend",
+      });
+      return;
+    }
+  }
+}
+
+function validateNetworkExpression(value: string | null | undefined, context: z.RefinementCtx) {
+  if (!value) {
+    return;
+  }
+
+  const allowed = new Set(["tcp", "udp"]);
+  const values = value
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  if (values.length === 0 || values.some((item) => !allowed.has(item))) {
+    context.addIssue({ code: "custom", message: "Network must be tcp, udp, or tcp,udp" });
+  }
+}
+
+function zodIssuesToErrorMap(error: z.ZodError): ErrorMap {
+  return Object.fromEntries(
+    error.issues.map((issue) => [issue.path.join(".") || "form", issue.message]),
+  );
+}
+
+function firstZodMessage(error: z.ZodError) {
+  return error.issues[0]?.message ?? "Validation failed";
 }

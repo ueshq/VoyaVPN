@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type * as React from "react";
 import type {
   Control,
@@ -51,7 +51,6 @@ import type {
   GroupChildCandidate,
   GroupPreview,
   GroupPreviewRoute,
-  ProfileItem_Deserialize,
 } from "@/ipc/bindings";
 import { cn } from "@/lib/utils";
 
@@ -89,6 +88,8 @@ export function GroupBuilder({
   const [preview, setPreview] = useState<GroupPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const previewRequestId = useRef(0);
+  const mountedRef = useRef(true);
   const multipleLoadId = useId();
   const values = useWatch({ control }) as ProfileFormValues;
   const childItems = (values.ProtocolExtra?.ChildItems ?? "") as string;
@@ -108,17 +109,18 @@ export function GroupBuilder({
   const [pickerDraftIds, setPickerDraftIds] = useState<string[]>(selectedIds);
 
   useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      previewRequestId.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
     const groupType = isProxyChain ? "ProxyChain" : "PolicyGroup";
     if (values.ProtocolExtra?.GroupType !== groupType) {
       setValue("ProtocolExtra.GroupType", groupType, { shouldDirty: true });
     }
   }, [isProxyChain, setValue, values.ProtocolExtra?.GroupType]);
-
-  useEffect(() => {
-    if (multipleLoad == null) {
-      setValue("ProtocolExtra.MultipleLoad", 0);
-    }
-  }, [multipleLoad, setValue]);
 
   function setSelectedIds(ids: string[]) {
     setValue("ProtocolExtra.ChildItems", ids.join(","), {
@@ -145,16 +147,26 @@ export function GroupBuilder({
   }
 
   async function loadPreview() {
+    const requestId = previewRequestId.current + 1;
+    previewRequestId.current = requestId;
     setPreviewLoading(true);
     setPreviewError(null);
     try {
-      const draft = prepareGroupDraftForPreview(getValues()) as ProfileItem_Deserialize;
+      const draft = prepareGroupDraftForPreview(getValues());
       const nextPreview = await previewGroupProfile(draft);
+      if (!mountedRef.current || requestId !== previewRequestId.current) {
+        return;
+      }
       setPreview(nextPreview);
     } catch (error) {
+      if (!mountedRef.current || requestId !== previewRequestId.current) {
+        return;
+      }
       setPreviewError(error instanceof Error ? error.message : String(error));
     } finally {
-      setPreviewLoading(false);
+      if (mountedRef.current && requestId === previewRequestId.current) {
+        setPreviewLoading(false);
+      }
     }
   }
 
