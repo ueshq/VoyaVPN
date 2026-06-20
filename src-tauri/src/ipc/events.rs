@@ -7,12 +7,14 @@ use voya_app::{
 };
 use voya_core::{CoreType, ServerStatItem};
 
+#[cfg(debug_assertions)]
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct DemoRequest {
     pub message: String,
 }
 
+#[cfg(debug_assertions)]
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct DemoResponse {

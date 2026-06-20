@@ -32,7 +32,7 @@ use voya_app::hotkeys::{
 };
 use voya_app::presets::{PresetApplyOptions, PresetApplyResult, PresetManager, PresetManagerError};
 use voya_app::profiles::{ProfileManager, ProfileManagerError};
-use voya_app::qr::{QrCodeImage, QrCodeManager};
+use voya_app::qr::{QrCodeError, QrCodeImage, QrCodeManager};
 use voya_app::routing::{RoutingManager, RoutingManagerError};
 use voya_app::runtime::{RuntimeError, RuntimeManager};
 use voya_app::speedtest::{
@@ -57,13 +57,24 @@ use voya_core::{
 };
 use voya_platform::{coreinfo::CoreInfoError, sysproxy::SystemProxyStatus};
 
+#[cfg(debug_assertions)]
+use super::events::{AppEvent, AppNotice, AppNoticeLevel, DemoRequest, DemoResponse};
 use super::events::{
-    AppEvent, AppNotice, AppNoticeLevel, CoreState, CoreStateEvent, DemoRequest, DemoResponse,
-    InvalidateEvent, LogLevel, LogLineEvent, QueryInvalidation, TransientStreamEvent,
+    CoreState, CoreStateEvent, InvalidateEvent, LogLevel, LogLineEvent, QueryInvalidation,
+    TransientStreamEvent,
 };
 use crate::AppState;
 
 const PROFILE_IMPORT_DIR_NAME: &str = "imports";
+const IPC_ID_MAX_CHARS: usize = 128;
+const IPC_NAME_MAX_CHARS: usize = 256;
+const IPC_FILTER_MAX_CHARS: usize = 256;
+const IPC_PATH_MAX_CHARS: usize = 4096;
+const IPC_PROXY_URL_MAX_CHARS: usize = 2048;
+const IPC_QR_CONTENT_MAX_CHARS: usize = 4096;
+const IPC_UPDATE_VERSION_MAX_CHARS: usize = 128;
+const IPC_SHA256_MAX_CHARS: usize = 128;
+const IPC_LIST_MAX_ITEMS: usize = 1024;
 
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(tag = "kind", content = "message", rename_all = "camelCase")]
@@ -348,9 +359,14 @@ pub fn save_global_hotkeys<R: tauri::Runtime>(
 #[tauri::command]
 #[specta::specta]
 pub fn generate_qr_code(content: String) -> Result<QrCodeImage, AppError> {
-    QrCodeManager
-        .generate_svg(&content)
-        .map_err(|error| AppError::Qr(error.to_string()))
+    validate_ipc_text(
+        &content,
+        "QR content",
+        IPC_QR_CONTENT_MAX_CHARS,
+        AppError::Qr,
+    )?;
+
+    QrCodeManager.generate_svg(&content).map_err(qr_error)
 }
 
 pub(crate) fn register_global_hotkeys_for_config<R: tauri::Runtime>(
@@ -383,6 +399,12 @@ pub fn sudo_submit_password(
     request_id: String,
     password: String,
 ) -> Result<SudoCollectionResponse, AppError> {
+    validate_required_ipc_text(
+        &request_id,
+        "sudo request id",
+        IPC_ID_MAX_CHARS,
+        AppError::Sudo,
+    )?;
     let request_id = request_id
         .parse::<u64>()
         .map_err(|_| AppError::Sudo("invalid sudo password request id".to_string()))?;
@@ -638,6 +660,18 @@ pub async fn list_profiles(
     subid: Option<String>,
     filter: Option<String>,
 ) -> Result<Vec<ProfileListItem>, AppError> {
+    validate_present_ipc_text(
+        subid.as_deref(),
+        "subscription id",
+        IPC_ID_MAX_CHARS,
+        AppError::Profile,
+    )?;
+    validate_optional_ipc_text(
+        filter.as_deref(),
+        "profile filter",
+        IPC_FILTER_MAX_CHARS,
+        AppError::Profile,
+    )?;
     let config = current_config(&state)?;
 
     ProfileManager::new(state.database())
@@ -652,6 +686,12 @@ pub async fn get_profile(
     state: tauri::State<'_, AppState>,
     index_id: String,
 ) -> Result<Option<ProfileListItem>, AppError> {
+    validate_required_ipc_text(
+        &index_id,
+        "profile index id",
+        IPC_ID_MAX_CHARS,
+        AppError::Profile,
+    )?;
     let config = current_config(&state)?;
 
     ProfileManager::new(state.database())
@@ -692,6 +732,12 @@ pub async fn delete_profiles<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     index_ids: Vec<String>,
 ) -> Result<u32, AppError> {
+    validate_ipc_text_list(
+        &index_ids,
+        "profile index id",
+        IPC_ID_MAX_CHARS,
+        AppError::Profile,
+    )?;
     let original = current_config(&state)?;
     let mut config = original.clone();
     let deleted = ProfileManager::new(state.database())
@@ -717,6 +763,12 @@ pub async fn copy_profiles<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     index_ids: Vec<String>,
 ) -> Result<Vec<ProfileListItem>, AppError> {
+    validate_ipc_text_list(
+        &index_ids,
+        "profile index id",
+        IPC_ID_MAX_CHARS,
+        AppError::Profile,
+    )?;
     let original = current_config(&state)?;
     let mut config = original.clone();
     let copied = ProfileManager::new(state.database())
@@ -745,6 +797,12 @@ pub async fn set_active_profile<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     index_id: String,
 ) -> Result<ProfileListItem, AppError> {
+    validate_required_ipc_text(
+        &index_id,
+        "profile index id",
+        IPC_ID_MAX_CHARS,
+        AppError::Profile,
+    )?;
     let original = current_config(&state)?;
     let mut config = original.clone();
     let active = ProfileManager::new(state.database())
@@ -768,6 +826,18 @@ pub async fn move_profile<R: tauri::Runtime>(
     action: MoveAction,
     position: Option<i32>,
 ) -> Result<Vec<ProfileListItem>, AppError> {
+    validate_present_ipc_text(
+        subid.as_deref(),
+        "subscription id",
+        IPC_ID_MAX_CHARS,
+        AppError::Profile,
+    )?;
+    validate_required_ipc_text(
+        &index_id,
+        "profile index id",
+        IPC_ID_MAX_CHARS,
+        AppError::Profile,
+    )?;
     let config = current_config(&state)?;
     let profiles = ProfileManager::new(state.database())
         .move_profile(&config, subid.as_deref(), &index_id, action, position)
@@ -788,6 +858,12 @@ pub async fn sort_profiles<R: tauri::Runtime>(
     sort_key: ProfileSortKey,
     ascending: bool,
 ) -> Result<Vec<ProfileListItem>, AppError> {
+    validate_present_ipc_text(
+        subid.as_deref(),
+        "subscription id",
+        IPC_ID_MAX_CHARS,
+        AppError::Profile,
+    )?;
     let config = current_config(&state)?;
     let profiles = ProfileManager::new(state.database())
         .sort_profiles(&config, subid.as_deref(), sort_key, ascending)
@@ -815,6 +891,18 @@ pub async fn move_profiles_to_group<R: tauri::Runtime>(
     index_ids: Vec<String>,
     subid: String,
 ) -> Result<u32, AppError> {
+    validate_ipc_text_list(
+        &index_ids,
+        "profile index id",
+        IPC_ID_MAX_CHARS,
+        AppError::Profile,
+    )?;
+    validate_required_ipc_text(
+        &subid,
+        "subscription id",
+        IPC_ID_MAX_CHARS,
+        AppError::Profile,
+    )?;
     let updated = ProfileManager::new(state.database())
         .move_profiles_to_group(&index_ids, &subid)
         .await
@@ -833,6 +921,12 @@ pub async fn dedupe_profiles<R: tauri::Runtime>(
     subid: Option<String>,
     keep_older: Option<bool>,
 ) -> Result<ProfileDedupeResult, AppError> {
+    validate_present_ipc_text(
+        subid.as_deref(),
+        "subscription id",
+        IPC_ID_MAX_CHARS,
+        AppError::Profile,
+    )?;
     let original = current_config(&state)?;
     let mut config = original.clone();
     let result = ProfileManager::new(state.database())
@@ -858,6 +952,18 @@ pub async fn list_group_child_candidates(
     current_index_id: Option<String>,
     filter: Option<String>,
 ) -> Result<Vec<GroupChildCandidate>, AppError> {
+    validate_present_ipc_text(
+        current_index_id.as_deref(),
+        "profile index id",
+        IPC_ID_MAX_CHARS,
+        AppError::Group,
+    )?;
+    validate_optional_ipc_text(
+        filter.as_deref(),
+        "group candidate filter",
+        IPC_FILTER_MAX_CHARS,
+        AppError::Group,
+    )?;
     GroupManager::new(state.database())
         .list_child_candidates(current_index_id.as_deref(), filter.as_deref())
         .await
@@ -932,6 +1038,12 @@ pub async fn get_subscription(
     state: tauri::State<'_, AppState>,
     id: String,
 ) -> Result<Option<SubItem>, AppError> {
+    validate_required_ipc_text(
+        &id,
+        "subscription id",
+        IPC_ID_MAX_CHARS,
+        AppError::Subscription,
+    )?;
     SubscriptionManager::new(state.database())
         .get_subscription(&id)
         .await
@@ -965,6 +1077,12 @@ pub async fn delete_subscriptions<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     ids: Vec<String>,
 ) -> Result<u32, AppError> {
+    validate_ipc_text_list(
+        &ids,
+        "subscription id",
+        IPC_ID_MAX_CHARS,
+        AppError::Subscription,
+    )?;
     let original = current_config(&state)?;
     let mut config = original.clone();
     let deleted = SubscriptionManager::new(state.database())
@@ -987,6 +1105,12 @@ pub async fn import_profiles_from_text<R: tauri::Runtime>(
     subid: Option<String>,
     is_sub: bool,
 ) -> Result<ImportProfilesResult, AppError> {
+    validate_present_ipc_text(
+        subid.as_deref(),
+        "subscription id",
+        IPC_ID_MAX_CHARS,
+        AppError::Subscription,
+    )?;
     let original = current_config(&state)?;
     let mut config = original.clone();
     let result = SubscriptionManager::new(state.database())
@@ -1009,6 +1133,12 @@ pub async fn import_profiles_from_file<R: tauri::Runtime>(
     subid: Option<String>,
     is_sub: bool,
 ) -> Result<ImportProfilesResult, AppError> {
+    validate_present_ipc_text(
+        subid.as_deref(),
+        "subscription id",
+        IPC_ID_MAX_CHARS,
+        AppError::Subscription,
+    )?;
     let path = resolve_scoped_ipc_file(
         &path,
         &state.runtime_paths().temp_file(PROFILE_IMPORT_DIR_NAME),
@@ -1029,6 +1159,18 @@ pub async fn update_subscriptions<R: tauri::Runtime>(
     prefer_proxy: bool,
     proxy_url: Option<String>,
 ) -> Result<SubscriptionUpdateResult, AppError> {
+    validate_present_ipc_text(
+        subid.as_deref(),
+        "subscription id",
+        IPC_ID_MAX_CHARS,
+        AppError::Subscription,
+    )?;
+    validate_optional_ipc_text(
+        proxy_url.as_deref(),
+        "proxy URL",
+        IPC_PROXY_URL_MAX_CHARS,
+        AppError::Subscription,
+    )?;
     let original = current_config(&state)?;
     let mut config = original.clone();
     let result = SubscriptionManager::new(state.database())
@@ -1056,6 +1198,12 @@ pub async fn run_due_subscription_updates<R: tauri::Runtime>(
     prefer_proxy: bool,
     proxy_url: Option<String>,
 ) -> Result<SubscriptionUpdateResult, AppError> {
+    validate_optional_ipc_text(
+        proxy_url.as_deref(),
+        "proxy URL",
+        IPC_PROXY_URL_MAX_CHARS,
+        AppError::Subscription,
+    )?;
     let original = current_config(&state)?;
     let mut config = original.clone();
     let result = SubscriptionManager::new(state.database())
@@ -1091,6 +1239,7 @@ pub async fn get_routing(
     state: tauri::State<'_, AppState>,
     id: String,
 ) -> Result<Option<RoutingItem>, AppError> {
+    validate_required_ipc_text(&id, "routing id", IPC_ID_MAX_CHARS, AppError::Routing)?;
     RoutingManager::new(state.database())
         .get_routing(&id)
         .await
@@ -1130,6 +1279,7 @@ pub async fn delete_routings<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     ids: Vec<String>,
 ) -> Result<u32, AppError> {
+    validate_ipc_text_list(&ids, "routing id", IPC_ID_MAX_CHARS, AppError::Routing)?;
     let original = current_config(&state)?;
     let mut config = original.clone();
     let deleted = RoutingManager::new(state.database())
@@ -1151,6 +1301,7 @@ pub async fn set_active_routing<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     id: String,
 ) -> Result<RoutingItem, AppError> {
+    validate_required_ipc_text(&id, "routing id", IPC_ID_MAX_CHARS, AppError::Routing)?;
     let original = current_config(&state)?;
     let mut config = original.clone();
     let active = RoutingManager::new(state.database())
@@ -1173,6 +1324,12 @@ pub async fn save_routing_rule<R: tauri::Runtime>(
     routing_id: String,
     rule: RulesItem,
 ) -> Result<RoutingItem, AppError> {
+    validate_required_ipc_text(
+        &routing_id,
+        "routing id",
+        IPC_ID_MAX_CHARS,
+        AppError::Routing,
+    )?;
     let config = current_config(&state)?;
     let saved = RoutingManager::new(state.database())
         .save_rule(&routing_id, rule)
@@ -1193,6 +1350,18 @@ pub async fn delete_routing_rules<R: tauri::Runtime>(
     routing_id: String,
     rule_ids: Vec<String>,
 ) -> Result<RoutingItem, AppError> {
+    validate_required_ipc_text(
+        &routing_id,
+        "routing id",
+        IPC_ID_MAX_CHARS,
+        AppError::Routing,
+    )?;
+    validate_ipc_text_list(
+        &rule_ids,
+        "routing rule id",
+        IPC_ID_MAX_CHARS,
+        AppError::Routing,
+    )?;
     let config = current_config(&state)?;
     let saved = RoutingManager::new(state.database())
         .delete_rules(&routing_id, &rule_ids)
@@ -1215,6 +1384,18 @@ pub async fn move_routing_rule<R: tauri::Runtime>(
     action: MoveAction,
     position: Option<i32>,
 ) -> Result<RoutingItem, AppError> {
+    validate_required_ipc_text(
+        &routing_id,
+        "routing id",
+        IPC_ID_MAX_CHARS,
+        AppError::Routing,
+    )?;
+    validate_required_ipc_text(
+        &rule_id,
+        "routing rule id",
+        IPC_ID_MAX_CHARS,
+        AppError::Routing,
+    )?;
     let config = current_config(&state)?;
     let saved = RoutingManager::new(state.database())
         .move_rule(&routing_id, &rule_id, action, position)
@@ -1236,6 +1417,12 @@ pub async fn import_routing_templates<R: tauri::Runtime>(
     proxy_url: Option<String>,
     import_advanced_rules: bool,
 ) -> Result<Vec<RoutingItem>, AppError> {
+    validate_optional_ipc_text(
+        proxy_url.as_deref(),
+        "proxy URL",
+        IPC_PROXY_URL_MAX_CHARS,
+        AppError::Routing,
+    )?;
     let original = current_config(&state)?;
     let mut config = original.clone();
     let imported = RoutingManager::new(state.database())
@@ -1272,6 +1459,12 @@ pub async fn apply_regional_preset<R: tauri::Runtime>(
     prefer_proxy: bool,
     proxy_url: Option<String>,
 ) -> Result<PresetApplyResult, AppError> {
+    validate_optional_ipc_text(
+        proxy_url.as_deref(),
+        "proxy URL",
+        IPC_PROXY_URL_MAX_CHARS,
+        AppError::Preset,
+    )?;
     let original = current_config(&state)?;
     let mut config = original.clone();
     let result = PresetManager::new(state.database())
@@ -1313,6 +1506,12 @@ pub async fn clash_test_delay(
     state: tauri::State<'_, AppState>,
     proxy_names: Vec<String>,
 ) -> Result<Vec<ClashDelayTestResult>, AppError> {
+    validate_ipc_text_list(
+        &proxy_names,
+        "Clash proxy name",
+        IPC_NAME_MAX_CHARS,
+        AppError::Clash,
+    )?;
     let config = current_config(&state)?;
 
     ClashManager::new()
@@ -1329,6 +1528,18 @@ pub async fn clash_select_proxy<R: tauri::Runtime>(
     group_name: String,
     proxy_name: String,
 ) -> Result<ClashProxiesSnapshot, AppError> {
+    validate_required_ipc_text(
+        &group_name,
+        "Clash group name",
+        IPC_NAME_MAX_CHARS,
+        AppError::Clash,
+    )?;
+    validate_required_ipc_text(
+        &proxy_name,
+        "Clash proxy name",
+        IPC_NAME_MAX_CHARS,
+        AppError::Clash,
+    )?;
     let config = current_config(&state)?;
     let snapshot = ClashManager::new()
         .select_proxy(&config, &group_name, &proxy_name)
@@ -1360,6 +1571,12 @@ pub async fn clash_close_connection<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     connection_id: Option<String>,
 ) -> Result<ClashConnectionsSnapshot, AppError> {
+    validate_present_ipc_text(
+        connection_id.as_deref(),
+        "Clash connection id",
+        IPC_ID_MAX_CHARS,
+        AppError::Clash,
+    )?;
     let config = current_config(&state)?;
     let snapshot = ClashManager::new()
         .close_connection(&config, connection_id.as_deref())
@@ -1403,6 +1620,12 @@ pub async fn clash_reload_config<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     path: Option<String>,
 ) -> Result<(), AppError> {
+    validate_optional_ipc_text(
+        path.as_deref(),
+        "Clash config path",
+        IPC_PATH_MAX_CHARS,
+        AppError::Clash,
+    )?;
     let config = current_config(&state)?;
 
     ClashManager::new()
@@ -1474,6 +1697,12 @@ pub async fn run_speedtest<R: tauri::Runtime>(
     action: voya_core::SpeedActionType,
     index_ids: Vec<String>,
 ) -> Result<SpeedtestRunResult, AppError> {
+    validate_ipc_text_list(
+        &index_ids,
+        "profile index id",
+        IPC_ID_MAX_CHARS,
+        AppError::Speedtest,
+    )?;
     let config = current_config(&state)?;
     let manager = speedtest_manager(&state);
     let emit_app = app.clone();
@@ -1693,6 +1922,12 @@ pub fn save_update_preferences(
     pre_release: bool,
     selected_target_ids: Vec<String>,
 ) -> Result<UpdateStatus, AppError> {
+    validate_ipc_text_list(
+        &selected_target_ids,
+        "update target id",
+        IPC_ID_MAX_CHARS,
+        AppError::Update,
+    )?;
     let original = current_config(&state)?;
     let mut config = original.clone();
     let manager = update_manager(&state);
@@ -1736,6 +1971,18 @@ pub async fn check_updates(
     prefer_proxy: bool,
     proxy_url: Option<String>,
 ) -> Result<UpdateRunResult, AppError> {
+    validate_ipc_text_list(
+        &selected_target_ids,
+        "update target id",
+        IPC_ID_MAX_CHARS,
+        AppError::Update,
+    )?;
+    validate_optional_ipc_text(
+        proxy_url.as_deref(),
+        "proxy URL",
+        IPC_PROXY_URL_MAX_CHARS,
+        AppError::Update,
+    )?;
     let original = current_config(&state)?;
     let mut config = original.clone();
     let manager = update_manager(&state);
@@ -1785,6 +2032,18 @@ pub async fn download_updates(
     prefer_proxy: bool,
     proxy_url: Option<String>,
 ) -> Result<UpdateRunResult, AppError> {
+    validate_ipc_text_list(
+        &selected_target_ids,
+        "update target id",
+        IPC_ID_MAX_CHARS,
+        AppError::Update,
+    )?;
+    validate_optional_ipc_text(
+        proxy_url.as_deref(),
+        "proxy URL",
+        IPC_PROXY_URL_MAX_CHARS,
+        AppError::Update,
+    )?;
     let original = current_config(&state)?;
     let mut config = original.clone();
     let manager = update_manager(&state);
@@ -1848,6 +2107,12 @@ pub async fn manual_app_update_links(
     prefer_proxy: bool,
     proxy_url: Option<String>,
 ) -> Result<ManualAppUpdateLinks, AppError> {
+    validate_optional_ipc_text(
+        proxy_url.as_deref(),
+        "proxy URL",
+        IPC_PROXY_URL_MAX_CHARS,
+        AppError::Update,
+    )?;
     let config = current_config(&state)?;
 
     update_manager(&state)
@@ -1870,6 +2135,7 @@ pub async fn apply_downloaded_core_update(
     state: tauri::State<'_, AppState>,
     request: CoreUpdateApplyRequest,
 ) -> Result<CoreUpdateApplyResult, AppError> {
+    validate_core_update_apply_request(&request)?;
     let config = current_config(&state)?;
     let runtime = runtime_manager(&state);
     let updates = update_manager(&state);
@@ -1930,6 +2196,12 @@ pub async fn backup_create_local(
     state: tauri::State<'_, AppState>,
     output_path: Option<String>,
 ) -> Result<BackupOperationResult, AppError> {
+    validate_optional_ipc_text(
+        output_path.as_deref(),
+        "backup output path",
+        IPC_PATH_MAX_CHARS,
+        AppError::Backup,
+    )?;
     let config = current_config(&state)?;
     let output_path = output_path
         .filter(|path| !path.trim().is_empty())
@@ -1948,6 +2220,12 @@ pub async fn backup_restore_local<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     input_path: String,
 ) -> Result<BackupRestoreResult, AppError> {
+    validate_required_ipc_text(
+        &input_path,
+        "backup restore path",
+        IPC_PATH_MAX_CHARS,
+        AppError::Backup,
+    )?;
     let input_path = resolve_scoped_ipc_file(
         &input_path,
         state.runtime_paths().backup_dir(),
@@ -2009,6 +2287,7 @@ pub async fn backup_webdav_pull<R: tauri::Runtime>(
     Ok(result)
 }
 
+#[cfg(debug_assertions)]
 #[tauri::command]
 #[specta::specta]
 pub fn ipc_demo_round_trip<R: tauri::Runtime>(
@@ -2063,6 +2342,107 @@ fn current_config(state: &AppState) -> Result<AppConfig, AppError> {
         .read()
         .map_err(|_| AppError::State("app config lock is poisoned".to_string()))
         .map(|guard| guard.clone())
+}
+
+fn validate_core_update_apply_request(request: &CoreUpdateApplyRequest) -> Result<(), AppError> {
+    validate_required_ipc_text(
+        &request.target_id,
+        "update target id",
+        IPC_ID_MAX_CHARS,
+        AppError::Update,
+    )?;
+    validate_required_ipc_text(
+        &request.file_name,
+        "core update file path",
+        IPC_PATH_MAX_CHARS,
+        AppError::Update,
+    )?;
+    validate_required_ipc_text(
+        &request.sha256,
+        "core update checksum",
+        IPC_SHA256_MAX_CHARS,
+        AppError::Update,
+    )?;
+    validate_required_ipc_text(
+        &request.remote_version,
+        "core update version",
+        IPC_UPDATE_VERSION_MAX_CHARS,
+        AppError::Update,
+    )
+}
+
+fn validate_present_ipc_text(
+    value: Option<&str>,
+    field: &str,
+    max_chars: usize,
+    make_error: fn(String) -> AppError,
+) -> Result<(), AppError> {
+    if let Some(value) = value {
+        validate_required_ipc_text(value, field, max_chars, make_error)?;
+    }
+
+    Ok(())
+}
+
+fn validate_optional_ipc_text(
+    value: Option<&str>,
+    field: &str,
+    max_chars: usize,
+    make_error: fn(String) -> AppError,
+) -> Result<(), AppError> {
+    if let Some(value) = value {
+        validate_ipc_text(value, field, max_chars, make_error)?;
+    }
+
+    Ok(())
+}
+
+fn validate_ipc_text_list(
+    values: &[String],
+    field: &str,
+    max_chars: usize,
+    make_error: fn(String) -> AppError,
+) -> Result<(), AppError> {
+    if values.len() > IPC_LIST_MAX_ITEMS {
+        return Err(make_error(format!("invalid {field}: too many items")));
+    }
+
+    for value in values {
+        validate_required_ipc_text(value, field, max_chars, make_error)?;
+    }
+
+    Ok(())
+}
+
+fn validate_required_ipc_text(
+    value: &str,
+    field: &str,
+    max_chars: usize,
+    make_error: fn(String) -> AppError,
+) -> Result<(), AppError> {
+    if value.trim().is_empty() {
+        return Err(make_error(format!("invalid {field}: value is required")));
+    }
+
+    validate_ipc_text(value, field, max_chars, make_error)
+}
+
+fn validate_ipc_text(
+    value: &str,
+    field: &str,
+    max_chars: usize,
+    make_error: fn(String) -> AppError,
+) -> Result<(), AppError> {
+    if value.chars().count() > max_chars {
+        return Err(make_error(format!("invalid {field}: value is too long")));
+    }
+    if value.chars().any(char::is_control) {
+        return Err(make_error(format!(
+            "invalid {field}: control characters are not allowed"
+        )));
+    }
+
+    Ok(())
 }
 
 pub(crate) fn diagnostics_release_channel() -> DiagnosticsReleaseChannel {
@@ -2291,7 +2671,10 @@ fn resolve_scoped_ipc_file(
     scope: IpcFileScope,
 ) -> Result<PathBuf, AppError> {
     let input = input.trim();
-    if input.is_empty() {
+    if input.is_empty()
+        || input.chars().count() > IPC_PATH_MAX_CHARS
+        || input.chars().any(char::is_control)
+    {
         return Err(scope.invalid_path_error());
     }
 
@@ -2753,6 +3136,13 @@ fn preset_error(error: PresetManagerError) -> AppError {
     match error {
         PresetManagerError::Database(error) => AppError::Database(error.to_string()),
         error => AppError::Preset(error.to_string()),
+    }
+}
+
+fn qr_error(error: QrCodeError) -> AppError {
+    match error {
+        QrCodeError::EmptyContent => AppError::Qr("QR content is empty".to_string()),
+        QrCodeError::Generate(_) => AppError::Qr("failed to generate QR code".to_string()),
     }
 }
 
@@ -3244,6 +3634,79 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[test]
+    fn scoped_ipc_file_rejects_control_characters_without_echoing_input() {
+        let root = unique_temp_root("ipc-file-control");
+        let base = root.join("imports");
+        fs::create_dir_all(&base).expect("create import dir");
+        let input = "profiles\nsecret.txt";
+
+        let error = resolve_scoped_ipc_file(input, &base, IpcFileScope::ProfileImport)
+            .expect_err("control character path should be rejected");
+        let message = invalid_import_path_error_message(&error);
+
+        assert!(!message.contains("secret"));
+        assert!(!message.contains('\n'));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn ipc_text_validation_rejects_control_characters_without_echoing_value() {
+        let error = validate_required_ipc_text(
+            "profile\nsecret",
+            "profile index id",
+            IPC_ID_MAX_CHARS,
+            AppError::Profile,
+        )
+        .expect_err("control characters should be rejected");
+
+        let message = profile_error_message(&error);
+        assert!(message.contains("control characters"));
+        assert!(!message.contains("secret"));
+    }
+
+    #[test]
+    fn ipc_text_validation_rejects_oversized_values() {
+        let value = "a".repeat(IPC_ID_MAX_CHARS + 1);
+        let error = validate_required_ipc_text(
+            &value,
+            "profile index id",
+            IPC_ID_MAX_CHARS,
+            AppError::Profile,
+        )
+        .expect_err("oversized value should be rejected");
+
+        assert!(profile_error_message(&error).contains("too long"));
+    }
+
+    #[test]
+    fn ipc_text_list_validation_rejects_empty_items() {
+        let values = vec!["profile-1".to_string(), String::new()];
+        let error = validate_ipc_text_list(
+            &values,
+            "profile index id",
+            IPC_ID_MAX_CHARS,
+            AppError::Profile,
+        )
+        .expect_err("empty list item should be rejected");
+
+        assert!(profile_error_message(&error).contains("value is required"));
+    }
+
+    #[test]
+    fn qr_generation_error_does_not_echo_sensitive_content() {
+        let error = qr_error(QrCodeError::Generate(
+            "failed for vless://secret@example.test".to_string(),
+        ));
+
+        let AppError::Qr(message) = error else {
+            panic!("unexpected QR error variant");
+        };
+        assert_eq!(message, "failed to generate QR code");
+        assert!(!message.contains("secret"));
+    }
+
     #[cfg(unix)]
     #[test]
     fn scoped_ipc_file_rejects_symlink_escape_from_base_dir() {
@@ -3266,9 +3729,25 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    fn invalid_import_path_error_message(error: &AppError) -> &str {
+        match error {
+            AppError::Subscription(message) if message.contains("invalid import file path") => {
+                message
+            }
+            error => panic!("unexpected error: {error:?}"),
+        }
+    }
+
     fn invalid_backup_path_error_message(error: &AppError) -> &str {
         match error {
             AppError::Backup(message) if message.contains("invalid backup restore path") => message,
+            error => panic!("unexpected error: {error:?}"),
+        }
+    }
+
+    fn profile_error_message(error: &AppError) -> &str {
+        match error {
+            AppError::Profile(message) => message,
             error => panic!("unexpected error: {error:?}"),
         }
     }

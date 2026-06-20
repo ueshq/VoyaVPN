@@ -1,74 +1,11 @@
 pub mod commands;
 pub mod events;
 
-use tauri_specta::{collect_commands, collect_events, Builder};
+use tauri_specta::{collect_commands, collect_events, Builder, Commands};
 
-pub fn specta_builder() -> Builder<tauri::Wry> {
-    Builder::<tauri::Wry>::new()
-        .typ::<voya_core::ProfileItem>()
-        .typ::<voya_core::ProtocolExtraItem>()
-        .typ::<voya_core::TransportExtraItem>()
-        .typ::<voya_core::SubItem>()
-        .typ::<voya_core::ImportProfilesResult>()
-        .typ::<voya_core::SubscriptionUpdateResult>()
-        .typ::<voya_core::RoutingItem>()
-        .typ::<voya_core::RulesItem>()
-        .typ::<voya_core::DnsItem>()
-        .typ::<voya_app::dns::DnsSettings>()
-        .typ::<voya_app::dns::DnsValidationIssue>()
-        .typ::<voya_app::presets::PresetApplyResult>()
-        .typ::<voya_app::clash::ClashProxiesSnapshot>()
-        .typ::<voya_app::clash::ClashProxyGroup>()
-        .typ::<voya_app::clash::ClashProxyNode>()
-        .typ::<voya_app::clash::ClashDelayTestResult>()
-        .typ::<voya_app::clash::ClashConnectionsSnapshot>()
-        .typ::<voya_app::clash::ClashConnectionItem>()
-        .typ::<voya_app::clash::ClashTrafficEvent>()
-        .typ::<voya_app::clash::ClashMonitorState>()
-        .typ::<voya_app::clash::ClashMonitorStatus>()
-        .typ::<voya_app::speedtest::SpeedTestResult>()
-        .typ::<voya_app::speedtest::SpeedtestRunResult>()
-        .typ::<voya_app::speedtest::SpeedtestStatus>()
-        .typ::<voya_app::updates::UpdateStatus>()
-        .typ::<voya_app::updates::UpdateTarget>()
-        .typ::<voya_app::updates::UpdateRunResult>()
-        .typ::<voya_app::updates::UpdateCheckResult>()
-        .typ::<voya_app::updates::ManualAppUpdateLinks>()
-        .typ::<voya_app::updates::ManualAppUpdateDownload>()
-        .typ::<voya_app::updates::CoreUpdateApplyRequest>()
-        .typ::<voya_app::updates::CoreUpdateApplyResult>()
-        .typ::<voya_app::updates::UpdateTargetKind>()
-        .typ::<voya_app::updates::UpdateAcquisition>()
-        .typ::<voya_app::updates::UpdateResultStatus>()
-        .typ::<voya_app::updates::RulesetGeoSourceSettings>()
-        .typ::<voya_app::backup::BackupStatus>()
-        .typ::<voya_app::backup::BackupOperationResult>()
-        .typ::<voya_app::backup::BackupRestoreResult>()
-        .typ::<voya_app::backup::BackupRemoteResult>()
-        .typ::<voya_app::autostart::AutostartStatus>()
-        .typ::<voya_app::autostart::AutostartPlatform>()
-        .typ::<voya_app::hotkeys::HotkeyStatus>()
-        .typ::<voya_app::hotkeys::GlobalHotkeyAction>()
-        .typ::<voya_app::hotkeys::GlobalHotkeyBinding>()
-        .typ::<voya_app::qr::QrCodeImage>()
-        .typ::<voya_core::WebDavItem>()
-        .typ::<voya_core::PresetType>()
-        .typ::<voya_core::SpeedActionType>()
-        .typ::<voya_app::tun::TunStatus>()
-        .typ::<voya_app::tun::TunPreflight>()
-        .typ::<voya_core::ProfileExItem>()
-        .typ::<voya_core::ProfileListItem>()
-        .typ::<voya_core::ProfileDedupeResult>()
-        .typ::<voya_core::GroupChildCandidate>()
-        .typ::<voya_core::GroupValidationResult>()
-        .typ::<voya_core::GroupPreview>()
-        .typ::<voya_core::GroupPreviewRoute>()
-        .typ::<voya_core::GroupPreviewBalancer>()
-        .typ::<voya_core::ProfileSortKey>()
-        .typ::<voya_core::MoveAction>()
-        .typ::<voya_core::FullConfigTemplateItem>()
-        .typ::<voya_core::ServerStatItem>()
-        .commands(collect_commands![
+macro_rules! collect_ipc_commands {
+    ($($extra_command:tt)*) => {
+        collect_commands![
             commands::app_health,
             commands::load_app_config,
             commands::save_app_config,
@@ -155,8 +92,87 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             commands::backup_webdav_check,
             commands::backup_webdav_push,
             commands::backup_webdav_pull::<tauri::Wry>,
-            commands::ipc_demo_round_trip::<tauri::Wry>,
-        ])
+            $($extra_command)*
+        ]
+    };
+}
+
+#[cfg(debug_assertions)]
+fn ipc_commands() -> Commands<tauri::Wry> {
+    collect_ipc_commands![commands::ipc_demo_round_trip::<tauri::Wry>,]
+}
+
+#[cfg(not(debug_assertions))]
+fn ipc_commands() -> Commands<tauri::Wry> {
+    collect_ipc_commands![]
+}
+
+pub fn specta_builder() -> Builder<tauri::Wry> {
+    Builder::<tauri::Wry>::new()
+        .typ::<voya_core::ProfileItem>()
+        .typ::<voya_core::ProtocolExtraItem>()
+        .typ::<voya_core::TransportExtraItem>()
+        .typ::<voya_core::SubItem>()
+        .typ::<voya_core::ImportProfilesResult>()
+        .typ::<voya_core::SubscriptionUpdateResult>()
+        .typ::<voya_core::RoutingItem>()
+        .typ::<voya_core::RulesItem>()
+        .typ::<voya_core::DnsItem>()
+        .typ::<voya_app::dns::DnsSettings>()
+        .typ::<voya_app::dns::DnsValidationIssue>()
+        .typ::<voya_app::presets::PresetApplyResult>()
+        .typ::<voya_app::clash::ClashProxiesSnapshot>()
+        .typ::<voya_app::clash::ClashProxyGroup>()
+        .typ::<voya_app::clash::ClashProxyNode>()
+        .typ::<voya_app::clash::ClashDelayTestResult>()
+        .typ::<voya_app::clash::ClashConnectionsSnapshot>()
+        .typ::<voya_app::clash::ClashConnectionItem>()
+        .typ::<voya_app::clash::ClashTrafficEvent>()
+        .typ::<voya_app::clash::ClashMonitorState>()
+        .typ::<voya_app::clash::ClashMonitorStatus>()
+        .typ::<voya_app::speedtest::SpeedTestResult>()
+        .typ::<voya_app::speedtest::SpeedtestRunResult>()
+        .typ::<voya_app::speedtest::SpeedtestStatus>()
+        .typ::<voya_app::updates::UpdateStatus>()
+        .typ::<voya_app::updates::UpdateTarget>()
+        .typ::<voya_app::updates::UpdateRunResult>()
+        .typ::<voya_app::updates::UpdateCheckResult>()
+        .typ::<voya_app::updates::ManualAppUpdateLinks>()
+        .typ::<voya_app::updates::ManualAppUpdateDownload>()
+        .typ::<voya_app::updates::CoreUpdateApplyRequest>()
+        .typ::<voya_app::updates::CoreUpdateApplyResult>()
+        .typ::<voya_app::updates::UpdateTargetKind>()
+        .typ::<voya_app::updates::UpdateAcquisition>()
+        .typ::<voya_app::updates::UpdateResultStatus>()
+        .typ::<voya_app::updates::RulesetGeoSourceSettings>()
+        .typ::<voya_app::backup::BackupStatus>()
+        .typ::<voya_app::backup::BackupOperationResult>()
+        .typ::<voya_app::backup::BackupRestoreResult>()
+        .typ::<voya_app::backup::BackupRemoteResult>()
+        .typ::<voya_app::autostart::AutostartStatus>()
+        .typ::<voya_app::autostart::AutostartPlatform>()
+        .typ::<voya_app::hotkeys::HotkeyStatus>()
+        .typ::<voya_app::hotkeys::GlobalHotkeyAction>()
+        .typ::<voya_app::hotkeys::GlobalHotkeyBinding>()
+        .typ::<voya_app::qr::QrCodeImage>()
+        .typ::<voya_core::WebDavItem>()
+        .typ::<voya_core::PresetType>()
+        .typ::<voya_core::SpeedActionType>()
+        .typ::<voya_app::tun::TunStatus>()
+        .typ::<voya_app::tun::TunPreflight>()
+        .typ::<voya_core::ProfileExItem>()
+        .typ::<voya_core::ProfileListItem>()
+        .typ::<voya_core::ProfileDedupeResult>()
+        .typ::<voya_core::GroupChildCandidate>()
+        .typ::<voya_core::GroupValidationResult>()
+        .typ::<voya_core::GroupPreview>()
+        .typ::<voya_core::GroupPreviewRoute>()
+        .typ::<voya_core::GroupPreviewBalancer>()
+        .typ::<voya_core::ProfileSortKey>()
+        .typ::<voya_core::MoveAction>()
+        .typ::<voya_core::FullConfigTemplateItem>()
+        .typ::<voya_core::ServerStatItem>()
+        .commands(ipc_commands())
         .events(collect_events![
             events::InvalidateEvent,
             events::TransientStreamEvent,
