@@ -1,13 +1,13 @@
 use thiserror::Error;
 use voya_core::{
     generate_singbox_config_value, generate_xray_config_value, group_preview_from_values,
-    list_group_child_candidates, validate_group_profile, AppConfig, ConfigType,
-    CoreConfigContextBuilder, CoreGenEnv, CoreGenPlatform, CoreType, DnsItem,
-    FullConfigTemplateItem, GroupChildCandidate, GroupPreview, GroupValidationResult,
-    InboundProtocol, ProfileItem, ProfileListItem, RoutingItem, SingboxConfigError, SubItem,
+    list_group_child_candidates, validate_group_profile, AppConfig, CoreConfigContextBuilder,
+    CoreGenPlatform, CoreType, DnsItem, GroupChildCandidate, GroupPreview, GroupValidationResult,
+    ProfileItem, ProfileListItem, RoutingItem, SingboxConfigError, SubItem,
 };
 use voya_db::{Database, DbError};
 
+use crate::coregen::{CoreTypeFallback, SnapshotCoreGenEnv};
 use crate::profiles::{ProfileManager, ProfileManagerError};
 
 pub type Result<T> = std::result::Result<T, GroupManagerError>;
@@ -149,17 +149,11 @@ impl<'db> GroupManager<'db> {
     ) -> Result<PreviewValue> {
         let mut node = profile.clone();
         node.core_type = Some(core_type);
-        let env = GroupCoreGenEnv {
-            core_type_items: config
-                .core_type_item
-                .iter()
-                .map(|item| (item.config_type, item.core_type))
-                .collect(),
-            local_socks_port: config
-                .inbound
-                .first()
-                .map_or(voya_core::DEFAULT_LOCAL_PORT, |inbound| inbound.local_port),
-            profiles: source
+        let env = SnapshotCoreGenEnv::new(
+            config,
+            CoreGenPlatform::Linux,
+            CoreTypeFallback::Fixed(core_type),
+            source
                 .profiles
                 .iter()
                 .map(|candidate| {
@@ -170,11 +164,10 @@ impl<'db> GroupManager<'db> {
                     }
                 })
                 .collect(),
-            routings: source.routings.to_vec(),
-            dns_items: source.dns_items.to_vec(),
-            subs: source.subs.to_vec(),
-            core_type,
-        };
+            source.routings.to_vec(),
+            source.dns_items.to_vec(),
+            source.subs.to_vec(),
+        );
         let mut preview_config = config.clone();
         preview_config.index_id.clone_from(&node.index_id);
         preview_config.tun_mode_item.enable_tun = false;
@@ -211,104 +204,6 @@ struct GroupPreviewSource<'a> {
     routings: &'a [RoutingItem],
     dns_items: &'a [DnsItem],
     subs: &'a [SubItem],
-}
-
-#[derive(Debug, Clone)]
-struct GroupCoreGenEnv {
-    core_type_items: Vec<(ConfigType, CoreType)>,
-    local_socks_port: i32,
-    profiles: Vec<ProfileItem>,
-    routings: Vec<RoutingItem>,
-    dns_items: Vec<DnsItem>,
-    subs: Vec<SubItem>,
-    core_type: CoreType,
-}
-
-impl CoreGenEnv for GroupCoreGenEnv {
-    fn platform(&self) -> CoreGenPlatform {
-        CoreGenPlatform::Linux
-    }
-
-    fn get_core_type(&self, profile: &ProfileItem, config_type: ConfigType) -> CoreType {
-        profile
-            .core_type
-            .or_else(|| {
-                self.core_type_items
-                    .iter()
-                    .find_map(|(candidate, core_type)| {
-                        (*candidate == config_type).then_some(*core_type)
-                    })
-            })
-            .unwrap_or(self.core_type)
-    }
-
-    fn get_profile_by_index_id(&self, index_id: &str) -> Option<ProfileItem> {
-        self.profiles
-            .iter()
-            .find(|profile| profile.index_id == index_id)
-            .cloned()
-    }
-
-    fn get_profile_by_remarks(&self, remarks: &str) -> Option<ProfileItem> {
-        self.profiles
-            .iter()
-            .find(|profile| profile.remarks == remarks)
-            .cloned()
-    }
-
-    fn get_profile_items_ordered_by_index_ids(&self, index_ids: &[String]) -> Vec<ProfileItem> {
-        index_ids
-            .iter()
-            .filter_map(|index_id| self.get_profile_by_index_id(index_id))
-            .collect()
-    }
-
-    fn get_profile_items_by_subid(&self, subid: &str) -> Vec<ProfileItem> {
-        self.profiles
-            .iter()
-            .filter(|profile| profile.subid == subid)
-            .cloned()
-            .collect()
-    }
-
-    fn get_sub_item(&self, subid: &str) -> Option<SubItem> {
-        self.subs.iter().find(|sub| sub.id == subid).cloned()
-    }
-
-    fn get_full_config_template_item(
-        &self,
-        _core_type: CoreType,
-    ) -> Option<FullConfigTemplateItem> {
-        None
-    }
-
-    fn get_dns_item(&self, core_type: CoreType) -> Option<DnsItem> {
-        self.dns_items
-            .iter()
-            .find(|item| item.core_type == core_type)
-            .cloned()
-    }
-
-    fn get_default_routing(&self, config: &AppConfig) -> Option<RoutingItem> {
-        self.routings
-            .iter()
-            .find(|routing| {
-                routing.is_active || routing.id == config.routing_basic_item.routing_index_id
-            })
-            .or_else(|| self.routings.first())
-            .cloned()
-    }
-
-    fn get_local_port(&self, protocol: InboundProtocol) -> i32 {
-        match protocol {
-            InboundProtocol::socks => self.local_socks_port,
-            _ => self.local_socks_port + protocol.as_i32(),
-        }
-    }
-
-    fn next_virtual_chain_id(&self, node: &ProfileItem, child_index_ids: &[String]) -> String {
-        format!("inner-{}-{}", node.index_id, child_index_ids.join("-"))
-    }
 }
 
 #[cfg(test)]

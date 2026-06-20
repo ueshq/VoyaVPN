@@ -1,15 +1,12 @@
 use std::{
-    collections::BTreeMap,
     fs, io,
     path::{Path, PathBuf},
 };
 
 use thiserror::Error;
 use voya_core::{
-    generate_singbox_config_json, generate_xray_config_json, AppConfig, ConfigType,
-    ContextBuildError, CoreConfigContext, CoreConfigContextBuilder, CoreGenEnv, CoreGenPlatform,
-    CoreType, DnsItem, FullConfigTemplateItem, InboundProtocol, ProfileItem, RoutingItem,
-    SingboxConfigError, SubItem,
+    generate_singbox_config_json, generate_xray_config_json, AppConfig, ContextBuildError,
+    CoreConfigContext, CoreConfigContextBuilder, CoreGenPlatform, CoreType, SingboxConfigError,
 };
 use voya_db::{Database, DbError};
 use voya_platform::{
@@ -20,6 +17,7 @@ use voya_platform::{
     paths::{AppPaths, PathError},
 };
 
+use crate::coregen::{CoreTypeFallback, SnapshotCoreGenEnv};
 use crate::supervisor::{
     CoreProcessSpec, CoreSupervisor, SupervisorError, SupervisorSnapshot, SupervisorStartRequest,
 };
@@ -101,7 +99,7 @@ impl<'runtime> RuntimeManager<'runtime> {
             .ok_or_else(|| RuntimeError::ActiveProfileNotFound(active_profile_id.to_string()))?;
 
         let env =
-            RuntimeCoreGenEnv::load(self.database, &self.paths, config, self.target_os).await?;
+            load_runtime_core_gen_env(self.database, &self.paths, config, self.target_os).await?;
         let contexts = CoreConfigContextBuilder::new(&env).build_all(config, &active_profile);
         if !contexts.success() {
             let validation = contexts.combined_validator_result();
@@ -265,134 +263,22 @@ pub enum RuntimeError {
     Supervisor(#[from] SupervisorError),
 }
 
-#[derive(Debug, Clone)]
-struct RuntimeCoreGenEnv {
-    core_type_items: Vec<(ConfigType, CoreType)>,
-    local_socks_port: i32,
-    platform: CoreGenPlatform,
-    profiles: Vec<ProfileItem>,
-    routings: Vec<RoutingItem>,
-    dns_items: Vec<DnsItem>,
-    subs: Vec<SubItem>,
-    singbox_ruleset_paths: BTreeMap<String, String>,
-}
-
-impl RuntimeCoreGenEnv {
-    async fn load(
-        database: &Database,
-        paths: &AppPaths,
-        config: &AppConfig,
-        target_os: TargetOs,
-    ) -> Result<Self, DbError> {
-        Ok(Self {
-            core_type_items: config
-                .core_type_item
-                .iter()
-                .map(|item| (item.config_type, item.core_type))
-                .collect(),
-            local_socks_port: config
-                .inbound
-                .first()
-                .map_or(voya_core::DEFAULT_LOCAL_PORT, |inbound| inbound.local_port),
-            platform: core_gen_platform(target_os),
-            profiles: database.profiles().list().await?,
-            routings: database.routings().list().await?,
-            dns_items: database.dns().list().await?,
-            subs: database.subscriptions().list().await?,
-            singbox_ruleset_paths: local_singbox_ruleset_paths(paths),
-        })
-    }
-}
-
-impl CoreGenEnv for RuntimeCoreGenEnv {
-    fn platform(&self) -> CoreGenPlatform {
-        self.platform
-    }
-
-    fn get_core_type(&self, profile: &ProfileItem, config_type: ConfigType) -> CoreType {
-        profile
-            .core_type
-            .or_else(|| {
-                self.core_type_items
-                    .iter()
-                    .find_map(|(candidate, core_type)| {
-                        (*candidate == config_type).then_some(*core_type)
-                    })
-            })
-            .unwrap_or_else(|| default_core_type(config_type))
-    }
-
-    fn get_profile_by_index_id(&self, index_id: &str) -> Option<ProfileItem> {
-        self.profiles
-            .iter()
-            .find(|profile| profile.index_id == index_id)
-            .cloned()
-    }
-
-    fn get_profile_by_remarks(&self, remarks: &str) -> Option<ProfileItem> {
-        self.profiles
-            .iter()
-            .find(|profile| profile.remarks == remarks)
-            .cloned()
-    }
-
-    fn get_profile_items_ordered_by_index_ids(&self, index_ids: &[String]) -> Vec<ProfileItem> {
-        index_ids
-            .iter()
-            .filter_map(|index_id| self.get_profile_by_index_id(index_id))
-            .collect()
-    }
-
-    fn get_profile_items_by_subid(&self, subid: &str) -> Vec<ProfileItem> {
-        self.profiles
-            .iter()
-            .filter(|profile| profile.subid == subid)
-            .cloned()
-            .collect()
-    }
-
-    fn get_sub_item(&self, subid: &str) -> Option<SubItem> {
-        self.subs.iter().find(|sub| sub.id == subid).cloned()
-    }
-
-    fn get_full_config_template_item(
-        &self,
-        _core_type: CoreType,
-    ) -> Option<FullConfigTemplateItem> {
-        None
-    }
-
-    fn get_dns_item(&self, core_type: CoreType) -> Option<DnsItem> {
-        self.dns_items
-            .iter()
-            .find(|item| item.core_type == core_type)
-            .cloned()
-    }
-
-    fn get_default_routing(&self, config: &AppConfig) -> Option<RoutingItem> {
-        self.routings
-            .iter()
-            .find(|routing| {
-                routing.is_active || routing.id == config.routing_basic_item.routing_index_id
-            })
-            .or_else(|| self.routings.first())
-            .cloned()
-    }
-
-    fn get_local_port(&self, protocol: InboundProtocol) -> i32 {
-        match protocol {
-            InboundProtocol::socks => self.local_socks_port,
-            _ => self.local_socks_port + protocol.as_i32(),
-        }
-    }
-
-    fn get_singbox_ruleset_paths(&self) -> BTreeMap<String, String> {
-        self.singbox_ruleset_paths.clone()
-    }
-
-    fn next_virtual_chain_id(&self, node: &ProfileItem, child_index_ids: &[String]) -> String {
-        format!("inner-{}-{}", node.index_id, child_index_ids.join("-"))
-    }
+async fn load_runtime_core_gen_env(
+    database: &Database,
+    paths: &AppPaths,
+    config: &AppConfig,
+    target_os: TargetOs,
+) -> Result<SnapshotCoreGenEnv, DbError> {
+    Ok(SnapshotCoreGenEnv::new(
+        config,
+        core_gen_platform(target_os),
+        CoreTypeFallback::ConfigDefaults,
+        database.profiles().list().await?,
+        database.routings().list().await?,
+        database.dns().list().await?,
+        database.subscriptions().list().await?,
+    )
+    .with_singbox_ruleset_paths(local_singbox_ruleset_paths(paths)))
 }
 
 const fn core_gen_platform(target_os: TargetOs) -> CoreGenPlatform {
@@ -400,13 +286,6 @@ const fn core_gen_platform(target_os: TargetOs) -> CoreGenPlatform {
         TargetOs::Windows => CoreGenPlatform::Windows,
         TargetOs::Macos => CoreGenPlatform::MacOS,
         TargetOs::Linux | TargetOs::Other => CoreGenPlatform::Linux,
-    }
-}
-
-const fn default_core_type(config_type: ConfigType) -> CoreType {
-    match config_type {
-        ConfigType::TUIC | ConfigType::Anytls | ConfigType::Naive => CoreType::sing_box,
-        _ => CoreType::Xray,
     }
 }
 
@@ -420,7 +299,9 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use voya_core::{CoreType, DnsItem, RoutingItem, RuleType, RulesItem};
+    use voya_core::{
+        ConfigType, CoreGenEnv, CoreType, DnsItem, ProfileItem, RoutingItem, RuleType, RulesItem,
+    };
     use voya_db::Database;
     use voya_platform::{
         coreinfo::{
@@ -507,7 +388,7 @@ mod tests {
 
         let paths = temp_paths();
         let env =
-            RuntimeCoreGenEnv::load(&database, &paths, &AppConfig::default(), TargetOs::Linux)
+            load_runtime_core_gen_env(&database, &paths, &AppConfig::default(), TargetOs::Linux)
                 .await
                 .expect("runtime test operation should succeed");
 

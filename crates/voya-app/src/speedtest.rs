@@ -389,7 +389,7 @@ impl SpeedtestManager {
                 on_result(result.clone());
                 results.push(result);
             }
-            SpeedActionType::Realping => {
+            SpeedActionType::Realping | SpeedActionType::FastRealping => {
                 let result = self
                     .run_realping(database, config, action, item, cancel)
                     .await?;
@@ -438,9 +438,6 @@ impl SpeedtestManager {
                     on_result(udp.clone());
                     results.push(udp);
                 }
-            }
-            SpeedActionType::FastRealping => {
-                unreachable!("normalized action cannot be FastRealping")
             }
         }
 
