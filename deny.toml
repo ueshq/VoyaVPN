@@ -1,0 +1,63 @@
+[graph]
+all-features = true
+
+[advisories]
+db-urls = ["https://github.com/rustsec/advisory-db"]
+ignore = [
+    { id = "RUSTSEC-2024-0370", reason = "Existing transitive GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2024-0411", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2024-0412", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2024-0413", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2024-0414", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2024-0415", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2024-0416", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2024-0417", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2024-0418", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2024-0419", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2024-0420", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2024-0436", reason = "Existing transitive Specta advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2025-0075", reason = "Existing transitive Tauri URL pattern advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2025-0080", reason = "Existing transitive Tauri URL pattern advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2025-0081", reason = "Existing transitive Tauri URL pattern advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2025-0098", reason = "Existing transitive Tauri URL pattern advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2025-0100", reason = "Existing transitive Tauri URL pattern advisory; tracked outside CI-2 dependency gate wiring." },
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+highlight = "all"
+deny = []
+skip = []
+skip-tree = []
+
+[licenses]
+confidence-threshold = 0.8
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+exceptions = []
+
+[licenses.private]
+ignore = true
+registries = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
