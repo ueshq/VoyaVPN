@@ -88,6 +88,8 @@ pub enum UpdateManagerError {
         expected: String,
         actual: String,
     },
+    #[error("downloaded core archive path is outside the update staging directory")]
+    UnsafeArchivePath,
     #[error("unsupported core archive format for {0}")]
     UnsupportedArchiveFormat(PathBuf),
     #[error("failed to read or write archive {path}: {source}")]
@@ -918,7 +920,7 @@ pub fn apply_downloaded_core_update(
         required_update_field(&request.target_id, "remoteVersion", &request.remote_version)?
             .to_string();
     let expected_sha256 = normalize_sha256(&request.sha256)?;
-    let archive_path = PathBuf::from(file_name);
+    let archive_path = canonicalize_update_archive_path(paths, Path::new(file_name))?;
 
     verify_sha256(&archive_path, &expected_sha256)?;
 
@@ -967,6 +969,20 @@ pub fn apply_downloaded_core_update(
             .backup_dir
             .map(|path| path.to_string_lossy().into_owned()),
     })
+}
+
+fn canonicalize_update_archive_path(paths: &AppPaths, archive_path: &Path) -> Result<PathBuf> {
+    let updates_dir = paths.temp_file("updates");
+    let updates_dir =
+        fs::canonicalize(&updates_dir).map_err(|_| UpdateManagerError::UnsafeArchivePath)?;
+    let archive_path =
+        fs::canonicalize(archive_path).map_err(|_| UpdateManagerError::UnsafeArchivePath)?;
+
+    if archive_path.starts_with(updates_dir) {
+        Ok(archive_path)
+    } else {
+        Err(UpdateManagerError::UnsafeArchivePath)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2197,7 +2213,7 @@ mod tests {
         let target_exe = paths.core_bin_file(core_type_dir_name(CoreType::Xray), &exe_name);
         fs::create_dir_all(target_exe.parent().expect("target exe parent")).expect("target dir");
         fs::write(&target_exe, b"old-xray").expect("old xray");
-        let archive = root.join("Xray-linux-64.zip");
+        let archive = update_archive_path(&paths, "Xray-linux-64.zip");
         write_zip_archive(
             &archive,
             &[(&exe_name, b"new-xray".as_slice()), ("geoip.dat", b"geo")],
@@ -2236,7 +2252,7 @@ mod tests {
         let target_exe = paths.core_bin_file(core_type_dir_name(CoreType::sing_box), &exe_name);
         fs::create_dir_all(target_exe.parent().expect("target exe parent")).expect("target dir");
         fs::write(&target_exe, b"old-sing-box").expect("old sing-box");
-        let archive = root.join("sing-box-1.12.0-linux-amd64.tar.gz");
+        let archive = update_archive_path(&paths, "sing-box-1.12.0-linux-amd64.tar.gz");
         let nested_exe = format!("sing-box-1.12.0-linux-amd64/{exe_name}");
         write_tar_gz_archive(&archive, &[(&nested_exe, b"new-sing-box".as_slice())]);
 
@@ -2277,7 +2293,7 @@ mod tests {
         let target_exe = paths.core_bin_file(core_type_dir_name(CoreType::mihomo), &exe_name);
         fs::create_dir_all(target_exe.parent().expect("target exe parent")).expect("target dir");
         fs::write(&target_exe, b"old-mihomo").expect("old mihomo");
-        let archive = root.join(format!("{exe_name}-v1.19.15.gz"));
+        let archive = update_archive_path(&paths, format!("{exe_name}-v1.19.15.gz"));
         write_gz_file(&archive, b"new-mihomo");
 
         apply_downloaded_core_update(
@@ -2307,7 +2323,7 @@ mod tests {
         let target_exe = paths.core_bin_file(core_type_dir_name(CoreType::Xray), &exe_name);
         fs::create_dir_all(target_exe.parent().expect("target exe parent")).expect("target dir");
         fs::write(&target_exe, b"old-xray").expect("old xray");
-        let archive = root.join("Xray-linux-64.zip");
+        let archive = update_archive_path(&paths, "Xray-linux-64.zip");
         write_zip_archive(&archive, &[(&exe_name, b"new-xray".as_slice())]);
         let mut request = apply_request(CoreType::Xray, &archive, "1.8.24");
         request.sha256 =
@@ -2330,7 +2346,7 @@ mod tests {
         let target_exe = paths.core_bin_file(core_type_dir_name(CoreType::Xray), &exe_name);
         fs::create_dir_all(target_exe.parent().expect("target exe parent")).expect("target dir");
         fs::write(&target_exe, b"old-xray").expect("old xray");
-        let archive = root.join("Xray-linux-64.zip");
+        let archive = update_archive_path(&paths, "Xray-linux-64.zip");
         fs::write(&archive, b"not a zip").expect("corrupt archive");
 
         let error = apply_downloaded_core_update(
@@ -2341,6 +2357,27 @@ mod tests {
 
         assert!(matches!(error, UpdateManagerError::ZipArchive { .. }));
         assert_eq!(fs::read(&target_exe).expect("read old xray"), b"old-xray");
+        assert!(archive.exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn update_apply_rejects_archive_outside_updates_dir_without_removing_it() {
+        let root = unique_temp_root("apply-outside-archive");
+        let paths = AppPaths::new(root.join("VoyaVPN"), StorageMode::Portable);
+        fs::create_dir_all(paths.temp_file("updates")).expect("create updates dir");
+        let archive = root.join("Xray-linux-64.zip");
+        let exe_name = executable_name_for_current_os("xray");
+        write_zip_archive(&archive, &[(&exe_name, b"new-xray".as_slice())]);
+
+        let error = apply_downloaded_core_update(
+            &paths,
+            &apply_request(CoreType::Xray, &archive, "1.8.24"),
+        )
+        .expect_err("outside archive should be rejected");
+
+        assert!(matches!(error, UpdateManagerError::UnsafeArchivePath));
         assert!(archive.exists());
 
         let _ = fs::remove_dir_all(root);
@@ -2373,7 +2410,7 @@ mod tests {
             .connect(&config)
             .await
             .expect("update manager test operation should succeed");
-        let archive = root.join("Xray-linux-64.zip");
+        let archive = update_archive_path(&paths, "Xray-linux-64.zip");
         let exe_name = executable_name_for_current_os("xray");
         write_zip_archive(&archive, &[(&exe_name, b"new-xray".as_slice())]);
 
@@ -2436,7 +2473,7 @@ mod tests {
             .connect(&config)
             .await
             .expect("update manager test operation should succeed");
-        let archive = root.join("Xray-linux-64.zip");
+        let archive = update_archive_path(&paths, "Xray-linux-64.zip");
         let exe_name = executable_name_for_current_os("xray");
         write_zip_archive(&archive, &[(&exe_name, b"new-xray".as_slice())]);
         let mut request = apply_request(CoreType::Xray, &archive, "1.8.24");
@@ -2479,7 +2516,7 @@ mod tests {
             index_id: "active".to_string(),
             ..AppConfig::default()
         };
-        let archive = root.join("Xray-linux-64.zip");
+        let archive = update_archive_path(&paths, "Xray-linux-64.zip");
         let exe_name = executable_name_for_current_os("xray");
         write_zip_archive(&archive, &[(&exe_name, b"new-xray".as_slice())]);
 
@@ -2704,6 +2741,12 @@ mod tests {
             std::process::id(),
             monotonic_millis()
         ))
+    }
+
+    fn update_archive_path(paths: &AppPaths, file_name: impl AsRef<Path>) -> PathBuf {
+        let archive = paths.temp_file("updates").join(file_name);
+        fs::create_dir_all(archive.parent().expect("archive parent")).expect("create updates dir");
+        archive
     }
 
     fn apply_request(

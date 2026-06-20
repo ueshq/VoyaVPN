@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeSet,
-    fs,
-    path::PathBuf,
+    fs, io,
+    path::{Component, Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -62,6 +62,8 @@ use super::events::{
     InvalidateEvent, LogLevel, LogLineEvent, QueryInvalidation, TransientStreamEvent,
 };
 use crate::AppState;
+
+const PROFILE_IMPORT_DIR_NAME: &str = "imports";
 
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(tag = "kind", content = "message", rename_all = "camelCase")]
@@ -1007,9 +1009,13 @@ pub async fn import_profiles_from_file<R: tauri::Runtime>(
     subid: Option<String>,
     is_sub: bool,
 ) -> Result<ImportProfilesResult, AppError> {
-    let text = fs::read_to_string(&path).map_err(|error| {
-        AppError::Subscription(format!("failed to read import file {path}: {error}"))
-    })?;
+    let path = resolve_scoped_ipc_file(
+        &path,
+        &state.runtime_paths().temp_file(PROFILE_IMPORT_DIR_NAME),
+        IpcFileScope::ProfileImport,
+    )?;
+    let text = fs::read_to_string(&path)
+        .map_err(|error| AppError::Subscription(format!("failed to read import file: {error}")))?;
 
     import_profiles_from_text(app, state, text, subid, is_sub).await
 }
@@ -1942,11 +1948,15 @@ pub async fn backup_restore_local<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     input_path: String,
 ) -> Result<BackupRestoreResult, AppError> {
-    let input_path = PathBuf::from(input_path);
+    let input_path = resolve_scoped_ipc_file(
+        &input_path,
+        state.runtime_paths().backup_dir(),
+        IpcFileScope::BackupRestore,
+    )?;
     let result = backup_manager(&state)
         .restore_local_backup(&input_path)
         .await
-        .map_err(backup_error)?;
+        .map_err(backup_restore_error)?;
     replace_current_config(&state, &result.restored_config)?;
     emit_backup_invalidation(&app, "backup-restored")?;
 
@@ -2232,6 +2242,81 @@ fn runtime_missing_core_type(error: &RuntimeError) -> Option<CoreType> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum IpcFileScope {
+    ProfileImport,
+    BackupRestore,
+}
+
+impl IpcFileScope {
+    fn invalid_path_error(self) -> AppError {
+        match self {
+            Self::ProfileImport => AppError::Subscription(
+                "invalid import file path: provide a relative file name inside the import directory"
+                    .to_string(),
+            ),
+            Self::BackupRestore => AppError::Backup(
+                "invalid backup restore path: provide a relative file name inside the backup directory"
+                    .to_string(),
+            ),
+        }
+    }
+
+    fn unavailable_error(self) -> AppError {
+        match self {
+            Self::ProfileImport => AppError::Subscription(
+                "import file is not available in the import directory".to_string(),
+            ),
+            Self::BackupRestore => {
+                AppError::Backup("backup file is not available in the backup directory".to_string())
+            }
+        }
+    }
+
+    fn prepare_error(self, source: io::Error) -> AppError {
+        match self {
+            Self::ProfileImport => {
+                AppError::Subscription(format!("failed to prepare import directory: {source}"))
+            }
+            Self::BackupRestore => {
+                AppError::Backup(format!("failed to prepare backup directory: {source}"))
+            }
+        }
+    }
+}
+
+fn resolve_scoped_ipc_file(
+    input: &str,
+    base_dir: &Path,
+    scope: IpcFileScope,
+) -> Result<PathBuf, AppError> {
+    let input = input.trim();
+    if input.is_empty() {
+        return Err(scope.invalid_path_error());
+    }
+
+    let relative_path = Path::new(input);
+    if relative_path.is_absolute() || has_disallowed_relative_components(relative_path) {
+        return Err(scope.invalid_path_error());
+    }
+
+    fs::create_dir_all(base_dir).map_err(|source| scope.prepare_error(source))?;
+    let base_dir = fs::canonicalize(base_dir).map_err(|source| scope.prepare_error(source))?;
+    let candidate =
+        fs::canonicalize(base_dir.join(relative_path)).map_err(|_| scope.unavailable_error())?;
+
+    if candidate.starts_with(&base_dir) && candidate.is_file() {
+        Ok(candidate)
+    } else {
+        Err(scope.invalid_path_error())
+    }
+}
+
+fn has_disallowed_relative_components(path: &Path) -> bool {
+    path.components()
+        .any(|component| !matches!(component, Component::Normal(_)))
+}
+
 fn diagnostics_error_class_for_runtime_error(error: &RuntimeError) -> DiagnosticsErrorClass {
     match error {
         RuntimeError::MissingCoreInfo(_)
@@ -2259,7 +2344,7 @@ fn diagnostics_error_class_for_core_info_error(error: &CoreInfoError) -> Diagnos
         | CoreInfoError::ReadCoreSeedDir { source, .. }
         | CoreInfoError::CopyCoreSeedAsset { source, .. }
         | CoreInfoError::ChmodExecutable { source, .. }
-            if source.kind() == std::io::ErrorKind::PermissionDenied =>
+            if source.kind() == io::ErrorKind::PermissionDenied =>
         {
             DiagnosticsErrorClass::PermissionDenied
         }
@@ -2282,7 +2367,7 @@ fn diagnostics_error_class_for_update_error(error: &UpdateManagerError) -> Diagn
         UpdateManagerError::ArchiveIo { source, .. }
         | UpdateManagerError::SwapIo { source, .. }
         | UpdateManagerError::VersionProbe { source, .. }
-            if source.kind() == std::io::ErrorKind::PermissionDenied =>
+            if source.kind() == io::ErrorKind::PermissionDenied =>
         {
             DiagnosticsErrorClass::PermissionDenied
         }
@@ -2747,6 +2832,28 @@ fn backup_error(error: BackupManagerError) -> AppError {
     }
 }
 
+fn backup_restore_error(error: BackupManagerError) -> AppError {
+    match error {
+        BackupManagerError::Database(error) => AppError::Database(error.to_string()),
+        BackupManagerError::Io { source, .. } => {
+            AppError::Backup(format!("backup restore filesystem error: {source}"))
+        }
+        BackupManagerError::Zip { source, .. } => {
+            AppError::Backup(format!("backup restore zip error: {source}"))
+        }
+        BackupManagerError::InvalidArchive(_) => {
+            AppError::Backup("invalid backup archive".to_string())
+        }
+        BackupManagerError::ConfigSerialize(error) => {
+            AppError::Backup(format!("failed to serialize backup data: {error}"))
+        }
+        BackupManagerError::ConfigDeserialize(error) => {
+            AppError::Backup(format!("failed to deserialize backup data: {error}"))
+        }
+        BackupManagerError::WebDav(error) => AppError::Backup(error.to_string()),
+    }
+}
+
 fn sudo_error(error: SudoCollectionError) -> AppError {
     AppError::Sudo(error.to_string())
 }
@@ -3086,5 +3193,91 @@ fn sysproxy_mode(mode: SysProxyType) -> super::events::SysProxyMode {
         SysProxyType::ForcedChange => super::events::SysProxyMode::ForcedChange,
         SysProxyType::Unchanged => super::events::SysProxyMode::Unchanged,
         SysProxyType::Pac => super::events::SysProxyMode::Pac,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::env;
+
+    use super::*;
+
+    #[test]
+    fn scoped_ipc_file_resolves_relative_file_inside_base_dir() {
+        let root = unique_temp_root("ipc-file-valid");
+        let base = root.join("imports");
+        fs::create_dir_all(&base).expect("create import dir");
+        let file = base.join("profiles.txt");
+        fs::write(&file, b"profile").expect("write import file");
+
+        let resolved = resolve_scoped_ipc_file("profiles.txt", &base, IpcFileScope::ProfileImport)
+            .expect("resolve import file");
+
+        assert_eq!(
+            resolved,
+            file.canonicalize().expect("canonical import file")
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn scoped_ipc_file_rejects_absolute_and_parent_paths_without_echoing_input() {
+        let root = unique_temp_root("ipc-file-invalid");
+        let base = root.join("backups");
+        fs::create_dir_all(&base).expect("create backup dir");
+        let file = base.join("backup.zip");
+        fs::write(&file, b"backup").expect("write backup file");
+        let absolute = file.to_string_lossy().into_owned();
+
+        let absolute_error = resolve_scoped_ipc_file(&absolute, &base, IpcFileScope::BackupRestore)
+            .expect_err("absolute path should be rejected");
+        let message = invalid_backup_path_error_message(&absolute_error);
+        assert!(!message.contains(&absolute));
+
+        let parent_error =
+            resolve_scoped_ipc_file("../backup.zip", &base, IpcFileScope::BackupRestore)
+                .expect_err("parent path should be rejected");
+        let message = invalid_backup_path_error_message(&parent_error);
+        assert!(!message.contains(".."));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn scoped_ipc_file_rejects_symlink_escape_from_base_dir() {
+        use std::os::unix::fs::symlink;
+
+        let root = unique_temp_root("ipc-file-symlink");
+        let base = root.join("imports");
+        fs::create_dir_all(&base).expect("create import dir");
+        let outside = root.join("outside.txt");
+        fs::write(&outside, b"outside").expect("write outside file");
+        symlink(&outside, base.join("escape.txt")).expect("create symlink");
+
+        let error = resolve_scoped_ipc_file("escape.txt", &base, IpcFileScope::ProfileImport)
+            .expect_err("symlink escape should be rejected");
+
+        assert!(
+            matches!(error, AppError::Subscription(message) if message.contains("invalid import file path"))
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    fn invalid_backup_path_error_message(error: &AppError) -> &str {
+        match error {
+            AppError::Backup(message) if message.contains("invalid backup restore path") => message,
+            error => panic!("unexpected error: {error:?}"),
+        }
+    }
+
+    fn unique_temp_root(name: &str) -> PathBuf {
+        env::temp_dir().join(format!(
+            "voyavpn-{name}-{}-{}",
+            std::process::id(),
+            current_unix_time()
+        ))
     }
 }
