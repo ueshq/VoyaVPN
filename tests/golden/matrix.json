@@ -114,6 +114,48 @@
       "volatile_fields": []
     },
     {
+      "id": "singbox-outbound-tuic-tls",
+      "core": "sing-box",
+      "fixture": "singbox/outbounds/tuic_tls.json",
+      "generated": "singbox.outbound.tuic_tls",
+      "summary": "sing-box TUIC outbound with TLS, ALPN, uTLS fingerprint, password, UUID, and congestion control.",
+      "hotspots": ["protocol", "tuic", "security"],
+      "reference_paths": [
+        "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs",
+        "ServiceLib.Tests/CoreConfig/Singbox/CoreConfigSingboxServiceTests.cs"
+      ],
+      "core_acceptance": false,
+      "volatile_fields": []
+    },
+    {
+      "id": "singbox-outbound-anytls-tls",
+      "core": "sing-box",
+      "fixture": "singbox/outbounds/anytls_tls.json",
+      "generated": "singbox.outbound.anytls_tls",
+      "summary": "sing-box AnyTLS outbound with typed password and TLS/uTLS settings.",
+      "hotspots": ["protocol", "anytls", "security"],
+      "reference_paths": [
+        "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs",
+        "ServiceLib.Tests/CoreConfig/Singbox/CoreConfigSingboxServiceTests.cs"
+      ],
+      "core_acceptance": false,
+      "volatile_fields": []
+    },
+    {
+      "id": "singbox-outbound-naive-quic-tls",
+      "core": "sing-box",
+      "fixture": "singbox/outbounds/naive_quic_tls.json",
+      "generated": "singbox.outbound.naive_quic_tls",
+      "summary": "sing-box Naive outbound with QUIC, congestion control, insecure concurrency, UDP-over-TCP, and TLS/uTLS settings.",
+      "hotspots": ["protocol", "naive", "security"],
+      "reference_paths": [
+        "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs",
+        "ServiceLib.Tests/CoreConfig/Singbox/CoreConfigSingboxServiceTests.cs"
+      ],
+      "core_acceptance": false,
+      "volatile_fields": []
+    },
+    {
       "id": "singbox-dns-fakeip-typed",
       "core": "sing-box",
       "fixture": "singbox/dns/fakeip_typed.json",

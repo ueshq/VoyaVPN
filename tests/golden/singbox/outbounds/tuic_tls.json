@@ -1,0 +1,21 @@
+{
+  "type": "tuic",
+  "tag": "proxy",
+  "server": "tuic.example",
+  "server_port": 443,
+  "uuid": "00000000-0000-0000-0000-000000000021",
+  "password": "tuic-pass",
+  "congestion_control": "bbr",
+  "tls": {
+    "enabled": true,
+    "server_name": "tuic.example",
+    "insecure": false,
+    "alpn": [
+      "h3"
+    ],
+    "utls": {
+      "enabled": true,
+      "fingerprint": "chrome"
+    }
+  }
+}

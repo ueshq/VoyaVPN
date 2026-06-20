@@ -1,0 +1,24 @@
+{
+  "type": "naive",
+  "tag": "proxy",
+  "server": "naive.example",
+  "server_port": 443,
+  "username": "naive-user",
+  "password": "naive-pass",
+  "quic": true,
+  "quic_congestion_control": "bbr",
+  "insecure_concurrency": 4,
+  "udp_over_tcp": true,
+  "tls": {
+    "enabled": true,
+    "server_name": "naive.example",
+    "insecure": false,
+    "alpn": [
+      "h3"
+    ],
+    "utls": {
+      "enabled": true,
+      "fingerprint": "edge"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "type": "anytls",
+  "tag": "proxy",
+  "server": "anytls.example",
+  "server_port": 8443,
+  "password": "anytls-pass",
+  "tls": {
+    "enabled": true,
+    "server_name": "anytls.example",
+    "insecure": false,
+    "alpn": [
+      "h2",
+      "http/1.1"
+    ],
+    "utls": {
+      "enabled": true,
+      "fingerprint": "safari"
+    }
+  }
+}

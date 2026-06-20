@@ -123,6 +123,9 @@ pub(crate) fn generated_value_for_case(case: &GoldenCase) -> Value {
         "singbox.route.rulesets_from_dns" => singbox_rulesets_from_dns(),
         "singbox.inbounds.tun" => singbox_tun_inbounds(),
         "singbox.route.tun" => singbox_tun_route(),
+        "singbox.outbound.tuic_tls" => singbox_tuic_tls_outbound(),
+        "singbox.outbound.anytls_tls" => singbox_anytls_tls_outbound(),
+        "singbox.outbound.naive_quic_tls" => singbox_naive_quic_tls_outbound(),
         generated => panic!(
             "golden case `{}` references unknown generated selector `{generated}`",
             case.id
@@ -556,6 +559,89 @@ fn singbox_vless_ws_tls_mux_outbound() -> Value {
         ..ProfileItem::default()
     };
 
+    let generated = generate_singbox_config(&singbox_context(config, node))
+        .expect("sing-box config should generate");
+    serde_json::to_value(
+        generated
+            .outbounds
+            .iter()
+            .find(|outbound| outbound.tag == PROXY_TAG)
+            .expect("proxy outbound"),
+    )
+    .expect("sing-box outbound serializes")
+}
+
+fn singbox_tuic_tls_outbound() -> Value {
+    let node = ProfileItem {
+        index_id: "n-tuic".to_string(),
+        config_type: ConfigType::TUIC,
+        core_type: Some(CoreType::sing_box),
+        remarks: "tuic-tls".to_string(),
+        address: "tuic.example".to_string(),
+        port: 443,
+        username: "00000000-0000-0000-0000-000000000021".to_string(),
+        password: "tuic-pass".to_string(),
+        stream_security: "tls".to_string(),
+        sni: "tuic.example".to_string(),
+        alpn: "h3".to_string(),
+        fingerprint: "chrome".to_string(),
+        protocol_extra: ProtocolExtraItem {
+            congestion_control: Some("bbr".to_string()),
+            ..ProtocolExtraItem::default()
+        },
+        ..ProfileItem::default()
+    };
+
+    singbox_proxy_outbound(AppConfig::default(), node)
+}
+
+fn singbox_anytls_tls_outbound() -> Value {
+    let node = ProfileItem {
+        index_id: "n-anytls".to_string(),
+        config_type: ConfigType::Anytls,
+        core_type: Some(CoreType::sing_box),
+        remarks: "anytls-tls".to_string(),
+        address: "anytls.example".to_string(),
+        port: 8443,
+        password: "anytls-pass".to_string(),
+        stream_security: "tls".to_string(),
+        sni: "anytls.example".to_string(),
+        alpn: "h2,http/1.1".to_string(),
+        fingerprint: "safari".to_string(),
+        ..ProfileItem::default()
+    };
+
+    singbox_proxy_outbound(AppConfig::default(), node)
+}
+
+fn singbox_naive_quic_tls_outbound() -> Value {
+    let node = ProfileItem {
+        index_id: "n-naive".to_string(),
+        config_type: ConfigType::Naive,
+        core_type: Some(CoreType::sing_box),
+        remarks: "naive-quic".to_string(),
+        address: "naive.example".to_string(),
+        port: 443,
+        username: "naive-user".to_string(),
+        password: "naive-pass".to_string(),
+        stream_security: "tls".to_string(),
+        sni: "naive.example".to_string(),
+        alpn: "h3".to_string(),
+        fingerprint: "edge".to_string(),
+        protocol_extra: ProtocolExtraItem {
+            naive_quic: Some(true),
+            congestion_control: Some("bbr".to_string()),
+            insecure_concurrency: Some(4),
+            uot: Some(true),
+            ..ProtocolExtraItem::default()
+        },
+        ..ProfileItem::default()
+    };
+
+    singbox_proxy_outbound(AppConfig::default(), node)
+}
+
+fn singbox_proxy_outbound(config: AppConfig, node: ProfileItem) -> Value {
     let generated = generate_singbox_config(&singbox_context(config, node))
         .expect("sing-box config should generate");
     serde_json::to_value(

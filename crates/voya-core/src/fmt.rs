@@ -31,6 +31,7 @@ const HYSTERIA2_ALT_SCHEME: &str = "hy2://";
 const NAIVE_HTTPS_SCHEME: &str = "naive+https://";
 const NAIVE_QUIC_SCHEME: &str = "naive+quic://";
 const INNER_URI_PROTOCOL: &str = "v2rayn://";
+const MAX_BASE64_DECODE_INPUT: usize = 1024 * 1024;
 
 const NETWORKS: &[&str] = &["raw", "xhttp", "kcp", "grpc", "ws", "httpupgrade"];
 const XHTTP_MODES: &[&str] = &["auto", "packet-up", "stream-up", "stream-one"];
@@ -2073,6 +2074,12 @@ fn ensure_type(
 
 fn ensure_address_port(protocol: &'static str, item: &ProfileItem) -> Result<(), ShareError> {
     ensure_nonempty(protocol, "address", &item.address)?;
+    if !valid_host(&item.address) {
+        return Err(ShareError::InvalidUri {
+            protocol,
+            reason: format!("invalid host {}", item.address),
+        });
+    }
     if !(1..=65535).contains(&item.port) {
         return Err(ShareError::InvalidPort {
             protocol,
@@ -2092,6 +2099,44 @@ fn ensure_nonempty(
     } else {
         Ok(())
     }
+}
+
+fn valid_host(host: &str) -> bool {
+    let host = host.trim();
+    if host.is_empty()
+        || host.len() > 253
+        || host.chars().any(|ch| {
+            ch.is_control()
+                || ch.is_whitespace()
+                || matches!(ch, '=' | '/' | '?' | '#' | '@' | '\\')
+        })
+    {
+        return false;
+    }
+
+    let host_for_ip = host
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(host);
+    if host_for_ip.parse::<IpAddr>().is_ok() {
+        return true;
+    }
+
+    if host.contains(':') {
+        return false;
+    }
+
+    let domain = host.trim_end_matches('.');
+    !domain.is_empty()
+        && domain.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        })
 }
 
 fn protocol_share(config_type: ConfigType) -> &'static str {
@@ -2235,6 +2280,10 @@ fn base64_encode(input: &str, remove_padding: bool) -> String {
 }
 
 fn base64_decode(input: &str, protocol: &'static str) -> Result<String, ShareError> {
+    if input.trim().len() > MAX_BASE64_DECODE_INPUT {
+        return Err(ShareError::InvalidBase64 { protocol });
+    }
+
     let mut normalized = input
         .trim()
         .chars()
@@ -2311,11 +2360,15 @@ impl StripPrefixCi for str {
 
 #[cfg(test)]
 mod share_tests {
-    use std::panic;
+    use std::{collections::BTreeMap, panic};
 
     use proptest::prelude::*;
 
     use super::*;
+    use crate::{
+        generate_singbox_config_value, generate_xray_config_value, AppConfig, CoreConfigContext,
+        CoreType, PROXY_TAG,
+    };
 
     #[test]
     fn fmt_share_round_trips_all_supported_protocols() {
@@ -2402,6 +2455,62 @@ mod share_tests {
     }
 
     #[test]
+    fn fmt_hostile_subscription_tls_flags_are_not_trusted_by_generators() {
+        let mut node = parse_share_link(
+            "vless://00000000-0000-0000-0000-000000000099@hostile.example:443?encryption=none&security=tls&type=ws&host=cdn.example&path=/ws&insecure=1&fp=definitely-not-utls#hostile",
+        )
+        .expect("parse hostile vless share");
+        node.index_id = "hostile-vless".to_string();
+
+        assert_eq!(node.allow_insecure, ALLOW_INSECURE_TRUE);
+        assert_eq!(node.fingerprint, "definitely-not-utls");
+
+        let mut app_config = AppConfig::default();
+        app_config.core_basic_item.def_fingerprint = "firefox".to_string();
+
+        let xray_value = generate_xray_config_value(&fmt_test_context(
+            CoreType::Xray,
+            app_config.clone(),
+            node.clone(),
+        ));
+        let xray_proxy = proxy_outbound(&xray_value);
+        assert_eq!(
+            xray_proxy
+                .pointer("/streamSettings/tlsSettings/allowInsecure")
+                .and_then(Value::as_bool),
+            Some(false)
+        );
+        assert_eq!(
+            xray_proxy
+                .pointer("/streamSettings/tlsSettings/fingerprint")
+                .and_then(Value::as_str),
+            Some("firefox")
+        );
+
+        let mut singbox_node = node;
+        singbox_node.core_type = Some(CoreType::sing_box);
+        let singbox_value = generate_singbox_config_value(&fmt_test_context(
+            CoreType::sing_box,
+            app_config,
+            singbox_node,
+        ))
+        .expect("sing-box config should generate");
+        let singbox_proxy = proxy_outbound(&singbox_value);
+        assert_eq!(
+            singbox_proxy
+                .pointer("/tls/insecure")
+                .and_then(Value::as_bool),
+            Some(false)
+        );
+        assert_eq!(
+            singbox_proxy
+                .pointer("/tls/utls/fingerprint")
+                .and_then(Value::as_str),
+            Some("firefox")
+        );
+    }
+
+    #[test]
     fn fmt_negative_inputs_return_typed_errors_without_panicking() {
         for bad in [
             "",
@@ -2420,6 +2529,35 @@ mod share_tests {
                     parse_share_link(bad).map(|_| ())
                 }
             });
+            assert!(result.is_ok(), "{bad} panicked");
+            assert!(result.expect("panic checked").is_err(), "{bad} parsed");
+        }
+    }
+
+    #[test]
+    fn fmt_negative_inputs_cover_port_host_and_large_base64_edges() {
+        let bad_port_vmess = base64_encode(
+            r#"{"v":"2","ps":"bad-port","add":"example.com","port":"70000","id":"00000000-0000-0000-0000-000000000012"}"#,
+            false,
+        );
+        let bad_host_vmess = base64_encode(
+            r#"{"v":"2","ps":"bad-host","add":"bad=host","port":"443","id":"00000000-0000-0000-0000-000000000013"}"#,
+            false,
+        );
+        let oversized_vmess = format!("vmess://{}", "A".repeat(MAX_BASE64_DECODE_INPUT + 4));
+        let bad_inputs = vec![
+            "vless://00000000-0000-0000-0000-000000000014@example.com:0?encryption=none"
+                .to_string(),
+            "vless://00000000-0000-0000-0000-000000000014@example.com:65536?encryption=none"
+                .to_string(),
+            "vless://00000000-0000-0000-0000-000000000014@bad=host:443?encryption=none".to_string(),
+            format!("vmess://{bad_port_vmess}"),
+            format!("vmess://{bad_host_vmess}"),
+            oversized_vmess,
+        ];
+
+        for bad in bad_inputs {
+            let result = panic::catch_unwind(|| parse_share_link(&bad));
             assert!(result.is_ok(), "{bad} panicked");
             assert!(result.expect("panic checked").is_err(), "{bad} parsed");
         }
@@ -2734,5 +2872,35 @@ mod share_tests {
                 ..ProfileItem::default()
             },
         ]
+    }
+
+    fn fmt_test_context(
+        run_core_type: CoreType,
+        app_config: AppConfig,
+        node: ProfileItem,
+    ) -> CoreConfigContext {
+        let mut all_proxies_map = BTreeMap::new();
+        all_proxies_map.insert(node.index_id.clone(), node.clone());
+        let simple_dns_item = app_config.simple_dns_item.clone();
+        CoreConfigContext {
+            node,
+            run_core_type,
+            app_config,
+            simple_dns_item,
+            all_proxies_map,
+            ..CoreConfigContext::default()
+        }
+    }
+
+    fn proxy_outbound(config: &Value) -> &Value {
+        config
+            .get("outbounds")
+            .and_then(Value::as_array)
+            .and_then(|outbounds| {
+                outbounds
+                    .iter()
+                    .find(|outbound| outbound.get("tag").and_then(Value::as_str) == Some(PROXY_TAG))
+            })
+            .expect("proxy outbound should be generated")
     }
 }

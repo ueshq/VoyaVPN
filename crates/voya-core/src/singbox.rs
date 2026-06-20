@@ -80,6 +80,18 @@ const VMESS_SECURITIES: &[&str] = &[
     "none",
     "zero",
 ];
+const SINGBOX_UTLS_FINGERPRINTS: &[&str] = &[
+    "chrome",
+    "firefox",
+    "safari",
+    "ios",
+    "android",
+    "edge",
+    "360",
+    "qq",
+    "random",
+    "randomized",
+];
 
 const SS_SECURITIES_IN_SINGBOX: &[&str] = &[
     "aes-256-gcm",
@@ -1680,7 +1692,7 @@ fn fill_outbound_tls(
         ..SingboxTls::default()
     };
 
-    if let Some(fingerprint) = nonempty_string(Some(&node.fingerprint)) {
+    if let Some(fingerprint) = effective_fingerprint(node, context) {
         tls.utls = Some(SingboxUtls {
             enabled: true,
             fingerprint,
@@ -3548,6 +3560,20 @@ fn allow_insecure(node: &ProfileItem, context: &CoreConfigContext) -> bool {
 
     let node_value = trimmed(&node.allow_insecure);
     node_value.is_empty() || node_value.eq_ignore_ascii_case("true")
+}
+
+fn effective_fingerprint(node: &ProfileItem, context: &CoreConfigContext) -> Option<String> {
+    singbox_utls_fingerprint(&node.fingerprint)
+        .or_else(|| singbox_utls_fingerprint(&context.app_config.core_basic_item.def_fingerprint))
+}
+
+fn singbox_utls_fingerprint(value: &str) -> Option<String> {
+    let fingerprint = trimmed(value).to_ascii_lowercase();
+    if SINGBOX_UTLS_FINGERPRINTS.contains(&fingerprint.as_str()) {
+        Some(fingerprint)
+    } else {
+        None
+    }
 }
 
 fn transport_host_for_tls(node: &ProfileItem) -> Option<String> {
