@@ -169,15 +169,6 @@ impl<'db> SubscriptionManager<'db> {
             .iter()
             .find(|profile| !config.index_id.is_empty() && profile.index_id == config.index_id)
             .cloned();
-        let removed_existing = if is_sub {
-            if let Some(id) = subid {
-                self.database.profiles().delete_by_subid(id, true).await?
-            } else {
-                0
-            }
-        } else {
-            0
-        };
 
         let mut profiles = self
             .parse_import_text(config, text, subid.unwrap_or_default(), is_sub)
@@ -204,11 +195,21 @@ impl<'db> SubscriptionManager<'db> {
             return Ok(ImportProfilesResult {
                 imported: 0,
                 skipped: u32::try_from(skipped).unwrap_or(u32::MAX),
-                removed_existing: u32::try_from(removed_existing).unwrap_or(u32::MAX),
+                removed_existing: 0,
                 subid: subid.map(str::to_string),
                 imported_index_ids: Vec::new(),
             });
         }
+
+        let removed_existing = if is_sub {
+            if let Some(id) = subid {
+                self.database.profiles().delete_by_subid(id, true).await?
+            } else {
+                0
+            }
+        } else {
+            0
+        };
 
         let profile_manager = ProfileManager::new(self.database);
         let mut imported_index_ids = Vec::new();
@@ -246,9 +247,30 @@ impl<'db> SubscriptionManager<'db> {
         proxy_url: Option<&str>,
         now: i64,
     ) -> Result<SubscriptionUpdateResult> {
+        let subscriptions = self.database.subscriptions().list().await?;
+        self.update_subscription_snapshot(
+            config,
+            subscriptions,
+            subid,
+            prefer_proxy,
+            proxy_url,
+            now,
+        )
+        .await
+    }
+
+    async fn update_subscription_snapshot(
+        &self,
+        config: &mut AppConfig,
+        subscriptions: Vec<SubItem>,
+        subid: Option<&str>,
+        prefer_proxy: bool,
+        proxy_url: Option<&str>,
+        now: i64,
+    ) -> Result<SubscriptionUpdateResult> {
         let client = SubscriptionClient::new();
         let mut result = SubscriptionUpdateResult::default();
-        let subscriptions = self.database.subscriptions().list().await?;
+        let subid = subid.map(str::trim).filter(|value| !value.is_empty());
 
         for mut item in subscriptions {
             if subid.is_some_and(|wanted| wanted != item.id) {
@@ -281,24 +303,58 @@ impl<'db> SubscriptionManager<'db> {
 
             match fetch {
                 Ok(fetch) => {
-                    let import = self
+                    if fetch.content.trim().is_empty() {
+                        result.skipped = result.skipped.saturating_add(1);
+                        result.messages.push(format!(
+                            "{}->fetched empty subscription content",
+                            item.remarks
+                        ));
+                        continue;
+                    }
+
+                    match self
                         .import_profiles_from_text(config, &fetch.content, Some(&item.id), true)
-                        .await?;
-                    item.update_time = now;
-                    self.database.subscriptions().upsert(&item).await?;
-                    result.updated = result.updated.saturating_add(1);
-                    result.imported = result.imported.saturating_add(import.imported);
-                    result.removed_existing = result
-                        .removed_existing
-                        .saturating_add(import.removed_existing);
-                    result.messages.push(format!(
-                        "{}->imported {} profiles",
-                        item.remarks, import.imported
-                    ));
+                        .await
+                    {
+                        Ok(import) if import.imported > 0 => {
+                            item.update_time = now;
+                            self.database.subscriptions().upsert(&item).await?;
+                            result.updated = result.updated.saturating_add(1);
+                            result.imported = result.imported.saturating_add(import.imported);
+                            result.removed_existing = result
+                                .removed_existing
+                                .saturating_add(import.removed_existing);
+                            result.messages.push(format!(
+                                "{}->imported {} profiles",
+                                item.remarks, import.imported
+                            ));
+                        }
+                        Ok(_) => {
+                            result.skipped = result.skipped.saturating_add(1);
+                            result
+                                .messages
+                                .push(format!("{}->no profiles were imported", item.remarks));
+                        }
+                        Err(SubscriptionManagerError::NoImportableProfiles) => {
+                            result.skipped = result.skipped.saturating_add(1);
+                            result.messages.push(format!(
+                                "{}->no importable profiles were found",
+                                item.remarks
+                            ));
+                        }
+                        Err(error) => return Err(error),
+                    }
                 }
                 Err(error) => {
                     result.skipped = result.skipped.saturating_add(1);
-                    result.messages.push(format!("{}->{}", item.remarks, error));
+                    let message = if is_empty_download_error(&error) {
+                        "fetched empty subscription content".to_string()
+                    } else {
+                        error.to_string()
+                    };
+                    result
+                        .messages
+                        .push(format!("{}->{}", item.remarks, message));
                 }
             }
         }
@@ -313,7 +369,7 @@ impl<'db> SubscriptionManager<'db> {
         prefer_proxy: bool,
         proxy_url: Option<&str>,
     ) -> Result<SubscriptionUpdateResult> {
-        let due_ids = self
+        let due_subscriptions = self
             .database
             .subscriptions()
             .list()
@@ -323,24 +379,17 @@ impl<'db> SubscriptionManager<'db> {
             .filter(|item| {
                 now.saturating_sub(item.update_time) >= i64::from(item.auto_update_interval) * 60
             })
-            .map(|item| item.id)
             .collect::<Vec<_>>();
 
-        let mut combined = SubscriptionUpdateResult::default();
-        for id in due_ids {
-            let result = self
-                .update_subscriptions(config, Some(&id), prefer_proxy, proxy_url, now)
-                .await?;
-            combined.updated = combined.updated.saturating_add(result.updated);
-            combined.skipped = combined.skipped.saturating_add(result.skipped);
-            combined.imported = combined.imported.saturating_add(result.imported);
-            combined.removed_existing = combined
-                .removed_existing
-                .saturating_add(result.removed_existing);
-            combined.messages.extend(result.messages);
-        }
-
-        Ok(combined)
+        self.update_subscription_snapshot(
+            config,
+            due_subscriptions,
+            None,
+            prefer_proxy,
+            proxy_url,
+            now,
+        )
+        .await
     }
 
     async fn parse_import_text(
@@ -352,6 +401,7 @@ impl<'db> SubscriptionManager<'db> {
     ) -> Result<Vec<ProfileItem>> {
         let mut profiles = Vec::new();
         let mut added_subscription = false;
+        let allow_subscription_import = !is_sub && subid.trim().is_empty();
         let mut contents = Vec::new();
         if let Some(decoded) = decode_base64_payload(text) {
             contents.push(decoded);
@@ -368,7 +418,7 @@ impl<'db> SubscriptionManager<'db> {
                 if is_sub && !lines_seen.insert(line.to_string()) {
                     continue;
                 }
-                if !is_sub && is_http_url(line) {
+                if allow_subscription_import && is_http_url(line) {
                     self.add_subscription_from_url(config, line).await?;
                     added_subscription = true;
                     continue;
@@ -478,6 +528,18 @@ fn extract_remarks_from_url(url: &str) -> Option<String> {
         let (key, value) = part.split_once('=')?;
         (key.eq_ignore_ascii_case("remarks") && !value.is_empty()).then(|| value.to_string())
     })
+}
+
+fn is_empty_download_error(error: &DownloadError) -> bool {
+    match error {
+        DownloadError::AttemptsFailed { attempts, .. } => {
+            !attempts.is_empty()
+                && attempts.iter().all(|attempt| {
+                    attempt.bytes == 0 && attempt.error.as_deref() == Some("empty response")
+                })
+        }
+        _ => false,
+    }
 }
 
 fn generate_subscription_id() -> String {
@@ -649,6 +711,126 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn subscription_update_skips_non_importable_fetches_without_touching_state() {
+        let seen_user_agents = Arc::new(Mutex::new(Vec::new()));
+        let base = spawn_http_fixture(
+            HashMap::from([
+                ("/empty".to_string(), String::new()),
+                ("/junk".to_string(), "not a profile".to_string()),
+                (
+                    "/filtered".to_string(),
+                    "vless://uuid@example.test:443#US%20Filtered".to_string(),
+                ),
+                (
+                    "/url-only".to_string(),
+                    "https://example.test/new?remarks=Injected".to_string(),
+                ),
+            ]),
+            4,
+            Arc::clone(&seen_user_agents),
+        )
+        .await;
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+        for (id, remarks, path, filter) in [
+            ("empty", "Empty", "/empty", None),
+            ("junk", "Junk", "/junk", None),
+            ("filtered", "Filtered", "/filtered", Some("JP")),
+            ("url-only", "URL Only", "/url-only", None),
+        ] {
+            manager
+                .save_subscription(
+                    &mut config,
+                    SubItem {
+                        id: id.to_string(),
+                        remarks: remarks.to_string(),
+                        url: format!("{base}{path}"),
+                        filter: filter.map(str::to_string),
+                        update_time: 10,
+                        ..SubItem::default()
+                    },
+                )
+                .await
+                .expect("subscription manager test operation should succeed");
+        }
+
+        let mut old_profile = sample_profile("filtered-old", "JP old");
+        old_profile.subid = "filtered".to_string();
+        old_profile.is_sub = true;
+        database
+            .profiles()
+            .upsert(&old_profile)
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        let result = manager
+            .update_subscriptions(&mut config, None, false, None, 900)
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        assert_eq!(result.updated, 0);
+        assert_eq!(result.skipped, 4);
+        assert_eq!(result.imported, 0);
+        assert_eq!(result.removed_existing, 0);
+        assert!(
+            result
+                .messages
+                .iter()
+                .any(|message| message.contains("Empty->fetched empty subscription content")),
+            "{:?}",
+            result.messages
+        );
+        assert!(
+            result
+                .messages
+                .iter()
+                .any(|message| message.contains("Junk->no importable profiles were found")),
+            "{:?}",
+            result.messages
+        );
+        assert!(
+            result
+                .messages
+                .iter()
+                .any(|message| message.contains("Filtered->no profiles were imported")),
+            "{:?}",
+            result.messages
+        );
+        assert!(
+            result
+                .messages
+                .iter()
+                .any(|message| message.contains("URL Only->no importable profiles were found")),
+            "{:?}",
+            result.messages
+        );
+
+        let subscriptions = database
+            .subscriptions()
+            .list()
+            .await
+            .expect("subscription manager test operation should succeed");
+        assert_eq!(subscriptions.len(), 4);
+        assert!(subscriptions
+            .iter()
+            .all(|subscription| subscription.update_time == 10));
+        assert!(subscriptions
+            .iter()
+            .all(|subscription| subscription.url != "https://example.test/new?remarks=Injected"));
+
+        let filtered_profiles = database
+            .profiles()
+            .list_by_subid(Some("filtered"))
+            .await
+            .expect("subscription manager test operation should succeed");
+        assert_eq!(filtered_profiles.len(), 1);
+        assert_eq!(filtered_profiles[0].remarks, "JP old");
+    }
+
+    #[tokio::test]
     async fn due_update_only_runs_subscriptions_past_their_interval() {
         let seen_user_agents = Arc::new(Mutex::new(Vec::new()));
         let base = spawn_http_fixture(
@@ -709,6 +891,57 @@ mod tests {
                 .expect("subscription manager test operation should succeed")
                 .len(),
             1
+        );
+    }
+
+    #[tokio::test]
+    async fn due_update_uses_initial_subscription_snapshot() {
+        let seen_paths = Arc::new(Mutex::new(Vec::new()));
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let base = spawn_due_snapshot_fixture(database.clone(), Arc::clone(&seen_paths)).await;
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+        manager
+            .save_subscription(
+                &mut config,
+                SubItem {
+                    id: "first".to_string(),
+                    remarks: "First".to_string(),
+                    url: format!("{base}/first"),
+                    auto_update_interval: 1,
+                    sort: 1,
+                    ..SubItem::default()
+                },
+            )
+            .await
+            .expect("subscription manager test operation should succeed");
+        manager
+            .save_subscription(
+                &mut config,
+                SubItem {
+                    id: "second".to_string(),
+                    remarks: "Second".to_string(),
+                    url: format!("{base}/second-original"),
+                    auto_update_interval: 1,
+                    sort: 2,
+                    ..SubItem::default()
+                },
+            )
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        let result = manager
+            .run_due_updates(&mut config, 120, false, None)
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        assert_eq!(result.updated, 2);
+        assert_eq!(result.imported, 2);
+        assert_eq!(
+            seen_paths.lock().await.as_slice(),
+            ["/first", "/second-original"]
         );
     }
 
@@ -805,5 +1038,77 @@ mod tests {
         });
 
         format!("http://{address}")
+    }
+
+    async fn spawn_due_snapshot_fixture(
+        database: Database,
+        seen_paths: Arc<Mutex<Vec<String>>>,
+    ) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("subscription manager test operation should succeed");
+        let address = listener
+            .local_addr()
+            .expect("subscription manager test operation should succeed");
+        let base = format!("http://{address}");
+        let server_base = base.clone();
+
+        tokio::spawn(async move {
+            for _ in 0..2 {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    break;
+                };
+                let database = database.clone();
+                let seen_paths = Arc::clone(&seen_paths);
+                let base = server_base.clone();
+                tokio::spawn(async move {
+                    let mut buffer = vec![0; 4096];
+                    let bytes_read = socket.read(&mut buffer).await.unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+                    let path = request
+                        .lines()
+                        .next()
+                        .and_then(|line| line.split_whitespace().nth(1))
+                        .and_then(|target| target.split('?').next())
+                        .unwrap_or("/")
+                        .to_string();
+                    seen_paths.lock().await.push(path.clone());
+
+                    if path == "/first" {
+                        database
+                            .subscriptions()
+                            .upsert(&SubItem {
+                                id: "second".to_string(),
+                                remarks: "Second mutated".to_string(),
+                                url: format!("{base}/second-mutated"),
+                                auto_update_interval: 1,
+                                sort: 2,
+                                ..SubItem::default()
+                            })
+                            .await
+                            .expect("subscription manager test operation should succeed");
+                    }
+
+                    let body = match path.as_str() {
+                        "/first" => "vless://uuid-first@example.test:443#First",
+                        "/second-original" => "vless://uuid-second@example.test:443#Second",
+                        "/second-mutated" => "vless://uuid-mutated@example.test:443#Mutated",
+                        _ => "",
+                    };
+                    let status = if body.is_empty() {
+                        "404 Not Found"
+                    } else {
+                        "200 OK"
+                    };
+                    let response = format!(
+                        "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = socket.write_all(response.as_bytes()).await;
+                });
+            }
+        });
+
+        base
     }
 }
