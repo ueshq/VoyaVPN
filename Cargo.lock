@@ -5058,6 +5058,7 @@ dependencies = [
  "voya-net",
  "voya-platform",
  "voya-udptest",
+ "zeroize",
  "zip 0.6.6",
 ]
 
@@ -5145,6 +5146,7 @@ dependencies = [
  "voya-core",
  "voya-db",
  "voya-platform",
+ "zeroize",
 ]
 
 [[package]]

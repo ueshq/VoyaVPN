@@ -36,6 +36,7 @@ voya-app.workspace = true
 voya-core.workspace = true
 voya-db.workspace = true
 voya-platform.workspace = true
+zeroize.workspace = true
 
 [lints]
 workspace = true

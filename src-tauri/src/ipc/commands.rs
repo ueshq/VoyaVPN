@@ -56,6 +56,7 @@ use voya_core::{
     SubscriptionUpdateResult, SysProxyType, WebDavItem,
 };
 use voya_platform::{coreinfo::CoreInfoError, sysproxy::SystemProxyStatus};
+use zeroize::Zeroizing;
 
 use super::events::{
     next_log_line_id, CoreState, CoreStateEvent, InvalidateEvent, LogLevel, LogLineEvent,
@@ -406,13 +407,11 @@ pub fn sudo_submit_password(
         IPC_ID_MAX_CHARS,
         AppError::Sudo,
     )?;
-    let request_id = request_id
-        .parse::<u64>()
-        .map_err(|_| AppError::Sudo("invalid sudo password request id".to_string()))?;
+    let password = Zeroizing::new(password);
 
     state
         .sudo_password_collector()
-        .submit_password(request_id, password)
+        .submit_password(&request_id, password)
         .map(sudo_collection_response)
         .map_err(sudo_error)
 }
@@ -3285,7 +3284,7 @@ fn sudo_collection_response(status: SudoCollectionStatus) -> SudoCollectionRespo
         },
         SudoCollectionStatus::Required { request_id } => SudoCollectionResponse {
             state: SudoCollectionState::Required,
-            request_id: Some(request_id.to_string()),
+            request_id: Some(request_id),
         },
     }
 }

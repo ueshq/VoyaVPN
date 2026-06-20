@@ -28,11 +28,18 @@ impl SudoPasswordStore {
     }
 
     pub fn set_password(&self, password: impl Into<String>) -> Result<(), SudoPasswordError> {
+        self.set_password_secret(Zeroizing::new(password.into()))
+    }
+
+    pub fn set_password_secret(
+        &self,
+        password: Zeroizing<String>,
+    ) -> Result<(), SudoPasswordError> {
         let mut guard = self
             .password
             .lock()
             .map_err(|_| SudoPasswordError::LockPoisoned)?;
-        *guard = Zeroizing::new(password.into());
+        *guard = password;
         Ok(())
     }
 

@@ -1,25 +1,20 @@
-use std::{
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
-    },
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::sync::{Arc, Mutex};
 
 use thiserror::Error;
+use uuid::Uuid;
 use voya_platform::elevation::{SudoPasswordError, SudoPasswordStore};
+use zeroize::Zeroizing;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SudoCollectionStatus {
     Ready,
-    Required { request_id: u64 },
+    Required { request_id: String },
 }
 
 #[derive(Debug)]
 pub struct SudoPasswordCollector {
     store: Arc<SudoPasswordStore>,
-    pending_request_id: Mutex<Option<u64>>,
-    next_request_id: AtomicU64,
+    pending_request_id: Mutex<Option<String>>,
 }
 
 impl SudoPasswordCollector {
@@ -33,7 +28,6 @@ impl SudoPasswordCollector {
         Self {
             store,
             pending_request_id: Mutex::new(None),
-            next_request_id: AtomicU64::new(initial_request_id()),
         }
     }
 
@@ -51,11 +45,11 @@ impl SudoPasswordCollector {
             .pending_request_id
             .lock()
             .map_err(|_| SudoCollectionError::LockPoisoned)?;
-        let request_id = match *pending {
-            Some(request_id) => request_id,
+        let request_id = match pending.as_ref() {
+            Some(request_id) => request_id.clone(),
             None => {
-                let request_id = self.next_request_id.fetch_add(1, Ordering::Relaxed);
-                *pending = Some(request_id);
+                let request_id = new_request_id();
+                *pending = Some(request_id.clone());
                 request_id
             }
         };
@@ -65,8 +59,8 @@ impl SudoPasswordCollector {
 
     pub fn submit_password(
         &self,
-        request_id: u64,
-        password: String,
+        request_id: &str,
+        password: Zeroizing<String>,
     ) -> Result<SudoCollectionStatus, SudoCollectionError> {
         if password.is_empty() {
             return Err(SudoCollectionError::EmptyPassword);
@@ -77,15 +71,19 @@ impl SudoPasswordCollector {
             .lock()
             .map_err(|_| SudoCollectionError::LockPoisoned)?;
 
-        match *pending {
-            Some(pending_request_id) if pending_request_id == request_id => {
-                self.store.set_password(password)?;
-                *pending = None;
-                Ok(SudoCollectionStatus::Ready)
-            }
-            Some(_) => Err(SudoCollectionError::RequestMismatch),
-            None if self.store.has_password()? => Ok(SudoCollectionStatus::Ready),
-            None => Err(SudoCollectionError::NoPendingRequest),
+        if pending
+            .as_ref()
+            .is_some_and(|pending_request_id| pending_request_id == request_id)
+        {
+            self.store.set_password_secret(password)?;
+            *pending = None;
+            Ok(SudoCollectionStatus::Ready)
+        } else if pending.is_some() {
+            Err(SudoCollectionError::RequestMismatch)
+        } else if self.store.has_password()? {
+            Ok(SudoCollectionStatus::Ready)
+        } else {
+            Err(SudoCollectionError::NoPendingRequest)
         }
     }
 
@@ -100,10 +98,8 @@ impl SudoPasswordCollector {
     }
 }
 
-fn initial_request_id() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(1, |duration| duration.as_secs().max(1))
+fn new_request_id() -> String {
+    Uuid::new_v4().to_string()
 }
 
 #[derive(Debug, Error)]
@@ -137,7 +133,7 @@ mod tests {
         };
         assert_eq!(
             collector
-                .submit_password(request_id, "pw".to_string())
+                .submit_password(&request_id, Zeroizing::new("pw".to_string()))
                 .expect("submit password"),
             SudoCollectionStatus::Ready
         );
@@ -145,5 +141,29 @@ mod tests {
             collector.begin_collection().expect("ready after password"),
             SudoCollectionStatus::Ready
         );
+    }
+
+    #[test]
+    fn sudo_collection_request_ids_are_random_v4_uuids() {
+        let collector = SudoPasswordCollector::new(Arc::new(SudoPasswordStore::new()));
+
+        let first = required_request_id(collector.begin_collection().expect("first request"));
+        let first_uuid = Uuid::parse_str(&first).expect("first request id is uuid");
+        assert_eq!(first_uuid.get_version(), Some(uuid::Version::Random));
+        assert!(first.parse::<u64>().is_err());
+
+        collector.clear_password().expect("clear pending request");
+        let second = required_request_id(collector.begin_collection().expect("second request"));
+        let second_uuid = Uuid::parse_str(&second).expect("second request id is uuid");
+        assert_eq!(second_uuid.get_version(), Some(uuid::Version::Random));
+
+        assert_ne!(first, second);
+    }
+
+    fn required_request_id(status: SudoCollectionStatus) -> String {
+        let SudoCollectionStatus::Required { request_id } = status else {
+            panic!("expected sudo password request");
+        };
+        request_id
     }
 }

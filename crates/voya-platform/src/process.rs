@@ -274,12 +274,7 @@ impl ProcessRunner for StdProcessRunner {
         })?;
 
         if let Some(stdin) = &request.stdin {
-            if let Some(mut child_stdin) = child.stdin.take() {
-                child_stdin
-                    .write_all(stdin.expose_for_process().as_bytes())
-                    .and_then(|_| child_stdin.write_all(b"\n"))
-                    .map_err(ProcessError::WriteStdin)?;
-            }
+            write_child_stdin(&mut child, stdin)?;
         }
 
         if request.display_log {
@@ -332,12 +327,7 @@ impl ProcessRunner for StdProcessRunner {
                 executable: request.executable.clone(),
                 source,
             })?;
-            if let Some(mut child_stdin) = child.stdin.take() {
-                child_stdin
-                    .write_all(stdin.expose_for_process().as_bytes())
-                    .and_then(|_| child_stdin.write_all(b"\n"))
-                    .map_err(ProcessError::WriteStdin)?;
-            }
+            write_child_stdin(&mut child, stdin)?;
             let output = child.wait_with_output().map_err(ProcessError::Wait)?;
             return Ok(ProcessOutput {
                 status_code: output.status.code(),
@@ -513,6 +503,24 @@ fn stop_child(child: &mut Child) -> Result<(), ProcessError> {
             Ok(())
         }
     }
+}
+
+fn write_child_stdin(child: &mut Child, stdin: &ProcessStdin) -> Result<(), ProcessError> {
+    let Some(mut child_stdin) = child.stdin.take() else {
+        if let Err(error) = stop_child(child) {
+            tracing::warn!(
+                ?error,
+                "failed to stop child process after stdin pipe was missing"
+            );
+            return Err(error);
+        }
+        return Err(ProcessError::MissingStdinPipe);
+    };
+
+    child_stdin
+        .write_all(stdin.expose_for_process().as_bytes())
+        .and_then(|_| child_stdin.write_all(b"\n"))
+        .map_err(ProcessError::WriteStdin)
 }
 
 fn remove_child_control(children: &Weak<Mutex<HashMap<u32, ChildControl>>>, process_id: u32) {
@@ -975,6 +983,8 @@ pub enum ProcessError {
     },
     #[error("failed to write process stdin: {0}")]
     WriteStdin(io::Error),
+    #[error("process stdin pipe was unavailable")]
+    MissingStdinPipe,
     #[error("failed while waiting for process: {0}")]
     Wait(io::Error),
     #[error("failed to stop process: {0}")]
@@ -1312,6 +1322,30 @@ mod tests {
 
         drop(runner);
 
+        assert!(!process_is_running(pid));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_stdin_missing_pipe_fails_and_kills_child() {
+        let Some(sleep) = ["/bin/sleep", "/usr/bin/sleep"]
+            .into_iter()
+            .find(|path| Path::new(path).exists())
+        else {
+            return;
+        };
+
+        let mut child = Command::new(sleep)
+            .arg("30")
+            .stdin(Stdio::null())
+            .spawn()
+            .expect("spawn sleep without stdin pipe");
+        let pid = child.id();
+        let stdin = ProcessStdin::new(Zeroizing::new("secret-password".to_string()));
+
+        let error = write_child_stdin(&mut child, &stdin).expect_err("missing pipe should fail");
+
+        assert!(matches!(error, ProcessError::MissingStdinPipe));
         assert!(!process_is_running(pid));
     }
 
