@@ -61,6 +61,12 @@ pub enum UpdateManagerError {
     RulesetGeo(#[from] RulesetGeoError),
     #[error(transparent)]
     Runtime(#[from] RuntimeError),
+    #[error("blocking update task {operation} failed: {source}")]
+    BlockingTaskJoin {
+        operation: &'static str,
+        #[source]
+        source: tokio::task::JoinError,
+    },
     #[error("unsupported update target {0}")]
     UnsupportedTarget(String),
     #[error("current OS or CPU architecture is not supported for downloads")]
@@ -345,7 +351,7 @@ impl<'db> UpdateManager<'db> {
                 continue;
             }
 
-            let current = self.current_package_version(&package)?;
+            let current = self.current_package_version(&package).await?;
             match check_package_from_cdn_metadata(&package, current.as_ref(), os, arch, &metadata) {
                 Ok(check) => results.push(check_result_to_update_result(&check)),
                 Err(error) => results.push(UpdateCheckResult {
@@ -392,7 +398,7 @@ impl<'db> UpdateManager<'db> {
                 continue;
             }
 
-            let current = self.current_package_version(&package)?;
+            let current = self.current_package_version(&package).await?;
             match check_package_from_cdn_metadata(&package, current.as_ref(), os, arch, &metadata) {
                 Ok(check) if check.has_update => {
                     let file_name = check.asset.name.clone();
@@ -482,40 +488,31 @@ impl<'db> UpdateManager<'db> {
         )
     }
 
-    pub fn apply_core_update(
+    pub async fn apply_core_update(
         &self,
         request: &CoreUpdateApplyRequest,
     ) -> Result<CoreUpdateApplyResult> {
-        apply_downloaded_core_update(&self.paths, request)
+        let paths = self.paths.clone();
+        let request = request.clone();
+        spawn_update_blocking("apply core update", move || {
+            apply_downloaded_core_update(&paths, &request)
+        })
+        .await
     }
 
-    fn current_package_version(&self, package: &ReleasePackage) -> Result<Option<Version>> {
+    async fn current_package_version(&self, package: &ReleasePackage) -> Result<Option<Version>> {
         match package.target {
             PackageTarget::App => Ok(parse_version(env!("CARGO_PKG_VERSION"))),
-            PackageTarget::Core(core_type) => self.installed_core_version(core_type),
+            PackageTarget::Core(core_type) => self.installed_core_version(core_type).await,
         }
     }
 
-    fn installed_core_version(&self, core_type: CoreType) -> Result<Option<Version>> {
-        let Some(core_info) = get_core_info(core_type) else {
-            return Ok(None);
-        };
-        let Some(version_arg) = core_info.version_arg else {
-            return Ok(None);
-        };
-        let Ok(executable) = discover_executable(&self.paths, core_info) else {
-            return Ok(None);
-        };
-
-        let output = Command::new(executable)
-            .args(version_arg.split_whitespace())
-            .output()
-            .map_err(|source| UpdateManagerError::VersionProbe { core_type, source })?;
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let combined = format!("{stdout}\n{stderr}");
-
-        Ok(parse_core_version_output(core_type, &combined))
+    async fn installed_core_version(&self, core_type: CoreType) -> Result<Option<Version>> {
+        let paths = self.paths.clone();
+        spawn_update_blocking("core version probe", move || {
+            installed_core_version_blocking(&paths, core_type)
+        })
+        .await
     }
 
     async fn download_geo_files(
@@ -610,6 +607,41 @@ impl<'db> UpdateManager<'db> {
     }
 }
 
+async fn spawn_update_blocking<T, F>(operation: &'static str, task: F) -> Result<T>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T> + Send + 'static,
+{
+    tokio::task::spawn_blocking(task)
+        .await
+        .map_err(|source| UpdateManagerError::BlockingTaskJoin { operation, source })?
+}
+
+fn installed_core_version_blocking(
+    paths: &AppPaths,
+    core_type: CoreType,
+) -> Result<Option<Version>> {
+    let Some(core_info) = get_core_info(core_type) else {
+        return Ok(None);
+    };
+    let Some(version_arg) = core_info.version_arg else {
+        return Ok(None);
+    };
+    let Ok(executable) = discover_executable(paths, core_info) else {
+        return Ok(None);
+    };
+
+    let output = Command::new(executable)
+        .args(version_arg.split_whitespace())
+        .output()
+        .map_err(|source| UpdateManagerError::VersionProbe { core_type, source })?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{stdout}\n{stderr}");
+
+    Ok(parse_core_version_output(core_type, &combined))
+}
+
 pub async fn apply_downloaded_core_update_with_runtime(
     update_manager: &UpdateManager<'_>,
     runtime_manager: &RuntimeManager<'_>,
@@ -628,7 +660,7 @@ pub async fn apply_downloaded_core_update_with_runtime(
         None
     };
 
-    match update_manager.apply_core_update(request) {
+    match update_manager.apply_core_update(request).await {
         Ok(update) => {
             let restarted_runtime = if should_restart {
                 Some(runtime_manager.restart(config).await?)

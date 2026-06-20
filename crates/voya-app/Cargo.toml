@@ -32,6 +32,7 @@ zip = { version = "0.6", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 base64 = "0.22"
+voya-net = { workspace = true, features = ["test-utils"] }
 
 [lints]
 workspace = true

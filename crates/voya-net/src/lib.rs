@@ -634,7 +634,7 @@ pub struct SubscriptionClient {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SubscriptionUrlPolicy {
     DenyLocal,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-utils"))]
     AllowLocalForTests,
 }
 
@@ -652,6 +652,16 @@ impl SubscriptionClient {
         options: &SubscriptionFetchOptions,
     ) -> Result<SubscriptionFetchResult> {
         self.fetch_with_url_policy(source, options, SubscriptionUrlPolicy::DenyLocal)
+            .await
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    pub async fn fetch_allowing_local_for_tests(
+        &self,
+        source: &SubscriptionFetchSource,
+        options: &SubscriptionFetchOptions,
+    ) -> Result<SubscriptionFetchResult> {
+        self.fetch_with_url_policy(source, options, SubscriptionUrlPolicy::AllowLocalForTests)
             .await
     }
 

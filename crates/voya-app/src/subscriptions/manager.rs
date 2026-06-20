@@ -14,7 +14,7 @@ use voya_core::{
 use voya_db::{Database, DbError};
 use voya_net::{
     decode_base64_payload, DownloadError, SubscriptionClient, SubscriptionFetchOptions,
-    SubscriptionFetchSource,
+    SubscriptionFetchResult, SubscriptionFetchSource,
 };
 
 use crate::profiles::{ProfileManager, ProfileManagerError};
@@ -266,21 +266,18 @@ impl<'db> SubscriptionManager<'db> {
                 continue;
             }
 
-            let fetch = client
-                .fetch(
-                    &SubscriptionFetchSource {
-                        url: item.url.clone(),
-                        more_url: item.more_url.clone(),
-                        user_agent: item.user_agent.clone(),
-                        convert_target: item.convert_target.clone(),
-                        sub_convert_url: config.const_item.sub_convert_url.clone(),
-                    },
-                    &SubscriptionFetchOptions {
-                        prefer_proxy,
-                        proxy_url: proxy_url.map(str::to_string),
-                    },
-                )
-                .await;
+            let source = SubscriptionFetchSource {
+                url: item.url.clone(),
+                more_url: item.more_url.clone(),
+                user_agent: item.user_agent.clone(),
+                convert_target: item.convert_target.clone(),
+                sub_convert_url: config.const_item.sub_convert_url.clone(),
+            };
+            let options = SubscriptionFetchOptions {
+                prefer_proxy,
+                proxy_url: proxy_url.map(str::to_string),
+            };
+            let fetch = fetch_subscription(&client, &source, &options).await;
 
             match fetch {
                 Ok(fetch) => {
@@ -405,6 +402,24 @@ impl<'db> SubscriptionManager<'db> {
             Ok(profiles)
         }
     }
+}
+
+#[cfg(not(test))]
+async fn fetch_subscription(
+    client: &SubscriptionClient,
+    source: &SubscriptionFetchSource,
+    options: &SubscriptionFetchOptions,
+) -> std::result::Result<SubscriptionFetchResult, DownloadError> {
+    client.fetch(source, options).await
+}
+
+#[cfg(test)]
+async fn fetch_subscription(
+    client: &SubscriptionClient,
+    source: &SubscriptionFetchSource,
+    options: &SubscriptionFetchOptions,
+) -> std::result::Result<SubscriptionFetchResult, DownloadError> {
+    client.fetch_allowing_local_for_tests(source, options).await
 }
 
 fn normalize_subscription(item: &mut SubItem) {
