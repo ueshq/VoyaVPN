@@ -57,6 +57,32 @@ describe("app update flow", () => {
 
     expect(() => assertManualLinksSafe(links)).toThrow("forbidden download URL");
   });
+
+  it.each([
+    "javascript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "file:///tmp/VoyaVPN-linux-x64.AppImage",
+    "http://cdn.voyavpn.test/stable/VoyaVPN-linux-x64.AppImage",
+    "https://cdn.voyavpn.test.evil.example/stable/VoyaVPN-linux-x64.AppImage",
+    "https://github.com.evil.example/voyavpn/VoyaVPN-linux-x64.AppImage",
+    "not a url",
+    " ",
+  ])("rejects unsafe manual download URL %s", (url) => {
+    expect(() => assertManualLinksSafe(makeManualLinks({ downloads: [makeDownload({ url })] }))).toThrow(
+      "forbidden download URL",
+    );
+  });
+
+  it.each([
+    "https://cdn.voyavpn.test/stable/VoyaVPN-linux-x64.AppImage",
+    "https://assets.cdn.voyavpn.test/stable/VoyaVPN-linux-x64.AppImage",
+    "https://cdn.voyavpn.dev/stable/VoyaVPN-linux-x64.AppImage",
+    "https://downloads.cdn.voyavpn.dev/stable/VoyaVPN-linux-x64.AppImage",
+  ])("allows approved manual download host %s", (url) => {
+    const links = makeManualLinks({ downloads: [makeDownload({ url })] });
+
+    expect(assertManualLinksSafe(links)).toBe(links);
+  });
 });
 
 function makeDeps(overrides: Partial<AppUpdateFlowDeps> = {}): AppUpdateFlowDeps {
@@ -89,16 +115,19 @@ function makeManualLinks(overrides: Partial<ManualAppUpdateLinks> = {}): ManualA
     channel: "stable",
     target: "linux",
     arch: "x64",
-    downloads: [
-      {
-        name: "VoyaVPN-linux-x64.AppImage",
-        kind: "appimage",
-        version: "2.0.0",
-        url: "https://cdn.voyavpn.test/stable/VoyaVPN-linux-x64.AppImage",
-        sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        bytes: 10,
-      },
-    ],
+    downloads: [makeDownload()],
+    ...overrides,
+  };
+}
+
+function makeDownload(overrides: Partial<ManualAppUpdateLinks["downloads"][number]> = {}) {
+  return {
+    name: "VoyaVPN-linux-x64.AppImage",
+    kind: "appimage" as const,
+    version: "2.0.0",
+    url: "https://cdn.voyavpn.test/stable/VoyaVPN-linux-x64.AppImage",
+    sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    bytes: 10,
     ...overrides,
   };
 }

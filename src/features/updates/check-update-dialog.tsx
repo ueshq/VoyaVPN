@@ -528,7 +528,7 @@ function AppUpdatePanel({
                 className="inline-flex h-8 max-w-full min-w-0 items-center gap-2 rounded-md border px-3 text-xs font-medium text-foreground hover:bg-accent hover:text-accent-foreground"
                 href={download.url}
                 key={`${download.kind}:${download.url}`}
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 target="_blank"
               >
                 <ExternalLink className="size-3.5" aria-hidden="true" />

@@ -94,6 +94,7 @@ describe("CheckUpdateDialog", () => {
     });
 
     expect(link).toHaveAttribute("href", "https://cdn.voyavpn.test/stable/VoyaVPN-linux-x64.AppImage");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(screen.getByText(/updater failed at/)).toHaveTextContent("[redacted URL]");
     expect(screen.getByText(/updater failed at/)).toHaveTextContent("proxyUrl=[redacted]");
     expect(screen.queryByText(/updates\.voyavpn\.test/)).not.toBeInTheDocument();

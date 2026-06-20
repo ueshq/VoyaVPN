@@ -33,6 +33,8 @@ export const defaultAppUpdateFlowDeps: AppUpdateFlowDeps = {
   manualAppUpdateLinks,
 };
 
+const manualDownloadAllowedHosts = ["cdn.voyavpn.dev", "cdn.voyavpn.test"] as const;
+
 export async function loadAppUpdatePaths(
   preRelease: boolean,
   preferProxy = true,
@@ -98,15 +100,26 @@ export function assertManualLinksSafe(links: ManualAppUpdateLinks): ManualAppUpd
 }
 
 function isForbiddenManualUrl(url: string) {
-  const value = url.trim().toLowerCase();
+  const value = url.trim();
 
-  return (
-    value.length === 0 ||
-    value.includes("placeholder") ||
-    value.includes("voyavpn.example") ||
-    value.includes("github.com") ||
-    value.includes("githubusercontent.com") ||
-    value.includes("github.io")
+  if (value.length === 0) {
+    return true;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return true;
+  }
+
+  if (parsed.protocol !== "https:") {
+    return true;
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  return !manualDownloadAllowedHosts.some(
+    (allowedHost) => hostname === allowedHost || hostname.endsWith(`.${allowedHost}`),
   );
 }
 
