@@ -936,13 +936,10 @@ fn normalize_semver(candidate: &str) -> Option<String> {
 mod tests {
     use std::{collections::HashMap, sync::Arc};
 
-    use tokio::{
-        io::{AsyncReadExt, AsyncWriteExt},
-        net::TcpListener,
-        sync::Mutex,
-    };
+    use tokio::sync::Mutex;
 
     use super::*;
+    use crate::test_support::spawn_http_fixture;
 
     #[test]
     fn update_release_selection_respects_pre_release_toggle() {
@@ -1402,62 +1399,5 @@ mod tests {
                 ),
             },
         }
-    }
-
-    async fn spawn_http_fixture(
-        routes: HashMap<String, String>,
-        max_requests: usize,
-        seen_user_agents: Arc<Mutex<Vec<String>>>,
-    ) -> String {
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("update test operation should succeed");
-        let address = listener
-            .local_addr()
-            .expect("update test operation should succeed");
-        let routes = Arc::new(routes);
-
-        tokio::spawn(async move {
-            for _ in 0..max_requests {
-                let Ok((mut socket, _)) = listener.accept().await else {
-                    break;
-                };
-                let routes = Arc::clone(&routes);
-                let seen_user_agents = Arc::clone(&seen_user_agents);
-                tokio::spawn(async move {
-                    let mut buffer = vec![0; 4096];
-                    let bytes_read = socket.read(&mut buffer).await.unwrap_or(0);
-                    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
-                    let path = request
-                        .lines()
-                        .next()
-                        .and_then(|line| line.split_whitespace().nth(1))
-                        .and_then(|target| target.split('?').next())
-                        .unwrap_or("/");
-                    let user_agent = request
-                        .lines()
-                        .find_map(|line| {
-                            let (name, value) = line.split_once(':')?;
-                            name.eq_ignore_ascii_case("user-agent")
-                                .then(|| value.trim().to_string())
-                        })
-                        .unwrap_or_default();
-                    seen_user_agents.lock().await.push(user_agent);
-                    let body = routes.get(path).cloned().unwrap_or_default();
-                    let status = if routes.contains_key(path) {
-                        "200 OK"
-                    } else {
-                        "404 Not Found"
-                    };
-                    let response = format!(
-                        "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                        body.len()
-                    );
-                    let _ = socket.write_all(response.as_bytes()).await;
-                });
-            }
-        });
-
-        format!("http://{address}")
     }
 }

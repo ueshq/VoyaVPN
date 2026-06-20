@@ -12,8 +12,10 @@ use reqwest::{Client, Proxy};
 use std::{
     collections::HashMap,
     fs,
+    future::Future,
     net::IpAddr,
     path::{Path, PathBuf},
+    pin::Pin,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -136,6 +138,43 @@ pub struct DownloadBytesResponse {
     pub used_proxy: bool,
     pub attempts: Vec<DownloadAttempt>,
 }
+
+trait DownloadBody {
+    fn byte_len(&self) -> usize;
+    fn is_empty(&self) -> bool;
+}
+
+impl DownloadBody for String {
+    fn byte_len(&self) -> usize {
+        self.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        String::is_empty(self)
+    }
+}
+
+impl DownloadBody for Vec<u8> {
+    fn byte_len(&self) -> usize {
+        self.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        Vec::is_empty(self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DownloadOutput<T> {
+    body: T,
+    used_proxy: bool,
+    attempts: Vec<DownloadAttempt>,
+}
+
+type DownloadRequestFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
+
+type DownloadBodyRequest<T> =
+    for<'a> fn(&'a Client, &'a str, Option<&'a str>, usize) -> DownloadRequestFuture<'a, T>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegionalPreset {
@@ -280,140 +319,50 @@ impl DownloadClient {
     }
 
     pub async fn download_text(&self, request: DownloadRequest) -> Result<DownloadResponse> {
-        let mut attempts = Vec::new();
-        let response_body_limit = request
-            .response_body_limit
-            .unwrap_or(DEFAULT_TEXT_RESPONSE_LIMIT_BYTES);
+        let response = self
+            .request(
+                request,
+                DEFAULT_TEXT_RESPONSE_LIMIT_BYTES,
+                request_text_boxed,
+            )
+            .await?;
 
-        if request.prefer_proxy {
-            if let Some(proxy_url) = request
-                .proxy_url
-                .as_deref()
-                .filter(|value| !value.is_empty())
-            {
-                match self.proxy_client(&request.url, proxy_url) {
-                    Ok(client) => {
-                        match request_text(
-                            &client,
-                            &request.url,
-                            request.user_agent.as_deref(),
-                            response_body_limit,
-                        )
-                        .await
-                        {
-                            Ok(body) if !body.is_empty() => {
-                                attempts.push(DownloadAttempt {
-                                    url: request.url.clone(),
-                                    via_proxy: true,
-                                    bytes: body.len(),
-                                    error: None,
-                                });
-
-                                return Ok(DownloadResponse {
-                                    body,
-                                    used_proxy: true,
-                                    attempts,
-                                });
-                            }
-                            Ok(body) => attempts.push(DownloadAttempt {
-                                url: request.url.clone(),
-                                via_proxy: true,
-                                bytes: body.len(),
-                                error: Some("empty response".to_string()),
-                            }),
-                            Err(error) => attempts.push(DownloadAttempt {
-                                url: request.url.clone(),
-                                via_proxy: true,
-                                bytes: 0,
-                                error: Some(error.to_string()),
-                            }),
-                        }
-                    }
-                    Err(error) => attempts.push(DownloadAttempt {
-                        url: request.url.clone(),
-                        via_proxy: true,
-                        bytes: 0,
-                        error: Some(error.to_string()),
-                    }),
-                }
-            }
-        }
-
-        let client = match self.direct_client(&request.url) {
-            Ok(client) => client,
-            Err(error) => {
-                attempts.push(DownloadAttempt {
-                    url: request.url.clone(),
-                    via_proxy: false,
-                    bytes: 0,
-                    error: Some(error.to_string()),
-                });
-                return Err(DownloadError::AttemptsFailed {
-                    url: request.url,
-                    attempts,
-                });
-            }
-        };
-
-        match request_text(
-            &client,
-            &request.url,
-            request.user_agent.as_deref(),
-            response_body_limit,
-        )
-        .await
-        {
-            Ok(body) if !body.is_empty() => {
-                attempts.push(DownloadAttempt {
-                    url: request.url.clone(),
-                    via_proxy: false,
-                    bytes: body.len(),
-                    error: None,
-                });
-
-                Ok(DownloadResponse {
-                    body,
-                    used_proxy: false,
-                    attempts,
-                })
-            }
-            Ok(body) => {
-                attempts.push(DownloadAttempt {
-                    url: request.url.clone(),
-                    via_proxy: false,
-                    bytes: body.len(),
-                    error: Some("empty response".to_string()),
-                });
-                Err(DownloadError::AttemptsFailed {
-                    url: request.url,
-                    attempts,
-                })
-            }
-            Err(error) => {
-                let response_too_large = matches!(&error, DownloadError::ResponseTooLarge { .. });
-                attempts.push(DownloadAttempt {
-                    url: request.url.clone(),
-                    via_proxy: false,
-                    bytes: 0,
-                    error: Some(error.to_string()),
-                });
-                if response_too_large {
-                    Err(error)
-                } else {
-                    Err(DownloadError::AttemptsFailed {
-                        url: request.url,
-                        attempts,
-                    })
-                }
-            }
-        }
+        Ok(DownloadResponse {
+            body: response.body,
+            used_proxy: response.used_proxy,
+            attempts: response.attempts,
+        })
     }
 
     pub async fn download_bytes(&self, request: DownloadRequest) -> Result<DownloadBytesResponse> {
+        let response = self
+            .request(
+                request,
+                DEFAULT_BINARY_RESPONSE_LIMIT_BYTES,
+                request_bytes_boxed,
+            )
+            .await?;
+
+        Ok(DownloadBytesResponse {
+            body: response.body,
+            used_proxy: response.used_proxy,
+            attempts: response.attempts,
+        })
+    }
+
+    async fn request<T>(
+        &self,
+        request: DownloadRequest,
+        default_response_body_limit: usize,
+        request_body: DownloadBodyRequest<T>,
+    ) -> Result<DownloadOutput<T>>
+    where
+        T: DownloadBody,
+    {
         let mut attempts = Vec::new();
         let response_body_limit = request
             .response_body_limit
-            .unwrap_or(DEFAULT_BINARY_RESPONSE_LIMIT_BYTES);
+            .unwrap_or(default_response_body_limit);
 
         if request.prefer_proxy {
             if let Some(proxy_url) = request
@@ -423,7 +372,7 @@ impl DownloadClient {
             {
                 match self.proxy_client(&request.url, proxy_url) {
                     Ok(client) => {
-                        match request_bytes(
+                        match request_body(
                             &client,
                             &request.url,
                             request.user_agent.as_deref(),
@@ -432,14 +381,15 @@ impl DownloadClient {
                         .await
                         {
                             Ok(body) if !body.is_empty() => {
+                                let bytes = body.byte_len();
                                 attempts.push(DownloadAttempt {
                                     url: request.url.clone(),
                                     via_proxy: true,
-                                    bytes: body.len(),
+                                    bytes,
                                     error: None,
                                 });
 
-                                return Ok(DownloadBytesResponse {
+                                return Ok(DownloadOutput {
                                     body,
                                     used_proxy: true,
                                     attempts,
@@ -448,7 +398,7 @@ impl DownloadClient {
                             Ok(body) => attempts.push(DownloadAttempt {
                                 url: request.url.clone(),
                                 via_proxy: true,
-                                bytes: body.len(),
+                                bytes: body.byte_len(),
                                 error: Some("empty response".to_string()),
                             }),
                             Err(error) => attempts.push(DownloadAttempt {
@@ -485,7 +435,7 @@ impl DownloadClient {
             }
         };
 
-        match request_bytes(
+        match request_body(
             &client,
             &request.url,
             request.user_agent.as_deref(),
@@ -494,14 +444,15 @@ impl DownloadClient {
         .await
         {
             Ok(body) if !body.is_empty() => {
+                let bytes = body.byte_len();
                 attempts.push(DownloadAttempt {
                     url: request.url.clone(),
                     via_proxy: false,
-                    bytes: body.len(),
+                    bytes,
                     error: None,
                 });
 
-                Ok(DownloadBytesResponse {
+                Ok(DownloadOutput {
                     body,
                     used_proxy: false,
                     attempts,
@@ -511,7 +462,7 @@ impl DownloadClient {
                 attempts.push(DownloadAttempt {
                     url: request.url.clone(),
                     via_proxy: false,
-                    bytes: body.len(),
+                    bytes: body.byte_len(),
                     error: Some("empty response".to_string()),
                 });
                 Err(DownloadError::AttemptsFailed {
@@ -1022,12 +973,35 @@ fn map_download_body_error(url: &str, error: LimitedBodyReadError) -> DownloadEr
     }
 }
 
-async fn request_text(
+fn request_text_boxed<'a>(
+    client: &'a Client,
+    url: &'a str,
+    user_agent: Option<&'a str>,
+    response_body_limit: usize,
+) -> DownloadRequestFuture<'a, String> {
+    Box::pin(request_text(client, url, user_agent, response_body_limit))
+}
+
+fn request_bytes_boxed<'a>(
+    client: &'a Client,
+    url: &'a str,
+    user_agent: Option<&'a str>,
+    response_body_limit: usize,
+) -> DownloadRequestFuture<'a, Vec<u8>> {
+    Box::pin(request_bytes(client, url, user_agent, response_body_limit))
+}
+
+async fn request<T, ExtractBody, ExtractFuture>(
     client: &Client,
     url: &str,
     user_agent: Option<&str>,
     response_body_limit: usize,
-) -> Result<String> {
+    extract_body: ExtractBody,
+) -> Result<T>
+where
+    ExtractBody: FnOnce(reqwest::Response, usize) -> ExtractFuture,
+    ExtractFuture: Future<Output = std::result::Result<T, LimitedBodyReadError>>,
+{
     let user_agent = user_agent
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -1048,9 +1022,25 @@ async fn request_text(
             source,
         })?;
 
-    read_response_text_limited(response, response_body_limit)
+    extract_body(response, response_body_limit)
         .await
         .map_err(|error| map_download_body_error(url, error))
+}
+
+async fn request_text(
+    client: &Client,
+    url: &str,
+    user_agent: Option<&str>,
+    response_body_limit: usize,
+) -> Result<String> {
+    request(
+        client,
+        url,
+        user_agent,
+        response_body_limit,
+        read_response_text_limited,
+    )
+    .await
 }
 
 async fn request_bytes(
@@ -1059,29 +1049,14 @@ async fn request_bytes(
     user_agent: Option<&str>,
     response_body_limit: usize,
 ) -> Result<Vec<u8>> {
-    let user_agent = user_agent
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(USER_AGENT_PREFIX);
-
-    let response = client
-        .get(url)
-        .header(reqwest::header::USER_AGENT, user_agent)
-        .send()
-        .await
-        .map_err(|source| DownloadError::Request {
-            url: url.to_string(),
-            source,
-        })?
-        .error_for_status()
-        .map_err(|source| DownloadError::Request {
-            url: url.to_string(),
-            source,
-        })?;
-
-    read_response_bytes_limited(response, response_body_limit)
-        .await
-        .map_err(|error| map_download_body_error(url, error))
+    request(
+        client,
+        url,
+        user_agent,
+        response_body_limit,
+        read_response_bytes_limited,
+    )
+    .await
 }
 
 fn nonempty(value: String) -> Option<String> {
@@ -1101,17 +1076,196 @@ fn join_url_path(base: &str, file_name: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod test_support {
     use std::{collections::HashMap, sync::Arc};
 
-    use base64::engine::general_purpose::STANDARD;
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         net::TcpListener,
         sync::Mutex,
     };
 
+    pub(crate) async fn spawn_http_fixture(
+        routes: HashMap<String, String>,
+        max_requests: usize,
+        seen_user_agents: Arc<Mutex<Vec<String>>>,
+    ) -> String {
+        let routes = routes
+            .into_iter()
+            .map(|(path, body)| (path, body.into_bytes()))
+            .collect();
+
+        spawn_http_bytes_fixture(routes, max_requests, seen_user_agents).await
+    }
+
+    pub(crate) async fn spawn_http_bytes_fixture(
+        routes: HashMap<String, Vec<u8>>,
+        max_requests: usize,
+        seen_user_agents: Arc<Mutex<Vec<String>>>,
+    ) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("HTTP fixture should bind");
+        let address = listener.local_addr().expect("HTTP fixture address");
+        let routes = Arc::new(routes);
+
+        tokio::spawn(async move {
+            for _ in 0..max_requests {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    break;
+                };
+                let routes = Arc::clone(&routes);
+                let seen_user_agents = Arc::clone(&seen_user_agents);
+                tokio::spawn(async move {
+                    let mut buffer = vec![0; 4096];
+                    let bytes_read = socket.read(&mut buffer).await.unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+                    let path = request_path(&request);
+                    let user_agent = request_header(&request, "user-agent").unwrap_or_default();
+                    seen_user_agents.lock().await.push(user_agent);
+                    let body = routes.get(path).cloned().unwrap_or_default();
+                    let status = if routes.contains_key(path) {
+                        "200 OK"
+                    } else {
+                        "404 Not Found"
+                    };
+                    let header = format!(
+                        "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    let _ = socket.write_all(header.as_bytes()).await;
+                    let _ = socket.write_all(&body).await;
+                });
+            }
+        });
+
+        format!("http://{address}")
+    }
+
+    pub(crate) async fn spawn_redirect_chain_fixture(redirects: usize) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("HTTP fixture should bind");
+        let address = listener.local_addr().expect("HTTP fixture address");
+
+        tokio::spawn(async move {
+            for _ in 0..=redirects {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    break;
+                };
+                tokio::spawn(async move {
+                    let mut buffer = vec![0; 4096];
+                    let bytes_read = socket.read(&mut buffer).await.unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+                    let path = request_path(&request);
+                    let index = path
+                        .strip_prefix("/r")
+                        .and_then(|value| value.parse::<usize>().ok());
+                    let response = match index {
+                        Some(index) if index < redirects => {
+                            let next = index.saturating_add(1);
+                            format!(
+                                "HTTP/1.1 302 Found\r\nLocation: /r{next}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                            )
+                        }
+                        Some(index) if index == redirects => {
+                            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
+                                .to_string()
+                        }
+                        _ => {
+                            "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\nConnection: close\r\n\r\nnot found"
+                                .to_string()
+                        }
+                    };
+                    let _ = socket.write_all(response.as_bytes()).await;
+                });
+            }
+        });
+
+        format!("http://{address}")
+    }
+
+    #[derive(Clone)]
+    pub(crate) struct RawFixtureResponse {
+        pub(crate) status: String,
+        pub(crate) content_length: Option<usize>,
+        pub(crate) body: Vec<u8>,
+    }
+
+    pub(crate) async fn spawn_raw_http_fixture(
+        routes: HashMap<String, RawFixtureResponse>,
+        max_requests: usize,
+    ) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("HTTP fixture should bind");
+        let address = listener.local_addr().expect("HTTP fixture address");
+        let routes = Arc::new(routes);
+
+        tokio::spawn(async move {
+            for _ in 0..max_requests {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    break;
+                };
+                let routes = Arc::clone(&routes);
+                tokio::spawn(async move {
+                    let mut buffer = vec![0; 4096];
+                    let bytes_read = socket.read(&mut buffer).await.unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+                    let path = request_path(&request);
+                    let response = routes.get(path).cloned().unwrap_or(RawFixtureResponse {
+                        status: "404 Not Found".to_string(),
+                        content_length: Some(9),
+                        body: b"not found".to_vec(),
+                    });
+                    let header = match response.content_length {
+                        Some(length) => format!(
+                            "HTTP/1.1 {}\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n",
+                            response.status
+                        ),
+                        None => {
+                            format!("HTTP/1.1 {}\r\nConnection: close\r\n\r\n", response.status)
+                        }
+                    };
+                    let _ = socket.write_all(header.as_bytes()).await;
+                    let _ = socket.write_all(&response.body).await;
+                });
+            }
+        });
+
+        format!("http://{address}")
+    }
+
+    fn request_path(request: &str) -> &str {
+        request
+            .lines()
+            .next()
+            .and_then(|line| line.split_whitespace().nth(1))
+            .and_then(|target| target.split('?').next())
+            .unwrap_or("/")
+    }
+
+    fn request_header(request: &str, header_name: &str) -> Option<String> {
+        request.lines().find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case(header_name)
+                .then(|| value.trim().to_string())
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, sync::Arc};
+
+    use base64::engine::general_purpose::STANDARD;
+    use tokio::sync::Mutex;
+
     use super::*;
+    use crate::test_support::{
+        spawn_http_fixture, spawn_raw_http_fixture, spawn_redirect_chain_fixture,
+        RawFixtureResponse,
+    };
 
     #[test]
     fn user_agent_prefix_names_the_app() {
@@ -1485,170 +1639,5 @@ mod tests {
 
         assert_eq!(templates, PresetDnsTemplates::default());
         assert_eq!(seen_user_agents.lock().await.len(), 3);
-    }
-
-    async fn spawn_http_fixture(
-        routes: HashMap<String, String>,
-        max_requests: usize,
-        seen_user_agents: Arc<Mutex<Vec<String>>>,
-    ) -> String {
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("update test operation should succeed");
-        let address = listener
-            .local_addr()
-            .expect("update test operation should succeed");
-        let routes = Arc::new(routes);
-
-        tokio::spawn(async move {
-            for _ in 0..max_requests {
-                let Ok((mut socket, _)) = listener.accept().await else {
-                    break;
-                };
-                let routes = Arc::clone(&routes);
-                let seen_user_agents = Arc::clone(&seen_user_agents);
-                tokio::spawn(async move {
-                    let mut buffer = vec![0; 4096];
-                    let bytes_read = socket.read(&mut buffer).await.unwrap_or(0);
-                    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
-                    let path = request
-                        .lines()
-                        .next()
-                        .and_then(|line| line.split_whitespace().nth(1))
-                        .and_then(|target| target.split('?').next())
-                        .unwrap_or("/");
-                    let user_agent = request
-                        .lines()
-                        .find_map(|line| {
-                            let (name, value) = line.split_once(':')?;
-                            name.eq_ignore_ascii_case("user-agent")
-                                .then(|| value.trim().to_string())
-                        })
-                        .unwrap_or_default();
-                    seen_user_agents.lock().await.push(user_agent);
-                    let body = routes.get(path).cloned().unwrap_or_default();
-                    let status = if routes.contains_key(path) {
-                        "200 OK"
-                    } else {
-                        "404 Not Found"
-                    };
-                    let response = format!(
-                        "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                        body.len()
-                    );
-                    let _ = socket.write_all(response.as_bytes()).await;
-                });
-            }
-        });
-
-        format!("http://{address}")
-    }
-
-    async fn spawn_redirect_chain_fixture(redirects: usize) -> String {
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("update test operation should succeed");
-        let address = listener
-            .local_addr()
-            .expect("update test operation should succeed");
-
-        tokio::spawn(async move {
-            for _ in 0..=redirects {
-                let Ok((mut socket, _)) = listener.accept().await else {
-                    break;
-                };
-                tokio::spawn(async move {
-                    let mut buffer = vec![0; 4096];
-                    let bytes_read = socket.read(&mut buffer).await.unwrap_or(0);
-                    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
-                    let path = request
-                        .lines()
-                        .next()
-                        .and_then(|line| line.split_whitespace().nth(1))
-                        .and_then(|target| target.split('?').next())
-                        .unwrap_or("/");
-                    let index = path
-                        .strip_prefix("/r")
-                        .and_then(|value| value.parse::<usize>().ok());
-                    let response = match index {
-                        Some(index) if index < redirects => {
-                            let next = index.saturating_add(1);
-                            format!(
-                                "HTTP/1.1 302 Found\r\nLocation: /r{next}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                            )
-                        }
-                        Some(index) if index == redirects => {
-                            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
-                                .to_string()
-                        }
-                        _ => {
-                            "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\nConnection: close\r\n\r\nnot found"
-                                .to_string()
-                        }
-                    };
-                    let _ = socket.write_all(response.as_bytes()).await;
-                });
-            }
-        });
-
-        format!("http://{address}")
-    }
-
-    #[derive(Clone)]
-    struct RawFixtureResponse {
-        status: String,
-        content_length: Option<usize>,
-        body: Vec<u8>,
-    }
-
-    async fn spawn_raw_http_fixture(
-        routes: HashMap<String, RawFixtureResponse>,
-        max_requests: usize,
-    ) -> String {
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("update test operation should succeed");
-        let address = listener
-            .local_addr()
-            .expect("update test operation should succeed");
-        let routes = Arc::new(routes);
-
-        tokio::spawn(async move {
-            for _ in 0..max_requests {
-                let Ok((mut socket, _)) = listener.accept().await else {
-                    break;
-                };
-                let routes = Arc::clone(&routes);
-                tokio::spawn(async move {
-                    let mut buffer = vec![0; 4096];
-                    let bytes_read = socket.read(&mut buffer).await.unwrap_or(0);
-                    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
-                    let path = request
-                        .lines()
-                        .next()
-                        .and_then(|line| line.split_whitespace().nth(1))
-                        .and_then(|target| target.split('?').next())
-                        .unwrap_or("/");
-                    let response = routes.get(path).cloned().unwrap_or(RawFixtureResponse {
-                        status: "404 Not Found".to_string(),
-                        content_length: Some(9),
-                        body: b"not found".to_vec(),
-                    });
-                    let header = match response.content_length {
-                        Some(length) => format!(
-                            "HTTP/1.1 {}\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n",
-                            response.status
-                        ),
-                        None => {
-                            format!("HTTP/1.1 {}\r\nConnection: close\r\n\r\n", response.status)
-                        }
-                    };
-                    let _ = socket.write_all(header.as_bytes()).await;
-                    let _ = socket.write_all(&response.body).await;
-                });
-            }
-        });
-
-        format!("http://{address}")
     }
 }

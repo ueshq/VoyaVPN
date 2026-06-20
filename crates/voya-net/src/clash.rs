@@ -559,7 +559,20 @@ where
     Option::<Value>::deserialize(deserializer).map(|value| match value {
         Some(Value::Array(items)) => items
             .into_iter()
-            .filter_map(|item| serde_json::from_value(item).ok())
+            .enumerate()
+            .filter_map(
+                |(index, item)| match serde_json::from_value::<ClashConnection>(item) {
+                    Ok(connection) => Some(connection),
+                    Err(error) => {
+                        tracing::debug!(
+                            index,
+                            error = %error,
+                            "dropping malformed Clash connection"
+                        );
+                        None
+                    }
+                },
+            )
             .collect(),
         _ => Vec::new(),
     })
@@ -907,7 +920,7 @@ mod tests {
                 }, {
                     "metadata": null,
                     "chains": null
-                }]
+                }, "malformed"]
             }"#,
         )
         .expect("connections event");
