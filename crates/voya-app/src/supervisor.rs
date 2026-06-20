@@ -462,6 +462,15 @@ impl SupervisorActor {
     }
 }
 
+impl Drop for SupervisorActor {
+    fn drop(&mut self) {
+        let running = std::mem::replace(&mut self.running, RunningCore::empty());
+        if let Err(error) = self.stop_running(running) {
+            tracing::warn!(?error, "failed to stop core supervisor during actor drop");
+        }
+    }
+}
+
 fn process_uses_unix_sudo(
     deps: &SupervisorDeps,
     spec: &CoreProcessSpec,
@@ -741,6 +750,41 @@ mod tests {
                 "oneshot:SudoKill:stdin=true",
                 "stop:Main:pid=100",
                 "stop:Pre:pid=101"
+            ]
+        );
+    }
+
+    #[test]
+    fn supervisor_actor_drop_stops_running_core_with_sudo_kill() {
+        let events = SharedEvents::default();
+        let sudo_passwords = Arc::new(SudoPasswordStore::new());
+        sudo_passwords.set_password("pw").expect("sudo password");
+        let deps = SupervisorDeps::new(Arc::new(FakeRunner::new(events.clone())), sudo_passwords)
+            .with_target_os(TargetOs::Linux);
+
+        {
+            let mut actor = SupervisorActor::new(deps);
+            actor
+                .start(SupervisorStartRequest {
+                    active_profile_id: Some("active".to_string()),
+                    main: CoreProcessSpec::new(
+                        CoreType::sing_box,
+                        launch("/tmp/sing-box", "run -c config.json --disable-color"),
+                    ),
+                    pre: None,
+                    tun_enabled: true,
+                    sudo_script_dir: "/tmp/voya/scripts".into(),
+                    restart_on_crash: false,
+                })
+                .expect("start");
+        }
+
+        assert_eq!(
+            events.lock().as_slice(),
+            [
+                "spawn:Main:pid=100:stdin=true",
+                "oneshot:SudoKill:stdin=true",
+                "stop:Main:pid=100"
             ]
         );
     }

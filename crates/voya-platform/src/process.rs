@@ -323,6 +323,45 @@ impl ProcessRunner for StdProcessRunner {
     }
 }
 
+impl Drop for StdProcessRunner {
+    fn drop(&mut self) {
+        let children = match self.children.get_mut() {
+            Ok(children) => children,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+
+        for (pid, mut child) in std::mem::take(children) {
+            match child.try_wait() {
+                Ok(Some(_)) => {}
+                Ok(None) => {
+                    if let Err(error) = child.kill() {
+                        tracing::warn!(
+                            pid,
+                            ?error,
+                            "failed to kill child process during runner drop"
+                        );
+                        continue;
+                    }
+                    if let Err(error) = child.wait() {
+                        tracing::warn!(
+                            pid,
+                            ?error,
+                            "failed to wait for child process during runner drop"
+                        );
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        pid,
+                        ?error,
+                        "failed to inspect child process during runner drop"
+                    );
+                }
+            }
+        }
+    }
+}
+
 fn build_command(request: &ProcessSpawn) -> Command {
     let mut command = Command::new(&request.executable);
     command.args(&request.arguments);
@@ -732,5 +771,40 @@ mod tests {
             runner.events.lock().expect("events").as_slice(),
             ["spawn:Main", "stop:Main"]
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn std_process_runner_drop_kills_tracked_children() {
+        let Some(sleep) = ["/bin/sleep", "/usr/bin/sleep"]
+            .into_iter()
+            .find(|path| Path::new(path).exists())
+        else {
+            return;
+        };
+
+        let runner = StdProcessRunner::new();
+        let handle = runner
+            .spawn(
+                ProcessSpawn::new(ProcessRole::Probe, sleep)
+                    .with_arguments(["30".to_string()])
+                    .with_display_log(false),
+            )
+            .expect("spawn sleep");
+        let pid = handle.id();
+
+        drop(runner);
+
+        assert!(!process_is_running(pid));
+    }
+
+    #[cfg(unix)]
+    fn process_is_running(pid: u32) -> bool {
+        let pid = pid.to_string();
+        Command::new("kill")
+            .args(["-0", pid.as_str()])
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success())
     }
 }

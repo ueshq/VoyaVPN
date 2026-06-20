@@ -15,6 +15,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use voya_app::{
     clash::{ClashConnectionsSnapshot, ClashEventSink, ClashMonitorController, ClashTrafficEvent},
     diagnostics::{prepare_diagnostics_settings, DiagnosticsClient},
+    runtime::RuntimeManager,
     speedtest::SpeedtestManager,
     statistics::{
         SharedAppConfigSource, StatisticsEventSink, StatisticsManager,
@@ -218,7 +219,7 @@ pub fn run() {
 
     app.run(|app, event| {
         if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
-            restore_system_proxy_for_exit(app);
+            shutdown_for_exit(app);
         }
     });
 }
@@ -235,7 +236,7 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
                 TRAY_SHOW => show_main_window(app),
                 TRAY_HIDE => hide_main_window(app),
                 TRAY_QUIT => {
-                    restore_system_proxy_for_exit(app);
+                    shutdown_for_exit(app);
                     app.exit(0);
                 }
                 TRAY_CONNECT => spawn_tray_connect(app),
@@ -654,6 +655,25 @@ fn spawn_tray_set_active_server<R: tauri::Runtime>(app: &tauri::AppHandle<R>, in
             tracing::warn!(?error, "failed to refresh tray after server switch");
         }
     });
+}
+
+fn shutdown_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    disconnect_runtime_for_exit(app);
+    restore_system_proxy_for_exit(app);
+}
+
+fn disconnect_runtime_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let runtime = RuntimeManager::new(
+        state.database(),
+        state.runtime_paths().clone(),
+        state.supervisor(),
+    );
+    if let Err(error) = tauri::async_runtime::block_on(runtime.disconnect()) {
+        tracing::warn!(?error, "failed to disconnect runtime on exit");
+    }
 }
 
 fn restore_system_proxy_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
