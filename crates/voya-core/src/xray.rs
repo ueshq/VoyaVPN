@@ -71,6 +71,19 @@ const VMESS_SECURITIES: &[&str] = &[
     "none",
     "zero",
 ];
+const XRAY_UTLS_FINGERPRINTS: &[&str] = &[
+    "chrome",
+    "firefox",
+    "safari",
+    "ios",
+    "android",
+    "edge",
+    "360",
+    "qq",
+    "random",
+    "randomized",
+    "randomizednoalpn",
+];
 const SS_SECURITIES_IN_XRAY: &[&str] = &[
     "aes-256-gcm",
     "aes-128-gcm",
@@ -2648,6 +2661,7 @@ fn tls_settings(
 
 fn reality_settings(node: &ProfileItem, context: &CoreConfigContext) -> XrayTlsSettings {
     XrayTlsSettings {
+        allow_insecure: Some(false),
         fingerprint: Some(effective_fingerprint(node, context)),
         server_name: Some(trimmed(&node.sni).to_string()),
         public_key: Some(node.public_key.clone()),
@@ -3165,23 +3179,34 @@ fn shadowsocks_method(protocol_extra: &ProtocolExtraItem) -> String {
 }
 
 fn allow_insecure(node: &ProfileItem, context: &CoreConfigContext) -> bool {
-    let value = if trimmed(&node.allow_insecure).is_empty() {
-        context
-            .app_config
-            .core_basic_item
-            .def_allow_insecure
-            .to_string()
-    } else {
-        node.allow_insecure.clone()
-    };
-    value.eq_ignore_ascii_case("true")
+    if !context.app_config.core_basic_item.def_allow_insecure {
+        return false;
+    }
+
+    let node_value = trimmed(&node.allow_insecure);
+    node_value.is_empty() || node_value.eq_ignore_ascii_case("true")
 }
 
 fn effective_fingerprint(node: &ProfileItem, context: &CoreConfigContext) -> String {
-    if trimmed(&node.fingerprint).is_empty() {
-        context.app_config.core_basic_item.def_fingerprint.clone()
+    if let Some(fingerprint) = xray_utls_fingerprint(&node.fingerprint) {
+        return fingerprint;
+    }
+
+    if let Some(fingerprint) =
+        xray_utls_fingerprint(&context.app_config.core_basic_item.def_fingerprint)
+    {
+        return fingerprint;
+    }
+
+    String::new()
+}
+
+fn xray_utls_fingerprint(value: &str) -> Option<String> {
+    let fingerprint = trimmed(value).to_ascii_lowercase();
+    if XRAY_UTLS_FINGERPRINTS.contains(&fingerprint.as_str()) {
+        Some(fingerprint)
     } else {
-        node.fingerprint.clone()
+        None
     }
 }
 
@@ -3322,6 +3347,106 @@ mod tests {
             &expected,
             &serde_json::to_value(first_outbound)
                 .expect("xray first outbound should serialize to JSON"),
+        );
+    }
+
+    #[test]
+    fn xray_tls_insecure_requires_application_gate() {
+        let node = ProfileItem {
+            allow_insecure: "true".to_string(),
+            stream_security: STREAM_SECURITY_TLS.to_string(),
+            ..ProfileItem::default()
+        };
+        let context = test_context(AppConfig::default(), node.clone());
+        assert_eq!(
+            tls_settings(&node, &context, "")
+                .allow_insecure
+                .expect("tls allowInsecure should be set"),
+            false
+        );
+
+        let mut config = AppConfig::default();
+        config.core_basic_item.def_allow_insecure = true;
+        let context = test_context(config.clone(), node.clone());
+        assert_eq!(
+            tls_settings(&node, &context, "")
+                .allow_insecure
+                .expect("tls allowInsecure should be set"),
+            true
+        );
+
+        let node = ProfileItem {
+            allow_insecure: "false".to_string(),
+            ..node
+        };
+        let context = test_context(config, node.clone());
+        assert_eq!(
+            tls_settings(&node, &context, "")
+                .allow_insecure
+                .expect("tls allowInsecure should be set"),
+            false
+        );
+    }
+
+    #[test]
+    fn xray_unknown_fingerprint_falls_back_to_default_allowlist() {
+        let mut config = AppConfig::default();
+        config.core_basic_item.def_fingerprint = "firefox".to_string();
+
+        let node = ProfileItem {
+            fingerprint: "not-a-utls-fingerprint".to_string(),
+            ..ProfileItem::default()
+        };
+        let context = test_context(config.clone(), node.clone());
+        assert_eq!(effective_fingerprint(&node, &context), "firefox");
+
+        let node = ProfileItem {
+            fingerprint: "Chrome".to_string(),
+            ..node
+        };
+        let context = test_context(config.clone(), node.clone());
+        assert_eq!(effective_fingerprint(&node, &context), "chrome");
+
+        config.core_basic_item.def_fingerprint = "also-not-utls".to_string();
+        let node = ProfileItem {
+            fingerprint: "still-not-utls".to_string(),
+            ..node
+        };
+        let context = test_context(config, node.clone());
+        assert!(effective_fingerprint(&node, &context).is_empty());
+    }
+
+    #[test]
+    fn xray_pinned_cert_and_reality_force_insecure_false() {
+        let mut config = AppConfig::default();
+        config.core_basic_item.def_allow_insecure = true;
+
+        let pinned_node = ProfileItem {
+            allow_insecure: "true".to_string(),
+            cert_sha: "0123456789abcdef".to_string(),
+            stream_security: STREAM_SECURITY_TLS.to_string(),
+            ..ProfileItem::default()
+        };
+        let context = test_context(config.clone(), pinned_node.clone());
+        let tls = tls_settings(&pinned_node, &context, "");
+        assert_eq!(tls.allow_insecure, Some(false));
+        assert_eq!(
+            tls.pinned_peer_cert_sha256.as_deref(),
+            Some("0123456789abcdef")
+        );
+
+        let reality_node = ProfileItem {
+            allow_insecure: "true".to_string(),
+            fingerprint: "chrome".to_string(),
+            stream_security: STREAM_SECURITY_REALITY.to_string(),
+            public_key: "reality-public-key".to_string(),
+            short_id: "reality-short-id".to_string(),
+            ..ProfileItem::default()
+        };
+        let context = test_context(config, reality_node.clone());
+        assert_eq!(
+            reality_settings(&reality_node, &context).allow_insecure,
+            Some(false)
         );
     }
 

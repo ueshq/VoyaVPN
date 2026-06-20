@@ -3385,16 +3385,12 @@ fn shadowsocks_method(protocol_extra: &ProtocolExtraItem) -> String {
 }
 
 fn allow_insecure(node: &ProfileItem, context: &CoreConfigContext) -> bool {
-    let value = if trimmed(&node.allow_insecure).is_empty() {
-        context
-            .app_config
-            .core_basic_item
-            .def_allow_insecure
-            .to_string()
-    } else {
-        node.allow_insecure.clone()
-    };
-    value.eq_ignore_ascii_case("true")
+    if !context.app_config.core_basic_item.def_allow_insecure {
+        return false;
+    }
+
+    let node_value = trimmed(&node.allow_insecure);
+    node_value.is_empty() || node_value.eq_ignore_ascii_case("true")
 }
 
 fn transport_host_for_tls(node: &ProfileItem) -> Option<String> {
@@ -3625,6 +3621,78 @@ mod tests {
             full_value.pointer("/experimental/cache_file/enabled"),
             Some(&Value::Bool(true))
         );
+    }
+
+    #[test]
+    fn singbox_tls_insecure_requires_application_gate() {
+        let node = ProfileItem {
+            allow_insecure: "true".to_string(),
+            ..base_remote_node()
+        };
+        let context = test_context(AppConfig::default(), node.clone());
+        assert_eq!(
+            build_outbound(&context, &node)
+                .tls
+                .expect("tls settings should be generated")
+                .insecure,
+            Some(false)
+        );
+
+        let mut config = AppConfig::default();
+        config.core_basic_item.def_allow_insecure = true;
+        let context = test_context(config.clone(), node.clone());
+        assert_eq!(
+            build_outbound(&context, &node)
+                .tls
+                .expect("tls settings should be generated")
+                .insecure,
+            Some(true)
+        );
+
+        let node = ProfileItem {
+            allow_insecure: "false".to_string(),
+            ..node
+        };
+        let context = test_context(config, node.clone());
+        assert_eq!(
+            build_outbound(&context, &node)
+                .tls
+                .expect("tls settings should be generated")
+                .insecure,
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn singbox_pinned_cert_and_reality_force_insecure_false() {
+        let mut config = AppConfig::default();
+        config.core_basic_item.def_allow_insecure = true;
+
+        let pinned_node = ProfileItem {
+            allow_insecure: "true".to_string(),
+            cert: "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----".to_string(),
+            ..base_remote_node()
+        };
+        let context = test_context(config.clone(), pinned_node.clone());
+        let tls = build_outbound(&context, &pinned_node)
+            .tls
+            .expect("tls settings should be generated");
+        assert_eq!(tls.insecure, Some(false));
+        assert!(tls.certificate.is_some());
+
+        let reality_node = ProfileItem {
+            allow_insecure: "true".to_string(),
+            stream_security: STREAM_SECURITY_REALITY.to_string(),
+            public_key: "reality-public-key".to_string(),
+            short_id: "reality-short-id".to_string(),
+            ..base_remote_node()
+        };
+        let context = test_context(config, reality_node.clone());
+        let tls = build_outbound(&context, &reality_node)
+            .tls
+            .expect("tls settings should be generated");
+        assert_eq!(tls.insecure, Some(false));
+        assert!(tls.reality.is_some());
     }
 
     #[test]
