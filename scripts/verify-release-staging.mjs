@@ -186,6 +186,7 @@ async function readJsonSource(source, label, options) {
   let text;
   if (isHttpSource(source)) {
     const response = await fetchWithTimeout(source, { method: "GET" }, options.timeoutMs);
+    assertNoRedirectResponse(response, `${label} fetch`);
     if (!response.ok) {
       throw new Error(`${label} could not be fetched: ${response.status} ${response.statusText}`);
     }
@@ -738,10 +739,20 @@ async function fetchWithTimeout(url, init, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await fetch(url, { ...init, redirect: "manual", signal: controller.signal });
   } finally {
     clearTimeout(timer);
   }
+}
+
+function assertNoRedirectResponse(response, label) {
+  if (response.status < 300 || response.status >= 400) {
+    return;
+  }
+
+  const location = response.headers.get("location");
+  const target = location ? ` to ${location}` : "";
+  throw new Error(`${label} redirect blocked: ${response.status} ${response.statusText}${target}`);
 }
 
 async function probeCandidate(candidate, options) {
@@ -750,8 +761,10 @@ async function probeCandidate(candidate, options) {
   }
 
   let response = await fetchWithTimeout(candidate.url, { method: "HEAD" }, options.timeoutMs);
+  assertNoRedirectResponse(response, `${candidate.label} probe`);
   if (response.status === 405 || response.status === 403) {
     response = await fetchWithTimeout(candidate.url, { headers: { range: "bytes=0-0" }, method: "GET" }, options.timeoutMs);
+    assertNoRedirectResponse(response, `${candidate.label} range probe`);
   }
   if (!response.ok && response.status !== 206) {
     throw new Error(`${candidate.label} probe failed: ${response.status} ${response.statusText}`);
@@ -777,6 +790,7 @@ async function probeCandidate(candidate, options) {
 
 async function downloadAndHashCandidate(candidate, options) {
   const response = await fetchWithTimeout(candidate.url, { method: "GET" }, options.timeoutMs);
+  assertNoRedirectResponse(response, `${candidate.label} download`);
   if (!response.ok) {
     throw new Error(`${candidate.label} download failed: ${response.status} ${response.statusText}`);
   }
@@ -912,6 +926,7 @@ export {
   StagingValidationError,
   forbiddenHostReason,
   normalizeBaseUrl,
+  probeCandidate,
   validateCoreManifest,
   validateReleaseIndex,
   validateUpdaterMetadata,

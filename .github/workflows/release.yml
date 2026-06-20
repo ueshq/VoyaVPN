@@ -37,6 +37,7 @@ env:
   CARGO_TERM_COLOR: always
   NODE_VERSION: "22"
   PNPM_VERSION: "11.5.0"
+  RUST_TOOLCHAIN_VERSION: "1.96.0"
 
 defaults:
   run:
@@ -47,7 +48,7 @@ jobs:
     name: Test And Drift Checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install Linux Tauri dependencies
         run: |
@@ -63,13 +64,15 @@ jobs:
             libxdo-dev \
             wget
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -249,7 +252,7 @@ jobs:
             release_target: linux-aarch64
             rust_target: aarch64-unknown-linux-gnu
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install Linux Tauri dependencies
         if: ${{ runner.os == 'Linux' }}
@@ -266,16 +269,18 @@ jobs:
             libxdo-dev \
             wget
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
 
       - name: Install Rust target
         run: rustup target add ${{ matrix.rust_target }}
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -330,7 +335,7 @@ jobs:
             --channel "${{ inputs.channel }}"
 
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: voyavpn-${{ inputs.channel }}-${{ matrix.release_target }}-${{ inputs.build_profile }}
           path: dist/release/${{ matrix.release_target }}
@@ -341,18 +346,18 @@ jobs:
     needs: package
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Download package artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist/downloaded-release-artifacts
 
@@ -374,7 +379,7 @@ jobs:
             --base-url "$base_url"
 
       - name: Upload CDN staging metadata
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: voyavpn-${{ inputs.channel }}-cdn-staging-metadata-${{ inputs.build_profile }}
           path: dist/cdn-staging
@@ -386,18 +391,18 @@ jobs:
     needs: package
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Download package artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist/downloaded-release-artifacts
 
@@ -431,7 +436,7 @@ jobs:
             $placeholder_flag
 
       - name: Upload updater metadata
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: voyavpn-${{ inputs.channel }}-updater-metadata-${{ inputs.build_profile }}
           path: dist/updater
@@ -442,9 +447,9 @@ jobs:
     needs: package
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -478,7 +483,7 @@ jobs:
             --base-url "$base_url"
 
       - name: Upload core staging metadata
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: voyavpn-${{ inputs.channel }}-core-staging-metadata-${{ inputs.build_profile }}
           path: dist/core-staging
@@ -494,62 +499,62 @@ jobs:
       - core-staging-metadata
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Download darwin x64 package artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: voyavpn-${{ inputs.channel }}-darwin-x86_64-${{ inputs.build_profile }}
           path: dist/final-readiness/packages/darwin-x86_64
 
       - name: Download darwin arm64 package artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: voyavpn-${{ inputs.channel }}-darwin-aarch64-${{ inputs.build_profile }}
           path: dist/final-readiness/packages/darwin-aarch64
 
       - name: Download Windows x64 package artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: voyavpn-${{ inputs.channel }}-windows-x86_64-${{ inputs.build_profile }}
           path: dist/final-readiness/packages/windows-x86_64
 
       - name: Download Windows arm64 package artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: voyavpn-${{ inputs.channel }}-windows-aarch64-${{ inputs.build_profile }}
           path: dist/final-readiness/packages/windows-aarch64
 
       - name: Download Linux x64 package artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: voyavpn-${{ inputs.channel }}-linux-x86_64-${{ inputs.build_profile }}
           path: dist/final-readiness/packages/linux-x86_64
 
       - name: Download Linux arm64 package artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: voyavpn-${{ inputs.channel }}-linux-aarch64-${{ inputs.build_profile }}
           path: dist/final-readiness/packages/linux-aarch64
 
       - name: Download CDN staging metadata
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: voyavpn-${{ inputs.channel }}-cdn-staging-metadata-${{ inputs.build_profile }}
           path: dist/final-readiness/cdn-staging-metadata
 
       - name: Download updater metadata
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: voyavpn-${{ inputs.channel }}-updater-metadata-${{ inputs.build_profile }}
           path: dist/final-readiness/updater-metadata
 
       - name: Download core staging metadata
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: voyavpn-${{ inputs.channel }}-core-staging-metadata-${{ inputs.build_profile }}
           path: dist/final-readiness/core-staging-metadata
@@ -587,7 +592,7 @@ jobs:
             --work-dir dist/final-readiness/readiness-output
 
       - name: Upload final readiness evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: voyavpn-${{ inputs.channel }}-final-readiness-${{ inputs.build_profile }}
           path: dist/final-readiness/readiness-output

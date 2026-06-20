@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  probeCandidate,
   validateCoreManifest,
   validateReleaseIndex,
   validateUpdaterMetadata,
@@ -102,6 +104,34 @@ function validCoreManifest() {
   };
 }
 
+async function listen(server) {
+  await new Promise((resolveListen, rejectListen) => {
+    server.once("error", rejectListen);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", rejectListen);
+      resolveListen();
+    });
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("test server did not bind to a TCP port");
+  }
+  return address.port;
+}
+
+function close(server) {
+  return new Promise((resolveClose, rejectClose) => {
+    server.close((error) => {
+      if (error) {
+        rejectClose(error);
+      } else {
+        resolveClose();
+      }
+    });
+  });
+}
+
 describe("release staging verification", () => {
   it("accepts complete stable metadata on approved CDN hosts", async () => {
     expect(() => validateReleaseIndex(validReleaseIndex(), { expectedVersion: version })).not.toThrow();
@@ -153,5 +183,36 @@ describe("release staging verification", () => {
     manifest.assets = manifest.assets.filter((asset) => !(asset.coreType === "sing_box" && asset.os === "linux"));
 
     expect(() => validateCoreManifest(manifest)).toThrow(/missing required entries/);
+  });
+
+  it("rejects redirect responses during CDN probes", async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(302, {
+        "content-length": "0",
+        location: "/ok",
+      });
+      response.end();
+    });
+    const port = await listen(server);
+
+    try {
+      await expect(
+        probeCandidate(
+          {
+            label: "release-index artifacts[0]",
+            url: `http://127.0.0.1:${port}/artifact`,
+            bytes: null,
+            sha256: null,
+          },
+          {
+            downloadAndHash: false,
+            requireCacheHeaders: false,
+            timeoutMs: 1000,
+          },
+        ),
+      ).rejects.toThrow(/redirect blocked: 302/);
+    } finally {
+      await close(server);
+    }
   });
 });
