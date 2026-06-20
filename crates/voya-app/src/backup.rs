@@ -42,6 +42,13 @@ pub enum BackupManagerError {
     ConfigSerialize(serde_json::Error),
     #[error("failed to deserialize app config from backup: {0}")]
     ConfigDeserialize(serde_json::Error),
+    #[error(
+        "restore failed and rollback failed: restore error: {restore}; rollback error: {rollback}"
+    )]
+    RestoreRollback {
+        restore: Box<BackupManagerError>,
+        rollback: Box<BackupManagerError>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Type)]
@@ -183,6 +190,9 @@ impl<'db> BackupManager<'db> {
             source,
         })?;
 
+        let rollback_dir = self.stage_dir("restore-rollback");
+        remove_path_if_exists(&rollback_dir)?;
+
         let result = async {
             let extracted = extract_backup_archive(input_path, &stage_dir)?;
             let config_text = fs::read_to_string(&extracted.config_path).map_err(|source| {
@@ -194,21 +204,41 @@ impl<'db> BackupManager<'db> {
             let config: AppConfig = serde_json::from_str(&config_text)
                 .map_err(BackupManagerError::ConfigDeserialize)?;
 
-            self.database
-                .replace_from_file(&extracted.database_path)
-                .await?;
-            self.config_store.save(&config)?;
-            restore_config_dir(&extracted.config_dir, self.paths.config_dir())?;
+            let rollback = RestoreRollback::capture(self, &rollback_dir).await?;
+            let restore_result = async {
+                self.database
+                    .replace_from_file(&extracted.database_path)
+                    .await?;
+                self.config_store.save(&config)?;
+                restore_config_dir(&extracted.config_dir, self.paths.config_dir())?;
 
-            Result::<BackupRestoreResult>::Ok(BackupRestoreResult {
-                path: path_to_string(input_path),
-                restored_config: config,
-                message: "Backup restored".to_string(),
-            })
+                Result::<BackupRestoreResult>::Ok(BackupRestoreResult {
+                    path: path_to_string(input_path),
+                    restored_config: config,
+                    message: "Backup restored".to_string(),
+                })
+            }
+            .await;
+
+            match restore_result {
+                Ok(restored) => Ok(restored),
+                Err(error) => {
+                    if let Err(rollback_error) = rollback.restore(self).await {
+                        return Err(BackupManagerError::RestoreRollback {
+                            restore: Box::new(error),
+                            rollback: Box::new(rollback_error),
+                        });
+                    }
+                    Err(error)
+                }
+            }
         }
         .await;
 
-        let _ = remove_dir_if_exists(&stage_dir);
+        if result.is_ok() {
+            let _ = remove_dir_if_exists(&stage_dir);
+            let _ = remove_path_if_exists(&rollback_dir);
+        }
         result
     }
 
@@ -324,6 +354,121 @@ struct ExtractedBackup {
     config_path: PathBuf,
     database_path: PathBuf,
     config_dir: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+struct RestoreRollback {
+    database_path: PathBuf,
+    config_file: PathRollback,
+    config_dir: PathRollback,
+}
+
+impl RestoreRollback {
+    async fn capture(manager: &BackupManager<'_>, rollback_dir: &Path) -> Result<Self> {
+        fs::create_dir_all(rollback_dir).map_err(|source| BackupManagerError::Io {
+            path: rollback_dir.to_path_buf(),
+            source,
+        })?;
+
+        let database_path = rollback_dir.join(DATABASE_NAME);
+        manager.database.backup_to(&database_path).await?;
+
+        Ok(Self {
+            database_path,
+            config_file: PathRollback::capture(
+                manager.config_store.path(),
+                &rollback_dir.join("app-config"),
+            )?,
+            config_dir: PathRollback::capture(
+                manager.paths.config_dir(),
+                &rollback_dir.join(CONFIG_DIR_NAME),
+            )?,
+        })
+    }
+
+    async fn restore(&self, manager: &BackupManager<'_>) -> Result<()> {
+        let mut first_error = None;
+
+        if let Err(error) = manager
+            .database
+            .replace_from_file(&self.database_path)
+            .await
+        {
+            remember_error(&mut first_error, BackupManagerError::Database(error));
+        }
+        if let Err(error) = self.config_file.restore() {
+            remember_error(&mut first_error, error);
+        }
+        if let Err(error) = self.config_dir.restore() {
+            remember_error(&mut first_error, error);
+        }
+
+        if let Some(error) = first_error {
+            return Err(error);
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+enum PathRollback {
+    Missing { target: PathBuf },
+    File { target: PathBuf, backup: PathBuf },
+    Directory { target: PathBuf, backup: PathBuf },
+}
+
+impl PathRollback {
+    fn capture(target: &Path, backup: &Path) -> Result<Self> {
+        match fs::symlink_metadata(target) {
+            Ok(_) if target.is_dir() => {
+                copy_dir_recursive(target, backup)?;
+                Ok(Self::Directory {
+                    target: target.to_path_buf(),
+                    backup: backup.to_path_buf(),
+                })
+            }
+            Ok(_) => {
+                copy_file(target, backup)?;
+                Ok(Self::File {
+                    target: target.to_path_buf(),
+                    backup: backup.to_path_buf(),
+                })
+            }
+            Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(Self::Missing {
+                target: target.to_path_buf(),
+            }),
+            Err(source) => Err(BackupManagerError::Io {
+                path: target.to_path_buf(),
+                source,
+            }),
+        }
+    }
+
+    fn restore(&self) -> Result<()> {
+        let target = self.target();
+        remove_path_if_exists(target)?;
+
+        match self {
+            Self::Missing { .. } => Ok(()),
+            Self::File { backup, .. } => copy_file(backup, target),
+            Self::Directory { backup, .. } => copy_dir_recursive(backup, target),
+        }
+    }
+
+    fn target(&self) -> &Path {
+        match self {
+            Self::Missing { target }
+            | Self::File { target, .. }
+            | Self::Directory { target, .. } => target,
+        }
+    }
+}
+
+fn remember_error(slot: &mut Option<BackupManagerError>, error: BackupManagerError) {
+    if slot.is_none() {
+        *slot = Some(error);
+    }
 }
 
 fn webdav_client(settings: &WebDavItem) -> Result<WebDavClient> {
@@ -539,6 +684,22 @@ fn restore_config_dir(source: &Path, destination: &Path) -> Result<()> {
     copy_dir_recursive(source, destination)
 }
 
+fn copy_file(source: &Path, destination: &Path) -> Result<()> {
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent).map_err(|source_error| BackupManagerError::Io {
+            path: parent.to_path_buf(),
+            source: source_error,
+        })?;
+    }
+
+    fs::copy(source, destination).map_err(|source_error| BackupManagerError::Io {
+        path: destination.to_path_buf(),
+        source: source_error,
+    })?;
+
+    Ok(())
+}
+
 fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<()> {
     fs::create_dir_all(destination).map_err(|source_error| BackupManagerError::Io {
         path: destination.to_path_buf(),
@@ -561,6 +722,32 @@ fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<()> {
                 path: target,
                 source: source_error,
             })?;
+        }
+    }
+
+    Ok(())
+}
+
+fn remove_path_if_exists(path: &Path) -> Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_dir() => {
+            fs::remove_dir_all(path).map_err(|source| BackupManagerError::Io {
+                path: path.to_path_buf(),
+                source,
+            })?;
+        }
+        Ok(_) => {
+            fs::remove_file(path).map_err(|source| BackupManagerError::Io {
+                path: path.to_path_buf(),
+                source,
+            })?;
+        }
+        Err(source) if source.kind() == io::ErrorKind::NotFound => {}
+        Err(source) => {
+            return Err(BackupManagerError::Io {
+                path: path.to_path_buf(),
+                source,
+            });
         }
     }
 
@@ -681,6 +868,204 @@ mod tests {
         restored_db.close().await;
         let _ = fs::remove_dir_all(source_root);
         let _ = fs::remove_dir_all(restored_root);
+    }
+
+    #[tokio::test]
+    async fn restore_local_backup_rolls_back_when_config_save_fails() {
+        let source_root = unique_temp_root("rollback-config-save-source");
+        let restored_root = unique_temp_root("rollback-config-save-restored");
+        let source_paths = AppPaths::new(&source_root, StorageMode::Portable);
+        let restored_paths = AppPaths::new(&restored_root, StorageMode::Portable);
+        source_paths.ensure_dirs().expect("source dirs");
+        restored_paths.ensure_dirs().expect("restored dirs");
+
+        let source_db = Database::connect(source_root.join(DATABASE_NAME))
+            .await
+            .expect("source db");
+        let restored_db = Database::connect(restored_root.join(DATABASE_NAME))
+            .await
+            .expect("restored db");
+        let source_config_store = AppConfigStore::new(source_root.join(DEFAULT_CONFIG_FILE_NAME));
+        let restored_config_store =
+            AppConfigStore::new(restored_root.join(DEFAULT_CONFIG_FILE_NAME));
+        seed_profile(&source_db, "backup-profile", "backup profile").await;
+        seed_profile(&restored_db, "current-profile", "current profile").await;
+        restored_config_store
+            .save(&config_with_index("current-profile"))
+            .expect("current config");
+        fs::write(restored_paths.config_file("generated.json"), b"current").expect("config file");
+
+        let source_manager =
+            BackupManager::new(&source_db, &source_config_store, source_paths.clone());
+        let backup_path = source_root.join("rollback-config-save.zip");
+        source_manager
+            .create_local_backup(&config_with_index("backup-profile"), Some(&backup_path))
+            .await
+            .expect("backup");
+        fs::create_dir(restored_root.join("guiNConfig.json.tmp")).expect("block config save");
+
+        let restored_manager =
+            BackupManager::new(&restored_db, &restored_config_store, restored_paths.clone());
+        let error = restored_manager
+            .restore_local_backup(&backup_path)
+            .await
+            .expect_err("config save should fail");
+
+        assert!(matches!(
+            error,
+            BackupManagerError::Database(DbError::Io { .. })
+        ));
+        assert_profile_state(
+            &restored_db,
+            "current-profile",
+            "current profile",
+            "backup-profile",
+        )
+        .await;
+        assert_eq!(
+            restored_config_store
+                .load()
+                .expect("restored config")
+                .index_id,
+            "current-profile"
+        );
+        assert_eq!(
+            fs::read_to_string(restored_paths.config_file("generated.json")).expect("generated"),
+            "current"
+        );
+        assert_restore_stage_retained(&restored_paths);
+
+        source_db.close().await;
+        restored_db.close().await;
+        let _ = fs::remove_dir_all(source_root);
+        let _ = fs::remove_dir_all(restored_root);
+    }
+
+    #[tokio::test]
+    async fn restore_local_backup_rolls_back_when_config_dir_restore_fails() {
+        let source_root = unique_temp_root("rollback-config-dir-source");
+        let restored_root = unique_temp_root("rollback-config-dir-restored");
+        let source_paths = AppPaths::new(&source_root, StorageMode::Portable);
+        let restored_paths = AppPaths::new(&restored_root, StorageMode::Portable);
+        source_paths.ensure_dirs().expect("source dirs");
+        restored_paths.ensure_dirs().expect("restored dirs");
+
+        let source_db = Database::connect(source_root.join(DATABASE_NAME))
+            .await
+            .expect("source db");
+        let restored_db = Database::connect(restored_root.join(DATABASE_NAME))
+            .await
+            .expect("restored db");
+        let restored_config_store =
+            AppConfigStore::new(restored_root.join(DEFAULT_CONFIG_FILE_NAME));
+        seed_profile(&source_db, "backup-profile", "backup profile").await;
+        seed_profile(&restored_db, "current-profile", "current profile").await;
+        restored_config_store
+            .save(&config_with_index("current-profile"))
+            .expect("current config");
+        fs::write(restored_paths.config_file("generated.json"), b"current").expect("config file");
+
+        let backup_stage = source_root.join("bad-config-dir-stage");
+        fs::create_dir_all(&backup_stage).expect("backup stage");
+        fs::write(
+            backup_stage.join(DEFAULT_CONFIG_FILE_NAME),
+            serde_json::to_string_pretty(&config_with_index("backup-profile"))
+                .expect("serialize config"),
+        )
+        .expect("backup config");
+        source_db
+            .backup_to(backup_stage.join(DATABASE_NAME))
+            .await
+            .expect("backup database");
+        fs::write(backup_stage.join(CONFIG_DIR_NAME), b"not a directory").expect("bad config dir");
+        let backup_path = source_root.join("bad-config-dir.zip");
+        create_zip_from_dir(&backup_stage, &backup_path).expect("zip");
+
+        let restored_manager =
+            BackupManager::new(&restored_db, &restored_config_store, restored_paths.clone());
+        let error = restored_manager
+            .restore_local_backup(&backup_path)
+            .await
+            .expect_err("config dir restore should fail");
+
+        assert!(matches!(error, BackupManagerError::Io { .. }));
+        assert_profile_state(
+            &restored_db,
+            "current-profile",
+            "current profile",
+            "backup-profile",
+        )
+        .await;
+        assert_eq!(
+            restored_config_store
+                .load()
+                .expect("restored config")
+                .index_id,
+            "current-profile"
+        );
+        assert_eq!(
+            fs::read_to_string(restored_paths.config_file("generated.json")).expect("generated"),
+            "current"
+        );
+        assert_restore_stage_retained(&restored_paths);
+
+        source_db.close().await;
+        restored_db.close().await;
+        let _ = fs::remove_dir_all(source_root);
+        let _ = fs::remove_dir_all(restored_root);
+    }
+
+    async fn seed_profile(database: &Database, index_id: &str, remarks: &str) {
+        let profile = ProfileItem {
+            index_id: index_id.to_string(),
+            config_type: ConfigType::VLESS,
+            remarks: remarks.to_string(),
+            address: "example.test".to_string(),
+            port: 443,
+            password: "00000000-0000-0000-0000-000000000000".to_string(),
+            ..ProfileItem::default()
+        };
+        database.profiles().upsert(&profile).await.expect("profile");
+    }
+
+    async fn assert_profile_state(
+        database: &Database,
+        present_id: &str,
+        present_remarks: &str,
+        missing_id: &str,
+    ) {
+        let present = database
+            .profiles()
+            .get(present_id)
+            .await
+            .expect("load present profile")
+            .expect("present profile");
+        assert_eq!(present.remarks, present_remarks);
+        assert!(database
+            .profiles()
+            .get(missing_id)
+            .await
+            .expect("load missing profile")
+            .is_none());
+    }
+
+    fn config_with_index(index_id: &str) -> AppConfig {
+        AppConfig {
+            index_id: index_id.to_string(),
+            ..AppConfig::default()
+        }
+    }
+
+    fn assert_restore_stage_retained(paths: &AppPaths) {
+        let has_restore_stage = fs::read_dir(paths.temp_dir())
+            .expect("read temp dir")
+            .filter_map(std::result::Result::ok)
+            .any(|entry| {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                name.starts_with("backup-restore-") && !name.starts_with("backup-restore-rollback-")
+            });
+
+        assert!(has_restore_stage, "restore staging should remain");
     }
 
     fn unique_temp_root(name: &str) -> PathBuf {
