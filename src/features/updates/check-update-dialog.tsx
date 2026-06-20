@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -61,6 +61,10 @@ import { cn } from "@/lib/utils";
 
 type CoreRunMode = "check" | "download";
 type RunMode = CoreRunMode | "app-check" | "app-install";
+type PreferenceSnapshot = {
+  preRelease: boolean;
+  selectedIds: string[];
+};
 
 export function CheckUpdateDialog() {
   const { t } = useI18n();
@@ -81,6 +85,15 @@ export function CheckUpdateDialog() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState<UpdateStatus | null>(null);
   const [working, setWorking] = useState<RunMode | null>(null);
+  const preferenceSnapshotRef = useRef<PreferenceSnapshot>({
+    preRelease: false,
+    selectedIds: [],
+  });
+  const preferenceSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const latestPreferenceRequestRef = useRef(0);
+  const latestPreferenceSaveRef = useRef<{ key: string; promise: Promise<void> } | null>(null);
+  const lastPersistedPreferenceKeyRef = useRef<string | null>(null);
+  const pendingPreferenceSaveCountRef = useRef(0);
 
   function applyAppUpdatePaths(paths: AppUpdatePaths) {
     if (paths.updaterStatus) {
@@ -103,9 +116,7 @@ export function CheckUpdateDialog() {
         if (disposed) {
           return;
         }
-        setStatus(nextStatus);
-        setPreRelease(nextStatus.preRelease);
-        setSelectedIds(new Set(nextStatus.targets.filter((target) => target.selected).map((target) => target.id)));
+        applyUpdateStatus(nextStatus);
         const appPaths = await loadAppUpdatePaths(nextStatus.preRelease, true, null);
         if (!disposed) {
           applyAppUpdatePaths(appPaths);
@@ -122,17 +133,74 @@ export function CheckUpdateDialog() {
     };
   }, []);
 
-  const selectedTargetIds = useMemo(() => [...selectedIds], [selectedIds]);
   const resultByTarget = useMemo(
     () => new Map(results.map((result) => [result.targetId, result])),
     [results],
   );
 
-  async function persistSelection(nextPreRelease = preRelease, nextSelected = selectedTargetIds) {
-    const nextStatus = await saveUpdatePreferences(nextPreRelease, nextSelected);
+  function setPreferenceSnapshot(nextPreference: PreferenceSnapshot) {
+    const snapshot = clonePreferenceSnapshot(nextPreference);
+    preferenceSnapshotRef.current = snapshot;
+    setPreRelease(snapshot.preRelease);
+    setSelectedIds(new Set(snapshot.selectedIds));
+  }
+
+  function applyUpdateStatus(nextStatus: UpdateStatus) {
+    const nextPreference = preferenceSnapshotFromStatus(nextStatus);
+    lastPersistedPreferenceKeyRef.current = preferenceSnapshotKey(nextPreference);
     setStatus(nextStatus);
-    setPreRelease(nextStatus.preRelease);
-    setSelectedIds(new Set(nextStatus.targets.filter((target) => target.selected).map((target) => target.id)));
+    setPreferenceSnapshot(nextPreference);
+  }
+
+  function persistPreference(nextPreference: PreferenceSnapshot) {
+    const snapshot = clonePreferenceSnapshot(nextPreference);
+    const key = preferenceSnapshotKey(snapshot);
+    const latestSave = latestPreferenceSaveRef.current;
+
+    if (pendingPreferenceSaveCountRef.current === 0 && key === lastPersistedPreferenceKeyRef.current) {
+      return Promise.resolve();
+    }
+
+    if (latestSave && latestSave.key === key) {
+      return latestSave.promise;
+    }
+
+    const requestId = latestPreferenceRequestRef.current + 1;
+    latestPreferenceRequestRef.current = requestId;
+    pendingPreferenceSaveCountRef.current += 1;
+
+    const request = preferenceSaveChainRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const nextStatus = await saveUpdatePreferences(snapshot.preRelease, snapshot.selectedIds);
+        const savedPreference = preferenceSnapshotFromStatus(nextStatus);
+        lastPersistedPreferenceKeyRef.current = preferenceSnapshotKey(savedPreference);
+
+        if (requestId === latestPreferenceRequestRef.current) {
+          setStatus(nextStatus);
+          setPreferenceSnapshot(savedPreference);
+        }
+      });
+
+    preferenceSaveChainRef.current = request.catch(() => undefined);
+    latestPreferenceSaveRef.current = { key, promise: request };
+    void request.then(
+      () => clearTrackedPreferenceSave(request),
+      () => clearTrackedPreferenceSave(request),
+    );
+
+    return request;
+  }
+
+  function clearTrackedPreferenceSave(request: Promise<void>) {
+    pendingPreferenceSaveCountRef.current = Math.max(0, pendingPreferenceSaveCountRef.current - 1);
+    if (latestPreferenceSaveRef.current?.promise === request) {
+      latestPreferenceSaveRef.current = null;
+    }
+  }
+
+  async function waitForPendingPreferenceSaves() {
+    await preferenceSaveChainRef.current;
   }
 
   async function run(mode: CoreRunMode) {
@@ -141,18 +209,19 @@ export function CheckUpdateDialog() {
     setAppliedCoreResults(new Map());
     setCoreApplyErrors(new Map());
     try {
-      await persistSelection();
+      await waitForPendingPreferenceSaves();
+      const preference = clonePreferenceSnapshot(preferenceSnapshotRef.current);
       const [runResult, appPaths] = await Promise.allSettled([
         mode === "check"
-          ? checkUpdates(preRelease, selectedTargetIds, true, null)
-          : downloadUpdates(preRelease, selectedTargetIds, true, null),
+          ? checkUpdates(preference.preRelease, preference.selectedIds, true, null)
+          : downloadUpdates(preference.preRelease, preference.selectedIds, true, null),
         mode === "check"
-          ? checkAppUpdatePaths(preRelease, true, null)
-          : loadAppUpdatePaths(preRelease, true, null),
+          ? checkAppUpdatePaths(preference.preRelease, true, null)
+          : loadAppUpdatePaths(preference.preRelease, true, null),
       ]);
 
       if (runResult.status === "fulfilled") {
-        setStatus({ preRelease: runResult.value.preRelease, targets: runResult.value.targets });
+        applyUpdateStatus({ preRelease: runResult.value.preRelease, targets: runResult.value.targets });
         setResults(runResult.value.results);
       } else {
         setError(errorMessage(runResult.reason));
@@ -174,7 +243,7 @@ export function CheckUpdateDialog() {
     setWorking("app-check");
     setAppUpdaterError(null);
     try {
-      applyAppUpdatePaths(await checkAppUpdatePaths(preRelease, true, null));
+      applyAppUpdatePaths(await checkAppUpdatePaths(preferenceSnapshotRef.current.preRelease, true, null));
     } catch (error) {
       setAppUpdaterError(errorMessage(error));
     } finally {
@@ -212,19 +281,12 @@ export function CheckUpdateDialog() {
         remoteVersion: result.remoteVersion,
       });
       setAppliedCoreResults((current) => new Map(current).set(result.targetId, applied));
-      setResults((current) =>
-        current.map((item) =>
-          item.targetId === result.targetId
-            ? {
-                ...item,
-                status: "upToDate",
-                message: item.message,
-                currentVersion: applied.appliedVersion,
-                remoteVersion: applied.appliedVersion,
-              }
-            : item,
-        ),
-      );
+      setResults((current) => reconcileAppliedCoreResult(current, result.targetId, applied));
+      try {
+        applyUpdateStatus(await updateStatus());
+      } catch (refreshError) {
+        setError(errorMessage(refreshError));
+      }
     } catch (error) {
       const message = errorMessage(error);
       setCoreApplyErrors((current) => new Map(current).set(result.targetId, message));
@@ -235,26 +297,28 @@ export function CheckUpdateDialog() {
   }
 
   function toggleTarget(id: string, checked: boolean) {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (checked) {
-        next.add(id);
-      } else {
-        next.delete(id);
-      }
-      void persistSelection(preRelease, [...next]).catch((error: unknown) =>
-        setError(error instanceof Error ? error.message : String(error)),
-      );
+    const nextSelected = new Set(preferenceSnapshotRef.current.selectedIds);
+    if (checked) {
+      nextSelected.add(id);
+    } else {
+      nextSelected.delete(id);
+    }
 
-      return next;
-    });
+    const nextPreference = {
+      preRelease: preferenceSnapshotRef.current.preRelease,
+      selectedIds: [...nextSelected],
+    };
+    setPreferenceSnapshot(nextPreference);
+    void persistPreference(nextPreference).catch((error: unknown) => setError(errorMessage(error)));
   }
 
   function togglePreRelease(checked: boolean) {
-    setPreRelease(checked);
-    void persistSelection(checked, selectedTargetIds).catch((error: unknown) =>
-      setError(error instanceof Error ? error.message : String(error)),
-    );
+    const nextPreference = {
+      preRelease: checked,
+      selectedIds: preferenceSnapshotRef.current.selectedIds,
+    };
+    setPreferenceSnapshot(nextPreference);
+    void persistPreference(nextPreference).catch((error: unknown) => setError(errorMessage(error)));
   }
 
   return (
@@ -272,6 +336,7 @@ export function CheckUpdateDialog() {
           <div className="flex items-center gap-2">
             <Checkbox
               checked={preRelease}
+              disabled={working !== null || applyingCoreTargetId !== null}
               id="updates-pre-release"
               onCheckedChange={(checked) => togglePreRelease(checked === true)}
             />
@@ -360,6 +425,7 @@ export function CheckUpdateDialog() {
                       <Checkbox
                         aria-label={`${t("updates.selected")} ${target.name}`}
                         checked={selectedIds.has(target.id)}
+                        disabled={working !== null || applyingCoreTargetId !== null}
                         onCheckedChange={(checked) => toggleTarget(target.id, checked === true)}
                       />
                     </TableCell>
@@ -691,6 +757,49 @@ function statusTone(status: UpdateResultStatus) {
     case "skipped":
       return "border-transparent bg-muted text-muted-foreground";
   }
+}
+
+function clonePreferenceSnapshot(snapshot: PreferenceSnapshot): PreferenceSnapshot {
+  return {
+    preRelease: snapshot.preRelease,
+    selectedIds: [...snapshot.selectedIds],
+  };
+}
+
+function preferenceSnapshotFromStatus(status: UpdateStatus): PreferenceSnapshot {
+  return {
+    preRelease: status.preRelease,
+    selectedIds: status.targets.filter((target) => target.selected).map((target) => target.id),
+  };
+}
+
+function preferenceSnapshotKey(snapshot: PreferenceSnapshot) {
+  return JSON.stringify({
+    preRelease: snapshot.preRelease,
+    selectedIds: [...new Set(snapshot.selectedIds)].sort(),
+  });
+}
+
+function reconcileAppliedCoreResult(
+  current: UpdateCheckResult[],
+  targetId: string,
+  applied: CoreUpdateApplyResult,
+): UpdateCheckResult[] {
+  return current.map((item) =>
+    item.targetId === targetId
+      ? {
+          ...item,
+          bytes: null,
+          currentVersion: applied.appliedVersion,
+          downloadUrl: null,
+          fileName: null,
+          remoteVersion: applied.appliedVersion,
+          sha256: null,
+          status: "upToDate",
+          usedProxy: null,
+        }
+      : item,
+  );
 }
 
 function withoutMapEntry<T>(current: Map<string, T>, key: string) {

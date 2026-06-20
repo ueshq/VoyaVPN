@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -118,6 +118,76 @@ describe("CheckUpdateDialog", () => {
     expect(failedMessage).toHaveTextContent("proxyUrl=[redacted]");
     expect(screen.queryByText(/cdn\.voyavpn\.test\/stable\/xray\.zip/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apply" })).toBeEnabled();
+  });
+
+  it("serializes preference saves and ignores stale preference responses", async () => {
+    const user = userEvent.setup();
+    const saves: Array<{
+      preRelease: boolean;
+      selectedIds: string[];
+      deferred: Deferred<UpdateStatus>;
+    }> = [];
+    ipcMocks.saveUpdatePreferences.mockImplementation((preRelease: boolean, selectedIds: string[]) => {
+      const deferred = createDeferred<UpdateStatus>();
+      saves.push({ deferred, preRelease, selectedIds });
+
+      return deferred.promise;
+    });
+
+    renderDialog();
+
+    const xray = await screen.findByRole("checkbox", { name: "Selected Xray" });
+    const geo = screen.getByRole("checkbox", { name: "Selected Geo files" });
+
+    await user.click(xray);
+
+    expect(xray).not.toBeChecked();
+    await waitFor(() => expect(ipcMocks.saveUpdatePreferences).toHaveBeenCalledTimes(1));
+    expect(saves[0]?.preRelease).toBe(false);
+    expect(saves[0]?.selectedIds).toEqual(["app", "geo", "srs"]);
+
+    await user.click(geo);
+
+    expect(geo).not.toBeChecked();
+    expect(ipcMocks.saveUpdatePreferences).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      saves[0]?.deferred.resolve(makeStatus(selectTargets(["app", "geo", "srs"])));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(ipcMocks.saveUpdatePreferences).toHaveBeenCalledTimes(2));
+    expect(saves[1]?.preRelease).toBe(false);
+    expect(saves[1]?.selectedIds).toEqual(["app", "srs"]);
+    expect(xray).not.toBeChecked();
+    expect(geo).not.toBeChecked();
+
+    await act(async () => {
+      saves[1]?.deferred.resolve(makeStatus(selectTargets(["app", "srs"])));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(xray).not.toBeChecked());
+    expect(geo).not.toBeChecked();
+  });
+
+  it("refreshes backend status after applying a core update", async () => {
+    const user = userEvent.setup();
+    ipcMocks.updateStatus
+      .mockResolvedValueOnce(makeStatus(allTargets))
+      .mockResolvedValueOnce(makeStatus(selectTargets(["app", "geo", "srs"]), true));
+
+    renderDialog();
+
+    await screen.findByText("Manual 2.1.0 available");
+    await user.click(screen.getByRole("button", { name: "Download" }));
+    await screen.findByText("Downloaded 2.0.0");
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+
+    await waitFor(() => expect(ipcMocks.updateStatus).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Applied 2.0.0")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Pre-release" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Selected Xray" })).not.toBeChecked();
   });
 
   it("shows the no selected target state and disables core check actions", async () => {
@@ -317,3 +387,33 @@ const allTargets: UpdateTarget[] = [
     updateSupported: true,
   },
 ];
+
+type Deferred<T> = {
+  promise: Promise<T>;
+  reject: (reason?: unknown) => void;
+  resolve: (value: T | PromiseLike<T>) => void;
+};
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve: Deferred<T>["resolve"] | null = null;
+  let reject: Deferred<T>["reject"] | null = null;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  if (!resolve || !reject) {
+    throw new Error("Failed to create deferred promise.");
+  }
+
+  return { promise, reject, resolve };
+}
+
+function selectTargets(selectedIds: string[]) {
+  const selected = new Set(selectedIds);
+
+  return allTargets.map((target) => ({
+    ...target,
+    selected: selected.has(target.id),
+  }));
+}
