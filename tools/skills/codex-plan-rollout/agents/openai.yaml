@@ -1,4 +1,0 @@
-interface:
-  display_name: "Spec Plan Rollout"
-  short_description: "Plan large refactors and migrations"
-  default_prompt: "Use $codex-plan-rollout to draft a spec, a phase-and-batch plan, and, when appropriate, a rollout runner for this initiative."
