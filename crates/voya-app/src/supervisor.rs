@@ -10,9 +10,9 @@ use voya_platform::{
         SudoPasswordStore,
     },
     process::{
-        NoopProcessJobFactory, PlatformProcessJobFactory, ProcessError, ProcessHandle, ProcessJob,
-        ProcessJobFactory, ProcessOutput, ProcessRole, ProcessRunner, ProcessSpawn,
-        StdProcessRunner,
+        NoopProcessJobFactory, PlatformProcessJobFactory, ProcessError, ProcessExit,
+        ProcessExitHandler, ProcessHandle, ProcessJob, ProcessJobFactory, ProcessOutput,
+        ProcessRole, ProcessRunner, ProcessSpawn, StdProcessRunner,
     },
     tun::{NoopTunCleaner, PlatformTunCleaner, TunCleaner, TunCleanupError},
 };
@@ -161,6 +161,12 @@ impl CoreSupervisor {
     #[must_use]
     pub fn spawn(deps: SupervisorDeps) -> Self {
         let (tx, mut rx) = mpsc::channel(16);
+        let supervisor = Self { tx: tx.clone() };
+        deps.runner
+            .set_exit_handler(Some(Arc::new(SupervisorProcessExitHandler {
+                tx: tx.downgrade(),
+                runtime: tokio::runtime::Handle::current(),
+            })));
         tokio::spawn(async move {
             let mut actor = SupervisorActor::new(deps);
             while let Some(command) = rx.recv().await {
@@ -168,7 +174,7 @@ impl CoreSupervisor {
             }
         });
 
-        Self { tx }
+        supervisor
     }
 
     pub async fn start(
@@ -222,6 +228,33 @@ impl CoreSupervisor {
         response
             .await
             .map_err(|_| SupervisorError::ResponseDropped)?
+    }
+}
+
+struct SupervisorProcessExitHandler {
+    tx: mpsc::WeakSender<SupervisorCommand>,
+    runtime: tokio::runtime::Handle,
+}
+
+impl ProcessExitHandler for SupervisorProcessExitHandler {
+    fn process_exited(&self, exit: ProcessExit) {
+        let Some(tx) = self.tx.upgrade() else {
+            return;
+        };
+        let supervisor = CoreSupervisor { tx };
+        self.runtime.spawn(async move {
+            if let Err(error) = supervisor
+                .process_exited(exit.process_id, exit.exit_code)
+                .await
+            {
+                tracing::warn!(
+                    pid = exit.process_id,
+                    role = ?exit.role,
+                    ?error,
+                    "failed to process core process exit"
+                );
+            }
+        });
     }
 }
 
@@ -566,6 +599,8 @@ mod tests {
         io,
         sync::{Mutex, MutexGuard},
     };
+    #[cfg(unix)]
+    use std::{fs, time::Duration};
 
     use voya_platform::{
         process::{ProcessOutput, ProcessRunner},
@@ -853,6 +888,97 @@ mod tests {
                 "spawn:Main:pid=101:stdin=false"
             ]
         );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn supervisor_reaper_callback_restarts_crashed_core() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = std::env::temp_dir().join(format!(
+            "voya-supervisor-reaper-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let script = temp_dir.join("core.sh");
+        let count_file = temp_dir.join("restart-count");
+        fs::write(
+            &script,
+            r#"#!/bin/sh
+count_file="$PWD/restart-count"
+if [ -f "$count_file" ]; then
+  count=$(cat "$count_file")
+else
+  count=0
+fi
+count=$((count + 1))
+printf '%s\n' "$count" > "$count_file"
+if [ "$count" -eq 1 ]; then
+  exit 7
+fi
+sleep 30
+"#,
+        )
+        .expect("write script");
+        let mut permissions = fs::metadata(&script)
+            .expect("script metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script, permissions).expect("chmod script");
+
+        let supervisor = CoreSupervisor::spawn(
+            SupervisorDeps::new(
+                Arc::new(StdProcessRunner::new()),
+                Arc::new(SudoPasswordStore::new()),
+            )
+            .with_target_os(TargetOs::Linux),
+        );
+        let snapshot = supervisor
+            .start(SupervisorStartRequest {
+                active_profile_id: Some("active".to_string()),
+                main: CoreProcessSpec::new(
+                    CoreType::Xray,
+                    CoreLaunch {
+                        executable: script,
+                        arguments: String::new(),
+                        working_dir: temp_dir.clone(),
+                        environment: BTreeMap::new(),
+                    },
+                )
+                .with_display_log(false)
+                .with_may_need_sudo(false),
+                pre: None,
+                tun_enabled: false,
+                sudo_script_dir: temp_dir.join("scripts"),
+                restart_on_crash: true,
+            })
+            .await
+            .expect("start");
+        let first_pid = snapshot.main_pid.expect("main pid");
+
+        let restarted = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let Ok(contents) = fs::read_to_string(&count_file) {
+                    if let Ok(count) = contents.trim().parse::<u32>() {
+                        let snapshot = supervisor.status().await.expect("status");
+                        if count >= 2 && snapshot.main_pid.is_some_and(|pid| pid != first_pid) {
+                            break snapshot;
+                        }
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await;
+
+        let stop_result = supervisor.stop().await;
+        let _ = fs::remove_dir_all(&temp_dir);
+        let restarted = restarted.expect("restart observed");
+        stop_result.expect("stop restarted child");
+
+        assert_eq!(restarted.state, SupervisorConnectionState::Connected);
+        assert_ne!(restarted.main_pid, Some(first_pid));
     }
 
     #[tokio::test]

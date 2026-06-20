@@ -4,8 +4,9 @@ use std::{
     io::{self, BufRead, Write},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::{Arc, Mutex},
+    sync::{mpsc, Arc, Mutex, Weak},
     thread,
+    time::Duration,
 };
 
 use thiserror::Error;
@@ -171,6 +172,18 @@ pub trait ProcessRunner: Send + Sync {
     fn spawn(&self, request: ProcessSpawn) -> Result<ProcessHandle, ProcessError>;
     fn run_oneshot(&self, request: ProcessSpawn) -> Result<ProcessOutput, ProcessError>;
     fn stop(&self, handle: &ProcessHandle) -> Result<(), ProcessError>;
+    fn set_exit_handler(&self, _handler: Option<Arc<dyn ProcessExitHandler>>) {}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProcessExit {
+    pub process_id: u32,
+    pub role: ProcessRole,
+    pub exit_code: Option<i32>,
+}
+
+pub trait ProcessExitHandler: Send + Sync {
+    fn process_exited(&self, exit: ProcessExit);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -184,7 +197,8 @@ pub trait ProcessLogSink: Send + Sync {
 }
 
 pub struct StdProcessRunner {
-    children: Mutex<HashMap<u32, Child>>,
+    children: Arc<Mutex<HashMap<u32, ChildControl>>>,
+    exit_handler: Mutex<Option<Arc<dyn ProcessExitHandler>>>,
     log_sink: Option<Arc<dyn ProcessLogSink>>,
 }
 
@@ -197,7 +211,8 @@ impl StdProcessRunner {
     #[must_use]
     pub fn with_log_sink(log_sink: Arc<dyn ProcessLogSink>) -> Self {
         Self {
-            children: Mutex::new(HashMap::new()),
+            children: Arc::new(Mutex::new(HashMap::new())),
+            exit_handler: Mutex::new(None),
             log_sink: Some(log_sink),
         }
     }
@@ -206,7 +221,8 @@ impl StdProcessRunner {
 impl Default for StdProcessRunner {
     fn default() -> Self {
         Self {
-            children: Mutex::new(HashMap::new()),
+            children: Arc::new(Mutex::new(HashMap::new())),
+            exit_handler: Mutex::new(None),
             log_sink: None,
         }
     }
@@ -259,11 +275,26 @@ impl ProcessRunner for StdProcessRunner {
         }
 
         let handle = ProcessHandle::new(child.id(), request.role);
-        let mut children = self
-            .children
+        let exit_handler = self
+            .exit_handler
             .lock()
-            .map_err(|_| ProcessError::LockPoisoned("children"))?;
-        children.insert(handle.id(), child);
+            .map_err(|_| ProcessError::LockPoisoned("exit_handler"))?
+            .clone();
+        let (stop_tx, stop_rx) = mpsc::channel();
+        {
+            let mut children = self
+                .children
+                .lock()
+                .map_err(|_| ProcessError::LockPoisoned("children"))?;
+            children.insert(handle.id(), ChildControl { stop_tx });
+        }
+        spawn_child_reaper(
+            handle.clone(),
+            child,
+            stop_rx,
+            exit_handler,
+            Arc::downgrade(&self.children),
+        );
 
         Ok(handle)
     }
@@ -304,62 +335,175 @@ impl ProcessRunner for StdProcessRunner {
     }
 
     fn stop(&self, handle: &ProcessHandle) -> Result<(), ProcessError> {
-        let mut children = self
-            .children
-            .lock()
-            .map_err(|_| ProcessError::LockPoisoned("children"))?;
-        let Some(mut child) = children.remove(&handle.id()) else {
+        let child = {
+            let mut children = self
+                .children
+                .lock()
+                .map_err(|_| ProcessError::LockPoisoned("children"))?;
+            children.remove(&handle.id())
+        };
+        let Some(child) = child else {
             return Ok(());
         };
 
-        match child.try_wait().map_err(ProcessError::Wait)? {
-            Some(_) => Ok(()),
-            None => {
-                child.kill().map_err(ProcessError::Stop)?;
-                let _ = child.wait().map_err(ProcessError::Wait)?;
-                Ok(())
-            }
-        }
+        child.stop()
+    }
+
+    fn set_exit_handler(&self, handler: Option<Arc<dyn ProcessExitHandler>>) {
+        let Ok(mut exit_handler) = self.exit_handler.lock() else {
+            tracing::warn!("failed to register process exit handler: exit handler lock poisoned");
+            return;
+        };
+        *exit_handler = handler;
     }
 }
 
 impl Drop for StdProcessRunner {
     fn drop(&mut self) {
-        let children = match self.children.get_mut() {
-            Ok(children) => children,
-            Err(poisoned) => poisoned.into_inner(),
+        let children = {
+            let mut children = match self.children.lock() {
+                Ok(children) => children,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            std::mem::take(&mut *children)
         };
 
-        for (pid, mut child) in std::mem::take(children) {
-            match child.try_wait() {
-                Ok(Some(_)) => {}
-                Ok(None) => {
-                    if let Err(error) = child.kill() {
-                        tracing::warn!(
-                            pid,
-                            ?error,
-                            "failed to kill child process during runner drop"
-                        );
-                        continue;
-                    }
-                    if let Err(error) = child.wait() {
-                        tracing::warn!(
-                            pid,
-                            ?error,
-                            "failed to wait for child process during runner drop"
-                        );
-                    }
-                }
-                Err(error) => {
-                    tracing::warn!(
-                        pid,
-                        ?error,
-                        "failed to inspect child process during runner drop"
-                    );
-                }
+        for (pid, child) in children {
+            if let Err(error) = child.stop() {
+                tracing::warn!(
+                    pid,
+                    ?error,
+                    "failed to stop child process during runner drop"
+                );
             }
         }
     }
+}
+
+struct ChildControl {
+    stop_tx: mpsc::Sender<ChildCommand>,
+}
+
+impl ChildControl {
+    fn stop(&self) -> Result<(), ProcessError> {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        if self
+            .stop_tx
+            .send(ChildCommand::Stop { reply: reply_tx })
+            .is_err()
+        {
+            return Ok(());
+        }
+
+        match reply_rx.recv() {
+            Ok(result) => result,
+            Err(_) => Ok(()),
+        }
+    }
+}
+
+enum ChildCommand {
+    Stop {
+        reply: mpsc::Sender<Result<(), ProcessError>>,
+    },
+}
+
+const CHILD_REAPER_POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+fn spawn_child_reaper(
+    handle: ProcessHandle,
+    child: Child,
+    stop_rx: mpsc::Receiver<ChildCommand>,
+    exit_handler: Option<Arc<dyn ProcessExitHandler>>,
+    children: Weak<Mutex<HashMap<u32, ChildControl>>>,
+) {
+    thread::spawn(move || {
+        run_child_reaper(handle, child, stop_rx, exit_handler, children);
+    });
+}
+
+fn run_child_reaper(
+    handle: ProcessHandle,
+    mut child: Child,
+    stop_rx: mpsc::Receiver<ChildCommand>,
+    exit_handler: Option<Arc<dyn ProcessExitHandler>>,
+    children: Weak<Mutex<HashMap<u32, ChildControl>>>,
+) {
+    loop {
+        match stop_rx.recv_timeout(CHILD_REAPER_POLL_INTERVAL) {
+            Ok(ChildCommand::Stop { reply }) => {
+                let _ = reply.send(stop_child(&mut child));
+                return;
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                if let Err(error) = stop_child(&mut child) {
+                    tracing::warn!(
+                        pid = handle.id(),
+                        ?error,
+                        "failed to stop child process after control channel closed"
+                    );
+                }
+                return;
+            }
+        }
+
+        match child.try_wait().map_err(ProcessError::Wait) {
+            Ok(Some(status)) => {
+                remove_child_control(&children, handle.id());
+                if let Some(exit_handler) = exit_handler {
+                    exit_handler.process_exited(ProcessExit {
+                        process_id: handle.id(),
+                        role: handle.role(),
+                        exit_code: status.code(),
+                    });
+                }
+                return;
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(
+                    pid = handle.id(),
+                    ?error,
+                    "failed to wait for child process exit"
+                );
+                remove_child_control(&children, handle.id());
+                if let Some(exit_handler) = exit_handler {
+                    exit_handler.process_exited(ProcessExit {
+                        process_id: handle.id(),
+                        role: handle.role(),
+                        exit_code: None,
+                    });
+                }
+                return;
+            }
+        }
+    }
+}
+
+fn stop_child(child: &mut Child) -> Result<(), ProcessError> {
+    match child.try_wait().map_err(ProcessError::Wait)? {
+        Some(_) => Ok(()),
+        None => {
+            child.kill().map_err(ProcessError::Stop)?;
+            let _ = child.wait().map_err(ProcessError::Wait)?;
+            Ok(())
+        }
+    }
+}
+
+fn remove_child_control(children: &Weak<Mutex<HashMap<u32, ChildControl>>>, process_id: u32) {
+    let Some(children) = children.upgrade() else {
+        return;
+    };
+    let Ok(mut children) = children.lock() else {
+        tracing::warn!(
+            pid = process_id,
+            "failed to remove exited child process: children lock poisoned"
+        );
+        return;
+    };
+    children.remove(&process_id);
 }
 
 fn build_command(request: &ProcessSpawn) -> Command {
@@ -697,6 +841,8 @@ pub fn split_command_line(input: &str) -> Result<Vec<String>, ProcessError> {
 #[cfg(test)]
 mod tests {
     use std::{collections::BTreeMap, sync::Mutex};
+    #[cfg(unix)]
+    use std::{sync::mpsc, time::Duration};
 
     use super::*;
 
@@ -771,6 +917,50 @@ mod tests {
             runner.events.lock().expect("events").as_slice(),
             ["spawn:Main", "stop:Main"]
         );
+    }
+
+    #[cfg(unix)]
+    struct RecordingExitHandler {
+        tx: mpsc::Sender<ProcessExit>,
+    }
+
+    #[cfg(unix)]
+    impl ProcessExitHandler for RecordingExitHandler {
+        fn process_exited(&self, exit: ProcessExit) {
+            let _ = self.tx.send(exit);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn std_process_runner_reports_and_reaps_exited_children() {
+        let (tx, rx) = mpsc::channel();
+        let runner = StdProcessRunner::new();
+        runner.set_exit_handler(Some(Arc::new(RecordingExitHandler { tx })));
+
+        let handle = runner
+            .spawn(
+                ProcessSpawn::new(ProcessRole::Probe, "/bin/sh")
+                    .with_arguments(["-c".to_string(), "exit 7".to_string()])
+                    .with_display_log(false),
+            )
+            .expect("spawn shell");
+        let pid = handle.id();
+
+        let exit = rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("process exit event");
+
+        assert_eq!(
+            exit,
+            ProcessExit {
+                process_id: pid,
+                role: ProcessRole::Probe,
+                exit_code: Some(7),
+            }
+        );
+        assert!(!process_is_running(pid));
+        runner.stop(&handle).expect("stop reaped child");
     }
 
     #[cfg(unix)]
