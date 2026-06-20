@@ -770,6 +770,7 @@ export type KeyEventItem_Serialize = {
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
 
 export type LogLineEvent = {
+	id: number,
 	level: LogLevel,
 	line: string,
 };

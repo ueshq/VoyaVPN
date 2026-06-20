@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri_specta::Event;
@@ -6,6 +8,12 @@ use voya_app::{
     speedtest::SpeedTestResult,
 };
 use voya_core::{CoreType, ServerStatItem};
+
+static NEXT_LOG_LINE_ID: AtomicU32 = AtomicU32::new(1);
+
+pub fn next_log_line_id() -> u32 {
+    NEXT_LOG_LINE_ID.fetch_add(1, Ordering::Relaxed)
+}
 
 #[cfg(debug_assertions)]
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]
@@ -48,6 +56,7 @@ pub enum LogLevel {
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LogLineEvent {
+    pub id: u32,
     pub level: LogLevel,
     pub line: String,
 }

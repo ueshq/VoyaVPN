@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import type { ClashConnectionsSnapshot } from "@/ipc/bindings";
+import type { ClashConnectionsSnapshot, StatisticsSnapshot } from "@/ipc/bindings";
 
 const initialMonitorStatus = {
   message: null,
@@ -23,6 +23,9 @@ describe("runtime event store", () => {
       clashMonitorStatus: initialMonitorStatus,
       clashTraffic: null,
       lastTransientEvent: null,
+      logLines: [],
+      serverStatsByProfileId: {},
+      statistics: null,
     });
   });
 
@@ -187,6 +190,51 @@ describe("runtime event store", () => {
       stale: false,
       state: "failed",
     });
+    expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("clashConnections");
+  });
+
+  it("rejects invalid statistics payloads before storing them", () => {
+    const invalidStatistics = {
+      activeProfileId: "profile-a",
+      directDownloadBytesPerSecond: 0,
+      directUploadBytesPerSecond: 0,
+      downloadBytesPerSecond: 0,
+      proxyDownloadBytesPerSecond: 0,
+      proxyUploadBytesPerSecond: Number.NaN,
+      serverStat: { IndexId: "profile-a", TotalUp: 1 },
+      uploadBytesPerSecond: 0,
+    } as StatisticsSnapshot;
+
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "statistics",
+      payload: invalidStatistics,
+    });
+
+    expect(useRuntimeEventStore.getState().statistics).toBeNull();
+    expect(useRuntimeEventStore.getState().serverStatsByProfileId).toEqual({});
+    expect(useRuntimeEventStore.getState().lastTransientEvent).toBeNull();
+  });
+
+  it("does not let invalid Clash connection payloads replace a queued valid frame", async () => {
+    vi.useFakeTimers();
+
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "clashConnections",
+      payload: makeConnectionsSnapshot("connection-1", "valid.example.com:443", 200, 100),
+    });
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "clashConnections",
+      payload: {
+        connections: [],
+        downloadTotal: -1,
+        uploadTotal: 0,
+      } as ClashConnectionsSnapshot,
+    });
+
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(useRuntimeEventStore.getState().clashConnections?.connections[0]?.host).toBe("valid.example.com:443");
+    expect(useRuntimeEventStore.getState().clashConnections?.downloadTotal).toBe(200);
     expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("clashConnections");
   });
 });

@@ -489,6 +489,7 @@ impl ProcessLogSink for TauriProcessLogSink {
         };
         let line = redact_process_log_line(&line);
         let event = ipc::events::TransientStreamEvent::LogLine(ipc::events::LogLineEvent {
+            id: ipc::events::next_log_line_id(),
             level,
             line: format!("[{}] {line}", process_role_label(role)),
         });

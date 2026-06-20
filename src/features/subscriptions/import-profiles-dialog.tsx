@@ -63,8 +63,8 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
       setResultText(
         `${result.imported ?? 0} imported, ${result.skipped ?? 0} skipped for ${targetLabel}`,
       );
+      setText("");
       onImported();
-      onOpenChange(false);
     } catch (error) {
       setError(redactOperationalError(error));
     }
@@ -184,7 +184,10 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
               <Textarea
                 className="min-h-72 resize-y bg-card font-mono text-xs"
                 id="import-payload"
-                onChange={(event) => setText(event.target.value)}
+                onChange={(event) => {
+                  setResultText(null);
+                  setText(event.target.value);
+                }}
                 value={text}
               />
             </div>

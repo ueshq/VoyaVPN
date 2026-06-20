@@ -1,6 +1,8 @@
 import { create } from "zustand";
+import { z } from "zod";
 
 import type {
+  ClashConnectionItem,
   ClashConnectionsSnapshot,
   ClashMonitorState,
   ClashMonitorStatus,
@@ -51,10 +53,59 @@ type RuntimeEventState = {
 };
 
 type ClashConnectionsEvent = Extract<TransientStreamEvent, { kind: "clashConnections" }>;
+type StatisticsEvent = Extract<TransientStreamEvent, { kind: "statistics" }>;
 type FrameHandle = number | ReturnType<typeof setTimeout>;
 
 let pendingClashConnectionsEvent: ClashConnectionsEvent | null = null;
 let pendingClashConnectionsFrame: FrameHandle | null = null;
+
+const payloadStringSchema = z.string().max(4096);
+const nullablePayloadStringSchema = payloadStringSchema.nullable();
+const nonnegativeFiniteNumberSchema = z.number().finite().nonnegative();
+const nullableNonnegativeFiniteNumberSchema = nonnegativeFiniteNumberSchema.nullable();
+
+const clashConnectionItemSchema: z.ZodType<ClashConnectionItem> = z.object({
+  chains: z.array(payloadStringSchema).max(512),
+  connectionType: nullablePayloadStringSchema,
+  destination: payloadStringSchema,
+  download: nullableNonnegativeFiniteNumberSchema,
+  host: payloadStringSchema,
+  id: nullablePayloadStringSchema,
+  network: nullablePayloadStringSchema,
+  process: nullablePayloadStringSchema,
+  processPath: nullablePayloadStringSchema,
+  rule: nullablePayloadStringSchema,
+  rulePayload: nullablePayloadStringSchema,
+  source: payloadStringSchema,
+  start: payloadStringSchema,
+  upload: nullableNonnegativeFiniteNumberSchema,
+});
+
+const clashConnectionsSnapshotSchema: z.ZodType<ClashConnectionsSnapshot> = z.object({
+  connections: z.array(clashConnectionItemSchema).max(10_000),
+  downloadTotal: nullableNonnegativeFiniteNumberSchema,
+  uploadTotal: nullableNonnegativeFiniteNumberSchema,
+});
+
+const serverStatItemSchema: z.ZodType<ServerStatItem> = z.object({
+  DateNow: nullableNonnegativeFiniteNumberSchema.optional(),
+  IndexId: payloadStringSchema.optional(),
+  TodayDown: nullableNonnegativeFiniteNumberSchema.optional(),
+  TodayUp: nullableNonnegativeFiniteNumberSchema.optional(),
+  TotalDown: nullableNonnegativeFiniteNumberSchema.optional(),
+  TotalUp: nullableNonnegativeFiniteNumberSchema.optional(),
+});
+
+const statisticsSnapshotSchema: z.ZodType<StatisticsSnapshot> = z.object({
+  activeProfileId: nullablePayloadStringSchema,
+  directDownloadBytesPerSecond: nullableNonnegativeFiniteNumberSchema,
+  directUploadBytesPerSecond: nullableNonnegativeFiniteNumberSchema,
+  downloadBytesPerSecond: nullableNonnegativeFiniteNumberSchema,
+  proxyDownloadBytesPerSecond: nullableNonnegativeFiniteNumberSchema,
+  proxyUploadBytesPerSecond: nullableNonnegativeFiniteNumberSchema,
+  serverStat: serverStatItemSchema.nullable(),
+  uploadBytesPerSecond: nullableNonnegativeFiniteNumberSchema,
+});
 
 const initialClashMonitorStatus: RuntimeClashMonitorStatus = {
   message: null,
@@ -73,7 +124,12 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
   logLines: [],
   pushTransientEvent: (event) => {
     if (event.kind === "clashConnections") {
-      pendingClashConnectionsEvent = event;
+      const payload = parseClashConnectionsSnapshot(event.payload);
+      if (!payload) {
+        return;
+      }
+
+      pendingClashConnectionsEvent = { kind: "clashConnections", payload };
       if (pendingClashConnectionsFrame === null) {
         pendingClashConnectionsFrame = scheduleFrame(() => {
           const nextEvent = pendingClashConnectionsEvent;
@@ -100,19 +156,26 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
           };
         case "coreState":
           return { coreState: event.payload, lastTransientEvent: event };
-        case "statistics":
-          if (!event.payload.serverStat?.IndexId) {
-            return { lastTransientEvent: event, statistics: event.payload };
+        case "statistics": {
+          const payload = parseStatisticsSnapshot(event.payload);
+          if (!payload) {
+            return {};
+          }
+
+          const nextEvent: StatisticsEvent = { kind: "statistics", payload };
+          if (!payload.serverStat?.IndexId) {
+            return { lastTransientEvent: nextEvent, statistics: payload };
           }
 
           return {
-            lastTransientEvent: event,
+            lastTransientEvent: nextEvent,
             serverStatsByProfileId: {
               ...state.serverStatsByProfileId,
-              [event.payload.serverStat.IndexId]: event.payload.serverStat,
+              [payload.serverStat.IndexId]: payload.serverStat,
             },
-            statistics: event.payload,
+            statistics: payload,
           };
+        }
         case "sysProxyChanged":
           return { lastTransientEvent: event, sysProxy: event.payload };
         case "tunChanged":
@@ -139,7 +202,12 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
       }
     });
   },
-  setClashConnections: (clashConnections) => set({ clashConnections }),
+  setClashConnections: (clashConnections) => {
+    const payload = parseClashConnectionsSnapshot(clashConnections);
+    if (payload) {
+      set({ clashConnections: payload });
+    }
+  },
   setClashMonitorFailed: (message = null) =>
     set({ clashMonitorStatus: makeClashMonitorStatus("failed", false, true, message) }),
   setClashMonitorRunning: (message = null) =>
@@ -183,6 +251,16 @@ function makeClashMonitorStatus(
 
 function markClashDataFresh(status: RuntimeClashMonitorStatus): RuntimeClashMonitorStatus {
   return { ...status, stale: false };
+}
+
+function parseClashConnectionsSnapshot(payload: unknown): ClashConnectionsSnapshot | null {
+  const result = clashConnectionsSnapshotSchema.safeParse(payload);
+  return result.success ? result.data : null;
+}
+
+function parseStatisticsSnapshot(payload: unknown): StatisticsSnapshot | null {
+  const result = statisticsSnapshotSchema.safeParse(payload);
+  return result.success ? result.data : null;
 }
 
 function scheduleFrame(callback: () => void): FrameHandle {

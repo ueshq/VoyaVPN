@@ -199,6 +199,9 @@ export function ClashConnectionsScreen() {
           <div className="relative min-w-[72rem]" style={{ height: rowVirtualizer.getTotalSize() }}>
             {renderedRows.map((virtualRow) => {
               const connection = filteredConnections[virtualRow.index];
+              if (!connection) {
+                return null;
+              }
 
               return (
                 <ConnectionRow

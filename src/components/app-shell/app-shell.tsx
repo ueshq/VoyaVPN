@@ -578,14 +578,19 @@ function usePersistedPreferences(language: string) {
   const fontSize = usePreferencesStore((state) => state.fontSize);
   const hydrateFromConfig = usePreferencesStore((state) => state.hydrateFromConfig);
   const themeMode = usePreferencesStore((state) => state.themeMode);
-  const languageRef = useRef(language);
   const lastPersistedKeyRef = useRef<string | null>(null);
+  const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const persistSequenceRef = useRef(0);
+  const preferenceSnapshot = useMemo<PreferenceConfigSnapshot>(
+    () => ({ font, fontSize, language, themeMode }),
+    [font, fontSize, language, themeMode],
+  );
 
   useEffect(() => {
-    languageRef.current = language;
-  }, [language]);
+    if (appConfigLoaded) {
+      return undefined;
+    }
 
-  useEffect(() => {
     let disposed = false;
 
     void loadAppConfig()
@@ -598,7 +603,7 @@ function usePersistedPreferences(language: string) {
         lastPersistedKeyRef.current = preferenceConfigKey({
           font: usePreferencesStore.getState().font,
           fontSize: usePreferencesStore.getState().fontSize,
-          language: languageRef.current,
+          language,
           themeMode: usePreferencesStore.getState().themeMode,
         });
       })
@@ -607,26 +612,33 @@ function usePersistedPreferences(language: string) {
     return () => {
       disposed = true;
     };
-  }, [hydrateFromConfig]);
+  }, [appConfigLoaded, hydrateFromConfig, language]);
 
   useEffect(() => {
-    if (!appConfigLoaded) {
+    if (!appConfigLoaded || lastPersistedKeyRef.current === null) {
       return undefined;
     }
 
-    const persistKey = preferenceConfigKey({ font, fontSize, language, themeMode });
+    const persistKey = preferenceConfigKey(preferenceSnapshot);
     if (lastPersistedKeyRef.current === persistKey) {
       return undefined;
     }
 
+    const sequence = ++persistSequenceRef.current;
     const timeout = window.setTimeout(() => {
-      void persistPreferenceConfig({ font, fontSize, language, themeMode }).then(() => {
-        lastPersistedKeyRef.current = persistKey;
-      });
+      persistQueueRef.current = persistQueueRef.current
+        .catch(() => undefined)
+        .then(() => persistPreferenceConfig(preferenceSnapshot))
+        .then(() => {
+          if (persistSequenceRef.current === sequence) {
+            lastPersistedKeyRef.current = persistKey;
+          }
+        })
+        .catch(() => undefined);
     }, 250);
 
     return () => window.clearTimeout(timeout);
-  }, [appConfigLoaded, font, fontSize, language, themeMode]);
+  }, [appConfigLoaded, preferenceSnapshot]);
 }
 
 function useClashMonitorLifecycle(activeTab: ShellTab) {
@@ -825,17 +837,19 @@ function isTauriRuntime() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+type PreferenceConfigSnapshot = {
+  font: Font;
+  fontSize: number;
+  language: string;
+  themeMode: ThemeMode;
+};
+
 function preferenceConfigKey({
   font,
   fontSize,
   language,
   themeMode,
-}: {
-  font: Font;
-  fontSize: number;
-  language: string;
-  themeMode: ThemeMode;
-}) {
+}: PreferenceConfigSnapshot) {
   return JSON.stringify({
     font,
     fontSize,
@@ -849,12 +863,7 @@ async function persistPreferenceConfig({
   fontSize,
   language,
   themeMode,
-}: {
-  font: Font;
-  fontSize: number;
-  language: string;
-  themeMode: ThemeMode;
-}) {
+}: PreferenceConfigSnapshot) {
   const config = await loadAppConfig();
   const nextConfig = {
     ...config,

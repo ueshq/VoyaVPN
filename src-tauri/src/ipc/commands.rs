@@ -57,12 +57,12 @@ use voya_core::{
 };
 use voya_platform::{coreinfo::CoreInfoError, sysproxy::SystemProxyStatus};
 
+use super::events::{
+    next_log_line_id, CoreState, CoreStateEvent, InvalidateEvent, LogLevel, LogLineEvent,
+    QueryInvalidation, TransientStreamEvent,
+};
 #[cfg(debug_assertions)]
 use super::events::{AppEvent, AppNotice, AppNoticeLevel, DemoRequest, DemoResponse};
-use super::events::{
-    CoreState, CoreStateEvent, InvalidateEvent, LogLevel, LogLineEvent, QueryInvalidation,
-    TransientStreamEvent,
-};
 use crate::AppState;
 
 const PROFILE_IMPORT_DIR_NAME: &str = "imports";
@@ -2310,6 +2310,7 @@ pub fn ipc_demo_round_trip<R: tauri::Runtime>(
     .map_err(|error| AppError::EventEmit(error.to_string()))?;
 
     TransientStreamEvent::LogLine(LogLineEvent {
+        id: next_log_line_id(),
         level: LogLevel::Info,
         line: format!("IPC demo echoed {} characters", response.message_length),
     })
@@ -2965,6 +2966,7 @@ where
     R: tauri::Runtime,
 {
     TransientStreamEvent::LogLine(LogLineEvent {
+        id: next_log_line_id(),
         level,
         line: line.to_string(),
     })
@@ -3255,7 +3257,19 @@ fn backup_restore_error(error: BackupManagerError) -> AppError {
         BackupManagerError::ConfigDeserialize(error) => {
             AppError::Backup(format!("failed to deserialize backup data: {error}"))
         }
+        BackupManagerError::RestoreRollback { restore, rollback } => AppError::Backup(format!(
+            "backup restore failed and rollback failed: restore error: {}; rollback error: {}",
+            backup_restore_error_message(*restore),
+            backup_restore_error_message(*rollback)
+        )),
         BackupManagerError::WebDav(error) => AppError::Backup(error.to_string()),
+    }
+}
+
+fn backup_restore_error_message(error: BackupManagerError) -> String {
+    match backup_restore_error(error) {
+        AppError::Backup(message) | AppError::Database(message) => message,
+        _ => "backup restore failed".to_string(),
     }
 }
 

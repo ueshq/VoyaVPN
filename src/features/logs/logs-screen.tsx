@@ -38,10 +38,10 @@ export function LogsScreen() {
       ) : (
         <ScrollArea className="min-h-0 flex-1 bg-muted/20">
           <ol className="grid gap-px p-2 font-mono text-xs leading-5" data-testid="log-lines">
-            {logLines.map((line, index) => (
+            {logLines.map((line) => (
               <li
                 className="grid grid-cols-[4.75rem_minmax(0,1fr)] gap-3 rounded-md px-2 py-1 transition-colors hover:bg-background/80"
-                key={`${index}-${line.line}`}
+                key={line.id}
               >
                 <Badge
                   className={cn(

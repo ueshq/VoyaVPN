@@ -547,6 +547,10 @@ export function ProfilesScreen() {
               <div className="relative min-w-[110rem]" style={{ height: rowVirtualizer.getTotalSize() }}>
                 {renderedRows.map((virtualRow) => {
                   const row = rows[virtualRow.index];
+                  if (!row) {
+                    return null;
+                  }
+
                   const item = row.original;
                   const indexId = item.profile.IndexId;
                   const isSelected = selectedIds.has(indexId);

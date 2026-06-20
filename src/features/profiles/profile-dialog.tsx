@@ -1,4 +1,4 @@
-import { useEffect, useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import type * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Save, Server, ShieldCheck } from "lucide-react";
@@ -80,10 +80,22 @@ export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile }: P
   const security = useWatch({ control: form.control, name: "StreamSecurity" }) ?? "";
   const allowInsecure = useWatch({ control: form.control, name: "AllowInsecure" }) === "true";
   const muxEnabled = useWatch({ control: form.control, name: "MuxEnabled" }) === true;
+  const resetKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (!open) {
+      resetKeyRef.current = null;
+      return;
+    }
+
+    const resetKey = `${mode}:${profile?.profile.IndexId ?? "new"}`;
+    if (resetKeyRef.current === resetKey) {
+      return;
+    }
+
+    resetKeyRef.current = resetKey;
     reset(profile ? normalizeProfileForForm(profile.profile) : createDefaultProfile());
-  }, [profile, reset, open]);
+  }, [mode, profile, reset, open]);
 
   const submit = handleSubmit(async (values) => {
     await onSubmit(prepareProfileForSave(values));
