@@ -11,6 +11,8 @@ use voya_core::{DnsItem, RoutingItem, RulesItem};
 use crate::{DownloadAttempt, DownloadClient, DownloadError, DownloadRequest, USER_AGENT_PREFIX};
 
 const RULESET_ASSET_RESPONSE_LIMIT_BYTES: usize = 256 * 1024 * 1024;
+const RULESET_DNS_JSON_LIMIT_BYTES: usize = 1024 * 1024;
+const RULESET_DNS_JSON_DEPTH_LIMIT: usize = 64;
 
 pub const DEFAULT_GEO_SOURCE_URL: &str =
     "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/{0}.dat";
@@ -414,29 +416,49 @@ fn collect_srs_from_rule(
 }
 
 fn collect_srs_from_json(json: &str, geoip: &mut BTreeSet<String>, geosite: &mut BTreeSet<String>) {
+    if json.len() > RULESET_DNS_JSON_LIMIT_BYTES {
+        tracing::warn!(
+            limit = RULESET_DNS_JSON_LIMIT_BYTES,
+            received = json.len(),
+            "ruleset DNS JSON exceeds parse budget"
+        );
+        return;
+    }
+
     let Ok(value) = serde_json::from_str::<serde_json::Value>(json) else {
         return;
     };
-    collect_srs_from_json_value(&value, geoip, geosite);
+    collect_srs_from_json_value(&value, geoip, geosite, 0);
 }
 
 fn collect_srs_from_json_value(
     value: &serde_json::Value,
     geoip: &mut BTreeSet<String>,
     geosite: &mut BTreeSet<String>,
+    depth: usize,
 ) {
+    if depth > RULESET_DNS_JSON_DEPTH_LIMIT {
+        tracing::warn!(
+            limit = RULESET_DNS_JSON_DEPTH_LIMIT,
+            "ruleset DNS JSON nesting exceeds parse budget"
+        );
+        return;
+    }
+
     match value {
         serde_json::Value::Array(values) => {
+            let child_depth = depth.saturating_add(1);
             for value in values {
-                collect_srs_from_json_value(value, geoip, geosite);
+                collect_srs_from_json_value(value, geoip, geosite, child_depth);
             }
         }
         serde_json::Value::Object(map) => {
+            let child_depth = depth.saturating_add(1);
             for (key, value) in map {
                 if key == "rule_set" {
                     collect_rule_set_value(value, geoip, geosite);
                 }
-                collect_srs_from_json_value(value, geoip, geosite);
+                collect_srs_from_json_value(value, geoip, geosite, child_depth);
             }
         }
         _ => {}
@@ -555,6 +577,54 @@ mod tests {
         assert!(names.contains("geosite-google.srs"));
         assert!(names.contains("geosite-tld-cn.srs"));
         assert!(names.contains("geosite-category-ads-all.srs"));
+    }
+
+    #[test]
+    fn ruleset_collection_skips_dns_json_above_size_limit() {
+        let dns = DnsItem {
+            normal_dns: Some(format!(
+                r#"{{"rule_set":"geosite-hidden","pad":"{}"}}"#,
+                "x".repeat(RULESET_DNS_JSON_LIMIT_BYTES)
+            )),
+            ..DnsItem::default()
+        };
+
+        let assets =
+            collect_singbox_ruleset_assets(Some("https://rules.example/{0}/{1}.srs"), &[], &[dns]);
+        let names = assets
+            .iter()
+            .map(|asset| asset.file_name.as_str())
+            .collect::<BTreeSet<_>>();
+
+        assert!(!names.contains("geosite-hidden.srs"));
+        assert!(names.contains("geosite-category-ads-all.srs"));
+    }
+
+    #[test]
+    fn ruleset_collection_stops_dns_json_traversal_at_depth_limit() {
+        let mut nested = String::from(r#"{"rule_set":"geosite-shallow","child":"#);
+        for _ in 0..=RULESET_DNS_JSON_DEPTH_LIMIT {
+            nested.push_str(r#"{"child":"#);
+        }
+        nested.push_str(r#"{"rule_set":"geosite-too-deep"}"#);
+        for _ in 0..=RULESET_DNS_JSON_DEPTH_LIMIT {
+            nested.push('}');
+        }
+        nested.push('}');
+        let dns = DnsItem {
+            normal_dns: Some(nested),
+            ..DnsItem::default()
+        };
+
+        let assets =
+            collect_singbox_ruleset_assets(Some("https://rules.example/{0}/{1}.srs"), &[], &[dns]);
+        let names = assets
+            .iter()
+            .map(|asset| asset.file_name.as_str())
+            .collect::<BTreeSet<_>>();
+
+        assert!(names.contains("geosite-shallow.srs"));
+        assert!(!names.contains("geosite-too-deep.srs"));
     }
 
     #[tokio::test]

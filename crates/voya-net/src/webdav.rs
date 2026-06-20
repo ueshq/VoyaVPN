@@ -7,8 +7,9 @@ const DEFAULT_BACKUP_DIR: &str = "VoyaVPN_backup";
 const DEFAULT_BACKUP_FILE: &str = "backup.zip";
 const TEST_FILE: &str = "readme_test";
 const WEBDAV_PROPFIND_RESPONSE_LIMIT_BYTES: usize = 8 * 1024 * 1024;
+const WEBDAV_PROPFIND_XML_DEPTH_LIMIT: usize = 64;
 const WEBDAV_DOWNLOAD_RESPONSE_LIMIT_BYTES: usize = 128 * 1024 * 1024;
-const WEBDAV_STATUS_RESPONSE_LIMIT_BYTES: usize = 64 * 1024;
+const WEBDAV_STATUS_ERROR_BODY_PREVIEW_BYTES: usize = 512;
 const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b' ')
     .add(b'"')
@@ -69,6 +70,10 @@ pub enum WebDavError {
         content_length: Option<u64>,
         received: usize,
     },
+    #[error("WebDAV PROPFIND XML too large: limit {limit} bytes, received {received}")]
+    XmlTooLarge { limit: usize, received: usize },
+    #[error("WebDAV PROPFIND XML nesting too deep: limit {limit}")]
+    XmlTooDeep { limit: usize },
     #[error("failed to parse WebDAV XML: {0}")]
     Xml(String),
 }
@@ -374,6 +379,13 @@ fn validate_https_url(url: &str) -> Result<()> {
 }
 
 pub fn parse_propfind_response(xml: &str) -> Result<Vec<WebDavEntry>> {
+    if xml.len() > WEBDAV_PROPFIND_RESPONSE_LIMIT_BYTES {
+        return Err(WebDavError::XmlTooLarge {
+            limit: WEBDAV_PROPFIND_RESPONSE_LIMIT_BYTES,
+            received: xml.len(),
+        });
+    }
+
     #[derive(Default)]
     struct EntryBuilder {
         href: String,
@@ -397,23 +409,38 @@ pub fn parse_propfind_response(xml: &str) -> Result<Vec<WebDavEntry>> {
     let mut field = None;
     let mut current: Option<EntryBuilder> = None;
     let mut entries = Vec::new();
+    let mut depth = 0usize;
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(event)) => match local_name(event.name().as_ref()) {
-                "response" => current = Some(EntryBuilder::default()),
-                "href" => field = Some(TextField::Href),
-                "displayname" => field = Some(TextField::DisplayName),
-                "getcontentlength" => field = Some(TextField::ContentLength),
-                "getlastmodified" => field = Some(TextField::LastModified),
-                "collection" => {
-                    if let Some(entry) = current.as_mut() {
-                        entry.is_collection = true;
-                    }
+            Ok(Event::Start(event)) => {
+                depth = depth.saturating_add(1);
+                if depth > WEBDAV_PROPFIND_XML_DEPTH_LIMIT {
+                    return Err(WebDavError::XmlTooDeep {
+                        limit: WEBDAV_PROPFIND_XML_DEPTH_LIMIT,
+                    });
                 }
-                _ => {}
-            },
+
+                match local_name(event.name().as_ref()) {
+                    "response" => current = Some(EntryBuilder::default()),
+                    "href" => field = Some(TextField::Href),
+                    "displayname" => field = Some(TextField::DisplayName),
+                    "getcontentlength" => field = Some(TextField::ContentLength),
+                    "getlastmodified" => field = Some(TextField::LastModified),
+                    "collection" => {
+                        if let Some(entry) = current.as_mut() {
+                            entry.is_collection = true;
+                        }
+                    }
+                    _ => {}
+                }
+            }
             Ok(Event::Empty(event)) => {
+                if depth.saturating_add(1) > WEBDAV_PROPFIND_XML_DEPTH_LIMIT {
+                    return Err(WebDavError::XmlTooDeep {
+                        limit: WEBDAV_PROPFIND_XML_DEPTH_LIMIT,
+                    });
+                }
                 if local_name(event.name().as_ref()) == "collection" {
                     if let Some(entry) = current.as_mut() {
                         entry.is_collection = true;
@@ -436,23 +463,26 @@ pub fn parse_propfind_response(xml: &str) -> Result<Vec<WebDavEntry>> {
                     }
                 }
             }
-            Ok(Event::End(event)) => match local_name(event.name().as_ref()) {
-                "response" => {
-                    if let Some(entry) = current.take() {
-                        entries.push(WebDavEntry {
-                            href: entry.href,
-                            display_name: entry.display_name,
-                            content_length: entry.content_length,
-                            is_collection: entry.is_collection,
-                            last_modified: entry.last_modified,
-                        });
+            Ok(Event::End(event)) => {
+                match local_name(event.name().as_ref()) {
+                    "response" => {
+                        if let Some(entry) = current.take() {
+                            entries.push(WebDavEntry {
+                                href: entry.href,
+                                display_name: entry.display_name,
+                                content_length: entry.content_length,
+                                is_collection: entry.is_collection,
+                                last_modified: entry.last_modified,
+                            });
+                        }
                     }
+                    "href" | "displayname" | "getcontentlength" | "getlastmodified" => {
+                        field = None;
+                    }
+                    _ => {}
                 }
-                "href" | "displayname" | "getcontentlength" | "getlastmodified" => {
-                    field = None;
-                }
-                _ => {}
-            },
+                depth = depth.saturating_sub(1);
+            }
             Ok(Event::Eof) => break,
             Err(error) => return Err(WebDavError::Xml(error.to_string())),
             _ => {}
@@ -469,15 +499,45 @@ fn custom_method(method: &str) -> Method {
 
 async fn status_error(method: &str, url: &str, response: reqwest::Response) -> WebDavError {
     let status = response.status();
-    match crate::read_response_text_limited(response, WEBDAV_STATUS_RESPONSE_LIMIT_BYTES).await {
+    match read_response_text_preview(response, WEBDAV_STATUS_ERROR_BODY_PREVIEW_BYTES).await {
         Ok(body) => WebDavError::Status {
             method: method.to_string(),
             url: url.to_string(),
             status,
             body,
         },
-        Err(error) => webdav_body_error(method, url, error),
+        Err(source) => WebDavError::Request {
+            method: method.to_string(),
+            url: url.to_string(),
+            source,
+        },
     }
+}
+
+async fn read_response_text_preview(
+    mut response: reqwest::Response,
+    limit: usize,
+) -> std::result::Result<String, reqwest::Error> {
+    let capacity = response
+        .content_length()
+        .and_then(|length| usize::try_from(length).ok())
+        .map_or(0, |length| length.min(limit));
+    let mut body = Vec::with_capacity(capacity);
+
+    while body.len() < limit {
+        let Some(chunk) = response.chunk().await? else {
+            break;
+        };
+        let remaining = limit - body.len();
+        if chunk.len() <= remaining {
+            body.extend_from_slice(&chunk);
+        } else {
+            body.extend_from_slice(&chunk[..remaining]);
+            break;
+        }
+    }
+
+    Ok(String::from_utf8_lossy(&body).into_owned())
 }
 
 fn webdav_body_error(method: &str, url: &str, error: crate::LimitedBodyReadError) -> WebDavError {
@@ -584,6 +644,48 @@ mod tests {
     }
 
     #[test]
+    fn webdav_propfind_rejects_oversized_xml_input() {
+        let xml = "x".repeat(WEBDAV_PROPFIND_RESPONSE_LIMIT_BYTES + 1);
+
+        let error = parse_propfind_response(&xml).expect_err("oversized XML should fail");
+
+        assert!(
+            matches!(
+                error,
+                WebDavError::XmlTooLarge {
+                    limit: WEBDAV_PROPFIND_RESPONSE_LIMIT_BYTES,
+                    received
+                } if received == WEBDAV_PROPFIND_RESPONSE_LIMIT_BYTES + 1
+            ),
+            "{error:?}"
+        );
+    }
+
+    #[test]
+    fn webdav_propfind_rejects_too_deep_xml_input() {
+        let mut xml = String::from(r#"<d:multistatus xmlns:d="DAV:">"#);
+        for _ in 0..WEBDAV_PROPFIND_XML_DEPTH_LIMIT {
+            xml.push_str("<d:prop>");
+        }
+        for _ in 0..WEBDAV_PROPFIND_XML_DEPTH_LIMIT {
+            xml.push_str("</d:prop>");
+        }
+        xml.push_str("</d:multistatus>");
+
+        let error = parse_propfind_response(&xml).expect_err("deep XML should fail");
+
+        assert!(
+            matches!(
+                error,
+                WebDavError::XmlTooDeep {
+                    limit: WEBDAV_PROPFIND_XML_DEPTH_LIMIT
+                }
+            ),
+            "{error:?}"
+        );
+    }
+
+    #[test]
     fn webdav_config_rejects_plain_http_url() {
         let error = WebDavConfig::new(
             "http://webdav.example.test/dav",
@@ -681,6 +783,36 @@ mod tests {
                     Some(u64::try_from(declared_length).expect("declared length"))
                 );
                 assert_eq!(received, 0);
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn webdav_status_error_body_is_truncated() {
+        let body = vec![b'x'; WEBDAV_STATUS_ERROR_BODY_PREVIEW_BYTES + 128];
+        let base = spawn_webdav_single_response(
+            "PUT",
+            "/VoyaVPN_backup/backup.zip",
+            "500 Internal Server Error",
+            "text/plain",
+            Some(body.len()),
+            body,
+        )
+        .await;
+        let config = http_test_config(base, Some("VoyaVPN_backup".to_string()));
+        let client = http_test_client(config);
+
+        let error = client
+            .upload("VoyaVPN_backup/backup.zip", b"zip".to_vec())
+            .await
+            .expect_err("status error should fail");
+
+        match error {
+            WebDavError::Status { status, body, .. } => {
+                assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+                assert_eq!(body.len(), WEBDAV_STATUS_ERROR_BODY_PREVIEW_BYTES);
+                assert!(body.as_bytes().iter().all(|byte| *byte == b'x'));
             }
             other => panic!("unexpected error: {other:?}"),
         }

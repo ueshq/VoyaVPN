@@ -25,6 +25,8 @@ const SOCKS5_CMD_UDP_ASSOCIATE: u8 = 0x03;
 const SOCKS5_ATYP_IPV4: u8 = 0x01;
 const SOCKS5_ATYP_DOMAIN: u8 = 0x03;
 const SOCKS5_ATYP_IPV6: u8 = 0x04;
+const STUN_BINDING_SUCCESS_RESPONSE_TYPE: u16 = 0x0101;
+const STUN_MAGIC_COOKIE: u32 = 0x2112_a442;
 #[cfg(test)]
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -566,11 +568,13 @@ fn verify_stun_response(response: &[u8]) -> bool {
         return false;
     }
     let message_type = u16::from_be_bytes([response[0], response[1]]);
-    if matches!(message_type, 0x0101 | 0x0111) {
-        return true;
-    }
+    let message_length = usize::from(u16::from_be_bytes([response[2], response[3]]));
+    let magic_cookie = u32::from_be_bytes([response[4], response[5], response[6], response[7]]);
 
-    true
+    message_type == STUN_BINDING_SUCCESS_RESPONSE_TYPE
+        && message_length % 4 == 0
+        && response.len() == 20 + message_length
+        && magic_cookie == STUN_MAGIC_COOKIE
 }
 
 fn verify_mcbe_response(response: &[u8]) -> bool {
@@ -712,6 +716,7 @@ mod tests {
 
         let mut stun_response = vec![0; 20];
         stun_response[..2].copy_from_slice(&[0x01, 0x01]);
+        stun_response[4..8].copy_from_slice(&STUN_MAGIC_COOKIE.to_be_bytes());
         assert!(UdpTestKind::Stun.verify_response(&stun_response));
 
         let mcbe_text =
@@ -722,6 +727,32 @@ mod tests {
         mcbe_response[33..35].copy_from_slice(&(mcbe_text.len() as u16).to_be_bytes());
         mcbe_response[35..].copy_from_slice(mcbe_text);
         assert!(UdpTestKind::Mcbe.verify_response(&mcbe_response));
+    }
+
+    #[test]
+    fn stun_verifier_rejects_malformed_or_non_success_responses() {
+        let mut valid = vec![0; 20];
+        valid[..2].copy_from_slice(&STUN_BINDING_SUCCESS_RESPONSE_TYPE.to_be_bytes());
+        valid[4..8].copy_from_slice(&STUN_MAGIC_COOKIE.to_be_bytes());
+        assert!(UdpTestKind::Stun.verify_response(&valid));
+
+        let mut wrong_type = valid.clone();
+        wrong_type[..2].copy_from_slice(&0x0111_u16.to_be_bytes());
+        assert!(!UdpTestKind::Stun.verify_response(&wrong_type));
+
+        let mut wrong_cookie = valid.clone();
+        wrong_cookie[4..8].copy_from_slice(&0xfeed_beef_u32.to_be_bytes());
+        assert!(!UdpTestKind::Stun.verify_response(&wrong_cookie));
+
+        let mut truncated = valid.clone();
+        truncated[2..4].copy_from_slice(&4_u16.to_be_bytes());
+        assert!(!UdpTestKind::Stun.verify_response(&truncated));
+
+        let mut extra_bytes = valid.clone();
+        extra_bytes.push(0);
+        assert!(!UdpTestKind::Stun.verify_response(&extra_bytes));
+
+        assert!(!UdpTestKind::Stun.verify_response(&valid[..19]));
     }
 
     #[tokio::test]
