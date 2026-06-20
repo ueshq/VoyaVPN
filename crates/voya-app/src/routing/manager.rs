@@ -10,10 +10,11 @@ use voya_core::{
     DIRECT_TAG, PROXY_TAG,
 };
 use voya_db::{Database, DbError};
-use voya_net::{DownloadClient, DownloadError, DownloadRequest};
+use voya_net::{DownloadClient, DownloadError, DownloadRequest, DEFAULT_TEXT_RESPONSE_LIMIT_BYTES};
 
 const DEFAULT_ROUTING_SORT_STEP: i32 = 10;
 const BUILTIN_ROUTING_VERSION: &str = "V4-";
+const ROUTING_TEMPLATE_CHILD_HOSTS: &[&str] = &["raw.githubusercontent.com", "cdn.jsdelivr.net"];
 
 static ROUTING_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 static ROUTING_RULE_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -307,7 +308,7 @@ impl<'db> RoutingManager<'db> {
                 user_agent: None,
                 prefer_proxy,
                 proxy_url: proxy_url.map(ToOwned::to_owned),
-                response_body_limit: None,
+                response_body_limit: Some(DEFAULT_TEXT_RESPONSE_LIMIT_BYTES),
             })
             .await?;
         let template = parse_routing_template(&response.body)?;
@@ -315,6 +316,7 @@ impl<'db> RoutingManager<'db> {
         self.apply_template(
             config,
             template,
+            Some(source_url),
             Some(&download),
             prefer_proxy,
             proxy_url,
@@ -327,11 +329,16 @@ impl<'db> RoutingManager<'db> {
         &self,
         config: &mut AppConfig,
         template: RoutingTemplate,
+        source_url: Option<&str>,
         download: Option<&DownloadClient>,
         prefer_proxy: bool,
         proxy_url: Option<&str>,
         import_advanced_rules: bool,
     ) -> Result<Vec<RoutingItem>> {
+        let child_url_policy = source_url
+            .map(TemplateChildUrlPolicy::from_source_url)
+            .transpose()
+            .map_err(RoutingManagerError::InvalidTemplate)?;
         let existing = self.database.routings().list().await?;
         if !import_advanced_rules
             && !template.version.trim().is_empty()
@@ -345,24 +352,65 @@ impl<'db> RoutingManager<'db> {
         let mut imported = Vec::new();
         let mut max_sort = self.database.routings().max_sort().await?;
         for (index, template_item) in template.routing_items.into_iter().enumerate() {
-            let mut item = template_item.into_routing_item();
+            let mut item = match template_item.into_routing_item() {
+                Ok(item) => item,
+                Err(error) => {
+                    tracing::warn!(index, ?error, "skipping invalid routing template item");
+                    continue;
+                }
+            };
             let rules = if item.rule_set.is_empty() {
-                if item.url.trim().is_empty() {
+                let rule_url = item.url.trim().to_string();
+                if rule_url.is_empty() {
                     continue;
                 }
                 let Some(download) = download else {
                     continue;
                 };
-                let response = download
+                if let Some(policy) = child_url_policy.as_ref() {
+                    if let Err(reason) = policy.validate_child_url(&rule_url) {
+                        tracing::warn!(
+                            index,
+                            routing = %item.remarks,
+                            reason,
+                            "skipping routing template item with disallowed rules URL"
+                        );
+                        continue;
+                    }
+                }
+                let response = match download
                     .download_text(DownloadRequest {
-                        url: item.url.clone(),
+                        url: rule_url,
                         user_agent: None,
                         prefer_proxy,
                         proxy_url: proxy_url.map(ToOwned::to_owned),
-                        response_body_limit: None,
+                        response_body_limit: Some(DEFAULT_TEXT_RESPONSE_LIMIT_BYTES),
                     })
-                    .await?;
-                parse_rules(&response.body)?
+                    .await
+                {
+                    Ok(response) => response,
+                    Err(error) => {
+                        tracing::warn!(
+                            index,
+                            routing = %item.remarks,
+                            ?error,
+                            "skipping routing template item after rules download failed"
+                        );
+                        continue;
+                    }
+                };
+                match parse_rules(&response.body) {
+                    Ok(rules) => rules,
+                    Err(error) => {
+                        tracing::warn!(
+                            index,
+                            routing = %item.remarks,
+                            ?error,
+                            "skipping routing template item after rules parse failed"
+                        );
+                        continue;
+                    }
+                }
             } else {
                 std::mem::take(&mut item.rule_set)
             };
@@ -379,7 +427,7 @@ impl<'db> RoutingManager<'db> {
             item.sort = max_sort;
             item.url.clear();
             item.enabled = true;
-            item.is_active = !import_advanced_rules && index == 0;
+            item.is_active = !import_advanced_rules && imported.is_empty();
             normalize_routing_item(&mut item);
             self.database.routings().upsert(&item).await?;
             if item.is_active {
@@ -483,12 +531,12 @@ impl Default for TemplateRoutingItem {
 }
 
 impl TemplateRoutingItem {
-    fn into_routing_item(self) -> RoutingItem {
-        RoutingItem {
+    fn into_routing_item(self) -> Result<RoutingItem> {
+        Ok(RoutingItem {
             id: self.id,
             remarks: self.remarks,
             url: self.url,
-            rule_set: self.rule_set.into_rules(),
+            rule_set: self.rule_set.into_rules()?,
             enabled: self.enabled,
             locked: self.locked,
             custom_icon: self.custom_icon,
@@ -496,7 +544,7 @@ impl TemplateRoutingItem {
             domain_strategy: self.domain_strategy,
             domain_strategy4_singbox: self.domain_strategy4_singbox,
             ..RoutingItem::default()
-        }
+        })
     }
 }
 
@@ -514,12 +562,86 @@ impl Default for TemplateRuleSet {
 }
 
 impl TemplateRuleSet {
-    fn into_rules(self) -> Vec<RulesItem> {
+    fn into_rules(self) -> Result<Vec<RulesItem>> {
         match self {
-            Self::Rules(rules) => rules,
-            Self::Text(text) => parse_rules(&text).unwrap_or_default(),
+            Self::Rules(mut rules) => {
+                for rule in &mut rules {
+                    normalize_rule(rule);
+                }
+                Ok(rules)
+            }
+            Self::Text(text) if text.trim().is_empty() => Ok(Vec::new()),
+            Self::Text(text) => parse_rules(&text),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TemplateChildUrlPolicy {
+    source_origin: UrlOrigin,
+}
+
+impl TemplateChildUrlPolicy {
+    fn from_source_url(source_url: &str) -> std::result::Result<Self, String> {
+        let parsed = reqwest::Url::parse(source_url.trim())
+            .map_err(|error| format!("invalid source URL: {error}"))?;
+        let source_origin = UrlOrigin::from_url(&parsed)?;
+
+        Ok(Self { source_origin })
+    }
+
+    fn validate_child_url(&self, child_url: &str) -> std::result::Result<(), String> {
+        let parsed = reqwest::Url::parse(child_url.trim())
+            .map_err(|error| format!("invalid rules URL: {error}"))?;
+        let child_origin = UrlOrigin::from_url(&parsed)?;
+        if child_origin != self.source_origin && !self.is_allowed_known_child_origin(&child_origin)
+        {
+            return Err("rules URL origin is not allowed for template source".to_string());
+        }
+
+        Ok(())
+    }
+
+    fn is_allowed_known_child_origin(&self, child_origin: &UrlOrigin) -> bool {
+        self.source_origin.scheme == "https"
+            && child_origin.scheme == "https"
+            && child_origin.port == Some(443)
+            && ROUTING_TEMPLATE_CHILD_HOSTS.contains(&self.source_origin.host.as_str())
+            && ROUTING_TEMPLATE_CHILD_HOSTS.contains(&child_origin.host.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UrlOrigin {
+    scheme: String,
+    host: String,
+    port: Option<u16>,
+}
+
+impl UrlOrigin {
+    fn from_url(url: &reqwest::Url) -> std::result::Result<Self, String> {
+        if !matches!(url.scheme(), "http" | "https") {
+            return Err("scheme must be http or https".to_string());
+        }
+        let host = url
+            .host_str()
+            .map(normalize_url_host)
+            .filter(|host| !host.is_empty())
+            .ok_or_else(|| "host is required".to_string())?;
+
+        Ok(Self {
+            scheme: url.scheme().to_string(),
+            host,
+            port: url.port_or_known_default(),
+        })
+    }
+}
+
+fn normalize_url_host(host: &str) -> String {
+    host.trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim_end_matches('.')
+        .to_ascii_lowercase()
 }
 
 fn parse_routing_template(value: &str) -> Result<RoutingTemplate> {
@@ -757,6 +879,12 @@ fn generate_id(prefix: &str, counter: &AtomicU64) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::{collections::HashMap, sync::Arc};
+
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+    };
     use voya_core::{AppConfig, RuleType};
     use voya_db::Database;
 
@@ -870,6 +998,121 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn routing_manager_external_template_skips_bad_secondary_items() {
+        let routes = HashMap::from([
+            (
+                "/template.json".to_string(),
+                r#"{
+                  "version": "R1",
+                  "routingItems": [
+                    { "remarks": "missing", "url": "__BASE__/missing.json" },
+                    { "remarks": "bad-json", "url": "__BASE__/bad.json" },
+                    { "remarks": "blocked", "url": "http://127.0.0.1:9/blocked.json" },
+                    { "remarks": "good", "url": "__BASE__/good.json" },
+                    { "remarks": "also-good", "url": "__BASE__/also-good.json" }
+                  ]
+                }"#
+                .to_string(),
+            ),
+            (
+                "/good.json".to_string(),
+                r#"[{"remarks":"direct","outboundTag":"direct","domain":["full:good.example.com"]}]"#
+                    .to_string(),
+            ),
+            ("/bad.json".to_string(), r#"{"not":"an array"}"#.to_string()),
+            (
+                "/also-good.json".to_string(),
+                r#"[{"remarks":"proxy","outboundTag":"proxy","domain":["full:proxy.example.com"]}]"#
+                    .to_string(),
+            ),
+        ]);
+        let base = spawn_http_fixture(routes, 5).await;
+        let database = Database::connect_in_memory()
+            .await
+            .expect("routing manager test operation should succeed");
+        let manager = RoutingManager::new(&database);
+        let mut config = AppConfig::default();
+        config.const_item.route_rules_template_source_url = Some(format!("{base}/template.json"));
+
+        let imported = manager
+            .import_routing_templates(&mut config, false, None, false)
+            .await
+            .expect("routing manager test operation should succeed");
+
+        assert_eq!(
+            imported
+                .iter()
+                .map(|item| item.remarks.as_str())
+                .collect::<Vec<_>>(),
+            vec!["R1-good", "R1-also-good"]
+        );
+        assert!(imported[0].is_active);
+        assert!(!imported[1].is_active);
+
+        let stored = database
+            .routings()
+            .list()
+            .await
+            .expect("routing manager test operation should succeed");
+        assert_eq!(stored.len(), 2);
+        assert!(stored.iter().all(|item| item.url.is_empty()));
+        assert!(stored.iter().all(|item| item.rule_num == 1));
+        assert!(!stored.iter().any(|item| item.remarks == "R1-missing"
+            || item.remarks == "R1-bad-json"
+            || item.remarks == "R1-blocked"));
+
+        let active = database
+            .routings()
+            .active()
+            .await
+            .expect("routing manager test operation should succeed")
+            .expect("routing manager test operation should succeed");
+        assert_eq!(active.remarks, "R1-good");
+        assert_eq!(config.routing_basic_item.routing_index_id, active.id);
+    }
+
+    #[test]
+    fn routing_template_child_url_policy_requires_same_origin() {
+        let policy =
+            TemplateChildUrlPolicy::from_source_url("https://cdn.example.test/templates/main.json")
+                .expect("routing manager test operation should succeed");
+
+        policy
+            .validate_child_url("https://cdn.example.test/rules/direct.json")
+            .expect("same-origin child URL should be allowed");
+        policy
+            .validate_child_url("https://cdn.example.test:443/rules/direct.json")
+            .expect("default port should match same-origin child URL");
+
+        let preset_policy = TemplateChildUrlPolicy::from_source_url(
+            "https://raw.githubusercontent.com/Chocolate4U/Iran-v2ray-rules/main/v2rayN/template.json",
+        )
+        .expect("routing manager test operation should succeed");
+        preset_policy
+            .validate_child_url(
+                "https://cdn.jsdelivr.net/gh/Chocolate4U/Iran-v2ray-rules@main/v2rayN/all.json",
+            )
+            .expect("known HTTPS routing template CDN mirror should be allowed");
+        preset_policy
+            .validate_child_url(
+                "http://cdn.jsdelivr.net/gh/Chocolate4U/Iran-v2ray-rules@main/v2rayN/all.json",
+            )
+            .expect_err("known CDN mirror must still use HTTPS");
+
+        for denied in [
+            "http://cdn.example.test/rules/direct.json",
+            "https://cdn.example.test:8443/rules/direct.json",
+            "https://evil.example.test/rules/direct.json",
+            "file:///tmp/rules.json",
+            "https://127.0.0.1/rules/direct.json",
+        ] {
+            policy
+                .validate_child_url(denied)
+                .expect_err("cross-origin or non-HTTP child URL should be rejected");
+        }
+    }
+
     #[test]
     fn routing_template_parser_accepts_v2rayn_camel_case_rule_json() {
         let template = parse_routing_template(
@@ -889,7 +1132,8 @@ mod tests {
             .into_iter()
             .next()
             .expect("routing manager test operation should succeed")
-            .into_routing_item();
+            .into_routing_item()
+            .expect("routing manager test operation should succeed");
 
         assert_eq!(item.remarks, "split");
         assert_eq!(item.rule_set[0].outbound_tag.as_deref(), Some(DIRECT_TAG));
@@ -900,5 +1144,54 @@ mod tests {
                 .expect("routing manager test operation should succeed"),
             &vec!["full:direct.example.com".to_string()]
         );
+    }
+
+    async fn spawn_http_fixture(routes: HashMap<String, String>, max_requests: usize) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("routing manager test operation should succeed");
+        let address = listener
+            .local_addr()
+            .expect("routing manager test operation should succeed");
+        let base = format!("http://{address}");
+        let server_base = base.clone();
+        let routes = Arc::new(routes);
+
+        tokio::spawn(async move {
+            for _ in 0..max_requests {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    break;
+                };
+                let routes = Arc::clone(&routes);
+                let server_base = server_base.clone();
+                tokio::spawn(async move {
+                    let mut buffer = vec![0; 8192];
+                    let bytes_read = socket.read(&mut buffer).await.unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+                    let path = request
+                        .lines()
+                        .next()
+                        .and_then(|line| line.split_whitespace().nth(1))
+                        .and_then(|target| target.split('?').next())
+                        .unwrap_or("/");
+                    let body = routes
+                        .get(path)
+                        .map(|body| body.replace("__BASE__", &server_base))
+                        .unwrap_or_default();
+                    let status = if routes.contains_key(path) {
+                        "200 OK"
+                    } else {
+                        "404 Not Found"
+                    };
+                    let response = format!(
+                        "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = socket.write_all(response.as_bytes()).await;
+                });
+            }
+        });
+
+        base
     }
 }
