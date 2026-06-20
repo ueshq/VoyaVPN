@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { dirname, relative, resolve } from "node:path";
+import { readdir, readFile, stat } from "node:fs/promises";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  resolveApprovedUpdaterPublicKey,
+  verifyTauriUpdaterSignature,
+  verifyTauriUpdaterSignatureFile,
+} from "./updater-signatures.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const stableTargets = [
@@ -37,6 +42,7 @@ function parseArgs(argv) {
   const options = {
     releaseIndex: "dist/release/release-index.json",
     updaterMetadata: "dist/release/latest.json",
+    updaterArtifacts: process.env.VOYAVPN_SIGNED_UPDATER_DIR ?? "dist/release/signed-updater",
     coreManifest: "dist/release/core-assets.json",
     cdnBaseUrl: process.env.VOYAVPN_CDN_BASE_URL ?? null,
     updatesBaseUrl: process.env.VOYAVPN_UPDATES_BASE_URL ?? null,
@@ -66,6 +72,9 @@ function parseArgs(argv) {
       case "--updater-metadata":
       case "--latest":
         options.updaterMetadata = next();
+        break;
+      case "--updater-artifacts":
+        options.updaterArtifacts = next();
         break;
       case "--core-manifest":
       case "--core-assets":
@@ -104,6 +113,9 @@ function parseArgs(argv) {
       case "--skip-updater-metadata":
         options.updaterMetadata = null;
         break;
+      case "--skip-updater-artifacts":
+        options.updaterArtifacts = null;
+        break;
       case "--skip-core-manifest":
         options.coreManifest = null;
         break;
@@ -136,6 +148,8 @@ Options:
                                   Default: dist/release/release-index.json
   --updater-metadata <file|url>   Tauri latest.json metadata.
                                   Default: dist/release/latest.json
+  --updater-artifacts <dir>       Local signed updater artifact root used for offline signature verification.
+                                  Default: VOYAVPN_SIGNED_UPDATER_DIR or dist/release/signed-updater
   --core-manifest <file|url>      Core asset manifest.
                                   Default: dist/release/core-assets.json
   --cdn-base-url <url>            Approved CDN base URL. Defaults to VOYAVPN_CDN_BASE_URL
@@ -148,6 +162,7 @@ Options:
   --allow-test-hosts              Permit localhost and .test hosts for fixtures only
   --skip-release-index            Do not validate release-index.json
   --skip-updater-metadata         Do not validate latest.json
+  --skip-updater-artifacts        Do not use local updater artifacts; requires --download-and-hash
   --skip-core-manifest            Do not validate core-assets.json`);
 }
 
@@ -320,6 +335,190 @@ function releaseTargetForArtifact(artifact) {
   return releaseTargetFor(artifact.target, artifact.arch);
 }
 
+async function walkManifests(root) {
+  let entries;
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch (error) {
+    if (error && error.code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+
+  const manifests = [];
+  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) {
+      manifests.push(...(await walkManifests(path)));
+    } else if (entry.isFile() && entry.name === "artifact-manifest.json") {
+      manifests.push(path);
+    }
+  }
+  return manifests.sort((left, right) => left.localeCompare(right));
+}
+
+function artifactPath(artifact, context) {
+  const value = artifact?.path ?? artifact?.name;
+  if (!value || typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${context} is missing path or name`);
+  }
+
+  const normalized = value.trim().replaceAll("\\", "/");
+  if (normalized.startsWith("/") || normalized.split("/").some((segment) => segment === "..")) {
+    throw new Error(`${context} has an unsafe artifact path: ${value}`);
+  }
+
+  return normalized;
+}
+
+function isUpdaterPayload(artifact) {
+  return artifact.kind === "updater" && !String(artifact.name ?? "").toLowerCase().endsWith(".sig");
+}
+
+function findSignatureArtifact(payload, artifacts) {
+  return artifacts.find((artifact) => {
+    if (artifact.kind !== "signature") {
+      return false;
+    }
+
+    return (
+      artifact.originalRelativePath === `${payload.originalRelativePath}.sig` ||
+      artifact.originalName === `${payload.originalName}.sig` ||
+      artifact.path === `${payload.path}.sig` ||
+      artifact.name === `${payload.name}.sig`
+    );
+  });
+}
+
+async function loadUpdaterArtifactTargets(root) {
+  const targets = new Map();
+  for (const manifestPath of await walkManifests(root)) {
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    const target = String(manifest.target ?? "").trim();
+    if (!target) {
+      throw new Error(`${relative(repoRoot, manifestPath)} is missing target`);
+    }
+    if (!Array.isArray(manifest.artifacts)) {
+      throw new Error(`${relative(repoRoot, manifestPath)} is missing artifacts[]`);
+    }
+    if (targets.has(target)) {
+      throw new Error(`signed updater artifacts contain multiple manifests for ${target}`);
+    }
+    targets.set(target, {
+      manifestDir: dirname(manifestPath),
+      artifacts: manifest.artifacts,
+    });
+  }
+  return targets;
+}
+
+function updaterFileNameFromUrl(urlText) {
+  const parsed = new URL(urlText);
+  const fileName = basename(parsed.pathname);
+  try {
+    return decodeURIComponent(fileName);
+  } catch {
+    return fileName;
+  }
+}
+
+async function assertFile(path, label) {
+  let fileStat;
+  try {
+    fileStat = await stat(path);
+  } catch (error) {
+    if (error && error.code === "ENOENT") {
+      throw new Error(`${label} file is missing: ${path}`, { cause: error });
+    }
+    throw error;
+  }
+  if (!fileStat.isFile()) {
+    throw new Error(`${label} is not a file: ${path}`);
+  }
+}
+
+async function verifyUpdaterMetadataSignatures(latest, rawOptions = {}) {
+  const env = rawOptions.env ?? process.env;
+  const updaterPublicKey = rawOptions.updaterPublicKey ?? resolveApprovedUpdaterPublicKey(env);
+  const artifactRoot = rawOptions.updaterArtifacts ? resolve(repoRoot, rawOptions.updaterArtifacts) : null;
+  const failures = [];
+  const verifications = {};
+
+  if (!artifactRoot) {
+    throw new StagingValidationError("updater signatures", [
+      "local signed updater artifacts are required for offline signature verification",
+    ]);
+  }
+
+  let targets;
+  try {
+    targets = await loadUpdaterArtifactTargets(artifactRoot);
+  } catch (error) {
+    throw new StagingValidationError("updater signatures", [error.message]);
+  }
+
+  for (const target of stableTargets) {
+    const platform = latest.platforms?.[target];
+    if (!platform || typeof platform !== "object") {
+      continue;
+    }
+
+    const targetArtifacts = targets.get(target);
+    const label = `latest.json platforms.${target}`;
+    if (!targetArtifacts) {
+      failures.push(`${label} has no local signed updater artifact manifest`);
+      continue;
+    }
+
+    const expectedPayloadName = updaterFileNameFromUrl(platform.url);
+    const payload =
+      targetArtifacts.artifacts.find((artifact) => isUpdaterPayload(artifact) && artifact.name === expectedPayloadName) ??
+      targetArtifacts.artifacts.find(isUpdaterPayload);
+    if (!payload) {
+      failures.push(`${label} has no local updater payload artifact`);
+      continue;
+    }
+    if (payload.name !== expectedPayloadName) {
+      failures.push(`${label} URL filename ${expectedPayloadName} does not match local payload ${payload.name}`);
+      continue;
+    }
+
+    const signatureArtifact = findSignatureArtifact(payload, targetArtifacts.artifacts);
+    if (!signatureArtifact) {
+      failures.push(`${label} has no local .sig artifact for ${payload.name}`);
+      continue;
+    }
+
+    try {
+      const payloadPath = resolve(targetArtifacts.manifestDir, artifactPath(payload, `${label} payload`));
+      const signaturePath = resolve(targetArtifacts.manifestDir, artifactPath(signatureArtifact, `${label} signature`));
+      await assertFile(payloadPath, `${label} payload`);
+      await assertFile(signaturePath, `${label} signature`);
+      const signature = (await readFile(signaturePath, "utf8")).trim();
+      if (signature !== String(platform.signature ?? "").trim()) {
+        failures.push(`${label} signature does not match local .sig artifact`);
+        continue;
+      }
+      verifications[target] = await verifyTauriUpdaterSignatureFile(
+        payloadPath,
+        signature,
+        updaterPublicKey,
+        `${label} payload`,
+      );
+    } catch (error) {
+      failures.push(error.message);
+    }
+  }
+
+  assertNoFailures("updater signatures", failures);
+  return {
+    verifiedCount: Object.keys(verifications).length,
+    targets: Object.keys(verifications).sort((left, right) => left.localeCompare(right)),
+    verifications,
+  };
+}
+
 function assertStableMatrix(label, present, failures) {
   const missing = stableTargets.filter((target) => !present.has(target));
   if (missing.length > 0) {
@@ -435,12 +634,12 @@ function validateUpdaterMetadata(latest, rawOptions = {}) {
       continue;
     }
     const signature = requiredString(platform.signature, `${label} signature`, failures);
-    if (signature && (signature.length < 64 || placeholderSignature(signature))) {
+    if (signature && placeholderSignature(signature)) {
       failures.push(`${label} signature must be a real non-placeholder Tauri updater signature`);
     }
     const parsed = assertAllowedUrl(platform.url, `${label} url`, baseUrl, options, failures);
     if (parsed) {
-      candidates.push({ label, url: parsed.toString(), bytes: null, sha256: null });
+      candidates.push({ label, url: parsed.toString(), bytes: null, sha256: null, updaterSignature: signature, updaterTarget: target });
     }
   }
   assertNoFailures("updater metadata", failures);
@@ -584,9 +783,13 @@ async function downloadAndHashCandidate(candidate, options) {
 
   const hash = createHash("sha256");
   let bytes = 0;
+  const signatureChunks = candidate.updaterSignature ? [] : null;
   for await (const chunk of response.body) {
     const buffer = Buffer.from(chunk);
     hash.update(buffer);
+    if (signatureChunks) {
+      signatureChunks.push(buffer);
+    }
     bytes += buffer.length;
   }
 
@@ -596,6 +799,15 @@ async function downloadAndHashCandidate(candidate, options) {
   }
   if (candidate.sha256 && actualSha256 !== candidate.sha256.toLowerCase()) {
     throw new Error(`${candidate.label} sha256 mismatch: expected ${candidate.sha256}, got ${actualSha256}`);
+  }
+  let updaterSignature = null;
+  if (signatureChunks) {
+    updaterSignature = verifyTauriUpdaterSignature(
+      Buffer.concat(signatureChunks),
+      candidate.updaterSignature,
+      options.updaterPublicKey,
+      `${candidate.label} payload`,
+    );
   }
 
   const cacheControl = response.headers.get("cache-control");
@@ -609,6 +821,7 @@ async function downloadAndHashCandidate(candidate, options) {
     cacheControl,
     bytes,
     sha256: actualSha256,
+    updaterSignature,
     checked: "download-and-hash",
   };
 }
@@ -640,10 +853,21 @@ async function main() {
   }
 
   if (options.updaterMetadata) {
+    options.updaterPublicKey = resolveApprovedUpdaterPublicKey();
     const latest = await readJsonSource(options.updaterMetadata, "updater metadata", options);
     const summary = validateUpdaterMetadata(latest, options);
+    let signatureSummary = null;
+    if (options.updaterArtifacts) {
+      signatureSummary = await verifyUpdaterMetadataSignatures(latest, options);
+    } else if (!options.downloadAndHash) {
+      throw new Error("latest.json signature verification requires --updater-artifacts or --download-and-hash");
+    }
     allCandidates.push(...summary.candidates);
-    summaries.push(`latest.json: ${summary.platformCount} updater platforms`);
+    summaries.push(
+      signatureSummary
+        ? `latest.json: ${summary.platformCount} updater platforms; ${signatureSummary.verifiedCount} signatures verified`
+        : `latest.json: ${summary.platformCount} updater platforms; signatures verify during download-and-hash`,
+    );
   }
 
   if (options.coreManifest) {
@@ -691,4 +915,5 @@ export {
   validateCoreManifest,
   validateReleaseIndex,
   validateUpdaterMetadata,
+  verifyUpdaterMetadataSignatures,
 };

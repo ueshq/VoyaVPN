@@ -25,8 +25,8 @@
       "target": "darwin-x86_64",
       "channel": "stable",
       "version": "0.1.0",
-      "bytes": 125,
-      "sha256": "b513e4f63ede3acd298976aace5a18bea8303ce2e11fe731a8705ea6576174bc",
+      "bytes": 444,
+      "sha256": "1c2f7954dfef9d1837dc0e111753499dc63bf12d9257d2989b383634c3529d35",
       "originalName": "VoyaVPN_0.1.0_darwin_x86_64.updater.zip.sig",
       "originalRelativePath": "updater/VoyaVPN_0.1.0_darwin_x86_64.updater.zip.sig"
     }

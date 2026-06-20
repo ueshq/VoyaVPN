@@ -25,8 +25,8 @@
       "target": "linux-x86_64",
       "channel": "stable",
       "version": "0.1.0",
-      "bytes": 125,
-      "sha256": "e20cde58a9cf928c1c4c41f8e662a3beb314745c2241d823288d2905b8c68d8d",
+      "bytes": 440,
+      "sha256": "afe651e714d9560755a52d4e75814e3bd157bfbde22625cc4dcb7b60dd0d16aa",
       "originalName": "VoyaVPN_0.1.0_linux_x86_64.updater.zip.sig",
       "originalRelativePath": "updater/VoyaVPN_0.1.0_linux_x86_64.updater.zip.sig"
     }

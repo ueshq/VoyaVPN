@@ -1,13 +1,20 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   validateCoreManifest,
   validateReleaseIndex,
   validateUpdaterMetadata,
+  verifyUpdaterMetadataSignatures,
 } from "./verify-release-staging.mjs";
 
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cdnBaseUrl = "https://cdn.voyavpn.dev/stable";
 const updatesBaseUrl = "https://updates.voyavpn.dev/stable";
+const updaterArtifacts = "tests/fixtures/release/signed-updater";
+const updaterPublicKey = readFileSync(resolve(repoRoot, "tests/fixtures/release/updater-signing/public.key"), "utf8").trim();
 const version = "0.1.0";
 const releaseTargets = [
   ["darwin-aarch64", "macos", "arm64"],
@@ -48,13 +55,19 @@ function validUpdaterMetadata() {
     notes: "stable",
     pub_date: "2026-06-06T00:00:00.000Z",
     platforms: Object.fromEntries(
-      releaseTargets.map(([releaseTarget]) => [
-        releaseTarget,
-        {
-          signature: `${"a".repeat(86)}==`,
-          url: `${updatesBaseUrl}/voyavpn-${version}-stable-${releaseTarget}-updater.zip`,
-        },
-      ]),
+      releaseTargets.map(([releaseTarget]) => {
+        const manifestPath = resolve(repoRoot, updaterArtifacts, releaseTarget, "artifact-manifest.json");
+        const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+        const payload = manifest.artifacts.find((artifact) => artifact.kind === "updater");
+        const signature = readFileSync(resolve(dirname(manifestPath), `${payload.path}.sig`), "utf8").trim();
+        return [
+          releaseTarget,
+          {
+            signature,
+            url: `${updatesBaseUrl}/${payload.name}`,
+          },
+        ];
+      }),
     ),
   };
 }
@@ -90,14 +103,21 @@ function validCoreManifest() {
 }
 
 describe("release staging verification", () => {
-  it("accepts complete stable metadata on approved CDN hosts", () => {
+  it("accepts complete stable metadata on approved CDN hosts", async () => {
     expect(() => validateReleaseIndex(validReleaseIndex(), { expectedVersion: version })).not.toThrow();
+    const latest = validUpdaterMetadata();
     expect(() =>
-      validateUpdaterMetadata(validUpdaterMetadata(), {
+      validateUpdaterMetadata(latest, {
         expectedVersion: version,
         updatesBaseUrl,
       }),
     ).not.toThrow();
+    await expect(
+      verifyUpdaterMetadataSignatures(latest, {
+        updaterArtifacts,
+        env: { VOYAVPN_UPDATER_PUBLIC_KEY: updaterPublicKey },
+      }),
+    ).resolves.toMatchObject({ verifiedCount: releaseTargets.length });
     expect(() => validateCoreManifest(validCoreManifest(), { expectedVersion: version })).not.toThrow();
   });
 
@@ -114,6 +134,18 @@ describe("release staging verification", () => {
     delete latest.platforms["linux-aarch64"];
 
     expect(() => validateUpdaterMetadata(latest, { updatesBaseUrl })).toThrow(/placeholder|missing stable targets/);
+  });
+
+  it("rejects updater metadata signatures that do not verify against the local payload", async () => {
+    const latest = validUpdaterMetadata();
+    latest.platforms["darwin-aarch64"].signature = latest.platforms["linux-x86_64"].signature;
+
+    await expect(
+      verifyUpdaterMetadataSignatures(latest, {
+        updaterArtifacts,
+        env: { VOYAVPN_UPDATER_PUBLIC_KEY: updaterPublicKey },
+      }),
+    ).rejects.toThrow(/signature does not match local \.sig artifact|signature verification failed/);
   });
 
   it("rejects incomplete core asset matrices", () => {

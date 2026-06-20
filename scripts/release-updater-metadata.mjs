@@ -3,6 +3,7 @@ import { createReadStream } from "node:fs";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveApprovedUpdaterPublicKey, verifyTauriUpdaterSignatureFile } from "./updater-signatures.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const stableChannel = "stable";
@@ -322,10 +323,6 @@ function assertStableSignature(signature, target) {
   if (isPlaceholderSignature(signature)) {
     throw new Error(`Stable updater signature for ${target} is a placeholder or empty value`);
   }
-
-  if (signature.length < 32) {
-    throw new Error(`Stable updater signature for ${target} is too short to be a signed Tauri updater artifact`);
-  }
 }
 
 async function sha256(path) {
@@ -423,9 +420,12 @@ function assertStableDocuments(latest, evidenceDocument, baseUrl) {
     if (!platform.url.startsWith(`${baseUrl}/`)) {
       throw new Error(`Stable updater URL for ${target} is not derived from base URL: ${platform.url}`);
     }
-    assertStableSignature(platform.signature, target);
-    if (evidenceDocument.platforms[target]?.source !== "signed-artifact") {
+    const evidence = evidenceDocument.platforms[target];
+    if (evidence?.source !== "signed-artifact") {
       throw new Error(`Stable updater evidence for ${target} does not map to a signed artifact`);
+    }
+    if (evidence.signatureVerified !== true) {
+      throw new Error(`Stable updater signature for ${target} was not verified with the approved updater public key`);
     }
   }
 }
@@ -496,6 +496,7 @@ async function main() {
   const inputDir = resolve(repoRoot, options.input);
   const outputPath = resolve(repoRoot, options.output);
   const evidencePath = resolve(repoRoot, options.evidenceOutput ?? defaultEvidencePath(outputPath));
+  const updaterPublicKey = isStable(options.channel) ? resolveApprovedUpdaterPublicKey() : null;
 
   const loadedManifests = await loadManifests(inputDir);
   const targets = new Map();
@@ -558,8 +559,15 @@ async function main() {
         requireManifestMetadata,
       );
       const signature = await readSignature(targetArtifacts.manifestDir, signatureArtifact);
+      let signatureVerification = null;
       if (isStable(options.channel)) {
         assertStableSignature(signature, target);
+        signatureVerification = await verifyTauriUpdaterSignatureFile(
+          resolve(targetArtifacts.manifestDir, payloadEvidence.path),
+          signature,
+          updaterPublicKey,
+          `${target} updater payload`,
+        );
       }
 
       const url = joinUrl(baseUrl, payload.name);
@@ -583,6 +591,15 @@ async function main() {
         sourceArtifactPath: payload.originalRelativePath,
         sourceSignatureArtifactName: signatureArtifact.originalName ?? signatureArtifact.name,
         sourceSignatureArtifactPath: signatureArtifact.originalRelativePath,
+        ...(signatureVerification
+          ? {
+              signatureVerified: true,
+              signatureAlgorithm: signatureVerification.algorithm,
+              signatureKeyId: signatureVerification.keyId,
+              signaturePrehashed: signatureVerification.prehashed,
+              signatureTrustedComment: signatureVerification.trustedComment,
+            }
+          : {}),
       };
       evidence.push(evidenceEntry);
       evidencePlatforms[target] = evidenceEntry;
@@ -649,6 +666,10 @@ async function main() {
       urlsDerivedFromBaseUrl: true,
       signedArtifactsRequiredForStable: isStable(options.channel),
       stableTargetMatrixComplete: isStable(options.channel),
+      updaterPublicKeyApproved: isStable(options.channel),
+      updaterSignaturesVerified: isStable(options.channel)
+        ? evidence.every((entry) => entry.source === "signed-artifact" && entry.signatureVerified === true)
+        : false,
     },
     targets: targetEvidence,
     evidence,
@@ -669,6 +690,12 @@ async function main() {
   const signedEvidence = evidence.filter((entry) => entry.source === "signed-artifact");
   if (signedEvidence.length > 0) {
     console.log(`Signed updater artifacts: ${signedEvidence.map((entry) => `${entry.target}=${entry.artifact}`).join(", ")}`);
+    const verifiedEvidence = signedEvidence.filter((entry) => entry.signatureVerified === true);
+    if (verifiedEvidence.length > 0) {
+      console.log(
+        `Verified updater signatures: ${verifiedEvidence.map((entry) => `${entry.target}=${entry.signatureKeyId}`).join(", ")}`,
+      );
+    }
   } else {
     console.log(`Dry-run updater placeholders: ${evidence.map((entry) => `${entry.target}=${entry.artifact}`).join(", ")}`);
   }

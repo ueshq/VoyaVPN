@@ -25,8 +25,8 @@
       "target": "windows-x86_64",
       "channel": "stable",
       "version": "0.1.0",
-      "bytes": 129,
-      "sha256": "608f21dd833dbda64308e9b4e0209b75b48fb52f0e5c0a30a2bc0166ec21504e",
+      "bytes": 444,
+      "sha256": "70ec9a24305749355daf40d9c6ee11b33eda52ec1ca1863cefe5b812ce291961",
       "originalName": "VoyaVPN_0.1.0_windows_x86_64.updater.zip.sig",
       "originalRelativePath": "updater/VoyaVPN_0.1.0_windows_x86_64.updater.zip.sig"
     }

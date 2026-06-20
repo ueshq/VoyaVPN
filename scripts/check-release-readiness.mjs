@@ -900,6 +900,13 @@ async function checkGeneratedManifests(reporter, options, cdnBaseUrl, updatesBas
     VOYAVPN_CDN_BASE_URL: cdnBaseUrl,
     VOYAVPN_UPDATES_BASE_URL: updatesBaseUrl,
   };
+  if (isDryRun(options)) {
+    const fixtureUpdaterPublicKey = (
+      await readFile(resolveRepoPath("tests/fixtures/release/updater-signing/public.key"), "utf8")
+    ).trim();
+    env.VOYAVPN_UPDATER_PUBLIC_KEY = fixtureUpdaterPublicKey;
+    env.TAURI_UPDATER_PUBLIC_KEY = fixtureUpdaterPublicKey;
+  }
 
   assertStableEvidencePath(options, "release artifacts", releaseArtifacts);
   assertStableEvidencePath(options, "signed updater artifacts", updaterArtifacts);

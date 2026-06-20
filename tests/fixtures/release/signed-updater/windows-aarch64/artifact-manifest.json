@@ -25,8 +25,8 @@
       "target": "windows-aarch64",
       "channel": "stable",
       "version": "0.1.0",
-      "bytes": 129,
-      "sha256": "e7ebf7548761141a4ee9db5011145dfc354be3d493d57bcaa89ced60f662b942",
+      "bytes": 444,
+      "sha256": "e16310fdb215f58eb80e31ffad55b368e0f56ff3cbb89bbab17bcbe64d41145c",
       "originalName": "VoyaVPN_0.1.0_windows_aarch64.updater.zip.sig",
       "originalRelativePath": "updater/VoyaVPN_0.1.0_windows_aarch64.updater.zip.sig"
     }
