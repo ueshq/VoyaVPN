@@ -1,7 +1,7 @@
 use std::{
     fs, io,
     io::Write,
-    net::{TcpListener, TcpStream},
+    net::{IpAddr, TcpListener, TcpStream},
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -62,15 +62,30 @@ pub struct SystemProxyStatus {
 }
 
 impl SystemProxyStatus {
-    #[must_use]
-    pub fn from_request(request: &SystemProxyRequest, effective_type: SysProxyType) -> Self {
+    pub fn from_request(
+        request: &SystemProxyRequest,
+        effective_type: SysProxyType,
+    ) -> Result<Self, SystemProxyError> {
+        let exceptions = validated_proxy_exceptions(&request.item.system_proxy_exceptions)?;
+        Ok(Self::from_request_with_exceptions(
+            request,
+            effective_type,
+            exceptions_to_csv(&exceptions),
+        ))
+    }
+
+    fn from_request_with_exceptions(
+        request: &SystemProxyRequest,
+        effective_type: SysProxyType,
+        exceptions: String,
+    ) -> Self {
         Self {
             requested_type: request.item.sys_proxy_type,
             effective_type,
             target_os: request.target_os,
             pac_available: pac_available(request.target_os),
             proxy: None,
-            exceptions: normalized_exceptions(&request.item),
+            exceptions,
             pac_url: None,
         }
     }
@@ -354,17 +369,27 @@ pub fn plan_system_proxy(
         return Err(SystemProxyError::InvalidPort(request.pac_port));
     }
 
+    let exception_entries = validated_proxy_exceptions(&request.item.system_proxy_exceptions)?;
+    let normalized_exceptions = exceptions_to_csv(&exception_entries);
     let effective_type = effective_type(request.item.sys_proxy_type, request.force_disable);
-    let mut status = SystemProxyStatus::from_request(request, effective_type);
+    let mut status = SystemProxyStatus::from_request_with_exceptions(
+        request,
+        effective_type,
+        normalized_exceptions.clone(),
+    );
     let action = match (effective_type, request.target_os) {
         (SysProxyType::ForcedChange, TargetOs::Windows) => {
-            let settings = build_windows_proxy_settings(&request.item, request.socks_port);
+            let settings = build_windows_proxy_settings_with_exceptions(
+                &request.item,
+                request.socks_port,
+                &exception_entries,
+            );
             status.proxy = Some(settings.proxy.clone());
             status.exceptions.clone_from(&settings.exceptions);
             SystemProxyAction::WindowsSetProxy(settings)
         }
         (SysProxyType::ForcedChange, TargetOs::Linux) => {
-            let exceptions = normalized_exceptions(&request.item);
+            let exceptions = normalized_exceptions.clone();
             SystemProxyAction::LinuxSet {
                 script: linux_script_invocation(
                     request,
@@ -377,7 +402,7 @@ pub fn plan_system_proxy(
             }
         }
         (SysProxyType::ForcedChange, TargetOs::Macos) => {
-            let exceptions = normalized_exceptions(&request.item);
+            let exceptions = normalized_exceptions.clone();
             SystemProxyAction::MacosSet {
                 script: macos_script_invocation(
                     request,
@@ -389,7 +414,9 @@ pub fn plan_system_proxy(
                 exceptions,
             }
         }
-        (SysProxyType::ForcedChange, TargetOs::Other) => SystemProxyAction::Noop,
+        (SysProxyType::ForcedChange, TargetOs::Other) => {
+            return Err(SystemProxyError::UnsupportedPlatform(TargetOs::Other));
+        }
         (SysProxyType::ForcedClear, TargetOs::Windows) => SystemProxyAction::WindowsClear,
         (SysProxyType::ForcedClear, TargetOs::Linux) => SystemProxyAction::LinuxClear {
             script: linux_script_invocation(request, "none", None),
@@ -397,9 +424,10 @@ pub fn plan_system_proxy(
         (SysProxyType::ForcedClear, TargetOs::Macos) => SystemProxyAction::MacosClear {
             script: macos_script_invocation(request, "clear", None),
         },
-        (SysProxyType::ForcedClear, TargetOs::Other) | (SysProxyType::Unchanged, _) => {
-            SystemProxyAction::Noop
+        (SysProxyType::ForcedClear, TargetOs::Other) => {
+            return Err(SystemProxyError::UnsupportedPlatform(TargetOs::Other));
         }
+        (SysProxyType::Unchanged, _) => SystemProxyAction::Noop,
         (SysProxyType::Pac, TargetOs::Windows) => {
             let pac_url = format!(
                 "http://{}:{}/pac?t={}",
@@ -410,6 +438,9 @@ pub fn plan_system_proxy(
             status.exceptions.clear();
             SystemProxyAction::WindowsSetPac { pac_url }
         }
+        (SysProxyType::Pac, TargetOs::Other) => {
+            return Err(SystemProxyError::UnsupportedPlatform(TargetOs::Other));
+        }
         (SysProxyType::Pac, _) => {
             status.effective_type = SysProxyType::Unchanged;
             SystemProxyAction::UnsupportedPac
@@ -419,9 +450,24 @@ pub fn plan_system_proxy(
     Ok(SystemProxyPlan { action, status })
 }
 
-#[must_use]
-pub fn build_windows_proxy_settings(item: &SystemProxyItem, port: i32) -> WindowsProxySettings {
-    let exceptions = windows_exceptions(item);
+pub fn build_windows_proxy_settings(
+    item: &SystemProxyItem,
+    port: i32,
+) -> Result<WindowsProxySettings, SystemProxyError> {
+    let exception_entries = validated_proxy_exceptions(&item.system_proxy_exceptions)?;
+    Ok(build_windows_proxy_settings_with_exceptions(
+        item,
+        port,
+        &exception_entries,
+    ))
+}
+
+fn build_windows_proxy_settings_with_exceptions(
+    item: &SystemProxyItem,
+    port: i32,
+    exception_entries: &[String],
+) -> WindowsProxySettings {
+    let exceptions = windows_exceptions(item, exception_entries);
     let proxy = if item.system_proxy_advanced_protocol.trim().is_empty() {
         format!("{LOOPBACK}:{port}")
     } else {
@@ -446,13 +492,163 @@ fn effective_type(proxy_type: SysProxyType, force_disable: bool) -> SysProxyType
     }
 }
 
-fn normalized_exceptions(item: &SystemProxyItem) -> String {
-    item.system_proxy_exceptions.replace(' ', "")
+fn validated_proxy_exceptions(input: &str) -> Result<Vec<String>, SystemProxyError> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    trimmed
+        .split(',')
+        .map(|raw| {
+            let value = raw.trim();
+            validate_proxy_exception(value)?;
+            Ok(value.to_string())
+        })
+        .collect()
 }
 
-fn windows_exceptions(item: &SystemProxyItem) -> String {
-    let exceptions = normalized_exceptions(item);
-    if item.not_proxy_local_address {
+fn validate_proxy_exception(value: &str) -> Result<(), SystemProxyError> {
+    if value.is_empty() {
+        return Err(SystemProxyError::InvalidProxyException {
+            value: value.to_string(),
+            reason: "empty exception entry",
+        });
+    }
+    if contains_forbidden_proxy_exception_char(value) {
+        return Err(SystemProxyError::InvalidProxyException {
+            value: value.to_string(),
+            reason: "contains forbidden shell or gsettings metacharacters",
+        });
+    }
+    if value.contains('/') {
+        return validate_cidr_exception(value);
+    }
+    if value.parse::<IpAddr>().is_ok() || is_valid_hostname(value) {
+        return Ok(());
+    }
+
+    Err(SystemProxyError::InvalidProxyException {
+        value: value.to_string(),
+        reason: "expected a hostname, IP address, or CIDR range",
+    })
+}
+
+fn validate_cidr_exception(value: &str) -> Result<(), SystemProxyError> {
+    let Some((ip, prefix)) = value.split_once('/') else {
+        return Err(SystemProxyError::InvalidProxyException {
+            value: value.to_string(),
+            reason: "expected a CIDR range",
+        });
+    };
+    if prefix.is_empty() || !prefix.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(SystemProxyError::InvalidProxyException {
+            value: value.to_string(),
+            reason: "expected a numeric CIDR prefix length",
+        });
+    }
+
+    let Ok(ip) = ip.parse::<IpAddr>() else {
+        return Err(SystemProxyError::InvalidProxyException {
+            value: value.to_string(),
+            reason: "expected a CIDR IP address",
+        });
+    };
+    let Ok(prefix) = prefix.parse::<u8>() else {
+        return Err(SystemProxyError::InvalidProxyException {
+            value: value.to_string(),
+            reason: "CIDR prefix length is out of range",
+        });
+    };
+    let max_prefix = match ip {
+        IpAddr::V4(_) => 32,
+        IpAddr::V6(_) => 128,
+    };
+    if prefix > max_prefix {
+        return Err(SystemProxyError::InvalidProxyException {
+            value: value.to_string(),
+            reason: "CIDR prefix length is out of range",
+        });
+    }
+
+    Ok(())
+}
+
+fn contains_forbidden_proxy_exception_char(value: &str) -> bool {
+    value.bytes().any(|byte| {
+        matches!(
+            byte,
+            b'\''
+                | b'"'
+                | b'`'
+                | b'$'
+                | b'\\'
+                | b';'
+                | b'|'
+                | b'&'
+                | b'('
+                | b')'
+                | b'['
+                | b']'
+                | b'{'
+                | b'}'
+                | b'<'
+                | b'>'
+                | b'!'
+                | b'*'
+                | b'?'
+                | b'~'
+        ) || byte.is_ascii_whitespace()
+            || !byte.is_ascii()
+    })
+}
+
+fn is_valid_hostname(value: &str) -> bool {
+    let hostname = if let Some(stripped) = value.strip_suffix('.') {
+        stripped
+    } else {
+        value
+    };
+    if hostname.is_empty() || hostname.len() > 253 {
+        return false;
+    }
+
+    hostname.split('.').all(is_valid_hostname_label)
+}
+
+fn is_valid_hostname_label(label: &str) -> bool {
+    if label.is_empty() || label.len() > 63 {
+        return false;
+    }
+
+    let mut bytes = label.bytes();
+    let Some(first) = bytes.next() else {
+        return false;
+    };
+    if !first.is_ascii_alphanumeric() {
+        return false;
+    }
+
+    let mut last = first;
+    for byte in bytes {
+        if !(byte.is_ascii_alphanumeric() || byte == b'-') {
+            return false;
+        }
+        last = byte;
+    }
+
+    last.is_ascii_alphanumeric()
+}
+
+fn exceptions_to_csv(entries: &[String]) -> String {
+    entries.join(",")
+}
+
+fn windows_exceptions(item: &SystemProxyItem, exception_entries: &[String]) -> String {
+    let exceptions = exception_entries.join(";");
+    if item.not_proxy_local_address && exceptions.is_empty() {
+        LOCAL_EXCEPTIONS.to_string()
+    } else if item.not_proxy_local_address {
         format!("{LOCAL_EXCEPTIONS};{exceptions}")
     } else {
         exceptions
@@ -824,6 +1020,10 @@ done
 pub enum SystemProxyError {
     #[error("invalid system proxy port {0}")]
     InvalidPort(i32),
+    #[error("system proxy is not supported on {0:?}")]
+    UnsupportedPlatform(TargetOs),
+    #[error("invalid system proxy exception {value:?}: {reason}")]
+    InvalidProxyException { value: String, reason: &'static str },
     #[error("PAC mode is only supported on Windows, not {0:?}")]
     PacUnsupported(TargetOs),
     #[error(transparent)]
@@ -929,20 +1129,98 @@ mod tests {
     #[test]
     fn sysproxy_windows_advanced_template_uses_socks_port_and_local_exceptions() {
         let item = SystemProxyItem {
-            system_proxy_exceptions: "localhost; 10.*".to_string(),
+            system_proxy_exceptions: "localhost, 10.0.0.0/8".to_string(),
             not_proxy_local_address: true,
             system_proxy_advanced_protocol:
                 "http={ip}:{http_port};https={ip}:{http_port};socks={ip}:{socks_port}".to_string(),
             ..SystemProxyItem::default()
         };
 
-        let settings = build_windows_proxy_settings(&item, 2080);
+        let settings = build_windows_proxy_settings(&item, 2080).expect("windows settings");
 
         assert_eq!(
             settings.proxy,
             "http=127.0.0.1:2080;https=127.0.0.1:2080;socks=127.0.0.1:2080"
         );
-        assert_eq!(settings.exceptions, "<local>;localhost;10.*");
+        assert_eq!(settings.exceptions, "<local>;localhost;10.0.0.0/8");
+    }
+
+    #[test]
+    fn sysproxy_rejects_unsafe_proxy_exceptions() {
+        for value in [
+            "localhost,'direct'",
+            "localhost,$(id)",
+            "localhost;example.com",
+            "bad host",
+            "*.example.com",
+            "10.0.0.0/33",
+            "example.com/24",
+        ] {
+            let mut request = request(TargetOs::Linux, SysProxyType::ForcedChange);
+            request.item.system_proxy_exceptions = value.to_string();
+
+            let error = plan_system_proxy(&request).expect_err("unsafe exception should fail");
+
+            assert!(matches!(
+                error,
+                SystemProxyError::InvalidProxyException { .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn sysproxy_allows_hostname_ip_and_cidr_exceptions() {
+        let mut request = request(TargetOs::Linux, SysProxyType::ForcedChange);
+        request.item.system_proxy_exceptions =
+            "localhost,example.internal,127.0.0.1,10.0.0.0/8,::1,fd00::/8".to_string();
+
+        let plan = plan_system_proxy(&request).expect("valid exceptions");
+
+        let SystemProxyAction::LinuxSet {
+            exceptions, script, ..
+        } = plan.action
+        else {
+            panic!("expected linux set");
+        };
+        assert_eq!(
+            exceptions,
+            "localhost,example.internal,127.0.0.1,10.0.0.0/8,::1,fd00::/8"
+        );
+        assert_eq!(
+            script.arguments,
+            [
+                "manual",
+                LOOPBACK,
+                "10808",
+                "localhost,example.internal,127.0.0.1,10.0.0.0/8,::1,fd00::/8"
+            ]
+        );
+    }
+
+    #[test]
+    fn sysproxy_other_platform_forced_modes_are_errors() {
+        for proxy_type in [SysProxyType::ForcedChange, SysProxyType::ForcedClear] {
+            let error = plan_system_proxy(&request(TargetOs::Other, proxy_type))
+                .expect_err("unsupported platform should fail");
+
+            assert!(matches!(
+                error,
+                SystemProxyError::UnsupportedPlatform(TargetOs::Other)
+            ));
+        }
+
+        let runner = Arc::new(RecordingRunner::default());
+        let pac = Arc::new(FakePacManager::default());
+        let service = SystemProxyService::new(runner.clone(), pac);
+        let error = service
+            .apply(&request(TargetOs::Other, SysProxyType::ForcedChange))
+            .expect_err("unsupported platform apply should fail");
+
+        assert!(matches!(
+            error,
+            SystemProxyError::UnsupportedPlatform(TargetOs::Other)
+        ));
+        assert!(runner.lock().is_empty());
     }
 
     #[test]

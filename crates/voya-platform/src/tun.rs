@@ -147,14 +147,12 @@ fn platform_cleanup_before_start() -> Result<(), TunCleanupError> {
             .output()
             .map_err(TunCleanupError::Command)?;
 
-        if !output.status.success() {
-            tracing::warn!(
-                device = device.name,
-                status = ?output.status.code(),
-                stderr = %String::from_utf8_lossy(&output.stderr),
-                "failed to remove stale Windows TUN device"
-            );
-        }
+        windows_cleanup_result(
+            device,
+            output.status.success(),
+            output.status.code(),
+            &output.stderr,
+        )?;
     }
     Ok(())
 }
@@ -164,10 +162,35 @@ fn platform_cleanup_before_start() -> Result<(), TunCleanupError> {
     Ok(())
 }
 
+fn windows_cleanup_result(
+    device: &WindowsTunDevice,
+    success: bool,
+    status_code: Option<i32>,
+    stderr: &[u8],
+) -> Result<(), TunCleanupError> {
+    if success {
+        return Ok(());
+    }
+
+    Err(TunCleanupError::CommandFailed {
+        device: device.name,
+        status_code,
+        stderr: String::from_utf8_lossy(stderr).into_owned(),
+    })
+}
+
 #[derive(Debug, Error)]
 pub enum TunCleanupError {
     #[error("failed to run Windows TUN cleanup command: {0}")]
     Command(io::Error),
+    #[error(
+        "Windows TUN cleanup command failed for {device} with status {status_code:?}: {stderr}"
+    )]
+    CommandFailed {
+        device: &'static str,
+        status_code: Option<i32>,
+        stderr: String,
+    },
 }
 
 #[cfg(test)]
@@ -187,6 +210,26 @@ mod tests {
     #[test]
     fn process_noop_tun_cleaner_is_deterministic_for_tests() {
         NoopTunCleaner.cleanup_before_start().expect("noop cleanup");
+    }
+
+    #[test]
+    fn process_windows_tun_cleanup_failure_is_returned() {
+        let error = windows_cleanup_result(
+            &WINDOWS_TUN_DEVICES[0],
+            false,
+            Some(1),
+            b"device removal failed",
+        )
+        .expect_err("failed cleanup should propagate");
+
+        assert!(matches!(
+            error,
+            TunCleanupError::CommandFailed {
+                device: "wintunsingbox_tun",
+                status_code: Some(1),
+                ref stderr,
+            } if stderr == "device removal failed"
+        ));
     }
 
     #[test]
