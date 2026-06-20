@@ -75,7 +75,7 @@ export function resolveThemeMode(themeMode: ThemeMode) {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-export function preferencesFromConfig(
+function preferencesFromConfig(
   uiItem: UiItem_Serialize | null | undefined,
 ): PersistedPreferences {
   return {

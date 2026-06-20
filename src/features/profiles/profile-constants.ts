@@ -1,4 +1,4 @@
-import type { ConfigType, CoreType, MoveAction, ProfileSortKey, SpeedActionType } from "@/ipc/bindings";
+import type { ConfigType, CoreType, MoveAction, SpeedActionType } from "@/ipc/bindings";
 
 export const CONFIG_TYPES = {
   VMess: 1,
@@ -119,19 +119,6 @@ export const SECURITY_OPTIONS = [
   { label: "None", value: "" },
   { label: "TLS", value: "tls" },
   { label: "REALITY", value: "reality" },
-];
-
-export const MAIN_SORT_COLUMNS: Array<{ key: ProfileSortKey; label: string }> = [
-  { key: "configType", label: "Protocol" },
-  { key: "remarks", label: "Remarks" },
-  { key: "address", label: "Address" },
-  { key: "port", label: "Port" },
-  { key: "network", label: "Transport" },
-  { key: "streamSecurity", label: "Security" },
-  { key: "delay", label: "Delay" },
-  { key: "speed", label: "Speed" },
-  { key: "ipInfo", label: "IP info" },
-  { key: "subid", label: "Group" },
 ];
 
 export function getProtocolLabel(configType: ConfigType | null | undefined) {
