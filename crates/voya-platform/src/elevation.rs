@@ -113,17 +113,22 @@ pub fn unix_sudo_kill_spawn(
     os: TargetOs,
     script_dir: impl AsRef<Path>,
     target_pid: u32,
+    expected_executable: impl AsRef<Path>,
     working_dir: impl Into<PathBuf>,
     password: Zeroizing<String>,
 ) -> Result<ProcessSpawn, ElevationError> {
     let script_file_name =
         unix_sudo_kill_script_file_name(os).ok_or(ElevationError::UnsupportedOs)?;
     let script_path = script_dir.as_ref().join(script_file_name);
-    let command = format!(
-        "sudo -S {} {}",
+    let expected_names = expected_process_comm_names(expected_executable.as_ref())?;
+    let mut command = format!(
+        "sudo -S {} {target_pid}",
         quote_shell_arg(script_path.to_string_lossy().as_ref()),
-        target_pid
     );
+    for expected_name in expected_names {
+        command.push(' ');
+        command.push_str(&quote_shell_arg(&expected_name));
+    }
 
     Ok(ProcessSpawn::new(ProcessRole::SudoKill, "/bin/bash")
         .with_arguments(["-c".to_string(), command])
@@ -167,34 +172,145 @@ fn unix_sudo_kill_script(os: TargetOs) -> Result<String, ElevationError> {
         r#"#!/bin/bash
 set +e
 
-if [ "$#" -ne 1 ]; then
-  echo "Usage: $0 <PID>"
-  exit 1
+if [ "$#" -lt 2 ]; then
+  echo "Usage: $0 <PID> <expected process name>..." >&2
+  exit 64
 fi
 
 PID="$1"
+shift
 if ! kill -0 "$PID" 2>/dev/null; then
   exit 0
 fi
 
+child_pids() {{
+  local parent="$1"
+  {child_lookup}
+}}
+
+process_comm() {{
+  local process_id="$1"
+  if [ -r "/proc/$process_id/comm" ]; then
+    head -n 1 "/proc/$process_id/comm" 2>/dev/null
+    return
+  fi
+  ps -p "$process_id" -o comm= 2>/dev/null | awk 'NR==1 {{print $1}}'
+}}
+
+process_matches_expected() {{
+  local process_id="$1"
+  shift
+  local comm
+  local base
+  local expected
+  comm=$(process_comm "$process_id")
+  if [ -z "$comm" ]; then
+    return 1
+  fi
+  base="${{comm##*/}}"
+  for expected in "$@"; do
+    if [ "$comm" = "$expected" ] || [ "$base" = "$expected" ]; then
+      return 0
+    fi
+  done
+  return 1
+}}
+
+tree_has_expected_process() {{
+  local parent="$1"
+  shift
+  local child
+  if process_matches_expected "$parent" "$@"; then
+    return 0
+  fi
+  for child in $(child_pids "$parent"); do
+    if tree_has_expected_process "$child" "$@"; then
+      return 0
+    fi
+  done
+  return 1
+}}
+
+descendant_pids() {{
+  local parent="$1"
+  local child
+  for child in $(child_pids "$parent"); do
+    echo "$child"
+    descendant_pids "$child"
+  done
+}}
+
 kill_children() {{
   local parent="$1"
-  local children
-  children=$({child_lookup})
-  for child in $children; do
+  local child
+  for child in $(child_pids "$parent"); do
     kill_children "$child"
     kill -9 "$child" 2>/dev/null || true
   done
 }}
 
+wait_for_exit() {{
+  local process_id="$1"
+  local attempts=20
+  while [ "$attempts" -gt 0 ]; do
+    if ! kill -0 "$process_id" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.1
+    attempts=$((attempts - 1))
+  done
+  return 1
+}}
+
+if ! tree_has_expected_process "$PID" "$@"; then
+  echo "refusing to sudo kill pid $PID: target process tree does not contain an expected core" >&2
+  exit 65
+fi
+
+DESCENDANTS=$(descendant_pids "$PID")
 kill -15 "$PID" 2>/dev/null || true
 sleep 1
 if kill -0 "$PID" 2>/dev/null; then
   kill_children "$PID"
   kill -9 "$PID" 2>/dev/null || true
 fi
+
+FAILED=0
+if ! wait_for_exit "$PID"; then
+  echo "sudo kill target pid $PID is still running" >&2
+  FAILED=1
+fi
+for child in $DESCENDANTS; do
+  if ! wait_for_exit "$child"; then
+    echo "sudo kill child pid $child is still running" >&2
+    FAILED=1
+  fi
+done
+exit "$FAILED"
 "#
     ))
+}
+
+const LINUX_COMM_MAX_VISIBLE_CHARS: usize = 15;
+
+fn expected_process_comm_names(executable: &Path) -> Result<Vec<String>, ElevationError> {
+    let file_name = executable
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| ElevationError::InvalidKillTarget {
+            executable: executable.to_path_buf(),
+        })?;
+
+    let mut names = vec![file_name.to_string()];
+    let truncated: String = file_name
+        .chars()
+        .take(LINUX_COMM_MAX_VISIBLE_CHARS)
+        .collect();
+    if truncated != file_name {
+        names.push(truncated);
+    }
+    Ok(names)
 }
 
 #[must_use]
@@ -216,6 +332,8 @@ pub fn quote_shell_arg(value: &str) -> String {
 pub enum ElevationError {
     #[error("unix sudo is not supported for this target OS")]
     UnsupportedOs,
+    #[error("sudo kill target executable has no comparable process name: {executable}")]
+    InvalidKillTarget { executable: PathBuf },
 }
 
 #[cfg(test)]
@@ -229,6 +347,7 @@ mod tests {
             TargetOs::Linux,
             "/tmp/voya scripts",
             42,
+            "/tmp/voya cores/sing-box",
             "/tmp",
             Zeroizing::new("pw".to_string()),
         )
@@ -237,6 +356,7 @@ mod tests {
             TargetOs::Macos,
             "/tmp/voya scripts",
             42,
+            "/tmp/voya cores/sing-box",
             "/tmp",
             Zeroizing::new("pw".to_string()),
         )
@@ -248,10 +368,46 @@ mod tests {
         assert_eq!(macos.arguments[0], "-c");
         assert!(linux.arguments[1].starts_with("sudo -S "));
         assert!(macos.arguments[1].starts_with("sudo -S "));
+        assert!(linux.arguments[1].ends_with(" 42 sing-box"));
+        assert!(macos.arguments[1].ends_with(" 42 sing-box"));
         assert_ne!(
             linux.generated_scripts[0].path.file_name(),
             macos.generated_scripts[0].path.file_name()
         );
+    }
+
+    #[test]
+    fn process_sudo_kill_uses_expected_comm_aliases_for_pid_validation() {
+        let spawn = unix_sudo_kill_spawn(
+            TargetOs::Linux,
+            "/tmp/voya/scripts",
+            42,
+            "/tmp/voya cores/mihomo-linux-amd64-v1",
+            "/tmp",
+            Zeroizing::new("pw".to_string()),
+        )
+        .expect("linux kill plan");
+
+        assert!(spawn.arguments[1].ends_with(" 42 mihomo-linux-amd64-v1 mihomo-linux-am"));
+        let script = &spawn.generated_scripts[0].contents;
+        assert!(script.contains("tree_has_expected_process"));
+        assert!(script.contains("refusing to sudo kill pid $PID"));
+        assert!(script.contains("sudo kill target pid $PID is still running"));
+    }
+
+    #[test]
+    fn process_sudo_kill_rejects_target_without_comparable_process_name() {
+        let error = unix_sudo_kill_spawn(
+            TargetOs::Linux,
+            "/tmp/voya/scripts",
+            42,
+            "/",
+            "/tmp",
+            Zeroizing::new("pw".to_string()),
+        )
+        .expect_err("missing process name");
+
+        assert!(matches!(error, ElevationError::InvalidKillTarget { .. }));
     }
 
     #[test]

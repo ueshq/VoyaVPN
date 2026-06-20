@@ -380,16 +380,20 @@ impl SupervisorActor {
     fn stop(&mut self) -> Result<SupervisorSnapshot, SupervisorError> {
         let running = std::mem::replace(&mut self.running, RunningCore::empty());
 
-        self.stop_running(running)
+        match self.stop_running(&running) {
+            Ok(()) => Ok(SupervisorSnapshot::disconnected()),
+            Err(error) => {
+                self.running = running;
+                Err(error)
+            }
+        }
     }
 
-    fn stop_running(&self, running: RunningCore) -> Result<SupervisorSnapshot, SupervisorError> {
+    fn stop_running(&self, running: &RunningCore) -> Result<(), SupervisorError> {
         let mut first_error = None;
 
         for handle in &running.elevated {
-            if let Err(error) = self.sudo_kill(handle, &running) {
-                first_error.get_or_insert(error);
-            }
+            self.sudo_kill(handle, running)?;
         }
 
         if let Some(main) = &running.main {
@@ -404,11 +408,9 @@ impl SupervisorActor {
             }
         }
 
-        drop(running.job);
-
         match first_error {
             Some(error) => Err(error),
-            None => Ok(SupervisorSnapshot::disconnected()),
+            None => Ok(()),
         }
     }
 
@@ -417,8 +419,8 @@ impl SupervisorActor {
         running: RunningCore,
         start_error: SupervisorError,
     ) -> Result<SupervisorSnapshot, SupervisorError> {
-        match self.stop_running(running) {
-            Ok(_) => Err(start_error),
+        match self.stop_running(&running) {
+            Ok(()) => Err(start_error),
             Err(cleanup_error) => Err(cleanup_error),
         }
     }
@@ -471,34 +473,35 @@ impl SupervisorActor {
         &self,
         handle: &ProcessHandle,
         running: &RunningCore,
-    ) -> Result<ProcessOutput, SupervisorError> {
+    ) -> Result<(), SupervisorError> {
         let Some(request) = &running.last_request else {
-            return Ok(ProcessOutput {
-                status_code: Some(0),
-                stdout: String::new(),
-                stderr: String::new(),
-            });
+            return Ok(());
         };
-        let password = self.deps.sudo_passwords.read_password()?.ok_or(
-            SupervisorError::MissingSudoPassword(
-                running.running_core_type.unwrap_or(CoreType::sing_box),
-            ),
-        )?;
+        let target = running
+            .sudo_kill_target(handle)
+            .ok_or(SupervisorError::UnknownSudoKillTarget { pid: handle.id() })?;
+        let password = self
+            .deps
+            .sudo_passwords
+            .read_password()?
+            .ok_or(SupervisorError::MissingSudoPassword(target.core_type))?;
         let spawn = unix_sudo_kill_spawn(
             self.deps.target_os,
             &request.sudo_script_dir,
             handle.id(),
-            request.main.launch.working_dir.clone(),
+            &target.launch.executable,
+            target.launch.working_dir.clone(),
             password,
         )?;
-        self.deps.runner.run_oneshot(spawn).map_err(Into::into)
+        let output = self.deps.runner.run_oneshot(spawn)?;
+        ensure_sudo_kill_success(handle.id(), output)
     }
 }
 
 impl Drop for SupervisorActor {
     fn drop(&mut self) {
         let running = std::mem::replace(&mut self.running, RunningCore::empty());
-        if let Err(error) = self.stop_running(running) {
+        if let Err(error) = self.stop_running(&running) {
             tracing::warn!(?error, "failed to stop core supervisor during actor drop");
         }
     }
@@ -550,6 +553,21 @@ impl RunningCore {
                 .is_some_and(|handle| handle.id() == process_id)
     }
 
+    fn sudo_kill_target(&self, handle: &ProcessHandle) -> Option<&CoreProcessSpec> {
+        let request = self.last_request.as_ref()?;
+        if self
+            .main
+            .as_ref()
+            .is_some_and(|main| main.id() == handle.id())
+        {
+            return Some(&request.main);
+        }
+        if self.pre.as_ref().is_some_and(|pre| pre.id() == handle.id()) {
+            return request.pre.as_ref();
+        }
+        None
+    }
+
     fn snapshot(&self) -> SupervisorSnapshot {
         let connected = self.main.is_some();
         SupervisorSnapshot {
@@ -564,6 +582,30 @@ impl RunningCore {
             running_core_type: self.running_core_type,
         }
     }
+}
+
+fn ensure_sudo_kill_success(pid: u32, output: ProcessOutput) -> Result<(), SupervisorError> {
+    if output.status_code == Some(0) {
+        return Ok(());
+    }
+
+    Err(SupervisorError::SudoKillFailed {
+        pid,
+        status_code: output.status_code,
+        stderr: sudo_kill_error_message(&output),
+    })
+}
+
+fn sudo_kill_error_message(output: &ProcessOutput) -> String {
+    let stderr = output.stderr.trim();
+    if !stderr.is_empty() {
+        return stderr.to_string();
+    }
+    let stdout = output.stdout.trim();
+    if !stdout.is_empty() {
+        return stdout.to_string();
+    }
+    "sudo kill command failed".to_string()
 }
 
 #[derive(Debug, Error)]
@@ -584,6 +626,14 @@ pub enum SupervisorError {
     Job(String),
     #[error("elevation error: {0}")]
     Elevation(String),
+    #[error("sudo kill target pid {pid} does not match a tracked elevated process")]
+    UnknownSudoKillTarget { pid: u32 },
+    #[error("sudo kill for pid {pid} failed with status {status_code:?}: {stderr}")]
+    SudoKillFailed {
+        pid: u32,
+        status_code: Option<i32>,
+        stderr: String,
+    },
 }
 
 impl From<voya_platform::elevation::ElevationError> for SupervisorError {
@@ -627,6 +677,8 @@ mod tests {
         events: SharedEvents,
         fail_spawn_role: Arc<Mutex<Option<ProcessRole>>>,
         next_pid: Arc<Mutex<u32>>,
+        oneshot_output: Arc<Mutex<ProcessOutput>>,
+        oneshot_requests: Arc<Mutex<Vec<ProcessSpawn>>>,
     }
 
     impl FakeRunner {
@@ -635,12 +687,30 @@ mod tests {
                 events,
                 fail_spawn_role: Arc::new(Mutex::new(None)),
                 next_pid: Arc::new(Mutex::new(100)),
+                oneshot_output: Arc::new(Mutex::new(ProcessOutput {
+                    status_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                })),
+                oneshot_requests: Arc::new(Mutex::new(Vec::new())),
             }
         }
 
         fn with_fail_spawn_role(self, role: ProcessRole) -> Self {
             *self.fail_spawn_role.lock().expect("fail spawn role") = Some(role);
             self
+        }
+
+        fn with_oneshot_output(self, output: ProcessOutput) -> Self {
+            *self.oneshot_output.lock().expect("oneshot output") = output;
+            self
+        }
+
+        fn oneshot_requests(&self) -> Vec<ProcessSpawn> {
+            self.oneshot_requests
+                .lock()
+                .expect("oneshot requests")
+                .clone()
         }
     }
 
@@ -676,11 +746,11 @@ mod tests {
                 request.role,
                 request.has_stdin()
             ));
-            Ok(ProcessOutput {
-                status_code: Some(0),
-                stdout: String::new(),
-                stderr: String::new(),
-            })
+            self.oneshot_requests
+                .lock()
+                .expect("oneshot requests")
+                .push(request);
+            Ok(self.oneshot_output.lock().expect("oneshot output").clone())
         }
 
         fn stop(&self, handle: &ProcessHandle) -> Result<(), ProcessError> {
@@ -785,6 +855,94 @@ mod tests {
                 "oneshot:SudoKill:stdin=true",
                 "stop:Main:pid=100",
                 "stop:Pre:pid=101"
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn supervisor_sudo_kill_passes_expected_core_name_for_pid_validation() {
+        let events = SharedEvents::default();
+        let sudo_passwords = Arc::new(SudoPasswordStore::new());
+        sudo_passwords.set_password("pw").expect("sudo password");
+        let runner = Arc::new(FakeRunner::new(events.clone()));
+        let deps =
+            SupervisorDeps::new(runner.clone(), sudo_passwords).with_target_os(TargetOs::Linux);
+        let supervisor = CoreSupervisor::spawn(deps);
+
+        supervisor
+            .start(SupervisorStartRequest {
+                active_profile_id: Some("active".to_string()),
+                main: CoreProcessSpec::new(
+                    CoreType::sing_box,
+                    launch(
+                        "/tmp/voya cores/sing-box-client",
+                        "run -c config.json --disable-color",
+                    ),
+                ),
+                pre: None,
+                tun_enabled: true,
+                sudo_script_dir: "/tmp/voya/scripts".into(),
+                restart_on_crash: false,
+            })
+            .await
+            .expect("start");
+        supervisor.stop().await.expect("stop");
+
+        let requests = runner.oneshot_requests();
+        assert_eq!(requests.len(), 1);
+        assert!(requests[0].arguments[1].ends_with(" 100 sing-box-client"));
+        assert!(requests[0].generated_scripts[0]
+            .contents
+            .contains("refusing to sudo kill pid $PID"));
+    }
+
+    #[tokio::test]
+    async fn supervisor_sudo_kill_nonzero_status_is_typed_error() {
+        let events = SharedEvents::default();
+        let sudo_passwords = Arc::new(SudoPasswordStore::new());
+        sudo_passwords.set_password("pw").expect("sudo password");
+        let runner = Arc::new(
+            FakeRunner::new(events.clone()).with_oneshot_output(ProcessOutput {
+                status_code: Some(65),
+                stdout: String::new(),
+                stderr: "refusing to sudo kill pid 100".to_string(),
+            }),
+        );
+        let deps = SupervisorDeps::new(runner, sudo_passwords).with_target_os(TargetOs::Linux);
+        let supervisor = CoreSupervisor::spawn(deps);
+
+        supervisor
+            .start(SupervisorStartRequest {
+                active_profile_id: Some("active".to_string()),
+                main: CoreProcessSpec::new(
+                    CoreType::sing_box,
+                    launch("/tmp/sing-box", "run -c config.json --disable-color"),
+                ),
+                pre: None,
+                tun_enabled: true,
+                sudo_script_dir: "/tmp/voya/scripts".into(),
+                restart_on_crash: false,
+            })
+            .await
+            .expect("start");
+
+        let error = supervisor.stop().await.expect_err("sudo kill should fail");
+        assert!(matches!(
+            error,
+            SupervisorError::SudoKillFailed {
+                pid: 100,
+                status_code: Some(65),
+                ref stderr,
+            } if stderr == "refusing to sudo kill pid 100"
+        ));
+        let snapshot = supervisor.status().await.expect("status after failed stop");
+        assert_eq!(snapshot.state, SupervisorConnectionState::Connected);
+        assert_eq!(snapshot.main_pid, Some(100));
+        assert_eq!(
+            events.lock().as_slice(),
+            [
+                "spawn:Main:pid=100:stdin=true",
+                "oneshot:SudoKill:stdin=true"
             ]
         );
     }
