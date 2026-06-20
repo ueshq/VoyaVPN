@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, readdir, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
@@ -167,12 +168,13 @@ Options:
   --core-manifest <file>        Existing generated core-assets.json artifact to validate as workflow evidence
   --diagnostics-endpoint <url>  Approved diagnostics ingest endpoint. Stable defaults to
                                 VOYAVPN_DIAGNOSTICS_ENDPOINT; dry-run does not require one
-  --tauri-config <file>         Tauri config or generated stable overlay to scan. Non-default
+  --tauri-config <file>         Tauri config or package-uploaded stable overlay to scan. Non-default
                                 paths are merged over src-tauri/tauri.conf.json
 
 Dry-run mode uses fixture data and does not require signing secrets. Stable mode
 fails closed on missing production inputs, placeholder updater keys/signatures,
-diagnostics endpoint config, example URLs, and GitHub release/download URLs in production surfaces.`);
+diagnostics endpoint config, package-time updater overlay evidence, example URLs,
+and GitHub release/download URLs in production surfaces.`);
 }
 
 function isDryRun(options) {
@@ -327,6 +329,48 @@ function placeholderText(value) {
 
 function readJson(path) {
   return readFile(path, "utf8").then((text) => JSON.parse(text));
+}
+
+function sha256Text(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+async function sha256File(path) {
+  return sha256Text(await readFile(path));
+}
+
+async function walkArtifactManifests(root) {
+  let rootStat;
+  try {
+    rootStat = await stat(root);
+  } catch (error) {
+    if (error && error.code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+
+  if (rootStat.isFile()) {
+    return basename(root) === "artifact-manifest.json" ? [root] : [];
+  }
+
+  const entries = await readdir(root, { withFileTypes: true });
+  const manifests = [];
+
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) {
+      continue;
+    }
+
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) {
+      manifests.push(...(await walkArtifactManifests(path)));
+    } else if (entry.isFile() && entry.name === "artifact-manifest.json") {
+      manifests.push(path);
+    }
+  }
+
+  return manifests.sort((left, right) => left.localeCompare(right));
 }
 
 function isPlainObject(value) {
@@ -874,6 +918,113 @@ function validateCoreManifest(manifest, cdnBaseUrl) {
   }
 }
 
+function safeRelativePath(value, context) {
+  if (!value || typeof value !== "string") {
+    throw new Error(`${context} path is missing`);
+  }
+
+  const normalized = value.replaceAll("\\", "/");
+  if (normalized.startsWith("/") || normalized.split("/").some((segment) => segment === "..")) {
+    throw new Error(`${context} path is unsafe: ${value}`);
+  }
+  return normalized;
+}
+
+export function validateStableUpdaterConfigMetadata(metadata, { updatesBaseUrl, updaterPublicKey, label }) {
+  assert(metadata && typeof metadata === "object", `${label} stableUpdaterConfig is missing`);
+  assert(/^[a-f0-9]{64}$/i.test(metadata.sha256 ?? ""), `${label} stableUpdaterConfig.sha256 is invalid`);
+  assert(metadata.createUpdaterArtifacts === true, `${label} stable updater artifacts flag is not enabled`);
+
+  const expectedPubkeySha256 = sha256Text(String(updaterPublicKey ?? "").trim());
+  assert(
+    metadata.pubkeySha256 === expectedPubkeySha256,
+    `${label} stable updater public key hash does not match VOYAVPN_UPDATER_PUBLIC_KEY`,
+  );
+
+  assert(Array.isArray(metadata.endpoints) && metadata.endpoints.length > 0, `${label} updater endpoints are missing`);
+  const expectedEndpoint = `${updatesBaseUrl}/latest.json`;
+  for (const endpoint of metadata.endpoints) {
+    assert(endpoint === expectedEndpoint, `${label} updater endpoint does not match readiness base URL: ${endpoint}`);
+  }
+
+  if (metadata.path !== undefined) {
+    safeRelativePath(metadata.path, `${label} stableUpdaterConfig`);
+  }
+}
+
+async function checkStableUpdaterConfigEvidence(reporter, options, roots, updatesBaseUrl, expectedConfigSha256) {
+  if (isDryRun(options)) {
+    reporter.pass("packaged updater config evidence", [
+      "dry-run mode does not require package-time stable updater overlay evidence",
+    ]);
+    return;
+  }
+
+  const updaterPublicKey = process.env.VOYAVPN_UPDATER_PUBLIC_KEY ?? process.env.TAURI_UPDATER_PUBLIC_KEY ?? "";
+  const manifestPaths = [];
+  for (const root of roots) {
+    manifestPaths.push(...(await walkArtifactManifests(resolveRepoPath(root))));
+  }
+
+  if (manifestPaths.length === 0) {
+    reporter.fail("packaged updater config evidence", ["no artifact-manifest.json files found"]);
+    return;
+  }
+
+  const failures = [];
+  const overlayHashes = new Set();
+  const copiedOverlayHashes = new Set();
+
+  for (const manifestPath of manifestPaths) {
+    const label = displayPath(manifestPath);
+    const manifest = await readJson(manifestPath);
+    try {
+      validateStableUpdaterConfigMetadata(manifest.stableUpdaterConfig, {
+        updatesBaseUrl,
+        updaterPublicKey,
+        label,
+      });
+      overlayHashes.add(manifest.stableUpdaterConfig.sha256);
+
+      if (manifest.stableUpdaterConfig.path) {
+        const copiedPath = resolve(dirname(manifestPath), safeRelativePath(manifest.stableUpdaterConfig.path, label));
+        const copiedHash = await sha256File(copiedPath);
+        copiedOverlayHashes.add(copiedHash);
+        if (copiedHash !== manifest.stableUpdaterConfig.sha256) {
+          failures.push(`${label} stable updater config copy hash does not match artifact-manifest.json`);
+        }
+      }
+    } catch (error) {
+      failures.push(error.message);
+    }
+  }
+
+  if (overlayHashes.size > 1) {
+    failures.push(`package targets used different stable updater overlay hashes: ${[...overlayHashes].join(", ")}`);
+  }
+  if (expectedConfigSha256 && !overlayHashes.has(expectedConfigSha256)) {
+    failures.push(
+      `checked Tauri updater config hash ${expectedConfigSha256} does not match package-time overlay hash ${[
+        ...overlayHashes,
+      ].join(", ")}`,
+    );
+  }
+  if (copiedOverlayHashes.size > 1) {
+    failures.push(`package targets uploaded different stable updater overlay files: ${[...copiedOverlayHashes].join(", ")}`);
+  }
+
+  if (failures.length > 0) {
+    reporter.fail("packaged updater config evidence", lineSummary(failures, 10));
+    return;
+  }
+
+  reporter.pass("packaged updater config evidence", [
+    `validated ${manifestPaths.length} artifact manifest(s)`,
+    `overlay sha256: ${[...overlayHashes][0]}`,
+    ...(expectedConfigSha256 ? ["checked Tauri config hash matches package-time overlay"] : []),
+  ]);
+}
+
 async function checkGeneratedManifests(reporter, options, cdnBaseUrl, updatesBaseUrl, workDir) {
   const releaseArtifacts = stableInputPath(
     options,
@@ -911,6 +1062,14 @@ async function checkGeneratedManifests(reporter, options, cdnBaseUrl, updatesBas
   assertStableEvidencePath(options, "release artifacts", releaseArtifacts);
   assertStableEvidencePath(options, "signed updater artifacts", updaterArtifacts);
   assertStableEvidencePath(options, "core asset source", coreAssets);
+  const expectedConfigSha256 = isDryRun(options) ? null : await sha256File(resolveRepoPath(options.tauriConfig));
+  await checkStableUpdaterConfigEvidence(
+    reporter,
+    options,
+    [...new Set([releaseArtifacts, updaterArtifacts])],
+    updatesBaseUrl,
+    expectedConfigSha256,
+  );
   if (options.releaseIndex) {
     assertStableEvidencePath(options, "release index evidence", options.releaseIndex);
     const releaseIndexEvidence = await readJson(resolveRepoPath(options.releaseIndex));

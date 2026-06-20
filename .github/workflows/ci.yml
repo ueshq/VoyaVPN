@@ -104,3 +104,6 @@ jobs:
 
       - name: Check generated IPC binding drift
         run: pnpm run check:bindings
+
+      - name: Check i18n locale drift
+        run: pnpm run i18n:check

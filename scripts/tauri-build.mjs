@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rawArgs = process.argv.slice(2);
@@ -17,6 +18,12 @@ const localTauriBin = resolve(
 );
 const tauriBin = existsSync(localTauriBin) ? localTauriBin : "tauri";
 const stableOverlayPath = resolve(repoRoot, "target", "release-config", "tauri.updater.stable.generated.json");
+const stableOverlayMetadataPath = resolve(
+  repoRoot,
+  "target",
+  "release-config",
+  "tauri.updater.stable.generated.metadata.json",
+);
 
 if (env.CI === "1") {
   env.CI = "true";
@@ -126,6 +133,10 @@ function stableUpdaterPublicKey() {
   return value;
 }
 
+function sha256Text(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
 function assertStableSigningInput() {
   if (!firstEnv("TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PATH")) {
     throw new Error(
@@ -138,6 +149,7 @@ function writeStableUpdaterOverlay() {
   assertStableSigningInput();
   const baseUrl = stableUpdaterBaseUrl();
   const publicKey = stableUpdaterPublicKey();
+  const endpoints = [`${baseUrl}/latest.json`];
   const overlay = {
     bundle: {
       createUpdaterArtifacts: true,
@@ -145,7 +157,7 @@ function writeStableUpdaterOverlay() {
     plugins: {
       updater: {
         pubkey: publicKey,
-        endpoints: [`${baseUrl}/latest.json`],
+        endpoints,
         windows: {
           installMode: "passive",
         },
@@ -154,7 +166,22 @@ function writeStableUpdaterOverlay() {
   };
 
   mkdirSync(dirname(stableOverlayPath), { recursive: true });
-  writeFileSync(stableOverlayPath, `${JSON.stringify(overlay, null, 2)}\n`);
+  const overlayText = `${JSON.stringify(overlay, null, 2)}\n`;
+  writeFileSync(stableOverlayPath, overlayText);
+  writeFileSync(
+    stableOverlayMetadataPath,
+    `${JSON.stringify(
+      {
+        path: relative(repoRoot, stableOverlayPath).replaceAll("\\", "/"),
+        sha256: sha256Text(overlayText),
+        pubkeySha256: sha256Text(publicKey),
+        endpoints,
+        createUpdaterArtifacts: true,
+      },
+      null,
+      2,
+    )}\n`,
+  );
   return stableOverlayPath;
 }
 

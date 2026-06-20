@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 
-import { findProductionBlockersInText } from "./check-release-readiness.mjs";
+import { findProductionBlockersInText, validateStableUpdaterConfigMetadata } from "./check-release-readiness.mjs";
 
 describe("release readiness production blocker scan", () => {
   it("blocks GitHub URLs in production manifest URL fields", () => {
@@ -105,5 +106,26 @@ mod tests {
     expect(matches).toEqual([
       "docs/release/runbook.md:1: example production URL: VOYAVPN_CDN_BASE_URL=https://stable.voyavpn.example",
     ]);
+  });
+});
+
+describe("release readiness packaged updater config evidence", () => {
+  it("rejects package-time updater overlay metadata with a different approved public key", () => {
+    const publicKey = "A".repeat(64);
+    const metadata = {
+      sha256: "1".repeat(64),
+      pubkeySha256: createHash("sha256").update("B".repeat(64)).digest("hex"),
+      endpoints: ["https://updates.voyavpn.dev/stable/latest.json"],
+      createUpdaterArtifacts: true,
+      path: "stable-updater-config.json",
+    };
+
+    expect(() =>
+      validateStableUpdaterConfigMetadata(metadata, {
+        updatesBaseUrl: "https://updates.voyavpn.dev/stable",
+        updaterPublicKey: publicKey,
+        label: "artifact-manifest.json",
+      }),
+    ).toThrow(/public key hash/);
   });
 });

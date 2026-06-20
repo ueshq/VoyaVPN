@@ -8,6 +8,7 @@ const steps = [
   ["Frontend tests", "pnpm", ["run", "check:frontend:test"]],
   ["Frontend lint", "pnpm", ["run", "check:frontend:lint"]],
   ["Generated binding drift", "pnpm", ["run", "check:bindings"]],
+  ["i18n locale drift", "pnpm", ["run", "i18n:check"]],
 ];
 
 for (const [name, command, args] of steps) {

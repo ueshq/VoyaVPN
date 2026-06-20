@@ -34,6 +34,7 @@ function parseArgs(argv) {
     version: null,
     product: "VoyaVPN",
     allowEmpty: false,
+    stableUpdaterConfig: null,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -66,6 +67,9 @@ function parseArgs(argv) {
       case "--product":
         options.product = next();
         break;
+      case "--stable-updater-config":
+        options.stableUpdaterConfig = next();
+        break;
       case "--allow-empty":
         options.allowEmpty = true;
         break;
@@ -89,6 +93,9 @@ Options:
   --channel <name>   Release channel label used in artifact names. Default: beta
   --version <semver> App version. Defaults to package.json version
   --product <name>   Product name used in artifact names. Default: VoyaVPN
+  --stable-updater-config <file>
+                    Stable updater overlay used by the package build.
+                    Default for stable: target/release-config/tauri.updater.stable.generated.json
   --allow-empty      Write empty manifests instead of failing when no bundle artifacts exist`);
 }
 
@@ -110,6 +117,10 @@ async function walkFiles(root) {
 
   const files = [];
   for (const entry of entries) {
+    if (entry.isSymbolicLink()) {
+      continue;
+    }
+
     const path = join(root, entry.name);
     if (entry.isDirectory()) {
       files.push(...(await walkFiles(path)));
@@ -123,6 +134,19 @@ async function walkFiles(root) {
 function artifactSuffix(filename) {
   const lowerName = filename.toLowerCase();
   return artifactSuffixes.find((suffix) => lowerName.endsWith(suffix.toLowerCase())) ?? null;
+}
+
+function isStableChannel(channel) {
+  return channel.trim().toLowerCase() === "stable";
+}
+
+function placeholderText(value) {
+  return (
+    !value ||
+    /placeholder|replace_before_release|replace-before-release|changeme|\btodo\b|\btbd\b|voyavpn\.example/i.test(
+      String(value),
+    )
+  );
 }
 
 function slugify(value) {
@@ -187,6 +211,64 @@ async function sha256(path) {
   return hash.digest("hex");
 }
 
+function sha256Text(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+async function stableUpdaterConfigEvidence(options, outputDir) {
+  const configuredPath =
+    options.stableUpdaterConfig ??
+    process.env.VOYAVPN_STABLE_UPDATER_CONFIG_PATH ??
+    (isStableChannel(options.channel) ? "target/release-config/tauri.updater.stable.generated.json" : null);
+  if (!configuredPath) {
+    return null;
+  }
+
+  const sourcePath = resolve(repoRoot, configuredPath);
+  let sourceText;
+  try {
+    sourceText = await readFile(sourcePath, "utf8");
+  } catch (error) {
+    if (error && error.code === "ENOENT" && !isStableChannel(options.channel)) {
+      return null;
+    }
+    throw new Error(`Stable updater config overlay is required for stable artifacts: ${sourcePath}`, { cause: error });
+  }
+
+  const overlay = JSON.parse(sourceText);
+  const updater = overlay.plugins?.updater;
+  const endpoints = Array.isArray(updater?.endpoints) ? updater.endpoints.map((endpoint) => String(endpoint)) : [];
+  const pubkey = typeof updater?.pubkey === "string" ? updater.pubkey.trim() : "";
+  const createUpdaterArtifacts = overlay.bundle?.createUpdaterArtifacts === true;
+
+  if (isStableChannel(options.channel)) {
+    if (!createUpdaterArtifacts) {
+      throw new Error("Stable updater config overlay must enable bundle.createUpdaterArtifacts.");
+    }
+    if (placeholderText(pubkey) || pubkey.length < 32) {
+      throw new Error("Stable updater config overlay must contain the approved non-placeholder updater public key.");
+    }
+    if (endpoints.length === 0 || endpoints.some((endpoint) => placeholderText(endpoint))) {
+      throw new Error("Stable updater config overlay must contain non-placeholder updater endpoints.");
+    }
+  }
+
+  const copiedName = "stable-updater-config.json";
+  const copiedPath = join(outputDir, copiedName);
+  if (resolve(copiedPath) !== sourcePath) {
+    await writeFile(copiedPath, sourceText);
+  }
+
+  return {
+    path: copiedName,
+    sourcePath: relative(repoRoot, sourcePath).replaceAll("\\", "/"),
+    sha256: sha256Text(sourceText),
+    pubkeySha256: sha256Text(pubkey),
+    endpoints,
+    createUpdaterArtifacts,
+  };
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (!options.input) {
@@ -204,6 +286,7 @@ async function main() {
   const targetSlug = slugify(options.target);
 
   await mkdir(outputDir, { recursive: true });
+  const stableUpdaterConfig = await stableUpdaterConfigEvidence(options, outputDir);
 
   const sourceFiles = (await walkFiles(inputDir))
     .map((file) => ({ file, suffix: artifactSuffix(basename(file)) }))
@@ -248,6 +331,7 @@ async function main() {
     target: options.target,
     generatedAt: new Date().toISOString(),
     sourceBundleDir: relative(repoRoot, inputDir).replaceAll("\\", "/"),
+    ...(stableUpdaterConfig ? { stableUpdaterConfig } : {}),
     artifacts,
   };
 

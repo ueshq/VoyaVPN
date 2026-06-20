@@ -576,7 +576,6 @@ jobs:
           WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
-          node scripts/tauri-build.mjs --write-stable-updater-config
           node scripts/check-release-readiness.mjs \
             --mode stable \
             --cdn-base-url "$VOYAVPN_CDN_BASE_URL" \
@@ -588,7 +587,7 @@ jobs:
             --release-index dist/final-readiness/cdn-staging-metadata/release-index.json \
             --updater-metadata dist/final-readiness/updater-metadata/latest.json \
             --core-manifest dist/final-readiness/core-staging-metadata/core-assets.json \
-            --tauri-config target/release-config/tauri.updater.stable.generated.json \
+            --tauri-config dist/final-readiness/packages/darwin-x86_64/stable-updater-config.json \
             --work-dir dist/final-readiness/readiness-output
 
       - name: Upload final readiness evidence

@@ -23,8 +23,8 @@ const localeImports = [
 const neutralResxPath = resolve(referenceResxDir, "ResUI.resx");
 
 if (!existsSync(neutralResxPath)) {
-  console.error(`Missing v2rayN neutral ResUI resource at ${neutralResxPath}`);
-  process.exit(1);
+  console.log(`Skipping i18n ResX import: v2rayN neutral ResUI resource is not available at ${neutralResxPath}`);
+  process.exit(0);
 }
 
 const neutralResx = parseResx(readFileSync(neutralResxPath, "utf8"));
@@ -110,7 +110,7 @@ function parseResx(source) {
       }
     }
 
-    dataMatch = dataPattern.exec(source);
+    dataMatch = dataPattern.exec(xml);
   }
 
   return entries;
