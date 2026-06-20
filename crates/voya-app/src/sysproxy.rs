@@ -1,4 +1,8 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    fs, io,
+    path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use thiserror::Error;
 use voya_core::{AppConfig, InboundProtocol, SysProxyType};
@@ -9,6 +13,8 @@ use voya_platform::{
 };
 
 const SYSPROXY_SCRIPT_DIR_NAME: &str = "sysproxy";
+const SYSPROXY_DIRTY_MARKER_FILE_NAME: &str = "proxy-dirty";
+const SYSPROXY_DIRTY_MARKER_CONTENTS: &[u8] = b"dirty\n";
 
 #[derive(Clone)]
 pub struct SystemProxyManager {
@@ -63,7 +69,16 @@ impl SystemProxyManager {
     ) -> Result<SystemProxyStatus, SystemProxyManagerError> {
         let request = self.request(config, force_disable)?;
 
-        Ok(self.service.apply(&request)?)
+        if request_sets_local_proxy(&request) {
+            self.write_dirty_marker()?;
+        }
+
+        let status = self.service.apply(&request)?;
+        if status.effective_type == SysProxyType::ForcedClear {
+            self.clear_dirty_marker()?;
+        }
+
+        Ok(status)
     }
 
     pub fn restore(
@@ -71,6 +86,24 @@ impl SystemProxyManager {
         config: &AppConfig,
     ) -> Result<SystemProxyStatus, SystemProxyManagerError> {
         self.apply_config(config, true)
+    }
+
+    pub fn restore_dirty_proxy_if_needed(
+        &self,
+        config: &AppConfig,
+    ) -> Result<bool, SystemProxyManagerError> {
+        if !self.dirty_marker_exists()? {
+            return Ok(false);
+        }
+
+        let mut request = self.request(config, false)?;
+        request.item.sys_proxy_type = SysProxyType::ForcedClear;
+        let status = self.service.apply(&request)?;
+        if status.effective_type == SysProxyType::ForcedClear {
+            self.clear_dirty_marker()?;
+        }
+
+        Ok(true)
     }
 
     pub fn stop_pac(&self) {
@@ -100,6 +133,35 @@ impl SystemProxyManager {
             pac_url_nonce: current_tick_string(),
         })
     }
+
+    fn dirty_marker_path(&self) -> PathBuf {
+        self.paths.config_file(SYSPROXY_DIRTY_MARKER_FILE_NAME)
+    }
+
+    fn dirty_marker_exists(&self) -> Result<bool, SystemProxyManagerError> {
+        let path = self.dirty_marker_path();
+        match fs::metadata(&path) {
+            Ok(_) => Ok(true),
+            Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(false),
+            Err(source) => Err(SystemProxyManagerError::DirtyMarkerInspect { path, source }),
+        }
+    }
+
+    fn write_dirty_marker(&self) -> Result<(), SystemProxyManagerError> {
+        self.paths.ensure_dirs()?;
+        let path = self.dirty_marker_path();
+        fs::write(&path, SYSPROXY_DIRTY_MARKER_CONTENTS)
+            .map_err(|source| SystemProxyManagerError::DirtyMarkerWrite { path, source })
+    }
+
+    fn clear_dirty_marker(&self) -> Result<(), SystemProxyManagerError> {
+        let path = self.dirty_marker_path();
+        match fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(source) => Err(SystemProxyManagerError::DirtyMarkerRemove { path, source }),
+        }
+    }
 }
 
 #[derive(Debug, Error)]
@@ -110,6 +172,12 @@ pub enum SystemProxyManagerError {
     Path(#[from] PathError),
     #[error(transparent)]
     SystemProxy(#[from] SystemProxyError),
+    #[error("failed to inspect system proxy dirty marker {path}: {source}")]
+    DirtyMarkerInspect { path: PathBuf, source: io::Error },
+    #[error("failed to write system proxy dirty marker {path}: {source}")]
+    DirtyMarkerWrite { path: PathBuf, source: io::Error },
+    #[error("failed to remove system proxy dirty marker {path}: {source}")]
+    DirtyMarkerRemove { path: PathBuf, source: io::Error },
 }
 
 fn current_tick_string() -> String {
@@ -119,9 +187,27 @@ fn current_tick_string() -> String {
         .to_string()
 }
 
+fn request_sets_local_proxy(request: &SystemProxyRequest) -> bool {
+    if request.force_disable {
+        return false;
+    }
+
+    matches!(
+        (request.item.sys_proxy_type, request.target_os),
+        (
+            SysProxyType::ForcedChange,
+            TargetOs::Windows | TargetOs::Linux | TargetOs::Macos
+        ) | (SysProxyType::Pac, TargetOs::Windows)
+    )
+}
+
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::{
+        fs,
+        path::PathBuf,
+        sync::{Arc, Mutex},
+    };
 
     use voya_platform::{
         paths::StorageMode,
@@ -181,12 +267,29 @@ mod tests {
         runner: Arc<RecordingRunner>,
         pac: Arc<RecordingPac>,
     ) -> SystemProxyManager {
+        manager_with_app_dir(target_os, runner, pac, unique_app_dir("default"))
+    }
+
+    fn manager_with_app_dir(
+        target_os: TargetOs,
+        runner: Arc<RecordingRunner>,
+        pac: Arc<RecordingPac>,
+        app_dir: PathBuf,
+    ) -> SystemProxyManager {
         let service = SystemProxyService::new(runner, pac);
         SystemProxyManager::with_target_os(
             service,
-            AppPaths::new("/tmp/voya-app-sysproxy", StorageMode::Portable),
+            AppPaths::new(app_dir, StorageMode::Portable),
             target_os,
         )
+    }
+
+    fn unique_app_dir(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "voya-app-sysproxy-{name}-{}-{}",
+            std::process::id(),
+            current_tick_string()
+        ))
     }
 
     #[test]
@@ -226,5 +329,75 @@ mod tests {
             config.system_proxy_item.sys_proxy_type,
             SysProxyType::ForcedChange
         );
+    }
+
+    #[test]
+    fn sysproxy_manager_apply_sets_dirty_marker_for_local_proxy() {
+        let app_dir = unique_app_dir("apply-dirty");
+        let runner = Arc::new(RecordingRunner::default());
+        let pac = Arc::new(RecordingPac::default());
+        let manager = manager_with_app_dir(TargetOs::Windows, runner, pac, app_dir.clone());
+        let mut config = AppConfig::default();
+        config.system_proxy_item.sys_proxy_type = SysProxyType::ForcedChange;
+
+        manager.apply_config(&config, false).expect("apply proxy");
+
+        assert!(manager.dirty_marker_path().is_file());
+        let _ = fs::remove_dir_all(app_dir);
+    }
+
+    #[test]
+    fn sysproxy_manager_restore_clears_dirty_marker() {
+        let app_dir = unique_app_dir("restore-clean");
+        let runner = Arc::new(RecordingRunner::default());
+        let pac = Arc::new(RecordingPac::default());
+        let manager = manager_with_app_dir(TargetOs::Windows, runner, pac, app_dir.clone());
+        let mut config = AppConfig::default();
+        config.system_proxy_item.sys_proxy_type = SysProxyType::ForcedChange;
+
+        manager.apply_config(&config, false).expect("apply proxy");
+        manager.restore(&config).expect("restore proxy");
+
+        assert!(!manager.dirty_marker_path().exists());
+        let _ = fs::remove_dir_all(app_dir);
+    }
+
+    #[test]
+    fn sysproxy_manager_startup_recovery_forces_clear_when_marker_exists() {
+        let app_dir = unique_app_dir("startup-recover");
+        let runner = Arc::new(RecordingRunner::default());
+        let pac = Arc::new(RecordingPac::default());
+        let manager =
+            manager_with_app_dir(TargetOs::Windows, Arc::clone(&runner), pac, app_dir.clone());
+        let mut config = AppConfig::default();
+        config.system_proxy_item.sys_proxy_type = SysProxyType::Unchanged;
+        manager.write_dirty_marker().expect("dirty marker");
+
+        let restored = manager
+            .restore_dirty_proxy_if_needed(&config)
+            .expect("startup recovery");
+
+        assert!(restored);
+        assert!(!manager.dirty_marker_path().exists());
+        assert_eq!(runner.spawns.lock().expect("spawns").len(), 4);
+        let _ = fs::remove_dir_all(app_dir);
+    }
+
+    #[test]
+    fn sysproxy_manager_startup_recovery_noops_without_marker() {
+        let app_dir = unique_app_dir("startup-clean");
+        let runner = Arc::new(RecordingRunner::default());
+        let pac = Arc::new(RecordingPac::default());
+        let manager =
+            manager_with_app_dir(TargetOs::Windows, Arc::clone(&runner), pac, app_dir.clone());
+        let config = AppConfig::default();
+
+        let restored = manager
+            .restore_dirty_proxy_if_needed(&config)
+            .expect("startup recovery");
+
+        assert!(!restored);
+        assert!(runner.spawns.lock().expect("spawns").is_empty());
+        let _ = fs::remove_dir_all(app_dir);
     }
 }

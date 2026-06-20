@@ -132,8 +132,31 @@ pub fn run() {
         .invoke_handler(specta_builder.invoke_handler())
         .setup(move |app| {
             let app_config_dir = app.path().app_config_dir()?;
+            let runtime_paths = AppPaths::new(&app_config_dir, StorageMode::UserData);
+            runtime_paths.ensure_dirs()?;
+            let system_proxy_manager = SystemProxyManager::new(
+                SystemProxyService::new(Arc::new(StdProcessRunner::new()), platform_pac_manager()),
+                runtime_paths.clone(),
+            );
             let config_store = AppConfigStore::new(app_config_dir.join("guiNConfig.json"));
             let mut config = config_store.load()?;
+            let skip_persisted_proxy_apply = match system_proxy_manager
+                .restore_dirty_proxy_if_needed(&config)
+            {
+                Ok(restored) => {
+                    if restored {
+                        tracing::warn!("restored system proxy from previous dirty shutdown marker");
+                    }
+                    restored
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        ?error,
+                        "failed to restore system proxy from dirty shutdown marker"
+                    );
+                    true
+                }
+            };
             let original_config = config.clone();
             let app_version = app.package_info().version.to_string();
             prepare_diagnostics_settings(
@@ -151,8 +174,6 @@ pub fn run() {
             tauri::async_runtime::block_on(
                 voya_app::profiles::ProfileExManager::new(&database).init(),
             )?;
-            let runtime_paths = AppPaths::new(&app_config_dir, StorageMode::UserData);
-            runtime_paths.ensure_dirs()?;
             let core_seed_resource_dir = Some(core_seed_resources_dir(app.path().resource_dir()?));
             if let Some(seed_dir) = &core_seed_resource_dir {
                 if let Err(error) = copy_seed_core_assets(&runtime_paths, seed_dir) {
@@ -181,12 +202,12 @@ pub fn run() {
                 }),
             );
             drop(runtime_guard);
-            let system_proxy_manager = SystemProxyManager::new(
-                SystemProxyService::new(Arc::new(StdProcessRunner::new()), platform_pac_manager()),
-                runtime_paths.clone(),
-            );
-            if let Err(error) = system_proxy_manager.apply_config(&config, false) {
-                tracing::warn!(?error, "failed to apply persisted system proxy mode");
+            if !skip_persisted_proxy_apply {
+                if let Err(error) = system_proxy_manager.apply_config(&config, false) {
+                    tracing::warn!(?error, "failed to apply persisted system proxy mode");
+                }
+            } else {
+                tracing::warn!("skipped persisted system proxy apply after dirty marker recovery");
             }
             if let Err(error) =
                 ipc::commands::register_global_hotkeys_for_config(app.handle(), &config)
