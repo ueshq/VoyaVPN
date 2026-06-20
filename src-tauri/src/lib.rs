@@ -47,6 +47,12 @@ const TRAY_PROXY_UNCHANGED: &str = "tray-proxy-unchanged";
 const TRAY_PROXY_PAC: &str = "tray-proxy-pac";
 const TRAY_SERVER_PREFIX: &str = "tray-server:";
 
+enum TrayPrivilegedAction {
+    Connect,
+    Disconnect,
+    Proxy(SysProxyType),
+}
+
 pub(crate) struct AppState {
     database: Database,
     config_store: AppConfigStore,
@@ -260,16 +266,16 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
                     shutdown_for_exit(app);
                     app.exit(0);
                 }
-                TRAY_CONNECT => spawn_tray_connect(app),
-                TRAY_DISCONNECT => spawn_tray_disconnect(app),
-                TRAY_PROXY_CLEAR => spawn_tray_proxy_mode(app, SysProxyType::ForcedClear),
-                TRAY_PROXY_SET => spawn_tray_proxy_mode(app, SysProxyType::ForcedChange),
-                TRAY_PROXY_UNCHANGED => spawn_tray_proxy_mode(app, SysProxyType::Unchanged),
-                TRAY_PROXY_PAC => spawn_tray_proxy_mode(app, SysProxyType::Pac),
-                id if id.starts_with(TRAY_SERVER_PREFIX) => {
-                    spawn_tray_set_active_server(app, id[TRAY_SERVER_PREFIX.len()..].to_string());
+                id => {
+                    if let Some(action) = tray_privileged_action(id) {
+                        handle_tray_privileged_action(app, action);
+                    } else if id.starts_with(TRAY_SERVER_PREFIX) {
+                        spawn_tray_set_active_server(
+                            app,
+                            id[TRAY_SERVER_PREFIX.len()..].to_string(),
+                        );
+                    }
                 }
-                _ => {}
             },
         );
 
@@ -280,6 +286,31 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
     tray.build(app)?;
 
     Ok(())
+}
+
+fn tray_privileged_action(id: &str) -> Option<TrayPrivilegedAction> {
+    match id {
+        TRAY_CONNECT => Some(TrayPrivilegedAction::Connect),
+        TRAY_DISCONNECT => Some(TrayPrivilegedAction::Disconnect),
+        TRAY_PROXY_CLEAR => Some(TrayPrivilegedAction::Proxy(SysProxyType::ForcedClear)),
+        TRAY_PROXY_SET => Some(TrayPrivilegedAction::Proxy(SysProxyType::ForcedChange)),
+        TRAY_PROXY_UNCHANGED => Some(TrayPrivilegedAction::Proxy(SysProxyType::Unchanged)),
+        TRAY_PROXY_PAC if cfg!(target_os = "windows") => {
+            Some(TrayPrivilegedAction::Proxy(SysProxyType::Pac))
+        }
+        _ => None,
+    }
+}
+
+fn handle_tray_privileged_action<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    action: TrayPrivilegedAction,
+) {
+    match action {
+        TrayPrivilegedAction::Connect => spawn_tray_connect(app),
+        TrayPrivilegedAction::Disconnect => spawn_tray_disconnect(app),
+        TrayPrivilegedAction::Proxy(mode) => spawn_tray_proxy_mode(app, mode),
+    }
 }
 
 pub(crate) fn refresh_tray_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {

@@ -201,7 +201,7 @@ mod hotkey_app_tests {
                     KeyEventItem {
                         global_hotkey: GlobalHotkey::SystemProxyPac,
                         control: true,
-                        alt: false,
+                        alt: true,
                         shift: true,
                         key_code: Some(80),
                     },
@@ -220,7 +220,7 @@ mod hotkey_app_tests {
                 },
                 GlobalHotkeyBinding {
                     action: GlobalHotkey::SystemProxyPac,
-                    accelerator: "Ctrl+Shift+KeyP".to_string(),
+                    accelerator: "Ctrl+Alt+Shift+KeyP".to_string(),
                 },
             ]
         );
@@ -259,14 +259,14 @@ mod hotkey_app_tests {
                     KeyEventItem {
                         global_hotkey: GlobalHotkey::ShowForm,
                         control: true,
-                        alt: false,
+                        alt: true,
                         shift: false,
                         key_code: Some(65),
                     },
                     KeyEventItem {
                         global_hotkey: GlobalHotkey::SystemProxySet,
                         control: true,
-                        alt: false,
+                        alt: true,
                         shift: false,
                         key_code: Some(65),
                     },
@@ -277,6 +277,32 @@ mod hotkey_app_tests {
         assert!(matches!(
             error,
             HotkeyManagerError::Platform(HotkeyError::DuplicateAccelerator(_))
+        ));
+        assert!(registrar.registered.lock().expect("registered").is_empty());
+    }
+
+    #[test]
+    fn hotkey_manager_rejects_unsafe_proxy_modifier_chord_before_registering() {
+        let registrar = Arc::new(FakeHotkeyRegistrar::default());
+        let manager = HotkeyManager::new(registrar.clone());
+        let mut config = AppConfig::default();
+
+        let error = manager
+            .save_settings(
+                &mut config,
+                vec![KeyEventItem {
+                    global_hotkey: GlobalHotkey::SystemProxySet,
+                    control: true,
+                    alt: false,
+                    shift: false,
+                    key_code: Some(83),
+                }],
+            )
+            .expect_err("unsafe proxy chord");
+
+        assert!(matches!(
+            error,
+            HotkeyManagerError::Platform(HotkeyError::UnsupportedModifierChord(_))
         ));
         assert!(registrar.registered.lock().expect("registered").is_empty());
     }

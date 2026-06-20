@@ -2832,6 +2832,10 @@ where
 
     fn register(&self, bindings: &[GlobalHotkeyBinding]) -> Result<(), HotkeyManagerError> {
         for binding in bindings {
+            voya_platform::hotkeys::validate_hotkey_accelerator(
+                binding.action,
+                &binding.accelerator,
+            )?;
             let action = binding.action;
             self.app
                 .global_shortcut()
