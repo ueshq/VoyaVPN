@@ -21,6 +21,7 @@ const STREAM_SECURITY_TLS: &str = "tls";
 const STREAM_SECURITY_REALITY: &str = "reality";
 const USER_AGENT_HEADER: &str = "Sec-WebSocket-Protocol";
 const WIREGUARD_DEFAULT_ADDRESS: &str = "172.16.0.2/32";
+const WIREGUARD_DEFAULT_ALLOWED_IPS: &[&str] = &["0.0.0.0/0", "::/0"];
 const WIREGUARD_DEFAULT_MTU: i32 = 1280;
 const DEFAULT_HYSTERIA2_HOP_INTERVAL: i32 = 30;
 const DEFAULT_TUN_STACK: &str = "gvisor";
@@ -109,6 +110,8 @@ pub enum SingboxConfigError {
     CustomRulesetMissingRequiredFields { index: usize },
     #[error("sing-box node {remarks} has invalid port {port}")]
     InvalidNodePort { remarks: String, port: i32 },
+    #[error("sing-box WireGuard node {remarks} is missing peer public key")]
+    MissingWireGuardPublicKey { remarks: String },
     #[error("failed to serialize sing-box config: {0}")]
     Serialize(#[source] serde_json::Error),
 }
@@ -878,6 +881,7 @@ pub fn generate_singbox_config(
     context: &CoreConfigContext,
 ) -> Result<SingboxConfig, SingboxConfigError> {
     validate_proxy_ports(context)?;
+    validate_active_wireguard(context)?;
     let mut config = SingboxConfig::sample();
     gen_log(&mut config, context);
     gen_inbounds(&mut config, context);
@@ -903,6 +907,17 @@ pub fn generate_singbox_config_json(
 ) -> Result<String, SingboxConfigError> {
     let value = generate_singbox_config_value(context)?;
     serde_json::to_string_pretty(&value).map_err(SingboxConfigError::Serialize)
+}
+
+fn validate_active_wireguard(context: &CoreConfigContext) -> Result<(), SingboxConfigError> {
+    if context.node.config_type == ConfigType::WireGuard
+        && wireguard_public_key(&context.node.protocol_extra).is_none()
+    {
+        return Err(SingboxConfigError::MissingWireGuardPublicKey {
+            remarks: context.node.remarks.clone(),
+        });
+    }
+    Ok(())
 }
 
 fn validate_proxy_ports(context: &CoreConfigContext) -> Result<(), SingboxConfigError> {
@@ -1062,7 +1077,9 @@ fn build_all_proxy_servers(
     let mut proxy_servers = if node.config_type.is_group_type() {
         build_group_proxy_servers(context, node, base_tag_name)
     } else {
-        vec![build_proxy_server(context, node, base_tag_name)]
+        build_proxy_server(context, node, base_tag_name)
+            .into_iter()
+            .collect()
     };
 
     if with_selector {
@@ -1081,16 +1098,16 @@ fn build_proxy_server(
     context: &CoreConfigContext,
     node: &ProfileItem,
     base_tag_name: &str,
-) -> SingboxServer {
+) -> Option<SingboxServer> {
     if node.config_type == ConfigType::WireGuard {
-        let mut endpoint = build_wireguard_endpoint(node);
+        let mut endpoint = build_wireguard_endpoint(node)?;
         endpoint.tag = base_tag_name.to_string();
-        return SingboxServer::Endpoint(Box::new(endpoint));
+        return Some(SingboxServer::Endpoint(Box::new(endpoint)));
     }
 
     let mut outbound = build_outbound(context, node);
     outbound.tag = base_tag_name.to_string();
-    SingboxServer::Outbound(Box::new(outbound))
+    Some(SingboxServer::Outbound(Box::new(outbound)))
 }
 
 fn build_group_proxy_servers(
@@ -1110,7 +1127,7 @@ fn build_outbounds_list(
     node: &ProfileItem,
     base_tag_name: &str,
 ) -> Vec<SingboxServer> {
-    let nodes = child_nodes(context, node);
+    let nodes = buildable_child_nodes(context, node);
     let mut result: Vec<SingboxServer> = Vec::new();
 
     for (index, child_node) in nodes.iter().enumerate() {
@@ -1125,7 +1142,9 @@ fn build_outbounds_list(
             continue;
         }
 
-        result.push(build_proxy_server(context, child_node, &current_tag));
+        if let Some(server) = build_proxy_server(context, child_node, &current_tag) {
+            result.push(server);
+        }
     }
 
     result
@@ -1136,7 +1155,7 @@ fn build_chain_outbounds_list(
     node: &ProfileItem,
     base_tag_name: &str,
 ) -> Vec<SingboxServer> {
-    let nodes = child_nodes(context, node);
+    let nodes = buildable_child_nodes(context, node);
     let nodes_reverse = nodes.into_iter().rev().collect::<Vec<_>>();
     let mut result: Vec<SingboxServer> = Vec::new();
 
@@ -1216,7 +1235,9 @@ fn build_chain_outbounds_list(
             continue;
         }
 
-        let mut outbound = build_proxy_server(context, child_node, &current_tag);
+        let Some(mut outbound) = build_proxy_server(context, child_node, &current_tag) else {
+            continue;
+        };
         if let Some(detour_tag) = detour_tag {
             outbound.set_detour(&detour_tag);
         }
@@ -1317,9 +1338,10 @@ fn build_outbound(context: &CoreConfigContext, node: &ProfileItem) -> SingboxOut
     outbound
 }
 
-fn build_wireguard_endpoint(node: &ProfileItem) -> SingboxEndpoint {
+fn build_wireguard_endpoint(node: &ProfileItem) -> Option<SingboxEndpoint> {
     let protocol_extra = &node.protocol_extra;
-    SingboxEndpoint {
+    let public_key = wireguard_public_key(protocol_extra)?;
+    Some(SingboxEndpoint {
         r#type: protocol_name(node.config_type).to_string(),
         tag: PROXY_TAG.to_string(),
         address: split_list(
@@ -1340,14 +1362,14 @@ fn build_wireguard_endpoint(node: &ProfileItem) -> SingboxEndpoint {
         peers: vec![SingboxPeer {
             address: node.address.clone(),
             port: node.port,
-            public_key: protocol_extra.wg_public_key.clone().unwrap_or_default(),
+            public_key,
             pre_shared_key: protocol_extra.wg_preshared_key.clone(),
-            allowed_ips: vec!["0.0.0.0/0".to_string(), "::/0".to_string()],
+            allowed_ips: wireguard_allowed_ips(protocol_extra),
             reserved: parse_i32_list(protocol_extra.wg_reserved.as_deref()),
             persistent_keepalive_interval: None,
         }],
         ..SingboxEndpoint::default()
-    }
+    })
 }
 
 fn fill_shadowsocks_plugin(
@@ -2088,16 +2110,25 @@ fn gen_routing_user_rule(
                 .iter()
                 .filter(|ip| parse_v2_address(ip, &mut negative_rule))
                 .count();
-            negative_rule.invert = Some(true);
-            ip_rule = SingboxRule {
-                outbound: rule.outbound.clone(),
-                action: rule.action.clone(),
-                r#type: Some("logical".to_string()),
-                mode: Some("or".to_string()),
-                rules: Some(vec![positive_rule, negative_rule]),
-                ..SingboxRule::default()
-            };
-            positive_count + negative_count
+            if positive_count > 0 && negative_count > 0 && route_ip_rule_has_matcher(&negative_rule)
+            {
+                negative_rule.invert = Some(true);
+                ip_rule = SingboxRule {
+                    outbound: rule.outbound.clone(),
+                    action: rule.action.clone(),
+                    r#type: Some("logical".to_string()),
+                    mode: Some("and".to_string()),
+                    rules: Some(vec![positive_rule, negative_rule]),
+                    ..SingboxRule::default()
+                };
+                positive_count + negative_count
+            } else if positive_count > 0 {
+                ip_rule = positive_rule;
+                positive_count
+            } else {
+                has_domain_ip_process = true;
+                0
+            }
         };
         if count > 0 {
             config.route.rules.push(ip_rule);
@@ -2188,6 +2219,12 @@ fn fill_rule_common(rule: &mut SingboxRule, user_rule: &RulesItem) {
         .filter(|items| !items.is_empty());
 }
 
+fn route_ip_rule_has_matcher(rule: &SingboxRule) -> bool {
+    rule.geoip.as_ref().is_some_and(|items| !items.is_empty())
+        || rule.ip_cidr.as_ref().is_some_and(|items| !items.is_empty())
+        || rule.ip_is_private == Some(true)
+}
+
 fn gen_routing_user_rule_outbound(
     config: &mut SingboxConfig,
     context: &CoreConfigContext,
@@ -2222,6 +2259,9 @@ fn gen_routing_user_rule_outbound(
     }
 
     let servers = build_all_proxy_servers(context, &node, &tag, true);
+    if servers.is_empty() {
+        return PROXY_TAG.to_string();
+    }
     append_servers(config, servers);
     tag
 }
@@ -2630,40 +2670,42 @@ fn gen_dns_custom(config: &mut SingboxConfig, context: &CoreConfigContext) {
 }
 
 fn gen_dns_protect_custom(dns: &mut SingboxDns, context: &CoreConfigContext) {
-    dns.rules.insert(
-        0,
-        SingboxRule {
-            server: Some(
-                dns.servers
-                    .iter()
-                    .find(|server| server.detour.as_deref() == Some(PROXY_TAG))
-                    .map(|server| server.tag.clone())
-                    .unwrap_or_else(|| "remote".to_string()),
-            ),
-            clash_mode: Some("Global".to_string()),
-            ..SingboxRule::default()
-        },
-    );
-    dns.rules.insert(
-        0,
-        SingboxRule {
-            server: Some(SINGBOX_LOCAL_DNS_TAG.to_string()),
-            clash_mode: Some("Direct".to_string()),
-            ..SingboxRule::default()
-        },
-    );
-
     let final_dns_address = context
         .raw_dns_item
         .as_ref()
         .and_then(|item| nonempty_string(item.domain_dns_address.as_deref()))
         .unwrap_or_else(|| DEFAULT_BOOTSTRAP_DNS.to_string());
-    if let Some(mut local_dns_server) = parse_dns_address(&final_dns_address) {
-        local_dns_server.tag = SINGBOX_LOCAL_DNS_TAG.to_string();
-        dns.servers.push(local_dns_server);
+    if !dns_server_tag_exists(dns, SINGBOX_LOCAL_DNS_TAG) {
+        if let Some(mut local_dns_server) = parse_dns_address(&final_dns_address) {
+            local_dns_server.tag = SINGBOX_LOCAL_DNS_TAG.to_string();
+            dns.servers.push(local_dns_server);
+        }
     }
 
-    if !context.protect_domain_list.is_empty() {
+    if let Some(global_server_tag) = custom_dns_global_server_tag(dns) {
+        dns.rules.insert(
+            0,
+            SingboxRule {
+                server: Some(global_server_tag),
+                clash_mode: Some("Global".to_string()),
+                ..SingboxRule::default()
+            },
+        );
+    }
+
+    if dns_server_tag_exists(dns, SINGBOX_LOCAL_DNS_TAG) {
+        dns.rules.insert(
+            0,
+            SingboxRule {
+                server: Some(SINGBOX_LOCAL_DNS_TAG.to_string()),
+                clash_mode: Some("Direct".to_string()),
+                ..SingboxRule::default()
+            },
+        );
+    }
+
+    if !context.protect_domain_list.is_empty() && dns_server_tag_exists(dns, SINGBOX_LOCAL_DNS_TAG)
+    {
         dns.rules.insert(
             0,
             SingboxRule {
@@ -2673,6 +2715,18 @@ fn gen_dns_protect_custom(dns: &mut SingboxDns, context: &CoreConfigContext) {
             },
         );
     }
+}
+
+fn custom_dns_global_server_tag(dns: &SingboxDns) -> Option<String> {
+    dns.servers
+        .iter()
+        .find(|server| server.detour.as_deref() == Some(PROXY_TAG))
+        .or_else(|| dns.servers.first())
+        .map(|server| server.tag.clone())
+}
+
+fn dns_server_tag_exists(dns: &SingboxDns, tag: &str) -> bool {
+    dns.servers.iter().any(|server| server.tag == tag)
 }
 
 fn final_dns_uses_direct(context: &CoreConfigContext) -> bool {
@@ -3413,6 +3467,19 @@ fn child_nodes(context: &CoreConfigContext, node: &ProfileItem) -> Vec<ProfileIt
     .collect()
 }
 
+fn buildable_child_nodes(context: &CoreConfigContext, node: &ProfileItem) -> Vec<ProfileItem> {
+    child_nodes(context, node)
+        .into_iter()
+        .filter(|child| child.config_type.is_group_type() || singbox_can_build_leaf(child))
+        .collect()
+}
+
+fn singbox_can_build_leaf(node: &ProfileItem) -> bool {
+    singbox_supports_config_type(node.config_type)
+        && (node.config_type != ConfigType::WireGuard
+            || wireguard_public_key(&node.protocol_extra).is_some())
+}
+
 fn protocol_name(config_type: ConfigType) -> &'static str {
     match config_type {
         ConfigType::VMess => "vmess",
@@ -3532,6 +3599,21 @@ fn parse_pem_chain(pem_chain: &str) -> Vec<String> {
     }
 
     certs
+}
+
+fn wireguard_public_key(protocol_extra: &ProtocolExtraItem) -> Option<String> {
+    nonempty_string(protocol_extra.wg_public_key.as_deref())
+}
+
+fn wireguard_allowed_ips(protocol_extra: &ProtocolExtraItem) -> Vec<String> {
+    split_list(protocol_extra.wg_allowed_ips.as_deref().unwrap_or_default())
+        .filter(|items| !items.is_empty())
+        .unwrap_or_else(|| {
+            WIREGUARD_DEFAULT_ALLOWED_IPS
+                .iter()
+                .map(|item| (*item).to_string())
+                .collect()
+        })
 }
 
 fn parse_i32(value: Option<&str>) -> Option<i32> {
@@ -3658,7 +3740,7 @@ fn value_from_config(config: &SingboxConfig) -> Value {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use super::*;
     use crate::{golden, CoreGenPlatform, CoreType, DnsItem, RoutingItem};
@@ -4263,6 +4345,118 @@ mod tests {
         assert_no_nulls(
             &serde_json::to_value(&dns).expect("sing-box raw DNS should serialize to JSON"),
         );
+    }
+
+    #[test]
+    fn singbox_negative_ip_rules_use_and_and_skip_negative_only_rules() {
+        let mut context = test_context(AppConfig::default(), base_remote_node());
+        context.routing_item = Some(RoutingItem {
+            rule_set: vec![
+                RulesItem {
+                    outbound_tag: Some(DIRECT_TAG.to_string()),
+                    ip: Some(vec!["10.0.0.0/8".to_string(), "!10.1.0.0/16".to_string()]),
+                    ..RulesItem::default()
+                },
+                RulesItem {
+                    outbound_tag: Some(BLOCK_TAG.to_string()),
+                    ip: Some(vec!["!geoip:private".to_string()]),
+                    port: Some("443".to_string()),
+                    ..RulesItem::default()
+                },
+            ],
+            ..RoutingItem::default()
+        });
+
+        let generated = generate_singbox_config(&context).expect("sing-box config should generate");
+        let logical_rule = generated
+            .route
+            .rules
+            .iter()
+            .find(|rule| {
+                rule.r#type.as_deref() == Some("logical")
+                    && rule.outbound.as_deref() == Some(DIRECT_TAG)
+            })
+            .expect("logical negative IP rule");
+        assert_eq!(logical_rule.mode.as_deref(), Some("and"));
+        let nested = logical_rule.rules.as_ref().expect("nested rules");
+        assert_eq!(nested.len(), 2);
+        assert_eq!(
+            nested[0].ip_cidr.as_ref(),
+            Some(&vec!["10.0.0.0/8".to_string()])
+        );
+        assert_eq!(nested[1].invert, Some(true));
+        assert_eq!(
+            nested[1].ip_cidr.as_ref(),
+            Some(&vec!["10.1.0.0/16".to_string()])
+        );
+        assert!(!generated.route.rules.iter().any(|rule| {
+            rule.action.as_deref() == Some("reject") && rule.port.as_ref() == Some(&vec![443])
+        }));
+    }
+
+    #[test]
+    fn singbox_custom_dns_protect_rules_reference_existing_server_tags() {
+        let mut context = test_context(AppConfig::default(), base_remote_node());
+        context.protect_domain_list = vec!["ech.example".to_string()];
+        context.raw_dns_item = Some(DnsItem {
+            enabled: true,
+            core_type: CoreType::sing_box,
+            normal_dns: Some(
+                r#"{"servers":[{"tag":"only-local","type":"udp","server":"1.1.1.1"}],"rules":[],"final":"only-local"}"#.to_string(),
+            ),
+            domain_dns_address: Some("9.9.9.9".to_string()),
+            ..DnsItem::default()
+        });
+
+        let generated = generate_singbox_config(&context).expect("sing-box config should generate");
+        let dns = generated.dns.expect("raw dns");
+        let server_tags = dns
+            .servers
+            .iter()
+            .map(|server| server.tag.as_str())
+            .collect::<BTreeSet<_>>();
+        for rule in dns.rules.iter().filter_map(|rule| rule.server.as_deref()) {
+            assert!(server_tags.contains(rule));
+        }
+        assert!(dns.rules.iter().any(|rule| {
+            rule.clash_mode.as_deref() == Some("Global")
+                && rule.server.as_deref() == Some("only-local")
+        }));
+    }
+
+    #[test]
+    fn singbox_wireguard_uses_allowed_ips_and_rejects_empty_public_key() {
+        let wireguard = ProfileItem {
+            index_id: "wg".to_string(),
+            config_type: ConfigType::WireGuard,
+            password: "private-key".to_string(),
+            protocol_extra: ProtocolExtraItem {
+                wg_public_key: Some("public-key".to_string()),
+                wg_allowed_ips: Some("10.0.0.0/8,192.168.0.0/16".to_string()),
+                ..ProtocolExtraItem::default()
+            },
+            ..base_remote_node()
+        };
+        let generated = generate_singbox_config(&test_context(AppConfig::default(), wireguard))
+            .expect("sing-box config should generate");
+        assert_eq!(
+            generated.endpoints[0].peers[0].allowed_ips,
+            vec!["10.0.0.0/8".to_string(), "192.168.0.0/16".to_string()]
+        );
+
+        let missing_public_key = ProfileItem {
+            index_id: "wg-missing-key".to_string(),
+            config_type: ConfigType::WireGuard,
+            password: "private-key".to_string(),
+            ..base_remote_node()
+        };
+        let error =
+            generate_singbox_config(&test_context(AppConfig::default(), missing_public_key))
+                .expect_err("missing WireGuard public key should fail");
+        assert!(matches!(
+            error,
+            SingboxConfigError::MissingWireGuardPublicKey { .. }
+        ));
     }
 
     #[test]

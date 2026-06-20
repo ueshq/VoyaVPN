@@ -27,6 +27,8 @@ pub struct ProtocolExtraItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wg_interface_address: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub wg_allowed_ips: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub wg_reserved: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wg_mtu: Option<i32>,

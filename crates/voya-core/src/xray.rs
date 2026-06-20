@@ -32,6 +32,7 @@ const GEOSITE_PREFIX: &str = "geosite:";
 const IP_IF_NON_MATCH: &str = "IPIfNonMatch";
 const AS_IS: &str = "AsIs";
 const WIREGUARD_DEFAULT_ADDRESS: &str = "172.16.0.2/32";
+const WIREGUARD_DEFAULT_ALLOWED_IPS: &[&str] = &["0.0.0.0/0", "::/0"];
 const WIREGUARD_DEFAULT_MTU: i32 = 1280;
 const XRAY_TUN_INBOUND_TAG: &str = "tun";
 const XRAY_FAKE_DNS_POOL: &str = "198.18.0.0/15";
@@ -343,6 +344,8 @@ pub struct XrayWireguardPeer {
     pub public_key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pre_shared_key: Option<String>,
+    #[serde(default, rename = "allowedIPs", skip_serializing_if = "Vec::is_empty")]
+    pub allowed_ips: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -1299,7 +1302,7 @@ fn gen_routing_user_rule_outbound(
     else {
         return PROXY_TAG.to_string();
     };
-    if !node.config_type.is_group_type() && !xray_supports_config_type(node.config_type) {
+    if !node.config_type.is_group_type() && !xray_can_build_leaf(&node) {
         return PROXY_TAG.to_string();
     }
 
@@ -1315,6 +1318,9 @@ fn gen_routing_user_rule_outbound(
     let mut nested_context = context.clone();
     nested_context.node = node.clone();
     let proxy_outbounds = build_xray_proxy_outbounds(&nested_context, &tag);
+    if proxy_outbounds.is_empty() {
+        return PROXY_TAG.to_string();
+    }
     let proxy_tag_count = proxy_outbounds
         .iter()
         .filter(|outbound| outbound.tag.starts_with(&tag))
@@ -2497,7 +2503,9 @@ pub fn build_xray_proxy_outbounds(
     if context.node.config_type.is_group_type() {
         return build_group_proxy_outbounds(context, &context.node, base_tag_name);
     }
-    vec![build_proxy_outbound(context, &context.node, base_tag_name)]
+    build_proxy_outbound(context, &context.node, base_tag_name)
+        .into_iter()
+        .collect()
 }
 
 pub fn apply_xray_outbound_fragment(outbounds: &mut [XrayOutbound], app_config: &AppConfig) {
@@ -2573,11 +2581,14 @@ fn build_proxy_outbound(
     context: &CoreConfigContext,
     node: &ProfileItem,
     base_tag_name: &str,
-) -> XrayOutbound {
+) -> Option<XrayOutbound> {
+    if !xray_can_build_leaf(node) {
+        return None;
+    }
     let mut outbound = XrayOutbound::proxy_sample(base_tag_name);
     fill_outbound(context, node, &mut outbound);
     outbound.tag = base_tag_name.to_string();
-    outbound
+    Some(outbound)
 }
 
 fn fill_outbound(context: &CoreConfigContext, node: &ProfileItem, outbound: &mut XrayOutbound) {
@@ -2687,7 +2698,7 @@ fn fill_outbound(context: &CoreConfigContext, node: &ProfileItem, outbound: &mut
             });
         }
         ConfigType::WireGuard => {
-            outbound.settings = Some(wireguard_settings(node, protocol_extra));
+            outbound.settings = wireguard_settings(node, protocol_extra);
         }
         _ => {}
     }
@@ -2991,7 +3002,8 @@ fn reality_settings(node: &ProfileItem, context: &CoreConfigContext) -> XrayTlsS
 fn wireguard_settings(
     node: &ProfileItem,
     protocol_extra: &ProtocolExtraItem,
-) -> XrayOutboundSettings {
+) -> Option<XrayOutboundSettings> {
+    let public_key = wireguard_public_key(protocol_extra)?;
     let endpoint_address = if node
         .address
         .parse::<IpAddr>()
@@ -3001,7 +3013,7 @@ fn wireguard_settings(
     } else {
         node.address.clone()
     };
-    XrayOutboundSettings {
+    Some(XrayOutboundSettings {
         address: Some(json!(split_list(
             protocol_extra
                 .wg_interface_address
@@ -3026,12 +3038,13 @@ fn wireguard_settings(
                 .unwrap_or(WIREGUARD_DEFAULT_MTU),
         ),
         peers: Some(vec![XrayWireguardPeer {
-            public_key: protocol_extra.wg_public_key.clone().unwrap_or_default(),
+            public_key,
             endpoint: format!("{endpoint_address}:{}", node.port),
             pre_shared_key: protocol_extra.wg_preshared_key.clone(),
+            allowed_ips: wireguard_allowed_ips(protocol_extra),
         }]),
         ..XrayOutboundSettings::default()
-    }
+    })
 }
 
 fn build_outbounds_list(
@@ -3039,7 +3052,7 @@ fn build_outbounds_list(
     node: &ProfileItem,
     base_tag_name: &str,
 ) -> Vec<XrayOutbound> {
-    let nodes = child_nodes(context, node);
+    let nodes = buildable_child_nodes(context, node);
     let mut result_outbounds: Vec<XrayOutbound> = Vec::new();
     for (index, child_node) in nodes.iter().enumerate() {
         let mut current_tag = format!("{base_tag_name}-{}-{}", index + 1, child_node.remarks);
@@ -3056,9 +3069,10 @@ fn build_outbounds_list(
             continue;
         }
 
-        let mut outbound = build_proxy_outbound(context, child_node, PROXY_TAG);
-        outbound.tag = current_tag;
-        result_outbounds.push(outbound);
+        if let Some(mut outbound) = build_proxy_outbound(context, child_node, PROXY_TAG) {
+            outbound.tag = current_tag;
+            result_outbounds.push(outbound);
+        }
     }
     result_outbounds
 }
@@ -3068,7 +3082,7 @@ fn build_chain_outbounds_list(
     node: &ProfileItem,
     base_tag_name: &str,
 ) -> Vec<XrayOutbound> {
-    let nodes = child_nodes(context, node);
+    let nodes = buildable_child_nodes(context, node);
     let nodes_reverse = nodes.into_iter().rev().collect::<Vec<_>>();
     let mut result_outbounds: Vec<XrayOutbound> = Vec::new();
 
@@ -3160,7 +3174,9 @@ fn build_chain_outbounds_list(
             continue;
         }
 
-        let mut outbound = build_proxy_outbound(context, child_node, PROXY_TAG);
+        let Some(mut outbound) = build_proxy_outbound(context, child_node, PROXY_TAG) else {
+            continue;
+        };
         outbound.tag = current_tag;
         if let Some(dialer_proxy_tag) = dialer_proxy_tag {
             fill_dialer_proxy(&mut outbound, &dialer_proxy_tag);
@@ -3333,6 +3349,19 @@ fn child_nodes(context: &CoreConfigContext, node: &ProfileItem) -> Vec<ProfileIt
     .into_iter()
     .filter_map(|node_id| context.all_proxies_map.get(&node_id).cloned())
     .collect()
+}
+
+fn buildable_child_nodes(context: &CoreConfigContext, node: &ProfileItem) -> Vec<ProfileItem> {
+    child_nodes(context, node)
+        .into_iter()
+        .filter(|child| child.config_type.is_group_type() || xray_can_build_leaf(child))
+        .collect()
+}
+
+fn xray_can_build_leaf(node: &ProfileItem) -> bool {
+    xray_supports_config_type(node.config_type)
+        && (node.config_type != ConfigType::WireGuard
+            || wireguard_public_key(&node.protocol_extra).is_some())
 }
 
 fn merge_mask_array_if_empty(finalmask: &mut Map<String, Value>, key: &str, mask: Value) {
@@ -3553,6 +3582,24 @@ fn parse_pem_chain(pem_chain: &str) -> Vec<String> {
     }
 
     certs
+}
+
+fn wireguard_public_key(protocol_extra: &ProtocolExtraItem) -> Option<String> {
+    protocol_extra
+        .wg_public_key
+        .as_deref()
+        .and_then(nonempty_string)
+}
+
+fn wireguard_allowed_ips(protocol_extra: &ProtocolExtraItem) -> Vec<String> {
+    split_list(protocol_extra.wg_allowed_ips.as_deref().unwrap_or_default())
+        .filter(|items| !items.is_empty())
+        .unwrap_or_else(|| {
+            WIREGUARD_DEFAULT_ALLOWED_IPS
+                .iter()
+                .map(|item| (*item).to_string())
+                .collect()
+        })
 }
 
 fn split_list(value: &str) -> Option<Vec<String>> {
@@ -3912,7 +3959,8 @@ mod tests {
             };
 
             let context = test_context(AppConfig::default(), node.clone());
-            let outbound = build_proxy_outbound(&context, &node, PROXY_TAG);
+            let outbound =
+                build_proxy_outbound(&context, &node, PROXY_TAG).expect("proxy outbound");
             let stream = outbound.stream_settings.expect("stream settings");
             let expected_host = host_field.split(',').next().expect("first host").trim();
             assert_eq!(
@@ -3955,7 +4003,7 @@ mod tests {
         };
 
         let context = test_context(AppConfig::default(), node.clone());
-        let outbound = build_proxy_outbound(&context, &node, PROXY_TAG);
+        let outbound = build_proxy_outbound(&context, &node, PROXY_TAG).expect("proxy outbound");
         let stream = outbound.stream_settings.expect("stream settings");
         assert_eq!(
             stream
@@ -4253,6 +4301,102 @@ mod tests {
                 .and_then(|settings| settings.domain_strategy.as_deref()),
             Some("UseIPv4")
         );
+    }
+
+    #[test]
+    fn xray_group_skips_unsupported_children_without_sample_fallthrough() {
+        let group = ProfileItem {
+            index_id: "group".to_string(),
+            config_type: ConfigType::PolicyGroup,
+            remarks: "mixed".to_string(),
+            protocol_extra: ProtocolExtraItem {
+                child_items: Some("supported,unsupported".to_string()),
+                ..ProtocolExtraItem::default()
+            },
+            ..ProfileItem::default()
+        };
+        let mut context = test_context(AppConfig::default(), group);
+        context.all_proxies_map.insert(
+            "supported".to_string(),
+            socks_node("supported", "supported-node"),
+        );
+        context.all_proxies_map.insert(
+            "unsupported".to_string(),
+            ProfileItem {
+                index_id: "unsupported".to_string(),
+                config_type: ConfigType::TUIC,
+                remarks: "unsupported-node".to_string(),
+                address: "tuic.example".to_string(),
+                port: 443,
+                username: "00000000-0000-0000-0000-000000000024".to_string(),
+                password: "secret".to_string(),
+                ..ProfileItem::default()
+            },
+        );
+
+        let generated = generate_xray_config(&context);
+        let outbounds_json =
+            serde_json::to_string(&generated.outbounds).expect("xray outbounds should serialize");
+        assert!(!outbounds_json.contains("v2ray.cool"));
+        assert!(!generated
+            .outbounds
+            .iter()
+            .any(|outbound| outbound.tag.contains("unsupported-node")));
+        assert!(generated
+            .outbounds
+            .iter()
+            .any(|outbound| outbound.tag == PROXY_TAG && outbound.protocol == "socks"));
+    }
+
+    #[test]
+    fn xray_wireguard_uses_allowed_ips_and_skips_empty_public_key() {
+        let wireguard = ProfileItem {
+            index_id: "wg".to_string(),
+            config_type: ConfigType::WireGuard,
+            remarks: "wg".to_string(),
+            address: "wg.example".to_string(),
+            port: 51820,
+            password: "private-key".to_string(),
+            protocol_extra: ProtocolExtraItem {
+                wg_public_key: Some("public-key".to_string()),
+                wg_allowed_ips: Some("10.0.0.0/8,192.168.0.0/16".to_string()),
+                wg_interface_address: Some("172.16.0.2/32".to_string()),
+                ..ProtocolExtraItem::default()
+            },
+            ..ProfileItem::default()
+        };
+        let generated = generate_xray_config(&test_context(AppConfig::default(), wireguard));
+        let proxy = generated
+            .outbounds
+            .iter()
+            .find(|outbound| outbound.tag == PROXY_TAG)
+            .expect("wireguard proxy outbound");
+        let peer = proxy
+            .settings
+            .as_ref()
+            .and_then(|settings| settings.peers.as_ref())
+            .and_then(|peers| peers.first())
+            .expect("wireguard peer");
+        assert_eq!(
+            peer.allowed_ips,
+            vec!["10.0.0.0/8".to_string(), "192.168.0.0/16".to_string()]
+        );
+
+        let missing_public_key = ProfileItem {
+            index_id: "wg-missing".to_string(),
+            config_type: ConfigType::WireGuard,
+            remarks: "wg-missing".to_string(),
+            address: "wg.example".to_string(),
+            port: 51820,
+            password: "private-key".to_string(),
+            ..ProfileItem::default()
+        };
+        let generated =
+            generate_xray_config(&test_context(AppConfig::default(), missing_public_key));
+        assert!(!generated
+            .outbounds
+            .iter()
+            .any(|outbound| outbound.tag == PROXY_TAG));
     }
 
     #[test]

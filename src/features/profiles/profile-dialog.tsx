@@ -279,6 +279,7 @@ function ProtocolPanel({
             <TextField label="Peer public key" {...register("ProtocolExtra.WgPublicKey")} />
             <TextField label="Preshared key" {...register("ProtocolExtra.WgPresharedKey")} />
             <TextField label="Interface address" {...register("ProtocolExtra.WgInterfaceAddress")} />
+            <TextField label="Allowed IPs" {...register("ProtocolExtra.WgAllowedIps")} />
             <TextField label="Reserved bytes" {...register("ProtocolExtra.WgReserved")} />
             <TextField
               inputMode="numeric"

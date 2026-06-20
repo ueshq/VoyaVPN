@@ -21,6 +21,7 @@ const protocolExtraSchema = z
     WgPublicKey: optionalNullableText,
     WgPresharedKey: optionalNullableText,
     WgInterfaceAddress: optionalNullableText,
+    WgAllowedIps: optionalNullableText,
     WgReserved: optionalNullableText,
     WgMtu: optionalNullableNumber,
     SalamanderPass: optionalNullableText,

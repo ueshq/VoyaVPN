@@ -534,6 +534,12 @@ impl ShareFmt for WireguardFmt {
             nonempty(parsed.query.decoded_or("presharedkey", ""));
         item.protocol_extra.wg_reserved = nonempty(parsed.query.decoded_or("reserved", ""));
         item.protocol_extra.wg_interface_address = nonempty(parsed.query.decoded_or("address", ""));
+        let allowed_ips = parsed.query.decoded_or("allowedips", "");
+        item.protocol_extra.wg_allowed_ips = nonempty(if allowed_ips.is_empty() {
+            parsed.query.decoded_or("allowed_ips", "")
+        } else {
+            allowed_ips
+        });
         item.protocol_extra.wg_mtu = parse_positive_i32(&parsed.query.decoded_or("mtu", ""));
         ensure_address_port("wireguard", &item)?;
         ensure_nonempty("wireguard", "private key", &item.password)?;
@@ -556,6 +562,11 @@ impl ShareFmt for WireguardFmt {
             &mut query,
             "address",
             &item.protocol_extra.wg_interface_address,
+        );
+        push_encoded_opt(
+            &mut query,
+            "allowedips",
+            &item.protocol_extra.wg_allowed_ips,
         );
         if let Some(mtu) = item.protocol_extra.wg_mtu.filter(|value| *value > 0) {
             query.push(("mtu".to_string(), mtu.to_string()));
@@ -851,6 +862,9 @@ pub fn parse_wireguard_config(input: &str) -> Result<Vec<ProfileItem>, ShareErro
                     .get("presharedkey")
                     .and_then(|value| nonempty(value.clone())),
                 wg_interface_address: nonempty(wg_interface_address.clone()),
+                wg_allowed_ips: peer
+                    .get("allowedips")
+                    .and_then(|value| nonempty(value.clone())),
                 wg_reserved: peer
                     .get("reserved")
                     .and_then(|value| nonempty(value.clone())),
@@ -2445,6 +2459,7 @@ mod share_tests {
             [Peer]
             PublicKey = peer-public-key
             PresharedKey = peer-preshared-key
+            AllowedIPs = 10.0.0.0/8, 192.168.0.0/16
             Reserved = 1, 2, 3 # inline comment
             Endpoint = [2001:db8::1]:51820 # inline comment
 
@@ -2461,6 +2476,10 @@ mod share_tests {
         assert_eq!(
             resolved[0].protocol_extra.wg_reserved.as_deref(),
             Some("1, 2, 3")
+        );
+        assert_eq!(
+            resolved[0].protocol_extra.wg_allowed_ips.as_deref(),
+            Some("10.0.0.0/8, 192.168.0.0/16")
         );
         assert_eq!(
             resolved[0].protocol_extra.wg_interface_address.as_deref(),
