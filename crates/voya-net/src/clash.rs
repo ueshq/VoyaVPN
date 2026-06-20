@@ -113,16 +113,22 @@ pub trait ClashHttpTransport: Clone + Send + Sync + 'static {
     ) -> Pin<Box<dyn Future<Output = Result<Value>> + Send + 'transport>>;
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ReqwestClashHttpTransport {
-    client: reqwest::Client,
+    client: std::result::Result<reqwest::Client, String>,
+}
+
+impl Default for ReqwestClashHttpTransport {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ReqwestClashHttpTransport {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: crate::build_http_client(None).map_err(|error| error.to_string()),
         }
     }
 }
@@ -133,9 +139,10 @@ impl ClashHttpTransport for ReqwestClashHttpTransport {
         request: ClashHttpRequest,
     ) -> Pin<Box<dyn Future<Output = Result<Value>> + Send + 'transport>> {
         Box::pin(async move {
-            let mut builder = self
-                .client
-                .request(Method::from(request.method), &request.url);
+            let client = self.client.as_ref().map_err(|error| {
+                ClashError::Request(format!("failed to build HTTP client: {error}"))
+            })?;
+            let mut builder = client.request(Method::from(request.method), &request.url);
             if let Some(token) = request
                 .bearer_token
                 .as_deref()

@@ -29,6 +29,8 @@ pub enum WebDavError {
     MissingUsername,
     #[error("WebDAV password is required")]
     MissingPassword,
+    #[error("failed to build WebDAV HTTP client: {0}")]
+    ClientBuild(String),
     #[error("failed to build WebDAV request {method} {url}: {source}")]
     RequestBuild {
         method: String,
@@ -117,7 +119,7 @@ pub struct WebDavTransferOutcome {
 
 #[derive(Debug, Clone)]
 pub struct WebDavClient {
-    client: Client,
+    client: std::result::Result<Client, String>,
     config: WebDavConfig,
 }
 
@@ -125,7 +127,7 @@ impl WebDavClient {
     #[must_use]
     pub fn new(config: WebDavConfig) -> Self {
         Self {
-            client: Client::new(),
+            client: crate::build_http_client(None).map_err(|error| error.to_string()),
             config,
         }
     }
@@ -152,8 +154,8 @@ impl WebDavClient {
         let path = self.config.collection_name();
         let url = self.url(path);
         let method = "MKCOL";
-        let request = self
-            .client
+        let client = self.client()?;
+        let request = client
             .request(custom_method(method), &url)
             .basic_auth(&self.config.username, Some(&self.config.password))
             .build()
@@ -162,15 +164,14 @@ impl WebDavClient {
                 url: url.clone(),
                 source,
             })?;
-        let response =
-            self.client
-                .execute(request)
-                .await
-                .map_err(|source| WebDavError::Request {
-                    method: method.to_string(),
-                    url: url.clone(),
-                    source,
-                })?;
+        let response = client
+            .execute(request)
+            .await
+            .map_err(|source| WebDavError::Request {
+                method: method.to_string(),
+                url: url.clone(),
+                source,
+            })?;
         let status = response.status();
 
         if status.is_success()
@@ -200,6 +201,7 @@ impl WebDavClient {
     pub async fn propfind(&self, path: &str) -> Result<Vec<WebDavEntry>> {
         let url = self.url(path);
         let method = "PROPFIND";
+        let client = self.client()?;
         let body = r#"<?xml version="1.0" encoding="utf-8" ?>
 <d:propfind xmlns:d="DAV:">
   <d:prop>
@@ -209,8 +211,7 @@ impl WebDavClient {
     <d:resourcetype />
   </d:prop>
 </d:propfind>"#;
-        let request = self
-            .client
+        let request = client
             .request(custom_method(method), &url)
             .basic_auth(&self.config.username, Some(&self.config.password))
             .header("Depth", "1")
@@ -222,15 +223,14 @@ impl WebDavClient {
                 url: url.clone(),
                 source,
             })?;
-        let response =
-            self.client
-                .execute(request)
-                .await
-                .map_err(|source| WebDavError::Request {
-                    method: method.to_string(),
-                    url: url.clone(),
-                    source,
-                })?;
+        let response = client
+            .execute(request)
+            .await
+            .map_err(|source| WebDavError::Request {
+                method: method.to_string(),
+                url: url.clone(),
+                source,
+            })?;
         let status = response.status();
         if !status.is_success() && status.as_u16() != 207 {
             return Err(status_error(method, &url, response).await);
@@ -252,7 +252,7 @@ impl WebDavClient {
         let method = "PUT";
         let bytes = u64::try_from(body.len()).unwrap_or(u64::MAX);
         let response = self
-            .client
+            .client()?
             .put(&url)
             .basic_auth(&self.config.username, Some(&self.config.password))
             .body(body)
@@ -277,7 +277,7 @@ impl WebDavClient {
         let url = self.url(path);
         let method = "GET";
         let response = self
-            .client
+            .client()?
             .get(&url)
             .basic_auth(&self.config.username, Some(&self.config.password))
             .send()
@@ -306,7 +306,7 @@ impl WebDavClient {
         let url = self.url(path);
         let method = "DELETE";
         let response = self
-            .client
+            .client()?
             .delete(&url)
             .basic_auth(&self.config.username, Some(&self.config.password))
             .send()
@@ -325,6 +325,12 @@ impl WebDavClient {
 
     fn backup_remote_path(&self) -> String {
         join_remote_path(self.config.collection_name(), DEFAULT_BACKUP_FILE)
+    }
+
+    fn client(&self) -> Result<&Client> {
+        self.client
+            .as_ref()
+            .map_err(|reason| WebDavError::ClientBuild(reason.clone()))
     }
 
     fn url(&self, path: &str) -> String {

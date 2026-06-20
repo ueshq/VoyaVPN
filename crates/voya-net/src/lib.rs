@@ -10,8 +10,11 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use reqwest::{Client, Proxy};
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+    time::Duration,
 };
 use thiserror::Error;
 
@@ -37,10 +40,15 @@ pub const RUSSIA_DNS_TEMPLATE_SOURCE_URL: &str =
 pub const IRAN_DNS_TEMPLATE_SOURCE_URL: &str =
     "https://raw.githubusercontent.com/Chocolate4U/Iran-v2ray-rules/main/v2rayN/";
 
+pub(crate) const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+pub(crate) const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
 pub type Result<T> = std::result::Result<T, DownloadError>;
 
 #[derive(Debug, Error)]
 pub enum DownloadError {
+    #[error("failed to build download HTTP client for {url}: {reason}")]
+    ClientBuild { url: String, reason: String },
     #[error("download failed for {url}: {source}")]
     Request {
         url: String,
@@ -224,13 +232,25 @@ impl PresetDnsTemplateClient {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct DownloadClient;
+#[derive(Debug, Clone)]
+pub struct DownloadClient {
+    direct_client: std::result::Result<Client, String>,
+    proxy_clients: Arc<Mutex<HashMap<String, Client>>>,
+}
+
+impl Default for DownloadClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl DownloadClient {
     #[must_use]
     pub fn new() -> Self {
-        Self
+        Self {
+            direct_client: build_http_client(None).map_err(|error| error.to_string()),
+            proxy_clients: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     pub async fn download_text(&self, request: DownloadRequest) -> Result<DownloadResponse> {
@@ -242,29 +262,39 @@ impl DownloadClient {
                 .as_deref()
                 .filter(|value| !value.is_empty())
             {
-                match request_text(&request.url, request.user_agent.as_deref(), Some(proxy_url))
-                    .await
-                {
-                    Ok(body) if !body.is_empty() => {
-                        attempts.push(DownloadAttempt {
-                            url: request.url.clone(),
-                            via_proxy: true,
-                            bytes: body.len(),
-                            error: None,
-                        });
+                match self.proxy_client(&request.url, proxy_url) {
+                    Ok(client) => {
+                        match request_text(&client, &request.url, request.user_agent.as_deref())
+                            .await
+                        {
+                            Ok(body) if !body.is_empty() => {
+                                attempts.push(DownloadAttempt {
+                                    url: request.url.clone(),
+                                    via_proxy: true,
+                                    bytes: body.len(),
+                                    error: None,
+                                });
 
-                        return Ok(DownloadResponse {
-                            body,
-                            used_proxy: true,
-                            attempts,
-                        });
+                                return Ok(DownloadResponse {
+                                    body,
+                                    used_proxy: true,
+                                    attempts,
+                                });
+                            }
+                            Ok(body) => attempts.push(DownloadAttempt {
+                                url: request.url.clone(),
+                                via_proxy: true,
+                                bytes: body.len(),
+                                error: Some("empty response".to_string()),
+                            }),
+                            Err(error) => attempts.push(DownloadAttempt {
+                                url: request.url.clone(),
+                                via_proxy: true,
+                                bytes: 0,
+                                error: Some(error.to_string()),
+                            }),
+                        }
                     }
-                    Ok(body) => attempts.push(DownloadAttempt {
-                        url: request.url.clone(),
-                        via_proxy: true,
-                        bytes: body.len(),
-                        error: Some("empty response".to_string()),
-                    }),
                     Err(error) => attempts.push(DownloadAttempt {
                         url: request.url.clone(),
                         via_proxy: true,
@@ -275,7 +305,23 @@ impl DownloadClient {
             }
         }
 
-        match request_text(&request.url, request.user_agent.as_deref(), None).await {
+        let client = match self.direct_client(&request.url) {
+            Ok(client) => client,
+            Err(error) => {
+                attempts.push(DownloadAttempt {
+                    url: request.url.clone(),
+                    via_proxy: false,
+                    bytes: 0,
+                    error: Some(error.to_string()),
+                });
+                return Err(DownloadError::AttemptsFailed {
+                    url: request.url,
+                    attempts,
+                });
+            }
+        };
+
+        match request_text(&client, &request.url, request.user_agent.as_deref()).await {
             Ok(body) if !body.is_empty() => {
                 attempts.push(DownloadAttempt {
                     url: request.url.clone(),
@@ -326,29 +372,39 @@ impl DownloadClient {
                 .as_deref()
                 .filter(|value| !value.is_empty())
             {
-                match request_bytes(&request.url, request.user_agent.as_deref(), Some(proxy_url))
-                    .await
-                {
-                    Ok(body) if !body.is_empty() => {
-                        attempts.push(DownloadAttempt {
-                            url: request.url.clone(),
-                            via_proxy: true,
-                            bytes: body.len(),
-                            error: None,
-                        });
+                match self.proxy_client(&request.url, proxy_url) {
+                    Ok(client) => {
+                        match request_bytes(&client, &request.url, request.user_agent.as_deref())
+                            .await
+                        {
+                            Ok(body) if !body.is_empty() => {
+                                attempts.push(DownloadAttempt {
+                                    url: request.url.clone(),
+                                    via_proxy: true,
+                                    bytes: body.len(),
+                                    error: None,
+                                });
 
-                        return Ok(DownloadBytesResponse {
-                            body,
-                            used_proxy: true,
-                            attempts,
-                        });
+                                return Ok(DownloadBytesResponse {
+                                    body,
+                                    used_proxy: true,
+                                    attempts,
+                                });
+                            }
+                            Ok(body) => attempts.push(DownloadAttempt {
+                                url: request.url.clone(),
+                                via_proxy: true,
+                                bytes: body.len(),
+                                error: Some("empty response".to_string()),
+                            }),
+                            Err(error) => attempts.push(DownloadAttempt {
+                                url: request.url.clone(),
+                                via_proxy: true,
+                                bytes: 0,
+                                error: Some(error.to_string()),
+                            }),
+                        }
                     }
-                    Ok(body) => attempts.push(DownloadAttempt {
-                        url: request.url.clone(),
-                        via_proxy: true,
-                        bytes: body.len(),
-                        error: Some("empty response".to_string()),
-                    }),
                     Err(error) => attempts.push(DownloadAttempt {
                         url: request.url.clone(),
                         via_proxy: true,
@@ -359,7 +415,23 @@ impl DownloadClient {
             }
         }
 
-        match request_bytes(&request.url, request.user_agent.as_deref(), None).await {
+        let client = match self.direct_client(&request.url) {
+            Ok(client) => client,
+            Err(error) => {
+                attempts.push(DownloadAttempt {
+                    url: request.url.clone(),
+                    via_proxy: false,
+                    bytes: 0,
+                    error: Some(error.to_string()),
+                });
+                return Err(DownloadError::AttemptsFailed {
+                    url: request.url,
+                    attempts,
+                });
+            }
+        };
+
+        match request_bytes(&client, &request.url, request.user_agent.as_deref()).await {
             Ok(body) if !body.is_empty() => {
                 attempts.push(DownloadAttempt {
                     url: request.url.clone(),
@@ -399,6 +471,35 @@ impl DownloadClient {
                 })
             }
         }
+    }
+
+    fn direct_client(&self, url: &str) -> Result<Client> {
+        self.direct_client
+            .as_ref()
+            .cloned()
+            .map_err(|reason| DownloadError::ClientBuild {
+                url: url.to_string(),
+                reason: reason.clone(),
+            })
+    }
+
+    fn proxy_client(&self, url: &str, proxy_url: &str) -> Result<Client> {
+        let mut clients = match self.proxy_clients.lock() {
+            Ok(clients) => clients,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if let Some(client) = clients.get(proxy_url) {
+            return Ok(client.clone());
+        }
+
+        let client =
+            build_http_client(Some(proxy_url)).map_err(|source| DownloadError::Request {
+                url: url.to_string(),
+                source,
+            })?;
+        clients.insert(proxy_url.to_string(), client.clone());
+
+        Ok(client)
     }
 
     pub async fn download_file(
@@ -607,23 +708,22 @@ pub fn decode_base64_payload(input: &str) -> Option<String> {
     }
 }
 
-async fn request_text(
-    url: &str,
-    user_agent: Option<&str>,
+pub(crate) fn build_http_client(
     proxy_url: Option<&str>,
-) -> Result<String> {
-    let mut builder = Client::builder();
-    if let Some(proxy_url) = proxy_url {
-        let proxy = Proxy::all(proxy_url).map_err(|source| DownloadError::Request {
-            url: url.to_string(),
-            source,
-        })?;
-        builder = builder.proxy(proxy);
-    }
-    let client = builder.build().map_err(|source| DownloadError::Request {
-        url: url.to_string(),
-        source,
-    })?;
+) -> std::result::Result<Client, reqwest::Error> {
+    let mut builder = Client::builder()
+        .timeout(HTTP_REQUEST_TIMEOUT)
+        .connect_timeout(HTTP_CONNECT_TIMEOUT);
+    builder = if let Some(proxy_url) = proxy_url {
+        builder.proxy(Proxy::all(proxy_url)?)
+    } else {
+        builder.no_proxy()
+    };
+
+    builder.build()
+}
+
+async fn request_text(client: &Client, url: &str, user_agent: Option<&str>) -> Result<String> {
     let user_agent = user_agent
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -651,23 +751,7 @@ async fn request_text(
         })
 }
 
-async fn request_bytes(
-    url: &str,
-    user_agent: Option<&str>,
-    proxy_url: Option<&str>,
-) -> Result<Vec<u8>> {
-    let mut builder = Client::builder();
-    if let Some(proxy_url) = proxy_url {
-        let proxy = Proxy::all(proxy_url).map_err(|source| DownloadError::Request {
-            url: url.to_string(),
-            source,
-        })?;
-        builder = builder.proxy(proxy);
-    }
-    let client = builder.build().map_err(|source| DownloadError::Request {
-        url: url.to_string(),
-        source,
-    })?;
+async fn request_bytes(client: &Client, url: &str, user_agent: Option<&str>) -> Result<Vec<u8>> {
     let user_agent = user_agent
         .map(str::trim)
         .filter(|value| !value.is_empty())
