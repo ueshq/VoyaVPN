@@ -34,6 +34,7 @@ const AS_IS: &str = "AsIs";
 const WIREGUARD_DEFAULT_ADDRESS: &str = "172.16.0.2/32";
 const WIREGUARD_DEFAULT_ALLOWED_IPS: &[&str] = &["0.0.0.0/0", "::/0"];
 const WIREGUARD_DEFAULT_MTU: i32 = 1280;
+const WIREGUARD_RESERVED_LEN: usize = 3;
 const XRAY_TUN_INBOUND_TAG: &str = "tun";
 const XRAY_FAKE_DNS_POOL: &str = "198.18.0.0/15";
 pub const DEFAULT_XRAY_DNS_NORMAL: &str = r#"{
@@ -2043,10 +2044,7 @@ fn parse_dns_addresses(input: Option<&str>, default_address: &str) -> Vec<String
         .filter(|address| !address.is_empty())
         .filter(|address| parse_dns_address(address).is_some())
     {
-        let normalized = if address
-            .get(..4)
-            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("dhcp"))
-        {
+        let normalized = if is_dhcp_dns_token(address) {
             LOOPBACK
         } else {
             address
@@ -3030,14 +3028,7 @@ fn wireguard_settings(
         .filter(|items| !items.is_empty())
         .unwrap_or_else(|| vec![WIREGUARD_DEFAULT_ADDRESS.to_string()]))),
         secret_key: Some(node.password.clone()),
-        reserved: split_list(protocol_extra.wg_reserved.as_deref().unwrap_or_default()).map(
-            |items| {
-                items
-                    .into_iter()
-                    .filter_map(|item| item.trim().parse::<i32>().ok())
-                    .collect()
-            },
-        ),
+        reserved: parse_wireguard_reserved(protocol_extra.wg_reserved.as_deref()),
         mtu: Some(
             protocol_extra
                 .wg_mtu
@@ -3609,6 +3600,23 @@ fn wireguard_allowed_ips(protocol_extra: &ProtocolExtraItem) -> Vec<String> {
         })
 }
 
+fn parse_wireguard_reserved(value: Option<&str>) -> Option<Vec<i32>> {
+    let value = nonempty_str(value)?;
+    let mut reserved = Vec::new();
+    for item in value.split(',') {
+        let item = item.trim();
+        let Ok(byte) = item.parse::<u8>() else {
+            return None;
+        };
+        reserved.push(i32::from(byte));
+    }
+    (reserved.len() == WIREGUARD_RESERVED_LEN).then_some(reserved)
+}
+
+fn is_dhcp_dns_token(value: &str) -> bool {
+    value.trim().eq_ignore_ascii_case("dhcp")
+}
+
 fn split_list(value: &str) -> Option<Vec<String>> {
     let value = value.trim();
     if value.is_empty() {
@@ -4029,6 +4037,22 @@ mod tests {
             ),
             vec!["8.8.8.8:53".to_string()]
         );
+        assert_eq!(
+            parse_dns_addresses(Some("dhcp.example.com;DHCP"), DEFAULT_DIRECT_DNS),
+            vec!["dhcp.example.com".to_string(), LOOPBACK.to_string()]
+        );
+    }
+
+    #[test]
+    fn xray_wireguard_reserved_requires_exactly_three_bytes() {
+        assert_eq!(
+            parse_wireguard_reserved(Some("1, 2, 255")),
+            Some(vec![1, 2, 255])
+        );
+
+        for value in ["1,2", "1,2,3,4", "1,x,3", "1,256,3", "1,,2,3"] {
+            assert_eq!(parse_wireguard_reserved(Some(value)), None);
+        }
     }
 
     #[test]

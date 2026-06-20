@@ -23,6 +23,7 @@ const USER_AGENT_HEADER: &str = "Sec-WebSocket-Protocol";
 const WIREGUARD_DEFAULT_ADDRESS: &str = "172.16.0.2/32";
 const WIREGUARD_DEFAULT_ALLOWED_IPS: &[&str] = &["0.0.0.0/0", "::/0"];
 const WIREGUARD_DEFAULT_MTU: i32 = 1280;
+const WIREGUARD_RESERVED_LEN: usize = 3;
 const DEFAULT_HYSTERIA2_HOP_INTERVAL: i32 = 30;
 const DEFAULT_TUN_STACK: &str = "gvisor";
 const SINGBOX_TUN_INBOUND_TAG: &str = "tun";
@@ -1377,7 +1378,7 @@ fn build_wireguard_endpoint(node: &ProfileItem) -> Option<SingboxEndpoint> {
             public_key,
             pre_shared_key: protocol_extra.wg_preshared_key.clone(),
             allowed_ips: wireguard_allowed_ips(protocol_extra),
-            reserved: parse_i32_list(protocol_extra.wg_reserved.as_deref()),
+            reserved: parse_wireguard_reserved(protocol_extra.wg_reserved.as_deref()),
             persistent_keepalive_interval: None,
         }],
         ..SingboxEndpoint::default()
@@ -1501,13 +1502,27 @@ fn fill_hysteria2_fields(
 
 fn parse_hysteria_hop_interval(value: &str) -> Option<i32> {
     let value = value.trim();
-    if let Ok(value) = value.parse::<i32>() {
-        return Some(value);
+    if let Ok(value) = value.parse::<i64>() {
+        return Some(clamp_i64_to_i32(value));
     }
     let (left, right) = value.split_once('-')?;
-    let left = left.trim().parse::<i32>().ok()?;
-    let right = right.trim().parse::<i32>().ok()?;
-    Some((left + right) / 2)
+    let left = left.trim().parse::<i64>().ok()?;
+    let right = right.trim().parse::<i64>().ok()?;
+    let midpoint = left.checked_add(right).map_or_else(
+        || {
+            if left.is_negative() && right.is_negative() {
+                i64::MIN
+            } else {
+                i64::MAX
+            }
+        },
+        |sum| sum / 2,
+    );
+    Some(clamp_i64_to_i32(midpoint))
+}
+
+fn clamp_i64_to_i32(value: i64) -> i32 {
+    value.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
 }
 
 fn fill_outbound_mux(
@@ -3646,12 +3661,17 @@ fn parse_i32(value: Option<&str>) -> Option<i32> {
     value.and_then(|value| value.trim().parse::<i32>().ok())
 }
 
-fn parse_i32_list(value: Option<&str>) -> Option<Vec<i32>> {
-    let values = split_list(value.unwrap_or_default())?
-        .into_iter()
-        .filter_map(|item| item.trim().parse::<i32>().ok())
-        .collect::<Vec<_>>();
-    (!values.is_empty()).then_some(values)
+fn parse_wireguard_reserved(value: Option<&str>) -> Option<Vec<i32>> {
+    let value = nonempty_str(value)?;
+    let mut reserved = Vec::new();
+    for item in value.split(',') {
+        let item = item.trim();
+        let Ok(byte) = item.parse::<u8>() else {
+            return None;
+        };
+        reserved.push(i32::from(byte));
+    }
+    (reserved.len() == WIREGUARD_RESERVED_LEN).then_some(reserved)
 }
 
 fn split_list(value: &str) -> Option<Vec<String>> {
@@ -4029,6 +4049,35 @@ mod tests {
             error,
             SingboxConfigError::InvalidNodePort { port: 70000, .. }
         ));
+    }
+
+    #[test]
+    fn singbox_hysteria_hop_interval_clamps_without_overflow() {
+        assert_eq!(parse_hysteria_hop_interval("10-20"), Some(15));
+        assert_eq!(
+            parse_hysteria_hop_interval("2147483647-2147483647"),
+            Some(i32::MAX)
+        );
+        assert_eq!(
+            parse_hysteria_hop_interval("9223372036854775807-9223372036854775807"),
+            Some(i32::MAX)
+        );
+        assert_eq!(
+            parse_hysteria_hop_interval("9223372036854775807"),
+            Some(i32::MAX)
+        );
+    }
+
+    #[test]
+    fn singbox_wireguard_reserved_requires_exactly_three_bytes() {
+        assert_eq!(
+            parse_wireguard_reserved(Some("1, 2, 255")),
+            Some(vec![1, 2, 255])
+        );
+
+        for value in ["1,2", "1,2,3,4", "1,x,3", "1,256,3", "1,,2,3"] {
+            assert_eq!(parse_wireguard_reserved(Some(value)), None);
+        }
     }
 
     #[test]
