@@ -16,7 +16,7 @@ for (const [name, command, args] of steps) {
   console.log(`$ ${[command, ...args].join(" ")}`);
 
   const result = spawnSync(command, args, {
-    env: { ...process.env, CI: process.env.CI ?? "1" },
+    env: { ...process.env, CI: process.env.CI ?? "true" },
     shell: process.platform === "win32",
     stdio: "inherit",
   });
