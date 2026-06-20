@@ -75,6 +75,7 @@ const IPC_QR_CONTENT_MAX_CHARS: usize = 4096;
 const IPC_UPDATE_VERSION_MAX_CHARS: usize = 128;
 const IPC_SHA256_MAX_CHARS: usize = 128;
 const IPC_LIST_MAX_ITEMS: usize = 1024;
+const MISSING_CORE_SEARCH_DIR_LABEL: &str = "application core directory";
 
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(tag = "kind", content = "message", rename_all = "camelCase")]
@@ -3087,23 +3088,37 @@ fn runtime_error(error: RuntimeError) -> AppError {
     match error {
         RuntimeError::CoreInfo(CoreInfoError::ExecutableNotFound {
             core_type,
-            search_dir,
+            search_dir: _,
             candidates,
             url,
         }) => AppError::MissingCore(MissingCoreError {
-            message,
+            message: missing_core_error_message(core_type),
             core_type,
-            search_dir: search_dir.to_string(),
-            candidates: candidates
-                .split(',')
-                .map(str::trim)
-                .filter(|candidate| !candidate.is_empty())
-                .map(ToString::to_string)
-                .collect(),
+            search_dir: missing_core_search_dir_label(),
+            candidates: missing_core_candidates(&candidates),
             download_url: url.to_string(),
         }),
         _ => AppError::Runtime(message),
     }
+}
+
+fn missing_core_error_message(core_type: CoreType) -> String {
+    format!(
+        "core {core_type:?} executable is missing; install or update the core package and try again"
+    )
+}
+
+fn missing_core_search_dir_label() -> String {
+    MISSING_CORE_SEARCH_DIR_LABEL.to_string()
+}
+
+fn missing_core_candidates(candidates: &str) -> Vec<String> {
+    candidates
+        .split(',')
+        .map(str::trim)
+        .filter(|candidate| !candidate.is_empty())
+        .map(ToString::to_string)
+        .collect()
 }
 
 fn group_error(error: GroupManagerError) -> AppError {
@@ -3705,6 +3720,21 @@ mod tests {
         };
         assert_eq!(message, "failed to generate QR code");
         assert!(!message.contains("secret"));
+    }
+
+    #[test]
+    fn missing_core_error_fields_do_not_echo_search_directory() {
+        let message = missing_core_error_message(CoreType::Xray);
+        let search_dir = missing_core_search_dir_label();
+        let candidates = missing_core_candidates("xray, xray.exe,  ");
+
+        assert!(message.contains("Xray"));
+        assert!(!message.contains("/Users/afu/Library"));
+        assert!(!message.contains("Application Support"));
+        assert_eq!(search_dir, MISSING_CORE_SEARCH_DIR_LABEL);
+        assert!(!search_dir.contains('/'));
+        assert!(!search_dir.contains('\\'));
+        assert_eq!(candidates, vec!["xray".to_string(), "xray.exe".to_string()]);
     }
 
     #[cfg(unix)]
