@@ -564,7 +564,8 @@ mod tests {
 
         assert!(result.success(), "{:?}", result.validator_result);
         match core_type {
-            CoreType::sing_box => generate_singbox_config_value(&result.context),
+            CoreType::sing_box => generate_singbox_config_value(&result.context)
+                .expect("sing-box group preview config should generate"),
             _ => generate_xray_config_value(&result.context),
         }
     }

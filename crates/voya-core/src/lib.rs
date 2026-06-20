@@ -101,8 +101,11 @@ mod tests {
             ..CoreConfigContext::default()
         };
 
-        let generated: Value = serde_json::from_str(&generate_singbox_config_json(&context))
-            .expect("generated sing-box config should parse as JSON");
+        let generated: Value = serde_json::from_str(
+            &generate_singbox_config_json(&context)
+                .expect("generated sing-box config should serialize"),
+        )
+        .expect("generated sing-box config should parse as JSON");
         let rules = generated["route"]["rules"]
             .as_array()
             .expect("generated sing-box route rules should be an array");

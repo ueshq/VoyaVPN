@@ -8,7 +8,8 @@ use thiserror::Error;
 use voya_core::{
     generate_singbox_config_json, generate_xray_config_json, AppConfig, ConfigType,
     ContextBuildError, CoreConfigContext, CoreConfigContextBuilder, CoreGenEnv, CoreGenPlatform,
-    CoreType, DnsItem, FullConfigTemplateItem, InboundProtocol, ProfileItem, RoutingItem, SubItem,
+    CoreType, DnsItem, FullConfigTemplateItem, InboundProtocol, ProfileItem, RoutingItem,
+    SingboxConfigError, SubItem,
 };
 use voya_db::{Database, DbError};
 use voya_platform::{
@@ -196,7 +197,7 @@ fn write_runtime_config(
     context: &CoreConfigContext,
 ) -> Result<PathBuf, RuntimeError> {
     let json = if context.run_core_type == CoreType::sing_box {
-        generate_singbox_config_json(context)
+        generate_singbox_config_json(context)?
     } else {
         generate_xray_config_json(context)
     };
@@ -252,6 +253,8 @@ pub enum RuntimeError {
     RemoveConfig { path: PathBuf, source: io::Error },
     #[error(transparent)]
     ContextBuild(#[from] ContextBuildError),
+    #[error(transparent)]
+    SingboxConfig(#[from] SingboxConfigError),
     #[error(transparent)]
     CoreInfo(#[from] CoreInfoError),
     #[error(transparent)]

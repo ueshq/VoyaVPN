@@ -6,6 +6,7 @@ use std::{
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use thiserror::Error;
 
 use crate::{
     AppConfig, ConfigType, CoreConfigContext, InItem, InboundProtocol, MultipleLoad, ProfileItem,
@@ -99,6 +100,16 @@ const SS_SECURITIES_IN_SINGBOX: &[&str] = &[
     "chacha20-ietf",
     "xchacha20",
 ];
+
+#[derive(Debug, Error)]
+pub enum SingboxConfigError {
+    #[error("invalid sing-box custom ruleset JSON: {0}")]
+    CustomRulesetJson(#[source] serde_json::Error),
+    #[error("sing-box custom ruleset at index {index} is missing tag, type, or format")]
+    CustomRulesetMissingRequiredFields { index: usize },
+    #[error("failed to serialize sing-box config: {0}")]
+    Serialize(#[source] serde_json::Error),
+}
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default, rename_all = "snake_case")]
@@ -861,8 +872,9 @@ impl SingboxServer {
     }
 }
 
-#[must_use]
-pub fn generate_singbox_config(context: &CoreConfigContext) -> SingboxConfig {
+pub fn generate_singbox_config(
+    context: &CoreConfigContext,
+) -> Result<SingboxConfig, SingboxConfigError> {
     let mut config = SingboxConfig::sample();
     gen_log(&mut config, context);
     gen_inbounds(&mut config, context);
@@ -870,22 +882,24 @@ pub fn generate_singbox_config(context: &CoreConfigContext) -> SingboxConfig {
     gen_routing(&mut config, context);
     gen_dns(&mut config, context);
     gen_experimental(&mut config, context);
-    convert_geo_to_ruleset(&mut config, context);
+    convert_geo_to_ruleset(&mut config, context)?;
     apply_outbound_bind_interface(&mut config, context);
     apply_outbound_send_through(&mut config, context);
-    config
+    Ok(config)
 }
 
-#[must_use]
-pub fn generate_singbox_config_value(context: &CoreConfigContext) -> Value {
-    let config = generate_singbox_config(context);
-    apply_full_config_template(context, &config)
+pub fn generate_singbox_config_value(
+    context: &CoreConfigContext,
+) -> Result<Value, SingboxConfigError> {
+    let config = generate_singbox_config(context)?;
+    Ok(apply_full_config_template(context, &config))
 }
 
-#[must_use]
-pub fn generate_singbox_config_json(context: &CoreConfigContext) -> String {
-    serde_json::to_string_pretty(&generate_singbox_config_value(context))
-        .unwrap_or_else(|_| "{}".to_string())
+pub fn generate_singbox_config_json(
+    context: &CoreConfigContext,
+) -> Result<String, SingboxConfigError> {
+    let value = generate_singbox_config_value(context)?;
+    serde_json::to_string_pretty(&value).map_err(SingboxConfigError::Serialize)
 }
 
 fn gen_log(config: &mut SingboxConfig, context: &CoreConfigContext) {
@@ -3073,7 +3087,10 @@ fn gen_experimental(config: &mut SingboxConfig, context: &CoreConfigContext) {
     config.experimental = Some(experimental);
 }
 
-fn convert_geo_to_ruleset(config: &mut SingboxConfig, context: &CoreConfigContext) {
+fn convert_geo_to_ruleset(
+    config: &mut SingboxConfig,
+    context: &CoreConfigContext,
+) -> Result<(), SingboxConfigError> {
     let mut rule_sets = Vec::new();
     for rule in &mut config.route.rules {
         convert_rule_geo_to_ruleset(rule, &mut rule_sets);
@@ -3089,7 +3106,7 @@ fn convert_geo_to_ruleset(config: &mut SingboxConfig, context: &CoreConfigContex
         .filter(|item| !item.is_empty())
         .collect::<BTreeSet<_>>();
     if unique_rule_sets.is_empty() {
-        return;
+        return Ok(());
     }
 
     let custom_rulesets = parse_inline_custom_rulesets(
@@ -3097,7 +3114,7 @@ fn convert_geo_to_ruleset(config: &mut SingboxConfig, context: &CoreConfigContex
             .routing_item
             .as_ref()
             .map(|routing| routing.custom_ruleset_path4_singbox.as_str()),
-    );
+    )?;
     let source_url = nonempty_str(context.app_config.const_item.srs_source_url.as_deref())
         .unwrap_or(SINGBOX_RULESET_URL);
     config.route.rule_set = Some(
@@ -3112,6 +3129,7 @@ fn convert_geo_to_ruleset(config: &mut SingboxConfig, context: &CoreConfigContex
             })
             .collect(),
     );
+    Ok(())
 }
 
 fn convert_rule_geo_to_ruleset(rule: &mut SingboxRule, rule_sets: &mut Vec<String>) {
@@ -3139,17 +3157,35 @@ fn convert_rule_geo_to_ruleset(rule: &mut SingboxRule, rule_sets: &mut Vec<Strin
     }
 }
 
-fn parse_inline_custom_rulesets(value: Option<&str>) -> Vec<SingboxRuleset> {
+fn parse_inline_custom_rulesets(
+    value: Option<&str>,
+) -> Result<Vec<SingboxRuleset>, SingboxConfigError> {
     let Some(value) = value.map(str::trim).filter(|value| value.starts_with('[')) else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
-    serde_json::from_str::<Vec<SingboxRuleset>>(value)
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|ruleset| {
-            ruleset.tag.is_some() && ruleset.r#type.is_some() && ruleset.format.is_some()
-        })
-        .collect()
+    let rulesets = serde_json::from_str::<Vec<SingboxRuleset>>(value)
+        .map_err(SingboxConfigError::CustomRulesetJson)?;
+    for (index, ruleset) in rulesets.iter().enumerate() {
+        if ruleset
+            .tag
+            .as_deref()
+            .and_then(|value| nonempty_str(Some(value)))
+            .is_none()
+            || ruleset
+                .r#type
+                .as_deref()
+                .and_then(|value| nonempty_str(Some(value)))
+                .is_none()
+            || ruleset
+                .format
+                .as_deref()
+                .and_then(|value| nonempty_str(Some(value)))
+                .is_none()
+        {
+            return Err(SingboxConfigError::CustomRulesetMissingRequiredFields { index });
+        }
+    }
+    Ok(rulesets)
 }
 
 fn ruleset_for_tag(tag: &str, source_url: &str, context: &CoreConfigContext) -> SingboxRuleset {
@@ -3594,7 +3630,8 @@ mod tests {
             ..ProfileItem::default()
         };
 
-        let generated = generate_singbox_config(&test_context(config, node));
+        let generated = generate_singbox_config(&test_context(config, node))
+            .expect("sing-box config should generate");
         let proxy = generated
             .outbounds
             .iter()
@@ -3715,7 +3752,7 @@ mod tests {
         context.all_proxies_map.insert(n1.index_id.clone(), n1);
         context.all_proxies_map.insert(n2.index_id.clone(), n2);
 
-        let generated = generate_singbox_config(&context);
+        let generated = generate_singbox_config(&context).expect("sing-box config should generate");
         let value = serde_json::to_value(&generated.outbounds)
             .expect("sing-box proxy chain outbounds should serialize to JSON");
         assert_no_nulls(&value);
@@ -3846,7 +3883,8 @@ mod tests {
         ];
 
         for (expected_type, node) in cases {
-            let generated = generate_singbox_config(&test_context(AppConfig::default(), node));
+            let generated = generate_singbox_config(&test_context(AppConfig::default(), node))
+                .expect("sing-box config should generate");
             let proxy = generated
                 .outbounds
                 .iter()
@@ -3870,7 +3908,8 @@ mod tests {
             },
             ..base_remote_node()
         };
-        let generated = generate_singbox_config(&test_context(AppConfig::default(), wireguard));
+        let generated = generate_singbox_config(&test_context(AppConfig::default(), wireguard))
+            .expect("sing-box config should generate");
         assert_eq!(generated.endpoints.len(), 1);
         assert_eq!(generated.endpoints[0].r#type, "wireguard");
         assert_no_nulls(
@@ -3900,7 +3939,7 @@ mod tests {
         context.all_proxies_map.insert(n1.index_id.clone(), n1);
         context.all_proxies_map.insert(n2.index_id.clone(), n2);
 
-        let generated = generate_singbox_config(&context);
+        let generated = generate_singbox_config(&context).expect("sing-box config should generate");
         let value = serde_json::to_value(&generated.outbounds)
             .expect("sing-box policy group outbounds should serialize to JSON");
         assert_no_nulls(&value);
@@ -3915,7 +3954,8 @@ mod tests {
     #[test]
     fn singbox_dns_fakeip_typed_schema_and_rulesets_match_golden() {
         let (dns_context, _) = singbox_routing_dns_snapshot_contexts();
-        let dns_generated = generate_singbox_config(&dns_context);
+        let dns_generated =
+            generate_singbox_config(&dns_context).expect("sing-box config should generate");
         let dns_value = serde_json::to_value(
             dns_generated
                 .dns
@@ -3957,7 +3997,8 @@ mod tests {
             "/tmp/VoyaVPN/bin/srss/geosite-cn.srs".to_string(),
         );
 
-        let generated = generate_singbox_config(&dns_context);
+        let generated =
+            generate_singbox_config(&dns_context).expect("sing-box config should generate");
         let rule_set = generated.route.rule_set.expect("rulesets");
         let local = rule_set
             .iter()
@@ -3979,6 +4020,32 @@ mod tests {
     }
 
     #[test]
+    fn singbox_invalid_inline_custom_rulesets_are_reported() {
+        let (mut dns_context, _) = singbox_routing_dns_snapshot_contexts();
+        dns_context
+            .routing_item
+            .as_mut()
+            .expect("routing item")
+            .custom_ruleset_path4_singbox = "[{\"tag\":\"geosite-cn\"}]".to_string();
+
+        let error = generate_singbox_config(&dns_context)
+            .expect_err("missing custom ruleset fields should fail generation");
+        assert!(matches!(
+            error,
+            SingboxConfigError::CustomRulesetMissingRequiredFields { index: 0 }
+        ));
+
+        dns_context
+            .routing_item
+            .as_mut()
+            .expect("routing item")
+            .custom_ruleset_path4_singbox = "[{\"tag\":\"geosite-cn\"}".to_string();
+        let error = generate_singbox_config(&dns_context)
+            .expect_err("invalid custom ruleset JSON should fail generation");
+        assert!(matches!(error, SingboxConfigError::CustomRulesetJson(_)));
+    }
+
+    #[test]
     fn singbox_dns_raw_override_uses_typed_custom_schema_and_protect_rules() {
         let mut context = test_context(AppConfig::default(), base_remote_node());
         context.protect_domain_list = vec!["ech.example".to_string()];
@@ -3992,7 +4059,7 @@ mod tests {
             ..DnsItem::default()
         });
 
-        let generated = generate_singbox_config(&context);
+        let generated = generate_singbox_config(&context).expect("sing-box config should generate");
         let dns = generated.dns.expect("raw dns");
 
         assert!(dns.servers.iter().any(|server| {
@@ -4010,7 +4077,8 @@ mod tests {
     #[test]
     fn singbox_tun_inbound_and_route_match_golden() {
         let (_, tun_context) = singbox_routing_dns_snapshot_contexts();
-        let generated = generate_singbox_config(&tun_context);
+        let generated =
+            generate_singbox_config(&tun_context).expect("sing-box config should generate");
         let inbounds_value = serde_json::to_value(&generated.inbounds)
             .expect("sing-box tun inbounds should serialize to JSON");
         assert_no_nulls(&inbounds_value);

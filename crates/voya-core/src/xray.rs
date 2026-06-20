@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, net::IpAddr};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use thiserror::Error;
 
 use crate::{
     AppConfig, ConfigType, CoreConfigContext, DnsItem, FullConfigTemplateItem, InItem,
@@ -499,7 +500,285 @@ pub struct XrayXhttpSettings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub extra: Option<Value>,
+    pub extra: Option<XrayXhttpExtra>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct XrayXhttpExtra {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub headers: Option<BTreeMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub x_padding_bytes: Option<XrayXhttpScalar>,
+    #[serde(rename = "noGRPCHeader", skip_serializing_if = "Option::is_none")]
+    pub no_grpc_header: Option<bool>,
+    #[serde(rename = "noSSEHeader", skip_serializing_if = "Option::is_none")]
+    pub no_sse_header: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sc_max_each_post_bytes: Option<XrayXhttpScalar>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sc_min_posts_interval_ms: Option<XrayXhttpScalar>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sc_max_buffered_posts: Option<XrayXhttpScalar>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sc_stream_up_server_secs: Option<XrayXhttpScalar>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub h_max_request_times: Option<XrayXhttpScalar>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub h_max_reusable_secs: Option<XrayXhttpScalar>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub h_keep_alive_period: Option<XrayXhttpScalar>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub xmux: Option<XrayXhttpXmux>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub download_settings: Option<XrayXhttpDownloadSettings>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum XrayXhttpScalar {
+    Number(i64),
+    Range(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct XrayXhttpXmux {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_concurrency: Option<XrayXhttpScalar>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_connections: Option<XrayXhttpScalar>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub c_max_reuse_times: Option<XrayXhttpScalar>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub c_max_lifetime_ms: Option<XrayXhttpScalar>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub h_max_request_times: Option<XrayXhttpScalar>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub h_max_reusable_secs: Option<XrayXhttpScalar>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub h_keep_alive_period: Option<XrayXhttpScalar>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct XrayXhttpDownloadSettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub network: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub security: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls_settings: Option<XrayXhttpDownloadTlsSettings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reality_settings: Option<XrayXhttpDownloadRealitySettings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub xhttp_settings: Option<XrayXhttpDownloadXhttpSettings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sockopt: Option<XraySockopt>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct XrayXhttpDownloadTlsSettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alpn: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ech_config_list: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ech_force_query: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct XrayXhttpDownloadRealitySettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub public_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub short_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spider_x: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mldsa65_verify: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct XrayXhttpDownloadXhttpSettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
+}
+
+#[derive(Debug, Error)]
+pub enum XrayXhttpExtraError {
+    #[error("invalid xhttp extra JSON: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("xhttp extra downloadSettings.port must be between 1 and 65535")]
+    InvalidDownloadPort,
+    #[error("xhttp extra downloadSettings.network must be xhttp")]
+    InvalidDownloadNetwork,
+    #[error("xhttp extra downloadSettings.security must be tls or reality")]
+    InvalidDownloadSecurity,
+    #[error("xhttp extra downloadSettings.xhttpSettings.mode is not allowed")]
+    InvalidDownloadXhttpMode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+struct XrayXhttpExtraInput {
+    headers: Option<BTreeMap<String, String>>,
+    x_padding_bytes: Option<XrayXhttpScalar>,
+    #[serde(rename = "noGRPCHeader")]
+    no_grpc_header: Option<bool>,
+    #[serde(rename = "noSSEHeader")]
+    no_sse_header: Option<bool>,
+    sc_max_each_post_bytes: Option<XrayXhttpScalar>,
+    sc_min_posts_interval_ms: Option<XrayXhttpScalar>,
+    sc_max_buffered_posts: Option<XrayXhttpScalar>,
+    sc_stream_up_server_secs: Option<XrayXhttpScalar>,
+    h_max_request_times: Option<XrayXhttpScalar>,
+    h_max_reusable_secs: Option<XrayXhttpScalar>,
+    h_keep_alive_period: Option<XrayXhttpScalar>,
+    xmux: Option<XrayXhttpXmux>,
+    download_settings: Option<XrayXhttpDownloadSettingsInput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+struct XrayXhttpDownloadSettingsInput {
+    address: Option<String>,
+    port: Option<u16>,
+    network: Option<String>,
+    security: Option<String>,
+    tls_settings: Option<XrayXhttpDownloadTlsSettings>,
+    reality_settings: Option<XrayXhttpDownloadRealitySettings>,
+    xhttp_settings: Option<XrayXhttpDownloadXhttpSettings>,
+}
+
+pub fn validate_xhttp_extra(value: &str) -> Result<(), XrayXhttpExtraError> {
+    parse_xhttp_extra(value).map(|_| ())
+}
+
+fn parse_xhttp_extra(value: &str) -> Result<Option<XrayXhttpExtra>, XrayXhttpExtraError> {
+    let Some(value) = nonempty_str(Some(value)) else {
+        return Ok(None);
+    };
+    let input = serde_json::from_str::<XrayXhttpExtraInput>(value)?;
+    Ok(Some(XrayXhttpExtra::try_from_input(input)?))
+}
+
+impl XrayXhttpExtra {
+    fn try_from_input(input: XrayXhttpExtraInput) -> Result<Self, XrayXhttpExtraError> {
+        Ok(Self {
+            headers: input.headers,
+            x_padding_bytes: input.x_padding_bytes,
+            no_grpc_header: input.no_grpc_header,
+            no_sse_header: input.no_sse_header,
+            sc_max_each_post_bytes: input.sc_max_each_post_bytes,
+            sc_min_posts_interval_ms: input.sc_min_posts_interval_ms,
+            sc_max_buffered_posts: input.sc_max_buffered_posts,
+            sc_stream_up_server_secs: input.sc_stream_up_server_secs,
+            h_max_request_times: input.h_max_request_times,
+            h_max_reusable_secs: input.h_max_reusable_secs,
+            h_keep_alive_period: input.h_keep_alive_period,
+            xmux: input.xmux,
+            download_settings: input
+                .download_settings
+                .map(XrayXhttpDownloadSettings::try_from_input)
+                .transpose()?,
+        })
+    }
+}
+
+impl XrayXhttpDownloadSettings {
+    fn try_from_input(input: XrayXhttpDownloadSettingsInput) -> Result<Self, XrayXhttpExtraError> {
+        if input.port == Some(0) {
+            return Err(XrayXhttpExtraError::InvalidDownloadPort);
+        }
+
+        let network = normalize_xhttp_download_network(input.network)?;
+        let security = normalize_xhttp_download_security(input.security)?;
+        let xhttp_settings = input
+            .xhttp_settings
+            .map(normalize_xhttp_download_xhttp_settings)
+            .transpose()?;
+
+        Ok(Self {
+            address: nonempty_owned(input.address),
+            port: input.port,
+            network,
+            security,
+            tls_settings: input.tls_settings,
+            reality_settings: input.reality_settings,
+            xhttp_settings,
+            sockopt: None,
+        })
+    }
+}
+
+fn normalize_xhttp_download_network(
+    value: Option<String>,
+) -> Result<Option<String>, XrayXhttpExtraError> {
+    let Some(value) = nonempty_owned(value) else {
+        return Ok(None);
+    };
+    let network = value.to_ascii_lowercase();
+    if network == "xhttp" {
+        Ok(Some(network))
+    } else {
+        Err(XrayXhttpExtraError::InvalidDownloadNetwork)
+    }
+}
+
+fn normalize_xhttp_download_security(
+    value: Option<String>,
+) -> Result<Option<String>, XrayXhttpExtraError> {
+    let Some(value) = nonempty_owned(value) else {
+        return Ok(None);
+    };
+    let security = value.to_ascii_lowercase();
+    if matches!(
+        security.as_str(),
+        STREAM_SECURITY_TLS | STREAM_SECURITY_REALITY
+    ) {
+        Ok(Some(security))
+    } else {
+        Err(XrayXhttpExtraError::InvalidDownloadSecurity)
+    }
+}
+
+fn normalize_xhttp_download_xhttp_settings(
+    mut settings: XrayXhttpDownloadXhttpSettings,
+) -> Result<XrayXhttpDownloadXhttpSettings, XrayXhttpExtraError> {
+    settings.path = nonempty_owned(settings.path);
+    settings.host = nonempty_owned(settings.host);
+    settings.mode = match nonempty_owned(settings.mode) {
+        Some(mode) if XHTTP_MODES.contains(&mode.as_str()) => Some(mode),
+        Some(_) => return Err(XrayXhttpExtraError::InvalidDownloadXhttpMode),
+        None => None,
+    };
+    Ok(settings)
+}
+
+fn nonempty_owned(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -2046,26 +2325,22 @@ fn push_unique(items: &mut Vec<String>, item: String) {
 }
 
 fn fill_xhttp_download_sockopt_string(outbound: &mut XrayOutbound, key: &str, value: &str) {
-    let Some(extra) = outbound
+    let Some(download_settings) = outbound
         .stream_settings
         .as_mut()
         .and_then(|settings| settings.xhttp_settings.as_mut())
         .and_then(|settings| settings.extra.as_mut())
-        .and_then(Value::as_object_mut)
-    else {
-        return;
-    };
-    let Some(download_settings) = extra
-        .get_mut("downloadSettings")
-        .and_then(Value::as_object_mut)
+        .and_then(|extra| extra.download_settings.as_mut())
     else {
         return;
     };
     let sockopt = download_settings
-        .entry("sockopt".to_string())
-        .or_insert_with(|| Value::Object(Map::new()));
-    if let Some(sockopt) = sockopt.as_object_mut() {
-        sockopt.insert(key.to_string(), Value::String(value.to_string()));
+        .sockopt
+        .get_or_insert_with(XraySockopt::default);
+    match key {
+        "interface" => sockopt.interface = Some(value.to_string()),
+        "dialerProxy" => sockopt.dialer_proxy = Some(value.to_string()),
+        _ => {}
     }
 }
 
@@ -2461,8 +2736,10 @@ fn fill_bound_stream_settings(
                 mode: XHTTP_MODES
                     .contains(&values.header_type.as_str())
                     .then(|| values.header_type.clone()),
-                extra: nonempty_string(&values.xhttp_extra)
-                    .and_then(|extra| serde_json::from_str::<Value>(&extra).ok()),
+                extra: match parse_xhttp_extra(&values.xhttp_extra) {
+                    Ok(extra) => extra,
+                    Err(_) => None,
+                },
             });
             fill_outbound_mux(outbound, false, false, &context.app_config);
         }
@@ -2865,26 +3142,16 @@ fn fill_dialer_proxy(outbound: &mut XrayOutbound, dialer_proxy_tag: &str) {
         .get_or_insert_with(XraySockopt::default)
         .dialer_proxy = Some(dialer_proxy_tag.to_string());
 
-    if let Some(extra) = stream_settings
+    if let Some(download_settings) = stream_settings
         .xhttp_settings
         .as_mut()
         .and_then(|settings| settings.extra.as_mut())
-        .and_then(Value::as_object_mut)
+        .and_then(|extra| extra.download_settings.as_mut())
     {
-        if let Some(download_settings) = extra
-            .get_mut("downloadSettings")
-            .and_then(Value::as_object_mut)
-        {
-            let sockopt = download_settings
-                .entry("sockopt")
-                .or_insert_with(|| Value::Object(Map::new()));
-            if let Some(sockopt) = sockopt.as_object_mut() {
-                sockopt.insert(
-                    "dialerProxy".to_string(),
-                    Value::String(dialer_proxy_tag.to_string()),
-                );
-            }
-        }
+        download_settings
+            .sockopt
+            .get_or_insert_with(XraySockopt::default)
+            .dialer_proxy = Some(dialer_proxy_tag.to_string());
     }
 }
 
@@ -3514,10 +3781,58 @@ mod tests {
                 .xhttp_settings
                 .as_ref()
                 .and_then(|settings| settings.extra.as_ref())
-                .and_then(|extra| extra.pointer("/downloadSettings/sockopt/dialerProxy"))
-                .and_then(Value::as_str),
+                .and_then(|extra| extra.download_settings.as_ref())
+                .and_then(|download_settings| download_settings.sockopt.as_ref())
+                .and_then(|sockopt| sockopt.dialer_proxy.as_deref()),
             Some("chain-proxy-1-raw-hop")
         );
+    }
+
+    #[test]
+    fn xray_xhttp_extra_rejects_unauthorized_sockopt_injection() {
+        let malicious_extra = r#"{
+            "downloadSettings": {
+                "address": "assets.example",
+                "sockopt": {
+                    "dialerProxy": "evil-hop"
+                }
+            },
+            "address": "evil.example"
+        }"#;
+        assert!(validate_xhttp_extra(malicious_extra).is_err());
+
+        let node = ProfileItem {
+            index_id: "n-xhttp".to_string(),
+            config_type: ConfigType::VLESS,
+            remarks: "xhttp-injection".to_string(),
+            address: "server.example".to_string(),
+            port: 443,
+            password: "00000000-0000-0000-0000-000000000003".to_string(),
+            network: "xhttp".to_string(),
+            protocol_extra: ProtocolExtraItem {
+                vless_encryption: Some("none".to_string()),
+                ..ProtocolExtraItem::default()
+            },
+            transport_extra: TransportExtraItem {
+                xhttp_extra: Some(malicious_extra.to_string()),
+                ..TransportExtraItem::default()
+            },
+            ..ProfileItem::default()
+        };
+        let validation = crate::validate_node(&node, CoreType::Xray);
+        assert!(validation
+            .errors
+            .iter()
+            .any(|error| error == "invalid XHTTP Extra"));
+
+        let generated = generate_xray_config(&test_context(AppConfig::default(), node));
+        let proxy = generated.outbounds.first().expect("proxy outbound");
+        let xhttp_settings = proxy
+            .stream_settings
+            .as_ref()
+            .and_then(|stream| stream.xhttp_settings.as_ref())
+            .expect("xhttp settings");
+        assert_eq!(xhttp_settings.extra, None);
     }
 
     #[test]

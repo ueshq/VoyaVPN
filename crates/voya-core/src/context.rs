@@ -9,8 +9,9 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::{
-    AppConfig, ConfigType, CoreType, DnsItem, FullConfigTemplateItem, InboundProtocol, ProfileItem,
-    ProtocolExtraItem, RoutingItem, RulesItem, SimpleDnsItem, SubItem,
+    validate_xhttp_extra, AppConfig, ConfigType, CoreType, DnsItem, FullConfigTemplateItem,
+    InboundProtocol, ProfileItem, ProtocolExtraItem, RoutingItem, RulesItem, SimpleDnsItem,
+    SubItem,
 };
 
 pub const PROXY_TAG: &str = "proxy";
@@ -906,9 +907,7 @@ pub fn validate_node(item: &ProfileItem, core_type: CoreType) -> NodeValidatorRe
             .xhttp_extra
             .as_deref()
             .and_then(nonempty)
-            .is_some_and(|extra| {
-                serde_json::from_str::<Value>(extra).map_or(true, |v| !v.is_object())
-            })
+            .is_some_and(|extra| validate_xhttp_extra(extra).is_err())
     {
         result.push_error("invalid XHTTP Extra");
     }

@@ -556,7 +556,8 @@ fn singbox_vless_ws_tls_mux_outbound() -> Value {
         ..ProfileItem::default()
     };
 
-    let generated = generate_singbox_config(&singbox_context(config, node));
+    let generated = generate_singbox_config(&singbox_context(config, node))
+        .expect("sing-box config should generate");
     serde_json::to_value(
         generated
             .outbounds
@@ -586,8 +587,8 @@ fn singbox_proxy_chain_detour() -> Value {
     context.all_proxies_map.insert(n1.index_id.clone(), n1);
     context.all_proxies_map.insert(n2.index_id.clone(), n2);
 
-    serde_json::to_value(generate_singbox_config(&context).outbounds)
-        .expect("sing-box outbounds serialize")
+    let generated = generate_singbox_config(&context).expect("sing-box config should generate");
+    serde_json::to_value(generated.outbounds).expect("sing-box outbounds serialize")
 }
 
 fn singbox_policy_group_selector() -> Value {
@@ -610,14 +611,15 @@ fn singbox_policy_group_selector() -> Value {
     context.all_proxies_map.insert(n1.index_id.clone(), n1);
     context.all_proxies_map.insert(n2.index_id.clone(), n2);
 
-    serde_json::to_value(generate_singbox_config(&context).outbounds)
-        .expect("sing-box outbounds serialize")
+    let generated = generate_singbox_config(&context).expect("sing-box config should generate");
+    serde_json::to_value(generated.outbounds).expect("sing-box outbounds serialize")
 }
 
 fn singbox_fakeip_typed_dns() -> Value {
     let (dns_context, _) = singbox_routing_dns_contexts();
     serde_json::to_value(
         generate_singbox_config(&dns_context)
+            .expect("sing-box config should generate")
             .dns
             .expect("sing-box dns"),
     )
@@ -628,6 +630,7 @@ fn singbox_rulesets_from_dns() -> Value {
     let (dns_context, _) = singbox_routing_dns_contexts();
     serde_json::to_value(
         generate_singbox_config(&dns_context)
+            .expect("sing-box config should generate")
             .route
             .rule_set
             .expect("sing-box route rulesets"),
@@ -637,14 +640,14 @@ fn singbox_rulesets_from_dns() -> Value {
 
 fn singbox_tun_inbounds() -> Value {
     let (_, tun_context) = singbox_routing_dns_contexts();
-    serde_json::to_value(generate_singbox_config(&tun_context).inbounds)
-        .expect("sing-box inbounds serialize")
+    let generated = generate_singbox_config(&tun_context).expect("sing-box config should generate");
+    serde_json::to_value(generated.inbounds).expect("sing-box inbounds serialize")
 }
 
 fn singbox_tun_route() -> Value {
     let (_, tun_context) = singbox_routing_dns_contexts();
-    serde_json::to_value(generate_singbox_config(&tun_context).route)
-        .expect("sing-box route serializes")
+    let generated = generate_singbox_config(&tun_context).expect("sing-box config should generate");
+    serde_json::to_value(generated.route).expect("sing-box route serializes")
 }
 
 fn singbox_routing_dns_contexts() -> (CoreConfigContext, CoreConfigContext) {
@@ -880,6 +883,7 @@ fn acceptance_singbox_config() -> Value {
         AppConfig::default(),
         singbox_socks_node("accept-singbox", "accept-singbox"),
     ))
+    .expect("sing-box acceptance config should generate")
 }
 
 fn run_optional_core_check(

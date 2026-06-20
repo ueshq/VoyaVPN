@@ -4,7 +4,7 @@ use voya_core::{
     list_group_child_candidates, validate_group_profile, AppConfig, ConfigType,
     CoreConfigContextBuilder, CoreGenEnv, CoreGenPlatform, CoreType, DnsItem,
     FullConfigTemplateItem, GroupChildCandidate, GroupPreview, GroupValidationResult,
-    InboundProtocol, ProfileItem, ProfileListItem, RoutingItem, SubItem,
+    InboundProtocol, ProfileItem, ProfileListItem, RoutingItem, SingboxConfigError, SubItem,
 };
 use voya_db::{Database, DbError};
 
@@ -22,6 +22,8 @@ pub enum GroupManagerError {
     NotGroupProfile,
     #[error("group validation failed: {0:?}")]
     Validation(Vec<String>),
+    #[error(transparent)]
+    SingboxConfig(#[from] SingboxConfigError),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -80,8 +82,8 @@ impl<'db> GroupManager<'db> {
             dns_items: &dns_items,
             subs: &subs,
         };
-        let xray_value = self.preview_value(config, profile, &source, CoreType::Xray);
-        let singbox_value = self.preview_value(config, profile, &source, CoreType::sing_box);
+        let xray_value = self.preview_value(config, profile, &source, CoreType::Xray)?;
+        let singbox_value = self.preview_value(config, profile, &source, CoreType::sing_box)?;
 
         validation.warnings.extend(
             xray_value
@@ -144,7 +146,7 @@ impl<'db> GroupManager<'db> {
         profile: &ProfileItem,
         source: &GroupPreviewSource<'_>,
         core_type: CoreType,
-    ) -> PreviewValue {
+    ) -> Result<PreviewValue> {
         let mut node = profile.clone();
         node.core_type = Some(core_type);
         let env = GroupCoreGenEnv {
@@ -178,14 +180,14 @@ impl<'db> GroupManager<'db> {
         preview_config.tun_mode_item.enable_tun = false;
         let result = CoreConfigContextBuilder::new(&env).build(&preview_config, &node);
         let value = match core_type {
-            CoreType::sing_box => generate_singbox_config_value(&result.context),
+            CoreType::sing_box => generate_singbox_config_value(&result.context)?,
             _ => generate_xray_config_value(&result.context),
         };
 
-        PreviewValue {
+        Ok(PreviewValue {
             value,
             builder_warnings: result.validator_result.warnings,
-        }
+        })
     }
 }
 
