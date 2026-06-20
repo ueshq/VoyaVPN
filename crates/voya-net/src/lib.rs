@@ -12,6 +12,7 @@ use reqwest::{Client, Proxy};
 use std::{
     collections::HashMap,
     fs,
+    net::IpAddr,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::Duration,
@@ -42,6 +43,7 @@ pub const IRAN_DNS_TEMPLATE_SOURCE_URL: &str =
 
 pub(crate) const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 pub(crate) const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+pub(crate) const HTTP_REDIRECT_LIMIT: usize = 5;
 pub const DEFAULT_TEXT_RESPONSE_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 pub const DEFAULT_BINARY_RESPONSE_LIMIT_BYTES: usize = 512 * 1024 * 1024;
 const SUBSCRIPTION_RESPONSE_LIMIT_BYTES: usize = DEFAULT_TEXT_RESPONSE_LIMIT_BYTES;
@@ -68,6 +70,8 @@ pub enum DownloadError {
         content_length: Option<u64>,
         received: usize,
     },
+    #[error("subscription URL {url} is not allowed: {reason}")]
+    ForbiddenSubscriptionUrl { url: String, reason: String },
     #[error("all download attempts failed for {url}: {attempts:?}")]
     AttemptsFailed {
         url: String,
@@ -627,6 +631,13 @@ pub struct SubscriptionClient {
     download: DownloadClient,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SubscriptionUrlPolicy {
+    DenyLocal,
+    #[cfg(test)]
+    AllowLocalForTests,
+}
+
 impl SubscriptionClient {
     #[must_use]
     pub fn new() -> Self {
@@ -640,11 +651,26 @@ impl SubscriptionClient {
         source: &SubscriptionFetchSource,
         options: &SubscriptionFetchOptions,
     ) -> Result<SubscriptionFetchResult> {
+        self.fetch_with_url_policy(source, options, SubscriptionUrlPolicy::DenyLocal)
+            .await
+    }
+
+    async fn fetch_with_url_policy(
+        &self,
+        source: &SubscriptionFetchSource,
+        options: &SubscriptionFetchOptions,
+        url_policy: SubscriptionUrlPolicy,
+    ) -> Result<SubscriptionFetchResult> {
+        let raw_url = source.url.trim();
+        validate_subscription_url(raw_url, url_policy)?;
         let main_url = build_subscription_url(
-            source.url.trim(),
+            raw_url,
             source.convert_target.as_deref(),
             source.sub_convert_url.as_deref(),
         );
+        if main_url.trim() != raw_url {
+            validate_subscription_url(&main_url, url_policy)?;
+        }
         let mut downloads = Vec::new();
         let main = self
             .download
@@ -681,6 +707,7 @@ impl SubscriptionClient {
             .map(str::trim)
             .filter(|url| !url.is_empty())
         {
+            validate_subscription_url(url, url_policy)?;
             let additional = self
                 .download
                 .download_text(DownloadRequest {
@@ -703,6 +730,67 @@ impl SubscriptionClient {
         }
 
         Ok(SubscriptionFetchResult { content, downloads })
+    }
+}
+
+fn validate_subscription_url(url: &str, policy: SubscriptionUrlPolicy) -> Result<()> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Err(forbidden_subscription_url(trimmed, "URL is empty"));
+    }
+
+    let parsed = reqwest::Url::parse(trimmed)
+        .map_err(|source| forbidden_subscription_url(trimmed, format!("invalid URL: {source}")))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(forbidden_subscription_url(
+            trimmed,
+            "scheme must be http or https",
+        ));
+    }
+    let Some(host) = parsed.host_str() else {
+        return Err(forbidden_subscription_url(trimmed, "host is required"));
+    };
+
+    if policy == SubscriptionUrlPolicy::DenyLocal && is_denied_local_host(host) {
+        return Err(forbidden_subscription_url(
+            trimmed,
+            "loopback and link-local hosts are not allowed",
+        ));
+    }
+
+    Ok(())
+}
+
+fn forbidden_subscription_url(url: &str, reason: impl Into<String>) -> DownloadError {
+    DownloadError::ForbiddenSubscriptionUrl {
+        url: url.to_string(),
+        reason: reason.into(),
+    }
+}
+
+fn is_denied_local_host(host: &str) -> bool {
+    let normalized = host
+        .trim_end_matches('.')
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .to_ascii_lowercase();
+    if normalized == "localhost" || normalized.ends_with(".localhost") {
+        return true;
+    }
+
+    normalized.parse::<IpAddr>().is_ok_and(is_denied_local_ip)
+}
+
+fn is_denied_local_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            let octets = ip.octets();
+            ip.is_loopback() || (octets[0] == 169 && octets[1] == 254)
+        }
+        IpAddr::V6(ip) => {
+            let segments = ip.segments();
+            ip.is_loopback() || (segments[0] & 0xffc0) == 0xfe80
+        }
     }
 }
 
@@ -777,7 +865,8 @@ pub(crate) fn build_http_client(
 ) -> std::result::Result<Client, reqwest::Error> {
     let mut builder = Client::builder()
         .timeout(HTTP_REQUEST_TIMEOUT)
-        .connect_timeout(HTTP_CONNECT_TIMEOUT);
+        .connect_timeout(HTTP_CONNECT_TIMEOUT)
+        .redirect(redirect_policy());
     builder = if let Some(proxy_url) = proxy_url {
         builder.proxy(Proxy::all(proxy_url)?)
     } else {
@@ -785,6 +874,61 @@ pub(crate) fn build_http_client(
     };
 
     builder.build()
+}
+
+fn redirect_policy() -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(|attempt| {
+        match validate_redirect_attempt(attempt.previous(), attempt.url()) {
+            Ok(()) => attempt.follow(),
+            Err(error) => attempt.error(error),
+        }
+    })
+}
+
+fn validate_redirect_attempt(
+    previous: &[reqwest::Url],
+    next: &reqwest::Url,
+) -> std::result::Result<(), RedirectPolicyError> {
+    if previous.len() > HTTP_REDIRECT_LIMIT {
+        return Err(RedirectPolicyError::TooManyRedirects {
+            limit: HTTP_REDIRECT_LIMIT,
+        });
+    }
+
+    if let Some(previous) = previous
+        .last()
+        .filter(|previous| previous.scheme() == "https" && next.scheme() == "http")
+    {
+        return Err(RedirectPolicyError::HttpsDowngrade {
+            from: previous.as_str().to_string(),
+            to: next.as_str().to_string(),
+        });
+    }
+    if url_has_denied_local_host(next)
+        && !previous
+            .last()
+            .is_some_and(|previous| url_has_denied_local_host(previous))
+    {
+        return Err(RedirectPolicyError::LocalNetworkTarget {
+            to: next.as_str().to_string(),
+        });
+    }
+
+    Ok(())
+}
+
+fn url_has_denied_local_host(url: &reqwest::Url) -> bool {
+    url.host_str().is_some_and(is_denied_local_host)
+}
+
+#[derive(Debug, Error)]
+enum RedirectPolicyError {
+    #[error("too many redirects: maximum {limit}")]
+    TooManyRedirects { limit: usize },
+    #[error("refusing HTTPS to HTTP redirect from {from} to {to}")]
+    HttpsDowngrade { from: String, to: String },
+    #[error("refusing redirect to loopback or link-local URL {to}")]
+    LocalNetworkTarget { to: String },
 }
 
 #[derive(Debug, Error)]
@@ -1069,6 +1213,124 @@ mod tests {
         );
     }
 
+    #[test]
+    fn redirect_policy_rejects_https_to_http_downgrade() {
+        let previous = [reqwest::Url::parse("https://example.test/sub").expect("previous URL")];
+        let next = reqwest::Url::parse("http://example.test/sub").expect("next URL");
+
+        let error = validate_redirect_attempt(&previous, &next)
+            .expect_err("HTTPS to HTTP redirect should fail");
+
+        assert!(
+            matches!(error, RedirectPolicyError::HttpsDowngrade { .. }),
+            "{error:?}"
+        );
+    }
+
+    #[test]
+    fn redirect_policy_rejects_public_to_local_target() {
+        let previous = [reqwest::Url::parse("https://example.test/sub").expect("previous URL")];
+        let next = reqwest::Url::parse("https://127.0.0.1/sub").expect("next URL");
+
+        let error = validate_redirect_attempt(&previous, &next)
+            .expect_err("public to loopback redirect should fail");
+
+        assert!(
+            matches!(error, RedirectPolicyError::LocalNetworkTarget { .. }),
+            "{error:?}"
+        );
+    }
+
+    #[test]
+    fn redirect_policy_rejects_more_than_configured_limit() {
+        let previous = (0..=HTTP_REDIRECT_LIMIT)
+            .map(|index| {
+                reqwest::Url::parse(&format!("https://example.test/r{index}"))
+                    .expect("previous URL")
+            })
+            .collect::<Vec<_>>();
+        let next = reqwest::Url::parse("https://example.test/final").expect("next URL");
+
+        let error = validate_redirect_attempt(&previous, &next)
+            .expect_err("redirect chain above limit should fail");
+
+        assert!(
+            matches!(error, RedirectPolicyError::TooManyRedirects { limit } if limit == HTTP_REDIRECT_LIMIT),
+            "{error:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn download_rejects_redirect_chain_above_limit() {
+        let base = spawn_redirect_chain_fixture(HTTP_REDIRECT_LIMIT + 1).await;
+
+        let error = DownloadClient::new()
+            .download_text(DownloadRequest::direct(format!("{base}/r0")))
+            .await
+            .expect_err("redirect chain above limit should fail");
+
+        match error {
+            DownloadError::AttemptsFailed { attempts, .. } => {
+                assert!(
+                    attempts.iter().any(|attempt| attempt
+                        .error
+                        .as_deref()
+                        .is_some_and(|error| error.contains("error following redirect"))),
+                    "{attempts:?}"
+                );
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn subscription_url_guard_rejects_loopback_and_link_local() {
+        for url in [
+            "http://127.0.0.1/sub",
+            "https://localhost/sub",
+            "http://169.254.1.10/sub",
+            "https://[::1]/sub",
+            "http://[fe80::1]/sub",
+        ] {
+            let error = validate_subscription_url(url, SubscriptionUrlPolicy::DenyLocal)
+                .expect_err("local subscription URL should fail");
+            assert!(
+                matches!(error, DownloadError::ForbiddenSubscriptionUrl { .. }),
+                "{error:?}"
+            );
+        }
+
+        validate_subscription_url("https://example.com/sub", SubscriptionUrlPolicy::DenyLocal)
+            .expect("public HTTPS subscription URL");
+        validate_subscription_url("http://192.168.1.10/sub", SubscriptionUrlPolicy::DenyLocal)
+            .expect("private non-loopback subscription URL remains allowed");
+    }
+
+    #[tokio::test]
+    async fn subscription_fetch_rejects_loopback_main_url() {
+        let error = SubscriptionClient::new()
+            .fetch(
+                &SubscriptionFetchSource {
+                    url: "http://127.0.0.1/sub".to_string(),
+                    more_url: String::new(),
+                    user_agent: String::new(),
+                    convert_target: None,
+                    sub_convert_url: None,
+                },
+                &SubscriptionFetchOptions {
+                    prefer_proxy: false,
+                    proxy_url: None,
+                },
+            )
+            .await
+            .expect_err("loopback subscription URL should fail");
+
+        assert!(
+            matches!(error, DownloadError::ForbiddenSubscriptionUrl { .. }),
+            "{error:?}"
+        );
+    }
+
     #[tokio::test]
     async fn subscription_fetch_decodes_base64_and_merges_more_urls() {
         let main = STANDARD.encode("vless://id-a@example.test:443#A");
@@ -1082,7 +1344,7 @@ mod tests {
         .await;
 
         let result = SubscriptionClient::new()
-            .fetch(
+            .fetch_with_url_policy(
                 &SubscriptionFetchSource {
                     url: format!("{base}/main"),
                     more_url: format!("{base}/extra"),
@@ -1094,6 +1356,7 @@ mod tests {
                     prefer_proxy: false,
                     proxy_url: None,
                 },
+                SubscriptionUrlPolicy::AllowLocalForTests,
             )
             .await
             .expect("subscription content");
@@ -1124,7 +1387,7 @@ mod tests {
         let source_url = format!("{base}/raw-sub");
 
         let result = SubscriptionClient::new()
-            .fetch(
+            .fetch_with_url_policy(
                 &SubscriptionFetchSource {
                     url: source_url.clone(),
                     more_url: format!("{base}/should-not-fetch"),
@@ -1136,6 +1399,7 @@ mod tests {
                     prefer_proxy: false,
                     proxy_url: None,
                 },
+                SubscriptionUrlPolicy::AllowLocalForTests,
             )
             .await
             .expect("converted subscription content");
@@ -1266,6 +1530,56 @@ mod tests {
                         "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                         body.len()
                     );
+                    let _ = socket.write_all(response.as_bytes()).await;
+                });
+            }
+        });
+
+        format!("http://{address}")
+    }
+
+    async fn spawn_redirect_chain_fixture(redirects: usize) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("update test operation should succeed");
+        let address = listener
+            .local_addr()
+            .expect("update test operation should succeed");
+
+        tokio::spawn(async move {
+            for _ in 0..=redirects {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    break;
+                };
+                tokio::spawn(async move {
+                    let mut buffer = vec![0; 4096];
+                    let bytes_read = socket.read(&mut buffer).await.unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+                    let path = request
+                        .lines()
+                        .next()
+                        .and_then(|line| line.split_whitespace().nth(1))
+                        .and_then(|target| target.split('?').next())
+                        .unwrap_or("/");
+                    let index = path
+                        .strip_prefix("/r")
+                        .and_then(|value| value.parse::<usize>().ok());
+                    let response = match index {
+                        Some(index) if index < redirects => {
+                            let next = index.saturating_add(1);
+                            format!(
+                                "HTTP/1.1 302 Found\r\nLocation: /r{next}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                            )
+                        }
+                        Some(index) if index == redirects => {
+                            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
+                                .to_string()
+                        }
+                        _ => {
+                            "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\nConnection: close\r\n\r\nnot found"
+                                .to_string()
+                        }
+                    };
                     let _ = socket.write_all(response.as_bytes()).await;
                 });
             }

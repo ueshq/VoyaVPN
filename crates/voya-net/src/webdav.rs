@@ -32,6 +32,10 @@ pub enum WebDavError {
     MissingUsername,
     #[error("WebDAV password is required")]
     MissingPassword,
+    #[error("invalid WebDAV URL {url}: {reason}")]
+    InvalidUrl { url: String, reason: String },
+    #[error("WebDAV URL must use https://, got {scheme}")]
+    InsecureUrlScheme { scheme: String },
     #[error("failed to build WebDAV HTTP client: {0}")]
     ClientBuild(String),
     #[error("failed to build WebDAV request {method} {url}: {source}")]
@@ -97,6 +101,7 @@ impl WebDavConfig {
         if password.is_empty() {
             return Err(WebDavError::MissingPassword);
         }
+        validate_https_url(&url)?;
 
         Ok(Self {
             url,
@@ -139,10 +144,12 @@ pub struct WebDavClient {
 impl WebDavClient {
     #[must_use]
     pub fn new(config: WebDavConfig) -> Self {
-        Self {
-            client: crate::build_http_client(None).map_err(|error| error.to_string()),
-            config,
-        }
+        let client = match validate_https_url(&config.url) {
+            Ok(()) => crate::build_http_client(None).map_err(|error| error.to_string()),
+            Err(error) => Err(error.to_string()),
+        };
+
+        Self { client, config }
     }
 
     #[must_use]
@@ -344,6 +351,26 @@ impl WebDavClient {
             format!("{}/{}", self.config.url, path)
         }
     }
+}
+
+fn validate_https_url(url: &str) -> Result<()> {
+    let parsed = reqwest::Url::parse(url).map_err(|source| WebDavError::InvalidUrl {
+        url: url.to_string(),
+        reason: source.to_string(),
+    })?;
+    if parsed.scheme() != "https" {
+        return Err(WebDavError::InsecureUrlScheme {
+            scheme: parsed.scheme().to_string(),
+        });
+    }
+    if parsed.host_str().is_none() {
+        return Err(WebDavError::InvalidUrl {
+            url: url.to_string(),
+            reason: "host is required".to_string(),
+        });
+    }
+
+    Ok(())
 }
 
 pub fn parse_propfind_response(xml: &str) -> Result<Vec<WebDavEntry>> {
@@ -556,13 +583,46 @@ mod tests {
         assert!(!entries[1].is_collection);
     }
 
+    #[test]
+    fn webdav_config_rejects_plain_http_url() {
+        let error = WebDavConfig::new(
+            "http://webdav.example.test/dav",
+            "user",
+            "pass",
+            Some("VoyaVPN_backup".to_string()),
+        )
+        .expect_err("plain HTTP WebDAV URL should fail");
+
+        assert!(
+            matches!(error, WebDavError::InsecureUrlScheme { ref scheme } if scheme == "http"),
+            "{error:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn webdav_client_rejects_http_config_literal() {
+        let client = WebDavClient::new(http_test_config(
+            "http://127.0.0.1:1",
+            Some("VoyaVPN_backup".to_string()),
+        ));
+
+        let error = client
+            .list_collection()
+            .await
+            .expect_err("plain HTTP WebDAV client should fail before request");
+
+        assert!(
+            matches!(error, WebDavError::ClientBuild(ref reason) if reason.contains("https://")),
+            "{error:?}"
+        );
+    }
+
     #[tokio::test]
     async fn webdav_client_propfind_upload_download_and_delete_use_fixture_http() {
         let requests = Arc::new(StdMutex::new(Vec::new()));
         let base = spawn_webdav_fixture(Arc::clone(&requests)).await;
-        let config = WebDavConfig::new(base, "user", "pass", Some("VoyaVPN_backup".to_string()))
-            .expect("config");
-        let client = WebDavClient::new(config);
+        let config = http_test_config(base, Some("VoyaVPN_backup".to_string()));
+        let client = http_test_client(config);
 
         let entries = client.list_collection().await.expect("propfind");
         assert_eq!(entries[0].display_name.as_deref(), Some("backup.zip"));
@@ -598,9 +658,8 @@ mod tests {
             b"zip".to_vec(),
         )
         .await;
-        let config = WebDavConfig::new(base, "user", "pass", Some("VoyaVPN_backup".to_string()))
-            .expect("config");
-        let client = WebDavClient::new(config);
+        let config = http_test_config(base, Some("VoyaVPN_backup".to_string()));
+        let client = http_test_client(config);
 
         let error = client
             .download_backup()
@@ -624,6 +683,22 @@ mod tests {
                 assert_eq!(received, 0);
             }
             other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    fn http_test_config(url: impl Into<String>, dir_name: Option<String>) -> WebDavConfig {
+        WebDavConfig {
+            url: url.into().trim().trim_end_matches('/').to_string(),
+            username: "user".to_string(),
+            password: "pass".to_string(),
+            dir_name,
+        }
+    }
+
+    fn http_test_client(config: WebDavConfig) -> WebDavClient {
+        WebDavClient {
+            client: crate::build_http_client(None).map_err(|error| error.to_string()),
+            config,
         }
     }
 
