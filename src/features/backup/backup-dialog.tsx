@@ -17,7 +17,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/use-i18n";
-import { cn } from "@/lib/utils";
 import {
   backupCreateLocal,
   backupRestoreLocal,
@@ -28,6 +27,8 @@ import {
   backupWebdavPush,
 } from "@/ipc";
 import type { BackupOperationResult, BackupRemoteResult, BackupStatus_Serialize, WebDavItem_Deserialize } from "@/ipc/bindings";
+import { redactOperationalError } from "@/lib/operational-redaction";
+import { cn } from "@/lib/utils";
 
 type WorkingAction = "localBackup" | "localRestore" | "save" | "webdavCheck" | "webdavPull" | "webdavPush";
 
@@ -63,7 +64,7 @@ export function BackupDialog() {
       })
       .catch((error: unknown) => {
         if (!disposed) {
-          setError(error instanceof Error ? error.message : String(error));
+          setError(redactOperationalError(error));
         }
       });
 
@@ -116,7 +117,7 @@ export function BackupDialog() {
         setMessage(result.message);
       }
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(redactOperationalError(error));
     } finally {
       setWorking(null);
     }

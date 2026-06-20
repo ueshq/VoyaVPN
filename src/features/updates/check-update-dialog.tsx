@@ -57,6 +57,7 @@ import type {
   UpdateTarget,
   UpdateTargetKind,
 } from "@/ipc/bindings";
+import { redactOperationalMessage } from "@/lib/operational-redaction";
 import { cn } from "@/lib/utils";
 
 type CoreRunMode = "check" | "download";
@@ -376,7 +377,7 @@ export function CheckUpdateDialog() {
           <Alert variant="destructive">
             <AlertTriangle aria-hidden="true" />
             <AlertDescription className="break-words">
-              {redactOperationalMessage(error, t)}
+              {redactUpdateMessage(error, t)}
             </AlertDescription>
           </Alert>
         ) : null}
@@ -508,7 +509,7 @@ function AppUpdatePanel({
   const { t } = useI18n();
   const update = appUpdaterCheck?.update ?? null;
   const statusMessage = appUpdaterStatus?.message
-    ? redactOperationalMessage(appUpdaterStatus.message, t)
+    ? redactUpdateMessage(appUpdaterStatus.message, t)
     : t("updates.appUpdaterReady");
 
   return (
@@ -569,7 +570,7 @@ function AppUpdatePanel({
 
       {appUpdaterError ? (
         <p className="break-words text-xs text-destructive">
-          {redactOperationalMessage(appUpdaterError, t)}
+          {redactUpdateMessage(appUpdaterError, t)}
         </p>
       ) : null}
 
@@ -605,7 +606,7 @@ function AppUpdatePanel({
         ) : (
           <p className="break-words text-xs text-muted-foreground">
             {manualLinksError
-              ? redactOperationalMessage(manualLinksError, t)
+              ? redactUpdateMessage(manualLinksError, t)
               : t("updates.manualLinksUnavailable")}
           </p>
         )}
@@ -708,7 +709,7 @@ function updateResultLabel({
 }) {
   if (applyError) {
     return t("updates.statusFailedMessage", {
-      message: redactOperationalMessage(applyError, t),
+      message: redactUpdateMessage(applyError, t),
     });
   }
 
@@ -734,7 +735,7 @@ function updateResultLabel({
       return target.selected ? t("updates.statusSkipped") : t("updates.statusNotSelected");
     case "error":
       return t("updates.statusFailedMessage", {
-        message: redactOperationalMessage(result.message, t),
+        message: redactUpdateMessage(result.message, t),
       });
   }
 }
@@ -813,14 +814,12 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-function redactOperationalMessage(
+function redactUpdateMessage(
   message: string,
   t: (key: string, options?: Record<string, unknown>) => string,
 ) {
-  return message
-    .replace(
-      /\b(proxyUrl|proxy_url|proxy|HTTP_PROXY|HTTPS_PROXY)=\S+/gi,
-      (_match, key: string) => `${key}=${t("updates.redactedValue")}`,
-    )
-    .replace(/\bhttps?:\/\/[^\s<>"')\]]+/gi, t("updates.redactedUrl"));
+  return redactOperationalMessage(message, {
+    redactedUrl: t("updates.redactedUrl"),
+    redactedValue: t("updates.redactedValue"),
+  });
 }

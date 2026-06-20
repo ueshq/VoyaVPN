@@ -23,6 +23,7 @@ import type {
   KeyEventItem_Deserialize,
   KeyEventItem_Serialize,
 } from "@/ipc/bindings";
+import { redactOperationalError } from "@/lib/operational-redaction";
 
 type MutableKeyEventItem = Required<Pick<KeyEventItem_Deserialize, "Alt" | "Control" | "Shift">> & {
   EGlobalHotkey: GlobalHotkey;
@@ -77,7 +78,7 @@ export function IntegrationSettings() {
       })
       .catch((error: unknown) => {
         if (!disposed) {
-          setDiagnosticsError(redactedErrorMessage(error));
+          setDiagnosticsError(redactOperationalError(error));
         }
       });
 
@@ -119,7 +120,7 @@ export function IntegrationSettings() {
     try {
       setDiagnostics(await setDiagnosticsEnabled(enabled));
     } catch (error) {
-      setDiagnosticsError(redactedErrorMessage(error));
+      setDiagnosticsError(redactOperationalError(error));
     } finally {
       setDiagnosticsWorking(false);
     }
@@ -398,18 +399,4 @@ function keyCodeLabel(keyCode: number | null): string {
   };
 
   return labels[keyCode] ?? `#${keyCode}`;
-}
-
-function redactedErrorMessage(error: unknown) {
-  return redactOperationalMessage(error instanceof Error ? error.message : String(error));
-}
-
-function redactOperationalMessage(message: string) {
-  return message
-    .replace(
-      /\b(proxyUrl|proxy_url|proxy|HTTP_PROXY|HTTPS_PROXY)=\S+/gi,
-      (_match, key: string) => `${key}=[redacted]`,
-    )
-    .replace(/\b(vless|vmess|trojan|ss):\/\/[^\s<>"')\]]+/gi, "[redacted]")
-    .replace(/\bhttps?:\/\/[^\s<>"')\]]+/gi, "[redacted URL]");
 }

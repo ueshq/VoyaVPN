@@ -26,6 +26,7 @@ import {
   updateSubscriptions,
 } from "@/ipc";
 import type { SubItem_Deserialize } from "@/ipc/bindings";
+import { redactOperationalError } from "@/lib/operational-redaction";
 import { cn } from "@/lib/utils";
 
 type SubscriptionsDialogProps = {
@@ -74,7 +75,7 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
       }
       await refreshSubscriptions();
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(redactOperationalError(error));
     }
   }
 

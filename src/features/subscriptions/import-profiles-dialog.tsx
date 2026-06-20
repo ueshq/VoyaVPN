@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { importProfilesFromText, listSubscriptions } from "@/ipc";
+import { redactOperationalError } from "@/lib/operational-redaction";
 
 type ImportProfilesDialogProps = {
   onImported: () => void;
@@ -65,7 +66,7 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
       onImported();
       onOpenChange(false);
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(redactOperationalError(error));
     }
   }
 
@@ -75,7 +76,11 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
       return;
     }
     setError(null);
-    setText(await navigator.clipboard.readText());
+    try {
+      setText(await navigator.clipboard.readText());
+    } catch (error) {
+      setError(redactOperationalError(error));
+    }
   }
 
   async function handleFile(file: File | null) {
@@ -83,7 +88,11 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
       return;
     }
     setError(null);
-    setText(await file.text());
+    try {
+      setText(await file.text());
+    } catch (error) {
+      setError(redactOperationalError(error));
+    }
   }
 
   return (

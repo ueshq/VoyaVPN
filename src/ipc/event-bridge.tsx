@@ -13,6 +13,10 @@ import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
 
 type Unlisten = () => void;
+type RegisteredUnlisten = {
+  eventName: string;
+  unlisten: Unlisten;
+};
 
 export function EventBridge() {
   const queryClient = useQueryClient();
@@ -23,34 +27,85 @@ export function EventBridge() {
     }
 
     let disposed = false;
-    const unlisten: Unlisten[] = [];
+    const unlisteners: RegisteredUnlisten[] = [];
 
-    void Promise.all([
-      events.invalidateEvent.listen((event) => {
-        routeInvalidation(event.payload, queryClient);
-      }),
-      events.transientStreamEvent.listen((event) => {
-        routeTransientStream(event.payload);
-      }),
-      events.appEvent.listen((event) => {
-        routeAppEvent(event.payload);
-      }),
-    ]).then((listeners) => {
-      if (disposed) {
-        listeners.forEach((listener) => listener());
-        return;
+    void Promise.allSettled([
+      registerEventListener("invalidateEvent", () =>
+        events.invalidateEvent.listen((event) => {
+          routeInvalidation(event.payload, queryClient);
+        }),
+      ),
+      registerEventListener("transientStreamEvent", () =>
+        events.transientStreamEvent.listen((event) => {
+          routeTransientStream(event.payload);
+        }),
+      ),
+      registerEventListener("appEvent", () =>
+        events.appEvent.listen((event) => {
+          routeAppEvent(event.payload);
+        }),
+      ),
+    ]);
+
+    function registerEventListener(eventName: string, listen: () => Promise<Unlisten>) {
+      let registration: Promise<Unlisten>;
+
+      try {
+        registration = listen();
+      } catch (error) {
+        reportEventBridgeError(`failed to register ${eventName}`, error);
+        return Promise.resolve();
       }
 
-      unlisten.push(...listeners);
-    });
+      return registration
+        .then((unlisten) => {
+          if (disposed) {
+            safeUnlisten(eventName, unlisten);
+            return;
+          }
+
+          unlisteners.push({ eventName, unlisten });
+        })
+        .catch((error: unknown) => {
+          reportEventBridgeError(`failed to register ${eventName}`, error);
+        });
+    }
 
     return () => {
       disposed = true;
-      unlisten.forEach((listener) => listener());
+      drainUnlisteners(unlisteners);
     };
   }, [queryClient]);
 
   return null;
+}
+
+function drainUnlisteners(unlisteners: RegisteredUnlisten[]) {
+  while (unlisteners.length > 0) {
+    const registered = unlisteners.pop();
+    if (!registered) {
+      continue;
+    }
+
+    safeUnlisten(registered.eventName, registered.unlisten);
+  }
+}
+
+function safeUnlisten(eventName: string, unlisten: Unlisten) {
+  try {
+    unlisten();
+  } catch (error) {
+    reportEventBridgeError(`failed to unlisten ${eventName}`, error);
+  }
+}
+
+function reportEventBridgeError(context: string, error: unknown) {
+  if (typeof console === "undefined") {
+    return;
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`[event-bridge] ${context}: ${message}`);
 }
 
 function routeInvalidation(event: InvalidateEvent, queryClient: ReturnType<typeof useQueryClient>) {
