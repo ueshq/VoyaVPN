@@ -11,7 +11,7 @@ use std::{
 use sqlx::{
     migrate::MigrateError,
     sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteRow},
-    Acquire, Row, SqlitePool,
+    Acquire, Row, SqliteConnection, SqlitePool,
 };
 use thiserror::Error;
 use voya_core::{
@@ -140,6 +140,97 @@ pub const DATABASE_NAME: &str = "voyavpn.sqlite";
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
+const IMPORT_DELETE_STATEMENTS: &[&str] = &[
+    "DELETE FROM main.server_stat_items",
+    "DELETE FROM main.profile_ex_items",
+    "DELETE FROM main.profile_items",
+    "DELETE FROM main.subscriptions",
+    "DELETE FROM main.routing_items",
+    "DELETE FROM main.dns_items",
+    "DELETE FROM main.full_config_template_items",
+];
+
+const IMPORT_INSERT_STATEMENTS: &[&str] = &[
+    r#"
+    INSERT INTO main.profile_items (
+        index_id, config_type, core_type, config_version, subid, is_sub,
+        pre_socks_port, display_log, remarks, address, port, password,
+        username, network, stream_security, allow_insecure, sni, alpn,
+        fingerprint, public_key, short_id, spider_x, mldsa65_verify,
+        mux_enabled, cert, cert_sha, ech_config_list, finalmask,
+        protocol_extra, transport_extra
+    )
+    SELECT
+        index_id, config_type, core_type, config_version, subid, is_sub,
+        pre_socks_port, display_log, remarks, address, port, password,
+        username, network, stream_security, allow_insecure, sni, alpn,
+        fingerprint, public_key, short_id, spider_x, mldsa65_verify,
+        mux_enabled, cert, cert_sha, ech_config_list, finalmask,
+        protocol_extra, transport_extra
+    FROM backup.profile_items
+    "#,
+    r#"
+    INSERT INTO main.profile_ex_items (
+        index_id, delay, speed, sort, message, ip_info
+    )
+    SELECT
+        index_id, delay, speed, sort, message, ip_info
+    FROM backup.profile_ex_items
+    "#,
+    r#"
+    INSERT INTO main.server_stat_items (
+        index_id, total_up, total_down, today_up, today_down, date_now
+    )
+    SELECT
+        index_id, total_up, total_down, today_up, today_down, date_now
+    FROM backup.server_stat_items
+    "#,
+    r#"
+    INSERT INTO main.subscriptions (
+        id, remarks, url, more_url, enabled, user_agent, sort, filter,
+        auto_update_interval, update_time, convert_target, prev_profile,
+        next_profile, pre_socks_port, memo
+    )
+    SELECT
+        id, remarks, url, more_url, enabled, user_agent, sort, filter,
+        auto_update_interval, update_time, convert_target, prev_profile,
+        next_profile, pre_socks_port, memo
+    FROM backup.subscriptions
+    "#,
+    r#"
+    INSERT INTO main.routing_items (
+        id, remarks, url, rule_set, rule_num, enabled, locked,
+        custom_icon, custom_ruleset_path4_singbox, domain_strategy,
+        domain_strategy4_singbox, sort, is_active
+    )
+    SELECT
+        id, remarks, url, rule_set, rule_num, enabled, locked,
+        custom_icon, custom_ruleset_path4_singbox, domain_strategy,
+        domain_strategy4_singbox, sort, is_active
+    FROM backup.routing_items
+    "#,
+    r#"
+    INSERT INTO main.dns_items (
+        id, remarks, enabled, core_type, use_system_hosts, normal_dns,
+        tun_dns, domain_strategy4_freedom, domain_dns_address
+    )
+    SELECT
+        id, remarks, enabled, core_type, use_system_hosts, normal_dns,
+        tun_dns, domain_strategy4_freedom, domain_dns_address
+    FROM backup.dns_items
+    "#,
+    r#"
+    INSERT INTO main.full_config_template_items (
+        id, remarks, enabled, core_type, config, tun_config,
+        add_proxy_only, proxy_detour
+    )
+    SELECT
+        id, remarks, enabled, core_type, config, tun_config,
+        add_proxy_only, proxy_detour
+    FROM backup.full_config_template_items
+    "#,
+];
+
 pub type Result<T> = std::result::Result<T, DbError>;
 
 #[derive(Debug, Error)]
@@ -164,6 +255,10 @@ pub enum DbError {
         #[source]
         source: serde_json::Error,
     },
+    #[error("invalid backup database: {reason}")]
+    InvalidBackup { reason: &'static str },
+    #[error("backup database failed foreign key check with {violations} violation(s)")]
+    BackupForeignKeyViolation { violations: usize },
 }
 
 #[derive(Debug, Clone)]
@@ -244,52 +339,52 @@ impl Database {
 
     pub async fn replace_from_file(&self, path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
+        validate_backup_file(path).await?;
+
         let source = path.to_string_lossy().into_owned();
         let mut conn = self.pool.acquire().await?;
 
-        sqlx::query("PRAGMA foreign_keys = OFF")
-            .execute(&mut *conn)
-            .await?;
         sqlx::query("ATTACH DATABASE ? AS backup")
             .bind(source)
             .execute(&mut *conn)
             .await?;
 
-        let copy_result = async {
+        let import_result = async {
+            validate_attached_backup_migrations(&mut *conn).await?;
+            sqlx::query("PRAGMA foreign_keys = OFF")
+                .execute(&mut *conn)
+                .await?;
+
             let mut tx = conn.begin().await?;
 
-            for statement in [
-                "DELETE FROM main.server_stat_items",
-                "DELETE FROM main.profile_ex_items",
-                "DELETE FROM main.profile_items",
-                "DELETE FROM main.subscriptions",
-                "DELETE FROM main.routing_items",
-                "DELETE FROM main.dns_items",
-                "DELETE FROM main.full_config_template_items",
-                "INSERT INTO main.profile_items SELECT * FROM backup.profile_items",
-                "INSERT INTO main.profile_ex_items SELECT * FROM backup.profile_ex_items",
-                "INSERT INTO main.server_stat_items SELECT * FROM backup.server_stat_items",
-                "INSERT INTO main.subscriptions SELECT * FROM backup.subscriptions",
-                "INSERT INTO main.routing_items SELECT * FROM backup.routing_items",
-                "INSERT INTO main.dns_items SELECT * FROM backup.dns_items",
-                "INSERT INTO main.full_config_template_items SELECT * FROM backup.full_config_template_items",
-            ] {
-                sqlx::query(statement).execute(&mut *tx).await?;
+            for statement in IMPORT_DELETE_STATEMENTS
+                .iter()
+                .chain(IMPORT_INSERT_STATEMENTS.iter())
+            {
+                sqlx::query(*statement).execute(&mut *tx).await?;
             }
 
+            ensure_foreign_key_check_clean(&mut *tx).await?;
             tx.commit().await?;
             Result::<()>::Ok(())
         }
         .await;
 
+        let foreign_keys_result = sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&mut *conn)
+            .await;
+        let post_import_check_result = if import_result.is_ok() && foreign_keys_result.is_ok() {
+            ensure_foreign_key_check_clean(&mut *conn).await
+        } else {
+            Ok(())
+        };
         let detach_result = sqlx::query("DETACH DATABASE backup")
             .execute(&mut *conn)
             .await;
-        let _ = sqlx::query("PRAGMA foreign_keys = ON")
-            .execute(&mut *conn)
-            .await;
 
-        copy_result?;
+        import_result?;
+        foreign_keys_result?;
+        post_import_check_result?;
         detach_result?;
 
         Ok(())
@@ -327,6 +422,87 @@ impl Database {
 
     pub async fn close(&self) {
         self.pool.close().await;
+    }
+}
+
+async fn validate_backup_file(path: &Path) -> Result<()> {
+    let options = SqliteConnectOptions::new()
+        .filename(path)
+        .create_if_missing(false)
+        .foreign_keys(true);
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await?;
+
+    let has_migrations: i64 = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS(
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = '_sqlx_migrations'
+        )
+        "#,
+    )
+    .fetch_one(&pool)
+    .await?;
+
+    if has_migrations != 1 {
+        pool.close().await;
+        return Err(DbError::InvalidBackup {
+            reason: "missing _sqlx_migrations table",
+        });
+    }
+
+    let migration_result = MIGRATOR.run(&pool).await;
+    pool.close().await;
+    migration_result?;
+
+    Ok(())
+}
+
+async fn validate_attached_backup_migrations(conn: &mut SqliteConnection) -> Result<()> {
+    let expected_migrations = current_migration_count()?;
+    let successful_migrations: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM backup._sqlx_migrations WHERE success = 1")
+            .fetch_one(&mut *conn)
+            .await?;
+    let total_migrations: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM backup._sqlx_migrations")
+        .fetch_one(&mut *conn)
+        .await?;
+
+    if successful_migrations != expected_migrations || total_migrations != expected_migrations {
+        return Err(DbError::InvalidBackup {
+            reason: "backup migration set does not match current schema",
+        });
+    }
+
+    Ok(())
+}
+
+fn current_migration_count() -> Result<i64> {
+    i64::try_from(
+        MIGRATOR
+            .iter()
+            .filter(|migration| migration.migration_type.is_up_migration())
+            .count(),
+    )
+    .map_err(|_| DbError::InvalidBackup {
+        reason: "local migration count overflow",
+    })
+}
+
+async fn ensure_foreign_key_check_clean(conn: &mut SqliteConnection) -> Result<()> {
+    let violations = sqlx::query("PRAGMA main.foreign_key_check")
+        .fetch_all(&mut *conn)
+        .await?;
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(DbError::BackupForeignKeyViolation {
+            violations: violations.len(),
+        })
     }
 }
 
@@ -562,13 +738,17 @@ impl<'pool> ProfileRepository<'pool> {
     }
 
     pub async fn delete_many(&self, index_ids: &[String]) -> Result<u64> {
+        let mut tx = self.pool.begin().await?;
         let mut deleted = 0;
         for index_id in index_ids {
-            if self.delete(index_id).await? {
-                deleted += 1;
-            }
+            let result = sqlx::query("DELETE FROM profile_items WHERE index_id = ?")
+                .bind(index_id)
+                .execute(&mut *tx)
+                .await?;
+            deleted += result.rows_affected();
         }
 
+        tx.commit().await?;
         Ok(deleted)
     }
 
@@ -589,16 +769,18 @@ impl<'pool> ProfileRepository<'pool> {
     }
 
     pub async fn update_subid_many(&self, index_ids: &[String], subid: &str) -> Result<u64> {
+        let mut tx = self.pool.begin().await?;
         let mut updated = 0;
         for index_id in index_ids {
             let result = sqlx::query("UPDATE profile_items SET subid = ? WHERE index_id = ?")
                 .bind(subid)
                 .bind(index_id)
-                .execute(self.pool)
+                .execute(&mut *tx)
                 .await?;
             updated += result.rows_affected();
         }
 
+        tx.commit().await?;
         Ok(updated)
     }
 }
@@ -1086,13 +1268,17 @@ impl<'pool> RoutingRepository<'pool> {
     }
 
     pub async fn delete_many(&self, ids: &[String]) -> Result<u64> {
+        let mut tx = self.pool.begin().await?;
         let mut deleted = 0;
         for id in ids {
-            if self.delete(id).await? {
-                deleted += 1;
-            }
+            let result = sqlx::query("DELETE FROM routing_items WHERE id = ?")
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+            deleted += result.rows_affected();
         }
 
+        tx.commit().await?;
         Ok(deleted)
     }
 }
@@ -1618,6 +1804,194 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn replace_from_file_imports_valid_backup() {
+        let current_path = temp_path("replace-current.sqlite");
+        let backup_path = temp_path("replace-backup.sqlite");
+        let current = Database::connect(&current_path)
+            .await
+            .expect("database test operation should succeed");
+        let backup = Database::connect(&backup_path)
+            .await
+            .expect("database test operation should succeed");
+        let mut current_profile = sample_profile();
+        current_profile.index_id = "current".to_string();
+        let mut backup_profile = sample_profile();
+        backup_profile.index_id = "backup".to_string();
+
+        current
+            .profiles()
+            .upsert(&current_profile)
+            .await
+            .expect("database test operation should succeed");
+        backup
+            .profiles()
+            .upsert(&backup_profile)
+            .await
+            .expect("database test operation should succeed");
+        backup.close().await;
+
+        current
+            .replace_from_file(&backup_path)
+            .await
+            .expect("database test operation should succeed");
+
+        assert!(current
+            .profiles()
+            .get("current")
+            .await
+            .expect("database test operation should succeed")
+            .is_none());
+        assert!(current
+            .profiles()
+            .get("backup")
+            .await
+            .expect("database test operation should succeed")
+            .is_some());
+
+        current.close().await;
+        let _ = fs::remove_file(current_path);
+        let _ = fs::remove_file(backup_path);
+    }
+
+    #[tokio::test]
+    async fn replace_from_file_rejects_backup_with_mismatched_migration_checksum() {
+        let current_path = temp_path("replace-current-bad-migration.sqlite");
+        let backup_path = temp_path("replace-backup-bad-migration.sqlite");
+        let current = Database::connect(&current_path)
+            .await
+            .expect("database test operation should succeed");
+        let backup = Database::connect(&backup_path)
+            .await
+            .expect("database test operation should succeed");
+        let mut current_profile = sample_profile();
+        current_profile.index_id = "current".to_string();
+        let mut backup_profile = sample_profile();
+        backup_profile.index_id = "backup".to_string();
+
+        current
+            .profiles()
+            .upsert(&current_profile)
+            .await
+            .expect("database test operation should succeed");
+        backup
+            .profiles()
+            .upsert(&backup_profile)
+            .await
+            .expect("database test operation should succeed");
+        backup.close().await;
+
+        let raw_backup = open_raw_sqlite(&backup_path, false).await;
+        sqlx::query("UPDATE _sqlx_migrations SET checksum = X'00' WHERE version = 1")
+            .execute(&raw_backup)
+            .await
+            .expect("database test operation should succeed");
+        raw_backup.close().await;
+
+        let error = current
+            .replace_from_file(&backup_path)
+            .await
+            .expect_err("mismatched backup migration should be rejected");
+        assert!(matches!(
+            error,
+            DbError::Migrate(MigrateError::VersionMismatch(1))
+        ));
+        assert!(current
+            .profiles()
+            .get("current")
+            .await
+            .expect("database test operation should succeed")
+            .is_some());
+        assert!(current
+            .profiles()
+            .get("backup")
+            .await
+            .expect("database test operation should succeed")
+            .is_none());
+
+        current.close().await;
+        let _ = fs::remove_file(current_path);
+        let _ = fs::remove_file(backup_path);
+    }
+
+    #[tokio::test]
+    async fn replace_from_file_rejects_foreign_key_violations_and_preserves_current_database() {
+        let current_path = temp_path("replace-current-bad-fk.sqlite");
+        let backup_path = temp_path("replace-backup-bad-fk.sqlite");
+        let current = Database::connect(&current_path)
+            .await
+            .expect("database test operation should succeed");
+        let backup = Database::connect(&backup_path)
+            .await
+            .expect("database test operation should succeed");
+        let mut current_profile = sample_profile();
+        current_profile.index_id = "current".to_string();
+        let mut backup_profile = sample_profile();
+        backup_profile.index_id = "backup".to_string();
+
+        current
+            .profiles()
+            .upsert(&current_profile)
+            .await
+            .expect("database test operation should succeed");
+        backup
+            .profiles()
+            .upsert(&backup_profile)
+            .await
+            .expect("database test operation should succeed");
+        {
+            let mut conn = backup
+                .pool()
+                .acquire()
+                .await
+                .expect("database test operation should succeed");
+            sqlx::query("PRAGMA foreign_keys = OFF")
+                .execute(&mut *conn)
+                .await
+                .expect("database test operation should succeed");
+            sqlx::query(
+                r#"
+                INSERT INTO server_stat_items (
+                    index_id, total_up, total_down, today_up, today_down, date_now
+                ) VALUES ('missing-profile', 0, 0, 0, 0, 0)
+                "#,
+            )
+            .execute(&mut *conn)
+            .await
+            .expect("database test operation should succeed");
+            sqlx::query("PRAGMA foreign_keys = ON")
+                .execute(&mut *conn)
+                .await
+                .expect("database test operation should succeed");
+        }
+        backup.close().await;
+
+        let error = current
+            .replace_from_file(&backup_path)
+            .await
+            .expect_err("foreign key violating backup should be rejected");
+        assert!(matches!(
+            error,
+            DbError::BackupForeignKeyViolation { violations: 1 }
+        ));
+        assert!(current
+            .profiles()
+            .get("current")
+            .await
+            .expect("database test operation should succeed")
+            .is_some());
+        assert!(current
+            .profiles()
+            .get("backup")
+            .await
+            .expect("database test operation should succeed")
+            .is_none());
+
+        current.close().await;
+        let _ = fs::remove_file(current_path);
+        let _ = fs::remove_file(backup_path);
+    }
+
+    #[tokio::test]
     async fn profile_repository_orders_by_profile_ex_sort_and_updates_groups() {
         let database = Database::connect_in_memory()
             .await
@@ -1681,6 +2055,99 @@ mod tests {
                 .len(),
             2
         );
+    }
+
+    #[tokio::test]
+    async fn profile_batch_operations_roll_back_on_mid_batch_error() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("database test operation should succeed");
+        let mut first = sample_profile();
+        first.index_id = "first".to_string();
+        first.subid = "old".to_string();
+        let mut second = sample_profile();
+        second.index_id = "second".to_string();
+        second.subid = "old".to_string();
+
+        database
+            .profiles()
+            .upsert(&first)
+            .await
+            .expect("database test operation should succeed");
+        database
+            .profiles()
+            .upsert(&second)
+            .await
+            .expect("database test operation should succeed");
+        sqlx::query(
+            r#"
+            CREATE TRIGGER reject_second_profile_subid_update
+            BEFORE UPDATE OF subid ON profile_items
+            WHEN OLD.index_id = 'second'
+            BEGIN
+                SELECT RAISE(ABORT, 'blocked profile update');
+            END
+            "#,
+        )
+        .execute(database.pool())
+        .await
+        .expect("database test operation should succeed");
+
+        let update_error = database
+            .profiles()
+            .update_subid_many(&["first".to_string(), "second".to_string()], "new")
+            .await;
+        assert!(update_error.is_err());
+        assert_eq!(
+            database
+                .profiles()
+                .get("first")
+                .await
+                .expect("database test operation should succeed")
+                .expect("database test operation should succeed")
+                .subid,
+            "old"
+        );
+        assert_eq!(
+            database
+                .profiles()
+                .get("second")
+                .await
+                .expect("database test operation should succeed")
+                .expect("database test operation should succeed")
+                .subid,
+            "old"
+        );
+
+        sqlx::query(
+            r#"
+            CREATE TRIGGER reject_second_profile_delete
+            BEFORE DELETE ON profile_items
+            WHEN OLD.index_id = 'second'
+            BEGIN
+                SELECT RAISE(ABORT, 'blocked profile delete');
+            END
+            "#,
+        )
+        .execute(database.pool())
+        .await
+        .expect("database test operation should succeed");
+
+        let delete_error = database
+            .profiles()
+            .delete_many(&["first".to_string(), "second".to_string()])
+            .await;
+        assert!(delete_error.is_err());
+        assert!(database
+            .profiles()
+            .exists("first")
+            .await
+            .expect("database test operation should succeed"));
+        assert!(database
+            .profiles()
+            .exists("second")
+            .await
+            .expect("database test operation should succeed"));
     }
 
     #[tokio::test]
@@ -1908,6 +2375,63 @@ mod tests {
             .is_none());
     }
 
+    #[tokio::test]
+    async fn routing_delete_many_rolls_back_on_mid_batch_error() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("database test operation should succeed");
+        let first = RoutingItem {
+            id: "routing-a".to_string(),
+            remarks: "A".to_string(),
+            ..RoutingItem::default()
+        };
+        let second = RoutingItem {
+            id: "routing-b".to_string(),
+            remarks: "B".to_string(),
+            ..RoutingItem::default()
+        };
+
+        database
+            .routings()
+            .upsert(&first)
+            .await
+            .expect("database test operation should succeed");
+        database
+            .routings()
+            .upsert(&second)
+            .await
+            .expect("database test operation should succeed");
+        sqlx::query(
+            r#"
+            CREATE TRIGGER reject_second_routing_delete
+            BEFORE DELETE ON routing_items
+            WHEN OLD.id = 'routing-b'
+            BEGIN
+                SELECT RAISE(ABORT, 'blocked routing delete');
+            END
+            "#,
+        )
+        .execute(database.pool())
+        .await
+        .expect("database test operation should succeed");
+
+        let delete_error = database
+            .routings()
+            .delete_many(&["routing-a".to_string(), "routing-b".to_string()])
+            .await;
+        assert!(delete_error.is_err());
+        assert!(database
+            .routings()
+            .exists("routing-a")
+            .await
+            .expect("database test operation should succeed"));
+        assert!(database
+            .routings()
+            .exists("routing-b")
+            .await
+            .expect("database test operation should succeed"));
+    }
+
     #[test]
     fn app_config_store_defaults_and_persists_across_restart() {
         let path = temp_path("guiNConfig.json");
@@ -1962,6 +2486,19 @@ mod tests {
             },
             ..ProfileItem::default()
         }
+    }
+
+    async fn open_raw_sqlite(path: &Path, create_if_missing: bool) -> SqlitePool {
+        let options = SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(create_if_missing)
+            .foreign_keys(true);
+
+        SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .expect("database test operation should succeed")
     }
 
     fn temp_path(name: &str) -> PathBuf {
