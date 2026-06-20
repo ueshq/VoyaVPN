@@ -727,6 +727,14 @@ fn show_main_window(app: &tauri::AppHandle) {
     }
 }
 
+fn hide_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if let Err(error) = window.hide() {
+            tracing::warn!(?error, "failed to hide main window from tray");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -758,13 +766,5 @@ mod tests {
         let line = "connect https://example.test/path@segment for admin@example.test";
 
         assert_eq!(redact_process_log_line(line), line);
-    }
-}
-
-fn hide_main_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        if let Err(error) = window.hide() {
-            tracing::warn!(?error, "failed to hide main window from tray");
-        }
     }
 }

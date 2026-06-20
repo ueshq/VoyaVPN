@@ -2785,10 +2785,7 @@ fn fill_bound_stream_settings(
                 mode: XHTTP_MODES
                     .contains(&values.header_type.as_str())
                     .then(|| values.header_type.clone()),
-                extra: match parse_xhttp_extra(&values.xhttp_extra) {
-                    Ok(extra) => extra,
-                    Err(_) => None,
-                },
+                extra: parse_xhttp_extra_or_none(&values.xhttp_extra),
             });
             fill_outbound_mux(outbound, false, false, &context.app_config);
         }
@@ -2815,6 +2812,16 @@ fn fill_bound_stream_settings(
     }
 
     outbound.stream_settings = Some(stream_settings);
+}
+
+fn parse_xhttp_extra_or_none(value: &str) -> Option<XrayXhttpExtra> {
+    // Invalid XHTTP extra is rejected by validation before config generation.
+    // Keep generation defensive without using unwrap_or_default to hide parse failures.
+    #[allow(clippy::manual_unwrap_or_default)]
+    match parse_xhttp_extra(value) {
+        Ok(extra) => extra,
+        Err(_) => None,
+    }
 }
 
 fn fill_kcp_stream(
@@ -3721,34 +3728,25 @@ mod tests {
             ..ProfileItem::default()
         };
         let context = test_context(AppConfig::default(), node.clone());
-        assert_eq!(
-            tls_settings(&node, &context, "")
-                .allow_insecure
-                .expect("tls allowInsecure should be set"),
-            false
-        );
+        assert!(!tls_settings(&node, &context, "")
+            .allow_insecure
+            .expect("tls allowInsecure should be set"));
 
         let mut config = AppConfig::default();
         config.core_basic_item.def_allow_insecure = true;
         let context = test_context(config.clone(), node.clone());
-        assert_eq!(
-            tls_settings(&node, &context, "")
-                .allow_insecure
-                .expect("tls allowInsecure should be set"),
-            true
-        );
+        assert!(tls_settings(&node, &context, "")
+            .allow_insecure
+            .expect("tls allowInsecure should be set"));
 
         let node = ProfileItem {
             allow_insecure: "false".to_string(),
             ..node
         };
         let context = test_context(config, node.clone());
-        assert_eq!(
-            tls_settings(&node, &context, "")
-                .allow_insecure
-                .expect("tls allowInsecure should be set"),
-            false
-        );
+        assert!(!tls_settings(&node, &context, "")
+            .allow_insecure
+            .expect("tls allowInsecure should be set"));
     }
 
     #[test]

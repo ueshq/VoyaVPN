@@ -350,7 +350,7 @@ impl Database {
             .await?;
 
         let import_result = async {
-            validate_attached_backup_migrations(&mut *conn).await?;
+            validate_attached_backup_migrations(&mut conn).await?;
             sqlx::query("PRAGMA foreign_keys = OFF")
                 .execute(&mut *conn)
                 .await?;
@@ -364,7 +364,7 @@ impl Database {
                 sqlx::query(*statement).execute(&mut *tx).await?;
             }
 
-            ensure_foreign_key_check_clean(&mut *tx).await?;
+            ensure_foreign_key_check_clean(&mut tx).await?;
             tx.commit().await?;
             Result::<()>::Ok(())
         }
@@ -374,7 +374,7 @@ impl Database {
             .execute(&mut *conn)
             .await;
         let post_import_check_result = if import_result.is_ok() && foreign_keys_result.is_ok() {
-            ensure_foreign_key_check_clean(&mut *conn).await
+            ensure_foreign_key_check_clean(&mut conn).await
         } else {
             Ok(())
         };

@@ -904,11 +904,7 @@ fn validate_redirect_attempt(
             to: next.as_str().to_string(),
         });
     }
-    if url_has_denied_local_host(next)
-        && !previous
-            .last()
-            .is_some_and(|previous| url_has_denied_local_host(previous))
-    {
+    if url_has_denied_local_host(next) && !previous.last().is_some_and(url_has_denied_local_host) {
         return Err(RedirectPolicyError::LocalNetworkTarget {
             to: next.as_str().to_string(),
         });

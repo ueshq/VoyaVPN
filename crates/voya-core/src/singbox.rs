@@ -2796,7 +2796,7 @@ fn parse_direct_expected_ips(value: Option<&str>) -> (Vec<String>, Vec<String>, 
 fn parse_dns_address_or_default(address: &str, default_address: &str) -> SingboxDnsServer {
     parse_dns_address(address)
         .or_else(|| parse_dns_address(default_address))
-        .unwrap_or_else(SingboxDnsServer::default)
+        .unwrap_or_default()
 }
 
 fn parse_dns_address(address: &str) -> Option<SingboxDnsServer> {
