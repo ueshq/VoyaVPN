@@ -80,11 +80,11 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
           pendingClashConnectionsEvent = null;
           pendingClashConnectionsFrame = null;
           if (nextEvent) {
-            set({
+            set((state) => ({
               clashConnections: nextEvent.payload,
-              clashMonitorStatus: markClashDataFresh(),
+              clashMonitorStatus: markClashDataFresh(state.clashMonitorStatus),
               lastTransientEvent: nextEvent,
-            });
+            }));
           }
         });
       }
@@ -124,7 +124,7 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
           };
         case "clashTraffic":
           return {
-            clashMonitorStatus: markClashDataFresh(),
+            clashMonitorStatus: markClashDataFresh(state.clashMonitorStatus),
             clashTraffic: event.payload,
             lastTransientEvent: event,
           };
@@ -181,8 +181,8 @@ function makeClashMonitorStatus(
   return { message, running, stale, state };
 }
 
-function markClashDataFresh(): RuntimeClashMonitorStatus {
-  return makeClashMonitorStatus("running", true, false, null);
+function markClashDataFresh(status: RuntimeClashMonitorStatus): RuntimeClashMonitorStatus {
+  return { ...status, stale: false };
 }
 
 function scheduleFrame(callback: () => void): FrameHandle {

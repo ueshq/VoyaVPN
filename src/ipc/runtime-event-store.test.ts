@@ -78,7 +78,7 @@ describe("runtime event store", () => {
     });
   });
 
-  it("clears stale state when fresh Clash traffic arrives", () => {
+  it("only clears stale state when fresh Clash traffic arrives", () => {
     useRuntimeEventStore.getState().setClashMonitorFailed("stream failed");
 
     useRuntimeEventStore.getState().pushTransientEvent({
@@ -88,10 +88,28 @@ describe("runtime event store", () => {
 
     expect(useRuntimeEventStore.getState().clashTraffic).toEqual({ down: 2048, up: 1024 });
     expect(useRuntimeEventStore.getState().clashMonitorStatus).toEqual({
-      message: null,
-      running: true,
+      message: "stream failed",
+      running: false,
       stale: false,
-      state: "running",
+      state: "failed",
+    });
+    expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("clashTraffic");
+  });
+
+  it("does not promote stopped monitor status when late Clash traffic arrives", () => {
+    useRuntimeEventStore.getState().setClashMonitorStopped("monitor stopped");
+
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "clashTraffic",
+      payload: { down: 2048, up: 1024 },
+    });
+
+    expect(useRuntimeEventStore.getState().clashTraffic).toEqual({ down: 2048, up: 1024 });
+    expect(useRuntimeEventStore.getState().clashMonitorStatus).toEqual({
+      message: "monitor stopped",
+      running: false,
+      stale: false,
+      state: "stopped",
     });
     expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("clashTraffic");
   });
@@ -164,10 +182,10 @@ describe("runtime event store", () => {
     expect(snapshot?.connections[0]?.host).toBe("latest.example.com:443");
     expect(snapshot?.downloadTotal).toBe(400);
     expect(useRuntimeEventStore.getState().clashMonitorStatus).toEqual({
-      message: null,
-      running: true,
+      message: "stream failed",
+      running: false,
       stale: false,
-      state: "running",
+      state: "failed",
     });
     expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("clashConnections");
   });
