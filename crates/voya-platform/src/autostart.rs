@@ -70,6 +70,10 @@ pub enum AutostartAction {
         executable: PathBuf,
         arguments: Vec<String>,
     },
+    RunCommandBestEffort {
+        executable: PathBuf,
+        arguments: Vec<String>,
+    },
     Noop,
 }
 
@@ -136,6 +140,18 @@ impl AutostartService {
                     executable,
                     arguments,
                 } => self.adapter.run_command(executable, arguments)?,
+                AutostartAction::RunCommandBestEffort {
+                    executable,
+                    arguments,
+                } => {
+                    if let Err(error) = self.adapter.run_command(executable, arguments) {
+                        tracing::debug!(
+                            %error,
+                            executable = %executable.display(),
+                            "ignored autostart cleanup command failure"
+                        );
+                    }
+                }
                 AutostartAction::Noop => {}
             }
         }
@@ -264,8 +280,8 @@ pub fn macos_launch_agent_plist(app_name: &str, executable: &Path) -> String {
         .file_stem()
         .and_then(|value| value.to_str())
         .unwrap_or(app_name);
-    let executable = xml_escape(&executable.to_string_lossy());
-    let process_name = shell_single_quote(process_name);
+    let executable = shell_quoted_xml(&executable.to_string_lossy());
+    let process_name = shell_quoted_xml(process_name);
 
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -278,7 +294,7 @@ pub fn macos_launch_agent_plist(app_name: &str, executable: &Path) -> String {
     <array>
         <string>/bin/sh</string>
         <string>-c</string>
-        <string>if ! pgrep -x {process_name} &gt; /dev/null; then "{executable}"; fi</string>
+        <string>if ! pgrep -x {process_name} &gt; /dev/null; then {executable}; fi</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -337,37 +353,43 @@ fn linux_actions(request: &AutostartRequest) -> Vec<AutostartAction> {
 
 fn macos_actions(request: &AutostartRequest) -> Vec<AutostartAction> {
     let path = macos_launch_agent_path(&request.home_dir, &request.app_name);
-    let command = format!(
-        "launchctl unload -w \"{}\" 2>/dev/null || true",
-        path.display()
-    );
     if request.enabled {
         vec![
-            AutostartAction::RunCommand {
-                executable: PathBuf::from("/bin/sh"),
-                arguments: vec!["-c".to_string(), command],
-            },
+            launchctl_best_effort_action("unload", &path),
             AutostartAction::WriteFile {
                 path: path.clone(),
                 contents: macos_launch_agent_plist(&request.app_name, &request.executable),
             },
-            AutostartAction::RunCommand {
-                executable: PathBuf::from("/bin/sh"),
-                arguments: vec![
-                    "-c".to_string(),
-                    format!("launchctl load -w \"{}\"", path.display()),
-                ],
-            },
+            launchctl_action("load", &path),
         ]
     } else {
         vec![
-            AutostartAction::RunCommand {
-                executable: PathBuf::from("/bin/sh"),
-                arguments: vec!["-c".to_string(), command],
-            },
+            launchctl_best_effort_action("unload", &path),
             AutostartAction::RemoveFile { path },
         ]
     }
+}
+
+fn launchctl_action(command: &str, path: &Path) -> AutostartAction {
+    AutostartAction::RunCommand {
+        executable: PathBuf::from("launchctl"),
+        arguments: launchctl_arguments(command, path),
+    }
+}
+
+fn launchctl_best_effort_action(command: &str, path: &Path) -> AutostartAction {
+    AutostartAction::RunCommandBestEffort {
+        executable: PathBuf::from("launchctl"),
+        arguments: launchctl_arguments(command, path),
+    }
+}
+
+fn launchctl_arguments(command: &str, path: &Path) -> Vec<String> {
+    vec![
+        command.to_string(),
+        "-w".to_string(),
+        path.to_string_lossy().into_owned(),
+    ]
 }
 
 fn linux_autostart_path(home_dir: &Path, app_name: &str) -> PathBuf {
@@ -427,6 +449,10 @@ fn xml_escape(value: &str) -> String {
         .replace('"', "&quot;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
+}
+
+fn shell_quoted_xml(value: &str) -> String {
+    xml_escape(&shell_single_quote(value))
 }
 
 fn shell_single_quote(value: &str) -> String {
@@ -537,6 +563,10 @@ mod autostart_tests {
         }
     }
 
+    fn string_args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_string()).collect()
+    }
+
     #[test]
     fn autostart_linux_plan_writes_desktop_file() {
         let request = request(TargetOs::Linux, true);
@@ -562,6 +592,18 @@ mod autostart_tests {
 
         assert_eq!(plan.actions.len(), 3);
         assert!(matches!(
+            &plan.actions[0],
+            AutostartAction::RunCommandBestEffort {
+                executable,
+                arguments,
+            } if executable == Path::new("launchctl")
+                && arguments == &string_args(&[
+                    "unload",
+                    "-w",
+                    "/home/alice/Library/LaunchAgents/VoyaVPN-LaunchAgent.plist"
+                ])
+        ));
+        assert!(matches!(
             &plan.actions[1],
             AutostartAction::WriteFile { path, contents }
             if path.ends_with("VoyaVPN-LaunchAgent.plist")
@@ -570,7 +612,61 @@ mod autostart_tests {
         assert!(matches!(
             &plan.actions[2],
             AutostartAction::RunCommand { executable, arguments }
-            if executable == Path::new("/bin/sh") && arguments.join(" ").contains("launchctl load -w")
+            if executable == Path::new("launchctl")
+                && arguments == &string_args(&[
+                    "load",
+                    "-w",
+                    "/home/alice/Library/LaunchAgents/VoyaVPN-LaunchAgent.plist"
+                ])
+        ));
+    }
+
+    #[test]
+    fn autostart_macos_shell_metacharacters_do_not_escape_path_arguments() {
+        let executable =
+            PathBuf::from("/Applications/VoyaVPN $(touch owned) \"quote\" 'apostrophe'/voyavpn");
+        let request = AutostartRequest {
+            target_os: TargetOs::Macos,
+            enabled: true,
+            app_name: AUTOSTART_APP_NAME.to_string(),
+            executable: executable.clone(),
+            home_dir: PathBuf::from("/Users/alice; touch owned"),
+        };
+        let path = "/Users/alice; touch owned/Library/LaunchAgents/VoyaVPN-LaunchAgent.plist";
+        let plan = plan_autostart(&request);
+        let executable_text = executable.to_string_lossy();
+        let quoted_executable = shell_quoted_xml(&executable_text);
+        let contents = match &plan.actions[1] {
+            AutostartAction::WriteFile { contents, .. } => contents,
+            action => panic!("expected plist write action, got {action:?}"),
+        };
+
+        assert!(matches!(
+            &plan.actions[0],
+            AutostartAction::RunCommandBestEffort {
+                executable,
+                arguments,
+            } if executable == Path::new("launchctl")
+                && arguments == &string_args(&["unload", "-w", path])
+        ));
+        assert!(
+            contents.contains(&format!("then {quoted_executable}; fi</string>")),
+            "plist did not include shell-quoted executable path:\n{contents}"
+        );
+        assert!(
+            !contents.contains(&format!(
+                "then &quot;{}&quot;;",
+                xml_escape(&executable_text)
+            )),
+            "plist still used a double-quoted shell path:\n{contents}"
+        );
+        assert!(matches!(
+            &plan.actions[2],
+            AutostartAction::RunCommand {
+                executable,
+                arguments,
+            } if executable == Path::new("launchctl")
+                && arguments == &string_args(&["load", "-w", path])
         ));
     }
 
