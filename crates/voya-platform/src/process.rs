@@ -8,6 +8,11 @@ use std::{
     thread,
     time::Duration,
 };
+#[cfg(unix)]
+use std::{
+    fs::OpenOptions,
+    io::{Seek, SeekFrom},
+};
 
 use thiserror::Error;
 use zeroize::Zeroizing;
@@ -70,9 +75,27 @@ impl std::fmt::Debug for ProcessStdin {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GeneratedScript {
+    pub directory: PathBuf,
     pub path: PathBuf,
     pub contents: String,
     pub executable: bool,
+}
+
+impl GeneratedScript {
+    #[must_use]
+    pub fn new(
+        directory: impl Into<PathBuf>,
+        path: impl Into<PathBuf>,
+        contents: impl Into<String>,
+        executable: bool,
+    ) -> Self {
+        Self {
+            directory: directory.into(),
+            path: path.into(),
+            contents: contents.into(),
+            executable,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -545,45 +568,237 @@ fn drain_child_pipe<T>(
 
 fn write_generated_scripts(scripts: &[GeneratedScript]) -> Result<(), ProcessError> {
     for script in scripts {
-        if let Some(parent) = script.path.parent() {
-            fs::create_dir_all(parent).map_err(|source| ProcessError::WriteGeneratedScript {
-                path: parent.to_path_buf(),
-                source,
-            })?;
-        }
-        fs::write(&script.path, &script.contents).map_err(|source| {
-            ProcessError::WriteGeneratedScript {
-                path: script.path.clone(),
-                source,
-            }
-        })?;
-        if script.executable {
-            make_executable(&script.path)?;
-        }
+        let script_path = prepare_generated_script_path(script)?;
+        write_generated_script_file(&script_path, &script.contents, script.executable)?;
     }
     Ok(())
 }
 
 #[cfg(unix)]
-fn make_executable(path: &Path) -> Result<(), ProcessError> {
-    use std::os::unix::fs::PermissionsExt;
+const GENERATED_SCRIPT_EXECUTABLE_MODE: u32 = 0o700;
+#[cfg(unix)]
+const GENERATED_SCRIPT_FILE_MODE: u32 = 0o600;
 
-    let metadata = fs::metadata(path).map_err(|source| ProcessError::WriteGeneratedScript {
-        path: path.to_path_buf(),
-        source,
-    })?;
-    let mut permissions = metadata.permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(path, permissions).map_err(|source| ProcessError::WriteGeneratedScript {
-        path: path.to_path_buf(),
-        source,
-    })
+fn prepare_generated_script_path(script: &GeneratedScript) -> Result<PathBuf, ProcessError> {
+    ensure_generated_script_directory(&script.directory)?;
+    let directory = fs::canonicalize(&script.directory)
+        .map_err(|source| generated_script_io_error(&script.directory, source))?;
+    let parent = script
+        .path
+        .parent()
+        .ok_or_else(|| ProcessError::InsecureGeneratedScriptPath {
+            path: script.path.clone(),
+            reason: "script path has no parent directory",
+        })?;
+    let parent = fs::canonicalize(parent)
+        .map_err(|source| generated_script_io_error(&script.path, source))?;
+    if parent != directory {
+        return Err(ProcessError::GeneratedScriptPathOutsideDirectory {
+            path: script.path.clone(),
+            directory,
+        });
+    }
+
+    let file_name =
+        script
+            .path
+            .file_name()
+            .ok_or_else(|| ProcessError::InsecureGeneratedScriptPath {
+                path: script.path.clone(),
+                reason: "script path has no file name",
+            })?;
+    Ok(parent.join(file_name))
+}
+
+#[cfg(unix)]
+fn ensure_generated_script_directory(path: &Path) -> Result<(), ProcessError> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
+
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    builder.mode(GENERATED_SCRIPT_EXECUTABLE_MODE);
+    builder
+        .create(path)
+        .map_err(|source| generated_script_io_error(path, source))?;
+
+    let directory = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NOFOLLOW)
+        .open(path)
+        .map_err(|source| generated_script_io_error(path, source))?;
+    let metadata = directory
+        .metadata()
+        .map_err(|source| generated_script_io_error(path, source))?;
+    if !metadata.is_dir() {
+        return Err(ProcessError::InsecureGeneratedScriptDirectory {
+            path: path.to_path_buf(),
+            reason: "managed script directory is not a directory",
+        });
+    }
+    if metadata.uid() != current_effective_uid() {
+        return Err(ProcessError::InsecureGeneratedScriptDirectory {
+            path: path.to_path_buf(),
+            reason: "managed script directory is not owned by the current user",
+        });
+    }
+
+    directory
+        .set_permissions(fs::Permissions::from_mode(GENERATED_SCRIPT_EXECUTABLE_MODE))
+        .map_err(|source| generated_script_io_error(path, source))?;
+    let metadata = directory
+        .metadata()
+        .map_err(|source| generated_script_io_error(path, source))?;
+    if metadata.permissions().mode() & 0o777 != GENERATED_SCRIPT_EXECUTABLE_MODE {
+        return Err(ProcessError::InsecureGeneratedScriptDirectory {
+            path: path.to_path_buf(),
+            reason: "managed script directory is writable or readable by non-owners",
+        });
+    }
+
+    Ok(())
 }
 
 #[cfg(not(unix))]
-fn make_executable(path: &Path) -> Result<(), ProcessError> {
-    let _ = path;
+fn ensure_generated_script_directory(path: &Path) -> Result<(), ProcessError> {
+    fs::create_dir_all(path).map_err(|source| generated_script_io_error(path, source))
+}
+
+#[cfg(unix)]
+fn write_generated_script_file(
+    path: &Path,
+    contents: &str,
+    executable: bool,
+) -> Result<(), ProcessError> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+
+    validate_existing_generated_script_path(path)?;
+
+    let mode = if executable {
+        GENERATED_SCRIPT_EXECUTABLE_MODE
+    } else {
+        GENERATED_SCRIPT_FILE_MODE
+    };
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .mode(mode)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(path)
+        .map_err(|source| generated_script_io_error(path, source))?;
+    validate_open_generated_script_file(&file, path)?;
+    file.set_permissions(fs::Permissions::from_mode(mode))
+        .map_err(|source| generated_script_io_error(path, source))?;
+    file.set_len(0)
+        .map_err(|source| generated_script_io_error(path, source))?;
+    file.seek(SeekFrom::Start(0))
+        .map_err(|source| generated_script_io_error(path, source))?;
+    file.write_all(contents.as_bytes())
+        .map_err(|source| generated_script_io_error(path, source))?;
+
+    let metadata = file
+        .metadata()
+        .map_err(|source| generated_script_io_error(path, source))?;
+    if metadata.uid() != current_effective_uid() {
+        return Err(ProcessError::InsecureGeneratedScriptPath {
+            path: path.to_path_buf(),
+            reason: "generated script is not owned by the current user",
+        });
+    }
+    if metadata.permissions().mode() & 0o777 != mode {
+        return Err(ProcessError::InsecureGeneratedScriptPath {
+            path: path.to_path_buf(),
+            reason: "generated script permissions are too broad",
+        });
+    }
+
     Ok(())
+}
+
+#[cfg(unix)]
+fn validate_existing_generated_script_path(path: &Path) -> Result<(), ProcessError> {
+    use std::os::unix::fs::MetadataExt;
+
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(source) if source.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(source) => return Err(generated_script_io_error(path, source)),
+    };
+    let file_type = metadata.file_type();
+    if file_type.is_symlink() {
+        return Err(ProcessError::InsecureGeneratedScriptPath {
+            path: path.to_path_buf(),
+            reason: "generated script path is a symbolic link",
+        });
+    }
+    if !file_type.is_file() {
+        return Err(ProcessError::InsecureGeneratedScriptPath {
+            path: path.to_path_buf(),
+            reason: "generated script path is not a regular file",
+        });
+    }
+    if metadata.nlink() != 1 {
+        return Err(ProcessError::InsecureGeneratedScriptPath {
+            path: path.to_path_buf(),
+            reason: "generated script path has multiple hard links",
+        });
+    }
+    if metadata.uid() != current_effective_uid() {
+        return Err(ProcessError::InsecureGeneratedScriptPath {
+            path: path.to_path_buf(),
+            reason: "generated script path is not owned by the current user",
+        });
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn validate_open_generated_script_file(file: &fs::File, path: &Path) -> Result<(), ProcessError> {
+    use std::os::unix::fs::MetadataExt;
+
+    let metadata = file
+        .metadata()
+        .map_err(|source| generated_script_io_error(path, source))?;
+    if !metadata.file_type().is_file() {
+        return Err(ProcessError::InsecureGeneratedScriptPath {
+            path: path.to_path_buf(),
+            reason: "generated script path is not a regular file",
+        });
+    }
+    if metadata.nlink() != 1 {
+        return Err(ProcessError::InsecureGeneratedScriptPath {
+            path: path.to_path_buf(),
+            reason: "generated script path has multiple hard links",
+        });
+    }
+    if metadata.uid() != current_effective_uid() {
+        return Err(ProcessError::InsecureGeneratedScriptPath {
+            path: path.to_path_buf(),
+            reason: "generated script path is not owned by the current user",
+        });
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn current_effective_uid() -> u32 {
+    // SAFETY: geteuid has no preconditions and does not dereference pointers.
+    unsafe { libc::geteuid() }
+}
+
+#[cfg(not(unix))]
+fn write_generated_script_file(
+    path: &Path,
+    contents: &str,
+    _executable: bool,
+) -> Result<(), ProcessError> {
+    fs::write(path, contents).map_err(|source| generated_script_io_error(path, source))
+}
+
+fn generated_script_io_error(path: &Path, source: io::Error) -> ProcessError {
+    ProcessError::WriteGeneratedScript {
+        path: path.to_path_buf(),
+        source,
+    }
 }
 
 pub trait ProcessJob: Send {
@@ -766,6 +981,12 @@ pub enum ProcessError {
     Stop(io::Error),
     #[error("failed to write generated script {path}: {source}")]
     WriteGeneratedScript { path: PathBuf, source: io::Error },
+    #[error("generated script path {path} is outside managed directory {directory}")]
+    GeneratedScriptPathOutsideDirectory { path: PathBuf, directory: PathBuf },
+    #[error("insecure generated script path {path}: {reason}")]
+    InsecureGeneratedScriptPath { path: PathBuf, reason: &'static str },
+    #[error("insecure generated script directory {path}: {reason}")]
+    InsecureGeneratedScriptDirectory { path: PathBuf, reason: &'static str },
     #[error("failed to parse command line: {0}")]
     ArgumentParse(String),
     #[error("process lock poisoned: {0}")]
@@ -866,6 +1087,112 @@ mod tests {
     fn process_stdin_debug_does_not_expose_secret() {
         let stdin = ProcessStdin::new(Zeroizing::new("secret-password".to_string()));
         assert_eq!(format!("{stdin:?}"), "ProcessStdin(<redacted>)");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_generated_script_rewrites_existing_file_and_locks_down_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = unique_temp_root("generated-script-rewrite");
+        let directory = root.join("guiTemps").join("sudo");
+        fs::create_dir_all(&directory).expect("create script directory");
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o777))
+            .expect("make directory too broad");
+        let script_path = directory.join("run_as_sudo.sh");
+        fs::write(&script_path, "stale").expect("write stale script");
+        fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))
+            .expect("make script too broad");
+
+        write_generated_scripts(&[GeneratedScript::new(
+            directory.clone(),
+            script_path.clone(),
+            "#!/bin/sh\nexit 0\n",
+            true,
+        )])
+        .expect("rewrite generated script");
+
+        assert_eq!(
+            fs::read_to_string(&script_path).expect("read script"),
+            "#!/bin/sh\nexit 0\n"
+        );
+        assert_eq!(
+            fs::metadata(&directory)
+                .expect("directory metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        assert_eq!(
+            fs::metadata(&script_path)
+                .expect("script metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_generated_script_rejects_paths_outside_managed_directory() {
+        let root = unique_temp_root("generated-script-outside");
+        let directory = root.join("guiTemps").join("sudo");
+        let outside = root.join("guiTemps").join("sysproxy");
+        fs::create_dir_all(&directory).expect("create script directory");
+        fs::create_dir_all(&outside).expect("create outside directory");
+        let script_path = outside.join("run_as_sudo.sh");
+
+        let error = write_generated_scripts(&[GeneratedScript::new(
+            directory.clone(),
+            script_path.clone(),
+            "#!/bin/sh\n",
+            true,
+        )])
+        .expect_err("outside path should fail");
+
+        assert!(matches!(
+            error,
+            ProcessError::GeneratedScriptPathOutsideDirectory { path, directory: managed }
+                if path == script_path && managed.ends_with("sudo")
+        ));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_generated_script_rejects_symbolic_link_targets() {
+        let root = unique_temp_root("generated-script-symlink");
+        let directory = root.join("guiTemps").join("sysproxy");
+        fs::create_dir_all(&directory).expect("create script directory");
+        let outside = root.join("outside.sh");
+        fs::write(&outside, "outside").expect("write outside target");
+        let script_path = directory.join("proxy_set_linux.sh");
+        std::os::unix::fs::symlink(&outside, &script_path).expect("create script symlink");
+
+        let error = write_generated_scripts(&[GeneratedScript::new(
+            directory,
+            script_path,
+            "#!/bin/sh\n",
+            true,
+        )])
+        .expect_err("symlink path should fail");
+
+        assert!(matches!(
+            error,
+            ProcessError::InsecureGeneratedScriptPath { reason, .. }
+                if reason.contains("symbolic link")
+        ));
+        assert_eq!(
+            fs::read_to_string(&outside).expect("read outside target"),
+            "outside"
+        );
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[derive(Default)]
@@ -996,5 +1323,21 @@ mod tests {
             .stderr(Stdio::null())
             .status()
             .is_ok_and(|status| status.success())
+    }
+
+    #[cfg(unix)]
+    fn unique_temp_root(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "voyavpn-process-{name}-{}-{}",
+            std::process::id(),
+            monotonic_nanos()
+        ))
+    }
+
+    #[cfg(unix)]
+    fn monotonic_nanos() -> u128 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |duration| duration.as_nanos())
     }
 }

@@ -90,7 +90,8 @@ pub fn wrap_spawn_with_unix_sudo(
     script_dir: impl AsRef<Path>,
     password: Zeroizing<String>,
 ) -> ProcessSpawn {
-    let script_path = script_dir.as_ref().join(RUN_AS_SUDO_SCRIPT_FILE_NAME);
+    let script_dir = script_dir.as_ref();
+    let script_path = script_dir.join(RUN_AS_SUDO_SCRIPT_FILE_NAME);
     let script_body = unix_sudo_run_script(&base);
 
     ProcessSpawn {
@@ -101,11 +102,12 @@ pub fn wrap_spawn_with_unix_sudo(
         environment: base.environment,
         display_log: base.display_log,
         stdin: Some(ProcessStdin::new(password)),
-        generated_scripts: vec![GeneratedScript {
-            path: script_path,
-            contents: script_body,
-            executable: true,
-        }],
+        generated_scripts: vec![GeneratedScript::new(
+            script_dir.to_path_buf(),
+            script_path,
+            script_body,
+            true,
+        )],
     }
 }
 
@@ -119,7 +121,8 @@ pub fn unix_sudo_kill_spawn(
 ) -> Result<ProcessSpawn, ElevationError> {
     let script_file_name =
         unix_sudo_kill_script_file_name(os).ok_or(ElevationError::UnsupportedOs)?;
-    let script_path = script_dir.as_ref().join(script_file_name);
+    let script_dir = script_dir.as_ref();
+    let script_path = script_dir.join(script_file_name);
     let expected_names = expected_process_comm_names(expected_executable.as_ref())?;
     let mut command = format!(
         "sudo -S {} {target_pid}",
@@ -135,11 +138,12 @@ pub fn unix_sudo_kill_spawn(
         .with_working_dir(working_dir)
         .with_display_log(true)
         .with_stdin(ProcessStdin::new(password))
-        .with_generated_script(GeneratedScript {
-            path: script_path,
-            contents: unix_sudo_kill_script(os)?,
-            executable: true,
-        }))
+        .with_generated_script(GeneratedScript::new(
+            script_dir.to_path_buf(),
+            script_path,
+            unix_sudo_kill_script(os)?,
+            true,
+        )))
 }
 
 #[must_use]

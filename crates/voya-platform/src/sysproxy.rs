@@ -472,13 +472,21 @@ fn linux_script_invocation(
     mode: &str,
     manual: Option<(&str, i32, &str)>,
 ) -> ScriptInvocation {
-    let executable = custom_script_path(&request.item)
-        .unwrap_or_else(|| request.script_dir.join(LINUX_PROXY_SCRIPT_NAME));
-    let generated_script = (!executable.exists()).then(|| GeneratedScript {
-        path: executable.clone(),
-        contents: LINUX_PROXY_SCRIPT.to_string(),
-        executable: true,
-    });
+    let (executable, generated_script) =
+        if let Some(custom_script) = custom_script_path(&request.item) {
+            (custom_script, None)
+        } else {
+            let executable = request.script_dir.join(LINUX_PROXY_SCRIPT_NAME);
+            (
+                executable.clone(),
+                Some(GeneratedScript::new(
+                    request.script_dir.clone(),
+                    executable,
+                    LINUX_PROXY_SCRIPT,
+                    true,
+                )),
+            )
+        };
     let mut arguments = vec![mode.to_string()];
     if let Some((host, port, exceptions)) = manual {
         arguments.push(host.to_string());
@@ -498,13 +506,21 @@ fn macos_script_invocation(
     mode: &str,
     manual: Option<(&str, i32, &str)>,
 ) -> ScriptInvocation {
-    let executable = custom_script_path(&request.item)
-        .unwrap_or_else(|| request.script_dir.join(MACOS_PROXY_SCRIPT_NAME));
-    let generated_script = (!executable.exists()).then(|| GeneratedScript {
-        path: executable.clone(),
-        contents: MACOS_PROXY_SCRIPT.to_string(),
-        executable: true,
-    });
+    let (executable, generated_script) =
+        if let Some(custom_script) = custom_script_path(&request.item) {
+            (custom_script, None)
+        } else {
+            let executable = request.script_dir.join(MACOS_PROXY_SCRIPT_NAME);
+            (
+                executable.clone(),
+                Some(GeneratedScript::new(
+                    request.script_dir.clone(),
+                    executable,
+                    MACOS_PROXY_SCRIPT,
+                    true,
+                )),
+            )
+        };
     let mut arguments = vec![mode.to_string()];
     if let Some((host, port, exceptions)) = manual {
         arguments.push(host.to_string());
@@ -993,6 +1009,52 @@ mod tests {
     }
 
     #[test]
+    fn sysproxy_managed_scripts_are_generated_even_when_existing_file_is_present() {
+        let root = unique_temp_root("sysproxy-managed-script");
+        let script_dir = root.join("guiTemps").join("sysproxy");
+        fs::create_dir_all(&script_dir).expect("create script directory");
+        let script_path = script_dir.join(LINUX_PROXY_SCRIPT_NAME);
+        fs::write(&script_path, "stale").expect("write stale script");
+
+        let mut request = request(TargetOs::Linux, SysProxyType::ForcedChange);
+        request.script_dir = script_dir.clone();
+        let plan = plan_system_proxy(&request).expect("linux plan");
+        let SystemProxyAction::LinuxSet { script, .. } = plan.action else {
+            panic!("expected linux set");
+        };
+        let generated = script.generated_script.expect("managed script");
+
+        assert_eq!(script.executable, script_path);
+        assert_eq!(generated.directory, script_dir);
+        assert_eq!(generated.path, script.executable);
+        assert_eq!(generated.contents, LINUX_PROXY_SCRIPT);
+        assert!(generated.executable);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn sysproxy_custom_script_path_is_not_rewritten_as_managed_script() {
+        let root = unique_temp_root("sysproxy-custom-script");
+        fs::create_dir_all(&root).expect("create script directory");
+        let custom_script = root.join("custom.sh");
+        fs::write(&custom_script, "#!/bin/sh\n").expect("write custom script");
+
+        let mut request = request(TargetOs::Linux, SysProxyType::ForcedChange);
+        request.item.custom_system_proxy_script_path =
+            Some(custom_script.to_string_lossy().into_owned());
+        let plan = plan_system_proxy(&request).expect("linux plan");
+        let SystemProxyAction::LinuxSet { script, .. } = plan.action else {
+            panic!("expected linux set");
+        };
+
+        assert_eq!(script.executable, custom_script);
+        assert!(script.generated_script.is_none());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn sysproxy_service_starts_windows_pac_and_sets_autoconfig_url() {
         let runner = Arc::new(RecordingRunner::default());
         let pac = Arc::new(FakePacManager::default());
@@ -1012,5 +1074,19 @@ mod tests {
             .lock()
             .iter()
             .any(|spawn| spawn.arguments.iter().any(|arg| arg == "AutoConfigURL")));
+    }
+
+    fn unique_temp_root(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "voyavpn-sysproxy-{name}-{}-{}",
+            std::process::id(),
+            monotonic_nanos()
+        ))
+    }
+
+    fn monotonic_nanos() -> u128 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |duration| duration.as_nanos())
     }
 }
