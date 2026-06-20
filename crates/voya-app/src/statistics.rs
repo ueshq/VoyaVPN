@@ -20,13 +20,16 @@ use voya_core::{
 };
 use voya_db::{Database, DbError};
 
-use crate::supervisor::CoreSupervisor;
+use crate::supervisor::{CoreSupervisor, SupervisorSnapshot};
 
 const STATISTICS_CHANNEL_SIZE: usize = 64;
 const COALESCE_INTERVAL: Duration = Duration::from_secs(1);
 const XRAY_POLL_INTERVAL: Duration = Duration::from_secs(1);
-const SINGBOX_RECONNECT_INTERVAL: Duration = Duration::from_secs(1);
+const SINGBOX_RECONNECT_INITIAL_DELAY: Duration = Duration::from_secs(1);
+const SINGBOX_RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
 const SINGBOX_INITIAL_DELAY: Duration = Duration::from_secs(5);
+const SINGBOX_WS_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const WS_RECONNECT_JITTER_DIVISOR: u32 = 4;
 
 pub type Result<T> = std::result::Result<T, StatisticsError>;
 
@@ -289,6 +292,17 @@ impl XrayDebugVarsParser {
     }
 
     #[must_use]
+    pub fn set_baseline(&mut self, source: &str) -> bool {
+        let Some(current) = parse_xray_debug_vars_totals(source) else {
+            self.previous = None;
+            return false;
+        };
+
+        self.previous = Some(current);
+        true
+    }
+
+    #[must_use]
     pub fn parse_next(&mut self, source: &str) -> Option<ServerSpeedSample> {
         let current = parse_xray_debug_vars_totals(source)?;
         let previous = self.previous.unwrap_or_default();
@@ -329,15 +343,12 @@ pub fn singbox_state_port2(config: &AppConfig) -> u16 {
 
 #[must_use]
 pub fn core_matches_xray(core_type: Option<CoreType>) -> bool {
-    matches!(
-        core_type,
-        Some(CoreType::Xray | CoreType::v2fly | CoreType::v2fly_v5)
-    )
+    core_type.is_some_and(core_type_matches_xray)
 }
 
 #[must_use]
 pub fn core_matches_singbox(core_type: Option<CoreType>) -> bool {
-    matches!(core_type, Some(CoreType::sing_box | CoreType::mihomo))
+    core_type.is_some_and(core_type_matches_singbox)
 }
 
 #[must_use]
@@ -399,6 +410,7 @@ async fn run_xray_statistics_service(
 ) {
     let client = reqwest::Client::new();
     let mut parser = XrayDebugVarsParser::new();
+    let mut active_identity = None;
     let mut interval = time::interval(XRAY_POLL_INTERVAL);
 
     loop {
@@ -411,15 +423,36 @@ async fn run_xray_statistics_service(
             }
             _ = interval.tick() => {
                 let config = config_source.snapshot();
-                if !config.enabled() || !is_running_xray(&supervisor).await {
+                if !config.enabled() {
                     parser.reset();
+                    active_identity = None;
                     continue;
                 }
+                let Some(identity) = xray_process_identity(&supervisor).await else {
+                    parser.reset();
+                    active_identity = None;
+                    continue;
+                };
+                let Some(state_port) = available_state_port(config.state_port) else {
+                    parser.reset();
+                    active_identity = None;
+                    tracing::debug!("skipping Xray statistics because state port is unavailable");
+                    continue;
+                };
+                let baseline_required = active_identity.as_ref() != Some(&identity);
 
-                let url = format!("http://{LOOPBACK}:{}/debug/vars", config.state_port);
+                let url = format!("http://{LOOPBACK}:{state_port}/debug/vars");
                 match client.get(url).send().await {
                     Ok(response) => match response.text().await {
                         Ok(body) => {
+                            if baseline_required {
+                                if parser.set_baseline(&body) {
+                                    active_identity = Some(identity);
+                                } else {
+                                    active_identity = None;
+                                }
+                                continue;
+                            }
                             if let Some(sample) = parser.parse_next(&body) {
                                 let _ = sample_tx.send(sample).await;
                             }
@@ -449,24 +482,53 @@ async fn run_singbox_statistics_service(
         _ = &mut initial_delay => {}
     }
 
+    let mut reconnect_backoff = WebSocketReconnectBackoff::new(
+        SINGBOX_RECONNECT_INITIAL_DELAY,
+        SINGBOX_RECONNECT_MAX_DELAY,
+    );
+    let mut active_identity = None;
+
     loop {
         if *shutdown.borrow() {
             break;
         }
 
         let config = config_source.snapshot();
-        if !config.enabled() || !is_running_singbox(&supervisor).await {
-            if sleep_or_shutdown(SINGBOX_RECONNECT_INTERVAL, &mut shutdown).await {
+        if !config.enabled() {
+            active_identity = None;
+            reconnect_backoff.reset();
+            if sleep_or_shutdown(SINGBOX_RECONNECT_INITIAL_DELAY, &mut shutdown).await {
                 break;
             }
             continue;
         }
+        let Some(identity) = singbox_process_identity(&supervisor).await else {
+            active_identity = None;
+            reconnect_backoff.reset();
+            if sleep_or_shutdown(SINGBOX_RECONNECT_INITIAL_DELAY, &mut shutdown).await {
+                break;
+            }
+            continue;
+        };
+        if update_active_identity(&mut active_identity, identity) {
+            reconnect_backoff.reset();
+        }
+        let Some(state_port) = available_state_port(config.state_port2) else {
+            active_identity = None;
+            reconnect_backoff.reset();
+            tracing::debug!("skipping sing-box statistics because state port is unavailable");
+            if sleep_or_shutdown(SINGBOX_RECONNECT_INITIAL_DELAY, &mut shutdown).await {
+                break;
+            }
+            continue;
+        };
 
-        let url = format!("ws://{LOOPBACK}:{}/traffic", config.state_port2);
-        match connect_async(&url).await {
-            Ok((mut stream, _)) => loop {
-                if !is_running_singbox(&supervisor).await {
-                    break;
+        let url = format!("ws://{LOOPBACK}:{state_port}/traffic");
+        match time::timeout(SINGBOX_WS_CONNECT_TIMEOUT, connect_async(&url)).await {
+            Ok(Ok((mut stream, _))) => loop {
+                match singbox_process_identity(&supervisor).await {
+                    Some(current_identity) if current_identity == identity => {}
+                    Some(_) | None => break,
                 }
 
                 tokio::select! {
@@ -479,12 +541,14 @@ async fn run_singbox_statistics_service(
                         match message {
                             Ok(Some(Ok(Message::Text(text)))) => {
                                 if let Some(sample) = parse_singbox_traffic_sample(&text) {
+                                    reconnect_backoff.reset();
                                     let _ = sample_tx.send(sample).await;
                                 }
                             }
                             Ok(Some(Ok(Message::Binary(bytes)))) => {
                                 if let Ok(text) = String::from_utf8(bytes.to_vec()) {
                                     if let Some(sample) = parse_singbox_traffic_sample(&text) {
+                                        reconnect_backoff.reset();
                                         let _ = sample_tx.send(sample).await;
                                     }
                                 }
@@ -499,31 +563,34 @@ async fn run_singbox_statistics_service(
                     }
                 }
             },
-            Err(error) => {
+            Ok(Err(error)) => {
                 tracing::debug!(?error, "failed to connect sing-box statistics websocket");
+            }
+            Err(error) => {
+                tracing::debug!(?error, "timed out connecting sing-box statistics websocket");
             }
         }
 
-        if sleep_or_shutdown(SINGBOX_RECONNECT_INTERVAL, &mut shutdown).await {
+        if sleep_or_shutdown(reconnect_backoff.next_delay(), &mut shutdown).await {
             break;
         }
     }
 }
 
-async fn is_running_xray(supervisor: &CoreSupervisor) -> bool {
+async fn xray_process_identity(supervisor: &CoreSupervisor) -> Option<CoreProcessIdentity> {
     supervisor
         .status()
         .await
-        .map(|snapshot| core_matches_xray(snapshot.running_core_type))
-        .unwrap_or(false)
+        .ok()
+        .and_then(|snapshot| core_process_identity(snapshot, core_type_matches_xray))
 }
 
-async fn is_running_singbox(supervisor: &CoreSupervisor) -> bool {
+async fn singbox_process_identity(supervisor: &CoreSupervisor) -> Option<CoreProcessIdentity> {
     supervisor
         .status()
         .await
-        .map(|snapshot| core_matches_singbox(snapshot.running_core_type))
-        .unwrap_or(false)
+        .ok()
+        .and_then(|snapshot| core_process_identity(snapshot, core_type_matches_singbox))
 }
 
 async fn sleep_or_shutdown(duration: Duration, shutdown: &mut watch::Receiver<bool>) -> bool {
@@ -640,6 +707,117 @@ fn counters_rolled_back(previous: ServerSpeedSample, current: ServerSpeedSample)
         || current.direct_down_bytes < previous.direct_down_bytes
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CoreProcessIdentity {
+    core_type: CoreType,
+    main_pid: u32,
+    pre_pid: Option<u32>,
+}
+
+fn core_process_identity(
+    snapshot: SupervisorSnapshot,
+    matches_core_type: fn(CoreType) -> bool,
+) -> Option<CoreProcessIdentity> {
+    let core_type = snapshot.running_core_type?;
+    let main_pid = snapshot.main_pid?;
+    matches_core_type(core_type).then_some(CoreProcessIdentity {
+        core_type,
+        main_pid,
+        pre_pid: snapshot.pre_pid,
+    })
+}
+
+fn update_active_identity(
+    active_identity: &mut Option<CoreProcessIdentity>,
+    identity: CoreProcessIdentity,
+) -> bool {
+    if active_identity.as_ref() == Some(&identity) {
+        return false;
+    }
+
+    *active_identity = Some(identity);
+    true
+}
+
+fn core_type_matches_xray(core_type: CoreType) -> bool {
+    matches!(
+        core_type,
+        CoreType::Xray | CoreType::v2fly | CoreType::v2fly_v5
+    )
+}
+
+fn core_type_matches_singbox(core_type: CoreType) -> bool {
+    matches!(core_type, CoreType::sing_box | CoreType::mihomo)
+}
+
+fn available_state_port(port: u16) -> Option<u16> {
+    (port != 0).then_some(port)
+}
+
+#[derive(Debug, Clone)]
+struct WebSocketReconnectBackoff {
+    attempt: u32,
+    initial: Duration,
+    max: Duration,
+}
+
+impl WebSocketReconnectBackoff {
+    const fn new(initial: Duration, max: Duration) -> Self {
+        Self {
+            attempt: 0,
+            initial,
+            max,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.attempt = 0;
+    }
+
+    fn next_delay(&mut self) -> Duration {
+        let delay = websocket_reconnect_delay(
+            self.attempt,
+            self.initial,
+            self.max,
+            reconnect_jitter_seed(),
+        );
+        self.attempt = self.attempt.saturating_add(1);
+        delay
+    }
+}
+
+fn websocket_reconnect_delay(
+    attempt: u32,
+    initial: Duration,
+    max: Duration,
+    jitter_seed: u64,
+) -> Duration {
+    let multiplier = 1_u32.checked_shl(attempt.min(16)).unwrap_or(u32::MAX);
+    let scaled = initial.saturating_mul(multiplier);
+    let base = if scaled > max { max } else { scaled };
+
+    base.saturating_add(reconnect_jitter(base, jitter_seed))
+}
+
+fn reconnect_jitter(base: Duration, jitter_seed: u64) -> Duration {
+    let jitter_limit_nanos =
+        (base.as_nanos() / u128::from(WS_RECONNECT_JITTER_DIVISOR)).min(u128::from(u64::MAX));
+    if jitter_limit_nanos == 0 {
+        return Duration::ZERO;
+    }
+
+    let jitter_nanos = u128::from(jitter_seed) % (jitter_limit_nanos + 1);
+    Duration::from_nanos(u64::try_from(jitter_nanos).unwrap_or(u64::MAX))
+}
+
+fn reconnect_jitter_seed() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| {
+            u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX) ^ u64::from(std::process::id())
+        })
+}
+
 fn inbound_port(app_config: &AppConfig, protocol: InboundProtocol) -> i32 {
     app_config
         .inbound
@@ -662,6 +840,7 @@ fn nonempty(value: String) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use crate::supervisor::SupervisorConnectionState;
     use voya_core::{ConfigType, GuiItem, InItem, ProfileItem, TunModeItem};
 
     use super::*;
@@ -746,6 +925,70 @@ mod tests {
     }
 
     #[test]
+    fn statistics_xray_debug_vars_parser_resets_restart_baseline() {
+        let mut parser = XrayDebugVarsParser::new();
+        assert!(parser.set_baseline(
+            r#"{
+                "stats": {
+                    "outbound": {
+                        "proxy": { "uplink": 1000, "downlink": 2000 },
+                        "direct": { "uplink": 100, "downlink": 200 }
+                    }
+                }
+            }"#
+        ));
+
+        assert_eq!(
+            parser.parse_next(
+                r#"{
+                    "stats": {
+                        "outbound": {
+                            "proxy": { "uplink": 1010, "downlink": 2020 },
+                            "direct": { "uplink": 103, "downlink": 207 }
+                        }
+                    }
+                }"#
+            ),
+            Some(ServerSpeedSample {
+                proxy_up_bytes: 10,
+                proxy_down_bytes: 20,
+                direct_up_bytes: 3,
+                direct_down_bytes: 7,
+            })
+        );
+
+        assert!(parser.set_baseline(
+            r#"{
+                "stats": {
+                    "outbound": {
+                        "proxy": { "uplink": 5000, "downlink": 8000 },
+                        "direct": { "uplink": 900, "downlink": 1200 }
+                    }
+                }
+            }"#
+        ));
+
+        assert_eq!(
+            parser.parse_next(
+                r#"{
+                    "stats": {
+                        "outbound": {
+                            "proxy": { "uplink": 5004, "downlink": 8009 },
+                            "direct": { "uplink": 902, "downlink": 1205 }
+                        }
+                    }
+                }"#
+            ),
+            Some(ServerSpeedSample {
+                proxy_up_bytes: 4,
+                proxy_down_bytes: 9,
+                direct_up_bytes: 2,
+                direct_down_bytes: 5,
+            })
+        );
+    }
+
+    #[test]
     fn statistics_singbox_traffic_parser_reads_ws_payload() {
         assert_eq!(
             parse_singbox_traffic_sample(r#"{"up":1234,"down":5678}"#),
@@ -790,6 +1033,73 @@ mod tests {
         assert!(core_matches_singbox(Some(CoreType::sing_box)));
         assert!(core_matches_singbox(Some(CoreType::mihomo)));
         assert!(!core_matches_singbox(Some(CoreType::Xray)));
+    }
+
+    #[test]
+    fn statistics_core_process_identity_tracks_pid_changes() {
+        let first = SupervisorSnapshot {
+            state: SupervisorConnectionState::Connected,
+            active_profile_id: Some("profile-a".to_string()),
+            main_pid: Some(100),
+            pre_pid: None,
+            running_core_type: Some(CoreType::Xray),
+        };
+        let restarted = SupervisorSnapshot {
+            main_pid: Some(101),
+            ..first.clone()
+        };
+        let disconnected = SupervisorSnapshot {
+            main_pid: None,
+            ..first.clone()
+        };
+
+        assert_ne!(
+            core_process_identity(first, core_type_matches_xray),
+            core_process_identity(restarted, core_type_matches_xray)
+        );
+        assert_eq!(
+            core_process_identity(disconnected, core_type_matches_xray),
+            None
+        );
+    }
+
+    #[test]
+    fn statistics_state_port_zero_is_unavailable() {
+        let mut config = AppConfig {
+            inbound: vec![InItem {
+                local_port: -4,
+                protocol: "socks".to_string(),
+                ..InItem::default()
+            }],
+            ..AppConfig::default()
+        };
+
+        assert_eq!(xray_state_port(&config), 0);
+        assert_eq!(available_state_port(xray_state_port(&config)), None);
+
+        config
+            .inbound
+            .first_mut()
+            .expect("test config has an inbound")
+            .local_port = -5;
+        assert_eq!(singbox_state_port2(&config), 0);
+        assert_eq!(available_state_port(singbox_state_port2(&config)), None);
+        assert_eq!(available_state_port(1), Some(1));
+    }
+
+    #[test]
+    fn statistics_ws_reconnect_delay_backs_off_with_cap_and_jitter() {
+        let initial = Duration::from_secs(1);
+        let max = Duration::from_secs(8);
+
+        let first = websocket_reconnect_delay(0, initial, max, 0);
+        let second = websocket_reconnect_delay(1, initial, max, 0);
+        let capped = websocket_reconnect_delay(12, initial, max, u64::MAX);
+
+        assert_eq!(first, Duration::from_secs(1));
+        assert_eq!(second, Duration::from_secs(2));
+        assert!(capped >= max);
+        assert!(capped <= max + Duration::from_secs(2));
     }
 
     #[tokio::test]

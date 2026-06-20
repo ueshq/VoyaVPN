@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeSet,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use serde::{Deserialize, Serialize};
@@ -25,7 +25,10 @@ use voya_net::clash::{
 use crate::statistics::singbox_state_port2;
 
 const DELAY_TIMEOUT_MS: u32 = 10_000;
-const CLASH_WS_RECONNECT_INTERVAL: Duration = Duration::from_secs(1);
+const CLASH_WS_RECONNECT_INITIAL_DELAY: Duration = Duration::from_secs(1);
+const CLASH_WS_RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
+const CLASH_WS_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const WS_RECONNECT_JITTER_DIVISOR: u32 = 4;
 const ALLOW_SELECT_TYPES: &[&str] = &["selector", "urltest", "loadbalance", "fallback"];
 const NOT_ALLOW_TEST_TYPES: &[&str] = &[
     "selector",
@@ -57,6 +60,8 @@ pub enum ClashManagerError {
     MonitorLockPoisoned,
     #[error("Clash monitor requires a Tokio runtime")]
     MonitorRuntimeUnavailable,
+    #[error("Clash API state port is unavailable")]
+    InvalidStatePort,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
@@ -179,7 +184,7 @@ where
     }
 
     pub async fn proxies(&self, config: &AppConfig) -> Result<ClashProxiesSnapshot> {
-        let client = self.client(config);
+        let client = self.client(config)?;
         let proxies = client.get_proxies().await?;
         let providers = client.get_proxy_providers().await.unwrap_or_default();
 
@@ -192,7 +197,7 @@ where
     }
 
     pub async fn connections(&self, config: &AppConfig) -> Result<ClashConnectionsSnapshot> {
-        self.client(config)
+        self.client(config)?
             .get_connections()
             .await
             .map(connections_snapshot)
@@ -205,7 +210,7 @@ where
         group_name: &str,
         proxy_name: &str,
     ) -> Result<ClashProxiesSnapshot> {
-        let client = self.client(config);
+        let client = self.client(config)?;
         let proxies = client.get_proxies().await?;
         let group = proxies
             .proxies
@@ -227,7 +232,7 @@ where
         config: &AppConfig,
         proxy_names: Vec<String>,
     ) -> Result<Vec<ClashDelayTestResult>> {
-        let client = self.client(config);
+        let client = self.client(config)?;
         let names = if proxy_names.is_empty() {
             client
                 .get_proxies()
@@ -268,14 +273,14 @@ where
             return Err(ClashManagerError::InvalidRuleMode(mode));
         };
 
-        self.client(config)
+        self.client(config)?
             .set_rule_mode(mode)
             .await
             .map_err(Into::into)
     }
 
     pub async fn reload_config(&self, config: &AppConfig, path: Option<&str>) -> Result<()> {
-        let client = self.client(config);
+        let client = self.client(config)?;
         let _ = client.close_connection(None).await;
         client.reload_config(path).await.map_err(Into::into)
     }
@@ -285,7 +290,7 @@ where
         config: &AppConfig,
         connection_id: Option<&str>,
     ) -> Result<ClashConnectionsSnapshot> {
-        let client = self.client(config);
+        let client = self.client(config)?;
         client.close_connection(connection_id).await?;
         client
             .get_connections()
@@ -294,8 +299,12 @@ where
             .map_err(Into::into)
     }
 
-    fn client(&self, config: &AppConfig) -> ClashRestClient<T> {
-        ClashRestClient::with_transport(clash_endpoint(config), self.transport.clone())
+    fn client(&self, config: &AppConfig) -> Result<ClashRestClient<T>> {
+        let endpoint = clash_endpoint(config).ok_or(ClashManagerError::InvalidStatePort)?;
+        Ok(ClashRestClient::with_transport(
+            endpoint,
+            self.transport.clone(),
+        ))
     }
 }
 
@@ -319,7 +328,13 @@ impl ClashMonitorController {
             .handle
             .lock()
             .map_err(|_| ClashManagerError::MonitorLockPoisoned)?;
-        let endpoint = clash_endpoint(config);
+        let Some(endpoint) = clash_endpoint(config) else {
+            if let Some(handle) = guard.take() {
+                handle.stop();
+            }
+            tracing::debug!("skipping Clash monitor because state port is unavailable");
+            return Ok(ClashMonitorStatus::stopped());
+        };
         if guard
             .as_ref()
             .is_some_and(|handle| handle.endpoint == endpoint)
@@ -437,14 +452,19 @@ async fn run_clash_ws_monitor(
     sink: Arc<dyn ClashEventSink>,
     mut shutdown: watch::Receiver<bool>,
 ) {
+    let mut reconnect_backoff = WebSocketReconnectBackoff::new(
+        CLASH_WS_RECONNECT_INITIAL_DELAY,
+        CLASH_WS_RECONNECT_MAX_DELAY,
+    );
+
     loop {
         if *shutdown.borrow() {
             break;
         }
 
         let client = ClashWebSocketClient::new(endpoint.clone());
-        match client.connect(resource).await {
-            Ok(mut session) => loop {
+        match time::timeout(CLASH_WS_CONNECT_TIMEOUT, client.connect(resource)).await {
+            Ok(Ok(mut session)) => loop {
                 tokio::select! {
                     changed = shutdown.changed() => {
                         if changed.is_err() || *shutdown.borrow() {
@@ -452,7 +472,10 @@ async fn run_clash_ws_monitor(
                         }
                     }
                     event = session.next_event() => match event {
-                        Ok(event) => route_clash_ws_event(sink.as_ref(), event),
+                        Ok(event) => {
+                            reconnect_backoff.reset();
+                            route_clash_ws_event(sink.as_ref(), event);
+                        }
                         Err(error) => {
                             tracing::debug!(?error, ?resource, "Clash websocket monitor read failed");
                             break;
@@ -460,16 +483,23 @@ async fn run_clash_ws_monitor(
                     }
                 }
             },
-            Err(error) => {
+            Ok(Err(error)) => {
                 tracing::debug!(
                     ?error,
                     ?resource,
                     "failed to connect Clash websocket monitor"
                 );
             }
+            Err(error) => {
+                tracing::debug!(
+                    ?error,
+                    ?resource,
+                    "timed out connecting Clash websocket monitor"
+                );
+            }
         }
 
-        if sleep_or_shutdown(CLASH_WS_RECONNECT_INTERVAL, &mut shutdown).await {
+        if sleep_or_shutdown(reconnect_backoff.next_delay(), &mut shutdown).await {
             break;
         }
     }
@@ -486,6 +516,70 @@ async fn sleep_or_shutdown(duration: Duration, shutdown: &mut watch::Receiver<bo
     }
 }
 
+#[derive(Debug, Clone)]
+struct WebSocketReconnectBackoff {
+    attempt: u32,
+    initial: Duration,
+    max: Duration,
+}
+
+impl WebSocketReconnectBackoff {
+    const fn new(initial: Duration, max: Duration) -> Self {
+        Self {
+            attempt: 0,
+            initial,
+            max,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.attempt = 0;
+    }
+
+    fn next_delay(&mut self) -> Duration {
+        let delay = websocket_reconnect_delay(
+            self.attempt,
+            self.initial,
+            self.max,
+            reconnect_jitter_seed(),
+        );
+        self.attempt = self.attempt.saturating_add(1);
+        delay
+    }
+}
+
+fn websocket_reconnect_delay(
+    attempt: u32,
+    initial: Duration,
+    max: Duration,
+    jitter_seed: u64,
+) -> Duration {
+    let multiplier = 1_u32.checked_shl(attempt.min(16)).unwrap_or(u32::MAX);
+    let scaled = initial.saturating_mul(multiplier);
+    let base = if scaled > max { max } else { scaled };
+
+    base.saturating_add(reconnect_jitter(base, jitter_seed))
+}
+
+fn reconnect_jitter(base: Duration, jitter_seed: u64) -> Duration {
+    let jitter_limit_nanos =
+        (base.as_nanos() / u128::from(WS_RECONNECT_JITTER_DIVISOR)).min(u128::from(u64::MAX));
+    if jitter_limit_nanos == 0 {
+        return Duration::ZERO;
+    }
+
+    let jitter_nanos = u128::from(jitter_seed) % (jitter_limit_nanos + 1);
+    Duration::from_nanos(u64::try_from(jitter_nanos).unwrap_or(u64::MAX))
+}
+
+fn reconnect_jitter_seed() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| {
+            u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX) ^ u64::from(std::process::id())
+        })
+}
+
 pub fn route_clash_ws_event(sink: &dyn ClashEventSink, event: ClashWebSocketEvent) {
     match event {
         ClashWebSocketEvent::Traffic(event) => sink.emit_traffic(traffic_event(event)),
@@ -496,8 +590,13 @@ pub fn route_clash_ws_event(sink: &dyn ClashEventSink, event: ClashWebSocketEven
 }
 
 #[must_use]
-pub fn clash_endpoint(config: &AppConfig) -> ClashApiEndpoint {
-    ClashApiEndpoint::loopback(singbox_state_port2(config))
+pub fn clash_endpoint(config: &AppConfig) -> Option<ClashApiEndpoint> {
+    available_clash_state_port(config).map(ClashApiEndpoint::loopback)
+}
+
+fn available_clash_state_port(config: &AppConfig) -> Option<u16> {
+    let port = singbox_state_port2(config);
+    (port != 0).then_some(port)
 }
 
 #[must_use]
@@ -915,6 +1014,36 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn clash_manager_rejects_zero_state_port_without_request() {
+        let transport = MockTransport::default();
+        let manager = ClashManager::with_transport(transport.clone());
+
+        let error = manager
+            .connections(&config_with_local_port(-5))
+            .await
+            .expect_err("zero Clash state port should be rejected");
+
+        assert!(matches!(error, ClashManagerError::InvalidStatePort));
+        assert!(transport.requests().is_empty());
+        assert_eq!(clash_endpoint(&config_with_local_port(-5)), None);
+    }
+
+    #[test]
+    fn clash_ws_reconnect_delay_backs_off_with_cap_and_jitter() {
+        let initial = Duration::from_secs(1);
+        let max = Duration::from_secs(8);
+
+        let first = websocket_reconnect_delay(0, initial, max, 0);
+        let second = websocket_reconnect_delay(1, initial, max, 0);
+        let capped = websocket_reconnect_delay(12, initial, max, u64::MAX);
+
+        assert_eq!(first, Duration::from_secs(1));
+        assert_eq!(second, Duration::from_secs(2));
+        assert!(capped >= max);
+        assert!(capped <= max + Duration::from_secs(2));
+    }
+
     #[test]
     fn clash_ws_events_update_event_sink_payloads() {
         let sink = CaptureSink::default();
@@ -1029,6 +1158,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn clash_monitor_zero_state_port_stops_without_endpoint() {
+        let controller = ClashMonitorController::new();
+
+        controller
+            .start(&config(), Arc::new(NoopClashEventSink))
+            .expect("initial monitor start");
+        let (_, first_shutdown) = monitor_handle_snapshot(&controller);
+
+        assert_eq!(
+            controller
+                .start(&config_with_local_port(-5), Arc::new(NoopClashEventSink))
+                .expect("zero port monitor start"),
+            ClashMonitorStatus::stopped()
+        );
+
+        assert!(shutdown_requested(&first_shutdown));
+        assert!(monitor_handle_is_none(&controller));
+    }
+
+    #[tokio::test]
     async fn clash_monitor_start_is_idempotent_for_same_endpoint() {
         let controller = ClashMonitorController::new();
 
@@ -1111,8 +1260,14 @@ mod tests {
         );
         let (replacement_endpoint, replacement_shutdown) = monitor_handle_snapshot(&controller);
 
-        assert_eq!(initial_endpoint, clash_endpoint(&initial_config));
-        assert_eq!(replacement_endpoint, clash_endpoint(&replacement_config));
+        assert_eq!(
+            clash_endpoint(&initial_config).as_ref(),
+            Some(&initial_endpoint)
+        );
+        assert_eq!(
+            clash_endpoint(&replacement_config).as_ref(),
+            Some(&replacement_endpoint)
+        );
         assert_ne!(initial_endpoint, replacement_endpoint);
         assert!(shutdown_requested(&initial_shutdown));
         assert!(!initial_shutdown.same_channel(&replacement_shutdown));
