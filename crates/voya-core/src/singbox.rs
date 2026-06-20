@@ -107,6 +107,8 @@ pub enum SingboxConfigError {
     CustomRulesetJson(#[source] serde_json::Error),
     #[error("sing-box custom ruleset at index {index} is missing tag, type, or format")]
     CustomRulesetMissingRequiredFields { index: usize },
+    #[error("sing-box node {remarks} has invalid port {port}")]
+    InvalidNodePort { remarks: String, port: i32 },
     #[error("failed to serialize sing-box config: {0}")]
     Serialize(#[source] serde_json::Error),
 }
@@ -875,6 +877,7 @@ impl SingboxServer {
 pub fn generate_singbox_config(
     context: &CoreConfigContext,
 ) -> Result<SingboxConfig, SingboxConfigError> {
+    validate_proxy_ports(context)?;
     let mut config = SingboxConfig::sample();
     gen_log(&mut config, context);
     gen_inbounds(&mut config, context);
@@ -900,6 +903,43 @@ pub fn generate_singbox_config_json(
 ) -> Result<String, SingboxConfigError> {
     let value = generate_singbox_config_value(context)?;
     serde_json::to_string_pretty(&value).map_err(SingboxConfigError::Serialize)
+}
+
+fn validate_proxy_ports(context: &CoreConfigContext) -> Result<(), SingboxConfigError> {
+    let mut pending = vec![context.node.clone()];
+    let mut seen = BTreeSet::new();
+
+    while let Some(node) = pending.pop() {
+        if !node.index_id.is_empty() && !seen.insert(node.index_id.clone()) {
+            continue;
+        }
+        if node.config_type == ConfigType::Custom {
+            continue;
+        }
+        if node.config_type.is_group_type() {
+            if let Some(child_ids) = split_list(
+                node.protocol_extra
+                    .child_items
+                    .as_deref()
+                    .unwrap_or_default(),
+            ) {
+                pending.extend(
+                    child_ids
+                        .into_iter()
+                        .filter_map(|node_id| context.all_proxies_map.get(&node_id).cloned()),
+                );
+            }
+            continue;
+        }
+        if !(1..=65535).contains(&node.port) {
+            return Err(SingboxConfigError::InvalidNodePort {
+                remarks: node.remarks,
+                port: node.port,
+            });
+        }
+    }
+
+    Ok(())
 }
 
 fn gen_log(config: &mut SingboxConfig, context: &CoreConfigContext) {
@@ -1332,7 +1372,7 @@ fn fill_shadowsocks_plugin(
         plugin_args.push_str("mode=websocket;");
         plugin_args.push_str(&format!(
             "host={};",
-            transport_extra.host.as_deref().unwrap_or_default()
+            first_list_value(transport_extra.host.as_deref())
         ));
         let path = transport_extra
             .path
@@ -1493,14 +1533,10 @@ fn fill_outbound_transport(
             transport.path = nonempty_string(Some(&ws_path));
             transport.max_early_data = early_data;
             transport.early_data_header_name = early_header;
-            if transport_extra
-                .host
-                .as_deref()
-                .is_some_and(|host| !host.trim().is_empty())
-                || !user_agent.is_empty()
-            {
+            let host = first_list_value(transport_extra.host.as_deref());
+            if !host.is_empty() || !user_agent.is_empty() {
                 transport.headers = Some(SingboxHeaders {
-                    host: nonempty_string(transport_extra.host.as_deref()),
+                    host: nonempty_string(Some(&host)),
                     user_agent: nonempty_string(Some(&user_agent)),
                 });
             }
@@ -1508,7 +1544,8 @@ fn fill_outbound_transport(
         "httpupgrade" => {
             transport.r#type = Some("httpupgrade".to_string());
             transport.path = nonempty_string(transport_extra.path.as_deref());
-            transport.host = nonempty_string(transport_extra.host.as_deref()).map(Value::String);
+            let host = first_list_value(transport_extra.host.as_deref());
+            transport.host = nonempty_string(Some(&host)).map(Value::String);
             if !user_agent.is_empty() {
                 transport.headers = Some(SingboxHeaders {
                     host: None,
@@ -2284,32 +2321,32 @@ fn gen_dns(config: &mut SingboxConfig, context: &CoreConfigContext) {
 
 fn gen_dns_servers(config: &mut SingboxConfig, context: &CoreConfigContext) {
     let simple_dns = &context.simple_dns_item;
-    let mut bootstrap_dns = parse_dns_address(
+    let mut bootstrap_dns = parse_dns_address_or_default(
         simple_dns
             .bootstrap_dns
             .as_deref()
             .unwrap_or(DEFAULT_BOOTSTRAP_DNS),
-    )
-    .unwrap_or_else(|| parse_dns_address(DEFAULT_BOOTSTRAP_DNS).unwrap_or_default());
+        DEFAULT_BOOTSTRAP_DNS,
+    );
     bootstrap_dns.tag = SINGBOX_LOCAL_DNS_TAG.to_string();
 
-    let mut direct_dns = parse_dns_address(
+    let mut direct_dns = parse_dns_address_or_default(
         simple_dns
             .direct_dns
             .as_deref()
             .unwrap_or(DEFAULT_DIRECT_DNS),
-    )
-    .unwrap_or_else(|| parse_dns_address(DEFAULT_DIRECT_DNS).unwrap_or_default());
+        DEFAULT_DIRECT_DNS,
+    );
     direct_dns.tag = SINGBOX_DIRECT_DNS_TAG.to_string();
     direct_dns.domain_resolver = Some(SINGBOX_LOCAL_DNS_TAG.to_string());
 
-    let mut remote_dns = parse_dns_address(
+    let mut remote_dns = parse_dns_address_or_default(
         simple_dns
             .remote_dns
             .as_deref()
             .unwrap_or(DEFAULT_REMOTE_DNS),
-    )
-    .unwrap_or_else(|| parse_dns_address(DEFAULT_REMOTE_DNS).unwrap_or_default());
+        DEFAULT_REMOTE_DNS,
+    );
     remote_dns.tag = SINGBOX_REMOTE_DNS_TAG.to_string();
     remote_dns.detour = Some(PROXY_TAG.to_string());
     remote_dns.domain_resolver = Some(SINGBOX_LOCAL_DNS_TAG.to_string());
@@ -2690,6 +2727,12 @@ fn parse_direct_expected_ips(value: Option<&str>) -> (Vec<String>, Vec<String>, 
     (ip_cidr, regions, region_name)
 }
 
+fn parse_dns_address_or_default(address: &str, default_address: &str) -> SingboxDnsServer {
+    parse_dns_address(address)
+        .or_else(|| parse_dns_address(default_address))
+        .unwrap_or_else(SingboxDnsServer::default)
+}
+
 fn parse_dns_address(address: &str) -> Option<SingboxDnsServer> {
     let address_first = first_dns_address(address)?;
     if matches!(address_first.as_str(), "local" | "localhost") {
@@ -2699,7 +2742,7 @@ fn parse_dns_address(address: &str) -> Option<SingboxDnsServer> {
         });
     }
 
-    let (domain, scheme, port, path) = parse_url_parts(&address_first);
+    let (domain, scheme, port, path) = parse_url_parts(&address_first)?;
     if scheme.eq_ignore_ascii_case("dhcp") {
         return Some(SingboxDnsServer {
             r#type: "dhcp".to_string(),
@@ -2716,7 +2759,7 @@ fn parse_dns_address(address: &str) -> Option<SingboxDnsServer> {
     Some(SingboxDnsServer {
         r#type: server_type.clone(),
         server: (!domain.is_empty()).then_some(domain),
-        server_port: (port != 0).then_some(port),
+        server_port: port.map(i32::from),
         path: matches!(server_type.as_str(), "https" | "h3")
             .then(|| path)
             .filter(|path| !path.is_empty() && path != "/"),
@@ -2733,7 +2776,7 @@ fn first_dns_address(address: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-fn parse_url_parts(input: &str) -> (String, String, i32, String) {
+fn parse_url_parts(input: &str) -> Option<(String, String, Option<u16>, String)> {
     if let Ok(url) = url::Url::parse(input) {
         if let Some(host) = url.host_str() {
             let mut path = url.path().to_string();
@@ -2741,13 +2784,16 @@ fn parse_url_parts(input: &str) -> (String, String, i32, String) {
                 path.push('?');
                 path.push_str(query);
             }
-            return (
-                host.to_string(),
-                url.scheme().to_string(),
-                url.port().unwrap_or_default().into(),
-                path,
-            );
+            let port = match url.port() {
+                Some(0) => return None,
+                Some(port) => Some(port),
+                None => None,
+            };
+            return Some((host.to_string(), url.scheme().to_string(), port, path));
         }
+    }
+    if input.contains("://") {
+        return None;
     }
 
     let (scheme, rest) = input
@@ -2764,17 +2810,17 @@ fn parse_url_parts(input: &str) -> (String, String, i32, String) {
     } else {
         String::new()
     };
-    let (domain, port) = parse_authority(authority);
+    let (domain, port) = parse_authority(authority)?;
     if domain.is_empty() {
-        (input.to_string(), String::new(), 0, String::new())
+        Some((input.to_string(), String::new(), None, String::new()))
     } else {
-        (domain, scheme.to_string(), port, path)
+        Some((domain, scheme.to_string(), port, path))
     }
 }
 
-fn parse_authority(authority: &str) -> (String, i32) {
+fn parse_authority(authority: &str) -> Option<(String, Option<u16>)> {
     if authority.is_empty() {
-        return (String::new(), 0);
+        return Some((String::new(), None));
     }
     let authority = authority
         .rsplit_once('@')
@@ -2782,19 +2828,27 @@ fn parse_authority(authority: &str) -> (String, i32) {
     if authority.starts_with('[') {
         if let Some(closing_bracket_index) = authority.rfind(']') {
             let domain = authority[..=closing_bracket_index].to_string();
-            let port = authority
-                .get(closing_bracket_index + 2..)
-                .and_then(|port| port.parse::<i32>().ok())
+            let rest = authority
+                .get(closing_bracket_index + 1..)
                 .unwrap_or_default();
-            return (domain, port);
+            if rest.is_empty() {
+                return Some((domain, None));
+            }
+            let port = parse_authority_port(rest.strip_prefix(':')?)?;
+            return Some((domain, Some(port)));
         }
     }
     if let Some((domain, port)) = authority.rsplit_once(':') {
-        if port.chars().all(|ch| ch.is_ascii_digit()) {
-            return (domain.to_string(), port.parse::<i32>().unwrap_or_default());
+        if !domain.contains(':') {
+            let port = parse_authority_port(port)?;
+            return Some((domain.to_string(), Some(port)));
         }
     }
-    (authority.to_string(), 0)
+    Some((authority.to_string(), None))
+}
+
+fn parse_authority_port(port: &str) -> Option<u16> {
+    port.parse::<u16>().ok().filter(|port| *port > 0)
 }
 
 fn domain_strategy4_sbox(strategy: Option<&str>) -> Option<String> {
@@ -3430,11 +3484,13 @@ fn allow_insecure(node: &ProfileItem, context: &CoreConfigContext) -> bool {
 }
 
 fn transport_host_for_tls(node: &ProfileItem) -> Option<String> {
-    match singbox_network(node).as_str() {
+    let host = match singbox_network(node).as_str() {
         DEFAULT_NETWORK | "ws" | "httpupgrade" | "xhttp" => node.transport_extra.host.clone(),
         "grpc" => node.transport_extra.grpc_authority.clone(),
         _ => None,
-    }
+    };
+    let first_host = first_list_value(host.as_deref());
+    nonempty_string(Some(&first_host))
 }
 
 fn raw_http_user_agent(user_agent: &str) -> String {
@@ -3512,6 +3568,17 @@ fn split_csv(value: &str) -> Vec<String> {
         .filter(|item| !item.is_empty())
         .map(str::to_string)
         .collect()
+}
+
+fn first_list_value(value: Option<&str>) -> String {
+    split_list(value.unwrap_or_default())
+        .and_then(|items| {
+            items
+                .into_iter()
+                .map(|item| item.trim().to_string())
+                .find(|item| !item.is_empty())
+        })
+        .unwrap_or_default()
 }
 
 fn nonempty_string(value: Option<&str>) -> Option<String> {
@@ -3730,6 +3797,130 @@ mod tests {
             .expect("tls settings should be generated");
         assert_eq!(tls.insecure, Some(false));
         assert!(tls.reality.is_some());
+    }
+
+    #[test]
+    fn singbox_transport_hosts_use_first_authority() {
+        let node = ProfileItem {
+            network: "ws".to_string(),
+            sni: String::new(),
+            transport_extra: TransportExtraItem {
+                host: Some("one.example, two.example".to_string()),
+                path: Some("/ws".to_string()),
+                ..TransportExtraItem::default()
+            },
+            ..base_remote_node()
+        };
+        let context = test_context(AppConfig::default(), node.clone());
+        let outbound = build_outbound(&context, &node);
+        assert_eq!(
+            outbound
+                .transport
+                .as_ref()
+                .and_then(|transport| transport.headers.as_ref())
+                .and_then(|headers| headers.host.as_deref()),
+            Some("one.example")
+        );
+        assert_eq!(
+            outbound
+                .tls
+                .as_ref()
+                .and_then(|tls| tls.server_name.as_deref()),
+            Some("one.example")
+        );
+
+        let node = ProfileItem {
+            network: "httpupgrade".to_string(),
+            sni: String::new(),
+            transport_extra: TransportExtraItem {
+                host: Some("upgrade.example, backup.example".to_string()),
+                path: Some("/up".to_string()),
+                ..TransportExtraItem::default()
+            },
+            ..base_remote_node()
+        };
+        let context = test_context(AppConfig::default(), node.clone());
+        let outbound = build_outbound(&context, &node);
+        assert_eq!(
+            outbound
+                .transport
+                .as_ref()
+                .and_then(|transport| transport.host.as_ref()),
+            Some(&Value::String("upgrade.example".to_string()))
+        );
+        assert_eq!(
+            outbound
+                .tls
+                .as_ref()
+                .and_then(|tls| tls.server_name.as_deref()),
+            Some("upgrade.example")
+        );
+
+        let node = ProfileItem {
+            config_type: ConfigType::Trojan,
+            password: "secret".to_string(),
+            network: "grpc".to_string(),
+            sni: String::new(),
+            transport_extra: TransportExtraItem {
+                grpc_authority: Some("grpc-one.example, grpc-two.example".to_string()),
+                grpc_service_name: Some("svc".to_string()),
+                ..TransportExtraItem::default()
+            },
+            ..base_remote_node()
+        };
+        let context = test_context(AppConfig::default(), node.clone());
+        let outbound = build_outbound(&context, &node);
+        assert_eq!(
+            outbound
+                .tls
+                .as_ref()
+                .and_then(|tls| tls.server_name.as_deref()),
+            Some("grpc-one.example")
+        );
+
+        let node = ProfileItem {
+            config_type: ConfigType::Shadowsocks,
+            password: "secret".to_string(),
+            network: "ws".to_string(),
+            stream_security: String::new(),
+            protocol_extra: ProtocolExtraItem {
+                ss_method: Some("aes-128-gcm".to_string()),
+                ..ProtocolExtraItem::default()
+            },
+            transport_extra: TransportExtraItem {
+                host: Some("plugin-one.example, plugin-two.example".to_string()),
+                path: Some("/plugin".to_string()),
+                ..TransportExtraItem::default()
+            },
+            ..base_remote_node()
+        };
+        let context = test_context(AppConfig::default(), node.clone());
+        let outbound = build_outbound(&context, &node);
+        assert_eq!(
+            outbound.plugin_opts.as_deref(),
+            Some("mode=websocket;host=plugin-one.example;path=/plugin;mux=0")
+        );
+    }
+
+    #[test]
+    fn singbox_invalid_ports_are_rejected_or_skipped() {
+        assert!(parse_dns_address("1.1.1.1:70000").is_none());
+        assert!(parse_dns_address("https://dns.example:70000/dns-query").is_none());
+        assert!(parse_dns_address("8.8.8.8:0").is_none());
+
+        let fallback = parse_dns_address_or_default("1.1.1.1:70000", DEFAULT_DIRECT_DNS);
+        assert_ne!(fallback.server_port, Some(70000));
+
+        let node = ProfileItem {
+            port: 70000,
+            ..base_remote_node()
+        };
+        let error = generate_singbox_config(&test_context(AppConfig::default(), node))
+            .expect_err("invalid node port should be rejected");
+        assert!(matches!(
+            error,
+            SingboxConfigError::InvalidNodePort { port: 70000, .. }
+        ));
     }
 
     #[test]

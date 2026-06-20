@@ -117,16 +117,9 @@ impl Query {
         };
         let mut query = Self::default();
         for part in raw_query.split('&').filter(|part| !part.is_empty()) {
-            let mut pieces = part.split('=');
-            let Some(key) = pieces.next() else {
+            let Some((key, value)) = part.split_once('=') else {
                 continue;
             };
-            let Some(value) = pieces.next() else {
-                continue;
-            };
-            if pieces.next().is_some() {
-                continue;
-            }
             let key = url_decode(key);
             if query.contains_key(&key) {
                 continue;
@@ -2378,6 +2371,20 @@ mod share_tests {
             .as_deref()
             .unwrap_or_default()
             .contains("downloadSettings"));
+    }
+
+    #[test]
+    fn fmt_query_parser_preserves_values_containing_equals() {
+        let parsed = parse_share_link(
+            "vless://00000000-0000-0000-0000-000000000001@example.com:443?encryption=none&type=xhttp&extra=left=right==#eq",
+        )
+        .expect("parse vless with equals in query value");
+
+        assert_eq!(parsed.network, "xhttp");
+        assert_eq!(
+            parsed.transport_extra.xhttp_extra.as_deref(),
+            Some("left=right==")
+        );
     }
 
     #[test]

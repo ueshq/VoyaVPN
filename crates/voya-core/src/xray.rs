@@ -1543,7 +1543,9 @@ fn fill_dns_servers(context: &CoreConfigContext, config: &mut XrayConfig) -> Vec
 
     if use_direct_dns(context.routing_item.as_ref()) {
         for dns in &direct_dns_addresses {
-            let mut dns_server = create_dns_server(dns, &[], &[]);
+            let Some(mut dns_server) = create_dns_server(dns, &[], &[]) else {
+                continue;
+            };
             if let Some(object) = dns_server.as_object_mut() {
                 object.insert(
                     "tag".to_string(),
@@ -1555,7 +1557,12 @@ fn fill_dns_servers(context: &CoreConfigContext, config: &mut XrayConfig) -> Vec
             servers.push(dns_server);
         }
     } else {
-        servers.extend(remote_dns_addresses.into_iter().map(Value::String));
+        servers.extend(
+            remote_dns_addresses
+                .into_iter()
+                .filter(|address| parse_dns_address(address).is_some())
+                .map(Value::String),
+        );
     }
 
     let direct_dns_tags = servers
@@ -1661,11 +1668,9 @@ fn fill_dns_domains_custom(dns: &mut Value, context: &CoreConfigContext) {
         .as_ref()
         .and_then(|item| nonempty_str(item.domain_dns_address.as_deref()))
         .unwrap_or(DEFAULT_BOOTSTRAP_DNS);
-    servers.push(create_dns_server(
-        address,
-        &context.protect_domain_list,
-        &[],
-    ));
+    if let Some(dns_server) = create_dns_server(address, &context.protect_domain_list, &[]) {
+        servers.push(dns_server);
+    }
 }
 
 fn gen_statistic(config: &mut XrayConfig, context: &CoreConfigContext) {
@@ -2030,6 +2035,7 @@ fn parse_dns_addresses(input: Option<&str>, default_address: &str) -> Vec<String
         .split(separator)
         .map(str::trim)
         .filter(|address| !address.is_empty())
+        .filter(|address| parse_dns_address(address).is_some())
     {
         let normalized = if address
             .get(..4)
@@ -2084,7 +2090,9 @@ fn add_dns_servers(
         return;
     }
     for dns_address in dns_addresses {
-        let mut dns_server = create_dns_server(dns_address, domains, expected_ips);
+        let Some(mut dns_server) = create_dns_server(dns_address, domains, expected_ips) else {
+            continue;
+        };
         if is_direct_dns {
             if let Some(object) = dns_server.as_object_mut() {
                 object.insert(
@@ -2098,8 +2106,12 @@ fn add_dns_servers(
     }
 }
 
-fn create_dns_server(dns_address: &str, domains: &[String], expected_ips: &[String]) -> Value {
-    let parsed = parse_dns_address(dns_address);
+fn create_dns_server(
+    dns_address: &str,
+    domains: &[String],
+    expected_ips: &[String],
+) -> Option<Value> {
+    let parsed = parse_dns_address(dns_address)?;
     let mut object = Map::new();
     object.insert("address".to_string(), Value::String(parsed.address));
     if let Some(port) = parsed.port {
@@ -2112,7 +2124,7 @@ fn create_dns_server(dns_address: &str, domains: &[String], expected_ips: &[Stri
     if !expected_ips.is_empty() {
         object.insert("expectedIPs".to_string(), json!(expected_ips));
     }
-    Value::Object(object)
+    Some(Value::Object(object))
 }
 
 #[derive(Debug, Clone)]
@@ -2121,11 +2133,15 @@ struct ParsedDnsAddress {
     port: Option<i32>,
 }
 
-fn parse_dns_address(dns_address: &str) -> ParsedDnsAddress {
+fn parse_dns_address(dns_address: &str) -> Option<ParsedDnsAddress> {
     if let Ok(url) = url::Url::parse(dns_address) {
         let scheme = url.scheme();
         let host = url.host_str().unwrap_or_default();
-        let port = url.port().map(i32::from);
+        let port = match url.port() {
+            Some(0) => return None,
+            Some(port) => Some(i32::from(port)),
+            None => None,
+        };
         let address = if scheme.is_empty() || scheme.starts_with("udp") {
             host.to_string()
         } else if scheme.starts_with("tcp") {
@@ -2133,37 +2149,59 @@ fn parse_dns_address(dns_address: &str) -> ParsedDnsAddress {
         } else {
             dns_address.to_string()
         };
-        return ParsedDnsAddress { address, port };
+        return Some(ParsedDnsAddress { address, port });
+    }
+
+    if dns_address.contains("://") {
+        return None;
     }
 
     if let Some((host, port)) = split_host_port(dns_address) {
-        return ParsedDnsAddress {
+        return Some(ParsedDnsAddress {
             address: host.to_string(),
-            port: port.parse::<i32>().ok(),
-        };
+            port: Some(i32::from(port)),
+        });
     }
 
-    ParsedDnsAddress {
+    if has_invalid_host_port(dns_address) {
+        return None;
+    }
+
+    Some(ParsedDnsAddress {
         address: dns_address.to_string(),
         port: None,
-    }
+    })
 }
 
 fn parse_dns_domain(dns_address: &str) -> String {
     if let Ok(url) = url::Url::parse(dns_address) {
         return url.host_str().unwrap_or_default().to_string();
     }
+    if dns_address.contains("://") || has_invalid_host_port(dns_address) {
+        return String::new();
+    }
     split_host_port(dns_address)
         .map(|(host, _)| host.to_string())
         .unwrap_or_else(|| dns_address.to_string())
 }
 
-fn split_host_port(value: &str) -> Option<(&str, &str)> {
+fn split_host_port(value: &str) -> Option<(&str, u16)> {
     let (host, port) = value.rsplit_once(':')?;
     if host.contains(':') || port.is_empty() || !port.chars().all(|ch| ch.is_ascii_digit()) {
         return None;
     }
-    Some((host, port))
+    parse_port_u16(port).map(|port| (host, port))
+}
+
+fn has_invalid_host_port(value: &str) -> bool {
+    let Some((host, port)) = value.rsplit_once(':') else {
+        return false;
+    };
+    !host.contains(':') && (port.is_empty() || parse_port_u16(port).is_none())
+}
+
+fn parse_port_u16(value: &str) -> Option<u16> {
+    value.parse::<u16>().ok().filter(|port| *port > 0)
 }
 
 fn use_direct_dns(routing: Option<&crate::RoutingItem>) -> bool {
@@ -3348,7 +3386,7 @@ fn transport_values(
                 .unwrap_or(context.app_config.kcp_item.mtu);
         }
         "ws" | "httpupgrade" => {
-            values.host = trimmed_opt(transport.host.as_deref());
+            values.host = first_list_value(transport.host.as_deref());
             values.path = trimmed_opt(transport.path.as_deref());
         }
         "xhttp" => {
@@ -3358,7 +3396,7 @@ fn transport_values(
             values.xhttp_extra = trimmed_opt(transport.xhttp_extra.as_deref());
         }
         "grpc" => {
-            values.host = trimmed_opt(transport.grpc_authority.as_deref());
+            values.host = first_list_value(transport.grpc_authority.as_deref());
             values.path = trimmed_opt(transport.grpc_service_name.as_deref());
             values.header_type = trimmed_opt(transport.grpc_mode.as_deref());
         }
@@ -3550,6 +3588,17 @@ fn trimmed(value: &str) -> &str {
 
 fn trimmed_opt(value: Option<&str>) -> String {
     value.map(str::trim).unwrap_or_default().to_string()
+}
+
+fn first_list_value(value: Option<&str>) -> String {
+    split_list(value.unwrap_or_default())
+        .and_then(|items| {
+            items
+                .into_iter()
+                .map(|item| item.trim().to_string())
+                .find(|item| !item.is_empty())
+        })
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -3833,6 +3882,107 @@ mod tests {
             .and_then(|stream| stream.xhttp_settings.as_ref())
             .expect("xhttp settings");
         assert_eq!(xhttp_settings.extra, None);
+    }
+
+    #[test]
+    fn xray_transport_hosts_use_first_authority_for_ws_httpupgrade_and_grpc() {
+        for (network, host_field) in [
+            ("ws", "one.example, two.example"),
+            ("httpupgrade", "upgrade.example, backup.example"),
+        ] {
+            let node = ProfileItem {
+                index_id: format!("n-{network}"),
+                config_type: ConfigType::VLESS,
+                remarks: network.to_string(),
+                address: "server.example".to_string(),
+                port: 443,
+                password: "00000000-0000-0000-0000-000000000013".to_string(),
+                network: network.to_string(),
+                stream_security: STREAM_SECURITY_TLS.to_string(),
+                protocol_extra: ProtocolExtraItem {
+                    vless_encryption: Some("none".to_string()),
+                    ..ProtocolExtraItem::default()
+                },
+                transport_extra: TransportExtraItem {
+                    host: Some(host_field.to_string()),
+                    path: Some("/path".to_string()),
+                    ..TransportExtraItem::default()
+                },
+                ..ProfileItem::default()
+            };
+
+            let context = test_context(AppConfig::default(), node.clone());
+            let outbound = build_proxy_outbound(&context, &node, PROXY_TAG);
+            let stream = outbound.stream_settings.expect("stream settings");
+            let expected_host = host_field.split(',').next().expect("first host").trim();
+            assert_eq!(
+                stream
+                    .tls_settings
+                    .as_ref()
+                    .and_then(|settings| settings.server_name.as_deref()),
+                Some(expected_host)
+            );
+            if network == "ws" {
+                assert_eq!(
+                    stream.ws_settings.and_then(|settings| settings.host),
+                    Some(expected_host.to_string())
+                );
+            } else {
+                assert_eq!(
+                    stream
+                        .httpupgrade_settings
+                        .and_then(|settings| settings.host),
+                    Some(expected_host.to_string())
+                );
+            }
+        }
+
+        let node = ProfileItem {
+            index_id: "n-grpc".to_string(),
+            config_type: ConfigType::Trojan,
+            remarks: "grpc".to_string(),
+            address: "server.example".to_string(),
+            port: 443,
+            password: "secret".to_string(),
+            network: "grpc".to_string(),
+            stream_security: STREAM_SECURITY_TLS.to_string(),
+            transport_extra: TransportExtraItem {
+                grpc_authority: Some("grpc-one.example, grpc-two.example".to_string()),
+                grpc_service_name: Some("svc".to_string()),
+                ..TransportExtraItem::default()
+            },
+            ..ProfileItem::default()
+        };
+
+        let context = test_context(AppConfig::default(), node.clone());
+        let outbound = build_proxy_outbound(&context, &node, PROXY_TAG);
+        let stream = outbound.stream_settings.expect("stream settings");
+        assert_eq!(
+            stream
+                .tls_settings
+                .as_ref()
+                .and_then(|settings| settings.server_name.as_deref()),
+            Some("grpc-one.example")
+        );
+        assert_eq!(
+            stream.grpc_settings.and_then(|settings| settings.authority),
+            Some("grpc-one.example".to_string())
+        );
+    }
+
+    #[test]
+    fn xray_dns_addresses_with_invalid_ports_are_skipped() {
+        assert!(parse_dns_address("1.1.1.1:70000").is_none());
+        assert!(parse_dns_address("https://dns.example:70000/dns-query").is_none());
+        assert!(create_dns_server("8.8.8.8:0", &[], &[]).is_none());
+
+        assert_eq!(
+            parse_dns_addresses(
+                Some("1.1.1.1:70000;8.8.8.8:53;https://dns.example:70000/dns-query"),
+                DEFAULT_DIRECT_DNS,
+            ),
+            vec!["8.8.8.8:53".to_string()]
+        );
     }
 
     #[test]
