@@ -149,6 +149,11 @@
   },
   "panes": {
     "clashConnections": {
+      "columns": {
+        "heading": "نمایش ستون‌ها",
+        "reset": "بازنشانی به پیش‌فرض",
+        "toggle": "ستون‌ها"
+      },
       "empty": "اتصال Clash نیست",
       "title": "اتصال های Clash"
     },

@@ -149,6 +149,11 @@
   },
   "panes": {
     "clashConnections": {
+      "columns": {
+        "heading": "显示列",
+        "reset": "恢复默认",
+        "toggle": "列"
+      },
       "empty": "No Clash connections",
       "title": "Clash Connections"
     },

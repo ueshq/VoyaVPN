@@ -149,6 +149,11 @@
   },
   "panes": {
     "clashConnections": {
+      "columns": {
+        "heading": "顯示欄位",
+        "reset": "恢復預設",
+        "toggle": "欄位"
+      },
       "empty": "No Clash connections",
       "title": "Clash Connections"
     },

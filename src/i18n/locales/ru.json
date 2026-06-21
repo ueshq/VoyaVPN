@@ -149,6 +149,11 @@
   },
   "panes": {
     "clashConnections": {
+      "columns": {
+        "heading": "Показать столбцы",
+        "reset": "Сбросить по умолчанию",
+        "toggle": "Столбцы"
+      },
       "empty": "No Clash connections",
       "title": "Clash Connections"
     },

@@ -149,6 +149,11 @@
   },
   "panes": {
     "clashConnections": {
+      "columns": {
+        "heading": "Spalten anzeigen",
+        "reset": "Auf Standard zurücksetzen",
+        "toggle": "Spalten"
+      },
       "empty": "No Clash connections",
       "title": "Clash Connections"
     },

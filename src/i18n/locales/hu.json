@@ -149,6 +149,11 @@
   },
   "panes": {
     "clashConnections": {
+      "columns": {
+        "heading": "Oszlopok megjelenítése",
+        "reset": "Alapértékek visszaállítása",
+        "toggle": "Oszlopok"
+      },
       "empty": "No Clash connections",
       "title": "Clash Connections"
     },
