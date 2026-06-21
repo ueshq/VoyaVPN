@@ -759,7 +759,8 @@
     "dns": "DNS",
     "logs": "Logs",
     "profiles": "Profiles",
-    "routing": "Routing"
+    "routing": "Routing",
+    "home": "主頁"
   },
   "updates": {
     "acquisition": {
@@ -823,5 +824,18 @@
     "title": "Check Updates",
     "version": "Version",
     "waiting": "Waiting"
+  },
+  "home": {
+    "aria": "連線主頁",
+    "protected": "已受保護",
+    "unprotected": "未受保護",
+    "protectedHint": "流量正透過目前節點轉發。",
+    "unprotectedHint": "連線以安全轉發流量。",
+    "node": "節點",
+    "noNode": "無使用中節點",
+    "core": "核心",
+    "upload": "上行",
+    "download": "下行",
+    "duration": "已連線"
   }
 }

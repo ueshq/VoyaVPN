@@ -105,7 +105,6 @@ export function StatusBar() {
   const tunStateLabel = tunEnabled ? t("status.tunOn") : t("status.tunOff");
   const uploadLabel = t("status.upload", { speed: formatBytesPerSecond(statistics?.uploadBytesPerSecond ?? 0) });
   const downloadLabel = t("status.download", { speed: formatBytesPerSecond(statistics?.downloadBytesPerSecond ?? 0) });
-  const profilesLabel = t("status.profiles", { count: 0 });
 
   async function runRuntimeAction(action: "connect" | "disconnect" | "restart") {
     setPendingAction(action);
@@ -337,13 +336,6 @@ export function StatusBar() {
         </Badge>
       </div>
       <div className="ms-auto flex min-w-0 items-center gap-2">
-        <Badge
-          className="hidden h-6 w-24 min-w-0 shrink justify-start bg-background px-2 text-muted-foreground sm:inline-flex"
-          title={profilesLabel}
-          variant="outline"
-        >
-          <span className="min-w-0 truncate">{profilesLabel}</span>
-        </Badge>
         <Badge
           className="hidden h-6 w-28 min-w-0 shrink justify-start bg-background px-2 text-muted-foreground lg:inline-flex"
           title={uploadLabel}

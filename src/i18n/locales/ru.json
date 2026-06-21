@@ -759,7 +759,8 @@
     "dns": "DNS",
     "logs": "Logs",
     "profiles": "Profiles",
-    "routing": "Routing"
+    "routing": "Routing",
+    "home": "Главная"
   },
   "updates": {
     "acquisition": {
@@ -823,5 +824,18 @@
     "title": "Check Updates",
     "version": "Version",
     "waiting": "Waiting"
+  },
+  "home": {
+    "aria": "Главная подключения",
+    "protected": "Защищено",
+    "unprotected": "Не защищено",
+    "protectedHint": "Трафик идёт через активный узел.",
+    "unprotectedHint": "Подключитесь для безопасной маршрутизации трафика.",
+    "node": "Узел",
+    "noNode": "Нет активного узла",
+    "core": "Ядро",
+    "upload": "Отправка",
+    "download": "Приём",
+    "duration": "В сети"
   }
 }

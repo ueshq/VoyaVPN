@@ -759,7 +759,8 @@
     "dns": "DNS",
     "logs": "Logs",
     "profiles": "Profiles",
-    "routing": "Routing"
+    "routing": "Routing",
+    "home": "Kezdőlap"
   },
   "updates": {
     "acquisition": {
@@ -823,5 +824,18 @@
     "title": "Check Updates",
     "version": "Version",
     "waiting": "Waiting"
+  },
+  "home": {
+    "aria": "Kapcsolat kezdőlap",
+    "protected": "Védett",
+    "unprotected": "Nem védett",
+    "protectedHint": "A forgalom az aktív csomóponton keresztül halad.",
+    "unprotectedHint": "Csatlakozzon a forgalom biztonságos irányításához.",
+    "node": "Csomópont",
+    "noNode": "Nincs aktív csomópont",
+    "core": "Mag",
+    "upload": "Feltöltés",
+    "download": "Letöltés",
+    "duration": "Kapcsolódva"
   }
 }

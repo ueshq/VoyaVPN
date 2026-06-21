@@ -759,7 +759,8 @@
     "dns": "DNS",
     "logs": "Logs",
     "profiles": "Profiles",
-    "routing": "Routing"
+    "routing": "Routing",
+    "home": "Start"
   },
   "updates": {
     "acquisition": {
@@ -823,5 +824,18 @@
     "title": "Check Updates",
     "version": "Version",
     "waiting": "Waiting"
+  },
+  "home": {
+    "aria": "Verbindungsstart",
+    "protected": "Geschützt",
+    "unprotected": "Nicht geschützt",
+    "protectedHint": "Ihr Datenverkehr läuft über den aktiven Knoten.",
+    "unprotectedHint": "Verbinden Sie sich, um Ihren Datenverkehr sicher zu leiten.",
+    "node": "Knoten",
+    "noNode": "Kein aktiver Knoten",
+    "core": "Kern",
+    "upload": "Upload",
+    "download": "Download",
+    "duration": "Verbunden seit"
   }
 }

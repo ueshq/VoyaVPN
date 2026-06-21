@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, vi } from "vitest";
@@ -470,12 +470,24 @@ describe("App", () => {
     renderApp();
 
     expect(screen.getByRole("heading", { name: "VoyaVPN" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Home/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Profiles/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Routing/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /DNS/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Clash Proxies/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Clash Connections/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Logs/ })).toBeInTheDocument();
+    expect(screen.getByTestId("status-bar")).toHaveTextContent("Disconnected");
+  });
+
+  it("defaults to the connection home hero", () => {
+    useShellStore.setState({ activeTab: "home" });
+
+    renderApp();
+
+    const hero = screen.getByRole("region", { name: "Connection home" });
+    expect(within(hero).getByRole("button", { name: "Connect" })).toBeInTheDocument();
+    expect(within(hero).getByText("Not protected")).toBeInTheDocument();
     expect(screen.getByTestId("status-bar")).toHaveTextContent("Disconnected");
   });
 

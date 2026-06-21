@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type ShellTab = "profiles" | "routing" | "dns" | "clash-proxies" | "clash-connections" | "logs";
+export type ShellTab = "home" | "profiles" | "routing" | "dns" | "clash-proxies" | "clash-connections" | "logs";
 
 type ShellState = {
   activeTab: ShellTab;
@@ -8,6 +8,6 @@ type ShellState = {
 };
 
 export const useShellStore = create<ShellState>((set) => ({
-  activeTab: "profiles",
+  activeTab: "home",
   setActiveTab: (activeTab) => set({ activeTab }),
 }));

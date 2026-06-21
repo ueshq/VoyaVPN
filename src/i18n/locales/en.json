@@ -759,7 +759,8 @@
     "dns": "DNS",
     "logs": "Logs",
     "profiles": "Profiles",
-    "routing": "Routing"
+    "routing": "Routing",
+    "home": "Home"
   },
   "updates": {
     "acquisition": {
@@ -823,5 +824,18 @@
     "title": "Check Updates",
     "version": "Version",
     "waiting": "Waiting"
+  },
+  "home": {
+    "aria": "Connection home",
+    "protected": "Protected",
+    "unprotected": "Not protected",
+    "protectedHint": "Your traffic is routed through the active node.",
+    "unprotectedHint": "Connect to route your traffic securely.",
+    "node": "Node",
+    "noNode": "No active node",
+    "core": "Core",
+    "upload": "Upload",
+    "download": "Download",
+    "duration": "Connected for"
   }
 }

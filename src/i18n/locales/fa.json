@@ -759,7 +759,8 @@
     "dns": "DNS",
     "logs": "گزارش ها",
     "profiles": "نمایه ها",
-    "routing": "مسیریابی"
+    "routing": "مسیریابی",
+    "home": "خانه"
   },
   "updates": {
     "acquisition": {
@@ -823,5 +824,18 @@
     "title": "بررسی به روزرسانی",
     "version": "نسخه",
     "waiting": "در انتظار"
+  },
+  "home": {
+    "aria": "خانهٔ اتصال",
+    "protected": "محافظت‌شده",
+    "unprotected": "محافظت‌نشده",
+    "protectedHint": "ترافیک شما از طریق گرهٔ فعال هدایت می‌شود.",
+    "unprotectedHint": "برای هدایت امن ترافیک متصل شوید.",
+    "node": "گره",
+    "noNode": "گرهٔ فعالی نیست",
+    "core": "هسته",
+    "upload": "ارسال",
+    "download": "دریافت",
+    "duration": "متصل از"
   }
 }

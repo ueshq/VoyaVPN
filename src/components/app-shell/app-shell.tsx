@@ -6,6 +6,7 @@ import {
   FolderInput,
   Globe2,
   HelpCircle,
+  Home,
   Languages,
   Monitor,
   Moon,
@@ -51,6 +52,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { applyDocumentLocale } from "@/i18n";
 import { useI18n } from "@/i18n/use-i18n";
+import { HomeScreen } from "@/features/home";
 import { ProfilesScreen } from "@/features/profiles";
 import { RoutingScreen } from "@/features/routing";
 import { DnsScreen } from "@/features/dns";
@@ -90,6 +92,12 @@ type ShellTabConfig = {
 };
 
 const shellTabs: ShellTabConfig[] = [
+  {
+    emptyKey: "home.aria",
+    icon: Home,
+    titleKey: "tabs.home",
+    value: "home",
+  },
   {
     emptyKey: "panes.profiles.empty",
     icon: Shield,
@@ -424,7 +432,9 @@ export function AppShell() {
           <div className="min-h-0 flex-1 bg-background">
             {shellTabs.map((tab) => (
               <TabsContent key={tab.value} className="m-0 h-full" value={tab.value}>
-                {tab.value === "profiles" ? (
+                {tab.value === "home" ? (
+                  <HomeScreen />
+                ) : tab.value === "profiles" ? (
                   <ProfilesScreen />
                 ) : tab.value === "routing" ? (
                   <RoutingScreen />
