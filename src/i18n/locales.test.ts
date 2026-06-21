@@ -50,6 +50,47 @@ describe("i18n locales", () => {
     }
   });
 
+  it("translates representative UI strings in Chinese locales (no English leakage)", () => {
+    // Representative keys across the modern UI namespaces and the profiles
+    // sub-domain that previously leaked English values into zh-Hans/zh-Hant.
+    const translatedKeys = [
+      "actions.connect",
+      "actions.save",
+      "actions.settings",
+      "backup.title",
+      "clash.network",
+      "confirm.deleteProfilesTitle",
+      "menu.about",
+      "menu.language",
+      "modal.aboutDescription",
+      "modal.language",
+      "options.autostart",
+      "panes.logs.title",
+      "panes.profiles.title",
+      "panes.profiles.fields.flow",
+      "panes.profiles.fields.host",
+      "panes.subscriptions.empty",
+      "qr.title",
+      "status.connected",
+      "tabs.profiles",
+      "updates.title",
+    ];
+    const hasCjk = /[一-鿿]/;
+
+    for (const locale of ["zh-Hans", "zh-Hant"] as const) {
+      const tree = localeTree(locale);
+      const english = localeTree("en");
+
+      for (const key of translatedKeys) {
+        const value = getValue(tree, key);
+
+        expect(typeof value, `${locale}:${key}`).toBe("string");
+        expect(value, `${locale}:${key}`).toMatch(hasCjk);
+        expect(value, `${locale}:${key}`).not.toBe(getValue(english, key));
+      }
+    }
+  });
+
   it("covers static translation keys used by app source", () => {
     const staticKeys = collectStaticTranslationKeys();
 
