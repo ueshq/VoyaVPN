@@ -165,6 +165,11 @@
       "title": "Logs"
     },
     "profiles": {
+      "columns": {
+        "heading": "Показать столбцы",
+        "reset": "Сбросить по умолчанию",
+        "toggle": "Столбцы"
+      },
       "empty": "No profiles",
       "title": "Profiles"
     },

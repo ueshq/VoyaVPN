@@ -12,6 +12,7 @@ import {
   ChevronsDown,
   ChevronsUp,
   Clock,
+  Columns3,
   Copy,
   FilePlus2,
   Filter,
@@ -20,6 +21,7 @@ import {
   Play,
   Radio,
   RefreshCw,
+  RotateCcw,
   Rows3,
   Rss,
   Search,
@@ -36,6 +38,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import {
+  Menubar,
+  MenubarCheckboxItem,
+  MenubarContent,
+  MenubarItem,
+  MenubarMenu,
+  MenubarSeparator,
+  MenubarTrigger,
+} from "@/components/ui/menubar";
 import {
   copyProfiles,
   cancelSpeedtest,
@@ -57,7 +68,9 @@ import type {
   ProfileSortKey,
   SpeedActionType,
 } from "@/ipc/bindings";
+import { useI18n } from "@/i18n/use-i18n";
 import { cn } from "@/lib/utils";
+import { useProfileColumnsStore } from "@/stores/profile-columns-store";
 
 import { ImportProfilesDialog, SubscriptionsDialog } from "@/features/subscriptions";
 import { CONFIG_TYPES, getProtocolLabel, MOVE_ACTIONS, SPEED_ACTIONS } from "./profile-constants";
@@ -200,7 +213,23 @@ const serverColumns: ServerColumn[] = [
   },
 ];
 
-const gridTemplateColumns = `2.75rem ${serverColumns.map((column) => column.width).join(" ")}`;
+// Leading track is the selection checkbox column.
+const SELECTION_COLUMN_WIDTH_REM = 2.75;
+
+function buildGridTemplateColumns(columns: ServerColumn[]) {
+  return `${SELECTION_COLUMN_WIDTH_REM}rem ${columns.map((column) => column.width).join(" ")}`;
+}
+
+function columnMinWidthRem(width: string) {
+  // Pick the first rem measurement — the fixed size, or the floor of a minmax().
+  const match = /([\d.]+)rem/.exec(width);
+  return match ? Number(match[1]) : 8;
+}
+
+function buildGridMinWidth(columns: ServerColumn[]) {
+  const total = columns.reduce((sum, column) => sum + columnMinWidthRem(column.width), SELECTION_COLUMN_WIDTH_REM);
+  return `${total}rem`;
+}
 
 export function ProfilesScreen() {
   const [dialogState, setDialogState] = useState<DialogState>(null);
@@ -212,6 +241,10 @@ export function ProfilesScreen() {
   const [sortState, setSortState] = useState<{ ascending: boolean; key: ProfileSortKey } | null>(null);
   const [speedtestRunning, setSpeedtestRunning] = useState(false);
   const [subscriptionsOpen, setSubscriptionsOpen] = useState(false);
+  const { t } = useI18n();
+  const columnVisibility = useProfileColumnsStore((state) => state.columnVisibility);
+  const setColumnVisibility = useProfileColumnsStore((state) => state.setColumnVisibility);
+  const resetColumnVisibility = useProfileColumnsStore((state) => state.resetColumnVisibility);
   const serverStatsByProfileId = useRuntimeEventStore((state) => state.serverStatsByProfileId);
   const speedtestResultsByProfileId = useRuntimeEventStore((state) => state.speedtestResultsByProfileId);
   const queryClient = useQueryClient();
@@ -229,6 +262,9 @@ export function ProfilesScreen() {
       serverColumns.map((column) => ({
         id: column.id,
         header: column.label,
+        // The structural `#`/state column is always shown; everything else can
+        // be collapsed through the column menu.
+        enableHiding: column.id !== "state",
       })),
     [],
   );
@@ -238,7 +274,16 @@ export function ProfilesScreen() {
     data: profiles,
     getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => row.profile.IndexId,
+    onColumnVisibilityChange: setColumnVisibility,
+    state: { columnVisibility },
   });
+  const hideableColumns = table.getAllLeafColumns().filter((column) => column.getCanHide());
+  const visibleColumns = useMemo(
+    () => serverColumns.filter((column) => column.id === "state" || columnVisibility[column.id] !== false),
+    [columnVisibility],
+  );
+  const gridTemplateColumns = useMemo(() => buildGridTemplateColumns(visibleColumns), [visibleColumns]);
+  const gridMinWidth = useMemo(() => buildGridMinWidth(visibleColumns), [visibleColumns]);
   const rows = table.getRowModel().rows;
   const viewportRef = useRef<HTMLDivElement>(null);
   const rowVirtualizer = useVirtualizer({
@@ -347,6 +392,38 @@ export function ProfilesScreen() {
             value={filterText}
           />
         </div>
+
+        <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
+          <MenubarMenu>
+            <MenubarTrigger asChild>
+              <Button size="sm" type="button" variant="outline">
+                <Columns3 className="size-4" aria-hidden="true" />
+                {t("panes.profiles.columns.toggle")}
+              </Button>
+            </MenubarTrigger>
+            <MenubarContent align="end">
+              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                {t("panes.profiles.columns.heading")}
+              </div>
+              <MenubarSeparator />
+              {hideableColumns.map((column) => (
+                <MenubarCheckboxItem
+                  checked={column.getIsVisible()}
+                  key={column.id}
+                  onCheckedChange={(value) => column.toggleVisibility(value === true)}
+                  onSelect={(event) => event.preventDefault()}
+                >
+                  {String(column.columnDef.header)}
+                </MenubarCheckboxItem>
+              ))}
+              <MenubarSeparator />
+              <MenubarItem onSelect={() => resetColumnVisibility()}>
+                <RotateCcw className="size-4" aria-hidden="true" />
+                {t("panes.profiles.columns.reset")}
+              </MenubarItem>
+            </MenubarContent>
+          </MenubarMenu>
+        </Menubar>
 
         <Button onClick={() => setDialogState({ mode: "create" })} size="sm" type="button">
           <FilePlus2 className="size-4" aria-hidden="true" />
@@ -474,7 +551,7 @@ export function ProfilesScreen() {
       <div className="min-h-0 flex-1 overflow-hidden p-4">
         <div
           aria-busy={profilesQuery.isLoading}
-          aria-colcount={serverColumns.length + 1}
+          aria-colcount={visibleColumns.length + 1}
           aria-label="Profiles"
           aria-rowcount={profiles.length}
           className="flex h-full min-h-[18rem] flex-col overflow-hidden rounded-md border bg-card"
@@ -483,9 +560,9 @@ export function ProfilesScreen() {
           <div className="overflow-x-auto border-b">
             <div
               aria-rowindex={1}
-              className="grid min-w-[110rem] items-center bg-muted text-xs font-semibold uppercase text-muted-foreground"
+              className="grid items-center bg-muted text-xs font-semibold uppercase text-muted-foreground"
               role="row"
-              style={{ gridTemplateColumns }}
+              style={{ gridTemplateColumns, minWidth: gridMinWidth }}
             >
               <div
                 aria-colindex={1}
@@ -498,7 +575,7 @@ export function ProfilesScreen() {
                   onCheckedChange={(checked) => toggleAllVisible(checked === true)}
                 />
               </div>
-              {serverColumns.map((column, columnIndex) => (
+              {visibleColumns.map((column, columnIndex) => (
                 <div
                   aria-colindex={columnIndex + 2}
                   aria-sort={sortAriaValue(column, sortState)}
@@ -544,7 +621,7 @@ export function ProfilesScreen() {
                 No profiles
               </div>
             ) : (
-              <div className="relative min-w-[110rem]" style={{ height: rowVirtualizer.getTotalSize() }}>
+              <div className="relative" style={{ height: rowVirtualizer.getTotalSize(), minWidth: gridMinWidth }}>
                 {renderedRows.map((virtualRow) => {
                   const row = rows[virtualRow.index];
                   if (!row) {
@@ -569,7 +646,7 @@ export function ProfilesScreen() {
                       <div
                         aria-selected={isSelected}
                         className={cn(
-                          "absolute start-0 grid h-[38px] min-w-[110rem] items-center border-b text-sm outline-none",
+                          "absolute start-0 grid h-[38px] items-center border-b text-sm outline-none",
                           item.isActive || isSelected
                             ? "bg-muted/70"
                             : virtualRow.index % 2 === 0
@@ -615,6 +692,7 @@ export function ProfilesScreen() {
                         role="row"
                         style={{
                           gridTemplateColumns,
+                          minWidth: gridMinWidth,
                           transform: `translateY(${virtualRow.start}px)`,
                         }}
                         tabIndex={0}
@@ -631,7 +709,7 @@ export function ProfilesScreen() {
                             onCheckedChange={(checked) => toggleSelection(indexId, checked === true)}
                           />
                         </div>
-                        {serverColumns.map((column, columnIndex) => {
+                        {visibleColumns.map((column, columnIndex) => {
                           const cell = column.cell(item, virtualRow.index + 1);
 
                           return (

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, vi } from "vitest";
 
 import type { ProfileItem_Deserialize, ProfileListItem_Serialize } from "@/ipc/bindings";
+import { DEFAULT_PROFILE_COLUMN_VISIBILITY, useProfileColumnsStore } from "@/stores/profile-columns-store";
 
 import { CONFIG_TYPES, MOVE_ACTIONS, PROFILE_PROTOCOLS } from "./profile-constants";
 import { ProfilesScreen } from "./server-table";
@@ -92,6 +93,9 @@ describe("ProfilesScreen", () => {
         mock.mockReset();
       }
     });
+    // Column visibility persists to localStorage, so reset it between tests to
+    // keep the default-column expectations independent of prior toggles.
+    useProfileColumnsStore.setState({ columnVisibility: { ...DEFAULT_PROFILE_COLUMN_VISIBILITY } });
     ipcMocks.copyProfiles.mockResolvedValue([]);
     ipcMocks.dedupeProfiles.mockResolvedValue({ kept: 0, removedIndexIds: [], total: 0 });
     ipcMocks.deleteSubscriptions.mockResolvedValue(1);
@@ -174,15 +178,59 @@ describe("ProfilesScreen", () => {
     expect(ipcMocks.sortProfiles).toHaveBeenCalledWith(null, "remarks", true);
   });
 
-  it("renders persisted traffic columns for profile rows", async () => {
+  it("ships high-signal columns and collapses niche ones by default", async () => {
     ipcMocks.listProfiles.mockResolvedValue(makeProfiles(3));
 
     renderProfiles();
 
-    expect(await screen.findByText("Today up")).toBeInTheDocument();
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+
+    for (const label of ["Protocol", "Remarks", "Address", "Delay", "Group"]) {
+      expect(screen.getByRole("columnheader", { name: label })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole("columnheader", { name: "IP info" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Security" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("menuitem", { name: "Columns" }));
+    await userEvent.click(await screen.findByRole("menuitemcheckbox", { name: "IP info" }));
+    expect(await screen.findByRole("columnheader", { name: "IP info" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("menuitemcheckbox", { name: "IP info" }));
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("columnheader", { name: "IP info" })).not.toBeInTheDocument();
+  });
+
+  it("reveals niche traffic columns through the column menu", async () => {
+    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(3));
+
+    renderProfiles();
+
     expect(await screen.findByText("Server 1")).toBeInTheDocument();
+    // Traffic columns are collapsed by default to cut horizontal scroll.
+    expect(screen.queryByRole("columnheader", { name: "Total up" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("menuitem", { name: "Columns" }));
+    await userEvent.click(await screen.findByRole("menuitemcheckbox", { name: "Total up" }));
+    await userEvent.keyboard("{Escape}");
+
+    expect(await screen.findByRole("columnheader", { name: "Total up" })).toBeInTheDocument();
     expect(screen.getAllByText("4.0 KB").length).toBeGreaterThan(0);
     expect(screen.getAllByText("8.0 KB").length).toBeGreaterThan(0);
+  });
+
+  it("restores default columns from the column menu reset action", async () => {
+    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(3));
+
+    renderProfiles();
+
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("menuitem", { name: "Columns" }));
+    await userEvent.click(await screen.findByRole("menuitemcheckbox", { name: "IP info" }));
+    expect(await screen.findByRole("columnheader", { name: "IP info" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("menuitem", { name: "Reset to defaults" }));
+    expect(screen.queryByRole("columnheader", { name: "IP info" })).not.toBeInTheDocument();
   });
 
   it("runs import and subscription update actions through subscription IPC wrappers", async () => {
