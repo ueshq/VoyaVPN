@@ -394,8 +394,11 @@ export function ProfilesScreen() {
 
   async function handleSpeedtest(action: SpeedActionType, indexIds = selectedIdsArray) {
     setSpeedtestRunning(true);
-    await runOperation(() => runSpeedtest(action, indexIds));
-    setSpeedtestRunning(false);
+    try {
+      await runOperation(() => runSpeedtest(action, indexIds));
+    } finally {
+      setSpeedtestRunning(false);
+    }
   }
 
   async function handleCancelSpeedtest() {

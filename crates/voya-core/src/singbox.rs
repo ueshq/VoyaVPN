@@ -10,8 +10,9 @@ use thiserror::Error;
 
 use crate::{
     AppConfig, ConfigType, CoreConfigContext, InItem, InboundProtocol, MultipleLoad, ProfileItem,
-    ProtocolExtraItem, RuleType, RulesItem, TransportExtraItem, BLOCK_TAG, DEFAULT_BOOTSTRAP_DNS,
-    DEFAULT_DIRECT_DNS, DEFAULT_LOCAL_PORT, DEFAULT_REMOTE_DNS, DIRECT_TAG, LOOPBACK, PROXY_TAG,
+    ProtocolExtraItem, RuleType, RulesItem, SpeedtestConfigEntry, TransportExtraItem, BLOCK_TAG,
+    DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS, DEFAULT_LOCAL_PORT, DEFAULT_REMOTE_DNS, DIRECT_TAG,
+    LOOPBACK, PROXY_TAG,
 };
 
 const DEFAULT_SECURITY: &str = "auto";
@@ -920,6 +921,79 @@ pub fn generate_singbox_config_json(
 ) -> Result<String, SingboxConfigError> {
     let value = generate_singbox_config_value(context)?;
     serde_json::to_string_pretty(&value).map_err(SingboxConfigError::Serialize)
+}
+
+pub fn generate_singbox_speedtest_config_json(
+    entries: &[SpeedtestConfigEntry],
+) -> Result<String, SingboxConfigError> {
+    serde_json::to_string_pretty(&generate_singbox_speedtest_config(entries))
+        .map_err(SingboxConfigError::Serialize)
+}
+
+#[must_use]
+pub fn generate_singbox_speedtest_config(entries: &[SpeedtestConfigEntry]) -> SingboxConfig {
+    let mut config = SingboxConfig::sample();
+    config.inbounds.clear();
+    config.outbounds.clear();
+    config.endpoints.clear();
+    config.route.rules.clear();
+    config.route.rule_set = None;
+    config.route.final_outbound = None;
+    config.route.default_domain_resolver = Some(SingboxRule {
+        server: Some(SINGBOX_DIRECT_DNS_TAG.to_string()),
+        ..SingboxRule::default()
+    });
+    config.dns = Some(SingboxDns {
+        servers: vec![SingboxDnsServer {
+            r#type: "udp".to_string(),
+            tag: SINGBOX_DIRECT_DNS_TAG.to_string(),
+            server: Some(DEFAULT_DIRECT_DNS.to_string()),
+            ..SingboxDnsServer::default()
+        }],
+        final_server: Some(SINGBOX_DIRECT_DNS_TAG.to_string()),
+        ..SingboxDns::default()
+    });
+
+    if let Some(entry) = entries.first() {
+        gen_log(&mut config, &entry.context);
+    }
+
+    for entry in entries {
+        let inbound_tag = speedtest_inbound_tag(entry.port);
+        let proxy_tag = speedtest_proxy_tag(entry.port);
+        config.inbounds.push(SingboxInbound {
+            r#type: "mixed".to_string(),
+            tag: inbound_tag.clone(),
+            listen: Some(LOOPBACK.to_string()),
+            listen_port: Some(entry.port),
+            ..SingboxInbound::default()
+        });
+
+        append_servers(
+            &mut config,
+            build_all_proxy_servers(&entry.context, &entry.context.node, &proxy_tag, true),
+        );
+        config.route.rules.push(SingboxRule {
+            inbound: Some(vec![inbound_tag]),
+            outbound: Some(proxy_tag),
+            ..SingboxRule::default()
+        });
+    }
+
+    if let Some(entry) = entries.first() {
+        apply_outbound_bind_interface(&mut config, &entry.context);
+        apply_outbound_send_through(&mut config, &entry.context);
+    }
+
+    config
+}
+
+fn speedtest_inbound_tag(port: i32) -> String {
+    format!("mixed{port}")
+}
+
+fn speedtest_proxy_tag(port: i32) -> String {
+    format!("{PROXY_TAG}{port}")
 }
 
 fn validate_active_wireguard(context: &CoreConfigContext) -> Result<(), SingboxConfigError> {
@@ -4555,6 +4629,134 @@ mod tests {
             serde_json::from_str(include_str!("../../../tests/golden/singbox/route/tun.json"))
                 .expect("sing-box tun route golden fixture should parse as JSON");
         golden::assert_json_eq("singbox-tun-route", &expected_route, &route_value);
+    }
+
+    #[test]
+    fn singbox_speedtest_config_adds_mixed_inbound_proxy_and_route_per_entry() {
+        let entries = vec![
+            SpeedtestConfigEntry {
+                index_id: "a".to_string(),
+                port: 12000,
+                context: test_context(AppConfig::default(), socks_node("a", "node-a")),
+            },
+            SpeedtestConfigEntry {
+                index_id: "b".to_string(),
+                port: 12001,
+                context: test_context(AppConfig::default(), socks_node("b", "node-b")),
+            },
+        ];
+
+        let generated: Value = serde_json::from_str(
+            &generate_singbox_speedtest_config_json(&entries)
+                .expect("sing-box speedtest config should serialize"),
+        )
+        .expect("sing-box speedtest config should parse as JSON");
+        for port in [12000, 12001] {
+            let inbound_tag = format!("mixed{port}");
+            let proxy_tag = format!("proxy{port}");
+            assert!(generated["inbounds"].as_array().is_some_and(|inbounds| {
+                inbounds.iter().any(|inbound| {
+                    inbound["tag"] == inbound_tag
+                        && inbound["listen"] == LOOPBACK
+                        && inbound["listen_port"] == port
+                        && inbound["type"] == "mixed"
+                })
+            }));
+            assert!(generated["outbounds"].as_array().is_some_and(|outbounds| {
+                outbounds
+                    .iter()
+                    .any(|outbound| outbound["tag"] == proxy_tag)
+            }));
+            assert!(generated["route"]["rules"].as_array().is_some_and(|rules| {
+                rules.iter().any(|rule| {
+                    rule["inbound"].as_array().is_some_and(|tags| {
+                        tags.iter()
+                            .any(|tag| tag == &Value::String(inbound_tag.clone()))
+                    }) && rule["outbound"] == proxy_tag
+                })
+            }));
+        }
+        assert_eq!(
+            generated.pointer("/dns/final").and_then(Value::as_str),
+            Some(SINGBOX_DIRECT_DNS_TAG)
+        );
+    }
+
+    #[test]
+    fn singbox_speedtest_config_routes_policy_group_and_proxy_chain_entries() {
+        let group = ProfileItem {
+            index_id: "group".to_string(),
+            config_type: ConfigType::PolicyGroup,
+            core_type: Some(CoreType::sing_box),
+            remarks: "group".to_string(),
+            protocol_extra: ProtocolExtraItem {
+                child_items: Some("g1,g2".to_string()),
+                group_type: Some("PolicyGroup".to_string()),
+                multiple_load: Some(MultipleLoad::Fallback),
+                ..ProtocolExtraItem::default()
+            },
+            ..ProfileItem::default()
+        };
+        let mut group_context = test_context(AppConfig::default(), group);
+        group_context
+            .all_proxies_map
+            .insert("g1".to_string(), socks_node("g1", "group-node-1"));
+        group_context
+            .all_proxies_map
+            .insert("g2".to_string(), socks_node("g2", "group-node-2"));
+
+        let chain = ProfileItem {
+            index_id: "chain".to_string(),
+            config_type: ConfigType::ProxyChain,
+            core_type: Some(CoreType::sing_box),
+            remarks: "chain".to_string(),
+            protocol_extra: ProtocolExtraItem {
+                child_items: Some("c1,c2".to_string()),
+                group_type: Some("ProxyChain".to_string()),
+                ..ProtocolExtraItem::default()
+            },
+            ..ProfileItem::default()
+        };
+        let mut chain_context = test_context(AppConfig::default(), chain);
+        chain_context
+            .all_proxies_map
+            .insert("c1".to_string(), socks_node("c1", "chain-node-1"));
+        chain_context
+            .all_proxies_map
+            .insert("c2".to_string(), socks_node("c2", "chain-node-2"));
+
+        let generated = generate_singbox_speedtest_config(&[
+            SpeedtestConfigEntry {
+                index_id: "group".to_string(),
+                port: 12100,
+                context: group_context,
+            },
+            SpeedtestConfigEntry {
+                index_id: "chain".to_string(),
+                port: 12101,
+                context: chain_context,
+            },
+        ]);
+
+        assert_speedtest_singbox_route(&generated, 12100);
+        assert_speedtest_singbox_route(&generated, 12101);
+        assert!(generated
+            .outbounds
+            .iter()
+            .any(|outbound| outbound.tag.starts_with("proxy12100")));
+        assert!(generated
+            .outbounds
+            .iter()
+            .any(|outbound| outbound.tag.starts_with("proxy12101")));
+    }
+
+    fn assert_speedtest_singbox_route(generated: &SingboxConfig, port: i32) {
+        let inbound_tag = format!("mixed{port}");
+        let proxy_tag = format!("proxy{port}");
+        assert!(generated.route.rules.iter().any(|rule| {
+            rule.inbound.as_ref() == Some(&vec![inbound_tag.clone()])
+                && rule.outbound.as_deref() == Some(proxy_tag.as_str())
+        }));
     }
 
     fn singbox_routing_dns_snapshot_contexts() -> (CoreConfigContext, CoreConfigContext) {

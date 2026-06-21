@@ -151,6 +151,13 @@ pub struct CoreConfigContext {
     pub singbox_ruleset_paths: BTreeMap<String, String>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpeedtestConfigEntry {
+    pub index_id: String,
+    pub port: i32,
+    pub context: CoreConfigContext,
+}
+
 impl Default for CoreConfigContext {
     fn default() -> Self {
         Self {

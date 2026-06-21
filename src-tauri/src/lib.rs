@@ -193,6 +193,9 @@ pub fn run() {
             let runner = StdProcessRunner::with_log_sink(Arc::new(TauriProcessLogSink {
                 app: app.handle().clone(),
             }));
+            let speedtest_runner = StdProcessRunner::with_log_sink(Arc::new(TauriProcessLogSink {
+                app: app.handle().clone(),
+            }));
             let runtime_handle = tauri::async_runtime::handle();
             let runtime_guard = runtime_handle.inner().enter();
             let supervisor = CoreSupervisor::spawn(SupervisorDeps::platform_with_runner(
@@ -229,7 +232,11 @@ pub fn run() {
                 sudo_password_collector,
                 supervisor,
                 statistics_manager,
-                speedtest_manager: SpeedtestManager::new(),
+                speedtest_manager: SpeedtestManager::new(
+                    runtime_paths.clone(),
+                    core_seed_resource_dir.clone(),
+                    Arc::new(speedtest_runner),
+                ),
                 system_proxy_manager,
                 clash_monitor_controller: ClashMonitorController::new(),
                 diagnostics_client: Arc::new(AsyncMutex::new(DiagnosticsClient::new())),

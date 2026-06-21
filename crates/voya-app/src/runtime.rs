@@ -263,7 +263,7 @@ pub enum RuntimeError {
     Supervisor(#[from] SupervisorError),
 }
 
-async fn load_runtime_core_gen_env(
+pub(crate) async fn load_runtime_core_gen_env(
     database: &Database,
     paths: &AppPaths,
     config: &AppConfig,

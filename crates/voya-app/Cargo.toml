@@ -11,7 +11,7 @@ qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 futures-util = "0.3"
 flate2 = "1.1"
 regex = "1.12"
-reqwest = { version = "0.12", default-features = false, features = ["charset", "http2", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["charset", "http2", "rustls-tls", "socks"] }
 semver = "1.0"
 serde.workspace = true
 serde_json.workspace = true

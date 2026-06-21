@@ -6,7 +6,7 @@ import { afterEach, vi } from "vitest";
 import type { ProfileItem_Deserialize, ProfileListItem_Serialize } from "@/ipc/bindings";
 import { DEFAULT_PROFILE_COLUMN_VISIBILITY, useProfileColumnsStore } from "@/stores/profile-columns-store";
 
-import { CONFIG_TYPES, MOVE_ACTIONS, PROFILE_PROTOCOLS } from "./profile-constants";
+import { CONFIG_TYPES, MOVE_ACTIONS, PROFILE_PROTOCOLS, SPEED_ACTIONS } from "./profile-constants";
 import { ProfilesScreen } from "./server-table";
 import { applyLiveUpdates } from "./server-table-live-updates";
 
@@ -21,6 +21,8 @@ const ipcMocks = vi.hoisted(() => ({
   listSubscriptions: vi.fn(),
   moveProfile: vi.fn(),
   previewGroupProfile: vi.fn(),
+  cancelSpeedtest: vi.fn(),
+  runSpeedtest: vi.fn(),
   saveGroupProfile: vi.fn(),
   saveProfile: vi.fn(),
   saveSubscription: vi.fn(),
@@ -112,6 +114,14 @@ describe("ProfilesScreen", () => {
       xrayBurstObservatorySelectors: [],
       singboxRoutes: [],
     });
+    ipcMocks.cancelSpeedtest.mockResolvedValue({ running: false });
+    ipcMocks.runSpeedtest.mockResolvedValue({
+      action: SPEED_ACTIONS.Speedtest,
+      cancelled: false,
+      completedCount: 0,
+      results: [],
+      selectedCount: 0,
+    });
     ipcMocks.saveGroupProfile.mockImplementation(async (profile: ProfileItem_Deserialize) => makeProfile(100, profile));
     ipcMocks.saveProfile.mockImplementation(async (profile: ProfileItem_Deserialize) => makeProfile(99, profile));
     ipcMocks.saveSubscription.mockResolvedValue(makeSubscription());
@@ -180,6 +190,31 @@ describe("ProfilesScreen", () => {
     expect(ipcMocks.copyProfiles).toHaveBeenCalledWith(["profile-0"]);
     expect(ipcMocks.deleteProfiles).toHaveBeenCalledWith(["profile-0"]);
     expect(ipcMocks.sortProfiles).toHaveBeenCalledWith(null, "remarks", true);
+  });
+
+  it("re-enables speedtest buttons when the speedtest IPC rejects", async () => {
+    let rejectSpeedtest: (reason?: unknown) => void = () => {};
+    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(1));
+    ipcMocks.runSpeedtest.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectSpeedtest = reject;
+      }),
+    );
+
+    renderProfiles();
+
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText("Select Server 0"));
+
+    const speedButton = screen.getByRole("button", { name: "Speed" });
+    await userEvent.click(speedButton);
+
+    await waitFor(() => expect(speedButton).toBeDisabled());
+    expect(ipcMocks.runSpeedtest).toHaveBeenCalledWith(SPEED_ACTIONS.Speedtest, ["profile-0"]);
+
+    rejectSpeedtest(new Error("boom"));
+
+    await waitFor(() => expect(speedButton).toBeEnabled());
   });
 
   it("confirms before deleting and cancels without calling the delete IPC", async () => {

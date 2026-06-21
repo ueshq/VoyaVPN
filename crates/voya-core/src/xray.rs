@@ -7,8 +7,8 @@ use thiserror::Error;
 use crate::{
     AppConfig, ConfigType, CoreConfigContext, DnsItem, FullConfigTemplateItem, InItem,
     InboundProtocol, MultipleLoad, ProfileItem, ProtocolExtraItem, RuleType, RulesItem,
-    TransportExtraItem, BLOCK_TAG, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS, DEFAULT_LOCAL_PORT,
-    DEFAULT_REMOTE_DNS, DIRECT_TAG, LOOPBACK, PROXY_TAG,
+    SpeedtestConfigEntry, TransportExtraItem, BLOCK_TAG, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS,
+    DEFAULT_LOCAL_PORT, DEFAULT_REMOTE_DNS, DIRECT_TAG, LOOPBACK, PROXY_TAG,
 };
 
 const BALANCER_TAG_SUFFIX: &str = "-balancer";
@@ -995,6 +995,96 @@ pub fn generate_xray_config_value(context: &CoreConfigContext) -> Value {
 #[must_use]
 pub fn generate_xray_config_json(context: &CoreConfigContext) -> String {
     canonical_json_string(&generate_xray_config_value(context))
+}
+
+#[must_use]
+pub fn generate_xray_speedtest_config_json(entries: &[SpeedtestConfigEntry]) -> String {
+    canonical_json_string(
+        &serde_json::to_value(generate_xray_speedtest_config(entries)).unwrap_or(Value::Null),
+    )
+}
+
+#[must_use]
+pub fn generate_xray_speedtest_config(entries: &[SpeedtestConfigEntry]) -> XrayConfig {
+    let mut config = XrayConfig::sample();
+    config.inbounds.clear();
+    config.outbounds.clear();
+    config.routing.rules.clear();
+    config.routing.balancers = None;
+    config.observatory = None;
+    config.burst_observatory = None;
+    config.metrics = None;
+    config.policy = None;
+    config.stats = None;
+
+    if let Some(entry) = entries.first() {
+        gen_log(&mut config, &entry.context);
+    }
+
+    for entry in entries {
+        let inbound_tag = speedtest_inbound_tag(entry.port);
+        let proxy_tag = speedtest_proxy_tag(entry.port);
+        config.inbounds.push(json!({
+            "tag": inbound_tag,
+            "listen": LOOPBACK,
+            "port": entry.port,
+            "protocol": inbound_protocol_tag(InboundProtocol::mixed),
+            "settings": {
+                "auth": "noauth",
+                "udp": true
+            }
+        }));
+
+        let proxy_outbounds = build_xray_proxy_outbounds(&entry.context, &proxy_tag);
+        let proxy_tag_count = proxy_outbounds
+            .iter()
+            .filter(|outbound| outbound.tag.starts_with(&proxy_tag))
+            .count();
+        config.outbounds.extend(proxy_outbounds);
+
+        let mut rule = XrayRule {
+            r#type: Some("field".to_string()),
+            inbound_tag: Some(vec![inbound_tag]),
+            outbound_tag: Some(proxy_tag.clone()),
+            ..XrayRule::default()
+        };
+        if proxy_tag_count > 1 {
+            let multiple_load = entry
+                .context
+                .node
+                .protocol_extra
+                .multiple_load
+                .unwrap_or(MultipleLoad::LeastPing);
+            gen_observatory(
+                &mut config,
+                multiple_load,
+                &proxy_tag,
+                &entry.context.app_config.speed_test_item.speed_ping_test_url,
+            );
+            gen_balancer(&mut config, multiple_load, &proxy_tag);
+            rule.outbound_tag = None;
+            rule.balancer_tag = Some(format!("{proxy_tag}{BALANCER_TAG_SUFFIX}"));
+        }
+        config.routing.rules.push(rule);
+    }
+
+    if let Some(entry) = entries.first() {
+        if entry.context.app_config.core_basic_item.enable_fragment {
+            apply_xray_outbound_fragment(&mut config.outbounds, &entry.context.app_config);
+        }
+        apply_outbound_bind_interface(&mut config, &entry.context);
+        apply_outbound_send_through(&mut config, &entry.context);
+    }
+
+    config
+}
+
+fn speedtest_inbound_tag(port: i32) -> String {
+    format!("mixed{port}")
+}
+
+fn speedtest_proxy_tag(port: i32) -> String {
+    format!("{PROXY_TAG}{port}")
 }
 
 fn gen_log(config: &mut XrayConfig, context: &CoreConfigContext) {
@@ -4521,6 +4611,129 @@ mod tests {
         assert!(value.get("targetStrategy").is_none());
         assert_eq!(value.pointer("/mux/enabled"), Some(&Value::Bool(false)));
         assert!(value.pointer("/mux/concurrency").is_none());
+    }
+
+    #[test]
+    fn xray_speedtest_config_adds_mixed_inbound_proxy_and_route_per_entry() {
+        let entries = vec![
+            SpeedtestConfigEntry {
+                index_id: "a".to_string(),
+                port: 12000,
+                context: test_context(AppConfig::default(), socks_node("a", "node-a")),
+            },
+            SpeedtestConfigEntry {
+                index_id: "b".to_string(),
+                port: 12001,
+                context: test_context(AppConfig::default(), socks_node("b", "node-b")),
+            },
+        ];
+
+        let generated: Value = serde_json::from_str(&generate_xray_speedtest_config_json(&entries))
+            .expect("xray speedtest config should parse as JSON");
+        for port in [12000, 12001] {
+            let inbound_tag = format!("mixed{port}");
+            let proxy_tag = format!("proxy{port}");
+            assert!(generated["inbounds"].as_array().is_some_and(|inbounds| {
+                inbounds.iter().any(|inbound| {
+                    inbound["tag"] == inbound_tag
+                        && inbound["listen"] == LOOPBACK
+                        && inbound["port"] == port
+                        && inbound["protocol"] == "mixed"
+                })
+            }));
+            assert!(generated["outbounds"].as_array().is_some_and(|outbounds| {
+                outbounds
+                    .iter()
+                    .any(|outbound| outbound["tag"] == proxy_tag)
+            }));
+            assert!(generated["routing"]["rules"]
+                .as_array()
+                .is_some_and(|rules| {
+                    rules.iter().any(|rule| {
+                        rule["inboundTag"].as_array().is_some_and(|tags| {
+                            tags.iter()
+                                .any(|tag| tag == &Value::String(inbound_tag.clone()))
+                        }) && rule["outboundTag"] == proxy_tag
+                    })
+                }));
+        }
+    }
+
+    #[test]
+    fn xray_speedtest_config_routes_policy_group_and_proxy_chain_entries() {
+        let group = ProfileItem {
+            index_id: "group".to_string(),
+            config_type: ConfigType::PolicyGroup,
+            remarks: "group".to_string(),
+            protocol_extra: ProtocolExtraItem {
+                child_items: Some("g1,g2".to_string()),
+                group_type: Some("PolicyGroup".to_string()),
+                multiple_load: Some(MultipleLoad::LeastPing),
+                ..ProtocolExtraItem::default()
+            },
+            ..ProfileItem::default()
+        };
+        let mut group_context = test_context(AppConfig::default(), group);
+        group_context
+            .all_proxies_map
+            .insert("g1".to_string(), socks_node("g1", "group-node-1"));
+        group_context
+            .all_proxies_map
+            .insert("g2".to_string(), socks_node("g2", "group-node-2"));
+
+        let chain = ProfileItem {
+            index_id: "chain".to_string(),
+            config_type: ConfigType::ProxyChain,
+            remarks: "chain".to_string(),
+            protocol_extra: ProtocolExtraItem {
+                child_items: Some("c1,c2".to_string()),
+                group_type: Some("ProxyChain".to_string()),
+                ..ProtocolExtraItem::default()
+            },
+            ..ProfileItem::default()
+        };
+        let mut chain_context = test_context(AppConfig::default(), chain);
+        chain_context
+            .all_proxies_map
+            .insert("c1".to_string(), socks_node("c1", "chain-node-1"));
+        chain_context
+            .all_proxies_map
+            .insert("c2".to_string(), socks_node("c2", "chain-node-2"));
+
+        let generated = generate_xray_speedtest_config(&[
+            SpeedtestConfigEntry {
+                index_id: "group".to_string(),
+                port: 12100,
+                context: group_context,
+            },
+            SpeedtestConfigEntry {
+                index_id: "chain".to_string(),
+                port: 12101,
+                context: chain_context,
+            },
+        ]);
+
+        assert_speedtest_xray_route(&generated, 12100);
+        assert_speedtest_xray_route(&generated, 12101);
+        assert!(generated
+            .outbounds
+            .iter()
+            .any(|outbound| outbound.tag.starts_with("proxy12100")));
+        assert!(generated
+            .outbounds
+            .iter()
+            .any(|outbound| outbound.tag.starts_with("proxy12101")));
+    }
+
+    fn assert_speedtest_xray_route(generated: &XrayConfig, port: i32) {
+        let inbound_tag = format!("mixed{port}");
+        let proxy_tag = format!("proxy{port}");
+        let balancer_tag = format!("{proxy_tag}{BALANCER_TAG_SUFFIX}");
+        assert!(generated.routing.rules.iter().any(|rule| {
+            rule.inbound_tag.as_ref() == Some(&vec![inbound_tag.clone()])
+                && (rule.outbound_tag.as_deref() == Some(proxy_tag.as_str())
+                    || rule.balancer_tag.as_deref() == Some(balancer_tag.as_str()))
+        }));
     }
 
     fn test_context(app_config: AppConfig, node: ProfileItem) -> CoreConfigContext {
