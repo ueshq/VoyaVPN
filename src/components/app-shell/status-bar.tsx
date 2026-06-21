@@ -1,9 +1,20 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Gauge, KeyRound, LoaderCircle, Plug, Power, Shield, WifiOff } from "lucide-react";
+import { Activity, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Plug, Power, Shield, WifiOff } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Menubar,
+  MenubarCheckboxItem,
+  MenubarContent,
+  MenubarItem,
+  MenubarMenu,
+  MenubarRadioGroup,
+  MenubarRadioItem,
+  MenubarSeparator,
+  MenubarTrigger,
+} from "@/components/ui/menubar";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/use-i18n";
@@ -228,7 +239,7 @@ export function StatusBar() {
         </Badge>
       </div>
       <Separator orientation="vertical" className="hidden h-4 md:block" />
-      <div className="flex min-w-0 shrink-0 items-center gap-2">
+      <div className="hidden min-w-0 shrink-0 items-center gap-2 md:flex">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -255,6 +266,43 @@ export function StatusBar() {
           <span className="min-w-0 truncate">{tunStateLabel}</span>
         </Badge>
       </div>
+      {/* Below md: the core info, proxy mode, and TUN controls above are hidden;
+          surface them here so small windows keep access to every key control. */}
+      <Menubar className="h-7 shrink-0 border-0 bg-transparent p-0 shadow-none md:hidden">
+        <MenubarMenu>
+          <MenubarTrigger
+            aria-label={t("status.moreControls")}
+            className="size-7 justify-center rounded-md p-0 text-muted-foreground"
+            title={t("status.moreControls")}
+          >
+            <MoreHorizontal className="size-3.5" aria-hidden="true" />
+          </MenubarTrigger>
+          <MenubarContent align="start">
+            <MenubarItem disabled>{coreLabel}</MenubarItem>
+            <MenubarItem disabled>{pidLabel}</MenubarItem>
+            <MenubarSeparator />
+            <MenubarRadioGroup
+              onValueChange={(value) => void runProxyMode(value as SysProxyMode)}
+              value={requestedProxyMode}
+            >
+              {proxyModeOptions(sysProxy?.pacAvailable ?? false).map((mode) => (
+                <MenubarRadioItem key={mode} value={mode}>
+                  {formatSysProxy(mode, t)}
+                </MenubarRadioItem>
+              ))}
+            </MenubarRadioGroup>
+            <MenubarItem disabled>{effectiveProxyLabel}</MenubarItem>
+            <MenubarSeparator />
+            <MenubarCheckboxItem
+              checked={tunEnabled}
+              disabled={pendingAction === "tun"}
+              onCheckedChange={() => void runTunToggle()}
+            >
+              {t("status.tun")}
+            </MenubarCheckboxItem>
+          </MenubarContent>
+        </MenubarMenu>
+      </Menubar>
       <div className="ms-auto flex min-w-0 items-center gap-2">
         <Badge
           className="hidden h-6 w-24 min-w-0 shrink justify-start bg-background px-2 text-muted-foreground sm:inline-flex"

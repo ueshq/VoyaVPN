@@ -768,6 +768,7 @@
     "disconnected": "Disconnected",
     "disconnecting": "Disconnecting",
     "download": "Down {{speed}}",
+    "moreControls": "More controls",
     "noCore": "No core",
     "noPid": "No PID",
     "profiles": "Profiles: {{count}}",
@@ -780,6 +781,7 @@
     "sysProxyPacShort": "PAC",
     "sysProxySetShort": "Set",
     "sysProxyUnchanged": "System proxy unchanged",
+    "tun": "TUN",
     "tunOff": "TUN off",
     "tunOn": "TUN on",
     "upload": "Up {{speed}}"

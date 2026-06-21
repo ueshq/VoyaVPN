@@ -768,6 +768,7 @@
     "disconnected": "قطع",
     "disconnecting": "در حال قطع",
     "download": "دریافت {{speed}}",
+    "moreControls": "کنترل‌های بیشتر",
     "noCore": "بدون هسته",
     "noPid": "بدون PID",
     "profiles": "نمایه ها: {{count}}",
@@ -780,6 +781,7 @@
     "sysProxyPacShort": "PAC",
     "sysProxySetShort": "تنظیم",
     "sysProxyUnchanged": "پراکسی سیستم بدون تغییر",
+    "tun": "TUN",
     "tunOff": "TUN خاموش",
     "tunOn": "TUN روشن",
     "upload": "ارسال {{speed}}"
