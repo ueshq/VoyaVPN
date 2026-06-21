@@ -109,6 +109,20 @@ export function CheckUpdateDialog() {
     setManualLinksError(paths.manualError);
   }
 
+  function setPreferenceSnapshot(nextPreference: PreferenceSnapshot) {
+    const snapshot = clonePreferenceSnapshot(nextPreference);
+    preferenceSnapshotRef.current = snapshot;
+    setPreRelease(snapshot.preRelease);
+    setSelectedIds(new Set(snapshot.selectedIds));
+  }
+
+  function applyUpdateStatus(nextStatus: UpdateStatus) {
+    const nextPreference = preferenceSnapshotFromStatus(nextStatus);
+    lastPersistedPreferenceKeyRef.current = preferenceSnapshotKey(nextPreference);
+    setStatus(nextStatus);
+    setPreferenceSnapshot(nextPreference);
+  }
+
   useEffect(() => {
     let disposed = false;
 
@@ -138,20 +152,6 @@ export function CheckUpdateDialog() {
     () => new Map(results.map((result) => [result.targetId, result])),
     [results],
   );
-
-  function setPreferenceSnapshot(nextPreference: PreferenceSnapshot) {
-    const snapshot = clonePreferenceSnapshot(nextPreference);
-    preferenceSnapshotRef.current = snapshot;
-    setPreRelease(snapshot.preRelease);
-    setSelectedIds(new Set(snapshot.selectedIds));
-  }
-
-  function applyUpdateStatus(nextStatus: UpdateStatus) {
-    const nextPreference = preferenceSnapshotFromStatus(nextStatus);
-    lastPersistedPreferenceKeyRef.current = preferenceSnapshotKey(nextPreference);
-    setStatus(nextStatus);
-    setPreferenceSnapshot(nextPreference);
-  }
 
   function persistPreference(nextPreference: PreferenceSnapshot) {
     const snapshot = clonePreferenceSnapshot(nextPreference);

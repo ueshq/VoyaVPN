@@ -33,6 +33,18 @@
   --chart-4: #ffb900;
   --chart-5: #fe9a00;
 
+  /* Safe Passage — brand accents. Use sparingly: connected state / primary connect glow / active node. */
+  --signal: #009d90;
+  --signal-foreground: #ffffff;
+  --beacon: #fe9a00;
+  --beacon-foreground: #422006;
+
+  /* Depth ladder + connection glow */
+  --shadow-sm: 0 1px 2px 0 rgb(2 6 24 / 0.06), 0 1px 3px 0 rgb(2 6 24 / 0.1);
+  --shadow-md: 0 2px 4px -1px rgb(2 6 24 / 0.08), 0 4px 12px -2px rgb(2 6 24 / 0.12);
+  --shadow-lg: 0 8px 16px -4px rgb(2 6 24 / 0.1), 0 16px 32px -8px rgb(2 6 24 / 0.16);
+  --glow-signal: 0 0 0 1px rgb(0 157 144 / 0.4), 0 0 18px -2px rgb(0 157 144 / 0.45);
+
   --sidebar: var(--background);
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
@@ -67,6 +79,18 @@
   --chart-3: #fe9a00;
   --chart-4: #ad46ff;
   --chart-5: #ff2056;
+
+  /* Safe Passage — brand accents (signal brightens on the dark canvas) */
+  --signal: #2bd2c2;
+  --signal-foreground: #06201d;
+  --beacon: #fe9a00;
+  --beacon-foreground: #1c1206;
+
+  /* Depth ladder + connection glow (deeper shadows on the dark canvas) */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --shadow-md: 0 2px 4px -1px rgb(0 0 0 / 0.45), 0 4px 12px -2px rgb(0 0 0 / 0.55);
+  --shadow-lg: 0 8px 16px -4px rgb(0 0 0 / 0.5), 0 16px 32px -8px rgb(0 0 0 / 0.6);
+  --glow-signal: 0 0 0 1px rgb(43 210 194 / 0.45), 0 0 22px -2px rgb(43 210 194 / 0.55);
 }
 
 @supports (color: oklch(1 0 0)) {
@@ -94,6 +118,12 @@
     --chart-3: oklch(0.398 0.07 227.392);
     --chart-4: oklch(0.828 0.189 84.429);
     --chart-5: oklch(0.769 0.188 70.08);
+
+    --signal: oklch(0.62 0.12 185);
+    --signal-foreground: oklch(1 0 0);
+    --beacon: oklch(0.769 0.188 70.08);
+    --beacon-foreground: oklch(0.279 0.06 55);
+    --glow-signal: 0 0 0 1px oklch(0.62 0.12 185 / 0.4), 0 0 18px -2px oklch(0.62 0.12 185 / 0.45);
   }
 
   .dark {
@@ -120,6 +150,12 @@
     --chart-3: oklch(0.769 0.188 70.08);
     --chart-4: oklch(0.627 0.265 303.9);
     --chart-5: oklch(0.645 0.246 16.439);
+
+    --signal: oklch(0.78 0.13 185);
+    --signal-foreground: oklch(0.27 0.05 185);
+    --beacon: oklch(0.769 0.188 70.08);
+    --beacon-foreground: oklch(0.22 0.04 55);
+    --glow-signal: 0 0 0 1px oklch(0.78 0.13 185 / 0.45), 0 0 22px -2px oklch(0.78 0.13 185 / 0.55);
   }
 }
 
@@ -155,6 +191,10 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-signal: var(--signal);
+  --color-signal-foreground: var(--signal-foreground);
+  --color-beacon: var(--beacon);
+  --color-beacon-foreground: var(--beacon-foreground);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -204,6 +244,18 @@
     select,
     textarea {
       font-size: 16px !important;
+    }
+  }
+
+  /* Respect reduced-motion: kill transitions/animations (incl. connection glow pulse). */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
     }
   }
 }

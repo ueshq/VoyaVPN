@@ -7,7 +7,7 @@ const DEFAULT_REDACTED_URL = "[redacted URL]";
 const DEFAULT_REDACTED_VALUE = "[redacted]";
 
 const SENSITIVE_ASSIGNMENT_PATTERN =
-  /(^|[\s,;({\[])(proxyUrl|proxy_url|proxy|HTTP_PROXY|HTTPS_PROXY|user|username|userName|user_name|UserName|password|passwd|pass|token|access_token|refresh_token|authorization|auth|secret)(\s*[=:]\s*)(?:Bearer\s+)?[^\s<>"')\]]+/gi;
+  /(^|[\s,;({[])(proxyUrl|proxy_url|proxy|HTTP_PROXY|HTTPS_PROXY|user|username|userName|user_name|UserName|password|passwd|pass|token|access_token|refresh_token|authorization|auth|secret)(\s*[=:]\s*)(?:Bearer\s+)?[^\s<>"')\]]+/gi;
 const SHARE_LINK_PATTERN = /\b(vless|vmess|trojan|ss):\/\/[^\s<>"')\]]+/gi;
 const URL_PATTERN = /\bhttps?:\/\/[^\s<>"')\]]+/gi;
 
