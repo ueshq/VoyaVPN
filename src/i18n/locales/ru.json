@@ -185,11 +185,18 @@
         "toggle": "Столбцы"
       },
       "empty": "No profiles",
+      "emptyDescription": "Add a profile or import one from a subscription to get started.",
+      "loading": "Loading profiles",
       "title": "Profiles"
     },
     "routing": {
       "empty": "No routing profiles",
       "title": "Routing"
+    },
+    "subscriptions": {
+      "empty": "No subscriptions",
+      "emptyDescription": "Add a subscription source to import profiles automatically.",
+      "loading": "Loading subscriptions"
     }
   },
   "qr": {

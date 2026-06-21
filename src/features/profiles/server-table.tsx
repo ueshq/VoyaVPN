@@ -17,6 +17,7 @@ import {
   FilePlus2,
   Filter,
   Gauge,
+  Inbox,
   Pencil,
   Play,
   Radio,
@@ -47,6 +48,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import {
   Menubar,
@@ -57,6 +59,7 @@ import {
   MenubarSeparator,
   MenubarTrigger,
 } from "@/components/ui/menubar";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   copyProfiles,
   cancelSpeedtest,
@@ -640,13 +643,19 @@ export function ProfilesScreen() {
             role="rowgroup"
           >
             {profilesQuery.isLoading ? (
-              <div className="grid h-full place-items-center text-sm text-muted-foreground" role="status">
-                Loading profiles
-              </div>
+              <ProfileSkeletonRows
+                aria-label={t("panes.profiles.loading")}
+                columnCount={visibleColumns.length}
+                gridMinWidth={gridMinWidth}
+                gridTemplateColumns={gridTemplateColumns}
+              />
             ) : rows.length === 0 ? (
-              <div className="grid h-full place-items-center text-sm text-muted-foreground" role="status">
-                No profiles
-              </div>
+              <EmptyState
+                className="h-full content-center"
+                description={t("panes.profiles.emptyDescription")}
+                icon={Inbox}
+                title={t("panes.profiles.empty")}
+              />
             ) : (
               <div className="relative" style={{ height: rowVirtualizer.getTotalSize(), minWidth: gridMinWidth }}>
                 {renderedRows.map((virtualRow) => {
@@ -823,6 +832,40 @@ function SpeedButton({
       <Icon className="size-4" aria-hidden="true" />
       {label}
     </Button>
+  );
+}
+
+// Mirror the grid geometry of a real row so the loading state holds the same
+// layout as the populated table — the connections pane skeleton pattern.
+function ProfileSkeletonRows({
+  columnCount,
+  gridMinWidth,
+  gridTemplateColumns,
+  ...props
+}: React.ComponentProps<"div"> & {
+  columnCount: number;
+  gridMinWidth: string;
+  gridTemplateColumns: string;
+}) {
+  return (
+    <div role="status" {...props}>
+      {Array.from({ length: 12 }).map((_, rowIndex) => (
+        <div
+          className="grid h-[38px] items-center border-b"
+          key={rowIndex}
+          style={{ gridTemplateColumns, minWidth: gridMinWidth }}
+        >
+          <div className="flex h-full items-center justify-center border-e px-2">
+            <Skeleton className="size-4 rounded-sm" />
+          </div>
+          {Array.from({ length: columnCount }).map((_, columnIndex) => (
+            <div className="flex h-full items-center border-e px-2 last:border-e-0" key={columnIndex}>
+              <Skeleton className="h-4 w-3/4" />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
   );
 }
 

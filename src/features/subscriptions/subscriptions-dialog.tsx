@@ -16,9 +16,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   deleteSubscriptions,
   listSubscriptions,
@@ -26,6 +28,7 @@ import {
   updateSubscriptions,
 } from "@/ipc";
 import type { SubItem_Deserialize } from "@/ipc/bindings";
+import { useI18n } from "@/i18n/use-i18n";
 import { redactOperationalError } from "@/lib/operational-redaction";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +55,7 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
   const [form, setForm] = useState<SubItem_Deserialize>(() => createBlankSubscription());
   const [message, setMessage] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState("");
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const subscriptionsQuery = useQuery({
     enabled: open,
@@ -142,8 +146,14 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
             <CardContent className="min-h-0 p-0">
               <ScrollArea className="h-[24rem]">
                 <div className="p-1">
-                  {subscriptions.length === 0 ? (
-                    <p className="px-2 py-3 text-sm text-muted-foreground">No subscriptions</p>
+                  {subscriptionsQuery.isLoading ? (
+                    <SubscriptionSkeletonRows aria-label={t("panes.subscriptions.loading")} />
+                  ) : subscriptions.length === 0 ? (
+                    <EmptyState
+                      description={t("panes.subscriptions.emptyDescription")}
+                      icon={Rss}
+                      title={t("panes.subscriptions.empty")}
+                    />
                   ) : (
                     subscriptions.map((item) => (
                       <button
@@ -270,6 +280,22 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Mirror the source button layout (remarks + status badge + url) so the loading
+// state matches the populated list — the connections pane skeleton pattern.
+function SubscriptionSkeletonRows(props: React.ComponentProps<"div">) {
+  return (
+    <div role="status" {...props}>
+      {Array.from({ length: 5 }).map((_, index) => (
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 px-2 py-2" key={index}>
+          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="h-5 w-16 rounded-full" />
+          <Skeleton className="col-span-2 h-3 w-4/5" />
+        </div>
+      ))}
+    </div>
   );
 }
 

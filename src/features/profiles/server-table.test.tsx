@@ -199,6 +199,18 @@ describe("ProfilesScreen", () => {
     expect(ipcMocks.deleteProfiles).not.toHaveBeenCalled();
   });
 
+  it("shows a localized empty state when no profiles exist", async () => {
+    ipcMocks.listProfiles.mockResolvedValue([]);
+
+    renderProfiles();
+
+    expect(await screen.findByText("No profiles")).toBeInTheDocument();
+    expect(
+      screen.getByText("Add a profile or import one from a subscription to get started."),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("server-row")).not.toBeInTheDocument();
+  });
+
   it("ships high-signal columns and collapses niche ones by default", async () => {
     ipcMocks.listProfiles.mockResolvedValue(makeProfiles(3));
 
