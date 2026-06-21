@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { PageHeader, PageHeaderHeading, PageSection } from "@/components/app-shell/page-section";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -230,13 +231,11 @@ export function RoutingScreen() {
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col" aria-label="Routing">
-      <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <Route className="size-4 text-muted-foreground" aria-hidden="true" />
-          <h2 className="text-sm font-semibold">Routing</h2>
+    <PageSection aria-label="Routing">
+      <PageHeader>
+        <PageHeaderHeading icon={Route} title="Routing">
           <Badge variant="outline">{routings.length.toLocaleString()} profiles</Badge>
-        </div>
+        </PageHeaderHeading>
 
         <div className="ms-auto min-w-[18rem] max-w-xl flex-1 md:flex-none">
           <Label className="sr-only" htmlFor="routing-template-url">
@@ -311,7 +310,7 @@ export function RoutingScreen() {
           <Trash2 className="size-4" aria-hidden="true" />
           Delete
         </Button>
-      </div>
+      </PageHeader>
 
       {operationError ? (
         <div className="border-b px-4 py-2">
@@ -523,7 +522,7 @@ export function RoutingScreen() {
         open={Boolean(ruleDialog)}
         rule={ruleDialog?.mode === "edit" ? ruleDialog.rule : null}
       />
-    </section>
+    </PageSection>
   );
 }
 

@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Braces, Database, RefreshCw, RotateCcw, Save, ServerCog, ShieldCheck, TriangleAlert } from "lucide-react";
 import { z } from "zod";
 
+import { PageHeader, PageHeaderHeading, PageSection } from "@/components/app-shell/page-section";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -176,11 +177,9 @@ export function DnsScreen() {
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col" aria-label="DNS">
-      <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <Database className="size-4 text-muted-foreground" aria-hidden="true" />
-          <h2 className="text-sm font-semibold">DNS</h2>
+    <PageSection aria-label="DNS">
+      <PageHeader>
+        <PageHeaderHeading icon={Database} title="DNS">
           <Badge variant="outline">
             {form?.simpleDnsItem.FakeIP ? "FakeIP" : "Standard"}
           </Badge>
@@ -190,7 +189,7 @@ export function DnsScreen() {
               {issueCount} errors
             </Badge>
           ) : null}
-        </div>
+        </PageHeaderHeading>
 
         <div className="ms-auto flex items-center gap-2">
           <Button disabled={dnsQuery.isFetching} onClick={() => void handleReload()} size="sm" type="button" variant="outline">
@@ -202,7 +201,7 @@ export function DnsScreen() {
             Save
           </Button>
         </div>
-      </div>
+      </PageHeader>
 
       {operationError ? (
         <div className="border-b px-4 py-2">
@@ -272,7 +271,7 @@ export function DnsScreen() {
           ) : null}
         </div>
       </div>
-    </section>
+    </PageSection>
   );
 }
 

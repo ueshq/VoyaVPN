@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownToLine, ScrollText, Search, Trash2 } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
+import { PageHeader, PageHeaderHeading, PageSection } from "@/components/app-shell/page-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -123,11 +124,9 @@ export function LogsScreen() {
         }));
 
   return (
-    <section className="flex h-full min-h-0 flex-col" aria-label={t("tabs.logs")}>
-      <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <ScrollText className="size-4 text-muted-foreground" aria-hidden="true" />
-          <h2 className="text-sm font-semibold">{t("tabs.logs")}</h2>
+    <PageSection aria-label={t("tabs.logs")}>
+      <PageHeader>
+        <PageHeaderHeading icon={ScrollText} title={t("tabs.logs")}>
           {hasLogs ? (
             <Badge className="h-6 bg-background font-mono tabular-nums text-muted-foreground" variant="outline">
               {isFiltered
@@ -135,7 +134,7 @@ export function LogsScreen() {
                 : logLines.length.toLocaleString()}
             </Badge>
           ) : null}
-        </div>
+        </PageHeaderHeading>
 
         <div className="relative ms-auto min-w-[12rem] flex-1 sm:flex-none">
           <Search
@@ -180,7 +179,7 @@ export function LogsScreen() {
           <Trash2 className="size-4" aria-hidden="true" />
           {t("actions.clear")}
         </Button>
-      </div>
+      </PageHeader>
 
       {!hasLogs ? (
         <EmptyState className="min-h-0 flex-1 content-center" icon={ScrollText} title={t("panes.logs.empty")} />
@@ -247,7 +246,7 @@ export function LogsScreen() {
           ) : null}
         </div>
       )}
-    </section>
+    </PageSection>
   );
 }
 
