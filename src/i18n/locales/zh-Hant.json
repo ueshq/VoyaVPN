@@ -176,7 +176,13 @@
     },
     "logs": {
       "empty": "No log lines",
-      "title": "Logs"
+      "jumpToLatest": "Jump to latest",
+      "levelFilterLabel": "Filter by level",
+      "noMatches": "No matching log lines",
+      "noMatchesDescription": "Adjust your search or active log levels.",
+      "search": "Filter log lines",
+      "title": "Logs",
+      "toggleLevel": "Toggle {{level}} logs"
     },
     "profiles": {
       "columns": {

@@ -176,7 +176,13 @@
     },
     "logs": {
       "empty": "خط گزارشی نیست",
-      "title": "گزارش ها"
+      "jumpToLatest": "پرش به آخرین",
+      "levelFilterLabel": "فیلتر بر اساس سطح",
+      "noMatches": "خط گزارش منطبقی نیست",
+      "noMatchesDescription": "جستجو یا سطوح گزارش فعال را تغییر دهید.",
+      "search": "فیلتر خطوط گزارش",
+      "title": "گزارش ها",
+      "toggleLevel": "نمایش/پنهان گزارش‌های {{level}}"
     },
     "profiles": {
       "columns": {
