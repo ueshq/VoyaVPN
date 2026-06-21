@@ -71,5 +71,9 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, "e2e/**"],
     globals: true,
     setupFiles: "./src/test/setup.ts",
+    // Heavy interaction tests (e.g. the protocol-dialog walkthrough) can exceed
+    // the 5s default under parallel CPU contention; give them comfortable margin
+    // while still catching genuinely hung tests.
+    testTimeout: 20000,
   },
 });
