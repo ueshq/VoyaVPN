@@ -1,0 +1,4 @@
+interface:
+  display_name: "Claude Rollout"
+  short_description: "Plan large refactors and migrations driven by Claude Code"
+  default_prompt: "Use $claude-rollout to draft an upstream spec, derive a phase-and-batch plan from it, and, when appropriate, generate a rollout runner that drives `claude -p` for this initiative."
