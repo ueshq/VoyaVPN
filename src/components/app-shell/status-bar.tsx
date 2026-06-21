@@ -1,16 +1,6 @@
 import { useEffect, useState } from "react";
-import {
-  Activity,
-  Gauge,
-  KeyRound,
-  LoaderCircle,
-  Plug,
-  Power,
-  PowerOff,
-  RotateCw,
-  Shield,
-  WifiOff,
-} from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Activity, Gauge, KeyRound, LoaderCircle, Plug, Power, Shield, WifiOff } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,10 +8,8 @@ import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/use-i18n";
 import {
-  connectActiveProfile,
-  disconnectCore,
   IpcCommandError,
-  restartCore,
+  listProfiles,
   runtimeStatus,
   setTunEnabled,
   setSystemProxyMode,
@@ -59,7 +47,11 @@ export function StatusBar() {
   const tun = useRuntimeEventStore((state) => state.tun);
   const setTun = useRuntimeEventStore((state) => state.setTun);
   const openModal = useModalStore((state) => state.openModal);
-  const [pendingAction, setPendingAction] = useState<"connect" | "disconnect" | "restart" | "tun" | null>(null);
+  const [pendingAction, setPendingAction] = useState<"tun" | null>(null);
+  const profilesQuery = useQuery({
+    queryFn: () => listProfiles(null, null),
+    queryKey: ["profiles", { filter: "" }],
+  });
 
   useEffect(() => {
     let disposed = false;
@@ -92,8 +84,6 @@ export function StatusBar() {
   }, [setCoreState, setSysProxy, setTun]);
 
   const state = coreState?.state ?? "disconnected";
-  const connected = state === "connected";
-  const busy = state === "connecting" || state === "disconnecting" || pendingAction !== null;
   const StateIcon = state === "connected" ? Power : state === "disconnected" ? WifiOff : LoaderCircle;
   const stateLabel = t(`status.${state}`);
   const coreLabel = coreState?.runningCoreType ? formatCoreType(coreState.runningCoreType) : t("status.noCore");
@@ -105,26 +95,7 @@ export function StatusBar() {
   const tunStateLabel = tunEnabled ? t("status.tunOn") : t("status.tunOff");
   const uploadLabel = t("status.upload", { speed: formatBytesPerSecond(statistics?.uploadBytesPerSecond ?? 0) });
   const downloadLabel = t("status.download", { speed: formatBytesPerSecond(statistics?.downloadBytesPerSecond ?? 0) });
-
-  async function runRuntimeAction(action: "connect" | "disconnect" | "restart") {
-    setPendingAction(action);
-    try {
-      const status =
-        action === "connect"
-          ? await connectActiveProfile()
-          : action === "disconnect"
-            ? await disconnectCore()
-            : await restartCore();
-
-      setCoreState(statusToCoreState(status));
-    } catch (error) {
-      if (shouldOpenSudoPrompt(error)) {
-        openModal("sudo");
-      }
-    } finally {
-      setPendingAction(null);
-    }
-  }
+  const profilesLabel = t("status.profiles", { count: profilesQuery.data?.length ?? 0 });
 
   async function runProxyMode(mode: SysProxyMode) {
     try {
@@ -193,57 +164,6 @@ export function StatusBar() {
       </div>
       <Separator orientation="vertical" className="h-4" />
       <div className="flex items-center gap-1">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              aria-label={t("actions.connect")}
-              className="size-7"
-              disabled={busy || connected}
-              onClick={() => void runRuntimeAction("connect")}
-              size="icon"
-              title={t("actions.connect")}
-              type="button"
-              variant={connected ? "secondary" : "outline"}
-            >
-              <Power className="size-3.5" aria-hidden="true" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">{t("actions.connect")}</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              aria-label={t("actions.disconnect")}
-              className="size-7"
-              disabled={busy || !connected}
-              onClick={() => void runRuntimeAction("disconnect")}
-              size="icon"
-              title={t("actions.disconnect")}
-              type="button"
-              variant="outline"
-            >
-              <PowerOff className="size-3.5" aria-hidden="true" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">{t("actions.disconnect")}</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              aria-label={t("actions.restart")}
-              className="size-7"
-              disabled={busy || !connected}
-              onClick={() => void runRuntimeAction("restart")}
-              size="icon"
-              title={t("actions.restart")}
-              type="button"
-              variant="outline"
-            >
-              <RotateCw className="size-3.5" aria-hidden="true" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">{t("actions.restart")}</TooltipContent>
-        </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -336,6 +256,13 @@ export function StatusBar() {
         </Badge>
       </div>
       <div className="ms-auto flex min-w-0 items-center gap-2">
+        <Badge
+          className="hidden h-6 w-24 min-w-0 shrink justify-start bg-background px-2 text-muted-foreground sm:inline-flex"
+          title={profilesLabel}
+          variant="outline"
+        >
+          <span className="min-w-0 truncate">{profilesLabel}</span>
+        </Badge>
         <Badge
           className="hidden h-6 w-28 min-w-0 shrink justify-start bg-background px-2 text-muted-foreground lg:inline-flex"
           title={uploadLabel}
