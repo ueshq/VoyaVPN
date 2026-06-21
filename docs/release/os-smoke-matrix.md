@@ -2,7 +2,7 @@
 
 Batch: `05-03-stable-runbooks-and-smoke`
 
-These checks must run on real operating systems before production stable publication. Use [../verification/manual-os-smoke.md](../verification/manual-os-smoke.md) as the evidence template and [../verification/cross-platform-smoke.md](../verification/cross-platform-smoke.md) for the automated smoke boundary. The generated runner does not execute external publication, CDN pointer promotion, signing, notarization, diagnostics approval, or real OS smoke.
+These checks must run on real operating systems before production stable publication. The generated runner does not execute external publication, CDN pointer promotion, signing, notarization, diagnostics approval, or real OS smoke.
 
 ## Evidence Links
 
@@ -12,7 +12,6 @@ These checks must run on real operating systems before production stable publica
 - Stable external evidence checklist: [external-evidence-checklist.md](external-evidence-checklist.md)
 - Stable gate: [../verification/stable-release-gate.md](../verification/stable-release-gate.md)
 - Diagnostics privacy contract: [diagnostics-privacy.md](diagnostics-privacy.md)
-- Update subsystem evidence: [../verification/updates.md](../verification/updates.md)
 
 ## Evidence Required For Every OS Run
 

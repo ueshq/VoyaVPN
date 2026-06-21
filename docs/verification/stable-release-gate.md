@@ -1,16 +1,8 @@
 # Stable Release Gate Verification
 
-Batch: `05-01-final-local-sweep`
+This gate defines the current production-stable release contract. It records what must be true before stable publication, without preserving historical batch logs or one-off command output in the repository.
 
-## Scope
-
-This gate closes the production stable release documentation path for Phase `05-final-regression`. It verifies that the stable runbook, OS smoke matrix, rollback playbooks, external evidence checklist, and final local automated sweep describe the complete stable publication path without performing external publication.
-
-The generated runner does not execute external publication. It does not upload artifacts to the CDN, mutate stable pointers, purge caches, access signing secrets, notarize apps, approve legal notices, approve diagnostics, or run real Windows/macOS/Linux smoke machines.
-
-## Evidence Path
-
-Stable gate doc path: `docs/verification/stable-release-gate.md`
+The release runner, local scripts, and GitHub Actions workflow produce evidence only. They do not upload artifacts to the CDN, mutate stable pointers, purge caches, access signing secrets, notarize apps, approve legal notices, approve diagnostics, or run real Windows/macOS/Linux smoke machines.
 
 ## Release Evidence Inputs
 
@@ -23,7 +15,6 @@ Stable gate doc path: `docs/verification/stable-release-gate.md`
 - Signing, notarization, and updater signing: [../release/signing-notarization.md](../release/signing-notarization.md)
 - Third-party notices and core redistribution: [../release/THIRD_PARTY_NOTICES.md](../release/THIRD_PARTY_NOTICES.md)
 - Diagnostics privacy contract: [../release/diagnostics-privacy.md](../release/diagnostics-privacy.md)
-- Update subsystem evidence: [updates.md](updates.md)
 
 ## Stable Gate Checklist
 
@@ -31,7 +22,7 @@ Every external checkpoint must attach owner, system, verification, rollback or s
 
 | Gate | Owner | System | Verification | Rollback or stop condition |
 | --- | --- | --- | --- | --- |
-| Automated regression gate | Release engineer | Local workstation and GitHub Actions `Release` workflow | `pnpm run verify:ci` covers Rust formatting, strict Clippy, Rust workspace tests, frontend typecheck, Vitest, ESLint, and generated binding drift; `pnpm run build`, local debug packaging, six-target package jobs, `SHA256SUMS`, artifact manifests, CDN release-index evidence, updater metadata evidence, and core manifest evidence are recorded. | Stop release. Fix the failing automated check and rerun from the frozen commit. |
+| Automated regression gate | Release engineer | Local workstation and GitHub Actions `Release` workflow | `pnpm run verify:ci`, `pnpm run build`, package jobs, `SHA256SUMS`, artifact manifests, CDN release-index evidence, updater metadata evidence, and core manifest evidence are recorded for the frozen commit. | Stop release, fix the failing check, and rerun from the frozen commit. |
 | CDN staging | CDN owner | VoyaVPN CDN immutable versioned paths | App artifacts, updater payloads, `latest.json`, manual release index, core manifest, geo/SRS manifests, checksums, signatures, notices, and evidence resolve from the approved CDN and match SHA-256 evidence. | Stop pointer promotion, purge accidental public cache, and quarantine bad staged artifacts with hashes. |
 | Stable pointer promotion | Release owner and CDN owner | VoyaVPN CDN stable pointers | Manual release-index pointer, app updater `latest.json` pointer, core manifest pointer, geo/SRS pointers, checksum pointers, and notices are promoted only after all gates pass; before/after pointer hashes are recorded. | Roll back pointers to the previous known-good release index, `latest.json`, core manifest, and geo/SRS manifests. |
 | Signing and notarization | Security owner, macOS owner, Windows owner, Linux owner | Approved signing systems, Apple Developer ID, Authenticode signer, package repository signing when used | macOS x64/arm64 signatures, notarization, and stapling pass; Windows x64/arm64 signatures pass; Linux package metadata and optional repository signatures pass. | Hold affected platform assets, rebuild from clean artifacts, re-sign, re-notarize, and rerun smoke. |
@@ -51,7 +42,7 @@ Production stable may be exposed only when:
 
 - Release workflow and docs define CDN staging, pointer promotion, updater smoke, manual download smoke, core smoke, diagnostics smoke, legal approval, privacy approval, rollback, and monitoring.
 - Windows, macOS, and Linux coverage includes x64 and arm64.
-- Stable Tauri updater config is generated with `pnpm tauri:stable-updater-config` into `target/release-config/tauri.updater.stable.generated.json`; the generated overlay enables `bundle.createUpdaterArtifacts`, while the committed `src-tauri/tauri.conf.json` keeps `createUpdaterArtifacts` false and remains credential-free.
+- Stable Tauri updater config is generated with `pnpm tauri:stable-updater-config` into `target/release-config/tauri.updater.stable.generated.json`; the generated overlay enables `bundle.createUpdaterArtifacts`, while the committed `src-tauri/tauri.conf.json` keeps `createUpdaterArtifacts` false with an empty credential-free updater config.
 - Rollback docs cover app updater pointer rollback, manual index rollback, core manifest rollback, diagnostics disablement, and bad artifact quarantine.
 - The stable external evidence checklist has matching owner, system, required evidence, stop or rollback condition, and artifact/hash fields for each stable gate entry.
 - Generated evidence contains no `voyavpn.example`, placeholder updater signatures, placeholder public keys, or production GitHub download URLs.
@@ -75,76 +66,9 @@ Expected unprepared-shell failures are missing external inputs, not repository b
 
 Expected prepared-environment pass criteria: `pnpm tauri:stable-updater-config` generates `target/release-config/tauri.updater.stable.generated.json`, the overlay enables `bundle.createUpdaterArtifacts`, updater metadata is signed and CDN-derived, app/core metadata use approved CDN production URLs, and `pnpm check:release:stable` exits successfully with zero failures. Stable pointer promotion must not start until the prepared environment passes `pnpm check:release:stable`.
 
-## Automated Risk Closure
+## Repository-Owned Checks
 
-Batch `05-04-flaky-tests-and-build-budget` closes the named local release blockers before final regression.
-
-Profiles table Vitest stability:
-
-- Owner: frontend release engineer.
-- Outcome: fixed through per-test QueryClient isolation, no query cache retention across profile table tests, awaited policy-group child-picker interactions, and an explicit wait for selected children before preview/save.
-- Focused timeout rationale: the policy-group test exercises the full profile table, profile dialog, child picker query, React Hook Form state, generator preview, and group save path. It now has a focused `10_000` ms timeout to absorb local and CI variance without masking missing async state, because every transition still has a concrete DOM or IPC assertion.
-- Evidence: `pnpm exec vitest --run src/features/profiles/server-table.test.tsx --reporter verbose` passed 1 file and 8 tests in 8.33s. The policy-group test completed in 2050ms.
-
-Vite chunk budget:
-
-- Owner: frontend release engineer.
-- Outcome: resolved by `build.rolldownOptions.output.codeSplitting` groups for React, editor/UI libraries, data/form libraries, profile features, operational features, and remaining vendor code.
-- Stable budget: keep the default Vite large-chunk threshold of 500 kB minified JS. Any future chunk over that threshold must either be split or recorded here with owner, reason, and rollback impact before stable sign-off.
-- Evidence: `pnpm run build` passed with no Vite large-chunk warning. Largest emitted JS chunks were `vendor-editor` 419.33 kB, `feature-ops` 391.66 kB, `vendor-data` 246.55 kB, `vendor-react` 189.64 kB, and `feature-profiles` 111.25 kB.
-
-## Verification Commands
-
-Required local docs check from batch `04-01-external-evidence-checklist`:
-
-```sh
-rg -n "CDN staging|pointer promotion|notarization|Authenticator|Authenticode|updater smoke|manual download smoke|core smoke|diagnostics smoke|legal|privacy|rollback|monitoring" docs/release docs/verification
-```
-
-This command proves that the release docs expose the named external gates. It does not prove that human CDN, signing, notarization, smoke, legal, privacy, rollback, or monitoring gates have passed.
-
-Required local docs check from batch `04-02-diagnostics-and-legal-signoff-evidence`:
-
-```sh
-rg -n "retention|opt-out|forbidden|source availability|GPL|byte|sha256|legal|privacy" docs/release docs/verification
-```
-
-This command proves that the release docs expose diagnostics privacy evidence fields and legal core redistribution evidence fields. It does not prove that privacy/security or legal owners have approved stable publication.
-
-Required local docs checks from batch `05-03-stable-runbooks-and-smoke`:
-
-```sh
-test -f docs/verification/stable-release-gate.md
-rg -n "CDN|x64|arm64|updater smoke|core smoke|diagnostics|rollback" docs/release docs/verification/stable-release-gate.md
-```
-
-These commands prove the documentation gate exists and references the required stable release concepts. They do not prove that external CDN publication, signing, smoke testing, diagnostics approval, or rollback operations have passed.
-
-Required local docs check from batch `05-02-stable-env-preflight-doc`:
-
-```sh
-rg -n "VOYAVPN_CDN_BASE_URL|VOYAVPN_UPDATES_BASE_URL|VOYAVPN_UPDATER_PUBLIC_KEY|TAURI_SIGNING_PRIVATE_KEY|check:release:stable" docs/release docs/verification/stable-release-gate.md
-```
-
-This command proves that release docs expose the stable prepared-environment command sequence, required stable env names, expected unprepared-shell failures, and the requirement that `pnpm check:release:stable` pass before stable pointer promotion. It does not prove that external production variables, secrets, artifacts, or stable pointer promotion have been provisioned or completed.
-
-Evidence captured on 2026-06-06:
-
-- PASS. The scan found the prepared stable env names, `pnpm tauri:stable-updater-config`, `pnpm check:release:stable`, unprepared-shell failure language, and prepared-environment pass criteria in [../release/runbook.md](../release/runbook.md), [../release/ci-secrets.md](../release/ci-secrets.md), and this gate doc.
-
-Required local automated checks for batch `05-04-flaky-tests-and-build-budget`:
-
-```sh
-pnpm test --run
-pnpm run build
-```
-
-Evidence captured on 2026-06-06:
-
-- `pnpm test --run`: PASS. Vitest completed 7 test files and 41 tests in 14.75s.
-- `pnpm run build`: PASS. TypeScript build and Vite production build completed; no Vite large-chunk warning was emitted. The Tailwind plugin timing notice is informational and is not a release-blocking chunk budget finding.
-
-Required local automated checks for batch `05-01-final-local-sweep`:
+Before handing a frozen commit to external release owners, run:
 
 ```sh
 pnpm run verify:ci
@@ -153,33 +77,4 @@ pnpm run smoke:frontend
 pnpm run check:release:dry-run
 ```
 
-Final local sweep evidence captured on 2026-06-06 at 12:58-13:00 CST (Asia/Shanghai):
-
-- `pnpm run verify:ci`: PASS. The verifier completed Rust formatting, strict Rust Clippy, Rust workspace tests, frontend typecheck, Vitest, ESLint, and generated binding drift. The Clippy step invoked `cargo clippy --workspace --all-targets -- -D warnings` and finished successfully. Rust tests passed across 236 unit tests. Vitest passed 8 files and 48 tests in 10.89s. ESLint reported 0 errors and the existing 3 warnings in `src/components/ui/badge.tsx`, `src/components/ui/button.tsx`, and `src/features/clash/clash-connections-screen.tsx`. `pnpm bindings:check` compiled `export-bindings` and reported generated IPC bindings are up to date.
-- `pnpm run build`: PASS. TypeScript build and Vite production build completed, transforming 2069 modules and building in 4.06s. No Vite large-chunk warning was emitted. Largest emitted JS chunks were `vendor-editor` 419.33 kB, `feature-ops` 391.66 kB, `vendor-data` 246.55 kB, `vendor-react` 189.64 kB, `vendor-radix` 144.23 kB, and `feature-profiles` 111.25 kB. The Tailwind plugin timing notice remains informational.
-- `pnpm run smoke:frontend`: PASS. Playwright started the Vite web server on `127.0.0.1:1420` and passed 3 Chromium smoke tests in 16.7s: app shell and dialogs, profile import/activation/fake runtime connect, and routing/DNS settings. The `NO_COLOR`/`FORCE_COLOR` and React SWC performance notices were informational.
-- `pnpm run check:release:dry-run`: PASS before and after this gate doc update. Dry-run readiness finished with 11 passes, 0 warnings, and 0 failures. The production blocker scan passed with no forbidden production URL fields, updater placeholders, or GitHub production download templates found. The generated stable release index contained 6 artifacts, updater metadata contained 6 platforms, and the core asset manifest contained 18 assets.
-- `pnpm tauri:build --debug`: PASS as supplemental local packaging evidence. Local macOS debug packaging completed without signing credentials. The run produced `/Users/afu/Dev/VoyaVPN/target/debug/bundle/macos/VoyaVPN.app` and `/Users/afu/Dev/VoyaVPN/target/debug/bundle/dmg/VoyaVPN_0.1.0_x64.dmg`. These are unsigned local debug artifacts and are not stable release, notarized, or CDN-publishable artifacts.
-
-Stable overlay and blocker-warning status after the final local sweep:
-
-- The committed default Tauri config does not include production updater config and keeps `bundle.createUpdaterArtifacts` disabled. This is an intentional repository posture, not a remaining repository blocker. Stable non-dry-run release must generate `target/release-config/tauri.updater.stable.generated.json` with `pnpm tauri:stable-updater-config` and use the approved updater public key plus updater signing input.
-- Dry-run readiness passes with zero stable-blocker warnings. Repository-controlled blockers for forbidden production URL fields, updater placeholders, and GitHub production download templates are resolved. CDN staging, signing, notarization, external smoke machines, legal approval, privacy approval, stable pointer promotion, and monitoring remain external stable gates.
-
-Repository-owned closure sweep captured on 2026-06-06 at 18:27-18:34 CST (Asia/Shanghai):
-
-- `pnpm lint`: PASS with 0 warnings and 0 errors after removing unused UI variant exports from `badge.tsx` and `button.tsx`, and scoping the known TanStack Virtual React Compiler warning in `clash-connections-screen.tsx` to the `useVirtualizer` call.
-- `pnpm release:record`: PASS. The generated fillable release-owner packet was written to `dist/release/stable-release-record.md` with version `0.1.0`, commit `b5d31342842a1bd3901ec0bc43968b4005e56adc`, branch `main`, required command evidence rows, six stable target artifact rows, CDN pointer rows, external gate rows, and Go/No-Go fields. The generated packet records the worktree as dirty until this closure change set is committed.
-- `pnpm exec vitest --run scripts/verify-release-staging.test.mjs scripts/check-release-readiness.test.mjs --reporter verbose`: PASS. The targeted release-script tests passed 2 files and 11 tests, including GitHub production URL rejection, upstream/source URL allowance, complete staging metadata acceptance, placeholder updater signature rejection, and core matrix rejection.
-- `scripts/verify-release-staging.mjs` fixture integration: PASS. Fixture-derived stable release index, signed updater metadata, and core manifest validated with `--allow-test-hosts`: 6 app artifacts across 6 stable targets, 6 updater platforms, and 18 core assets for Xray, mihomo, and sing-box. Network probing was intentionally skipped for fixture hosts.
-- `pnpm run verify:ci`: PASS. Rust formatting, strict Clippy, Rust workspace tests, frontend typecheck, Vitest, ESLint, and generated binding drift passed. Rust tests passed across 236 unit tests. Vitest passed 9 files and 52 tests. ESLint reported no warnings or errors. IPC bindings were up to date.
-- `pnpm run build`: PASS. TypeScript build and Vite production build completed, transforming 2069 modules. No Vite large-chunk warning was emitted; the Tailwind plugin timing notice remains informational.
-- `pnpm run smoke:frontend`: PASS. Playwright passed 3 Chromium smoke tests: app shell and dialogs, profile import/activation/fake runtime connect, and routing/DNS settings.
-- `pnpm run check:release:dry-run`: PASS. Dry-run readiness finished with 11 passes, 0 warnings, and 0 failures.
-
-External gates not completed by this local batch:
-
-- CDN staging, stable pointer promotion, cache purge, and CDN rollback verification were not run.
-- Production signing, Windows Authenticode signing, macOS notarization/stapling, Linux package repository signing, and six-target release workflow jobs were not run.
-- Windows, macOS, and Linux x64/arm64 updater smoke, manual download smoke, core smoke, diagnostics smoke, and rollback drills were not run on external smoke machines.
-- Legal redistribution approval and privacy/security diagnostics approval were not granted by this automated evidence run.
+These checks prove local regression, packaging metadata shape, and dry-run release readiness. They do not prove CDN publication, signing, notarization, external smoke, legal approval, privacy approval, stable pointer promotion, rollback drills, or monitoring readiness.

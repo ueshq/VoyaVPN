@@ -162,6 +162,7 @@ fn platform_cleanup_before_start() -> Result<(), TunCleanupError> {
     Ok(())
 }
 
+#[cfg(any(windows, test))]
 fn windows_cleanup_result(
     device: &WindowsTunDevice,
     success: bool,

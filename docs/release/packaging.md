@@ -134,7 +134,7 @@ Bundled seed assets are a startup convenience for missing app-data cores. They a
 
 ## Updater Metadata
 
-The Tauri updater plugin is registered in `src-tauri/src/lib.rs`. The committed `src-tauri/tauri.conf.json` intentionally omits `plugins.updater` and keeps `bundle.createUpdaterArtifacts` disabled so local debug builds remain credential-free.
+The Tauri updater plugin is registered in `src-tauri/src/lib.rs`. The committed `src-tauri/tauri.conf.json` keeps an empty `plugins.updater` block and keeps `bundle.createUpdaterArtifacts` disabled so local debug builds initialize the plugin without updater credentials or endpoints.
 
 Stable packaging uses the generated overlay from `scripts/tauri-build.mjs`:
 

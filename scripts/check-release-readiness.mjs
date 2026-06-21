@@ -21,7 +21,6 @@ const stableTargets = [
 
 const stableCoreTypes = ["Xray", "mihomo", "sing_box"];
 const requiredDocs = [
-  ".agents/rollouts/voyavpn-production-stable-closure/stable-contract.md",
   "docs/release/packaging.md",
   "docs/release/ci-secrets.md",
   "docs/release/signing-notarization.md",
@@ -30,7 +29,7 @@ const requiredDocs = [
   "docs/release/runbook.md",
   "docs/release/diagnostics-privacy.md",
   "docs/release/THIRD_PARTY_NOTICES.md",
-  "docs/verification/m7-public-beta-gate.md",
+  "docs/verification/stable-release-gate.md",
 ];
 
 const blockerScanFiles = [
@@ -44,7 +43,7 @@ const blockerScanFiles = [
   "docs/release/runbook.md",
   "docs/release/diagnostics-privacy.md",
   "docs/release/THIRD_PARTY_NOTICES.md",
-  "docs/verification/m7-public-beta-gate.md",
+  "docs/verification/stable-release-gate.md",
   "crates/voya-net/src/lib.rs",
   "crates/voya-net/src/update.rs",
 ];
@@ -389,6 +388,16 @@ function mergeConfig(base, overlay) {
   return merged;
 }
 
+function isCredentialFreeUpdaterConfig(updater) {
+  return (
+    updater &&
+    typeof updater === "object" &&
+    placeholderText(updater.pubkey) &&
+    Array.isArray(updater.endpoints) &&
+    updater.endpoints.length === 0
+  );
+}
+
 async function loadTauriConfig(options) {
   const basePath = resolveRepoPath(defaultTauriConfig);
   const requestedPath = resolveRepoPath(options.tauriConfig);
@@ -556,6 +565,10 @@ async function checkTauriConfig(reporter, options, updatesBaseUrl) {
     } else {
       reporter.blocker("Tauri updater config", [`${detailsPrefix}: plugins.updater is missing`]);
     }
+  } else if (defaultDryRunConfig && isCredentialFreeUpdaterConfig(updater)) {
+    reporter.pass("Tauri updater config", [
+      `${detailsPrefix}: dry-run uses an empty credential-free updater config; stable mode validates the generated updater overlay`,
+    ]);
   } else {
     if (placeholderText(updater.pubkey)) {
       reporter.blocker("Tauri updater public key", [`${detailsPrefix}: plugins.updater.pubkey is empty or a placeholder`]);

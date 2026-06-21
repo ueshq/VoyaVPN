@@ -1,7 +1,5 @@
 # Golden Fixtures
 
-Batch: `00-03-verification-scaffold-plan`
-
 Golden fixtures are the config-generation oracle for VoyaVPN. They compare VoyaVPN-generated Xray and sing-box JSON against JSON exported from the read-only v2rayN reference behavior. Golden tests must assert on generated core configs, not only on entities, DTOs, or intermediate snapshots.
 
 ## Reference Inputs

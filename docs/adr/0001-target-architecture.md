@@ -13,7 +13,7 @@ Reference evidence:
 - v2rayN business logic: `/Users/afu/Dev/refs/v2rayN/v2rayN/ServiceLib`
 - v2rayN tests: `/Users/afu/Dev/refs/v2rayN/v2rayN/ServiceLib.Tests`
 - UI references: `/Users/afu/Dev/refs/v2rayN/v2rayN/v2rayN` and `/Users/afu/Dev/refs/v2rayN/v2rayN/v2rayN.Desktop`
-- target subsystem map: `docs/source-inventory.md`
+- Target module boundaries are captured in the decision below.
 
 ## Decision
 

@@ -87,5 +87,11 @@
         "bundleMediaFramework": false
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": []
+    }
   }
 }

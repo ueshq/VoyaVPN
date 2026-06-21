@@ -15,9 +15,6 @@ This runbook is the top-level release path for VoyaVPN production stable package
 - Rollback procedures: [rollback.md](rollback.md)
 - Stable external evidence checklist: [external-evidence-checklist.md](external-evidence-checklist.md)
 - Stable release gate: [../verification/stable-release-gate.md](../verification/stable-release-gate.md)
-- Manual OS evidence template: [../verification/manual-os-smoke.md](../verification/manual-os-smoke.md)
-- Automated smoke coverage and gaps: [../verification/cross-platform-smoke.md](../verification/cross-platform-smoke.md)
-- Update subsystem evidence: [../verification/updates.md](../verification/updates.md)
 
 ## Publication Boundary
 
@@ -95,7 +92,7 @@ pnpm tauri:stable-updater-config
 
 The generated overlay path is `target/release-config/tauri.updater.stable.generated.json`. `pnpm check:release:stable` scans that overlay merged over `src-tauri/tauri.conf.json`.
 
-The committed Tauri config intentionally keeps `bundle.createUpdaterArtifacts` disabled and omits `plugins.updater` so repository-controlled builds do not contain updater credentials or generated release state. The stable overlay is the only release path that enables `createUpdaterArtifacts`; it is generated from environment variables, used by the package job through `--config`, and left uncommitted.
+The committed Tauri config intentionally keeps `bundle.createUpdaterArtifacts` disabled and leaves `plugins.updater` empty so repository-controlled builds do not contain updater credentials, endpoints, or generated release state. The stable overlay is the only release path that enables `createUpdaterArtifacts`; it is generated from environment variables, used by the package job through `--config`, and left uncommitted.
 
 Required stable overlay inputs:
 

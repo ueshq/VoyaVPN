@@ -1,4 +1,0 @@
-interface:
-  display_name: "Codex Rollout"
-  short_description: "Plan large refactors and migrations driven by Codex"
-  default_prompt: "Use $codex-rollout to draft an upstream spec, derive a phase-and-batch plan from it, and, when appropriate, generate a rollout runner that drives `codex exec` for this initiative."

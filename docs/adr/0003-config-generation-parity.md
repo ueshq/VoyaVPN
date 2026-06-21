@@ -23,7 +23,7 @@ Golden testing is the parity contract:
 
 - Golden fixtures are exported from the read-only v2rayN reference behavior.
 - Rust generation canonicalizes JSON and diffs generated output against the golden corpus.
-- Golden fixtures must cover high-risk hotspots from `docs/fidelity-hotspots.md`: finalmask, policy group ordering, proxy chains, DNS final/direct detection, TUN, pre-socks, stats config, templates, and per-rule outbounds.
+- Golden fixtures must cover high-risk parity areas: finalmask, policy group ordering, proxy chains, DNS final/direct detection, TUN, pre-socks, stats config, templates, and per-rule outbounds.
 - Where binaries exist, generated Xray configs must pass `xray run -test` and generated sing-box configs must pass `sing-box check -c`.
 - When core binaries are not available, tests must skip acceptance with explicit evidence and still run JSON golden parity.
 

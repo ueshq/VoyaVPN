@@ -101,7 +101,7 @@ These retention assumptions are release gates until the privacy/security owner a
 ## Evidence
 
 - Diagnostics privacy doc path: `docs/release/diagnostics-privacy.md`
-- Later Phase 04 batches must record implementation and test output in `docs/verification/updates.md` or a dedicated diagnostics verification document.
+- Diagnostics implementation and test output should be attached to PR, workflow, or release evidence instead of committed as one-off verification reports.
 
 ## Stable Diagnostics Approval Evidence Template
 
