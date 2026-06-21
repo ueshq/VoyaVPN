@@ -95,21 +95,23 @@ type DialogState =
   | { mode: "edit"; profile: ProfileListItem_Serialize }
   | null;
 
+type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
+
 type ServerColumn = {
-  cell: (item: ProfileListItem_Serialize, rowNumber: number) => React.ReactNode;
+  cell: (item: ProfileListItem_Serialize, rowNumber: number, t: TranslateFn) => React.ReactNode;
   id: string;
-  label: string;
+  labelKey: string;
   sortKey?: ProfileSortKey;
   width: string;
 };
 
 const serverColumns: ServerColumn[] = [
   {
-    cell: (item, rowNumber) => (
+    cell: (item, rowNumber, t) => (
       <span className="flex items-center gap-2">
         {item.isActive ? (
           <Badge
-            aria-label="Active profile"
+            aria-label={t("panes.profiles.aria.activeProfile")}
             className="size-5 rounded-full border-border bg-muted p-0 text-muted-foreground"
             data-testid="active-profile-marker"
             variant="secondary"
@@ -123,7 +125,7 @@ const serverColumns: ServerColumn[] = [
       </span>
     ),
     id: "state",
-    label: "#",
+    labelKey: "panes.profiles.columns.labels.indexHeader",
     width: "5rem",
   },
   {
@@ -133,98 +135,102 @@ const serverColumns: ServerColumn[] = [
       </Badge>
     ),
     id: "configType",
-    label: "Protocol",
+    labelKey: "panes.profiles.columns.labels.protocol",
     sortKey: "configType",
     width: "8rem",
   },
   {
-    cell: (item) => item.profile.Remarks || "Untitled",
+    cell: (item, _rowNumber, t) => item.profile.Remarks || t("panes.profiles.untitled"),
     id: "remarks",
-    label: "Remarks",
+    labelKey: "panes.profiles.columns.labels.remarks",
     sortKey: "remarks",
     width: "minmax(13rem,1.3fr)",
   },
   {
     cell: (item) => item.profile.Address,
     id: "address",
-    label: "Address",
+    labelKey: "panes.profiles.columns.labels.address",
     sortKey: "address",
     width: "minmax(12rem,1fr)",
   },
   {
     cell: (item) => <span className="tabular-nums">{item.profile.Port || ""}</span>,
     id: "port",
-    label: "Port",
+    labelKey: "panes.profiles.columns.labels.port",
     sortKey: "port",
     width: "5rem",
   },
   {
     cell: (item) => item.profile.Network || "tcp",
     id: "network",
-    label: "Transport",
+    labelKey: "panes.profiles.columns.labels.transport",
     sortKey: "network",
     width: "7rem",
   },
   {
     cell: (item) => item.profile.StreamSecurity || "none",
     id: "security",
-    label: "Security",
+    labelKey: "panes.profiles.columns.labels.security",
     sortKey: "streamSecurity",
     width: "7rem",
   },
   {
     cell: (item) => formatDelay(item.profileEx.Delay),
     id: "delay",
-    label: "Delay",
+    labelKey: "panes.profiles.columns.labels.delay",
     sortKey: "delay",
     width: "6rem",
   },
   {
     cell: (item) => formatSpeedOrMessage(item.profileEx.Speed, item.profileEx.Message),
     id: "speed",
-    label: "Speed",
+    labelKey: "panes.profiles.columns.labels.speed",
     sortKey: "speed",
     width: "7rem",
   },
   {
     cell: (item) => formatTraffic(item.serverStat?.TodayUp),
     id: "todayUp",
-    label: "Today up",
+    labelKey: "panes.profiles.columns.labels.todayUp",
     width: "8rem",
   },
   {
     cell: (item) => formatTraffic(item.serverStat?.TodayDown),
     id: "todayDown",
-    label: "Today down",
+    labelKey: "panes.profiles.columns.labels.todayDown",
     width: "8rem",
   },
   {
     cell: (item) => formatTraffic(item.serverStat?.TotalUp),
     id: "totalUp",
-    label: "Total up",
+    labelKey: "panes.profiles.columns.labels.totalUp",
     width: "8rem",
   },
   {
     cell: (item) => formatTraffic(item.serverStat?.TotalDown),
     id: "totalDown",
-    label: "Total down",
+    labelKey: "panes.profiles.columns.labels.totalDown",
     width: "8rem",
   },
   {
     cell: (item) => item.profileEx.IpInfo ?? "",
     id: "ipInfo",
-    label: "IP info",
+    labelKey: "panes.profiles.columns.labels.ipInfo",
     sortKey: "ipInfo",
     width: "10rem",
   },
   {
     cell: (item) => item.profile.Subid,
     id: "subid",
-    label: "Group",
+    labelKey: "panes.profiles.columns.labels.group",
     sortKey: "subid",
     width: "8rem",
   },
 ];
+
+const COLUMN_LABEL_KEY_BY_ID: Record<string, string> = Object.fromEntries(
+  serverColumns.map((column) => [column.id, column.labelKey]),
+);
 
 // Leading track is the selection checkbox column.
 const SELECTION_COLUMN_WIDTH_REM = 2.75;
@@ -275,7 +281,7 @@ export function ProfilesScreen() {
     () =>
       serverColumns.map((column) => ({
         id: column.id,
-        header: column.label,
+        header: column.labelKey,
         // The structural `#`/state column is always shown; everything else can
         // be collapsed through the column menu.
         enableHiding: column.id !== "state",
@@ -398,13 +404,13 @@ export function ProfilesScreen() {
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col" aria-label="Profiles">
+    <section className="flex h-full min-h-0 flex-col" aria-label={t("panes.profiles.title")}>
       <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <Rows3 className="size-4 text-muted-foreground" aria-hidden="true" />
-          <h2 className="text-sm font-semibold">Profiles</h2>
+          <h2 className="text-sm font-semibold">{t("panes.profiles.title")}</h2>
           <Badge className="h-6 bg-background text-muted-foreground" variant="outline">
-            {profiles.length.toLocaleString()} rows
+            {t("panes.profiles.toolbar.rows", { rows: profiles.length.toLocaleString() })}
           </Badge>
         </div>
 
@@ -414,10 +420,10 @@ export function ProfilesScreen() {
             aria-hidden="true"
           />
           <Input
-            aria-label="Filter profiles"
+            aria-label={t("panes.profiles.aria.filter")}
             className="h-9 ps-9"
             onChange={(event) => setFilterText(event.target.value)}
-            placeholder="Filter remarks or address"
+            placeholder={t("panes.profiles.toolbar.filterPlaceholder")}
             type="search"
             value={filterText}
           />
@@ -443,7 +449,7 @@ export function ProfilesScreen() {
                   onCheckedChange={(value) => column.toggleVisibility(value === true)}
                   onSelect={(event) => event.preventDefault()}
                 >
-                  {String(column.columnDef.header)}
+                  {t(COLUMN_LABEL_KEY_BY_ID[column.id])}
                 </MenubarCheckboxItem>
               ))}
               <MenubarSeparator />
@@ -457,73 +463,73 @@ export function ProfilesScreen() {
 
         <Button onClick={() => setDialogState({ mode: "create" })} size="sm" type="button">
           <FilePlus2 className="size-4" aria-hidden="true" />
-          Add
+          {t("panes.profiles.toolbar.add")}
         </Button>
         <Button onClick={() => setImportOpen(true)} size="sm" type="button" variant="outline">
           <Upload className="size-4" aria-hidden="true" />
-          Import
+          {t("panes.profiles.toolbar.import")}
         </Button>
         <Button onClick={() => setSubscriptionsOpen(true)} size="sm" type="button" variant="outline">
           <Rss className="size-4" aria-hidden="true" />
-          Subscriptions
+          {t("panes.profiles.toolbar.subscriptions")}
         </Button>
         <Button onClick={() => void runOperation(() => updateSubscriptions(null, false, null))} size="sm" type="button" variant="outline">
           <RefreshCw className="size-4" aria-hidden="true" />
-          Update subs
+          {t("panes.profiles.toolbar.updateSubs")}
         </Button>
         <div className="flex items-center gap-1 border-s ps-2">
           <SpeedButton
             action={SPEED_ACTIONS.FastRealping}
             disabled={profiles.length === 0 || speedtestRunning}
             icon={Zap}
-            label="Fast"
+            label={t("panes.profiles.speedtest.fast")}
             onRun={handleSpeedtest}
           />
           <SpeedButton
             action={SPEED_ACTIONS.Tcping}
             disabled={selectedIdsArray.length === 0 || speedtestRunning}
             icon={Activity}
-            label="TCP"
+            label={t("panes.profiles.speedtest.tcp")}
             onRun={handleSpeedtest}
           />
           <SpeedButton
             action={SPEED_ACTIONS.Realping}
             disabled={selectedIdsArray.length === 0 || speedtestRunning}
             icon={Clock}
-            label="Real"
+            label={t("panes.profiles.speedtest.real")}
             onRun={handleSpeedtest}
           />
           <SpeedButton
             action={SPEED_ACTIONS.UdpTest}
             disabled={selectedIdsArray.length === 0 || speedtestRunning}
             icon={Radio}
-            label="UDP"
+            label={t("panes.profiles.speedtest.udp")}
             onRun={handleSpeedtest}
           />
           <SpeedButton
             action={SPEED_ACTIONS.Speedtest}
             disabled={selectedIdsArray.length === 0 || speedtestRunning}
             icon={Gauge}
-            label="Speed"
+            label={t("panes.profiles.speedtest.speed")}
             onRun={handleSpeedtest}
           />
           <SpeedButton
             action={SPEED_ACTIONS.Mixedtest}
             disabled={selectedIdsArray.length === 0 || speedtestRunning}
             icon={Wifi}
-            label="Mixed"
+            label={t("panes.profiles.speedtest.mixed")}
             onRun={handleSpeedtest}
           />
           <Button
             disabled={!speedtestRunning}
             onClick={() => void handleCancelSpeedtest()}
             size="sm"
-            title="Cancel speedtest"
+            title={t("panes.profiles.speedtest.cancelTitle")}
             type="button"
             variant="outline"
           >
             <Square className="size-4" aria-hidden="true" />
-            Stop
+            {t("panes.profiles.speedtest.stop")}
           </Button>
         </div>
         <Button
@@ -534,7 +540,7 @@ export function ProfilesScreen() {
           variant="outline"
         >
           <Pencil className="size-4" aria-hidden="true" />
-          Edit
+          {t("panes.profiles.toolbar.edit")}
         </Button>
         <Button
           disabled={!primarySelection}
@@ -544,7 +550,7 @@ export function ProfilesScreen() {
           variant="outline"
         >
           <Play className="size-4" aria-hidden="true" />
-          Activate
+          {t("panes.profiles.toolbar.activate")}
         </Button>
         <Button
           disabled={selectedIdsArray.length === 0}
@@ -554,7 +560,7 @@ export function ProfilesScreen() {
           variant="outline"
         >
           <Copy className="size-4" aria-hidden="true" />
-          Copy
+          {t("panes.profiles.toolbar.copy")}
         </Button>
         <Button
           disabled={selectedIdsArray.length === 0}
@@ -564,11 +570,11 @@ export function ProfilesScreen() {
           variant="outline"
         >
           <Trash2 className="size-4" aria-hidden="true" />
-          Delete
+          {t("panes.profiles.toolbar.delete")}
         </Button>
         <Button onClick={() => void runOperation(() => dedupeProfiles(null, null))} size="sm" type="button" variant="outline">
           <Filter className="size-4" aria-hidden="true" />
-          Dedupe
+          {t("panes.profiles.toolbar.dedupe")}
         </Button>
       </div>
 
@@ -582,7 +588,7 @@ export function ProfilesScreen() {
         <div
           aria-busy={profilesQuery.isLoading}
           aria-colcount={visibleColumns.length + 1}
-          aria-label="Profiles"
+          aria-label={t("panes.profiles.title")}
           aria-rowcount={profiles.length}
           className="flex h-full min-h-[18rem] flex-col overflow-hidden rounded-md border bg-card"
           role="table"
@@ -600,7 +606,7 @@ export function ProfilesScreen() {
                 role="columnheader"
               >
                 <Checkbox
-                  aria-label="Select all profiles"
+                  aria-label={t("panes.profiles.aria.selectAll")}
                   checked={allVisibleCheckboxState}
                   onCheckedChange={(checked) => toggleAllVisible(checked === true)}
                 />
@@ -619,7 +625,7 @@ export function ProfilesScreen() {
                       onClick={() => void handleSort(column.sortKey!)}
                       type="button"
                     >
-                      <span className="truncate">{column.label}</span>
+                      <span className="truncate">{t(column.labelKey)}</span>
                       {sortState?.key === column.sortKey ? (
                         sortState.ascending ? (
                           <ArrowUp className="size-3" aria-hidden="true" />
@@ -629,7 +635,7 @@ export function ProfilesScreen() {
                       ) : null}
                     </button>
                   ) : (
-                    <span className="truncate">{column.label}</span>
+                    <span className="truncate">{t(column.labelKey)}</span>
                   )}
                 </div>
               ))}
@@ -739,14 +745,14 @@ export function ProfilesScreen() {
                           role="cell"
                         >
                           <Checkbox
-                            aria-label={`Select ${item.profile.Remarks || indexId}`}
+                            aria-label={t("panes.profiles.aria.selectRow", { name: item.profile.Remarks || indexId })}
                             checked={isSelected}
                             onClick={(event) => event.stopPropagation()}
                             onCheckedChange={(checked) => toggleSelection(indexId, checked === true)}
                           />
                         </div>
                         {visibleColumns.map((column, columnIndex) => {
-                          const cell = column.cell(item, virtualRow.index + 1);
+                          const cell = column.cell(item, virtualRow.index + 1, t);
 
                           return (
                             <div
@@ -820,12 +826,14 @@ function SpeedButton({
   label: string;
   onRun: (action: SpeedActionType) => Promise<void>;
 }) {
+  const { t } = useI18n();
+
   return (
     <Button
       disabled={disabled}
       onClick={() => void onRun(action)}
       size="sm"
-      title={`${label} speedtest`}
+      title={t("panes.profiles.speedtest.buttonTitle", { label })}
       type="button"
       variant="outline"
     >
@@ -888,23 +896,25 @@ function ProfileRowContextMenu({
   onMove: (action: number) => void;
   onSelectOnly: () => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <ContextMenu.Root onOpenChange={(open) => open && onSelectOnly()}>
       <ContextMenu.Trigger asChild>{children}</ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content className="z-50 min-w-48 rounded-md border bg-card p-1 text-sm shadow-xl outline-none">
           <ContextMenu.Label className="truncate px-2 py-1.5 text-xs text-muted-foreground">
-            {item.profile.Remarks || "Untitled"}
+            {item.profile.Remarks || t("panes.profiles.untitled")}
           </ContextMenu.Label>
-          <ContextItem icon={Play} label="Activate" onSelect={onActivate} />
-          <ContextItem icon={Pencil} label="Edit" onSelect={onEdit} />
-          <ContextItem icon={Copy} label="Copy" onSelect={onCopy} />
-          <ContextItem icon={Trash2} label="Delete" onSelect={onDelete} />
+          <ContextItem icon={Play} label={t("panes.profiles.menu.activate")} onSelect={onActivate} />
+          <ContextItem icon={Pencil} label={t("panes.profiles.menu.edit")} onSelect={onEdit} />
+          <ContextItem icon={Copy} label={t("panes.profiles.menu.copy")} onSelect={onCopy} />
+          <ContextItem icon={Trash2} label={t("panes.profiles.menu.delete")} onSelect={onDelete} />
           <ContextMenu.Separator className="my-1 h-px bg-border" />
-          <ContextItem icon={ChevronsUp} label="Move to top" onSelect={() => onMove(MOVE_ACTIONS.Top)} />
-          <ContextItem icon={ArrowUp} label="Move up" onSelect={() => onMove(MOVE_ACTIONS.Up)} />
-          <ContextItem icon={ArrowDown} label="Move down" onSelect={() => onMove(MOVE_ACTIONS.Down)} />
-          <ContextItem icon={ChevronsDown} label="Move to bottom" onSelect={() => onMove(MOVE_ACTIONS.Bottom)} />
+          <ContextItem icon={ChevronsUp} label={t("panes.profiles.menu.moveTop")} onSelect={() => onMove(MOVE_ACTIONS.Top)} />
+          <ContextItem icon={ArrowUp} label={t("panes.profiles.menu.moveUp")} onSelect={() => onMove(MOVE_ACTIONS.Up)} />
+          <ContextItem icon={ArrowDown} label={t("panes.profiles.menu.moveDown")} onSelect={() => onMove(MOVE_ACTIONS.Down)} />
+          <ContextItem icon={ChevronsDown} label={t("panes.profiles.menu.moveBottom")} onSelect={() => onMove(MOVE_ACTIONS.Bottom)} />
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>

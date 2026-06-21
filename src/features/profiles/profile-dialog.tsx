@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import type { ProfileListItem_Serialize } from "@/ipc/bindings";
+import { useI18n } from "@/i18n/use-i18n";
 import { cn } from "@/lib/utils";
 import { GroupBuilder } from "@/features/groups";
 
@@ -62,7 +63,10 @@ type ProfileDialogProps = {
   profile?: ProfileListItem_Serialize | null;
 };
 
+type Translate = (key: string, options?: Record<string, unknown>) => string;
+
 export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile }: ProfileDialogProps) {
+  const { t } = useI18n();
   const form = useForm<ProfileFormValues, unknown, ParsedProfileFormValues>({
     defaultValues: profile ? normalizeProfileForForm(profile.profile) : createDefaultProfile(),
     mode: "onBlur",
@@ -107,20 +111,20 @@ export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile }: P
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Server className="size-4" aria-hidden="true" />
-            {mode === "edit" ? "Edit profile" : "Add profile"}
+            {mode === "edit" ? t("panes.profiles.dialog.editTitle") : t("panes.profiles.dialog.addTitle")}
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Create or edit a persisted proxy profile using the generated profile IPC contract.
+            {t("panes.profiles.dialog.description")}
           </DialogDescription>
         </DialogHeader>
 
         <form className="min-h-0 overflow-y-auto pe-1" id="profile-form" onSubmit={(event) => void submit(event)}>
           <div className="grid gap-4">
-            <Panel title="Profile">
+            <Panel title={t("panes.profiles.panels.profile")}>
               <div className="grid gap-3 lg:grid-cols-[14rem_1fr_8rem]">
                 <SelectField
                   control={form.control}
-                  label="Protocol"
+                  label={t("panes.profiles.fields.protocol")}
                   name="ConfigType"
                   onValueChange={(value) => {
                     const next = Number(value) as ProfileProtocol;
@@ -136,10 +140,10 @@ export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile }: P
                   parseValue={(value) => Number(value)}
                 />
 
-                <TextField error={errors.Remarks?.message} label="Remarks" {...register("Remarks")} />
+                <TextField error={errors.Remarks?.message} label={t("panes.profiles.fields.remarks")} {...register("Remarks")} />
                 <SelectField
                   control={form.control}
-                  label="Core"
+                  label={t("panes.profiles.fields.core")}
                   name="CoreType"
                   options={CORE_TYPE_OPTIONS}
                   parseValue={(value) => (value === "" ? null : Number(value))}
@@ -147,15 +151,15 @@ export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile }: P
               </div>
 
               <div className="grid gap-3 lg:grid-cols-[1fr_7rem_12rem]">
-                <TextField error={errors.Address?.message} label={addressLabel(configType)} {...register("Address")} />
+                <TextField error={errors.Address?.message} label={addressLabel(configType, t)} {...register("Address")} />
                 <TextField
                   error={errors.Port?.message}
                   inputMode="numeric"
-                  label="Port"
+                  label={t("panes.profiles.fields.port")}
                   type="number"
                   {...register("Port", { valueAsNumber: true })}
                 />
-                <TextField label="Group" {...register("Subid")} />
+                <TextField label={t("panes.profiles.fields.group")} {...register("Subid")} />
               </div>
             </Panel>
 
@@ -180,11 +184,11 @@ export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile }: P
 
         <DialogFooter>
           <Button disabled={isSubmitting} onClick={() => onOpenChange(false)} type="button" variant="outline">
-            Cancel
+            {t("panes.profiles.dialog.cancel")}
           </Button>
           <Button disabled={isSubmitting} form="profile-form" type="submit">
             <Save className="size-4" aria-hidden="true" />
-            Save
+            {t("panes.profiles.dialog.save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -208,9 +212,17 @@ function ProtocolPanel({
   register: Register;
   setValue: UseFormSetValue<ProfileFormValues>;
 }) {
+  const { t } = useI18n();
+
   if (configType === CONFIG_TYPES.PolicyGroup || configType === CONFIG_TYPES.ProxyChain) {
     return (
-      <Panel title={configType === CONFIG_TYPES.PolicyGroup ? "Policy group" : "Proxy chain"}>
+      <Panel
+        title={
+          configType === CONFIG_TYPES.PolicyGroup
+            ? t("panes.profiles.panels.policyGroup")
+            : t("panes.profiles.panels.proxyChain")
+        }
+      >
         <GroupBuilder
           configType={configType}
           control={control}
@@ -224,63 +236,65 @@ function ProtocolPanel({
 
   if (configType === CONFIG_TYPES.Custom) {
     return (
-      <Panel title="Custom profile">
+      <Panel title={t("panes.profiles.panels.custom")}>
         <div className="grid gap-3 lg:grid-cols-2">
-          <TextField label="Config source" {...register("Address")} />
-          <TextField label="Filter" {...register("ProtocolExtra.Filter")} />
+          <TextField label={t("panes.profiles.fields.configSource")} {...register("Address")} />
+          <TextField label={t("panes.profiles.fields.filter")} {...register("ProtocolExtra.Filter")} />
         </div>
       </Panel>
     );
   }
 
   return (
-    <Panel title="Protocol">
+    <Panel title={t("panes.profiles.panels.protocol")}>
       <div className="grid gap-3 lg:grid-cols-3">
-        {requiresUsername(configType) ? <TextField label="Username" {...register("Username")} /> : null}
-        <TextField label={passwordLabel(configType)} {...register("Password")} />
+        {requiresUsername(configType) ? (
+          <TextField label={t("panes.profiles.fields.username")} {...register("Username")} />
+        ) : null}
+        <TextField label={passwordLabel(configType, t)} {...register("Password")} />
         {configType === CONFIG_TYPES.VMess ? (
           <>
-            <TextField label="Alter ID" {...register("ProtocolExtra.AlterId")} />
-            <TextField label="VMess security" placeholder="auto" {...register("ProtocolExtra.VmessSecurity")} />
+            <TextField label={t("panes.profiles.fields.alterId")} {...register("ProtocolExtra.AlterId")} />
+            <TextField label={t("panes.profiles.fields.vmessSecurity")} placeholder="auto" {...register("ProtocolExtra.VmessSecurity")} />
           </>
         ) : null}
         {configType === CONFIG_TYPES.VLESS ? (
           <>
-            <TextField label="Flow" placeholder="xtls-rprx-vision" {...register("ProtocolExtra.Flow")} />
-            <TextField label="Encryption" placeholder="none" {...register("ProtocolExtra.VlessEncryption")} />
+            <TextField label={t("panes.profiles.fields.flow")} placeholder="xtls-rprx-vision" {...register("ProtocolExtra.Flow")} />
+            <TextField label={t("panes.profiles.fields.encryption")} placeholder="none" {...register("ProtocolExtra.VlessEncryption")} />
           </>
         ) : null}
         {configType === CONFIG_TYPES.Shadowsocks ? (
           <>
-            <TextField label="Method" placeholder="2022-blake3-aes-128-gcm" {...register("ProtocolExtra.SsMethod")} />
-            <CheckboxField control={control} label="UDP over TCP" name="ProtocolExtra.Uot" />
+            <TextField label={t("panes.profiles.fields.method")} placeholder="2022-blake3-aes-128-gcm" {...register("ProtocolExtra.SsMethod")} />
+            <CheckboxField control={control} label={t("panes.profiles.fields.udpOverTcp")} name="ProtocolExtra.Uot" />
           </>
         ) : null}
         {configType === CONFIG_TYPES.Hysteria2 ? (
           <>
             <TextField
               inputMode="numeric"
-              label="Up Mbps"
+              label={t("panes.profiles.fields.upMbps")}
               type="number"
               {...register("ProtocolExtra.UpMbps", { setValueAs: optionalNumber })}
             />
             <TextField
               inputMode="numeric"
-              label="Down Mbps"
+              label={t("panes.profiles.fields.downMbps")}
               type="number"
               {...register("ProtocolExtra.DownMbps", { setValueAs: optionalNumber })}
             />
-            <TextField label="Ports" {...register("ProtocolExtra.Ports")} />
-            <TextField label="Hop interval" {...register("ProtocolExtra.HopInterval")} />
-            <TextField label="Salamander password" {...register("ProtocolExtra.SalamanderPass")} />
+            <TextField label={t("panes.profiles.fields.ports")} {...register("ProtocolExtra.Ports")} />
+            <TextField label={t("panes.profiles.fields.hopInterval")} {...register("ProtocolExtra.HopInterval")} />
+            <TextField label={t("panes.profiles.fields.salamanderPassword")} {...register("ProtocolExtra.SalamanderPass")} />
           </>
         ) : null}
         {configType === CONFIG_TYPES.TUIC ? (
           <>
-            <TextField label="Congestion control" placeholder="bbr" {...register("ProtocolExtra.CongestionControl")} />
+            <TextField label={t("panes.profiles.fields.congestionControl")} placeholder="bbr" {...register("ProtocolExtra.CongestionControl")} />
             <TextField
               inputMode="numeric"
-              label="Insecure concurrency"
+              label={t("panes.profiles.fields.insecureConcurrency")}
               type="number"
               {...register("ProtocolExtra.InsecureConcurrency", { setValueAs: optionalNumber })}
             />
@@ -288,21 +302,21 @@ function ProtocolPanel({
         ) : null}
         {configType === CONFIG_TYPES.WireGuard ? (
           <>
-            <TextField label="Peer public key" {...register("ProtocolExtra.WgPublicKey")} />
-            <TextField label="Preshared key" {...register("ProtocolExtra.WgPresharedKey")} />
-            <TextField label="Interface address" {...register("ProtocolExtra.WgInterfaceAddress")} />
-            <TextField label="Allowed IPs" {...register("ProtocolExtra.WgAllowedIps")} />
-            <TextField label="Reserved bytes" {...register("ProtocolExtra.WgReserved")} />
+            <TextField label={t("panes.profiles.fields.peerPublicKey")} {...register("ProtocolExtra.WgPublicKey")} />
+            <TextField label={t("panes.profiles.fields.presharedKey")} {...register("ProtocolExtra.WgPresharedKey")} />
+            <TextField label={t("panes.profiles.fields.interfaceAddress")} {...register("ProtocolExtra.WgInterfaceAddress")} />
+            <TextField label={t("panes.profiles.fields.allowedIps")} {...register("ProtocolExtra.WgAllowedIps")} />
+            <TextField label={t("panes.profiles.fields.reservedBytes")} {...register("ProtocolExtra.WgReserved")} />
             <TextField
               inputMode="numeric"
-              label="MTU"
+              label={t("panes.profiles.fields.mtu")}
               type="number"
               {...register("ProtocolExtra.WgMtu", { setValueAs: optionalNumber })}
             />
           </>
         ) : null}
         {configType === CONFIG_TYPES.Naive ? (
-          <CheckboxField control={control} label="QUIC" name="ProtocolExtra.NaiveQuic" />
+          <CheckboxField control={control} label={t("panes.profiles.fields.quic")} name="ProtocolExtra.NaiveQuic" />
         ) : null}
       </div>
     </Panel>
@@ -310,23 +324,25 @@ function ProtocolPanel({
 }
 
 function TransportPanel({ control, register }: { control: ProfileFormControl; register: Register }) {
+  const { t } = useI18n();
+
   return (
-    <Panel title="Transport">
+    <Panel title={t("panes.profiles.panels.transport")}>
       <div className="grid gap-3 lg:grid-cols-4">
-        <SelectField control={control} label="Network" name="Network" options={NETWORK_OPTIONS} />
-        <TextField label="Host" {...register("TransportExtra.Host")} />
-        <TextField label="Path" {...register("TransportExtra.Path")} />
-        <TextField label="Raw header" placeholder="none" {...register("TransportExtra.RawHeaderType")} />
-        <TextField label="XHTTP mode" {...register("TransportExtra.XhttpMode")} />
-        <TextField label="XHTTP extra JSON" {...register("TransportExtra.XhttpExtra")} />
-        <TextField label="gRPC authority" {...register("TransportExtra.GrpcAuthority")} />
-        <TextField label="gRPC service" {...register("TransportExtra.GrpcServiceName")} />
-        <TextField label="gRPC mode" {...register("TransportExtra.GrpcMode")} />
-        <TextField label="KCP header" {...register("TransportExtra.KcpHeaderType")} />
-        <TextField label="KCP seed" {...register("TransportExtra.KcpSeed")} />
+        <SelectField control={control} label={t("panes.profiles.fields.network")} name="Network" options={NETWORK_OPTIONS} />
+        <TextField label={t("panes.profiles.fields.host")} {...register("TransportExtra.Host")} />
+        <TextField label={t("panes.profiles.fields.path")} {...register("TransportExtra.Path")} />
+        <TextField label={t("panes.profiles.fields.rawHeader")} placeholder="none" {...register("TransportExtra.RawHeaderType")} />
+        <TextField label={t("panes.profiles.fields.xhttpMode")} {...register("TransportExtra.XhttpMode")} />
+        <TextField label={t("panes.profiles.fields.xhttpExtra")} {...register("TransportExtra.XhttpExtra")} />
+        <TextField label={t("panes.profiles.fields.grpcAuthority")} {...register("TransportExtra.GrpcAuthority")} />
+        <TextField label={t("panes.profiles.fields.grpcService")} {...register("TransportExtra.GrpcServiceName")} />
+        <TextField label={t("panes.profiles.fields.grpcMode")} {...register("TransportExtra.GrpcMode")} />
+        <TextField label={t("panes.profiles.fields.kcpHeader")} {...register("TransportExtra.KcpHeaderType")} />
+        <TextField label={t("panes.profiles.fields.kcpSeed")} {...register("TransportExtra.KcpSeed")} />
         <TextField
           inputMode="numeric"
-          label="KCP MTU"
+          label={t("panes.profiles.fields.kcpMtu")}
           type="number"
           {...register("TransportExtra.KcpMtu", { setValueAs: optionalNumber })}
         />
@@ -344,23 +360,27 @@ function SecurityPanel({
   register: Register;
   security: string;
 }) {
+  const { t } = useI18n();
   const reality = security === "reality";
 
   return (
-    <Panel title="Security">
+    <Panel title={t("panes.profiles.panels.security")}>
       <div className="grid gap-3 lg:grid-cols-4">
-        <SelectField control={control} label="TLS mode" name="StreamSecurity" options={SECURITY_OPTIONS} />
-        <TextField label="SNI" {...register("Sni")} />
-        <TextField label="ALPN" {...register("Alpn")} />
-        <TextField label="Fingerprint" {...register("Fingerprint")} />
-        <TextField label={reality ? "REALITY public key" : "Public key"} {...register("PublicKey")} />
-        <TextField label="Short ID" {...register("ShortId")} />
-        <TextField label="Spider X" {...register("SpiderX")} />
-        <TextField label="ML-DSA verify" {...register("Mldsa65Verify")} />
-        <TextField label="ECH config list" {...register("EchConfigList")} />
-        <TextField label="Final mask" {...register("Finalmask")} />
-        <TextField label="Pinned cert" {...register("Cert")} />
-        <TextField label="Cert SHA" {...register("CertSha")} />
+        <SelectField control={control} label={t("panes.profiles.fields.tlsMode")} name="StreamSecurity" options={SECURITY_OPTIONS} />
+        <TextField label={t("panes.profiles.fields.sni")} {...register("Sni")} />
+        <TextField label={t("panes.profiles.fields.alpn")} {...register("Alpn")} />
+        <TextField label={t("panes.profiles.fields.fingerprint")} {...register("Fingerprint")} />
+        <TextField
+          label={reality ? t("panes.profiles.fields.realityPublicKey") : t("panes.profiles.fields.publicKey")}
+          {...register("PublicKey")}
+        />
+        <TextField label={t("panes.profiles.fields.shortId")} {...register("ShortId")} />
+        <TextField label={t("panes.profiles.fields.spiderX")} {...register("SpiderX")} />
+        <TextField label={t("panes.profiles.fields.mldsaVerify")} {...register("Mldsa65Verify")} />
+        <TextField label={t("panes.profiles.fields.echConfigList")} {...register("EchConfigList")} />
+        <TextField label={t("panes.profiles.fields.finalMask")} {...register("Finalmask")} />
+        <TextField label={t("panes.profiles.fields.pinnedCert")} {...register("Cert")} />
+        <TextField label={t("panes.profiles.fields.certSha")} {...register("CertSha")} />
       </div>
     </Panel>
   );
@@ -379,22 +399,24 @@ function MuxPanel({
   setAllowInsecure: (enabled: boolean) => void;
   setMuxEnabled: (enabled: boolean) => void;
 }) {
+  const { t } = useI18n();
+
   return (
-    <Panel title="Mux">
+    <Panel title={t("panes.profiles.panels.mux")}>
       <div className="grid gap-3 lg:grid-cols-4">
         <ToggleButton
           checked={muxEnabled}
-          description="Mux is stored per profile and interpreted by the core generator."
-          label="Mux enabled"
+          description={t("panes.profiles.fields.muxEnabledHint")}
+          label={t("panes.profiles.fields.muxEnabled")}
           onCheckedChange={setMuxEnabled}
         />
         <ToggleButton
           checked={allowInsecure}
-          description="Stored as the profile AllowInsecure string expected by the Rust DTO."
-          label="Allow insecure TLS"
+          description={t("panes.profiles.fields.allowInsecureTlsHint")}
+          label={t("panes.profiles.fields.allowInsecureTls")}
           onCheckedChange={setAllowInsecure}
         />
-        <CheckboxField control={control} label="Display log" name="DisplayLog" />
+        <CheckboxField control={control} label={t("panes.profiles.fields.displayLog")} name="DisplayLog" />
       </div>
     </Panel>
   );
@@ -583,6 +605,7 @@ function ToggleButton({
   label: string;
   onCheckedChange: (enabled: boolean) => void;
 }) {
+  const { t } = useI18n();
   const generatedId = useId();
   const inputId = `${fieldId(label)}-${generatedId}`;
 
@@ -598,7 +621,7 @@ function ToggleButton({
         <span className="grid min-w-0 gap-1">
           <span className="truncate font-medium text-foreground">{label}</span>
           <Badge className="w-fit" variant={checked ? "default" : "secondary"}>
-            {checked ? "On" : "Off"}
+            {checked ? t("panes.profiles.toggle.on") : t("panes.profiles.toggle.off")}
           </Badge>
         </span>
         <Switch aria-label={label} checked={checked} id={inputId} onCheckedChange={onCheckedChange} />
@@ -635,33 +658,33 @@ function mergeIds(...ids: Array<string | undefined>) {
   return ids.filter(Boolean).join(" ") || undefined;
 }
 
-function addressLabel(configType: ProfileProtocol) {
+function addressLabel(configType: ProfileProtocol, t: Translate) {
   if (configType === CONFIG_TYPES.Custom) {
-    return "Config path / JSON";
+    return t("panes.profiles.fields.addressConfig");
   }
   if (configType === CONFIG_TYPES.PolicyGroup) {
-    return "Group tag";
+    return t("panes.profiles.fields.addressGroupTag");
   }
   if (configType === CONFIG_TYPES.ProxyChain) {
-    return "Chain tag";
+    return t("panes.profiles.fields.addressChainTag");
   }
 
-  return "Address";
+  return t("panes.profiles.fields.address");
 }
 
-function passwordLabel(configType: ProfileProtocol) {
+function passwordLabel(configType: ProfileProtocol, t: Translate) {
   if (
     configType === CONFIG_TYPES.VMess ||
     configType === CONFIG_TYPES.VLESS ||
     configType === CONFIG_TYPES.TUIC
   ) {
-    return "UUID";
+    return t("panes.profiles.fields.uuid");
   }
   if (configType === CONFIG_TYPES.WireGuard) {
-    return "Private key";
+    return t("panes.profiles.fields.privateKey");
   }
 
-  return "Password";
+  return t("panes.profiles.fields.password");
 }
 
 function requiresUsername(configType: ProfileProtocol) {
