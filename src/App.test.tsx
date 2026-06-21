@@ -21,6 +21,7 @@ import type {
   ClashTrafficEvent,
   UiItem_Serialize,
 } from "@/ipc/bindings";
+import { DEFAULT_FONT, DEFAULT_FONT_SIZE, usePreferencesStore } from "@/stores/preferences-store";
 import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
 
@@ -431,6 +432,15 @@ describe("App", () => {
     runtimeStoreMock.reset();
     useShellStore.setState({ activeTab: "profiles" });
     useToastStore.setState({ toasts: [] });
+    // Reset the persisted preferences singleton so each test re-hydrates from
+    // its own loadAppConfig mock; otherwise a prior test leaves appConfigLoaded
+    // true and the theme/font hydration effect short-circuits.
+    usePreferencesStore.setState({
+      appConfigLoaded: false,
+      font: DEFAULT_FONT,
+      fontSize: DEFAULT_FONT_SIZE,
+      themeMode: "system",
+    });
     window.localStorage.clear();
     document.documentElement.className = "";
     document.documentElement.style.removeProperty("--app-font-family");

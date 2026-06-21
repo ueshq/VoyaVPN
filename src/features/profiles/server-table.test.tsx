@@ -190,7 +190,13 @@ describe("ProfilesScreen", () => {
 
     renderProfiles();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Import" }));
+    // Trigger the toolbar subscription update first: a successful import keeps
+    // the dialog open to show its result summary, and the open modal makes the
+    // toolbar aria-hidden, so "Update subs" must be exercised before importing.
+    fireEvent.click(await screen.findByRole("button", { name: "Update subs" }));
+    expect(ipcMocks.updateSubscriptions).toHaveBeenCalledWith(null, false, null);
+
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
     fireEvent.change(screen.getByLabelText("Import payload"), {
       target: { value: "vless://uuid@example.test:443#US" },
     });
@@ -203,9 +209,6 @@ describe("ProfilesScreen", () => {
         false,
       ),
     );
-
-    fireEvent.click(screen.getByRole("button", { name: "Update subs" }));
-    expect(ipcMocks.updateSubscriptions).toHaveBeenCalledWith(null, false, null);
   });
 
   it("moves rows with drag and drop through the move IPC command", async () => {
