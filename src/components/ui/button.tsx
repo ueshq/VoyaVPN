@@ -45,4 +45,4 @@ function Button({ className, variant, size, asChild = false, ...props }: ButtonP
   return <Comp data-slot="button" className={cn(buttonVariants({ variant, size, className }))} {...props} />;
 }
 
-export { Button };
+export { Button, buttonVariants };

@@ -169,13 +169,34 @@ describe("ProfilesScreen", () => {
     await userEvent.click(screen.getByLabelText("Select Server 0"));
     await userEvent.click(screen.getByRole("button", { name: /Activate/ }));
     await userEvent.click(screen.getByRole("button", { name: /Copy/ }));
+    // Delete now routes through a confirmation dialog before the IPC call fires.
     await userEvent.click(screen.getByRole("button", { name: /Delete/ }));
+    const confirm = await screen.findByRole("alertdialog");
+    fireEvent.click(within(confirm).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: "Remarks" }));
 
     expect(ipcMocks.setActiveProfile).toHaveBeenCalledWith("profile-0");
     expect(ipcMocks.copyProfiles).toHaveBeenCalledWith(["profile-0"]);
     expect(ipcMocks.deleteProfiles).toHaveBeenCalledWith(["profile-0"]);
     expect(ipcMocks.sortProfiles).toHaveBeenCalledWith(null, "remarks", true);
+  });
+
+  it("confirms before deleting and cancels without calling the delete IPC", async () => {
+    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(3));
+
+    renderProfiles();
+
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByLabelText("Select Server 0"));
+    await userEvent.click(screen.getByRole("button", { name: /Delete/ }));
+
+    const confirm = await screen.findByRole("alertdialog");
+    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(ipcMocks.deleteProfiles).not.toHaveBeenCalled();
   });
 
   it("ships high-signal columns and collapses niche ones by default", async () => {

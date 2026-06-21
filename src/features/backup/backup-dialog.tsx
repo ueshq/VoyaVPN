@@ -3,9 +3,19 @@ import type * as React from "react";
 import { AlertTriangle, CheckCircle2, Database, Download, RefreshCw, Upload } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DialogContent,
@@ -32,6 +42,10 @@ import { cn } from "@/lib/utils";
 
 type WorkingAction = "localBackup" | "localRestore" | "save" | "webdavCheck" | "webdavPull" | "webdavPush";
 
+// Restore actions overwrite the current profiles/settings, so they go through a
+// confirmation gate before running.
+type RestoreAction = Extract<WorkingAction, "localRestore" | "webdavPull">;
+
 const emptyWebDav: WebDavItem_Deserialize = {
   DirName: null,
   Password: null,
@@ -45,6 +59,7 @@ export function BackupDialog() {
   const [error, setError] = useState<string | null>(null);
   const [localOutputPath, setLocalOutputPath] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [pendingRestore, setPendingRestore] = useState<RestoreAction | null>(null);
   const [restorePath, setRestorePath] = useState("");
   const [status, setStatus] = useState<BackupStatus_Serialize | null>(null);
   const [webDav, setWebDav] = useState<WebDavItem_Deserialize>(emptyWebDav);
@@ -123,6 +138,14 @@ export function BackupDialog() {
     }
   }
 
+  function confirmRestore() {
+    const action = pendingRestore;
+    setPendingRestore(null);
+    if (action) {
+      void run(action);
+    }
+  }
+
   function updateWebDav(key: keyof WebDavItem_Deserialize, value: string) {
     setWebDav((current) => ({ ...current, [key]: value }));
   }
@@ -187,7 +210,7 @@ export function BackupDialog() {
               <Button
                 className="self-end"
                 disabled={working !== null || !restorePath.trim()}
-                onClick={() => void run("localRestore")}
+                onClick={() => setPendingRestore("localRestore")}
                 type="button"
                 variant="outline"
               >
@@ -243,7 +266,7 @@ export function BackupDialog() {
                 <Upload className="size-4" aria-hidden="true" />
                 {working === "webdavPush" ? t("backup.working") : t("backup.webdavPush")}
               </Button>
-              <Button disabled={working !== null} onClick={() => void run("webdavPull")} type="button" variant="secondary">
+              <Button disabled={working !== null} onClick={() => setPendingRestore("webdavPull")} type="button" variant="secondary">
                 <Download className="size-4" aria-hidden="true" />
                 {working === "webdavPull" ? t("backup.working") : t("backup.webdavPull")}
               </Button>
@@ -253,6 +276,21 @@ export function BackupDialog() {
       </div>
 
       <DialogFooter />
+
+      <AlertDialog open={pendingRestore !== null} onOpenChange={(open) => !open && setPendingRestore(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("confirm.restoreBackupTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("confirm.restoreBackupDescription")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
+            <AlertDialogAction className={buttonVariants({ variant: "destructive" })} onClick={confirmRestore}>
+              {t("confirm.restoreBackupConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DialogContent>
   );
 }

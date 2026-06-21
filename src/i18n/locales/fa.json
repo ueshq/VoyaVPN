@@ -68,6 +68,15 @@
     "udp": "UDP",
     "upload": "ارسال"
   },
+  "confirm": {
+    "cancel": "انصراف",
+    "deleteProfilesTitle": "نمایه‌ها حذف شوند؟",
+    "deleteProfilesDescription": "{{count}} نمایه انتخاب‌شده برای همیشه حذف خواهد شد. این عمل قابل بازگشت نیست.",
+    "deleteProfilesConfirm": "حذف",
+    "restoreBackupTitle": "از پشتیبان بازیابی شود؟",
+    "restoreBackupDescription": "بازیابی، نمایه‌ها و تنظیمات کنونی شما را با محتوای پشتیبان بازنویسی می‌کند. این عمل قابل بازگشت نیست.",
+    "restoreBackupConfirm": "بازیابی"
+  },
   "menu": {
     "about": "درباره VoyaVPN",
     "backup": "پشتیبان گیری و بازیابی",

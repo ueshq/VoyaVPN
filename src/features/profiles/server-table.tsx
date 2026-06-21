@@ -33,9 +33,19 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
@@ -237,6 +247,7 @@ export function ProfilesScreen() {
   const [filterText, setFilterText] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [sortState, setSortState] = useState<{ ascending: boolean; key: ProfileSortKey } | null>(null);
   const [speedtestRunning, setSpeedtestRunning] = useState(false);
@@ -315,6 +326,22 @@ export function ProfilesScreen() {
       await queryClient.invalidateQueries({ queryKey: ["profiles"] });
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  // Destructive: route deletions through a confirmation gate instead of firing
+  // the IPC call directly from the trigger.
+  function requestDelete(indexIds: string[]) {
+    if (indexIds.length > 0) {
+      setPendingDelete(indexIds);
+    }
+  }
+
+  function confirmDelete() {
+    const indexIds = pendingDelete;
+    setPendingDelete(null);
+    if (indexIds && indexIds.length > 0) {
+      void runOperation(() => deleteProfiles(indexIds));
     }
   }
 
@@ -528,7 +555,7 @@ export function ProfilesScreen() {
         </Button>
         <Button
           disabled={selectedIdsArray.length === 0}
-          onClick={() => void runOperation(() => deleteProfiles(selectedIdsArray))}
+          onClick={() => requestDelete(selectedIdsArray)}
           size="sm"
           type="button"
           variant="outline"
@@ -638,7 +665,7 @@ export function ProfilesScreen() {
                       key={row.id}
                       onActivate={() => void runOperation(() => setActiveProfile(indexId))}
                       onCopy={() => void runOperation(() => copyProfiles(selectedIds.has(indexId) ? selectedIdsArray : [indexId]))}
-                      onDelete={() => void runOperation(() => deleteProfiles(selectedIds.has(indexId) ? selectedIdsArray : [indexId]))}
+                      onDelete={() => requestDelete(selectedIds.has(indexId) ? selectedIdsArray : [indexId])}
                       onEdit={() => setDialogState({ mode: "edit", profile: item })}
                       onMove={(action) => void runOperation(() => moveProfile(null, indexId, action, null))}
                       onSelectOnly={() => selectOnly(indexId)}
@@ -751,6 +778,22 @@ export function ProfilesScreen() {
         onOpenChange={setSubscriptionsOpen}
         open={subscriptionsOpen}
       />
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => !open && setPendingDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("confirm.deleteProfilesTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("confirm.deleteProfilesDescription", { count: pendingDelete?.length ?? 0 })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
+            <AlertDialogAction className={buttonVariants({ variant: "destructive" })} onClick={confirmDelete}>
+              {t("confirm.deleteProfilesConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

@@ -68,6 +68,15 @@
     "udp": "UDP",
     "upload": "Up"
   },
+  "confirm": {
+    "cancel": "Cancel",
+    "deleteProfilesTitle": "Delete profiles?",
+    "deleteProfilesDescription": "{{count}} selected profile(s) will be permanently deleted. This action cannot be undone.",
+    "deleteProfilesConfirm": "Delete",
+    "restoreBackupTitle": "Restore from backup?",
+    "restoreBackupDescription": "Restoring overwrites your current profiles and settings with the backup contents. This action cannot be undone.",
+    "restoreBackupConfirm": "Restore"
+  },
   "menu": {
     "about": "About VoyaVPN",
     "backup": "Backup and Restore",
