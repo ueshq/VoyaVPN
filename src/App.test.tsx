@@ -478,6 +478,7 @@ describe("App", () => {
     expect(screen.getByRole("tab", { name: /Clash Connections/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Logs/ })).toBeInTheDocument();
     expect(screen.getByTestId("status-bar")).toHaveTextContent("Disconnected");
+    expect(screen.getByTestId("status-bar")).toHaveTextContent("Route: /profiles");
   });
 
   it("defaults to the connection home hero", () => {
@@ -489,6 +490,7 @@ describe("App", () => {
     expect(within(hero).getByRole("button", { name: "Connect" })).toBeInTheDocument();
     expect(within(hero).getByText("Not protected")).toBeInTheDocument();
     expect(screen.getByTestId("status-bar")).toHaveTextContent("Disconnected");
+    expect(screen.getByTestId("status-bar")).toHaveTextContent("Route: /home");
   });
 
   it("switches document direction through the RTL locale", async () => {
@@ -550,6 +552,7 @@ describe("App", () => {
     await activateTab(/Clash Connections/);
 
     expect(screen.getByRole("heading", { name: "Clash Connections" })).toBeInTheDocument();
+    expect(screen.getByTestId("status-bar")).toHaveTextContent("Route: /clash/connections");
     expect(clashStartMonitor).not.toHaveBeenCalled();
     expect(clashListConnections).not.toHaveBeenCalled();
 

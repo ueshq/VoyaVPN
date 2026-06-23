@@ -63,11 +63,11 @@ const V2FLY_ENV: &[CoreEnvTemplate] = &[CoreEnvTemplate {
 const XRAY_ENV: &[CoreEnvTemplate] = &[
     CoreEnvTemplate {
         key: XRAY_LOCAL_ASSET_ENV,
-        value: EnvValueTemplate::BinDir,
+        value: EnvValueTemplate::CoreBinDir,
     },
     CoreEnvTemplate {
         key: XRAY_LOCAL_CERT_ENV,
-        value: EnvValueTemplate::BinDir,
+        value: EnvValueTemplate::CoreBinDir,
     },
 ];
 const MIERU_ENV: &[CoreEnvTemplate] = &[CoreEnvTemplate {
@@ -310,6 +310,10 @@ impl CoreInfo {
             .map(|template| {
                 let value = match template.value {
                     EnvValueTemplate::BinDir => paths.bin_dir().to_string_lossy().into_owned(),
+                    EnvValueTemplate::CoreBinDir => paths
+                        .core_bin_dir(core_type_dir_name(self.core_type))
+                        .to_string_lossy()
+                        .into_owned(),
                     EnvValueTemplate::ConfigArgument => config_argument.clone(),
                 };
                 (template.key.to_string(), value)
@@ -354,6 +358,7 @@ pub struct CoreEnvTemplate {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnvValueTemplate {
     BinDir,
+    CoreBinDir,
     ConfigArgument,
 }
 
@@ -940,11 +945,11 @@ mod tests {
             BTreeMap::from([
                 (
                     XRAY_LOCAL_ASSET_ENV.to_string(),
-                    "/tmp/VoyaVPN/bin".to_string()
+                    "/tmp/VoyaVPN/bin/xray".to_string()
                 ),
                 (
                     XRAY_LOCAL_CERT_ENV.to_string(),
-                    "/tmp/VoyaVPN/bin".to_string()
+                    "/tmp/VoyaVPN/bin/xray".to_string()
                 ),
             ])
         );

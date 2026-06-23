@@ -918,6 +918,7 @@
     "noCore": "無核心",
     "noPid": "無 PID",
     "profiles": "設定檔：{{count}}",
+    "route": "路由：{{route}}",
     "sysProxyCleared": "已清除系統代理",
     "sysProxyClearShort": "清除",
     "sysProxyForced": "已強制系統代理",

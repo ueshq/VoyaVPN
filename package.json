@@ -5,7 +5,8 @@
   "type": "module",
   "packageManager": "pnpm@11.5.0",
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 1420",
+    "dev": "node scripts/tauri.mjs dev",
+    "dev:web": "vite --host 127.0.0.1 --port 1420",
     "build": "tsc -b --pretty false && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
@@ -31,7 +32,7 @@
     "check:release:dry-run": "node scripts/check-release-readiness.mjs --mode dry-run",
     "check:release:stable": "node scripts/check-release-readiness.mjs --mode stable --tauri-config target/release-config/tauri.updater.stable.generated.json",
     "tauri": "node scripts/tauri.mjs",
-    "tauri:dev": "tauri dev",
+    "tauri:dev": "pnpm dev",
     "tauri:build": "node scripts/tauri-build.mjs",
     "tauri:stable-updater-config": "node scripts/tauri-build.mjs --write-stable-updater-config"
   },

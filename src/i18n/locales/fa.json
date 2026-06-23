@@ -918,6 +918,7 @@
     "noCore": "بدون هسته",
     "noPid": "بدون PID",
     "profiles": "نمایه ها: {{count}}",
+    "route": "مسیر: {{route}}",
     "sysProxyCleared": "پراکسی سیستم پاک شد",
     "sysProxyClearShort": "پاک",
     "sysProxyForced": "پراکسی سیستم اجباری",

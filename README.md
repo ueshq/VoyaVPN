@@ -26,16 +26,16 @@ pnpm install --frozen-lockfile
 
 ## Development Commands
 
-Run the frontend-only Vite dev server:
+Run the full Tauri app in development:
 
 ```sh
 pnpm dev
 ```
 
-Run the full Tauri app in development:
+Run the frontend-only Vite dev server:
 
 ```sh
-pnpm tauri:dev
+pnpm dev:web
 ```
 
 Regenerate Rust-to-TypeScript IPC bindings after command or event type changes:

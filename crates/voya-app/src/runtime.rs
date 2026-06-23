@@ -346,11 +346,11 @@ mod tests {
         assert_eq!(launch.working_dir, paths.bin_config_dir());
         assert_eq!(
             launch.environment.get(XRAY_LOCAL_ASSET_ENV),
-            Some(&"/tmp/VoyaVPN/bin".to_string())
+            Some(&"/tmp/VoyaVPN/bin/xray".to_string())
         );
         assert_eq!(
             launch.environment.get(XRAY_LOCAL_CERT_ENV),
-            Some(&"/tmp/VoyaVPN/bin".to_string())
+            Some(&"/tmp/VoyaVPN/bin/xray".to_string())
         );
 
         let mieru = core_launch_plan(

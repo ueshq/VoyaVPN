@@ -918,6 +918,7 @@
     "noCore": "No core",
     "noPid": "No PID",
     "profiles": "Profiles: {{count}}",
+    "route": "Route: {{route}}",
     "sysProxyCleared": "System proxy cleared",
     "sysProxyClearShort": "Clear",
     "sysProxyForced": "System proxy forced",

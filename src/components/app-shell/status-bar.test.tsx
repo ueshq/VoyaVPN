@@ -89,6 +89,7 @@ vi.mock("@/ipc", () => ({
 }));
 
 import { listProfiles, setSystemProxyMode } from "@/ipc";
+import { useShellStore } from "@/stores/shell-store";
 
 function profilesOfLength(count: number) {
   return Array.from({ length: count }) as unknown as ProfileListItem_Serialize[];
@@ -112,6 +113,7 @@ describe("StatusBar", () => {
     runtimeMock.state.statistics = null;
     runtimeMock.state.sysProxy = null;
     runtimeMock.state.tun = null;
+    useShellStore.setState({ activeTab: "home" });
     vi.mocked(listProfiles).mockResolvedValue([]);
   });
 
@@ -132,6 +134,20 @@ describe("StatusBar", () => {
     renderStatusBar();
 
     await waitFor(() => expect(screen.getByText("Profiles: 0")).toBeInTheDocument());
+  });
+
+  it("shows the default page route from the shell store", () => {
+    renderStatusBar();
+
+    expect(screen.getByText("Route: /home")).toBeInTheDocument();
+  });
+
+  it("shows the selected page route from the shell store", () => {
+    useShellStore.setState({ activeTab: "routing" });
+
+    renderStatusBar();
+
+    expect(screen.getByText("Route: /routing")).toBeInTheDocument();
   });
 
   it("drops the connect, disconnect, and restart keys now owned by the hero", async () => {

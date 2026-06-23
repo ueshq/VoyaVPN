@@ -223,6 +223,11 @@ pub fn run() {
             {
                 tracing::warn!(?error, "failed to register persisted global hotkeys");
             }
+            let speedtest_manager = SpeedtestManager::new(
+                runtime_paths.clone(),
+                core_seed_resource_dir.clone(),
+                Arc::new(speedtest_runner),
+            );
             app.manage(AppState {
                 database,
                 config_store,
@@ -232,11 +237,7 @@ pub fn run() {
                 sudo_password_collector,
                 supervisor,
                 statistics_manager,
-                speedtest_manager: SpeedtestManager::new(
-                    runtime_paths.clone(),
-                    core_seed_resource_dir.clone(),
-                    Arc::new(speedtest_runner),
-                ),
+                speedtest_manager,
                 system_proxy_manager,
                 clash_monitor_controller: ClashMonitorController::new(),
                 diagnostics_client: Arc::new(AsyncMutex::new(DiagnosticsClient::new())),

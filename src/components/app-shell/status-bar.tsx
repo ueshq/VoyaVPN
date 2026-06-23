@@ -40,6 +40,7 @@ import type {
 } from "@/ipc/bindings";
 import { cn } from "@/lib/utils";
 import { useModalStore } from "@/stores/modal-store";
+import { shellTabRoutes, useShellStore } from "@/stores/shell-store";
 
 const SYS_PROXY_TYPE = {
   forcedClear: 0,
@@ -58,6 +59,7 @@ export function StatusBar() {
   const tun = useRuntimeEventStore((state) => state.tun);
   const setTun = useRuntimeEventStore((state) => state.setTun);
   const openModal = useModalStore((state) => state.openModal);
+  const activeTab = useShellStore((state) => state.activeTab);
   const [pendingAction, setPendingAction] = useState<"tun" | null>(null);
   const profilesQuery = useQuery({
     queryFn: () => listProfiles(null, null),
@@ -107,6 +109,7 @@ export function StatusBar() {
   const uploadLabel = t("status.upload", { speed: formatBytesPerSecond(statistics?.uploadBytesPerSecond ?? 0) });
   const downloadLabel = t("status.download", { speed: formatBytesPerSecond(statistics?.downloadBytesPerSecond ?? 0) });
   const profilesLabel = t("status.profiles", { count: profilesQuery.data?.length ?? 0 });
+  const routeLabel = t("status.route", { route: shellTabRoutes[activeTab] });
 
   async function runProxyMode(mode: SysProxyMode) {
     try {
@@ -157,6 +160,13 @@ export function StatusBar() {
         />
         <span className="truncate">{stateLabel}</span>
       </div>
+      <Badge
+        className="h-6 max-w-40 min-w-0 shrink justify-start bg-background px-2 text-muted-foreground"
+        title={routeLabel}
+        variant="outline"
+      >
+        <span className="min-w-0 truncate">{routeLabel}</span>
+      </Badge>
       <div className="hidden min-w-0 items-center gap-1.5 md:flex">
         <Badge
           className="h-6 max-w-28 justify-start bg-background px-2 text-muted-foreground"
