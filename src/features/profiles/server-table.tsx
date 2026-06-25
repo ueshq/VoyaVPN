@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type * as React from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -72,6 +72,7 @@ import {
   saveProfile,
   setActiveProfile,
   sortProfiles,
+  speedtestStatus,
   updateSubscriptions,
   useRuntimeEventStore,
 } from "@/ipc";
@@ -277,6 +278,26 @@ export function ProfilesScreen() {
     () => applyLiveUpdates(profilesQuery.data ?? [], serverStatsByProfileId, speedtestResultsByProfileId),
     [profilesQuery.data, serverStatsByProfileId, speedtestResultsByProfileId],
   );
+
+  useEffect(() => {
+    let mounted = true;
+
+    void speedtestStatus()
+      .then((status) => {
+        if (mounted) {
+          setSpeedtestRunning(status.running);
+        }
+      })
+      .catch((error) => {
+        if (mounted) {
+          setOperationError(error instanceof Error ? error.message : String(error));
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
   const tableColumns = useMemo<ColumnDef<ProfileListItem_Serialize>[]>(
     () =>
       serverColumns.map((column) => ({
@@ -490,35 +511,35 @@ export function ProfilesScreen() {
           />
           <SpeedButton
             action={SPEED_ACTIONS.Tcping}
-            disabled={selectedIdsArray.length === 0 || speedtestRunning}
+            disabled={profiles.length === 0 || speedtestRunning}
             icon={Activity}
             label={t("panes.profiles.speedtest.tcp")}
             onRun={handleSpeedtest}
           />
           <SpeedButton
             action={SPEED_ACTIONS.Realping}
-            disabled={selectedIdsArray.length === 0 || speedtestRunning}
+            disabled={profiles.length === 0 || speedtestRunning}
             icon={Clock}
             label={t("panes.profiles.speedtest.real")}
             onRun={handleSpeedtest}
           />
           <SpeedButton
             action={SPEED_ACTIONS.UdpTest}
-            disabled={selectedIdsArray.length === 0 || speedtestRunning}
+            disabled={profiles.length === 0 || speedtestRunning}
             icon={Radio}
             label={t("panes.profiles.speedtest.udp")}
             onRun={handleSpeedtest}
           />
           <SpeedButton
             action={SPEED_ACTIONS.Speedtest}
-            disabled={selectedIdsArray.length === 0 || speedtestRunning}
+            disabled={profiles.length === 0 || speedtestRunning}
             icon={Gauge}
             label={t("panes.profiles.speedtest.speed")}
             onRun={handleSpeedtest}
           />
           <SpeedButton
             action={SPEED_ACTIONS.Mixedtest}
-            disabled={selectedIdsArray.length === 0 || speedtestRunning}
+            disabled={profiles.length === 0 || speedtestRunning}
             icon={Wifi}
             label={t("panes.profiles.speedtest.mixed")}
             onRun={handleSpeedtest}

@@ -28,6 +28,7 @@ const ipcMocks = vi.hoisted(() => ({
   saveSubscription: vi.fn(),
   setActiveProfile: vi.fn(),
   sortProfiles: vi.fn(),
+  speedtestStatus: vi.fn(),
   updateSubscriptions: vi.fn(),
   validateGroupProfile: vi.fn(),
   useRuntimeEventStore: Object.assign(
@@ -122,6 +123,7 @@ describe("ProfilesScreen", () => {
       results: [],
       selectedCount: 0,
     });
+    ipcMocks.speedtestStatus.mockResolvedValue({ running: false });
     ipcMocks.saveGroupProfile.mockImplementation(async (profile: ProfileItem_Deserialize) => makeProfile(100, profile));
     ipcMocks.saveProfile.mockImplementation(async (profile: ProfileItem_Deserialize) => makeProfile(99, profile));
     ipcMocks.saveSubscription.mockResolvedValue(makeSubscription());
@@ -215,6 +217,33 @@ describe("ProfilesScreen", () => {
     rejectSpeedtest(new Error("boom"));
 
     await waitFor(() => expect(speedButton).toBeEnabled());
+  });
+
+  it("runs realping for all profiles when no rows are selected", async () => {
+    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(2));
+
+    renderProfiles();
+
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+
+    const realButton = screen.getByRole("button", { name: "Real" });
+    expect(realButton).toBeEnabled();
+
+    await userEvent.click(realButton);
+
+    expect(ipcMocks.runSpeedtest).toHaveBeenCalledWith(SPEED_ACTIONS.Realping, []);
+  });
+
+  it("reflects an already running backend speedtest on mount", async () => {
+    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(1));
+    ipcMocks.speedtestStatus.mockResolvedValue({ running: true });
+
+    renderProfiles();
+
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Fast" })).toBeDisabled());
+    expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
   });
 
   it("confirms before deleting and cancels without calling the delete IPC", async () => {
