@@ -608,7 +608,7 @@ impl SpeedtestManager {
                         database,
                         config,
                         action,
-                        selected.clone(),
+                        &selected,
                         Arc::clone(&cancel),
                         &on_result,
                     )
@@ -624,7 +624,7 @@ impl SpeedtestManager {
                         database,
                         config,
                         action,
-                        selected.clone(),
+                        &selected,
                         Arc::clone(&cancel),
                         &on_result,
                     )
@@ -744,7 +744,7 @@ impl SpeedtestManager {
         database: &Database,
         config: &AppConfig,
         action: SpeedActionType,
-        items: Vec<ServerTestItem>,
+        items: &[ServerTestItem],
         cancel: CancellationFlag,
         on_result: &F,
     ) -> Result<Vec<SpeedTestResult>>
@@ -752,7 +752,7 @@ impl SpeedtestManager {
         F: Fn(SpeedTestResult) + Send + Sync,
     {
         let prepared = self
-            .prepare_speedtest_items(database, config, items)
+            .prepare_speedtest_items(database, config, items.iter().cloned())
             .await?;
         let mut results = Vec::new();
         for (core_type, group) in group_prepared_items(prepared) {
@@ -832,7 +832,7 @@ impl SpeedtestManager {
         database: &Database,
         config: &AppConfig,
         action: SpeedActionType,
-        items: Vec<ServerTestItem>,
+        items: &[ServerTestItem],
         cancel: CancellationFlag,
         on_result: &F,
     ) -> Result<Vec<SpeedTestResult>>
@@ -840,7 +840,7 @@ impl SpeedtestManager {
         F: Fn(SpeedTestResult) + Send + Sync,
     {
         let concurrency = dedicated_concurrency_count(action, config, items.len());
-        let mut pending = items.into_iter();
+        let mut pending = items.iter();
         let mut in_flight = FuturesUnordered::new();
         let mut results = Vec::new();
 
@@ -855,7 +855,7 @@ impl SpeedtestManager {
                 database,
                 config,
                 action,
-                item,
+                item.clone(),
                 Arc::clone(&cancel),
                 on_result,
             ));
@@ -874,7 +874,7 @@ impl SpeedtestManager {
                     database,
                     config,
                     action,
-                    item,
+                    item.clone(),
                     Arc::clone(&cancel),
                     on_result,
                 ));
@@ -884,12 +884,15 @@ impl SpeedtestManager {
         Ok(results)
     }
 
-    async fn prepare_speedtest_items(
+    async fn prepare_speedtest_items<I>(
         &self,
         database: &Database,
         config: &AppConfig,
-        items: Vec<ServerTestItem>,
-    ) -> Result<Vec<PreparedSpeedtestItem>> {
+        items: I,
+    ) -> Result<Vec<PreparedSpeedtestItem>>
+    where
+        I: IntoIterator<Item = ServerTestItem>,
+    {
         let env = load_runtime_core_gen_env(database, &self.paths, config, self.target_os).await?;
         let builder = CoreConfigContextBuilder::new(&env);
         let mut used_ports = HashSet::new();
@@ -1155,11 +1158,11 @@ fn group_prepared_items(
 }
 
 fn unique_result_count(results: &[SpeedTestResult]) -> usize {
+    let mut seen = HashSet::new();
     results
         .iter()
-        .map(|result| result.index_id.as_str())
-        .collect::<HashSet<_>>()
-        .len()
+        .filter(|result| seen.insert(result.index_id.as_str()))
+        .count()
 }
 
 fn speedtest_page_size(config: &AppConfig, selected_count: usize) -> usize {
@@ -1336,8 +1339,8 @@ async fn clear_previous_results<F>(
 where
     F: Fn(SpeedTestResult) + Send + Sync,
 {
+    let profile_ex = ProfileExManager::new(database);
     for item in selected {
-        let profile_ex = ProfileExManager::new(database);
         match normalize_action(action) {
             SpeedActionType::Tcping
             | SpeedActionType::Realping
@@ -1347,28 +1350,12 @@ where
                 profile_ex
                     .set_test_message(&item.index_id, "Speedtesting")
                     .await?;
-                on_result(SpeedTestResult {
-                    action,
-                    index_id: item.index_id.clone(),
-                    delay: Some(0),
-                    speed: None,
-                    message: Some("Speedtesting".to_string()),
-                    ip_info: None,
-                });
             }
             SpeedActionType::Speedtest => {
                 profile_ex.set_test_speed(&item.index_id, 0.0).await?;
                 profile_ex
                     .set_test_message(&item.index_id, "Speedtesting wait")
                     .await?;
-                on_result(SpeedTestResult {
-                    action,
-                    index_id: item.index_id.clone(),
-                    delay: None,
-                    speed: Some(0.0),
-                    message: Some("Speedtesting wait".to_string()),
-                    ip_info: None,
-                });
             }
             SpeedActionType::Mixedtest => {
                 profile_ex.set_test_delay(&item.index_id, 0).await?;
@@ -1376,19 +1363,44 @@ where
                 profile_ex
                     .set_test_message(&item.index_id, "Speedtesting wait")
                     .await?;
-                on_result(SpeedTestResult {
-                    action,
-                    index_id: item.index_id.clone(),
-                    delay: Some(0),
-                    speed: Some(0.0),
-                    message: Some("Speedtesting wait".to_string()),
-                    ip_info: None,
-                });
             }
         }
+        on_result(make_pending_result(action, item.index_id.clone()));
     }
 
     Ok(())
+}
+
+fn make_pending_result(action: SpeedActionType, index_id: String) -> SpeedTestResult {
+    match normalize_action(action) {
+        SpeedActionType::Tcping
+        | SpeedActionType::Realping
+        | SpeedActionType::UdpTest
+        | SpeedActionType::FastRealping => SpeedTestResult {
+            action,
+            index_id,
+            delay: Some(0),
+            speed: None,
+            message: Some("Speedtesting".to_string()),
+            ip_info: None,
+        },
+        SpeedActionType::Speedtest => SpeedTestResult {
+            action,
+            index_id,
+            delay: None,
+            speed: Some(0.0),
+            message: Some("Speedtesting wait".to_string()),
+            ip_info: None,
+        },
+        SpeedActionType::Mixedtest => SpeedTestResult {
+            action,
+            index_id,
+            delay: Some(0),
+            speed: Some(0.0),
+            message: Some("Speedtesting wait".to_string()),
+            ip_info: None,
+        },
+    }
 }
 
 async fn persist_speedtest_result(database: &Database, result: &SpeedTestResult) -> Result<()> {
