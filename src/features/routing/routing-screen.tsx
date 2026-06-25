@@ -65,16 +65,9 @@ import type {
   RoutingItem_Serialize,
   RulesItem_Serialize,
 } from "@/ipc/bindings";
-import { cn } from "@/lib/utils";
+import { MOVE_ACTIONS } from "@/features/profiles/profile-constants";
+import { cn, getErrorMessage } from "@/lib/utils";
 import { z } from "zod";
-
-const MOVE_ACTIONS = {
-  Top: 1,
-  Up: 2,
-  Down: 3,
-  Bottom: 4,
-  Position: 5,
-} as const;
 
 const RULE_TYPES = {
   All: 0,
@@ -173,7 +166,7 @@ export function RoutingScreen() {
       await queryClient.invalidateQueries({ queryKey: ["routings"] });
       return true;
     } catch (error) {
-      setOperationError(error instanceof Error ? error.message : String(error));
+      setOperationError(getErrorMessage(error));
       return false;
     }
   }
@@ -1095,7 +1088,7 @@ function validateHttpsUrl(value: string, context: z.RefinementCtx) {
   } catch (error) {
     context.addIssue({
       code: "custom",
-      message: `URL must be valid: ${error instanceof Error ? error.message : String(error)}`,
+      message: `URL must be valid: ${getErrorMessage(error)}`,
     });
     return;
   }

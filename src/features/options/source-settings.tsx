@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/use-i18n";
 import { loadRulesetGeoSources, saveRulesetGeoSources } from "@/ipc";
+import { getErrorMessage } from "@/lib/utils";
 
 type SourceForm = {
   geoSourceUrl: string;
@@ -39,7 +40,7 @@ export function SourceSettings() {
       })
       .catch((error: unknown) => {
         if (!disposed) {
-          setError(error instanceof Error ? error.message : String(error));
+          setError(getErrorMessage(error));
         }
       });
 
@@ -63,7 +64,7 @@ export function SourceSettings() {
       });
       setSaved(true);
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(getErrorMessage(error));
     } finally {
       setWorking(false);
     }

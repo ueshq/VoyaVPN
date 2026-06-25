@@ -9,6 +9,7 @@ import type {
   TransientStreamEvent,
 } from "@/ipc/bindings";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { getErrorMessage } from "@/lib/utils";
 import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
 
@@ -104,7 +105,7 @@ function reportEventBridgeError(context: string, error: unknown) {
     return;
   }
 
-  const message = error instanceof Error ? error.message : String(error);
+  const message = getErrorMessage(error);
   console.error(`[event-bridge] ${context}: ${message}`);
 }
 

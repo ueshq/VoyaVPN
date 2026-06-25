@@ -67,6 +67,7 @@ import {
   useRuntimeEventStore,
 } from "@/ipc";
 import type { AppConfig_Deserialize, ClashMonitorStatus, PresetType } from "@/ipc/bindings";
+import { getErrorMessage } from "@/lib/utils";
 import {
   type Font,
   fontToClassName,
@@ -502,7 +503,7 @@ function RegionalPresetConfirmDialog({
       onApplied(result.fallbackCustomDnsEnabled);
       onOpenChange(false);
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(getErrorMessage(error));
     } finally {
       setIsApplying(false);
     }

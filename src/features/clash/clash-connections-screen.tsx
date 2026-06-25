@@ -26,7 +26,7 @@ import {
   useRuntimeEventStore,
 } from "@/ipc";
 import type { ClashConnectionItem, ClashConnectionsSnapshot } from "@/ipc/bindings";
-import { cn } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 import { useConnectionColumnsStore } from "@/stores/connection-columns-store";
 import { ClashMonitorStatusBadge } from "@/features/clash/clash-monitor-status-badge";
 
@@ -368,9 +368,7 @@ export function ClashConnectionsScreen() {
 
       {connectionsQuery.error ? (
         <Alert className="rounded-none border-x-0 border-t-0 px-4 py-2" variant="destructive">
-          <AlertDescription>
-            {connectionsQuery.error instanceof Error ? connectionsQuery.error.message : String(connectionsQuery.error)}
-          </AlertDescription>
+          <AlertDescription>{getErrorMessage(connectionsQuery.error)}</AlertDescription>
         </Alert>
       ) : null}
 

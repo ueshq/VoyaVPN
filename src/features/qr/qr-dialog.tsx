@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/i18n/use-i18n";
 import { generateQrCode, importProfilesFromText } from "@/ipc";
 import type { QrCodeImage } from "@/ipc/bindings";
+import { getErrorMessage } from "@/lib/utils";
 
 type BarcodeDetectorLike = {
   detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;
@@ -51,7 +52,7 @@ export function QrDialog() {
     try {
       setGenerated(await generateQrCode(content));
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(getErrorMessage(error));
     } finally {
       setWorking(false);
     }
@@ -72,7 +73,7 @@ export function QrDialog() {
       setDecodedText(result);
       setContent(result);
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(getErrorMessage(error));
     } finally {
       setWorking(false);
     }
@@ -91,7 +92,7 @@ export function QrDialog() {
       const result = await importProfilesFromText(text, null, false);
       setImportMessage(t("qr.imported", { count: result.imported ?? 0 }));
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(getErrorMessage(error));
     } finally {
       setWorking(false);
     }

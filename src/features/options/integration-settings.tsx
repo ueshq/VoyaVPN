@@ -24,6 +24,7 @@ import type {
   KeyEventItem_Serialize,
 } from "@/ipc/bindings";
 import { redactOperationalError } from "@/lib/operational-redaction";
+import { getErrorMessage } from "@/lib/utils";
 
 type MutableKeyEventItem = Required<Pick<KeyEventItem_Deserialize, "Alt" | "Control" | "Shift">> & {
   EGlobalHotkey: GlobalHotkey;
@@ -56,7 +57,7 @@ export function IntegrationSettings() {
       })
       .catch((error: unknown) => {
         if (!disposed) {
-          setError(error instanceof Error ? error.message : String(error));
+          setError(getErrorMessage(error));
         }
       });
 
@@ -108,7 +109,7 @@ export function IntegrationSettings() {
     try {
       setAutostart(await setAutostartEnabled(!autostart.enabled));
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(getErrorMessage(error));
     } finally {
       setWorking(false);
     }
@@ -136,7 +137,7 @@ export function IntegrationSettings() {
       setSettings(status.settings.map(toMutableSetting));
       setSaved(true);
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(getErrorMessage(error));
     } finally {
       setWorking(false);
     }

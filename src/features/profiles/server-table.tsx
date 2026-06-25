@@ -83,7 +83,7 @@ import type {
   SpeedActionType,
 } from "@/ipc/bindings";
 import { useI18n } from "@/i18n/use-i18n";
-import { cn } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 import { useProfileColumnsStore } from "@/stores/profile-columns-store";
 
 import { ImportProfilesDialog, SubscriptionsDialog } from "@/features/subscriptions";
@@ -290,7 +290,7 @@ export function ProfilesScreen() {
       })
       .catch((error) => {
         if (mounted) {
-          setOperationError(error instanceof Error ? error.message : String(error));
+          setOperationError(getErrorMessage(error));
         }
       });
 
@@ -355,7 +355,7 @@ export function ProfilesScreen() {
       await operation();
       await queryClient.invalidateQueries({ queryKey: ["profiles"] });
     } catch (error) {
-      setOperationError(error instanceof Error ? error.message : String(error));
+      setOperationError(getErrorMessage(error));
     }
   }
 

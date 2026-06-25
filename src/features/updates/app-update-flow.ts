@@ -10,6 +10,7 @@ import type {
   AppUpdaterStatus,
   ManualAppUpdateLinks,
 } from "@/ipc/bindings";
+import { getErrorMessage } from "@/lib/utils";
 
 export type AppUpdateFlowDeps = {
   appUpdateStatus: typeof appUpdateStatus;
@@ -132,5 +133,5 @@ function settledError<T>(result: PromiseSettledResult<T>): string | null {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  return getErrorMessage(error);
 }

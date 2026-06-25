@@ -1,3 +1,5 @@
+import { getErrorMessage } from "@/lib/utils";
+
 export type OperationalRedactionOptions = {
   redactedUrl?: string;
   redactedValue?: string;
@@ -12,7 +14,7 @@ const SHARE_LINK_PATTERN = /\b(vless|vmess|trojan|ss):\/\/[^\s<>"')\]]+/gi;
 const URL_PATTERN = /\bhttps?:\/\/[^\s<>"')\]]+/gi;
 
 export function redactOperationalError(error: unknown, options?: OperationalRedactionOptions) {
-  return redactOperationalMessage(error instanceof Error ? error.message : String(error), options);
+  return redactOperationalMessage(getErrorMessage(error), options);
 }
 
 export function redactOperationalMessage(

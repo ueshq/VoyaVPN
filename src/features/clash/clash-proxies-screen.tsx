@@ -21,7 +21,7 @@ import type {
   ClashProxyNode,
   RuleMode,
 } from "@/ipc/bindings";
-import { cn } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 import { ClashMonitorStatusBadge } from "@/features/clash/clash-monitor-status-badge";
 
 const ruleModeOptions: Array<{ labelKey: string; value: RuleMode }> = [
@@ -159,9 +159,7 @@ export function ClashProxiesScreen() {
 
       {proxiesQuery.error ? (
         <Alert className="rounded-none border-x-0 border-t-0 px-4 py-2" variant="destructive">
-          <AlertDescription>
-            {proxiesQuery.error instanceof Error ? proxiesQuery.error.message : String(proxiesQuery.error)}
-          </AlertDescription>
+          <AlertDescription>{getErrorMessage(proxiesQuery.error)}</AlertDescription>
         </Alert>
       ) : null}
 

@@ -43,6 +43,7 @@ import {
   usePreferencesStore,
 } from "@/stores/preferences-store";
 import { useModalStore } from "@/stores/modal-store";
+import { getErrorMessage } from "@/lib/utils";
 
 const themeOptions: Array<{ icon: typeof Monitor; labelKey: string; value: ThemeMode }> = [
   { icon: Monitor, labelKey: "menu.themeSystem", value: "system" },
@@ -236,7 +237,7 @@ function SudoPromptDialog({ intent }: { intent?: "enableTun" }) {
       })
       .catch((error: unknown) => {
         if (!disposed) {
-          setError(error instanceof Error ? error.message : String(error));
+          setError(getErrorMessage(error));
         }
       });
 
@@ -265,7 +266,7 @@ function SudoPromptDialog({ intent }: { intent?: "enableTun" }) {
         closeTopModal();
       }
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(getErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
@@ -278,7 +279,7 @@ function SudoPromptDialog({ intent }: { intent?: "enableTun" }) {
       await sudoClearPassword();
       setCollection(await sudoBeginCollection());
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(getErrorMessage(error));
     } finally {
       setSubmitting(false);
     }

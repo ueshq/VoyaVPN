@@ -336,6 +336,7 @@ vi.mock("@/ipc", () => ({
       sudoPasswordPresent: false,
     }),
   ),
+  speedtestStatus: vi.fn(() => Promise.resolve({ running: false })),
   sortProfiles: vi.fn(),
   validateGroupProfile: vi.fn(() =>
     Promise.resolve({ childIndexIds: [], errors: [], normalizedChildItems: "", valid: true, warnings: [] }),

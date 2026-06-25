@@ -52,7 +52,7 @@ import type {
   GroupPreview,
   GroupPreviewRoute,
 } from "@/ipc/bindings";
-import { cn } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 
 import { CONFIG_TYPES, getProtocolLabel, type ProfileProtocol } from "@/features/profiles/profile-constants";
 import {
@@ -162,7 +162,7 @@ export function GroupBuilder({
       if (!mountedRef.current || requestId !== previewRequestId.current) {
         return;
       }
-      setPreviewError(error instanceof Error ? error.message : String(error));
+      setPreviewError(getErrorMessage(error));
     } finally {
       if (mountedRef.current && requestId === previewRequestId.current) {
         setPreviewLoading(false);

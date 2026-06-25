@@ -58,7 +58,7 @@ import type {
   UpdateTargetKind,
 } from "@/ipc/bindings";
 import { redactOperationalMessage } from "@/lib/operational-redaction";
-import { cn } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 
 type CoreRunMode = "check" | "download";
 type RunMode = CoreRunMode | "app-check" | "app-install";
@@ -139,7 +139,7 @@ export function CheckUpdateDialog() {
       })
       .catch((error: unknown) => {
         if (!disposed) {
-          setError(error instanceof Error ? error.message : String(error));
+          setError(getErrorMessage(error));
         }
       });
 
@@ -811,7 +811,7 @@ function withoutMapEntry<T>(current: Map<string, T>, key: string) {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  return getErrorMessage(error);
 }
 
 function redactUpdateMessage(

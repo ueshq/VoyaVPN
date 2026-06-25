@@ -19,7 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { IpcCommandError, loadDnsSettings, saveDnsSettings } from "@/ipc";
 import type { DnsItem_Serialize, DnsSettings_Deserialize, DnsSettings_Serialize } from "@/ipc/bindings";
-import { cn } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 
 const STRATEGIES = ["", "AsIs", "UseIP", "UseIPv4", "UseIPv6", "ForceIPv4", "ForceIPv6"] as const;
 const EMPTY_SELECT_VALUE = "__voyavpn_empty_select_value__";
@@ -128,7 +128,7 @@ export function DnsScreen() {
         );
         return;
       }
-      setOperationError(error instanceof Error ? error.message : String(error));
+      setOperationError(getErrorMessage(error));
     }
   }
 
@@ -376,7 +376,7 @@ function parseJsonObject(
   } catch (error) {
     context.addIssue({
       code: "custom",
-      message: `${label}: ${error instanceof Error ? error.message : String(error)}`,
+      message: `${label}: ${getErrorMessage(error)}`,
     });
     return null;
   }
