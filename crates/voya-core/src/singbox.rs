@@ -953,20 +953,12 @@ pub fn generate_singbox_speedtest_config(entries: &[SpeedtestConfigEntry]) -> Si
         ..SingboxDns::default()
     });
 
-    if let Some(entry) = entries.first() {
-        gen_log(&mut config, &entry.context);
-    }
-
     for entry in entries {
         let inbound_tag = speedtest_inbound_tag(entry.port);
         let proxy_tag = speedtest_proxy_tag(entry.port);
-        config.inbounds.push(SingboxInbound {
-            r#type: "mixed".to_string(),
-            tag: inbound_tag.clone(),
-            listen: Some(LOOPBACK.to_string()),
-            listen_port: Some(entry.port),
-            ..SingboxInbound::default()
-        });
+        config
+            .inbounds
+            .push(build_mixed_inbound_with(inbound_tag.as_str(), entry.port));
 
         append_servers(
             &mut config,
@@ -979,12 +971,18 @@ pub fn generate_singbox_speedtest_config(entries: &[SpeedtestConfigEntry]) -> Si
         });
     }
 
-    if let Some(entry) = entries.first() {
-        apply_outbound_bind_interface(&mut config, &entry.context);
-        apply_outbound_send_through(&mut config, &entry.context);
-    }
+    apply_common_config_settings(&mut config, entries);
 
     config
+}
+
+fn apply_common_config_settings(config: &mut SingboxConfig, entries: &[SpeedtestConfigEntry]) {
+    let Some(entry) = entries.first() else {
+        return;
+    };
+    gen_log(config, &entry.context);
+    apply_outbound_bind_interface(config, &entry.context);
+    apply_outbound_send_through(config, &entry.context);
 }
 
 fn speedtest_inbound_tag(port: i32) -> String {
@@ -1103,11 +1101,18 @@ fn gen_inbounds(config: &mut SingboxConfig, context: &CoreConfigContext) {
 }
 
 fn build_mixed_inbound(in_item: &InItem, protocol: InboundProtocol) -> SingboxInbound {
+    build_mixed_inbound_with(
+        inbound_protocol_tag(protocol),
+        in_item.local_port + protocol.as_i32(),
+    )
+}
+
+fn build_mixed_inbound_with(tag: impl Into<String>, port: i32) -> SingboxInbound {
     SingboxInbound {
         r#type: "mixed".to_string(),
-        tag: inbound_protocol_tag(protocol).to_string(),
+        tag: tag.into(),
         listen: Some(LOOPBACK.to_string()),
-        listen_port: Some(in_item.local_port + protocol.as_i32()),
+        listen_port: Some(port),
         ..SingboxInbound::default()
     }
 }

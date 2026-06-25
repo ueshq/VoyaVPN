@@ -1017,23 +1017,12 @@ pub fn generate_xray_speedtest_config(entries: &[SpeedtestConfigEntry]) -> XrayC
     config.policy = None;
     config.stats = None;
 
-    if let Some(entry) = entries.first() {
-        gen_log(&mut config, &entry.context);
-    }
-
     for entry in entries {
         let inbound_tag = speedtest_inbound_tag(entry.port);
         let proxy_tag = speedtest_proxy_tag(entry.port);
-        config.inbounds.push(json!({
-            "tag": inbound_tag,
-            "listen": LOOPBACK,
-            "port": entry.port,
-            "protocol": inbound_protocol_tag(InboundProtocol::mixed),
-            "settings": {
-                "auth": "noauth",
-                "udp": true
-            }
-        }));
+        config
+            .inbounds
+            .push(build_socks_inbound_json(inbound_tag.as_str(), entry.port));
 
         let proxy_outbounds = build_xray_proxy_outbounds(&entry.context, &proxy_tag);
         let proxy_tag_count = proxy_outbounds
@@ -1068,15 +1057,21 @@ pub fn generate_xray_speedtest_config(entries: &[SpeedtestConfigEntry]) -> XrayC
         config.routing.rules.push(rule);
     }
 
-    if let Some(entry) = entries.first() {
-        if entry.context.app_config.core_basic_item.enable_fragment {
-            apply_xray_outbound_fragment(&mut config.outbounds, &entry.context.app_config);
-        }
-        apply_outbound_bind_interface(&mut config, &entry.context);
-        apply_outbound_send_through(&mut config, &entry.context);
-    }
+    apply_common_config_settings(&mut config, entries);
 
     config
+}
+
+fn apply_common_config_settings(config: &mut XrayConfig, entries: &[SpeedtestConfigEntry]) {
+    let Some(entry) = entries.first() else {
+        return;
+    };
+    gen_log(config, &entry.context);
+    if entry.context.app_config.core_basic_item.enable_fragment {
+        apply_xray_outbound_fragment(&mut config.outbounds, &entry.context.app_config);
+    }
+    apply_outbound_bind_interface(config, &entry.context);
+    apply_outbound_send_through(config, &entry.context);
 }
 
 fn speedtest_inbound_tag(port: i32) -> String {
@@ -1162,20 +1157,35 @@ fn build_inbound(in_item: &InItem, protocol: InboundProtocol) -> Value {
         .dest_override
         .clone()
         .unwrap_or_else(|| vec!["http".to_string(), "tls".to_string()]);
+    let mut inbound = build_socks_inbound_json(
+        inbound_protocol_tag(protocol),
+        in_item.local_port + protocol.as_i32(),
+    );
+
+    if let Some(settings) = inbound.get_mut("settings").and_then(Value::as_object_mut) {
+        settings.insert("udp".to_string(), Value::Bool(in_item.udp_enabled));
+        settings.insert("allowTransparent".to_string(), Value::Bool(false));
+    }
+    let sniffing = json!({
+        "enabled": in_item.sniffing_enabled,
+        "destOverride": dest_override,
+        "routeOnly": in_item.route_only
+    });
+    if let Some(object) = inbound.as_object_mut() {
+        object.insert("sniffing".to_string(), sniffing);
+    }
+    inbound
+}
+
+fn build_socks_inbound_json(tag: impl Into<String>, port: i32) -> Value {
     json!({
-        "tag": inbound_protocol_tag(protocol),
-        "port": in_item.local_port + protocol.as_i32(),
-        "protocol": "mixed",
+        "tag": tag.into(),
         "listen": LOOPBACK,
+        "port": port,
+        "protocol": inbound_protocol_tag(InboundProtocol::mixed),
         "settings": {
             "auth": "noauth",
-            "udp": in_item.udp_enabled,
-            "allowTransparent": false
-        },
-        "sniffing": {
-            "enabled": in_item.sniffing_enabled,
-            "destOverride": dest_override,
-            "routeOnly": in_item.route_only
+            "udp": true
         }
     })
 }
