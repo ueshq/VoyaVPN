@@ -1048,44 +1048,13 @@ pub enum SystemProxyError {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Mutex, MutexGuard};
+    use std::sync::Mutex;
 
     use voya_core::DEFAULT_SYSTEM_PROXY_EXCEPTIONS;
 
+    use crate::test_support::RecordingRunner;
+
     use super::*;
-
-    #[derive(Default)]
-    struct RecordingRunner {
-        spawns: Mutex<Vec<ProcessSpawn>>,
-    }
-
-    impl RecordingRunner {
-        fn lock(&self) -> MutexGuard<'_, Vec<ProcessSpawn>> {
-            self.spawns.lock().expect("spawns")
-        }
-    }
-
-    impl ProcessRunner for RecordingRunner {
-        fn spawn(
-            &self,
-            _request: ProcessSpawn,
-        ) -> Result<crate::process::ProcessHandle, ProcessError> {
-            unreachable!("sysproxy tests only use oneshot commands")
-        }
-
-        fn run_oneshot(&self, request: ProcessSpawn) -> Result<ProcessOutput, ProcessError> {
-            self.spawns.lock().expect("spawns").push(request);
-            Ok(ProcessOutput {
-                status_code: Some(0),
-                stdout: String::new(),
-                stderr: String::new(),
-            })
-        }
-
-        fn stop(&self, _handle: &crate::process::ProcessHandle) -> Result<(), ProcessError> {
-            unreachable!("sysproxy tests only use oneshot commands")
-        }
-    }
 
     #[derive(Default)]
     struct FakePacManager {
@@ -1220,7 +1189,7 @@ mod tests {
             error,
             SystemProxyError::UnsupportedPlatform(TargetOs::Other)
         ));
-        assert!(runner.lock().is_empty());
+        assert!(runner.oneshots().is_empty());
     }
 
     #[test]
@@ -1349,7 +1318,7 @@ mod tests {
         );
         assert_eq!(pac.starts.lock().expect("starts").len(), 1);
         assert!(runner
-            .lock()
+            .oneshots()
             .iter()
             .any(|spawn| spawn.arguments.iter().any(|arg| arg == "AutoConfigURL")));
     }

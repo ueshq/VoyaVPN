@@ -294,7 +294,7 @@ mod tests {
     use std::{
         sync::{
             atomic::{AtomicU64, Ordering},
-            Arc, Mutex,
+            Arc,
         },
         time::{SystemTime, UNIX_EPOCH},
     };
@@ -309,9 +309,7 @@ mod tests {
             XRAY_LOCAL_ASSET_ENV, XRAY_LOCAL_CERT_ENV,
         },
         paths::{core_seed_resources_dir, AppPaths, StorageMode},
-        process::{
-            ProcessError, ProcessHandle, ProcessOutput, ProcessRole, ProcessRunner, ProcessSpawn,
-        },
+        test_support::RecordingRunner,
     };
 
     use super::*;
@@ -395,32 +393,6 @@ mod tests {
         assert_eq!(env.get_dns_item(CoreType::Xray), Some(item));
     }
 
-    #[derive(Clone, Default)]
-    struct RecordingRunner {
-        spawns: Arc<Mutex<Vec<ProcessSpawn>>>,
-        stops: Arc<Mutex<Vec<u32>>>,
-    }
-
-    impl ProcessRunner for RecordingRunner {
-        fn spawn(&self, request: ProcessSpawn) -> Result<ProcessHandle, ProcessError> {
-            self.spawns.lock().expect("spawns").push(request);
-            Ok(ProcessHandle::new(10, ProcessRole::Main))
-        }
-
-        fn run_oneshot(&self, _request: ProcessSpawn) -> Result<ProcessOutput, ProcessError> {
-            Ok(ProcessOutput {
-                status_code: Some(0),
-                stdout: String::new(),
-                stderr: String::new(),
-            })
-        }
-
-        fn stop(&self, handle: &ProcessHandle) -> Result<(), ProcessError> {
-            self.stops.lock().expect("stops").push(handle.id());
-            Ok(())
-        }
-    }
-
     #[tokio::test]
     async fn runtime_connect_writes_generated_config_and_starts_supervisor_path() {
         let database = Database::connect_in_memory()
@@ -466,11 +438,9 @@ mod tests {
 
         assert_eq!(connected.active_profile_id.as_deref(), Some("active"));
         assert!(paths.bin_config_file(MAIN_CONFIG_FILE_NAME).exists());
-        assert_eq!(runner.spawns.lock().expect("spawns").len(), 1);
-        assert_eq!(
-            runner.spawns.lock().expect("spawns")[0].arguments,
-            ["run", "-c", MAIN_CONFIG_FILE_NAME]
-        );
+        let spawns = runner.spawns();
+        assert_eq!(spawns.len(), 1);
+        assert_eq!(spawns[0].arguments, ["run", "-c", MAIN_CONFIG_FILE_NAME]);
 
         let disconnected = manager
             .disconnect()
@@ -482,7 +452,7 @@ mod tests {
             crate::supervisor::SupervisorConnectionState::Disconnected
         );
         assert!(!paths.bin_config_file(MAIN_CONFIG_FILE_NAME).exists());
-        assert_eq!(runner.stops.lock().expect("stops").as_slice(), [10]);
+        assert_eq!(runner.stops().as_slice(), [10]);
         config.index_id.clear();
     }
 
@@ -521,7 +491,7 @@ mod tests {
             core_type_dir_name(CoreType::Xray),
             executable_name_for_current_os("xray"),
         );
-        let spawns = runner.spawns.lock().expect("spawns");
+        let spawns = runner.spawns();
         assert_eq!(spawns.len(), 1);
         assert_eq!(spawns[0].executable, app_data_exe);
         assert_ne!(spawns[0].executable, seed_exe);
@@ -559,7 +529,7 @@ mod tests {
             }
             other => panic!("expected typed missing core error, got {other:?}"),
         }
-        assert!(runner.spawns.lock().expect("spawns").is_empty());
+        assert!(runner.spawns().is_empty());
     }
 
     #[tokio::test]

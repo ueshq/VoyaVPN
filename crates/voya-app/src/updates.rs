@@ -1691,13 +1691,7 @@ fn monotonic_millis() -> u128 {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        collections::HashMap,
-        env,
-        io::Write as _,
-        path::Path,
-        sync::{Arc, Mutex},
-    };
+    use std::{collections::HashMap, env, io::Write as _, path::Path, sync::Arc};
 
     use flate2::{write::GzEncoder, Compression};
     use sha2::{Digest as _, Sha256};
@@ -1714,7 +1708,7 @@ mod tests {
         coreinfo::{executable_name_for_current_os, TargetOs},
         elevation::SudoPasswordStore,
         paths::StorageMode,
-        process::{ProcessError, ProcessHandle, ProcessOutput, ProcessRunner, ProcessSpawn},
+        test_support::RecordingRunner,
     };
 
     use super::*;
@@ -2473,8 +2467,8 @@ mod tests {
             Some("active")
         );
         assert_eq!(fs::read(&target_exe).expect("read new xray"), b"new-xray");
-        assert_eq!(runner.spawns.lock().expect("spawns").len(), 2);
-        assert_eq!(runner.stops.lock().expect("stops").as_slice(), [10]);
+        assert_eq!(runner.spawns().len(), 2);
+        assert_eq!(runner.stops().as_slice(), [10]);
 
         let _ = fs::remove_dir_all(root);
     }
@@ -2521,8 +2515,8 @@ mod tests {
         assert!(matches!(error, UpdateManagerError::ChecksumMismatch { .. }));
         assert_eq!(fs::read(&target_exe).expect("read old xray"), b"old-xray");
         assert!(archive.exists());
-        assert_eq!(runner.spawns.lock().expect("spawns").len(), 2);
-        assert_eq!(runner.stops.lock().expect("stops").as_slice(), [10]);
+        assert_eq!(runner.spawns().len(), 2);
+        assert_eq!(runner.stops().as_slice(), [10]);
         assert_eq!(
             runtime.status().await.expect("runtime status").state,
             SupervisorConnectionState::Connected
@@ -2565,8 +2559,8 @@ mod tests {
         assert!(result.stopped_runtime.is_none());
         assert!(result.restarted_runtime.is_none());
         assert_eq!(fs::read(&target_exe).expect("read new xray"), b"new-xray");
-        assert!(runner.spawns.lock().expect("spawns").is_empty());
-        assert!(runner.stops.lock().expect("stops").is_empty());
+        assert!(runner.spawns().is_empty());
+        assert!(runner.stops().is_empty());
 
         let _ = fs::remove_dir_all(root);
     }
@@ -2623,50 +2617,6 @@ mod tests {
 
         assert_eq!(plan.target_dir, Path::new("/tmp/VoyaVPN/bin/xray"));
         assert!(plan.backup_dir.starts_with("/tmp/VoyaVPN/guiTemps/updates"));
-    }
-
-    #[derive(Clone)]
-    struct RecordingRunner {
-        spawns: Arc<Mutex<Vec<ProcessSpawn>>>,
-        stops: Arc<Mutex<Vec<u32>>>,
-        next_pid: Arc<Mutex<u32>>,
-    }
-
-    impl Default for RecordingRunner {
-        fn default() -> Self {
-            Self {
-                spawns: Arc::new(Mutex::new(Vec::new())),
-                stops: Arc::new(Mutex::new(Vec::new())),
-                next_pid: Arc::new(Mutex::new(10)),
-            }
-        }
-    }
-
-    impl ProcessRunner for RecordingRunner {
-        fn spawn(&self, request: ProcessSpawn) -> std::result::Result<ProcessHandle, ProcessError> {
-            let role = request.role;
-            self.spawns.lock().expect("spawns").push(request);
-            let mut next_pid = self.next_pid.lock().expect("next pid");
-            let pid = *next_pid;
-            *next_pid += 1;
-            Ok(ProcessHandle::new(pid, role))
-        }
-
-        fn run_oneshot(
-            &self,
-            _request: ProcessSpawn,
-        ) -> std::result::Result<ProcessOutput, ProcessError> {
-            Ok(ProcessOutput {
-                status_code: Some(0),
-                stdout: String::new(),
-                stderr: String::new(),
-            })
-        }
-
-        fn stop(&self, handle: &ProcessHandle) -> std::result::Result<(), ProcessError> {
-            self.stops.lock().expect("stops").push(handle.id());
-            Ok(())
-        }
     }
 
     fn runtime_manager_for<'db>(

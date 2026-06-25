@@ -1071,9 +1071,11 @@ pub fn split_command_line(input: &str) -> Result<Vec<String>, ProcessError> {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeMap, sync::Mutex};
+    use std::collections::BTreeMap;
     #[cfg(unix)]
     use std::{sync::mpsc, time::Duration};
+
+    use crate::test_support::RecordingRunner;
 
     use super::*;
 
@@ -1205,41 +1207,6 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
-    #[derive(Default)]
-    struct RecordingRunner {
-        events: Mutex<Vec<String>>,
-    }
-
-    impl ProcessRunner for RecordingRunner {
-        fn spawn(&self, request: ProcessSpawn) -> Result<ProcessHandle, ProcessError> {
-            self.events
-                .lock()
-                .expect("events")
-                .push(format!("spawn:{:?}", request.role));
-            Ok(ProcessHandle::new(1, request.role))
-        }
-
-        fn run_oneshot(&self, request: ProcessSpawn) -> Result<ProcessOutput, ProcessError> {
-            self.events
-                .lock()
-                .expect("events")
-                .push(format!("oneshot:{:?}", request.role));
-            Ok(ProcessOutput {
-                status_code: Some(0),
-                stdout: String::new(),
-                stderr: String::new(),
-            })
-        }
-
-        fn stop(&self, handle: &ProcessHandle) -> Result<(), ProcessError> {
-            self.events
-                .lock()
-                .expect("events")
-                .push(format!("stop:{:?}", handle.role()));
-            Ok(())
-        }
-    }
-
     #[test]
     fn process_runner_trait_supports_fake_process_runner() {
         let runner = RecordingRunner::default();
@@ -1250,10 +1217,7 @@ mod tests {
         let handle = runner.spawn(spawn).expect("spawn");
         runner.stop(&handle).expect("stop");
 
-        assert_eq!(
-            runner.events.lock().expect("events").as_slice(),
-            ["spawn:Main", "stop:Main"]
-        );
+        assert_eq!(runner.events().as_slice(), ["spawn:Main", "stop:Main"]);
     }
 
     #[cfg(unix)]

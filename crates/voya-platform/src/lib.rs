@@ -10,4 +10,6 @@ pub mod hotkeys;
 pub mod paths;
 pub mod process;
 pub mod sysproxy;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
 pub mod tun;

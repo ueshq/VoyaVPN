@@ -211,35 +211,11 @@ mod tests {
 
     use voya_platform::{
         paths::StorageMode,
-        process::{ProcessError, ProcessHandle, ProcessOutput, ProcessRunner, ProcessSpawn},
         sysproxy::{PacManager, PacStartConfig},
+        test_support::RecordingRunner,
     };
 
     use super::*;
-
-    #[derive(Default)]
-    struct RecordingRunner {
-        spawns: Mutex<Vec<ProcessSpawn>>,
-    }
-
-    impl ProcessRunner for RecordingRunner {
-        fn spawn(&self, _request: ProcessSpawn) -> Result<ProcessHandle, ProcessError> {
-            unreachable!("sysproxy app tests only use oneshot commands")
-        }
-
-        fn run_oneshot(&self, request: ProcessSpawn) -> Result<ProcessOutput, ProcessError> {
-            self.spawns.lock().expect("spawns").push(request);
-            Ok(ProcessOutput {
-                status_code: Some(0),
-                stdout: String::new(),
-                stderr: String::new(),
-            })
-        }
-
-        fn stop(&self, _handle: &ProcessHandle) -> Result<(), ProcessError> {
-            unreachable!("sysproxy app tests only use oneshot commands")
-        }
-    }
 
     #[derive(Default)]
     struct RecordingPac {
@@ -379,7 +355,7 @@ mod tests {
 
         assert!(restored);
         assert!(!manager.dirty_marker_path().exists());
-        assert_eq!(runner.spawns.lock().expect("spawns").len(), 4);
+        assert_eq!(runner.oneshots().len(), 4);
         let _ = fs::remove_dir_all(app_dir);
     }
 
@@ -397,7 +373,7 @@ mod tests {
             .expect("startup recovery");
 
         assert!(!restored);
-        assert!(runner.spawns.lock().expect("spawns").is_empty());
+        assert!(runner.oneshots().is_empty());
         let _ = fs::remove_dir_all(app_dir);
     }
 }
