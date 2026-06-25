@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, vi } from "vitest";
 
 import type { ProfileItem_Deserialize, ProfileListItem_Serialize } from "@/ipc/bindings";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { DEFAULT_PROFILE_COLUMN_VISIBILITY, useProfileColumnsStore } from "@/stores/profile-columns-store";
 
 import { CONFIG_TYPES, MOVE_ACTIONS, PROFILE_PROTOCOLS, SPEED_ACTIONS } from "./profile-constants";
@@ -28,30 +29,20 @@ const ipcMocks = vi.hoisted(() => ({
   saveSubscription: vi.fn(),
   setActiveProfile: vi.fn(),
   sortProfiles: vi.fn(),
-  speedtestStatus: vi.fn(),
   updateSubscriptions: vi.fn(),
   validateGroupProfile: vi.fn(),
-  useRuntimeEventStore: Object.assign(
-    (selector: (state: unknown) => unknown) =>
-      selector({
-        clearLogs: vi.fn(),
-        coreState: null,
-        lastTransientEvent: null,
-        logLines: [],
-        pushTransientEvent: vi.fn(),
-        serverStatsByProfileId: {},
-        setCoreState: vi.fn(),
-        setSysProxy: vi.fn(),
-        speedtestResultsByProfileId: {},
-        statistics: null,
-        sysProxy: null,
-        tun: null,
-      }),
-    { getState: vi.fn() },
-  ),
 }));
 
-vi.mock("@/ipc", () => ipcMocks);
+vi.mock("@/ipc", async () => {
+  const runtimeStore = await vi.importActual<typeof import("@/ipc/runtime-event-store")>(
+    "@/ipc/runtime-event-store",
+  );
+
+  return {
+    ...ipcMocks,
+    useRuntimeEventStore: runtimeStore.useRuntimeEventStore,
+  };
+});
 
 const queryClients = new Set<QueryClient>();
 
@@ -99,6 +90,11 @@ describe("ProfilesScreen", () => {
     // Column visibility persists to localStorage, so reset it between tests to
     // keep the default-column expectations independent of prior toggles.
     useProfileColumnsStore.setState({ columnVisibility: { ...DEFAULT_PROFILE_COLUMN_VISIBILITY } });
+    useRuntimeEventStore.setState({
+      serverStatsByProfileId: {},
+      speedtestResultsByProfileId: {},
+      speedtestRunning: false,
+    });
     ipcMocks.copyProfiles.mockResolvedValue([]);
     ipcMocks.dedupeProfiles.mockResolvedValue({ kept: 0, removedIndexIds: [], total: 0 });
     ipcMocks.deleteSubscriptions.mockResolvedValue(1);
@@ -123,7 +119,6 @@ describe("ProfilesScreen", () => {
       results: [],
       selectedCount: 0,
     });
-    ipcMocks.speedtestStatus.mockResolvedValue({ running: false });
     ipcMocks.saveGroupProfile.mockImplementation(async (profile: ProfileItem_Deserialize) => makeProfile(100, profile));
     ipcMocks.saveProfile.mockImplementation(async (profile: ProfileItem_Deserialize) => makeProfile(99, profile));
     ipcMocks.saveSubscription.mockResolvedValue(makeSubscription());
@@ -257,9 +252,9 @@ describe("ProfilesScreen", () => {
     expect(ipcMocks.runSpeedtest).toHaveBeenCalledWith(SPEED_ACTIONS.Realping, []);
   });
 
-  it("reflects an already running backend speedtest on mount", async () => {
+  it("reflects an already running speedtest from the runtime store", async () => {
     ipcMocks.listProfiles.mockResolvedValue(makeProfiles(1));
-    ipcMocks.speedtestStatus.mockResolvedValue({ running: true });
+    useRuntimeEventStore.setState({ speedtestRunning: true });
 
     renderProfiles();
 

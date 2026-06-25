@@ -30,6 +30,13 @@ export function EventBridge() {
       return undefined;
     }
 
+    void useRuntimeEventStore
+      .getState()
+      .refreshSpeedtestStatus()
+      .catch((error: unknown) => {
+        reportEventBridgeError("failed to refresh speedtest status", error);
+      });
+
     const generation = ++listenerGenerationRef.current;
     const unlisteners: RegisteredUnlisten[] = [];
 

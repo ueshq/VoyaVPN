@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const ipcCommandMocks = vi.hoisted(() => ({
+  speedtestStatus: vi.fn(),
+}));
+
+vi.mock("@/ipc/commands", () => ipcCommandMocks);
+
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import type { ClashConnectionsSnapshot, StatisticsSnapshot } from "@/ipc/bindings";
+import type { ClashConnectionsSnapshot, SpeedTestResult, StatisticsSnapshot } from "@/ipc/bindings";
 
 const initialMonitorStatus = {
   message: null,
@@ -25,8 +31,11 @@ describe("runtime event store", () => {
       lastTransientEvent: null,
       logLines: [],
       serverStatsByProfileId: {},
+      speedtestResultsByProfileId: {},
+      speedtestRunning: false,
       statistics: null,
     });
+    ipcCommandMocks.speedtestStatus.mockReset().mockResolvedValue({ running: false });
   });
 
   afterEach(() => {
@@ -41,6 +50,48 @@ describe("runtime event store", () => {
 
     expect(useRuntimeEventStore.getState().clashTraffic).toEqual({ down: 2048, up: 1024 });
     expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("clashTraffic");
+  });
+
+  it("hydrates speedtest running state from the backend status command", async () => {
+    ipcCommandMocks.speedtestStatus.mockResolvedValue({ running: true });
+
+    await useRuntimeEventStore.getState().refreshSpeedtestStatus();
+
+    expect(ipcCommandMocks.speedtestStatus).toHaveBeenCalledTimes(1);
+    expect(useRuntimeEventStore.getState().speedtestRunning).toBe(true);
+  });
+
+  it("sets speedtest running state through store actions", () => {
+    useRuntimeEventStore.getState().setSpeedtestRunning(true);
+
+    expect(useRuntimeEventStore.getState().speedtestRunning).toBe(true);
+
+    useRuntimeEventStore.getState().setSpeedtestStatus({ running: false });
+
+    expect(useRuntimeEventStore.getState().speedtestRunning).toBe(false);
+  });
+
+  it("stores speedtest result events without ending the running state", () => {
+    const result: SpeedTestResult = {
+      action: 3,
+      delay: 42,
+      indexId: "profile-a",
+      ipInfo: "US",
+      message: "42",
+      speed: null,
+    };
+
+    useRuntimeEventStore.getState().setSpeedtestRunning(true);
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "speedtestResult",
+      payload: result,
+    });
+
+    expect(useRuntimeEventStore.getState().speedtestResultsByProfileId).toEqual({
+      "profile-a": result,
+    });
+    expect(useRuntimeEventStore.getState().speedtestRunning).toBe(true);
+    expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("speedtestResult");
   });
 
   it("sets Clash monitor lifecycle state through store actions", () => {

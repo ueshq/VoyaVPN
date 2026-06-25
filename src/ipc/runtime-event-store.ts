@@ -11,11 +11,13 @@ import type {
   LogLineEvent,
   ServerStatItem,
   SpeedTestResult,
+  SpeedtestStatus,
   StatisticsSnapshot,
   SysProxyChanged,
   TransientStreamEvent,
   TunChanged,
 } from "@/ipc/bindings";
+import { speedtestStatus } from "@/ipc/commands";
 
 export type RuntimeClashMonitorState = "starting" | ClashMonitorState;
 
@@ -35,8 +37,10 @@ type RuntimeEventState = {
   lastTransientEvent: TransientStreamEvent | null;
   logLines: LogLineEvent[];
   pushTransientEvent: (event: TransientStreamEvent) => void;
+  refreshSpeedtestStatus: () => Promise<void>;
   serverStatsByProfileId: Record<string, ServerStatItem>;
   speedtestResultsByProfileId: Record<string, SpeedTestResult>;
+  speedtestRunning: boolean;
   setClashConnections: (snapshot: ClashConnectionsSnapshot) => void;
   setClashMonitorFailed: (message?: string | null) => void;
   setClashMonitorRunning: (message?: string | null) => void;
@@ -45,6 +49,8 @@ type RuntimeEventState = {
   setClashMonitorStopped: (message?: string | null) => void;
   setClashTraffic: (event: ClashTrafficEvent) => void;
   setCoreState: (event: CoreStateEvent) => void;
+  setSpeedtestRunning: (running: boolean) => void;
+  setSpeedtestStatus: (status: SpeedtestStatus) => void;
   setSysProxy: (event: SysProxyChanged) => void;
   setTun: (event: TunChanged) => void;
   statistics: StatisticsSnapshot | null;
@@ -202,6 +208,10 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
       }
     });
   },
+  refreshSpeedtestStatus: async () => {
+    const status = await speedtestStatus();
+    set({ speedtestRunning: status.running });
+  },
   setClashConnections: (clashConnections) => {
     const payload = parseClashConnectionsSnapshot(clashConnections);
     if (payload) {
@@ -222,10 +232,13 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
     set({ clashMonitorStatus: makeClashMonitorStatus("stopped", false, true, message) }),
   setClashTraffic: (clashTraffic) => set({ clashTraffic }),
   setCoreState: (coreState) => set({ coreState }),
+  setSpeedtestRunning: (speedtestRunning) => set({ speedtestRunning }),
+  setSpeedtestStatus: (status) => set({ speedtestRunning: status.running }),
   setSysProxy: (sysProxy) => set({ sysProxy }),
   setTun: (tun) => set({ tun }),
   serverStatsByProfileId: {},
   speedtestResultsByProfileId: {},
+  speedtestRunning: false,
   statistics: null,
   sysProxy: null,
   tun: null,
