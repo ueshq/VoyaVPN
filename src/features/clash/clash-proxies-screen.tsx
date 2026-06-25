@@ -21,6 +21,7 @@ import type {
   ClashProxyNode,
   RuleMode,
 } from "@/ipc/bindings";
+import { formatBytesPerSecond, formatDelay } from "@/lib/formatting";
 import { cn, getErrorMessage } from "@/lib/utils";
 import { ClashMonitorStatusBadge } from "@/features/clash/clash-monitor-status-badge";
 
@@ -101,8 +102,8 @@ export function ClashProxiesScreen() {
         <h2 className="text-sm font-semibold">{t("tabs.clashProxies")}</h2>
         <Badge className="gap-2 bg-background px-2 py-1 font-normal text-muted-foreground" variant="outline">
           <Activity className="size-4 text-muted-foreground" aria-hidden="true" />
-          <span className="tabular-nums">{t("status.upload", { speed: formatRate(traffic?.up) })}</span>
-          <span className="tabular-nums">{t("status.download", { speed: formatRate(traffic?.down) })}</span>
+          <span className="tabular-nums">{t("status.upload", { speed: formatBytesPerSecond(traffic?.up ?? 0) })}</span>
+          <span className="tabular-nums">{t("status.download", { speed: formatBytesPerSecond(traffic?.down ?? 0) })}</span>
         </Badge>
         <ClashMonitorStatusBadge className="max-w-[15rem]" status={monitorStatus} />
         <div className="ms-auto flex shrink-0 items-center gap-2">
@@ -324,28 +325,4 @@ function ProxyNodeGrid({
 
 function selectGroup(groups: ClashProxyGroup[], selectedName: string | null) {
   return groups.find((group) => group.name === selectedName) ?? groups[0] ?? null;
-}
-
-function formatDelay(delay: number | null | undefined, fallback: string | null | undefined) {
-  if (typeof delay === "number" && delay > 0) {
-    return `${delay}ms`;
-  }
-
-  return fallback || "";
-}
-
-function formatRate(value: number | null | undefined) {
-  return `${formatBytes(value)}/s`;
-}
-
-function formatBytes(value: number | null | undefined) {
-  const bytes = value ?? 0;
-  if (bytes >= 1024 * 1024) {
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  }
-  if (bytes >= 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-
-  return `${bytes.toFixed(0)} B`;
 }

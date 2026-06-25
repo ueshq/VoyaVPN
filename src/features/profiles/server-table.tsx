@@ -83,6 +83,7 @@ import type {
   SpeedActionType,
 } from "@/ipc/bindings";
 import { useI18n } from "@/i18n/use-i18n";
+import { formatDelay, formatSpeed, formatTraffic } from "@/lib/formatting";
 import { cn, getErrorMessage } from "@/lib/utils";
 import { useProfileColumnsStore } from "@/stores/profile-columns-store";
 
@@ -985,25 +986,6 @@ function cellTitle(cell: React.ReactNode) {
   return typeof cell === "string" || typeof cell === "number" ? String(cell) : undefined;
 }
 
-function formatDelay(delay: number) {
-  return delay > 0 ? `${delay} ms` : "";
-}
-
-function formatSpeed(speed: number | null) {
-  if (!speed || speed <= 0) {
-    return "";
-  }
-
-  if (speed >= 1024 * 1024) {
-    return `${(speed / 1024 / 1024).toFixed(1)} MB/s`;
-  }
-  if (speed >= 1024) {
-    return `${(speed / 1024).toFixed(1)} KB/s`;
-  }
-
-  return `${speed.toFixed(0)} B/s`;
-}
-
 function formatSpeedOrMessage(speed: number | null, message?: string | null) {
   if (isSpeedtestStatusMessage(message)) {
     return message;
@@ -1024,20 +1006,4 @@ function formatSpeedOrMessage(speed: number | null, message?: string | null) {
 
 function isSpeedtestStatusMessage(message?: string | null) {
   return Boolean(message && !/^-?\d+(\.\d+)?$/.test(message));
-}
-
-function formatTraffic(value: number | null | undefined) {
-  if (!value || value <= 0) {
-    return "";
-  }
-
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let scaled = value;
-  let unitIndex = 0;
-  while (scaled >= 1024 && unitIndex < units.length - 1) {
-    scaled /= 1024;
-    unitIndex += 1;
-  }
-
-  return `${scaled >= 10 ? scaled.toFixed(0) : scaled.toFixed(1)} ${units[unitIndex]}`;
 }

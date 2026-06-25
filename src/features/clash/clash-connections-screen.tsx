@@ -26,6 +26,7 @@ import {
   useRuntimeEventStore,
 } from "@/ipc";
 import type { ClashConnectionItem, ClashConnectionsSnapshot } from "@/ipc/bindings";
+import { formatBytes } from "@/lib/formatting";
 import { cn, getErrorMessage } from "@/lib/utils";
 import { useConnectionColumnsStore } from "@/stores/connection-columns-store";
 import { ClashMonitorStatusBadge } from "@/features/clash/clash-monitor-status-badge";
@@ -538,16 +539,4 @@ function connectionChain(connection: ClashConnectionItem) {
 
 function connectionChains(connection: ClashConnectionItem) {
   return Array.isArray(connection.chains) ? connection.chains : [];
-}
-
-function formatBytes(value: number | null | undefined) {
-  const bytes = value ?? 0;
-  if (bytes >= 1024 * 1024) {
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  }
-  if (bytes >= 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-
-  return `${bytes.toFixed(0)} B`;
 }

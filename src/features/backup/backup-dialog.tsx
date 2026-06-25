@@ -37,6 +37,7 @@ import {
   backupWebdavPush,
 } from "@/ipc";
 import type { BackupOperationResult, BackupRemoteResult, BackupStatus_Serialize, WebDavItem_Deserialize } from "@/ipc/bindings";
+import { formatBytes } from "@/lib/formatting";
 import { redactOperationalError } from "@/lib/operational-redaction";
 import { cn } from "@/lib/utils";
 
@@ -355,17 +356,6 @@ function remoteMessage(result: BackupRemoteResult) {
   const size = result.bytes ? ` (${formatBytes(result.bytes)})` : "";
 
   return `${result.message}: ${result.remotePath}${size}`;
-}
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024) {
-    return `${bytes.toFixed(0)} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KiB`;
-  }
-
-  return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
 }
 
 async function invalidateRestoredState(queryClient: ReturnType<typeof useQueryClient>) {

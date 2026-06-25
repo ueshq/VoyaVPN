@@ -24,6 +24,7 @@ import {
   useRuntimeEventStore,
 } from "@/ipc";
 import type { CoreStateEvent, RuntimeStatusResponse } from "@/ipc/bindings";
+import { formatBytesPerSecond } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
 import { useModalStore } from "@/stores/modal-store";
 
@@ -255,23 +256,6 @@ function formatDuration(ms: number) {
   const pad = (value: number) => String(value).padStart(2, "0");
 
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
-}
-
-function formatBytesPerSecond(value: number) {
-  if (value < 1024) {
-    return `${Math.round(value)} B/s`;
-  }
-
-  const units = ["KB/s", "MB/s", "GB/s"];
-  let scaled = value / 1024;
-  let unitIndex = 0;
-
-  while (scaled >= 1024 && unitIndex < units.length - 1) {
-    scaled /= 1024;
-    unitIndex += 1;
-  }
-
-  return `${scaled >= 10 ? scaled.toFixed(0) : scaled.toFixed(1)} ${units[unitIndex]}`;
 }
 
 function shouldOpenSudoPrompt(error: unknown) {
