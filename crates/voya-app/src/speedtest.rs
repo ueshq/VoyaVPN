@@ -24,7 +24,7 @@ use tokio::{
 use voya_core::{
     generate_singbox_speedtest_config_json, generate_xray_speedtest_config_json, AppConfig,
     ConfigType, CoreConfigContextBuilder, CoreType, InboundProtocol, ProfileItem, SpeedActionType,
-    SpeedtestConfigEntry, DEFAULT_LOCAL_PORT,
+    SpeedTestItem, SpeedtestConfigEntry, DEFAULT_LOCAL_PORT,
 };
 use voya_db::{Database, DbError};
 use voya_platform::{
@@ -144,28 +144,27 @@ pub trait SpeedtestProbe: Send + Sync {
     fn tcping(
         &self,
         item: ServerTestItem,
-        config: AppConfig,
         cancel: CancellationFlag,
     ) -> BoxFuture<'static, Result<i32>>;
 
     fn realping(
         &self,
         socks_port: u16,
-        config: AppConfig,
+        speed_test_item: SpeedTestItem,
         cancel: CancellationFlag,
     ) -> BoxFuture<'static, Result<RealPingProbeResult>>;
 
     fn download_speed(
         &self,
         socks_port: u16,
-        config: AppConfig,
+        speed_test_item: SpeedTestItem,
         cancel: CancellationFlag,
     ) -> BoxFuture<'static, Result<f64>>;
 
     fn udp_test(
         &self,
         socks_port: u16,
-        config: AppConfig,
+        speed_test_item: SpeedTestItem,
         cancel: CancellationFlag,
     ) -> BoxFuture<'static, Result<i32>>;
 }
@@ -177,7 +176,6 @@ impl SpeedtestProbe for ReqwestSpeedtestProbe {
     fn tcping(
         &self,
         item: ServerTestItem,
-        _config: AppConfig,
         cancel: CancellationFlag,
     ) -> BoxFuture<'static, Result<i32>> {
         Box::pin(async move {
@@ -189,19 +187,19 @@ impl SpeedtestProbe for ReqwestSpeedtestProbe {
     fn realping(
         &self,
         socks_port: u16,
-        config: AppConfig,
+        speed_test_item: SpeedTestItem,
         cancel: CancellationFlag,
     ) -> BoxFuture<'static, Result<RealPingProbeResult>> {
         Box::pin(async move {
             check_cancelled(&cancel)?;
             let client = proxied_client(socks_port)?;
-            let url = if config.speed_test_item.speed_ping_test_url.trim().is_empty() {
+            let url = if speed_test_item.speed_ping_test_url.trim().is_empty() {
                 REALPING_FALLBACK_URL
             } else {
-                config.speed_test_item.speed_ping_test_url.as_str()
+                speed_test_item.speed_ping_test_url.as_str()
             };
             let timeout = Duration::from_secs(
-                u64::try_from(config.speed_test_item.speed_test_timeout.max(1)).unwrap_or(1),
+                u64::try_from(speed_test_item.speed_test_timeout.max(1)).unwrap_or(1),
             );
             let mut best_delay = None;
             let mut last_error = None;
@@ -234,11 +232,11 @@ impl SpeedtestProbe for ReqwestSpeedtestProbe {
                 }
             };
 
-            let ip_info = if config.speed_test_item.ipapi_url.trim().is_empty() {
+            let ip_info = if speed_test_item.ipapi_url.trim().is_empty() {
                 None
             } else {
                 match client
-                    .get(config.speed_test_item.ipapi_url.as_str())
+                    .get(speed_test_item.ipapi_url.as_str())
                     .timeout(Duration::from_secs(5))
                     .send()
                     .await
@@ -262,21 +260,19 @@ impl SpeedtestProbe for ReqwestSpeedtestProbe {
     fn download_speed(
         &self,
         socks_port: u16,
-        config: AppConfig,
+        speed_test_item: SpeedTestItem,
         cancel: CancellationFlag,
     ) -> BoxFuture<'static, Result<f64>> {
         Box::pin(async move {
             check_cancelled(&cancel)?;
             let client = proxied_client(socks_port)?;
             let timeout = Duration::from_secs(
-                u64::try_from(config.speed_test_item.speed_test_timeout.max(1)).unwrap_or(1),
+                u64::try_from(speed_test_item.speed_test_timeout.max(1)).unwrap_or(1),
             );
             let started = Instant::now();
             let mut response = match time::timeout(
                 timeout,
-                client
-                    .get(config.speed_test_item.speed_test_url.as_str())
-                    .send(),
+                client.get(speed_test_item.speed_test_url.as_str()).send(),
             )
             .await
             {
@@ -326,13 +322,13 @@ impl SpeedtestProbe for ReqwestSpeedtestProbe {
     fn udp_test(
         &self,
         socks_port: u16,
-        config: AppConfig,
+        speed_test_item: SpeedTestItem,
         cancel: CancellationFlag,
     ) -> BoxFuture<'static, Result<i32>> {
         Box::pin(async move {
             check_cancelled(&cancel)?;
             let (service, target) =
-                UdpTestService::from_target(Some(&config.speed_test_item.udp_test_target));
+                UdpTestService::from_target(Some(&speed_test_item.udp_test_target));
             let elapsed = service
                 .send_via_socks5(LOOPBACK_ADDR, socks_port, &target, Duration::from_secs(5))
                 .await?;
@@ -690,9 +686,7 @@ impl SpeedtestManager {
         let mut results = Vec::new();
         match normalized {
             SpeedActionType::Tcping => {
-                let result = self
-                    .run_tcping(database, config, action, item, cancel)
-                    .await?;
+                let result = self.run_tcping(database, action, item, cancel).await?;
                 on_result(result.clone());
                 results.push(result);
             }
@@ -928,17 +922,12 @@ impl SpeedtestManager {
     async fn run_tcping(
         &self,
         database: &Database,
-        config: &AppConfig,
         action: SpeedActionType,
         item: ServerTestItem,
         cancel: CancellationFlag,
     ) -> Result<SpeedTestResult> {
         let index_id = item.index_id.clone();
-        let delay = self
-            .probe
-            .tcping(item, config.clone(), cancel)
-            .await
-            .unwrap_or(-1);
+        let delay = self.probe.tcping(item, cancel).await.unwrap_or(-1);
         let result = SpeedTestResult {
             action,
             index_id,
@@ -963,7 +952,7 @@ impl SpeedtestManager {
         let index_id = item.index_id.clone();
         let result = match self
             .probe
-            .realping(item.socks_port, config.clone(), cancel)
+            .realping(item.socks_port, config.speed_test_item.clone(), cancel)
             .await
         {
             Ok(realping) => SpeedTestResult {
@@ -1002,7 +991,7 @@ impl SpeedtestManager {
         let index_id = item.index_id.clone();
         let result = match self
             .probe
-            .download_speed(item.socks_port, config.clone(), cancel)
+            .download_speed(item.socks_port, config.speed_test_item.clone(), cancel)
             .await
         {
             Ok(speed) => SpeedTestResult {
@@ -1041,7 +1030,7 @@ impl SpeedtestManager {
         let index_id = item.index_id.clone();
         let delay = self
             .probe
-            .udp_test(item.socks_port, config.clone(), cancel)
+            .udp_test(item.socks_port, config.speed_test_item.clone(), cancel)
             .await
             .unwrap_or(-1);
         let result = SpeedTestResult {
@@ -1519,7 +1508,6 @@ mod tests {
         fn tcping(
             &self,
             item: ServerTestItem,
-            _config: AppConfig,
             _cancel: CancellationFlag,
         ) -> BoxFuture<'static, Result<i32>> {
             let calls = Arc::clone(&self.calls);
@@ -1535,7 +1523,7 @@ mod tests {
         fn realping(
             &self,
             socks_port: u16,
-            _config: AppConfig,
+            _speed_test_item: SpeedTestItem,
             cancel: CancellationFlag,
         ) -> BoxFuture<'static, Result<RealPingProbeResult>> {
             let calls = Arc::clone(&self.calls);
@@ -1561,7 +1549,7 @@ mod tests {
         fn download_speed(
             &self,
             socks_port: u16,
-            _config: AppConfig,
+            _speed_test_item: SpeedTestItem,
             _cancel: CancellationFlag,
         ) -> BoxFuture<'static, Result<f64>> {
             let calls = Arc::clone(&self.calls);
@@ -1581,7 +1569,7 @@ mod tests {
         fn udp_test(
             &self,
             socks_port: u16,
-            _config: AppConfig,
+            _speed_test_item: SpeedTestItem,
             _cancel: CancellationFlag,
         ) -> BoxFuture<'static, Result<i32>> {
             let calls = Arc::clone(&self.calls);
