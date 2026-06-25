@@ -277,11 +277,8 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
                 id => {
                     if let Some(action) = tray_privileged_action(id) {
                         handle_tray_privileged_action(app, action);
-                    } else if id.starts_with(TRAY_SERVER_PREFIX) {
-                        spawn_tray_set_active_server(
-                            app,
-                            id[TRAY_SERVER_PREFIX.len()..].to_string(),
-                        );
+                    } else if let Some(server_id) = id.strip_prefix(TRAY_SERVER_PREFIX) {
+                        spawn_tray_set_active_server(app, server_id.to_string());
                     }
                 }
             },
