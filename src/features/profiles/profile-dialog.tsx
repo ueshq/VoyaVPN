@@ -17,11 +17,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  ScrollableDialogContent,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -107,7 +107,7 @@ export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile }: P
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] w-[min(96vw,68rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+      <ScrollableDialogContent width="68rem">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Server className="size-4" aria-hidden="true" />
@@ -191,7 +191,7 @@ export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile }: P
             {t("panes.profiles.dialog.save")}
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ScrollableDialogContent>
     </Dialog>
   );
 }

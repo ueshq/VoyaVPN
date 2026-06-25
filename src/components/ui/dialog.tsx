@@ -1,8 +1,33 @@
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { cva, type VariantProps } from "class-variance-authority";
 import { XIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+
+const scrollableDialogContentVariants = cva("overflow-hidden", {
+  variants: {
+    height: {
+      compact: "max-h-[86vh]",
+      default: "max-h-[92vh]",
+    },
+    rows: {
+      body: "grid-rows-[auto_minmax(0,1fr)_auto]",
+      "toolbar-body": "grid-rows-[auto_auto_minmax(0,1fr)_auto]",
+    },
+    width: {
+      "5xl": "max-w-5xl",
+      "54rem": "w-[min(94vw,54rem)]",
+      "56rem": "w-[min(96vw,56rem)]",
+      "68rem": "w-[min(96vw,68rem)]",
+    },
+  },
+  defaultVariants: {
+    height: "default",
+    rows: "body",
+    width: "56rem",
+  },
+});
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
@@ -38,9 +63,7 @@ function DialogContent({
   children,
   showCloseButton = true,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & {
-  showCloseButton?: boolean;
-}) {
+}: DialogContentProps) {
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -65,6 +88,27 @@ function DialogContent({
         ) : null}
       </DialogPrimitive.Content>
     </DialogPortal>
+  );
+}
+
+type DialogContentProps = React.ComponentProps<typeof DialogPrimitive.Content> & {
+  showCloseButton?: boolean;
+};
+
+type ScrollableDialogContentVariants = VariantProps<typeof scrollableDialogContentVariants>;
+
+function ScrollableDialogContent({
+  className,
+  height,
+  rows,
+  width,
+  ...props
+}: Omit<DialogContentProps, keyof ScrollableDialogContentVariants> & ScrollableDialogContentVariants) {
+  return (
+    <DialogContent
+      className={cn(scrollableDialogContentVariants({ height, rows, width }), className)}
+      {...props}
+    />
   );
 }
 
@@ -115,4 +159,5 @@ export {
   DialogPortal,
   DialogTitle,
   DialogTrigger,
+  ScrollableDialogContent,
 };

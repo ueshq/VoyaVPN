@@ -27,11 +27,11 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  ScrollableDialogContent,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -343,7 +343,7 @@ function ServerPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[86vh] w-[min(94vw,54rem)] grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden">
+      <ScrollableDialogContent height="compact" rows="toolbar-body" width="54rem">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Layers3 className="size-4" aria-hidden="true" />
@@ -431,7 +431,7 @@ function ServerPickerDialog({
             Apply
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ScrollableDialogContent>
     </Dialog>
   );
 }

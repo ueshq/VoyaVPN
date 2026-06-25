@@ -28,6 +28,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  ScrollableDialogContent,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -657,7 +658,7 @@ function RoutingRuleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] w-[min(96vw,56rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+      <ScrollableDialogContent width="56rem">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Route className="size-4" aria-hidden="true" />
@@ -764,7 +765,7 @@ function RoutingRuleDialog({
             Save
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ScrollableDialogContent>
     </Dialog>
   );
 }

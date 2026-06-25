@@ -10,11 +10,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  ScrollableDialogContent,
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -116,7 +116,7 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-5xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+      <ScrollableDialogContent width="5xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Rss className="size-4" aria-hidden="true" />
@@ -278,7 +278,7 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
             Close
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ScrollableDialogContent>
     </Dialog>
   );
 }
