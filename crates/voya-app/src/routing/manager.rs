@@ -41,6 +41,14 @@ pub enum RoutingManagerError {
     InvalidMove { rule_id: String, reason: String },
 }
 
+struct TemplateApplyContext<'a> {
+    source_url: Option<&'a str>,
+    download: Option<&'a DownloadClient>,
+    prefer_proxy: bool,
+    proxy_url: Option<&'a str>,
+    import_advanced_rules: bool,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct RoutingManager<'db> {
     database: &'db Database,
@@ -316,11 +324,13 @@ impl<'db> RoutingManager<'db> {
         self.apply_template(
             config,
             template,
-            Some(source_url),
-            Some(&download),
-            prefer_proxy,
-            proxy_url,
-            import_advanced_rules,
+            TemplateApplyContext {
+                source_url: Some(source_url),
+                download: Some(&download),
+                prefer_proxy,
+                proxy_url,
+                import_advanced_rules,
+            },
         )
         .await
     }
@@ -329,18 +339,15 @@ impl<'db> RoutingManager<'db> {
         &self,
         config: &mut AppConfig,
         template: RoutingTemplate,
-        source_url: Option<&str>,
-        download: Option<&DownloadClient>,
-        prefer_proxy: bool,
-        proxy_url: Option<&str>,
-        import_advanced_rules: bool,
+        context: TemplateApplyContext<'_>,
     ) -> Result<Vec<RoutingItem>> {
-        let child_url_policy = source_url
+        let child_url_policy = context
+            .source_url
             .map(TemplateChildUrlPolicy::from_source_url)
             .transpose()
             .map_err(RoutingManagerError::InvalidTemplate)?;
         let existing = self.database.routings().list().await?;
-        if !import_advanced_rules
+        if !context.import_advanced_rules
             && !template.version.trim().is_empty()
             && existing
                 .iter()
@@ -364,7 +371,7 @@ impl<'db> RoutingManager<'db> {
                 if rule_url.is_empty() {
                     continue;
                 }
-                let Some(download) = download else {
+                let Some(download) = context.download else {
                     continue;
                 };
                 if let Some(policy) = child_url_policy.as_ref() {
@@ -382,8 +389,8 @@ impl<'db> RoutingManager<'db> {
                     .download_text(DownloadRequest {
                         url: rule_url,
                         user_agent: None,
-                        prefer_proxy,
-                        proxy_url: proxy_url.map(ToOwned::to_owned),
+                        prefer_proxy: context.prefer_proxy,
+                        proxy_url: context.proxy_url.map(ToOwned::to_owned),
                         response_body_limit: Some(DEFAULT_TEXT_RESPONSE_LIMIT_BYTES),
                     })
                     .await
@@ -427,7 +434,7 @@ impl<'db> RoutingManager<'db> {
             item.sort = max_sort;
             item.url.clear();
             item.enabled = true;
-            item.is_active = !import_advanced_rules && imported.is_empty();
+            item.is_active = !context.import_advanced_rules && imported.is_empty();
             normalize_routing_item(&mut item);
             self.database.routings().upsert(&item).await?;
             if item.is_active {

@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     env, fs,
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::Command,
 };
 
@@ -1050,9 +1050,4 @@ fn unique_suffix() -> u128 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or(0)
-}
-
-#[allow(dead_code)]
-fn ensure_fixture_path(path: &Path) {
-    assert!(path.is_file(), "missing golden fixture {}", path.display());
 }

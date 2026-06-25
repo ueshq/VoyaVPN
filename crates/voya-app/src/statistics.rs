@@ -841,7 +841,7 @@ fn nonempty(value: String) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use crate::supervisor::SupervisorConnectionState;
-    use voya_core::{ConfigType, GuiItem, InItem, ProfileItem, TunModeItem};
+    use voya_core::{ConfigType, InItem, ProfileItem, TunModeItem};
 
     use super::*;
 
@@ -1237,19 +1237,6 @@ mod tests {
             address: "example.test".to_string(),
             port: 443,
             ..ProfileItem::default()
-        }
-    }
-
-    #[allow(dead_code)]
-    fn enabled_config(index_id: &str) -> AppConfig {
-        AppConfig {
-            index_id: index_id.to_string(),
-            gui_item: GuiItem {
-                enable_statistics: true,
-                display_real_time_speed: true,
-                ..GuiItem::default()
-            },
-            ..AppConfig::default()
         }
     }
 }
