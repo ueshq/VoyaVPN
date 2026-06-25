@@ -414,6 +414,7 @@ export function ProfilesScreen() {
   const selectedIdsArray = selected.map((item) => item.profile.IndexId);
 
   async function handleSpeedtest(action: SpeedActionType, indexIds = selectedIdsArray) {
+    setColumnVisibility((current) => ({ ...current, delay: true, speed: true }));
     setSpeedtestRunning(true);
     try {
       await runOperation(() => runSpeedtest(action, indexIds));
@@ -1004,6 +1005,10 @@ function formatSpeed(speed: number | null) {
 }
 
 function formatSpeedOrMessage(speed: number | null, message?: string | null) {
+  if (isSpeedtestStatusMessage(message)) {
+    return message;
+  }
+
   const speedLabel = formatSpeed(speed);
 
   if (speedLabel) {
@@ -1015,6 +1020,10 @@ function formatSpeedOrMessage(speed: number | null, message?: string | null) {
   }
 
   return message;
+}
+
+function isSpeedtestStatusMessage(message?: string | null) {
+  return Boolean(message && !/^-?\d+(\.\d+)?$/.test(message));
 }
 
 function formatTraffic(value: number | null | undefined) {

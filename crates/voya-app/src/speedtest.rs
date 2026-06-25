@@ -484,6 +484,7 @@ impl SpeedtestManager {
         core_seed_resource_dir: Option<PathBuf>,
         runner: Arc<dyn ProcessRunner>,
     ) -> Self {
+        cleanup_stale_speedtest_configs(&paths);
         Self::with_probe_and_backend(
             paths.clone(),
             Arc::new(ReqwestSpeedtestProbe),
@@ -844,7 +845,7 @@ impl SpeedtestManager {
     where
         F: Fn(SpeedTestResult) + Send + Sync,
     {
-        let concurrency = mixed_concurrency_count(config, items.len());
+        let concurrency = dedicated_concurrency_count(action, config, items.len());
         let mut pending = items.into_iter();
         let mut in_flight = FuturesUnordered::new();
         let mut results = Vec::new();
@@ -973,14 +974,17 @@ impl SpeedtestManager {
                 message: Some(realping.delay.to_string()),
                 ip_info: realping.ip_info,
             },
-            Err(error) => SpeedTestResult {
-                action,
-                index_id,
-                delay: Some(-1),
-                speed: None,
-                message: Some(error.to_string()),
-                ip_info: Some("Skipped".to_string()),
-            },
+            Err(error) => {
+                tracing::warn!(index_id = %index_id, ?error, "speedtest realping failed");
+                SpeedTestResult {
+                    action,
+                    index_id,
+                    delay: Some(-1),
+                    speed: None,
+                    message: Some(speedtest_error_message(&error)),
+                    ip_info: Some("Skipped".to_string()),
+                }
+            }
         };
         persist_speedtest_result(database, &result).await?;
 
@@ -1009,14 +1013,17 @@ impl SpeedtestManager {
                 message: Some(format!("{speed:.0}")),
                 ip_info: None,
             },
-            Err(error) => SpeedTestResult {
-                action,
-                index_id,
-                delay: None,
-                speed: Some(0.0),
-                message: Some(error.to_string()),
-                ip_info: None,
-            },
+            Err(error) => {
+                tracing::warn!(index_id = %index_id, ?error, "speedtest download failed");
+                SpeedTestResult {
+                    action,
+                    index_id,
+                    delay: None,
+                    speed: Some(0.0),
+                    message: Some(speedtest_error_message(&error)),
+                    ip_info: None,
+                }
+            }
         };
         persist_speedtest_result(database, &result).await?;
 
@@ -1194,6 +1201,18 @@ fn mixed_concurrency_count(config: &AppConfig, selected_count: usize) -> usize {
     configured.min(selected_count.max(1))
 }
 
+fn dedicated_concurrency_count(
+    action: SpeedActionType,
+    config: &AppConfig,
+    selected_count: usize,
+) -> usize {
+    if normalize_action(action) == SpeedActionType::Mixedtest {
+        mixed_concurrency_count(config, selected_count)
+    } else {
+        1
+    }
+}
+
 fn find_free_speedtest_port(start: i32, used_ports: &mut HashSet<u16>) -> Result<u16> {
     let mut port = u16::try_from(start).map_err(|_| SpeedtestError::InvalidSocksPort(start))?;
     loop {
@@ -1238,6 +1257,31 @@ fn write_speedtest_config(
     Ok(path)
 }
 
+fn cleanup_stale_speedtest_configs(paths: &AppPaths) {
+    let Ok(entries) = fs::read_dir(paths.bin_config_dir()) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if !file_name.starts_with(SPEEDTEST_CONFIG_PREFIX) || !file_name.ends_with(".json") {
+            continue;
+        }
+        if let Err(error) = fs::remove_file(&path) {
+            if error.kind() != io::ErrorKind::NotFound {
+                tracing::warn!(
+                    path = %path.display(),
+                    ?error,
+                    "failed to remove stale speedtest config"
+                );
+            }
+        }
+    }
+}
+
 async fn wait_for_speedtest_ports(
     entries: &[SpeedtestConfigEntry],
     cancel: &CancellationFlag,
@@ -1260,10 +1304,37 @@ async fn wait_for_speedtest_ports(
         if started.elapsed() >= SPEEDTEST_READY_TIMEOUT {
             return Err(SpeedtestError::Io(io::Error::new(
                 io::ErrorKind::TimedOut,
-                "speedtest core local port did not become ready",
+                "temporary speedtest core did not expose a local SOCKS port",
             )));
         }
         time::sleep(SPEEDTEST_READY_INTERVAL).await;
+    }
+}
+
+fn speedtest_error_message(error: &SpeedtestError) -> String {
+    match error {
+        SpeedtestError::Cancelled => "cancelled".to_string(),
+        SpeedtestError::Io(source) if source.kind() == io::ErrorKind::TimedOut => {
+            "request timed out".to_string()
+        }
+        SpeedtestError::Http(source) if source.is_timeout() => "request timed out".to_string(),
+        SpeedtestError::Http(source) if source.is_connect() => {
+            "proxy connection failed".to_string()
+        }
+        SpeedtestError::Udp(_) => "UDP test failed".to_string(),
+        _ => {
+            let raw = error.to_string();
+            let lower = raw.to_ascii_lowercase();
+            if lower.contains("timed out") || lower.contains("timeout") {
+                "request timed out".to_string()
+            } else if lower.contains("connection refused") {
+                "proxy connection refused".to_string()
+            } else if lower.contains("connection reset") || lower.contains("connection closed") {
+                "proxy connection closed".to_string()
+            } else {
+                raw
+            }
+        }
     }
 }
 
@@ -1418,7 +1489,10 @@ fn millis_i32(duration: Duration) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{atomic::AtomicUsize, Mutex as StdMutex};
+    use std::{
+        fs,
+        sync::{atomic::AtomicUsize, Mutex as StdMutex},
+    };
 
     use voya_core::{ProfileExItem, ProtocolExtraItem};
     use voya_db::Database;
@@ -1775,7 +1849,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn speedtest_manager_speedtest_uses_per_node_core_and_concurrency_limit() {
+    async fn speedtest_manager_speedtest_runs_dedicated_cores_serially() {
         let database = Database::connect_in_memory()
             .await
             .expect("speedtest test operation should succeed");
@@ -1801,7 +1875,59 @@ mod tests {
         let starts = backend.starts();
         assert_eq!(starts.len(), 3);
         assert!(starts.iter().all(|start| start.ports.len() == 1));
+        assert_eq!(backend.max_active(), 1);
+    }
+
+    #[tokio::test]
+    async fn speedtest_manager_mixedtest_uses_configured_dedicated_core_concurrency() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
+        insert_profile(&database, "a", 443).await;
+        insert_profile(&database, "b", 8443).await;
+        insert_profile(&database, "c", 9443).await;
+        let probe = Arc::new(RecordingProbe {
+            calls: Arc::new(StdMutex::new(Vec::new())),
+            download_delay: Duration::from_millis(50),
+            ..RecordingProbe::default()
+        });
+        let backend = Arc::new(RecordingCoreBackend::default());
+        let manager =
+            SpeedtestManager::with_probe_and_backend(test_paths(), probe, backend.clone());
+        let mut config = AppConfig::default();
+        config.speed_test_item.mixed_concurrency_count = 2;
+
+        manager
+            .run(&database, &config, SpeedActionType::Mixedtest, Vec::new())
+            .await
+            .expect("speedtest test operation should succeed");
+
+        let starts = backend.starts();
+        assert_eq!(starts.len(), 3);
+        assert!(starts.iter().all(|start| start.ports.len() == 1));
         assert_eq!(backend.max_active(), 2);
+    }
+
+    #[test]
+    fn cleanup_stale_speedtest_configs_removes_only_speedtest_json_files() {
+        let paths = test_paths();
+        fs::create_dir_all(paths.bin_config_dir())
+            .expect("speedtest test operation should succeed");
+        let stale = paths.bin_config_file("configTest-old.json");
+        let current_style_stale = paths.bin_config_file("configTest-123.json");
+        let runtime_config = paths.bin_config_file("config.json");
+        let similar_name = paths.bin_config_file("configTest-not-json.txt");
+        fs::write(&stale, "{}").expect("speedtest test operation should succeed");
+        fs::write(&current_style_stale, "{}").expect("speedtest test operation should succeed");
+        fs::write(&runtime_config, "{}").expect("speedtest test operation should succeed");
+        fs::write(&similar_name, "{}").expect("speedtest test operation should succeed");
+
+        cleanup_stale_speedtest_configs(&paths);
+
+        assert!(!stale.exists());
+        assert!(!current_style_stale.exists());
+        assert!(runtime_config.exists());
+        assert!(similar_name.exists());
     }
 
     #[tokio::test]

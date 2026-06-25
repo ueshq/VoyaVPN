@@ -170,6 +170,29 @@ describe("ProfilesScreen", () => {
     expect(updated[499].serverStat?.TodayDown).toBe(499 * 2048 + 59);
   });
 
+  it("shows speedtest status messages even when a previous speed value exists", async () => {
+    const profile = makeProfile(0);
+    profile.profileEx = {
+      ...profile.profileEx,
+      Delay: -1,
+      IpInfo: "Skipped",
+      Message: "request timed out",
+      Speed: 2048,
+    };
+    ipcMocks.listProfiles.mockResolvedValue([profile]);
+
+    renderProfiles();
+
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Speed" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Speed" }));
+
+    expect(await screen.findByRole("columnheader", { name: "Speed" })).toBeInTheDocument();
+    expect(await screen.findByText("request timed out")).toBeInTheDocument();
+    expect(screen.queryByText("2.0 KB/s")).not.toBeInTheDocument();
+  });
+
   it("runs table operations through profile IPC wrappers", async () => {
     const profiles = makeProfiles(3);
     ipcMocks.listProfiles.mockResolvedValue(profiles);
