@@ -803,21 +803,13 @@ impl SpeedtestManager {
         database: &Database,
         config: &AppConfig,
         action: SpeedActionType,
-        item: ServerTestItem,
+        prepared: PreparedSpeedtestItem,
         cancel: CancellationFlag,
         on_result: &F,
     ) -> Result<Vec<SpeedTestResult>>
     where
         F: Fn(SpeedTestResult) + Send + Sync,
     {
-        let Some(prepared) = self
-            .prepare_speedtest_items(database, config, vec![item])
-            .await?
-            .into_iter()
-            .next()
-        else {
-            return Ok(Vec::new());
-        };
         let core_type = prepared.entry.context.run_core_type;
         let _session = self
             .core_backend
@@ -839,13 +831,20 @@ impl SpeedtestManager {
     where
         F: Fn(SpeedTestResult) + Send + Sync,
     {
+        if is_cancelled(&cancel) {
+            return Ok(Vec::new());
+        }
+
+        let prepared = self
+            .prepare_speedtest_items(database, config, items.iter().cloned())
+            .await?;
         let concurrency = dedicated_concurrency_count(action, config, items.len());
-        let mut pending = items.iter();
+        let mut pending = prepared.into_iter();
         let mut in_flight = FuturesUnordered::new();
         let mut results = Vec::new();
 
         while in_flight.len() < concurrency {
-            let Some(item) = pending.next() else {
+            let Some(prepared) = pending.next() else {
                 break;
             };
             if is_cancelled(&cancel) {
@@ -855,7 +854,7 @@ impl SpeedtestManager {
                 database,
                 config,
                 action,
-                item.clone(),
+                prepared,
                 Arc::clone(&cancel),
                 on_result,
             ));
@@ -864,7 +863,7 @@ impl SpeedtestManager {
         while let Some(item_results) = in_flight.next().await {
             results.extend(item_results?);
             while in_flight.len() < concurrency {
-                let Some(item) = pending.next() else {
+                let Some(prepared) = pending.next() else {
                     break;
                 };
                 if is_cancelled(&cancel) {
@@ -874,7 +873,7 @@ impl SpeedtestManager {
                     database,
                     config,
                     action,
-                    item.clone(),
+                    prepared,
                     Arc::clone(&cancel),
                     on_result,
                 ));
@@ -1491,7 +1490,9 @@ fn millis_i32(duration: Duration) -> i32 {
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::HashSet as StdHashSet,
         fs,
+        net::TcpListener as StdTcpListener,
         sync::{atomic::AtomicUsize, Mutex as StdMutex},
     };
 
@@ -1908,6 +1909,43 @@ mod tests {
         assert_eq!(backend.max_active(), 2);
     }
 
+    #[tokio::test]
+    async fn speedtest_manager_dedicated_prepare_reserves_ports_across_batch() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
+        insert_profile(&database, "a", 443).await;
+        insert_profile(&database, "b", 8443).await;
+        let probe = Arc::new(RecordingProbe::default());
+        let backend = Arc::new(RecordingCoreBackend::default());
+        let manager =
+            SpeedtestManager::with_probe_and_backend(test_paths(), probe, backend.clone());
+        let mut config = AppConfig::default();
+        config.speed_test_item.mixed_concurrency_count = 2;
+        let reserved_base = reserve_speedtest_base_port(&mut config);
+        let reserved_port = i32::from(
+            reserved_base
+                .local_addr()
+                .expect("speedtest test operation should succeed")
+                .port(),
+        );
+
+        manager
+            .run(&database, &config, SpeedActionType::Mixedtest, Vec::new())
+            .await
+            .expect("speedtest test operation should succeed");
+
+        let starts = backend.starts();
+        let ports = starts
+            .iter()
+            .flat_map(|start| start.ports.iter().copied())
+            .collect::<Vec<_>>();
+        let unique_ports = ports.iter().copied().collect::<StdHashSet<_>>();
+        assert_eq!(ports.len(), 2);
+        assert_eq!(unique_ports.len(), ports.len());
+        assert!(!unique_ports.contains(&reserved_port));
+    }
+
     #[test]
     fn cleanup_stale_speedtest_configs_removes_only_speedtest_json_files() {
         let paths = test_paths();
@@ -2022,5 +2060,23 @@ mod tests {
             std::env::temp_dir().join(format!("voyavpn-speedtest-tests-{}", uuid::Uuid::new_v4())),
             StorageMode::UserData,
         )
+    }
+
+    fn reserve_speedtest_base_port(config: &mut AppConfig) -> StdTcpListener {
+        let speedtest_offset = InboundProtocol::speedtest.as_i32();
+        for _ in 0..100 {
+            let listener = StdTcpListener::bind((LOOPBACK_ADDR, 0))
+                .expect("speedtest test operation should succeed");
+            let base_port = listener
+                .local_addr()
+                .expect("speedtest test operation should succeed")
+                .port();
+            let local_port = i32::from(base_port) - speedtest_offset;
+            if local_port > 0 && base_port < u16::MAX - 4 {
+                config.inbound[0].local_port = local_port;
+                return listener;
+            }
+        }
+        panic!("speedtest test operation should succeed");
     }
 }
