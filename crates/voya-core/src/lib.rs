@@ -10,6 +10,7 @@ pub mod entities;
 pub mod enums;
 pub mod fmt;
 pub mod groups;
+pub(crate) mod protocol_common;
 pub mod singbox;
 pub mod xray;
 
