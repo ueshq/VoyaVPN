@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Activity, Keyboard, Power, Save } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import type {
   KeyEventItem_Serialize,
 } from "@/ipc/bindings";
 import { redactOperationalError } from "@/lib/operational-redaction";
+import { useMountedRef } from "@/lib/use-mounted-ref";
 import { getErrorMessage } from "@/lib/utils";
 
 type MutableKeyEventItem = Required<Pick<KeyEventItem_Deserialize, "Alt" | "Control" | "Shift">> & {
@@ -42,13 +43,17 @@ export function IntegrationSettings() {
   const [settings, setSettings] = useState<MutableKeyEventItem[]>([]);
   const [saved, setSaved] = useState(false);
   const [working, setWorking] = useState(false);
+  const diagnosticsGenerationRef = useRef(0);
+  const integrationGenerationRef = useRef(0);
+  const mountedRef = useMountedRef();
 
   useEffect(() => {
-    let disposed = false;
+    const generation = ++integrationGenerationRef.current;
+    const isCurrent = () => mountedRef.current && generation === integrationGenerationRef.current;
 
     void Promise.all([autostartStatus(), globalHotkeyStatus()])
       .then(([autostartStatusResult, hotkeyStatusResult]) => {
-        if (disposed) {
+        if (!isCurrent()) {
           return;
         }
         setAutostart(autostartStatusResult);
@@ -56,37 +61,38 @@ export function IntegrationSettings() {
         setSettings(hotkeyStatusResult.settings.map(toMutableSetting));
       })
       .catch((error: unknown) => {
-        if (!disposed) {
+        if (isCurrent()) {
           setError(getErrorMessage(error));
         }
       });
 
     return () => {
-      disposed = true;
+      integrationGenerationRef.current += 1;
     };
-  }, []);
+  }, [mountedRef]);
 
   useEffect(() => {
-    let disposed = false;
+    const generation = ++diagnosticsGenerationRef.current;
+    const isCurrent = () => mountedRef.current && generation === diagnosticsGenerationRef.current;
 
     void diagnosticsStatus()
       .then((status) => {
-        if (disposed) {
+        if (!isCurrent()) {
           return;
         }
         setDiagnostics(status);
         setDiagnosticsError(null);
       })
       .catch((error: unknown) => {
-        if (!disposed) {
+        if (isCurrent()) {
           setDiagnosticsError(redactOperationalError(error));
         }
       });
 
     return () => {
-      disposed = true;
+      diagnosticsGenerationRef.current += 1;
     };
-  }, []);
+  }, [mountedRef]);
 
   const artifact = useMemo(() => {
     if (!autostart?.artifactPath) {

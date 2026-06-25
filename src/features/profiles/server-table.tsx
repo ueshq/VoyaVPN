@@ -84,6 +84,7 @@ import type {
 } from "@/ipc/bindings";
 import { useI18n } from "@/i18n/use-i18n";
 import { formatDelay, formatSpeed, formatTraffic } from "@/lib/formatting";
+import { useMountedRef } from "@/lib/use-mounted-ref";
 import { cn, getErrorMessage } from "@/lib/utils";
 import { useProfileColumnsStore } from "@/stores/profile-columns-store";
 
@@ -269,6 +270,8 @@ export function ProfilesScreen() {
   const resetColumnVisibility = useProfileColumnsStore((state) => state.resetColumnVisibility);
   const serverStatsByProfileId = useRuntimeEventStore((state) => state.serverStatsByProfileId);
   const speedtestResultsByProfileId = useRuntimeEventStore((state) => state.speedtestResultsByProfileId);
+  const speedtestStatusGenerationRef = useRef(0);
+  const mountedRef = useMountedRef();
   const queryClient = useQueryClient();
   const filter = filterText.trim();
   const profilesQuery = useQuery({
@@ -281,24 +284,25 @@ export function ProfilesScreen() {
   );
 
   useEffect(() => {
-    let mounted = true;
+    const generation = ++speedtestStatusGenerationRef.current;
+    const isCurrent = () => mountedRef.current && generation === speedtestStatusGenerationRef.current;
 
     void speedtestStatus()
       .then((status) => {
-        if (mounted) {
+        if (isCurrent()) {
           setSpeedtestRunning(status.running);
         }
       })
       .catch((error) => {
-        if (mounted) {
+        if (isCurrent()) {
           setOperationError(getErrorMessage(error));
         }
       });
 
     return () => {
-      mounted = false;
+      speedtestStatusGenerationRef.current += 1;
     };
-  }, []);
+  }, [mountedRef]);
   const tableColumns = useMemo<ColumnDef<ProfileListItem_Serialize>[]>(
     () =>
       serverColumns.map((column) => ({

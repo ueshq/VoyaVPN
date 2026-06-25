@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Globe2, Save } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n/use-i18n";
 import { loadRulesetGeoSources, saveRulesetGeoSources } from "@/ipc";
+import { useMountedRef } from "@/lib/use-mounted-ref";
 import { getErrorMessage } from "@/lib/utils";
 
 type SourceForm = {
@@ -24,13 +25,16 @@ export function SourceSettings() {
   const [form, setForm] = useState<SourceForm>(emptyForm);
   const [saved, setSaved] = useState(false);
   const [working, setWorking] = useState(false);
+  const loadGenerationRef = useRef(0);
+  const mountedRef = useMountedRef();
 
   useEffect(() => {
-    let disposed = false;
+    const generation = ++loadGenerationRef.current;
+    const isCurrent = () => mountedRef.current && generation === loadGenerationRef.current;
 
     void loadRulesetGeoSources()
       .then((settings) => {
-        if (disposed) {
+        if (!isCurrent()) {
           return;
         }
         setForm({
@@ -39,15 +43,15 @@ export function SourceSettings() {
         });
       })
       .catch((error: unknown) => {
-        if (!disposed) {
+        if (isCurrent()) {
           setError(getErrorMessage(error));
         }
       });
 
     return () => {
-      disposed = true;
+      loadGenerationRef.current += 1;
     };
-  }, []);
+  }, [mountedRef]);
 
   async function save() {
     setWorking(true);

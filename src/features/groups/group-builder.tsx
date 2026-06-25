@@ -52,6 +52,7 @@ import type {
   GroupPreview,
   GroupPreviewRoute,
 } from "@/ipc/bindings";
+import { useMountedRef } from "@/lib/use-mounted-ref";
 import { cn, getErrorMessage } from "@/lib/utils";
 
 import { CONFIG_TYPES, getProtocolLabel, type ProfileProtocol } from "@/features/profiles/profile-constants";
@@ -89,7 +90,7 @@ export function GroupBuilder({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const previewRequestId = useRef(0);
-  const mountedRef = useRef(true);
+  const mountedRef = useMountedRef();
   const multipleLoadId = useId();
   const values = useWatch({ control }) as ProfileFormValues;
   const childItems = (values.ProtocolExtra?.ChildItems ?? "") as string;
@@ -110,7 +111,6 @@ export function GroupBuilder({
 
   useEffect(() => {
     return () => {
-      mountedRef.current = false;
       previewRequestId.current += 1;
     };
   }, []);

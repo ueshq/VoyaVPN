@@ -67,6 +67,7 @@ import {
   useRuntimeEventStore,
 } from "@/ipc";
 import type { AppConfig_Deserialize, ClashMonitorStatus, PresetType } from "@/ipc/bindings";
+import { useMountedRef } from "@/lib/use-mounted-ref";
 import { getErrorMessage } from "@/lib/utils";
 import {
   type Font,
@@ -590,6 +591,8 @@ function usePersistedPreferences(language: string) {
   const hydrateFromConfig = usePreferencesStore((state) => state.hydrateFromConfig);
   const themeMode = usePreferencesStore((state) => state.themeMode);
   const lastPersistedKeyRef = useRef<string | null>(null);
+  const loadGenerationRef = useRef(0);
+  const mountedRef = useMountedRef();
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
   const persistSequenceRef = useRef(0);
   const preferenceSnapshot = useMemo<PreferenceConfigSnapshot>(
@@ -602,11 +605,11 @@ function usePersistedPreferences(language: string) {
       return undefined;
     }
 
-    let disposed = false;
+    const generation = ++loadGenerationRef.current;
 
     void loadAppConfig()
       .then((config) => {
-        if (disposed) {
+        if (!mountedRef.current || generation !== loadGenerationRef.current) {
           return;
         }
 
@@ -621,9 +624,9 @@ function usePersistedPreferences(language: string) {
       .catch(() => undefined);
 
     return () => {
-      disposed = true;
+      loadGenerationRef.current += 1;
     };
-  }, [appConfigLoaded, hydrateFromConfig, language]);
+  }, [appConfigLoaded, hydrateFromConfig, language, mountedRef]);
 
   useEffect(() => {
     if (!appConfigLoaded || lastPersistedKeyRef.current === null) {

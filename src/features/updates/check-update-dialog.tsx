@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -58,6 +58,7 @@ import type {
   UpdateTargetKind,
 } from "@/ipc/bindings";
 import { redactOperationalMessage } from "@/lib/operational-redaction";
+import { useMountedRef } from "@/lib/use-mounted-ref";
 import { cn, getErrorMessage } from "@/lib/utils";
 
 type CoreRunMode = "check" | "download";
@@ -95,6 +96,8 @@ export function CheckUpdateDialog() {
   const latestPreferenceSaveRef = useRef<{ key: string; promise: Promise<void> } | null>(null);
   const lastPersistedPreferenceKeyRef = useRef<string | null>(null);
   const pendingPreferenceSaveCountRef = useRef(0);
+  const statusGenerationRef = useRef(0);
+  const mountedRef = useMountedRef();
 
   function applyAppUpdatePaths(paths: AppUpdatePaths) {
     if (paths.updaterStatus) {
@@ -109,44 +112,45 @@ export function CheckUpdateDialog() {
     setManualLinksError(paths.manualError);
   }
 
-  function setPreferenceSnapshot(nextPreference: PreferenceSnapshot) {
+  const setPreferenceSnapshot = useCallback((nextPreference: PreferenceSnapshot) => {
     const snapshot = clonePreferenceSnapshot(nextPreference);
     preferenceSnapshotRef.current = snapshot;
     setPreRelease(snapshot.preRelease);
     setSelectedIds(new Set(snapshot.selectedIds));
-  }
+  }, []);
 
-  function applyUpdateStatus(nextStatus: UpdateStatus) {
+  const applyUpdateStatus = useCallback((nextStatus: UpdateStatus) => {
     const nextPreference = preferenceSnapshotFromStatus(nextStatus);
     lastPersistedPreferenceKeyRef.current = preferenceSnapshotKey(nextPreference);
     setStatus(nextStatus);
     setPreferenceSnapshot(nextPreference);
-  }
+  }, [setPreferenceSnapshot]);
 
   useEffect(() => {
-    let disposed = false;
+    const generation = ++statusGenerationRef.current;
+    const isCurrent = () => mountedRef.current && generation === statusGenerationRef.current;
 
     void updateStatus()
       .then(async (nextStatus) => {
-        if (disposed) {
+        if (!isCurrent()) {
           return;
         }
         applyUpdateStatus(nextStatus);
         const appPaths = await loadAppUpdatePaths(nextStatus.preRelease, true, null);
-        if (!disposed) {
+        if (isCurrent()) {
           applyAppUpdatePaths(appPaths);
         }
       })
       .catch((error: unknown) => {
-        if (!disposed) {
+        if (isCurrent()) {
           setError(getErrorMessage(error));
         }
       });
 
     return () => {
-      disposed = true;
+      statusGenerationRef.current += 1;
     };
-  }, []);
+  }, [applyUpdateStatus, mountedRef]);
 
   const resultByTarget = useMemo(
     () => new Map(results.map((result) => [result.targetId, result])),

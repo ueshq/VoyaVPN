@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { events } from "@/ipc/bindings";
@@ -9,6 +9,7 @@ import type {
   TransientStreamEvent,
 } from "@/ipc/bindings";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useMountedRef } from "@/lib/use-mounted-ref";
 import { getErrorMessage } from "@/lib/utils";
 import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
@@ -21,13 +22,15 @@ type RegisteredUnlisten = {
 
 export function EventBridge() {
   const queryClient = useQueryClient();
+  const mountedRef = useMountedRef();
+  const listenerGenerationRef = useRef(0);
 
   useEffect(() => {
     if (!isTauriRuntime()) {
       return undefined;
     }
 
-    let disposed = false;
+    const generation = ++listenerGenerationRef.current;
     const unlisteners: RegisteredUnlisten[] = [];
 
     void Promise.allSettled([
@@ -60,7 +63,7 @@ export function EventBridge() {
 
       return registration
         .then((unlisten) => {
-          if (disposed) {
+          if (!mountedRef.current || generation !== listenerGenerationRef.current) {
             safeUnlisten(eventName, unlisten);
             return;
           }
@@ -73,10 +76,10 @@ export function EventBridge() {
     }
 
     return () => {
-      disposed = true;
+      listenerGenerationRef.current += 1;
       drainUnlisteners(unlisteners);
     };
-  }, [queryClient]);
+  }, [mountedRef, queryClient]);
 
   return null;
 }

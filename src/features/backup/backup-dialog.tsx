@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type * as React from "react";
 import { AlertTriangle, CheckCircle2, Database, Download, RefreshCw, Upload } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -39,6 +39,7 @@ import {
 import type { BackupOperationResult, BackupRemoteResult, BackupStatus_Serialize, WebDavItem_Deserialize } from "@/ipc/bindings";
 import { formatBytes } from "@/lib/formatting";
 import { redactOperationalError } from "@/lib/operational-redaction";
+import { useMountedRef } from "@/lib/use-mounted-ref";
 import { cn } from "@/lib/utils";
 
 type WorkingAction = "localBackup" | "localRestore" | "save" | "webdavCheck" | "webdavPull" | "webdavPush";
@@ -65,13 +66,16 @@ export function BackupDialog() {
   const [status, setStatus] = useState<BackupStatus_Serialize | null>(null);
   const [webDav, setWebDav] = useState<WebDavItem_Deserialize>(emptyWebDav);
   const [working, setWorking] = useState<WorkingAction | null>(null);
+  const statusGenerationRef = useRef(0);
+  const mountedRef = useMountedRef();
 
   useEffect(() => {
-    let disposed = false;
+    const generation = ++statusGenerationRef.current;
+    const isCurrent = () => mountedRef.current && generation === statusGenerationRef.current;
 
     void backupStatus()
       .then((nextStatus) => {
-        if (disposed) {
+        if (!isCurrent()) {
           return;
         }
         setStatus(nextStatus);
@@ -79,15 +83,15 @@ export function BackupDialog() {
         setWebDav(nextStatus.webDavItem);
       })
       .catch((error: unknown) => {
-        if (!disposed) {
+        if (isCurrent()) {
           setError(redactOperationalError(error));
         }
       });
 
     return () => {
-      disposed = true;
+      statusGenerationRef.current += 1;
     };
-  }, []);
+  }, [mountedRef]);
 
   const normalizedWebDav = useMemo(() => normalizeWebDav(webDav), [webDav]);
 

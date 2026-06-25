@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Plug, Power, Shield, WifiOff } from "lucide-react";
 
@@ -39,6 +39,7 @@ import type {
   TunStatus,
 } from "@/ipc/bindings";
 import { formatBytesPerSecond } from "@/lib/formatting";
+import { useMountedRef } from "@/lib/use-mounted-ref";
 import { cn } from "@/lib/utils";
 import { useModalStore } from "@/stores/modal-store";
 import { shellTabRoutes, useShellStore } from "@/stores/shell-store";
@@ -62,40 +63,43 @@ export function StatusBar() {
   const openModal = useModalStore((state) => state.openModal);
   const activeTab = useShellStore((state) => state.activeTab);
   const [pendingAction, setPendingAction] = useState<"tun" | null>(null);
+  const initialStatusGenerationRef = useRef(0);
+  const mountedRef = useMountedRef();
   const profilesQuery = useQuery({
     queryFn: () => listProfiles(null, null),
     queryKey: ["profiles", { filter: "" }],
   });
 
   useEffect(() => {
-    let disposed = false;
+    const generation = ++initialStatusGenerationRef.current;
+    const isCurrent = () => mountedRef.current && generation === initialStatusGenerationRef.current;
 
     void runtimeStatus()
       .then((status) => {
-        if (!disposed) {
+        if (isCurrent()) {
           setCoreState(statusToCoreState(status));
         }
       })
       .catch(() => undefined);
     void systemProxyStatus()
       .then((status) => {
-        if (!disposed) {
+        if (isCurrent()) {
           setSysProxy(statusToSysProxyChanged(status));
         }
       })
       .catch(() => undefined);
     void tunStatus()
       .then((status) => {
-        if (!disposed) {
+        if (isCurrent()) {
           setTun(statusToTunChanged(status));
         }
       })
       .catch(() => undefined);
 
     return () => {
-      disposed = true;
+      initialStatusGenerationRef.current += 1;
     };
-  }, [setCoreState, setSysProxy, setTun]);
+  }, [mountedRef, setCoreState, setSysProxy, setTun]);
 
   const state = coreState?.state ?? "disconnected";
   const StateIcon = state === "connected" ? Power : state === "disconnected" ? WifiOff : LoaderCircle;

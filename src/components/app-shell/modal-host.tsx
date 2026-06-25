@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Info, KeyRound, Languages, Monitor, Moon, Settings, Sun, Type } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ import {
   usePreferencesStore,
 } from "@/stores/preferences-store";
 import { useModalStore } from "@/stores/modal-store";
+import { useMountedRef } from "@/lib/use-mounted-ref";
 import { getErrorMessage } from "@/lib/utils";
 
 const themeOptions: Array<{ icon: typeof Monitor; labelKey: string; value: ThemeMode }> = [
@@ -225,26 +226,29 @@ function SudoPromptDialog({ intent }: { intent?: "enableTun" }) {
   const [error, setError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const collectionGenerationRef = useRef(0);
+  const mountedRef = useMountedRef();
 
   useEffect(() => {
-    let disposed = false;
+    const generation = ++collectionGenerationRef.current;
+    const isCurrent = () => mountedRef.current && generation === collectionGenerationRef.current;
 
     void sudoBeginCollection()
       .then((response) => {
-        if (!disposed) {
+        if (isCurrent()) {
           setCollection(response);
         }
       })
       .catch((error: unknown) => {
-        if (!disposed) {
+        if (isCurrent()) {
           setError(getErrorMessage(error));
         }
       });
 
     return () => {
-      disposed = true;
+      collectionGenerationRef.current += 1;
     };
-  }, []);
+  }, [mountedRef]);
 
   async function submitPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
