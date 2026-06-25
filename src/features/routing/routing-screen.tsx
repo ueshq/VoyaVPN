@@ -664,7 +664,7 @@ function RoutingRuleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] w-[min(96vw,56rem)] grid-rows-[auto,minmax(0,1fr),auto] overflow-hidden">
+      <DialogContent className="max-h-[92vh] w-[min(96vw,56rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Route className="size-4" aria-hidden="true" />

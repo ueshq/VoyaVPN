@@ -116,7 +116,7 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-5xl grid-rows-[auto,minmax(0,1fr),auto] overflow-hidden">
+      <DialogContent className="max-h-[92vh] max-w-5xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Rss className="size-4" aria-hidden="true" />
