@@ -9,6 +9,6 @@ describe("Card elevation", () => {
     const card = getByTestId("card");
 
     expect(card.dataset.slot).toBe("card");
-    expect(card.className).toContain("shadow-[var(--shadow-sm)]");
+    expect(card.className).toContain("shadow-raised");
   });
 });
