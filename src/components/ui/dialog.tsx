@@ -70,7 +70,7 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg border bg-background p-6 shadow-overlay duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
+          "fixed left-1/2 top-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-0 rounded-xl border bg-surface-overlay p-0 shadow-overlay duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
           className,
         )}
         {...props}
@@ -112,19 +112,34 @@ function ScrollableDialogContent({
   );
 }
 
+// Header/footer carry their own section padding now that DialogContent is `p-0`,
+// so every dialog inherits the same header → body → footer rhythm with full-bleed
+// dividers instead of each screen hand-spacing its chrome.
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <div data-slot="dialog-header" className={cn("flex flex-col gap-2 text-center sm:text-start", className)} {...props} />
+    <div
+      data-slot="dialog-header"
+      className={cn("flex flex-col gap-2 border-b px-6 pb-4 pt-6 text-center sm:text-start", className)}
+      {...props}
+    />
   );
 }
 
-function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
+function DialogFooter({ children, className, ...props }: React.ComponentProps<"div">) {
+  // A childless footer (several dialogs render `<DialogFooter />` purely for the
+  // grid slot) must not paint an orphan top divider, so collapse it to nothing.
+  if (React.Children.toArray(children).length === 0) {
+    return null;
+  }
+
   return (
     <div
       data-slot="dialog-footer"
-      className={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
+      className={cn("flex flex-col-reverse gap-2 border-t px-6 py-4 sm:flex-row sm:justify-end", className)}
       {...props}
-    />
+    >
+      {children}
+    </div>
   );
 }
 

@@ -16,7 +16,7 @@ function EmptyState({
 }) {
   return (
     <div
-      className={cn("grid place-items-center gap-2 px-4 py-8 text-center", className)}
+      className={cn("grid place-items-center gap-3 px-4 py-12 text-center", className)}
       data-slot="empty-state"
       role="status"
       {...props}
