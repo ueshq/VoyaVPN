@@ -79,6 +79,7 @@ export {
   setDiagnosticsEnabled,
   setSystemProxyMode,
   setTunEnabled,
+  setWindowAcrylic,
   sortProfiles,
   speedtestStatus,
   systemProxyStatus,

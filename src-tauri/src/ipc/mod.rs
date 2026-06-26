@@ -95,6 +95,7 @@ macro_rules! collect_ipc_commands {
             commands::backup_webdav_push,
             commands::backup_webdav_pull::<tauri::Wry>,
             window::get_window_chrome_config,
+            window::set_window_acrylic,
             $($extra_command)*
         ]
     };

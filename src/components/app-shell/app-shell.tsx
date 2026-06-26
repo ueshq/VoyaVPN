@@ -8,6 +8,7 @@ import { type RegionalPresetOption } from "@/components/app-shell/sidebar-footer
 import { StatusBar } from "@/components/app-shell/status-bar";
 import { TitleBar } from "@/components/app-shell/title-bar";
 import { Toaster } from "@/components/app-shell/toaster";
+import { useAcrylicWindow } from "@/components/app-shell/use-acrylic-window";
 import { useWindowChrome } from "@/components/app-shell/use-window-chrome";
 import { Button } from "@/components/ui/button";
 import {
@@ -91,6 +92,8 @@ export function AppShell() {
   usePersistedPreferences(language);
   useThemeEffects(themeMode, font, fontSize);
   useClashMonitorLifecycle(activeTab);
+  // Windows borderless chrome is the only Acrylic target; the hook no-ops elsewhere.
+  useAcrylicWindow(titleBarLayout === "windows");
 
   useEffect(() => {
     applyDocumentLocale(language);

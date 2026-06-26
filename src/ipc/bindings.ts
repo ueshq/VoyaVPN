@@ -139,6 +139,16 @@ export const commands = {
 	 *  web fallback (no Tauri runtime) resolves to `none` on the frontend.
 	 */
 	getWindowChromeConfig: () => typedError<WindowChromeConfig, AppError>(__TAURI_INVOKE("get_window_chrome_config")),
+	/**
+	 *  Tint the Windows Acrylic blur material to match the in-app light/dark theme.
+	 *  The frontend drives its own (non-system) theme, so this command sets the tint
+	 *  explicitly per mode to keep the native material's base color aligned with the
+	 *  UI. Acrylic has a single variant; light and dark differ only by `color`.
+	 * 
+	 *  Non-Windows platforms are a no-op: window effects are an OS capability, and
+	 *  macOS / Linux / web fall back to the flat CSS neutral-gray veil.
+	 */
+	setWindowAcrylic: (dark: boolean) => typedError<null, AppError>(__TAURI_INVOKE("set_window_acrylic", { dark })),
 	ipcDemoRoundTrip: (request: DemoRequest) => typedError<DemoResponse, AppError>(__TAURI_INVOKE("ipc_demo_round_trip", { request })),
 };
 

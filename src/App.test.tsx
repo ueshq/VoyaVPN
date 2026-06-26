@@ -321,6 +321,7 @@ vi.mock("@/ipc", () => ({
       requestedMode: 0,
     }),
   ),
+  setWindowAcrylic: vi.fn(() => Promise.resolve(null)),
   setTunEnabled: vi.fn(() =>
     Promise.resolve({
       allowEnableTun: true,

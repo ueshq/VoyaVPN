@@ -35,3 +35,37 @@ pub fn get_window_chrome_config() -> Result<WindowChromeConfig, AppError> {
 
     Ok(WindowChromeConfig { title_bar_layout })
 }
+
+/// Tint the Windows Acrylic blur material to match the in-app light/dark theme.
+/// The frontend drives its own (non-system) theme, so this command sets the tint
+/// explicitly per mode to keep the native material's base color aligned with the
+/// UI. Acrylic has a single variant; light and dark differ only by `color`.
+///
+/// Non-Windows platforms are a no-op: window effects are an OS capability, and
+/// macOS / Linux / web fall back to the flat CSS neutral-gray veil.
+#[tauri::command]
+#[specta::specta]
+#[allow(unused_variables)]
+pub fn set_window_acrylic(window: tauri::WebviewWindow, dark: bool) -> Result<(), AppError> {
+    #[cfg(target_os = "windows")]
+    {
+        use tauri::window::{Color, Effect, EffectsBuilder};
+        // Higher alpha reads as a more solid, controllable gray; lower is glassier.
+        // Neutral gray, one tint per mode — kept in sync with the `.voyavpn-acrylic`
+        // veil in globals.css so the native material and the CSS layer agree.
+        let color = if dark {
+            Color(24, 25, 27, 200)
+        } else {
+            Color(234, 235, 238, 200)
+        };
+        window
+            .set_effects(
+                EffectsBuilder::new()
+                    .effect(Effect::Acrylic)
+                    .color(color)
+                    .build(),
+            )
+            .map_err(|error| AppError::State(error.to_string()))?;
+    }
+    Ok(())
+}

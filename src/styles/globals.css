@@ -268,6 +268,43 @@
   }
 }
 
+/* —— Windows Acrylic veil scope (a single translucent layer over the OS material) ——
+   Only the desktop Windows build adds `.voyavpn-acrylic` to <html> (via useAcrylicWindow);
+   web / macOS never match and keep the flat opaque surfaces declared above.
+
+   The veil must live on exactly ONE element. bg-sidebar is painted by several stacked
+   chrome cells (title bar + sidebar + status bar) and the shell root <main> paints
+   bg-background over the whole grid; a translucent color on any of them would multiply
+   layer-on-layer and crush the chrome back to near-opaque. So every chrome surface
+   paints nothing (--sidebar: transparent) and the shell root <main> is cleared, leaving
+   the <body> as the only veil tinting the native Acrylic. The content viewport keeps its
+   own opaque --background and floats above the material. The veil alpha is the sole
+   translucency control (lower → glassier, higher → solider) and stays in sync with the
+   native tint in set_window_acrylic (window.rs). */
+html.voyavpn-acrylic {
+  --sidebar: transparent;
+}
+html.voyavpn-acrylic #root > main {
+  background-color: transparent;
+}
+html.voyavpn-acrylic body {
+  background-color: rgb(234 235 238 / 0.8);
+}
+html.voyavpn-acrylic.dark body {
+  background-color: rgb(24 25 27 / 0.8);
+}
+
+/* Accessibility: honor prefers-reduced-transparency by falling back to a fully opaque
+   surface — no reliance on the OS material, keeping text contrast stable. */
+@media (prefers-reduced-transparency: reduce) {
+  html.voyavpn-acrylic body {
+    background-color: #eaebee;
+  }
+  html.voyavpn-acrylic.dark body {
+    background-color: #18191b;
+  }
+}
+
 @theme inline {
   --font-inter: "Inter", sans-serif;
   --font-manrope: "Manrope", sans-serif;

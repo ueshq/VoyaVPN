@@ -525,6 +525,10 @@ export async function getWindowChromeConfig(): Promise<WindowChromeConfig> {
   return unwrapCommandResult(await commands.getWindowChromeConfig());
 }
 
+export async function setWindowAcrylic(dark: boolean): Promise<null> {
+  return unwrapCommandResult(await commands.setWindowAcrylic(dark));
+}
+
 export async function demoRoundTrip(message: string): Promise<DemoResponse> {
   const request: DemoRequest = { message };
 
