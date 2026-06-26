@@ -1,4 +1,12 @@
 {
+  "missingCore": {
+    "title": "Core not installed",
+    "description": "The {{core}} core executable is missing. Install it to connect.",
+    "install": "Install core",
+    "installing": "Installing…",
+    "openUpdates": "Open Updates…",
+    "seedMissingHint": "No bundled core is available. Open Updates to download it."
+  },
   "actions": {
     "addProfile": "Add profile",
     "clear": "Clear",

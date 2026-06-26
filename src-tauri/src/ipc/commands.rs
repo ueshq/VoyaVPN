@@ -55,7 +55,10 @@ use voya_core::{
     ProfileListItem, ProfileSortKey, RoutingItem, RuleMode, RulesItem, SubItem,
     SubscriptionUpdateResult, SysProxyType, WebDavItem,
 };
-use voya_platform::{coreinfo::CoreInfoError, sysproxy::SystemProxyStatus};
+use voya_platform::{
+    coreinfo::{copy_seed_core_asset, CoreInfoError, CoreSeedCopyOutcome, CoreSeedCopyStatus},
+    sysproxy::SystemProxyStatus,
+};
 use zeroize::Zeroizing;
 
 use super::events::{
@@ -121,6 +124,22 @@ pub struct MissingCoreError {
     pub search_dir: String,
     pub candidates: Vec<String>,
     pub download_url: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum CoreSeedInstallStatus {
+    Installed,
+    AlreadyInstalled,
+    SeedMissing,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreSeedInstallResult {
+    pub core_type: CoreType,
+    pub status: CoreSeedInstallStatus,
+    pub installed_files: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -2168,6 +2187,30 @@ pub async fn apply_downloaded_core_update(
     result.map(|result| result.update).map_err(update_error)
 }
 
+/// Re-install a core binary from the packaged seed (`{resource_dir}/core-seeds/<core>/`)
+/// into `bin/<core>/`. This is the recovery action behind the missing-core prompt: the
+/// startup seed copy already runs automatically, but this lets the UI re-run it on demand
+/// when the binary is absent (e.g. cleared bin dir, antivirus removal, or a skipped first run).
+#[tauri::command]
+#[specta::specta]
+pub fn install_core_seed(
+    state: tauri::State<'_, AppState>,
+    core_type: CoreType,
+) -> Result<CoreSeedInstallResult, AppError> {
+    let Some(seed_dir) = state.core_seed_resource_dir() else {
+        return Ok(CoreSeedInstallResult {
+            core_type,
+            status: CoreSeedInstallStatus::SeedMissing,
+            installed_files: Vec::new(),
+        });
+    };
+
+    let outcome = copy_seed_core_asset(state.runtime_paths(), seed_dir, core_type)
+        .map_err(core_seed_install_error)?;
+
+    Ok(core_seed_install_result(outcome))
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn backup_status(state: tauri::State<'_, AppState>) -> Result<BackupStatus, AppError> {
@@ -3124,6 +3167,29 @@ fn missing_core_candidates(candidates: &str) -> Vec<String> {
         .filter(|candidate| !candidate.is_empty())
         .map(ToString::to_string)
         .collect()
+}
+
+fn core_seed_install_result(outcome: CoreSeedCopyOutcome) -> CoreSeedInstallResult {
+    let status = match outcome.status {
+        CoreSeedCopyStatus::Copied => CoreSeedInstallStatus::Installed,
+        CoreSeedCopyStatus::AlreadyInstalled => CoreSeedInstallStatus::AlreadyInstalled,
+        CoreSeedCopyStatus::SeedMissing => CoreSeedInstallStatus::SeedMissing,
+    };
+    let installed_files = outcome
+        .copied_files
+        .iter()
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect();
+
+    CoreSeedInstallResult {
+        core_type: outcome.core_type,
+        status,
+        installed_files,
+    }
+}
+
+fn core_seed_install_error(error: CoreInfoError) -> AppError {
+    AppError::Runtime(error.to_string())
 }
 
 fn group_error(error: GroupManagerError) -> AppError {

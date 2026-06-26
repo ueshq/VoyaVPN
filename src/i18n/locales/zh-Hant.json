@@ -1,4 +1,12 @@
 {
+  "missingCore": {
+    "title": "核心未安裝",
+    "description": "缺少 {{core}} 核心執行檔。請先安裝後再連線。",
+    "install": "安裝核心",
+    "installing": "正在安裝…",
+    "openUpdates": "開啟更新…",
+    "seedMissingHint": "沒有可用的內建核心，請在「更新」中下載。"
+  },
   "actions": {
     "addProfile": "新增設定檔",
     "clear": "清除",

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Info, KeyRound, Languages, Monitor, Moon, Settings, Sun, Type } from "lucide-react";
+import { Cpu, Info, KeyRound, Languages, Monitor, Moon, Settings, Sun, Type } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +27,8 @@ import { QrDialog } from "@/features/qr";
 import { CheckUpdateDialog } from "@/features/updates";
 import { useI18n } from "@/i18n/use-i18n";
 import {
+  connectActiveProfile,
+  installCoreSeed,
   setTunEnabled,
   sudoBeginCollection,
   sudoClearPassword,
@@ -42,7 +44,7 @@ import {
   type ThemeMode,
   usePreferencesStore,
 } from "@/stores/preferences-store";
-import { useModalStore } from "@/stores/modal-store";
+import { type MissingCorePayload, useModalStore } from "@/stores/modal-store";
 import { useMountedRef } from "@/lib/use-mounted-ref";
 import { getErrorMessage } from "@/lib/utils";
 
@@ -69,9 +71,92 @@ export function ModalHost() {
       {modal?.kind === "backup" ? <BackupDialog /> : null}
       {modal?.kind === "qr" ? <QrDialog /> : null}
       {modal?.kind === "sudo" ? <SudoPromptDialog intent={modal.intent} /> : null}
+      {modal?.kind === "missingCore" ? <MissingCoreDialog payload={modal.missingCore} /> : null}
       {modal?.kind === "updates" ? <CheckUpdateDialog /> : null}
     </Dialog>
   );
+}
+
+function MissingCoreDialog({ payload }: { payload?: MissingCorePayload }) {
+  const { t } = useI18n();
+  const closeTopModal = useModalStore((state) => state.closeTopModal);
+  const openModal = useModalStore((state) => state.openModal);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [seedMissing, setSeedMissing] = useState(false);
+
+  const coreName = payload ? formatCoreType(payload.coreType) : "";
+
+  async function installAndConnect() {
+    if (!payload) {
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await installCoreSeed(payload.coreType);
+      if (result.status === "seedMissing") {
+        setSeedMissing(true);
+
+        return;
+      }
+
+      await connectActiveProfile();
+      closeTopModal();
+    } catch (error) {
+      setError(getErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openUpdates() {
+    closeTopModal();
+    openModal("updates");
+  }
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <Cpu className="size-4" aria-hidden="true" />
+          {t("missingCore.title")}
+        </DialogTitle>
+        <DialogDescription>{t("missingCore.description", { core: coreName })}</DialogDescription>
+      </DialogHeader>
+
+      <div className="grid gap-2 text-sm">
+        {seedMissing ? <p className="text-muted-foreground">{t("missingCore.seedMissingHint")}</p> : null}
+        {error ? <p className="text-destructive">{error}</p> : null}
+      </div>
+
+      <DialogFooter>
+        {seedMissing ? (
+          <Button onClick={openUpdates} type="button">
+            {t("missingCore.openUpdates")}
+          </Button>
+        ) : (
+          <Button disabled={busy || !payload} onClick={() => void installAndConnect()} type="button">
+            {busy ? t("missingCore.installing") : t("missingCore.install")}
+          </Button>
+        )}
+      </DialogFooter>
+    </DialogContent>
+  );
+}
+
+function formatCoreType(coreType: number) {
+  switch (coreType) {
+    case 2:
+      return "Xray";
+    case 24:
+      return "sing-box";
+    case 13:
+      return "mihomo";
+    default:
+      return `Core ${coreType}`;
+  }
 }
 
 function SettingsDialog() {

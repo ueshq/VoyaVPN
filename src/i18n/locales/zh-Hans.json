@@ -1,4 +1,12 @@
 {
+  "missingCore": {
+    "title": "内核未安装",
+    "description": "缺少 {{core}} 内核可执行文件。请先安装后再连接。",
+    "install": "安装内核",
+    "installing": "正在安装…",
+    "openUpdates": "打开更新…",
+    "seedMissingHint": "没有可用的内置内核，请在“更新”中下载。"
+  },
   "actions": {
     "addProfile": "新增配置",
     "clear": "清除",

@@ -924,7 +924,7 @@ mod windows_job {
                     handle,
                     JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS,
                     (&info as *const JobObjectExtendedLimitInformation).cast::<c_void>(),
-                    mem::size_of::<JobObjectExtendedLimitInformation>() as u32,
+                    size_of::<JobObjectExtendedLimitInformation>() as u32,
                 );
                 if ok == 0 {
                     let _ = CloseHandle(handle);

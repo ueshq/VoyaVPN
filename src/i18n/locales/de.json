@@ -1,4 +1,12 @@
 {
+  "missingCore": {
+    "title": "Kern nicht installiert",
+    "description": "Die ausführbare Datei des {{core}}-Kerns fehlt. Installieren Sie sie zum Verbinden.",
+    "install": "Kern installieren",
+    "installing": "Installation…",
+    "openUpdates": "Updates öffnen…",
+    "seedMissingHint": "Es ist kein gebündelter Kern verfügbar. Öffnen Sie die Updates, um ihn herunterzuladen."
+  },
   "actions": {
     "addProfile": "Add profile",
     "clear": "Clear",

@@ -1,4 +1,12 @@
 {
+  "missingCore": {
+    "title": "A mag nincs telepítve",
+    "description": "A(z) {{core}} mag végrehajtható fájlja hiányzik. Telepítse a csatlakozáshoz.",
+    "install": "Mag telepítése",
+    "installing": "Telepítés…",
+    "openUpdates": "Frissítések megnyitása…",
+    "seedMissingHint": "Nincs elérhető beépített mag. Nyissa meg a Frissítéseket a letöltéshez."
+  },
   "actions": {
     "addProfile": "Add profile",
     "clear": "Clear",

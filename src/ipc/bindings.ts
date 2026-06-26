@@ -119,6 +119,13 @@ export const commands = {
 	downloadUpdates: (preRelease: boolean, selectedTargetIds: string[], preferProxy: boolean, proxyUrl: string | null) => typedError<UpdateRunResult, AppError>(__TAURI_INVOKE("download_updates", { preRelease, selectedTargetIds, preferProxy, proxyUrl })),
 	manualAppUpdateLinks: (preRelease: boolean, preferProxy: boolean, proxyUrl: string | null) => typedError<ManualAppUpdateLinks, AppError>(__TAURI_INVOKE("manual_app_update_links", { preRelease, preferProxy, proxyUrl })),
 	applyDownloadedCoreUpdate: (request: CoreUpdateApplyRequest) => typedError<CoreUpdateApplyResult, AppError>(__TAURI_INVOKE("apply_downloaded_core_update", { request })),
+	/**
+	 *  Re-install a core binary from the packaged seed (`{resource_dir}/core-seeds/<core>/`)
+	 *  into `bin/<core>/`. This is the recovery action behind the missing-core prompt: the
+	 *  startup seed copy already runs automatically, but this lets the UI re-run it on demand
+	 *  when the binary is absent (e.g. cleared bin dir, antivirus removal, or a skipped first run).
+	 */
+	installCoreSeed: (coreType: CoreType) => typedError<CoreSeedInstallResult, AppError>(__TAURI_INVOKE("install_core_seed", { coreType })),
 	backupStatus: () => typedError<BackupStatus_Serialize, AppError>(__TAURI_INVOKE("backup_status")),
 	backupSaveWebdavSettings: (settings: WebDavItem_Deserialize) => typedError<WebDavItem_Serialize, AppError>(__TAURI_INVOKE("backup_save_webdav_settings", { settings })),
 	backupCreateLocal: (outputPath: string | null) => typedError<BackupOperationResult, AppError>(__TAURI_INVOKE("backup_create_local", { outputPath })),
@@ -434,6 +441,14 @@ export type CoreBasicItem_Serialize = {
 	EnableFragment: boolean,
 	EnableCacheFile4Sbox: boolean,
 };
+
+export type CoreSeedInstallResult = {
+	coreType: CoreType,
+	status: CoreSeedInstallStatus,
+	installedFiles: string[],
+};
+
+export type CoreSeedInstallStatus = "installed" | "alreadyInstalled" | "seedMissing";
 
 export type CoreState = "disconnected" | "connecting" | "connected" | "disconnecting";
 

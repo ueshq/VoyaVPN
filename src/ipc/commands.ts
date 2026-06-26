@@ -40,6 +40,8 @@ import type {
   RulesItem_Deserialize,
   RuntimeStatusResponse,
   RulesetGeoSourceSettings,
+  CoreSeedInstallResult,
+  CoreType,
   CoreUpdateApplyRequest,
   CoreUpdateApplyResult,
   DiagnosticsStatus,
@@ -482,6 +484,10 @@ export async function applyDownloadedCoreUpdate(
   request: CoreUpdateApplyRequest,
 ): Promise<CoreUpdateApplyResult> {
   return unwrapCommandResult(await commands.applyDownloadedCoreUpdate(request));
+}
+
+export async function installCoreSeed(coreType: CoreType): Promise<CoreSeedInstallResult> {
+  return unwrapCommandResult(await commands.installCoreSeed(coreType));
 }
 
 export async function backupStatus(): Promise<BackupStatus_Serialize> {

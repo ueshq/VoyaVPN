@@ -26,7 +26,7 @@ import {
 import type { CoreStateEvent, RuntimeStatusResponse } from "@/ipc/bindings";
 import { formatBytesPerSecond } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
-import { useModalStore } from "@/stores/modal-store";
+import { type MissingCorePayload, useModalStore } from "@/stores/modal-store";
 
 type RuntimeAction = "connect" | "disconnect" | "restart";
 
@@ -86,6 +86,11 @@ export function HomeScreen() {
     } catch (error) {
       if (shouldOpenSudoPrompt(error)) {
         openModal("sudo");
+      } else {
+        const missingCore = missingCorePayload(error);
+        if (missingCore) {
+          openModal("missingCore", { missingCore });
+        }
       }
     } finally {
       setPendingAction(null);
@@ -264,4 +269,14 @@ function shouldOpenSudoPrompt(error: unknown) {
   }
 
   return error.appError.kind === "sudo" || error.message.toLowerCase().includes("sudo password");
+}
+
+function missingCorePayload(error: unknown): MissingCorePayload | null {
+  if (!(error instanceof IpcCommandError) || error.appError.kind !== "missingCore") {
+    return null;
+  }
+
+  const missingCore = error.appError.message;
+
+  return { coreType: missingCore.coreType, message: missingCore.message };
 }

@@ -1,4 +1,12 @@
 {
+  "missingCore": {
+    "title": "Cœur non installé",
+    "description": "L'exécutable du cœur {{core}} est introuvable. Installez-le pour vous connecter.",
+    "install": "Installer le cœur",
+    "installing": "Installation…",
+    "openUpdates": "Ouvrir les mises à jour…",
+    "seedMissingHint": "Aucun cœur intégré n'est disponible. Ouvrez les mises à jour pour le télécharger."
+  },
   "actions": {
     "addProfile": "Add profile",
     "clear": "Clear",

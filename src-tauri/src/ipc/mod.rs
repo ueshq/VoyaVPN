@@ -85,6 +85,7 @@ macro_rules! collect_ipc_commands {
             commands::download_updates,
             commands::manual_app_update_links,
             commands::apply_downloaded_core_update,
+            commands::install_core_seed,
             commands::backup_status,
             commands::backup_save_webdav_settings,
             commands::backup_create_local,

@@ -1,18 +1,31 @@
 import { create } from "zustand";
 
-export type ModalKind = "about" | "backup" | "qr" | "settings" | "sudo" | "updates";
+import type { CoreType } from "@/ipc/bindings";
+
+export type ModalKind = "about" | "backup" | "missingCore" | "qr" | "settings" | "sudo" | "updates";
 export type ModalIntent = "enableTun";
+
+export type MissingCorePayload = {
+  coreType: CoreType;
+  message: string;
+};
 
 export type ModalEntry = {
   id: string;
   intent?: ModalIntent;
   kind: ModalKind;
+  missingCore?: MissingCorePayload;
+};
+
+type ModalOptions = {
+  intent?: ModalIntent;
+  missingCore?: MissingCorePayload;
 };
 
 type ModalState = {
   closeModal: (id: string) => void;
   closeTopModal: () => void;
-  openModal: (kind: ModalKind, options?: { intent?: ModalIntent }) => string;
+  openModal: (kind: ModalKind, options?: ModalOptions) => string;
   stack: ModalEntry[];
 };
 
@@ -26,7 +39,9 @@ export const useModalStore = create<ModalState>((set) => ({
   openModal: (kind, options) => {
     const id = createModalId(kind);
 
-    set((state) => ({ stack: [...state.stack, { id, intent: options?.intent, kind }] }));
+    set((state) => ({
+      stack: [...state.stack, { id, intent: options?.intent, kind, missingCore: options?.missingCore }],
+    }));
 
     return id;
   },

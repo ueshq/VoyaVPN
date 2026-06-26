@@ -2780,6 +2780,7 @@ mod tests {
         encoder.finish().expect("finish tar.gz");
     }
 
+    #[cfg(unix)]
     fn write_gz_file(path: &Path, contents: &[u8]) {
         let file = fs::File::create(path).expect("create gz");
         let mut encoder = GzEncoder::new(file, Compression::default());

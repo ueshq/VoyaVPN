@@ -46,6 +46,7 @@ export {
   importProfilesFromText,
   IpcCommandError,
   installAppUpdate,
+  installCoreSeed,
   listGroupChildCandidates,
   listProfiles,
   listRoutings,
