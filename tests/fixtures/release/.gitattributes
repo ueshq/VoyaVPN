@@ -1,0 +1,6 @@
+# Release fixtures are byte-exact artifacts: fake updater .zip payloads and
+# their detached .sig signatures whose lengths, SHA-256 digests, and Ed25519
+# signatures are asserted verbatim by the release verification tests. Disable
+# all EOL conversion here so checkouts on Windows (core.autocrlf=true) do not
+# rewrite LF -> CRLF and corrupt the recorded byte counts and signatures.
+* -text
