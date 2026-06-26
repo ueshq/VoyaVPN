@@ -30,6 +30,12 @@
   "app": {
     "name": "VoyaVPN"
   },
+  "window": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close"
+  },
   "backup": {
     "createLocal": "Create backup",
     "description": "Local and WebDAV backup operations.",

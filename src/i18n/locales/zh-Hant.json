@@ -30,6 +30,12 @@
   "app": {
     "name": "VoyaVPN"
   },
+  "window": {
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "還原",
+    "close": "關閉"
+  },
   "backup": {
     "createLocal": "建立備份",
     "description": "本地與 WebDAV 備份操作。",

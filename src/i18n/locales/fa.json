@@ -30,6 +30,12 @@
   "app": {
     "name": "VoyaVPN"
   },
+  "window": {
+    "minimize": "کوچک کردن",
+    "maximize": "بزرگ کردن",
+    "restore": "بازگردانی",
+    "close": "بستن"
+  },
   "backup": {
     "createLocal": "ایجاد پشتیبان",
     "description": "عملیات پشتیبان محلی و WebDAV.",

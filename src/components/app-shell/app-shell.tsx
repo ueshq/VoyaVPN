@@ -6,7 +6,9 @@ import { AppSidebar, SHELL_PANEL_ID } from "@/components/app-shell/app-sidebar";
 import { ModalHost } from "@/components/app-shell/modal-host";
 import { type RegionalPresetOption } from "@/components/app-shell/sidebar-footer";
 import { StatusBar } from "@/components/app-shell/status-bar";
+import { TitleBar } from "@/components/app-shell/title-bar";
 import { Toaster } from "@/components/app-shell/toaster";
+import { useWindowChrome } from "@/components/app-shell/use-window-chrome";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -83,6 +85,7 @@ export function AppShell() {
   const fontSize = usePreferencesStore((state) => state.fontSize);
   const pushToast = useToastStore((state) => state.pushToast);
   const themeMode = usePreferencesStore((state) => state.themeMode);
+  const { titleBarLayout } = useWindowChrome();
   const [pendingPreset, setPendingPreset] = useState<RegionalPresetOption | null>(null);
 
   usePersistedPreferences(language);
@@ -110,11 +113,14 @@ export function AppShell() {
   return (
     <main className="bg-background text-foreground" dir={direction}>
       <div className="grid h-screen min-h-[34rem] grid-cols-[auto_1fr] grid-rows-[auto_1fr_auto] overflow-hidden">
-        {/* Titlebar row placeholder: structural row reserved for the Windows
-            custom titlebar + window controls that arrive in the window-chrome
-            phase. The native frame is kept for now, so it spans both columns and
-            renders empty (collapsing to zero height). */}
-        <div className="col-span-2" data-slot="titlebar-placeholder" />
+        {/* Titlebar row: the Windows build draws its own borderless title bar
+            (it spans both columns); every other platform keeps its native frame
+            and leaves this structural row empty (collapsing to zero height). */}
+        {titleBarLayout === "windows" ? (
+          <TitleBar />
+        ) : (
+          <div className="col-span-2" data-slot="titlebar-placeholder" />
+        )}
 
         <AppSidebar onSelectPreset={setPendingPreset} />
 

@@ -194,6 +194,7 @@ vi.mock("@/ipc", () => ({
   ),
   disconnectCore: vi.fn(),
   generateQrCode: vi.fn(() => Promise.resolve({ mimeType: "image/svg+xml", svg: "<svg />" })),
+  getWindowChromeConfig: vi.fn(() => Promise.resolve({ titleBarLayout: "none" })),
   globalHotkeyStatus: vi.fn(() =>
     Promise.resolve({
       actions: [
