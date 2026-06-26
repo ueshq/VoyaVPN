@@ -39,6 +39,7 @@ export {
   getRouting,
   getSubscription,
   generateQrCode,
+  getWindowChromeConfig,
   globalHotkeyStatus,
   importRoutingTemplates,
   applyRegionalPreset,

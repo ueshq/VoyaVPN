@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod events;
+pub mod window;
 
 use tauri_specta::{collect_commands, collect_events, Builder, Commands};
 
@@ -93,6 +94,7 @@ macro_rules! collect_ipc_commands {
             commands::backup_webdav_check,
             commands::backup_webdav_push,
             commands::backup_webdav_pull::<tauri::Wry>,
+            window::get_window_chrome_config,
             $($extra_command)*
         ]
     };
@@ -173,6 +175,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_core::MoveAction>()
         .typ::<voya_core::FullConfigTemplateItem>()
         .typ::<voya_core::ServerStatItem>()
+        .typ::<window::WindowChromeConfig>()
         .commands(ipc_commands())
         .events(collect_events![
             events::InvalidateEvent,

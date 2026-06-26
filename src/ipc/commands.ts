@@ -59,6 +59,7 @@ import type {
   UpdateStatus,
   WebDavItem_Deserialize,
   WebDavItem_Serialize,
+  WindowChromeConfig,
 } from "@/ipc/bindings";
 
 type CommandResult<T> = { status: "ok"; data: T } | { status: "error"; error: AppError };
@@ -518,6 +519,10 @@ export async function backupWebdavPush(settings: WebDavItem_Deserialize): Promis
 
 export async function backupWebdavPull(settings: WebDavItem_Deserialize): Promise<BackupRestoreResult_Serialize> {
   return unwrapCommandResult(await commands.backupWebdavPull(settings));
+}
+
+export async function getWindowChromeConfig(): Promise<WindowChromeConfig> {
+  return unwrapCommandResult(await commands.getWindowChromeConfig());
 }
 
 export async function demoRoundTrip(message: string): Promise<DemoResponse> {

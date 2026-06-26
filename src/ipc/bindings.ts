@@ -133,6 +133,12 @@ export const commands = {
 	backupWebdavCheck: (settings: WebDavItem_Deserialize) => typedError<BackupOperationResult, AppError>(__TAURI_INVOKE("backup_webdav_check", { settings })),
 	backupWebdavPush: (settings: WebDavItem_Deserialize) => typedError<BackupRemoteResult, AppError>(__TAURI_INVOKE("backup_webdav_push", { settings })),
 	backupWebdavPull: (settings: WebDavItem_Deserialize) => typedError<BackupRestoreResult_Serialize, AppError>(__TAURI_INVOKE("backup_webdav_pull", { settings })),
+	/**
+	 *  Report the window decoration this build should render. Only Windows gets the
+	 *  custom borderless title bar; macOS and Linux keep their native frame, and the
+	 *  web fallback (no Tauri runtime) resolves to `none` on the frontend.
+	 */
+	getWindowChromeConfig: () => typedError<WindowChromeConfig, AppError>(__TAURI_INVOKE("get_window_chrome_config")),
 	ipcDemoRoundTrip: (request: DemoRequest) => typedError<DemoResponse, AppError>(__TAURI_INVOKE("ipc_demo_round_trip", { request })),
 };
 
@@ -1422,6 +1428,13 @@ export type SystemProxyStatusResponse = {
 	pacUrl: string | null,
 };
 
+/**
+ *  Title-bar layout selected per platform. Windows uses a fully self-drawn
+ *  borderless bar (minimize/maximize/close + drag region); every other platform
+ *  keeps its native window frame and draws no custom title bar (`None`).
+ */
+export type TitleBarLayout = "windows" | "none";
+
 export type TransientStreamEvent = { kind: "logLine"; payload: LogLineEvent } | { kind: "coreState"; payload: CoreStateEvent } | { kind: "statistics"; payload: StatisticsSnapshot } | { kind: "sysProxyChanged"; payload: SysProxyChanged } | { kind: "tunChanged"; payload: TunChanged } | { kind: "clashMonitorStatus"; payload: ClashMonitorStatus } | { kind: "clashTraffic"; payload: ClashTrafficEvent } | { kind: "clashConnections"; payload: ClashConnectionsSnapshot } | { kind: "speedtestResult"; payload: SpeedTestResult };
 
 export type TransportExtraItem = TransportExtraItem_Serialize | TransportExtraItem_Deserialize;
@@ -1587,6 +1600,10 @@ export type WebDavItem_Serialize = {
 	UserName?: string | null,
 	Password?: string | null,
 	DirName?: string | null,
+};
+
+export type WindowChromeConfig = {
+	titleBarLayout: TitleBarLayout,
 };
 
 export type WindowSizeItem = {
