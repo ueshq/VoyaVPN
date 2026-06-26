@@ -3,11 +3,20 @@ import type * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { VisibilityState } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Activity, ArrowDown, ArrowUp, Columns3, PlugZap, RefreshCw, RotateCcw, Search, Trash2, XCircle } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, Columns3, Inbox, Plug, PlugZap, RefreshCw, RotateCcw, Search, Trash2, XCircle } from "lucide-react";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  dataTableHeader,
+  dataTableRowEven,
+  dataTableRowHover,
+  dataTableRowOdd,
+  dataTableRowSelected,
+} from "@/components/app-shell/data-table-surface";
+import { InlinePageError } from "@/components/app-shell/inline-page-error";
+import { PageHeader, PageHeaderHeading, PageSection } from "@/components/app-shell/page-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import {
   Menubar,
@@ -280,15 +289,16 @@ export function ClashConnectionsScreen() {
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col">
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-        <h2 className="text-sm font-semibold">{t("tabs.clashConnections")}</h2>
-        <Badge className="gap-2 bg-background px-2 py-1 font-normal text-muted-foreground" variant="outline">
-          <Activity className="size-4 text-muted-foreground" aria-hidden="true" />
-          <span className="tabular-nums">{t("status.upload", { speed: formatBytes(snapshot.uploadTotal) })}</span>
-          <span className="tabular-nums">{t("status.download", { speed: formatBytes(snapshot.downloadTotal) })}</span>
-        </Badge>
-        <ClashMonitorStatusBadge className="max-w-[16rem]" status={monitorStatus} />
+    <PageSection aria-label={t("tabs.clashConnections")}>
+      <PageHeader>
+        <PageHeaderHeading icon={Plug} title={t("tabs.clashConnections")}>
+          <Badge className="gap-2 bg-background px-2 py-1 font-normal text-muted-foreground" variant="outline">
+            <Activity className="size-4 text-muted-foreground" aria-hidden="true" />
+            <span className="tabular-nums">{t("status.upload", { speed: formatBytes(snapshot.uploadTotal) })}</span>
+            <span className="tabular-nums">{t("status.download", { speed: formatBytes(snapshot.downloadTotal) })}</span>
+          </Badge>
+          <ClashMonitorStatusBadge className="max-w-[16rem]" status={monitorStatus} />
+        </PageHeaderHeading>
         <div className="relative ms-auto w-64 max-w-[40vw]">
           <Search
             className="pointer-events-none absolute start-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -365,17 +375,13 @@ export function ClashConnectionsScreen() {
         >
           <RefreshCw className={cn("size-4", connectionsQuery.isFetching && "animate-spin")} aria-hidden="true" />
         </Button>
-      </div>
+      </PageHeader>
 
-      {connectionsQuery.error ? (
-        <Alert className="rounded-none border-x-0 border-t-0 px-4 py-2" variant="destructive">
-          <AlertDescription>{getErrorMessage(connectionsQuery.error)}</AlertDescription>
-        </Alert>
-      ) : null}
+      {connectionsQuery.error ? <InlinePageError>{getErrorMessage(connectionsQuery.error)}</InlinePageError> : null}
 
-      <div className="min-h-0 flex-1 overflow-auto" ref={viewportRef}>
+      <div className="min-h-0 flex-1 overflow-auto bg-surface-sunken" ref={viewportRef}>
         <div
-          className="grid border-b bg-muted/40 px-4 py-2 text-xs font-medium uppercase text-muted-foreground"
+          className={cn("sticky top-0 z-10 grid border-b px-4 py-2", dataTableHeader)}
           style={{ gridTemplateColumns, minWidth: gridMinWidth }}
         >
           <span />
@@ -419,6 +425,7 @@ export function ClashConnectionsScreen() {
                   connection={connection}
                   gridMinWidth={gridMinWidth}
                   gridTemplateColumns={gridTemplateColumns}
+                  index={virtualRow.index}
                   key={connection.id ?? `${connection.host}-${connection.start}-${virtualRow.index}`}
                   onSelect={setSelectedId}
                   selected={effectiveSelectedId !== null && effectiveSelectedId === connection.id}
@@ -428,10 +435,10 @@ export function ClashConnectionsScreen() {
             })}
           </div>
         ) : (
-          <p className="px-4 py-8 text-center text-sm text-muted-foreground">{t("panes.clashConnections.empty")}</p>
+          <EmptyState icon={Inbox} title={t("panes.clashConnections.empty")} />
         )}
       </div>
-    </section>
+    </PageSection>
   );
 }
 
@@ -440,6 +447,7 @@ const ConnectionRow = memo(function ConnectionRow({
   connection,
   gridMinWidth,
   gridTemplateColumns,
+  index,
   onSelect,
   selected,
   start,
@@ -448,6 +456,7 @@ const ConnectionRow = memo(function ConnectionRow({
   connection: ClashConnectionItem;
   gridMinWidth: string;
   gridTemplateColumns: string;
+  index: number;
   onSelect: (id: string | null) => void;
   selected: boolean;
   start: number;
@@ -455,8 +464,10 @@ const ConnectionRow = memo(function ConnectionRow({
   return (
     <button
       className={cn(
-        "absolute start-0 top-0 grid h-10 items-center border-b px-4 text-start text-sm outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
-        selected && "bg-muted text-foreground",
+        "absolute start-0 top-0 grid h-10 items-center border-b px-4 text-start text-sm outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        selected
+          ? dataTableRowSelected
+          : cn(index % 2 === 0 ? dataTableRowEven : dataTableRowOdd, dataTableRowHover),
       )}
       data-testid="connection-row"
       onClick={() => onSelect(connection.id ?? null)}
@@ -465,7 +476,7 @@ const ConnectionRow = memo(function ConnectionRow({
     >
       <span>
         {selected ? (
-          <PlugZap className="size-4 text-foreground" aria-hidden="true" />
+          <PlugZap className="size-4 text-accent-blue" aria-hidden="true" />
         ) : (
           <span className="block size-4 rounded-full border bg-background" aria-hidden="true" />
         )}

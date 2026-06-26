@@ -1,10 +1,17 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Check, Gauge, RefreshCw, RotateCw, Wifi, WifiOff } from "lucide-react";
+import { Activity, Check, Gauge, Inbox, Network, RefreshCw, RotateCw, Wifi, WifiOff } from "lucide-react";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  dataTableHeader,
+  dataTableRowHover,
+  dataTableRowSelected,
+} from "@/components/app-shell/data-table-surface";
+import { InlinePageError } from "@/components/app-shell/inline-page-error";
+import { PageHeader, PageHeaderActions, PageHeaderHeading, PageSection } from "@/components/app-shell/page-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useI18n } from "@/i18n/use-i18n";
 import {
@@ -97,16 +104,17 @@ export function ClashProxiesScreen() {
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col">
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-        <h2 className="text-sm font-semibold">{t("tabs.clashProxies")}</h2>
-        <Badge className="gap-2 bg-background px-2 py-1 font-normal text-muted-foreground" variant="outline">
-          <Activity className="size-4 text-muted-foreground" aria-hidden="true" />
-          <span className="tabular-nums">{t("status.upload", { speed: formatBytesPerSecond(traffic?.up ?? 0) })}</span>
-          <span className="tabular-nums">{t("status.download", { speed: formatBytesPerSecond(traffic?.down ?? 0) })}</span>
-        </Badge>
-        <ClashMonitorStatusBadge className="max-w-[15rem]" status={monitorStatus} />
-        <div className="ms-auto flex shrink-0 items-center gap-2">
+    <PageSection aria-label={t("tabs.clashProxies")}>
+      <PageHeader>
+        <PageHeaderHeading icon={Network} title={t("tabs.clashProxies")}>
+          <Badge className="gap-2 bg-background px-2 py-1 font-normal text-muted-foreground" variant="outline">
+            <Activity className="size-4 text-muted-foreground" aria-hidden="true" />
+            <span className="tabular-nums">{t("status.upload", { speed: formatBytesPerSecond(traffic?.up ?? 0) })}</span>
+            <span className="tabular-nums">{t("status.download", { speed: formatBytesPerSecond(traffic?.down ?? 0) })}</span>
+          </Badge>
+          <ClashMonitorStatusBadge className="max-w-[15rem]" status={monitorStatus} />
+        </PageHeaderHeading>
+        <PageHeaderActions>
           <div className="hidden h-9 items-center rounded-lg bg-muted p-[3px] md:flex">
             {ruleModeOptions.map((option) => (
               <Button
@@ -155,14 +163,10 @@ export function ClashProxiesScreen() {
           >
             <RefreshCw className={cn("size-4", proxiesQuery.isFetching && "animate-spin")} aria-hidden="true" />
           </Button>
-        </div>
-      </div>
+        </PageHeaderActions>
+      </PageHeader>
 
-      {proxiesQuery.error ? (
-        <Alert className="rounded-none border-x-0 border-t-0 px-4 py-2" variant="destructive">
-          <AlertDescription>{getErrorMessage(proxiesQuery.error)}</AlertDescription>
-        </Alert>
-      ) : null}
+      {proxiesQuery.error ? <InlinePageError>{getErrorMessage(proxiesQuery.error)}</InlinePageError> : null}
 
       <div className="grid min-h-0 flex-1 grid-cols-[18rem_minmax(0,1fr)] overflow-hidden">
         <aside className="min-h-0 border-r">
@@ -177,8 +181,8 @@ export function ClashProxiesScreen() {
                   <button
                     key={group.name}
                     className={cn(
-                      "mb-1 grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-md border border-transparent px-3 py-2 text-start text-sm outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                      selectedGroup?.name === group.name && "border-border bg-muted text-foreground shadow-xs",
+                      "mb-1 grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-md border border-transparent px-3 py-2 text-start text-sm outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                      selectedGroup?.name === group.name ? dataTableRowSelected : dataTableRowHover,
                     )}
                     onClick={() => setSelectedGroupName(group.name)}
                     type="button"
@@ -200,7 +204,7 @@ export function ClashProxiesScreen() {
                   </button>
                 ))
               ) : (
-                <p className="px-2 py-6 text-center text-sm text-muted-foreground">{t("panes.clashProxies.empty")}</p>
+                <EmptyState className="py-10" icon={Network} title={t("panes.clashProxies.empty")} />
               )}
             </div>
           </ScrollArea>
@@ -238,7 +242,7 @@ export function ClashProxiesScreen() {
           />
         </div>
       </div>
-    </section>
+    </PageSection>
   );
 }
 
@@ -256,8 +260,13 @@ function ProxyNodeGrid({
   const { t } = useI18n();
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto">
-      <div className="grid min-w-[44rem] grid-cols-[2.75rem_minmax(12rem,1fr)_8rem_7rem_5rem_6rem] border-b bg-muted/40 px-4 py-2 text-xs font-medium uppercase text-muted-foreground">
+    <div className="min-h-0 flex-1 overflow-auto bg-surface-sunken">
+      <div
+        className={cn(
+          "sticky top-0 z-10 grid min-w-[44rem] grid-cols-[2.75rem_minmax(12rem,1fr)_8rem_7rem_5rem_6rem] border-b px-4 py-2",
+          dataTableHeader,
+        )}
+      >
         <span />
         <span>{t("clash.node")}</span>
         <span>{t("clash.type")}</span>
@@ -274,9 +283,8 @@ function ProxyNodeGrid({
             <button
               key={node.name}
               className={cn(
-                "grid min-w-[44rem] grid-cols-[2.75rem_minmax(12rem,1fr)_8rem_7rem_5rem_6rem] items-center border-b px-4 py-2 text-start text-sm outline-none transition-colors focus-visible:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                selectable && !node.active ? "hover:bg-muted/60" : "",
-                node.active && "bg-muted text-foreground",
+                "grid min-w-[44rem] grid-cols-[2.75rem_minmax(12rem,1fr)_8rem_7rem_5rem_6rem] items-center border-b px-4 py-2 text-start text-sm outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                node.active ? dataTableRowSelected : selectable ? dataTableRowHover : "",
               )}
               disabled={!selectable || node.active}
               onClick={() => onSelect(node)}
@@ -284,7 +292,8 @@ function ProxyNodeGrid({
             >
               <span className="flex items-center">
                 {node.active ? (
-                  <span className="grid size-5 place-items-center rounded-full bg-foreground text-background">
+                  // Live node reads green — distinct from the blue selection fill.
+                  <span className="grid size-5 place-items-center rounded-full bg-connected text-connected-foreground">
                     <Check className="size-3" aria-hidden="true" />
                   </span>
                 ) : (
@@ -308,7 +317,10 @@ function ProxyNodeGrid({
               </span>
               <span>
                 {node.active ? (
-                  <Badge className="bg-background text-muted-foreground" variant="outline">
+                  <Badge
+                    className="border-connected/30 bg-connected/10 text-connected"
+                    variant="outline"
+                  >
                     {t("clash.active")}
                   </Badge>
                 ) : null}
@@ -317,7 +329,7 @@ function ProxyNodeGrid({
           );
         })
       ) : (
-        <p className="px-4 py-8 text-center text-sm text-muted-foreground">{t("panes.clashProxies.empty")}</p>
+        <EmptyState icon={Inbox} title={t("panes.clashProxies.empty")} />
       )}
     </div>
   );

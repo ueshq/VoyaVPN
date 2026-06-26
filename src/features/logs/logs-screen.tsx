@@ -126,15 +126,17 @@ export function LogsScreen() {
   return (
     <PageSection aria-label={t("tabs.logs")}>
       <PageHeader>
-        <PageHeaderHeading icon={ScrollText} title={t("tabs.logs")}>
-          {hasLogs ? (
-            <Badge className="h-6 bg-background font-mono tabular-nums text-muted-foreground" variant="outline">
-              {isFiltered
+        <PageHeaderHeading
+          count={
+            hasLogs
+              ? isFiltered
                 ? `${filtered.length.toLocaleString()} / ${logLines.length.toLocaleString()}`
-                : logLines.length.toLocaleString()}
-            </Badge>
-          ) : null}
-        </PageHeaderHeading>
+                : logLines.length.toLocaleString()
+              : undefined
+          }
+          icon={ScrollText}
+          title={t("tabs.logs")}
+        />
 
         <div className="relative ms-auto min-w-[12rem] flex-1 sm:flex-none">
           <Search
@@ -185,7 +187,7 @@ export function LogsScreen() {
         <EmptyState className="min-h-0 flex-1 content-center" icon={ScrollText} title={t("panes.logs.empty")} />
       ) : (
         <div className="relative min-h-0 flex-1">
-          <div className="h-full overflow-auto bg-muted/20" onScroll={handleScroll} ref={viewportRef}>
+          <div className="h-full overflow-auto bg-surface-sunken" onScroll={handleScroll} ref={viewportRef}>
             {filtered.length === 0 ? (
               <EmptyState
                 className="h-full content-center"
@@ -207,7 +209,7 @@ export function LogsScreen() {
 
                   return (
                     <li
-                      className="absolute inset-x-2 grid grid-cols-[4.25rem_3.5rem_minmax(0,1fr)] items-center gap-3 rounded-md px-2 transition-colors hover:bg-background/80"
+                      className="absolute inset-x-2 grid grid-cols-[4.25rem_3.5rem_minmax(0,1fr)] items-center gap-3 rounded-md px-2 transition-colors hover:bg-surface-raised"
                       data-testid="log-line"
                       key={line.id}
                       style={{ height: ROW_HEIGHT, transform: `translateY(${virtualRow.start}px)` }}
@@ -238,7 +240,6 @@ export function LogsScreen() {
               onClick={scrollToLatest}
               size="sm"
               type="button"
-              variant="secondary"
             >
               <ArrowDownToLine className="size-4" aria-hidden="true" />
               {t("panes.logs.jumpToLatest")}
