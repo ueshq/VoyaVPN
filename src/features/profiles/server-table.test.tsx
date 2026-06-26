@@ -181,7 +181,9 @@ describe("ProfilesScreen", () => {
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Speed" })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Speed" }));
+    // Speed is now a probe inside the speedtest split-button menu.
+    await userEvent.click(screen.getByRole("menuitem", { name: "More speed tests" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Speed" }));
 
     expect(await screen.findByRole("columnheader", { name: "Speed" })).toBeInTheDocument();
     expect(await screen.findByText("request timed out")).toBeInTheDocument();
@@ -226,11 +228,14 @@ describe("ProfilesScreen", () => {
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
     await userEvent.click(screen.getByLabelText("Select Server 0"));
 
-    const speedButton = screen.getByRole("button", { name: "Speed" });
+    // The split button's default Fast control stays a button, so it can hold the
+    // disabled/enabled state across the running speedtest the way the per-action
+    // buttons used to.
+    const speedButton = screen.getByRole("button", { name: "Fast" });
     await userEvent.click(speedButton);
 
     await waitFor(() => expect(speedButton).toBeDisabled());
-    expect(ipcMocks.runSpeedtest).toHaveBeenCalledWith(SPEED_ACTIONS.Speedtest, ["profile-0"]);
+    expect(ipcMocks.runSpeedtest).toHaveBeenCalledWith(SPEED_ACTIONS.FastRealping, ["profile-0"]);
 
     rejectSpeedtest(new Error("boom"));
 
@@ -244,10 +249,9 @@ describe("ProfilesScreen", () => {
 
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
 
-    const realButton = screen.getByRole("button", { name: "Real" });
-    expect(realButton).toBeEnabled();
-
-    await userEvent.click(realButton);
+    // Real ping moved into the speedtest split-button menu.
+    await userEvent.click(screen.getByRole("menuitem", { name: "More speed tests" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Real" }));
 
     expect(ipcMocks.runSpeedtest).toHaveBeenCalledWith(SPEED_ACTIONS.Realping, []);
   });
@@ -261,7 +265,12 @@ describe("ProfilesScreen", () => {
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Fast" })).toBeDisabled());
-    expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
+
+    // Stop is reachable through the split-button menu and stays enabled while a
+    // run is in flight, even as the probe items are disabled.
+    await userEvent.click(screen.getByRole("menuitem", { name: "More speed tests" }));
+    const stopItem = await screen.findByRole("menuitem", { name: "Stop" });
+    expect(stopItem).not.toHaveAttribute("data-disabled");
   });
 
   it("confirms before deleting and cancels without calling the delete IPC", async () => {
@@ -353,13 +362,16 @@ describe("ProfilesScreen", () => {
 
     renderProfiles();
 
-    // Trigger the toolbar subscription update first: a successful import keeps
-    // the dialog open to show its result summary, and the open modal makes the
-    // toolbar aria-hidden, so "Update subs" must be exercised before importing.
-    fireEvent.click(await screen.findByRole("button", { name: "Update subs" }));
+    // Import and subscription actions now live in the toolbar overflow menu.
+    // Trigger the subscription update first: a successful import keeps the dialog
+    // open to show its result summary, and the open modal makes the toolbar
+    // aria-hidden, so "Update subs" must be exercised before importing.
+    await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Update subs" }));
     expect(ipcMocks.updateSubscriptions).toHaveBeenCalledWith(null, false, null);
 
-    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "More actions" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Import" }));
     fireEvent.change(screen.getByLabelText("Import payload"), {
       target: { value: "vless://uuid@example.test:443#US" },
     });

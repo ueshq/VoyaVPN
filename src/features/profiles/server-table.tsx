@@ -8,7 +8,7 @@ import {
   Activity,
   ArrowDown,
   ArrowUp,
-  Check,
+  ChevronDown,
   ChevronsDown,
   ChevronsUp,
   Clock,
@@ -34,6 +34,17 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import { BulkActionBar, Toolbar, ToolbarGroup, ToolbarOverflow } from "@/components/app-shell/toolbar";
+import {
+  dataTableHeader,
+  dataTableRowEven,
+  dataTableRowHover,
+  dataTableRowOdd,
+  dataTableRowSelected,
+  dataTableWell,
+} from "@/components/app-shell/data-table-surface";
+import { InlinePageError } from "@/components/app-shell/inline-page-error";
+import { PageHeader, PageHeaderHeading, PageSection } from "@/components/app-shell/page-section";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,7 +55,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -111,16 +121,16 @@ const serverColumns: ServerColumn[] = [
     cell: (item, rowNumber, t) => (
       <span className="flex items-center gap-2">
         {item.isActive ? (
-          <Badge
+          // The live profile reads as a 6px green dot — intentionally distinct
+          // from the blue row-selection state rendered by the surface tokens.
+          <span
             aria-label={t("panes.profiles.aria.activeProfile")}
-            className="size-5 rounded-full border-border bg-muted p-0 text-muted-foreground"
+            className="size-1.5 rounded-full bg-connected"
             data-testid="active-profile-marker"
-            variant="secondary"
-          >
-            <Check className="size-3" aria-hidden="true" />
-          </Badge>
+            role="img"
+          />
         ) : (
-          <span className="size-5 rounded-full border" aria-hidden="true" />
+          <span className="size-1.5" aria-hidden="true" />
         )}
         <span className="tabular-nums text-muted-foreground">{rowNumber}</span>
       </span>
@@ -411,15 +421,13 @@ export function ProfilesScreen() {
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col" aria-label={t("panes.profiles.title")}>
-      <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <Rows3 className="size-4 text-muted-foreground" aria-hidden="true" />
-          <h2 className="text-sm font-semibold">{t("panes.profiles.title")}</h2>
-          <Badge className="h-6 bg-background text-muted-foreground" variant="outline">
-            {t("panes.profiles.toolbar.rows", { rows: profiles.length.toLocaleString() })}
-          </Badge>
-        </div>
+    <PageSection aria-label={t("panes.profiles.title")}>
+      <PageHeader>
+        <PageHeaderHeading
+          count={t("panes.profiles.toolbar.rows", { rows: profiles.length.toLocaleString() })}
+          icon={Rows3}
+          title={t("panes.profiles.title")}
+        />
 
         <div className="relative ms-auto min-w-[14rem]">
           <Search
@@ -435,161 +443,128 @@ export function ProfilesScreen() {
             value={filterText}
           />
         </div>
+      </PageHeader>
 
-        <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
-          <MenubarMenu>
-            <MenubarTrigger asChild>
-              <Button size="sm" type="button" variant="outline">
-                <Columns3 className="size-4" aria-hidden="true" />
-                {t("panes.profiles.columns.toggle")}
-              </Button>
-            </MenubarTrigger>
-            <MenubarContent align="end">
-              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                {t("panes.profiles.columns.heading")}
-              </div>
-              <MenubarSeparator />
-              {hideableColumns.map((column) => (
-                <MenubarCheckboxItem
-                  checked={column.getIsVisible()}
-                  key={column.id}
-                  onCheckedChange={(value) => column.toggleVisibility(value === true)}
-                  onSelect={(event) => event.preventDefault()}
-                >
-                  {t(COLUMN_LABEL_KEY_BY_ID[column.id])}
-                </MenubarCheckboxItem>
-              ))}
-              <MenubarSeparator />
-              <MenubarItem onSelect={() => resetColumnVisibility()}>
-                <RotateCcw className="size-4" aria-hidden="true" />
-                {t("panes.profiles.columns.reset")}
-              </MenubarItem>
-            </MenubarContent>
-          </MenubarMenu>
-        </Menubar>
-
-        <Button onClick={() => setDialogState({ mode: "create" })} size="sm" type="button">
-          <FilePlus2 className="size-4" aria-hidden="true" />
-          {t("panes.profiles.toolbar.add")}
-        </Button>
-        <Button onClick={() => setImportOpen(true)} size="sm" type="button" variant="outline">
-          <Upload className="size-4" aria-hidden="true" />
-          {t("panes.profiles.toolbar.import")}
-        </Button>
-        <Button onClick={() => setSubscriptionsOpen(true)} size="sm" type="button" variant="outline">
-          <Rss className="size-4" aria-hidden="true" />
-          {t("panes.profiles.toolbar.subscriptions")}
-        </Button>
-        <Button onClick={() => void runOperation(() => updateSubscriptions(null, false, null))} size="sm" type="button" variant="outline">
-          <RefreshCw className="size-4" aria-hidden="true" />
-          {t("panes.profiles.toolbar.updateSubs")}
-        </Button>
-        <div className="flex items-center gap-1 border-s ps-2">
-          <SpeedButton
-            action={SPEED_ACTIONS.FastRealping}
-            disabled={profiles.length === 0 || speedtestRunning}
-            icon={Zap}
-            label={t("panes.profiles.speedtest.fast")}
-            onRun={handleSpeedtest}
-          />
-          <SpeedButton
-            action={SPEED_ACTIONS.Tcping}
-            disabled={profiles.length === 0 || speedtestRunning}
-            icon={Activity}
-            label={t("panes.profiles.speedtest.tcp")}
-            onRun={handleSpeedtest}
-          />
-          <SpeedButton
-            action={SPEED_ACTIONS.Realping}
-            disabled={profiles.length === 0 || speedtestRunning}
-            icon={Clock}
-            label={t("panes.profiles.speedtest.real")}
-            onRun={handleSpeedtest}
-          />
-          <SpeedButton
-            action={SPEED_ACTIONS.UdpTest}
-            disabled={profiles.length === 0 || speedtestRunning}
-            icon={Radio}
-            label={t("panes.profiles.speedtest.udp")}
-            onRun={handleSpeedtest}
-          />
-          <SpeedButton
-            action={SPEED_ACTIONS.Speedtest}
-            disabled={profiles.length === 0 || speedtestRunning}
-            icon={Gauge}
-            label={t("panes.profiles.speedtest.speed")}
-            onRun={handleSpeedtest}
-          />
-          <SpeedButton
-            action={SPEED_ACTIONS.Mixedtest}
-            disabled={profiles.length === 0 || speedtestRunning}
-            icon={Wifi}
-            label={t("panes.profiles.speedtest.mixed")}
-            onRun={handleSpeedtest}
-          />
-          <Button
-            disabled={!speedtestRunning}
-            onClick={() => void handleCancelSpeedtest()}
-            size="sm"
-            title={t("panes.profiles.speedtest.cancelTitle")}
-            type="button"
-            variant="outline"
-          >
-            <Square className="size-4" aria-hidden="true" />
-            {t("panes.profiles.speedtest.stop")}
+      <Toolbar className="shrink-0 border-b px-4 py-2">
+        <ToolbarGroup>
+          <Button onClick={() => setDialogState({ mode: "create" })} size="sm" type="button">
+            <FilePlus2 className="size-4" aria-hidden="true" />
+            {t("panes.profiles.toolbar.add")}
           </Button>
-        </div>
-        <Button
-          disabled={!primarySelection}
-          onClick={() => primarySelection && setDialogState({ mode: "edit", profile: primarySelection })}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          <Pencil className="size-4" aria-hidden="true" />
-          {t("panes.profiles.toolbar.edit")}
-        </Button>
-        <Button
-          disabled={!primarySelection}
-          onClick={() => primarySelection && void runOperation(() => setActiveProfile(primarySelection.profile.IndexId))}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          <Play className="size-4" aria-hidden="true" />
-          {t("panes.profiles.toolbar.activate")}
-        </Button>
-        <Button
-          disabled={selectedIdsArray.length === 0}
-          onClick={() => void runOperation(() => copyProfiles(selectedIdsArray))}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          <Copy className="size-4" aria-hidden="true" />
-          {t("panes.profiles.toolbar.copy")}
-        </Button>
-        <Button
-          disabled={selectedIdsArray.length === 0}
-          onClick={() => requestDelete(selectedIdsArray)}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          <Trash2 className="size-4" aria-hidden="true" />
-          {t("panes.profiles.toolbar.delete")}
-        </Button>
-        <Button onClick={() => void runOperation(() => dedupeProfiles(null, null))} size="sm" type="button" variant="outline">
-          <Filter className="size-4" aria-hidden="true" />
-          {t("panes.profiles.toolbar.dedupe")}
-        </Button>
-      </div>
+        </ToolbarGroup>
 
-      {operationError ? (
-        <Alert className="rounded-none border-x-0 border-t-0 px-4 py-2" variant="destructive">
-          <AlertDescription>{operationError}</AlertDescription>
-        </Alert>
+        <ToolbarGroup>
+          <SpeedtestSplitButton
+            disabled={profiles.length === 0}
+            onCancel={handleCancelSpeedtest}
+            onRun={handleSpeedtest}
+            running={speedtestRunning}
+          />
+          <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
+            <MenubarMenu>
+              <MenubarTrigger asChild>
+                <Button size="sm" type="button" variant="outline">
+                  <Columns3 className="size-4" aria-hidden="true" />
+                  {t("panes.profiles.columns.toggle")}
+                </Button>
+              </MenubarTrigger>
+              <MenubarContent align="end">
+                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                  {t("panes.profiles.columns.heading")}
+                </div>
+                <MenubarSeparator />
+                {hideableColumns.map((column) => (
+                  <MenubarCheckboxItem
+                    checked={column.getIsVisible()}
+                    key={column.id}
+                    onCheckedChange={(value) => column.toggleVisibility(value === true)}
+                    onSelect={(event) => event.preventDefault()}
+                  >
+                    {t(COLUMN_LABEL_KEY_BY_ID[column.id])}
+                  </MenubarCheckboxItem>
+                ))}
+                <MenubarSeparator />
+                <MenubarItem onSelect={() => resetColumnVisibility()}>
+                  <RotateCcw className="size-4" aria-hidden="true" />
+                  {t("panes.profiles.columns.reset")}
+                </MenubarItem>
+              </MenubarContent>
+            </MenubarMenu>
+          </Menubar>
+        </ToolbarGroup>
+
+        <ToolbarGroup>
+          <ToolbarOverflow label={t("panes.profiles.toolbar.more")}>
+            <MenubarItem onSelect={() => setImportOpen(true)}>
+              <Upload className="size-4" aria-hidden="true" />
+              {t("panes.profiles.toolbar.import")}
+            </MenubarItem>
+            <MenubarItem onSelect={() => setSubscriptionsOpen(true)}>
+              <Rss className="size-4" aria-hidden="true" />
+              {t("panes.profiles.toolbar.subscriptions")}
+            </MenubarItem>
+            <MenubarItem onSelect={() => void runOperation(() => updateSubscriptions(null, false, null))}>
+              <RefreshCw className="size-4" aria-hidden="true" />
+              {t("panes.profiles.toolbar.updateSubs")}
+            </MenubarItem>
+            <MenubarSeparator />
+            <MenubarItem onSelect={() => void runOperation(() => dedupeProfiles(null, null))}>
+              <Filter className="size-4" aria-hidden="true" />
+              {t("panes.profiles.toolbar.dedupe")}
+            </MenubarItem>
+          </ToolbarOverflow>
+        </ToolbarGroup>
+      </Toolbar>
+
+      {selected.length > 0 ? (
+        <BulkActionBar>
+          <span className="text-sm font-medium">
+            {t("panes.profiles.bulk.selected", { count: selected.length })}
+          </span>
+          <div className="ms-auto flex items-center gap-2">
+            <Button
+              onClick={() =>
+                primarySelection && void runOperation(() => setActiveProfile(primarySelection.profile.IndexId))
+              }
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Play className="size-4" aria-hidden="true" />
+              {t("panes.profiles.toolbar.activate")}
+            </Button>
+            <Button
+              onClick={() => primarySelection && setDialogState({ mode: "edit", profile: primarySelection })}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Pencil className="size-4" aria-hidden="true" />
+              {t("panes.profiles.toolbar.edit")}
+            </Button>
+            <Button
+              onClick={() => void runOperation(() => copyProfiles(selectedIdsArray))}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Copy className="size-4" aria-hidden="true" />
+              {t("panes.profiles.toolbar.copy")}
+            </Button>
+            <Button
+              onClick={() => requestDelete(selectedIdsArray)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+              {t("panes.profiles.toolbar.delete")}
+            </Button>
+          </div>
+        </BulkActionBar>
       ) : null}
+
+      {operationError ? <InlinePageError>{operationError}</InlinePageError> : null}
 
       <div className="min-h-0 flex-1 overflow-hidden p-4">
         <div
@@ -597,13 +572,13 @@ export function ProfilesScreen() {
           aria-colcount={visibleColumns.length + 1}
           aria-label={t("panes.profiles.title")}
           aria-rowcount={profiles.length}
-          className="flex h-full min-h-[18rem] flex-col overflow-hidden rounded-md border bg-card"
+          className={cn("flex h-full min-h-[18rem] flex-col", dataTableWell)}
           role="table"
         >
           <div className="overflow-x-auto border-b">
             <div
               aria-rowindex={1}
-              className="grid items-center bg-muted text-xs font-semibold uppercase text-muted-foreground"
+              className={cn("grid items-center", dataTableHeader)}
               role="row"
               style={{ gridTemplateColumns, minWidth: gridMinWidth }}
             >
@@ -696,12 +671,12 @@ export function ProfilesScreen() {
                         aria-selected={isSelected}
                         className={cn(
                           "absolute start-0 grid h-[38px] items-center border-b text-sm outline-none",
-                          item.isActive || isSelected
-                            ? "bg-muted/70"
-                            : virtualRow.index % 2 === 0
-                              ? "bg-card"
-                              : "bg-background",
-                          isSelected ? "ring-1 ring-inset ring-border" : null,
+                          isSelected
+                            ? dataTableRowSelected
+                            : cn(
+                                virtualRow.index % 2 === 0 ? dataTableRowEven : dataTableRowOdd,
+                                dataTableRowHover,
+                              ),
                         )}
                         data-testid="server-row"
                         draggable
@@ -816,11 +791,110 @@ export function ProfilesScreen() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </section>
+    </PageSection>
   );
 }
 
-function SpeedButton({
+// Speedtest split button: the default `Fast` ping runs straight from the primary
+// control, while the chevron opens a menu for the remaining probe modes plus the
+// running-only Stop. The dropdown reuses the Menubar primitive (no new
+// dependency) so its trigger and items expose `menuitem` roles, mirroring the
+// Columns menu.
+function SpeedtestSplitButton({
+  disabled,
+  onCancel,
+  onRun,
+  running,
+}: {
+  disabled: boolean;
+  onCancel: () => Promise<void>;
+  onRun: (action: SpeedActionType) => Promise<void>;
+  running: boolean;
+}) {
+  const { t } = useI18n();
+
+  return (
+    <div className="flex items-center">
+      <Button
+        className="rounded-e-none"
+        disabled={disabled || running}
+        onClick={() => void onRun(SPEED_ACTIONS.FastRealping)}
+        size="sm"
+        title={t("panes.profiles.speedtest.buttonTitle", { label: t("panes.profiles.speedtest.fast") })}
+        type="button"
+        variant="outline"
+      >
+        <Zap className="size-4" aria-hidden="true" />
+        {t("panes.profiles.speedtest.fast")}
+      </Button>
+      <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
+        <MenubarMenu>
+          <MenubarTrigger asChild>
+            <Button
+              aria-label={t("panes.profiles.speedtest.more")}
+              className="rounded-s-none border-s-0 px-2"
+              disabled={disabled}
+              size="sm"
+              title={t("panes.profiles.speedtest.more")}
+              type="button"
+              variant="outline"
+            >
+              <ChevronDown className="size-4" aria-hidden="true" />
+            </Button>
+          </MenubarTrigger>
+          <MenubarContent align="start">
+            <SpeedMenuItem
+              action={SPEED_ACTIONS.Tcping}
+              disabled={running}
+              icon={Activity}
+              label={t("panes.profiles.speedtest.tcp")}
+              onRun={onRun}
+            />
+            <SpeedMenuItem
+              action={SPEED_ACTIONS.Realping}
+              disabled={running}
+              icon={Clock}
+              label={t("panes.profiles.speedtest.real")}
+              onRun={onRun}
+            />
+            <SpeedMenuItem
+              action={SPEED_ACTIONS.UdpTest}
+              disabled={running}
+              icon={Radio}
+              label={t("panes.profiles.speedtest.udp")}
+              onRun={onRun}
+            />
+            <SpeedMenuItem
+              action={SPEED_ACTIONS.Speedtest}
+              disabled={running}
+              icon={Gauge}
+              label={t("panes.profiles.speedtest.speed")}
+              onRun={onRun}
+            />
+            <SpeedMenuItem
+              action={SPEED_ACTIONS.Mixedtest}
+              disabled={running}
+              icon={Wifi}
+              label={t("panes.profiles.speedtest.mixed")}
+              onRun={onRun}
+            />
+            <MenubarSeparator />
+            <MenubarItem
+              disabled={!running}
+              onSelect={() => void onCancel()}
+              title={t("panes.profiles.speedtest.cancelTitle")}
+            >
+              <Square className="size-4" aria-hidden="true" />
+              {t("panes.profiles.speedtest.stop")}
+            </MenubarItem>
+          </MenubarContent>
+        </MenubarMenu>
+      </Menubar>
+    </div>
+  );
+}
+
+function SpeedMenuItem({
   action,
   disabled,
   icon: Icon,
@@ -833,20 +907,11 @@ function SpeedButton({
   label: string;
   onRun: (action: SpeedActionType) => Promise<void>;
 }) {
-  const { t } = useI18n();
-
   return (
-    <Button
-      disabled={disabled}
-      onClick={() => void onRun(action)}
-      size="sm"
-      title={t("panes.profiles.speedtest.buttonTitle", { label })}
-      type="button"
-      variant="outline"
-    >
+    <MenubarItem disabled={disabled} onSelect={() => void onRun(action)}>
       <Icon className="size-4" aria-hidden="true" />
       {label}
-    </Button>
+    </MenubarItem>
   );
 }
 

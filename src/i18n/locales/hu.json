@@ -327,7 +327,8 @@
         "mixed": "Mixed",
         "stop": "Stop",
         "cancelTitle": "Cancel speedtest",
-        "buttonTitle": "{{label}} speedtest"
+        "buttonTitle": "{{label}} speedtest",
+        "more": "More speed tests"
       },
       "toolbar": {
         "add": "Add",
@@ -340,13 +341,17 @@
         "delete": "Delete",
         "dedupe": "Dedupe",
         "rows": "{{rows}} rows",
-        "filterPlaceholder": "Filter remarks or address"
+        "filterPlaceholder": "Filter remarks or address",
+        "more": "More actions"
       },
       "aria": {
         "filter": "Filter profiles",
         "selectAll": "Select all profiles",
         "selectRow": "Select {{name}}",
         "activeProfile": "Active profile"
+      },
+      "bulk": {
+        "selected": "{{count}} selected"
       }
     },
     "routing": {

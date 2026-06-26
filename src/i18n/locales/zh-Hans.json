@@ -327,7 +327,8 @@
         "mixed": "混合",
         "stop": "停止",
         "cancelTitle": "取消测速",
-        "buttonTitle": "{{label}} 测速"
+        "buttonTitle": "{{label}} 测速",
+        "more": "更多测速"
       },
       "toolbar": {
         "add": "新增",
@@ -340,13 +341,17 @@
         "delete": "删除",
         "dedupe": "去重",
         "rows": "{{rows}} 条",
-        "filterPlaceholder": "过滤备注或地址"
+        "filterPlaceholder": "过滤备注或地址",
+        "more": "更多操作"
       },
       "aria": {
         "filter": "过滤配置",
         "selectAll": "全选配置",
         "selectRow": "选择 {{name}}",
         "activeProfile": "当前配置"
+      },
+      "bulk": {
+        "selected": "已选 {{count}} 项"
       }
     },
     "routing": {
