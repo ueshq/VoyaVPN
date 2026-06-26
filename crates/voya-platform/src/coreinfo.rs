@@ -940,17 +940,17 @@ mod tests {
             xray.resolve_arguments(&paths, "config.json"),
             "run -c config.json"
         );
+        // Build path expectations from the same helpers production uses so the
+        // assertions stay portable across path separators (Windows `\`, Unix `/`).
+        let xray_core_bin = paths
+            .core_bin_dir(core_type_dir_name(CoreType::Xray))
+            .to_string_lossy()
+            .into_owned();
         assert_eq!(
             xray.resolve_environment(&paths, "config.json"),
             BTreeMap::from([
-                (
-                    XRAY_LOCAL_ASSET_ENV.to_string(),
-                    "/tmp/VoyaVPN/bin/xray".to_string()
-                ),
-                (
-                    XRAY_LOCAL_CERT_ENV.to_string(),
-                    "/tmp/VoyaVPN/bin/xray".to_string()
-                ),
+                (XRAY_LOCAL_ASSET_ENV.to_string(), xray_core_bin.clone()),
+                (XRAY_LOCAL_CERT_ENV.to_string(), xray_core_bin.clone()),
             ])
         );
 
@@ -963,7 +963,7 @@ mod tests {
             v2fly_v5.resolve_environment(&paths, "config.json"),
             BTreeMap::from([(
                 V2RAY_LOCAL_ASSET_ENV.to_string(),
-                "/tmp/VoyaVPN/bin".to_string()
+                paths.bin_dir().to_string_lossy().into_owned()
             )])
         );
 
@@ -977,13 +977,13 @@ mod tests {
         let mihomo = get_core_info(CoreType::mihomo).expect("mihomo core info");
         assert_eq!(
             mihomo.resolve_arguments(&paths, "config.json"),
-            "-f config.json -d \"/tmp/VoyaVPN/bin\""
+            format!("-f config.json -d {}", quote_path(paths.bin_dir()))
         );
 
         let brook = get_core_info(CoreType::brook).expect("brook core info");
         assert_eq!(
             brook.resolve_arguments(&paths, "config.json"),
-            " \"/tmp/VoyaVPN/binConfigs/config.json\""
+            format!(" {}", quote_path(paths.bin_config_file("config.json")))
         );
 
         let hysteria = get_core_info(CoreType::hysteria).expect("hysteria core info");

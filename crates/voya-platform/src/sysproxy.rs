@@ -826,6 +826,11 @@ fn refresh_windows_internet_settings() {
     const INTERNET_OPTION_REFRESH: u32 = 37;
     const INTERNET_OPTION_SETTINGS_CHANGED: u32 = 39;
 
+    // `InternetSetOptionW` lives in wininet.dll, which is not one of the default
+    // libraries the GNU/mingw linker pulls in (unlike kernel32). Without an
+    // explicit link directive the test/binary link step fails with an undefined
+    // reference. kernel32-only extern blocks elsewhere need no such attribute.
+    #[link(name = "wininet")]
     extern "system" {
         fn InternetSetOptionW(
             internet: *mut c_void,

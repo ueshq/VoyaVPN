@@ -589,6 +589,11 @@ mod autostart_tests {
     fn autostart_macos_plan_loads_launch_agent() {
         let request = request(TargetOs::Macos, true);
         let plan = plan_autostart(&request);
+        // Derive the plist path with the same helper production uses so the
+        // expected launchctl arguments stay portable across path separators.
+        let plist_arg = macos_launch_agent_path(&request.home_dir, &request.app_name)
+            .to_string_lossy()
+            .into_owned();
 
         assert_eq!(plan.actions.len(), 3);
         assert!(matches!(
@@ -597,11 +602,7 @@ mod autostart_tests {
                 executable,
                 arguments,
             } if executable == Path::new("launchctl")
-                && arguments == &string_args(&[
-                    "unload",
-                    "-w",
-                    "/home/alice/Library/LaunchAgents/VoyaVPN-LaunchAgent.plist"
-                ])
+                && arguments == &string_args(&["unload", "-w", plist_arg.as_str()])
         ));
         assert!(matches!(
             &plan.actions[1],
@@ -613,11 +614,7 @@ mod autostart_tests {
             &plan.actions[2],
             AutostartAction::RunCommand { executable, arguments }
             if executable == Path::new("launchctl")
-                && arguments == &string_args(&[
-                    "load",
-                    "-w",
-                    "/home/alice/Library/LaunchAgents/VoyaVPN-LaunchAgent.plist"
-                ])
+                && arguments == &string_args(&["load", "-w", plist_arg.as_str()])
         ));
     }
 
@@ -632,7 +629,11 @@ mod autostart_tests {
             executable: executable.clone(),
             home_dir: PathBuf::from("/Users/alice; touch owned"),
         };
-        let path = "/Users/alice; touch owned/Library/LaunchAgents/VoyaVPN-LaunchAgent.plist";
+        // Derive the plist path the same way production does so the expected
+        // launchctl arguments stay portable across path separators.
+        let path = macos_launch_agent_path(&request.home_dir, &request.app_name)
+            .to_string_lossy()
+            .into_owned();
         let plan = plan_autostart(&request);
         let executable_text = executable.to_string_lossy();
         let quoted_executable = shell_quoted_xml(&executable_text);
@@ -647,7 +648,7 @@ mod autostart_tests {
                 executable,
                 arguments,
             } if executable == Path::new("launchctl")
-                && arguments == &string_args(&["unload", "-w", path])
+                && arguments == &string_args(&["unload", "-w", path.as_str()])
         ));
         assert!(
             contents.contains(&format!("then {quoted_executable}; fi</string>")),
@@ -666,7 +667,7 @@ mod autostart_tests {
                 executable,
                 arguments,
             } if executable == Path::new("launchctl")
-                && arguments == &string_args(&["load", "-w", path])
+                && arguments == &string_args(&["load", "-w", path.as_str()])
         ));
     }
 

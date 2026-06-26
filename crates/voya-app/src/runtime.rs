@@ -342,13 +342,19 @@ mod tests {
 
         assert_eq!(launch.arguments, "run -c config.json");
         assert_eq!(launch.working_dir, paths.bin_config_dir());
+        // Build the expectation the same way production does so the assertion
+        // stays portable across path separators (Windows uses `\`, Unix `/`).
+        let expected_xray_core_bin = paths
+            .core_bin_dir(core_type_dir_name(CoreType::Xray))
+            .to_string_lossy()
+            .into_owned();
         assert_eq!(
             launch.environment.get(XRAY_LOCAL_ASSET_ENV),
-            Some(&"/tmp/VoyaVPN/bin/xray".to_string())
+            Some(&expected_xray_core_bin)
         );
         assert_eq!(
             launch.environment.get(XRAY_LOCAL_CERT_ENV),
-            Some(&"/tmp/VoyaVPN/bin/xray".to_string())
+            Some(&expected_xray_core_bin)
         );
 
         let mieru = core_launch_plan(
