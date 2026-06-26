@@ -115,8 +115,8 @@ export function HomeScreen() {
             className={cn(
               "flex size-20 items-center justify-center rounded-full border transition-colors",
               connected
-                ? "border-signal/40 bg-signal/10 text-signal shadow-[var(--glow-signal)]"
-                : "border-border bg-muted text-muted-foreground",
+                ? "border-connected/40 bg-connected/10 text-connected shadow-[var(--connected-glow)]"
+                : "border-border bg-surface-sunken text-muted-foreground",
             )}
           >
             <StatusIcon className={cn("size-9", inProgress && "animate-spin")} />
@@ -125,7 +125,7 @@ export function HomeScreen() {
             <p
               className={cn(
                 "font-display text-3xl font-semibold tracking-tight",
-                connected ? "text-signal" : "text-foreground",
+                connected ? "text-connected" : "text-foreground",
               )}
             >
               {headline}
@@ -191,7 +191,7 @@ function StatTile({
   value: string;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-card px-3 py-2.5 shadow-[var(--shadow-sm)]">
+    <div className="flex min-w-0 flex-col gap-1 rounded-xl bg-surface-raised px-3 py-2.5 shadow-raised">
       <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         <Icon className="size-3.5" aria-hidden="true" />
         <span className="min-w-0 truncate">{label}</span>
