@@ -126,9 +126,9 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
         </DialogHeader>
 
         <div className="grid min-h-0 gap-4 lg:grid-cols-[18rem_1fr]">
-          <Card className="min-h-0 gap-0 rounded-md bg-background p-0 shadow-none">
+          <Card className="min-h-0 gap-0 rounded-xl bg-surface-raised p-0 shadow-raised">
             <CardHeader className="flex h-10 flex-row items-center justify-between border-b px-3 py-0">
-              <CardTitle className="text-sm">Sources</CardTitle>
+              <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">Sources</CardTitle>
               <Button
                 aria-label="New subscription"
                 className="size-7"
@@ -181,9 +181,9 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
             </CardContent>
           </Card>
 
-          <Card className="min-h-0 gap-3 rounded-md bg-background p-3 shadow-none">
+          <Card className="min-h-0 gap-3 rounded-xl bg-surface-raised p-3 shadow-raised">
             <CardHeader className="p-0">
-              <CardTitle className="text-sm">Subscription details</CardTitle>
+              <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">Subscription details</CardTitle>
             </CardHeader>
             <CardContent className="grid content-start gap-3 p-0">
               <div className="grid gap-3 md:grid-cols-2">

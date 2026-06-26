@@ -46,7 +46,7 @@ import {
 } from "@/stores/preferences-store";
 import { type MissingCorePayload, useModalStore } from "@/stores/modal-store";
 import { useMountedRef } from "@/lib/use-mounted-ref";
-import { getErrorMessage } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 
 const themeOptions: Array<{ icon: typeof Monitor; labelKey: string; value: ThemeMode }> = [
   { icon: Monitor, labelKey: "menu.themeSystem", value: "system" },
@@ -58,6 +58,12 @@ const fontSizeOptions = Array.from(
   { length: FONT_SIZE_MAX - FONT_SIZE_MIN + 1 },
   (_, index) => FONT_SIZE_MIN + index,
 );
+
+// Selected option buttons (theme/font/language) read blue — an accent-blue-light
+// tint with a blue border/text, matching the sidebar's active-row treatment —
+// instead of the neutral secondary fill. Applied on the `aria-pressed` button.
+const selectedOptionClass =
+  "border border-primary bg-accent-blue-light text-primary hover:bg-accent-blue-light hover:text-primary";
 
 export function ModalHost() {
   const closeTopModal = useModalStore((state) => state.closeTopModal);
@@ -194,7 +200,10 @@ function SettingsDialog() {
                 <Button
                   key={option.value}
                   aria-pressed={themeMode === option.value}
-                  className="h-9 min-w-0 justify-start px-3"
+                  className={cn(
+                    "h-9 min-w-0 justify-start px-3",
+                    themeMode === option.value && selectedOptionClass,
+                  )}
                   onClick={() => setThemeMode(option.value)}
                   type="button"
                   variant={themeMode === option.value ? "secondary" : "outline"}
@@ -220,7 +229,10 @@ function SettingsDialog() {
                 <Button
                   key={option.value}
                   aria-pressed={font === option.value}
-                  className="h-9 min-w-0 justify-start px-3"
+                  className={cn(
+                    "h-9 min-w-0 justify-start px-3",
+                    font === option.value && selectedOptionClass,
+                  )}
                   onClick={() => setFont(option.value as Font)}
                   type="button"
                   variant={font === option.value ? "secondary" : "outline"}
@@ -267,7 +279,10 @@ function SettingsDialog() {
               <Button
                 key={locale.code}
                 aria-pressed={language === locale.code}
-                className="h-8 min-w-12 px-2 text-xs"
+                className={cn(
+                  "h-8 min-w-12 px-2 text-xs",
+                  language === locale.code && selectedOptionClass,
+                )}
                 onClick={() => void setLocale(locale.code)}
                 type="button"
                 variant={language === locale.code ? "secondary" : "outline"}

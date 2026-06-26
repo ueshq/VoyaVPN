@@ -424,9 +424,9 @@ function MuxPanel({
 
 function Panel({ children, title }: { children: React.ReactNode; title: string }) {
   return (
-    <Card className="gap-3 rounded-md bg-background p-3 shadow-none">
+    <Card className="gap-3 rounded-xl bg-surface-raised p-3 shadow-raised">
       <CardHeader className="p-0">
-        <CardTitle className="flex items-center gap-2 text-sm">
+        <CardTitle className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
           <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
           {title}
         </CardTitle>

@@ -106,7 +106,7 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
           <DialogDescription className="sr-only">Import share links, subscription URLs, or JSON payloads.</DialogDescription>
         </DialogHeader>
 
-        <Card className="gap-3 rounded-md bg-background p-3 shadow-none">
+        <Card className="gap-3 rounded-xl bg-surface-raised p-3 shadow-raised">
           <CardContent className="grid gap-3 p-0">
             <div className="grid gap-3 md:grid-cols-[minmax(14rem,1fr)_12rem_auto_auto] md:items-end">
               <div className="grid min-w-0 gap-1">

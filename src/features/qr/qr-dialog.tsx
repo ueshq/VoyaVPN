@@ -163,9 +163,9 @@ export function QrDialog() {
         </section>
 
         {importMessage ? (
-          <Alert role="status">
+          <Alert className="border-connected/30 bg-connected/10 text-connected" role="status">
             <CheckCircle2 aria-hidden="true" />
-            <AlertDescription>{importMessage}</AlertDescription>
+            <AlertDescription className="text-current">{importMessage}</AlertDescription>
           </Alert>
         ) : null}
         {error ? (

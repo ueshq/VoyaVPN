@@ -168,7 +168,7 @@ export function BackupDialog() {
       <div className="grid gap-5">
         {message ? (
           <Alert
-            className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+            className="border-connected/30 bg-connected/10 text-connected"
             role="status"
           >
             <CheckCircle2 aria-hidden="true" />
@@ -182,9 +182,9 @@ export function BackupDialog() {
           </Alert>
         ) : null}
 
-        <Card className="gap-3 rounded-md bg-background p-3 shadow-none">
+        <Card className="gap-3 rounded-xl bg-surface-raised p-3 shadow-raised">
           <CardHeader className="p-0">
-            <CardTitle className="flex items-center gap-2 text-sm">
+            <CardTitle className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
               <Database className="size-4 text-muted-foreground" aria-hidden="true" />
               {t("backup.local")}
             </CardTitle>
@@ -231,9 +231,9 @@ export function BackupDialog() {
           </CardContent>
         </Card>
 
-        <Card className="gap-3 rounded-md bg-background p-3 shadow-none">
+        <Card className="gap-3 rounded-xl bg-surface-raised p-3 shadow-raised">
           <CardHeader className="p-0">
-            <CardTitle className="flex items-center gap-2 text-sm">
+            <CardTitle className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
               <Upload className="size-4 text-muted-foreground" aria-hidden="true" />
               {t("backup.webdav")}
             </CardTitle>
