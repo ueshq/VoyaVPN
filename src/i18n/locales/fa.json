@@ -949,7 +949,8 @@
     "logs": "گزارش ها",
     "profiles": "نمایه ها",
     "routing": "مسیریابی",
-    "home": "خانه"
+    "home": "خانه",
+    "network": "شبکه"
   },
   "updates": {
     "acquisition": {

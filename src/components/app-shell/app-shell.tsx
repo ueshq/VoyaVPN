@@ -1,32 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  Database,
-  FilePlus2,
-  FolderInput,
-  Globe2,
-  HelpCircle,
-  Home,
-  Languages,
-  Monitor,
-  Moon,
-  Network,
-  Plug,
-  QrCode,
-  RefreshCw,
-  Route,
-  ScrollText,
-  Settings,
-  Shield,
-  Sun,
-  Type,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Globe2 } from "lucide-react";
 
+import { AppSidebar, SHELL_PANEL_ID } from "@/components/app-shell/app-sidebar";
 import { ModalHost } from "@/components/app-shell/modal-host";
+import { type RegionalPresetOption } from "@/components/app-shell/sidebar-footer";
 import { StatusBar } from "@/components/app-shell/status-bar";
 import { Toaster } from "@/components/app-shell/toaster";
-import { fontOptions, fonts } from "@/config/fonts";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -36,20 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Menubar,
-  MenubarContent,
-  MenubarItem,
-  MenubarMenu,
-  MenubarRadioGroup,
-  MenubarRadioItem,
-  MenubarSeparator,
-  MenubarSub,
-  MenubarSubContent,
-  MenubarSubTrigger,
-  MenubarTrigger,
-} from "@/components/ui/menubar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { fonts } from "@/config/fonts";
 import { applyDocumentLocale } from "@/i18n";
 import { useI18n } from "@/i18n/use-i18n";
 import { HomeScreen } from "@/features/home";
@@ -66,7 +33,7 @@ import {
   saveAppConfig,
   useRuntimeEventStore,
 } from "@/ipc";
-import type { AppConfig_Deserialize, ClashMonitorStatus, PresetType } from "@/ipc/bindings";
+import type { AppConfig_Deserialize, ClashMonitorStatus } from "@/ipc/bindings";
 import { useMountedRef } from "@/lib/use-mounted-ref";
 import { getErrorMessage } from "@/lib/utils";
 import {
@@ -81,117 +48,42 @@ import {
   usePreferencesStore,
 } from "@/stores/preferences-store";
 import { type ShellTab, useShellStore } from "@/stores/shell-store";
-import { type ModalKind, useModalStore } from "@/stores/modal-store";
 import { useToastStore } from "@/stores/toast-store";
 
-type ShellTabConfig = {
-  emptyKey: string;
-  icon: LucideIcon;
-  primaryActionKey?: string;
-  secondaryActionKey?: string;
-  titleKey: string;
-  value: ShellTab;
-};
-
-const shellTabs: ShellTabConfig[] = [
-  {
-    emptyKey: "home.aria",
-    icon: Home,
-    titleKey: "tabs.home",
-    value: "home",
-  },
-  {
-    emptyKey: "panes.profiles.empty",
-    icon: Shield,
-    primaryActionKey: "actions.addProfile",
-    secondaryActionKey: "actions.import",
-    titleKey: "tabs.profiles",
-    value: "profiles",
-  },
-  {
-    emptyKey: "panes.routing.empty",
-    icon: Route,
-    primaryActionKey: "actions.refresh",
-    titleKey: "tabs.routing",
-    value: "routing",
-  },
-  {
-    emptyKey: "panes.dns.empty",
-    icon: Database,
-    primaryActionKey: "actions.refresh",
-    titleKey: "tabs.dns",
-    value: "dns",
-  },
-  {
-    emptyKey: "panes.clashProxies.empty",
-    icon: Network,
-    primaryActionKey: "actions.refresh",
-    titleKey: "tabs.clashProxies",
-    value: "clash-proxies",
-  },
-  {
-    emptyKey: "panes.clashConnections.empty",
-    icon: Plug,
-    primaryActionKey: "actions.refresh",
-    secondaryActionKey: "actions.clear",
-    titleKey: "tabs.clashConnections",
-    value: "clash-connections",
-  },
-  {
-    emptyKey: "panes.logs.empty",
-    icon: ScrollText,
-    primaryActionKey: "actions.pause",
-    secondaryActionKey: "actions.clear",
-    titleKey: "tabs.logs",
-    value: "logs",
-  },
-];
-
-const themeMenuOptions: Array<{ icon: LucideIcon; labelKey: string; value: ThemeMode }> = [
-  { icon: Monitor, labelKey: "menu.themeSystem", value: "system" },
-  { icon: Sun, labelKey: "menu.themeLight", value: "light" },
-  { icon: Moon, labelKey: "menu.themeDark", value: "dark" },
-];
-
-type RegionalPresetOption = {
-  descriptionKey: string;
-  labelKey: string;
-  value: PresetType;
-};
-
-const regionalPresetOptions: RegionalPresetOption[] = [
-  {
-    descriptionKey: "modal.regionalPresetDefaultDescription",
-    labelKey: "menu.regionalPresetDefault",
-    value: 0,
-  },
-  {
-    descriptionKey: "modal.regionalPresetRussiaDescription",
-    labelKey: "menu.regionalPresetRussia",
-    value: 1,
-  },
-  {
-    descriptionKey: "modal.regionalPresetIranDescription",
-    labelKey: "menu.regionalPresetIran",
-    value: 2,
-  },
-];
+// Render only the active screen. Replaces the Radix `Tabs`/`TabsContent` fan-out
+// (which already unmounted inactive panels) so the grid shell can drop the tab
+// primitive while keeping the exact "one mounted screen at a time" behaviour the
+// clash-monitor lifecycle and query work rely on.
+function renderActiveScreen(tab: ShellTab) {
+  switch (tab) {
+    case "home":
+      return <HomeScreen />;
+    case "profiles":
+      return <ProfilesScreen />;
+    case "routing":
+      return <RoutingScreen />;
+    case "dns":
+      return <DnsScreen />;
+    case "clash-proxies":
+      return <ClashProxiesScreen />;
+    case "clash-connections":
+      return <ClashConnectionsScreen />;
+    case "logs":
+      return <LogsScreen />;
+    default:
+      return null;
+  }
+}
 
 export function AppShell() {
   const queryClient = useQueryClient();
-  const { direction, language, localeOptions, setLocale, t } = useI18n();
+  const { direction, language, t } = useI18n();
+  const activeTab = useShellStore((state) => state.activeTab);
   const font = usePreferencesStore((state) => state.font);
   const fontSize = usePreferencesStore((state) => state.fontSize);
-  const activeTab = useShellStore((state) => state.activeTab);
-  const openModal = useModalStore((state) => state.openModal);
   const pushToast = useToastStore((state) => state.pushToast);
-  const setActiveTab = useShellStore((state) => state.setActiveTab);
-  const setFont = usePreferencesStore((state) => state.setFont);
-  const setThemeMode = usePreferencesStore((state) => state.setThemeMode);
   const themeMode = usePreferencesStore((state) => state.themeMode);
-  const [activeMenu, setActiveMenu] = useState("");
   const [pendingPreset, setPendingPreset] = useState<RegionalPresetOption | null>(null);
-  const fontLabel = t("menu.font");
 
   usePersistedPreferences(language);
   useThemeEffects(themeMode, font, fontSize);
@@ -215,248 +107,30 @@ export function AppShell() {
     });
   }
 
-  function openShellModal(kind: ModalKind) {
-    setActiveMenu("");
-    openModal(kind);
-  }
-
-  function selectMenuTab(tab: ShellTab) {
-    setActiveMenu("");
-    setActiveTab(tab);
-  }
-
-  function selectRegionalPreset(option: RegionalPresetOption) {
-    setActiveMenu("");
-    setPendingPreset(option);
-  }
-
   return (
-    <main className="min-h-screen bg-background text-foreground" dir={direction}>
-      <div className="flex h-screen min-h-[34rem] flex-col overflow-hidden">
-        <header className="shrink-0 border-b border-border bg-card text-card-foreground">
-          <div className="flex h-14 items-center gap-2 px-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground">
-                <Shield className="size-4" aria-hidden="true" />
-              </div>
-              <h1 className="truncate text-sm font-semibold leading-none">{t("app.name")}</h1>
-            </div>
+    <main className="bg-background text-foreground" dir={direction}>
+      <div className="grid h-screen min-h-[34rem] grid-cols-[auto_1fr] grid-rows-[auto_1fr_auto] overflow-hidden">
+        {/* Titlebar row placeholder: structural row reserved for the Windows
+            custom titlebar + window controls that arrive in the window-chrome
+            phase. The native frame is kept for now, so it spans both columns and
+            renders empty (collapsing to zero height). */}
+        <div className="col-span-2" data-slot="titlebar-placeholder" />
 
-            <Menubar
-              className="ms-2 hidden h-8 shrink-0 p-0.5 lg:flex"
-              onValueChange={setActiveMenu}
-              value={activeMenu}
-            >
-              <MenubarMenu>
-                <MenubarTrigger>{t("menu.file")}</MenubarTrigger>
-                <MenubarContent>
-                  <MenubarItem disabled>
-                    <FilePlus2 className="size-4" aria-hidden="true" />
-                    {t("menu.newProfile")}
-                  </MenubarItem>
-                  <MenubarItem disabled>
-                    <FolderInput className="size-4" aria-hidden="true" />
-                    {t("menu.import")}
-                  </MenubarItem>
-                  <MenubarSeparator />
-                  <MenubarItem disabled>{t("menu.quit")}</MenubarItem>
-                </MenubarContent>
-              </MenubarMenu>
+        <AppSidebar onSelectPreset={setPendingPreset} />
 
-              <MenubarMenu>
-                <MenubarTrigger>{t("menu.view")}</MenubarTrigger>
-                <MenubarContent>
-                  <MenubarSub>
-                    <MenubarSubTrigger>
-                      <Languages className="size-4" aria-hidden="true" />
-                      {t("menu.language")}
-                    </MenubarSubTrigger>
-                    <MenubarSubContent>
-                      <MenubarRadioGroup
-                        onValueChange={(value) => void setLocale(value as typeof language)}
-                        value={language}
-                      >
-                        {localeOptions.map((locale) => (
-                          <MenubarRadioItem key={locale.code} value={locale.code}>
-                            {locale.label}
-                          </MenubarRadioItem>
-                        ))}
-                      </MenubarRadioGroup>
-                    </MenubarSubContent>
-                  </MenubarSub>
-                  <MenubarSub>
-                    <MenubarSubTrigger>
-                      <Monitor className="size-4" aria-hidden="true" />
-                      {t("menu.theme")}
-                    </MenubarSubTrigger>
-                    <MenubarSubContent>
-                      <MenubarRadioGroup
-                        onValueChange={(value) => setThemeMode(value as ThemeMode)}
-                        value={themeMode}
-                      >
-                        {themeMenuOptions.map((option) => {
-                          const Icon = option.icon;
-
-                          return (
-                            <MenubarRadioItem key={option.value} value={option.value}>
-                              <Icon className="size-4" aria-hidden="true" />
-                              {t(option.labelKey)}
-                            </MenubarRadioItem>
-                          );
-                        })}
-                      </MenubarRadioGroup>
-                    </MenubarSubContent>
-                  </MenubarSub>
-                  <MenubarSub>
-                    <MenubarSubTrigger>
-                      <Type className="size-4" aria-hidden="true" />
-                      {fontLabel}
-                    </MenubarSubTrigger>
-                    <MenubarSubContent>
-                      <MenubarRadioGroup onValueChange={(value) => setFont(value as Font)} value={font}>
-                        {fontOptions.map((option) => (
-                          <MenubarRadioItem key={option.value} value={option.value}>
-                            <span className={fontToClassName(option.value)}>{option.label}</span>
-                          </MenubarRadioItem>
-                        ))}
-                      </MenubarRadioGroup>
-                    </MenubarSubContent>
-                  </MenubarSub>
-                </MenubarContent>
-              </MenubarMenu>
-
-              <MenubarMenu>
-                <MenubarTrigger>{t("menu.tools")}</MenubarTrigger>
-                <MenubarContent>
-                  <MenubarItem onSelect={() => selectMenuTab("routing")}>
-                    <Route className="size-4" aria-hidden="true" />
-                    {t("menu.routing")}
-                  </MenubarItem>
-                  <MenubarItem onSelect={() => selectMenuTab("dns")}>
-                    <Database className="size-4" aria-hidden="true" />
-                    {t("menu.dns")}
-                  </MenubarItem>
-                  <MenubarSub>
-                    <MenubarSubTrigger>
-                      <Globe2 className="size-4" aria-hidden="true" />
-                      {t("menu.regionalPresets")}
-                    </MenubarSubTrigger>
-                    <MenubarSubContent>
-                      {regionalPresetOptions.map((option) => (
-                        <MenubarItem key={option.value} onSelect={() => selectRegionalPreset(option)}>
-                          {t(option.labelKey)}
-                        </MenubarItem>
-                      ))}
-                    </MenubarSubContent>
-                  </MenubarSub>
-                  <MenubarItem disabled>{t("menu.systemProxy")}</MenubarItem>
-                  <MenubarItem disabled>{t("menu.tun")}</MenubarItem>
-                  <MenubarItem disabled>{t("menu.clash")}</MenubarItem>
-                  <MenubarItem onSelect={() => openShellModal("backup")}>
-                    <Database className="size-4" aria-hidden="true" />
-                    {t("menu.backup")}
-                  </MenubarItem>
-                  <MenubarItem onSelect={() => openShellModal("updates")}>
-                    <RefreshCw className="size-4" aria-hidden="true" />
-                    {t("menu.checkUpdates")}
-                  </MenubarItem>
-                  <MenubarItem onSelect={() => openShellModal("qr")}>
-                    <QrCode className="size-4" aria-hidden="true" />
-                    {t("menu.qr")}
-                  </MenubarItem>
-                </MenubarContent>
-              </MenubarMenu>
-
-              <MenubarMenu>
-                <MenubarTrigger>{t("menu.help")}</MenubarTrigger>
-                <MenubarContent>
-                  <MenubarItem onSelect={() => openShellModal("about")}>
-                    <HelpCircle className="size-4" aria-hidden="true" />
-                    {t("menu.about")}
-                  </MenubarItem>
-                </MenubarContent>
-              </MenubarMenu>
-            </Menubar>
-
-            <div className="ms-auto flex min-w-0 items-center gap-2">
-              <div
-                className="hidden shrink-0 rounded-md border border-border bg-background p-0.5 md:flex"
-                aria-label={t("menu.language")}
-              >
-                {localeOptions.map((locale) => (
-                  <Button
-                    key={locale.code}
-                    aria-pressed={language === locale.code}
-                    className="h-7 min-w-7 px-2 text-xs"
-                    onClick={() => void setLocale(locale.code)}
-                    title={locale.code}
-                    type="button"
-                    variant={language === locale.code ? "secondary" : "ghost"}
-                  >
-                    {locale.label}
-                  </Button>
-                ))}
-              </div>
-              <Button
-                aria-label={t("actions.settings")}
-                className="h-8 shrink-0 gap-2 px-3"
-                onClick={() => openModal("settings")}
-                size="sm"
-                variant="outline"
-              >
-                <Settings className="size-4" aria-hidden="true" />
-                <span className="hidden max-w-28 truncate sm:inline">{t("actions.settings")}</span>
-              </Button>
-            </div>
-          </div>
-        </header>
-
-        <Tabs
-          className="flex min-h-0 flex-1 flex-col gap-0"
-          onValueChange={(value) => setActiveTab(value as ShellTab)}
-          value={activeTab}
+        <div
+          aria-labelledby={`shell-tab-${activeTab}`}
+          className="min-h-0 min-w-0 overflow-hidden bg-background outline-none"
+          id={SHELL_PANEL_ID}
+          role="tabpanel"
+          tabIndex={0}
         >
-          <div className="shrink-0 overflow-x-auto border-b border-border bg-card px-4 py-1.5">
-            <TabsList aria-label={t("tabs.aria")} className="min-w-max">
-              {shellTabs.map((tab) => {
-                const Icon = tab.icon;
+          {renderActiveScreen(activeTab)}
+        </div>
 
-                return (
-                  <TabsTrigger key={tab.value} value={tab.value}>
-                    <Icon className="size-4" aria-hidden="true" />
-                    <span>{t(tab.titleKey)}</span>
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
-          </div>
-
-          <div className="min-h-0 flex-1 bg-background">
-            {shellTabs.map((tab) => (
-              <TabsContent key={tab.value} className="m-0 h-full" value={tab.value}>
-                {tab.value === "home" ? (
-                  <HomeScreen />
-                ) : tab.value === "profiles" ? (
-                  <ProfilesScreen />
-                ) : tab.value === "routing" ? (
-                  <RoutingScreen />
-                ) : tab.value === "dns" ? (
-                  <DnsScreen />
-                ) : tab.value === "clash-proxies" ? (
-                  <ClashProxiesScreen />
-                ) : tab.value === "clash-connections" ? (
-                  <ClashConnectionsScreen />
-                ) : tab.value === "logs" ? (
-                  <LogsScreen />
-                ) : (
-                  <ShellPane tab={tab} />
-                )}
-              </TabsContent>
-            ))}
-          </div>
-        </Tabs>
-
-        <StatusBar />
+        <div className="col-span-2 min-w-0">
+          <StatusBar />
+        </div>
       </div>
 
       <ModalHost />
@@ -547,40 +221,6 @@ function RegionalPresetConfirmDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function ShellPane({ tab }: { tab: ShellTabConfig }) {
-  const { t } = useI18n();
-  const Icon = tab.icon;
-
-  return (
-    <section className="flex h-full min-h-0 flex-col">
-      <div className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-card px-4">
-        <h2 className="text-sm font-semibold">{t(tab.titleKey)}</h2>
-        <div className="ms-auto flex items-center gap-2">
-          {tab.secondaryActionKey ? (
-            <Button disabled size="sm" type="button" variant="outline">
-              {t(tab.secondaryActionKey)}
-            </Button>
-          ) : null}
-          {tab.primaryActionKey ? (
-            <Button disabled size="sm" type="button" variant="secondary">
-              {t(tab.primaryActionKey)}
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="grid min-h-0 flex-1 place-items-center p-6">
-        <div className="grid justify-items-center gap-3 text-center">
-          <div className="flex size-10 items-center justify-center rounded-md border border-border bg-card">
-            <Icon className="size-5 text-muted-foreground" aria-hidden="true" />
-          </div>
-          <p className="text-sm font-medium">{t(tab.emptyKey)}</p>
-        </div>
-      </div>
-    </section>
   );
 }
 

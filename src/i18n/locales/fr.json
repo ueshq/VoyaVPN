@@ -949,7 +949,8 @@
     "logs": "Logs",
     "profiles": "Profiles",
     "routing": "Routing",
-    "home": "Accueil"
+    "home": "Accueil",
+    "network": "Réseau"
   },
   "updates": {
     "acquisition": {

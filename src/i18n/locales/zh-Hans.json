@@ -949,7 +949,8 @@
     "logs": "日志",
     "profiles": "配置",
     "routing": "路由",
-    "home": "主页"
+    "home": "主页",
+    "network": "网络"
   },
   "updates": {
     "acquisition": {

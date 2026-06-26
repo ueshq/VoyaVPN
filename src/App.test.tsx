@@ -499,9 +499,18 @@ describe("App", () => {
 
     renderApp();
 
+    // Language selection now lives in the Settings modal rather than a header
+    // toggle, so reach the RTL locale through the sidebar footer's Settings entry.
+    await user.click(screen.getByRole("button", { name: "Settings" }));
     await user.click(screen.getByRole("button", { name: "FA" }));
 
     await waitFor(() => expect(document.documentElement).toHaveAttribute("dir", "rtl"));
+
+    // The modal traps focus and hides the rest of the tree, so close it before
+    // asserting the now-Farsi sidebar nav.
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
     expect(screen.getByRole("tab", { name: /نمایه/ })).toBeInTheDocument();
   });
 
@@ -888,7 +897,7 @@ describe("App", () => {
 
 async function activateTab(name: RegExp) {
   await act(async () => {
-    fireEvent.mouseDown(screen.getByRole("tab", { name }), { button: 0, ctrlKey: false });
+    fireEvent.click(screen.getByRole("tab", { name }));
   });
 }
 

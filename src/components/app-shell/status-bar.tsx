@@ -155,7 +155,7 @@ export function StatusBar() {
   return (
     <footer
       aria-label={t("status.aria")}
-      className="flex h-11 min-w-0 shrink-0 items-center gap-3 overflow-hidden border-t border-border bg-card px-4 text-xs text-muted-foreground"
+      className="flex h-11 min-w-0 shrink-0 items-center gap-3 overflow-hidden border-t border-border bg-sidebar px-4 text-xs text-muted-foreground"
       data-testid="status-bar"
     >
       <div className="flex min-w-0 shrink-0 items-center gap-2 font-medium text-foreground">

@@ -949,7 +949,8 @@
     "logs": "Logs",
     "profiles": "Profiles",
     "routing": "Routing",
-    "home": "Kezdőlap"
+    "home": "Kezdőlap",
+    "network": "Hálózat"
   },
   "updates": {
     "acquisition": {
