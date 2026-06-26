@@ -16,6 +16,13 @@ import {
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import {
+  dataTableHeader,
+  dataTableRowEven,
+  dataTableRowHover,
+  dataTableRowOdd,
+  dataTableRowSelected,
+} from "@/components/app-shell/data-table-surface";
 import { PageHeader, PageHeaderHeading, PageSection } from "@/components/app-shell/page-section";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +37,7 @@ import {
   DialogTitle,
   ScrollableDialogContent,
 } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -322,39 +330,39 @@ export function RoutingScreen() {
           </div>
           <ScrollArea className="h-[18rem] lg:h-full">
             {routings.length > 0 ? (
-              routings.map((routing) => (
-                <button
-                  className={cn(
-                    "flex min-h-14 w-full items-center gap-3 border-b px-4 py-2 text-start hover:bg-accent",
-                    selectedRouting?.Id === routing.Id ? "bg-accent text-accent-foreground" : "",
-                  )}
-                  key={routing.Id}
-                  onClick={() => {
-                    setSelectedRoutingId(routing.Id);
-                    setSelectedRuleId(null);
-                  }}
-                  type="button"
-                >
-                  <span className="grid size-6 shrink-0 place-items-center rounded-md border bg-background">
-                    {routing.IsActive ? <CheckCircle2 className="size-4 text-primary" aria-hidden="true" /> : null}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{routing.Remarks || "Untitled routing"}</span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {routing.RuleNum} rules · {routing.DomainStrategy || "AsIs"}
+              <div className="p-2">
+                {routings.map((routing) => (
+                  <button
+                    className={cn(
+                      "mb-1 flex min-h-14 w-full items-center gap-3 rounded-lg px-3 py-2 text-start outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                      selectedRouting?.Id === routing.Id ? dataTableRowSelected : "hover:bg-surface-hovered",
+                    )}
+                    key={routing.Id}
+                    onClick={() => {
+                      setSelectedRoutingId(routing.Id);
+                      setSelectedRuleId(null);
+                    }}
+                    type="button"
+                  >
+                    <span className="grid size-6 shrink-0 place-items-center rounded-md border bg-surface-raised">
+                      {routing.IsActive ? <CheckCircle2 className="size-4 text-connected" aria-hidden="true" /> : null}
                     </span>
-                  </span>
-                  {routing.IsActive ? (
-                    <Badge className="shrink-0" variant="secondary">
-                      Active
-                    </Badge>
-                  ) : null}
-                </button>
-              ))
-            ) : (
-              <div className="grid h-full place-items-center px-4 py-8 text-center text-sm text-muted-foreground">
-                No routing profiles
+                    <span className="min-w-0 flex-1">
+                      <span className="line-clamp-1 text-sm font-medium">{routing.Remarks || "Untitled routing"}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {routing.RuleNum} rules · {routing.DomainStrategy || "AsIs"}
+                      </span>
+                    </span>
+                    {routing.IsActive ? (
+                      <Badge className="shrink-0 border-connected/30 bg-connected/10 text-connected" variant="outline">
+                        Active
+                      </Badge>
+                    ) : null}
+                  </button>
+                ))}
               </div>
+            ) : (
+              <EmptyState className="py-10" icon={Route} title="No routing profiles" />
             )}
           </ScrollArea>
         </aside>
@@ -433,43 +441,45 @@ export function RoutingScreen() {
             </div>
           </div>
 
-          <ScrollArea className="min-h-0 flex-1">
-            <Table className="min-w-[58rem]">
-              <TableHeader className="sticky top-0 z-10 bg-background text-xs">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-12 px-3 text-muted-foreground" scope="col">
-                    #
-                  </TableHead>
-                  <TableHead className="px-3 text-muted-foreground" scope="col">
-                    Remarks
-                  </TableHead>
-                  <TableHead className="px-3 text-muted-foreground" scope="col">
-                    Outbound
-                  </TableHead>
-                  <TableHead className="px-3 text-muted-foreground" scope="col">
-                    Type
-                  </TableHead>
-                  <TableHead className="px-3 text-muted-foreground" scope="col">
-                    Domain
-                  </TableHead>
-                  <TableHead className="px-3 text-muted-foreground" scope="col">
-                    IP
-                  </TableHead>
-                  <TableHead className="px-3 text-muted-foreground" scope="col">
-                    Port
-                  </TableHead>
-                  <TableHead className="px-3 text-muted-foreground" scope="col">
-                    Network
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(selectedRouting?.RuleSet ?? []).length > 0 ? (
-                  (selectedRouting?.RuleSet ?? []).map((rule, index) => (
+          <ScrollArea className="min-h-0 flex-1 bg-surface-sunken">
+            {(selectedRouting?.RuleSet ?? []).length > 0 ? (
+              <Table className="min-w-[58rem]">
+                <TableHeader className={cn("sticky top-0 z-10", dataTableHeader)}>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="w-12 px-3 text-muted-foreground" scope="col">
+                      #
+                    </TableHead>
+                    <TableHead className="px-3 text-muted-foreground" scope="col">
+                      Remarks
+                    </TableHead>
+                    <TableHead className="px-3 text-muted-foreground" scope="col">
+                      Outbound
+                    </TableHead>
+                    <TableHead className="px-3 text-muted-foreground" scope="col">
+                      Type
+                    </TableHead>
+                    <TableHead className="px-3 text-muted-foreground" scope="col">
+                      Domain
+                    </TableHead>
+                    <TableHead className="px-3 text-muted-foreground" scope="col">
+                      IP
+                    </TableHead>
+                    <TableHead className="px-3 text-muted-foreground" scope="col">
+                      Port
+                    </TableHead>
+                    <TableHead className="px-3 text-muted-foreground" scope="col">
+                      Network
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(selectedRouting?.RuleSet ?? []).map((rule, index) => (
                     <TableRow
                       className={cn(
-                        "cursor-default hover:bg-accent/70",
-                        selectedRule?.Id === rule.Id ? "bg-accent" : "",
+                        "cursor-default",
+                        selectedRule?.Id === rule.Id
+                          ? dataTableRowSelected
+                          : cn(index % 2 === 0 ? dataTableRowEven : dataTableRowOdd, dataTableRowHover),
                         !rule.Enabled ? "opacity-55" : "",
                       )}
                       key={rule.Id}
@@ -486,16 +496,12 @@ export function RoutingScreen() {
                       <TableCell className="px-3 py-2">{rule.Port ?? ""}</TableCell>
                       <TableCell className="px-3 py-2">{rule.Network ?? ""}</TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell className="h-28 text-center text-muted-foreground" colSpan={8}>
-                      No routing rules
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <EmptyState className="h-full content-center" icon={Route} title="No routing rules" />
+            )}
           </ScrollArea>
         </div>
       </div>

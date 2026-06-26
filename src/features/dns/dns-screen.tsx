@@ -213,7 +213,7 @@ export function DnsScreen() {
       ) : null}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[22rem_1fr]">
-        <aside className="min-h-0 border-b lg:border-b-0 lg:border-e">
+        <aside className="min-h-0 border-b bg-surface-sunken lg:border-b-0 lg:border-e">
           <ScrollArea className="h-[32rem] lg:h-full">
             <div className="p-4">
               {form ? (
@@ -400,9 +400,9 @@ function SimpleDnsForm({
   const simple = settings.simpleDnsItem;
 
   return (
-    <Card className="gap-3 rounded-md bg-background p-3 shadow-none">
+    <Card className="gap-3 rounded-xl bg-surface-raised p-3 shadow-raised">
       <CardHeader className="p-0">
-        <CardTitle className="flex items-center gap-2 text-sm">
+        <CardTitle className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
           <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
           Simple DNS
         </CardTitle>
@@ -522,7 +522,7 @@ function AdvancedDnsEditor({
         />
       </div>
 
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea className="min-h-0 flex-1 bg-surface-sunken">
         <div className="grid gap-4 p-4 xl:grid-cols-2">
           <JsonEditorField
             error={errors[`${fieldPrefix}.normalDNS`]}
@@ -575,12 +575,12 @@ function JsonEditorField({
   value: string;
 }) {
   return (
-    <Card className="min-h-[22rem] gap-3 rounded-md bg-background p-3 shadow-none">
+    <Card className="min-h-[22rem] gap-3 rounded-xl bg-surface-raised p-3 shadow-raised">
       <CardHeader className="p-0">
-        <CardTitle className="flex items-center gap-2 text-sm">
+        <CardTitle className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
           <Braces className="size-4 text-muted-foreground" aria-hidden="true" />
           {label}
-          <Button className="ms-auto h-7 px-2" onClick={onReset} type="button" variant="outline">
+          <Button className="ms-auto h-7 px-2 normal-case" onClick={onReset} type="button" variant="outline">
             <RotateCcw className="size-3.5" aria-hidden="true" />
             Default
           </Button>
@@ -590,7 +590,7 @@ function JsonEditorField({
         <div
           aria-invalid={error ? true : undefined}
           className={cn(
-            "overflow-hidden rounded-md border border-input bg-background shadow-xs transition-[color,box-shadow] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 dark:bg-input/30",
+            "overflow-hidden rounded-md border border-input bg-background shadow-xs transition-[color,box-shadow] focus-within:border-accent-blue focus-within:ring-[3px] focus-within:ring-accent-blue/40 dark:bg-input/30",
             error ? "border-destructive ring-destructive/20 dark:ring-destructive/40" : "",
           )}
         >
