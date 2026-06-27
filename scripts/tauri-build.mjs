@@ -3,11 +3,11 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeOptionalCoreSeedOverlay } from "./tauri-core-seeds.mjs";
 
 const rawArgs = process.argv.slice(2);
 const writeStableConfigOnly = rawArgs.includes("--write-stable-updater-config");
 const tauriArgs = rawArgs.filter((arg) => arg !== "--write-stable-updater-config");
-const args = ["build", ...tauriArgs];
 const env = { ...process.env };
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const localTauriBin = resolve(
@@ -24,6 +24,17 @@ const stableOverlayMetadataPath = resolve(
   "release-config",
   "tauri.updater.stable.generated.metadata.json",
 );
+const coreSeedOverlayPath = writeOptionalCoreSeedOverlay(
+  repoRoot,
+  resolve(repoRoot, "target", "release-config", "tauri.core-seeds.generated.json"),
+);
+const args = ["build"];
+
+if (coreSeedOverlayPath) {
+  args.push("--config", coreSeedOverlayPath);
+}
+
+args.push(...tauriArgs);
 
 if (env.CI === "1") {
   env.CI = "true";

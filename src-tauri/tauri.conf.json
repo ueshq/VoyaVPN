@@ -37,8 +37,7 @@
     "targets": ["app", "dmg", "nsis", "msi", "deb", "rpm", "appimage"],
     "createUpdaterArtifacts": false,
     "resources": {
-      "../docs/release/THIRD_PARTY_NOTICES.md": "release/THIRD_PARTY_NOTICES.md",
-      "resources/core-seeds/xray/*": "core-seeds/xray/"
+      "../docs/release/THIRD_PARTY_NOTICES.md": "release/THIRD_PARTY_NOTICES.md"
     },
     "externalBin": [],
     "macOS": {
