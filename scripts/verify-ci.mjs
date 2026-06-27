@@ -14,10 +14,10 @@ const steps = [
 for (const [name, command, args] of steps) {
   console.log(`\n==> ${name}`);
   console.log(`$ ${[command, ...args].join(" ")}`);
+  const invocation = executable(command, args);
 
-  const result = spawnSync(command, args, {
+  const result = spawnSync(invocation.file, invocation.args, {
     env: { ...process.env, CI: process.env.CI ?? "true" },
-    shell: process.platform === "win32",
     stdio: "inherit",
   });
 
@@ -27,3 +27,11 @@ for (const [name, command, args] of steps) {
 }
 
 console.log("\nCI baseline checks passed.");
+
+function executable(command, args) {
+  if (command === "pnpm" && process.env.npm_execpath) {
+    return { file: process.execPath, args: [process.env.npm_execpath, ...args] };
+  }
+
+  return { file: command, args };
+}

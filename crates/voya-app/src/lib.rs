@@ -5,15 +5,19 @@
 
 pub mod autostart;
 pub mod backup;
+pub mod certificates;
 pub mod clash;
 mod coregen;
 pub mod diagnostics;
 pub mod dns;
+pub mod exports;
 pub mod groups;
 pub mod hotkeys;
+pub mod input_safety;
 pub mod presets;
 pub mod profiles;
 pub mod qr;
+pub mod redaction;
 pub mod routing;
 pub mod runtime;
 pub mod speedtest;
@@ -22,6 +26,7 @@ pub mod subscriptions;
 pub mod sudo;
 pub mod supervisor;
 pub mod sysproxy;
+pub mod templates;
 pub mod tun;
 pub mod updates;
 

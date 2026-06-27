@@ -14,18 +14,23 @@ import {
   Clock,
   Columns3,
   Copy,
+  Download,
+  FileJson2,
   FilePlus2,
   Filter,
   Gauge,
   Inbox,
+  Link,
   Pencil,
   Play,
+  QrCode,
   Radio,
   RefreshCw,
   RotateCcw,
   Rows3,
   Rss,
   Search,
+  Share2,
   Square,
   Trash2,
   Upload,
@@ -56,7 +61,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -75,6 +81,10 @@ import {
   cancelSpeedtest,
   dedupeProfiles,
   deleteProfiles,
+  exportProfileClientConfig,
+  exportProfileInnerLinks,
+  exportProfileShareLinks,
+  exportProfileShareLinksBase64,
   listProfiles,
   moveProfile,
   runSpeedtest,
@@ -84,8 +94,10 @@ import {
   sortProfiles,
   updateSubscriptions,
   useRuntimeEventStore,
+  saveTextFile,
 } from "@/ipc";
 import type {
+  ExportProfilesResult,
   ProfileItem_Deserialize,
   ProfileListItem_Serialize,
   ProfileSortKey,
@@ -94,6 +106,7 @@ import type {
 import { useI18n } from "@/i18n/use-i18n";
 import { formatDelay, formatSpeed, formatTraffic } from "@/lib/formatting";
 import { cn, getErrorMessage } from "@/lib/utils";
+import { useModalStore } from "@/stores/modal-store";
 import { useProfileColumnsStore } from "@/stores/profile-columns-store";
 
 import { ImportProfilesDialog, SubscriptionsDialog } from "@/features/subscriptions";
@@ -107,6 +120,7 @@ type DialogState =
   | null;
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
+type ProfileExportKind = "clientConfig" | "innerLinks" | "shareBase64" | "shareLinks";
 
 type ServerColumn = {
   cell: (item: ProfileListItem_Serialize, rowNumber: number, t: TranslateFn) => React.ReactNode;
@@ -267,6 +281,7 @@ export function ProfilesScreen() {
   const [filterText, setFilterText] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
+  const [operationMessage, setOperationMessage] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [sortState, setSortState] = useState<{ ascending: boolean; key: ProfileSortKey } | null>(null);
@@ -279,6 +294,7 @@ export function ProfilesScreen() {
   const speedtestResultsByProfileId = useRuntimeEventStore((state) => state.speedtestResultsByProfileId);
   const speedtestRunning = useRuntimeEventStore((state) => state.speedtestRunning);
   const setSpeedtestRunning = useRuntimeEventStore((state) => state.setSpeedtestRunning);
+  const openModal = useModalStore((state) => state.openModal);
   const queryClient = useQueryClient();
   const filter = filterText.trim();
   const profilesQuery = useQuery({
@@ -343,6 +359,7 @@ export function ProfilesScreen() {
 
   async function runOperation(operation: () => Promise<unknown>) {
     setOperationError(null);
+    setOperationMessage(null);
     try {
       await operation();
       await queryClient.invalidateQueries({ queryKey: ["profiles"] });
@@ -404,6 +421,43 @@ export function ProfilesScreen() {
   }
 
   const selectedIdsArray = selected.map((item) => item.profile.IndexId);
+
+  async function handleExport(kind: ProfileExportKind, indexIds = selectedIdsArray, showQr = false, saveFile = false) {
+    setOperationError(null);
+    setOperationMessage(null);
+    if (indexIds.length === 0) {
+      setOperationError(t("panes.profiles.export.noSelection"));
+      return;
+    }
+
+    try {
+      const result = await runProfileExport(kind, indexIds);
+      if (showQr) {
+        openModal("qr", { qrContent: result.text });
+        return;
+      }
+
+      if (saveFile) {
+        const path = await saveTextFile({
+          defaultPath: exportFileName(kind),
+          filters: [exportFileFilter(kind)],
+          text: result.text,
+        });
+        if (path) {
+          setOperationMessage(t("panes.profiles.export.savedFile", { path }));
+        }
+        return;
+      }
+
+      if (!navigator.clipboard?.writeText) {
+        throw new Error(t("panes.profiles.export.clipboardUnavailable"));
+      }
+      await navigator.clipboard.writeText(result.text);
+      setOperationMessage(t("panes.profiles.export.copied", { count: result.count }));
+    } catch (error) {
+      setOperationError(getErrorMessage(error));
+    }
+  }
 
   async function handleSpeedtest(action: SpeedActionType, indexIds = selectedIdsArray) {
     setColumnVisibility((current) => ({ ...current, delay: true, speed: true }));
@@ -512,6 +566,13 @@ export function ProfilesScreen() {
               <Filter className="size-4" aria-hidden="true" />
               {t("panes.profiles.toolbar.dedupe")}
             </MenubarItem>
+            <MenubarSeparator />
+            <ExportMenuItems
+              onExport={(kind) => void handleExport(kind)}
+              onSave={(kind) => void handleExport(kind, selectedIdsArray, false, true)}
+              onShowQr={() => void handleExport("shareLinks", selectedIdsArray, true)}
+              t={t}
+            />
           </ToolbarOverflow>
         </ToolbarGroup>
       </Toolbar>
@@ -551,6 +612,24 @@ export function ProfilesScreen() {
               <Copy className="size-4" aria-hidden="true" />
               {t("panes.profiles.toolbar.copy")}
             </Button>
+            <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
+              <MenubarMenu>
+                <MenubarTrigger asChild>
+                  <Button size="sm" type="button" variant="outline">
+                    <Share2 className="size-4" aria-hidden="true" />
+                    {t("panes.profiles.export.export")}
+                  </Button>
+                </MenubarTrigger>
+                <MenubarContent align="end">
+                  <ExportMenuItems
+                    onExport={(kind) => void handleExport(kind, selectedIdsArray)}
+                    onSave={(kind) => void handleExport(kind, selectedIdsArray, false, true)}
+                    onShowQr={() => void handleExport("shareLinks", selectedIdsArray, true)}
+                    t={t}
+                  />
+                </MenubarContent>
+              </MenubarMenu>
+            </Menubar>
             <Button
               onClick={() => requestDelete(selectedIdsArray)}
               size="sm"
@@ -565,6 +644,9 @@ export function ProfilesScreen() {
       ) : null}
 
       {operationError ? <InlinePageError>{operationError}</InlinePageError> : null}
+      {operationMessage ? (
+        <div className="border-b bg-connected/10 px-4 py-2 text-sm text-connected">{operationMessage}</div>
+      ) : null}
 
       <div className="min-h-0 flex-1 overflow-hidden p-4">
         <div
@@ -664,8 +746,17 @@ export function ProfilesScreen() {
                       onCopy={() => void runOperation(() => copyProfiles(selectedIds.has(indexId) ? selectedIdsArray : [indexId]))}
                       onDelete={() => requestDelete(selectedIds.has(indexId) ? selectedIdsArray : [indexId])}
                       onEdit={() => setDialogState({ mode: "edit", profile: item })}
+                      onExport={(kind) =>
+                        void handleExport(kind, selectedIds.has(indexId) ? selectedIdsArray : [indexId])
+                      }
+                      onSave={(kind) =>
+                        void handleExport(kind, selectedIds.has(indexId) ? selectedIdsArray : [indexId], false, true)
+                      }
                       onMove={(action) => void runOperation(() => moveProfile(null, indexId, action, null))}
                       onSelectOnly={() => selectOnly(indexId)}
+                      onShowQr={() =>
+                        void handleExport("shareLinks", selectedIds.has(indexId) ? selectedIdsArray : [indexId], true)
+                      }
                     >
                       <div
                         aria-selected={isSelected}
@@ -915,6 +1006,84 @@ function SpeedMenuItem({
   );
 }
 
+function ExportMenuItems({
+  onExport,
+  onSave,
+  onShowQr,
+  t,
+}: {
+  onExport: (kind: ProfileExportKind) => void;
+  onSave: (kind: ProfileExportKind) => void;
+  onShowQr: () => void;
+  t: TranslateFn;
+}) {
+  return (
+    <>
+      <MenubarItem onSelect={() => onExport("shareLinks")}>
+        <Link className="size-4" aria-hidden="true" />
+        {t("panes.profiles.export.shareLinks")}
+      </MenubarItem>
+      <MenubarItem onSelect={() => onExport("shareBase64")}>
+        <Share2 className="size-4" aria-hidden="true" />
+        {t("panes.profiles.export.shareBase64")}
+      </MenubarItem>
+      <MenubarItem onSelect={() => onExport("innerLinks")}>
+        <Link className="size-4" aria-hidden="true" />
+        {t("panes.profiles.export.innerLinks")}
+      </MenubarItem>
+      <MenubarItem onSelect={() => onExport("clientConfig")}>
+        <FileJson2 className="size-4" aria-hidden="true" />
+        {t("panes.profiles.export.clientConfig")}
+      </MenubarItem>
+      <MenubarSeparator />
+      <MenubarItem onSelect={onShowQr}>
+        <QrCode className="size-4" aria-hidden="true" />
+        {t("panes.profiles.export.showQr")}
+      </MenubarItem>
+      <MenubarItem onSelect={() => onSave("shareLinks")}>
+        <Download className="size-4" aria-hidden="true" />
+        {t("panes.profiles.export.saveShareLinks")}
+      </MenubarItem>
+      <MenubarItem onSelect={() => onSave("clientConfig")}>
+        <FileJson2 className="size-4" aria-hidden="true" />
+        {t("panes.profiles.export.saveClientConfig")}
+      </MenubarItem>
+    </>
+  );
+}
+
+function runProfileExport(kind: ProfileExportKind, indexIds: string[]): Promise<ExportProfilesResult> {
+  switch (kind) {
+    case "clientConfig":
+      return exportProfileClientConfig(indexIds);
+    case "innerLinks":
+      return exportProfileInnerLinks(indexIds);
+    case "shareBase64":
+      return exportProfileShareLinksBase64(indexIds);
+    case "shareLinks":
+      return exportProfileShareLinks(indexIds);
+  }
+}
+
+function exportFileName(kind: ProfileExportKind) {
+  switch (kind) {
+    case "clientConfig":
+      return "voyavpn-client-config.json";
+    case "innerLinks":
+      return "voyavpn-inner-links.txt";
+    case "shareBase64":
+      return "voyavpn-share-links-base64.txt";
+    case "shareLinks":
+      return "voyavpn-share-links.txt";
+  }
+}
+
+function exportFileFilter(kind: ProfileExportKind) {
+  return kind === "clientConfig"
+    ? { extensions: ["json"], name: "JSON" }
+    : { extensions: ["txt"], name: "Text" };
+}
+
 // Mirror the grid geometry of a real row so the loading state holds the same
 // layout as the populated table — the connections pane skeleton pattern.
 function ProfileSkeletonRows({
@@ -956,8 +1125,11 @@ function ProfileRowContextMenu({
   onCopy,
   onDelete,
   onEdit,
+  onExport,
   onMove,
+  onSave,
   onSelectOnly,
+  onShowQr,
 }: {
   children: React.ReactNode;
   item: ProfileListItem_Serialize;
@@ -965,8 +1137,11 @@ function ProfileRowContextMenu({
   onCopy: () => void;
   onDelete: () => void;
   onEdit: () => void;
+  onExport: (kind: ProfileExportKind) => void;
   onMove: (action: number) => void;
+  onSave: (kind: ProfileExportKind) => void;
   onSelectOnly: () => void;
+  onShowQr: () => void;
 }) {
   const { t } = useI18n();
 
@@ -982,6 +1157,14 @@ function ProfileRowContextMenu({
           <ContextItem icon={Pencil} label={t("panes.profiles.menu.edit")} onSelect={onEdit} />
           <ContextItem icon={Copy} label={t("panes.profiles.menu.copy")} onSelect={onCopy} />
           <ContextItem icon={Trash2} label={t("panes.profiles.menu.delete")} onSelect={onDelete} />
+          <ContextMenu.Separator className="my-1 h-px bg-border" />
+          <ContextItem icon={Link} label={t("panes.profiles.export.shareLinks")} onSelect={() => onExport("shareLinks")} />
+          <ContextItem icon={Share2} label={t("panes.profiles.export.shareBase64")} onSelect={() => onExport("shareBase64")} />
+          <ContextItem icon={Link} label={t("panes.profiles.export.innerLinks")} onSelect={() => onExport("innerLinks")} />
+          <ContextItem icon={FileJson2} label={t("panes.profiles.export.clientConfig")} onSelect={() => onExport("clientConfig")} />
+          <ContextItem icon={QrCode} label={t("panes.profiles.export.showQr")} onSelect={onShowQr} />
+          <ContextItem icon={Download} label={t("panes.profiles.export.saveShareLinks")} onSelect={() => onSave("shareLinks")} />
+          <ContextItem icon={FileJson2} label={t("panes.profiles.export.saveClientConfig")} onSelect={() => onSave("clientConfig")} />
           <ContextMenu.Separator className="my-1 h-px bg-border" />
           <ContextItem icon={ChevronsUp} label={t("panes.profiles.menu.moveTop")} onSelect={() => onMove(MOVE_ACTIONS.Top)} />
           <ContextItem icon={ArrowUp} label={t("panes.profiles.menu.moveUp")} onSelect={() => onMove(MOVE_ACTIONS.Up)} />

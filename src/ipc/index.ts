@@ -10,6 +10,7 @@ export {
   backupWebdavPush,
   applyDownloadedCoreUpdate,
   appUpdateStatus,
+  calculateCertificateSha256,
   clashCloseConnection,
   clashListConnections,
   clashListProxies,
@@ -33,7 +34,13 @@ export {
   deleteRoutings,
   deleteSubscriptions,
   deleteProfiles,
+  exportProfileClientConfig,
+  exportProfileInnerLinks,
+  exportProfileShareLinks,
+  exportProfileShareLinksBase64,
+  fetchCertificate,
   loadDnsSettings,
+  loadFullConfigTemplates,
   loadRulesetGeoSources,
   getProfile,
   getRouting,
@@ -61,8 +68,10 @@ export {
   runtimeStatus,
   runSpeedtest,
   runDueSubscriptionUpdates,
+  scanScreenQr,
   previewGroupProfile,
   validateGroupProfile,
+  saveFullConfigTemplate,
   saveGroupProfile,
   saveGlobalHotkeys,
   saveProfile,
@@ -92,4 +101,5 @@ export {
   updateStatus,
 } from "@/ipc/commands";
 export { EventBridge } from "@/ipc/event-bridge";
+export { saveTextFile } from "@/ipc/file-dialog";
 export { useRuntimeEventStore } from "@/ipc/runtime-event-store";

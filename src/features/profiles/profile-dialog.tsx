@@ -1,7 +1,7 @@
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Save, Server, ShieldCheck } from "lucide-react";
+import { Download, Hash, Layers, Save, Server, ShieldCheck } from "lucide-react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import type {
   Control,
@@ -33,9 +33,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import type { ProfileListItem_Serialize } from "@/ipc/bindings";
 import { useI18n } from "@/i18n/use-i18n";
-import { cn } from "@/lib/utils";
+import { calculateCertificateSha256, fetchCertificate } from "@/ipc";
+import { cn, getErrorMessage } from "@/lib/utils";
 import { GroupBuilder } from "@/features/groups";
 
 import {
@@ -171,7 +173,13 @@ export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile }: P
               setValue={setValue}
             />
             <TransportPanel control={form.control} register={register} />
-            <SecurityPanel control={form.control} register={register} security={security} />
+            <SecurityPanel
+              control={form.control}
+              getValues={getValues}
+              register={register}
+              security={security}
+              setValue={setValue}
+            />
             <MuxPanel
               allowInsecure={allowInsecure}
               control={form.control}
@@ -353,15 +361,77 @@ function TransportPanel({ control, register }: { control: ProfileFormControl; re
 
 function SecurityPanel({
   control,
+  getValues,
   register,
   security,
+  setValue,
 }: {
   control: ProfileFormControl;
+  getValues: UseFormGetValues<ProfileFormValues>;
   register: Register;
   security: string;
+  setValue: UseFormSetValue<ProfileFormValues>;
 }) {
   const { t } = useI18n();
+  const [allowInsecureFetch, setAllowInsecureFetch] = useState(false);
+  const [certError, setCertError] = useState<string | null>(null);
+  const [certStatus, setCertStatus] = useState<string | null>(null);
+  const [certWorking, setCertWorking] = useState(false);
   const reality = security === "reality";
+
+  async function fetchRemoteCertificate(includeChain: boolean) {
+    const address = String(getValues("Address") ?? "").trim();
+    const port = Number(getValues("Port") ?? 0);
+    const serverName = String(getValues("Sni") || address).trim();
+    if (!address || !Number.isFinite(port) || port <= 0) {
+      setCertError(t("panes.profiles.certFetch.missingEndpoint"));
+      return;
+    }
+
+    setCertWorking(true);
+    setCertError(null);
+    setCertStatus(null);
+    try {
+      const result = await fetchCertificate({
+        address,
+        allowInsecure: allowInsecureFetch,
+        includeChain,
+        port,
+        serverName: serverName || null,
+      });
+      setValue("Cert", result.pem, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+      setValue("CertSha", result.sha256.join(","), { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+      setCertStatus(
+        result.warning ||
+          t("panes.profiles.certFetch.fetched", { count: result.chainCount }),
+      );
+    } catch (error) {
+      setCertError(getErrorMessage(error));
+    } finally {
+      setCertWorking(false);
+    }
+  }
+
+  async function calculatePinnedCertificateSha() {
+    const pem = String(getValues("Cert") ?? "").trim();
+    if (!pem) {
+      setCertError(t("panes.profiles.certFetch.missingPem"));
+      return;
+    }
+
+    setCertWorking(true);
+    setCertError(null);
+    setCertStatus(null);
+    try {
+      const hashes = await calculateCertificateSha256(pem);
+      setValue("CertSha", hashes.join(","), { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+      setCertStatus(t("panes.profiles.certFetch.shaCalculated", { count: hashes.length }));
+    } catch (error) {
+      setCertError(getErrorMessage(error));
+    } finally {
+      setCertWorking(false);
+    }
+  }
 
   return (
     <Panel title={t("panes.profiles.panels.security")}>
@@ -379,8 +449,58 @@ function SecurityPanel({
         <TextField label={t("panes.profiles.fields.mldsaVerify")} {...register("Mldsa65Verify")} />
         <TextField label={t("panes.profiles.fields.echConfigList")} {...register("EchConfigList")} />
         <TextField label={t("panes.profiles.fields.finalMask")} {...register("Finalmask")} />
-        <TextField label={t("panes.profiles.fields.pinnedCert")} {...register("Cert")} />
-        <TextField label={t("panes.profiles.fields.certSha")} {...register("CertSha")} />
+        <div className="grid min-w-0 gap-1 lg:col-span-2">
+          <Label className="text-xs text-muted-foreground" htmlFor="profile-pinned-cert">
+            <span className="truncate">{t("panes.profiles.fields.pinnedCert")}</span>
+          </Label>
+          <Textarea
+            className="min-h-24 resize-y bg-card font-mono text-xs"
+            id="profile-pinned-cert"
+            {...register("Cert")}
+          />
+        </div>
+        <TextField className="font-mono text-xs" label={t("panes.profiles.fields.certSha")} {...register("CertSha")} />
+        <div className="grid gap-2 lg:col-span-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              disabled={certWorking}
+              onClick={() => void fetchRemoteCertificate(false)}
+              type="button"
+              variant="outline"
+            >
+              <Download className="size-4" aria-hidden="true" />
+              {t("panes.profiles.certFetch.fetchCert")}
+            </Button>
+            <Button
+              disabled={certWorking}
+              onClick={() => void fetchRemoteCertificate(true)}
+              type="button"
+              variant="outline"
+            >
+              <Layers className="size-4" aria-hidden="true" />
+              {t("panes.profiles.certFetch.fetchChain")}
+            </Button>
+            <Button
+              disabled={certWorking}
+              onClick={() => void calculatePinnedCertificateSha()}
+              type="button"
+              variant="outline"
+            >
+              <Hash className="size-4" aria-hidden="true" />
+              {t("panes.profiles.certFetch.calculateSha")}
+            </Button>
+            <Label className="ms-auto flex min-h-9 cursor-pointer items-center gap-2 rounded-md border bg-card px-3 text-xs text-muted-foreground">
+              <Switch
+                aria-label={t("panes.profiles.certFetch.allowInsecure")}
+                checked={allowInsecureFetch}
+                onCheckedChange={setAllowInsecureFetch}
+              />
+              {t("panes.profiles.certFetch.allowInsecure")}
+            </Label>
+          </div>
+          {certStatus ? <p className="text-xs text-muted-foreground">{certStatus}</p> : null}
+          {certError ? <p className="text-xs text-destructive">{certError}</p> : null}
+        </div>
       </div>
     </Panel>
   );

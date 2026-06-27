@@ -77,6 +77,20 @@ The first production stable matrix covers x64 and arm64 for Windows, macOS, and 
 | Diagnostics smoke | Privacy/security owner and platform owner | Stable diagnostics setting, event envelope, endpoint or approved disablement control | Default-on state is visible, opt-out persists and clears pending events, redacted release-health events deliver or are disabled by approved control, and forbidden fields are absent. | Disable diagnostics delivery through the approved control path and block publication if node URLs, credentials, IP addresses, full logs, generated configs, or traffic destinations can be emitted. |
 | Uninstall cleanup | Platform owner | OS package manager or app removal flow | App removes cleanly, no orphaned process remains, and OS proxy/TUN/autostart/hotkey state is restored. | Remove leftovers manually and block publication if uninstall damages OS state. |
 
+## v2rayN Parity Smoke Addendum
+
+These checks cover parity features that are user-visible in v2rayN but implemented in VoyaVPN's Tauri/Rust architecture. Record pass, fail, or a platform-specific unavailable reason for each supported OS.
+
+| Area | Verification |
+| --- | --- |
+| Full config templates | Open Settings, then Full Config Template. Edit Xray and sing-box JSON object templates, toggle Enabled/Add proxy only, set Proxy detour, save, reopen, and verify persisted values. Connect one Xray and one sing-box profile that should consume the enabled template. |
+| Certificate fetch | Open a TLS profile, fetch leaf cert, fetch chain, calculate SHA from pasted PEM, and save. Verify self-signed or invalid chains fail by default and succeed only when Allow insecure fetch is explicitly enabled for the fetch action. |
+| QR import | Import from image file, clipboard text, clipboard image, and screen scan. On macOS screen-recording restrictions or Linux Wayland limitations, record the exact unavailable message and confirm image/clipboard paths still work. |
+| Share/export | Select one and multiple profiles. Export share links, base64 share links, inner links, and client config from toolbar and row context menu. Confirm clipboard contents and QR dialog display match the selected profile order. |
+| Settings coverage | In Settings, change Core basic, Mux, TUN, System proxy, Speed test, Hysteria, Fragment, Update source, and CoreType mapping values. Save, reopen, and verify persisted `AppConfig` values without schema migration. |
+| Core acquisition boundary | In Updates, verify Xray, mihomo, and sing-box show automatic update/download behavior. Other listed cores must show manual or unsupported acquisition state and require user-supplied binaries or a separately approved package path. |
+| End-to-end runtime | Connect and disconnect a redacted profile after settings/template edits, verify system proxy restore, TUN cleanup, logs, runtime state, speed test, backup create/restore, and no orphaned core process. |
+
 ## Pass Criteria
 
 A platform passes release smoke when:

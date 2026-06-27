@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Cpu, Info, KeyRound, Languages, Monitor, Moon, Settings, Sun, Type } from "lucide-react";
+import { Cpu, FileJson2, Info, KeyRound, Languages, Monitor, Moon, Settings, Sun, Type } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -22,8 +22,9 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { fontOptions } from "@/config/fonts";
 import { BackupDialog } from "@/features/backup";
-import { IntegrationSettings, SourceSettings } from "@/features/options";
+import { IntegrationSettings, RuntimeConfigSettings, SourceSettings } from "@/features/options";
 import { QrDialog } from "@/features/qr";
+import { FullConfigTemplateDialog } from "@/features/templates";
 import { CheckUpdateDialog } from "@/features/updates";
 import { useI18n } from "@/i18n/use-i18n";
 import {
@@ -75,7 +76,8 @@ export function ModalHost() {
       {modal?.kind === "settings" ? <SettingsDialog /> : null}
       {modal?.kind === "about" ? <AboutDialog /> : null}
       {modal?.kind === "backup" ? <BackupDialog /> : null}
-      {modal?.kind === "qr" ? <QrDialog /> : null}
+      {modal?.kind === "fullConfigTemplate" ? <FullConfigTemplateDialog /> : null}
+      {modal?.kind === "qr" ? <QrDialog initialContent={modal.qrContent} key={modal.id} /> : null}
       {modal?.kind === "sudo" ? <SudoPromptDialog intent={modal.intent} /> : null}
       {modal?.kind === "missingCore" ? <MissingCoreDialog payload={modal.missingCore} /> : null}
       {modal?.kind === "updates" ? <CheckUpdateDialog /> : null}
@@ -173,6 +175,7 @@ function SettingsDialog() {
   const setFontSize = usePreferencesStore((state) => state.setFontSize);
   const setThemeMode = usePreferencesStore((state) => state.setThemeMode);
   const themeMode = usePreferencesStore((state) => state.themeMode);
+  const openModal = useModalStore((state) => state.openModal);
   const fontLabel = t("modal.font");
   const fontSizeLabel = t("modal.fontSize");
 
@@ -262,6 +265,28 @@ function SettingsDialog() {
         <Separator />
 
         <SourceSettings />
+
+        <Separator />
+
+        <RuntimeConfigSettings />
+
+        <Separator />
+
+        <section className="grid gap-3">
+          <h3 className="flex items-center gap-2 text-sm font-medium">
+            <FileJson2 className="size-4" aria-hidden="true" />
+            {t("templates.title")}
+          </h3>
+          <Button
+            className="w-fit"
+            onClick={() => openModal("fullConfigTemplate")}
+            type="button"
+            variant="outline"
+          >
+            <FileJson2 className="size-4" aria-hidden="true" />
+            {t("templates.open")}
+          </Button>
+        </section>
 
         <Separator />
 

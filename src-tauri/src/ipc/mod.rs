@@ -17,6 +17,9 @@ macro_rules! collect_ipc_commands {
             commands::global_hotkey_status,
             commands::save_global_hotkeys::<tauri::Wry>,
             commands::generate_qr_code,
+            commands::scan_screen_qr,
+            commands::fetch_certificate,
+            commands::calculate_certificate_sha256,
             commands::sudo_begin_collection,
             commands::sudo_submit_password,
             commands::sudo_clear_password,
@@ -31,11 +34,17 @@ macro_rules! collect_ipc_commands {
             commands::set_tun_enabled::<tauri::Wry>,
             commands::load_dns_settings,
             commands::save_dns_settings::<tauri::Wry>,
+            commands::load_full_config_templates,
+            commands::save_full_config_template::<tauri::Wry>,
             commands::list_profiles,
             commands::get_profile,
             commands::save_profile::<tauri::Wry>,
             commands::delete_profiles::<tauri::Wry>,
             commands::copy_profiles::<tauri::Wry>,
+            commands::export_profile_share_links,
+            commands::export_profile_share_links_base64,
+            commands::export_profile_inner_links,
+            commands::export_profile_client_config,
             commands::set_active_profile::<tauri::Wry>,
             commands::move_profile::<tauri::Wry>,
             commands::sort_profiles::<tauri::Wry>,
@@ -159,6 +168,13 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_app::hotkeys::GlobalHotkeyAction>()
         .typ::<voya_app::hotkeys::GlobalHotkeyBinding>()
         .typ::<voya_app::qr::QrCodeImage>()
+        .typ::<voya_app::qr::QrScanResult>()
+        .typ::<voya_app::qr::QrScanStatus>()
+        .typ::<voya_app::certificates::CertificateFetchRequest>()
+        .typ::<voya_app::certificates::CertificateFetchResult>()
+        .typ::<voya_app::exports::ExportProfilesRequest>()
+        .typ::<voya_app::exports::ExportProfilesResult>()
+        .typ::<voya_app::exports::ExportProfilesFormat>()
         .typ::<voya_core::WebDavItem>()
         .typ::<voya_core::PresetType>()
         .typ::<voya_core::SpeedActionType>()

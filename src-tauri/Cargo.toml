@@ -13,6 +13,9 @@ version.workspace = true
 [lib]
 name = "voyavpn_lib"
 crate-type = ["rlib"]
+# This crate is Tauri shell glue; lib tests live in workspace crates.
+# CI excludes this target because --all-targets still forces disabled harnesses.
+test = false
 
 [[bin]]
 name = "voyavpn"
@@ -27,6 +30,8 @@ serde_json.workspace = true
 specta.workspace = true
 specta-typescript.workspace = true
 tauri.workspace = true
+tauri-plugin-dialog = "2.4.1"
+tauri-plugin-fs = "2.4.4"
 tauri-plugin-global-shortcut = "2.3.2"
 tauri-plugin-updater = "2.10.1"
 tauri-specta.workspace = true

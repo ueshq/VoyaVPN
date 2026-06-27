@@ -17,7 +17,7 @@ use voya_platform::{
     paths::{AppPaths, PathError},
 };
 
-use crate::coregen::{CoreTypeFallback, SnapshotCoreGenEnv};
+use crate::coregen::{CoreTypeFallback, SnapshotCoreGenData, SnapshotCoreGenEnv};
 use crate::supervisor::{
     CoreProcessSpec, CoreSupervisor, SupervisorError, SupervisorSnapshot, SupervisorStartRequest,
 };
@@ -273,10 +273,13 @@ pub(crate) async fn load_runtime_core_gen_env(
         config,
         core_gen_platform(target_os),
         CoreTypeFallback::ConfigDefaults,
-        database.profiles().list().await?,
-        database.routings().list().await?,
-        database.dns().list().await?,
-        database.subscriptions().list().await?,
+        SnapshotCoreGenData {
+            profiles: database.profiles().list().await?,
+            routings: database.routings().list().await?,
+            dns_items: database.dns().list().await?,
+            full_config_templates: database.full_config_templates().list().await?,
+            subs: database.subscriptions().list().await?,
+        },
     )
     .with_singbox_ruleset_paths(local_singbox_ruleset_paths(paths)))
 }

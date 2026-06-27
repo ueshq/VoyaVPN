@@ -76,12 +76,14 @@ pnpm run verify:ci
 Run the final gate checks individually:
 
 ```sh
-cargo test --workspace --all-targets
+pnpm run check:rust:test
 pnpm typecheck
 pnpm test --run
 pnpm lint
 pnpm bindings:check
 ```
+
+`pnpm run check:rust:test` runs workspace all-target tests while excluding the Tauri shell library harness, then builds the shell binary test target. The shell library target keeps its lib test harness disabled because shell-level coverage lives in workspace crates and frontend tests; this avoids Windows WebView/Wry loader failures from an otherwise empty harness. Do not use bare `cargo test --workspace --all-targets` on Windows, because Cargo still forces explicitly disabled targets when `--all-targets` is passed.
 
 Linux CI installs Tauri build prerequisites before compiling the Rust workspace. Local Linux machines need the same Tauri system libraries.
 

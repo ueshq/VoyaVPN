@@ -7,7 +7,7 @@ use voya_core::{
 };
 use voya_db::{Database, DbError};
 
-use crate::coregen::{CoreTypeFallback, SnapshotCoreGenEnv};
+use crate::coregen::{CoreTypeFallback, SnapshotCoreGenData, SnapshotCoreGenEnv};
 use crate::profiles::{ProfileManager, ProfileManagerError};
 
 pub type Result<T> = std::result::Result<T, GroupManagerError>;
@@ -153,20 +153,23 @@ impl<'db> GroupManager<'db> {
             config,
             CoreGenPlatform::Linux,
             CoreTypeFallback::Fixed(core_type),
-            source
-                .profiles
-                .iter()
-                .map(|candidate| {
-                    if candidate.index_id == node.index_id {
-                        node.clone()
-                    } else {
-                        candidate.clone()
-                    }
-                })
-                .collect(),
-            source.routings.to_vec(),
-            source.dns_items.to_vec(),
-            source.subs.to_vec(),
+            SnapshotCoreGenData {
+                profiles: source
+                    .profiles
+                    .iter()
+                    .map(|candidate| {
+                        if candidate.index_id == node.index_id {
+                            node.clone()
+                        } else {
+                            candidate.clone()
+                        }
+                    })
+                    .collect(),
+                routings: source.routings.to_vec(),
+                dns_items: source.dns_items.to_vec(),
+                full_config_templates: Vec::new(),
+                subs: source.subs.to_vec(),
+            },
         );
         let mut preview_config = config.clone();
         preview_config.index_id.clone_from(&node.index_id);

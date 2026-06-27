@@ -168,7 +168,13 @@
     "hotkeysRegistered": "已註冊 {{count}} 個",
     "saved": "已儲存",
     "sources": "來源",
-    "srsSource": "sing-box 規則集來源"
+    "srsSource": "sing-box 規則集來源",
+    "loading": "正在載入",
+    "runtimeConfig": "執行設定",
+    "runtimeCore": "核心",
+    "runtimeMapping": "映射",
+    "runtimeNetwork": "網路",
+    "runtimeTests": "測試與更新"
   },
   "panes": {
     "clashConnections": {
@@ -358,6 +364,30 @@
       },
       "bulk": {
         "selected": "已選 {{count}} 項"
+      },
+      "certFetch": {
+        "allowInsecure": "允許不安全抓取",
+        "calculateSha": "計算 SHA",
+        "fetchCert": "抓取憑證",
+        "fetchChain": "抓取憑證鏈",
+        "fetched": "已抓取 {{count}} 張憑證。",
+        "missingEndpoint": "抓取憑證前需要填寫位址和連接埠。",
+        "missingPem": "請先貼上或抓取 PEM 憑證，再計算 SHA-256。",
+        "shaCalculated": "已計算 {{count}} 個 SHA-256 指紋。"
+      },
+      "export": {
+        "clientConfig": "用戶端設定",
+        "clipboardUnavailable": "目前環境不支援寫入剪貼簿。",
+        "copied": "已複製 {{count}} 個匯出設定到剪貼簿。",
+        "export": "匯出",
+        "innerLinks": "內部連結",
+        "noSelection": "請至少選擇一個設定再匯出。",
+        "shareBase64": "分享連結（Base64）",
+        "shareLinks": "分享連結",
+        "showQr": "顯示 QR Code",
+        "saveClientConfig": "儲存用戶端設定",
+        "saveShareLinks": "儲存分享連結",
+        "savedFile": "已儲存匯出到 {{path}}。"
       }
     },
     "routing": {
@@ -380,7 +410,15 @@
     "imported": "已匯入 {{count}} 個設定檔",
     "scan": "掃描",
     "scanImage": "掃描圖片",
-    "title": "二維碼"
+    "title": "二維碼",
+    "clipboardEmpty": "剪貼簿為空。",
+    "clipboardImageUnavailable": "目前 WebView 不支援讀取剪貼簿圖片。",
+    "clipboardUnavailable": "目前 WebView 不支援讀取剪貼簿文字。",
+    "noQrFound": "未找到 QR Code。",
+    "scanClipboardImage": "剪貼簿圖片",
+    "scanClipboardText": "剪貼簿文字",
+    "scanScreen": "螢幕",
+    "screenUnavailable": "目前平台或權限狀態不支援螢幕 QR Code 掃描。"
   },
   "resx": {
     "AddBatchRoutingRulesYesNo": "是否追加規則？選擇\"是\"則追加，選擇\"否\"則完全取代。",
@@ -1024,7 +1062,11 @@
     "target": "目標",
     "title": "檢查更新",
     "version": "版本",
-    "waiting": "等待"
+    "waiting": "等待",
+    "support": {
+      "auto": "自動",
+      "manual": "手動"
+    }
   },
   "home": {
     "aria": "連線主頁",
@@ -1038,5 +1080,18 @@
     "upload": "上行",
     "download": "下行",
     "duration": "已連線"
+  },
+  "templates": {
+    "addProxyOnly": "僅新增代理",
+    "configJson": "設定 JSON",
+    "description": "編輯 Xray 和 sing-box 生成時使用的完整設定範本。",
+    "enabled": "啟用",
+    "open": "開啟範本設定",
+    "proxyDetour": "代理繞行",
+    "remarks": "備註",
+    "saved": "已儲存 {{core}} 範本。",
+    "saving": "儲存中",
+    "title": "完整設定範本",
+    "tunConfigJson": "TUN 設定 JSON"
   }
 }

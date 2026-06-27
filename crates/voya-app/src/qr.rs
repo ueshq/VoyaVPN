@@ -1,5 +1,5 @@
 use qrcode::{render::svg, EcLevel, QrCode};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use specta::Type;
 use thiserror::Error;
 
@@ -10,6 +10,23 @@ const QR_MIN_DIMENSION: u32 = 256;
 pub struct QrCodeImage {
     pub mime_type: String,
     pub svg: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum QrScanStatus {
+    Found,
+    NotFound,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct QrScanResult {
+    pub status: QrScanStatus,
+    pub text: Option<String>,
+    pub source: String,
+    pub message: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -34,6 +51,19 @@ impl QrCodeManager {
             mime_type: "image/svg+xml".to_string(),
             svg,
         })
+    }
+
+    #[must_use]
+    pub fn scan_screen(&self) -> QrScanResult {
+        QrScanResult {
+            status: QrScanStatus::Unavailable,
+            text: None,
+            source: "screen".to_string(),
+            message: Some(
+                "Screen QR capture is not available in this build; use image or clipboard import."
+                    .to_string(),
+            ),
+        }
     }
 }
 
@@ -83,5 +113,14 @@ mod qr_tests {
             .expect_err("empty content should fail");
 
         assert!(matches!(error, QrCodeError::EmptyContent));
+    }
+
+    #[test]
+    fn screen_scan_reports_unavailable_without_failing_import_paths() {
+        let result = QrCodeManager.scan_screen();
+
+        assert_eq!(result.status, QrScanStatus::Unavailable);
+        assert_eq!(result.source, "screen");
+        assert!(result.text.is_none());
     }
 }

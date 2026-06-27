@@ -168,7 +168,13 @@
     "hotkeysRegistered": "已注册 {{count}} 个",
     "saved": "已保存",
     "sources": "来源",
-    "srsSource": "sing-box 规则集来源"
+    "srsSource": "sing-box 规则集来源",
+    "loading": "正在加载",
+    "runtimeConfig": "运行配置",
+    "runtimeCore": "核心",
+    "runtimeMapping": "映射",
+    "runtimeNetwork": "网络",
+    "runtimeTests": "测试与更新"
   },
   "panes": {
     "clashConnections": {
@@ -358,6 +364,30 @@
       },
       "bulk": {
         "selected": "已选 {{count}} 项"
+      },
+      "certFetch": {
+        "allowInsecure": "允许不安全抓取",
+        "calculateSha": "计算 SHA",
+        "fetchCert": "抓取证书",
+        "fetchChain": "抓取证书链",
+        "fetched": "已抓取 {{count}} 张证书。",
+        "missingEndpoint": "抓取证书前需要填写地址和端口。",
+        "missingPem": "请先粘贴或抓取 PEM 证书，再计算 SHA-256。",
+        "shaCalculated": "已计算 {{count}} 个 SHA-256 指纹。"
+      },
+      "export": {
+        "clientConfig": "客户端配置",
+        "clipboardUnavailable": "当前环境不支持写入剪贴板。",
+        "copied": "已复制 {{count}} 个导出配置到剪贴板。",
+        "export": "导出",
+        "innerLinks": "内部链接",
+        "noSelection": "请至少选择一个配置再导出。",
+        "shareBase64": "分享链接（Base64）",
+        "shareLinks": "分享链接",
+        "showQr": "显示二维码",
+        "saveClientConfig": "保存客户端配置",
+        "saveShareLinks": "保存分享链接",
+        "savedFile": "已保存导出到 {{path}}。"
       }
     },
     "routing": {
@@ -380,7 +410,15 @@
     "imported": "已导入 {{count}} 个配置",
     "scan": "扫描",
     "scanImage": "扫描图片",
-    "title": "二维码"
+    "title": "二维码",
+    "clipboardEmpty": "剪贴板为空。",
+    "clipboardImageUnavailable": "当前 WebView 不支持读取剪贴板图片。",
+    "clipboardUnavailable": "当前 WebView 不支持读取剪贴板文本。",
+    "noQrFound": "未找到二维码。",
+    "scanClipboardImage": "剪贴板图片",
+    "scanClipboardText": "剪贴板文本",
+    "scanScreen": "屏幕",
+    "screenUnavailable": "当前平台或权限状态不支持屏幕二维码扫描。"
   },
   "resx": {
     "AddBatchRoutingRulesYesNo": "是否追加规则？选择\"是\"则追加，选择\"否\"则全部替换。",
@@ -1024,7 +1062,11 @@
     "target": "目标",
     "title": "检查更新",
     "version": "版本",
-    "waiting": "等待"
+    "waiting": "等待",
+    "support": {
+      "auto": "自动",
+      "manual": "手动"
+    }
   },
   "home": {
     "aria": "连接主页",
@@ -1038,5 +1080,18 @@
     "upload": "上行",
     "download": "下行",
     "duration": "已连接"
+  },
+  "templates": {
+    "addProxyOnly": "仅添加代理",
+    "configJson": "配置 JSON",
+    "description": "编辑 Xray 和 sing-box 生成时使用的完整配置模板。",
+    "enabled": "启用",
+    "open": "打开模板设置",
+    "proxyDetour": "代理绕行",
+    "remarks": "备注",
+    "saved": "已保存 {{core}} 模板。",
+    "saving": "保存中",
+    "title": "完整配置模板",
+    "tunConfigJson": "TUN 配置 JSON"
   }
 }

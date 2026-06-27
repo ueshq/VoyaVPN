@@ -11,6 +11,8 @@ import type {
   BackupRemoteResult,
   BackupRestoreResult_Serialize,
   BackupStatus_Serialize,
+  CertificateFetchRequest,
+  CertificateFetchResult,
   ClashConnectionsSnapshot,
   ClashDelayTestResult,
   ClashMonitorStatus,
@@ -19,6 +21,9 @@ import type {
   DemoResponse,
   DnsSettings_Deserialize,
   DnsSettings_Serialize,
+  ExportProfilesResult,
+  FullConfigTemplateItem_Deserialize,
+  FullConfigTemplateItem_Serialize,
   GroupChildCandidate,
   GroupPreview,
   GroupValidationResult,
@@ -34,6 +39,7 @@ import type {
   ProfileListItem_Serialize,
   ProfileSortKey,
   QrCodeImage,
+  QrScanResult,
   RoutingItem_Deserialize,
   RoutingItem_Serialize,
   RuleMode,
@@ -116,6 +122,20 @@ export async function generateQrCode(content: string): Promise<QrCodeImage> {
   return unwrapCommandResult(await commands.generateQrCode(content));
 }
 
+export async function scanScreenQr(): Promise<QrScanResult> {
+  return unwrapCommandResult(await commands.scanScreenQr());
+}
+
+export async function fetchCertificate(
+  request: CertificateFetchRequest,
+): Promise<CertificateFetchResult> {
+  return unwrapCommandResult(await commands.fetchCertificate(request));
+}
+
+export async function calculateCertificateSha256(pem: string): Promise<string[]> {
+  return unwrapCommandResult(await commands.calculateCertificateSha256(pem));
+}
+
 export async function sudoBeginCollection(): Promise<SudoCollectionResponse> {
   return unwrapCommandResult(await commands.sudoBeginCollection());
 }
@@ -172,6 +192,16 @@ export async function saveDnsSettings(settings: DnsSettings_Deserialize): Promis
   return unwrapCommandResult(await commands.saveDnsSettings(settings));
 }
 
+export async function loadFullConfigTemplates(): Promise<FullConfigTemplateItem_Serialize[]> {
+  return unwrapCommandResult(await commands.loadFullConfigTemplates());
+}
+
+export async function saveFullConfigTemplate(
+  template: FullConfigTemplateItem_Deserialize,
+): Promise<FullConfigTemplateItem_Serialize> {
+  return unwrapCommandResult(await commands.saveFullConfigTemplate(template));
+}
+
 export async function listProfiles(
   subid: string | null = null,
   filter: string | null = null,
@@ -218,6 +248,22 @@ export async function deleteProfiles(indexIds: string[]): Promise<number> {
 
 export async function copyProfiles(indexIds: string[]): Promise<ProfileListItem_Serialize[]> {
   return unwrapCommandResult(await commands.copyProfiles(indexIds));
+}
+
+export async function exportProfileShareLinks(indexIds: string[]): Promise<ExportProfilesResult> {
+  return unwrapCommandResult(await commands.exportProfileShareLinks(indexIds));
+}
+
+export async function exportProfileShareLinksBase64(indexIds: string[]): Promise<ExportProfilesResult> {
+  return unwrapCommandResult(await commands.exportProfileShareLinksBase64(indexIds));
+}
+
+export async function exportProfileInnerLinks(indexIds: string[]): Promise<ExportProfilesResult> {
+  return unwrapCommandResult(await commands.exportProfileInnerLinks(indexIds));
+}
+
+export async function exportProfileClientConfig(indexIds: string[]): Promise<ExportProfilesResult> {
+  return unwrapCommandResult(await commands.exportProfileClientConfig(indexIds));
 }
 
 export async function setActiveProfile(indexId: string): Promise<ProfileListItem_Serialize> {
@@ -555,6 +601,8 @@ function formatAppError(error: AppError): string {
       return error.message;
     case "backup":
       return error.message;
+    case "certificate":
+      return error.message;
     case "clash":
       return error.message;
     case "database":
@@ -571,6 +619,8 @@ function formatAppError(error: AppError): string {
       return error.message;
     case "qr":
       return error.message;
+    case "export":
+      return error.message;
     case "missingCore":
       return error.message.message;
     case "runtime":
@@ -586,6 +636,8 @@ function formatAppError(error: AppError): string {
     case "sysProxy":
       return error.message;
     case "state":
+      return error.message;
+    case "template":
       return error.message;
     case "tun":
       return error.message;

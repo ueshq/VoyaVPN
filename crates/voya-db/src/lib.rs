@@ -15,8 +15,8 @@ use sqlx::{
 };
 use thiserror::Error;
 use voya_core::{
-    AppConfig, ConfigType, CoreType, DnsItem, ProfileExItem, ProfileItem, RoutingItem,
-    ServerStatItem, SubItem,
+    AppConfig, ConfigType, CoreType, DnsItem, FullConfigTemplateItem, ProfileExItem, ProfileItem,
+    RoutingItem, ServerStatItem, SubItem,
 };
 
 pub mod blob {
@@ -418,6 +418,11 @@ impl Database {
     #[must_use]
     pub fn dns(&self) -> DnsRepository<'_> {
         DnsRepository::new(&self.pool)
+    }
+
+    #[must_use]
+    pub fn full_config_templates(&self) -> FullConfigTemplateRepository<'_> {
+        FullConfigTemplateRepository::new(&self.pool)
     }
 
     pub async fn close(&self) {
@@ -1371,6 +1376,95 @@ impl<'pool> DnsRepository<'pool> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct FullConfigTemplateRepository<'pool> {
+    pool: &'pool SqlitePool,
+}
+
+impl<'pool> FullConfigTemplateRepository<'pool> {
+    #[must_use]
+    pub fn new(pool: &'pool SqlitePool) -> Self {
+        Self { pool }
+    }
+
+    pub async fn upsert(&self, item: &FullConfigTemplateItem) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO full_config_template_items (
+                id, remarks, enabled, core_type, config,
+                tun_config, add_proxy_only, proxy_detour
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                remarks = excluded.remarks,
+                enabled = excluded.enabled,
+                core_type = excluded.core_type,
+                config = excluded.config,
+                tun_config = excluded.tun_config,
+                add_proxy_only = excluded.add_proxy_only,
+                proxy_detour = excluded.proxy_detour
+            "#,
+        )
+        .bind(&item.id)
+        .bind(&item.remarks)
+        .bind(item.enabled)
+        .bind(item.core_type.as_i32())
+        .bind(&item.config)
+        .bind(&item.tun_config)
+        .bind(item.add_proxy_only)
+        .bind(&item.proxy_detour)
+        .execute(self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn get(&self, id: &str) -> Result<Option<FullConfigTemplateItem>> {
+        let row = sqlx::query("SELECT * FROM full_config_template_items WHERE id = ?")
+            .bind(id)
+            .fetch_optional(self.pool)
+            .await?;
+
+        row.map(row_to_full_config_template).transpose()
+    }
+
+    pub async fn get_by_core_type(
+        &self,
+        core_type: CoreType,
+    ) -> Result<Option<FullConfigTemplateItem>> {
+        let row = sqlx::query(
+            r#"
+            SELECT *
+            FROM full_config_template_items
+            WHERE core_type = ?
+            ORDER BY enabled DESC, id
+            LIMIT 1
+            "#,
+        )
+        .bind(core_type.as_i32())
+        .fetch_optional(self.pool)
+        .await?;
+
+        row.map(row_to_full_config_template).transpose()
+    }
+
+    pub async fn list(&self) -> Result<Vec<FullConfigTemplateItem>> {
+        let rows = sqlx::query("SELECT * FROM full_config_template_items ORDER BY core_type, id")
+            .fetch_all(self.pool)
+            .await?;
+
+        rows.into_iter().map(row_to_full_config_template).collect()
+    }
+
+    pub async fn delete(&self, id: &str) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM full_config_template_items WHERE id = ?")
+            .bind(id)
+            .execute(self.pool)
+            .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AppConfigStore {
     path: PathBuf,
@@ -1592,6 +1686,24 @@ fn row_to_dns(row: SqliteRow) -> Result<DnsItem> {
     })
 }
 
+fn row_to_full_config_template(row: SqliteRow) -> Result<FullConfigTemplateItem> {
+    let core_type_value = row.try_get::<i32, _>("core_type")?;
+
+    Ok(FullConfigTemplateItem {
+        id: row.try_get("id")?,
+        remarks: row.try_get("remarks")?,
+        enabled: row.try_get("enabled")?,
+        core_type: CoreType::from_i32(core_type_value).ok_or(DbError::InvalidEnum {
+            enum_name: "CoreType",
+            value: core_type_value,
+        })?,
+        config: row.try_get("config")?,
+        tun_config: row.try_get("tun_config")?,
+        add_proxy_only: row.try_get("add_proxy_only")?,
+        proxy_detour: row.try_get("proxy_detour")?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1639,6 +1751,37 @@ mod tests {
 
         assert!(columns.iter().any(|column| column == "protocol_extra"));
         assert!(columns.iter().any(|column| column == "transport_extra"));
+    }
+
+    #[tokio::test]
+    async fn full_config_template_repository_round_trips_by_core_type() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("database test operation should succeed");
+        let item = FullConfigTemplateItem {
+            id: "template-xray".to_string(),
+            remarks: "Xray template".to_string(),
+            enabled: true,
+            core_type: CoreType::Xray,
+            config: Some(r#"{"outbounds":[]}"#.to_string()),
+            tun_config: Some(r#"{"inbounds":[]}"#.to_string()),
+            add_proxy_only: Some(true),
+            proxy_detour: Some("proxy".to_string()),
+        };
+
+        database
+            .full_config_templates()
+            .upsert(&item)
+            .await
+            .expect("database test operation should succeed");
+        let loaded = database
+            .full_config_templates()
+            .get_by_core_type(CoreType::Xray)
+            .await
+            .expect("database test operation should succeed")
+            .expect("template should be present");
+
+        assert_eq!(loaded, item);
     }
 
     #[tokio::test]

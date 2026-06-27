@@ -439,6 +439,7 @@ export function CheckUpdateDialog() {
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="font-medium">{target.name}</span>
                           <TargetKindBadge kind={target.kind} />
+                          <UpdateSupportBadge target={target} />
                           {target.kind === "app" ? (
                             <ManualStateBadge manualLinks={manualLinks} manualLinksError={manualLinksError} />
                           ) : null}
@@ -666,6 +667,17 @@ function TargetKindBadge({ kind }: { kind: UpdateTargetKind }) {
   const { t } = useI18n();
 
   return <Badge variant="outline">{t(`updates.kind.${kind}`)}</Badge>;
+}
+
+function UpdateSupportBadge({ target }: { target: UpdateTarget }) {
+  const { t } = useI18n();
+  const automatic = target.updateSupported && target.acquisition !== "unsupported";
+
+  return (
+    <Badge variant={automatic ? "secondary" : "outline"}>
+      {automatic ? t("updates.support.auto") : t("updates.support.manual")}
+    </Badge>
+  );
 }
 
 function AcquisitionBadge({ acquisition }: { acquisition: UpdateAcquisition }) {

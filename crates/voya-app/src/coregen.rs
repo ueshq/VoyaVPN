@@ -28,9 +28,19 @@ pub(crate) struct SnapshotCoreGenEnv {
     profiles: Vec<ProfileItem>,
     routings: Vec<RoutingItem>,
     dns_items: Vec<DnsItem>,
+    full_config_templates: Vec<FullConfigTemplateItem>,
     subs: Vec<SubItem>,
     singbox_ruleset_paths: BTreeMap<String, String>,
     fallback: CoreTypeFallback,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct SnapshotCoreGenData {
+    pub(crate) profiles: Vec<ProfileItem>,
+    pub(crate) routings: Vec<RoutingItem>,
+    pub(crate) dns_items: Vec<DnsItem>,
+    pub(crate) full_config_templates: Vec<FullConfigTemplateItem>,
+    pub(crate) subs: Vec<SubItem>,
 }
 
 impl SnapshotCoreGenEnv {
@@ -38,10 +48,7 @@ impl SnapshotCoreGenEnv {
         config: &AppConfig,
         platform: CoreGenPlatform,
         fallback: CoreTypeFallback,
-        profiles: Vec<ProfileItem>,
-        routings: Vec<RoutingItem>,
-        dns_items: Vec<DnsItem>,
-        subs: Vec<SubItem>,
+        data: SnapshotCoreGenData,
     ) -> Self {
         Self {
             core_type_items: config
@@ -54,10 +61,11 @@ impl SnapshotCoreGenEnv {
                 .first()
                 .map_or(voya_core::DEFAULT_LOCAL_PORT, |inbound| inbound.local_port),
             platform,
-            profiles,
-            routings,
-            dns_items,
-            subs,
+            profiles: data.profiles,
+            routings: data.routings,
+            dns_items: data.dns_items,
+            full_config_templates: data.full_config_templates,
+            subs: data.subs,
             singbox_ruleset_paths: BTreeMap::new(),
             fallback,
         }
@@ -123,11 +131,11 @@ impl CoreGenEnv for SnapshotCoreGenEnv {
         self.subs.iter().find(|sub| sub.id == subid).cloned()
     }
 
-    fn get_full_config_template_item(
-        &self,
-        _core_type: CoreType,
-    ) -> Option<FullConfigTemplateItem> {
-        None
+    fn get_full_config_template_item(&self, core_type: CoreType) -> Option<FullConfigTemplateItem> {
+        self.full_config_templates
+            .iter()
+            .find(|item| item.core_type == core_type)
+            .cloned()
     }
 
     fn get_dns_item(&self, core_type: CoreType) -> Option<DnsItem> {

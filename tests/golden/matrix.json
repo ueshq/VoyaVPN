@@ -68,7 +68,7 @@
         "ServiceLib/Services/CoreConfig/V2ray/V2rayConfigTemplateService.cs",
         "ServiceLib/Services/CoreConfig/V2ray/V2rayOutboundService.cs"
       ],
-      "core_acceptance": false,
+      "core_acceptance": true,
       "volatile_fields": []
     },
     {
@@ -82,7 +82,7 @@
         "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs",
         "ServiceLib.Tests/CoreConfig/Singbox/CoreConfigSingboxServiceTests.cs"
       ],
-      "core_acceptance": false,
+      "core_acceptance": true,
       "volatile_fields": []
     },
     {

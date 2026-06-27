@@ -15,6 +15,9 @@ export const commands = {
 	globalHotkeyStatus: () => typedError<HotkeyStatus_Serialize, AppError>(__TAURI_INVOKE("global_hotkey_status")),
 	saveGlobalHotkeys: (settings: KeyEventItem_Deserialize[]) => typedError<HotkeyStatus_Serialize, AppError>(__TAURI_INVOKE("save_global_hotkeys", { settings })),
 	generateQrCode: (content: string) => typedError<QrCodeImage, AppError>(__TAURI_INVOKE("generate_qr_code", { content })),
+	scanScreenQr: () => typedError<QrScanResult, AppError>(__TAURI_INVOKE("scan_screen_qr")),
+	fetchCertificate: (request: CertificateFetchRequest) => typedError<CertificateFetchResult, AppError>(__TAURI_INVOKE("fetch_certificate", { request })),
+	calculateCertificateSha256: (pem: string) => typedError<string[], AppError>(__TAURI_INVOKE("calculate_certificate_sha256", { pem })),
 	sudoBeginCollection: () => typedError<SudoCollectionResponse, AppError>(__TAURI_INVOKE("sudo_begin_collection")),
 	sudoSubmitPassword: (requestId: string, password: string) => typedError<SudoCollectionResponse, AppError>(__TAURI_INVOKE("sudo_submit_password", { requestId, password })),
 	sudoClearPassword: () => typedError<null, AppError>(__TAURI_INVOKE("sudo_clear_password")),
@@ -29,6 +32,8 @@ export const commands = {
 	setTunEnabled: (enabled: boolean) => typedError<TunStatus, AppError>(__TAURI_INVOKE("set_tun_enabled", { enabled })),
 	loadDnsSettings: () => typedError<DnsSettings_Serialize, AppError>(__TAURI_INVOKE("load_dns_settings")),
 	saveDnsSettings: (settings: DnsSettings_Deserialize) => typedError<DnsSettings_Serialize, AppError>(__TAURI_INVOKE("save_dns_settings", { settings })),
+	loadFullConfigTemplates: () => typedError<FullConfigTemplateItem_Serialize[], AppError>(__TAURI_INVOKE("load_full_config_templates")),
+	saveFullConfigTemplate: (template: FullConfigTemplateItem_Deserialize) => typedError<FullConfigTemplateItem_Serialize, AppError>(__TAURI_INVOKE("save_full_config_template", { template })),
 	listProfiles: (subid: string | null, filter: string | null) => typedError<ProfileListItem_Serialize[], AppError>(__TAURI_INVOKE("list_profiles", { subid, filter })),
 	getProfile: (indexId: string) => typedError<{
 	profile: ProfileItem_Serialize,
@@ -39,6 +44,10 @@ export const commands = {
 	saveProfile: (profile: ProfileItem_Deserialize) => typedError<ProfileListItem_Serialize, AppError>(__TAURI_INVOKE("save_profile", { profile })),
 	deleteProfiles: (indexIds: string[]) => typedError<number, AppError>(__TAURI_INVOKE("delete_profiles", { indexIds })),
 	copyProfiles: (indexIds: string[]) => typedError<ProfileListItem_Serialize[], AppError>(__TAURI_INVOKE("copy_profiles", { indexIds })),
+	exportProfileShareLinks: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_share_links", { indexIds })),
+	exportProfileShareLinksBase64: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_share_links_base64", { indexIds })),
+	exportProfileInnerLinks: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_inner_links", { indexIds })),
+	exportProfileClientConfig: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_client_config", { indexIds })),
 	setActiveProfile: (indexId: string) => typedError<ProfileListItem_Serialize, AppError>(__TAURI_INVOKE("set_active_profile", { indexId })),
 	moveProfile: (subid: string | null, indexId: string, action: MoveAction, position: number | null) => typedError<ProfileListItem_Serialize[], AppError>(__TAURI_INVOKE("move_profile", { subid, indexId, action, position })),
 	sortProfiles: (subid: string | null, sortKey: ProfileSortKey, ascending: boolean) => typedError<ProfileListItem_Serialize[], AppError>(__TAURI_INVOKE("sort_profiles", { subid, sortKey, ascending })),
@@ -218,7 +227,7 @@ export type AppConfig_Serialize = {
 	SimpleDNSItem: SimpleDnsItem_Serialize,
 };
 
-export type AppError = { kind: "eventEmit"; message: string } | { kind: "autostart"; message: string } | { kind: "configLoad"; message: string } | { kind: "configSave"; message: string } | { kind: "backup"; message: string } | { kind: "clash"; message: string } | { kind: "database"; message: string } | { kind: "dns"; message: DnsCommandError } | { kind: "group"; message: string } | { kind: "hotkey"; message: string } | { kind: "preset"; message: string } | { kind: "profile"; message: string } | { kind: "qr"; message: string } | { kind: "missingCore"; message: MissingCoreError } | { kind: "runtime"; message: string } | { kind: "routing"; message: string } | { kind: "speedtest"; message: string } | { kind: "sudo"; message: string } | { kind: "subscription"; message: string } | { kind: "sysProxy"; message: string } | { kind: "state"; message: string } | { kind: "tun"; message: string } | { kind: "update"; message: string };
+export type AppError = { kind: "eventEmit"; message: string } | { kind: "autostart"; message: string } | { kind: "configLoad"; message: string } | { kind: "configSave"; message: string } | { kind: "backup"; message: string } | { kind: "certificate"; message: string } | { kind: "clash"; message: string } | { kind: "database"; message: string } | { kind: "dns"; message: DnsCommandError } | { kind: "group"; message: string } | { kind: "hotkey"; message: string } | { kind: "preset"; message: string } | { kind: "profile"; message: string } | { kind: "qr"; message: string } | { kind: "export"; message: string } | { kind: "missingCore"; message: MissingCoreError } | { kind: "runtime"; message: string } | { kind: "routing"; message: string } | { kind: "speedtest"; message: string } | { kind: "sudo"; message: string } | { kind: "subscription"; message: string } | { kind: "sysProxy"; message: string } | { kind: "state"; message: string } | { kind: "template"; message: string } | { kind: "tun"; message: string } | { kind: "update"; message: string };
 
 export type AppEvent = { kind: "notice"; payload: AppNotice } | { kind: "selectTab"; payload: ShellTabTarget };
 
@@ -308,6 +317,21 @@ export type BackupStatus_Serialize = {
 	defaultBackupPath: string,
 	backupDir: string,
 	webDavItem: WebDavItem_Serialize,
+};
+
+export type CertificateFetchRequest = {
+	address: string,
+	port: number,
+	serverName: string | null,
+	allowInsecure: boolean,
+	includeChain: boolean,
+};
+
+export type CertificateFetchResult = {
+	pem: string,
+	sha256: string[],
+	chainCount: number,
+	warning: string | null,
 };
 
 export type CheckUpdateItem = CheckUpdateItem_Serialize | CheckUpdateItem_Deserialize;
@@ -584,6 +608,19 @@ export type DnsSettings_Serialize = {
 export type DnsValidationIssue = {
 	field: string,
 	message: string,
+};
+
+export type ExportProfilesFormat = "shareLinks" | "shareLinksBase64" | "innerLinks" | "clientConfig";
+
+export type ExportProfilesRequest = {
+	indexIds: string[],
+	format: ExportProfilesFormat,
+};
+
+export type ExportProfilesResult = {
+	text: string,
+	count: number,
+	format: ExportProfilesFormat,
 };
 
 export type Fragment4RayItem = Fragment4RayItem_Serialize | Fragment4RayItem_Deserialize;
@@ -1065,6 +1102,15 @@ export type QrCodeImage = {
 	mimeType: string,
 	svg: string,
 };
+
+export type QrScanResult = {
+	status: QrScanStatus,
+	text: string | null,
+	source: string,
+	message: string | null,
+};
+
+export type QrScanStatus = "found" | "notFound" | "unavailable";
 
 export type QueryInvalidation = {
 	queryKey: string[],

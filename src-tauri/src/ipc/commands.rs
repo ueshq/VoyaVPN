@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeSet,
     fs, io,
-    path::{Component, Path, PathBuf},
+    path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -16,6 +16,11 @@ use voya_app::backup::{
     BackupManager, BackupManagerError, BackupOperationResult, BackupRemoteResult,
     BackupRestoreResult, BackupStatus,
 };
+use voya_app::certificates::{
+    calculate_certificate_sha256 as calculate_certificate_sha256_impl,
+    fetch_certificate as fetch_certificate_impl, CertificateError, CertificateFetchRequest,
+    CertificateFetchResult,
+};
 use voya_app::clash::{
     ClashConnectionsSnapshot, ClashDelayTestResult, ClashManager, ClashManagerError,
     ClashMonitorStatus, ClashProxiesSnapshot,
@@ -26,13 +31,18 @@ use voya_app::diagnostics::{
     DiagnosticsSettings,
 };
 use voya_app::dns::{DnsManager, DnsManagerError, DnsSettings, DnsValidationIssue};
+use voya_app::exports::{
+    ExportManager, ExportManagerError, ExportProfilesFormat, ExportProfilesRequest,
+    ExportProfilesResult,
+};
 use voya_app::groups::{GroupManager, GroupManagerError};
 use voya_app::hotkeys::{
     GlobalHotkeyBinding, HotkeyManager, HotkeyManagerError, HotkeyRegistrar, HotkeyStatus,
 };
+use voya_app::input_safety::{self, InputSafetyError};
 use voya_app::presets::{PresetApplyOptions, PresetApplyResult, PresetManager, PresetManagerError};
 use voya_app::profiles::{ProfileManager, ProfileManagerError};
-use voya_app::qr::{QrCodeError, QrCodeImage, QrCodeManager};
+use voya_app::qr::{QrCodeError, QrCodeImage, QrCodeManager, QrScanResult};
 use voya_app::routing::{RoutingManager, RoutingManagerError};
 use voya_app::runtime::{RuntimeError, RuntimeManager};
 use voya_app::speedtest::{
@@ -42,6 +52,7 @@ use voya_app::subscriptions::{SubscriptionManager, SubscriptionManagerError};
 use voya_app::sudo::{SudoCollectionError, SudoCollectionStatus};
 use voya_app::supervisor::{SupervisorConnectionState, SupervisorError, SupervisorSnapshot};
 use voya_app::sysproxy::SystemProxyManagerError;
+use voya_app::templates::{FullConfigTemplateManager, FullConfigTemplateManagerError};
 use voya_app::tun::{TunManager, TunManagerError, TunStatus};
 use voya_app::updates::{
     apply_downloaded_core_update_with_runtime, core_type_for_update_target_id,
@@ -50,13 +61,15 @@ use voya_app::updates::{
     UpdateRunResult, UpdateStatus,
 };
 use voya_core::{
-    AppConfig, CoreType, GlobalHotkey, GroupChildCandidate, GroupPreview, GroupValidationResult,
-    ImportProfilesResult, KeyEventItem, MoveAction, PresetType, ProfileDedupeResult, ProfileItem,
-    ProfileListItem, ProfileSortKey, RoutingItem, RuleMode, RulesItem, SubItem,
-    SubscriptionUpdateResult, SysProxyType, WebDavItem,
+    AppConfig, CoreType, FullConfigTemplateItem, GlobalHotkey, GroupChildCandidate, GroupPreview,
+    GroupValidationResult, ImportProfilesResult, KeyEventItem, MoveAction, PresetType,
+    ProfileDedupeResult, ProfileItem, ProfileListItem, ProfileSortKey, RoutingItem, RuleMode,
+    RulesItem, SubItem, SubscriptionUpdateResult, SysProxyType, WebDavItem,
 };
 use voya_platform::{
-    coreinfo::{copy_seed_core_asset, CoreInfoError, CoreSeedCopyOutcome, CoreSeedCopyStatus},
+    coreinfo::{
+        copy_seed_core_asset, CoreInfoError, CoreSeedCopyOutcome, CoreSeedCopyStatus, TargetOs,
+    },
     sysproxy::SystemProxyStatus,
 };
 use zeroize::Zeroizing;
@@ -89,6 +102,7 @@ pub enum AppError {
     ConfigLoad(String),
     ConfigSave(String),
     Backup(String),
+    Certificate(String),
     Clash(String),
     Database(String),
     Dns(DnsCommandError),
@@ -97,6 +111,7 @@ pub enum AppError {
     Preset(String),
     Profile(String),
     Qr(String),
+    Export(String),
     MissingCore(MissingCoreError),
     Runtime(String),
     Routing(String),
@@ -105,6 +120,7 @@ pub enum AppError {
     Subscription(String),
     SysProxy(String),
     State(String),
+    Template(String),
     Tun(String),
     Update(String),
 }
@@ -388,6 +404,50 @@ pub fn generate_qr_code(content: String) -> Result<QrCodeImage, AppError> {
     )?;
 
     QrCodeManager.generate_svg(&content).map_err(qr_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn scan_screen_qr() -> Result<QrScanResult, AppError> {
+    Ok(QrCodeManager.scan_screen())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn fetch_certificate(
+    request: CertificateFetchRequest,
+) -> Result<CertificateFetchResult, AppError> {
+    validate_required_ipc_text(
+        &request.address,
+        "certificate address",
+        IPC_NAME_MAX_CHARS,
+        AppError::Certificate,
+    )?;
+    if let Some(server_name) = request.server_name.as_deref() {
+        validate_ipc_text(
+            server_name,
+            "certificate server name",
+            IPC_NAME_MAX_CHARS,
+            AppError::Certificate,
+        )?;
+    }
+
+    fetch_certificate_impl(request)
+        .await
+        .map_err(certificate_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn calculate_certificate_sha256(pem: String) -> Result<Vec<String>, AppError> {
+    validate_required_ipc_text(
+        &pem,
+        "certificate PEM",
+        IPC_QR_CONTENT_MAX_CHARS * 8,
+        AppError::Certificate,
+    )?;
+
+    calculate_certificate_sha256_impl(&pem).map_err(certificate_error)
 }
 
 pub(crate) fn register_global_hotkeys_for_config<R: tauri::Runtime>(
@@ -674,6 +734,34 @@ pub async fn save_dns_settings<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn load_full_config_templates(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<FullConfigTemplateItem>, AppError> {
+    FullConfigTemplateManager::new(state.database())
+        .load_templates()
+        .await
+        .map_err(template_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn save_full_config_template<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    template: FullConfigTemplateItem,
+) -> Result<FullConfigTemplateItem, AppError> {
+    let saved = FullConfigTemplateManager::new(state.database())
+        .save_template(template)
+        .await
+        .map_err(template_error)?;
+
+    emit_full_config_template_invalidation(&app, "full-config-template-saved")?;
+
+    Ok(saved)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn list_profiles(
     state: tauri::State<'_, AppState>,
     subid: Option<String>,
@@ -807,6 +895,42 @@ pub async fn copy_profiles<R: tauri::Runtime>(
     )?;
 
     Ok(copied)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn export_profile_share_links(
+    state: tauri::State<'_, AppState>,
+    index_ids: Vec<String>,
+) -> Result<ExportProfilesResult, AppError> {
+    export_profiles_result(&state, index_ids, ExportProfilesFormat::ShareLinks).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn export_profile_share_links_base64(
+    state: tauri::State<'_, AppState>,
+    index_ids: Vec<String>,
+) -> Result<ExportProfilesResult, AppError> {
+    export_profiles_result(&state, index_ids, ExportProfilesFormat::ShareLinksBase64).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn export_profile_inner_links(
+    state: tauri::State<'_, AppState>,
+    index_ids: Vec<String>,
+) -> Result<ExportProfilesResult, AppError> {
+    export_profiles_result(&state, index_ids, ExportProfilesFormat::InnerLinks).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn export_profile_client_config(
+    state: tauri::State<'_, AppState>,
+    index_ids: Vec<String>,
+) -> Result<ExportProfilesResult, AppError> {
+    export_profiles_result(&state, index_ids, ExportProfilesFormat::ClientConfig).await
 }
 
 #[tauri::command]
@@ -2388,6 +2512,30 @@ fn current_config(state: &AppState) -> Result<AppConfig, AppError> {
         .map(|guard| guard.clone())
 }
 
+async fn export_profiles_result(
+    state: &AppState,
+    index_ids: Vec<String>,
+    format: ExportProfilesFormat,
+) -> Result<ExportProfilesResult, AppError> {
+    validate_ipc_text_list(
+        &index_ids,
+        "profile index id",
+        IPC_ID_MAX_CHARS,
+        AppError::Export,
+    )?;
+    let config = current_config(state)?;
+
+    ExportManager::new(state.database())
+        .export_profiles(
+            state.runtime_paths(),
+            &config,
+            TargetOs::current(),
+            ExportProfilesRequest { index_ids, format },
+        )
+        .await
+        .map_err(export_error)
+}
+
 fn validate_core_update_apply_request(request: &CoreUpdateApplyRequest) -> Result<(), AppError> {
     validate_required_ipc_text(
         &request.target_id,
@@ -2421,11 +2569,8 @@ fn validate_present_ipc_text(
     max_chars: usize,
     make_error: fn(String) -> AppError,
 ) -> Result<(), AppError> {
-    if let Some(value) = value {
-        validate_required_ipc_text(value, field, max_chars, make_error)?;
-    }
-
-    Ok(())
+    input_safety::validate_present_text(value, max_chars)
+        .map_err(|error| ipc_text_error(error, field, make_error))
 }
 
 fn validate_optional_ipc_text(
@@ -2434,11 +2579,8 @@ fn validate_optional_ipc_text(
     max_chars: usize,
     make_error: fn(String) -> AppError,
 ) -> Result<(), AppError> {
-    if let Some(value) = value {
-        validate_ipc_text(value, field, max_chars, make_error)?;
-    }
-
-    Ok(())
+    input_safety::validate_optional_text(value, max_chars)
+        .map_err(|error| ipc_text_error(error, field, make_error))
 }
 
 fn validate_ipc_text_list(
@@ -2447,15 +2589,8 @@ fn validate_ipc_text_list(
     max_chars: usize,
     make_error: fn(String) -> AppError,
 ) -> Result<(), AppError> {
-    if values.len() > IPC_LIST_MAX_ITEMS {
-        return Err(make_error(format!("invalid {field}: too many items")));
-    }
-
-    for value in values {
-        validate_required_ipc_text(value, field, max_chars, make_error)?;
-    }
-
-    Ok(())
+    input_safety::validate_text_list(values, max_chars, IPC_LIST_MAX_ITEMS)
+        .map_err(|error| ipc_text_error(error, field, make_error))
 }
 
 fn validate_required_ipc_text(
@@ -2464,11 +2599,8 @@ fn validate_required_ipc_text(
     max_chars: usize,
     make_error: fn(String) -> AppError,
 ) -> Result<(), AppError> {
-    if value.trim().is_empty() {
-        return Err(make_error(format!("invalid {field}: value is required")));
-    }
-
-    validate_ipc_text(value, field, max_chars, make_error)
+    input_safety::validate_required_text(value, max_chars)
+        .map_err(|error| ipc_text_error(error, field, make_error))
 }
 
 fn validate_ipc_text(
@@ -2477,16 +2609,24 @@ fn validate_ipc_text(
     max_chars: usize,
     make_error: fn(String) -> AppError,
 ) -> Result<(), AppError> {
-    if value.chars().count() > max_chars {
-        return Err(make_error(format!("invalid {field}: value is too long")));
-    }
-    if value.chars().any(char::is_control) {
-        return Err(make_error(format!(
-            "invalid {field}: control characters are not allowed"
-        )));
-    }
+    input_safety::validate_text(value, max_chars)
+        .map_err(|error| ipc_text_error(error, field, make_error))
+}
 
-    Ok(())
+fn ipc_text_error(
+    error: InputSafetyError,
+    field: &str,
+    make_error: fn(String) -> AppError,
+) -> AppError {
+    let reason = match error {
+        InputSafetyError::EmptyValue => "value is required".to_string(),
+        InputSafetyError::TooLong => "value is too long".to_string(),
+        InputSafetyError::ControlCharacters => "control characters are not allowed".to_string(),
+        InputSafetyError::TooManyItems => "too many items".to_string(),
+        error => error.to_string(),
+    };
+
+    make_error(format!("invalid {field}: {reason}"))
 }
 
 pub(crate) fn diagnostics_release_channel() -> DiagnosticsReleaseChannel {
@@ -2707,41 +2847,27 @@ impl IpcFileScope {
             }
         }
     }
+
+    fn scoped_file_error(self, error: InputSafetyError) -> AppError {
+        match error {
+            InputSafetyError::InvalidPath
+            | InputSafetyError::EmptyValue
+            | InputSafetyError::TooLong
+            | InputSafetyError::ControlCharacters
+            | InputSafetyError::TooManyItems => self.invalid_path_error(),
+            InputSafetyError::PathUnavailable => self.unavailable_error(),
+            InputSafetyError::PrepareDirectory(source) => self.prepare_error(source),
+        }
+    }
 }
 
 fn resolve_scoped_ipc_file(
     input: &str,
-    base_dir: &Path,
+    base_dir: &std::path::Path,
     scope: IpcFileScope,
 ) -> Result<PathBuf, AppError> {
-    let input = input.trim();
-    if input.is_empty()
-        || input.chars().count() > IPC_PATH_MAX_CHARS
-        || input.chars().any(char::is_control)
-    {
-        return Err(scope.invalid_path_error());
-    }
-
-    let relative_path = Path::new(input);
-    if relative_path.is_absolute() || has_disallowed_relative_components(relative_path) {
-        return Err(scope.invalid_path_error());
-    }
-
-    fs::create_dir_all(base_dir).map_err(|source| scope.prepare_error(source))?;
-    let base_dir = fs::canonicalize(base_dir).map_err(|source| scope.prepare_error(source))?;
-    let candidate =
-        fs::canonicalize(base_dir.join(relative_path)).map_err(|_| scope.unavailable_error())?;
-
-    if candidate.starts_with(&base_dir) && candidate.is_file() {
-        Ok(candidate)
-    } else {
-        Err(scope.invalid_path_error())
-    }
-}
-
-fn has_disallowed_relative_components(path: &Path) -> bool {
-    path.components()
-        .any(|component| !matches!(component, Component::Normal(_)))
+    input_safety::resolve_scoped_file(input, base_dir, IPC_PATH_MAX_CHARS)
+        .map_err(|error| scope.scoped_file_error(error))
 }
 
 fn diagnostics_error_class_for_runtime_error(error: &RuntimeError) -> DiagnosticsErrorClass {
@@ -3232,6 +3358,24 @@ fn qr_error(error: QrCodeError) -> AppError {
     }
 }
 
+fn certificate_error(error: CertificateError) -> AppError {
+    AppError::Certificate(error.to_string())
+}
+
+fn template_error(error: FullConfigTemplateManagerError) -> AppError {
+    match error {
+        FullConfigTemplateManagerError::Db(error) => AppError::Database(error.to_string()),
+        error => AppError::Template(error.to_string()),
+    }
+}
+
+fn export_error(error: ExportManagerError) -> AppError {
+    match error {
+        ExportManagerError::Database(error) => AppError::Database(error.to_string()),
+        error => AppError::Export(error.to_string()),
+    }
+}
+
 fn clash_error(error: ClashManagerError) -> AppError {
     AppError::Clash(error.to_string())
 }
@@ -3489,6 +3633,29 @@ where
     .map_err(|error| AppError::EventEmit(error.to_string()))
 }
 
+fn emit_full_config_template_invalidation<R>(
+    app: &tauri::AppHandle<R>,
+    reason: &str,
+) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    InvalidateEvent {
+        keys: [
+            vec!["full-config-templates".to_string()],
+            vec!["app-config".to_string()],
+        ]
+        .into_iter()
+        .map(|query_key| QueryInvalidation {
+            query_key,
+            reason: reason.to_string(),
+        })
+        .collect(),
+    }
+    .emit(app)
+    .map_err(|error| AppError::EventEmit(error.to_string()))
+}
+
 fn emit_preset_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str) -> Result<(), AppError>
 where
     R: tauri::Runtime,
@@ -3681,195 +3848,5 @@ fn sysproxy_mode(mode: SysProxyType) -> super::events::SysProxyMode {
         SysProxyType::ForcedChange => super::events::SysProxyMode::ForcedChange,
         SysProxyType::Unchanged => super::events::SysProxyMode::Unchanged,
         SysProxyType::Pac => super::events::SysProxyMode::Pac,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::env;
-
-    use super::*;
-
-    #[test]
-    fn scoped_ipc_file_resolves_relative_file_inside_base_dir() {
-        let root = unique_temp_root("ipc-file-valid");
-        let base = root.join("imports");
-        fs::create_dir_all(&base).expect("create import dir");
-        let file = base.join("profiles.txt");
-        fs::write(&file, b"profile").expect("write import file");
-
-        let resolved = resolve_scoped_ipc_file("profiles.txt", &base, IpcFileScope::ProfileImport)
-            .expect("resolve import file");
-
-        assert_eq!(
-            resolved,
-            file.canonicalize().expect("canonical import file")
-        );
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn scoped_ipc_file_rejects_absolute_and_parent_paths_without_echoing_input() {
-        let root = unique_temp_root("ipc-file-invalid");
-        let base = root.join("backups");
-        fs::create_dir_all(&base).expect("create backup dir");
-        let file = base.join("backup.zip");
-        fs::write(&file, b"backup").expect("write backup file");
-        let absolute = file.to_string_lossy().into_owned();
-
-        let absolute_error = resolve_scoped_ipc_file(&absolute, &base, IpcFileScope::BackupRestore)
-            .expect_err("absolute path should be rejected");
-        let message = invalid_backup_path_error_message(&absolute_error);
-        assert!(!message.contains(&absolute));
-
-        let parent_error =
-            resolve_scoped_ipc_file("../backup.zip", &base, IpcFileScope::BackupRestore)
-                .expect_err("parent path should be rejected");
-        let message = invalid_backup_path_error_message(&parent_error);
-        assert!(!message.contains(".."));
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn scoped_ipc_file_rejects_control_characters_without_echoing_input() {
-        let root = unique_temp_root("ipc-file-control");
-        let base = root.join("imports");
-        fs::create_dir_all(&base).expect("create import dir");
-        let input = "profiles\nsecret.txt";
-
-        let error = resolve_scoped_ipc_file(input, &base, IpcFileScope::ProfileImport)
-            .expect_err("control character path should be rejected");
-        let message = invalid_import_path_error_message(&error);
-
-        assert!(!message.contains("secret"));
-        assert!(!message.contains('\n'));
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn ipc_text_validation_rejects_control_characters_without_echoing_value() {
-        let error = validate_required_ipc_text(
-            "profile\nsecret",
-            "profile index id",
-            IPC_ID_MAX_CHARS,
-            AppError::Profile,
-        )
-        .expect_err("control characters should be rejected");
-
-        let message = profile_error_message(&error);
-        assert!(message.contains("control characters"));
-        assert!(!message.contains("secret"));
-    }
-
-    #[test]
-    fn ipc_text_validation_rejects_oversized_values() {
-        let value = "a".repeat(IPC_ID_MAX_CHARS + 1);
-        let error = validate_required_ipc_text(
-            &value,
-            "profile index id",
-            IPC_ID_MAX_CHARS,
-            AppError::Profile,
-        )
-        .expect_err("oversized value should be rejected");
-
-        assert!(profile_error_message(&error).contains("too long"));
-    }
-
-    #[test]
-    fn ipc_text_list_validation_rejects_empty_items() {
-        let values = vec!["profile-1".to_string(), String::new()];
-        let error = validate_ipc_text_list(
-            &values,
-            "profile index id",
-            IPC_ID_MAX_CHARS,
-            AppError::Profile,
-        )
-        .expect_err("empty list item should be rejected");
-
-        assert!(profile_error_message(&error).contains("value is required"));
-    }
-
-    #[test]
-    fn qr_generation_error_does_not_echo_sensitive_content() {
-        let error = qr_error(QrCodeError::Generate(
-            "failed for vless://secret@example.test".to_string(),
-        ));
-
-        let AppError::Qr(message) = error else {
-            panic!("unexpected QR error variant");
-        };
-        assert_eq!(message, "failed to generate QR code");
-        assert!(!message.contains("secret"));
-    }
-
-    #[test]
-    fn missing_core_error_fields_do_not_echo_search_directory() {
-        let message = missing_core_error_message(CoreType::Xray);
-        let search_dir = missing_core_search_dir_label();
-        let candidates = missing_core_candidates("xray, xray.exe,  ");
-
-        assert!(message.contains("Xray"));
-        assert!(!message.contains("/Users/afu/Library"));
-        assert!(!message.contains("Application Support"));
-        assert_eq!(search_dir, MISSING_CORE_SEARCH_DIR_LABEL);
-        assert!(!search_dir.contains('/'));
-        assert!(!search_dir.contains('\\'));
-        assert_eq!(candidates, vec!["xray".to_string(), "xray.exe".to_string()]);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn scoped_ipc_file_rejects_symlink_escape_from_base_dir() {
-        use std::os::unix::fs::symlink;
-
-        let root = unique_temp_root("ipc-file-symlink");
-        let base = root.join("imports");
-        fs::create_dir_all(&base).expect("create import dir");
-        let outside = root.join("outside.txt");
-        fs::write(&outside, b"outside").expect("write outside file");
-        symlink(&outside, base.join("escape.txt")).expect("create symlink");
-
-        let error = resolve_scoped_ipc_file("escape.txt", &base, IpcFileScope::ProfileImport)
-            .expect_err("symlink escape should be rejected");
-
-        assert!(
-            matches!(error, AppError::Subscription(message) if message.contains("invalid import file path"))
-        );
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    fn invalid_import_path_error_message(error: &AppError) -> &str {
-        match error {
-            AppError::Subscription(message) if message.contains("invalid import file path") => {
-                message
-            }
-            error => panic!("unexpected error: {error:?}"),
-        }
-    }
-
-    fn invalid_backup_path_error_message(error: &AppError) -> &str {
-        match error {
-            AppError::Backup(message) if message.contains("invalid backup restore path") => message,
-            error => panic!("unexpected error: {error:?}"),
-        }
-    }
-
-    fn profile_error_message(error: &AppError) -> &str {
-        match error {
-            AppError::Profile(message) => message,
-            error => panic!("unexpected error: {error:?}"),
-        }
-    }
-
-    fn unique_temp_root(name: &str) -> PathBuf {
-        env::temp_dir().join(format!(
-            "voyavpn-{name}-{}-{}",
-            std::process::id(),
-            current_unix_time()
-        ))
     }
 }

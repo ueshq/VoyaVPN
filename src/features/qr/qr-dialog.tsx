@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState, type ChangeEvent } from "react";
-import { AlertTriangle, CheckCircle2, ImagePlus, QrCode, ScanLine } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { BrowserQRCodeReader } from "@zxing/browser";
+import { AlertTriangle, CheckCircle2, ClipboardPaste, ImagePlus, Monitor, QrCode, ScanLine } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -13,25 +14,15 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/i18n/use-i18n";
-import { generateQrCode, importProfilesFromText } from "@/ipc";
+import { generateQrCode, importProfilesFromText, scanScreenQr } from "@/ipc";
 import type { QrCodeImage } from "@/ipc/bindings";
 import { getErrorMessage } from "@/lib/utils";
 
-type BarcodeDetectorLike = {
-  detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;
-};
-
-type BarcodeDetectorConstructor = new (options: { formats: string[] }) => BarcodeDetectorLike;
-
-type WindowWithBarcodeDetector = Window & {
-  BarcodeDetector?: BarcodeDetectorConstructor;
-};
-
-export function QrDialog() {
+export function QrDialog({ initialContent = "" }: { initialContent?: string }) {
   const { t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [content, setContent] = useState("");
-  const [decodedText, setDecodedText] = useState("");
+  const [content, setContent] = useState(initialContent);
+  const [decodedText, setDecodedText] = useState(initialContent);
   const [error, setError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<QrCodeImage | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
@@ -44,6 +35,14 @@ export function QrDialog() {
 
     return `data:${generated.mimeType};utf8,${encodeURIComponent(generated.svg)}`;
   }, [generated]);
+
+  useEffect(() => {
+    if (initialContent.trim()) {
+      void generateQrCode(initialContent).then(setGenerated).catch((error: unknown) => {
+        setError(getErrorMessage(error));
+      });
+    }
+  }, [initialContent]);
 
   async function generate() {
     setWorking(true);
@@ -69,9 +68,73 @@ export function QrDialog() {
     setError(null);
     setImportMessage(null);
     try {
-      const result = await scanQrImage(file);
-      setDecodedText(result);
-      setContent(result);
+      applyDecoded(await scanQrBlob(file));
+    } catch (error) {
+      setError(getErrorMessage(error));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function scanClipboardText() {
+    if (!navigator.clipboard?.readText) {
+      setError(t("qr.clipboardUnavailable"));
+      return;
+    }
+
+    setWorking(true);
+    setError(null);
+    setImportMessage(null);
+    try {
+      const text = (await navigator.clipboard.readText()).trim();
+      if (!text) {
+        throw new Error(t("qr.clipboardEmpty"));
+      }
+      applyDecoded(text);
+    } catch (error) {
+      setError(getErrorMessage(error));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function scanClipboardImage() {
+    if (!navigator.clipboard?.read) {
+      setError(t("qr.clipboardImageUnavailable"));
+      return;
+    }
+
+    setWorking(true);
+    setError(null);
+    setImportMessage(null);
+    try {
+      const blob = await readClipboardImageBlob();
+      applyDecoded(await scanQrBlob(blob));
+    } catch (error) {
+      setError(getErrorMessage(error));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function scanScreen() {
+    setWorking(true);
+    setError(null);
+    setImportMessage(null);
+    try {
+      const result = await scanScreenQr();
+      if (result.status === "found" && result.text?.trim()) {
+        applyDecoded(result.text);
+        return;
+      }
+
+      try {
+        applyDecoded(await scanDisplayMediaQr());
+      } catch (screenError) {
+        const backendMessage =
+          result.message || t(result.status === "unavailable" ? "qr.screenUnavailable" : "qr.noQrFound");
+        setError(`${backendMessage} ${getErrorMessage(screenError)}`);
+      }
     } catch (error) {
       setError(getErrorMessage(error));
     } finally {
@@ -96,6 +159,16 @@ export function QrDialog() {
     } finally {
       setWorking(false);
     }
+  }
+
+  function applyDecoded(text: string) {
+    const decoded = text.trim();
+    if (!decoded) {
+      return;
+    }
+
+    setDecodedText(decoded);
+    setContent(decoded);
   }
 
   return (
@@ -149,6 +222,18 @@ export function QrDialog() {
               <ImagePlus className="size-4" aria-hidden="true" />
               {t("qr.scanImage")}
             </Button>
+            <Button disabled={working} onClick={() => void scanClipboardText()} type="button" variant="outline">
+              <ClipboardPaste className="size-4" aria-hidden="true" />
+              {t("qr.scanClipboardText")}
+            </Button>
+            <Button disabled={working} onClick={() => void scanClipboardImage()} type="button" variant="outline">
+              <ClipboardPaste className="size-4" aria-hidden="true" />
+              {t("qr.scanClipboardImage")}
+            </Button>
+            <Button disabled={working} onClick={() => void scanScreen()} type="button" variant="outline">
+              <Monitor className="size-4" aria-hidden="true" />
+              {t("qr.scanScreen")}
+            </Button>
             <Button disabled={!decodedText.trim() || working} onClick={() => void importDecoded()} type="button">
               {t("qr.importDecoded")}
             </Button>
@@ -181,23 +266,85 @@ export function QrDialog() {
   );
 }
 
-async function scanQrImage(file: File): Promise<string> {
-  const Detector = (window as WindowWithBarcodeDetector).BarcodeDetector;
-  if (!Detector) {
-    throw new Error("QR scanning is not available in this WebView.");
-  }
-
-  const bitmap = await createImageBitmap(file);
+async function scanQrBlob(blob: Blob): Promise<string> {
+  const objectUrl = URL.createObjectURL(blob);
   try {
-    const detector = new Detector({ formats: ["qr_code"] });
-    const [barcode] = await detector.detect(bitmap);
-    const rawValue = barcode?.rawValue?.trim();
+    const result = await new BrowserQRCodeReader().decodeFromImageUrl(objectUrl);
+    const rawValue = result.getText().trim();
     if (!rawValue) {
       throw new Error("No valid QR code found.");
     }
 
     return rawValue;
   } finally {
-    bitmap.close();
+    URL.revokeObjectURL(objectUrl);
   }
+}
+
+async function readClipboardImageBlob(): Promise<Blob> {
+  const items = await navigator.clipboard.read();
+  for (const item of items) {
+    const imageType = item.types.find((type) => type.startsWith("image/"));
+    if (imageType) {
+      return item.getType(imageType);
+    }
+  }
+
+  throw new Error("Clipboard does not contain an image.");
+}
+
+async function scanDisplayMediaQr(): Promise<string> {
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    throw new Error("Screen capture is unavailable in this WebView.");
+  }
+
+  const stream = await navigator.mediaDevices.getDisplayMedia({ audio: false, video: true });
+  try {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.srcObject = stream;
+    await waitForVideoMetadata(video);
+    await video.play();
+    await new Promise((resolve) => window.setTimeout(resolve, 150));
+
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (width <= 0 || height <= 0) {
+      throw new Error("Screen capture did not produce a video frame.");
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("Unable to read captured screen frame.");
+    }
+
+    context.drawImage(video, 0, 0, width, height);
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((nextBlob) => {
+        if (nextBlob) {
+          resolve(nextBlob);
+          return;
+        }
+        reject(new Error("Unable to encode captured screen frame."));
+      }, "image/png");
+    });
+
+    return scanQrBlob(blob);
+  } finally {
+    stream.getTracks().forEach((track) => track.stop());
+  }
+}
+
+function waitForVideoMetadata(video: HTMLVideoElement): Promise<void> {
+  if (video.videoWidth > 0 && video.videoHeight > 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    video.onloadedmetadata = () => resolve();
+    video.onerror = () => reject(new Error("Unable to load captured screen stream."));
+  });
 }

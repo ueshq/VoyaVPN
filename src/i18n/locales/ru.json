@@ -168,7 +168,13 @@
     "hotkeysRegistered": "{{count}} registered",
     "saved": "Saved",
     "sources": "Sources",
-    "srsSource": "sing-box ruleset source"
+    "srsSource": "sing-box ruleset source",
+    "loading": "Loading",
+    "runtimeConfig": "Runtime configuration",
+    "runtimeCore": "Core",
+    "runtimeMapping": "Mapping",
+    "runtimeNetwork": "Network",
+    "runtimeTests": "Tests and updates"
   },
   "panes": {
     "clashConnections": {
@@ -358,6 +364,30 @@
       },
       "bulk": {
         "selected": "{{count}} selected"
+      },
+      "certFetch": {
+        "allowInsecure": "Allow insecure fetch",
+        "calculateSha": "Calculate SHA",
+        "fetchCert": "Fetch cert",
+        "fetchChain": "Fetch chain",
+        "fetched": "Fetched {{count}} certificate(s).",
+        "missingEndpoint": "Address and port are required before fetching a certificate.",
+        "missingPem": "Paste or fetch a PEM certificate before calculating SHA-256.",
+        "shaCalculated": "Calculated {{count}} SHA-256 fingerprint(s)."
+      },
+      "export": {
+        "clientConfig": "Client config",
+        "clipboardUnavailable": "Clipboard write is unavailable in this context.",
+        "copied": "Copied {{count}} exported profile(s) to clipboard.",
+        "export": "Export",
+        "innerLinks": "Inner links",
+        "noSelection": "Select at least one profile to export.",
+        "shareBase64": "Share links (Base64)",
+        "shareLinks": "Share links",
+        "showQr": "Show QR",
+        "saveClientConfig": "Save client config",
+        "saveShareLinks": "Save share links",
+        "savedFile": "Saved export to {{path}}."
       }
     },
     "routing": {
@@ -380,7 +410,15 @@
     "imported": "Imported {{count}} profiles",
     "scan": "Scan",
     "scanImage": "Scan image",
-    "title": "QR"
+    "title": "QR",
+    "clipboardEmpty": "Clipboard is empty.",
+    "clipboardImageUnavailable": "Clipboard image read is unavailable in this WebView.",
+    "clipboardUnavailable": "Clipboard text read is unavailable in this WebView.",
+    "noQrFound": "No QR code found.",
+    "scanClipboardImage": "Clipboard image",
+    "scanClipboardText": "Clipboard text",
+    "scanScreen": "Screen",
+    "screenUnavailable": "Screen QR scanning is unavailable on this platform or permission state."
   },
   "resx": {
     "AddBatchRoutingRulesYesNo": "Хотите добавить правила? Выберите «Да» для добавления или «Нет» для замены",
@@ -1024,7 +1062,11 @@
     "target": "Target",
     "title": "Check Updates",
     "version": "Version",
-    "waiting": "Waiting"
+    "waiting": "Waiting",
+    "support": {
+      "auto": "Auto",
+      "manual": "Manual"
+    }
   },
   "home": {
     "aria": "Главная подключения",
@@ -1038,5 +1080,18 @@
     "upload": "Отправка",
     "download": "Приём",
     "duration": "В сети"
+  },
+  "templates": {
+    "addProxyOnly": "Add proxy only",
+    "configJson": "Config JSON",
+    "description": "Edit full config templates used by Xray and sing-box generation.",
+    "enabled": "Enabled",
+    "open": "Open template settings",
+    "proxyDetour": "Proxy detour",
+    "remarks": "Remarks",
+    "saved": "{{core}} template saved.",
+    "saving": "Saving",
+    "title": "Full Config Templates",
+    "tunConfigJson": "TUN config JSON"
   }
 }

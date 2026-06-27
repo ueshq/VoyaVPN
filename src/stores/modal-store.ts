@@ -2,7 +2,15 @@ import { create } from "zustand";
 
 import type { CoreType } from "@/ipc/bindings";
 
-export type ModalKind = "about" | "backup" | "missingCore" | "qr" | "settings" | "sudo" | "updates";
+export type ModalKind =
+  | "about"
+  | "backup"
+  | "fullConfigTemplate"
+  | "missingCore"
+  | "qr"
+  | "settings"
+  | "sudo"
+  | "updates";
 export type ModalIntent = "enableTun";
 
 export type MissingCorePayload = {
@@ -15,11 +23,13 @@ export type ModalEntry = {
   intent?: ModalIntent;
   kind: ModalKind;
   missingCore?: MissingCorePayload;
+  qrContent?: string;
 };
 
 type ModalOptions = {
   intent?: ModalIntent;
   missingCore?: MissingCorePayload;
+  qrContent?: string;
 };
 
 type ModalState = {
@@ -40,7 +50,16 @@ export const useModalStore = create<ModalState>((set) => ({
     const id = createModalId(kind);
 
     set((state) => ({
-      stack: [...state.stack, { id, intent: options?.intent, kind, missingCore: options?.missingCore }],
+      stack: [
+        ...state.stack,
+        {
+          id,
+          intent: options?.intent,
+          kind,
+          missingCore: options?.missingCore,
+          qrContent: options?.qrContent,
+        },
+      ],
     }));
 
     return id;
