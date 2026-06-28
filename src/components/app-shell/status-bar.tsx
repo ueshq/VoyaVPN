@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Plug, Power, Shield, WifiOff } from "lucide-react";
+import { Activity, Gauge, LoaderCircle, MoreHorizontal, Plug, Power, Shield, WifiOff } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,7 @@ import {
   setTunEnabled,
   setSystemProxyMode,
   systemProxyStatus,
-  sudoBeginCollection,
+  tunRequestElevation,
   tunStatus,
   useRuntimeEventStore,
 } from "@/ipc";
@@ -189,11 +189,6 @@ export function StatusBar() {
         setCoreState(statusToCoreState(status));
       }
     } catch (error) {
-      if (shouldOpenSudoPrompt(error)) {
-        openModal("sudo");
-        return;
-      }
-
       const missingCore = missingCorePayload(error);
       if (missingCore) {
         openModal("missingCore", { missingCore });
@@ -215,11 +210,13 @@ export function StatusBar() {
     setPendingAction("tun");
     try {
       if (nextEnabled) {
+        // Obtain system authorization on demand (one native prompt, no stored
+        // password) before switching TUN on.
         const current = await tunStatus();
-        if (current.requiresSudoPassword && !current.sudoPasswordPresent) {
-          const collection = await sudoBeginCollection();
-          if (collection.state === "required") {
-            openModal("sudo", { intent: "enableTun" });
+        if (current.requiresElevation && !current.elevationGranted) {
+          const granted = await tunRequestElevation();
+          if (!granted.elevationGranted) {
+            // User cancelled the native dialog — leave TUN off.
             return;
           }
         }
@@ -228,9 +225,10 @@ export function StatusBar() {
       const status = await setTunEnabled(nextEnabled);
       setTun(statusToTunChanged(status));
     } catch (error) {
-      if (shouldOpenSudoPrompt(error)) {
-        openModal("sudo", { intent: "enableTun" });
-      }
+      pushToast({
+        description: getErrorMessage(error),
+        title: t(nextEnabled ? "status.tunEnableFailed" : "status.tunDisableFailed"),
+      });
     } finally {
       setPendingAction(null);
     }
@@ -289,25 +287,6 @@ export function StatusBar() {
         </Badge>
       </div>
       <Separator orientation="vertical" className="h-4" />
-      <div className="flex items-center gap-1">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              aria-label={t("actions.sudo")}
-              className="size-7"
-              onClick={() => openModal("sudo")}
-              size="icon"
-              title={t("actions.sudo")}
-              type="button"
-              variant="ghost"
-            >
-              <KeyRound className="size-3.5" aria-hidden="true" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">{t("actions.sudo")}</TooltipContent>
-        </Tooltip>
-      </div>
-      <Separator orientation="vertical" className="h-4" />
       <div className="hidden min-w-0 items-center gap-2 md:flex">
         <Shield className="size-3.5" aria-hidden="true" />
         <div
@@ -354,32 +333,32 @@ export function StatusBar() {
         </Badge>
       </div>
       <Separator orientation="vertical" className="hidden h-4 md:block" />
-      <div className="hidden min-w-0 shrink-0 items-center gap-2 md:flex">
+      <div className="hidden min-w-0 shrink-0 items-center md:flex">
+        {/* Single TUN control: shows the on/off state and toggles it. Enabling
+            requests system authorization on demand (no stored password). */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               aria-label={tunActionLabel}
               aria-pressed={tunEnabled}
-              className="size-7"
+              className="h-7 gap-1.5 px-2"
               disabled={pendingAction === "tun"}
               onClick={() => void runTunToggle()}
-              size="icon"
+              size="sm"
               title={tunActionLabel}
               type="button"
               variant={tunEnabled ? "secondary" : "outline"}
             >
-              <Plug className="size-3.5" aria-hidden="true" />
+              {pendingAction === "tun" ? (
+                <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Plug className="size-3.5" aria-hidden="true" />
+              )}
+              <span className="min-w-0 truncate">{tunStateLabel}</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top">{tunActionLabel}</TooltipContent>
         </Tooltip>
-        <Badge
-          className="hidden h-6 max-w-20 justify-start bg-background px-2 text-muted-foreground sm:inline-flex"
-          title={tunStateLabel}
-          variant="outline"
-        >
-          <span className="min-w-0 truncate">{tunStateLabel}</span>
-        </Badge>
       </div>
       {/* Below md: the core info, proxy mode, and TUN controls above are hidden;
           surface them here so small windows keep access to every key control. */}
@@ -560,14 +539,6 @@ function formatSysProxy(mode: SysProxyMode | undefined, t: ReturnType<typeof use
     default:
       return t("status.sysProxyUnchanged");
   }
-}
-
-function shouldOpenSudoPrompt(error: unknown) {
-  if (!(error instanceof IpcCommandError)) {
-    return false;
-  }
-
-  return error.appError.kind === "sudo" || error.message.toLowerCase().includes("sudo password");
 }
 
 function missingCorePayload(error: unknown) {

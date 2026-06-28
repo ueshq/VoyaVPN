@@ -15,6 +15,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use voya_app::{
     clash::{ClashConnectionsSnapshot, ClashEventSink, ClashMonitorController, ClashTrafficEvent},
     diagnostics::{prepare_diagnostics_settings, DiagnosticsClient},
+    elevation::ElevationManager,
     redaction::redact_url_userinfo,
     runtime::RuntimeManager,
     speedtest::SpeedtestManager,
@@ -22,7 +23,6 @@ use voya_app::{
         SharedAppConfigSource, StatisticsEventSink, StatisticsManager,
         StatisticsSnapshot as AppStatisticsSnapshot,
     },
-    sudo::SudoPasswordCollector,
     supervisor::{CoreSupervisor, SupervisorDeps},
     sysproxy::SystemProxyManager,
 };
@@ -60,7 +60,7 @@ pub(crate) struct AppState {
     config: Arc<RwLock<AppConfig>>,
     runtime_paths: AppPaths,
     core_seed_resource_dir: Option<PathBuf>,
-    sudo_password_collector: SudoPasswordCollector,
+    elevation_manager: ElevationManager,
     supervisor: CoreSupervisor,
     statistics_manager: StatisticsManager,
     speedtest_manager: SpeedtestManager,
@@ -90,8 +90,8 @@ impl AppState {
         self.core_seed_resource_dir.as_deref()
     }
 
-    pub(crate) fn sudo_password_collector(&self) -> &SudoPasswordCollector {
-        &self.sudo_password_collector
+    pub(crate) fn elevation_manager(&self) -> &ElevationManager {
+        &self.elevation_manager
     }
 
     pub(crate) fn supervisor(&self) -> CoreSupervisor {
@@ -192,18 +192,24 @@ pub fn run() {
                     );
                 }
             }
-            let sudo_password_collector = SudoPasswordCollector::default_store();
-            let runner = StdProcessRunner::with_log_sink(Arc::new(TauriProcessLogSink {
-                app: app.handle().clone(),
-            }));
+            let runner: Arc<dyn voya_platform::process::ProcessRunner> = Arc::new(
+                StdProcessRunner::with_log_sink(Arc::new(TauriProcessLogSink {
+                    app: app.handle().clone(),
+                })),
+            );
+            let elevation_manager = ElevationManager::new(
+                Arc::clone(&runner),
+                runtime_paths.temp_dir().to_path_buf(),
+                runtime_paths.bin_dir().to_path_buf(),
+            );
             let speedtest_runner = StdProcessRunner::with_log_sink(Arc::new(TauriProcessLogSink {
                 app: app.handle().clone(),
             }));
             let runtime_handle = tauri::async_runtime::handle();
             let runtime_guard = runtime_handle.inner().enter();
             let supervisor = CoreSupervisor::spawn(SupervisorDeps::platform_with_runner(
-                Arc::new(runner),
-                sudo_password_collector.store(),
+                Arc::clone(&runner),
+                elevation_manager.state(),
             ));
             let statistics_manager = StatisticsManager::spawn(
                 database.clone(),
@@ -237,7 +243,7 @@ pub fn run() {
                 config: shared_config,
                 runtime_paths,
                 core_seed_resource_dir,
-                sudo_password_collector,
+                elevation_manager,
                 supervisor,
                 statistics_manager,
                 speedtest_manager,
@@ -618,7 +624,17 @@ fn spawn_tray_set_active_server<R: tauri::Runtime>(app: &tauri::AppHandle<R>, in
 
 fn shutdown_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     disconnect_runtime_for_exit(app);
+    revoke_elevation_for_exit(app);
     restore_system_proxy_for_exit(app);
+}
+
+fn revoke_elevation_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    // Runs after the runtime disconnect so the elevated core is already stopped
+    // (via the launcher) before the launcher + sudoers drop-in are removed.
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    state.elevation_manager().revoke();
 }
 
 fn disconnect_runtime_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {

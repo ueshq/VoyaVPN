@@ -6,7 +6,7 @@ use thiserror::Error;
 use voya_core::AppConfig;
 use voya_platform::{
     coreinfo::TargetOs,
-    elevation::{SudoPasswordError, SudoPasswordStore},
+    privilege::ElevationState,
     tun::{tun_preflight, TunPreflightReport, TunPreflightState as PlatformTunPreflightState},
 };
 
@@ -23,7 +23,7 @@ pub enum TunPlatform {
 #[serde(rename_all = "camelCase")]
 pub enum TunPreflightState {
     Ready,
-    NeedsSudoPassword,
+    NeedsElevation,
     ManualCheck,
     Unsupported,
 }
@@ -43,28 +43,28 @@ pub struct TunPreflight {
 pub struct TunStatus {
     pub enabled: bool,
     pub allow_enable_tun: bool,
-    pub requires_sudo_password: bool,
-    pub sudo_password_present: bool,
+    pub requires_elevation: bool,
+    pub elevation_granted: bool,
     pub restore_on_disconnect: bool,
     pub preflight: TunPreflight,
 }
 
 #[derive(Debug, Clone)]
 pub struct TunManager {
-    sudo_passwords: Arc<SudoPasswordStore>,
+    elevation: Arc<ElevationState>,
     target_os: TargetOs,
 }
 
 impl TunManager {
     #[must_use]
-    pub fn new(sudo_passwords: Arc<SudoPasswordStore>) -> Self {
-        Self::with_target_os(sudo_passwords, TargetOs::current())
+    pub fn new(elevation: Arc<ElevationState>) -> Self {
+        Self::with_target_os(elevation, TargetOs::current())
     }
 
     #[must_use]
-    pub fn with_target_os(sudo_passwords: Arc<SudoPasswordStore>, target_os: TargetOs) -> Self {
+    pub fn with_target_os(elevation: Arc<ElevationState>, target_os: TargetOs) -> Self {
         Self {
-            sudo_passwords,
+            elevation,
             target_os,
         }
     }
@@ -81,8 +81,8 @@ impl TunManager {
     ) -> Result<TunStatus, TunManagerError> {
         let (status, report) = self.status_with_report(config)?;
         if enabled && !status.allow_enable_tun {
-            return if report.requires_sudo_password && !report.sudo_password_present {
-                Err(TunManagerError::SudoPasswordRequired)
+            return if report.requires_elevation && !report.elevation_granted {
+                Err(TunManagerError::ElevationRequired)
             } else {
                 Err(TunManagerError::UnsupportedPlatform)
             };
@@ -96,13 +96,13 @@ impl TunManager {
         &self,
         config: &AppConfig,
     ) -> Result<(TunStatus, TunPreflightReport), TunManagerError> {
-        let sudo_password_present = self.sudo_passwords.has_password()?;
-        let report = tun_preflight(self.target_os, sudo_password_present);
+        let elevation_granted = self.elevation.is_granted();
+        let report = tun_preflight(self.target_os, elevation_granted);
         let status = TunStatus {
             enabled: config.tun_mode_item.enable_tun,
             allow_enable_tun: report.allow_enable_tun,
-            requires_sudo_password: report.requires_sudo_password,
-            sudo_password_present: report.sudo_password_present,
+            requires_elevation: report.requires_elevation,
+            elevation_granted: report.elevation_granted,
             restore_on_disconnect: self.target_os != TargetOs::Other,
             preflight: tun_preflight_response(&report),
         };
@@ -137,7 +137,7 @@ const fn tun_platform(os: TargetOs) -> TunPlatform {
 const fn tun_preflight_state(state: PlatformTunPreflightState) -> TunPreflightState {
     match state {
         PlatformTunPreflightState::Ready => TunPreflightState::Ready,
-        PlatformTunPreflightState::NeedsSudoPassword => TunPreflightState::NeedsSudoPassword,
+        PlatformTunPreflightState::NeedsElevation => TunPreflightState::NeedsElevation,
         PlatformTunPreflightState::ManualCheck => TunPreflightState::ManualCheck,
         PlatformTunPreflightState::Unsupported => TunPreflightState::Unsupported,
     }
@@ -145,12 +145,10 @@ const fn tun_preflight_state(state: PlatformTunPreflightState) -> TunPreflightSt
 
 #[derive(Debug, Error)]
 pub enum TunManagerError {
-    #[error("sudo password is required before enabling TUN on Unix")]
-    SudoPasswordRequired,
+    #[error("system authorization is required before enabling TUN on Unix")]
+    ElevationRequired,
     #[error("TUN mode is not supported on this platform")]
     UnsupportedPlatform,
-    #[error(transparent)]
-    SudoPassword(#[from] SudoPasswordError),
 }
 
 #[cfg(test)]
@@ -158,37 +156,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tun_allow_enable_on_unix_is_tied_to_non_empty_sudo_password() {
+    fn tun_allow_enable_on_unix_is_tied_to_elevation_grant() {
         let mut config = AppConfig::default();
-        let sudo_passwords = Arc::new(SudoPasswordStore::new());
-        let manager = TunManager::with_target_os(Arc::clone(&sudo_passwords), TargetOs::Linux);
+        let elevation = Arc::new(ElevationState::new());
+        let manager = TunManager::with_target_os(Arc::clone(&elevation), TargetOs::Linux);
 
         let status = manager.status(&config).expect("status");
         assert!(!status.enabled);
         assert!(!status.allow_enable_tun);
-        assert!(status.requires_sudo_password);
-        assert_eq!(status.preflight.state, TunPreflightState::NeedsSudoPassword);
+        assert!(status.requires_elevation);
+        assert_eq!(status.preflight.state, TunPreflightState::NeedsElevation);
         assert!(matches!(
             manager.set_enabled(&mut config, true),
-            Err(TunManagerError::SudoPasswordRequired)
+            Err(TunManagerError::ElevationRequired)
         ));
 
-        sudo_passwords.set_password("pw").expect("sudo password");
+        elevation.set_granted(true);
         let status = manager
             .set_enabled(&mut config, true)
-            .expect("enable with sudo password");
+            .expect("enable with elevation grant");
         assert!(status.enabled);
         assert!(status.allow_enable_tun);
-        assert!(status.sudo_password_present);
+        assert!(status.elevation_granted);
         assert_eq!(status.preflight.state, TunPreflightState::Ready);
     }
 
     #[test]
-    fn tun_disable_does_not_require_sudo_password() {
+    fn tun_disable_does_not_require_elevation() {
         let mut config = AppConfig::default();
         config.tun_mode_item.enable_tun = true;
-        let manager =
-            TunManager::with_target_os(Arc::new(SudoPasswordStore::new()), TargetOs::Macos);
+        let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Macos);
 
         let status = manager.set_enabled(&mut config, false).expect("disable");
         assert!(!status.enabled);
@@ -199,11 +196,11 @@ mod tests {
     fn tun_windows_preflight_tracks_cleanup_devices_and_manual_driver_smoke() {
         let config = AppConfig::default();
         let manager =
-            TunManager::with_target_os(Arc::new(SudoPasswordStore::new()), TargetOs::Windows);
+            TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Windows);
 
         let status = manager.status(&config).expect("status");
         assert!(status.allow_enable_tun);
-        assert!(!status.requires_sudo_password);
+        assert!(!status.requires_elevation);
         assert_eq!(status.preflight.state, TunPreflightState::ManualCheck);
         assert_eq!(
             status.preflight.windows_cleanup_devices,

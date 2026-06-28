@@ -29,7 +29,7 @@ import { formatBytesPerSecond } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
 import { useModalStore } from "@/stores/modal-store";
 
-import { missingCorePayload, shouldOpenSudoPrompt, statusToCoreState } from "./runtime-action";
+import { missingCorePayload, runWithElevation, statusToCoreState } from "./runtime-action";
 
 type RuntimeAction = "connect" | "disconnect" | "restart";
 
@@ -85,22 +85,19 @@ export function HomeScreen() {
   async function runRuntimeAction(action: RuntimeAction) {
     setPendingAction(action);
     try {
-      const status =
+      const status = await runWithElevation(() =>
         action === "connect"
-          ? await connectActiveProfile()
+          ? connectActiveProfile()
           : action === "disconnect"
-            ? await disconnectCore()
-            : await restartCore();
+            ? disconnectCore()
+            : restartCore(),
+      );
 
       setCoreState(statusToCoreState(status));
     } catch (error) {
-      if (shouldOpenSudoPrompt(error)) {
-        openModal("sudo");
-      } else {
-        const missingCore = missingCorePayload(error);
-        if (missingCore) {
-          openModal("missingCore", { missingCore });
-        }
+      const missingCore = missingCorePayload(error);
+      if (missingCore) {
+        openModal("missingCore", { missingCore });
       }
     } finally {
       setPendingAction(null);

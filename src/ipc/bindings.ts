@@ -18,10 +18,16 @@ export const commands = {
 	scanScreenQr: () => typedError<QrScanResult, AppError>(__TAURI_INVOKE("scan_screen_qr")),
 	fetchCertificate: (request: CertificateFetchRequest) => typedError<CertificateFetchResult, AppError>(__TAURI_INVOKE("fetch_certificate", { request })),
 	calculateCertificateSha256: (pem: string) => typedError<string[], AppError>(__TAURI_INVOKE("calculate_certificate_sha256", { pem })),
-	sudoBeginCollection: () => typedError<SudoCollectionResponse, AppError>(__TAURI_INVOKE("sudo_begin_collection")),
-	sudoSubmitPassword: (requestId: string, password: string) => typedError<SudoCollectionResponse, AppError>(__TAURI_INVOKE("sudo_submit_password", { requestId, password })),
-	sudoClearPassword: () => typedError<null, AppError>(__TAURI_INVOKE("sudo_clear_password")),
-	sudoHasPassword: () => typedError<boolean, AppError>(__TAURI_INVOKE("sudo_has_password")),
+	/**
+	 *  Trigger the one-time native authorization dialog and, on success, install
+	 *  the passwordless elevation launcher. No admin password is stored.
+	 */
+	tunRequestElevation: () => typedError<TunStatus, AppError>(__TAURI_INVOKE("tun_request_elevation")),
+	/**
+	 *  Remove the passwordless elevation launcher + sudoers drop-in and clear the
+	 *  session grant.
+	 */
+	tunRevokeElevation: () => typedError<TunStatus, AppError>(__TAURI_INVOKE("tun_revoke_elevation")),
 	connectActiveProfile: () => typedError<RuntimeStatusResponse, AppError>(__TAURI_INVOKE("connect_active_profile")),
 	disconnectCore: () => typedError<RuntimeStatusResponse, AppError>(__TAURI_INVOKE("disconnect_core")),
 	restartCore: () => typedError<RuntimeStatusResponse, AppError>(__TAURI_INVOKE("restart_core")),
@@ -1437,13 +1443,6 @@ export type SubscriptionUpdateResult = {
 	messages?: string[],
 };
 
-export type SudoCollectionResponse = {
-	state: SudoCollectionState,
-	requestId: string | null,
-};
-
-export type SudoCollectionState = "ready" | "required";
-
 export type SysProxyChanged = {
 	requestedMode: SysProxyMode,
 	effectiveMode: SysProxyMode,
@@ -1548,13 +1547,13 @@ export type TunPreflight = {
 	windowsCleanupDevices: string[],
 };
 
-export type TunPreflightState = "ready" | "needsSudoPassword" | "manualCheck" | "unsupported";
+export type TunPreflightState = "ready" | "needsElevation" | "manualCheck" | "unsupported";
 
 export type TunStatus = {
 	enabled: boolean,
 	allowEnableTun: boolean,
-	requiresSudoPassword: boolean,
-	sudoPasswordPresent: boolean,
+	requiresElevation: boolean,
+	elevationGranted: boolean,
 	restoreOnDisconnect: boolean,
 	preflight: TunPreflight,
 };

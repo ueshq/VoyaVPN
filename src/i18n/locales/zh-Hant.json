@@ -24,7 +24,6 @@
     "restart": "重新啟動",
     "save": "儲存",
     "settings": "設定",
-    "sudo": "Sudo",
     "testSelected": "測試所選"
   },
   "app": {
@@ -138,12 +137,6 @@
     "regionalPresetTitle": "套用 {{preset}} 預置",
     "settings": "設定",
     "settingsDescription": "顯示、語言與字型偏好。",
-    "sudo": "Sudo 密碼",
-    "sudoClear": "清除",
-    "sudoDescription": "儲存在記憶體中，用於本次工作階段以提權方式啟動 TUN。",
-    "sudoPassword": "密碼",
-    "sudoReady": "Sudo 密碼已就緒。",
-    "sudoSubmit": "提交",
     "theme": "主題",
     "version": "版本 0.1.0"
   },
@@ -1000,6 +993,8 @@
     "tun": "TUN",
     "tunOff": "TUN 關",
     "tunOn": "TUN 開",
+    "tunEnableFailed": "啟用 TUN 失敗",
+    "tunDisableFailed": "停用 TUN 失敗",
     "upload": "上行 {{speed}}"
   },
   "tabs": {

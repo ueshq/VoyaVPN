@@ -6,9 +6,10 @@ use voya_core::CoreType;
 use voya_platform::{
     coreinfo::{CoreLaunch, TargetOs},
     elevation::{
-        should_use_unix_sudo, unix_sudo_kill_spawn, wrap_spawn_with_unix_sudo, SudoPasswordError,
-        SudoPasswordStore,
+        should_use_unix_sudo, unix_sudo_kill_spawn_passwordless,
+        wrap_spawn_with_unix_sudo_passwordless,
     },
+    privilege::{elevate_launcher_path, ElevationState},
     process::{
         NoopProcessJobFactory, PlatformProcessJobFactory, ProcessError, ProcessExit,
         ProcessExitHandler, ProcessHandle, ProcessJob, ProcessJobFactory, ProcessOutput,
@@ -90,7 +91,7 @@ impl SupervisorSnapshot {
 #[derive(Clone)]
 pub struct SupervisorDeps {
     pub runner: Arc<dyn ProcessRunner>,
-    pub sudo_passwords: Arc<SudoPasswordStore>,
+    pub elevation: Arc<ElevationState>,
     pub job_factory: Arc<dyn ProcessJobFactory>,
     pub tun_cleaner: Arc<dyn TunCleaner>,
     pub target_os: TargetOs,
@@ -98,10 +99,10 @@ pub struct SupervisorDeps {
 
 impl SupervisorDeps {
     #[must_use]
-    pub fn new(runner: Arc<dyn ProcessRunner>, sudo_passwords: Arc<SudoPasswordStore>) -> Self {
+    pub fn new(runner: Arc<dyn ProcessRunner>, elevation: Arc<ElevationState>) -> Self {
         Self {
             runner,
-            sudo_passwords,
+            elevation,
             job_factory: Arc::new(NoopProcessJobFactory),
             tun_cleaner: Arc::new(NoopTunCleaner),
             target_os: TargetOs::current(),
@@ -112,7 +113,7 @@ impl SupervisorDeps {
     pub fn platform() -> Self {
         Self {
             runner: Arc::new(StdProcessRunner::new()),
-            sudo_passwords: Arc::new(SudoPasswordStore::new()),
+            elevation: Arc::new(ElevationState::new()),
             job_factory: Arc::new(PlatformProcessJobFactory),
             tun_cleaner: Arc::new(PlatformTunCleaner),
             target_os: TargetOs::current(),
@@ -122,11 +123,11 @@ impl SupervisorDeps {
     #[must_use]
     pub fn platform_with_runner(
         runner: Arc<dyn ProcessRunner>,
-        sudo_passwords: Arc<SudoPasswordStore>,
+        elevation: Arc<ElevationState>,
     ) -> Self {
         Self {
             runner,
-            sudo_passwords,
+            elevation,
             job_factory: Arc::new(PlatformProcessJobFactory),
             tun_cleaner: Arc::new(PlatformTunCleaner),
             target_os: TargetOs::current(),
@@ -457,12 +458,8 @@ impl SupervisorActor {
         let mut spawn = ProcessSpawn::from_core_launch(role, &spec.launch, spec.display_log)?;
 
         if process_uses_unix_sudo(&self.deps, spec, request.tun_enabled) {
-            let password = self
-                .deps
-                .sudo_passwords
-                .read_password()?
-                .ok_or(SupervisorError::MissingSudoPassword(spec.core_type))?;
-            spawn = wrap_spawn_with_unix_sudo(spawn, &request.sudo_script_dir, password);
+            let launcher = self.elevation_launcher(spec.core_type)?;
+            spawn = wrap_spawn_with_unix_sudo_passwordless(spawn, &launcher);
         }
 
         let handle = self.deps.runner.spawn(spawn)?;
@@ -474,27 +471,31 @@ impl SupervisorActor {
         handle: &ProcessHandle,
         running: &RunningCore,
     ) -> Result<(), SupervisorError> {
-        let Some(request) = &running.last_request else {
+        if running.last_request.is_none() {
             return Ok(());
-        };
+        }
         let target = running
             .sudo_kill_target(handle)
             .ok_or(SupervisorError::UnknownSudoKillTarget { pid: handle.id() })?;
-        let password = self
-            .deps
-            .sudo_passwords
-            .read_password()?
-            .ok_or(SupervisorError::MissingSudoPassword(target.core_type))?;
-        let spawn = unix_sudo_kill_spawn(
+        let launcher = self.elevation_launcher(target.core_type)?;
+        let spawn = unix_sudo_kill_spawn_passwordless(
             self.deps.target_os,
-            &request.sudo_script_dir,
+            &launcher,
             handle.id(),
             &target.launch.executable,
             target.launch.working_dir.clone(),
-            password,
         )?;
         let output = self.deps.runner.run_oneshot(spawn)?;
         ensure_sudo_kill_success(handle.id(), output)
+    }
+
+    /// Resolve the root-owned elevation launcher, requiring an active grant.
+    fn elevation_launcher(&self, core_type: CoreType) -> Result<PathBuf, SupervisorError> {
+        if !self.deps.elevation.is_granted() {
+            return Err(SupervisorError::ElevationNotGranted(core_type));
+        }
+        elevate_launcher_path(self.deps.target_os)
+            .ok_or(SupervisorError::ElevationNotGranted(core_type))
     }
 }
 
@@ -614,12 +615,10 @@ pub enum SupervisorError {
     CommandChannelClosed,
     #[error("supervisor response channel was dropped")]
     ResponseDropped,
-    #[error("sudo password is required before spawning elevated {0:?}")]
-    MissingSudoPassword(CoreType),
+    #[error("system authorization is required before spawning elevated {0:?}")]
+    ElevationNotGranted(CoreType),
     #[error(transparent)]
     Process(#[from] ProcessError),
-    #[error(transparent)]
-    SudoPassword(#[from] SudoPasswordError),
     #[error(transparent)]
     TunCleanup(#[from] TunCleanupError),
     #[error("process job error: {0}")]
@@ -811,9 +810,9 @@ mod tests {
     fn supervisor_with(
         events: &SharedEvents,
         target_os: TargetOs,
-        sudo_passwords: Arc<SudoPasswordStore>,
+        elevation: Arc<ElevationState>,
     ) -> CoreSupervisor {
-        let deps = SupervisorDeps::new(Arc::new(FakeRunner::new(events.clone())), sudo_passwords)
+        let deps = SupervisorDeps::new(Arc::new(FakeRunner::new(events.clone())), elevation)
             .with_target_os(target_os);
         CoreSupervisor::spawn(deps)
     }
@@ -821,9 +820,9 @@ mod tests {
     #[tokio::test]
     async fn supervisor_stop_teardown_order_is_sudo_kill_main_pre() {
         let events = SharedEvents::default();
-        let sudo_passwords = Arc::new(SudoPasswordStore::new());
-        sudo_passwords.set_password("pw").expect("sudo password");
-        let supervisor = supervisor_with(&events, TargetOs::Macos, sudo_passwords);
+        let elevation = Arc::new(ElevationState::new());
+        elevation.set_granted(true);
+        let supervisor = supervisor_with(&events, TargetOs::Macos, elevation);
 
         let snapshot = supervisor
             .start(SupervisorStartRequest {
@@ -852,7 +851,7 @@ mod tests {
         assert_eq!(
             &events[2..],
             [
-                "oneshot:SudoKill:stdin=true",
+                "oneshot:SudoKill:stdin=false",
                 "stop:Main:pid=100",
                 "stop:Pre:pid=101"
             ]
@@ -862,11 +861,10 @@ mod tests {
     #[tokio::test]
     async fn supervisor_sudo_kill_passes_expected_core_name_for_pid_validation() {
         let events = SharedEvents::default();
-        let sudo_passwords = Arc::new(SudoPasswordStore::new());
-        sudo_passwords.set_password("pw").expect("sudo password");
+        let elevation = Arc::new(ElevationState::new());
+        elevation.set_granted(true);
         let runner = Arc::new(FakeRunner::new(events.clone()));
-        let deps =
-            SupervisorDeps::new(runner.clone(), sudo_passwords).with_target_os(TargetOs::Linux);
+        let deps = SupervisorDeps::new(runner.clone(), elevation).with_target_os(TargetOs::Linux);
         let supervisor = CoreSupervisor::spawn(deps);
 
         supervisor
@@ -890,17 +888,29 @@ mod tests {
 
         let requests = runner.oneshot_requests();
         assert_eq!(requests.len(), 1);
-        assert!(requests[0].arguments[1].ends_with(" 100 sing-box-client"));
-        assert!(requests[0].generated_scripts[0]
-            .contents
-            .contains("refusing to sudo kill pid $PID"));
+        assert_eq!(requests[0].executable, PathBuf::from("/usr/bin/sudo"));
+        assert_eq!(
+            requests[0].arguments,
+            vec![
+                "-n".to_string(),
+                "--".to_string(),
+                "/usr/libexec/voya-vpn/voya-elevate".to_string(),
+                "kill".to_string(),
+                "100".to_string(),
+                "sing-box-client".to_string(),
+            ]
+        );
+        // The kill logic now lives in the root-owned launcher, not a generated
+        // user-owned script, and no admin password is piped in.
+        assert!(requests[0].generated_scripts.is_empty());
+        assert!(!requests[0].has_stdin());
     }
 
     #[tokio::test]
     async fn supervisor_sudo_kill_nonzero_status_is_typed_error() {
         let events = SharedEvents::default();
-        let sudo_passwords = Arc::new(SudoPasswordStore::new());
-        sudo_passwords.set_password("pw").expect("sudo password");
+        let elevation = Arc::new(ElevationState::new());
+        elevation.set_granted(true);
         let runner = Arc::new(
             FakeRunner::new(events.clone()).with_oneshot_output(ProcessOutput {
                 status_code: Some(65),
@@ -908,7 +918,7 @@ mod tests {
                 stderr: "refusing to sudo kill pid 100".to_string(),
             }),
         );
-        let deps = SupervisorDeps::new(runner, sudo_passwords).with_target_os(TargetOs::Linux);
+        let deps = SupervisorDeps::new(runner, elevation).with_target_os(TargetOs::Linux);
         let supervisor = CoreSupervisor::spawn(deps);
 
         supervisor
@@ -941,8 +951,8 @@ mod tests {
         assert_eq!(
             events.lock().as_slice(),
             [
-                "spawn:Main:pid=100:stdin=true",
-                "oneshot:SudoKill:stdin=true"
+                "spawn:Main:pid=100:stdin=false",
+                "oneshot:SudoKill:stdin=false"
             ]
         );
     }
@@ -950,9 +960,9 @@ mod tests {
     #[test]
     fn supervisor_actor_drop_stops_running_core_with_sudo_kill() {
         let events = SharedEvents::default();
-        let sudo_passwords = Arc::new(SudoPasswordStore::new());
-        sudo_passwords.set_password("pw").expect("sudo password");
-        let deps = SupervisorDeps::new(Arc::new(FakeRunner::new(events.clone())), sudo_passwords)
+        let elevation = Arc::new(ElevationState::new());
+        elevation.set_granted(true);
+        let deps = SupervisorDeps::new(Arc::new(FakeRunner::new(events.clone())), elevation)
             .with_target_os(TargetOs::Linux);
 
         {
@@ -975,18 +985,18 @@ mod tests {
         assert_eq!(
             events.lock().as_slice(),
             [
-                "spawn:Main:pid=100:stdin=true",
-                "oneshot:SudoKill:stdin=true",
+                "spawn:Main:pid=100:stdin=false",
+                "oneshot:SudoKill:stdin=false",
                 "stop:Main:pid=100"
             ]
         );
     }
 
     #[tokio::test]
-    async fn supervisor_sudo_password_is_read_synchronously_at_spawn() {
+    async fn supervisor_elevation_grant_gates_elevated_spawn() {
         let events = SharedEvents::default();
-        let sudo_passwords = Arc::new(SudoPasswordStore::new());
-        let supervisor = supervisor_with(&events, TargetOs::Linux, Arc::clone(&sudo_passwords));
+        let elevation = Arc::new(ElevationState::new());
+        let supervisor = supervisor_with(&events, TargetOs::Linux, Arc::clone(&elevation));
         let request = SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
             main: CoreProcessSpec::new(
@@ -1002,25 +1012,25 @@ mod tests {
         let missing = supervisor
             .start(request.clone())
             .await
-            .expect_err("missing sudo password should fail");
+            .expect_err("ungranted elevation should fail");
         assert!(matches!(
             missing,
-            SupervisorError::MissingSudoPassword(CoreType::sing_box)
+            SupervisorError::ElevationNotGranted(CoreType::sing_box)
         ));
 
-        sudo_passwords.set_password("pw").expect("sudo password");
+        elevation.set_granted(true);
         supervisor
             .start(request)
             .await
-            .expect("start with password");
-        assert_eq!(events.lock().as_slice(), ["spawn:Main:pid=100:stdin=true"]);
+            .expect("start with elevation grant");
+        assert_eq!(events.lock().as_slice(), ["spawn:Main:pid=100:stdin=false"]);
     }
 
     #[tokio::test]
     async fn supervisor_crash_restarts_serialized_lifecycle() {
         let events = SharedEvents::default();
-        let sudo_passwords = Arc::new(SudoPasswordStore::new());
-        let supervisor = supervisor_with(&events, TargetOs::Linux, sudo_passwords);
+        let elevation = Arc::new(ElevationState::new());
+        let supervisor = supervisor_with(&events, TargetOs::Linux, elevation);
 
         let request = SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
@@ -1088,7 +1098,7 @@ sleep 30
         let supervisor = CoreSupervisor::spawn(
             SupervisorDeps::new(
                 Arc::new(StdProcessRunner::new()),
-                Arc::new(SudoPasswordStore::new()),
+                Arc::new(ElevationState::new()),
             )
             .with_target_os(TargetOs::Linux),
         );
@@ -1142,8 +1152,8 @@ sleep 30
     #[tokio::test]
     async fn supervisor_windows_tun_cleanup_runs_before_process_start_and_assigns_job() {
         let events = SharedEvents::default();
-        let sudo_passwords = Arc::new(SudoPasswordStore::new());
-        let deps = SupervisorDeps::new(Arc::new(FakeRunner::new(events.clone())), sudo_passwords)
+        let elevation = Arc::new(ElevationState::new());
+        let deps = SupervisorDeps::new(Arc::new(FakeRunner::new(events.clone())), elevation)
             .with_target_os(TargetOs::Windows)
             .with_tun_cleaner(Arc::new(RecordingTunCleaner {
                 events: events.clone(),
@@ -1187,9 +1197,9 @@ sleep 30
     #[tokio::test]
     async fn supervisor_tun_sudo_wraps_singbox_and_mihomo_but_not_xray() {
         let events = SharedEvents::default();
-        let sudo_passwords = Arc::new(SudoPasswordStore::new());
-        sudo_passwords.set_password("pw").expect("sudo password");
-        let supervisor = supervisor_with(&events, TargetOs::Linux, sudo_passwords);
+        let elevation = Arc::new(ElevationState::new());
+        elevation.set_granted(true);
+        let supervisor = supervisor_with(&events, TargetOs::Linux, elevation);
 
         supervisor
             .start(SupervisorStartRequest {
@@ -1243,10 +1253,10 @@ sleep 30
             [
                 "spawn:Main:pid=100:stdin=false",
                 "stop:Main:pid=100",
-                "spawn:Main:pid=101:stdin=true",
-                "oneshot:SudoKill:stdin=true",
+                "spawn:Main:pid=101:stdin=false",
+                "oneshot:SudoKill:stdin=false",
                 "stop:Main:pid=101",
-                "spawn:Main:pid=102:stdin=true"
+                "spawn:Main:pid=102:stdin=false"
             ]
         );
     }
@@ -1254,11 +1264,10 @@ sleep 30
     #[tokio::test]
     async fn supervisor_tun_partial_start_failure_kills_elevated_main_before_returning() {
         let events = SharedEvents::default();
-        let sudo_passwords = Arc::new(SudoPasswordStore::new());
-        sudo_passwords.set_password("pw").expect("sudo password");
+        let elevation = Arc::new(ElevationState::new());
+        elevation.set_granted(true);
         let runner = FakeRunner::new(events.clone()).with_fail_spawn_role(ProcessRole::Pre);
-        let deps =
-            SupervisorDeps::new(Arc::new(runner), sudo_passwords).with_target_os(TargetOs::Linux);
+        let deps = SupervisorDeps::new(Arc::new(runner), elevation).with_target_os(TargetOs::Linux);
         let supervisor = CoreSupervisor::spawn(deps);
 
         let error = supervisor
@@ -1286,9 +1295,9 @@ sleep 30
         assert_eq!(
             events.lock().as_slice(),
             [
-                "spawn:Main:pid=100:stdin=true",
+                "spawn:Main:pid=100:stdin=false",
                 "spawn-fail:Pre",
-                "oneshot:SudoKill:stdin=true",
+                "oneshot:SudoKill:stdin=false",
                 "stop:Main:pid=100"
             ]
         );

@@ -54,7 +54,6 @@ import type {
   SpeedActionType,
   SpeedtestRunResult,
   SpeedtestStatus,
-  SudoCollectionResponse,
   SubItem_Deserialize,
   SubItem_Serialize,
   SubscriptionUpdateResult,
@@ -136,22 +135,6 @@ export async function calculateCertificateSha256(pem: string): Promise<string[]>
   return unwrapCommandResult(await commands.calculateCertificateSha256(pem));
 }
 
-export async function sudoBeginCollection(): Promise<SudoCollectionResponse> {
-  return unwrapCommandResult(await commands.sudoBeginCollection());
-}
-
-export async function sudoSubmitPassword(requestId: string, password: string): Promise<SudoCollectionResponse> {
-  return unwrapCommandResult(await commands.sudoSubmitPassword(requestId, password));
-}
-
-export async function sudoClearPassword(): Promise<null> {
-  return unwrapCommandResult(await commands.sudoClearPassword());
-}
-
-export async function sudoHasPassword(): Promise<boolean> {
-  return unwrapCommandResult(await commands.sudoHasPassword());
-}
-
 export async function connectActiveProfile(): Promise<RuntimeStatusResponse> {
   return unwrapCommandResult(await commands.connectActiveProfile());
 }
@@ -182,6 +165,14 @@ export async function tunStatus(): Promise<TunStatus> {
 
 export async function setTunEnabled(enabled: boolean): Promise<TunStatus> {
   return unwrapCommandResult(await commands.setTunEnabled(enabled));
+}
+
+export async function tunRequestElevation(): Promise<TunStatus> {
+  return unwrapCommandResult(await commands.tunRequestElevation());
+}
+
+export async function tunRevokeElevation(): Promise<TunStatus> {
+  return unwrapCommandResult(await commands.tunRevokeElevation());
 }
 
 export async function loadDnsSettings(): Promise<DnsSettings_Serialize> {

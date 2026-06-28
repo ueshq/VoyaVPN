@@ -31,6 +31,7 @@ use voya_app::diagnostics::{
     DiagnosticsSettings,
 };
 use voya_app::dns::{DnsManager, DnsManagerError, DnsSettings, DnsValidationIssue};
+use voya_app::elevation::ElevationError;
 use voya_app::exports::{
     ExportManager, ExportManagerError, ExportProfilesFormat, ExportProfilesRequest,
     ExportProfilesResult,
@@ -49,7 +50,6 @@ use voya_app::speedtest::{
     SpeedTestResult, SpeedtestError, SpeedtestManager, SpeedtestRunResult, SpeedtestStatus,
 };
 use voya_app::subscriptions::{SubscriptionManager, SubscriptionManagerError};
-use voya_app::sudo::{SudoCollectionError, SudoCollectionStatus};
 use voya_app::supervisor::{SupervisorConnectionState, SupervisorError, SupervisorSnapshot};
 use voya_app::sysproxy::SystemProxyManagerError;
 use voya_app::templates::{FullConfigTemplateManager, FullConfigTemplateManagerError};
@@ -72,7 +72,6 @@ use voya_platform::{
     },
     sysproxy::SystemProxyStatus,
 };
-use zeroize::Zeroizing;
 
 use super::events::{
     next_log_line_id, CoreState, CoreStateEvent, InvalidateEvent, LogLevel, LogLineEvent,
@@ -156,20 +155,6 @@ pub struct CoreSeedInstallResult {
     pub core_type: CoreType,
     pub status: CoreSeedInstallStatus,
     pub installed_files: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub enum SudoCollectionState {
-    Ready,
-    Required,
-}
-
-#[derive(Debug, Clone, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct SudoCollectionResponse {
-    pub state: SudoCollectionState,
-    pub request_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -461,57 +446,27 @@ pub(crate) fn register_global_hotkeys_for_config<R: tauri::Runtime>(
         .map_err(hotkey_error)
 }
 
+/// Trigger the one-time native authorization dialog and, on success, install
+/// the passwordless elevation launcher. No admin password is stored.
 #[tauri::command]
 #[specta::specta]
-pub fn sudo_begin_collection(
-    state: tauri::State<'_, AppState>,
-) -> Result<SudoCollectionResponse, AppError> {
+pub fn tun_request_elevation(state: tauri::State<'_, AppState>) -> Result<TunStatus, AppError> {
     state
-        .sudo_password_collector()
-        .begin_collection()
-        .map(sudo_collection_response)
-        .map_err(sudo_error)
+        .elevation_manager()
+        .request()
+        .map_err(elevation_error)?;
+    let config = current_config(&state)?;
+    tun_manager(&state).status(&config).map_err(tun_error)
 }
 
+/// Remove the passwordless elevation launcher + sudoers drop-in and clear the
+/// session grant.
 #[tauri::command]
 #[specta::specta]
-pub fn sudo_submit_password(
-    state: tauri::State<'_, AppState>,
-    request_id: String,
-    password: String,
-) -> Result<SudoCollectionResponse, AppError> {
-    validate_required_ipc_text(
-        &request_id,
-        "sudo request id",
-        IPC_ID_MAX_CHARS,
-        AppError::Sudo,
-    )?;
-    let password = Zeroizing::new(password);
-
-    state
-        .sudo_password_collector()
-        .submit_password(&request_id, password)
-        .map(sudo_collection_response)
-        .map_err(sudo_error)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn sudo_clear_password(state: tauri::State<'_, AppState>) -> Result<(), AppError> {
-    state
-        .sudo_password_collector()
-        .clear_password()
-        .map_err(sudo_error)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn sudo_has_password(state: tauri::State<'_, AppState>) -> Result<bool, AppError> {
-    state
-        .sudo_password_collector()
-        .store()
-        .has_password()
-        .map_err(|error| AppError::Sudo(error.to_string()))
+pub fn tun_revoke_elevation(state: tauri::State<'_, AppState>) -> Result<TunStatus, AppError> {
+    state.elevation_manager().revoke();
+    let config = current_config(&state)?;
+    tun_manager(&state).status(&config).map_err(tun_error)
 }
 
 #[tauri::command]
@@ -2878,7 +2833,7 @@ fn diagnostics_error_class_for_runtime_error(error: &RuntimeError) -> Diagnostic
             DiagnosticsErrorClass::CoreMissing
         }
         RuntimeError::CoreInfo(error) => diagnostics_error_class_for_core_info_error(error),
-        RuntimeError::Supervisor(SupervisorError::MissingSudoPassword(_)) => {
+        RuntimeError::Supervisor(SupervisorError::ElevationNotGranted(_)) => {
             DiagnosticsErrorClass::PermissionDenied
         }
         RuntimeError::Supervisor(_) => DiagnosticsErrorClass::RuntimeStartFailed,
@@ -2969,7 +2924,7 @@ fn speedtest_manager(state: &AppState) -> SpeedtestManager {
 }
 
 fn tun_manager(state: &AppState) -> TunManager {
-    TunManager::new(state.sudo_password_collector().store())
+    TunManager::new(state.elevation_manager().state())
 }
 
 fn update_manager(state: &AppState) -> UpdateManager<'_> {
@@ -3408,9 +3363,7 @@ fn sysproxy_error(error: SystemProxyManagerError) -> AppError {
 
 fn tun_error(error: TunManagerError) -> AppError {
     match error {
-        TunManagerError::SudoPasswordRequired | TunManagerError::SudoPassword(_) => {
-            AppError::Sudo(error.to_string())
-        }
+        TunManagerError::ElevationRequired => AppError::Sudo(error.to_string()),
         TunManagerError::UnsupportedPlatform => AppError::Tun(error.to_string()),
     }
 }
@@ -3486,21 +3439,8 @@ fn backup_restore_error_message(error: BackupManagerError) -> String {
     }
 }
 
-fn sudo_error(error: SudoCollectionError) -> AppError {
+fn elevation_error(error: ElevationError) -> AppError {
     AppError::Sudo(error.to_string())
-}
-
-fn sudo_collection_response(status: SudoCollectionStatus) -> SudoCollectionResponse {
-    match status {
-        SudoCollectionStatus::Ready => SudoCollectionResponse {
-            state: SudoCollectionState::Ready,
-            request_id: None,
-        },
-        SudoCollectionStatus::Required { request_id } => SudoCollectionResponse {
-            state: SudoCollectionState::Required,
-            request_id: Some(request_id),
-        },
-    }
 }
 
 fn current_unix_time() -> i64 {

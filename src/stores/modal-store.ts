@@ -10,9 +10,7 @@ export type ModalKind =
   | "nodePicker"
   | "qr"
   | "settings"
-  | "sudo"
   | "updates";
-export type ModalIntent = "enableTun";
 
 export type MissingCorePayload = {
   coreType: CoreType;
@@ -21,14 +19,12 @@ export type MissingCorePayload = {
 
 export type ModalEntry = {
   id: string;
-  intent?: ModalIntent;
   kind: ModalKind;
   missingCore?: MissingCorePayload;
   qrContent?: string;
 };
 
 type ModalOptions = {
-  intent?: ModalIntent;
   missingCore?: MissingCorePayload;
   qrContent?: string;
 };
@@ -55,7 +51,6 @@ export const useModalStore = create<ModalState>((set) => ({
         ...state.stack,
         {
           id,
-          intent: options?.intent,
           kind,
           missingCore: options?.missingCore,
           qrContent: options?.qrContent,

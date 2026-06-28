@@ -24,7 +24,6 @@
     "restart": "重启",
     "save": "保存",
     "settings": "设置",
-    "sudo": "Sudo",
     "testSelected": "测试所选"
   },
   "app": {
@@ -138,12 +137,6 @@
     "regionalPresetTitle": "应用 {{preset}} 预置",
     "settings": "设置",
     "settingsDescription": "显示、语言和字体偏好。",
-    "sudo": "Sudo 密码",
-    "sudoClear": "清除",
-    "sudoDescription": "保存在内存中，用于本次会话以提权方式启动 TUN。",
-    "sudoPassword": "密码",
-    "sudoReady": "Sudo 密码已就绪。",
-    "sudoSubmit": "提交",
     "theme": "主题",
     "version": "版本 0.1.0"
   },
@@ -1000,6 +993,8 @@
     "tun": "TUN",
     "tunOff": "TUN 关",
     "tunOn": "TUN 开",
+    "tunEnableFailed": "启用 TUN 失败",
+    "tunDisableFailed": "禁用 TUN 失败",
     "upload": "上行 {{speed}}"
   },
   "tabs": {

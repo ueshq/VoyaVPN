@@ -24,7 +24,6 @@
     "restart": "شروع دوباره",
     "save": "ذخیره",
     "settings": "تنظیمات",
-    "sudo": "Sudo",
     "testSelected": "آزمون انتخاب شده"
   },
   "app": {
@@ -138,12 +137,6 @@
     "regionalPresetTitle": "اعمال پیش تنظیم {{preset}}",
     "settings": "تنظیمات",
     "settingsDescription": "تنظیمات نما، زبان، و فونت.",
-    "sudo": "گذرواژه Sudo",
-    "sudoClear": "پاک کردن",
-    "sudoDescription": "برای شروع TUN با دسترسی بالا در همین نشست در حافظه نگه داری می شود.",
-    "sudoPassword": "گذرواژه",
-    "sudoReady": "گذرواژه Sudo آماده است.",
-    "sudoSubmit": "ثبت",
     "theme": "پوسته",
     "version": "نسخه 0.1.0"
   },
@@ -1000,6 +993,8 @@
     "tun": "TUN",
     "tunOff": "TUN خاموش",
     "tunOn": "TUN روشن",
+    "tunEnableFailed": "فعال‌سازی TUN ناموفق بود",
+    "tunDisableFailed": "غیرفعال‌سازی TUN ناموفق بود",
     "upload": "ارسال {{speed}}"
   },
   "tabs": {

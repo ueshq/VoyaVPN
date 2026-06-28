@@ -14,7 +14,7 @@ import { cn, getErrorMessage } from "@/lib/utils";
 import { useModalStore } from "@/stores/modal-store";
 
 import { getProtocolLabel } from "@/features/profiles/profile-constants";
-import { missingCorePayload, shouldOpenSudoPrompt, statusToCoreState } from "./runtime-action";
+import { missingCorePayload, runWithElevation, statusToCoreState } from "./runtime-action";
 
 /**
  * Node picker shown from the Home "Node" tile. Lists every imported profile
@@ -64,19 +64,12 @@ export function NodePickerDialog() {
     try {
       await setActiveProfile(indexId);
       if (connected) {
-        const status = await restartCore();
+        const status = await runWithElevation(() => restartCore());
         setCoreState(statusToCoreState(status));
       }
       await queryClient.invalidateQueries({ queryKey: ["profiles"] });
       closeTopModal();
     } catch (caught) {
-      if (shouldOpenSudoPrompt(caught)) {
-        closeTopModal();
-        openModal("sudo");
-
-        return;
-      }
-
       const missingCore = missingCorePayload(caught);
       if (missingCore) {
         closeTopModal();

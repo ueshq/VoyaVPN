@@ -27,7 +27,7 @@ pub struct WindowsTunDevice {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TunPreflightState {
     Ready,
-    NeedsSudoPassword,
+    NeedsElevation,
     ManualCheck,
     Unsupported,
 }
@@ -37,30 +37,30 @@ pub struct TunPreflightReport {
     pub os: TargetOs,
     pub state: TunPreflightState,
     pub allow_enable_tun: bool,
-    pub requires_sudo_password: bool,
-    pub sudo_password_present: bool,
+    pub requires_elevation: bool,
+    pub elevation_granted: bool,
     pub notes: Vec<String>,
     pub route_restore_note: String,
     pub windows_cleanup_devices: Vec<WindowsTunDevice>,
 }
 
 #[must_use]
-pub const fn allow_enable_tun(os: TargetOs, sudo_password_present: bool) -> bool {
+pub const fn allow_enable_tun(os: TargetOs, elevation_granted: bool) -> bool {
     match os {
         TargetOs::Windows => true,
-        TargetOs::Linux | TargetOs::Macos => sudo_password_present,
+        TargetOs::Linux | TargetOs::Macos => elevation_granted,
         TargetOs::Other => false,
     }
 }
 
 #[must_use]
-pub fn tun_preflight(os: TargetOs, sudo_password_present: bool) -> TunPreflightReport {
-    let requires_sudo_password = matches!(os, TargetOs::Linux | TargetOs::Macos);
-    let allow_enable_tun = allow_enable_tun(os, sudo_password_present);
+pub fn tun_preflight(os: TargetOs, elevation_granted: bool) -> TunPreflightReport {
+    let requires_elevation = matches!(os, TargetOs::Linux | TargetOs::Macos);
+    let allow_enable_tun = allow_enable_tun(os, elevation_granted);
     let state = match os {
         TargetOs::Windows => TunPreflightState::ManualCheck,
-        TargetOs::Linux | TargetOs::Macos if sudo_password_present => TunPreflightState::Ready,
-        TargetOs::Linux | TargetOs::Macos => TunPreflightState::NeedsSudoPassword,
+        TargetOs::Linux | TargetOs::Macos if elevation_granted => TunPreflightState::Ready,
+        TargetOs::Linux | TargetOs::Macos => TunPreflightState::NeedsElevation,
         TargetOs::Other => TunPreflightState::Unsupported,
     };
 
@@ -68,9 +68,9 @@ pub fn tun_preflight(os: TargetOs, sudo_password_present: bool) -> TunPreflightR
         os,
         state,
         allow_enable_tun,
-        requires_sudo_password,
-        sudo_password_present,
-        notes: tun_preflight_notes(os, sudo_password_present),
+        requires_elevation,
+        elevation_granted,
+        notes: tun_preflight_notes(os, elevation_granted),
         route_restore_note: route_restore_note(os).to_string(),
         windows_cleanup_devices: if os == TargetOs::Windows {
             WINDOWS_TUN_DEVICES.to_vec()
@@ -80,7 +80,7 @@ pub fn tun_preflight(os: TargetOs, sudo_password_present: bool) -> TunPreflightR
     }
 }
 
-fn tun_preflight_notes(os: TargetOs, sudo_password_present: bool) -> Vec<String> {
+fn tun_preflight_notes(os: TargetOs, elevation_granted: bool) -> Vec<String> {
     match os {
         TargetOs::Windows => vec![
             "Windows TUN start runs stale Wintun device cleanup before launching the core."
@@ -88,14 +88,14 @@ fn tun_preflight_notes(os: TargetOs, sudo_password_present: bool) -> Vec<String>
             "UAC and Windows job containment are runtime-managed; driver install still needs a manual OS smoke check."
                 .to_string(),
         ],
-        TargetOs::Linux | TargetOs::Macos if sudo_password_present => vec![
-            "Unix TUN start will reuse the in-memory sudo password collected at enable time."
+        TargetOs::Linux | TargetOs::Macos if elevation_granted => vec![
+            "Unix TUN start runs the core through the root-owned elevation launcher granted at enable time."
                 .to_string(),
             "The elevated process is killed first during disconnect before regular process teardown."
                 .to_string(),
         ],
         TargetOs::Linux | TargetOs::Macos => vec![
-            "Unix TUN start requires a non-empty sudo password collected before enabling TUN."
+            "Unix TUN start requires a one-time native authorization before enabling TUN; no admin password is stored."
                 .to_string(),
         ],
         TargetOs::Other => vec!["TUN mode is not supported on this platform yet.".to_string()],
@@ -234,7 +234,7 @@ mod tests {
     }
 
     #[test]
-    fn tun_allow_enable_on_unix_requires_stored_sudo_password() {
+    fn tun_allow_enable_on_unix_requires_elevation_grant() {
         assert!(!allow_enable_tun(TargetOs::Linux, false));
         assert!(allow_enable_tun(TargetOs::Linux, true));
         assert!(!allow_enable_tun(TargetOs::Macos, false));
@@ -250,7 +250,7 @@ mod tests {
         assert!(windows.route_restore_note.contains("manual OS smoke"));
 
         let linux_missing = tun_preflight(TargetOs::Linux, false);
-        assert_eq!(linux_missing.state, TunPreflightState::NeedsSudoPassword);
+        assert_eq!(linux_missing.state, TunPreflightState::NeedsElevation);
         assert!(!linux_missing.allow_enable_tun);
 
         let linux_ready = tun_preflight(TargetOs::Linux, true);

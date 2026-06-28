@@ -72,9 +72,9 @@ const tunStatusResponse: TunStatus = {
     state: "ready",
     windowsCleanupDevices: [],
   },
-  requiresSudoPassword: false,
+  requiresElevation: false,
   restoreOnDisconnect: true,
-  sudoPasswordPresent: true,
+  elevationGranted: true,
 };
 
 vi.mock("@/ipc", () => ({
@@ -92,13 +92,23 @@ vi.mock("@/ipc", () => ({
   saveProfile: vi.fn(),
   setSystemProxyMode: vi.fn(),
   setTunEnabled: vi.fn(),
-  sudoBeginCollection: vi.fn(),
+  tunRequestElevation: vi.fn(),
   systemProxyStatus: vi.fn(() => Promise.resolve(sysProxyStatus)),
   tunStatus: vi.fn(() => Promise.resolve(tunStatusResponse)),
   useRuntimeEventStore: runtimeMock.useRuntimeEventStore,
 }));
 
-import { IpcCommandError, listProfiles, restartCore, runtimeStatus, saveProfile, setSystemProxyMode } from "@/ipc";
+import {
+  IpcCommandError,
+  listProfiles,
+  restartCore,
+  runtimeStatus,
+  saveProfile,
+  setSystemProxyMode,
+  setTunEnabled,
+  tunRequestElevation,
+  tunStatus,
+} from "@/ipc";
 import { useModalStore } from "@/stores/modal-store";
 import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
@@ -198,6 +208,9 @@ describe("StatusBar", () => {
       makeProfile(0, profile, true),
     );
     vi.mocked(setSystemProxyMode).mockReset();
+    vi.mocked(tunStatus).mockResolvedValue(tunStatusResponse);
+    vi.mocked(tunRequestElevation).mockReset();
+    vi.mocked(setTunEnabled).mockReset();
   });
 
   afterEach(() => {
@@ -243,14 +256,18 @@ describe("StatusBar", () => {
     expect(screen.queryByRole("button", { name: "Restart" })).toBeNull();
   });
 
-  it("keeps the secondary status, sudo, and TUN controls", async () => {
+  it("keeps the secondary status and the consolidated TUN control", async () => {
     renderStatusBar();
 
     await waitFor(() => expect(screen.getByText("Profiles: 0")).toBeInTheDocument());
 
     expect(screen.getByTestId("status-bar")).toHaveTextContent("Disconnected");
-    expect(screen.getByRole("button", { name: "Sudo" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Enable TUN" })).toBeInTheDocument();
+    // The standalone sudo password control is gone; the single TUN control both
+    // shows state and toggles it.
+    expect(screen.queryByRole("button", { name: "Sudo" })).toBeNull();
+    const tunControl = screen.getByRole("button", { name: "Enable TUN" });
+    expect(tunControl).toBeInTheDocument();
+    expect(tunControl).toHaveTextContent("TUN off");
   });
 
   it("shows the effective active profile core while disconnected", async () => {
@@ -365,7 +382,7 @@ describe("StatusBar", () => {
     );
   });
 
-  it("opens the sudo modal when restart needs credentials", async () => {
+  it("toasts when a connected core switch fails", async () => {
     const user = userEvent.setup();
 
     runtimeMock.state.coreState = {
@@ -377,7 +394,7 @@ describe("StatusBar", () => {
     };
     vi.mocked(listProfiles).mockResolvedValue([makeProfile(0, { CoreType: 2 })]);
     vi.mocked(restartCore).mockRejectedValue(
-      new IpcCommandError({ kind: "sudo", message: "sudo password required" } as never),
+      new IpcCommandError({ kind: "runtime", message: "core start failed" } as never),
     );
 
     renderStatusBar();
@@ -386,7 +403,60 @@ describe("StatusBar", () => {
     await user.click(screen.getByLabelText("Switch core"));
     await user.click(await screen.findByRole("menuitemradio", { name: "sing-box" }));
 
-    await waitFor(() => expect(useModalStore.getState().stack.at(-1)?.kind).toBe("sudo"));
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts.at(-1)?.title).toBe("Core switch failed"),
+    );
+  });
+
+  it("requests system authorization on demand before switching TUN on", async () => {
+    const user = userEvent.setup();
+    vi.mocked(tunStatus).mockResolvedValue({
+      ...tunStatusResponse,
+      requiresElevation: true,
+      elevationGranted: false,
+    });
+    vi.mocked(tunRequestElevation).mockResolvedValue({
+      ...tunStatusResponse,
+      requiresElevation: true,
+      elevationGranted: true,
+    });
+    vi.mocked(setTunEnabled).mockResolvedValue({ ...tunStatusResponse, enabled: true });
+
+    renderStatusBar();
+
+    const tunControl = await screen.findByRole("button", { name: "Enable TUN" });
+    await user.click(tunControl);
+
+    await waitFor(() => expect(tunRequestElevation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(setTunEnabled).toHaveBeenCalledWith(true));
+    expect(runtimeMock.state.setTun).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
+  });
+
+  it("leaves TUN off when the authorization dialog is cancelled", async () => {
+    const user = userEvent.setup();
+    vi.mocked(tunStatus).mockResolvedValue({
+      ...tunStatusResponse,
+      requiresElevation: true,
+      elevationGranted: false,
+    });
+    vi.mocked(tunRequestElevation).mockResolvedValue({
+      ...tunStatusResponse,
+      requiresElevation: true,
+      elevationGranted: false,
+    });
+
+    renderStatusBar();
+
+    const tunControl = await screen.findByRole("button", { name: "Enable TUN" });
+    await user.click(tunControl);
+
+    await waitFor(() => expect(tunRequestElevation).toHaveBeenCalledTimes(1));
+    expect(setTunEnabled).not.toHaveBeenCalled();
+    // The mount effect seeds setTun with the initial (off) status; the cancelled
+    // toggle must never flip it on.
+    expect(runtimeMock.state.setTun).not.toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true }),
+    );
   });
 
   it("surfaces core info, proxy mode, and TUN in the small-window overflow menu", async () => {

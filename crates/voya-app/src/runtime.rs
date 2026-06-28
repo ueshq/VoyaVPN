@@ -415,7 +415,7 @@ mod tests {
         let runner = RecordingRunner::default();
         let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
             Arc::new(runner.clone()),
-            Arc::new(voya_platform::elevation::SudoPasswordStore::new()),
+            Arc::new(voya_platform::privilege::ElevationState::new()),
         ));
         let manager =
             RuntimeManager::with_target_os(&database, paths.clone(), supervisor, TargetOs::Linux);
@@ -476,7 +476,7 @@ mod tests {
         let runner = RecordingRunner::default();
         let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
             Arc::new(runner.clone()),
-            Arc::new(voya_platform::elevation::SudoPasswordStore::new()),
+            Arc::new(voya_platform::privilege::ElevationState::new()),
         ));
         let manager =
             RuntimeManager::with_target_os(&database, paths.clone(), supervisor, TargetOs::Linux)
@@ -516,7 +516,7 @@ mod tests {
         let runner = RecordingRunner::default();
         let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
             Arc::new(runner.clone()),
-            Arc::new(voya_platform::elevation::SudoPasswordStore::new()),
+            Arc::new(voya_platform::privilege::ElevationState::new()),
         ));
         let manager = RuntimeManager::with_target_os(&database, paths, supervisor, TargetOs::Linux)
             .with_core_seed_resource_dir(seed_root);
@@ -554,7 +554,7 @@ mod tests {
         let runner = RecordingRunner::default();
         let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
             Arc::new(runner),
-            Arc::new(voya_platform::elevation::SudoPasswordStore::new()),
+            Arc::new(voya_platform::privilege::ElevationState::new()),
         ));
         let manager =
             RuntimeManager::with_target_os(&database, paths.clone(), supervisor, TargetOs::Linux);

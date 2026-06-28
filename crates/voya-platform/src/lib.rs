@@ -8,6 +8,7 @@ pub mod coreinfo;
 pub mod elevation;
 pub mod hotkeys;
 pub mod paths;
+pub mod privilege;
 pub mod process;
 pub mod sysproxy;
 #[cfg(any(test, feature = "test-support"))]

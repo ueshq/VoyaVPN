@@ -1706,8 +1706,8 @@ mod tests {
     use voya_net::update::UpstreamAssetTemplates;
     use voya_platform::{
         coreinfo::{executable_name_for_current_os, TargetOs},
-        elevation::SudoPasswordStore,
         paths::StorageMode,
+        privilege::ElevationState,
         test_support::RecordingRunner,
     };
 
@@ -2626,7 +2626,7 @@ mod tests {
     ) -> RuntimeManager<'db> {
         let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
             Arc::new(runner),
-            Arc::new(SudoPasswordStore::new()),
+            Arc::new(ElevationState::new()),
         ));
         RuntimeManager::with_target_os(database, paths.clone(), supervisor, TargetOs::Linux)
     }

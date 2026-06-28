@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Cpu, FileJson2, Info, KeyRound, Languages, Monitor, Moon, Settings, Sun, Type } from "lucide-react";
+import { useState } from "react";
+import { Cpu, FileJson2, Info, Languages, Monitor, Moon, Settings, Sun, Type } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -10,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -28,16 +27,7 @@ import { QrDialog } from "@/features/qr";
 import { FullConfigTemplateDialog } from "@/features/templates";
 import { CheckUpdateDialog } from "@/features/updates";
 import { useI18n } from "@/i18n/use-i18n";
-import {
-  connectActiveProfile,
-  installCoreSeed,
-  setTunEnabled,
-  sudoBeginCollection,
-  sudoClearPassword,
-  sudoSubmitPassword,
-  useRuntimeEventStore,
-} from "@/ipc";
-import type { SudoCollectionResponse } from "@/ipc/bindings";
+import { connectActiveProfile, installCoreSeed } from "@/ipc";
 import {
   FONT_SIZE_MAX,
   FONT_SIZE_MIN,
@@ -48,7 +38,6 @@ import {
 } from "@/stores/preferences-store";
 import { type MissingCorePayload, useModalStore } from "@/stores/modal-store";
 import { formatCoreType } from "@/lib/core-types";
-import { useMountedRef } from "@/lib/use-mounted-ref";
 import { cn, getErrorMessage } from "@/lib/utils";
 
 const themeOptions: Array<{ icon: typeof Monitor; labelKey: string; value: ThemeMode }> = [
@@ -80,7 +69,6 @@ export function ModalHost() {
       {modal?.kind === "backup" ? <BackupDialog /> : null}
       {modal?.kind === "fullConfigTemplate" ? <FullConfigTemplateDialog /> : null}
       {modal?.kind === "qr" ? <QrDialog initialContent={modal.qrContent} key={modal.id} /> : null}
-      {modal?.kind === "sudo" ? <SudoPromptDialog intent={modal.intent} /> : null}
       {modal?.kind === "missingCore" ? <MissingCoreDialog payload={modal.missingCore} /> : null}
       {modal?.kind === "nodePicker" ? <NodePickerDialog key={modal.id} /> : null}
       {modal?.kind === "updates" ? <CheckUpdateDialog /> : null}
@@ -329,118 +317,6 @@ function AboutDialog() {
         <p className="text-muted-foreground">{t("modal.version")}</p>
       </div>
       <DialogFooter />
-    </DialogContent>
-  );
-}
-
-function SudoPromptDialog({ intent }: { intent?: "enableTun" }) {
-  const { t } = useI18n();
-  const closeTopModal = useModalStore((state) => state.closeTopModal);
-  const setTun = useRuntimeEventStore((state) => state.setTun);
-  const [collection, setCollection] = useState<SudoCollectionResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [password, setPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const collectionGenerationRef = useRef(0);
-  const mountedRef = useMountedRef();
-
-  useEffect(() => {
-    const generation = ++collectionGenerationRef.current;
-    const isCurrent = () => mountedRef.current && generation === collectionGenerationRef.current;
-
-    void sudoBeginCollection()
-      .then((response) => {
-        if (isCurrent()) {
-          setCollection(response);
-        }
-      })
-      .catch((error: unknown) => {
-        if (isCurrent()) {
-          setError(getErrorMessage(error));
-        }
-      });
-
-    return () => {
-      collectionGenerationRef.current += 1;
-    };
-  }, [mountedRef]);
-
-  async function submitPassword(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!collection?.requestId) {
-      return;
-    }
-
-    setSubmitting(true);
-    setError(null);
-    try {
-      const response = await sudoSubmitPassword(collection.requestId, password);
-      setCollection(response);
-      setPassword("");
-      if (response.state === "ready") {
-        if (intent === "enableTun") {
-          const status = await setTunEnabled(true);
-          setTun({ enabled: status.enabled });
-        }
-        closeTopModal();
-      }
-    } catch (error) {
-      setError(getErrorMessage(error));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function clearPassword() {
-    setSubmitting(true);
-    setError(null);
-    try {
-      await sudoClearPassword();
-      setCollection(await sudoBeginCollection());
-    } catch (error) {
-      setError(getErrorMessage(error));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
-          <KeyRound className="size-4" aria-hidden="true" />
-          {t("modal.sudo")}
-        </DialogTitle>
-        <DialogDescription>{t("modal.sudoDescription")}</DialogDescription>
-      </DialogHeader>
-
-      <form className="grid gap-4" onSubmit={(event) => void submitPassword(event)}>
-        <div className="grid gap-2 text-sm">
-          <Label htmlFor="sudo-password">{t("modal.sudoPassword")}</Label>
-          <Input
-            autoComplete="current-password"
-            disabled={collection?.state === "ready" || submitting}
-            id="sudo-password"
-            onChange={(event) => setPassword(event.target.value)}
-            type="password"
-            value={password}
-          />
-        </div>
-
-        {collection?.state === "ready" ? (
-          <p className="text-sm text-muted-foreground">{t("modal.sudoReady")}</p>
-        ) : null}
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-        <DialogFooter>
-          <Button disabled={submitting} onClick={() => void clearPassword()} type="button" variant="outline">
-            {t("modal.sudoClear")}
-          </Button>
-          <Button disabled={!collection?.requestId || !password || submitting} type="submit">
-            {t("modal.sudoSubmit")}
-          </Button>
-        </DialogFooter>
-      </form>
     </DialogContent>
   );
 }
