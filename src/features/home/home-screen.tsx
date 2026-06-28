@@ -24,6 +24,7 @@ import {
   restartCore,
   useRuntimeEventStore,
 } from "@/ipc";
+import { formatCoreType } from "@/lib/core-types";
 import { formatBytesPerSecond } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
 import { useModalStore } from "@/stores/modal-store";
@@ -264,19 +265,6 @@ function useConnectedDuration(connected: boolean) {
   }, [connected]);
 
   return connected ? elapsedMs : 0;
-}
-
-function formatCoreType(coreType: number) {
-  switch (coreType) {
-    case 2:
-      return "Xray";
-    case 24:
-      return "sing-box";
-    case 13:
-      return "mihomo";
-    default:
-      return `Core ${coreType}`;
-  }
 }
 
 function formatDuration(ms: number) {

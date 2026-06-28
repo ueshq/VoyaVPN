@@ -1,4 +1,5 @@
-import type { ConfigType, CoreType, MoveAction, SpeedActionType } from "@/ipc/bindings";
+import type { ConfigType, MoveAction, SpeedActionType } from "@/ipc/bindings";
+import { CORE_TYPES } from "@/lib/core-types";
 
 export const CONFIG_TYPES = {
   VMess: 1,
@@ -17,23 +18,7 @@ export const CONFIG_TYPES = {
   ProxyChain: 102,
 } as const satisfies Record<string, ConfigType>;
 
-export const CORE_TYPES = {
-  v2fly: 1,
-  Xray: 2,
-  v2flyV5: 4,
-  mihomo: 13,
-  hysteria: 21,
-  naiveproxy: 22,
-  tuic: 23,
-  singBox: 24,
-  juicity: 25,
-  hysteria2: 26,
-  brook: 27,
-  overtls: 28,
-  shadowquic: 29,
-  mieru: 30,
-  v2rayN: 99,
-} as const satisfies Record<string, CoreType>;
+export { CORE_TYPES };
 
 export const MOVE_ACTIONS = {
   Top: 1,

@@ -47,6 +47,7 @@ import {
   usePreferencesStore,
 } from "@/stores/preferences-store";
 import { type MissingCorePayload, useModalStore } from "@/stores/modal-store";
+import { formatCoreType } from "@/lib/core-types";
 import { useMountedRef } from "@/lib/use-mounted-ref";
 import { cn, getErrorMessage } from "@/lib/utils";
 
@@ -154,19 +155,6 @@ function MissingCoreDialog({ payload }: { payload?: MissingCorePayload }) {
       </DialogFooter>
     </DialogContent>
   );
-}
-
-function formatCoreType(coreType: number) {
-  switch (coreType) {
-    case 2:
-      return "Xray";
-    case 24:
-      return "sing-box";
-    case 13:
-      return "mihomo";
-    default:
-      return `Core ${coreType}`;
-  }
 }
 
 function SettingsDialog() {
