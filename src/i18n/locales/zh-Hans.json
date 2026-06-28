@@ -356,6 +356,12 @@
         "filterPlaceholder": "过滤备注或地址",
         "more": "更多操作"
       },
+      "import": {
+        "clipboard": "从剪贴板导入",
+        "clipboardEmpty": "剪贴板为空。",
+        "clipboardUnavailable": "当前 WebView 不支持读取剪贴板文本。",
+        "clipboardResult": "已从剪贴板导入 {{count}} 个配置。"
+      },
       "aria": {
         "filter": "过滤配置",
         "selectAll": "全选配置",

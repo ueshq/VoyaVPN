@@ -15,8 +15,19 @@ and the executable must be the OS-resolved name (`xray.exe` on Windows, `xray` o
 
 ## Populating it
 
-Binaries are **not** committed (large, separately licensed). Fetch them for your host
-platform before bundling:
+Binaries are **not** committed (large, separately licensed). A normal local
+`pnpm install` runs the root `postinstall` hook, which fetches the pinned Xray
+release for the host platform, stages it here, and copies it into the local app
+data `bin/xray/` directory so development builds can connect immediately.
+
+If install scripts were skipped, or you need to repair the local app data copy,
+run:
+
+```
+pnpm core:xray:install
+```
+
+To only populate bundled seed resources before a package build, run:
 
 ```
 node scripts/fetch-cores.mjs
@@ -24,8 +35,12 @@ node scripts/fetch-cores.mjs
 XRAY_VERSION=v26.3.27 node scripts/fetch-cores.mjs
 ```
 
-This downloads the pinned Xray release, verifies its SHA256, and stages `xray.exe`
-(plus `geoip.dat` / `geosite.dat` for `XRAY_LOCATION_ASSET`) into `xray/`.
+Set `VOYAVPN_SKIP_XRAY_POSTINSTALL=1` to skip the postinstall fetch. CI skips it
+by default unless `VOYAVPN_FETCH_XRAY_ON_INSTALL=1` is set.
+
+This downloads the pinned Xray release, verifies its SHA256, and stages `xray`
+or `xray.exe` (plus `geoip.dat` / `geosite.dat` for `XRAY_LOCATION_ASSET`) into
+`xray/`.
 
 ## Recovery path
 

@@ -45,6 +45,7 @@ vi.mock("@/ipc", async () => {
 });
 
 const queryClients = new Set<QueryClient>();
+const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
 
 function renderProfiles() {
   const queryClient = new QueryClient({
@@ -66,7 +67,35 @@ function renderProfiles() {
 afterEach(() => {
   queryClients.forEach((queryClient) => queryClient.clear());
   queryClients.clear();
+  restoreClipboard();
 });
+
+function mockClipboardReadText(text: string) {
+  const readText = vi.fn<() => Promise<string>>().mockResolvedValue(text);
+
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { readText },
+  });
+
+  return readText;
+}
+
+function mockClipboardUnavailable() {
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: undefined,
+  });
+}
+
+function restoreClipboard() {
+  if (originalClipboardDescriptor) {
+    Object.defineProperty(navigator, "clipboard", originalClipboardDescriptor);
+    return;
+  }
+
+  Reflect.deleteProperty(navigator, "clipboard");
+}
 
 async function selectComboboxOption(label: string, optionLabel: string) {
   const user = userEvent.setup();
@@ -384,6 +413,50 @@ describe("ProfilesScreen", () => {
         false,
       ),
     );
+  });
+
+  it("imports profiles directly from clipboard text", async () => {
+    const clipboardText = "vless://uuid@example.test:443#US";
+    const readText = mockClipboardReadText(`\n${clipboardText}\n`);
+    ipcMocks.listProfiles.mockResolvedValue([]);
+
+    renderProfiles();
+
+    await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Import from clipboard" }));
+
+    await waitFor(() => expect(readText).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(ipcMocks.importProfilesFromText).toHaveBeenCalledWith(clipboardText, null, false),
+    );
+    expect(await screen.findByText("Imported 1 profile(s) from clipboard.")).toBeInTheDocument();
+  });
+
+  it("does not import when clipboard text is empty", async () => {
+    const readText = mockClipboardReadText(" \n ");
+    ipcMocks.listProfiles.mockResolvedValue([]);
+
+    renderProfiles();
+
+    await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Import from clipboard" }));
+
+    await waitFor(() => expect(readText).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Clipboard is empty.")).toBeInTheDocument();
+    expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
+  });
+
+  it("does not import when clipboard text read is unavailable", async () => {
+    mockClipboardUnavailable();
+    ipcMocks.listProfiles.mockResolvedValue([]);
+
+    renderProfiles();
+
+    await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Import from clipboard" }));
+
+    expect(await screen.findByText("Clipboard text read is unavailable in this WebView.")).toBeInTheDocument();
+    expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
   });
 
   it("moves rows with drag and drop through the move IPC command", async () => {

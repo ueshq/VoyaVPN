@@ -356,6 +356,12 @@
         "filterPlaceholder": "篩選備註或位址",
         "more": "更多操作"
       },
+      "import": {
+        "clipboard": "從剪貼簿匯入",
+        "clipboardEmpty": "剪貼簿為空。",
+        "clipboardUnavailable": "目前 WebView 不支援讀取剪貼簿文字。",
+        "clipboardResult": "已從剪貼簿匯入 {{count}} 個設定檔。"
+      },
       "aria": {
         "filter": "篩選設定檔",
         "selectAll": "全選設定檔",

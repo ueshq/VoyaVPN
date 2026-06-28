@@ -356,6 +356,12 @@
         "filterPlaceholder": "Filter remarks or address",
         "more": "More actions"
       },
+      "import": {
+        "clipboard": "Import from clipboard",
+        "clipboardEmpty": "Clipboard is empty.",
+        "clipboardUnavailable": "Clipboard text read is unavailable in this WebView.",
+        "clipboardResult": "Imported {{count}} profile(s) from clipboard."
+      },
       "aria": {
         "filter": "Filter profiles",
         "selectAll": "Select all profiles",

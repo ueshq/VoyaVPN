@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronsDown,
   ChevronsUp,
+  ClipboardPaste,
   Clock,
   Columns3,
   Copy,
@@ -85,6 +86,7 @@ import {
   exportProfileInnerLinks,
   exportProfileShareLinks,
   exportProfileShareLinksBase64,
+  importProfilesFromText,
   listProfiles,
   moveProfile,
   runSpeedtest,
@@ -280,6 +282,7 @@ export function ProfilesScreen() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [filterText, setFilterText] = useState("");
   const [importOpen, setImportOpen] = useState(false);
+  const [importingFromClipboard, setImportingFromClipboard] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
   const [operationMessage, setOperationMessage] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
@@ -420,6 +423,37 @@ export function ProfilesScreen() {
     setDialogState(null);
   }
 
+  async function handleImportFromClipboard() {
+    setOperationError(null);
+    setOperationMessage(null);
+
+    if (!navigator.clipboard?.readText) {
+      setOperationError(t("panes.profiles.import.clipboardUnavailable"));
+      return;
+    }
+
+    setImportingFromClipboard(true);
+    try {
+      const text = (await navigator.clipboard.readText()).trim();
+      if (!text) {
+        throw new Error(t("panes.profiles.import.clipboardEmpty"));
+      }
+
+      const result = await importProfilesFromText(text, null, false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["profiles"] }),
+        queryClient.invalidateQueries({ queryKey: ["subscriptions"] }),
+      ]);
+      setOperationMessage(
+        t("panes.profiles.import.clipboardResult", { count: result.imported ?? 0 }),
+      );
+    } catch (error) {
+      setOperationError(getErrorMessage(error));
+    } finally {
+      setImportingFromClipboard(false);
+    }
+  }
+
   const selectedIdsArray = selected.map((item) => item.profile.IndexId);
 
   async function handleExport(kind: ProfileExportKind, indexIds = selectedIdsArray, showQr = false, saveFile = false) {
@@ -549,6 +583,13 @@ export function ProfilesScreen() {
 
         <ToolbarGroup>
           <ToolbarOverflow label={t("panes.profiles.toolbar.more")}>
+            <MenubarItem
+              disabled={importingFromClipboard}
+              onSelect={() => void handleImportFromClipboard()}
+            >
+              <ClipboardPaste className="size-4" aria-hidden="true" />
+              {t("panes.profiles.import.clipboard")}
+            </MenubarItem>
             <MenubarItem onSelect={() => setImportOpen(true)}>
               <Upload className="size-4" aria-hidden="true" />
               {t("panes.profiles.toolbar.import")}
