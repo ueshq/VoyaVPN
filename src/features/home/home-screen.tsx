@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDown,
   ArrowUp,
@@ -19,14 +20,15 @@ import { useI18n } from "@/i18n/use-i18n";
 import {
   connectActiveProfile,
   disconnectCore,
-  IpcCommandError,
+  listProfiles,
   restartCore,
   useRuntimeEventStore,
 } from "@/ipc";
-import type { CoreStateEvent, RuntimeStatusResponse } from "@/ipc/bindings";
 import { formatBytesPerSecond } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
-import { type MissingCorePayload, useModalStore } from "@/stores/modal-store";
+import { useModalStore } from "@/stores/modal-store";
+
+import { missingCorePayload, shouldOpenSudoPrompt, statusToCoreState } from "./runtime-action";
 
 type RuntimeAction = "connect" | "disconnect" | "restart";
 
@@ -45,6 +47,12 @@ export function HomeScreen() {
   const statistics = useRuntimeEventStore((state) => state.statistics);
   const openModal = useModalStore((state) => state.openModal);
   const [pendingAction, setPendingAction] = useState<RuntimeAction | null>(null);
+  // Shares the ProfilesScreen query cache (same key) so resolving the active
+  // node's name here costs no extra fetch and stays in sync after a switch.
+  const profilesQuery = useQuery({
+    queryFn: () => listProfiles(null, null),
+    queryKey: ["profiles", { filter: "" }],
+  });
 
   const state = coreState?.state ?? "disconnected";
   const connected = state === "connected";
@@ -66,7 +74,8 @@ export function HomeScreen() {
       ? t("home.unprotectedHint")
       : "";
 
-  const nodeLabel = coreState?.activeProfileId ?? t("home.noNode");
+  const activeProfile = profilesQuery.data?.find((item) => item.isActive) ?? null;
+  const nodeLabel = activeProfile?.profile.Remarks || coreState?.activeProfileId || t("home.noNode");
   const coreLabel = coreState?.runningCoreType ? formatCoreType(coreState.runningCoreType) : t("status.noCore");
   const uploadLabel = formatBytesPerSecond(statistics?.uploadBytesPerSecond ?? 0);
   const downloadLabel = formatBytesPerSecond(statistics?.downloadBytesPerSecond ?? 0);
@@ -164,7 +173,15 @@ export function HomeScreen() {
         </div>
 
         <dl className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3">
-          <StatTile icon={Server} label={t("home.node")} mono title={nodeLabel} value={nodeLabel} />
+          <StatTile
+            actionLabel={t("home.changeNode")}
+            icon={Server}
+            label={t("home.node")}
+            mono
+            onClick={() => openModal("nodePicker")}
+            title={nodeLabel}
+            value={nodeLabel}
+          />
           <StatTile icon={Cpu} label={t("home.core")} value={coreLabel} />
           <StatTile emphasis icon={Clock} label={t("home.duration")} value={durationLabel} />
           <StatTile emphasis icon={ArrowUp} label={t("home.upload")} value={uploadLabel} />
@@ -176,22 +193,31 @@ export function HomeScreen() {
 }
 
 function StatTile({
+  actionLabel,
   emphasis = false,
   icon: Icon,
   label,
   mono = false,
+  onClick,
   title,
   value,
 }: {
+  actionLabel?: string;
   emphasis?: boolean;
   icon: LucideIcon;
   label: string;
   mono?: boolean;
+  onClick?: () => void;
   title?: string;
   value: string;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-xl bg-surface-raised px-3 py-2.5 shadow-raised">
+    <div
+      className={cn(
+        "relative flex min-w-0 flex-col gap-1 rounded-xl bg-surface-raised px-3 py-2.5 shadow-raised",
+        onClick && "transition-colors hover:bg-surface-overlay",
+      )}
+    >
       <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         <Icon className="size-3.5" aria-hidden="true" />
         <span className="min-w-0 truncate">{label}</span>
@@ -206,6 +232,16 @@ function StatTile({
       >
         {value}
       </dd>
+      {onClick ? (
+        // A stretched, transparent button keeps the `<dl>`/`<dt>`/`<dd>` markup
+        // valid while giving the tile a real, keyboard-focusable activation target.
+        <button
+          aria-label={actionLabel ?? label}
+          className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+          onClick={onClick}
+          type="button"
+        />
+      ) : null}
     </div>
   );
 }
@@ -230,16 +266,6 @@ function useConnectedDuration(connected: boolean) {
   return connected ? elapsedMs : 0;
 }
 
-function statusToCoreState(status: RuntimeStatusResponse): CoreStateEvent {
-  return {
-    activeProfileId: status.activeProfileId,
-    mainPid: status.mainPid,
-    prePid: status.prePid,
-    runningCoreType: status.runningCoreType,
-    state: status.state,
-  };
-}
-
 function formatCoreType(coreType: number) {
   switch (coreType) {
     case 2:
@@ -261,22 +287,4 @@ function formatDuration(ms: number) {
   const pad = (value: number) => String(value).padStart(2, "0");
 
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
-}
-
-function shouldOpenSudoPrompt(error: unknown) {
-  if (!(error instanceof IpcCommandError)) {
-    return false;
-  }
-
-  return error.appError.kind === "sudo" || error.message.toLowerCase().includes("sudo password");
-}
-
-function missingCorePayload(error: unknown): MissingCorePayload | null {
-  if (!(error instanceof IpcCommandError) || error.appError.kind !== "missingCore") {
-    return null;
-  }
-
-  const missingCore = error.appError.message;
-
-  return { coreType: missingCore.coreType, message: missingCore.message };
 }

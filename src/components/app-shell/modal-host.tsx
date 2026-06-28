@@ -22,6 +22,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { fontOptions } from "@/config/fonts";
 import { BackupDialog } from "@/features/backup";
+import { NodePickerDialog } from "@/features/home";
 import { IntegrationSettings, RuntimeConfigSettings, SourceSettings } from "@/features/options";
 import { QrDialog } from "@/features/qr";
 import { FullConfigTemplateDialog } from "@/features/templates";
@@ -80,6 +81,7 @@ export function ModalHost() {
       {modal?.kind === "qr" ? <QrDialog initialContent={modal.qrContent} key={modal.id} /> : null}
       {modal?.kind === "sudo" ? <SudoPromptDialog intent={modal.intent} /> : null}
       {modal?.kind === "missingCore" ? <MissingCoreDialog payload={modal.missingCore} /> : null}
+      {modal?.kind === "nodePicker" ? <NodePickerDialog key={modal.id} /> : null}
       {modal?.kind === "updates" ? <CheckUpdateDialog /> : null}
     </Dialog>
   );
