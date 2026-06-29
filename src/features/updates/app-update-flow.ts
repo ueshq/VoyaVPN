@@ -1,22 +1,40 @@
+import { getVersion } from "@tauri-apps/api/app";
+import { check as checkForTauriUpdate, type Update as TauriUpdate } from "@tauri-apps/plugin-updater";
+
 import {
   appUpdateStatus,
-  checkAppUpdate,
-  installAppUpdate,
   manualAppUpdateLinks,
+  recordAppUpdateDiagnostic,
 } from "@/ipc";
-import type {
-  AppUpdateCheckResult,
-  AppUpdateInstallResult,
-  AppUpdaterStatus,
-  ManualAppUpdateLinks,
-} from "@/ipc/bindings";
+import type { AppUpdaterStatus, ManualAppUpdateLinks } from "@/ipc/bindings";
 import { getErrorMessage } from "@/lib/utils";
+
+export type AppUpdateInfo = {
+  currentVersion: string;
+  version: string;
+  date: string | null;
+  body: string | null;
+  downloadUrl: string;
+};
+
+export type AppUpdateCheckResult = {
+  currentVersion: string;
+  update: AppUpdateInfo | null;
+};
+
+export type AppUpdateInstallResult = {
+  state: "installed" | "noUpdate";
+  currentVersion: string;
+  installedVersion: string | null;
+  restartRequired: boolean;
+};
 
 export type AppUpdateFlowDeps = {
   appUpdateStatus: typeof appUpdateStatus;
-  checkAppUpdate: typeof checkAppUpdate;
-  installAppUpdate: typeof installAppUpdate;
+  checkForAppUpdate: typeof checkForTauriUpdate;
+  getCurrentVersion: typeof getVersion;
   manualAppUpdateLinks: typeof manualAppUpdateLinks;
+  recordAppUpdateDiagnostic: typeof recordAppUpdateDiagnostic;
 };
 
 export type AppUpdatePaths = {
@@ -29,9 +47,10 @@ export type AppUpdatePaths = {
 
 export const defaultAppUpdateFlowDeps: AppUpdateFlowDeps = {
   appUpdateStatus,
-  checkAppUpdate,
-  installAppUpdate,
+  checkForAppUpdate: checkForTauriUpdate,
+  getCurrentVersion: getVersion,
   manualAppUpdateLinks,
+  recordAppUpdateDiagnostic,
 };
 
 const manualDownloadAllowedHosts = ["cdn.voyavpn.dev", "cdn.voyavpn.test"] as const;
@@ -63,7 +82,7 @@ export async function checkAppUpdatePaths(
   deps: AppUpdateFlowDeps = defaultAppUpdateFlowDeps,
 ): Promise<AppUpdatePaths> {
   const [updaterCheck, manualLinks] = await Promise.allSettled([
-    deps.checkAppUpdate(),
+    checkAndRecordAppUpdate(deps),
     loadSafeManualLinks(preRelease, preferProxy, proxyUrl, deps),
   ]);
 
@@ -79,7 +98,92 @@ export async function checkAppUpdatePaths(
 export async function installCheckedAppUpdate(
   deps: AppUpdateFlowDeps = defaultAppUpdateFlowDeps,
 ): Promise<AppUpdateInstallResult> {
-  return deps.installAppUpdate();
+  let update: TauriUpdate | null = null;
+
+  try {
+    const currentVersion = await deps.getCurrentVersion();
+    update = await deps.checkForAppUpdate();
+
+    if (!update) {
+      await recordDiagnostic(deps, "install", "skipped", null);
+
+      return {
+        currentVersion,
+        installedVersion: null,
+        restartRequired: false,
+        state: "noUpdate",
+      };
+    }
+
+    const installedVersion = update.version;
+    await update.downloadAndInstall();
+    await recordDiagnostic(deps, "install", "success", null);
+
+    return {
+      currentVersion,
+      installedVersion,
+      restartRequired: true,
+      state: "installed",
+    };
+  } catch (error) {
+    await recordDiagnostic(deps, "install", "failure", errorMessage(error));
+    throw error;
+  } finally {
+    await closeUpdate(update);
+  }
+}
+
+async function checkAndRecordAppUpdate(
+  deps: AppUpdateFlowDeps,
+): Promise<AppUpdateCheckResult> {
+  let update: TauriUpdate | null = null;
+
+  try {
+    const currentVersion = await deps.getCurrentVersion();
+    update = await deps.checkForAppUpdate();
+    await recordDiagnostic(deps, "check", "success", null);
+
+    return {
+      currentVersion,
+      update: update ? appUpdateInfo(update, currentVersion) : null,
+    };
+  } catch (error) {
+    await recordDiagnostic(deps, "check", "failure", errorMessage(error));
+    throw error;
+  } finally {
+    await closeUpdate(update);
+  }
+}
+
+function appUpdateInfo(update: TauriUpdate, fallbackCurrentVersion: string): AppUpdateInfo {
+  return {
+    body: update.body ?? null,
+    currentVersion: update.currentVersion || fallbackCurrentVersion,
+    date: update.date ?? null,
+    downloadUrl: rawString(update.rawJson, "downloadUrl") ?? rawString(update.rawJson, "url") ?? "",
+    version: update.version,
+  };
+}
+
+async function recordDiagnostic(
+  deps: AppUpdateFlowDeps,
+  action: "check" | "install",
+  result: "success" | "failure" | "skipped",
+  message: string | null,
+) {
+  try {
+    await deps.recordAppUpdateDiagnostic(action, result, message);
+  } catch {
+    // Diagnostics must never block the updater path.
+  }
+}
+
+async function closeUpdate(update: TauriUpdate | null) {
+  try {
+    await update?.close();
+  } catch {
+    // Resource cleanup is best-effort because some install paths close in Rust.
+  }
 }
 
 async function loadSafeManualLinks(
@@ -134,4 +238,10 @@ function settledError<T>(result: PromiseSettledResult<T>): string | null {
 
 function errorMessage(error: unknown) {
   return getErrorMessage(error);
+}
+
+function rawString(rawJson: Record<string, unknown>, key: string) {
+  const value = rawJson[key];
+
+  return typeof value === "string" ? value : null;
 }

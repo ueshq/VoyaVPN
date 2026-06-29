@@ -25,13 +25,12 @@ const stableOverlayMetadataPath = resolve(
   "release-config",
   "tauri.updater.stable.generated.metadata.json",
 );
-let coreSeedOverlayPath = null;
 const args = ["build"];
 
 if (!writeStableConfigOnly) {
   try {
     await ensureSingBoxSeedForBuild({ repoRoot });
-    coreSeedOverlayPath = writeOptionalCoreSeedOverlay(
+    const coreSeedOverlayPath = writeOptionalCoreSeedOverlay(
       repoRoot,
       resolve(repoRoot, "target", "release-config", "tauri.core-seeds.generated.json"),
     );

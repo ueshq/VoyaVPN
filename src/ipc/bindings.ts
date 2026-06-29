@@ -124,8 +124,7 @@ export const commands = {
 	cancelSpeedtest: () => typedError<SpeedtestStatus, AppError>(__TAURI_INVOKE("cancel_speedtest")),
 	speedtestStatus: () => typedError<SpeedtestStatus, AppError>(__TAURI_INVOKE("speedtest_status")),
 	appUpdateStatus: () => typedError<AppUpdaterStatus, AppError>(__TAURI_INVOKE("app_update_status")),
-	checkAppUpdate: () => typedError<AppUpdateCheckResult, AppError>(__TAURI_INVOKE("check_app_update")),
-	installAppUpdate: () => typedError<AppUpdateInstallResult, AppError>(__TAURI_INVOKE("install_app_update")),
+	recordAppUpdateDiagnostic: (action: AppUpdateDiagnosticAction, result: AppUpdateDiagnosticResult, message: string | null) => typedError<null, AppError>(__TAURI_INVOKE("record_app_update_diagnostic", { action, result, message })),
 	updateStatus: () => typedError<UpdateStatus, AppError>(__TAURI_INVOKE("update_status")),
 	saveUpdatePreferences: (preRelease: boolean, selectedTargetIds: string[]) => typedError<UpdateStatus, AppError>(__TAURI_INVOKE("save_update_preferences", { preRelease, selectedTargetIds })),
 	loadRulesetGeoSources: () => typedError<RulesetGeoSourceSettings, AppError>(__TAURI_INVOKE("load_ruleset_geo_sources")),
@@ -244,26 +243,9 @@ export type AppNotice = {
 
 export type AppNoticeLevel = "info" | "warning" | "error";
 
-export type AppUpdateCheckResult = {
-	currentVersion: string,
-	update: AppUpdateInfo | null,
-};
+export type AppUpdateDiagnosticAction = "check" | "install";
 
-export type AppUpdateInfo = {
-	currentVersion: string,
-	version: string,
-	date: string | null,
-	body: string | null,
-	downloadUrl: string,
-};
-
-export type AppUpdateInstallResult = {
-	state: AppUpdateInstallState,
-	currentVersion: string,
-	installedVersion: string | null,
-};
-
-export type AppUpdateInstallState = "installed" | "noUpdate";
+export type AppUpdateDiagnosticResult = "success" | "failure" | "skipped";
 
 export type AppUpdaterState = "ready" | "unconfigured" | "unsupported" | "error";
 

@@ -83,8 +83,7 @@ macro_rules! collect_ipc_commands {
             commands::cancel_speedtest::<tauri::Wry>,
             commands::speedtest_status,
             commands::app_update_status::<tauri::Wry>,
-            commands::check_app_update::<tauri::Wry>,
-            commands::install_app_update::<tauri::Wry>,
+            commands::record_app_update_diagnostic,
             commands::update_status,
             commands::save_update_preferences,
             commands::load_ruleset_geo_sources,
@@ -153,6 +152,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_app::updates::UpdateAcquisition>()
         .typ::<voya_app::updates::UpdateResultStatus>()
         .typ::<voya_app::updates::RulesetGeoSourceSettings>()
+        .typ::<commands::AppUpdateDiagnosticAction>()
+        .typ::<commands::AppUpdateDiagnosticResult>()
         .typ::<voya_app::backup::BackupStatus>()
         .typ::<voya_app::backup::BackupOperationResult>()
         .typ::<voya_app::backup::BackupRestoreResult>()

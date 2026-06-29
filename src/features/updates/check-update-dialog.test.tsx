@@ -15,16 +15,23 @@ import type {
 
 const ipcMocks = vi.hoisted(() => ({
   appUpdateStatus: vi.fn(),
-  checkAppUpdate: vi.fn(),
   checkUpdates: vi.fn(),
   downloadUpdates: vi.fn(),
-  installAppUpdate: vi.fn(),
   manualAppUpdateLinks: vi.fn(),
+  recordAppUpdateDiagnostic: vi.fn(),
   saveUpdatePreferences: vi.fn(),
   updateStatus: vi.fn(),
 }));
+const tauriMocks = vi.hoisted(() => ({
+  check: vi.fn(),
+  getVersion: vi.fn(),
+  relaunch: vi.fn(),
+}));
 
 vi.mock("@/ipc", () => ipcMocks);
+vi.mock("@tauri-apps/api/app", () => ({ getVersion: tauriMocks.getVersion }));
+vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: tauriMocks.relaunch }));
+vi.mock("@tauri-apps/plugin-updater", () => ({ check: tauriMocks.check }));
 
 describe("CheckUpdateDialog", () => {
   beforeEach(async () => {
@@ -40,6 +47,9 @@ describe("CheckUpdateDialog", () => {
 
   it("checks, downloads, and installs an app update", async () => {
     const user = userEvent.setup();
+    const checkUpdate = makeTauriUpdate();
+    const installUpdate = makeTauriUpdate();
+    tauriMocks.check.mockResolvedValueOnce(checkUpdate).mockResolvedValueOnce(installUpdate);
 
     renderDialog();
 
@@ -64,8 +74,13 @@ describe("CheckUpdateDialog", () => {
 
     await user.click(screen.getByRole("button", { name: "Install app" }));
 
-    await waitFor(() => expect(ipcMocks.installAppUpdate).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(installUpdate.downloadAndInstall).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("App update installed: 2.1.0")).toBeInTheDocument();
+    expect(screen.getByText("Restart VoyaVPN to finish applying the update.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Restart app" }));
+
+    await waitFor(() => expect(tauriMocks.relaunch).toHaveBeenCalledTimes(1));
   });
 
   it("shows manual CDN links when the automatic updater status fails", async () => {
@@ -172,22 +187,11 @@ function mockDefaultIpc() {
     message: null,
     state: "ready",
   } satisfies AppUpdaterStatus);
-  ipcMocks.checkAppUpdate.mockResolvedValue({
-    currentVersion: "1.0.0",
-    update: {
-      body: null,
-      currentVersion: "1.0.0",
-      date: null,
-      downloadUrl: "https://cdn.voyavpn.test/stable/latest.json",
-      version: "2.1.0",
-    },
-  });
-  ipcMocks.installAppUpdate.mockResolvedValue({
-    currentVersion: "1.0.0",
-    installedVersion: "2.1.0",
-    state: "installed",
-  });
   ipcMocks.manualAppUpdateLinks.mockResolvedValue(makeManualLinks());
+  ipcMocks.recordAppUpdateDiagnostic.mockResolvedValue(undefined);
+  tauriMocks.check.mockResolvedValue(makeTauriUpdate());
+  tauriMocks.getVersion.mockResolvedValue("1.0.0");
+  tauriMocks.relaunch.mockResolvedValue(undefined);
   ipcMocks.checkUpdates.mockResolvedValue({
     preRelease: false,
     results: makeCheckResults(),
@@ -198,6 +202,19 @@ function mockDefaultIpc() {
     results: makeDownloadResults(),
     targets: allTargets,
   });
+}
+
+function makeTauriUpdate(overrides: Record<string, unknown> = {}) {
+  return {
+    body: null,
+    close: vi.fn().mockResolvedValue(undefined),
+    currentVersion: "1.0.0",
+    date: null,
+    downloadAndInstall: vi.fn().mockResolvedValue(undefined),
+    rawJson: { downloadUrl: "https://cdn.voyavpn.test/stable/latest.json" },
+    version: "2.1.0",
+    ...overrides,
+  };
 }
 
 function makeStatus(targets: UpdateTarget[], preRelease = false): UpdateStatus {

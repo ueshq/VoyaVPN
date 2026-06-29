@@ -25,6 +25,16 @@ import { DEFAULT_FONT, DEFAULT_FONT_SIZE, usePreferencesStore } from "@/stores/p
 import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
 
+vi.mock("@tauri-apps/api/app", () => ({
+  getVersion: vi.fn(() => Promise.resolve("0.1.0")),
+}));
+vi.mock("@tauri-apps/plugin-process", () => ({
+  relaunch: vi.fn(() => Promise.resolve()),
+}));
+vi.mock("@tauri-apps/plugin-updater", () => ({
+  check: vi.fn(() => Promise.resolve(null)),
+}));
+
 type TestClashMonitorState = "starting" | "running" | "stopped" | "failed";
 
 type TestClashMonitorStatus = {
@@ -359,11 +369,7 @@ vi.mock("@/ipc", () => ({
     }),
   ),
   checkUpdates: vi.fn(() => Promise.resolve({ preRelease: false, results: [], targets: [] })),
-  checkAppUpdate: vi.fn(() => Promise.resolve({ currentVersion: "0.1.0", update: null })),
   downloadUpdates: vi.fn(() => Promise.resolve({ preRelease: false, results: [], targets: [] })),
-  installAppUpdate: vi.fn(() =>
-    Promise.resolve({ state: "noUpdate", currentVersion: "0.1.0", installedVersion: null }),
-  ),
   manualAppUpdateLinks: vi.fn(() =>
     Promise.resolve({
       arch: "x64",
@@ -376,6 +382,7 @@ vi.mock("@/ipc", () => ({
       target: "linux",
     }),
   ),
+  recordAppUpdateDiagnostic: vi.fn(() => Promise.resolve()),
   saveUpdatePreferences: vi.fn(() => Promise.resolve({ preRelease: false, targets: [] })),
   updateStatus: vi.fn(() =>
     Promise.resolve({

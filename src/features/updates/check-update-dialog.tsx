@@ -7,6 +7,7 @@ import {
   PackageCheck,
   RefreshCw,
 } from "lucide-react";
+import { relaunch } from "@tauri-apps/plugin-process";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,8 @@ import {
   checkAppUpdatePaths,
   installCheckedAppUpdate,
   loadAppUpdatePaths,
+  type AppUpdateCheckResult,
+  type AppUpdateInstallResult,
   type AppUpdatePaths,
 } from "@/features/updates/app-update-flow";
 import { useI18n } from "@/i18n/use-i18n";
@@ -43,8 +46,6 @@ import {
   updateStatus,
 } from "@/ipc";
 import type {
-  AppUpdateCheckResult,
-  AppUpdateInstallResult,
   AppUpdaterStatus,
   ManualAppUpdateDownload,
   ManualAppUpdateLinks,
@@ -60,7 +61,7 @@ import { useMountedRef } from "@/lib/use-mounted-ref";
 import { cn, getErrorMessage } from "@/lib/utils";
 
 type CoreRunMode = "check" | "download";
-type RunMode = CoreRunMode | "app-check" | "app-install";
+type RunMode = CoreRunMode | "app-check" | "app-install" | "app-restart";
 type PreferenceSnapshot = {
   preRelease: boolean;
   selectedIds: string[];
@@ -260,6 +261,18 @@ export function CheckUpdateDialog() {
     }
   }
 
+  async function restartApp() {
+    setWorking("app-restart");
+    setAppUpdaterError(null);
+    try {
+      await relaunch();
+    } catch (error) {
+      setAppUpdaterError(errorMessage(error));
+    } finally {
+      setWorking(null);
+    }
+  }
+
   function toggleTarget(id: string, checked: boolean) {
     const nextSelected = new Set(preferenceSnapshotRef.current.selectedIds);
     if (checked) {
@@ -354,6 +367,7 @@ export function CheckUpdateDialog() {
           manualLinksError={manualLinksError}
           onCheck={() => void runAppUpdaterCheck()}
           onInstall={() => void installAppUpdate()}
+          onRestart={() => void restartApp()}
           working={working}
         />
 
@@ -436,6 +450,7 @@ function AppUpdatePanel({
   manualLinksError,
   onCheck,
   onInstall,
+  onRestart,
   working,
 }: {
   appInstallResult: AppUpdateInstallResult | null;
@@ -446,6 +461,7 @@ function AppUpdatePanel({
   manualLinksError: string | null;
   onCheck: () => void;
   onInstall: () => void;
+  onRestart: () => void;
   working: RunMode | null;
 }) {
   const { t } = useI18n();
@@ -480,6 +496,9 @@ function AppUpdatePanel({
                 : t("updates.noAppUpdate")}
             </p>
           ) : null}
+          {appInstallResult?.restartRequired ? (
+            <p className="text-xs text-muted-foreground">{t("updates.restartRequired")}</p>
+          ) : null}
         </div>
         <div className="ms-auto flex flex-wrap items-center gap-2">
           <Button
@@ -507,6 +526,20 @@ function AppUpdatePanel({
             />
             {t("updates.installApp")}
           </Button>
+          {appInstallResult?.restartRequired ? (
+            <Button
+              disabled={working !== null}
+              onClick={onRestart}
+              size="sm"
+              type="button"
+            >
+              <RefreshCw
+                className={cn("size-4", working === "app-restart" && "animate-spin")}
+                aria-hidden="true"
+              />
+              {t("updates.restartApp")}
+            </Button>
+          ) : null}
         </div>
       </div>
 

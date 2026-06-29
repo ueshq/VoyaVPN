@@ -3,8 +3,8 @@ import type {
   AppConfig_Deserialize,
   AppConfig_Serialize,
   AppError,
-  AppUpdateCheckResult,
-  AppUpdateInstallResult,
+  AppUpdateDiagnosticAction,
+  AppUpdateDiagnosticResult,
   AppUpdaterStatus,
   AutostartStatus,
   BackupOperationResult,
@@ -455,12 +455,12 @@ export async function appUpdateStatus(): Promise<AppUpdaterStatus> {
   return unwrapCommandResult(await commands.appUpdateStatus());
 }
 
-export async function checkAppUpdate(): Promise<AppUpdateCheckResult> {
-  return unwrapCommandResult(await commands.checkAppUpdate());
-}
-
-export async function installAppUpdate(): Promise<AppUpdateInstallResult> {
-  return unwrapCommandResult(await commands.installAppUpdate());
+export async function recordAppUpdateDiagnostic(
+  action: AppUpdateDiagnosticAction,
+  result: AppUpdateDiagnosticResult,
+  message: string | null = null,
+): Promise<void> {
+  unwrapCommandResult(await commands.recordAppUpdateDiagnostic(action, result, message));
 }
 
 export async function updateStatus(): Promise<UpdateStatus> {

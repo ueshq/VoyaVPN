@@ -5,7 +5,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
@@ -187,36 +187,19 @@ pub struct AppUpdaterStatus {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Type)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
-pub struct AppUpdateInfo {
-    pub current_version: String,
-    pub version: String,
-    pub date: Option<String>,
-    pub body: Option<String>,
-    pub download_url: String,
+pub enum AppUpdateDiagnosticAction {
+    Check,
+    Install,
 }
 
-#[derive(Debug, Clone, Serialize, Type)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
-pub struct AppUpdateCheckResult {
-    pub current_version: String,
-    pub update: Option<AppUpdateInfo>,
-}
-
-#[derive(Debug, Clone, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub enum AppUpdateInstallState {
-    Installed,
-    NoUpdate,
-}
-
-#[derive(Debug, Clone, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct AppUpdateInstallResult {
-    pub state: AppUpdateInstallState,
-    pub current_version: String,
-    pub installed_version: Option<String>,
+pub enum AppUpdateDiagnosticResult {
+    Success,
+    Failure,
+    Skipped,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -1870,135 +1853,38 @@ pub fn app_update_status<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn check_app_update<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
+pub fn record_app_update_diagnostic(
     state: tauri::State<'_, AppState>,
-) -> Result<AppUpdateCheckResult, AppError> {
-    let diagnostics_config = current_config(&state)
-        .map_err(|error| {
-            tracing::debug!(?error, "failed to load config for app update diagnostics");
-            error
-        })
-        .ok();
-    let current_version = app.package_info().version.to_string();
-    let updater = match app.updater() {
-        Ok(updater) => updater,
-        Err(error) => {
-            record_diagnostics_event_if_config(
-                &state,
-                diagnostics_config.as_ref(),
-                DiagnosticsEvent::update_check(
-                    DiagnosticsResult::Failure,
-                    Some(diagnostics_error_class_for_app_updater_check(&error)),
-                ),
-            );
-            return Err(app_updater_error(error));
+    action: AppUpdateDiagnosticAction,
+    result: AppUpdateDiagnosticResult,
+    message: Option<String>,
+) -> Result<(), AppError> {
+    validate_optional_ipc_text(
+        message.as_deref(),
+        "app update diagnostic message",
+        IPC_PROXY_URL_MAX_CHARS,
+        AppError::Update,
+    )?;
+    let config = current_config(&state)?;
+    let diagnostics_result = diagnostics_result_for_app_update_diagnostic(result);
+    let error_class = match result {
+        AppUpdateDiagnosticResult::Failure => Some(diagnostics_error_class_for_app_update_message(
+            action,
+            message.as_deref(),
+        )),
+        AppUpdateDiagnosticResult::Success | AppUpdateDiagnosticResult::Skipped => None,
+    };
+    let event = match action {
+        AppUpdateDiagnosticAction::Check => {
+            DiagnosticsEvent::update_check(diagnostics_result, error_class)
+        }
+        AppUpdateDiagnosticAction::Install => {
+            DiagnosticsEvent::app_update_install(diagnostics_result, error_class)
         }
     };
-    let update = match updater.check().await {
-        Ok(update) => update,
-        Err(error) => {
-            record_diagnostics_event_if_config(
-                &state,
-                diagnostics_config.as_ref(),
-                DiagnosticsEvent::update_check(
-                    DiagnosticsResult::Failure,
-                    Some(diagnostics_error_class_for_app_updater_check(&error)),
-                ),
-            );
-            return Err(app_updater_error(error));
-        }
-    };
+    record_diagnostics_event(&state, &config, event);
 
-    record_diagnostics_event_if_config(
-        &state,
-        diagnostics_config.as_ref(),
-        DiagnosticsEvent::update_check(DiagnosticsResult::Success, None),
-    );
-
-    Ok(AppUpdateCheckResult {
-        current_version,
-        update: update.map(app_update_info),
-    })
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn install_app_update<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
-    state: tauri::State<'_, AppState>,
-) -> Result<AppUpdateInstallResult, AppError> {
-    let diagnostics_config = current_config(&state)
-        .map_err(|error| {
-            tracing::debug!(?error, "failed to load config for app install diagnostics");
-            error
-        })
-        .ok();
-    let current_version = app.package_info().version.to_string();
-    let updater = match app.updater() {
-        Ok(updater) => updater,
-        Err(error) => {
-            record_diagnostics_event_if_config(
-                &state,
-                diagnostics_config.as_ref(),
-                DiagnosticsEvent::app_update_install(
-                    DiagnosticsResult::Failure,
-                    Some(diagnostics_error_class_for_app_updater_install(&error)),
-                ),
-            );
-            return Err(app_updater_error(error));
-        }
-    };
-    let Some(update) = (match updater.check().await {
-        Ok(update) => update,
-        Err(error) => {
-            record_diagnostics_event_if_config(
-                &state,
-                diagnostics_config.as_ref(),
-                DiagnosticsEvent::app_update_install(
-                    DiagnosticsResult::Failure,
-                    Some(diagnostics_error_class_for_app_updater_install(&error)),
-                ),
-            );
-            return Err(app_updater_error(error));
-        }
-    }) else {
-        record_diagnostics_event_if_config(
-            &state,
-            diagnostics_config.as_ref(),
-            DiagnosticsEvent::app_update_install(DiagnosticsResult::Skipped, None),
-        );
-        return Ok(AppUpdateInstallResult {
-            state: AppUpdateInstallState::NoUpdate,
-            current_version,
-            installed_version: None,
-        });
-    };
-    let version = update.version.clone();
-
-    if let Err(error) = update.download_and_install(|_, _| {}, || {}).await {
-        record_diagnostics_event_if_config(
-            &state,
-            diagnostics_config.as_ref(),
-            DiagnosticsEvent::app_update_install(
-                DiagnosticsResult::Failure,
-                Some(diagnostics_error_class_for_app_updater_install(&error)),
-            ),
-        );
-        return Err(app_updater_error(error));
-    }
-
-    record_diagnostics_event_if_config(
-        &state,
-        diagnostics_config.as_ref(),
-        DiagnosticsEvent::app_update_install(DiagnosticsResult::Success, None),
-    );
-
-    Ok(AppUpdateInstallResult {
-        state: AppUpdateInstallState::Installed,
-        current_version,
-        installed_version: Some(version),
-    })
+    Ok(())
 }
 
 #[tauri::command]
@@ -2581,16 +2467,6 @@ fn record_diagnostics_event(state: &AppState, config: &AppConfig, event: Diagnos
     });
 }
 
-fn record_diagnostics_event_if_config(
-    state: &AppState,
-    config: Option<&AppConfig>,
-    event: DiagnosticsEvent,
-) {
-    if let Some(config) = config {
-        record_diagnostics_event(state, config, event);
-    }
-}
-
 fn diagnostics_result_for_update_run(
     run: &UpdateRunResult,
 ) -> (DiagnosticsResult, Option<DiagnosticsErrorClass>) {
@@ -2614,6 +2490,16 @@ fn diagnostics_result_for_update_run(
     }
 
     (DiagnosticsResult::Success, None)
+}
+
+fn diagnostics_result_for_app_update_diagnostic(
+    result: AppUpdateDiagnosticResult,
+) -> DiagnosticsResult {
+    match result {
+        AppUpdateDiagnosticResult::Success => DiagnosticsResult::Success,
+        AppUpdateDiagnosticResult::Failure => DiagnosticsResult::Failure,
+        AppUpdateDiagnosticResult::Skipped => DiagnosticsResult::Skipped,
+    }
 }
 
 fn record_runtime_start_failure_diagnostics(
@@ -2753,25 +2639,31 @@ fn diagnostics_error_class_for_update_error(error: &UpdateManagerError) -> Diagn
     }
 }
 
-fn diagnostics_error_class_for_app_updater_check(
-    error: &tauri_plugin_updater::Error,
+fn diagnostics_error_class_for_app_update_message(
+    action: AppUpdateDiagnosticAction,
+    message: Option<&str>,
 ) -> DiagnosticsErrorClass {
-    match error {
-        tauri_plugin_updater::Error::EmptyEndpoints => DiagnosticsErrorClass::EndpointUnavailable,
-        tauri_plugin_updater::Error::UnsupportedArch
-        | tauri_plugin_updater::Error::UnsupportedOs => DiagnosticsErrorClass::Unknown,
-        _ => DiagnosticsErrorClass::EndpointUnavailable,
-    }
-}
+    let message = message.unwrap_or_default().to_ascii_lowercase();
 
-fn diagnostics_error_class_for_app_updater_install(
-    error: &tauri_plugin_updater::Error,
-) -> DiagnosticsErrorClass {
-    match error {
-        tauri_plugin_updater::Error::EmptyEndpoints => DiagnosticsErrorClass::EndpointUnavailable,
-        tauri_plugin_updater::Error::UnsupportedArch
-        | tauri_plugin_updater::Error::UnsupportedOs => DiagnosticsErrorClass::Unknown,
-        _ => DiagnosticsErrorClass::UpdaterInstallFailed,
+    if message.contains("unsupported") {
+        return DiagnosticsErrorClass::Unknown;
+    }
+
+    if message.contains("emptyendpoint")
+        || message.contains("empty endpoint")
+        || message.contains("endpoint")
+        || message.contains("fetch")
+        || message.contains("network")
+        || message.contains("request")
+        || message.contains("timeout")
+        || message.contains("http")
+    {
+        return DiagnosticsErrorClass::EndpointUnavailable;
+    }
+
+    match action {
+        AppUpdateDiagnosticAction::Check => DiagnosticsErrorClass::EndpointUnavailable,
+        AppUpdateDiagnosticAction::Install => DiagnosticsErrorClass::UpdaterInstallFailed,
     }
 }
 
@@ -3238,16 +3130,6 @@ fn tun_error(error: TunManagerError) -> AppError {
     }
 }
 
-fn app_update_info(update: tauri_plugin_updater::Update) -> AppUpdateInfo {
-    AppUpdateInfo {
-        current_version: update.current_version,
-        version: update.version,
-        date: update.date.map(|date| date.to_string()),
-        body: update.body,
-        download_url: update.download_url.to_string(),
-    }
-}
-
 fn app_updater_state_for_error(error: &tauri_plugin_updater::Error) -> AppUpdaterState {
     match error {
         tauri_plugin_updater::Error::EmptyEndpoints => AppUpdaterState::Unconfigured,
@@ -3255,10 +3137,6 @@ fn app_updater_state_for_error(error: &tauri_plugin_updater::Error) -> AppUpdate
         | tauri_plugin_updater::Error::UnsupportedOs => AppUpdaterState::Unsupported,
         _ => AppUpdaterState::Error,
     }
-}
-
-fn app_updater_error(error: tauri_plugin_updater::Error) -> AppError {
-    AppError::Update(error.to_string())
 }
 
 fn update_error(error: UpdateManagerError) -> AppError {

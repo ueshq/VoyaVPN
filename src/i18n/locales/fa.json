@@ -1030,6 +1030,7 @@
     "description": "بررسی به روزرسانی برنامه، فایل های geo و ruleset.",
     "download": "دریافت",
     "installApp": "نصب برنامه",
+    "restartApp": "Restart app",
     "kind": {
       "app": "برنامه",
       "geo": "Geo",
@@ -1049,6 +1050,7 @@
     "noAppUpdate": "برنامه به روز است",
     "noSelectedTargets": "حداقل یک هدف را برای بررسی یا دریافت انتخاب کنید.",
     "preRelease": "Pre-release",
+    "restartRequired": "Restart VoyaVPN to finish applying the update.",
     "redactedUrl": "[URL پنهان شد]",
     "redactedValue": "[پنهان شد]",
     "selected": "انتخاب شده",

@@ -129,6 +129,21 @@ export async function installTauriSmokeMock(page: Page) {
         case "plugin:event|unlisten":
         case "plugin:event|emit":
         case "plugin:event|emit_to":
+        case "plugin:resources|close":
+          return Promise.resolve(null);
+        case "plugin:app|version":
+          return Promise.resolve("0.1.0");
+        case "plugin:updater|check":
+          return Promise.resolve({
+            body: null,
+            currentVersion: "0.1.0",
+            date: null,
+            rawJson: { downloadUrl: "https://cdn.voyavpn.test/stable/latest.json" },
+            rid: 9001,
+            version: "0.2.0",
+          });
+        case "plugin:updater|download_and_install":
+        case "plugin:process|restart":
           return Promise.resolve(null);
         case "app_health":
           return Promise.resolve("ok");
@@ -405,6 +420,21 @@ export async function installTauriSmokeMock(page: Page) {
           return Promise.resolve({ bytes: 1024, message: "Smoke WebDAV upload ok", path: null, remotePath: "/VoyaVPN/smoke.zip" });
         case "backup_webdav_pull":
           return Promise.resolve({ message: "Smoke WebDAV restore ok", path: "/tmp/voyavpn-smoke/webdav.zip", restoredConfig: clone(state.appConfig) });
+        case "app_update_status":
+          return Promise.resolve({ currentVersion: "0.1.0", message: null, state: "ready" });
+        case "manual_app_update_links":
+          return Promise.resolve({
+            arch: "x64",
+            channel: "stable",
+            currentVersion: "0.1.0",
+            downloads: [],
+            hasUpdate: false,
+            releaseIndexUrl: "https://cdn.voyavpn.test/stable/release-index.json",
+            remoteVersion: null,
+            target: "linux",
+          });
+        case "record_app_update_diagnostic":
+          return Promise.resolve(null);
         case "update_status":
           return Promise.resolve(clone(state.updates));
         case "save_update_preferences":

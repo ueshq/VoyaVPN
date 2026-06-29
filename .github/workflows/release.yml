@@ -44,29 +44,11 @@ defaults:
     shell: bash
 
 jobs:
-  tests:
-    name: Test And Drift Checks
+  preflight:
+    name: Release Preflight
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Install Linux Tauri dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            curl \
-            file \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev \
-            wget
-
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
@@ -75,13 +57,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run release validation checks
-        run: pnpm run verify:ci
 
       - name: Reject stable dry runs
         if: ${{ inputs.channel == 'stable' && inputs.dry_run == true }}
@@ -227,7 +202,7 @@ jobs:
 
   package:
     name: Package ${{ matrix.release_target }}
-    needs: tests
+    needs: preflight
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

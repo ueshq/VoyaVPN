@@ -1030,6 +1030,7 @@
     "description": "检查应用、geo 文件和规则集的更新。",
     "download": "下载",
     "installApp": "安装应用",
+    "restartApp": "重启应用",
     "kind": {
       "app": "应用",
       "geo": "Geo",
@@ -1049,6 +1050,7 @@
     "noAppUpdate": "应用已是最新",
     "noSelectedTargets": "请至少选择一个目标以检查或下载。",
     "preRelease": "预发布",
+    "restartRequired": "重启 VoyaVPN 以完成更新。",
     "redactedUrl": "[已隐藏的 URL]",
     "redactedValue": "[已隐藏]",
     "selected": "已选择",

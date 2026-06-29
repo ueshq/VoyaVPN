@@ -1030,6 +1030,7 @@
     "description": "檢查應用程式、geo 檔案與規則集的更新。",
     "download": "下載",
     "installApp": "安裝應用程式",
+    "restartApp": "重新啟動應用程式",
     "kind": {
       "app": "應用程式",
       "geo": "Geo",
@@ -1049,6 +1050,7 @@
     "noAppUpdate": "應用程式已是最新",
     "noSelectedTargets": "請至少選擇一個目標以檢查或下載。",
     "preRelease": "預先發行",
+    "restartRequired": "重新啟動 VoyaVPN 以完成更新。",
     "redactedUrl": "[已隱藏的 URL]",
     "redactedValue": "[已隱藏]",
     "selected": "已選擇",
