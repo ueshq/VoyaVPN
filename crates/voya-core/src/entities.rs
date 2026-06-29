@@ -220,10 +220,18 @@ impl Default for SubItem {
 #[serde(default, rename_all = "camelCase")]
 pub struct ImportProfilesResult {
     pub imported: u32,
+    pub updated: u32,
     pub skipped: u32,
+    pub parsed: u32,
+    pub filtered: u32,
+    pub deduped: u32,
+    pub failed: u32,
     pub removed_existing: u32,
+    pub removed_duplicates: u32,
     pub subid: Option<String>,
     pub imported_index_ids: Vec<String>,
+    pub updated_index_ids: Vec<String>,
+    pub messages: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize, Type)]

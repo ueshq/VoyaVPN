@@ -2520,6 +2520,69 @@ mod share_tests {
     }
 
     #[test]
+    fn fmt_parses_common_multiline_import_shapes() {
+        let vmess_json = r#"{
+            "v": "2",
+            "ps": "JMS-TEST@example.test:17701",
+            "add": "node-vmess.example.test",
+            "port": "17701",
+            "id": "00000000-0000-0000-0000-000000000001",
+            "aid": "0",
+            "scy": "auto",
+            "net": "tcp",
+            "type": "none",
+            "host": "",
+            "path": "",
+            "tls": "",
+            "sni": "",
+            "alpn": "",
+            "fp": "",
+            "insecure": "0"
+        }"#;
+        let vmess = format!("vmess://{}", base64_encode(vmess_json, false));
+        let parsed = parse_share_link(&vmess).expect("parse vmess base64 json");
+        assert_eq!(parsed.config_type, ConfigType::VMess);
+        assert_eq!(parsed.remarks, "JMS-TEST@example.test:17701");
+        assert_eq!(parsed.address, "node-vmess.example.test");
+        assert_eq!(parsed.port, 17701);
+        assert_eq!(parsed.network, DEFAULT_NETWORK);
+        assert_eq!(
+            parsed.protocol_extra.vmess_security.as_deref(),
+            Some(DEFAULT_SECURITY)
+        );
+
+        let paddingless_vmess = format!("vmess://{}", base64_encode(vmess_json, true));
+        let parsed = parse_share_link(&paddingless_vmess).expect("parse paddingless vmess");
+        assert_eq!(parsed.address, "node-vmess.example.test");
+
+        let vless = "vless://00000000-0000-0000-0000-000000000002@node-vless.example.test:443?encryption=none&security=tls&sni=node-vless.example.test&fp=randomized&insecure=0&allowInsecure=0&type=ws&host=node-vless.example.test&path=%2F%3Fed%3D2048#node-vless.example.test";
+        let parsed = parse_share_link(vless).expect("parse vless ws tls");
+        assert_eq!(parsed.config_type, ConfigType::VLESS);
+        assert_eq!(parsed.address, "node-vless.example.test");
+        assert_eq!(parsed.network, "ws");
+        assert_eq!(parsed.stream_security, STREAM_SECURITY_TLS);
+        assert_eq!(
+            parsed.transport_extra.host.as_deref(),
+            Some("node-vless.example.test")
+        );
+        assert_eq!(parsed.transport_extra.path.as_deref(), Some("/?ed=2048"));
+
+        let ss_user_info = base64_encode("aes-256-gcm:test-password", true);
+        let ss = format!(
+            "ss://{ss_user_info}@node-ss.example.test:17701?#JMS-TEST%40node-ss.example.test%3A17701"
+        );
+        let parsed = parse_share_link(&ss).expect("parse sip002 ss with empty query");
+        assert_eq!(parsed.config_type, ConfigType::Shadowsocks);
+        assert_eq!(parsed.address, "node-ss.example.test");
+        assert_eq!(parsed.port, 17701);
+        assert_eq!(parsed.remarks, "JMS-TEST@node-ss.example.test:17701");
+        assert_eq!(
+            parsed.protocol_extra.ss_method.as_deref(),
+            Some("aes-256-gcm")
+        );
+    }
+
+    #[test]
     fn fmt_wireguard_config_parses_peers_and_inline_comments() {
         let config = r#"
             [Interface]

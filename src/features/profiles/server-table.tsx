@@ -100,6 +100,7 @@ import {
 } from "@/ipc";
 import type {
   ExportProfilesResult,
+  ImportProfilesResult,
   ProfileItem_Deserialize,
   ProfileListItem_Serialize,
   ProfileSortKey,
@@ -440,18 +441,27 @@ export function ProfilesScreen() {
       }
 
       const result = await importProfilesFromText(text, null, false);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["profiles"] }),
-        queryClient.invalidateQueries({ queryKey: ["subscriptions"] }),
-      ]);
-      setOperationMessage(
-        t("panes.profiles.import.clipboardResult", { count: result.imported ?? 0 }),
-      );
+      await handleDialogImport(result);
     } catch (error) {
       setOperationError(getErrorMessage(error));
     } finally {
       setImportingFromClipboard(false);
     }
+  }
+
+  async function handleDialogImport(result: ImportProfilesResult) {
+    setOperationError(null);
+    setOperationMessage(formatImportOperationMessage(result));
+    const importedIndexIds = result.importedIndexIds ?? [];
+    if (importedIndexIds.length > 0) {
+      setFilterText("");
+      setSelectedIds(new Set(importedIndexIds));
+      const refreshedProfiles = await listProfiles(null, null);
+      queryClient.setQueryData(profilesQueryKey(""), refreshedProfiles);
+    } else {
+      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
+    }
+    await queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
   }
 
   const selectedIdsArray = selected.map((item) => item.profile.IndexId);
@@ -685,6 +695,7 @@ export function ProfilesScreen() {
       ) : null}
 
       {operationError ? <InlinePageError>{operationError}</InlinePageError> : null}
+      {profilesQuery.isError ? <InlinePageError>{getErrorMessage(profilesQuery.error)}</InlinePageError> : null}
       {operationMessage ? (
         <div className="border-b bg-connected/10 px-4 py-2 text-sm text-connected">{operationMessage}</div>
       ) : null}
@@ -898,7 +909,7 @@ export function ProfilesScreen() {
         profile={dialogState?.mode === "edit" ? dialogState.profile : null}
       />
       <ImportProfilesDialog
-        onImported={() => void queryClient.invalidateQueries({ queryKey: ["profiles"] })}
+        onImported={handleDialogImport}
         onOpenChange={setImportOpen}
         open={importOpen}
       />
@@ -1239,6 +1250,40 @@ function ContextItem({
 
 function profilesQueryKey(filter: string) {
   return ["profiles", { filter }] as const;
+}
+
+function formatImportOperationMessage(result: ImportProfilesResult) {
+  const imported = result.imported ?? 0;
+  const updated = result.updated ?? 0;
+  const skipped = result.skipped ?? 0;
+  const failed = result.failed ?? 0;
+  const filtered = result.filtered ?? 0;
+  const deduped = result.deduped ?? 0;
+  const removedDuplicates = result.removedDuplicates ?? 0;
+  const parts = [`Imported ${imported.toLocaleString()} profile${imported === 1 ? "" : "s"}.`];
+
+  if (updated > 0) {
+    parts.push(`${updated.toLocaleString()} updated.`);
+  }
+  if (removedDuplicates > 0) {
+    parts.push(
+      `${removedDuplicates.toLocaleString()} duplicate${removedDuplicates === 1 ? "" : "s"} removed.`,
+    );
+  }
+  if (skipped > 0) {
+    parts.push(`${skipped.toLocaleString()} skipped.`);
+  }
+  if (failed > 0) {
+    parts.push(`${failed.toLocaleString()} failed to parse.`);
+  }
+  if (filtered > 0) {
+    parts.push(`${filtered.toLocaleString()} filtered.`);
+  }
+  if (deduped > 0) {
+    parts.push(`${deduped.toLocaleString()} duplicate${deduped === 1 ? "" : "s"} skipped from payload.`);
+  }
+
+  return parts.join(" ");
 }
 
 function sortAriaValue(

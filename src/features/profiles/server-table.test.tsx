@@ -382,6 +382,14 @@ describe("ProfilesScreen", () => {
     expect(screen.queryByRole("columnheader", { name: "IP info" })).not.toBeInTheDocument();
   });
 
+  it("shows profile query errors instead of silently presenting an empty table", async () => {
+    ipcMocks.listProfiles.mockRejectedValue(new Error("profile list failed"));
+
+    renderProfiles();
+
+    expect(await screen.findByText("profile list failed")).toBeInTheDocument();
+  });
+
   it("runs import and subscription update actions through subscription IPC wrappers", async () => {
     ipcMocks.listProfiles.mockResolvedValue([]);
 
@@ -411,12 +419,75 @@ describe("ProfilesScreen", () => {
     );
   });
 
+  it("refreshes and selects imported profiles after dialog import", async () => {
+    const importedProfile = makeProfile(7, {
+      IndexId: "profile-imported",
+      Remarks: "Imported node",
+    });
+    ipcMocks.listProfiles
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([importedProfile]);
+    ipcMocks.importProfilesFromText.mockResolvedValue({
+      deduped: 0,
+      failed: 0,
+      filtered: 0,
+      imported: 1,
+      importedIndexIds: ["profile-imported"],
+      messages: [],
+      parsed: 1,
+      removedExisting: 0,
+      skipped: 0,
+      subid: null,
+    });
+
+    renderProfiles();
+
+    await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Import" }));
+    fireEvent.change(screen.getByLabelText("Import payload"), {
+      target: { value: "vless://uuid@example.test:443#Imported" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import payload" }));
+
+    expect(await screen.findByText("Imported node")).toBeInTheDocument();
+    expect(await screen.findByText("1 selected")).toBeInTheDocument();
+    expect(screen.getByText("Imported 1 profile.")).toBeInTheDocument();
+  });
+
   it("imports profiles directly from clipboard text", async () => {
     const clipboardText = "vless://uuid@example.test:443#US";
     const readText = mockClipboardReadText(`\n${clipboardText}\n`);
-    ipcMocks.listProfiles.mockResolvedValue([]);
+    const importedProfile = makeProfile(1, {
+      IndexId: "profile-clipboard",
+      Remarks: "Clipboard node",
+    });
+    let imported = false;
+    ipcMocks.listProfiles.mockImplementation(async (_subid: string | null, filter: string | null) =>
+      imported && !filter ? [importedProfile] : [],
+    );
+    ipcMocks.importProfilesFromText.mockImplementation(async () => {
+      imported = true;
+      return {
+        deduped: 0,
+        failed: 0,
+        filtered: 0,
+        imported: 1,
+        importedIndexIds: ["profile-clipboard"],
+        messages: [],
+        parsed: 1,
+        removedExisting: 0,
+        removedDuplicates: 2,
+        skipped: 0,
+        subid: null,
+        updated: 1,
+        updatedIndexIds: ["profile-clipboard"],
+      };
+    });
 
     renderProfiles();
+
+    const filterInput = await screen.findByRole("searchbox", { name: "Filter profiles" });
+    fireEvent.change(filterInput, { target: { value: "hidden" } });
 
     await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Import from clipboard" }));
@@ -425,7 +496,10 @@ describe("ProfilesScreen", () => {
     await waitFor(() =>
       expect(ipcMocks.importProfilesFromText).toHaveBeenCalledWith(clipboardText, null, false),
     );
-    expect(await screen.findByText("Imported 1 profile(s) from clipboard.")).toBeInTheDocument();
+    expect(await screen.findByText("Clipboard node")).toBeInTheDocument();
+    expect(filterInput).toHaveValue("");
+    expect(await screen.findByText("1 selected")).toBeInTheDocument();
+    expect(screen.getByText("Imported 1 profile. 1 updated. 2 duplicates removed.")).toBeInTheDocument();
   });
 
   it("does not import when clipboard text is empty", async () => {

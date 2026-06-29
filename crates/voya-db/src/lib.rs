@@ -681,7 +681,7 @@ impl<'pool> ProfileRepository<'pool> {
                 SELECT
                     p.*,
                     COALESCE(e.delay, 0) AS ex_delay,
-                    COALESCE(e.speed, 0) AS ex_speed,
+                    COALESCE(e.speed, 0.0) AS ex_speed,
                     COALESCE(e.sort, 0) AS ex_sort,
                     e.message AS ex_message,
                     e.ip_info AS ex_ip_info
@@ -700,7 +700,7 @@ impl<'pool> ProfileRepository<'pool> {
                 SELECT
                     p.*,
                     COALESCE(e.delay, 0) AS ex_delay,
-                    COALESCE(e.speed, 0) AS ex_speed,
+                    COALESCE(e.speed, 0.0) AS ex_speed,
                     COALESCE(e.sort, 0) AS ex_sort,
                     e.message AS ex_message,
                     e.ip_info AS ex_ip_info
@@ -1555,14 +1555,7 @@ fn row_to_profile_ref(row: &SqliteRow) -> Result<ProfileItem> {
             enum_name: "ConfigType",
             value: config_type_value,
         })?,
-        core_type: core_type_value
-            .map(|value| {
-                CoreType::from_i32(value).ok_or(DbError::InvalidEnum {
-                    enum_name: "CoreType",
-                    value,
-                })
-            })
-            .transpose()?,
+        core_type: decode_profile_core_type(core_type_value),
         config_version: row.try_get("config_version")?,
         subid: row.try_get("subid")?,
         is_sub: row.try_get("is_sub")?,
@@ -1591,6 +1584,14 @@ fn row_to_profile_ref(row: &SqliteRow) -> Result<ProfileItem> {
         protocol_extra: blob::protocol_extra_from_text(&protocol_extra)?,
         transport_extra: blob::transport_extra_from_text(&transport_extra)?,
     })
+}
+
+// Unlike `ConfigType`, an unrecognized persisted `core_type` is recoverable:
+// `None` already means "use the default core". Tolerate unknown discriminants
+// (e.g. legacy Xray rows from before sing-box became the only core) by falling
+// back to the default rather than failing the entire profile listing.
+fn decode_profile_core_type(value: Option<i32>) -> Option<CoreType> {
+    value.and_then(CoreType::from_i32)
 }
 
 fn row_to_profile_ex(row: SqliteRow) -> Result<ProfileExItem> {
@@ -2198,6 +2199,33 @@ mod tests {
                 .len(),
             2
         );
+    }
+
+    #[tokio::test]
+    async fn profile_repository_treats_unknown_profile_core_type_as_default() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("database test operation should succeed");
+        let profile = sample_profile();
+        database
+            .profiles()
+            .upsert(&profile)
+            .await
+            .expect("database test operation should succeed");
+        sqlx::query("UPDATE profile_items SET core_type = 2 WHERE index_id = ?")
+            .bind(&profile.index_id)
+            .execute(database.pool())
+            .await
+            .expect("database test operation should succeed");
+
+        let listed = database
+            .profiles()
+            .list_with_profile_ex(None)
+            .await
+            .expect("unknown profile core type should not break profile listing");
+
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].0.core_type, None);
     }
 
     #[tokio::test]

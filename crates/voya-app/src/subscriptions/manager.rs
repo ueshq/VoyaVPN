@@ -9,7 +9,7 @@ use thiserror::Error;
 use voya_core::{
     parse_full_custom_config, parse_inner_share_links, parse_share_link, parse_ss_sip008,
     parse_wireguard_config, profile_items_match, AppConfig, ConfigType, ImportProfilesResult,
-    ProfileItem, SubItem, SubscriptionUpdateResult,
+    ProfileExItem, ProfileItem, SubItem, SubscriptionUpdateResult,
 };
 use voya_db::{Database, DbError};
 use voya_net::{
@@ -17,7 +17,7 @@ use voya_net::{
     SubscriptionFetchResult, SubscriptionFetchSource,
 };
 
-use crate::profiles::{ProfileManager, ProfileManagerError};
+use crate::profiles::{normalize_profile, ProfileManager, ProfileManagerError};
 
 static SUBSCRIPTION_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -165,45 +165,125 @@ impl<'db> SubscriptionManager<'db> {
         } else {
             Vec::new()
         };
-        let active_profile = old_profiles
-            .iter()
-            .find(|profile| !config.index_id.is_empty() && profile.index_id == config.index_id)
-            .cloned();
 
-        let mut profiles = self
+        let parsed_import = self
             .parse_import_text(config, text, subid.unwrap_or_default(), is_sub)
             .await?;
+        let mut profiles = parsed_import.profiles;
+        let parsed = profiles.len();
         let before_filter = profiles.len();
         if let Some(regex) = &regex {
             profiles.retain(|profile| regex.is_match(&profile.remarks));
         }
-        let mut skipped = before_filter.saturating_sub(profiles.len());
+        let filtered = before_filter.saturating_sub(profiles.len());
 
         for profile in &mut profiles {
             profile.subid = subid.unwrap_or_default().to_string();
             profile.is_sub = is_sub;
             profile.pre_socks_port = pre_socks_port;
+            normalize_profile(config, profile);
         }
 
         let before_dedupe = profiles.len();
         profiles = dedupe_profiles(profiles);
-        skipped += before_dedupe.saturating_sub(profiles.len());
+        let deduped = before_dedupe.saturating_sub(profiles.len());
+        let skipped = filtered
+            .saturating_add(deduped)
+            .saturating_add(parsed_import.failed_lines);
         if profiles.is_empty() {
             ProfileManager::new(self.database)
                 .ensure_active_profile(config)
                 .await?;
             return Ok(ImportProfilesResult {
                 imported: 0,
+                updated: 0,
                 skipped: u32::try_from(skipped).unwrap_or(u32::MAX),
+                parsed: u32::try_from(parsed).unwrap_or(u32::MAX),
+                filtered: u32::try_from(filtered).unwrap_or(u32::MAX),
+                deduped: u32::try_from(deduped).unwrap_or(u32::MAX),
+                failed: u32::try_from(parsed_import.failed_lines).unwrap_or(u32::MAX),
                 removed_existing: 0,
+                removed_duplicates: 0,
                 subid: subid.map(str::to_string),
                 imported_index_ids: Vec::new(),
+                updated_index_ids: Vec::new(),
+                messages: parsed_import.messages,
             });
         }
 
+        let profile_manager = ProfileManager::new(self.database);
+        let mut existing_profiles = self.database.profiles().list_with_profile_ex(None).await?;
+        let mut imported_index_ids = Vec::new();
+        let mut updated_index_ids = Vec::new();
+        let mut duplicate_index_ids_to_remove = Vec::new();
+        for mut profile in profiles {
+            let match_indices = existing_profiles
+                .iter()
+                .enumerate()
+                .filter_map(|(index, (existing, _))| {
+                    profile_items_match(existing, &profile, false).then_some(index)
+                })
+                .collect::<Vec<_>>();
+
+            if let Some(canonical_index) = choose_canonical_match_index(
+                &match_indices,
+                &existing_profiles,
+                &config.index_id,
+                subid,
+            ) {
+                let canonical_index_id = existing_profiles[canonical_index].0.index_id.clone();
+                let duplicate_index_ids = match_indices
+                    .iter()
+                    .filter_map(|index| {
+                        let index_id = &existing_profiles[*index].0.index_id;
+                        (index_id != &canonical_index_id).then(|| index_id.clone())
+                    })
+                    .collect::<Vec<_>>();
+
+                profile.index_id.clone_from(&canonical_index_id);
+                let saved = profile_manager.save_profile(config, profile).await?;
+                update_existing_profile_cache(
+                    &mut existing_profiles,
+                    saved.profile.clone(),
+                    saved.profile_ex.clone(),
+                    &duplicate_index_ids,
+                );
+                duplicate_index_ids_to_remove.extend(duplicate_index_ids);
+                updated_index_ids.push(saved.profile.index_id.clone());
+                imported_index_ids.push(saved.profile.index_id.clone());
+            } else {
+                let saved = profile_manager.save_profile(config, profile).await?;
+                existing_profiles.push((saved.profile.clone(), saved.profile_ex.clone()));
+                imported_index_ids.push(saved.profile.index_id.clone());
+            }
+        }
+
+        let removed_duplicates = if duplicate_index_ids_to_remove.is_empty() {
+            0
+        } else {
+            self.database
+                .profiles()
+                .delete_many(&duplicate_index_ids_to_remove)
+                .await?
+        };
+
         let removed_existing = if is_sub {
             if let Some(id) = subid {
-                self.database.profiles().delete_by_subid(id, true).await?
+                let retained_current_sub_index_ids: BTreeSet<&str> =
+                    imported_index_ids.iter().map(String::as_str).collect();
+                let stale_index_ids = old_profiles
+                    .iter()
+                    .filter(|profile| {
+                        profile.is_sub
+                            && profile.subid.as_str() == id
+                            && !retained_current_sub_index_ids.contains(profile.index_id.as_str())
+                    })
+                    .map(|profile| profile.index_id.clone())
+                    .collect::<Vec<_>>();
+                self.database
+                    .profiles()
+                    .delete_many(&stale_index_ids)
+                    .await?
             } else {
                 0
             }
@@ -211,31 +291,22 @@ impl<'db> SubscriptionManager<'db> {
             0
         };
 
-        let profile_manager = ProfileManager::new(self.database);
-        let mut imported_index_ids = Vec::new();
-        let mut active_replacement = None;
-        for profile in profiles {
-            let matches_old_active = active_profile
-                .as_ref()
-                .is_some_and(|old| profile_items_match(old, &profile, false));
-            let saved = profile_manager.save_profile(config, profile).await?;
-            if matches_old_active {
-                active_replacement = Some(saved.profile.index_id.clone());
-            }
-            imported_index_ids.push(saved.profile.index_id);
-        }
-
-        if let Some(active_replacement) = active_replacement {
-            config.index_id = active_replacement;
-        }
         profile_manager.ensure_active_profile(config).await?;
 
         Ok(ImportProfilesResult {
             imported: u32::try_from(imported_index_ids.len()).unwrap_or(u32::MAX),
+            updated: u32::try_from(updated_index_ids.len()).unwrap_or(u32::MAX),
             skipped: u32::try_from(skipped).unwrap_or(u32::MAX),
+            parsed: u32::try_from(parsed).unwrap_or(u32::MAX),
+            filtered: u32::try_from(filtered).unwrap_or(u32::MAX),
+            deduped: u32::try_from(deduped).unwrap_or(u32::MAX),
+            failed: u32::try_from(parsed_import.failed_lines).unwrap_or(u32::MAX),
             removed_existing: u32::try_from(removed_existing).unwrap_or(u32::MAX),
+            removed_duplicates: u32::try_from(removed_duplicates).unwrap_or(u32::MAX),
             subid: subid.map(str::to_string),
             imported_index_ids,
+            updated_index_ids,
+            messages: parsed_import.messages,
         })
     }
 
@@ -398,9 +469,11 @@ impl<'db> SubscriptionManager<'db> {
         text: &str,
         subid: &str,
         is_sub: bool,
-    ) -> Result<Vec<ProfileItem>> {
+    ) -> Result<ParsedImportText> {
         let mut profiles = Vec::new();
         let mut added_subscription = false;
+        let mut failed_lines = 0_usize;
+        let mut messages = Vec::new();
         let allow_subscription_import = !is_sub && subid.trim().is_empty();
         let mut contents = Vec::new();
         if let Some(decoded) = decode_base64_payload(text) {
@@ -410,10 +483,11 @@ impl<'db> SubscriptionManager<'db> {
 
         for content in contents {
             let mut lines_seen = BTreeSet::new();
-            for line in content
+            for (line_index, line) in content
                 .lines()
                 .map(str::trim)
                 .filter(|line| !line.is_empty())
+                .enumerate()
             {
                 if is_sub && !lines_seen.insert(line.to_string()) {
                     continue;
@@ -421,10 +495,19 @@ impl<'db> SubscriptionManager<'db> {
                 if allow_subscription_import && is_http_url(line) {
                     self.add_subscription_from_url(config, line).await?;
                     added_subscription = true;
+                    messages.push(format!(
+                        "Line {} added as a subscription source; run subscription update to import its profiles.",
+                        line_index + 1
+                    ));
                     continue;
                 }
-                if let Ok(profile) = parse_share_link(line) {
-                    profiles.push(profile);
+                match parse_share_link(line) {
+                    Ok(profile) => profiles.push(profile),
+                    Err(error) if should_report_line_parse_error(line) => {
+                        failed_lines = failed_lines.saturating_add(1);
+                        messages.push(format!("Line {} was skipped: {error}", line_index + 1));
+                    }
+                    Err(_) => {}
                 }
             }
 
@@ -446,12 +529,57 @@ impl<'db> SubscriptionManager<'db> {
             }
         }
 
-        if profiles.is_empty() && !added_subscription {
+        if profiles.is_empty() && !added_subscription && failed_lines == 0 {
             Err(SubscriptionManagerError::NoImportableProfiles)
         } else {
-            Ok(profiles)
+            Ok(ParsedImportText {
+                failed_lines,
+                messages,
+                profiles,
+            })
         }
     }
+}
+
+#[derive(Debug, Default)]
+struct ParsedImportText {
+    profiles: Vec<ProfileItem>,
+    failed_lines: usize,
+    messages: Vec<String>,
+}
+
+// Share-link schemes recognized by `parse_share_link`. A parse failure on a
+// line starting with one of these is worth surfacing to the user; any other
+// line is treated as noise and skipped silently. Kept in sync with the scheme
+// dispatch in `voya_core::parse_share_link`.
+const REPORTABLE_SHARE_LINK_SCHEMES: [&str; 15] = [
+    "vmess://",
+    "ss://",
+    "socks://",
+    "socks4://",
+    "socks5://",
+    "trojan://",
+    "vless://",
+    "hysteria2://",
+    "hy2://",
+    "tuic://",
+    "wireguard://",
+    "anytls://",
+    "naive://",
+    "naive+https://",
+    "naive+quic://",
+];
+
+fn should_report_line_parse_error(line: &str) -> bool {
+    let line = line.trim();
+    REPORTABLE_SHARE_LINK_SCHEMES
+        .iter()
+        .any(|prefix| line_has_prefix_ci(line, prefix))
+}
+
+fn line_has_prefix_ci(line: &str, prefix: &str) -> bool {
+    line.get(..prefix.len())
+        .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
 }
 
 #[cfg(not(test))]
@@ -517,6 +645,55 @@ fn dedupe_profiles(profiles: Vec<ProfileItem>) -> Vec<ProfileItem> {
     kept
 }
 
+fn choose_canonical_match_index(
+    match_indices: &[usize],
+    existing_profiles: &[(ProfileItem, ProfileExItem)],
+    active_index_id: &str,
+    target_subid: Option<&str>,
+) -> Option<usize> {
+    match_indices.iter().copied().min_by_key(|index| {
+        let (profile, profile_ex) = &existing_profiles[*index];
+        let active_rank = if !active_index_id.is_empty() && profile.index_id == active_index_id {
+            0
+        } else {
+            1
+        };
+        let target_subid_rank = if target_subid.is_some_and(|subid| profile.subid.as_str() == subid)
+        {
+            0
+        } else {
+            1
+        };
+
+        (active_rank, target_subid_rank, profile_ex.sort, *index)
+    })
+}
+
+fn update_existing_profile_cache(
+    existing_profiles: &mut Vec<(ProfileItem, ProfileExItem)>,
+    saved_profile: ProfileItem,
+    saved_profile_ex: ProfileExItem,
+    removed_index_ids: &[String],
+) {
+    let saved_index_id = saved_profile.index_id.clone();
+    existing_profiles.retain(|(profile, _)| {
+        profile.index_id == saved_index_id
+            || !removed_index_ids
+                .iter()
+                .any(|index_id| index_id == &profile.index_id)
+    });
+
+    if let Some((profile, profile_ex)) = existing_profiles
+        .iter_mut()
+        .find(|(profile, _)| profile.index_id == saved_index_id)
+    {
+        *profile = saved_profile;
+        *profile_ex = saved_profile_ex;
+    } else {
+        existing_profiles.push((saved_profile, saved_profile_ex));
+    }
+}
+
 fn is_http_url(value: &str) -> bool {
     let value = value.trim();
     value.starts_with("https://") || value.starts_with("http://")
@@ -562,7 +739,7 @@ mod tests {
         net::TcpListener,
         sync::Mutex,
     };
-    use voya_core::CoreType;
+    use voya_core::{CoreType, ProtocolExtraItem};
 
     use super::*;
 
@@ -970,6 +1147,307 @@ mod tests {
         assert_eq!(profiles[0].address, json);
     }
 
+    #[tokio::test]
+    async fn manual_import_reports_bad_share_lines_without_exposing_payloads() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+
+        let result = manager
+            .import_profiles_from_text(&mut config, "vmess://%%%%", None, false)
+            .await
+            .expect("bad share line should return diagnostics");
+
+        assert_eq!(result.imported, 0);
+        assert_eq!(result.skipped, 1);
+        assert_eq!(result.failed, 1);
+        assert_eq!(result.messages.len(), 1);
+        assert!(result.messages[0].contains("Line 1 was skipped"));
+        assert!(!result.messages[0].contains("%%%%"));
+    }
+
+    #[tokio::test]
+    async fn manual_import_persists_mixed_share_links_for_profiles_screen() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+        let text = [
+            test_vmess_link("node-vmess-1.example.test", "JMS-TEST@node-vmess-1.example.test:17701"),
+            "vless://00000000-0000-0000-0000-000000000101@node-vless.example.test:443?encryption=none&security=tls&sni=node-vless.example.test&fp=randomized&insecure=0&allowInsecure=0&type=ws&host=node-vless.example.test&path=%2F%3Fed%3D2048#node-vless.example.test".to_string(),
+            test_ss_link("node-ss-1.example.test", "JMS-TEST@node-ss-1.example.test:17701"),
+            test_vmess_link("node-vmess-2.example.test", "JMS-TEST@node-vmess-2.example.test:17701"),
+            test_ss_link("node-ss-2.example.test", "JMS-TEST@node-ss-2.example.test:17701"),
+            test_vmess_link("node-vmess-3.example.test", "JMS-TEST@node-vmess-3.example.test:17701"),
+            test_vmess_link("node-vmess-4.example.test", "JMS-TEST@node-vmess-4.example.test:17701"),
+        ]
+        .join("\n");
+
+        let result = manager
+            .import_profiles_from_text(&mut config, &text, None, false)
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        assert_eq!(result.imported, 7);
+        assert_eq!(result.parsed, 7);
+        assert_eq!(result.skipped, 0);
+        assert_eq!(result.filtered, 0);
+        assert_eq!(result.deduped, 0);
+        assert_eq!(result.failed, 0);
+        assert_eq!(result.imported_index_ids.len(), 7);
+        assert!(result.messages.is_empty());
+
+        let profiles = database
+            .profiles()
+            .list()
+            .await
+            .expect("subscription manager test operation should succeed");
+        assert_eq!(profiles.len(), 7);
+
+        let visible_profiles = ProfileManager::new(&database)
+            .list_profiles(&config, None, None)
+            .await
+            .expect("subscription manager test operation should succeed");
+        assert_eq!(visible_profiles.len(), 7);
+        assert!(visible_profiles
+            .iter()
+            .any(|item| item.profile.remarks == "node-vless.example.test"));
+    }
+
+    #[tokio::test]
+    async fn manual_import_updates_duplicate_profiles_instead_of_creating_rows() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+        let text = [
+            test_vmess_link(
+                "node-vmess-1.example.test",
+                "JMS-TEST@node-vmess-1.example.test:17701",
+            ),
+            test_vless_link("node-vless.example.test", "node-vless.example.test"),
+            test_ss_link(
+                "node-ss-1.example.test",
+                "JMS-TEST@node-ss-1.example.test:17701",
+            ),
+            test_vmess_link(
+                "node-vmess-2.example.test",
+                "JMS-TEST@node-vmess-2.example.test:17701",
+            ),
+            test_ss_link(
+                "node-ss-2.example.test",
+                "JMS-TEST@node-ss-2.example.test:17701",
+            ),
+            test_vmess_link(
+                "node-vmess-3.example.test",
+                "JMS-TEST@node-vmess-3.example.test:17701",
+            ),
+            test_vmess_link(
+                "node-vmess-4.example.test",
+                "JMS-TEST@node-vmess-4.example.test:17701",
+            ),
+        ]
+        .join("\n");
+
+        let first = manager
+            .import_profiles_from_text(&mut config, &text, None, false)
+            .await
+            .expect("subscription manager test operation should succeed");
+        let second = manager
+            .import_profiles_from_text(&mut config, &text, None, false)
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        assert_eq!(first.imported, 7);
+        assert_eq!(first.updated, 0);
+        assert_eq!(second.imported, 7);
+        assert_eq!(second.updated, 7);
+        assert_eq!(second.imported_index_ids, first.imported_index_ids);
+        assert_eq!(second.updated_index_ids, first.imported_index_ids);
+
+        let profiles = database
+            .profiles()
+            .list()
+            .await
+            .expect("subscription manager test operation should succeed");
+        assert_eq!(profiles.len(), 7);
+    }
+
+    #[tokio::test]
+    async fn subscription_import_updates_existing_manual_duplicate_globally() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+        let text = test_vless_link("same.example.test", "manual node");
+        let manual = manager
+            .import_profiles_from_text(&mut config, &text, None, false)
+            .await
+            .expect("subscription manager test operation should succeed");
+        let sub = manager
+            .save_subscription(
+                &mut config,
+                SubItem {
+                    id: "sub-same".to_string(),
+                    remarks: "Same".to_string(),
+                    url: "https://example.test/sub".to_string(),
+                    ..SubItem::default()
+                },
+            )
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        let result = manager
+            .import_profiles_from_text(&mut config, &text, Some(&sub.id), true)
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        assert_eq!(result.imported, 1);
+        assert_eq!(result.updated, 1);
+        assert_eq!(result.imported_index_ids, manual.imported_index_ids);
+        let profiles = database
+            .profiles()
+            .list()
+            .await
+            .expect("subscription manager test operation should succeed");
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(profiles[0].index_id, manual.imported_index_ids[0]);
+        assert_eq!(profiles[0].subid, sub.id);
+        assert!(profiles[0].is_sub);
+    }
+
+    #[tokio::test]
+    async fn subscription_import_preserves_matching_ids_and_removes_stale_subscription_profiles() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+        let sub = manager
+            .save_subscription(
+                &mut config,
+                SubItem {
+                    id: "sub-refresh".to_string(),
+                    remarks: "Refresh".to_string(),
+                    url: "https://example.test/sub".to_string(),
+                    ..SubItem::default()
+                },
+            )
+            .await
+            .expect("subscription manager test operation should succeed");
+        let first_text = [
+            test_vless_link("keep.example.test", "keep old"),
+            test_vless_link("stale.example.test", "stale"),
+        ]
+        .join("\n");
+        let first = manager
+            .import_profiles_from_text(&mut config, &first_text, Some(&sub.id), true)
+            .await
+            .expect("subscription manager test operation should succeed");
+        let keep_index_id = first.imported_index_ids[0].clone();
+        let stale_index_id = first.imported_index_ids[1].clone();
+        let second_text = [
+            test_vless_link("keep.example.test", "keep renamed"),
+            test_vless_link("new.example.test", "new"),
+        ]
+        .join("\n");
+
+        let second = manager
+            .import_profiles_from_text(&mut config, &second_text, Some(&sub.id), true)
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        assert_eq!(second.imported, 2);
+        assert_eq!(second.updated, 1);
+        assert_eq!(second.removed_existing, 1);
+        assert!(second.imported_index_ids.contains(&keep_index_id));
+        assert!(!second.imported_index_ids.contains(&stale_index_id));
+        let profiles = database
+            .profiles()
+            .list_by_subid(Some(&sub.id))
+            .await
+            .expect("subscription manager test operation should succeed");
+        assert_eq!(profiles.len(), 2);
+        assert!(profiles
+            .iter()
+            .any(|profile| profile.index_id == keep_index_id && profile.remarks == "keep renamed"));
+        assert!(!profiles
+            .iter()
+            .any(|profile| profile.index_id == stale_index_id));
+    }
+
+    #[tokio::test]
+    async fn duplicate_cleanup_prefers_active_profile_as_canonical() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let profile_manager = ProfileManager::new(&database);
+        let mut config = AppConfig::default();
+        let text = "vless://uuid@example.test:443#Imported";
+        let initial = manager
+            .import_profiles_from_text(&mut config, text, None, false)
+            .await
+            .expect("subscription manager test operation should succeed");
+        let original_index_id = initial.imported_index_ids[0].clone();
+        let original = database
+            .profiles()
+            .get(&original_index_id)
+            .await
+            .expect("subscription manager test operation should succeed")
+            .expect("imported profile should exist");
+        let mut active_duplicate = original.clone();
+        active_duplicate.index_id = "active".to_string();
+        active_duplicate.remarks = "Active".to_string();
+        profile_manager
+            .save_profile(&mut config, active_duplicate)
+            .await
+            .expect("subscription manager test operation should succeed");
+        profile_manager
+            .profile_ex()
+            .set_sort(&original_index_id, 10)
+            .await
+            .expect("subscription manager test operation should succeed");
+        profile_manager
+            .profile_ex()
+            .set_sort("active", 20)
+            .await
+            .expect("subscription manager test operation should succeed");
+        profile_manager
+            .profile_ex()
+            .set_test_speed("active", 42.0)
+            .await
+            .expect("subscription manager test operation should succeed");
+        config.index_id = "active".to_string();
+
+        let result = manager
+            .import_profiles_from_text(&mut config, text, None, false)
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        assert_eq!(result.imported, 1);
+        assert_eq!(result.updated, 1);
+        assert_eq!(result.removed_duplicates, 1);
+        assert_eq!(result.imported_index_ids, vec!["active".to_string()]);
+        assert_eq!(config.index_id, "active");
+
+        let profiles = database
+            .profiles()
+            .list_with_profile_ex(None)
+            .await
+            .expect("subscription manager test operation should succeed");
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(profiles[0].0.index_id, "active");
+        assert_eq!(profiles[0].0.remarks, "Imported");
+        assert_eq!(profiles[0].1.sort, 20);
+        assert_eq!(profiles[0].1.speed, 42.0);
+    }
+
     fn sample_profile(index_id: &str, remarks: &str) -> ProfileItem {
         ProfileItem {
             index_id: index_id.to_string(),
@@ -979,8 +1457,55 @@ mod tests {
             address: "example.test".to_string(),
             port: 443,
             password: "uuid".to_string(),
+            network: "tcp".to_string(),
+            protocol_extra: ProtocolExtraItem {
+                vless_encryption: Some("none".to_string()),
+                ..ProtocolExtraItem::default()
+            },
             ..ProfileItem::default()
         }
+    }
+
+    fn test_vmess_link(address: &str, remarks: &str) -> String {
+        let json = format!(
+            r#"{{
+                "v": "2",
+                "ps": "{remarks}",
+                "add": "{address}",
+                "port": "17701",
+                "id": "00000000-0000-0000-0000-000000000100",
+                "aid": "0",
+                "scy": "auto",
+                "net": "tcp",
+                "type": "none",
+                "host": "",
+                "path": "",
+                "tls": "",
+                "sni": "",
+                "alpn": "",
+                "fp": "",
+                "insecure": "0"
+            }}"#
+        );
+        format!("vmess://{}", STANDARD.encode(json).trim_end_matches('='))
+    }
+
+    fn test_vless_link(address: &str, remarks: &str) -> String {
+        format!(
+            "vless://00000000-0000-0000-0000-000000000101@{address}:443?encryption=none#{}",
+            remarks.replace('@', "%40").replace(':', "%3A")
+        )
+    }
+
+    fn test_ss_link(address: &str, remarks: &str) -> String {
+        let user_info = STANDARD
+            .encode("aes-256-gcm:test-password")
+            .trim_end_matches('=')
+            .to_string();
+        format!(
+            "ss://{user_info}@{address}:17701?#{}",
+            remarks.replace('@', "%40").replace(':', "%3A")
+        )
     }
 
     async fn spawn_http_fixture(

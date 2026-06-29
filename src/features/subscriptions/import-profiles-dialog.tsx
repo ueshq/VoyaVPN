@@ -24,10 +24,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { importProfilesFromText, listSubscriptions } from "@/ipc";
+import type { ImportProfilesResult } from "@/ipc/bindings";
 import { redactOperationalError } from "@/lib/operational-redaction";
 
 type ImportProfilesDialogProps = {
-  onImported: () => void;
+  onImported: (result: ImportProfilesResult) => Promise<void> | void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
 };
@@ -36,6 +37,7 @@ const EMPTY_SELECT_VALUE = "__voyavpn_manual_import__";
 
 export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportProfilesDialogProps) {
   const [error, setError] = useState<string | null>(null);
+  const [resultMessages, setResultMessages] = useState<string[]>([]);
   const [resultText, setResultText] = useState<string | null>(null);
   const [selectedSubid, setSelectedSubid] = useState("");
   const [text, setText] = useState("");
@@ -57,14 +59,17 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
       return;
     }
     setError(null);
+    setResultMessages([]);
     setResultText(null);
     try {
       const result = await importProfilesFromText(text, selectedSubid || null, Boolean(selectedSubid));
-      setResultText(
-        `${result.imported ?? 0} imported, ${result.skipped ?? 0} skipped for ${targetLabel}`,
-      );
+      setResultText(formatImportResult(result, targetLabel));
+      setResultMessages(result.messages ?? []);
       setText("");
-      onImported();
+      await onImported(result);
+      if ((result.imported ?? 0) > 0) {
+        onOpenChange(false);
+      }
     } catch (error) {
       setError(redactOperationalError(error));
     }
@@ -76,6 +81,7 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
       return;
     }
     setError(null);
+    setResultMessages([]);
     try {
       setText(await navigator.clipboard.readText());
     } catch (error) {
@@ -88,6 +94,7 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
       return;
     }
     setError(null);
+    setResultMessages([]);
     try {
       setText(await file.text());
     } catch (error) {
@@ -185,6 +192,7 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
                 className="min-h-72 resize-y bg-card font-mono text-xs"
                 id="import-payload"
                 onChange={(event) => {
+                  setResultMessages([]);
                   setResultText(null);
                   setText(event.target.value);
                 }}
@@ -194,7 +202,16 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
 
             {resultText ? (
               <Alert role="status">
-                <AlertDescription>{resultText}</AlertDescription>
+                <AlertDescription>
+                  <div>{resultText}</div>
+                  {resultMessages.length > 0 ? (
+                    <ul className="mt-2 list-disc space-y-1 ps-5">
+                      {resultMessages.map((message, index) => (
+                        <li key={`${index}-${message}`}>{message}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </AlertDescription>
               </Alert>
             ) : null}
             {error ? (
@@ -224,4 +241,37 @@ function encodeSelectValue(value: string) {
 
 function decodeSelectValue(value: string) {
   return value === EMPTY_SELECT_VALUE ? "" : value;
+}
+
+function formatImportResult(result: ImportProfilesResult, targetLabel: string) {
+  const imported = result.imported ?? 0;
+  const updated = result.updated ?? 0;
+  const skipped = result.skipped ?? 0;
+  const details = [`${imported} imported`, `${skipped} skipped`];
+  const parsed = result.parsed ?? null;
+  const filtered = result.filtered ?? 0;
+  const deduped = result.deduped ?? 0;
+  const failed = result.failed ?? 0;
+  const removedDuplicates = result.removedDuplicates ?? 0;
+
+  if (updated > 0) {
+    details.push(`${updated} updated`);
+  }
+  if (removedDuplicates > 0) {
+    details.push(`${removedDuplicates} duplicates removed`);
+  }
+  if (parsed !== null) {
+    details.push(`${parsed} parsed`);
+  }
+  if (filtered > 0) {
+    details.push(`${filtered} filtered`);
+  }
+  if (deduped > 0) {
+    details.push(`${deduped} payload duplicate`);
+  }
+  if (failed > 0) {
+    details.push(`${failed} failed`);
+  }
+
+  return `${details.join(", ")} for ${targetLabel}.`;
 }

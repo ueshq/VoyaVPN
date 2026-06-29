@@ -1,6 +1,7 @@
 import { Database, Home, Network, Plug, Route, ScrollText, Shield } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import { BrandMark } from "@/assets/brand-mark";
 import { SidebarFooter, type RegionalPresetOption } from "@/components/app-shell/sidebar-footer";
 import { SidebarNavItem } from "@/components/app-shell/sidebar-nav-item";
 import { SidebarSectionHeader } from "@/components/app-shell/sidebar-section-header";
@@ -55,9 +56,7 @@ export function AppSidebar({
   return (
     <aside className="flex h-full min-h-0 w-60 flex-col border-e border-sidebar-border bg-sidebar text-sidebar-foreground">
       <div className="flex h-14 shrink-0 items-center gap-3 px-4">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground">
-          <Shield className="size-4" aria-hidden="true" />
-        </div>
+        <BrandMark className="size-8 shrink-0 rounded-md" aria-hidden="true" />
         <h1 className="truncate text-sm font-semibold leading-none">{t("app.name")}</h1>
       </div>
 

@@ -397,7 +397,7 @@ impl<'db> ProfileManager<'db> {
     }
 }
 
-fn normalize_profile(config: &AppConfig, profile: &mut ProfileItem) {
+pub(crate) fn normalize_profile(config: &AppConfig, profile: &mut ProfileItem) {
     profile.index_id = profile.index_id.trim().to_string();
     profile.config_version = 4;
     profile.address = profile.address.trim().to_string();

@@ -733,10 +733,18 @@ export type HysteriaItem = {
 
 export type ImportProfilesResult = {
 	imported?: number,
+	updated?: number,
 	skipped?: number,
+	parsed?: number,
+	filtered?: number,
+	deduped?: number,
+	failed?: number,
 	removedExisting?: number,
+	removedDuplicates?: number,
 	subid?: string | null,
 	importedIndexIds?: string[],
+	updatedIndexIds?: string[],
+	messages?: string[],
 };
 
 export type InItem = InItem_Serialize | InItem_Deserialize;
