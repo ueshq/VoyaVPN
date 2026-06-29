@@ -55,15 +55,15 @@ export function AppSidebar({
 
   return (
     <aside className="flex h-full min-h-0 w-60 flex-col border-e border-sidebar-border bg-sidebar text-sidebar-foreground">
-      <div className="flex h-14 shrink-0 items-center gap-3 px-4">
-        <BrandMark className="size-8 shrink-0 rounded-md" aria-hidden="true" />
+      <div className="flex h-12 shrink-0 items-center gap-3 px-4">
+        <BrandMark className="size-8 shrink-0 rounded-lg" aria-hidden="true" />
         <h1 className="truncate text-sm font-semibold leading-none">{t("app.name")}</h1>
       </div>
 
       <nav
         aria-label={t("tabs.aria")}
         aria-orientation="vertical"
-        className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-2"
+        className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1.5 py-1"
         role="tablist"
       >
         <div className="flex flex-col gap-0.5">{primaryNav.map(renderNavItem)}</div>

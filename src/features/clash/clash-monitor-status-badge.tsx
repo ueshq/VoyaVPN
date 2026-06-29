@@ -15,9 +15,9 @@ type MonitorStatusDisplay = {
 
 const toneClassName: Record<MonitorTone, string> = {
   failed: "border-destructive/35 bg-destructive/10 text-destructive [&>svg]:text-destructive",
-  live: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 [&>svg]:text-emerald-600 dark:[&>svg]:text-emerald-300",
-  starting: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300 [&>svg]:text-sky-600 dark:[&>svg]:text-sky-300",
-  stale: "border-amber-500/35 bg-amber-500/10 text-amber-800 dark:text-amber-300 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-300",
+  live: "border-success-bold/30 bg-success-bg text-success [&>svg]:text-success-icon",
+  starting: "border-information/30 bg-information-bg text-information [&>svg]:text-information",
+  stale: "border-warning-bold/35 bg-warning-bg text-warning [&>svg]:text-warning-icon",
 };
 
 export function ClashMonitorStatusBadge({

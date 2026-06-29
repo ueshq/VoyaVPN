@@ -62,7 +62,7 @@ export function SidebarFooter({
         <MenubarMenu>
           <MenubarTrigger
             aria-label={t("menu.regionalPresets")}
-            className="size-8 justify-center rounded-md p-0 text-muted-foreground"
+            className="size-8 justify-center rounded-md p-0 text-subtle"
             title={t("menu.regionalPresets")}
           >
             <Globe2 className="size-4" aria-hidden="true" />
@@ -111,7 +111,7 @@ function SidebarFooterAction({
   return (
     <Button
       aria-label={label}
-      className="text-muted-foreground"
+      className="text-subtle"
       onClick={onClick}
       size="icon-sm"
       title={label}

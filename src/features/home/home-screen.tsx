@@ -34,9 +34,10 @@ import { missingCorePayload, runWithElevation, statusToCoreState } from "./runti
 type RuntimeAction = "connect" | "disconnect" | "restart";
 
 /**
- * Connection home Hero — the default view. It is the signature surface: a calm
- * slate canvas while disconnected, lit with the brand `--signal` / `--glow-signal`
- * once protected. It only reuses the existing runtime actions and
+ * Connection home Hero — the default view and signature surface. Single-accent
+ * discipline: the idle connect CTA is brand blue (`--primary`); affirmative green
+ * (`--connected` / `--connected-glow`) is reserved for the achieved protected
+ * state (status disc + headline). It only reuses the existing runtime actions and
  * {@link useRuntimeEventStore}; no new IPC is introduced. Decorative motion (the
  * status-light spinner) inherits the global `prefers-reduced-motion` guard in
  * globals.css.
@@ -115,7 +116,7 @@ export function HomeScreen() {
       data-testid="home-screen"
       role="region"
     >
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center gap-8 px-6 py-10">
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center gap-6 px-6 py-8">
         <div className="flex flex-col items-center gap-4 text-center">
           <span
             aria-hidden="true"
@@ -131,7 +132,7 @@ export function HomeScreen() {
           <div className="space-y-1">
             <p
               className={cn(
-                "font-display text-3xl font-semibold tracking-tight",
+                "font-display text-2xl font-semibold tracking-tight",
                 connected ? "text-connected" : "text-foreground",
               )}
             >
@@ -144,12 +145,12 @@ export function HomeScreen() {
         <div className="flex flex-col items-center gap-3">
           <Button
             aria-label={primaryLabel}
-            className="h-14 w-60 gap-2 text-base font-semibold"
+            className={cn("h-14 w-60 gap-2 rounded-lg text-base font-semibold", !connected && "shadow-raised")}
             disabled={busy}
             onClick={() => void runRuntimeAction(connected ? "disconnect" : "connect")}
             size="lg"
             type="button"
-            variant={connected ? "outline" : "signal"}
+            variant={connected ? "outline" : "default"}
           >
             <PrimaryIcon className={cn("size-5", busy && "animate-spin")} aria-hidden="true" />
             {primaryLabel}
@@ -212,18 +213,18 @@ function StatTile({
   return (
     <div
       className={cn(
-        "relative flex min-w-0 flex-col gap-1 rounded-xl bg-surface-raised px-3 py-2.5 shadow-raised",
+        "relative flex min-w-0 flex-col gap-1 rounded-lg bg-surface-raised px-3 py-2.5 shadow-raised",
         onClick && "transition-colors hover:bg-surface-overlay",
       )}
     >
-      <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-subtle">
         <Icon className="size-3.5" aria-hidden="true" />
         <span className="min-w-0 truncate">{label}</span>
       </dt>
       <dd
         className={cn(
           "min-w-0 truncate text-sm font-medium text-foreground",
-          emphasis && "font-display text-base tabular-nums",
+          emphasis && "font-mono tabular-nums",
           mono && "font-mono text-xs",
         )}
         title={title ?? value}
@@ -235,7 +236,7 @@ function StatTile({
         // valid while giving the tile a real, keyboard-focusable activation target.
         <button
           aria-label={actionLabel ?? label}
-          className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+          className="absolute inset-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           onClick={onClick}
           type="button"
         />

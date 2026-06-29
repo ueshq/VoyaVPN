@@ -813,7 +813,7 @@ export function ProfilesScreen() {
                       <div
                         aria-selected={isSelected}
                         className={cn(
-                          "absolute start-0 grid h-[38px] items-center border-b text-sm outline-none",
+                          "absolute start-0 grid h-9.5 items-center border-b text-sm outline-none",
                           isSelected
                             ? dataTableRowSelected
                             : cn(
@@ -1152,7 +1152,7 @@ function ProfileSkeletonRows({
     <div role="status" {...props}>
       {Array.from({ length: 12 }).map((_, rowIndex) => (
         <div
-          className="grid h-[38px] items-center border-b"
+          className="grid h-9.5 items-center border-b"
           key={rowIndex}
           style={{ gridTemplateColumns, minWidth: gridMinWidth }}
         >

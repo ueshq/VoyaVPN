@@ -27,10 +27,10 @@ export function SidebarNavItem({
       aria-controls={panelId}
       aria-selected={active}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50",
+        "flex w-full items-center gap-2 rounded-sm py-1.5 pr-4 pl-3 text-sm font-medium outline-none transition-colors duration-short ease-out-practical focus-visible:ring-2 focus-visible:ring-ring/50",
         active
           ? "bg-accent-blue-light text-primary"
-          : "text-sidebar-foreground hover:bg-surface-hovered",
+          : "text-sidebar-foreground hover:bg-accent",
       )}
       id={id}
       onClick={onSelect}

@@ -714,7 +714,7 @@ function statusTone(status: UpdateResultStatus) {
   switch (status) {
     case "downloaded":
     case "upToDate":
-      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+      return "border-success-bold/30 bg-success-bg text-success";
     case "updateAvailable":
       return "border-primary/30 bg-accent-blue-light text-primary";
     case "error":

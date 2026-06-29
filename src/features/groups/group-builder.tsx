@@ -449,7 +449,7 @@ function GroupPreviewPanel({ preview }: { preview: GroupPreview }) {
   return (
     <Card className="grid gap-3 rounded-lg bg-muted/30 p-3 shadow-none">
       {validation.valid ? (
-        <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
+        <div className="flex items-center gap-2 text-sm text-success">
           <CheckCircle2 className="size-4" aria-hidden="true" />
           Preview generated from validated children
         </div>
@@ -531,7 +531,7 @@ function ValidationMessage({
     <Alert
       className={cn(
         "gap-1 px-3 py-2",
-        tone === "error" ? "border-destructive/40 bg-destructive/10 text-destructive" : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200",
+        tone === "error" ? "border-destructive/40 bg-destructive/10 text-destructive" : "border-warning-bold/40 bg-warning-bg text-warning",
       )}
       role={tone === "error" ? "alert" : "status"}
       variant={tone === "error" ? "destructive" : "default"}

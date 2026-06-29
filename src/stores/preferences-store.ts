@@ -13,7 +13,7 @@ import {
 import type { UiItem_Serialize } from "@/ipc/bindings";
 
 export type ThemeMode = "system" | "light" | "dark";
-export const DEFAULT_FONT_SIZE = 16;
+export const DEFAULT_FONT_SIZE = 14;
 export const FONT_SIZE_MAX = 20;
 export const FONT_SIZE_MIN = 8;
 

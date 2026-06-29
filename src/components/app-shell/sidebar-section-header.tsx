@@ -30,7 +30,7 @@ export function SidebarSectionHeader({
         type="button"
       >
         <Caret className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className="flex-1 truncate text-start text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="flex-1 truncate text-start text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
           {label}
         </span>
       </button>

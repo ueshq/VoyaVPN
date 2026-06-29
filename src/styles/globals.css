@@ -6,33 +6,37 @@
 
 :root {
   --app-font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --app-font-size: 16px;
+  /* nicenote-aligned 14px UI base (user-adjustable; see DEFAULT_FONT_SIZE in preferences-store). */
+  --app-font-size: 14px;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
 
-  --radius: 0.625rem;
-  --background: #ffffff;
-  --foreground: #020618;
-  --card: #ffffff;
-  --card-foreground: #020618;
+  --radius: 7px;
+  --background: #fbfcfe;
+  --foreground: #262b35;
+  --card: #fbfcfe;
+  --card-foreground: #262b35;
   --popover: #ffffff;
-  --popover-foreground: #020618;
-  /* Interactive accent → nicenote desaturated blue (drives Button default / Badge / Switch / selection). */
-  --primary: #3b5b9a;
-  --primary-foreground: #f8fafc;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #0f172b;
-  --muted: #f1f5f9;
-  --muted-foreground: #62748e;
-  --accent: #f1f5f9;
-  --accent-foreground: #0f172b;
-  --destructive: #e7000b;
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #3b5b9a;
-  --chart-1: #f54900;
-  --chart-2: #009689;
-  --chart-3: #104e64;
-  --chart-4: #ffb900;
-  --chart-5: #fe9a00;
+  --popover-foreground: #262b35;
+  /* Interactive accent → nicenote brand blue (drives Button default / Badge / Switch / selection). */
+  --primary: #1a58f2;
+  --primary-foreground: #ffffff;
+  --secondary: #e2e7f0;
+  --secondary-foreground: #262b35;
+  --muted: #e9edf4;
+  --muted-foreground: #5e6573;
+  --accent: #e2e7f0;
+  --accent-foreground: #262b35;
+  --destructive: #e53e3e;
+  --destructive-foreground: #ffffff;
+  --border: #dde1ea;
+  --input: #dde1ea;
+  --ring: #1a58f2;
+  --chart-1: #427e8a;
+  --chart-2: #3f8850;
+  --chart-3: #987e1b;
+  --chart-4: #b25620;
+  --chart-5: #bb433a;
 
   /* Connected state — affirmative green for the VPN connected/affirmative semantics. */
   --connected: #38a169;
@@ -43,31 +47,32 @@
      Use sparingly: connected state / primary connect glow / active node. */
   --signal: var(--connected);
   --signal-foreground: var(--connected-foreground);
-  --beacon: #fe9a00;
-  --beacon-foreground: #422006;
+  /* Beacon — aligned to nicenote --accent-orange #d9730d (needs white ink for AA). */
+  --beacon: #d9730d;
+  --beacon-foreground: #ffffff;
 
   /* Depth ladder + connection glow */
-  --shadow-sm: 0 1px 2px 0 rgb(2 6 24 / 0.06), 0 1px 3px 0 rgb(2 6 24 / 0.1);
-  --shadow-md: 0 2px 4px -1px rgb(2 6 24 / 0.08), 0 4px 12px -2px rgb(2 6 24 / 0.12);
-  --shadow-lg: 0 8px 16px -4px rgb(2 6 24 / 0.1), 0 16px 32px -8px rgb(2 6 24 / 0.16);
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.06), 0 1px 3px 0 rgb(15 23 42 / 0.1);
+  --shadow-md: 0 2px 4px -1px rgb(15 23 42 / 0.08), 0 4px 12px -2px rgb(15 23 42 / 0.12);
+  --shadow-lg: 0 8px 16px -4px rgb(15 23 42 / 0.1), 0 16px 32px -8px rgb(15 23 42 / 0.16);
   --glow-signal: var(--connected-glow);
 
   /* nicenote surface ladder — base rungs alias existing semantics; interaction rungs are literal. */
   --surface: var(--background);
-  --surface-sunken: #f4f5f7;
-  --surface-raised: var(--card);
+  --surface-sunken: #eef1f6;
+  --surface-raised: #ffffff;
   --surface-overlay: var(--popover);
-  --surface-hovered: #eef0f2;
-  --surface-pressed: #e9ebee;
-  --surface-button: #e9ebee;
+  --surface-hovered: #e9edf4;
+  --surface-pressed: #e2e7f0;
+  --surface-button: #e2e7f0;
   --overlay-hovered: rgb(0 0 0 / 0.08);
   --overlay-pressed: rgb(0 0 0 / 0.12);
 
   /* nicenote accent palette (--accent-<hue> does not collide with the shadcn --accent slot). */
-  --accent-blue: #3b5b9a;
-  --accent-blue-light: rgb(59 91 154 / 0.08);
-  --accent-blue-bg: rgb(59 91 154 / 0.1);
-  --accent-blue-hover: #2f4a80;
+  --accent-blue: #1a58f2;
+  --accent-blue-light: rgb(26 88 242 / 0.08);
+  --accent-blue-bg: rgb(26 88 242 / 0.1);
+  --accent-blue-hover: #1243c4;
   --accent-red: #e53e3e;
   --accent-red-light: rgb(229 62 62 / 0.1);
   --accent-orange: #d9730d;
@@ -102,7 +107,51 @@
   --duration-xlong: 400ms;
   --duration-xxlong: 600ms;
 
-  --sidebar: var(--background);
+  /* nicenote semantic families — text/icon hierarchy, links, border variants,
+     feedback backgrounds, blanket + dialog trio (registered as utilities in @theme inline). */
+  --text-subtle: #5e6573;
+  --text-tertiary: #5e6573;
+  --text-subtlest: #868d9c;
+  --text-heading: #262b35;
+  --text-inverse: #ffffff;
+  --text-disabled: #868d9c;
+  --text-brand: #1a58f2;
+  --text-danger: #e53e3e;
+  --text-success: #38a169;
+  --text-warning: #92400e;
+  --text-information: #1a58f2;
+  --text-discovery: #805ad5;
+  --link: #1a58f2;
+  --link-pressed: #1243c4;
+  --border-bold: #cdd3df;
+  --border-subtle: #dde1ea;
+  --border-focused: #1a58f2;
+  --border-selected: #1a58f2;
+  --border-danger: #e53e3e;
+  --icon: #262b35;
+  --icon-subtle: #5e6573;
+  --icon-brand: #1a58f2;
+  --icon-danger: #e53e3e;
+  --icon-success: #38a169;
+  --icon-warning: #d9730d;
+  --bg-danger: rgb(229 62 62 / 0.1);
+  --bg-danger-bold: #e53e3e;
+  --bg-success: rgb(56 161 105 / 0.1);
+  --bg-success-bold: #38a169;
+  --bg-warning: #fef3c7;
+  --bg-warning-bold: #d97706;
+  --bg-information: rgb(26 88 242 / 0.1);
+  --bg-discovery: rgb(128 90 213 / 0.1);
+  --bg-selected: #e7eefe;
+  --bg-selected-strong: #d4e1fd;
+  --state-drag-target: rgb(26 88 242 / 0.1);
+  --blanket: rgb(0 0 0 / 0.3);
+  --surface-dialog: #ffffff;
+  --border-dialog: #dde1ea;
+  --shadow-dialog: rgb(15 23 42 / 0.15);
+
+  /* nicenote layered chrome — sidebar/titlebar/statusbar paint a cool-grey distinct from content. */
+  --sidebar: #e9ecf3;
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
@@ -113,37 +162,39 @@
 }
 
 .dark {
-  --background: #020618;
-  --foreground: #f8fafc;
-  --card: #020919;
-  --card-foreground: #f8fafc;
-  --popover: #0f172b;
-  --popover-foreground: #f8fafc;
-  --primary: #8fb0e8;
-  --primary-foreground: #0f172b;
-  --secondary: #1d293d;
-  --secondary-foreground: #f8fafc;
-  --muted: #1d293d;
-  --muted-foreground: #90a1b9;
-  --accent: #1d293d;
-  --accent-foreground: #f8fafc;
-  --destructive: #ff6467;
-  --border: #ffffff1a;
-  --input: #ffffff26;
-  --ring: #8fb0e8;
-  --chart-1: #1447e6;
-  --chart-2: #00bc7d;
-  --chart-3: #fe9a00;
-  --chart-4: #ad46ff;
-  --chart-5: #ff2056;
+  --background: #16181d;
+  --foreground: #e3e6ec;
+  --card: #1f232a;
+  --card-foreground: #e3e6ec;
+  --popover: #242932;
+  --popover-foreground: #e3e6ec;
+  --primary: #7aa7ff;
+  --primary-foreground: #0b1220;
+  --secondary: #272c34;
+  --secondary-foreground: #e3e6ec;
+  --muted: #20242b;
+  --muted-foreground: #aab0bd;
+  --accent: #272c34;
+  --accent-foreground: #e3e6ec;
+  --destructive: #ff8a86;
+  --destructive-foreground: #131517;
+  --border: #2e323a;
+  --input: #363b44;
+  --ring: #7aa7ff;
+  --chart-1: rgb(113 178 255);
+  --chart-2: rgb(64 221 138);
+  --chart-3: rgb(255 233 123);
+  --chart-4: rgb(191 139 255);
+  --chart-5: rgb(255 106 209);
 
   /* Connected state (green brightens on the dark canvas). signal/glow inherit via the :root indirection. */
   --connected: #79d89d;
   --connected-foreground: #06201d;
   --connected-glow: 0 0 0 1px rgb(121 216 157 / 0.45), 0 0 22px -2px rgb(121 216 157 / 0.55);
 
-  /* Safe Passage — brand accents (signal/glow re-point to --connected above) */
-  --beacon: #fe9a00;
+  /* Safe Passage — brand accents (signal/glow re-point to --connected above).
+     Beacon aligned to nicenote --accent-orange dark #f3a15b. */
+  --beacon: #f3a15b;
   --beacon-foreground: #1c1206;
 
   /* Depth ladder + connection glow (deeper shadows on the dark canvas) */
@@ -151,14 +202,14 @@
   --shadow-md: 0 2px 4px -1px rgb(0 0 0 / 0.45), 0 4px 12px -2px rgb(0 0 0 / 0.55);
   --shadow-lg: 0 8px 16px -4px rgb(0 0 0 / 0.5), 0 16px 32px -8px rgb(0 0 0 / 0.6);
 
-  /* nicenote surface ladder — interaction rungs tuned to the deep-navy canvas. */
+  /* nicenote surface ladder — interaction rungs tuned to the warm-charcoal canvas. */
   --surface: var(--background);
-  --surface-sunken: #01030f;
+  --surface-sunken: #111318;
   --surface-raised: var(--card);
   --surface-overlay: var(--popover);
-  --surface-hovered: #0c1424;
-  --surface-pressed: #161f33;
-  --surface-button: #1d293d;
+  --surface-hovered: #20242b;
+  --surface-pressed: #272c34;
+  --surface-button: #2c313a;
   --overlay-hovered: rgb(255 255 255 / 0.06);
   --overlay-pressed: rgb(255 255 255 / 0.1);
 
@@ -192,7 +243,49 @@
     0px 0px 1px 1px rgb(0 0 0 / 0.4);
   --elevation-overflow: 0px 0px 12px rgb(0 0 0 / 0.42), 0px 0px 1px rgb(0 0 0 / 0.4);
 
-  --sidebar: var(--background);
+  /* nicenote semantic families (dark) */
+  --text-subtle: #aab0bd;
+  --text-tertiary: #8f96a4;
+  --text-subtlest: #7b8290;
+  --text-heading: #f0f2f7;
+  --text-inverse: #131517;
+  --text-disabled: #5f636b;
+  --text-brand: #7aa7ff;
+  --text-danger: #ff8a86;
+  --text-success: #79d89d;
+  --text-warning: #f5c36b;
+  --text-information: #7aa7ff;
+  --text-discovery: #b69cff;
+  --link: #7aa7ff;
+  --link-pressed: #a6c4ff;
+  --border-bold: #424755;
+  --border-subtle: #22252c;
+  --border-focused: #7aa7ff;
+  --border-selected: #7aa7ff;
+  --border-danger: #ff8a86;
+  --icon: #e3e6ec;
+  --icon-subtle: #aab0bd;
+  --icon-brand: #7aa7ff;
+  --icon-danger: #ff8a86;
+  --icon-success: #79d89d;
+  --icon-warning: #f3a15b;
+  --bg-danger: rgb(255 138 134 / 0.16);
+  --bg-danger-bold: #ff8a86;
+  --bg-success: rgb(121 216 157 / 0.16);
+  --bg-success-bold: #79d89d;
+  --bg-warning: rgb(245 195 107 / 0.16);
+  --bg-warning-bold: #d99b3d;
+  --bg-information: rgb(122 167 255 / 0.2);
+  --bg-discovery: rgb(182 156 255 / 0.17);
+  --bg-selected: #1d3358;
+  --bg-selected-strong: #274680;
+  --state-drag-target: rgb(122 167 255 / 0.2);
+  --blanket: rgb(8 8 7 / 0.58);
+  --surface-dialog: #252830;
+  --border-dialog: #363b44;
+  --shadow-dialog: rgb(0 0 0 / 0.42);
+
+  --sidebar: #121419;
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
@@ -200,72 +293,6 @@
   --sidebar-accent-foreground: var(--accent-foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
-}
-
-@supports (color: oklch(1 0 0)) {
-  :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.129 0.042 264.695);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.129 0.042 264.695);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.129 0.042 264.695);
-    --primary: oklch(0.478 0.109 262.7);
-    --primary-foreground: oklch(0.984 0.003 247.858);
-    --secondary: oklch(0.968 0.007 247.896);
-    --secondary-foreground: oklch(0.208 0.042 265.755);
-    --muted: oklch(0.968 0.007 247.896);
-    --muted-foreground: oklch(0.554 0.046 257.417);
-    --accent: oklch(0.968 0.007 247.896);
-    --accent-foreground: oklch(0.208 0.042 265.755);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.929 0.013 255.508);
-    --input: oklch(0.929 0.013 255.508);
-    --ring: oklch(0.478 0.109 262.7);
-    --chart-1: oklch(0.646 0.222 41.116);
-    --chart-2: oklch(0.6 0.118 184.704);
-    --chart-3: oklch(0.398 0.07 227.392);
-    --chart-4: oklch(0.828 0.189 84.429);
-    --chart-5: oklch(0.769 0.188 70.08);
-
-    --connected: oklch(0.634 0.128 156.2);
-    --connected-foreground: oklch(1 0 0);
-    --connected-glow: 0 0 0 1px oklch(0.634 0.128 156.2 / 0.4), 0 0 18px -2px oklch(0.634 0.128 156.2 / 0.45);
-    --beacon: oklch(0.769 0.188 70.08);
-    --beacon-foreground: oklch(0.279 0.06 55);
-  }
-
-  .dark {
-    --background: oklch(0.129 0.042 264.695);
-    --foreground: oklch(0.984 0.003 247.858);
-    --card: oklch(0.14 0.04 259.21);
-    --card-foreground: oklch(0.984 0.003 247.858);
-    --popover: oklch(0.208 0.042 265.755);
-    --popover-foreground: oklch(0.984 0.003 247.858);
-    --primary: oklch(0.754 0.089 260.8);
-    --primary-foreground: oklch(0.208 0.042 265.755);
-    --secondary: oklch(0.279 0.041 260.031);
-    --secondary-foreground: oklch(0.984 0.003 247.858);
-    --muted: oklch(0.279 0.041 260.031);
-    --muted-foreground: oklch(0.704 0.04 256.788);
-    --accent: oklch(0.279 0.041 260.031);
-    --accent-foreground: oklch(0.984 0.003 247.858);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.754 0.089 260.8);
-    --chart-1: oklch(0.488 0.243 264.376);
-    --chart-2: oklch(0.696 0.17 162.48);
-    --chart-3: oklch(0.769 0.188 70.08);
-    --chart-4: oklch(0.627 0.265 303.9);
-    --chart-5: oklch(0.645 0.246 16.439);
-
-    --connected: oklch(0.808 0.124 155.2);
-    --connected-foreground: oklch(0.222 0.032 184.8);
-    --connected-glow: 0 0 0 1px oklch(0.808 0.124 155.2 / 0.45), 0 0 22px -2px oklch(0.808 0.124 155.2 / 0.55);
-    --beacon: oklch(0.769 0.188 70.08);
-    --beacon-foreground: oklch(0.22 0.04 55);
-  }
 }
 
 /* —— Windows Acrylic veil scope (a single translucent layer over the OS material) ——
@@ -288,20 +315,20 @@ html.voyavpn-acrylic #root > main {
   background-color: transparent;
 }
 html.voyavpn-acrylic body {
-  background-color: rgb(234 235 238 / 0.8);
+  background-color: rgb(233 236 243 / 0.8);
 }
 html.voyavpn-acrylic.dark body {
-  background-color: rgb(24 25 27 / 0.8);
+  background-color: rgb(18 20 25 / 0.8);
 }
 
 /* Accessibility: honor prefers-reduced-transparency by falling back to a fully opaque
    surface — no reliance on the OS material, keeping text contrast stable. */
 @media (prefers-reduced-transparency: reduce) {
   html.voyavpn-acrylic body {
-    background-color: #eaebee;
+    background-color: #e9ecf3;
   }
   html.voyavpn-acrylic.dark body {
-    background-color: #18191b;
+    background-color: #121419;
   }
 }
 
@@ -316,12 +343,13 @@ html.voyavpn-acrylic.dark body {
   --font-display: "Manrope", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
-  --radius-xs: calc(var(--radius) - 6px);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 6px);
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 7px;
+  --radius-xl: 11px;
+  --radius-2xl: 16px;
+  --radius-full: 9999px;
 
   /* nicenote named elevation → consume the theme-switched --elevation-* shadows. */
   --shadow-raised: var(--elevation-raised);
@@ -363,6 +391,45 @@ html.voyavpn-acrylic.dark body {
   --color-connected-foreground: var(--connected-foreground);
   --color-beacon: var(--beacon);
   --color-beacon-foreground: var(--beacon-foreground);
+
+  /* nicenote semantic utilities — text/icon hierarchy, links, border + focus/selection,
+     feedback (danger/success/warning/information/discovery), blanket + dialog. */
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-subtle: var(--text-subtle);
+  --color-tertiary: var(--text-tertiary);
+  --color-subtlest: var(--text-subtlest);
+  --color-inverse: var(--text-inverse);
+  --color-brand: var(--text-brand);
+  --color-link: var(--link);
+  --color-border-bold: var(--border-bold);
+  --color-border-subtle: var(--border-subtle);
+  --color-focused: var(--border-focused);
+  --color-selected: var(--border-selected);
+  --color-state-selected: var(--bg-selected);
+  --color-state-selected-strong: var(--bg-selected-strong);
+  --color-state-drag-target: var(--state-drag-target);
+  --color-icon-subtle: var(--icon-subtle);
+  --color-icon-brand: var(--icon-brand);
+  --color-danger: var(--text-danger);
+  --color-danger-bg: var(--bg-danger);
+  --color-danger-bold: var(--bg-danger-bold);
+  --color-danger-border: var(--border-danger);
+  --color-danger-icon: var(--icon-danger);
+  --color-success: var(--text-success);
+  --color-success-bg: var(--bg-success);
+  --color-success-bold: var(--bg-success-bold);
+  --color-success-icon: var(--icon-success);
+  --color-warning: var(--text-warning);
+  --color-warning-bg: var(--bg-warning);
+  --color-warning-bold: var(--bg-warning-bold);
+  --color-warning-icon: var(--icon-warning);
+  --color-information: var(--text-information);
+  --color-information-bg: var(--bg-information);
+  --color-discovery: var(--text-discovery);
+  --color-discovery-bg: var(--bg-discovery);
+  --color-blanket: var(--blanket);
+  --color-surface-dialog: var(--surface-dialog);
+  --color-border-dialog: var(--border-dialog);
 
   /* nicenote surface ladder + translucent interaction overlays. */
   --color-surface: var(--surface);

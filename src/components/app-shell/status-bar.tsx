@@ -237,7 +237,7 @@ export function StatusBar() {
   return (
     <footer
       aria-label={t("status.aria")}
-      className="flex h-11 min-w-0 shrink-0 items-center gap-3 overflow-hidden border-t border-border bg-sidebar px-4 text-xs text-muted-foreground"
+      className="flex h-8 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-border bg-sidebar px-2 text-xs text-muted-foreground"
       data-testid="status-bar"
     >
       <div className="flex min-w-0 shrink-0 items-center gap-2 font-medium text-foreground">
@@ -248,7 +248,7 @@ export function StatusBar() {
         <span className="truncate">{stateLabel}</span>
       </div>
       <Badge
-        className="h-6 max-w-40 min-w-0 shrink justify-start bg-background px-2 text-muted-foreground"
+        className="h-5 max-w-40 min-w-0 shrink justify-start bg-background px-2 text-subtle"
         title={routeLabel}
         variant="outline"
       >
@@ -260,7 +260,7 @@ export function StatusBar() {
             <MenubarTrigger
               aria-label={t("status.coreSwitch")}
               className={cn(
-                "h-6 max-w-28 justify-start rounded-md border border-border bg-background px-2 py-0 text-xs font-medium text-muted-foreground shadow-none",
+                "h-5 max-w-28 justify-start rounded-md border border-border bg-background px-2 py-0 text-xs font-medium text-subtle shadow-none",
                 "hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
               )}
               disabled={!activeProfile || pendingAction === "core"}
@@ -279,18 +279,18 @@ export function StatusBar() {
           </MenubarMenu>
         </Menubar>
         <Badge
-          className="h-6 max-w-24 justify-start bg-background px-2 text-muted-foreground"
+          className="h-5 max-w-24 justify-start bg-background px-2 text-subtle"
           title={pidLabel}
           variant="outline"
         >
           <span className="min-w-0 truncate">{pidLabel}</span>
         </Badge>
       </div>
-      <Separator orientation="vertical" className="h-4" />
+      <Separator orientation="vertical" className="h-3.5" />
       <div className="hidden min-w-0 items-center gap-2 md:flex">
         <Shield className="size-3.5" aria-hidden="true" />
         <div
-          className="flex h-7 shrink-0 items-center rounded-md bg-muted p-[2px]"
+          className="flex h-6 shrink-0 items-center rounded-md bg-muted p-0.5"
           role="group"
           aria-label={t("status.sysProxyMode")}
         >
@@ -305,7 +305,7 @@ export function StatusBar() {
                     aria-label={modeLabel}
                     aria-pressed={selected}
                     className={cn(
-                      "h-[22px] w-12 rounded-sm px-1 text-[11px] leading-none shadow-none focus-visible:relative focus-visible:z-10",
+                      "h-4.5 w-12 rounded-sm px-1 text-[11px] leading-none shadow-none focus-visible:relative focus-visible:z-10",
                       selected
                         ? "bg-background text-foreground hover:bg-background hover:text-foreground"
                         : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
@@ -325,14 +325,14 @@ export function StatusBar() {
           })}
         </div>
         <Badge
-          className="hidden h-6 max-w-44 justify-start bg-background px-2 text-muted-foreground lg:inline-flex"
+          className="hidden h-5 max-w-44 justify-start bg-background px-2 text-subtle lg:inline-flex"
           title={effectiveProxyLabel}
           variant="outline"
         >
           <span className="min-w-0 truncate">{effectiveProxyLabel}</span>
         </Badge>
       </div>
-      <Separator orientation="vertical" className="hidden h-4 md:block" />
+      <Separator orientation="vertical" className="hidden h-3.5 md:block" />
       <div className="hidden min-w-0 shrink-0 items-center md:flex">
         {/* Single TUN control: shows the on/off state and toggles it. Enabling
             requests system authorization on demand (no stored password). */}
@@ -341,7 +341,7 @@ export function StatusBar() {
             <Button
               aria-label={tunActionLabel}
               aria-pressed={tunEnabled}
-              className="h-7 gap-1.5 px-2"
+              className="h-6 gap-1.5 px-2"
               disabled={pendingAction === "tun"}
               onClick={() => void runTunToggle()}
               size="sm"
@@ -411,27 +411,27 @@ export function StatusBar() {
       </Menubar>
       <div className="ms-auto flex min-w-0 items-center gap-2">
         <Badge
-          className="hidden h-6 w-24 min-w-0 shrink justify-start bg-background px-2 text-muted-foreground sm:inline-flex"
+          className="hidden h-5 w-24 min-w-0 shrink justify-start bg-background px-2 text-subtle sm:inline-flex"
           title={profilesLabel}
           variant="outline"
         >
           <span className="min-w-0 truncate">{profilesLabel}</span>
         </Badge>
         <Badge
-          className="hidden h-6 w-28 min-w-0 shrink justify-start bg-background px-2 text-muted-foreground lg:inline-flex"
+          className="hidden h-5 w-28 min-w-0 shrink justify-start bg-background px-2 text-subtle lg:inline-flex"
           title={uploadLabel}
           variant="outline"
         >
           <Activity className="size-3.5" aria-hidden="true" />
-          <span className="min-w-0 truncate">{uploadLabel}</span>
+          <span className="min-w-0 truncate font-mono tabular-nums">{uploadLabel}</span>
         </Badge>
         <Badge
-          className="h-6 w-28 min-w-0 shrink justify-start bg-background px-2 text-muted-foreground"
+          className="h-5 w-28 min-w-0 shrink justify-start bg-background px-2 text-subtle"
           title={downloadLabel}
           variant="outline"
         >
           <Gauge className="size-3.5" aria-hidden="true" />
-          <span className="min-w-0 truncate">{downloadLabel}</span>
+          <span className="min-w-0 truncate font-mono tabular-nums">{downloadLabel}</span>
         </Badge>
       </div>
     </footer>

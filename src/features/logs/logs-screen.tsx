@@ -265,7 +265,7 @@ function logLevelClassName(level: LogLevel) {
     case "info":
       return "bg-background text-foreground";
     case "warn":
-      return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+      return "border-warning-bold/30 bg-warning-bg text-warning";
     case "error":
       return "border-destructive/30 bg-destructive/10 text-destructive";
   }
