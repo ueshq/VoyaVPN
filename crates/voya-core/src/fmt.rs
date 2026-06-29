@@ -84,9 +84,7 @@ pub enum ShareError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CustomConfigKind {
-    Xray,
     SingBox,
-    Mihomo,
     Hysteria2,
 }
 
@@ -911,20 +909,8 @@ pub fn parse_full_custom_config(
         return Ok(imports);
     }
 
-    if let Some(import) = parse_xray_custom(trimmed, sub_remarks)? {
-        return Ok(vec![import]);
-    }
     if let Some(import) = parse_singbox_custom(trimmed, sub_remarks)? {
         return Ok(vec![import]);
-    }
-    if contains_all_ci(trimmed, &["rules", "-port", "proxies"]) {
-        return Ok(vec![custom_import(
-            CustomConfigKind::Mihomo,
-            "yaml",
-            trimmed,
-            sub_remarks.unwrap_or("clash_custom"),
-            Some(CoreType::mihomo),
-        )]);
     }
     if contains_all_ci(trimmed, &["server", "auth", "up", "down", "listen"]) {
         return Ok(vec![custom_import(
@@ -932,7 +918,7 @@ pub fn parse_full_custom_config(
             "json",
             trimmed,
             sub_remarks.unwrap_or("hysteria2_custom"),
-            Some(CoreType::hysteria2),
+            Some(CoreType::sing_box),
         )]);
     }
 
@@ -1731,37 +1717,6 @@ fn resolve_uri_query(query: &Query, item: &mut ProfileItem) {
     }
 }
 
-fn parse_xray_custom(
-    input: &str,
-    sub_remarks: Option<&str>,
-) -> Result<Option<CustomConfigImport>, ShareError> {
-    let value = match serde_json::from_str::<Value>(input) {
-        Ok(value) => value,
-        Err(_) => return Ok(None),
-    };
-    let Some(object) = value.as_object() else {
-        return Ok(None);
-    };
-    if !(object.contains_key("inbounds")
-        && object.contains_key("outbounds")
-        && object.contains_key("routing"))
-    {
-        return Ok(None);
-    }
-    let remarks = object
-        .get("remarks")
-        .and_then(Value::as_str)
-        .or(sub_remarks)
-        .unwrap_or("v2ray_custom");
-    Ok(Some(custom_import(
-        CustomConfigKind::Xray,
-        "json",
-        input,
-        remarks,
-        Some(CoreType::Xray),
-    )))
-}
-
 fn parse_singbox_custom(
     input: &str,
     sub_remarks: Option<&str>,
@@ -1895,7 +1850,7 @@ fn parse_inner_single(input: &str) -> Result<ProfileItem, ShareError> {
     }
     if item
         .core_type
-        .is_some_and(|core_type| core_type != CoreType::Xray && core_type != CoreType::sing_box)
+        .is_some_and(|core_type| core_type != CoreType::sing_box)
     {
         return Err(ShareError::InvalidInner {
             reason: "unsupported core type".to_string(),
@@ -2365,10 +2320,7 @@ mod share_tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::{
-        generate_singbox_config_value, generate_xray_config_value, AppConfig, CoreConfigContext,
-        CoreType, PROXY_TAG,
-    };
+    use crate::{generate_singbox_config_value, AppConfig, CoreConfigContext, CoreType, PROXY_TAG};
 
     #[test]
     fn fmt_share_round_trips_all_supported_protocols() {
@@ -2467,25 +2419,6 @@ mod share_tests {
 
         let mut app_config = AppConfig::default();
         app_config.core_basic_item.def_fingerprint = "firefox".to_string();
-
-        let xray_value = generate_xray_config_value(&fmt_test_context(
-            CoreType::Xray,
-            app_config.clone(),
-            node.clone(),
-        ));
-        let xray_proxy = proxy_outbound(&xray_value);
-        assert_eq!(
-            xray_proxy
-                .pointer("/streamSettings/tlsSettings/allowInsecure")
-                .and_then(Value::as_bool),
-            Some(false)
-        );
-        assert_eq!(
-            xray_proxy
-                .pointer("/streamSettings/tlsSettings/fingerprint")
-                .and_then(Value::as_str),
-            Some("firefox")
-        );
 
         let mut singbox_node = node;
         singbox_node.core_type = Some(CoreType::sing_box);
@@ -2684,19 +2617,15 @@ mod share_tests {
 
     #[test]
     fn share_full_custom_import_helpers_classify_configs_without_file_writes() {
-        let xray = r#"{"remarks":"xray custom","inbounds":[],"outbounds":[],"routing":{}}"#;
-        let xray_imports = parse_full_custom_config(xray, None).expect("xray custom");
-        assert_eq!(xray_imports[0].kind, CustomConfigKind::Xray);
-        assert_eq!(xray_imports[0].profile.config_type, ConfigType::Custom);
-        assert_eq!(xray_imports[0].profile.core_type, Some(CoreType::Xray));
-        assert!(xray_imports[0].profile.address.is_empty());
+        let unsupported =
+            r#"{"remarks":"legacy custom","inbounds":[],"outbounds":[],"routing":{}}"#;
+        assert!(parse_full_custom_config(unsupported, None).is_err());
 
-        let singbox_array = r#"[{"inbounds":[],"outbounds":[],"route":{},"dns":{}},{"rules":[],"mixed-port":7890,"proxies":[]}]"#;
+        let singbox_array = r#"[{"inbounds":[],"outbounds":[],"route":{},"dns":{}}]"#;
         let imports =
             parse_full_custom_config(singbox_array, Some("sub")).expect("singbox array custom");
-        assert_eq!(imports.len(), 2);
+        assert_eq!(imports.len(), 1);
         assert_eq!(imports[0].kind, CustomConfigKind::SingBox);
-        assert_eq!(imports[1].kind, CustomConfigKind::Mihomo);
 
         let html = "<!doctype html><html><head></head></html>";
         assert!(parse_full_custom_config(html, None).is_err());

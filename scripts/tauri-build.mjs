@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ensureSingBoxSeedForBuild } from "./sing-box-core-installer.mjs";
 import { writeOptionalCoreSeedOverlay } from "./tauri-core-seeds.mjs";
 
 const rawArgs = process.argv.slice(2);
@@ -24,14 +25,23 @@ const stableOverlayMetadataPath = resolve(
   "release-config",
   "tauri.updater.stable.generated.metadata.json",
 );
-const coreSeedOverlayPath = writeOptionalCoreSeedOverlay(
-  repoRoot,
-  resolve(repoRoot, "target", "release-config", "tauri.core-seeds.generated.json"),
-);
+let coreSeedOverlayPath = null;
 const args = ["build"];
 
-if (coreSeedOverlayPath) {
-  args.push("--config", coreSeedOverlayPath);
+if (!writeStableConfigOnly) {
+  try {
+    await ensureSingBoxSeedForBuild({ repoRoot });
+    coreSeedOverlayPath = writeOptionalCoreSeedOverlay(
+      repoRoot,
+      resolve(repoRoot, "target", "release-config", "tauri.core-seeds.generated.json"),
+    );
+    if (coreSeedOverlayPath) {
+      args.push("--config", coreSeedOverlayPath);
+    }
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }
 
 args.push(...tauriArgs);

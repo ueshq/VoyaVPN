@@ -101,7 +101,7 @@ export const profileFormSchema = z.discriminatedUnion("ConfigType", [
   commonProfileSchema.extend({
     Address: z.string().trim().min(1, "Config path or JSON source is required"),
     ConfigType: z.literal(CONFIG_TYPES.Custom),
-    CoreType: z.number().int().default(CORE_TYPES.Xray),
+    CoreType: z.number().int().default(CORE_TYPES.singBox),
     Port: z.number().int().min(0).max(65535).default(0),
   }),
   serverProfileSchema.extend({ ConfigType: z.literal(CONFIG_TYPES.Shadowsocks) }),

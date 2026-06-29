@@ -33,7 +33,6 @@ pub struct PresetApplyResult {
     pub geo_source_url: Option<String>,
     pub srs_source_url: Option<String>,
     pub route_rules_template_source_url: Option<String>,
-    pub xray_dns_fetched: bool,
     pub singbox_dns_fetched: bool,
     pub simple_dns_fetched: bool,
     pub fallback_custom_dns_enabled: bool,
@@ -102,10 +101,6 @@ impl<'db> PresetManager<'db> {
         config.const_item.route_rules_template_source_url = None;
         config.simple_dns_item = SimpleDnsDefaults::builtin();
 
-        let mut xray = self.current_dns_item(CoreType::Xray).await?;
-        reset_dns_item(&mut xray, CoreType::Xray);
-        self.database.dns().upsert(&xray).await?;
-
         let mut singbox = self.current_dns_item(CoreType::sing_box).await?;
         reset_dns_item(&mut singbox, CoreType::sing_box);
         self.database.dns().upsert(&singbox).await?;
@@ -115,7 +110,6 @@ impl<'db> PresetManager<'db> {
             geo_source_url: None,
             srs_source_url: None,
             route_rules_template_source_url: None,
-            xray_dns_fetched: false,
             singbox_dns_fetched: false,
             simple_dns_fetched: false,
             fallback_custom_dns_enabled: false,
@@ -143,15 +137,6 @@ impl<'db> PresetManager<'db> {
             .fetch(&sources.dns_template_source_url, &fetch_options)
             .await;
 
-        let current_xray = self.current_dns_item(CoreType::Xray).await?;
-        let (mut xray, xray_dns_fetched) = external_dns_item(
-            CoreType::Xray,
-            current_xray,
-            templates.xray_template.as_deref(),
-            &client,
-            &fetch_options,
-        )
-        .await;
         let current_singbox = self.current_dns_item(CoreType::sing_box).await?;
         let (mut singbox, singbox_dns_fetched) = external_dns_item(
             CoreType::sing_box,
@@ -168,12 +153,10 @@ impl<'db> PresetManager<'db> {
         if let Some(simple_dns) = simple_dns {
             config.simple_dns_item = simple_dns;
         } else {
-            xray.enabled = true;
             singbox.enabled = true;
             config.simple_dns_item = SimpleDnsDefaults::builtin();
         }
 
-        self.database.dns().upsert(&xray).await?;
         self.database.dns().upsert(&singbox).await?;
 
         Ok(PresetApplyResult {
@@ -184,7 +167,6 @@ impl<'db> PresetManager<'db> {
                 .const_item
                 .route_rules_template_source_url
                 .clone(),
-            xray_dns_fetched,
             singbox_dns_fetched,
             simple_dns_fetched,
             fallback_custom_dns_enabled,
@@ -302,13 +284,6 @@ mod tests {
         let base = spawn_http_fixture(
             HashMap::from([
                 (
-                    "/dns/v2ray.json".to_string(),
-                    format!(
-                        r#"{{"UseSystemHosts":true,"NormalDNS":"{base}/xray-normal.json","TunDNS":"{base}/xray-tun.json"}}"#,
-                        base = "__BASE__"
-                    ),
-                ),
-                (
                     "/dns/sing_box.json".to_string(),
                     format!(
                         r#"{{"NormalDNS":"{base}/sing-normal.json"}}"#,
@@ -321,20 +296,12 @@ mod tests {
                         .to_string(),
                 ),
                 (
-                    "/xray-normal.json".to_string(),
-                    r#"{"servers":["8.8.8.8"]}"#.to_string(),
-                ),
-                (
-                    "/xray-tun.json".to_string(),
-                    r#"{"servers":["1.1.1.1"]}"#.to_string(),
-                ),
-                (
                     "/sing-normal.json".to_string(),
                     r#"{"servers":[{"tag":"remote","type":"https","server":"dns.google"}]}"#
                         .to_string(),
                 ),
             ]),
-            6,
+            3,
             Arc::clone(&seen_paths),
         )
         .await;
@@ -356,12 +323,6 @@ mod tests {
             .await
             .expect("preset manager test operation should succeed");
 
-        let xray = database
-            .dns()
-            .get_by_core_type(CoreType::Xray)
-            .await
-            .expect("preset manager test operation should succeed")
-            .expect("preset manager test operation should succeed");
         let singbox = database
             .dns()
             .get_by_core_type(CoreType::sing_box)
@@ -373,7 +334,6 @@ mod tests {
             result.route_rules_template_source_url.as_deref(),
             Some("https://example.test/routing-russia.json")
         );
-        assert!(result.xray_dns_fetched);
         assert!(result.singbox_dns_fetched);
         assert!(result.simple_dns_fetched);
         assert!(!result.fallback_custom_dns_enabled);
@@ -386,18 +346,11 @@ mod tests {
             Some("8.8.8.8")
         );
         assert_eq!(config.simple_dns_item.fake_ip, Some(true));
-        assert!(!xray.enabled);
-        assert!(xray.use_system_hosts);
-        assert_eq!(
-            xray.normal_dns.as_deref(),
-            Some(r#"{"servers":["8.8.8.8"]}"#)
-        );
-        assert_eq!(xray.tun_dns.as_deref(), Some(r#"{"servers":["1.1.1.1"]}"#));
         assert_eq!(
             singbox.normal_dns.as_deref(),
             Some(r#"{"servers":[{"tag":"remote","type":"https","server":"dns.google"}]}"#)
         );
-        assert_eq!(seen_paths.lock().await.len(), 6);
+        assert_eq!(seen_paths.lock().await.len(), 3);
     }
 
     #[tokio::test]
@@ -406,17 +359,13 @@ mod tests {
         let base = spawn_http_fixture(
             HashMap::from([
                 (
-                    "/dns/v2ray.json".to_string(),
-                    r#"{"NormalDNS":"{\"servers\":[\"9.9.9.9\"]}"}"#.to_string(),
-                ),
-                (
                     "/dns/sing_box.json".to_string(),
                     r#"{"NormalDNS":"{\"servers\":[{\"tag\":\"remote\",\"type\":\"udp\",\"server\":\"9.9.9.9\"}]}"}"#
                         .to_string(),
                 ),
                 ("/dns/simple_dns.json".to_string(), "null".to_string()),
             ]),
-            3,
+            2,
             Arc::clone(&seen_paths),
         )
         .await;
@@ -438,12 +387,6 @@ mod tests {
             .await
             .expect("preset manager test operation should succeed");
 
-        let xray = database
-            .dns()
-            .get_by_core_type(CoreType::Xray)
-            .await
-            .expect("preset manager test operation should succeed")
-            .expect("preset manager test operation should succeed");
         let singbox = database
             .dns()
             .get_by_core_type(CoreType::sing_box)
@@ -457,7 +400,6 @@ mod tests {
         );
         assert!(result.fallback_custom_dns_enabled);
         assert!(!result.simple_dns_fetched);
-        assert!(xray.enabled);
         assert!(singbox.enabled);
         assert_eq!(
             config.simple_dns_item.direct_dns.as_deref(),
@@ -467,7 +409,7 @@ mod tests {
             config.const_item.srs_source_url.as_deref(),
             Some("https://example.test/srs-iran/{1}.srs")
         );
-        assert_eq!(seen_paths.lock().await.len(), 3);
+        assert_eq!(seen_paths.lock().await.len(), 2);
     }
 
     fn test_catalog(base: &str) -> RegionalPresetCatalog {

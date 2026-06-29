@@ -444,10 +444,6 @@ function GroupPreviewPanel({ preview }: { preview: GroupPreview }) {
     valid: false,
     warnings: [],
   };
-  const xrayRoutes = preview.xrayRoutes ?? [];
-  const xrayBalancers = preview.xrayBalancers ?? [];
-  const xrayObservatorySelectors = preview.xrayObservatorySelectors ?? [];
-  const xrayBurstObservatorySelectors = preview.xrayBurstObservatorySelectors ?? [];
   const singboxRoutes = preview.singboxRoutes ?? [];
 
   return (
@@ -464,22 +460,7 @@ function GroupPreviewPanel({ preview }: { preview: GroupPreview }) {
         <ValidationMessage tone="warning" messages={validation.warnings ?? []} />
       ) : null}
 
-      <div className="grid gap-3 xl:grid-cols-2">
-        <PreviewList
-          routes={xrayRoutes}
-          title="Xray dialerProxy"
-          details={[
-            xrayBalancers.length > 0
-              ? `balancer ${xrayBalancers.map((balancer) => balancer.tag).join(", ")}`
-              : "",
-            xrayObservatorySelectors.length > 0
-              ? `observatory ${xrayObservatorySelectors.join(", ")}`
-              : "",
-            xrayBurstObservatorySelectors.length > 0
-              ? `burst ${xrayBurstObservatorySelectors.join(", ")}`
-              : "",
-          ].filter(Boolean)}
-        />
+      <div className="grid gap-3">
         <PreviewList routes={singboxRoutes} title="sing-box selector/urltest + detour" />
       </div>
     </Card>

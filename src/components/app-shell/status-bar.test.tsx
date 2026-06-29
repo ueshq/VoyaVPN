@@ -275,7 +275,7 @@ describe("StatusBar", () => {
 
     renderStatusBar();
 
-    await waitFor(() => expect(screen.getByLabelText("Switch core")).toHaveTextContent("Xray"));
+    await waitFor(() => expect(screen.getByLabelText("Switch core")).toHaveTextContent("sing-box"));
     expect(screen.queryByText("No active node")).not.toBeInTheDocument();
   });
 
@@ -285,7 +285,7 @@ describe("StatusBar", () => {
 
     renderStatusBar();
 
-    await waitFor(() => expect(screen.getByLabelText("Switch core")).toHaveTextContent("Xray"));
+    await waitFor(() => expect(screen.getByLabelText("Switch core")).toHaveTextContent("sing-box"));
     await user.click(screen.getByLabelText("Switch core"));
     await user.click(await screen.findByRole("menuitemradio", { name: "sing-box" }));
 
@@ -316,7 +316,7 @@ describe("StatusBar", () => {
       activeProfileId: "profile-0",
       mainPid: 100,
       prePid: null,
-      runningCoreType: 2,
+      runningCoreType: 24,
       state: "connected",
     };
     const switchedStatus: RuntimeStatusResponse = {
@@ -328,19 +328,22 @@ describe("StatusBar", () => {
       activeProfileId: "profile-0",
       mainPid: 100,
       prePid: null,
-      runningCoreType: 2,
+      runningCoreType: 24,
       state: "connected",
     };
     vi.mocked(runtimeStatus).mockResolvedValue(connectedStatus);
-    vi.mocked(listProfiles).mockResolvedValue([makeProfile(0, { CoreType: 2 })]);
+    vi.mocked(listProfiles).mockResolvedValue([makeProfile(0, { CoreType: 24 })]);
     vi.mocked(restartCore).mockResolvedValue(switchedStatus);
 
     renderStatusBar();
 
-    await waitFor(() => expect(screen.getByLabelText("Switch core")).toHaveTextContent("Xray"));
+    await waitFor(() => expect(screen.getByLabelText("Switch core")).toHaveTextContent("sing-box"));
     await user.click(screen.getByLabelText("Switch core"));
-    await user.click(await screen.findByRole("menuitemradio", { name: "sing-box" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "Default" }));
 
+    await waitFor(() =>
+      expect(saveProfile).toHaveBeenCalledWith(expect.objectContaining({ CoreType: null })),
+    );
     await waitFor(() => expect(restartCore).toHaveBeenCalledTimes(1));
     expect(vi.mocked(saveProfile).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(restartCore).mock.invocationCallOrder[0],
@@ -357,10 +360,10 @@ describe("StatusBar", () => {
       activeProfileId: "profile-0",
       mainPid: 100,
       prePid: null,
-      runningCoreType: 2,
+      runningCoreType: 24,
       state: "connected",
     };
-    vi.mocked(listProfiles).mockResolvedValue([makeProfile(0, { CoreType: 2 })]);
+    vi.mocked(listProfiles).mockResolvedValue([makeProfile(0, { CoreType: null })]);
     vi.mocked(restartCore).mockRejectedValue(
       new IpcCommandError({
         kind: "missingCore",
@@ -370,7 +373,7 @@ describe("StatusBar", () => {
 
     renderStatusBar();
 
-    await waitFor(() => expect(screen.getByLabelText("Switch core")).toHaveTextContent("Xray"));
+    await waitFor(() => expect(screen.getByLabelText("Switch core")).toHaveTextContent("sing-box"));
     await user.click(screen.getByLabelText("Switch core"));
     await user.click(await screen.findByRole("menuitemradio", { name: "sing-box" }));
 
@@ -389,17 +392,17 @@ describe("StatusBar", () => {
       activeProfileId: "profile-0",
       mainPid: 100,
       prePid: null,
-      runningCoreType: 2,
+      runningCoreType: 24,
       state: "connected",
     };
-    vi.mocked(listProfiles).mockResolvedValue([makeProfile(0, { CoreType: 2 })]);
+    vi.mocked(listProfiles).mockResolvedValue([makeProfile(0, { CoreType: null })]);
     vi.mocked(restartCore).mockRejectedValue(
       new IpcCommandError({ kind: "runtime", message: "core start failed" } as never),
     );
 
     renderStatusBar();
 
-    await waitFor(() => expect(screen.getByLabelText("Switch core")).toHaveTextContent("Xray"));
+    await waitFor(() => expect(screen.getByLabelText("Switch core")).toHaveTextContent("sing-box"));
     await user.click(screen.getByLabelText("Switch core"));
     await user.click(await screen.findByRole("menuitemradio", { name: "sing-box" }));
 
@@ -472,7 +475,7 @@ describe("StatusBar", () => {
 
     const menu = await screen.findByRole("menu");
     // Core info that md: would otherwise hide is reachable here.
-    expect(within(menu).getByRole("menuitem", { name: "Xray" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "sing-box" })).toBeInTheDocument();
     expect(within(menu).getByText("No PID")).toBeInTheDocument();
     // Proxy mode selection and TUN toggle stay reachable on small windows.
     expect(within(menu).getByRole("menuitemradio", { name: "System proxy cleared" })).toBeInTheDocument();

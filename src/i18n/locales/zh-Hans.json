@@ -5,7 +5,7 @@
     "install": "安装内核",
     "installing": "正在安装…",
     "openUpdates": "打开更新…",
-    "seedMissingHint": "没有可用的内置内核，请在“更新”中下载。"
+    "seedMissingHint": "没有可用的内置 sing-box 内核。请重新安装应用，或使用包含 sing-box seed 的安装包。"
   },
   "actions": {
     "addProfile": "新增配置",
@@ -892,7 +892,7 @@
     "TbSettingsSetUWP": "解除 Win10 UWP 应用回环代理限制",
     "TbSettingsSniffingEnabled": "开启流量探测",
     "TbSettingsSocksPort": "本地混合监听端口",
-    "TbSettingsSocksPortTip": "Pac 端口 = +3；Xray API 端口 = +4；mihomo API 端口 = +5；",
+    "TbSettingsSocksPortTip": "Pac 端口 = +3；Clash API 端口 = +5；",
     "TbSettingsSpeedPingTestUrl": "真连接测试地址",
     "TbSettingsSpeedTestTimeout": "测速单个超时值",
     "TbSettingsSpeedTestUrl": "测速文件地址",
@@ -943,7 +943,7 @@
     "TipChangeSystemProxy": "系统代理设置改变",
     "TipDisplayLog": "当有异常断流时请关闭",
     "TipNetwork": "*默认 raw，选错会无法连接",
-    "TipPreSocksPort": "*自定义配置的 Socks 端口值，可不设置；当设置此值后，将使用 Xray/sing-box (Tun) 额外启动一个前置 Socks 服务，提供分流和速度显示等功能",
+    "TipPreSocksPort": "*自定义配置的 Socks 端口值，可不设置；当设置此值后，将使用 sing-box (TUN) 额外启动一个前置 Socks 服务，提供分流和速度显示等功能",
     "TransportExtra": "XHTTP Extra",
     "TransportExtraTip": "原始 JSON，格式： { XHTTPObject }",
     "TransportHeaderType1": "raw 伪装类型",
@@ -1011,9 +1011,7 @@
   "updates": {
     "acquisition": {
       "appPackage": "应用安装包",
-      "downloadOnFirstRun": "首次运行下载",
-      "optionalDownload": "可选下载",
-      "unsupported": "不支持"
+      "optionalDownload": "可选下载"
     },
     "appInstalled": "应用更新已安装：{{version}}",
     "appUpdateAvailable": "应用 {{version}} 可用",
@@ -1029,12 +1027,11 @@
     "applied": "已应用 {{version}}",
     "check": "检查",
     "checkApp": "检查应用",
-    "description": "检查应用、内核、geo 文件和规则集的更新。",
+    "description": "检查应用、geo 文件和规则集的更新。",
     "download": "下载",
     "installApp": "安装应用",
     "kind": {
       "app": "应用",
-      "core": "内核",
       "geo": "Geo",
       "srs": "SRS"
     },
@@ -1095,7 +1092,7 @@
   "templates": {
     "addProxyOnly": "仅添加代理",
     "configJson": "配置 JSON",
-    "description": "编辑 Xray 和 sing-box 生成时使用的完整配置模板。",
+    "description": "编辑 sing-box 生成时使用的完整配置模板。",
     "enabled": "启用",
     "open": "打开模板设置",
     "proxyDetour": "代理绕行",

@@ -305,8 +305,8 @@ mod tests {
             Path::new("/tmp/VoyaVPN.app/Contents/Resources/core-seeds")
         );
         assert_eq!(
-            core_seed_resource_dir(&seed_root, "xray"),
-            Path::new("/tmp/VoyaVPN.app/Contents/Resources/core-seeds/xray")
+            core_seed_resource_dir(&seed_root, "sing_box"),
+            Path::new("/tmp/VoyaVPN.app/Contents/Resources/core-seeds/sing_box")
         );
     }
 

@@ -2,82 +2,17 @@
   "version": 1,
   "cases": [
     {
-      "id": "xray-outbound-vless-tls-xhttp-fragment",
-      "core": "xray",
-      "fixture": "xray/outbounds/vless_tls_xhttp_fragment.json",
-      "generated": "xray.outbound.vless_tls_xhttp_fragment",
-      "summary": "VLESS over xhttp with TLS, ECH SNI extraction, mux disabled output, and finalmask fragment/noise composition.",
-      "hotspots": ["finalmask", "transport", "security", "xhttp"],
-      "reference_paths": [
-        "ServiceLib/Services/CoreConfig/V2ray/V2rayOutboundService.cs",
-        "ServiceLib/Handler/Builder/CoreConfigContextBuilder.cs"
-      ],
-      "core_acceptance": false,
-      "volatile_fields": []
-    },
-    {
-      "id": "xray-policy-group-least-load",
-      "core": "xray",
-      "fixture": "xray/outbounds/policy_group_least_load.json",
-      "generated": "xray.outbound.policy_group_least_load",
-      "summary": "Policy group balancer and burstObservatory output for least-load selection.",
-      "hotspots": ["policy-group", "observatory"],
-      "reference_paths": [
-        "ServiceLib/Services/CoreConfig/V2ray/V2rayBalancerService.cs",
-        "ServiceLib.Tests/CoreConfig/V2ray/CoreConfigV2rayServiceTests.cs"
-      ],
-      "core_acceptance": false,
-      "volatile_fields": []
-    },
-    {
-      "id": "xray-inbounds-stats-tun",
-      "core": "xray",
-      "fixture": "xray/full/inbounds_stats_tun.json",
-      "generated": "xray.full.inbounds_stats_tun",
-      "summary": "SOCKS variants, LAN auth, dokodemo API, stats policy, metrics, and Xray TUN inbound.",
-      "hotspots": ["tun", "stats", "inbounds"],
-      "reference_paths": [
-        "ServiceLib/Services/CoreConfig/V2ray/V2rayInboundService.cs",
-        "ServiceLib/Services/CoreConfig/V2ray/V2rayStatisticService.cs"
-      ],
-      "core_acceptance": false,
-      "volatile_fields": []
-    },
-    {
-      "id": "xray-advanced-dns-routing",
-      "core": "xray",
-      "fixture": "xray/full/advanced_dns_routing.json",
-      "generated": "xray.full.advanced_dns_routing",
-      "summary": "Advanced Xray DNS, fake DNS, expected IPs, protected domains, per-rule outbound generation, and final direct routing.",
-      "hotspots": ["dns", "routing", "fakeip", "protect-domain"],
-      "reference_paths": [
-        "ServiceLib/Services/CoreConfig/V2ray/V2rayDnsService.cs",
-        "ServiceLib/Services/CoreConfig/V2ray/V2rayRoutingService.cs"
-      ],
-      "core_acceptance": false,
-      "volatile_fields": []
-    },
-    {
-      "id": "xray-template-tun-proxy-detour",
-      "core": "xray",
-      "fixture": "xray/full/template_tun_proxy_detour.json",
-      "generated": "xray.full.template_tun_proxy_detour",
-      "summary": "FullConfigTemplate TUN template injection with proxy detour and policy-group observatory merge.",
-      "hotspots": ["template", "tun", "policy-group", "proxy-detour"],
-      "reference_paths": [
-        "ServiceLib/Services/CoreConfig/V2ray/V2rayConfigTemplateService.cs",
-        "ServiceLib/Services/CoreConfig/V2ray/V2rayOutboundService.cs"
-      ],
-      "core_acceptance": true,
-      "volatile_fields": []
-    },
-    {
       "id": "singbox-outbound-vless-ws-tls-mux",
       "core": "sing-box",
       "fixture": "singbox/outbounds/vless_ws_tls_mux.json",
       "generated": "singbox.outbound.vless_ws_tls_mux",
       "summary": "sing-box VLESS over websocket with TLS, ECH, uTLS, record fragmentation, multiplexing, and strict null skipping.",
-      "hotspots": ["transport", "security", "mux", "serialization"],
+      "hotspots": [
+        "transport",
+        "security",
+        "mux",
+        "serialization"
+      ],
       "reference_paths": [
         "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs",
         "ServiceLib.Tests/CoreConfig/Singbox/CoreConfigSingboxServiceTests.cs"
@@ -91,7 +26,10 @@
       "fixture": "singbox/outbounds/proxy_chain_detour.json",
       "generated": "singbox.outbound.proxy_chain_detour",
       "summary": "sing-box ProxyChain expansion with detour linking from the proxy entrypoint to the chain hop.",
-      "hotspots": ["proxy-chain", "detour"],
+      "hotspots": [
+        "proxy-chain",
+        "detour"
+      ],
       "reference_paths": [
         "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs",
         "ServiceLib.Tests/CoreConfig/Singbox/CoreConfigSingboxServiceTests.cs"
@@ -105,7 +43,11 @@
       "fixture": "singbox/outbounds/policy_group_selector.json",
       "generated": "singbox.outbound.policy_group_selector",
       "summary": "sing-box selector/urltest policy group with child dedupe and selector ordering.",
-      "hotspots": ["policy-group", "selector", "urltest"],
+      "hotspots": [
+        "policy-group",
+        "selector",
+        "urltest"
+      ],
       "reference_paths": [
         "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs",
         "ServiceLib.Tests/CoreConfig/Singbox/CoreConfigSingboxServiceTests.cs"
@@ -119,7 +61,11 @@
       "fixture": "singbox/outbounds/tuic_tls.json",
       "generated": "singbox.outbound.tuic_tls",
       "summary": "sing-box TUIC outbound with TLS, ALPN, uTLS fingerprint, password, UUID, and congestion control.",
-      "hotspots": ["protocol", "tuic", "security"],
+      "hotspots": [
+        "protocol",
+        "tuic",
+        "security"
+      ],
       "reference_paths": [
         "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs",
         "ServiceLib.Tests/CoreConfig/Singbox/CoreConfigSingboxServiceTests.cs"
@@ -133,7 +79,11 @@
       "fixture": "singbox/outbounds/anytls_tls.json",
       "generated": "singbox.outbound.anytls_tls",
       "summary": "sing-box AnyTLS outbound with typed password and TLS/uTLS settings.",
-      "hotspots": ["protocol", "anytls", "security"],
+      "hotspots": [
+        "protocol",
+        "anytls",
+        "security"
+      ],
       "reference_paths": [
         "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs",
         "ServiceLib.Tests/CoreConfig/Singbox/CoreConfigSingboxServiceTests.cs"
@@ -147,7 +97,11 @@
       "fixture": "singbox/outbounds/naive_quic_tls.json",
       "generated": "singbox.outbound.naive_quic_tls",
       "summary": "sing-box Naive outbound with QUIC, congestion control, insecure concurrency, UDP-over-TCP, and TLS/uTLS settings.",
-      "hotspots": ["protocol", "naive", "security"],
+      "hotspots": [
+        "protocol",
+        "naive",
+        "security"
+      ],
       "reference_paths": [
         "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs",
         "ServiceLib.Tests/CoreConfig/Singbox/CoreConfigSingboxServiceTests.cs"
@@ -161,7 +115,11 @@
       "fixture": "singbox/dns/fakeip_typed.json",
       "generated": "singbox.dns.fakeip_typed",
       "summary": "sing-box typed DNS server schema, fakeip, predefined hosts, independent cache, and direct/proxy strategies.",
-      "hotspots": ["dns", "fakeip", "typed-schema"],
+      "hotspots": [
+        "dns",
+        "fakeip",
+        "typed-schema"
+      ],
       "reference_paths": [
         "ServiceLib/Services/CoreConfig/Singbox/SingboxDnsService.cs",
         "ServiceLib/Sample/singbox_fakeip_filter"
@@ -175,7 +133,11 @@
       "fixture": "singbox/route/rulesets_from_dns.json",
       "generated": "singbox.route.rulesets_from_dns",
       "summary": "sing-box remote ruleset generation from geo DNS and routing references.",
-      "hotspots": ["ruleset", "dns", "routing"],
+      "hotspots": [
+        "ruleset",
+        "dns",
+        "routing"
+      ],
       "reference_paths": [
         "ServiceLib/Services/CoreConfig/Singbox/SingboxRulesetService.cs",
         "ServiceLib/Global.cs"
@@ -189,7 +151,10 @@
       "fixture": "singbox/inbounds/tun.json",
       "generated": "singbox.inbounds.tun",
       "summary": "sing-box mixed inbound plus TUN inbound template expansion.",
-      "hotspots": ["tun", "inbounds"],
+      "hotspots": [
+        "tun",
+        "inbounds"
+      ],
       "reference_paths": [
         "ServiceLib/Services/CoreConfig/Singbox/SingboxInboundService.cs",
         "ServiceLib/Sample/tun_singbox_inbound"
@@ -203,7 +168,11 @@
       "fixture": "singbox/route/tun.json",
       "generated": "singbox.route.tun",
       "summary": "sing-box TUN routing template, DNS hijack, process exclusions, sniffing, and final route behavior.",
-      "hotspots": ["tun", "routing", "dns-hijack"],
+      "hotspots": [
+        "tun",
+        "routing",
+        "dns-hijack"
+      ],
       "reference_paths": [
         "ServiceLib/Services/CoreConfig/Singbox/SingboxRoutingService.cs",
         "ServiceLib/Sample/tun_singbox_rules"

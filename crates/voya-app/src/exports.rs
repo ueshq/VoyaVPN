@@ -3,9 +3,8 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use thiserror::Error;
 use voya_core::{
-    export_inner_share_links, export_share_link, generate_singbox_config_json,
-    generate_xray_config_json, AppConfig, CoreConfigContextBuilder, CoreType, ProfileItem,
-    ShareError, SingboxConfigError,
+    export_inner_share_links, export_share_link, generate_singbox_config_json, AppConfig,
+    CoreConfigContextBuilder, ProfileItem, ShareError, SingboxConfigError,
 };
 use voya_db::{Database, DbError};
 use voya_platform::{coreinfo::TargetOs, paths::AppPaths};
@@ -121,11 +120,7 @@ impl<'db> ExportManager<'db> {
             load_runtime_core_gen_env(self.database, paths, &export_config, target_os).await?;
         let result = CoreConfigContextBuilder::new(&env).build(&export_config, profile);
 
-        if result.context.run_core_type == CoreType::sing_box {
-            generate_singbox_config_json(&result.context).map_err(ExportManagerError::from)
-        } else {
-            Ok(generate_xray_config_json(&result.context))
-        }
+        generate_singbox_config_json(&result.context).map_err(ExportManagerError::from)
     }
 }
 

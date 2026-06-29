@@ -221,13 +221,6 @@ vi.mock("@/ipc", () => ({
   loadDnsSettings: vi.fn(() =>
     Promise.resolve({
       simpleDnsItem: {},
-      xrayDnsItem: {
-        Id: "dns-xray",
-        Remarks: "Xray",
-        Enabled: false,
-        CoreType: 2,
-        UseSystemHosts: false,
-      },
       singboxDnsItem: {
         Id: "dns-singbox",
         Remarks: "sing-box",
@@ -236,8 +229,6 @@ vi.mock("@/ipc", () => ({
         UseSystemHosts: false,
       },
       defaults: {
-        xrayNormalDns: "{\"servers\":[]}",
-        xrayTunDns: "{\"servers\":[]}",
         singboxNormalDns: "{\"servers\":[]}",
         singboxTunDns: "{\"servers\":[]}",
       },
@@ -266,10 +257,6 @@ vi.mock("@/ipc", () => ({
   previewGroupProfile: vi.fn(() =>
     Promise.resolve({
       validation: { childIndexIds: [], errors: [], normalizedChildItems: "", valid: true, warnings: [] },
-      xrayRoutes: [],
-      xrayBalancers: [],
-      xrayObservatorySelectors: [],
-      xrayBurstObservatorySelectors: [],
       singboxRoutes: [],
     }),
   ),

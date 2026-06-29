@@ -92,7 +92,6 @@ macro_rules! collect_ipc_commands {
             commands::check_updates,
             commands::download_updates,
             commands::manual_app_update_links,
-            commands::apply_downloaded_core_update,
             commands::install_core_seed,
             commands::backup_status,
             commands::backup_save_webdav_settings,
@@ -150,8 +149,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_app::updates::UpdateCheckResult>()
         .typ::<voya_app::updates::ManualAppUpdateLinks>()
         .typ::<voya_app::updates::ManualAppUpdateDownload>()
-        .typ::<voya_app::updates::CoreUpdateApplyRequest>()
-        .typ::<voya_app::updates::CoreUpdateApplyResult>()
         .typ::<voya_app::updates::UpdateTargetKind>()
         .typ::<voya_app::updates::UpdateAcquisition>()
         .typ::<voya_app::updates::UpdateResultStatus>()

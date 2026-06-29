@@ -5,7 +5,7 @@
     "install": "Mag telepítése",
     "installing": "Telepítés…",
     "openUpdates": "Frissítések megnyitása…",
-    "seedMissingHint": "Nincs elérhető beépített mag. Nyissa meg a Frissítéseket a letöltéshez."
+    "seedMissingHint": "Nincs elérhető beépített sing-box mag. Telepítse újra az alkalmazást, vagy építse újra a csomagot sing-box seeddel."
   },
   "actions": {
     "addProfile": "Add profile",
@@ -892,7 +892,7 @@
     "TbSettingsSetUWP": "Win10 UWP Loopback beállítása",
     "TbSettingsSniffingEnabled": "Sniffing bekapcsolása",
     "TbSettingsSocksPort": "Vegyes port",
-    "TbSettingsSocksPortTip": "Pac port = +3; Xray API port = +4; mihomo API port = +5;",
+    "TbSettingsSocksPortTip": "Pac port = +3; Clash API port = +5;",
     "TbSettingsSpeedPingTestUrl": "Sebesség Ping Teszt URL",
     "TbSettingsSpeedTestTimeout": "Sebességteszt egyszeri időtúllépési érték",
     "TbSettingsSpeedTestUrl": "Sebességteszt URL",
@@ -943,7 +943,7 @@
     "TipChangeSystemProxy": "Rendszerproxy beállítás megváltozott",
     "TipDisplayLog": "Kérjük, kapcsolja ki rendellenes megszakadás esetén",
     "TipNetwork": "*Alapértelmezett érték raw",
-    "TipPreSocksPort": "* A beállítás után egy socks szolgáltatás indul az Xray/sing-box(Tun) segítségével, hogy olyan funkciókat biztosítson, mint a sebességkijelzés",
+    "TipPreSocksPort": "* A beállítás után egy socks szolgáltatás indul a sing-box (TUN) segítségével, hogy olyan funkciókat biztosítson, mint a sebességkijelzés",
     "TransportExtra": "XHTTP Extra",
     "TransportExtraTip": "Raw JSON, format: { XHTTP Object }",
     "TransportHeaderType1": "raw álcázási típus",
@@ -1011,9 +1011,7 @@
   "updates": {
     "acquisition": {
       "appPackage": "App package",
-      "downloadOnFirstRun": "First-run download",
-      "optionalDownload": "Optional download",
-      "unsupported": "Unsupported"
+      "optionalDownload": "Optional download"
     },
     "appInstalled": "App update installed: {{version}}",
     "appUpdateAvailable": "App {{version}} is available",
@@ -1029,12 +1027,11 @@
     "applied": "Applied {{version}}",
     "check": "Check",
     "checkApp": "Check app",
-    "description": "Update checks for app, cores, geo files, and rulesets.",
+    "description": "Update checks for app, geo files, and rulesets.",
     "download": "Download",
     "installApp": "Install app",
     "kind": {
       "app": "App",
-      "core": "Core",
       "geo": "Geo",
       "srs": "SRS"
     },
@@ -1095,7 +1092,7 @@
   "templates": {
     "addProxyOnly": "Add proxy only",
     "configJson": "Config JSON",
-    "description": "Edit full config templates used by Xray and sing-box generation.",
+    "description": "Edit full config templates used by sing-box generation.",
     "enabled": "Enabled",
     "open": "Open template settings",
     "proxyDetour": "Proxy detour",

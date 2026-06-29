@@ -8,7 +8,7 @@ use specta::Type;
 use thiserror::Error;
 use voya_core::{
     CoreType, DnsItem, SimpleDnsItem, SingboxDns, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS,
-    DEFAULT_REMOTE_DNS, DEFAULT_SINGBOX_DNS_NORMAL, DEFAULT_XRAY_DNS_NORMAL,
+    DEFAULT_REMOTE_DNS, DEFAULT_SINGBOX_DNS_NORMAL,
 };
 use voya_db::{Database, DbError};
 
@@ -20,7 +20,6 @@ pub type Result<T> = std::result::Result<T, DnsManagerError>;
 #[serde(rename_all = "camelCase")]
 pub struct DnsSettings {
     pub simple_dns_item: SimpleDnsItem,
-    pub xray_dns_item: DnsItem,
     pub singbox_dns_item: DnsItem,
     pub defaults: DnsSettingsDefaults,
 }
@@ -28,8 +27,6 @@ pub struct DnsSettings {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct DnsSettingsDefaults {
-    pub xray_normal_dns: String,
-    pub xray_tun_dns: String,
     pub singbox_normal_dns: String,
     pub singbox_tun_dns: String,
 }
@@ -37,8 +34,6 @@ pub struct DnsSettingsDefaults {
 impl Default for DnsSettingsDefaults {
     fn default() -> Self {
         Self {
-            xray_normal_dns: DEFAULT_XRAY_DNS_NORMAL.to_string(),
-            xray_tun_dns: DEFAULT_XRAY_DNS_NORMAL.to_string(),
             singbox_normal_dns: DEFAULT_SINGBOX_DNS_NORMAL.to_string(),
             singbox_tun_dns: DEFAULT_SINGBOX_DNS_NORMAL.to_string(),
         }
@@ -74,12 +69,10 @@ impl<'db> DnsManager<'db> {
     }
 
     pub async fn load_settings(&self, simple_dns_item: &SimpleDnsItem) -> Result<DnsSettings> {
-        let xray_dns_item = self.ensure_core_dns_item(CoreType::Xray).await?;
         let singbox_dns_item = self.ensure_core_dns_item(CoreType::sing_box).await?;
 
         Ok(DnsSettings {
             simple_dns_item: normalize_simple_dns(simple_dns_item.clone()),
-            xray_dns_item,
             singbox_dns_item,
             defaults: DnsSettingsDefaults::default(),
         })
@@ -87,12 +80,10 @@ impl<'db> DnsManager<'db> {
 
     pub async fn save_settings(&self, mut settings: DnsSettings) -> Result<DnsSettings> {
         settings.simple_dns_item = normalize_simple_dns(settings.simple_dns_item);
-        normalize_dns_item(&mut settings.xray_dns_item, CoreType::Xray);
         normalize_dns_item(&mut settings.singbox_dns_item, CoreType::sing_box);
 
         validate_settings(&settings)?;
 
-        self.database.dns().upsert(&settings.xray_dns_item).await?;
         self.database
             .dns()
             .upsert(&settings.singbox_dns_item)
@@ -125,11 +116,7 @@ impl<'db> DnsManager<'db> {
 pub fn default_dns_item(core_type: CoreType) -> DnsItem {
     DnsItem {
         id: generate_dns_id(),
-        remarks: match core_type {
-            CoreType::Xray => "Xray".to_string(),
-            CoreType::sing_box => "sing-box".to_string(),
-            _ => format!("{core_type:?}"),
-        },
+        remarks: "sing-box".to_string(),
         core_type,
         enabled: false,
         ..DnsItem::default()
@@ -163,11 +150,7 @@ fn normalize_dns_item(item: &mut DnsItem, core_type: CoreType) {
         item.id = generate_dns_id();
     }
     if item.remarks.trim().is_empty() {
-        item.remarks = match core_type {
-            CoreType::Xray => "Xray".to_string(),
-            CoreType::sing_box => "sing-box".to_string(),
-            _ => format!("{core_type:?}"),
-        };
+        item.remarks = "sing-box".to_string();
     } else {
         item.remarks = item.remarks.trim().to_string();
     }
@@ -191,16 +174,6 @@ fn validate_settings(settings: &DnsSettings) -> Result<()> {
         "simpleDnsItem.directExpectedIPs",
         &mut issues,
     );
-    validate_xray_dns_json(
-        settings.xray_dns_item.normal_dns.as_deref(),
-        "xrayDnsItem.normalDNS",
-        &mut issues,
-    );
-    validate_xray_dns_json(
-        settings.xray_dns_item.tun_dns.as_deref(),
-        "xrayDnsItem.tunDNS",
-        &mut issues,
-    );
     validate_singbox_dns_json(
         settings.singbox_dns_item.normal_dns.as_deref(),
         "singboxDnsItem.normalDNS",
@@ -216,24 +189,6 @@ fn validate_settings(settings: &DnsSettings) -> Result<()> {
         Ok(())
     } else {
         Err(DnsManagerError::Validation(issues))
-    }
-}
-
-fn validate_xray_dns_json(value: Option<&str>, field: &str, issues: &mut Vec<DnsValidationIssue>) {
-    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
-        return;
-    };
-    match serde_json::from_str::<serde_json::Value>(value) {
-        Ok(json) => {
-            if json.get("servers").is_none() {
-                issues.push(issue(field, "Xray DNS JSON must contain a servers field"));
-            }
-        }
-        Err(error) => {
-            if value.contains('{') || value.contains('}') || value.starts_with('[') {
-                issues.push(issue(field, format!("Invalid Xray DNS JSON: {error}")));
-            }
-        }
     }
 }
 
@@ -359,8 +314,6 @@ mod tests {
         settings.simple_dns_item.global_fake_ip = Some(false);
         settings.simple_dns_item.direct_expected_ips = Some("geoip:cn,192.0.2.0/24".to_string());
         settings.simple_dns_item.hosts = Some("example.test 192.0.2.1".to_string());
-        settings.xray_dns_item.enabled = true;
-        settings.xray_dns_item.normal_dns = Some(r#"{"servers":["1.1.1.1"]}"#.to_string());
         settings.singbox_dns_item.enabled = true;
         settings.singbox_dns_item.normal_dns =
             Some(r#"{"servers":[{"tag":"remote","type":"udp","server":"1.1.1.1"}]}"#.to_string());
@@ -370,16 +323,6 @@ mod tests {
             .await
             .expect("DNS manager test operation should succeed");
         assert_eq!(saved.simple_dns_item.fake_ip, Some(true));
-        assert_eq!(
-            database
-                .dns()
-                .get_by_core_type(CoreType::Xray)
-                .await
-                .expect("DNS manager test operation should succeed")
-                .expect("DNS manager test operation should succeed")
-                .normal_dns,
-            settings.xray_dns_item.normal_dns
-        );
         assert_eq!(
             database
                 .dns()
@@ -402,7 +345,6 @@ mod tests {
             .load_settings(&SimpleDnsItem::default())
             .await
             .expect("DNS manager test operation should succeed");
-        settings.xray_dns_item.normal_dns = Some(r#"{"servers":"#.to_string());
         settings.singbox_dns_item.normal_dns =
             Some(r#"{"servers":[{"tag":"remote"}]}"#.to_string());
 
@@ -413,9 +355,6 @@ mod tests {
         let DnsManagerError::Validation(issues) = error else {
             panic!("expected validation errors");
         };
-        assert!(issues
-            .iter()
-            .any(|issue| issue.field == "xrayDnsItem.normalDNS"));
         assert!(issues
             .iter()
             .any(|issue| issue.field == "singboxDnsItem.normalDNS"));

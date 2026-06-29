@@ -71,7 +71,7 @@ test("adds and imports profiles, activates one, and connects through the fake ru
 
   await page.getByRole("button", { exact: true, name: "Connect" }).click();
   await expect(page.getByTestId("status-bar")).toContainText("Connected");
-  await expect(page.getByTestId("status-bar")).toContainText("Xray");
+  await expect(page.getByTestId("status-bar")).toContainText("sing-box");
 
   await page.getByRole("button", { exact: true, name: "Disconnect" }).click();
   await expect(page.getByTestId("status-bar")).toContainText("Disconnected");

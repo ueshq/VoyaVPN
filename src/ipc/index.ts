@@ -8,7 +8,6 @@ export {
   backupWebdavCheck,
   backupWebdavPull,
   backupWebdavPush,
-  applyDownloadedCoreUpdate,
   appUpdateStatus,
   calculateCertificateSha256,
   clashCloseConnection,

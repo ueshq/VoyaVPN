@@ -233,7 +233,6 @@ pub struct PresetDnsTemplateFetchOptions {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PresetDnsTemplates {
-    pub xray_template: Option<String>,
     pub singbox_template: Option<String>,
     pub simple_template: Option<String>,
 }
@@ -261,12 +260,10 @@ impl PresetDnsTemplateClient {
             return PresetDnsTemplates::default();
         }
 
-        let xray_url = join_url_path(source_url, "v2ray.json");
         let singbox_url = join_url_path(source_url, "sing_box.json");
         let simple_url = join_url_path(source_url, "simple_dns.json");
 
         PresetDnsTemplates {
-            xray_template: self.fetch_optional(&xray_url, options).await,
             singbox_template: self.fetch_optional(&singbox_url, options).await,
             simple_template: self.fetch_optional(&simple_url, options).await,
         }
@@ -1583,10 +1580,6 @@ mod tests {
         let base = spawn_http_fixture(
             HashMap::from([
                 (
-                    "/preset/v2ray.json".to_string(),
-                    r#"{"NormalDNS":"xray"}"#.to_string(),
-                ),
-                (
                     "/preset/sing_box.json".to_string(),
                     r#"{"NormalDNS":"sing-box"}"#.to_string(),
                 ),
@@ -1595,7 +1588,7 @@ mod tests {
                     r#"{"DirectDNS":"1.1.1.1"}"#.to_string(),
                 ),
             ]),
-            3,
+            2,
             Arc::clone(&seen_user_agents),
         )
         .await;
@@ -1608,10 +1601,6 @@ mod tests {
             .await;
 
         assert_eq!(
-            templates.xray_template.as_deref(),
-            Some(r#"{"NormalDNS":"xray"}"#)
-        );
-        assert_eq!(
             templates.singbox_template.as_deref(),
             Some(r#"{"NormalDNS":"sing-box"}"#)
         );
@@ -1621,14 +1610,14 @@ mod tests {
         );
         assert_eq!(
             seen_user_agents.lock().await.as_slice(),
-            [USER_AGENT_PREFIX, USER_AGENT_PREFIX, USER_AGENT_PREFIX]
+            [USER_AGENT_PREFIX, USER_AGENT_PREFIX]
         );
     }
 
     #[tokio::test]
     async fn preset_dns_template_client_returns_none_for_missing_templates() {
         let seen_user_agents = Arc::new(Mutex::new(Vec::new()));
-        let base = spawn_http_fixture(HashMap::new(), 3, Arc::clone(&seen_user_agents)).await;
+        let base = spawn_http_fixture(HashMap::new(), 2, Arc::clone(&seen_user_agents)).await;
 
         let templates = PresetDnsTemplateClient::new()
             .fetch(
@@ -1638,6 +1627,6 @@ mod tests {
             .await;
 
         assert_eq!(templates, PresetDnsTemplates::default());
-        assert_eq!(seen_user_agents.lock().await.len(), 3);
+        assert_eq!(seen_user_agents.lock().await.len(), 2);
     }
 }

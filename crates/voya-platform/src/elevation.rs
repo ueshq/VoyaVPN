@@ -21,10 +21,8 @@ pub const fn should_use_unix_sudo(
     tun_enabled: bool,
     may_need_sudo: bool,
 ) -> bool {
-    may_need_sudo
-        && tun_enabled
-        && matches!(core_type, CoreType::sing_box | CoreType::mihomo)
-        && matches!(os, TargetOs::Linux | TargetOs::Macos)
+    let _ = core_type;
+    may_need_sudo && tun_enabled && matches!(os, TargetOs::Linux | TargetOs::Macos)
 }
 
 /// Wrap a core launch so it runs through the root-owned elevation launcher via
@@ -302,7 +300,7 @@ mod tests {
             TargetOs::Linux,
             &launcher,
             42,
-            "/tmp/voya cores/mihomo-linux-amd64-v1",
+            "/tmp/voya cores/sing-box",
             "/tmp",
         )
         .expect("linux kill plan");
@@ -317,8 +315,7 @@ mod tests {
                 "/usr/libexec/voya-vpn/voya-elevate".to_string(),
                 "kill".to_string(),
                 "42".to_string(),
-                "mihomo-linux-amd64-v1".to_string(),
-                "mihomo-linux-am".to_string(),
+                "sing-box".to_string(),
             ]
         );
     }

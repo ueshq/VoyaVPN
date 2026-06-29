@@ -54,7 +54,7 @@ const connectedStatus: RuntimeStatusResponse = {
   activeProfileId: "node-tokyo",
   mainPid: 4242,
   prePid: null,
-  runningCoreType: 2,
+  runningCoreType: 24,
   state: "connected",
 };
 
@@ -109,7 +109,7 @@ describe("HomeScreen", () => {
       activeProfileId: "node-tokyo",
       mainPid: 4242,
       prePid: null,
-      runningCoreType: 2,
+      runningCoreType: 24,
       state: "connected",
     };
 
@@ -118,7 +118,7 @@ describe("HomeScreen", () => {
     expect(screen.getByText("Protected")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
     expect(screen.getByText("node-tokyo")).toBeInTheDocument();
-    expect(screen.getByText("Xray")).toBeInTheDocument();
+    expect(screen.getByText("sing-box")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Restart" })).toBeInTheDocument();
   });
 

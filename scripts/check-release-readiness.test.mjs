@@ -9,8 +9,8 @@ describe("release readiness production blocker scan", () => {
       "dist/release/core-assets.json",
       `{
   "assets": [{
-    "upstreamUrl": "https://github.com/XTLS/Xray-core/releases/download/v1.8.24/Xray-linux-64.zip",
-    "url": "https://github.com/XTLS/Xray-core/releases/download/v1.8.24/Xray-linux-64.zip"
+    "upstreamUrl": "https://github.com/voyavpn/example-core/releases/download/v1.0.0/example-core-linux-x64.gz",
+    "url": "https://github.com/voyavpn/example-core/releases/download/v1.0.0/example-core-linux-x64.gz"
   }]
 }`,
     );
@@ -25,8 +25,8 @@ describe("release readiness production blocker scan", () => {
       "tests/fixtures/release/core-assets.json",
       `{
   "assets": [{
-    "upstreamUrl": "https://github.com/XTLS/Xray-core/releases/download/v1.8.24/Xray-linux-64.zip",
-    "sourceUrl": "https://github.com/XTLS/Xray-core/releases/download/v1.8.24/Xray-linux-64.zip"
+    "upstreamUrl": "https://github.com/voyavpn/example-core/releases/download/v1.0.0/example-core-linux-x64.gz",
+    "sourceUrl": "https://github.com/voyavpn/example-core/releases/download/v1.0.0/example-core-linux-x64.gz"
   }]
 }`,
     );
@@ -53,10 +53,10 @@ describe("release readiness production blocker scan", () => {
   it("allows upstream release evidence templates", () => {
     const matches = findProductionBlockersInText(
       "crates/voya-net/src/update.rs",
-      `fn xray_upstream_release_evidence() -> UpstreamReleaseEvidence {
+      `fn app_upstream_release_evidence() -> UpstreamReleaseEvidence {
   UpstreamReleaseEvidence {
     asset_templates: UpstreamAssetTemplates {
-      windows_x64: Some("https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-windows-64.zip"),
+      windows_x64: Some("https://github.com/voyavpn/voyavpn/releases/download/{tag}/VoyaVPN-windows-x64.zip"),
     },
   }
 }`,
@@ -88,7 +88,7 @@ describe("release readiness production blocker scan", () => {
 mod tests {
   #[test]
   fn rejects_github_url() {
-    let manifest = r#"{"url":"https://github.com/XTLS/Xray-core/releases/download/v1.8.24/Xray-linux-64.zip"}"#;
+    let manifest = r#"{"url":"https://github.com/voyavpn/example-core/releases/download/v1.0.0/example-core-linux-x64.gz"}"#;
     assert!(manifest.contains("github.com"));
   }
 }`,

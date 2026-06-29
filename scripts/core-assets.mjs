@@ -5,15 +5,9 @@ import { fileURLToPath } from "node:url";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const stableChannel = "stable";
 
-const coreTypes = new Map([
-  ["xray", "Xray"],
-  ["Xray", "Xray"],
-  ["mihomo", "mihomo"],
-  ["sing-box", "sing_box"],
-  ["sing_box", "sing_box"],
-]);
+const coreTypes = new Map();
 
-const stableCoreTypes = ["Xray", "mihomo", "sing_box"];
+const stableCoreTypes = [];
 const stableOs = ["windows", "macos", "linux"];
 const stableArchs = ["x64", "arm64"];
 const stableTargetMatrix = [
@@ -82,7 +76,8 @@ function parseArgs(argv) {
 function printHelp() {
   console.log(`Usage: node scripts/core-assets.mjs --fixture <core-assets.json> --out <manifest.json> [options]
 
-Generates a stable CDN core asset manifest for Xray, mihomo, and sing-box.
+Generates a stable CDN core asset manifest. The current stable release does not
+publish downloadable core updates; sing-box is bundled as an application seed.
 Production download URLs are derived only from --base-url or VOYAVPN_CDN_BASE_URL.
 GitHub URLs are allowed only in upstreamUrl source-reference fields.
 
@@ -98,9 +93,8 @@ Required stable asset fields:
   coreType, version, license, os, arch, archiveFormat, executableCandidates,
   path or name, sha256, bytes, and upstreamUrl.
 
-Stable validation rejects unsupported OS/architecture pairs, unknown core types,
-missing Xray/mihomo/sing_box entries for the Windows/macOS/Linux x64+arm64 matrix,
-example or GitHub CDN base URLs, and GitHub download URLs outside upstreamUrl.`);
+Stable validation rejects unsupported core asset entries, example or GitHub CDN
+base URLs, and GitHub download URLs outside upstreamUrl.`);
 }
 
 function isStable(channel) {
@@ -545,10 +539,6 @@ async function main() {
   }
 
   const assets = fixture.assets.map((entry, index) => normalizeEntry(entry, index, baseUrl, options.channel)).sort(assetSort);
-
-  if (assets.length === 0) {
-    throw new Error("Core asset fixture did not contain any assets");
-  }
 
   assertConsistentCoreFields(assets);
   if (isStable(options.channel)) {

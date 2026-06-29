@@ -204,7 +204,7 @@ mod tests {
         assert_eq!(status.preflight.state, TunPreflightState::ManualCheck);
         assert_eq!(
             status.preflight.windows_cleanup_devices,
-            ["wintunsingbox_tun".to_string(), "xray_tun".to_string()]
+            ["wintunsingbox_tun".to_string()]
         );
         assert!(status
             .preflight

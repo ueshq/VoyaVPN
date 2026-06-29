@@ -5,7 +5,7 @@
     "install": "Installer le cœur",
     "installing": "Installation…",
     "openUpdates": "Ouvrir les mises à jour…",
-    "seedMissingHint": "Aucun cœur intégré n'est disponible. Ouvrez les mises à jour pour le télécharger."
+    "seedMissingHint": "Aucun cœur sing-box intégré n'est disponible. Réinstallez l'application ou reconstruisez le paquet avec le seed sing-box."
   },
   "actions": {
     "addProfile": "Add profile",
@@ -892,7 +892,7 @@
     "TbSettingsSetUWP": "Lever la restriction de proxy en boucle locale pour les applications Win10 UWP",
     "TbSettingsSniffingEnabled": "Activer le sniffing de trafic",
     "TbSettingsSocksPort": "Port d’écoute mixte local",
-    "TbSettingsSocksPortTip": "Port PAC = +3 ; port API Xray = +4 ; port API mihomo = +5 ;",
+    "TbSettingsSocksPortTip": "Port PAC = +3 ; port API Clash = +5 ;",
     "TbSettingsSpeedPingTestUrl": "Adresse de test de connexion réelle",
     "TbSettingsSpeedTestTimeout": "Valeur délai d'expiration test vitesse unique",
     "TbSettingsSpeedTestUrl": "URL du fichier de test de vitesse",
@@ -943,7 +943,7 @@
     "TipChangeSystemProxy": "Paramètres du proxy système modifiés",
     "TipDisplayLog": "Désactiver cette option si coupure anormale",
     "TipNetwork": "*raw par défaut ; un mauvais choix bloque la connexion",
-    "TipPreSocksPort": "*Valeur du port Socks (config perso, optionnelle). Si défini, Xray/sing-box (Tun) démarre un service Socks en amont supplémentaire pour fournir le routage sélectif et l’affichage de la vitesse.",
+    "TipPreSocksPort": "*Valeur du port Socks (config perso, optionnelle). Si défini, sing-box (TUN) démarre un service Socks en amont supplémentaire pour fournir le routage sélectif et l’affichage de la vitesse.",
     "TransportExtra": "XHTTP Extra",
     "TransportExtraTip": "Raw JSON, format: { XHTTP Object }",
     "TransportHeaderType1": "type de camouflage raw",
@@ -1011,9 +1011,7 @@
   "updates": {
     "acquisition": {
       "appPackage": "App package",
-      "downloadOnFirstRun": "First-run download",
-      "optionalDownload": "Optional download",
-      "unsupported": "Unsupported"
+      "optionalDownload": "Optional download"
     },
     "appInstalled": "App update installed: {{version}}",
     "appUpdateAvailable": "App {{version}} is available",
@@ -1029,12 +1027,11 @@
     "applied": "Applied {{version}}",
     "check": "Check",
     "checkApp": "Check app",
-    "description": "Update checks for app, cores, geo files, and rulesets.",
+    "description": "Update checks for app, geo files, and rulesets.",
     "download": "Download",
     "installApp": "Install app",
     "kind": {
       "app": "App",
-      "core": "Core",
       "geo": "Geo",
       "srs": "SRS"
     },
@@ -1095,7 +1092,7 @@
   "templates": {
     "addProxyOnly": "Add proxy only",
     "configJson": "Config JSON",
-    "description": "Edit full config templates used by Xray and sing-box generation.",
+    "description": "Edit full config templates used by sing-box generation.",
     "enabled": "Enabled",
     "open": "Open template settings",
     "proxyDetour": "Proxy detour",

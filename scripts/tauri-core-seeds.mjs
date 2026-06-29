@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { xrayExecutableName } from "./xray-core-installer.mjs";
+import { singBoxExecutableName } from "./sing-box-core-installer.mjs";
 
 const requiredBundleResources = {
   "../docs/release/THIRD_PARTY_NOTICES.md": "release/THIRD_PARTY_NOTICES.md",
@@ -8,9 +8,9 @@ const requiredBundleResources = {
 
 const optionalCoreSeedResources = [
   {
-    dir: "xray",
-    source: "resources/core-seeds/xray/*",
-    target: "core-seeds/xray/",
+    dir: "sing_box",
+    source: "resources/core-seeds/sing_box/*",
+    target: "core-seeds/sing_box/",
   },
 ];
 
@@ -19,7 +19,7 @@ export function hasExpectedSeedExecutable(seedDir, platform = process.platform) 
     return false;
   }
 
-  const expectedExecutable = xrayExecutableName(platform).toLowerCase();
+  const expectedExecutable = singBoxExecutableName(platform).toLowerCase();
 
   return readdirSync(seedDir, { withFileTypes: true }).some(
     (entry) => entry.isFile() && entry.name.toLowerCase() === expectedExecutable,

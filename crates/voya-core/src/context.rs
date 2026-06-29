@@ -9,9 +9,8 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::{
-    validate_xhttp_extra, AppConfig, ConfigType, CoreType, DnsItem, FullConfigTemplateItem,
-    InboundProtocol, ProfileItem, ProtocolExtraItem, RoutingItem, RulesItem, SimpleDnsItem,
-    SubItem,
+    AppConfig, ConfigType, CoreType, DnsItem, FullConfigTemplateItem, InboundProtocol, ProfileItem,
+    ProtocolExtraItem, RoutingItem, RulesItem, SimpleDnsItem, SubItem,
 };
 
 pub const PROXY_TAG: &str = "proxy";
@@ -162,7 +161,7 @@ impl Default for CoreConfigContext {
     fn default() -> Self {
         Self {
             node: ProfileItem::default(),
-            run_core_type: CoreType::Xray,
+            run_core_type: CoreType::sing_box,
             routing_item: None,
             raw_dns_item: None,
             simple_dns_item: SimpleDnsItem::default(),
@@ -318,7 +317,7 @@ where
 
     #[must_use]
     pub fn build(&self, config: &AppConfig, node: &ProfileItem) -> CoreConfigContextBuilderResult {
-        let run_core_type = self.env.get_core_type(node, node.config_type);
+        let run_core_type = CoreType::sing_box;
         let core_type = generator_core_type(run_core_type);
         let mut context = CoreConfigContext {
             node: node.clone(),
@@ -491,7 +490,7 @@ where
         let chain_node = ProfileItem {
             index_id: self.env.next_virtual_chain_id(node, &child_items),
             config_type: ConfigType::ProxyChain,
-            core_type: Some(self.env.get_core_type(node, node.config_type)),
+            core_type: Some(CoreType::sing_box),
             remarks: node.remarks.clone(),
             protocol_extra: ProtocolExtraItem {
                 group_type: Some("ProxyChain".to_string()),
@@ -731,24 +730,20 @@ where
 }
 
 fn generator_core_type(run_core_type: CoreType) -> CoreType {
-    if run_core_type == CoreType::sing_box {
-        CoreType::sing_box
-    } else {
-        CoreType::Xray
-    }
+    let _ = run_core_type;
+    CoreType::sing_box
 }
 
 fn pre_socks_item<E: CoreGenEnv>(
     config: &AppConfig,
     node: &ProfileItem,
-    core_type: CoreType,
+    _core_type: CoreType,
     env: &E,
 ) -> Option<ProfileItem> {
     let enable_legacy_protect =
         config.tun_mode_item.enable_legacy_protect || env.platform().is_non_windows();
 
     if node.config_type != ConfigType::Custom
-        && core_type != CoreType::sing_box
         && config.tun_mode_item.enable_tun
         && enable_legacy_protect
     {
@@ -763,11 +758,7 @@ fn pre_socks_item<E: CoreGenEnv>(
 
     if node.config_type == ConfigType::Custom && matches!(node.pre_socks_port, Some(1..=65535)) {
         return Some(ProfileItem {
-            core_type: Some(if config.tun_mode_item.enable_tun {
-                CoreType::sing_box
-            } else {
-                CoreType::Xray
-            }),
+            core_type: Some(CoreType::sing_box),
             config_type: ConfigType::SOCKS,
             address: LOOPBACK.to_string(),
             port: node.pre_socks_port.unwrap_or_default(),
@@ -856,11 +847,6 @@ pub fn validate_node(item: &ProfileItem, core_type: CoreType) -> NodeValidatorRe
                 "sing_box does not support Shadowsocks with network {network}"
             ));
         }
-    } else if core_type == CoreType::Xray && !xray_supports_config_type(item.config_type) {
-        result.push_error(format!(
-            "Xray does not support protocol {:?}",
-            item.config_type
-        ));
     }
 
     match item.config_type {
@@ -908,17 +894,6 @@ pub fn validate_node(item: &ProfileItem, core_type: CoreType) -> NodeValidatorRe
         result.push_error("invalid PublicKey");
     }
 
-    if item.network == XHTTP
-        && item
-            .transport_extra
-            .xhttp_extra
-            .as_deref()
-            .and_then(nonempty)
-            .is_some_and(|extra| validate_xhttp_extra(extra).is_err())
-    {
-        result.push_error("invalid XHTTP Extra");
-    }
-
     if !item.finalmask.trim().is_empty()
         && serde_json::from_str::<Value>(&item.finalmask).map_or(true, |value| !value.is_object())
     {
@@ -929,8 +904,7 @@ pub fn validate_node(item: &ProfileItem, core_type: CoreType) -> NodeValidatorRe
 }
 
 fn profile_is_valid(item: &ProfileItem) -> bool {
-    validate_node(item, CoreType::Xray).success()
-        || validate_node(item, CoreType::sing_box).success()
+    validate_node(item, CoreType::sing_box).success()
 }
 
 fn get_network(item: &ProfileItem) -> String {
@@ -940,20 +914,6 @@ fn get_network(item: &ProfileItem) -> String {
     } else {
         network.to_string()
     }
-}
-
-fn xray_supports_config_type(config_type: ConfigType) -> bool {
-    matches!(
-        config_type,
-        ConfigType::VMess
-            | ConfigType::VLESS
-            | ConfigType::Shadowsocks
-            | ConfigType::Trojan
-            | ConfigType::Hysteria2
-            | ConfigType::WireGuard
-            | ConfigType::SOCKS
-            | ConfigType::HTTP
-    )
 }
 
 fn singbox_supports_config_type(config_type: ConfigType) -> bool {
@@ -1142,10 +1102,8 @@ mod tests {
         }
 
         fn get_core_type(&self, profile: &ProfileItem, config_type: ConfigType) -> CoreType {
-            profile.core_type.unwrap_or(match config_type {
-                ConfigType::TUIC | ConfigType::Anytls | ConfigType::Naive => CoreType::sing_box,
-                _ => CoreType::Xray,
-            })
+            let _ = config_type;
+            profile.core_type.unwrap_or(CoreType::sing_box)
         }
 
         fn get_profile_by_index_id(&self, index_id: &str) -> Option<ProfileItem> {
@@ -1380,14 +1338,11 @@ mod tests {
     }
 
     #[test]
-    fn context_protect_domains_include_address_ech_sni_and_xhttp_download_address() {
+    fn context_protect_domains_include_address_and_ech_sni() {
         let mut active = vless_profile("active", "Active", "node.example.com");
         active.stream_security = STREAM_SECURITY_TLS.to_string();
         active.sni = "fallback.example.com".to_string();
         active.ech_config_list = "ech-query.example.com+https://dns.example/dns-query".to_string();
-        active.network = XHTTP.to_string();
-        active.transport_extra.xhttp_extra =
-            Some(r#"{"downloadSettings":{"address":"download.example.com"}}"#.to_string());
         let env = MemoryEnv {
             profiles: vec![active.clone()],
             ..MemoryEnv::default()
@@ -1400,8 +1355,7 @@ mod tests {
             result.context.protect_domain_list,
             vec![
                 "node.example.com".to_string(),
-                "ech-query.example.com".to_string(),
-                "download.example.com".to_string()
+                "ech-query.example.com".to_string()
             ]
         );
     }
@@ -1455,7 +1409,7 @@ mod tests {
             .expect("custom pre socks context")
             .context;
         assert_eq!(pre_context.node.config_type, ConfigType::SOCKS);
-        assert_eq!(pre_context.node.core_type, Some(CoreType::Xray));
+        assert_eq!(pre_context.node.core_type, Some(CoreType::sing_box));
         assert_eq!(pre_context.node.port, 18888);
     }
 
@@ -1473,7 +1427,7 @@ mod tests {
         ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::VLESS,
-            core_type: Some(CoreType::Xray),
+            core_type: Some(CoreType::sing_box),
             remarks: remarks.to_string(),
             address: address.to_string(),
             port: 443,

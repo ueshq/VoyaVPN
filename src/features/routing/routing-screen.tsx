@@ -350,7 +350,7 @@ export function RoutingScreen() {
                     <span className="min-w-0 flex-1">
                       <span className="line-clamp-1 text-sm font-medium">{routing.Remarks || "Untitled routing"}</span>
                       <span className="block truncate text-xs text-muted-foreground">
-                        {routing.RuleNum} rules · {routing.DomainStrategy || "AsIs"}
+                        {routing.RuleNum} rules · {routing.DomainStrategy4Singbox || "default"}
                       </span>
                     </span>
                     {routing.IsActive ? (
@@ -373,9 +373,7 @@ export function RoutingScreen() {
               <h3 className="truncate text-sm font-semibold">{selectedRouting?.Remarks ?? "No routing profile"}</h3>
               <p className="truncate text-xs text-muted-foreground">
                 {selectedRouting
-                  ? `${selectedRouting.RuleNum} rules · Xray ${selectedRouting.DomainStrategy || "AsIs"} · sing-box ${
-                      selectedRouting.DomainStrategy4Singbox || "default"
-                    }`
+                  ? `${selectedRouting.RuleNum} rules · sing-box ${selectedRouting.DomainStrategy4Singbox || "default"}`
                   : ""}
               </p>
             </div>
@@ -579,14 +577,7 @@ function RoutingProfileDialog({
             onChange={(value) => setForm((current) => ({ ...current, Remarks: value }))}
             value={form.Remarks ?? ""}
           />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <SelectField
-              error={fieldErrors.DomainStrategy}
-              label="Xray domain strategy"
-              onChange={(value) => setForm((current) => ({ ...current, DomainStrategy: value }))}
-              options={DOMAIN_STRATEGIES.map((strategy) => ({ label: strategy, value: strategy }))}
-              value={form.DomainStrategy ?? "AsIs"}
-            />
+          <div className="grid gap-3">
             <SelectField
               error={fieldErrors.DomainStrategy4Singbox}
               label="sing-box domain strategy"

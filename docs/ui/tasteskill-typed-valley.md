@@ -8,7 +8,7 @@
 
 ## Context（为什么做）
 
-VoyaVPN 是 Tauri 2 桌面代理/VPN 客户端（Clash/Xray/sing-box/mihomo 多核）。前端 React 19 + Vite +
+VoyaVPN 是 Tauri 2 桌面代理/VPN 客户端（sing-box 单内核）。前端 React 19 + Vite +
 Tailwind v4 + Radix/shadcn-ui（new-york、neutral 基色）+ lucide + i18next（8 语）+ TanStack
 Query/Table/Virtual + react-hook-form/zod + zustand，源码 46 tsx / 33 ts。上一轮安全/正确性审计整改
 （audit-remediation-2026-06）已收尾；本轮专审**界面**，产出可落地的优化方案。

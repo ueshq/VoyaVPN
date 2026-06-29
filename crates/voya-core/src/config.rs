@@ -575,7 +575,7 @@ impl Default for CoreTypeItem {
     fn default() -> Self {
         Self {
             config_type: ConfigType::VMess,
-            core_type: CoreType::Xray,
+            core_type: CoreType::sing_box,
         }
     }
 }

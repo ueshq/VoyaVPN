@@ -5,8 +5,8 @@ use std::{
 
 use thiserror::Error;
 use voya_core::{
-    generate_singbox_config_json, generate_xray_config_json, AppConfig, ContextBuildError,
-    CoreConfigContext, CoreConfigContextBuilder, CoreGenPlatform, CoreType, SingboxConfigError,
+    generate_singbox_config_json, AppConfig, ContextBuildError, CoreConfigContext,
+    CoreConfigContextBuilder, CoreGenPlatform, CoreType, SingboxConfigError,
 };
 use voya_db::{Database, DbError};
 use voya_platform::{
@@ -194,11 +194,7 @@ fn write_runtime_config(
     file_name: &str,
     context: &CoreConfigContext,
 ) -> Result<PathBuf, RuntimeError> {
-    let json = if context.run_core_type == CoreType::sing_box {
-        generate_singbox_config_json(context)?
-    } else {
-        generate_xray_config_json(context)
-    };
+    let json = generate_singbox_config_json(context)?;
     let path = paths.bin_config_file(file_name);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|source| RuntimeError::CreateConfigDir {
@@ -307,10 +303,7 @@ mod tests {
     };
     use voya_db::Database;
     use voya_platform::{
-        coreinfo::{
-            core_type_dir_name, executable_name_for_current_os, MIERU_CONFIG_ENV,
-            XRAY_LOCAL_ASSET_ENV, XRAY_LOCAL_CERT_ENV,
-        },
+        coreinfo::{core_type_dir_name, executable_name_for_current_os},
         paths::{core_seed_resources_dir, AppPaths, StorageMode},
         test_support::RecordingRunner,
     };
@@ -321,57 +314,27 @@ mod tests {
     static TEMP_PATH_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     #[test]
-    fn coreinfo_app_layer_exposes_full_platform_table() {
+    fn coreinfo_app_layer_exposes_singbox_only() {
         let infos = supported_core_infos();
 
-        assert_eq!(infos.len(), 15);
-        assert!(infos.iter().any(|info| info.core_type == CoreType::Xray));
-        assert!(infos
-            .iter()
-            .any(|info| info.core_type == CoreType::sing_box));
-        assert!(infos.iter().any(|info| info.core_type == CoreType::v2rayN));
+        assert_eq!(infos.len(), 1);
+        assert_eq!(infos[0].core_type, CoreType::sing_box);
     }
 
     #[test]
     fn coreinfo_app_layer_resolves_launch_command_and_env() {
         let paths = AppPaths::new("/tmp/VoyaVPN", StorageMode::Portable);
         let launch = core_launch_plan(
-            CoreType::Xray,
-            "/tmp/VoyaVPN/bin/xray/xray",
+            CoreType::sing_box,
+            "/tmp/VoyaVPN/bin/sing_box/sing-box",
             &paths,
             "config.json",
         )
-        .expect("xray launch plan");
+        .expect("sing-box launch plan");
 
-        assert_eq!(launch.arguments, "run -c config.json");
+        assert_eq!(launch.arguments, "run -c config.json --disable-color");
         assert_eq!(launch.working_dir, paths.bin_config_dir());
-        // Build the expectation the same way production does so the assertion
-        // stays portable across path separators (Windows uses `\`, Unix `/`).
-        let expected_xray_core_bin = paths
-            .core_bin_dir(core_type_dir_name(CoreType::Xray))
-            .to_string_lossy()
-            .into_owned();
-        assert_eq!(
-            launch.environment.get(XRAY_LOCAL_ASSET_ENV),
-            Some(&expected_xray_core_bin)
-        );
-        assert_eq!(
-            launch.environment.get(XRAY_LOCAL_CERT_ENV),
-            Some(&expected_xray_core_bin)
-        );
-
-        let mieru = core_launch_plan(
-            CoreType::mieru,
-            "/tmp/VoyaVPN/bin/mieru/mieru",
-            &paths,
-            "config.json",
-        )
-        .expect("mieru launch plan");
-        assert_eq!(mieru.arguments, "run");
-        assert_eq!(
-            mieru.environment.get(MIERU_CONFIG_ENV),
-            Some(&"config.json".to_string())
-        );
+        assert!(launch.environment.is_empty());
     }
 
     #[tokio::test]
@@ -380,11 +343,11 @@ mod tests {
             .await
             .expect("runtime test operation should succeed");
         let item = DnsItem {
-            id: "dns-xray".to_string(),
-            remarks: "Xray".to_string(),
+            id: "dns-sing-box".to_string(),
+            remarks: "sing-box".to_string(),
             enabled: true,
-            core_type: CoreType::Xray,
-            normal_dns: Some(r#"{"servers":["1.1.1.1"]}"#.to_string()),
+            core_type: CoreType::sing_box,
+            normal_dns: Some(r#"{"servers":[{"tag":"direct","address":"1.1.1.1"}]}"#.to_string()),
             ..DnsItem::default()
         };
         database
@@ -399,7 +362,7 @@ mod tests {
                 .await
                 .expect("runtime test operation should succeed");
 
-        assert_eq!(env.get_dns_item(CoreType::Xray), Some(item));
+        assert_eq!(env.get_dns_item(CoreType::sing_box), Some(item));
     }
 
     #[tokio::test]
@@ -411,7 +374,7 @@ mod tests {
         paths
             .ensure_dirs()
             .expect("runtime test operation should succeed");
-        write_fake_core_executable(&paths, CoreType::Xray);
+        write_fake_core_executable(&paths, CoreType::sing_box);
         let runner = RecordingRunner::default();
         let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
             Arc::new(runner.clone()),
@@ -426,7 +389,7 @@ mod tests {
         let profile = ProfileItem {
             index_id: "active".to_string(),
             config_type: ConfigType::VLESS,
-            core_type: Some(CoreType::Xray),
+            core_type: Some(CoreType::sing_box),
             remarks: "Runtime".to_string(),
             address: "example.test".to_string(),
             port: 443,
@@ -449,7 +412,10 @@ mod tests {
         assert!(paths.bin_config_file(MAIN_CONFIG_FILE_NAME).exists());
         let spawns = runner.spawns();
         assert_eq!(spawns.len(), 1);
-        assert_eq!(spawns[0].arguments, ["run", "-c", MAIN_CONFIG_FILE_NAME]);
+        assert_eq!(
+            spawns[0].arguments,
+            ["run", "-c", MAIN_CONFIG_FILE_NAME, "--disable-color"]
+        );
 
         let disconnected = manager
             .disconnect()
@@ -472,7 +438,7 @@ mod tests {
             .expect("runtime test operation should succeed");
         let paths = temp_paths();
         let seed_root = core_seed_resources_dir(paths.app_dir().join("resources"));
-        let seed_exe = write_seed_core_executable(&seed_root, CoreType::Xray, b"seed-xray");
+        let seed_exe = write_seed_core_executable(&seed_root, CoreType::sing_box, b"seed-sing-box");
         let runner = RecordingRunner::default();
         let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
             Arc::new(runner.clone()),
@@ -487,7 +453,7 @@ mod tests {
         };
         database
             .profiles()
-            .upsert(&active_xray_profile("active"))
+            .upsert(&active_singbox_profile("active"))
             .await
             .expect("runtime test operation should succeed");
 
@@ -497,8 +463,8 @@ mod tests {
             .expect("runtime test operation should succeed");
 
         let app_data_exe = paths.core_bin_file(
-            core_type_dir_name(CoreType::Xray),
-            executable_name_for_current_os("xray"),
+            core_type_dir_name(CoreType::sing_box),
+            executable_name_for_current_os("sing-box"),
         );
         let spawns = runner.spawns();
         assert_eq!(spawns.len(), 1);
@@ -526,7 +492,7 @@ mod tests {
         };
         database
             .profiles()
-            .upsert(&active_xray_profile("active"))
+            .upsert(&active_singbox_profile("active"))
             .await
             .expect("runtime test operation should succeed");
 
@@ -534,7 +500,7 @@ mod tests {
 
         match error {
             RuntimeError::CoreInfo(CoreInfoError::ExecutableNotFound { core_type, .. }) => {
-                assert_eq!(core_type, CoreType::Xray);
+                assert_eq!(core_type, CoreType::sing_box);
             }
             other => panic!("expected typed missing core error, got {other:?}"),
         }
@@ -550,7 +516,7 @@ mod tests {
         paths
             .ensure_dirs()
             .expect("runtime test operation should succeed");
-        write_fake_core_executable(&paths, CoreType::Xray);
+        write_fake_core_executable(&paths, CoreType::sing_box);
         let runner = RecordingRunner::default();
         let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
             Arc::new(runner),
@@ -565,7 +531,7 @@ mod tests {
         let profile = ProfileItem {
             index_id: "active".to_string(),
             config_type: ConfigType::VLESS,
-            core_type: Some(CoreType::Xray),
+            core_type: Some(CoreType::sing_box),
             remarks: "Runtime".to_string(),
             address: "example.test".to_string(),
             port: 443,
@@ -606,15 +572,13 @@ mod tests {
             .expect("runtime test operation should succeed");
         let json: serde_json::Value =
             serde_json::from_str(&generated).expect("runtime test operation should succeed");
-        let rules = json["routing"]["rules"]
+        let rules = json["route"]["rules"]
             .as_array()
             .expect("runtime test operation should succeed");
         assert!(rules.iter().any(|rule| {
-            rule["outboundTag"] == "direct"
+            rule["outbound"] == "direct"
                 && rule["domain"].as_array().is_some_and(|domains| {
-                    domains
-                        .iter()
-                        .any(|domain| domain == "full:direct.example.com")
+                    domains.iter().any(|domain| domain == "direct.example.com")
                 })
         }));
     }
@@ -658,11 +622,11 @@ mod tests {
         executable
     }
 
-    fn active_xray_profile(index_id: &str) -> ProfileItem {
+    fn active_singbox_profile(index_id: &str) -> ProfileItem {
         ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::VLESS,
-            core_type: Some(CoreType::Xray),
+            core_type: Some(CoreType::sing_box),
             remarks: "Runtime".to_string(),
             address: "example.test".to_string(),
             port: 443,

@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node scripts/tauri.mjs dev",
     "dev:web": "vite --host 127.0.0.1 --port 1420",
-    "postinstall": "node scripts/install-xray-core.mjs",
+    "postinstall": "node scripts/install-sing-box-core.mjs",
     "build": "tsc -b --pretty false && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
@@ -25,7 +25,7 @@
     "check:frontend:test": "pnpm test --run",
     "check:frontend:lint": "pnpm lint",
     "check:bindings": "pnpm bindings:check",
-    "core:xray:install": "node scripts/install-xray-core.mjs --force",
+    "core:sing-box:install": "node scripts/install-sing-box-core.mjs --force",
     "verify:ci": "node scripts/verify-ci.mjs",
     "release:record": "node scripts/release-record.mjs",
     "release:artifacts": "node scripts/release-artifacts.mjs",

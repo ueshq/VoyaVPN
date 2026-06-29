@@ -75,32 +75,11 @@ function validUpdaterMetadata() {
 }
 
 function validCoreManifest() {
-  const assets = [];
-  let index = 0;
-  for (const coreType of ["Xray", "mihomo", "sing_box"]) {
-    for (const os of ["windows", "macos", "linux"]) {
-      for (const arch of ["x64", "arm64"]) {
-        index += 1;
-        assets.push({
-          coreType,
-          version: coreType === "Xray" ? "1.8.24" : "1.0.0",
-          license: coreType === "Xray" ? "MPL-2.0" : "GPL-3.0",
-          os,
-          arch,
-          name: `${coreType}-${os}-${arch}.zip`,
-          bytes: 2000 + index,
-          sha256: sha(index.toString(16)),
-          url: `${cdnBaseUrl}/cores/${coreType}/${os}/${arch}/${coreType}.zip`,
-          upstreamUrl: `https://github.com/upstream/${coreType}/releases/download/v1/${coreType}.zip`,
-        });
-      }
-    }
-  }
   return {
     productName: "VoyaVPN",
     channel: "stable",
     baseUrl: cdnBaseUrl,
-    assets,
+    assets: [],
   };
 }
 
@@ -178,11 +157,22 @@ describe("release staging verification", () => {
     ).rejects.toThrow(/signature does not match local \.sig artifact|signature verification failed/);
   });
 
-  it("rejects incomplete core asset matrices", () => {
+  it("rejects downloadable core asset entries", () => {
     const manifest = validCoreManifest();
-    manifest.assets = manifest.assets.filter((asset) => !(asset.coreType === "sing_box" && asset.os === "linux"));
+    manifest.assets.push({
+      coreType: "legacy-core",
+      version: "1.0.0",
+      license: "GPL-3.0",
+      os: "linux",
+      arch: "x64",
+      name: "legacy-core-linux-x64.gz",
+      bytes: 2000,
+      sha256: sha("a"),
+      url: `${cdnBaseUrl}/cores/legacy-core/linux/x64/legacy-core.gz`,
+      upstreamUrl: "https://source.example.invalid/legacy-core/releases/v1",
+    });
 
-    expect(() => validateCoreManifest(manifest)).toThrow(/missing required entries/);
+    expect(() => validateCoreManifest(manifest)).toThrow(/not supported/);
   });
 
   it("rejects redirect responses during CDN probes", async () => {

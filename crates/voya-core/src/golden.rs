@@ -6,13 +6,12 @@ use std::{
 };
 
 use serde::Deserialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 
 use crate::{
-    generate_singbox_config, generate_singbox_config_value, generate_xray_config,
-    generate_xray_config_value, AppConfig, ConfigType, CoreConfigContext, CoreGenPlatform,
-    CoreType, FullConfigTemplateItem, MultipleLoad, ProfileItem, ProtocolExtraItem, RoutingItem,
-    RuleType, RulesItem, TransportExtraItem, DIRECT_TAG, LOOPBACK, PROXY_TAG,
+    generate_singbox_config, generate_singbox_config_value, AppConfig, ConfigType,
+    CoreConfigContext, CoreGenPlatform, CoreType, MultipleLoad, ProfileItem, ProtocolExtraItem,
+    RoutingItem, RuleType, RulesItem, TransportExtraItem, DIRECT_TAG, LOOPBACK, PROXY_TAG,
 };
 
 #[derive(Debug, Deserialize)]
@@ -111,11 +110,6 @@ pub(crate) fn canonicalize(value: &Value) -> Value {
 
 pub(crate) fn generated_value_for_case(case: &GoldenCase) -> Value {
     match case.generated.as_str() {
-        "xray.outbound.vless_tls_xhttp_fragment" => xray_vless_tls_xhttp_fragment_outbound(),
-        "xray.outbound.policy_group_least_load" => xray_policy_group_least_load(),
-        "xray.full.inbounds_stats_tun" => xray_inbounds_stats_tun(),
-        "xray.full.advanced_dns_routing" => xray_advanced_dns_routing(),
-        "xray.full.template_tun_proxy_detour" => xray_template_tun_proxy_detour(),
         "singbox.outbound.vless_ws_tls_mux" => singbox_vless_ws_tls_mux_outbound(),
         "singbox.outbound.proxy_chain_detour" => singbox_proxy_chain_detour(),
         "singbox.outbound.policy_group_selector" => singbox_policy_group_selector(),
@@ -240,290 +234,6 @@ fn push_diff_line(rendered: &mut String, prefix: char, line: &str, emitted: &mut
         rendered.push('\n');
         *emitted += 1;
     }
-}
-
-fn xray_vless_tls_xhttp_fragment_outbound() -> Value {
-    let mut config = AppConfig::default();
-    config.core_basic_item.enable_fragment = true;
-    config.core_basic_item.mux_enabled = true;
-    config.core_basic_item.def_fingerprint = "firefox".to_string();
-    config.speed_test_item.speed_ping_test_url = "https://ping.example/generate_204".to_string();
-
-    let node = ProfileItem {
-        index_id: "n-vless".to_string(),
-        config_type: ConfigType::VLESS,
-        remarks: "vless-xhttp".to_string(),
-        address: "server.example".to_string(),
-        port: 443,
-        password: "00000000-0000-0000-0000-000000000001".to_string(),
-        network: "xhttp".to_string(),
-        stream_security: "tls".to_string(),
-        sni: "tls.example".to_string(),
-        alpn: "h2,http/1.1".to_string(),
-        fingerprint: "chrome".to_string(),
-        ech_config_list: "tls.example+https://ech.example/config".to_string(),
-        mux_enabled: Some(true),
-        protocol_extra: ProtocolExtraItem {
-            vless_encryption: Some("none".to_string()),
-            ..ProtocolExtraItem::default()
-        },
-        transport_extra: TransportExtraItem {
-            host: Some("cdn.example".to_string()),
-            path: Some("/xhttp".to_string()),
-            xhttp_mode: Some("stream-up".to_string()),
-            xhttp_extra: Some(r#"{"downloadSettings":{"address":"download.example"}}"#.to_string()),
-            ..TransportExtraItem::default()
-        },
-        ..ProfileItem::default()
-    };
-    let generated = generate_xray_config(&xray_context(config, node));
-    serde_json::to_value(generated.outbounds.first().expect("proxy outbound"))
-        .expect("xray outbound serializes")
-}
-
-fn xray_policy_group_least_load() -> Value {
-    let mut config = AppConfig::default();
-    config.speed_test_item.speed_ping_test_url = "https://ping.example/generate_204".to_string();
-    let group = ProfileItem {
-        index_id: "group".to_string(),
-        config_type: ConfigType::PolicyGroup,
-        remarks: "least-load".to_string(),
-        protocol_extra: ProtocolExtraItem {
-            child_items: Some("n1,n2".to_string()),
-            multiple_load: Some(MultipleLoad::LeastLoad),
-            ..ProtocolExtraItem::default()
-        },
-        ..ProfileItem::default()
-    };
-    let mut context = xray_context(config, group);
-    context
-        .all_proxies_map
-        .insert("n1".to_string(), xray_socks_node("n1", "node-1"));
-    context
-        .all_proxies_map
-        .insert("n2".to_string(), xray_socks_node("n2", "node-2"));
-
-    let generated = generate_xray_config(&context);
-    json!({
-        "balancers": generated.routing.balancers,
-        "burstObservatory": generated.burst_observatory,
-        "observatory": generated.observatory,
-    })
-}
-
-fn xray_inbounds_stats_tun() -> Value {
-    let mut config = AppConfig::default();
-    config.inbound[0].local_port = 12000;
-    config.inbound[0].second_local_port_enabled = true;
-    config.inbound[0].allow_lan_conn = true;
-    config.inbound[0].new_port4_lan = true;
-    config.inbound[0].user = "lan-user".to_string();
-    config.inbound[0].pass = "lan-pass".to_string();
-    config.gui_item.enable_statistics = true;
-    config.tun_mode_item.mtu = 1408;
-    config.tun_mode_item.enable_ipv6_address = false;
-    config.core_basic_item.bind_interface = Some("eth0".to_string());
-    config.simple_dns_item.add_common_hosts = Some(false);
-
-    let node = ProfileItem {
-        index_id: "n-vmess".to_string(),
-        config_type: ConfigType::VMess,
-        remarks: "vmess".to_string(),
-        address: "remote.example".to_string(),
-        port: 443,
-        password: "00000000-0000-0000-0000-000000000004".to_string(),
-        protocol_extra: ProtocolExtraItem {
-            vmess_security: Some("auto".to_string()),
-            alter_id: Some("0".to_string()),
-            ..ProtocolExtraItem::default()
-        },
-        ..ProfileItem::default()
-    };
-    let mut context = xray_context(config, node);
-    context.is_tun_enabled = true;
-
-    let generated = generate_xray_config(&context);
-    json!({
-        "inbounds": generated.inbounds,
-        "metrics": generated.metrics,
-        "policy": generated.policy,
-        "stats": generated.stats,
-        "tunDnsOutbound": generated.outbounds.iter().any(|outbound| outbound.tag == "dns" && outbound.protocol == "dns"),
-    })
-}
-
-fn xray_advanced_dns_routing() -> Value {
-    let mut config = AppConfig::default();
-    config.simple_dns_item.add_common_hosts = Some(false);
-    config.simple_dns_item.direct_dns =
-        Some("119.29.29.29,https://dns.alidns.com/dns-query".to_string());
-    config.simple_dns_item.remote_dns = Some("https://cloudflare-dns.com/dns-query".to_string());
-    config.simple_dns_item.bootstrap_dns = Some("223.5.5.5".to_string());
-    config.simple_dns_item.strategy4_freedom = Some("UseIP".to_string());
-    config.simple_dns_item.strategy4_proxy = Some("UseIPv4".to_string());
-    config.simple_dns_item.serve_stale = Some(true);
-    config.simple_dns_item.parallel_query = Some(true);
-    config.simple_dns_item.fake_ip = Some(true);
-    config.simple_dns_item.hosts = Some("example.test 1.2.3.4 5.6.7.8\n# ignored".to_string());
-    config.simple_dns_item.direct_expected_ips = Some("geoip:cn,1.1.1.1".to_string());
-
-    let node = ProfileItem {
-        index_id: "n-vless".to_string(),
-        config_type: ConfigType::VLESS,
-        remarks: "main".to_string(),
-        address: "main.example".to_string(),
-        port: 443,
-        password: "00000000-0000-0000-0000-000000000005".to_string(),
-        protocol_extra: ProtocolExtraItem {
-            vless_encryption: Some("none".to_string()),
-            ..ProtocolExtraItem::default()
-        },
-        ..ProfileItem::default()
-    };
-    let mut context = xray_context(config, node);
-    context.protect_domain_list = vec!["full:ech.example".to_string()];
-    context.routing_item = Some(RoutingItem {
-        id: "routing".to_string(),
-        domain_strategy: "IPIfNonMatch".to_string(),
-        rule_set: vec![
-            RulesItem {
-                id: "direct-domains".to_string(),
-                outbound_tag: Some(DIRECT_TAG.to_string()),
-                domain: Some(vec![
-                    "geosite:cn".to_string(),
-                    "domain:direct.example".to_string(),
-                ]),
-                rule_type: Some(RuleType::DNS),
-                ..RulesItem::default()
-            },
-            RulesItem {
-                id: "proxy-domains".to_string(),
-                outbound_tag: Some(PROXY_TAG.to_string()),
-                domain: Some(vec![
-                    "geosite:google".to_string(),
-                    "domain:proxy.example".to_string(),
-                ]),
-                ..RulesItem::default()
-            },
-            RulesItem {
-                id: "detour".to_string(),
-                outbound_tag: Some("detour".to_string()),
-                domain: Some(vec!["full:special<COMMA>domain".to_string()]),
-                ..RulesItem::default()
-            },
-            RulesItem {
-                id: "final-direct".to_string(),
-                outbound_tag: Some(DIRECT_TAG.to_string()),
-                ip: Some(vec!["0.0.0.0/0".to_string()]),
-                port: Some("0-65535".to_string()),
-                network: Some("tcp,udp".to_string()),
-                ..RulesItem::default()
-            },
-        ],
-        ..RoutingItem::default()
-    });
-    context.all_proxies_map.insert(
-        "remark:detour".to_string(),
-        xray_socks_node("detour-id", "detour-node"),
-    );
-
-    let generated = generate_xray_config(&context);
-    json!({
-        "dns": generated.dns,
-        "fakedns": generated.fake_dns,
-        "routing": generated.routing,
-        "outbounds": generated.outbounds.iter().map(|outbound| {
-            json!({
-                "tag": outbound.tag,
-                "protocol": outbound.protocol,
-                "targetStrategy": outbound.target_strategy,
-                "settings": outbound.settings,
-            })
-        }).collect::<Vec<_>>(),
-    })
-}
-
-fn xray_template_tun_proxy_detour() -> Value {
-    let mut config = AppConfig::default();
-    config.speed_test_item.speed_ping_test_url = "https://ping.example/generate_204".to_string();
-    let group = ProfileItem {
-        index_id: "group".to_string(),
-        config_type: ConfigType::PolicyGroup,
-        remarks: "template-group".to_string(),
-        protocol_extra: ProtocolExtraItem {
-            child_items: Some("n1,n2".to_string()),
-            multiple_load: Some(MultipleLoad::LeastPing),
-            ..ProtocolExtraItem::default()
-        },
-        ..ProfileItem::default()
-    };
-    let mut context = xray_context(config, group);
-    context.is_tun_enabled = true;
-    context.full_config_template = Some(FullConfigTemplateItem {
-        enabled: true,
-        core_type: CoreType::Xray,
-        add_proxy_only: Some(false),
-        proxy_detour: Some("template-detour".to_string()),
-        config: Some(r#"{"remarks":"unused"}"#.to_string()),
-        tun_config: Some(
-            r#"{
-                "remarks": "tun-template",
-                "routing": {
-                    "rules": [
-                        { "type": "field", "outboundTag": "proxy", "domain": ["geosite:private"] }
-                    ]
-                },
-                "observatory": { "subjectSelector": ["template-observer"] },
-                "outbounds": [
-                    { "tag": "template-detour", "protocol": "freedom" }
-                ]
-            }"#
-            .to_string(),
-        ),
-        ..FullConfigTemplateItem::default()
-    });
-    context.all_proxies_map.insert(
-        "n1".to_string(),
-        ProfileItem {
-            index_id: "n1".to_string(),
-            config_type: ConfigType::VMess,
-            remarks: "remote-1".to_string(),
-            address: "one.example".to_string(),
-            port: 443,
-            password: "00000000-0000-0000-0000-000000000006".to_string(),
-            protocol_extra: ProtocolExtraItem {
-                alter_id: Some("0".to_string()),
-                vmess_security: Some("auto".to_string()),
-                ..ProtocolExtraItem::default()
-            },
-            ..ProfileItem::default()
-        },
-    );
-    context.all_proxies_map.insert(
-        "n2".to_string(),
-        ProfileItem {
-            index_id: "n2".to_string(),
-            config_type: ConfigType::VMess,
-            remarks: "remote-2".to_string(),
-            address: "two.example".to_string(),
-            port: 443,
-            password: "00000000-0000-0000-0000-000000000007".to_string(),
-            protocol_extra: ProtocolExtraItem {
-                alter_id: Some("0".to_string()),
-                vmess_security: Some("auto".to_string()),
-                ..ProtocolExtraItem::default()
-            },
-            ..ProfileItem::default()
-        },
-    );
-
-    let generated = generate_xray_config_value(&context);
-    json!({
-        "remarks": generated.get("remarks"),
-        "routing": generated.get("routing"),
-        "observatory": generated.get("observatory"),
-        "outbounds": generated.get("outbounds"),
-    })
 }
 
 fn singbox_vless_ws_tls_mux_outbound() -> Value {
@@ -781,21 +491,6 @@ fn singbox_routing_dns_contexts() -> (CoreConfigContext, CoreConfigContext) {
     (dns_context, tun_context)
 }
 
-fn xray_context(app_config: AppConfig, node: ProfileItem) -> CoreConfigContext {
-    let mut all_proxies_map = BTreeMap::new();
-    all_proxies_map.insert(node.index_id.clone(), node.clone());
-    let simple_dns_item = app_config.simple_dns_item.clone();
-    CoreConfigContext {
-        node,
-        run_core_type: CoreType::Xray,
-        app_config,
-        simple_dns_item,
-        all_proxies_map,
-        platform: CoreGenPlatform::Linux,
-        ..CoreConfigContext::default()
-    }
-}
-
 fn singbox_context(app_config: AppConfig, node: ProfileItem) -> CoreConfigContext {
     let mut all_proxies_map = BTreeMap::new();
     all_proxies_map.insert(node.index_id.clone(), node.clone());
@@ -808,23 +503,6 @@ fn singbox_context(app_config: AppConfig, node: ProfileItem) -> CoreConfigContex
         all_proxies_map,
         platform: CoreGenPlatform::Linux,
         ..CoreConfigContext::default()
-    }
-}
-
-fn xray_socks_node(index_id: &str, remarks: &str) -> ProfileItem {
-    ProfileItem {
-        index_id: index_id.to_string(),
-        config_type: ConfigType::SOCKS,
-        remarks: remarks.to_string(),
-        address: "127.0.0.1".to_string(),
-        port: 1080,
-        username: "user".to_string(),
-        password: "pass".to_string(),
-        network: "raw".to_string(),
-        mux_enabled: Some(false),
-        protocol_extra: ProtocolExtraItem::default(),
-        transport_extra: TransportExtraItem::default(),
-        ..ProfileItem::default()
     }
 }
 
@@ -871,7 +549,7 @@ fn golden_matrix_manifest_loads_fixture_files() {
             case.id
         );
         assert!(
-            matches!(case.core.as_str(), "xray" | "sing-box"),
+            case.core == "sing-box",
             "golden case {} has unsupported core {}",
             case.id,
             case.core
@@ -922,19 +600,10 @@ fn golden_matrix_generated_sections_match_reference_fixtures() {
 fn golden_core_acceptance_checks_are_opt_in() {
     if env::var_os("VOYA_GOLDEN_ACCEPTANCE").is_none() {
         println!(
-            "golden core acceptance skipped: set VOYA_GOLDEN_ACCEPTANCE=1 and install xray/sing-box"
+            "golden core acceptance skipped: set VOYA_GOLDEN_ACCEPTANCE=1 and install sing-box"
         );
         return;
     }
-
-    let xray_config = acceptance_xray_config();
-    run_optional_core_check(
-        "xray",
-        "VOYA_XRAY_BIN",
-        "xray",
-        &["run", "-test", "-config"],
-        &xray_config,
-    );
 
     let singbox_config = acceptance_singbox_config();
     run_optional_core_check(
@@ -944,24 +613,6 @@ fn golden_core_acceptance_checks_are_opt_in() {
         &["check", "-c"],
         &singbox_config,
     );
-}
-
-fn acceptance_xray_config() -> Value {
-    let node = ProfileItem {
-        index_id: "accept-xray".to_string(),
-        config_type: ConfigType::VMess,
-        remarks: "accept-xray".to_string(),
-        address: "server.example".to_string(),
-        port: 443,
-        password: "00000000-0000-0000-0000-000000000031".to_string(),
-        protocol_extra: ProtocolExtraItem {
-            vmess_security: Some("auto".to_string()),
-            alter_id: Some("0".to_string()),
-            ..ProtocolExtraItem::default()
-        },
-        ..ProfileItem::default()
-    };
-    generate_xray_config_value(&xray_context(AppConfig::default(), node))
 }
 
 fn acceptance_singbox_config() -> Value {

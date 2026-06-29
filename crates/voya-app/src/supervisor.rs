@@ -828,8 +828,8 @@ mod tests {
             .start(SupervisorStartRequest {
                 active_profile_id: Some("active".to_string()),
                 main: CoreProcessSpec::new(
-                    CoreType::Xray,
-                    launch("/tmp/xray", "run -c config.json"),
+                    CoreType::sing_box,
+                    launch("/tmp/sing-box-main", "run -c config.json --disable-color"),
                 ),
                 pre: Some(CoreProcessSpec::new(
                     CoreType::sing_box,
@@ -851,6 +851,7 @@ mod tests {
         assert_eq!(
             &events[2..],
             [
+                "oneshot:SudoKill:stdin=false",
                 "oneshot:SudoKill:stdin=false",
                 "stop:Main:pid=100",
                 "stop:Pre:pid=101"
@@ -1034,8 +1035,11 @@ mod tests {
 
         let request = SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
-            main: CoreProcessSpec::new(CoreType::Xray, launch("/tmp/xray", "run -c config.json"))
-                .with_may_need_sudo(false),
+            main: CoreProcessSpec::new(
+                CoreType::sing_box,
+                launch("/tmp/sing-box", "run -c config.json --disable-color"),
+            )
+            .with_may_need_sudo(false),
             pre: None,
             tun_enabled: false,
             sudo_script_dir: "/tmp/voya/scripts".into(),
@@ -1106,7 +1110,7 @@ sleep 30
             .start(SupervisorStartRequest {
                 active_profile_id: Some("active".to_string()),
                 main: CoreProcessSpec::new(
-                    CoreType::Xray,
+                    CoreType::sing_box,
                     CoreLaunch {
                         executable: script,
                         arguments: String::new(),
@@ -1171,8 +1175,8 @@ sleep 30
                     launch("/tmp/sing-box", "run -c config.json --disable-color"),
                 ),
                 pre: Some(CoreProcessSpec::new(
-                    CoreType::Xray,
-                    launch("/tmp/xray", "run -c pre.json"),
+                    CoreType::sing_box,
+                    launch("/tmp/sing-box-pre", "run -c pre.json --disable-color"),
                 )),
                 tun_enabled: true,
                 sudo_script_dir: "/tmp/voya/scripts".into(),
@@ -1195,27 +1199,11 @@ sleep 30
     }
 
     #[tokio::test]
-    async fn supervisor_tun_sudo_wraps_singbox_and_mihomo_but_not_xray() {
+    async fn supervisor_tun_sudo_wraps_singbox() {
         let events = SharedEvents::default();
         let elevation = Arc::new(ElevationState::new());
         elevation.set_granted(true);
         let supervisor = supervisor_with(&events, TargetOs::Linux, elevation);
-
-        supervisor
-            .start(SupervisorStartRequest {
-                active_profile_id: Some("xray".to_string()),
-                main: CoreProcessSpec::new(
-                    CoreType::Xray,
-                    launch("/tmp/xray", "run -c config.json"),
-                ),
-                pre: None,
-                tun_enabled: true,
-                sudo_script_dir: "/tmp/voya/scripts".into(),
-                restart_on_crash: false,
-            })
-            .await
-            .expect("xray start");
-        supervisor.stop().await.expect("xray stop");
 
         supervisor
             .start(SupervisorStartRequest {
@@ -1231,33 +1219,10 @@ sleep 30
             })
             .await
             .expect("sing-box start");
-        supervisor.stop().await.expect("sing-box stop");
-
-        supervisor
-            .start(SupervisorStartRequest {
-                active_profile_id: Some("mihomo".to_string()),
-                main: CoreProcessSpec::new(
-                    CoreType::mihomo,
-                    launch("/tmp/mihomo", "-f config.json -d /tmp/voya/bin"),
-                ),
-                pre: None,
-                tun_enabled: true,
-                sudo_script_dir: "/tmp/voya/scripts".into(),
-                restart_on_crash: false,
-            })
-            .await
-            .expect("mihomo start");
 
         assert_eq!(
             events.lock().as_slice(),
-            [
-                "spawn:Main:pid=100:stdin=false",
-                "stop:Main:pid=100",
-                "spawn:Main:pid=101:stdin=false",
-                "oneshot:SudoKill:stdin=false",
-                "stop:Main:pid=101",
-                "spawn:Main:pid=102:stdin=false"
-            ]
+            ["spawn:Main:pid=100:stdin=false",]
         );
     }
 
@@ -1278,8 +1243,8 @@ sleep 30
                     launch("/tmp/sing-box", "run -c config.json --disable-color"),
                 ),
                 pre: Some(CoreProcessSpec::new(
-                    CoreType::Xray,
-                    launch("/tmp/xray", "run -c pre.json"),
+                    CoreType::sing_box,
+                    launch("/tmp/sing-box-pre", "run -c pre.json --disable-color"),
                 )),
                 tun_enabled: true,
                 sudo_script_dir: "/tmp/voya/scripts".into(),

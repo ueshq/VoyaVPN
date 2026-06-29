@@ -6,21 +6,21 @@ import { describe, expect, it } from "vitest";
 import { coreSeedBundleResources, hasExpectedSeedExecutable } from "./tauri-core-seeds.mjs";
 
 describe("tauri core seed overlay", () => {
-  it("requires the current platform executable before bundling xray seeds", async () => {
+  it("requires the current platform executable before bundling sing-box seeds", async () => {
     const repoRoot = await mkdtemp(join(tmpdir(), "voyavpn-tauri-seeds-"));
     try {
-      const xrayDir = join(repoRoot, "src-tauri", "resources", "core-seeds", "xray");
-      await mkdir(xrayDir, { recursive: true });
-      await writeFile(join(xrayDir, "geoip.dat"), "geo");
+      const singBoxDir = join(repoRoot, "src-tauri", "resources", "core-seeds", "sing_box");
+      await mkdir(singBoxDir, { recursive: true });
+      await writeFile(join(singBoxDir, "LICENSE"), "license");
 
-      expect(hasExpectedSeedExecutable(xrayDir, "linux")).toBe(false);
+      expect(hasExpectedSeedExecutable(singBoxDir, "linux")).toBe(false);
       expect(coreSeedBundleResources(repoRoot, { platform: "linux" })).toEqual({});
 
-      await writeFile(join(xrayDir, "xray"), "fake executable");
+      await writeFile(join(singBoxDir, "sing-box"), "fake executable");
 
-      expect(hasExpectedSeedExecutable(xrayDir, "linux")).toBe(true);
+      expect(hasExpectedSeedExecutable(singBoxDir, "linux")).toBe(true);
       expect(coreSeedBundleResources(repoRoot, { platform: "linux" })).toEqual({
-        "resources/core-seeds/xray/*": "core-seeds/xray/",
+        "resources/core-seeds/sing_box/*": "core-seeds/sing_box/",
       });
     } finally {
       await rm(repoRoot, { force: true, recursive: true });

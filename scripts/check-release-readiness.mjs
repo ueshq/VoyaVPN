@@ -19,7 +19,7 @@ const stableTargets = [
   { os: "linux", arch: "arm64", updater: "linux-aarch64" },
 ];
 
-const stableCoreTypes = ["Xray", "mihomo", "sing_box"];
+const stableCoreTypes = [];
 const requiredDocs = [
   "docs/release/packaging.md",
   "docs/release/ci-secrets.md",
@@ -539,7 +539,7 @@ async function checkRequiredDocs(reporter) {
 async function checkNotices(reporter) {
   const noticesPath = resolveRepoPath("docs/release/THIRD_PARTY_NOTICES.md");
   const text = await readFile(noticesPath, "utf8");
-  const requiredTerms = ["VoyaVPN", "Xray", "mihomo", "sing-box", "MPL", "GPL"];
+  const requiredTerms = ["VoyaVPN", "sing-box", "GPL"];
   const missing = requiredTerms.filter((term) => !text.includes(term));
 
   if (missing.length > 0) {
@@ -907,7 +907,7 @@ function validateCoreManifest(manifest, cdnBaseUrl) {
   assert(manifest.productName === "VoyaVPN", "core manifest productName must be VoyaVPN");
   assert(manifest.channel === "stable", "core manifest channel must be stable");
   assert(manifest.baseUrl === cdnBaseUrl, "core manifest baseUrl must match readiness CDN base URL");
-  assert(Array.isArray(manifest.assets) && manifest.assets.length > 0, "core manifest assets[] must be non-empty");
+  assert(Array.isArray(manifest.assets), "core manifest assets[] must be an array");
 
   const present = new Set(manifest.assets.map((asset) => `${asset.coreType}/${asset.os}/${asset.arch}`));
   const missing = [];
@@ -922,6 +922,7 @@ function validateCoreManifest(manifest, cdnBaseUrl) {
   assert(missing.length === 0, `core manifest is missing first-stable asset(s): ${missing.join(", ")}`);
 
   for (const asset of manifest.assets) {
+    assert(stableCoreTypes.includes(asset.coreType), `core asset type is not supported in stable releases: ${asset.coreType}`);
     assert(asset.url?.startsWith(`${cdnBaseUrl}/`), `core asset URL is not CDN-derived: ${asset.name}`);
     assert(!/github\.com|voyavpn\.example|placeholder/i.test(asset.url), `core asset production URL is forbidden: ${asset.url}`);
     assert(Number.isInteger(asset.bytes) && asset.bytes > 0, `core asset has invalid bytes: ${asset.name}`);

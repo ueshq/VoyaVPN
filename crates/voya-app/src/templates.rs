@@ -7,8 +7,6 @@ use voya_db::{Database, DbError};
 pub enum FullConfigTemplateManagerError {
     #[error(transparent)]
     Db(#[from] DbError),
-    #[error("full config template only supports Xray and sing-box")]
-    UnsupportedCoreType,
     #[error("{field} must be a JSON object")]
     InvalidJsonObject { field: &'static str },
 }
@@ -26,10 +24,9 @@ impl<'db> FullConfigTemplateManager<'db> {
     }
 
     pub async fn load_templates(&self) -> Result<Vec<FullConfigTemplateItem>> {
-        let xray = self.ensure_template(CoreType::Xray).await?;
         let sing_box = self.ensure_template(CoreType::sing_box).await?;
 
-        Ok(vec![xray, sing_box])
+        Ok(vec![sing_box])
     }
 
     pub async fn save_template(
@@ -84,21 +81,12 @@ fn normalize_template(item: &mut FullConfigTemplateItem) -> Result<()> {
 }
 
 fn default_template(core_type: CoreType) -> Result<FullConfigTemplateItem> {
-    match core_type {
-        CoreType::Xray => Ok(FullConfigTemplateItem {
-            id: "full-template-xray".to_string(),
-            remarks: "Xray".to_string(),
-            core_type,
-            ..FullConfigTemplateItem::default()
-        }),
-        CoreType::sing_box => Ok(FullConfigTemplateItem {
-            id: "full-template-sing-box".to_string(),
-            remarks: "sing-box".to_string(),
-            core_type,
-            ..FullConfigTemplateItem::default()
-        }),
-        _ => Err(FullConfigTemplateManagerError::UnsupportedCoreType),
-    }
+    Ok(FullConfigTemplateItem {
+        id: "full-template-sing-box".to_string(),
+        remarks: "sing-box".to_string(),
+        core_type,
+        ..FullConfigTemplateItem::default()
+    })
 }
 
 fn normalize_optional_text(value: Option<String>) -> Option<String> {
@@ -126,7 +114,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn template_manager_materializes_xray_and_sing_box_defaults() {
+    async fn template_manager_materializes_sing_box_default() {
         let database = Database::connect_in_memory()
             .await
             .expect("database test operation should succeed");
@@ -137,9 +125,8 @@ mod tests {
             .await
             .expect("template test operation should succeed");
 
-        assert_eq!(templates.len(), 2);
-        assert_eq!(templates[0].core_type, CoreType::Xray);
-        assert_eq!(templates[1].core_type, CoreType::sing_box);
+        assert_eq!(templates.len(), 1);
+        assert_eq!(templates[0].core_type, CoreType::sing_box);
         assert_eq!(
             database
                 .full_config_templates()
@@ -147,7 +134,7 @@ mod tests {
                 .await
                 .expect("database test operation should succeed")
                 .len(),
-            2
+            1
         );
     }
 
@@ -160,7 +147,7 @@ mod tests {
 
         let error = manager
             .save_template(FullConfigTemplateItem {
-                core_type: CoreType::Xray,
+                core_type: CoreType::sing_box,
                 config: Some("[]".to_string()),
                 ..FullConfigTemplateItem::default()
             })

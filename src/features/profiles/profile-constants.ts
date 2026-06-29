@@ -72,21 +72,7 @@ export const PROFILE_PROTOCOL_LABELS = PROFILE_PROTOCOLS.reduce<Record<number, s
 
 export const CORE_TYPE_OPTIONS = [
   { label: "Default", value: "" },
-  { label: "Xray", value: String(CORE_TYPES.Xray) },
-  { label: "v2fly", value: String(CORE_TYPES.v2fly) },
-  { label: "v2fly v5", value: String(CORE_TYPES.v2flyV5) },
   { label: "sing-box", value: String(CORE_TYPES.singBox) },
-  { label: "mihomo", value: String(CORE_TYPES.mihomo) },
-  { label: "hysteria", value: String(CORE_TYPES.hysteria) },
-  { label: "hysteria2", value: String(CORE_TYPES.hysteria2) },
-  { label: "tuic", value: String(CORE_TYPES.tuic) },
-  { label: "naiveproxy", value: String(CORE_TYPES.naiveproxy) },
-  { label: "juicity", value: String(CORE_TYPES.juicity) },
-  { label: "brook", value: String(CORE_TYPES.brook) },
-  { label: "overtls", value: String(CORE_TYPES.overtls) },
-  { label: "shadowquic", value: String(CORE_TYPES.shadowquic) },
-  { label: "mieru", value: String(CORE_TYPES.mieru) },
-  { label: "v2rayN", value: String(CORE_TYPES.v2rayN) },
 ];
 
 export const NETWORK_OPTIONS = [

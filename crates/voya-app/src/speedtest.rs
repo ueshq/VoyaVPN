@@ -22,9 +22,9 @@ use tokio::{
     time,
 };
 use voya_core::{
-    generate_singbox_speedtest_config_json, generate_xray_speedtest_config_json, AppConfig,
-    ConfigType, CoreConfigContextBuilder, CoreType, InboundProtocol, ProfileItem, SpeedActionType,
-    SpeedTestItem, SpeedtestConfigEntry, DEFAULT_LOCAL_PORT,
+    generate_singbox_speedtest_config_json, AppConfig, ConfigType, CoreConfigContextBuilder,
+    CoreType, InboundProtocol, ProfileItem, SpeedActionType, SpeedTestItem, SpeedtestConfigEntry,
+    DEFAULT_LOCAL_PORT,
 };
 use voya_db::{Database, DbError};
 use voya_platform::{
@@ -1132,10 +1132,8 @@ async fn select_test_items(
 }
 
 const fn default_core_type(config_type: ConfigType) -> CoreType {
-    match config_type {
-        ConfigType::TUIC | ConfigType::Anytls | ConfigType::Naive => CoreType::sing_box,
-        _ => CoreType::Xray,
-    }
+    let _ = config_type;
+    CoreType::sing_box
 }
 
 fn group_prepared_items(
@@ -1228,11 +1226,8 @@ fn write_speedtest_config(
     core_type: CoreType,
     entries: &[SpeedtestConfigEntry],
 ) -> Result<PathBuf> {
-    let json = if core_type == CoreType::sing_box {
-        generate_singbox_speedtest_config_json(entries)?
-    } else {
-        generate_xray_speedtest_config_json(entries)
-    };
+    let _ = core_type;
+    let json = generate_singbox_speedtest_config_json(entries)?;
     let path = paths.bin_config_file(file_name);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|source| SpeedtestError::CreateConfigDir {
@@ -2033,7 +2028,7 @@ mod tests {
         let profile = ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::VMess,
-            core_type: Some(CoreType::Xray),
+            core_type: Some(CoreType::sing_box),
             remarks: index_id.to_string(),
             address: "127.0.0.1".to_string(),
             port,

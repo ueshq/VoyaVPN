@@ -47,7 +47,7 @@ Rollback readiness is release-blocking before pointer promotion. The release own
 | --- | --- | --- | --- | --- |
 | App updater pointer rollback | Release engineer | Stable updater CDN pointer and signed `latest.json` | Clients no longer see the bad version, or they see the previous known-good version. `latest.json` has real signatures, approved CDN URLs, and the recorded pointer hash. | Restore the previous `latest.json` pointer from release evidence or remove the channel metadata document. |
 | Manual index rollback | Release owner and CDN owner | Stable manual release-index pointer, checksum index, download page data | Bad direct-download entries are absent; remaining CDN entries match `SHA256SUMS`, signatures, and package evidence. | Restore the previous release-index pointer, purge caches, and keep affected direct downloads unavailable until rebuilt. |
-| Core manifest rollback | Release engineer | Core asset manifest pointer, geo manifest pointer, SRS manifest pointer, core CDN paths | Clients resolve previous known-good Xray/mihomo/sing-box core entries and geo/SRS entries; checksums match previous evidence. | Restore previous manifest pointers, purge caches, and keep bad core/geo/SRS assets quarantined. |
+| Core manifest rollback | Release engineer | Empty core asset manifest pointer, geo manifest pointer, SRS manifest pointer | Clients resolve the expected empty core manifest and previous known-good geo/SRS entries; checksums match previous evidence. sing-box seed rollback follows the app package rollback path. | Restore previous manifest pointers, purge caches, and keep bad geo/SRS assets quarantined. |
 | Diagnostics disablement | Privacy/security owner | Diagnostics endpoint, ingest routing, release config or remote disable control | New diagnostics delivery is disabled or routed to the approved safe state; opt-out behavior remains intact; no forbidden payload is accepted. | Keep diagnostics disabled until privacy/security approves a fixed endpoint, schema, or app build. |
 | Bad artifact quarantine | Release engineer and CDN owner | Private evidence storage, CDN staging area, package repositories | Bad app packages, updater payloads, core archives, manifests, checksums, and signatures are no longer publicly advertised and are retained with SHA-256, byte size, source path, and incident id. | Do not reuse quarantined filenames or mutable paths for a fixed build; publish a new version or approved rebuild identifier. |
 | Yank platform package | Platform owner | Windows, macOS, or Linux distribution surface | The affected platform asset is no longer recommended or reachable from stable release notes or CDN metadata. Other platforms remain published only if smoke evidence shows they are unaffected. | Republish only after a rebuilt package passes the platform matrix. |
@@ -94,7 +94,7 @@ Owner: release engineer, with legal/release owner approval when redistribution s
 
 System: stable core asset manifest pointer, geo manifest pointer, SRS manifest pointer, and CDN core/geo/SRS assets.
 
-1. Locate previous known-good manifests and evidence for Xray, mihomo, sing-box, geo files, and SRS assets.
+1. Locate previous known-good manifests and evidence for the empty core manifest, geo files, and SRS assets. For sing-box seed regressions, locate the previous known-good app package evidence.
 2. Confirm previous manifest URLs resolve from the approved CDN and match SHA-256, byte size, license, and source evidence.
 3. Restore the previous core manifest pointer. Restore geo/SRS manifest pointers if the bad release affected those lifecycles.
 4. Purge or bypass CDN caches for affected manifests.
@@ -118,7 +118,7 @@ System: diagnostics ingest endpoint, routing or firewall control, release config
 
 Verification: diagnostics smoke shows no network delivery from stable clients except the approved disabled/skipped state, and forbidden payload tests remain attached to the incident.
 
-Rollback notes: diagnostics disablement must not disable updater checks or core downloads. Those systems remain separate unless the incident affects shared release configuration.
+Rollback notes: diagnostics disablement must not disable updater checks or bundled core seed recovery. Those systems remain separate unless the incident affects shared release configuration.
 
 ## Bad Artifact Quarantine
 
@@ -150,7 +150,7 @@ Rollback notes: quarantine is not a substitute for pointer rollback. Users must 
 | --- | --- | --- | --- | --- |
 | Update channel safe state | Release engineer | Stable updater CDN pointer | Older clients do not see the bad version; fixed or previous version metadata validates. | Keep updater disabled if no safe state can be confirmed. |
 | Download page safe state | Release owner | Stable manual CDN release index and download page data | Bad artifacts are absent or clearly withdrawn; checksums match remaining assets. | Remove stale cache links and issue corrected notes. |
-| Core manifest safe state | Release engineer | Stable core, geo, and SRS manifest pointers | Clients resolve previous or fixed manifests, checksums match, and core smoke passes for affected OS/arch targets. | Keep affected core update entries disabled if no safe manifest can be confirmed. |
+| Core manifest safe state | Release engineer | Stable empty core, geo, and SRS manifest pointers | Clients resolve previous or fixed manifests, checksums match, and core smoke passes for affected OS/arch targets. | Keep core manifest assets empty if no approved manifest can be confirmed. |
 | Diagnostics safe state | Privacy/security owner | Diagnostics endpoint and release config | Diagnostics are disabled or fixed, opt-out remains honored, and no forbidden payload can be emitted. | Keep diagnostics disabled until privacy/security signs off. |
 | OS state remediation | Platform owner | Affected user machines or smoke machines | Reproduction machine can restore proxy, routes, TUN devices, autostart, hotkeys, and running processes. | Publish manual remediation steps if automatic cleanup cannot be relied on. |
 | Incident closeout | Release owner | Issue tracker and release notes | Root cause, affected artifacts, rollback actions, fixed version, and remaining risk are recorded. | Keep the release blocked until closeout has an owner and follow-up issue. |

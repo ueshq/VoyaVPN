@@ -68,9 +68,7 @@ pub enum PackageTarget {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryAcquisition {
     AppPackage,
-    DownloadOnFirstRun,
     OptionalDownload,
-    Unsupported,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -584,12 +582,8 @@ fn manifest_arch(value: &str) -> Option<AssetArch> {
 }
 
 fn manifest_core_type(value: &str) -> Option<CoreType> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "xray" => Some(CoreType::Xray),
-        "mihomo" => Some(CoreType::mihomo),
-        "sing_box" | "sing-box" => Some(CoreType::sing_box),
-        _ => None,
-    }
+    let _ = value;
+    None
 }
 
 fn asset_name(name: &str, url: &str) -> String {
@@ -780,12 +774,7 @@ pub fn parse_version(input: &str) -> Option<Version> {
 
 #[must_use]
 pub fn supported_release_packages() -> Vec<ReleasePackage> {
-    vec![
-        app_release_package(),
-        xray_release_package(),
-        mihomo_release_package(),
-        sing_box_release_package(),
-    ]
+    vec![app_release_package()]
 }
 
 #[must_use]
@@ -813,63 +802,17 @@ pub fn app_release_package() -> ReleasePackage {
 #[must_use]
 pub fn core_acquisition_policy(core_type: CoreType) -> PackagePolicy {
     match core_type {
-        CoreType::mihomo | CoreType::sing_box => PackagePolicy {
-            license: Some("GPL-3.0"),
-            acquisition: BinaryAcquisition::DownloadOnFirstRun,
-            redistribute_in_installer: false,
-        },
-        CoreType::juicity => PackagePolicy {
-            license: Some("AGPL-3.0"),
-            acquisition: BinaryAcquisition::DownloadOnFirstRun,
-            redistribute_in_installer: false,
-        },
-        CoreType::Xray => PackagePolicy {
-            license: Some("MPL-2.0"),
-            acquisition: BinaryAcquisition::DownloadOnFirstRun,
-            redistribute_in_installer: false,
-        },
-        CoreType::v2rayN => app_release_package().policy,
-        _ => PackagePolicy {
-            license: None,
-            acquisition: BinaryAcquisition::DownloadOnFirstRun,
-            redistribute_in_installer: false,
+        CoreType::sing_box => PackagePolicy {
+            license: Some("GPL-3.0-or-later"),
+            acquisition: BinaryAcquisition::AppPackage,
+            redistribute_in_installer: true,
         },
     }
 }
 
 #[must_use]
 pub fn updatable_core_types() -> &'static [CoreType] {
-    &[CoreType::Xray, CoreType::mihomo, CoreType::sing_box]
-}
-
-fn xray_release_package() -> ReleasePackage {
-    ReleasePackage {
-        id: "core:xray",
-        name: "Xray",
-        target: PackageTarget::Core(CoreType::Xray),
-        prerelease_policy: PrereleasePolicy::UserControlled,
-        policy: core_acquisition_policy(CoreType::Xray),
-    }
-}
-
-fn mihomo_release_package() -> ReleasePackage {
-    ReleasePackage {
-        id: "core:mihomo",
-        name: "mihomo",
-        target: PackageTarget::Core(CoreType::mihomo),
-        prerelease_policy: PrereleasePolicy::StableOnly,
-        policy: core_acquisition_policy(CoreType::mihomo),
-    }
-}
-
-fn sing_box_release_package() -> ReleasePackage {
-    ReleasePackage {
-        id: "core:sing_box",
-        name: "sing-box",
-        target: PackageTarget::Core(CoreType::sing_box),
-        prerelease_policy: PrereleasePolicy::StableOnly,
-        policy: core_acquisition_policy(CoreType::sing_box),
-    }
+    &[]
 }
 
 fn effective_prerelease(package: &ReleasePackage, options: &ReleaseFetchOptions) -> bool {
@@ -962,95 +905,6 @@ mod tests {
     }
 
     #[test]
-    fn update_asset_templates_cover_supported_os_arch_matrix() {
-        let release = GitHubRelease {
-            tag_name: "v1.2.3".to_string(),
-            ..fixture_release()
-        };
-        let version = parse_version("v1.2.3").expect("version");
-
-        let xray = release_package_for_core(CoreType::Xray).expect("xray package");
-        let xray_upstream = xray_upstream_release_evidence();
-        let xray_asset = resolve_asset(
-            &xray,
-            &xray_upstream,
-            &release,
-            &version,
-            AssetOs::Windows,
-            AssetArch::Arm64,
-        )
-        .expect("xray asset");
-        assert_eq!(xray_asset.name, "Xray-windows-arm64-v8a.zip");
-
-        let mihomo = release_package_for_core(CoreType::mihomo).expect("mihomo package");
-        let mihomo_upstream = mihomo_upstream_release_evidence();
-        let mihomo_asset = resolve_asset(
-            &mihomo,
-            &mihomo_upstream,
-            &release,
-            &version,
-            AssetOs::Linux,
-            AssetArch::X64,
-        )
-        .expect("mihomo asset");
-        assert_eq!(mihomo_asset.name, "mihomo-linux-amd64-v1-v1.2.3.gz");
-
-        let sing_box = release_package_for_core(CoreType::sing_box).expect("sing-box package");
-        let sing_box_upstream = sing_box_upstream_release_evidence();
-        let sing_asset = resolve_asset(
-            &sing_box,
-            &sing_box_upstream,
-            &release,
-            &version,
-            AssetOs::Linux,
-            AssetArch::Riscv64,
-        )
-        .expect("sing-box asset");
-        assert_eq!(sing_asset.name, "sing-box-1.2.3-linux-riscv64.tar.gz");
-    }
-
-    #[test]
-    fn update_asset_selection_prefers_release_asset_and_falls_back_to_template() {
-        let package = release_package_for_core(CoreType::Xray).expect("xray package");
-        let upstream = xray_upstream_release_evidence();
-        let version = parse_version("v1.8.7").expect("version");
-        let release = GitHubRelease {
-            tag_name: "v1.8.7".to_string(),
-            assets: vec![GitHubReleaseAsset {
-                name: "Xray-linux-64.zip".to_string(),
-                browser_download_url: "https://cdn.example/Xray-linux-64.zip".to_string(),
-                size: 10,
-                content_type: None,
-            }],
-            ..fixture_release()
-        };
-
-        let exact = resolve_asset(
-            &package,
-            &upstream,
-            &release,
-            &version,
-            AssetOs::Linux,
-            AssetArch::X64,
-        )
-        .expect("exact asset");
-        assert_eq!(exact.source, ResolvedAssetSource::ReleaseAsset);
-        assert_eq!(exact.download_url, "https://cdn.example/Xray-linux-64.zip");
-
-        let fallback = resolve_asset(
-            &package,
-            &upstream,
-            &release,
-            &version,
-            AssetOs::Macos,
-            AssetArch::X64,
-        )
-        .expect("fallback asset");
-        assert_eq!(fallback.source, ResolvedAssetSource::TemplateFallback);
-        assert_eq!(fallback.name, "Xray-macos-64.zip");
-    }
-
-    #[test]
     fn update_cdn_release_index_resolves_app_asset_with_checksum() {
         let index = parse_cdn_release_index(
             r#"{
@@ -1113,138 +967,6 @@ mod tests {
     }
 
     #[test]
-    fn update_cdn_core_manifest_resolves_core_asset_with_checksum() {
-        let manifest = parse_cdn_core_asset_manifest(
-            r#"{
-              "productName": "VoyaVPN",
-              "manifestVersion": 1,
-              "channel": "stable",
-              "baseUrl": "https://cdn.voyavpn.test/stable",
-              "assets": [{
-                "coreType": "Xray",
-                "version": "1.8.24",
-                "license": "MPL-2.0",
-                "os": "linux",
-                "arch": "x64",
-                "archiveFormat": "zip",
-                "executableCandidates": ["xray"],
-                "url": "https://cdn.voyavpn.test/stable/cores/Xray/1.8.24/linux/x64/Xray-linux-64.zip",
-                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-                "bytes": 11796480,
-                "upstreamUrl": "https://github.com/XTLS/Xray-core/releases/download/v1.8.24/Xray-linux-64.zip",
-                "name": "Xray-linux-64.zip",
-                "path": "cores/Xray/1.8.24/linux/x64/Xray-linux-64.zip"
-              }]
-            }"#,
-        )
-        .expect("cdn core manifest");
-        let package = release_package_for_core(CoreType::Xray).expect("xray package");
-
-        let check = check_core_from_cdn_manifest(
-            &package,
-            Some(&Version::new(1, 8, 0)),
-            AssetOs::Linux,
-            AssetArch::X64,
-            &manifest,
-        )
-        .expect("cdn core check");
-
-        assert!(check.has_update);
-        assert_eq!(check.remote_version, Version::new(1, 8, 24));
-        assert_eq!(check.asset.source, ResolvedAssetSource::CdnCoreManifest);
-        assert_eq!(check.asset.name, "Xray-linux-64.zip");
-        assert_eq!(
-            check.asset.sha256.as_deref(),
-            Some("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
-        );
-        assert_eq!(check.asset.bytes, Some(11796480));
-    }
-
-    #[test]
-    fn update_cdn_core_manifest_rejects_unsupported_target() {
-        let manifest = parse_cdn_core_asset_manifest(
-            r#"{
-              "productName": "VoyaVPN",
-              "manifestVersion": 1,
-              "channel": "stable",
-              "baseUrl": "https://cdn.voyavpn.test/stable",
-              "assets": [{
-                "coreType": "Xray",
-                "version": "1.8.24",
-                "license": "MPL-2.0",
-                "os": "linux",
-                "arch": "x64",
-                "archiveFormat": "zip",
-                "executableCandidates": ["xray"],
-                "url": "https://cdn.voyavpn.test/stable/Xray-linux-64.zip",
-                "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-                "bytes": 1,
-                "upstreamUrl": "https://github.com/XTLS/Xray-core/releases/download/v1.8.24/Xray-linux-64.zip",
-                "name": "Xray-linux-64.zip",
-                "path": "Xray-linux-64.zip"
-              }]
-            }"#,
-        )
-        .expect("cdn core manifest");
-        let package = release_package_for_core(CoreType::Xray).expect("xray package");
-
-        let error = check_core_from_cdn_manifest(
-            &package,
-            None,
-            AssetOs::Linux,
-            AssetArch::Riscv64,
-            &manifest,
-        )
-        .expect_err("unsupported first-stable target");
-
-        assert!(matches!(
-            error,
-            ReleaseError::UnsupportedAssetTarget {
-                package_id,
-                os: AssetOs::Linux,
-                arch: AssetArch::Riscv64
-            } if package_id == "core:xray"
-        ));
-    }
-
-    #[test]
-    fn update_cdn_manifest_rejects_github_production_download_url() {
-        let manifest = parse_cdn_core_asset_manifest(
-            r#"{
-              "productName": "VoyaVPN",
-              "manifestVersion": 1,
-              "channel": "stable",
-              "baseUrl": "https://cdn.voyavpn.test/stable",
-              "assets": [{
-                "coreType": "Xray",
-                "version": "1.8.24",
-                "license": "MPL-2.0",
-                "os": "linux",
-                "arch": "x64",
-                "archiveFormat": "zip",
-                "executableCandidates": ["xray"],
-                "url": "https://github.com/XTLS/Xray-core/releases/download/v1.8.24/Xray-linux-64.zip",
-                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-                "bytes": 1,
-                "upstreamUrl": "https://github.com/XTLS/Xray-core/releases/download/v1.8.24/Xray-linux-64.zip",
-                "name": "Xray-linux-64.zip",
-                "path": "Xray-linux-64.zip"
-              }]
-            }"#,
-        )
-        .expect("cdn core manifest");
-        let package = release_package_for_core(CoreType::Xray).expect("xray package");
-
-        let error =
-            check_core_from_cdn_manifest(&package, None, AssetOs::Linux, AssetArch::X64, &manifest)
-                .expect_err("github production URL");
-
-        assert!(
-            matches!(error, ReleaseError::ForbiddenProductionUrl(url) if url.contains("github.com"))
-        );
-    }
-
-    #[test]
     fn update_version_parser_accepts_tags_and_cli_output() {
         assert_eq!(
             parse_version("v1.2.3").expect("update test operation should succeed"),
@@ -1253,16 +975,6 @@ mod tests {
         assert_eq!(
             parse_version("1.2").expect("update test operation should succeed"),
             Version::new(1, 2, 0)
-        );
-        assert_eq!(
-            parse_version("Xray 1.8.7 (Xray, Penetrates Everything.)")
-                .expect("update test operation should succeed"),
-            Version::new(1, 8, 7)
-        );
-        assert_eq!(
-            parse_version("mihomo v1.18.4 linux amd64")
-                .expect("update test operation should succeed"),
-            Version::new(1, 18, 4)
         );
         assert_eq!(
             parse_version("v2.0.0-beta.1").expect("update test operation should succeed"),
@@ -1297,107 +1009,5 @@ mod tests {
             seen_user_agents.lock().await.as_slice(),
             ["VoyaUpdateTest/1"]
         );
-    }
-
-    fn fixture_release() -> GitHubRelease {
-        GitHubRelease {
-            tag_name: String::new(),
-            name: None,
-            html_url: None,
-            draft: false,
-            prerelease: false,
-            assets: Vec::new(),
-            body: None,
-        }
-    }
-
-    fn xray_upstream_release_evidence() -> UpstreamReleaseEvidence {
-        UpstreamReleaseEvidence {
-            release_api_url: "https://api.github.com/repos/XTLS/Xray-core/releases",
-            release_url: "https://github.com/XTLS/Xray-core/releases",
-            asset_templates: UpstreamAssetTemplates {
-                windows_x64: Some(
-                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-windows-64.zip",
-                ),
-                windows_arm64: Some(
-                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-windows-arm64-v8a.zip",
-                ),
-                linux_x64: Some(
-                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-linux-64.zip",
-                ),
-                linux_arm64: Some(
-                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-linux-arm64-v8a.zip",
-                ),
-                linux_riscv64: Some(
-                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-linux-riscv64.zip",
-                ),
-                macos_x64: Some(
-                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-macos-64.zip",
-                ),
-                macos_arm64: Some(
-                    "https://github.com/XTLS/Xray-core/releases/download/{tag}/Xray-macos-arm64-v8a.zip",
-                ),
-            },
-        }
-    }
-
-    fn mihomo_upstream_release_evidence() -> UpstreamReleaseEvidence {
-        UpstreamReleaseEvidence {
-            release_api_url: "https://api.github.com/repos/MetaCubeX/mihomo/releases",
-            release_url: "https://github.com/MetaCubeX/mihomo/releases",
-            asset_templates: UpstreamAssetTemplates {
-                windows_x64: Some(
-                    "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-windows-amd64-v1-{tag}.zip",
-                ),
-                windows_arm64: Some(
-                    "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-windows-arm64-{tag}.zip",
-                ),
-                linux_x64: Some(
-                    "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-linux-amd64-v1-{tag}.gz",
-                ),
-                linux_arm64: Some(
-                    "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-linux-arm64-{tag}.gz",
-                ),
-                linux_riscv64: Some(
-                    "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-linux-riscv64-{tag}.gz",
-                ),
-                macos_x64: Some(
-                    "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-darwin-amd64-v1-{tag}.gz",
-                ),
-                macos_arm64: Some(
-                    "https://github.com/MetaCubeX/mihomo/releases/download/{tag}/mihomo-darwin-arm64-{tag}.gz",
-                ),
-            },
-        }
-    }
-
-    fn sing_box_upstream_release_evidence() -> UpstreamReleaseEvidence {
-        UpstreamReleaseEvidence {
-            release_api_url: "https://api.github.com/repos/SagerNet/sing-box/releases",
-            release_url: "https://github.com/SagerNet/sing-box/releases",
-            asset_templates: UpstreamAssetTemplates {
-                windows_x64: Some(
-                    "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-windows-amd64.zip",
-                ),
-                windows_arm64: Some(
-                    "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-windows-arm64.zip",
-                ),
-                linux_x64: Some(
-                    "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-linux-amd64.tar.gz",
-                ),
-                linux_arm64: Some(
-                    "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-linux-arm64.tar.gz",
-                ),
-                linux_riscv64: Some(
-                    "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-linux-riscv64.tar.gz",
-                ),
-                macos_x64: Some(
-                    "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-darwin-amd64.tar.gz",
-                ),
-                macos_arm64: Some(
-                    "https://github.com/SagerNet/sing-box/releases/download/{tag}/sing-box-{version}-darwin-arm64.tar.gz",
-                ),
-            },
-        }
     }
 }

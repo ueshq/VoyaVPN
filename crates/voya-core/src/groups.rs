@@ -54,10 +54,6 @@ pub struct GroupPreviewBalancer {
 #[serde(default, rename_all = "camelCase")]
 pub struct GroupPreview {
     pub validation: GroupValidationResult,
-    pub xray_routes: Vec<GroupPreviewRoute>,
-    pub xray_balancers: Vec<GroupPreviewBalancer>,
-    pub xray_observatory_selectors: Vec<String>,
-    pub xray_burst_observatory_selectors: Vec<String>,
     pub singbox_routes: Vec<GroupPreviewRoute>,
 }
 
@@ -168,29 +164,10 @@ pub fn validate_group_profile(
 #[must_use]
 pub fn group_preview_from_values(
     validation: GroupValidationResult,
-    xray: Option<&Value>,
     singbox: Option<&Value>,
 ) -> GroupPreview {
     GroupPreview {
         validation,
-        xray_routes: xray.map(extract_xray_routes).unwrap_or_default(),
-        xray_balancers: xray.map(extract_xray_balancers).unwrap_or_default(),
-        xray_observatory_selectors: xray
-            .and_then(|value| {
-                value
-                    .get("observatory")
-                    .and_then(|observatory| observatory.get("subjectSelector"))
-            })
-            .map(string_array)
-            .unwrap_or_default(),
-        xray_burst_observatory_selectors: xray
-            .and_then(|value| {
-                value
-                    .get("burstObservatory")
-                    .and_then(|observatory| observatory.get("subjectSelector"))
-            })
-            .map(string_array)
-            .unwrap_or_default(),
         singbox_routes: singbox.map(extract_singbox_routes).unwrap_or_default(),
     }
 }
@@ -317,69 +294,6 @@ fn group_kind_label(config_type: ConfigType) -> &'static str {
     }
 }
 
-fn extract_xray_routes(value: &Value) -> Vec<GroupPreviewRoute> {
-    value
-        .get("outbounds")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|outbound| {
-            let tag = outbound.get("tag").and_then(Value::as_str)?;
-            if !is_preview_tag(tag) {
-                return None;
-            }
-
-            Some(GroupPreviewRoute {
-                tag: tag.to_string(),
-                kind: outbound
-                    .get("protocol")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
-                dialer_proxy: outbound
-                    .pointer("/streamSettings/sockopt/dialerProxy")
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
-                download_dialer_proxy: outbound
-                    .pointer(
-                        "/streamSettings/xhttpSettings/extra/downloadSettings/sockopt/dialerProxy",
-                    )
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
-                detour: None,
-                outbounds: Vec::new(),
-            })
-        })
-        .collect()
-}
-
-fn extract_xray_balancers(value: &Value) -> Vec<GroupPreviewBalancer> {
-    value
-        .pointer("/routing/balancers")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|balancer| {
-            let tag = balancer.get("tag").and_then(Value::as_str)?;
-            Some(GroupPreviewBalancer {
-                tag: tag.to_string(),
-                selectors: balancer
-                    .get("selector")
-                    .map(string_array)
-                    .unwrap_or_default(),
-                strategy: balancer
-                    .pointer("/strategy/type")
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
-                fallback_tag: balancer
-                    .get("fallbackTag")
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
-            })
-        })
-        .collect()
-}
-
 fn extract_singbox_routes(value: &Value) -> Vec<GroupPreviewRoute> {
     let outbounds = value
         .get("outbounds")
@@ -454,10 +368,9 @@ mod tests {
     use serde_json::{json, Value};
 
     use crate::{
-        generate_singbox_config_value, generate_xray_config_value, AppConfig,
-        CoreConfigContextBuilder, CoreGenEnv, CoreGenPlatform, CoreType, DnsItem,
-        FullConfigTemplateItem, InboundProtocol, MultipleLoad, ProtocolExtraItem, RoutingItem,
-        SubItem,
+        generate_singbox_config_value, AppConfig, CoreConfigContextBuilder, CoreGenEnv,
+        CoreGenPlatform, CoreType, DnsItem, FullConfigTemplateItem, InboundProtocol, MultipleLoad,
+        ProtocolExtraItem, RoutingItem, SubItem,
     };
 
     use super::*;
@@ -530,10 +443,9 @@ mod tests {
         profiles: &[ProfileItem],
         validation: GroupValidationResult,
     ) -> GroupPreview {
-        let xray = generated_value(profile, profiles, CoreType::Xray);
         let singbox = generated_value(profile, profiles, CoreType::sing_box);
 
-        group_preview_from_values(validation, Some(&xray), Some(&singbox))
+        group_preview_from_values(validation, Some(&singbox))
     }
 
     fn generated_value(
@@ -563,11 +475,8 @@ mod tests {
         let result = CoreConfigContextBuilder::new(&env).build(&config, &node);
 
         assert!(result.success(), "{:?}", result.validator_result);
-        match core_type {
-            CoreType::sing_box => generate_singbox_config_value(&result.context)
-                .expect("sing-box group preview config should generate"),
-            _ => generate_xray_config_value(&result.context),
-        }
+        generate_singbox_config_value(&result.context)
+            .expect("sing-box group preview config should generate")
     }
 
     fn assert_json_fixture(actual: &Value, fixture_path: &str) {
@@ -588,7 +497,7 @@ mod tests {
         ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::VLESS,
-            core_type: Some(CoreType::Xray),
+            core_type: Some(CoreType::sing_box),
             remarks: remarks.to_string(),
             address: format!("{index_id}.example.test"),
             port: 443,
@@ -606,7 +515,7 @@ mod tests {
         ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::PolicyGroup,
-            core_type: Some(CoreType::Xray),
+            core_type: Some(CoreType::sing_box),
             remarks: remarks.to_string(),
             address: "group".to_string(),
             protocol_extra: ProtocolExtraItem {
@@ -623,7 +532,7 @@ mod tests {
         ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::ProxyChain,
-            core_type: Some(CoreType::Xray),
+            core_type: Some(CoreType::sing_box),
             remarks: remarks.to_string(),
             address: "chain".to_string(),
             protocol_extra: ProtocolExtraItem {

@@ -48,8 +48,6 @@ import type {
   RulesetGeoSourceSettings,
   CoreSeedInstallResult,
   CoreType,
-  CoreUpdateApplyRequest,
-  CoreUpdateApplyResult,
   DiagnosticsStatus,
   SpeedActionType,
   SpeedtestRunResult,
@@ -516,12 +514,6 @@ export async function manualAppUpdateLinks(
   return unwrapCommandResult(
     await commands.manualAppUpdateLinks(preRelease, preferProxy, proxyUrl),
   );
-}
-
-export async function applyDownloadedCoreUpdate(
-  request: CoreUpdateApplyRequest,
-): Promise<CoreUpdateApplyResult> {
-  return unwrapCommandResult(await commands.applyDownloadedCoreUpdate(request));
 }
 
 export async function installCoreSeed(coreType: CoreType): Promise<CoreSeedInstallResult> {

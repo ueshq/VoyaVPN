@@ -1759,10 +1759,10 @@ mod tests {
             .await
             .expect("database test operation should succeed");
         let item = FullConfigTemplateItem {
-            id: "template-xray".to_string(),
-            remarks: "Xray template".to_string(),
+            id: "template-sing-box".to_string(),
+            remarks: "sing-box template".to_string(),
             enabled: true,
-            core_type: CoreType::Xray,
+            core_type: CoreType::sing_box,
             config: Some(r#"{"outbounds":[]}"#.to_string()),
             tun_config: Some(r#"{"inbounds":[]}"#.to_string()),
             add_proxy_only: Some(true),
@@ -1776,7 +1776,7 @@ mod tests {
             .expect("database test operation should succeed");
         let loaded = database
             .full_config_templates()
-            .get_by_core_type(CoreType::Xray)
+            .get_by_core_type(CoreType::sing_box)
             .await
             .expect("database test operation should succeed")
             .expect("template should be present");

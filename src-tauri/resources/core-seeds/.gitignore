@@ -1,6 +1,6 @@
-# Proxy core binaries are fetched at build time by scripts/fetch-cores.mjs and are
-# intentionally NOT committed (large, separately-licensed; redistribute_in_installer=false).
-# Keep the layout + docs tracked, ignore everything else (incl. xray/, mihomo/, sing_box/).
+# sing-box seed binaries are fetched at install/build time and are intentionally
+# not committed (large, separately licensed). Keep the layout docs tracked, ignore
+# generated seed payloads.
 *
 !.gitignore
 !README.md

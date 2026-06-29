@@ -22,7 +22,7 @@ import type { CoreType, FullConfigTemplateItem_Serialize } from "@/ipc/bindings"
 import { cn, getErrorMessage } from "@/lib/utils";
 import { CORE_TYPES } from "@/features/profiles/profile-constants";
 
-type TemplateTab = "xray" | "singbox";
+type TemplateTab = "singbox";
 
 type TemplateForm = {
   AddProxyOnly: boolean;
@@ -38,7 +38,6 @@ type TemplateForm = {
 const editorExtensions = [json()];
 
 const templateTabs: Array<{ coreType: CoreType; label: string; value: TemplateTab }> = [
-  { coreType: CORE_TYPES.Xray, label: "Xray", value: "xray" },
   { coreType: CORE_TYPES.singBox, label: "sing-box", value: "singbox" },
 ];
 
@@ -48,7 +47,7 @@ const emptyForms = Object.fromEntries(
 
 export function FullConfigTemplateDialog() {
   const { t } = useI18n();
-  const [activeTab, setActiveTab] = useState<TemplateTab>("xray");
+  const [activeTab, setActiveTab] = useState<TemplateTab>("singbox");
   const [error, setError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [forms, setForms] = useState<Record<TemplateTab, TemplateForm>>(emptyForms);

@@ -1,9 +1,9 @@
 use thiserror::Error;
 use voya_core::{
-    generate_singbox_config_value, generate_xray_config_value, group_preview_from_values,
-    list_group_child_candidates, validate_group_profile, AppConfig, CoreConfigContextBuilder,
-    CoreGenPlatform, CoreType, DnsItem, GroupChildCandidate, GroupPreview, GroupValidationResult,
-    ProfileItem, ProfileListItem, RoutingItem, SingboxConfigError, SubItem,
+    generate_singbox_config_value, group_preview_from_values, list_group_child_candidates,
+    validate_group_profile, AppConfig, CoreConfigContextBuilder, CoreGenPlatform, CoreType,
+    DnsItem, GroupChildCandidate, GroupPreview, GroupValidationResult, ProfileItem,
+    ProfileListItem, RoutingItem, SingboxConfigError, SubItem,
 };
 use voya_db::{Database, DbError};
 
@@ -70,7 +70,7 @@ impl<'db> GroupManager<'db> {
         let profiles = self.profiles_with_draft(profile).await?;
         let mut validation = validate_group_profile(profile, &profiles);
         if !validation.valid {
-            return Ok(group_preview_from_values(validation, None, None));
+            return Ok(group_preview_from_values(validation, None));
         }
 
         let routings = self.database.routings().list().await?;
@@ -82,15 +82,8 @@ impl<'db> GroupManager<'db> {
             dns_items: &dns_items,
             subs: &subs,
         };
-        let xray_value = self.preview_value(config, profile, &source, CoreType::Xray)?;
         let singbox_value = self.preview_value(config, profile, &source, CoreType::sing_box)?;
 
-        validation.warnings.extend(
-            xray_value
-                .builder_warnings
-                .iter()
-                .map(|warning| format!("xray: {warning}")),
-        );
         validation.warnings.extend(
             singbox_value
                 .builder_warnings
@@ -100,7 +93,6 @@ impl<'db> GroupManager<'db> {
 
         Ok(group_preview_from_values(
             validation,
-            Some(&xray_value.value),
             Some(&singbox_value.value),
         ))
     }
@@ -175,10 +167,7 @@ impl<'db> GroupManager<'db> {
         preview_config.index_id.clone_from(&node.index_id);
         preview_config.tun_mode_item.enable_tun = false;
         let result = CoreConfigContextBuilder::new(&env).build(&preview_config, &node);
-        let value = match core_type {
-            CoreType::sing_box => generate_singbox_config_value(&result.context)?,
-            _ => generate_xray_config_value(&result.context),
-        };
+        let value = generate_singbox_config_value(&result.context)?;
 
         Ok(PreviewValue {
             value,
@@ -252,7 +241,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn group_manager_preview_exposes_xray_and_singbox_routes() {
+    async fn group_manager_preview_exposes_singbox_routes() {
         let database = Database::connect_in_memory()
             .await
             .expect("group manager test operation should succeed");
@@ -283,10 +272,6 @@ mod tests {
             .expect("group manager test operation should succeed");
 
         assert!(preview.validation.valid);
-        assert!(preview
-            .xray_balancers
-            .iter()
-            .any(|balancer| balancer.tag == "proxy-balancer"));
         assert!(preview
             .singbox_routes
             .iter()

@@ -55,10 +55,8 @@ use voya_app::sysproxy::SystemProxyManagerError;
 use voya_app::templates::{FullConfigTemplateManager, FullConfigTemplateManagerError};
 use voya_app::tun::{TunManager, TunManagerError, TunStatus};
 use voya_app::updates::{
-    apply_downloaded_core_update_with_runtime, core_type_for_update_target_id,
-    CoreUpdateApplyRequest, CoreUpdateApplyResult, ManualAppUpdateLinks, RulesetGeoSourceSettings,
-    UpdateCheckResult, UpdateManager, UpdateManagerError, UpdateRequestOptions, UpdateResultStatus,
-    UpdateRunResult, UpdateStatus,
+    ManualAppUpdateLinks, RulesetGeoSourceSettings, UpdateManager, UpdateManagerError,
+    UpdateRequestOptions, UpdateResultStatus, UpdateRunResult, UpdateStatus,
 };
 use voya_core::{
     AppConfig, CoreType, FullConfigTemplateItem, GlobalHotkey, GroupChildCandidate, GroupPreview,
@@ -88,8 +86,6 @@ const IPC_FILTER_MAX_CHARS: usize = 256;
 const IPC_PATH_MAX_CHARS: usize = 4096;
 const IPC_PROXY_URL_MAX_CHARS: usize = 2048;
 const IPC_QR_CONTENT_MAX_CHARS: usize = 4096;
-const IPC_UPDATE_VERSION_MAX_CHARS: usize = 128;
-const IPC_SHA256_MAX_CHARS: usize = 128;
 const IPC_LIST_MAX_ITEMS: usize = 1024;
 const MISSING_CORE_SEARCH_DIR_LABEL: &str = "application core directory";
 
@@ -2145,7 +2141,6 @@ pub async fn download_updates(
     let original = current_config(&state)?;
     let mut config = original.clone();
     let manager = update_manager(&state);
-    let selected_for_diagnostics = selected_target_ids.clone();
     manager.save_preferences(&mut config, pre_release, selected_target_ids.clone());
     persist_config_if_changed(&state, &original, &config)?;
 
@@ -2169,7 +2164,6 @@ pub async fn download_updates(
                 &config,
                 DiagnosticsEvent::update_download(diagnostics_result, error_class),
             );
-            record_core_download_diagnostics(&state, &config, &run.results);
         }
         Err(error) => {
             let error_class = diagnostics_error_class_for_update_error(error);
@@ -2178,19 +2172,6 @@ pub async fn download_updates(
                 &config,
                 DiagnosticsEvent::update_download(DiagnosticsResult::Failure, Some(error_class)),
             );
-            for target_id in &selected_for_diagnostics {
-                if let Some(core_type) = core_type_for_update_target_id(target_id) {
-                    record_diagnostics_event(
-                        &state,
-                        &config,
-                        DiagnosticsEvent::core_download(
-                            core_type,
-                            DiagnosticsResult::Failure,
-                            Some(error_class),
-                        ),
-                    );
-                }
-            }
         }
     }
 
@@ -2225,45 +2206,6 @@ pub async fn manual_app_update_links(
         )
         .await
         .map_err(update_error)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn apply_downloaded_core_update(
-    state: tauri::State<'_, AppState>,
-    request: CoreUpdateApplyRequest,
-) -> Result<CoreUpdateApplyResult, AppError> {
-    validate_core_update_apply_request(&request)?;
-    let config = current_config(&state)?;
-    let runtime = runtime_manager(&state);
-    let updates = update_manager(&state);
-
-    let core_type = core_type_for_update_target_id(&request.target_id);
-    let result =
-        apply_downloaded_core_update_with_runtime(&updates, &runtime, &config, &request).await;
-
-    match &result {
-        Ok(result) => record_diagnostics_event(
-            &state,
-            &config,
-            DiagnosticsEvent::core_apply(result.update.core_type, DiagnosticsResult::Success, None),
-        ),
-        Err(error) => {
-            if let Some(core_type) = core_type {
-                record_diagnostics_event(
-                    &state,
-                    &config,
-                    DiagnosticsEvent::core_apply(
-                        core_type,
-                        DiagnosticsResult::Failure,
-                        Some(diagnostics_error_class_for_update_error(error)),
-                    ),
-                );
-            }
-        }
-    }
-
-    result.map(|result| result.update).map_err(update_error)
 }
 
 /// Re-install a core binary from the packaged seed (`{resource_dir}/core-seeds/<core>/`)
@@ -2491,33 +2433,6 @@ async fn export_profiles_result(
         .map_err(export_error)
 }
 
-fn validate_core_update_apply_request(request: &CoreUpdateApplyRequest) -> Result<(), AppError> {
-    validate_required_ipc_text(
-        &request.target_id,
-        "update target id",
-        IPC_ID_MAX_CHARS,
-        AppError::Update,
-    )?;
-    validate_required_ipc_text(
-        &request.file_name,
-        "core update file path",
-        IPC_PATH_MAX_CHARS,
-        AppError::Update,
-    )?;
-    validate_required_ipc_text(
-        &request.sha256,
-        "core update checksum",
-        IPC_SHA256_MAX_CHARS,
-        AppError::Update,
-    )?;
-    validate_required_ipc_text(
-        &request.remote_version,
-        "core update version",
-        IPC_UPDATE_VERSION_MAX_CHARS,
-        AppError::Update,
-    )
-}
-
 fn validate_present_ipc_text(
     value: Option<&str>,
     field: &str,
@@ -2701,39 +2616,6 @@ fn diagnostics_result_for_update_run(
     (DiagnosticsResult::Success, None)
 }
 
-fn diagnostics_result_for_update_result(
-    result: &UpdateCheckResult,
-) -> (DiagnosticsResult, Option<DiagnosticsErrorClass>) {
-    match result.status {
-        UpdateResultStatus::Error => (
-            DiagnosticsResult::Failure,
-            Some(DiagnosticsErrorClass::Unknown),
-        ),
-        UpdateResultStatus::Skipped => (DiagnosticsResult::Skipped, None),
-        UpdateResultStatus::Downloaded
-        | UpdateResultStatus::UpToDate
-        | UpdateResultStatus::UpdateAvailable => (DiagnosticsResult::Success, None),
-    }
-}
-
-fn record_core_download_diagnostics(
-    state: &AppState,
-    config: &AppConfig,
-    results: &[UpdateCheckResult],
-) {
-    for result in results {
-        let Some(core_type) = core_type_for_update_target_id(&result.target_id) else {
-            continue;
-        };
-        let (diagnostics_result, error_class) = diagnostics_result_for_update_result(result);
-        record_diagnostics_event(
-            state,
-            config,
-            DiagnosticsEvent::core_download(core_type, diagnostics_result, error_class),
-        );
-    }
-}
-
 fn record_runtime_start_failure_diagnostics(
     state: &AppState,
     config: &AppConfig,
@@ -2867,18 +2749,6 @@ fn diagnostics_error_class_for_update_error(error: &UpdateManagerError) -> Diagn
             DiagnosticsErrorClass::EndpointUnavailable
         }
         UpdateManagerError::Runtime(error) => diagnostics_error_class_for_runtime_error(error),
-        UpdateManagerError::ChecksumMismatch { .. } | UpdateManagerError::InvalidSha256(_) => {
-            DiagnosticsErrorClass::ChecksumMismatch
-        }
-        UpdateManagerError::CoreInfo(error) => diagnostics_error_class_for_core_info_error(error),
-        UpdateManagerError::MissingExtractedExecutable { .. } => DiagnosticsErrorClass::CoreMissing,
-        UpdateManagerError::ArchiveIo { source, .. }
-        | UpdateManagerError::SwapIo { source, .. }
-        | UpdateManagerError::VersionProbe { source, .. }
-            if source.kind() == io::ErrorKind::PermissionDenied =>
-        {
-            DiagnosticsErrorClass::PermissionDenied
-        }
         _ => DiagnosticsErrorClass::Unknown,
     }
 }

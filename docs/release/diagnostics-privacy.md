@@ -6,9 +6,9 @@ This contract defines the production stable diagnostics boundary for Phase 04. I
 
 ## Scope
 
-Diagnostics are default-on for production stable, user-disableable, and limited to release health. The feature exists to answer whether app startup, updates, core acquisition, core apply, runtime start, and crash-class reporting are healthy across the supported Windows, macOS, and Linux x64/arm64 matrix.
+Diagnostics are default-on for production stable, user-disableable, and limited to release health. The feature exists to answer whether app startup, updates, bundled core acquisition, runtime start, and crash-class reporting are healthy across the supported Windows, macOS, and Linux x64/arm64 matrix.
 
-Diagnostics must never be used as proxy analytics, traffic analytics, subscription analytics, or user behavior tracking. Events are best-effort and must not block app startup, update checks, downloads, core apply, runtime start/stop, UI actions, or shutdown.
+Diagnostics must never be used as proxy analytics, traffic analytics, subscription analytics, or user behavior tracking. Events are best-effort and must not block app startup, update checks, downloads, runtime start/stop, UI actions, or shutdown.
 
 ## Default And Opt-Out Behavior
 
@@ -33,10 +33,10 @@ Events are delivered as JSON over HTTPS:
 | `os` | Yes | `windows`, `macos`, or `linux`. This is the allowed OS/arch OS field. |
 | `arch` | Yes | `x64` or `arm64`. This is the allowed OS/arch architecture field. |
 | `anonymous_install_id` | Yes | Random locally generated UUID or equivalent random id. This is the allowed anonymous install id field. It must not be derived from hardware ids, usernames, hostnames, MAC addresses, IP addresses, or account data. |
-| `event_type` | Yes | Allowlisted event type such as `app_start`, `update_check`, `update_download`, `app_update_install`, `core_download`, `core_apply`, `runtime_start`, `runtime_stop`, `runtime_start_failure`, `core_missing`, `panic_class`, or `release_smoke`. This is the allowed event type field. |
+| `event_type` | Yes | Allowlisted event type such as `app_start`, `update_check`, `update_download`, `app_update_install`, `runtime_start`, `runtime_stop`, `runtime_start_failure`, `core_missing`, `panic_class`, or `release_smoke`. This is the allowed event type field. |
 | `result` | Yes | `success`, `failure`, `skipped`, `disabled`, or `dropped`. This is the allowed result field. |
 | `error_class` | No | Coarse enum only, for example `network_unavailable`, `endpoint_unavailable`, `checksum_mismatch`, `signature_invalid`, `permission_denied`, `core_missing`, `runtime_start_failed`, `updater_install_failed`, `panic`, or `unknown`. This is the allowed error class field. Raw error messages are forbidden. |
-| `subject_kind` | No | `app`, `xray`, `mihomo`, `sing_box`, `geo`, `srs`, or `runtime`. No node, subscription, or destination detail. |
+| `subject_kind` | No | `app`, `sing_box`, `geo`, `srs`, or `runtime`. No node, subscription, or destination detail. |
 | `duration_bucket_ms` | No | Coarse bucket only, such as `0-99`, `100-999`, `1000-4999`, `5000-29999`, or `30000_plus`. No exact timings are required. |
 | `queue_depth_bucket` | No | Coarse bucket only, such as `0`, `1-9`, `10-49`, or `50_plus`. |
 | `retry_count_bucket` | No | Coarse bucket only, such as `0`, `1`, `2-3`, or `4_plus`. |
@@ -53,7 +53,7 @@ The following fields and payloads are forbidden in diagnostics, including nested
 - Credentials, tokens, passwords, API keys, cookies, bearer headers, private keys, updater signing keys, WebDAV credentials, proxy credentials, and embedded user secrets.
 - IP addresses and IPs of any kind, including local IPs, public IPs, proxy IPs, DNS resolver IPs, endpoint IPs, destination IPs, and subnet/CIDR values.
 - Full logs, log excerpts that include raw errors, process output, core stdout/stderr, panic payload text, or support bundles.
-- Generated configs for Xray, sing-box, mihomo, TUN, DNS, routing, rulesets, or system proxy state.
+- Generated configs for sing-box, TUN, DNS, routing, rulesets, or system proxy state.
 - Traffic destinations, destination hostnames, domains, SNI values, DNS queries, URLs visited through the proxy, ports, protocols, HTTP headers, and request paths.
 - Hardware identifiers, MAC addresses, serial numbers, device names, usernames, home directory paths, account ids, email addresses, locale-derived identity, or precise geolocation.
 - Raw file paths outside documented release artifact names, because local paths can include usernames or project names.
@@ -123,7 +123,7 @@ Complete this template in the external release evidence tracker before stable pu
 | Redaction proof | Test command, output hash, or artifact proving redaction runs before queueing, persistence, serialization, logging, and delivery. |
 | Forbidden-field exclusion | Sensitive-fixture evidence proving node URLs, subscription URLs, credentials, IP addresses, full logs, generated configs, traffic destinations, hardware identifiers, local user paths, and raw error text are absent from serialized diagnostics and local queue storage. |
 | Retention policy | Approved retention record covering client queue retention, raw server-side event retention, aggregate retention, transport access logs, and non-joining to accounts, subscriptions, traffic, payment, support, or advertising systems. |
-| Disabled-state fallback | Evidence that missing endpoint configuration or the approved disable control prevents network delivery while app startup, update checks, downloads, core apply, runtime control, UI actions, and shutdown continue. |
+| Disabled-state fallback | Evidence that missing endpoint configuration or the approved disable control prevents network delivery while app startup, update checks, downloads, runtime control, UI actions, and shutdown continue. |
 | Anonymous install ID storage | Evidence that the ID is random, local, persistent, and not derived from hardware IDs, usernames, hostnames, MAC addresses, IP addresses, or account data. |
 | Queue bounds | Evidence for max event count or bytes, batch size, expiry, overflow behavior, retry bounds, and no unbounded startup or battery impact. |
 | Event schema hash | Hash of the approved event schema or fixture set. |

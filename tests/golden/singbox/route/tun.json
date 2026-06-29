@@ -25,44 +25,9 @@
       ]
     },
     {
-      "action": "hijack-dns",
-      "port": [
-        53
-      ],
-      "process_name": [
-        "xray",
-        "v2ray",
-        "wv2ray",
-        "hysteria",
-        "hysteria-windows-amd64",
-        "hysteria-linux-amd64",
-        "hysteria-darwin-amd64",
-        "hysteria-darwin-arm64",
-        "naive",
-        "naiveproxy",
-        "tuic-client",
-        "juicity-client",
-        "mieru"
-      ]
-    },
-    {
       "outbound": "direct",
       "process_name": [
-        "xray",
-        "v2ray",
-        "wv2ray",
-        "hysteria",
-        "hysteria-windows-amd64",
-        "hysteria-linux-amd64",
-        "hysteria-darwin-amd64",
-        "hysteria-darwin-arm64",
-        "naive",
-        "naiveproxy",
-        "tuic-client",
-        "juicity-client",
-        "mieru",
-        "sing-box",
-        "mihomo"
+        "sing-box"
       ]
     },
     {

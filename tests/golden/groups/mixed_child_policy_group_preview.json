@@ -57,45 +57,5 @@
     "normalizedChildItems": "leaf-a,chain",
     "valid": true,
     "warnings": []
-  },
-  "xrayBalancers": [
-    {
-      "fallbackTag": null,
-      "selectors": [
-        "proxy"
-      ],
-      "strategy": "leastPing",
-      "tag": "proxy-balancer"
-    }
-  ],
-  "xrayBurstObservatorySelectors": [],
-  "xrayObservatorySelectors": [
-    "proxy"
-  ],
-  "xrayRoutes": [
-    {
-      "detour": null,
-      "dialerProxy": null,
-      "downloadDialerProxy": null,
-      "kind": "vless",
-      "outbounds": [],
-      "tag": "proxy-1-Leaf A"
-    },
-    {
-      "detour": null,
-      "dialerProxy": "chain-proxy-2-Nested Chain-1-Leaf B",
-      "downloadDialerProxy": null,
-      "kind": "vless",
-      "outbounds": [],
-      "tag": "proxy-2-Nested Chain"
-    },
-    {
-      "detour": null,
-      "dialerProxy": null,
-      "downloadDialerProxy": null,
-      "kind": "vless",
-      "outbounds": [],
-      "tag": "chain-proxy-2-Nested Chain-1-Leaf B"
-    }
-  ]
+  }
 }

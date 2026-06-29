@@ -171,9 +171,6 @@ impl CoreGenEnv for SnapshotCoreGenEnv {
     }
 }
 
-const fn default_core_type(config_type: ConfigType) -> CoreType {
-    match config_type {
-        ConfigType::TUIC | ConfigType::Anytls | ConfigType::Naive => CoreType::sing_box,
-        _ => CoreType::Xray,
-    }
+const fn default_core_type(_config_type: ConfigType) -> CoreType {
+    CoreType::sing_box
 }

@@ -134,10 +134,6 @@ describe("ProfilesScreen", () => {
     ipcMocks.moveProfile.mockResolvedValue([]);
     ipcMocks.previewGroupProfile.mockResolvedValue({
       validation: { childIndexIds: [], errors: [], normalizedChildItems: "", valid: true, warnings: [] },
-      xrayRoutes: [],
-      xrayBalancers: [],
-      xrayObservatorySelectors: [],
-      xrayBurstObservatorySelectors: [],
       singboxRoutes: [],
     });
     ipcMocks.cancelSpeedtest.mockResolvedValue({ running: false });
@@ -553,19 +549,6 @@ describe("ProfilesScreen", () => {
         valid: true,
         warnings: [],
       },
-      xrayRoutes: [
-        {
-          detour: null,
-          dialerProxy: "chain-proxy-1-Chain A",
-          downloadDialerProxy: null,
-          kind: "vless",
-          outbounds: [],
-          tag: "proxy-1-Leaf A",
-        },
-      ],
-      xrayBalancers: [{ fallbackTag: null, selectors: ["proxy"], strategy: "leastPing", tag: "proxy-balancer" }],
-      xrayObservatorySelectors: ["proxy"],
-      xrayBurstObservatorySelectors: [],
       singboxRoutes: [
         {
           detour: null,
@@ -601,7 +584,6 @@ describe("ProfilesScreen", () => {
     expect(await screen.findByText("Chain A")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Preview" }));
-    expect(await screen.findByText("Xray dialerProxy")).toBeInTheDocument();
     expect(await screen.findByText("sing-box selector/urltest + detour")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Save/ }));

@@ -79,7 +79,6 @@ export function ModalHost() {
 function MissingCoreDialog({ payload }: { payload?: MissingCorePayload }) {
   const { t } = useI18n();
   const closeTopModal = useModalStore((state) => state.closeTopModal);
-  const openModal = useModalStore((state) => state.openModal);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [seedMissing, setSeedMissing] = useState(false);
@@ -110,11 +109,6 @@ function MissingCoreDialog({ payload }: { payload?: MissingCorePayload }) {
     }
   }
 
-  function openUpdates() {
-    closeTopModal();
-    openModal("updates");
-  }
-
   return (
     <DialogContent>
       <DialogHeader>
@@ -132,8 +126,8 @@ function MissingCoreDialog({ payload }: { payload?: MissingCorePayload }) {
 
       <DialogFooter>
         {seedMissing ? (
-          <Button onClick={openUpdates} type="button">
-            {t("missingCore.openUpdates")}
+          <Button onClick={closeTopModal} type="button" variant="outline">
+            {t("actions.close")}
           </Button>
         ) : (
           <Button disabled={busy || !payload} onClick={() => void installAndConnect()} type="button">

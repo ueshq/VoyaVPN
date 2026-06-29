@@ -5,7 +5,7 @@
     "install": "安裝核心",
     "installing": "正在安裝…",
     "openUpdates": "開啟更新…",
-    "seedMissingHint": "沒有可用的內建核心，請在「更新」中下載。"
+    "seedMissingHint": "沒有可用的內建 sing-box 核心。請重新安裝應用，或使用包含 sing-box seed 的安裝包。"
   },
   "actions": {
     "addProfile": "新增設定檔",
@@ -892,7 +892,7 @@
     "TbSettingsSetUWP": "解除 Win10 UWP 應用回環代理限制",
     "TbSettingsSniffingEnabled": "開啟流量探測",
     "TbSettingsSocksPort": "本機混合偵聽埠",
-    "TbSettingsSocksPortTip": "Pac 連接埠 = +3；Xray API 連接埠 = +4；mihomo API 連接埠 = +5；",
+    "TbSettingsSocksPortTip": "Pac 連接埠 = +3；Clash API 連接埠 = +5；",
     "TbSettingsSpeedPingTestUrl": "真連線測試位址",
     "TbSettingsSpeedTestTimeout": "測速單個超時值",
     "TbSettingsSpeedTestUrl": "測速檔案位址",
@@ -943,7 +943,7 @@
     "TipChangeSystemProxy": "系統代理設定已改變",
     "TipDisplayLog": "當有異常斷流時請關閉",
     "TipNetwork": "*預設 raw，選錯會無法連線",
-    "TipPreSocksPort": "*自訂設定的 Socks 埠值，可留空；當設定此值後，將使用 Xray/sing-box (Tun) 額外啟動一個前置 Socks 服務，提供分流和速度顯示等功能",
+    "TipPreSocksPort": "*自訂設定的 Socks 埠值，可留空；當設定此值後，將使用 sing-box (TUN) 額外啟動一個前置 Socks 服務，提供分流和速度顯示等功能",
     "TransportExtra": "XHTTP Extra",
     "TransportExtraTip": "原始 JSON，格式： { XHTTPObject }",
     "TransportHeaderType1": "raw 偽裝類型",
@@ -1011,9 +1011,7 @@
   "updates": {
     "acquisition": {
       "appPackage": "應用程式安裝包",
-      "downloadOnFirstRun": "首次執行下載",
-      "optionalDownload": "選用下載",
-      "unsupported": "不支援"
+      "optionalDownload": "選用下載"
     },
     "appInstalled": "應用程式更新已安裝：{{version}}",
     "appUpdateAvailable": "應用程式 {{version}} 可用",
@@ -1029,12 +1027,11 @@
     "applied": "已套用 {{version}}",
     "check": "檢查",
     "checkApp": "檢查應用程式",
-    "description": "檢查應用程式、核心、geo 檔案與規則集的更新。",
+    "description": "檢查應用程式、geo 檔案與規則集的更新。",
     "download": "下載",
     "installApp": "安裝應用程式",
     "kind": {
       "app": "應用程式",
-      "core": "核心",
       "geo": "Geo",
       "srs": "SRS"
     },
@@ -1095,7 +1092,7 @@
   "templates": {
     "addProxyOnly": "僅新增代理",
     "configJson": "設定 JSON",
-    "description": "編輯 Xray 和 sing-box 生成時使用的完整設定範本。",
+    "description": "編輯 sing-box 生成時使用的完整設定範本。",
     "enabled": "啟用",
     "open": "開啟範本設定",
     "proxyDetour": "代理繞行",

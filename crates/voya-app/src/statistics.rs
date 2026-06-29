@@ -1,12 +1,10 @@
 use std::{
-    collections::BTreeMap,
     sync::{Arc, RwLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use futures_util::StreamExt;
 use serde::Deserialize;
-use serde_json::Value;
 use thiserror::Error;
 use tokio::{
     sync::{mpsc, watch},
@@ -15,8 +13,7 @@ use tokio::{
 };
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use voya_core::{
-    AppConfig, CoreType, InboundProtocol, ServerStatItem, DEFAULT_LOCAL_PORT, DIRECT_TAG, LOOPBACK,
-    PROXY_TAG,
+    AppConfig, CoreType, InboundProtocol, ServerStatItem, DEFAULT_LOCAL_PORT, LOOPBACK,
 };
 use voya_db::{Database, DbError};
 
@@ -24,7 +21,6 @@ use crate::supervisor::{CoreSupervisor, SupervisorSnapshot};
 
 const STATISTICS_CHANNEL_SIZE: usize = 64;
 const COALESCE_INTERVAL: Duration = Duration::from_secs(1);
-const XRAY_POLL_INTERVAL: Duration = Duration::from_secs(1);
 const SINGBOX_RECONNECT_INITIAL_DELAY: Duration = Duration::from_secs(1);
 const SINGBOX_RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
 const SINGBOX_INITIAL_DELAY: Duration = Duration::from_secs(5);
@@ -189,12 +185,6 @@ impl StatisticsManager {
                 sample_rx,
                 shutdown_rx.clone(),
             )),
-            tokio::spawn(run_xray_statistics_service(
-                Arc::clone(&config_source),
-                supervisor.clone(),
-                sample_tx.clone(),
-                shutdown_rx.clone(),
-            )),
             tokio::spawn(run_singbox_statistics_service(
                 config_source,
                 supervisor,
@@ -276,74 +266,11 @@ pub fn parse_singbox_traffic_sample(source: &str) -> Option<ServerSpeedSample> {
     })
 }
 
-#[derive(Debug, Default)]
-pub struct XrayDebugVarsParser {
-    previous: Option<ServerSpeedSample>,
-}
-
-impl XrayDebugVarsParser {
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn reset(&mut self) {
-        self.previous = None;
-    }
-
-    #[must_use]
-    pub fn set_baseline(&mut self, source: &str) -> bool {
-        let Some(current) = parse_xray_debug_vars_totals(source) else {
-            self.previous = None;
-            return false;
-        };
-
-        self.previous = Some(current);
-        true
-    }
-
-    #[must_use]
-    pub fn parse_next(&mut self, source: &str) -> Option<ServerSpeedSample> {
-        let current = parse_xray_debug_vars_totals(source)?;
-        let previous = self.previous.unwrap_or_default();
-        self.previous = Some(current);
-
-        if counters_rolled_back(previous, current) {
-            return None;
-        }
-
-        Some(ServerSpeedSample {
-            proxy_up_bytes: current
-                .proxy_up_bytes
-                .saturating_sub(previous.proxy_up_bytes),
-            proxy_down_bytes: current
-                .proxy_down_bytes
-                .saturating_sub(previous.proxy_down_bytes),
-            direct_up_bytes: current
-                .direct_up_bytes
-                .saturating_sub(previous.direct_up_bytes),
-            direct_down_bytes: current
-                .direct_down_bytes
-                .saturating_sub(previous.direct_down_bytes),
-        })
-    }
-}
-
-#[must_use]
-pub fn xray_state_port(config: &AppConfig) -> u16 {
-    clamp_port(inbound_port(config, InboundProtocol::api))
-}
-
 #[must_use]
 pub fn singbox_state_port2(config: &AppConfig) -> u16 {
     clamp_port(
         inbound_port(config, InboundProtocol::api2) + i32::from(config.tun_mode_item.enable_tun),
     )
-}
-
-#[must_use]
-pub fn core_matches_xray(core_type: Option<CoreType>) -> bool {
-    core_type.is_some_and(core_type_matches_xray)
 }
 
 #[must_use]
@@ -396,70 +323,6 @@ async fn run_statistics_aggregator(
                     Ok(Some(snapshot)) => event_sink.emit_statistics(snapshot),
                     Ok(None) => {}
                     Err(error) => tracing::warn!(?error, "failed to apply statistics sample"),
-                }
-            }
-        }
-    }
-}
-
-async fn run_xray_statistics_service(
-    config_source: Arc<dyn StatisticsConfigSource>,
-    supervisor: CoreSupervisor,
-    sample_tx: mpsc::Sender<ServerSpeedSample>,
-    mut shutdown: watch::Receiver<bool>,
-) {
-    let client = reqwest::Client::new();
-    let mut parser = XrayDebugVarsParser::new();
-    let mut active_identity = None;
-    let mut interval = time::interval(XRAY_POLL_INTERVAL);
-
-    loop {
-        tokio::select! {
-            biased;
-            changed = shutdown.changed() => {
-                if changed.is_err() || *shutdown.borrow() {
-                    break;
-                }
-            }
-            _ = interval.tick() => {
-                let config = config_source.snapshot();
-                if !config.enabled() {
-                    parser.reset();
-                    active_identity = None;
-                    continue;
-                }
-                let Some(identity) = xray_process_identity(&supervisor).await else {
-                    parser.reset();
-                    active_identity = None;
-                    continue;
-                };
-                let Some(state_port) = available_state_port(config.state_port) else {
-                    parser.reset();
-                    active_identity = None;
-                    tracing::debug!("skipping Xray statistics because state port is unavailable");
-                    continue;
-                };
-                let baseline_required = active_identity.as_ref() != Some(&identity);
-
-                let url = format!("http://{LOOPBACK}:{state_port}/debug/vars");
-                match client.get(url).send().await {
-                    Ok(response) => match response.text().await {
-                        Ok(body) => {
-                            if baseline_required {
-                                if parser.set_baseline(&body) {
-                                    active_identity = Some(identity);
-                                } else {
-                                    active_identity = None;
-                                }
-                                continue;
-                            }
-                            if let Some(sample) = parser.parse_next(&body) {
-                                let _ = sample_tx.send(sample).await;
-                            }
-                        }
-                        Err(error) => tracing::debug!(?error, "failed to read Xray statistics body"),
-                    },
-                    Err(error) => tracing::debug!(?error, "failed to poll Xray statistics"),
                 }
             }
         }
@@ -577,14 +440,6 @@ async fn run_singbox_statistics_service(
     }
 }
 
-async fn xray_process_identity(supervisor: &CoreSupervisor) -> Option<CoreProcessIdentity> {
-    supervisor
-        .status()
-        .await
-        .ok()
-        .and_then(|snapshot| core_process_identity(snapshot, core_type_matches_xray))
-}
-
 async fn singbox_process_identity(supervisor: &CoreSupervisor) -> Option<CoreProcessIdentity> {
     supervisor
         .status()
@@ -622,91 +477,6 @@ fn snapshot_from_sample(
     }
 }
 
-fn parse_xray_debug_vars_totals(source: &str) -> Option<ServerSpeedSample> {
-    #[derive(Deserialize)]
-    struct V2rayMetricsVars {
-        stats: Option<V2rayMetricsVarsStats>,
-    }
-
-    #[derive(Deserialize)]
-    struct V2rayMetricsVarsStats {
-        outbound: Option<BTreeMap<String, Value>>,
-    }
-
-    let source = serde_json::from_str::<V2rayMetricsVars>(source).ok()?;
-    let outbound = source.stats?.outbound?;
-    let mut sample = ServerSpeedSample::default();
-
-    for (key, value) in outbound {
-        if key.contains(">>>traffic>>>") {
-            apply_xray_flat_counter(&mut sample, &key, &value);
-            continue;
-        }
-
-        let up = json_counter_field(&value, "uplink");
-        let down = json_counter_field(&value, "downlink");
-        if key.starts_with(PROXY_TAG) {
-            sample.proxy_up_bytes = sample.proxy_up_bytes.saturating_add(up);
-            sample.proxy_down_bytes = sample.proxy_down_bytes.saturating_add(down);
-        } else if key == DIRECT_TAG {
-            sample.direct_up_bytes = sample.direct_up_bytes.saturating_add(up);
-            sample.direct_down_bytes = sample.direct_down_bytes.saturating_add(down);
-        }
-    }
-
-    Some(sample)
-}
-
-fn apply_xray_flat_counter(sample: &mut ServerSpeedSample, key: &str, value: &Value) {
-    let mut parts = key.split(">>>");
-    let Some(tag) = parts.next() else {
-        return;
-    };
-    let direction = key.rsplit(">>>").next().unwrap_or_default();
-    let amount = json_counter_value(value);
-
-    match (tag, direction) {
-        (tag, "uplink") if tag.starts_with(PROXY_TAG) => {
-            sample.proxy_up_bytes = sample.proxy_up_bytes.saturating_add(amount);
-        }
-        (tag, "downlink") if tag.starts_with(PROXY_TAG) => {
-            sample.proxy_down_bytes = sample.proxy_down_bytes.saturating_add(amount);
-        }
-        (DIRECT_TAG, "uplink") => {
-            sample.direct_up_bytes = sample.direct_up_bytes.saturating_add(amount);
-        }
-        (DIRECT_TAG, "downlink") => {
-            sample.direct_down_bytes = sample.direct_down_bytes.saturating_add(amount);
-        }
-        _ => {}
-    }
-}
-
-fn json_counter_field(value: &Value, field: &str) -> i64 {
-    value.get(field).map_or(0, json_counter_value)
-}
-
-fn json_counter_value(value: &Value) -> i64 {
-    value
-        .as_i64()
-        .or_else(|| value.as_u64().and_then(|value| i64::try_from(value).ok()))
-        .or_else(|| value.get("value").and_then(json_counter_value_checked))
-        .unwrap_or(0)
-}
-
-fn json_counter_value_checked(value: &Value) -> Option<i64> {
-    value
-        .as_i64()
-        .or_else(|| value.as_u64().and_then(|value| i64::try_from(value).ok()))
-}
-
-fn counters_rolled_back(previous: ServerSpeedSample, current: ServerSpeedSample) -> bool {
-    current.proxy_up_bytes < previous.proxy_up_bytes
-        || current.proxy_down_bytes < previous.proxy_down_bytes
-        || current.direct_up_bytes < previous.direct_up_bytes
-        || current.direct_down_bytes < previous.direct_down_bytes
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct CoreProcessIdentity {
     core_type: CoreType,
@@ -739,15 +509,9 @@ fn update_active_identity(
     true
 }
 
-fn core_type_matches_xray(core_type: CoreType) -> bool {
-    matches!(
-        core_type,
-        CoreType::Xray | CoreType::v2fly | CoreType::v2fly_v5
-    )
-}
-
 fn core_type_matches_singbox(core_type: CoreType) -> bool {
-    matches!(core_type, CoreType::sing_box | CoreType::mihomo)
+    let _ = core_type;
+    true
 }
 
 fn available_state_port(port: u16) -> Option<u16> {
@@ -846,149 +610,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn statistics_xray_debug_vars_parser_sums_proxy_and_direct_deltas() {
-        let mut parser = XrayDebugVarsParser::new();
-        let first = parser
-            .parse_next(
-                r#"{
-                    "stats": {
-                        "outbound": {
-                            "proxy": { "uplink": 4096, "downlink": 8192 },
-                            "proxy10808": { "uplink": 1024, "downlink": 2048 },
-                            "direct": { "uplink": 512, "downlink": 256 }
-                        }
-                    }
-                }"#,
-            )
-            .expect("first sample");
-        assert_eq!(
-            first,
-            ServerSpeedSample {
-                proxy_up_bytes: 5120,
-                proxy_down_bytes: 10240,
-                direct_up_bytes: 512,
-                direct_down_bytes: 256,
-            }
-        );
-
-        let second = parser
-            .parse_next(
-                r#"{
-                    "stats": {
-                        "outbound": {
-                            "proxy": { "uplink": 5120, "downlink": 12288 },
-                            "proxy10808": { "uplink": 2048, "downlink": 4096 },
-                            "direct": { "uplink": 768, "downlink": 512 }
-                        }
-                    }
-                }"#,
-            )
-            .expect("second sample");
-        assert_eq!(
-            second,
-            ServerSpeedSample {
-                proxy_up_bytes: 2048,
-                proxy_down_bytes: 6144,
-                direct_up_bytes: 256,
-                direct_down_bytes: 256,
-            }
-        );
-    }
-
-    #[test]
-    fn statistics_xray_debug_vars_parser_reads_flat_expvar_counters() {
-        let mut parser = XrayDebugVarsParser::new();
-        let sample = parser
-            .parse_next(
-                r#"{
-                    "stats": {
-                        "outbound": {
-                            "proxy>>>traffic>>>uplink": { "value": 100 },
-                            "proxy>>>traffic>>>downlink": { "value": 200 },
-                            "direct>>>traffic>>>uplink": 30,
-                            "direct>>>traffic>>>downlink": 40
-                        }
-                    }
-                }"#,
-            )
-            .expect("flat counters");
-
-        assert_eq!(
-            sample,
-            ServerSpeedSample {
-                proxy_up_bytes: 100,
-                proxy_down_bytes: 200,
-                direct_up_bytes: 30,
-                direct_down_bytes: 40,
-            }
-        );
-    }
-
-    #[test]
-    fn statistics_xray_debug_vars_parser_resets_restart_baseline() {
-        let mut parser = XrayDebugVarsParser::new();
-        assert!(parser.set_baseline(
-            r#"{
-                "stats": {
-                    "outbound": {
-                        "proxy": { "uplink": 1000, "downlink": 2000 },
-                        "direct": { "uplink": 100, "downlink": 200 }
-                    }
-                }
-            }"#
-        ));
-
-        assert_eq!(
-            parser.parse_next(
-                r#"{
-                    "stats": {
-                        "outbound": {
-                            "proxy": { "uplink": 1010, "downlink": 2020 },
-                            "direct": { "uplink": 103, "downlink": 207 }
-                        }
-                    }
-                }"#
-            ),
-            Some(ServerSpeedSample {
-                proxy_up_bytes: 10,
-                proxy_down_bytes: 20,
-                direct_up_bytes: 3,
-                direct_down_bytes: 7,
-            })
-        );
-
-        assert!(parser.set_baseline(
-            r#"{
-                "stats": {
-                    "outbound": {
-                        "proxy": { "uplink": 5000, "downlink": 8000 },
-                        "direct": { "uplink": 900, "downlink": 1200 }
-                    }
-                }
-            }"#
-        ));
-
-        assert_eq!(
-            parser.parse_next(
-                r#"{
-                    "stats": {
-                        "outbound": {
-                            "proxy": { "uplink": 5004, "downlink": 8009 },
-                            "direct": { "uplink": 902, "downlink": 1205 }
-                        }
-                    }
-                }"#
-            ),
-            Some(ServerSpeedSample {
-                proxy_up_bytes: 4,
-                proxy_down_bytes: 9,
-                direct_up_bytes: 2,
-                direct_down_bytes: 5,
-            })
-        );
-    }
-
-    #[test]
     fn statistics_singbox_traffic_parser_reads_ws_payload() {
         assert_eq!(
             parse_singbox_traffic_sample(r#"{"up":1234,"down":5678}"#),
@@ -1003,7 +624,7 @@ mod tests {
     }
 
     #[test]
-    fn statistics_config_uses_state_port_and_state_port2() {
+    fn statistics_config_uses_singbox_state_port2() {
         let mut config = AppConfig {
             inbound: vec![InItem {
                 local_port: 12000,
@@ -1017,7 +638,6 @@ mod tests {
             ..AppConfig::default()
         };
 
-        assert_eq!(xray_state_port(&config), 12004);
         assert_eq!(singbox_state_port2(&config), 12006);
 
         config.tun_mode_item.enable_tun = false;
@@ -1025,14 +645,8 @@ mod tests {
     }
 
     #[test]
-    fn statistics_core_type_matching_follows_v2rayn_groups() {
-        assert!(core_matches_xray(Some(CoreType::Xray)));
-        assert!(core_matches_xray(Some(CoreType::v2fly)));
-        assert!(core_matches_xray(Some(CoreType::v2fly_v5)));
-        assert!(!core_matches_xray(Some(CoreType::sing_box)));
+    fn statistics_core_type_matching_follows_singbox_only() {
         assert!(core_matches_singbox(Some(CoreType::sing_box)));
-        assert!(core_matches_singbox(Some(CoreType::mihomo)));
-        assert!(!core_matches_singbox(Some(CoreType::Xray)));
     }
 
     #[test]
@@ -1042,7 +656,7 @@ mod tests {
             active_profile_id: Some("profile-a".to_string()),
             main_pid: Some(100),
             pre_pid: None,
-            running_core_type: Some(CoreType::Xray),
+            running_core_type: Some(CoreType::sing_box),
         };
         let restarted = SupervisorSnapshot {
             main_pid: Some(101),
@@ -1054,11 +668,11 @@ mod tests {
         };
 
         assert_ne!(
-            core_process_identity(first, core_type_matches_xray),
-            core_process_identity(restarted, core_type_matches_xray)
+            core_process_identity(first, core_type_matches_singbox),
+            core_process_identity(restarted, core_type_matches_singbox)
         );
         assert_eq!(
-            core_process_identity(disconnected, core_type_matches_xray),
+            core_process_identity(disconnected, core_type_matches_singbox),
             None
         );
     }
@@ -1073,9 +687,6 @@ mod tests {
             }],
             ..AppConfig::default()
         };
-
-        assert_eq!(xray_state_port(&config), 0);
-        assert_eq!(available_state_port(xray_state_port(&config)), None);
 
         config
             .inbound

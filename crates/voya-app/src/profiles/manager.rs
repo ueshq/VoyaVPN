@@ -777,7 +777,7 @@ mod tests {
         ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::VMess,
-            core_type: Some(CoreType::Xray),
+            core_type: Some(CoreType::sing_box),
             remarks: remarks.to_string(),
             address: " example.com ".to_string(),
             port,

@@ -18,7 +18,7 @@ const stableTargets = [
   "windows-x86_64",
 ];
 const stableTargetSet = new Set(stableTargets);
-const stableCoreTypes = ["Xray", "mihomo", "sing_box"];
+const stableCoreTypes = [];
 const stableOs = ["windows", "macos", "linux"];
 const stableArchs = ["x64", "arm64"];
 const targetMatrix = [
@@ -666,8 +666,8 @@ function validateCoreManifest(manifest, rawOptions = {}) {
   if (manifest.channel !== "stable") {
     failures.push(`core manifest channel must be stable, got ${String(manifest.channel)}`);
   }
-  if (!Array.isArray(manifest.assets) || manifest.assets.length === 0) {
-    failures.push("core manifest assets must be a non-empty array");
+  if (!Array.isArray(manifest.assets)) {
+    failures.push("core manifest assets must be an array");
   }
 
   const seen = new Set();
@@ -678,7 +678,7 @@ function validateCoreManifest(manifest, rawOptions = {}) {
     const os = requiredString(asset.os, `${label} os`, failures);
     const arch = requiredString(asset.arch, `${label} arch`, failures);
     if (coreType && !stableCoreTypes.includes(coreType)) {
-      failures.push(`${label} coreType must be one of ${stableCoreTypes.join(", ")}`);
+      failures.push(`${label} coreType is not supported by the stable release`);
     }
     if (os && !stableOs.includes(os)) {
       failures.push(`${label} os must be one of ${stableOs.join(", ")}`);
@@ -888,7 +888,11 @@ async function main() {
     const coreManifest = await readJsonSource(options.coreManifest, "core manifest", options);
     const summary = validateCoreManifest(coreManifest, options);
     allCandidates.push(...summary.candidates);
-    summaries.push(`core manifest: ${summary.assetCount} assets for ${summary.coreTypes.join(", ")}`);
+    summaries.push(
+      summary.coreTypes.length > 0
+        ? `core manifest: ${summary.assetCount} assets for ${summary.coreTypes.join(", ")}`
+        : `core manifest: ${summary.assetCount} assets; downloadable core updates disabled`,
+    );
   }
 
   if (summaries.length === 0) {

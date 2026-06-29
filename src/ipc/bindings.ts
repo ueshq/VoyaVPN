@@ -133,7 +133,6 @@ export const commands = {
 	checkUpdates: (preRelease: boolean, selectedTargetIds: string[], preferProxy: boolean, proxyUrl: string | null) => typedError<UpdateRunResult, AppError>(__TAURI_INVOKE("check_updates", { preRelease, selectedTargetIds, preferProxy, proxyUrl })),
 	downloadUpdates: (preRelease: boolean, selectedTargetIds: string[], preferProxy: boolean, proxyUrl: string | null) => typedError<UpdateRunResult, AppError>(__TAURI_INVOKE("download_updates", { preRelease, selectedTargetIds, preferProxy, proxyUrl })),
 	manualAppUpdateLinks: (preRelease: boolean, preferProxy: boolean, proxyUrl: string | null) => typedError<ManualAppUpdateLinks, AppError>(__TAURI_INVOKE("manual_app_update_links", { preRelease, preferProxy, proxyUrl })),
-	applyDownloadedCoreUpdate: (request: CoreUpdateApplyRequest) => typedError<CoreUpdateApplyResult, AppError>(__TAURI_INVOKE("apply_downloaded_core_update", { request })),
 	/**
 	 *  Re-install a core binary from the packaged seed (`{resource_dir}/core-seeds/<core>/`)
 	 *  into `bin/<core>/`. This is the recovery action behind the missing-core prompt: the
@@ -513,20 +512,6 @@ export type CoreTypeItem = {
 	CoreType?: CoreType,
 };
 
-export type CoreUpdateApplyRequest = {
-	targetId: string,
-	fileName: string,
-	sha256: string,
-	remoteVersion: string,
-};
-
-export type CoreUpdateApplyResult = {
-	appliedVersion: string,
-	coreType: CoreType,
-	targetDir: string,
-	rollbackPath: string | null,
-};
-
 export type DemoRequest = {
 	message: string,
 };
@@ -591,22 +576,18 @@ export type DnsItem_Serialize = {
 export type DnsSettings = DnsSettings_Serialize | DnsSettings_Deserialize;
 
 export type DnsSettingsDefaults = {
-	xrayNormalDns: string,
-	xrayTunDns: string,
 	singboxNormalDns: string,
 	singboxTunDns: string,
 };
 
 export type DnsSettings_Deserialize = {
 	simpleDnsItem: SimpleDnsItem_Deserialize,
-	xrayDnsItem: DnsItem_Deserialize,
 	singboxDnsItem: DnsItem_Deserialize,
 	defaults: DnsSettingsDefaults,
 };
 
 export type DnsSettings_Serialize = {
 	simpleDnsItem: SimpleDnsItem_Serialize,
-	xrayDnsItem: DnsItem_Serialize,
 	singboxDnsItem: DnsItem_Serialize,
 	defaults: DnsSettingsDefaults,
 };
@@ -694,10 +675,6 @@ export type GroupChildCandidate = {
 
 export type GroupPreview = {
 	validation?: GroupValidationResult,
-	xrayRoutes?: GroupPreviewRoute[],
-	xrayBalancers?: GroupPreviewBalancer[],
-	xrayObservatorySelectors?: string[],
-	xrayBurstObservatorySelectors?: string[],
 	singboxRoutes?: GroupPreviewRoute[],
 };
 
@@ -926,7 +903,6 @@ export type PresetApplyResult = {
 	geoSourceUrl: string | null,
 	srsSourceUrl: string | null,
 	routeRulesTemplateSourceUrl: string | null,
-	xrayDnsFetched: boolean,
 	singboxDnsFetched: boolean,
 	simpleDnsFetched: boolean,
 	fallbackCustomDnsEnabled: boolean,
@@ -1598,7 +1574,7 @@ export type UiItem_Serialize = {
 	WindowSizeItem: WindowSizeItem[],
 };
 
-export type UpdateAcquisition = "appPackage" | "downloadOnFirstRun" | "optionalDownload" | "unsupported";
+export type UpdateAcquisition = "appPackage" | "optionalDownload";
 
 export type UpdateCheckResult = {
 	targetId: string,
@@ -1639,7 +1615,7 @@ export type UpdateTarget = {
 	remarks: string,
 };
 
-export type UpdateTargetKind = "app" | "core" | "geo" | "srs";
+export type UpdateTargetKind = "app" | "geo" | "srs";
 
 export type WebDavItem = WebDavItem_Serialize | WebDavItem_Deserialize;
 

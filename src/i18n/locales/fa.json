@@ -5,7 +5,7 @@
     "install": "نصب هسته",
     "installing": "در حال نصب…",
     "openUpdates": "باز کردن به‌روزرسانی‌ها…",
-    "seedMissingHint": "هیچ هستهٔ همراهی در دسترس نیست. برای دانلود، به‌روزرسانی‌ها را باز کنید."
+    "seedMissingHint": "هیچ هستهٔ sing-box همراهی در دسترس نیست. برنامه را دوباره نصب کنید یا بسته را با seed هستهٔ sing-box بسازید."
   },
   "actions": {
     "addProfile": "افزودن نمایه",
@@ -892,7 +892,7 @@
     "TbSettingsSetUWP": "تنظیم کردن Win10 UWP Loopback",
     "TbSettingsSniffingEnabled": "فعال کردن Sniffing",
     "TbSettingsSocksPort": "پورت Mixed",
-    "TbSettingsSocksPortTip": "پورت Pac = +3; پورت Xray API = +4; پورت mihomo API = +5;",
+    "TbSettingsSocksPortTip": "پورت Pac = +3; پورت Clash API = +5;",
     "TbSettingsSpeedPingTestUrl": "آدرس اینترنتی تست پینگ سرعت",
     "TbSettingsSpeedTestTimeout": "یمقدار تاخیر تست سرعت منفرد",
     "TbSettingsSpeedTestUrl": "/آدرس اینترنتی SpeedTest",
@@ -943,7 +943,7 @@
     "TipChangeSystemProxy": "تنظیمات پراکسی سیستم تغییر کرده است",
     "TipDisplayLog": "لطفاً در صورت قطع غیرعادی آن را خاموش کنید",
     "TipNetwork": "*مقدار پیش فرض raw",
-    "TipPreSocksPort": "* پس از تنظیم این مقدار، یک سرویس جوراب با استفاده از Xray/sing-box (Tun) برای ارائه عملکردهایی مانند نمایش سرعت شروع می شود.",
+    "TipPreSocksPort": "* پس از تنظیم این مقدار، یک سرویس جوراب با استفاده از sing-box (TUN) برای ارائه عملکردهایی مانند نمایش سرعت شروع می شود.",
     "TransportExtra": "XHTTP Extra",
     "TransportExtraTip": "Raw JSON, format: { XHTTP Object }",
     "TransportHeaderType1": "raw camouflage type",
@@ -1011,9 +1011,7 @@
   "updates": {
     "acquisition": {
       "appPackage": "بسته برنامه",
-      "downloadOnFirstRun": "دریافت در اولین اجرا",
-      "optionalDownload": "دریافت اختیاری",
-      "unsupported": "پشتیبانی نمی شود"
+      "optionalDownload": "دریافت اختیاری"
     },
     "appInstalled": "به روزرسانی برنامه نصب شد: {{version}}",
     "appUpdateAvailable": "برنامه {{version}} در دسترس است",
@@ -1029,12 +1027,11 @@
     "applied": "اعمال شد {{version}}",
     "check": "بررسی",
     "checkApp": "بررسی برنامه",
-    "description": "بررسی به روزرسانی برنامه، هسته ها، فایل های geo و ruleset.",
+    "description": "بررسی به روزرسانی برنامه، فایل های geo و ruleset.",
     "download": "دریافت",
     "installApp": "نصب برنامه",
     "kind": {
       "app": "برنامه",
-      "core": "هسته",
       "geo": "Geo",
       "srs": "SRS"
     },
@@ -1095,7 +1092,7 @@
   "templates": {
     "addProxyOnly": "Add proxy only",
     "configJson": "Config JSON",
-    "description": "Edit full config templates used by Xray and sing-box generation.",
+    "description": "Edit full config templates used by sing-box generation.",
     "enabled": "Enabled",
     "open": "Open template settings",
     "proxyDetour": "Proxy detour",

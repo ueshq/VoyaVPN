@@ -37,7 +37,6 @@ import {
 } from "@/features/updates/app-update-flow";
 import { useI18n } from "@/i18n/use-i18n";
 import {
-  applyDownloadedCoreUpdate,
   checkUpdates,
   downloadUpdates,
   saveUpdatePreferences,
@@ -47,7 +46,6 @@ import type {
   AppUpdateCheckResult,
   AppUpdateInstallResult,
   AppUpdaterStatus,
-  CoreUpdateApplyResult,
   ManualAppUpdateDownload,
   ManualAppUpdateLinks,
   UpdateAcquisition,
@@ -75,11 +73,6 @@ export function CheckUpdateDialog() {
   const [appUpdaterCheck, setAppUpdaterCheck] = useState<AppUpdateCheckResult | null>(null);
   const [appUpdaterError, setAppUpdaterError] = useState<string | null>(null);
   const [appInstallResult, setAppInstallResult] = useState<AppUpdateInstallResult | null>(null);
-  const [appliedCoreResults, setAppliedCoreResults] = useState<Map<string, CoreUpdateApplyResult>>(
-    new Map(),
-  );
-  const [applyingCoreTargetId, setApplyingCoreTargetId] = useState<string | null>(null);
-  const [coreApplyErrors, setCoreApplyErrors] = useState<Map<string, string>>(new Map());
   const [manualLinks, setManualLinks] = useState<ManualAppUpdateLinks | null>(null);
   const [manualLinksError, setManualLinksError] = useState<string | null>(null);
   const [preRelease, setPreRelease] = useState(false);
@@ -211,8 +204,6 @@ export function CheckUpdateDialog() {
   async function run(mode: CoreRunMode) {
     setWorking(mode);
     setError(null);
-    setAppliedCoreResults(new Map());
-    setCoreApplyErrors(new Map());
     try {
       await waitForPendingPreferenceSaves();
       const preference = clonePreferenceSnapshot(preferenceSnapshotRef.current);
@@ -269,38 +260,6 @@ export function CheckUpdateDialog() {
     }
   }
 
-  async function applyCoreUpdate(result: UpdateCheckResult) {
-    if (!result.fileName || !result.sha256 || !result.remoteVersion) {
-      setError(t("updates.missingDownloadedFields"));
-      return;
-    }
-
-    setApplyingCoreTargetId(result.targetId);
-    setError(null);
-    setCoreApplyErrors((current) => withoutMapEntry(current, result.targetId));
-    try {
-      const applied = await applyDownloadedCoreUpdate({
-        targetId: result.targetId,
-        fileName: result.fileName,
-        sha256: result.sha256,
-        remoteVersion: result.remoteVersion,
-      });
-      setAppliedCoreResults((current) => new Map(current).set(result.targetId, applied));
-      setResults((current) => reconcileAppliedCoreResult(current, result.targetId, applied));
-      try {
-        applyUpdateStatus(await updateStatus());
-      } catch (refreshError) {
-        setError(errorMessage(refreshError));
-      }
-    } catch (error) {
-      const message = errorMessage(error);
-      setCoreApplyErrors((current) => new Map(current).set(result.targetId, message));
-      setError(message);
-    } finally {
-      setApplyingCoreTargetId(null);
-    }
-  }
-
   function toggleTarget(id: string, checked: boolean) {
     const nextSelected = new Set(preferenceSnapshotRef.current.selectedIds);
     if (checked) {
@@ -341,7 +300,7 @@ export function CheckUpdateDialog() {
           <div className="flex items-center gap-2">
             <Checkbox
               checked={preRelease}
-              disabled={working !== null || applyingCoreTargetId !== null}
+              disabled={working !== null}
               id="updates-pre-release"
               onCheckedChange={(checked) => togglePreRelease(checked === true)}
             />
@@ -419,10 +378,6 @@ export function CheckUpdateDialog() {
             <TableBody>
               {(status?.targets ?? []).map((target) => {
                 const result = resultByTarget.get(target.id);
-                const applied = appliedCoreResults.get(target.id) ?? null;
-                const applyError = coreApplyErrors.get(target.id) ?? null;
-                const canApplyCore =
-                  target.kind === "core" && result?.status === "downloaded" && !applied;
 
                 return (
                   <TableRow key={target.id}>
@@ -430,7 +385,7 @@ export function CheckUpdateDialog() {
                       <Checkbox
                         aria-label={`${t("updates.selected")} ${target.name}`}
                         checked={selectedIds.has(target.id)}
-                        disabled={working !== null || applyingCoreTargetId !== null}
+                        disabled={working !== null}
                         onCheckedChange={(checked) => toggleTarget(target.id, checked === true)}
                       />
                     </TableCell>
@@ -452,29 +407,11 @@ export function CheckUpdateDialog() {
                       </div>
                     </TableCell>
                     <TableCell className="px-3 py-2 align-top text-muted-foreground">
-                      {applied?.appliedVersion ?? result?.remoteVersion ?? result?.currentVersion ?? "-"}
+                      {result?.remoteVersion ?? result?.currentVersion ?? "-"}
                     </TableCell>
                     <TableCell className="min-w-56 px-3 py-2 align-top">
                       <div className="flex flex-wrap items-start gap-2">
-                        <UpdateResultBadge applyError={applyError} applied={applied} result={result} target={target} />
-                        {canApplyCore ? (
-                          <Button
-                            disabled={applyingCoreTargetId !== null}
-                            onClick={() => void applyCoreUpdate(result)}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                          >
-                            <PackageCheck
-                              className={cn(
-                                "size-4",
-                                applyingCoreTargetId === target.id && "animate-pulse",
-                              )}
-                              aria-hidden="true"
-                            />
-                            {t("updates.apply")}
-                          </Button>
-                        ) : null}
+                        <UpdateResultBadge result={result} target={target} />
                       </div>
                     </TableCell>
                   </TableRow>
@@ -621,13 +558,9 @@ function AppUpdatePanel({
 }
 
 function UpdateResultBadge({
-  applyError,
-  applied,
   result,
   target,
 }: {
-  applyError: string | null;
-  applied: CoreUpdateApplyResult | null;
   result: UpdateCheckResult | undefined;
   target: UpdateTarget;
 }) {
@@ -637,13 +570,9 @@ function UpdateResultBadge({
     return <Badge variant="secondary">{t("updates.waiting")}</Badge>;
   }
 
-  const isFailed = Boolean(applyError) || result.status === "error";
-  const tone = isFailed
-    ? statusTone("error")
-    : applied
-      ? statusTone("downloaded")
-      : statusTone(result.status);
-  const label = updateResultLabel({ applyError, applied, result, target, t });
+  const isFailed = result.status === "error";
+  const tone = statusTone(result.status);
+  const label = updateResultLabel({ result, target, t });
 
   return (
     <Badge
@@ -653,7 +582,7 @@ function UpdateResultBadge({
       )}
       variant="outline"
     >
-      {applied || result.status === "upToDate" || result.status === "downloaded" ? (
+      {result.status === "upToDate" || result.status === "downloaded" ? (
         <CheckCircle2 className="mt-0.5 shrink-0" aria-hidden="true" />
       ) : isFailed ? (
         <AlertTriangle className="shrink-0" aria-hidden="true" />
@@ -671,7 +600,7 @@ function TargetKindBadge({ kind }: { kind: UpdateTargetKind }) {
 
 function UpdateSupportBadge({ target }: { target: UpdateTarget }) {
   const { t } = useI18n();
-  const automatic = target.updateSupported && target.acquisition !== "unsupported";
+  const automatic = target.updateSupported;
 
   return (
     <Badge variant={automatic ? "secondary" : "outline"}>
@@ -711,28 +640,14 @@ function ManualStateBadge({
 }
 
 function updateResultLabel({
-  applyError,
-  applied,
   result,
   target,
   t,
 }: {
-  applyError: string | null;
-  applied: CoreUpdateApplyResult | null;
   result: UpdateCheckResult;
   target: UpdateTarget;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
-  if (applyError) {
-    return t("updates.statusFailedMessage", {
-      message: redactUpdateMessage(applyError, t),
-    });
-  }
-
-  if (applied) {
-    return t("updates.statusAppliedVersion", { version: applied.appliedVersion });
-  }
-
   switch (result.status) {
     case "downloaded":
       return result.remoteVersion
@@ -795,35 +710,6 @@ function preferenceSnapshotKey(snapshot: PreferenceSnapshot) {
     preRelease: snapshot.preRelease,
     selectedIds: [...new Set(snapshot.selectedIds)].sort(),
   });
-}
-
-function reconcileAppliedCoreResult(
-  current: UpdateCheckResult[],
-  targetId: string,
-  applied: CoreUpdateApplyResult,
-): UpdateCheckResult[] {
-  return current.map((item) =>
-    item.targetId === targetId
-      ? {
-          ...item,
-          bytes: null,
-          currentVersion: applied.appliedVersion,
-          downloadUrl: null,
-          fileName: null,
-          remoteVersion: applied.appliedVersion,
-          sha256: null,
-          status: "upToDate",
-          usedProxy: null,
-        }
-      : item,
-  );
-}
-
-function withoutMapEntry<T>(current: Map<string, T>, key: string) {
-  const next = new Map(current);
-  next.delete(key);
-
-  return next;
 }
 
 function errorMessage(error: unknown) {

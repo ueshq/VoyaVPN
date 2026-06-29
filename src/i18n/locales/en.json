@@ -5,7 +5,7 @@
     "install": "Install core",
     "installing": "Installing…",
     "openUpdates": "Open Updates…",
-    "seedMissingHint": "No bundled core is available. Open Updates to download it."
+    "seedMissingHint": "No bundled sing-box core is available. Reinstall the app or rebuild the package with the sing-box seed."
   },
   "actions": {
     "addProfile": "Add profile",
@@ -892,7 +892,7 @@
     "TbSettingsSetUWP": "Set Win10 UWP Loopback",
     "TbSettingsSniffingEnabled": "Turn on Sniffing",
     "TbSettingsSocksPort": "Mixed Port",
-    "TbSettingsSocksPortTip": "Pac port = +3; Xray API port = +4; mihomo API port = +5;",
+    "TbSettingsSocksPortTip": "Pac port = +3; Clash API port = +5;",
     "TbSettingsSpeedPingTestUrl": "Speed Ping Test URL",
     "TbSettingsSpeedTestTimeout": "Speed Test Single Timeout Value",
     "TbSettingsSpeedTestUrl": "Speed Test URL",
@@ -943,7 +943,7 @@
     "TipChangeSystemProxy": "System proxy setting has changed",
     "TipDisplayLog": "Please turn off when there is an abnormal disconnection",
     "TipNetwork": "*Default value raw",
-    "TipPreSocksPort": "* After setting this value, a socks service will be started using Xray/sing-box(Tun) to provide functions such as speed display",
+    "TipPreSocksPort": "* After setting this value, a socks service will be started using sing-box (TUN) to provide functions such as speed display",
     "TransportExtra": "XHTTP Extra",
     "TransportExtraTip": "Raw JSON, format: { XHTTP Object }",
     "TransportHeaderType1": "raw camouflage type",
@@ -1011,9 +1011,7 @@
   "updates": {
     "acquisition": {
       "appPackage": "App package",
-      "downloadOnFirstRun": "First-run download",
-      "optionalDownload": "Optional download",
-      "unsupported": "Unsupported"
+      "optionalDownload": "Optional download"
     },
     "appInstalled": "App update installed: {{version}}",
     "appUpdateAvailable": "App {{version}} is available",
@@ -1029,12 +1027,11 @@
     "applied": "Applied {{version}}",
     "check": "Check",
     "checkApp": "Check app",
-    "description": "Update checks for app, cores, geo files, and rulesets.",
+    "description": "Update checks for app, geo files, and rulesets.",
     "download": "Download",
     "installApp": "Install app",
     "kind": {
       "app": "App",
-      "core": "Core",
       "geo": "Geo",
       "srs": "SRS"
     },
@@ -1095,7 +1092,7 @@
   "templates": {
     "addProxyOnly": "Add proxy only",
     "configJson": "Config JSON",
-    "description": "Edit full config templates used by Xray and sing-box generation.",
+    "description": "Edit full config templates used by sing-box generation.",
     "enabled": "Enabled",
     "open": "Open template settings",
     "proxyDetour": "Proxy detour",

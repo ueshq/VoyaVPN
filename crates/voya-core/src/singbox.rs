@@ -1935,17 +1935,23 @@ fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContext) {
         config.route.auto_detect_interface = Some(true);
         config.route.rules.extend(tun_route_rules());
 
-        config.route.rules.push(SingboxRule {
-            port: Some(vec![53]),
-            action: Some("hijack-dns".to_string()),
-            process_name: Some(tun_dns_process_names()),
-            ..SingboxRule::default()
-        });
-        config.route.rules.push(SingboxRule {
-            outbound: Some(DIRECT_TAG.to_string()),
-            process_name: Some(tun_direct_process_names()),
-            ..SingboxRule::default()
-        });
+        let dns_process_names = tun_dns_process_names();
+        if !dns_process_names.is_empty() {
+            config.route.rules.push(SingboxRule {
+                port: Some(vec![53]),
+                action: Some("hijack-dns".to_string()),
+                process_name: Some(dns_process_names),
+                ..SingboxRule::default()
+            });
+        }
+        let direct_process_names = tun_direct_process_names();
+        if !direct_process_names.is_empty() {
+            config.route.rules.push(SingboxRule {
+                outbound: Some(DIRECT_TAG.to_string()),
+                process_name: Some(direct_process_names),
+                ..SingboxRule::default()
+            });
+        }
         match tun_icmp_routing(&context.app_config.tun_mode_item.icmp_routing) {
             "direct" => config.route.rules.push(SingboxRule {
                 network: Some(vec!["icmp".to_string()]),
@@ -2081,30 +2087,12 @@ fn tun_route_rules() -> Vec<SingboxRule> {
 }
 
 fn tun_dns_process_names() -> Vec<String> {
-    [
-        "xray",
-        "v2ray",
-        "wv2ray",
-        "hysteria",
-        "hysteria-windows-amd64",
-        "hysteria-linux-amd64",
-        "hysteria-darwin-amd64",
-        "hysteria-darwin-arm64",
-        "naive",
-        "naiveproxy",
-        "tuic-client",
-        "juicity-client",
-        "mieru",
-    ]
-    .into_iter()
-    .map(str::to_string)
-    .collect()
+    Vec::new()
 }
 
 fn tun_direct_process_names() -> Vec<String> {
     let mut names = tun_dns_process_names();
     names.push("sing-box".to_string());
-    names.push("mihomo".to_string());
     names
 }
 
@@ -2244,7 +2232,7 @@ fn gen_routing_user_rule(
         let mut process_name_rule = rule.clone();
         let mut process_path_rule = rule.clone();
         for process in processes {
-            if process == "self/" || process == "xray/" {
+            if process == "self/" {
                 process_name_rule
                     .process_name
                     .get_or_insert_with(Vec::new)

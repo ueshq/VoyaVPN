@@ -71,8 +71,6 @@ pub enum DiagnosticsEventType {
     UpdateCheck,
     UpdateDownload,
     AppUpdateInstall,
-    CoreDownload,
-    CoreApply,
     RuntimeStart,
     RuntimeStop,
     RuntimeStartFailure,
@@ -110,8 +108,6 @@ pub enum DiagnosticsErrorClass {
 #[serde(rename_all = "snake_case")]
 pub enum DiagnosticsSubjectKind {
     App,
-    Xray,
-    Mihomo,
     SingBox,
     Geo,
     Srs,
@@ -121,10 +117,7 @@ pub enum DiagnosticsSubjectKind {
 impl From<CoreType> for DiagnosticsSubjectKind {
     fn from(value: CoreType) -> Self {
         match value {
-            CoreType::Xray => Self::Xray,
-            CoreType::mihomo => Self::Mihomo,
             CoreType::sing_box => Self::SingBox,
-            _ => Self::Runtime,
         }
     }
 }
@@ -259,34 +252,6 @@ impl DiagnosticsEvent {
             DiagnosticsEventType::AppUpdateInstall,
             result,
             Some(DiagnosticsSubjectKind::App),
-        )
-        .with_error_class(error_class)
-    }
-
-    #[must_use]
-    pub fn core_download(
-        core_type: CoreType,
-        result: DiagnosticsResult,
-        error_class: Option<DiagnosticsErrorClass>,
-    ) -> Self {
-        Self::new(
-            DiagnosticsEventType::CoreDownload,
-            result,
-            Some(core_type.into()),
-        )
-        .with_error_class(error_class)
-    }
-
-    #[must_use]
-    pub fn core_apply(
-        core_type: CoreType,
-        result: DiagnosticsResult,
-        error_class: Option<DiagnosticsErrorClass>,
-    ) -> Self {
-        Self::new(
-            DiagnosticsEventType::CoreApply,
-            result,
-            Some(core_type.into()),
         )
         .with_error_class(error_class)
     }
@@ -1252,7 +1217,7 @@ mod tests {
         client.endpoint_policy = DiagnosticsEndpointPolicy::allow_http_loopback_for_tests();
         client.record(
             &settings,
-            DiagnosticsEvent::core_apply(CoreType::Xray, DiagnosticsResult::Success, None)
+            DiagnosticsEvent::runtime_start(DiagnosticsResult::Success, None)
                 .with_duration_bucket(DiagnosticsDurationBucket::from_millis(1200)),
         );
 
@@ -1266,8 +1231,8 @@ mod tests {
         assert_eq!(bodies.len(), 1);
         let body = bodies[0].clone();
         assert!(body.contains(r#""schema_version":1"#));
-        assert!(body.contains(r#""event_type":"core_apply""#));
-        assert!(body.contains(r#""subject_kind":"xray""#));
+        assert!(body.contains(r#""event_type":"runtime_start""#));
+        assert!(body.contains(r#""subject_kind":"runtime""#));
         assert!(body.contains(r#""duration_bucket_ms":"1000-4999""#));
         for forbidden in forbidden_fixture_values() {
             assert!(!body.contains(forbidden));

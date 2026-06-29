@@ -30,7 +30,7 @@
     "homepage": "https://github.com/voyavpn/voyavpn",
     "category": "DeveloperTool",
     "shortDescription": "Cross-platform proxy client",
-    "longDescription": "VoyaVPN is a cross-platform desktop proxy client with separate app and core update flows.",
+    "longDescription": "VoyaVPN is a cross-platform desktop proxy client with a bundled sing-box core seed and app update flow.",
     "license": "MIT",
     "copyright": "Copyright (c) VoyaVPN contributors",
     "icon": ["icons/icon.png"],

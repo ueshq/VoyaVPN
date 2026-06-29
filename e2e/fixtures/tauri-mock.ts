@@ -251,10 +251,6 @@ export async function installTauriSmokeMock(page: Page) {
           return Promise.resolve({
             singboxRoutes: [],
             validation: { childIndexIds: [], errors: [], normalizedChildItems: "", valid: true, warnings: [] },
-            xrayBalancers: [],
-            xrayBurstObservatorySelectors: [],
-            xrayObservatorySelectors: [],
-            xrayRoutes: [],
           });
         case "list_subscriptions":
           return Promise.resolve([]);
@@ -330,7 +326,6 @@ export async function installTauriSmokeMock(page: Page) {
             simpleDnsFetched: false,
             singboxDnsFetched: false,
             srsSourceUrl: state.sources.srsSourceUrl,
-            xrayDnsFetched: false,
           });
         case "load_dns_settings":
           return Promise.resolve(clone(state.dns));
@@ -689,8 +684,6 @@ export async function installTauriSmokeMock(page: Page) {
         defaults: {
           singboxNormalDns: "{\"servers\":[]}",
           singboxTunDns: "{\"servers\":[]}",
-          xrayNormalDns: "{\"servers\":[]}",
-          xrayTunDns: "{\"servers\":[]}",
         },
         simpleDnsItem: {
           AddCommonHosts: true,
@@ -718,17 +711,6 @@ export async function installTauriSmokeMock(page: Page) {
           Remarks: "sing-box",
           TunDNS: "{\"servers\":[]}",
           UseSystemHosts: false,
-        },
-        xrayDnsItem: {
-          CoreType: 2,
-          DomainDNSAddress: null,
-          DomainStrategy4Freedom: null,
-          Enabled: false,
-          Id: "dns-xray",
-          NormalDNS: "{\"servers\":[]}",
-          Remarks: "Xray",
-          TunDNS: "{\"servers\":[]}",
-          UseSystemHosts: true,
         },
       };
     }

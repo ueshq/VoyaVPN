@@ -19,7 +19,7 @@ Reference evidence:
 
 Use a Rust workspace with these ownership boundaries:
 
-- `crates/voya-core`: pure, OS-free, deterministic domain logic. Owns live models and enums, share-link parsers, routing/DNS logic, Xray and sing-box config generation, config canonicalization, and golden-test helpers. Clocks, random values, port allocation, filesystem reads, and platform facts are injected.
+- `crates/voya-core`: pure, OS-free, deterministic domain logic. Owns live models and enums, share-link parsers, routing/DNS logic, sing-box config generation, config canonicalization, and golden-test helpers. Clocks, random values, port allocation, filesystem reads, and platform facts are injected.
 - `crates/voya-db`: fresh sqlx SQLite schema, migrations, repositories, config/default persistence, and the only typed-blob persistence boundary.
 - `crates/voya-platform`: OS path resolution, system proxy, PAC, TUN/elevation, autostart, hotkeys, process/job handling, binary permissions, and platform adapters.
 - `crates/voya-net`: HTTP downloads, subscriptions, update checks, Clash REST/WebSocket, WebDAV, ruleset/geo fetches, and preset network fetches.

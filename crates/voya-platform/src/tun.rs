@@ -7,16 +7,10 @@ use thiserror::Error;
 
 use crate::coreinfo::TargetOs;
 
-pub const WINDOWS_TUN_DEVICES: &[WindowsTunDevice] = &[
-    WindowsTunDevice {
-        name: "wintunsingbox_tun",
-        guid: "b738a021-9842-444c-10b0-a4e3f65ab5b6",
-    },
-    WindowsTunDevice {
-        name: "xray_tun",
-        guid: "7d7d9015-6c82-d838-2430-f41b93b28148",
-    },
-];
+pub const WINDOWS_TUN_DEVICES: &[WindowsTunDevice] = &[WindowsTunDevice {
+    name: "wintunsingbox_tun",
+    guid: "b738a021-9842-444c-10b0-a4e3f65ab5b6",
+}];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WindowsTunDevice {
@@ -200,9 +194,8 @@ mod tests {
 
     #[test]
     fn process_windows_tun_cleanup_abstraction_names_reference_devices() {
-        assert_eq!(WINDOWS_TUN_DEVICES.len(), 2);
+        assert_eq!(WINDOWS_TUN_DEVICES.len(), 1);
         assert_eq!(WINDOWS_TUN_DEVICES[0].name, "wintunsingbox_tun");
-        assert_eq!(WINDOWS_TUN_DEVICES[1].name, "xray_tun");
         assert!(WINDOWS_TUN_DEVICES
             .iter()
             .all(|device| device.guid.len() == 36));

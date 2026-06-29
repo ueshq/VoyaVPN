@@ -21,7 +21,6 @@ pub const DEFAULT_SINGBOX_RULESET_URL: &str =
 pub const OTHER_GEO_URLS: &[&str] = &[
     "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/geoip-only-cn-private.dat",
     "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country.mmdb",
-    "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb",
 ];
 pub const DEFAULT_SRS_GEOSITE_TAGS: &[&str] =
     &["google", "cn", "geolocation-cn", "category-ads-all"];

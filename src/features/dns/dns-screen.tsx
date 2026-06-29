@@ -57,24 +57,18 @@ const dnsItemSchema = z.object({
 
 const dnsSettingsSchema: z.ZodType<DnsSettings_Deserialize> = z.object({
   simpleDnsItem: simpleDnsItemSchema,
-  xrayDnsItem: dnsItemSchema.extend({
-    NormalDNS: optionalNullableText.superRefine((value, context) => validateXrayDnsJson(value, context)),
-    TunDNS: optionalNullableText.superRefine((value, context) => validateXrayDnsJson(value, context)),
-  }),
   singboxDnsItem: dnsItemSchema.extend({
     NormalDNS: optionalNullableText.superRefine((value, context) => validateSingboxDnsJson(value, context)),
     TunDNS: optionalNullableText.superRefine((value, context) => validateSingboxDnsJson(value, context)),
   }),
   defaults: z.object({
-    xrayNormalDns: z.string(),
-    xrayTunDns: z.string(),
     singboxNormalDns: z.string(),
     singboxTunDns: z.string(),
   }),
 });
 
 type ErrorMap = Record<string, string>;
-type DnsCoreKey = "xrayDnsItem" | "singboxDnsItem";
+type DnsCoreKey = "singboxDnsItem";
 
 export function DnsScreen() {
   const queryClient = useQueryClient();
@@ -227,33 +221,15 @@ export function DnsScreen() {
 
         <div className="min-h-0 overflow-hidden">
           {form ? (
-            <Tabs className="flex h-full min-h-0 flex-col" defaultValue="xray">
+            <Tabs className="flex h-full min-h-0 flex-col" defaultValue="singbox">
               <div className="shrink-0 border-b px-4 py-2">
                 <TabsList>
-                  <TabsTrigger value="xray">
-                    <Braces className="size-4" aria-hidden="true" />
-                    Xray
-                  </TabsTrigger>
                   <TabsTrigger value="singbox">
                     <ServerCog className="size-4" aria-hidden="true" />
                     sing-box
                   </TabsTrigger>
                 </TabsList>
               </div>
-              <TabsContent className="m-0 min-h-0 flex-1" value="xray">
-                <AdvancedDnsEditor
-                  defaults={{
-                    normal: form.defaults.xrayNormalDns,
-                    tun: form.defaults.xrayTunDns,
-                  }}
-                  errors={fieldErrors}
-                  fieldPrefix="xrayDnsItem"
-                  item={form.xrayDnsItem}
-                  onChange={(patch) => updateCore("xrayDnsItem", patch)}
-                  showSystemHosts
-                  title="Xray raw DNS"
-                />
-              </TabsContent>
               <TabsContent className="m-0 min-h-0 flex-1" value="singbox">
                 <AdvancedDnsEditor
                   defaults={{
@@ -308,19 +284,6 @@ function validateExpectedIps(value: string | null | undefined, context: z.Refine
     context.addIssue({
       code: "custom",
       message: "Expected IPs must be comma-separated without embedded whitespace",
-    });
-  }
-}
-
-function validateXrayDnsJson(value: string | null | undefined, context: z.RefinementCtx) {
-  const parsed = parseJsonObject(value, "Invalid Xray DNS JSON", context);
-  if (!parsed) {
-    return;
-  }
-  if (!("servers" in parsed)) {
-    context.addIssue({
-      code: "custom",
-      message: "Xray DNS JSON must contain a servers field",
     });
   }
 }

@@ -5,7 +5,7 @@
     "install": "Установить ядро",
     "installing": "Установка…",
     "openUpdates": "Открыть обновления…",
-    "seedMissingHint": "Встроенное ядро недоступно. Откройте обновления, чтобы загрузить его."
+    "seedMissingHint": "Встроенное ядро sing-box недоступно. Переустановите приложение или пересоберите пакет с seed sing-box."
   },
   "actions": {
     "addProfile": "Add profile",
@@ -892,7 +892,7 @@
     "TbSettingsSetUWP": "Разрешить loopback для приложений UWP (Win10)",
     "TbSettingsSniffingEnabled": "Включить сниффинг",
     "TbSettingsSocksPort": "Смешанный порт",
-    "TbSettingsSocksPortTip": "PAC-порт = +3; Xray API порт = +4; mihomo API порт = +5;",
+    "TbSettingsSocksPortTip": "PAC-порт = +3; Clash API порт = +5;",
     "TbSettingsSpeedPingTestUrl": "URL для быстрой проверки реальной задержки",
     "TbSettingsSpeedTestTimeout": "Тайм-аут одиночного тестирования скорости",
     "TbSettingsSpeedTestUrl": "URL для тестирования скорости",
@@ -943,7 +943,7 @@
     "TipChangeSystemProxy": "Системные прокси изменены",
     "TipDisplayLog": "Отключите при нестабильном соединении",
     "TipNetwork": "*По-умолчанию raw",
-    "TipPreSocksPort": "* После установки этого значения служба SOCKS будет запущена с использованием Xray/sing-box(TUN) для обеспечения таких функций, как отображение скорости",
+    "TipPreSocksPort": "* После установки этого значения служба SOCKS будет запущена с использованием sing-box (TUN) для обеспечения таких функций, как отображение скорости",
     "TransportExtra": "Дополнительные параметры XHTTP (Extra)",
     "TransportExtraTip": "Сырой JSON, формат: { XHTTP Object }",
     "TransportHeaderType1": "Тип raw-камуфляжа",
@@ -1011,9 +1011,7 @@
   "updates": {
     "acquisition": {
       "appPackage": "App package",
-      "downloadOnFirstRun": "First-run download",
-      "optionalDownload": "Optional download",
-      "unsupported": "Unsupported"
+      "optionalDownload": "Optional download"
     },
     "appInstalled": "App update installed: {{version}}",
     "appUpdateAvailable": "App {{version}} is available",
@@ -1029,12 +1027,11 @@
     "applied": "Applied {{version}}",
     "check": "Check",
     "checkApp": "Check app",
-    "description": "Update checks for app, cores, geo files, and rulesets.",
+    "description": "Update checks for app, geo files, and rulesets.",
     "download": "Download",
     "installApp": "Install app",
     "kind": {
       "app": "App",
-      "core": "Core",
       "geo": "Geo",
       "srs": "SRS"
     },
@@ -1095,7 +1092,7 @@
   "templates": {
     "addProxyOnly": "Add proxy only",
     "configJson": "Config JSON",
-    "description": "Edit full config templates used by Xray and sing-box generation.",
+    "description": "Edit full config templates used by sing-box generation.",
     "enabled": "Enabled",
     "open": "Open template settings",
     "proxyDetour": "Proxy detour",

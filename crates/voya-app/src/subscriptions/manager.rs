@@ -952,7 +952,7 @@ mod tests {
             .expect("subscription manager test operation should succeed");
         let manager = SubscriptionManager::new(&database);
         let mut config = AppConfig::default();
-        let json = r#"{"remarks":"custom-json","inbounds":[],"outbounds":[],"routing":{}}"#;
+        let json = r#"{"remarks":"custom-json","inbounds":[],"outbounds":[],"route":{},"dns":{}}"#;
 
         let result = manager
             .import_profiles_from_text(&mut config, json, None, false)
@@ -966,7 +966,7 @@ mod tests {
             .await
             .expect("subscription manager test operation should succeed");
         assert_eq!(profiles[0].config_type, ConfigType::Custom);
-        assert_eq!(profiles[0].remarks, "custom-json");
+        assert_eq!(profiles[0].remarks, "singbox_custom");
         assert_eq!(profiles[0].address, json);
     }
 
@@ -974,7 +974,7 @@ mod tests {
         ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::VLESS,
-            core_type: Some(CoreType::Xray),
+            core_type: Some(CoreType::sing_box),
             remarks: remarks.to_string(),
             address: "example.test".to_string(),
             port: 443,

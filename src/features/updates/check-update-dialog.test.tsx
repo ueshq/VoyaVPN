@@ -15,7 +15,6 @@ import type {
 
 const ipcMocks = vi.hoisted(() => ({
   appUpdateStatus: vi.fn(),
-  applyDownloadedCoreUpdate: vi.fn(),
   checkAppUpdate: vi.fn(),
   checkUpdates: vi.fn(),
   downloadUpdates: vi.fn(),
@@ -39,42 +38,29 @@ describe("CheckUpdateDialog", () => {
     cleanup();
   });
 
-  it("checks, downloads, applies a core update, and installs an app update", async () => {
+  it("checks, downloads, and installs an app update", async () => {
     const user = userEvent.setup();
 
     renderDialog();
 
     expect(await screen.findByText("Manual 2.1.0 available")).toBeInTheDocument();
     expect(screen.getByText("App")).toBeInTheDocument();
-    expect(screen.getByText("Core")).toBeInTheDocument();
     expect(screen.getByText("Geo")).toBeInTheDocument();
     expect(screen.getByText("SRS")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Check" }));
 
     await waitFor(() =>
-      expect(ipcMocks.checkUpdates).toHaveBeenCalledWith(false, ["app", "xray", "geo", "srs"], true, null),
+      expect(ipcMocks.checkUpdates).toHaveBeenCalledWith(false, ["app", "geo", "srs"], true, null),
     );
-    expect(await screen.findByText("Available 2.0.0")).toBeInTheDocument();
+    expect(await screen.findByText("Available 2.1.0")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Download" }));
 
     await waitFor(() =>
-      expect(ipcMocks.downloadUpdates).toHaveBeenCalledWith(false, ["app", "xray", "geo", "srs"], true, null),
+      expect(ipcMocks.downloadUpdates).toHaveBeenCalledWith(false, ["app", "geo", "srs"], true, null),
     );
-    expect(await screen.findByText("Downloaded 2.0.0")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Apply" }));
-
-    await waitFor(() =>
-      expect(ipcMocks.applyDownloadedCoreUpdate).toHaveBeenCalledWith({
-        fileName: "/tmp/voyavpn/xray.zip",
-        remoteVersion: "2.0.0",
-        sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        targetId: "xray",
-      }),
-    );
-    expect(await screen.findByText("Applied 2.0.0")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText("Downloaded")).toHaveLength(2));
 
     await user.click(screen.getByRole("button", { name: "Install app" }));
 
@@ -100,26 +86,6 @@ describe("CheckUpdateDialog", () => {
     expect(screen.queryByText(/updates\.voyavpn\.test/)).not.toBeInTheDocument();
   });
 
-  it("keeps the downloaded row actionable and failed when core apply fails", async () => {
-    const user = userEvent.setup();
-    ipcMocks.applyDownloadedCoreUpdate.mockRejectedValue(
-      new Error("checksum mismatch for https://cdn.voyavpn.test/stable/xray.zip proxyUrl=http://127.0.0.1:8080"),
-    );
-
-    renderDialog();
-
-    await screen.findByText("Manual 2.1.0 available");
-    await user.click(screen.getByRole("button", { name: "Download" }));
-    await screen.findByText("Downloaded 2.0.0");
-    await user.click(screen.getByRole("button", { name: "Apply" }));
-
-    const failedMessage = await screen.findByText(/Failed: checksum mismatch/);
-    expect(failedMessage).toHaveTextContent("[redacted URL]");
-    expect(failedMessage).toHaveTextContent("proxyUrl=[redacted]");
-    expect(screen.queryByText(/cdn\.voyavpn\.test\/stable\/xray\.zip/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Apply" })).toBeEnabled();
-  });
-
   it("serializes preference saves and ignores stale preference responses", async () => {
     const user = userEvent.setup();
     const saves: Array<{
@@ -136,15 +102,15 @@ describe("CheckUpdateDialog", () => {
 
     renderDialog();
 
-    const xray = await screen.findByRole("checkbox", { name: "Selected Xray" });
+    const srs = await screen.findByRole("checkbox", { name: "Selected sing-box rulesets" });
     const geo = screen.getByRole("checkbox", { name: "Selected Geo files" });
 
-    await user.click(xray);
+    await user.click(srs);
 
-    expect(xray).not.toBeChecked();
+    expect(srs).not.toBeChecked();
     await waitFor(() => expect(ipcMocks.saveUpdatePreferences).toHaveBeenCalledTimes(1));
     expect(saves[0]?.preRelease).toBe(false);
-    expect(saves[0]?.selectedIds).toEqual(["app", "geo", "srs"]);
+    expect(saves[0]?.selectedIds).toEqual(["app", "geo"]);
 
     await user.click(geo);
 
@@ -152,45 +118,26 @@ describe("CheckUpdateDialog", () => {
     expect(ipcMocks.saveUpdatePreferences).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      saves[0]?.deferred.resolve(makeStatus(selectTargets(["app", "geo", "srs"])));
+      saves[0]?.deferred.resolve(makeStatus(selectTargets(["app", "geo"])));
       await Promise.resolve();
     });
 
     await waitFor(() => expect(ipcMocks.saveUpdatePreferences).toHaveBeenCalledTimes(2));
     expect(saves[1]?.preRelease).toBe(false);
-    expect(saves[1]?.selectedIds).toEqual(["app", "srs"]);
-    expect(xray).not.toBeChecked();
+    expect(saves[1]?.selectedIds).toEqual(["app"]);
+    expect(srs).not.toBeChecked();
     expect(geo).not.toBeChecked();
 
     await act(async () => {
-      saves[1]?.deferred.resolve(makeStatus(selectTargets(["app", "srs"])));
+      saves[1]?.deferred.resolve(makeStatus(selectTargets(["app"])));
       await Promise.resolve();
     });
 
-    await waitFor(() => expect(xray).not.toBeChecked());
+    await waitFor(() => expect(srs).not.toBeChecked());
     expect(geo).not.toBeChecked();
   });
 
-  it("refreshes backend status after applying a core update", async () => {
-    const user = userEvent.setup();
-    ipcMocks.updateStatus
-      .mockResolvedValueOnce(makeStatus(allTargets))
-      .mockResolvedValueOnce(makeStatus(selectTargets(["app", "geo", "srs"]), true));
-
-    renderDialog();
-
-    await screen.findByText("Manual 2.1.0 available");
-    await user.click(screen.getByRole("button", { name: "Download" }));
-    await screen.findByText("Downloaded 2.0.0");
-    await user.click(screen.getByRole("button", { name: "Apply" }));
-
-    await waitFor(() => expect(ipcMocks.updateStatus).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText("Applied 2.0.0")).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "Pre-release" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Selected Xray" })).not.toBeChecked();
-  });
-
-  it("shows the no selected target state and disables core check actions", async () => {
+  it("shows the no selected target state and disables check actions", async () => {
     ipcMocks.updateStatus.mockResolvedValue(makeStatus(allTargets.map((target) => ({ ...target, selected: false }))));
 
     renderDialog();
@@ -251,12 +198,6 @@ function mockDefaultIpc() {
     results: makeDownloadResults(),
     targets: allTargets,
   });
-  ipcMocks.applyDownloadedCoreUpdate.mockResolvedValue({
-    appliedVersion: "2.0.0",
-    coreType: 2,
-    rollbackPath: null,
-    targetDir: "/tmp/voyavpn/bin/xray",
-  });
 }
 
 function makeStatus(targets: UpdateTarget[], preRelease = false): UpdateStatus {
@@ -266,7 +207,6 @@ function makeStatus(targets: UpdateTarget[], preRelease = false): UpdateStatus {
 function makeCheckResults(): UpdateCheckResult[] {
   return [
     result("app", "updateAvailable", "2.1.0 is available", "1.0.0", "2.1.0"),
-    result("xray", "updateAvailable", "2.0.0 is available", "1.0.0", "2.0.0"),
     result("geo", "updateAvailable", "geo files can be refreshed", null, null),
     result("srs", "updateAvailable", "SRS rulesets can be refreshed", null, null),
   ];
@@ -275,12 +215,6 @@ function makeCheckResults(): UpdateCheckResult[] {
 function makeDownloadResults(): UpdateCheckResult[] {
   return [
     result("app", "updateAvailable", "2.1.0 is available", "1.0.0", "2.1.0"),
-    {
-      ...result("xray", "downloaded", "downloaded /tmp/voyavpn/xray.zip", "1.0.0", "2.0.0"),
-      bytes: 123,
-      fileName: "/tmp/voyavpn/xray.zip",
-      sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    },
     {
       ...result("geo", "downloaded", "downloaded /tmp/voyavpn/geo.dat", null, null),
       bytes: 456,
@@ -347,18 +281,6 @@ const allTargets: UpdateTarget[] = [
     name: "VoyaVPN",
     redistributeInInstaller: true,
     remarks: "application package update",
-    selected: true,
-    updateSupported: true,
-  },
-  {
-    acquisition: "downloadOnFirstRun",
-    coreType: 2,
-    id: "xray",
-    kind: "core",
-    license: "MPL-2.0",
-    name: "Xray",
-    redistributeInInstaller: true,
-    remarks: "download on first run; not bundled in installers",
     selected: true,
     updateSupported: true,
   },

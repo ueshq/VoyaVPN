@@ -132,40 +132,12 @@ impl ConfigType {
 #[repr(i32)]
 #[specta(type = i32)]
 pub enum CoreType {
-    v2fly = 1,
     #[default]
-    Xray = 2,
-    v2fly_v5 = 4,
-    mihomo = 13,
-    hysteria = 21,
-    naiveproxy = 22,
-    tuic = 23,
     sing_box = 24,
-    juicity = 25,
-    hysteria2 = 26,
-    brook = 27,
-    overtls = 28,
-    shadowquic = 29,
-    mieru = 30,
-    v2rayN = 99,
 }
 
 int_enum!(CoreType {
-    v2fly = 1,
-    Xray = 2,
-    v2fly_v5 = 4,
-    mihomo = 13,
-    hysteria = 21,
-    naiveproxy = 22,
-    tuic = 23,
     sing_box = 24,
-    juicity = 25,
-    hysteria2 = 26,
-    brook = 27,
-    overtls = 28,
-    shadowquic = 29,
-    mieru = 30,
-    v2rayN = 99,
 });
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Type)]
@@ -539,22 +511,8 @@ mod tests {
     }
 
     #[test]
-    fn core_type_discriminants_match_v2rayn() {
-        assert_eq!(CoreType::v2fly.as_i32(), 1);
-        assert_eq!(CoreType::Xray.as_i32(), 2);
-        assert_eq!(CoreType::v2fly_v5.as_i32(), 4);
-        assert_eq!(CoreType::mihomo.as_i32(), 13);
-        assert_eq!(CoreType::hysteria.as_i32(), 21);
-        assert_eq!(CoreType::naiveproxy.as_i32(), 22);
-        assert_eq!(CoreType::tuic.as_i32(), 23);
+    fn core_type_discriminants_keep_singbox_value() {
         assert_eq!(CoreType::sing_box.as_i32(), 24);
-        assert_eq!(CoreType::juicity.as_i32(), 25);
-        assert_eq!(CoreType::hysteria2.as_i32(), 26);
-        assert_eq!(CoreType::brook.as_i32(), 27);
-        assert_eq!(CoreType::overtls.as_i32(), 28);
-        assert_eq!(CoreType::shadowquic.as_i32(), 29);
-        assert_eq!(CoreType::mieru.as_i32(), 30);
-        assert_eq!(CoreType::v2rayN.as_i32(), 99);
     }
 
     #[test]
