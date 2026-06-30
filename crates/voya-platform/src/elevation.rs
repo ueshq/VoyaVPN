@@ -118,7 +118,7 @@ process_comm() {{
     head -n 1 "/proc/$process_id/comm" 2>/dev/null
     return
   fi
-  ps -p "$process_id" -o comm= 2>/dev/null | awk 'NR==1 {{print $1}}'
+  ps -p "$process_id" -o comm= 2>/dev/null | sed -n '1{{s/^[[:space:]]*//;s/[[:space:]]*$//;p;q;}}'
 }}
 
 process_matches_expected() {{
@@ -340,6 +340,65 @@ mod tests {
         assert!(linux.contains("ps -o pid= --ppid"));
         assert!(macos.contains("ps -axo pid=,ppid="));
         assert!(unix_sudo_kill_body(TargetOs::Windows).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_unix_sudo_kill_body_matches_macos_comm_paths_with_spaces() {
+        let body = unix_sudo_kill_body(TargetOs::Macos).expect("macos body");
+        let script = format!(
+            r#"
+TERMINATED=0
+kill() {{
+  if [ "${{1:-}}" = "-0" ]; then
+    if [ "$TERMINATED" = "0" ]; then
+      case "${{2:-}}" in
+        424242|424243) return 0 ;;
+      esac
+    fi
+    return 1
+  fi
+  case "${{1:-}}" in
+    -15|-9) TERMINATED=1; return 0 ;;
+  esac
+  return 0
+}}
+
+ps() {{
+  if [ "${{1:-}}" = "-axo" ]; then
+    printf '%s\n' '  424242       1' '  424243  424242'
+    return 0
+  fi
+  if [ "${{1:-}}" = "-p" ]; then
+    case "${{2:-}}" in
+      424242) printf '%s\n' '/usr/bin/sudo' ;;
+      424243) printf '%s\n' '/Users/afu/Library/Application Support/VoyaVPN/bin/sing-box' ;;
+      *) return 1 ;;
+    esac
+    return 0
+  fi
+  return 1
+}}
+
+sleep() {{ :; }}
+{body}
+"#
+        );
+        let output = std::process::Command::new("bash")
+            .arg("-c")
+            .arg(script)
+            .arg("voya-test")
+            .arg("424242")
+            .arg("sing-box")
+            .output()
+            .expect("run kill body");
+
+        assert!(
+            output.status.success(),
+            "stdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[test]
