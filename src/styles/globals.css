@@ -214,10 +214,10 @@
   --overlay-pressed: rgb(255 255 255 / 0.1);
 
   /* nicenote accent palette (dark) */
-  --accent-blue: #8fb0e8;
-  --accent-blue-light: rgb(143 176 232 / 0.16);
-  --accent-blue-bg: rgb(143 176 232 / 0.2);
-  --accent-blue-hover: #a9c4f0;
+  --accent-blue: #7aa7ff;
+  --accent-blue-light: rgb(122 167 255 / 0.16);
+  --accent-blue-bg: rgb(122 167 255 / 0.2);
+  --accent-blue-hover: #a6c4ff;
   --accent-red: #ff8a86;
   --accent-red-light: rgb(255 138 134 / 0.16);
   --accent-orange: #f3a15b;
