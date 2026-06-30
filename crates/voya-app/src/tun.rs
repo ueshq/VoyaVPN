@@ -7,7 +7,11 @@ use voya_core::AppConfig;
 use voya_platform::{
     coreinfo::TargetOs,
     privilege::ElevationState,
-    tun::{tun_preflight, TunPreflightReport, TunPreflightState as PlatformTunPreflightState},
+    tun::{
+        tun_preflight, NativeTunController, NativeTunProviderState, PlatformNativeTunController,
+        TunBackend as PlatformTunBackend, TunPreflightReport,
+        TunPreflightState as PlatformTunPreflightState,
+    },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
@@ -17,6 +21,27 @@ pub enum TunPlatform {
     Linux,
     Macos,
     Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum TunBackend {
+    Process,
+    MacosPacketTunnel,
+    WindowsService,
+    Unsupported,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum TunProviderState {
+    NotApplicable,
+    MissingComponent,
+    PermissionRequired,
+    Stopped,
+    Starting,
+    Running,
+    Error,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
@@ -42,29 +67,54 @@ pub struct TunPreflight {
 #[serde(rename_all = "camelCase")]
 pub struct TunStatus {
     pub enabled: bool,
+    pub backend: TunBackend,
+    pub provider_state: TunProviderState,
     pub allow_enable_tun: bool,
     pub requires_elevation: bool,
     pub elevation_granted: bool,
+    pub needs_vpn_permission: bool,
+    pub needs_service_install: bool,
+    pub native_component_ready: bool,
+    pub last_provider_error: Option<String>,
     pub restore_on_disconnect: bool,
     pub preflight: TunPreflight,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TunManager {
     elevation: Arc<ElevationState>,
+    native_tun: Arc<dyn NativeTunController>,
     target_os: TargetOs,
 }
 
 impl TunManager {
     #[must_use]
     pub fn new(elevation: Arc<ElevationState>) -> Self {
-        Self::with_target_os(elevation, TargetOs::current())
+        Self::with_target_os_and_native_tun(
+            elevation,
+            TargetOs::current(),
+            Arc::new(PlatformNativeTunController),
+        )
     }
 
     #[must_use]
     pub fn with_target_os(elevation: Arc<ElevationState>, target_os: TargetOs) -> Self {
+        Self::with_target_os_and_native_tun(
+            elevation,
+            target_os,
+            Arc::new(PlatformNativeTunController),
+        )
+    }
+
+    #[must_use]
+    pub fn with_target_os_and_native_tun(
+        elevation: Arc<ElevationState>,
+        target_os: TargetOs,
+        native_tun: Arc<dyn NativeTunController>,
+    ) -> Self {
         Self {
             elevation,
+            native_tun,
             target_os,
         }
     }
@@ -98,16 +148,47 @@ impl TunManager {
     ) -> Result<(TunStatus, TunPreflightReport), TunManagerError> {
         let elevation_granted = self.elevation.is_granted();
         let report = tun_preflight(self.target_os, elevation_granted);
+        let native_status = self.native_tun.status(report.backend);
+        let provider_state = tun_provider_state(native_status.provider_state);
         let status = TunStatus {
             enabled: config.tun_mode_item.enable_tun,
+            backend: tun_backend(report.backend),
+            provider_state,
             allow_enable_tun: report.allow_enable_tun,
             requires_elevation: report.requires_elevation,
             elevation_granted: report.elevation_granted,
+            needs_vpn_permission: native_status.provider_state
+                == NativeTunProviderState::PermissionRequired,
+            needs_service_install: report.backend == PlatformTunBackend::WindowsService
+                && !native_status.component_ready,
+            native_component_ready: native_status.component_ready,
+            last_provider_error: native_status.message,
             restore_on_disconnect: self.target_os != TargetOs::Other,
             preflight: tun_preflight_response(&report),
         };
 
         Ok((status, report))
+    }
+}
+
+const fn tun_backend(backend: PlatformTunBackend) -> TunBackend {
+    match backend {
+        PlatformTunBackend::Process => TunBackend::Process,
+        PlatformTunBackend::MacosPacketTunnel => TunBackend::MacosPacketTunnel,
+        PlatformTunBackend::WindowsService => TunBackend::WindowsService,
+        PlatformTunBackend::Unsupported => TunBackend::Unsupported,
+    }
+}
+
+const fn tun_provider_state(state: NativeTunProviderState) -> TunProviderState {
+    match state {
+        NativeTunProviderState::NotApplicable => TunProviderState::NotApplicable,
+        NativeTunProviderState::MissingComponent => TunProviderState::MissingComponent,
+        NativeTunProviderState::PermissionRequired => TunProviderState::PermissionRequired,
+        NativeTunProviderState::Stopped => TunProviderState::Stopped,
+        NativeTunProviderState::Starting => TunProviderState::Starting,
+        NativeTunProviderState::Running => TunProviderState::Running,
+        NativeTunProviderState::Error => TunProviderState::Error,
     }
 }
 
@@ -193,7 +274,7 @@ mod tests {
     }
 
     #[test]
-    fn tun_windows_preflight_tracks_cleanup_devices_and_manual_driver_smoke() {
+    fn tun_windows_preflight_tracks_service_backend_and_install_state() {
         let config = AppConfig::default();
         let manager =
             TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Windows);
@@ -201,7 +282,11 @@ mod tests {
         let status = manager.status(&config).expect("status");
         assert!(status.allow_enable_tun);
         assert!(!status.requires_elevation);
-        assert_eq!(status.preflight.state, TunPreflightState::ManualCheck);
+        assert_eq!(status.backend, TunBackend::WindowsService);
+        assert_eq!(status.provider_state, TunProviderState::MissingComponent);
+        assert!(status.needs_service_install);
+        assert!(!status.native_component_ready);
+        assert_eq!(status.preflight.state, TunPreflightState::Ready);
         assert_eq!(
             status.preflight.windows_cleanup_devices,
             ["wintunsingbox_tun".to_string()]
@@ -209,6 +294,24 @@ mod tests {
         assert!(status
             .preflight
             .route_restore_note
-            .contains("manual OS smoke"));
+            .contains("VoyaVPN Service"));
+    }
+
+    #[test]
+    fn tun_macos_preflight_uses_packet_tunnel_without_sudo() {
+        let mut config = AppConfig::default();
+        let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Macos);
+
+        let status = manager
+            .set_enabled(&mut config, true)
+            .expect("macOS PacketTunnel setting can be enabled without sudo");
+
+        assert!(status.enabled);
+        assert!(status.allow_enable_tun);
+        assert!(!status.requires_elevation);
+        assert_eq!(status.backend, TunBackend::MacosPacketTunnel);
+        assert_eq!(status.provider_state, TunProviderState::MissingComponent);
+        assert!(!status.native_component_ready);
+        assert_eq!(status.preflight.state, TunPreflightState::Ready);
     }
 }

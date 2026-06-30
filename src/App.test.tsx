@@ -321,7 +321,13 @@ vi.mock("@/ipc", () => ({
   setTunEnabled: vi.fn(() =>
     Promise.resolve({
       allowEnableTun: true,
+      backend: "process",
       enabled: false,
+      elevationGranted: false,
+      lastProviderError: null,
+      nativeComponentReady: true,
+      needsServiceInstall: false,
+      needsVpnPermission: false,
       preflight: {
         notes: [],
         platform: "linux",
@@ -329,9 +335,9 @@ vi.mock("@/ipc", () => ({
         state: "ready",
         windowsCleanupDevices: [],
       },
+      providerState: "notApplicable",
       requiresElevation: false,
       restoreOnDisconnect: true,
-      elevationGranted: false,
     }),
   ),
   speedtestStatus: vi.fn(() => Promise.resolve({ running: false })),
@@ -354,7 +360,13 @@ vi.mock("@/ipc", () => ({
   tunStatus: vi.fn(() =>
     Promise.resolve({
       allowEnableTun: true,
+      backend: "process",
       enabled: false,
+      elevationGranted: false,
+      lastProviderError: null,
+      nativeComponentReady: true,
+      needsServiceInstall: false,
+      needsVpnPermission: false,
       preflight: {
         notes: [],
         platform: "linux",
@@ -362,9 +374,9 @@ vi.mock("@/ipc", () => ({
         state: "ready",
         windowsCleanupDevices: [],
       },
+      providerState: "notApplicable",
       requiresElevation: false,
       restoreOnDisconnect: true,
-      elevationGranted: false,
     }),
   ),
   checkUpdates: vi.fn(() => Promise.resolve({ preRelease: false, results: [], targets: [] })),

@@ -199,6 +199,71 @@ Optional sidecars for future builds must follow this rule:
 3. Keep GPL or AGPL sidecars out of default installers unless the approval record explicitly covers sidecar redistribution and source availability.
 4. Re-run package builds on every target OS after adding any sidecar because Tauri resolves sidecars by target triple.
 
+## Native Tunnel Packaging
+
+macOS and Windows transparent TUN use native OS components instead of the
+desktop UI process owning routes directly.
+
+macOS release builds must stage and sign the PacketTunnel assets before the
+final package is signed and notarized:
+
+```sh
+pnpm native:macos:libbox
+export VOYAVPN_MACOS_APP_BUNDLE="$PWD/target/release/bundle/macos/VoyaVPN.app"
+export VOYAVPN_CODESIGN_IDENTITY="<Developer ID or Apple Distribution identity>"
+pnpm native:macos:tunnel
+pnpm native:macos:tunnel:verify
+pnpm native:macos:app:sign
+pnpm native:macos:app:notarize
+```
+
+`pnpm native:macos:libbox` builds sing-box's Apple `Libbox.xcframework` from the
+pinned sing-box source tag and places it at
+`src-tauri/native/macos/Frameworks/Libbox.xcframework`. Release owners may
+instead provide an already-built framework through `VOYAVPN_LIBBOX_XCFRAMEWORK`.
+`VOYAVPN_MACOS_APP_BUNDLE` points the staging, verification, signing, and
+notarization helpers at the actual Tauri `.app`; when it is omitted, the scripts
+use `target/native/macos/VoyaVPN.app` for local staging only.
+
+The staged assets are:
+
+- `VoyaVPN.app/Contents/MacOS/voyavpn-macos-tunnelctl`
+- `VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex`
+- `VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex/Contents/Frameworks/Libbox.framework`
+  when libbox is available
+
+The containing app uses `src-tauri/entitlements/macos-app.plist`; the extension
+uses `src-tauri/entitlements/packet-tunnel.plist`. App Store/TestFlight builds
+must provision the matching App Group `group.app.voyavpn.desktop` and Network
+Extension entitlement for `packet-tunnel-provider`. Set
+`VOYAVPN_REQUIRE_LIBBOX=1` and `VOYAVPN_REQUIRE_CODESIGN=1` in release lanes so
+missing libbox or unsigned native tunnel assets fail the build instead of
+becoming a runtime-only error.
+
+For notarization, prefer a keychain profile stored on the signing machine:
+
+```sh
+xcrun notarytool store-credentials "<profile-name>"
+export VOYAVPN_NOTARY_KEYCHAIN_PROFILE="<profile-name>"
+```
+
+The script also supports `VOYAVPN_NOTARY_APPLE_ID`,
+`VOYAVPN_NOTARY_TEAM_ID`, and `VOYAVPN_NOTARY_PASSWORD`. These values must come
+from the release secret system and must not be committed.
+
+Windows release builds must build and install the service on smoke machines:
+
+```sh
+pnpm native:windows:tunnel:build
+pnpm native:windows:tunnel:install
+pnpm native:windows:tunnel:status
+```
+
+`VoyaVPNTunnelService` runs `sing-box check -c` before launching sing-box with
+Wintun. Install and uninstall commands must run from an elevated Windows
+terminal or an installer custom action with equivalent service-management
+rights.
+
 ## First-Run Core Acquisition Flow
 
 First run should not assume any core executable is present in debug or dry-run packages. Stable packages copy the approved sing-box seed into app data when present. Missing sing-box seed assets do not fall back to an online sing-box download; rebuild or reinstall the package so the seed is present.

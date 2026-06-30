@@ -36,7 +36,16 @@
     "tauri": "node scripts/tauri.mjs",
     "tauri:dev": "pnpm dev",
     "tauri:build": "node scripts/tauri-build.mjs",
-    "tauri:stable-updater-config": "node scripts/tauri-build.mjs --write-stable-updater-config"
+    "tauri:stable-updater-config": "node scripts/tauri-build.mjs --write-stable-updater-config",
+    "native:macos:libbox": "node scripts/build-sing-box-libbox-apple.mjs",
+    "native:macos:tunnel": "node scripts/build-macos-native-tunnel.mjs",
+    "native:macos:tunnel:verify": "node scripts/verify-macos-native-tunnel.mjs",
+    "native:macos:app:sign": "node scripts/sign-macos-app.mjs",
+    "native:macos:app:notarize": "node scripts/notarize-macos-app.mjs",
+    "native:windows:tunnel:build": "node scripts/windows-tunnel-service.mjs build",
+    "native:windows:tunnel:install": "node scripts/windows-tunnel-service.mjs install",
+    "native:windows:tunnel:uninstall": "node scripts/windows-tunnel-service.mjs uninstall",
+    "native:windows:tunnel:status": "node scripts/windows-tunnel-service.mjs status"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.2",

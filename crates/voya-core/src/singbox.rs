@@ -26,6 +26,7 @@ const STREAM_SECURITY_REALITY: &str = "reality";
 const USER_AGENT_HEADER: &str = "Sec-WebSocket-Protocol";
 const DEFAULT_HYSTERIA2_HOP_INTERVAL: i32 = 30;
 const DEFAULT_TUN_STACK: &str = "gvisor";
+const MACOS_TUN_SAFE_MTU: i32 = 1500;
 const SINGBOX_TUN_INBOUND_TAG: &str = "tun";
 const SINGBOX_DIRECT_DNS_TAG: &str = "direct_dns";
 const SINGBOX_REMOTE_DNS_TAG: &str = "remote_dns";
@@ -34,6 +35,35 @@ const SINGBOX_HOSTS_DNS_TAG: &str = "hosts_dns";
 const SINGBOX_FAKE_DNS_TAG: &str = "fake_dns";
 const SINGBOX_FAKEIP_INET4_RANGE: &str = "198.18.0.0/15";
 const SINGBOX_FAKEIP_INET6_RANGE: &str = "fc00::/18";
+const PRIORITY_PROXY_DOMAIN_SUFFIXES: &[&str] = &[
+    "anthropic.com",
+    "claude.ai",
+    "claudeusercontent.com",
+    "openai.com",
+    "chatgpt.com",
+    "oaistatic.com",
+    "oaiusercontent.com",
+    "openai.azure.com",
+    "githubcopilot.com",
+    "copilot-proxy.githubusercontent.com",
+    "copilot-telemetry.githubusercontent.com",
+    "cursor.com",
+    "cursor.sh",
+    "codeium.com",
+    "windsurf.com",
+    "sourcegraph.com",
+    "perplexity.ai",
+    "generativelanguage.googleapis.com",
+    "aistudio.google.com",
+    "gemini.google.com",
+    "ai.google.dev",
+    "poe.com",
+    "x.ai",
+    "grok.com",
+    "cohere.ai",
+    "mistral.ai",
+    "huggingface.co",
+];
 const SINGBOX_RULESET_URL: &str =
     "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-{0}/{1}.srs";
 const GEOIP_PREFIX: &str = "geoip:";
@@ -435,6 +465,8 @@ pub struct SingboxInbound {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stack: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform: Option<SingboxTunPlatform>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub users: Option<Vec<SingboxUser>>,
 }
 
@@ -452,9 +484,27 @@ impl Default for SingboxInbound {
             strict_route: None,
             endpoint_independent_nat: None,
             stack: None,
+            platform: None,
             users: None,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct SingboxTunPlatform {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http_proxy: Option<SingboxTunHttpProxy>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct SingboxTunHttpProxy {
+    pub enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_port: Option<i32>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -1067,9 +1117,10 @@ fn gen_inbounds(config: &mut SingboxConfig, context: &CoreConfigContext) {
     let listen_port = inbound_port(&context.app_config, InboundProtocol::socks);
     let is_using_local_mixed_port =
         context.node.address == LOOPBACK && context.node.port == listen_port;
+    let mixed_inbound_available = !context.is_tun_enabled || !is_using_local_mixed_port;
 
     config.inbounds.clear();
-    if !context.is_tun_enabled || !is_using_local_mixed_port {
+    if mixed_inbound_available {
         let mut primary = build_mixed_inbound(&in_item, InboundProtocol::socks);
         if in_item.allow_lan_conn && !in_item.new_port4_lan {
             primary.listen = Some("0.0.0.0".to_string());
@@ -1096,7 +1147,10 @@ fn gen_inbounds(config: &mut SingboxConfig, context: &CoreConfigContext) {
     }
 
     if context.is_tun_enabled {
-        config.inbounds.push(build_tun_inbound(context));
+        config.inbounds.push(build_tun_inbound(
+            context,
+            mixed_inbound_available.then_some(listen_port),
+        ));
     }
 }
 
@@ -1117,20 +1171,9 @@ fn build_mixed_inbound_with(tag: impl Into<String>, port: i32) -> SingboxInbound
     }
 }
 
-fn build_tun_inbound(context: &CoreConfigContext) -> SingboxInbound {
-    let mtu = if context.app_config.tun_mode_item.mtu > 0 {
-        context.app_config.tun_mode_item.mtu
-    } else {
-        WIREGUARD_DEFAULT_MTU
-    };
-    let address = if context.app_config.tun_mode_item.enable_ipv6_address {
-        vec![
-            "172.18.0.1/30".to_string(),
-            "fdfe:dcba:9876::1/126".to_string(),
-        ]
-    } else {
-        vec!["172.18.0.1/30".to_string()]
-    };
+fn build_tun_inbound(context: &CoreConfigContext, http_proxy_port: Option<i32>) -> SingboxInbound {
+    let mtu = tun_mtu(context);
+    let address = tun_addresses(context);
     let stack = nonempty_str(Some(&context.app_config.tun_mode_item.stack))
         .unwrap_or(DEFAULT_TUN_STACK)
         .to_string();
@@ -1140,18 +1183,61 @@ fn build_tun_inbound(context: &CoreConfigContext) -> SingboxInbound {
         tag: SINGBOX_TUN_INBOUND_TAG.to_string(),
         listen: None,
         listen_port: None,
-        interface_name: Some(if context.is_macos() {
-            "utun0".to_string()
-        } else {
-            "singbox_tun".to_string()
-        }),
+        interface_name: tun_interface_name(context),
         address: Some(address),
         mtu: Some(mtu),
         auto_route: Some(context.app_config.tun_mode_item.auto_route),
-        strict_route: Some(context.app_config.tun_mode_item.strict_route),
+        strict_route: Some(tun_strict_route(context)),
         stack: Some(stack),
+        platform: tun_platform(context, http_proxy_port),
         ..SingboxInbound::default()
     }
+}
+
+fn tun_addresses(context: &CoreConfigContext) -> Vec<String> {
+    let mut address = vec!["172.18.0.1/30".to_string()];
+    if context.is_macos() || context.app_config.tun_mode_item.enable_ipv6_address {
+        address.push("fdfe:dcba:9876::1/126".to_string());
+    }
+    address
+}
+
+fn tun_platform(
+    context: &CoreConfigContext,
+    http_proxy_port: Option<i32>,
+) -> Option<SingboxTunPlatform> {
+    if !context.is_macos() {
+        return None;
+    }
+    let port = http_proxy_port?;
+    Some(SingboxTunPlatform {
+        http_proxy: Some(SingboxTunHttpProxy {
+            enabled: true,
+            server: Some(LOOPBACK.to_string()),
+            server_port: Some(port),
+        }),
+    })
+}
+
+fn tun_interface_name(context: &CoreConfigContext) -> Option<String> {
+    (!context.is_macos()).then(|| "singbox_tun".to_string())
+}
+
+fn tun_mtu(context: &CoreConfigContext) -> i32 {
+    let configured = if context.app_config.tun_mode_item.mtu > 0 {
+        context.app_config.tun_mode_item.mtu
+    } else {
+        WIREGUARD_DEFAULT_MTU
+    };
+    if context.is_macos() && configured > MACOS_TUN_SAFE_MTU {
+        MACOS_TUN_SAFE_MTU
+    } else {
+        configured
+    }
+}
+
+fn tun_strict_route(context: &CoreConfigContext) -> bool {
+    !context.is_macos() && context.app_config.tun_mode_item.strict_route
 }
 
 fn gen_outbounds(config: &mut SingboxConfig, context: &CoreConfigContext) {
@@ -2016,6 +2102,8 @@ fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContext) {
         }
     }
 
+    append_priority_proxy_route_rules(&mut config.route.rules);
+
     config.route.rules.push(SingboxRule {
         outbound: Some(DIRECT_TAG.to_string()),
         clash_mode: Some("Direct".to_string()),
@@ -2068,6 +2156,21 @@ fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContext) {
             gen_routing_user_rule(config, context, item);
         }
     }
+}
+
+fn append_priority_proxy_route_rules(rules: &mut Vec<SingboxRule>) {
+    rules.push(SingboxRule {
+        outbound: Some(PROXY_TAG.to_string()),
+        domain_suffix: Some(priority_proxy_domain_suffixes()),
+        ..SingboxRule::default()
+    });
+}
+
+fn priority_proxy_domain_suffixes() -> Vec<String> {
+    PRIORITY_PROXY_DOMAIN_SUFFIXES
+        .iter()
+        .map(|domain| (*domain).to_string())
+        .collect()
 }
 
 fn tun_route_rules() -> Vec<SingboxRule> {
@@ -2437,6 +2540,7 @@ fn gen_dns(config: &mut SingboxConfig, context: &CoreConfigContext) {
         }
         .to_string(),
     );
+    apply_tun_dns_reverse_mapping(dns, context);
 
     let simple_dns = &context.simple_dns_item;
     if !use_direct_dns
@@ -2564,6 +2668,12 @@ fn gen_dns_rules(config: &mut SingboxConfig, context: &CoreConfigContext) {
         });
     }
 
+    append_priority_proxy_dns_rules(
+        &mut rules,
+        SINGBOX_REMOTE_DNS_TAG,
+        priority_proxy_dns_strategy(context),
+    );
+
     rules.push(SingboxRule {
         server: Some(SINGBOX_REMOTE_DNS_TAG.to_string()),
         strategy: domain_strategy4_sbox(simple_dns.strategy4_proxy.as_deref()),
@@ -2643,6 +2753,36 @@ fn gen_dns_rules(config: &mut SingboxConfig, context: &CoreConfigContext) {
 
     append_dns_routing_rules(&mut rules, context);
     config.dns.get_or_insert_with(SingboxDns::default).rules = rules;
+}
+
+fn append_priority_proxy_dns_rules(
+    rules: &mut Vec<SingboxRule>,
+    server: &str,
+    strategy: Option<String>,
+) {
+    rules.push(priority_proxy_dns_rule(server, strategy));
+}
+
+fn priority_proxy_dns_rule(server: &str, strategy: Option<String>) -> SingboxRule {
+    SingboxRule {
+        server: Some(server.to_string()),
+        strategy,
+        domain_suffix: Some(priority_proxy_domain_suffixes()),
+        ..SingboxRule::default()
+    }
+}
+
+fn priority_proxy_dns_strategy(context: &CoreConfigContext) -> Option<String> {
+    if context.is_tun_enabled && !context.app_config.tun_mode_item.enable_ipv6_address {
+        return Some("ipv4_only".to_string());
+    }
+    domain_strategy4_sbox(context.simple_dns_item.strategy4_proxy.as_deref())
+}
+
+fn apply_tun_dns_reverse_mapping(dns: &mut SingboxDns, context: &CoreConfigContext) {
+    if context.is_tun_enabled {
+        dns.reverse_mapping = Some(true);
+    }
 }
 
 fn append_dns_routing_rules(rules: &mut Vec<SingboxRule>, context: &CoreConfigContext) {
@@ -2759,6 +2899,7 @@ fn gen_dns_custom(config: &mut SingboxConfig, context: &CoreConfigContext) {
         return;
     };
     gen_dns_protect_custom(&mut dns, context);
+    apply_tun_dns_reverse_mapping(&mut dns, context);
     config.dns = Some(dns);
 }
 
@@ -2775,11 +2916,12 @@ fn gen_dns_protect_custom(dns: &mut SingboxDns, context: &CoreConfigContext) {
         }
     }
 
-    if let Some(global_server_tag) = custom_dns_global_server_tag(dns) {
+    let global_server_tag = custom_dns_global_server_tag(dns);
+    if let Some(global_server_tag) = global_server_tag.as_ref() {
         dns.rules.insert(
             0,
             SingboxRule {
-                server: Some(global_server_tag),
+                server: Some(global_server_tag.clone()),
                 clash_mode: Some("Global".to_string()),
                 ..SingboxRule::default()
             },
@@ -2794,6 +2936,13 @@ fn gen_dns_protect_custom(dns: &mut SingboxDns, context: &CoreConfigContext) {
                 clash_mode: Some("Direct".to_string()),
                 ..SingboxRule::default()
             },
+        );
+    }
+
+    if let Some(global_server_tag) = global_server_tag.as_deref() {
+        dns.rules.insert(
+            0,
+            priority_proxy_dns_rule(global_server_tag, priority_proxy_dns_strategy(context)),
         );
     }
 
@@ -4331,6 +4480,9 @@ mod tests {
             rule.domain.as_ref() == Some(&vec!["ech.example".to_string()])
                 && rule.server.as_deref() == Some(SINGBOX_LOCAL_DNS_TAG)
         }));
+        assert!(dns.rules.iter().any(|rule| {
+            rule.server.as_deref() == Some("remote") && is_priority_proxy_domain_suffix(rule)
+        }));
         assert_no_nulls(
             &serde_json::to_value(&dns).expect("sing-box raw DNS should serialize to JSON"),
         );
@@ -4413,6 +4565,36 @@ mod tests {
     }
 
     #[test]
+    fn singbox_raw_tun_dns_enables_reverse_mapping_and_priority_ipv4() {
+        let mut app_config = AppConfig::default();
+        app_config.tun_mode_item.enable_tun = true;
+        app_config.tun_mode_item.enable_ipv6_address = false;
+        let mut context = test_context(app_config, base_remote_node());
+        context.is_tun_enabled = true;
+        context.raw_dns_item = Some(DnsItem {
+            enabled: true,
+            tun_dns: Some(
+                r#"{"servers":[{"tag":"remote","type":"udp","server":"1.1.1.1","detour":"proxy"}],"rules":[],"final":"remote","reverse_mapping":false}"#.to_string(),
+            ),
+            domain_dns_address: Some("9.9.9.9".to_string()),
+            ..DnsItem::default()
+        });
+
+        let generated = generate_singbox_config(&context).expect("sing-box config should generate");
+        let dns = generated.dns.expect("raw TUN DNS");
+
+        assert_eq!(dns.reverse_mapping, Some(true));
+        let priority_rule = dns
+            .rules
+            .iter()
+            .find(|rule| {
+                rule.server.as_deref() == Some("remote") && is_priority_proxy_domain_suffix(rule)
+            })
+            .expect("priority proxy DNS rule");
+        assert_eq!(priority_rule.strategy.as_deref(), Some("ipv4_only"));
+    }
+
+    #[test]
     fn singbox_wireguard_uses_allowed_ips_and_rejects_empty_public_key() {
         let wireguard = ProfileItem {
             index_id: "wg".to_string(),
@@ -4468,6 +4650,125 @@ mod tests {
             serde_json::from_str(include_str!("../../../tests/golden/singbox/route/tun.json"))
                 .expect("sing-box tun route golden fixture should parse as JSON");
         golden::assert_json_eq("singbox-tun-route", &expected_route, &route_value);
+    }
+
+    #[test]
+    fn singbox_macos_tun_inbound_lets_singbox_allocate_utun() {
+        let mut config = AppConfig::default();
+        config.tun_mode_item.enable_tun = true;
+        config.tun_mode_item.mtu = 9000;
+        config.tun_mode_item.strict_route = true;
+        let mut context = test_context(config, base_remote_node());
+        context.is_tun_enabled = true;
+        context.platform = CoreGenPlatform::MacOS;
+
+        let generated = generate_singbox_config(&context).expect("sing-box config should generate");
+        let tun = generated
+            .inbounds
+            .iter()
+            .find(|inbound| inbound.tag == SINGBOX_TUN_INBOUND_TAG)
+            .expect("TUN inbound should be generated");
+
+        assert_eq!(tun.interface_name, None);
+        assert_eq!(
+            tun.address.as_ref(),
+            Some(&vec![
+                "172.18.0.1/30".to_string(),
+                "fdfe:dcba:9876::1/126".to_string()
+            ])
+        );
+        assert_eq!(tun.mtu, Some(1500));
+        assert_eq!(tun.strict_route, Some(false));
+        let http_proxy = tun
+            .platform
+            .as_ref()
+            .and_then(|platform| platform.http_proxy.as_ref())
+            .expect("macOS TUN platform HTTP proxy");
+        assert!(http_proxy.enabled);
+        assert_eq!(http_proxy.server.as_deref(), Some(LOOPBACK));
+        assert_eq!(http_proxy.server_port, Some(crate::DEFAULT_LOCAL_PORT));
+    }
+
+    #[test]
+    fn singbox_priority_proxy_domains_follow_sniff_and_precede_direct_rules() {
+        let mut app_config = AppConfig::default();
+        app_config.tun_mode_item.enable_tun = true;
+        app_config.tun_mode_item.enable_ipv6_address = false;
+        let mut context = test_context(app_config, base_remote_node());
+        context.is_tun_enabled = true;
+        context.routing_item = Some(RoutingItem {
+            rule_set: vec![RulesItem {
+                outbound_tag: Some(DIRECT_TAG.to_string()),
+                port: Some("0-65535".to_string()),
+                rule_type: Some(RuleType::Routing),
+                ..RulesItem::default()
+            }],
+            ..RoutingItem::default()
+        });
+
+        let generated = generate_singbox_config(&context).expect("sing-box config should generate");
+        let sniff_index = generated
+            .route
+            .rules
+            .iter()
+            .position(|rule| rule.action.as_deref() == Some("sniff"))
+            .expect("sniff route rule");
+        let dns_hijack_index = generated
+            .route
+            .rules
+            .iter()
+            .position(|rule| rule.action.as_deref() == Some("hijack-dns"))
+            .expect("DNS hijack route rule");
+        let priority_route_index = generated
+            .route
+            .rules
+            .iter()
+            .position(is_priority_proxy_route_rule)
+            .expect("priority proxy route rule");
+        let direct_mode_index = generated
+            .route
+            .rules
+            .iter()
+            .position(|rule| {
+                rule.outbound.as_deref() == Some(DIRECT_TAG)
+                    && rule.clash_mode.as_deref() == Some("Direct")
+            })
+            .expect("Direct route mode rule");
+        let direct_final_index = generated
+            .route
+            .rules
+            .iter()
+            .position(|rule| {
+                rule.outbound.as_deref() == Some(DIRECT_TAG)
+                    && rule.port_range.as_ref() == Some(&vec!["0:65535".to_string()])
+            })
+            .expect("direct final route rule");
+        assert!(sniff_index < priority_route_index);
+        assert!(dns_hijack_index < priority_route_index);
+        assert!(priority_route_index < direct_mode_index);
+        assert!(priority_route_index < direct_final_index);
+
+        let dns = generated.dns.expect("DNS config should be generated");
+        assert_eq!(dns.reverse_mapping, Some(true));
+        let priority_dns_index = dns
+            .rules
+            .iter()
+            .position(|rule| {
+                rule.server.as_deref() == Some(SINGBOX_REMOTE_DNS_TAG)
+                    && is_priority_proxy_domain_suffix(rule)
+            })
+            .expect("priority proxy DNS rule");
+        let priority_dns_rule = &dns.rules[priority_dns_index];
+        assert_eq!(priority_dns_rule.strategy.as_deref(), Some("ipv4_only"));
+        let direct_mode_index = dns
+            .rules
+            .iter()
+            .position(|rule| {
+                rule.server.as_deref() == Some(SINGBOX_DIRECT_DNS_TAG)
+                    && rule.clash_mode.as_deref() == Some("Direct")
+            })
+            .expect("Direct DNS mode rule");
+        assert!(priority_dns_index < direct_mode_index);
     }
 
     #[test]
@@ -4594,6 +4895,14 @@ mod tests {
             rule.inbound.as_ref() == Some(&vec![inbound_tag.clone()])
                 && rule.outbound.as_deref() == Some(proxy_tag.as_str())
         }));
+    }
+
+    fn is_priority_proxy_route_rule(rule: &SingboxRule) -> bool {
+        rule.outbound.as_deref() == Some(PROXY_TAG) && is_priority_proxy_domain_suffix(rule)
+    }
+
+    fn is_priority_proxy_domain_suffix(rule: &SingboxRule) -> bool {
+        rule.domain_suffix.as_ref() == Some(&priority_proxy_domain_suffixes())
     }
 
     fn singbox_routing_dns_snapshot_contexts() -> (CoreConfigContext, CoreConfigContext) {

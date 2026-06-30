@@ -581,9 +581,9 @@ impl Default for TunModeItem {
         Self {
             enable_tun: false,
             auto_route: true,
-            strict_route: true,
+            strict_route: false,
             stack: String::new(),
-            mtu: 9000,
+            mtu: 1500,
             enable_ipv6_address: false,
             icmp_routing: DEFAULT_TUN_ICMP_ROUTING.to_string(),
             enable_legacy_protect: false,
@@ -678,7 +678,8 @@ mod tests {
         assert!(config.inbound[0].udp_enabled);
         assert_eq!(config.core_basic_item.loglevel, "warning");
         assert_eq!(config.routing_basic_item.domain_strategy, "AsIs");
-        assert_eq!(config.tun_mode_item.mtu, 9000);
+        assert_eq!(config.tun_mode_item.mtu, 1500);
+        assert!(!config.tun_mode_item.strict_route);
         assert_eq!(config.speed_test_item.speed_test_timeout, 10);
         assert_eq!(config.speed_test_item.mixed_concurrency_count, 5);
         assert_eq!(config.mux4_ray_item.concurrency, Some(8));

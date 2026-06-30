@@ -14,3 +14,4 @@ function run(command, args, options = {}) {
 
 run("cargo", ["test", "--workspace", "--all-targets", "--exclude", "voyavpn"]);
 run("cargo", ["test", "-p", "voyavpn", "--bin", "voyavpn"]);
+run("cargo", ["test", "-p", "voyavpn", "--bin", "voyavpn-tunnel-service"]);

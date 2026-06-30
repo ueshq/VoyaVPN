@@ -11,3 +11,4 @@ These ADRs are baseline contracts for the VoyaVPN full rewrite. They are based o
 - [0002 - Typed IPC And Events](0002-typed-ipc-and-events.md)
 - [0003 - Config Generation Parity](0003-config-generation-parity.md)
 - [0004 - Platform Boundaries](0004-platform-boundaries.md)
+- [0005 - Native Transparent Tunnel Backends](0005-native-transparent-tunnel-backends.md)

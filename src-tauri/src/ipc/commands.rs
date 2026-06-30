@@ -69,6 +69,7 @@ use voya_platform::{
         copy_seed_core_asset, CoreInfoError, CoreSeedCopyOutcome, CoreSeedCopyStatus, TargetOs,
     },
     sysproxy::SystemProxyStatus,
+    tun::{tun_backend, TunBackend as PlatformTunBackend},
 };
 
 use super::events::{
@@ -430,11 +431,16 @@ pub(crate) fn register_global_hotkeys_for_config<R: tauri::Runtime>(
 #[tauri::command]
 #[specta::specta]
 pub fn tun_request_elevation(state: tauri::State<'_, AppState>) -> Result<TunStatus, AppError> {
+    let config = current_config(&state)?;
+    let current = tun_manager(&state).status(&config).map_err(tun_error)?;
+    if !current.requires_elevation {
+        return Ok(current);
+    }
+
     state
         .elevation_manager()
         .request()
         .map_err(elevation_error)?;
-    let config = current_config(&state)?;
     tun_manager(&state).status(&config).map_err(tun_error)
 }
 
@@ -2821,9 +2827,34 @@ fn apply_system_proxy<R>(
 where
     R: tauri::Runtime,
 {
+    let runtime_config = runtime_system_proxy_config(config, force_disable);
     state
         .system_proxy_manager()
-        .apply_config(config, force_disable)
+        .apply_config(&runtime_config, force_disable)
+}
+
+fn runtime_system_proxy_config(config: &AppConfig, force_disable: bool) -> AppConfig {
+    runtime_system_proxy_config_for_os(config, force_disable, TargetOs::current())
+}
+
+fn runtime_system_proxy_config_for_os(
+    config: &AppConfig,
+    force_disable: bool,
+    target_os: TargetOs,
+) -> AppConfig {
+    if force_disable || !should_apply_tun_system_proxy_fallback(config, target_os) {
+        return config.clone();
+    }
+
+    let mut adjusted = config.clone();
+    adjusted.system_proxy_item.sys_proxy_type = SysProxyType::ForcedChange;
+    adjusted
+}
+
+fn should_apply_tun_system_proxy_fallback(config: &AppConfig, target_os: TargetOs) -> bool {
+    config.tun_mode_item.enable_tun
+        && config.system_proxy_item.sys_proxy_type == SysProxyType::ForcedClear
+        && tun_backend(target_os) == PlatformTunBackend::Process
 }
 
 pub(crate) fn restore_system_proxy<R>(
@@ -3563,7 +3594,7 @@ fn sysproxy_mode(mode: SysProxyType) -> super::events::SysProxyMode {
 
 #[cfg(test)]
 mod tests {
-    use voya_core::CoreType;
+    use voya_core::{CoreType, SysProxyType};
 
     use super::*;
 
@@ -3591,5 +3622,67 @@ mod tests {
             core_state_from_snapshot(&snapshot),
             CoreState::Disconnected
         ));
+    }
+
+    #[test]
+    fn runtime_system_proxy_config_enables_fallback_for_tun_default_clear() {
+        let mut config = AppConfig::default();
+        config.tun_mode_item.enable_tun = true;
+        config.system_proxy_item.sys_proxy_type = SysProxyType::ForcedClear;
+
+        let adjusted = runtime_system_proxy_config_for_os(&config, false, TargetOs::Linux);
+
+        assert_eq!(
+            adjusted.system_proxy_item.sys_proxy_type,
+            SysProxyType::ForcedChange
+        );
+        assert_eq!(
+            config.system_proxy_item.sys_proxy_type,
+            SysProxyType::ForcedClear
+        );
+    }
+
+    #[test]
+    fn runtime_system_proxy_config_preserves_explicit_modes_and_force_disable() {
+        for mode in [
+            SysProxyType::ForcedChange,
+            SysProxyType::Unchanged,
+            SysProxyType::Pac,
+        ] {
+            let mut config = AppConfig::default();
+            config.tun_mode_item.enable_tun = true;
+            config.system_proxy_item.sys_proxy_type = mode;
+
+            let adjusted = runtime_system_proxy_config_for_os(&config, false, TargetOs::Linux);
+
+            assert_eq!(adjusted.system_proxy_item.sys_proxy_type, mode);
+        }
+
+        let mut config = AppConfig::default();
+        config.tun_mode_item.enable_tun = true;
+        config.system_proxy_item.sys_proxy_type = SysProxyType::ForcedClear;
+
+        let adjusted = runtime_system_proxy_config_for_os(&config, true, TargetOs::Linux);
+
+        assert_eq!(
+            adjusted.system_proxy_item.sys_proxy_type,
+            SysProxyType::ForcedClear
+        );
+    }
+
+    #[test]
+    fn runtime_system_proxy_config_skips_fallback_for_native_tun_backends() {
+        for os in [TargetOs::Macos, TargetOs::Windows] {
+            let mut config = AppConfig::default();
+            config.tun_mode_item.enable_tun = true;
+            config.system_proxy_item.sys_proxy_type = SysProxyType::ForcedClear;
+
+            let adjusted = runtime_system_proxy_config_for_os(&config, false, os);
+
+            assert_eq!(
+                adjusted.system_proxy_item.sys_proxy_type,
+                SysProxyType::ForcedClear
+            );
+        }
     }
 }

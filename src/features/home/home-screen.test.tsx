@@ -85,7 +85,13 @@ const sysProxyStatus: SystemProxyStatusResponse = {
 
 const tunStatusResponse: TunStatus = {
   allowEnableTun: true,
+  backend: "process",
   enabled: false,
+  elevationGranted: true,
+  lastProviderError: null,
+  nativeComponentReady: true,
+  needsServiceInstall: false,
+  needsVpnPermission: false,
   preflight: {
     notes: [],
     platform: "macos",
@@ -93,9 +99,9 @@ const tunStatusResponse: TunStatus = {
     state: "ready",
     windowsCleanupDevices: [],
   },
+  providerState: "notApplicable",
   requiresElevation: false,
   restoreOnDisconnect: true,
-  elevationGranted: true,
 };
 
 vi.mock("@/ipc", () => ({
@@ -376,6 +382,28 @@ describe("HomeScreen", () => {
     await waitFor(() => expect(ipcMock.tunRequestElevation).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(ipcMock.setTunEnabled).toHaveBeenCalledWith(true));
     expect(runtimeMock.state.setTun).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
+  });
+
+  it("blocks native TUN enable when the platform component is missing", async () => {
+    const user = userEvent.setup();
+    ipcMock.tunStatus.mockResolvedValue({
+      ...tunStatusResponse,
+      backend: "macosPacketTunnel",
+      lastProviderError: "PacketTunnel extension is not bundled in this build",
+      nativeComponentReady: false,
+      providerState: "missingComponent",
+    });
+
+    renderHome();
+
+    await user.click(screen.getByRole("switch", { name: "TUN" }));
+
+    await waitFor(() => expect(ipcMock.tunStatus).toHaveBeenCalled());
+    expect(ipcMock.setTunEnabled).not.toHaveBeenCalled();
+    expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
+      description: "PacketTunnel extension is not bundled in this build",
+      title: "Failed to enable TUN",
+    });
   });
 
   it("leaves TUN off when the authorization dialog is cancelled", async () => {

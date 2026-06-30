@@ -21,6 +21,10 @@ test = false
 name = "voyavpn"
 path = "src/main.rs"
 
+[[bin]]
+name = "voyavpn-tunnel-service"
+path = "src/bin/voyavpn-tunnel-service.rs"
+
 [build-dependencies]
 tauri-build.workspace = true
 
@@ -43,6 +47,9 @@ voya-core.workspace = true
 voya-db.workspace = true
 voya-platform.workspace = true
 zeroize.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-service = "0.8"
 
 [lints]
 workspace = true

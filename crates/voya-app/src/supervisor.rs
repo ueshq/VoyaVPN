@@ -15,6 +15,10 @@ use voya_platform::{
         ProcessExitHandler, ProcessHandle, ProcessJob, ProcessJobFactory, ProcessOutput,
         ProcessRole, ProcessRunner, ProcessSpawn, StdProcessRunner,
     },
+    tun::{
+        tun_backend, NativeTunController, NativeTunError, NativeTunStartRequest,
+        NoopNativeTunController, PlatformNativeTunController, TunBackend,
+    },
     tun::{NoopTunCleaner, PlatformTunCleaner, TunCleaner, TunCleanupError},
 };
 
@@ -22,6 +26,7 @@ use voya_platform::{
 pub struct CoreProcessSpec {
     pub core_type: CoreType,
     pub launch: CoreLaunch,
+    pub config_path: Option<PathBuf>,
     pub display_log: bool,
     pub may_need_sudo: bool,
 }
@@ -32,9 +37,16 @@ impl CoreProcessSpec {
         Self {
             core_type,
             launch,
+            config_path: None,
             display_log: true,
             may_need_sudo: true,
         }
+    }
+
+    #[must_use]
+    pub fn with_config_path(mut self, config_path: impl Into<PathBuf>) -> Self {
+        self.config_path = Some(config_path.into());
+        self
     }
 
     #[must_use]
@@ -94,6 +106,7 @@ pub struct SupervisorDeps {
     pub elevation: Arc<ElevationState>,
     pub job_factory: Arc<dyn ProcessJobFactory>,
     pub tun_cleaner: Arc<dyn TunCleaner>,
+    pub native_tun_controller: Arc<dyn NativeTunController>,
     pub target_os: TargetOs,
 }
 
@@ -105,6 +118,7 @@ impl SupervisorDeps {
             elevation,
             job_factory: Arc::new(NoopProcessJobFactory),
             tun_cleaner: Arc::new(NoopTunCleaner),
+            native_tun_controller: Arc::new(NoopNativeTunController),
             target_os: TargetOs::current(),
         }
     }
@@ -116,6 +130,7 @@ impl SupervisorDeps {
             elevation: Arc::new(ElevationState::new()),
             job_factory: Arc::new(PlatformProcessJobFactory),
             tun_cleaner: Arc::new(PlatformTunCleaner),
+            native_tun_controller: Arc::new(PlatformNativeTunController),
             target_os: TargetOs::current(),
         }
     }
@@ -130,6 +145,7 @@ impl SupervisorDeps {
             elevation,
             job_factory: Arc::new(PlatformProcessJobFactory),
             tun_cleaner: Arc::new(PlatformTunCleaner),
+            native_tun_controller: Arc::new(PlatformNativeTunController),
             target_os: TargetOs::current(),
         }
     }
@@ -143,6 +159,15 @@ impl SupervisorDeps {
     #[must_use]
     pub fn with_tun_cleaner(mut self, tun_cleaner: Arc<dyn TunCleaner>) -> Self {
         self.tun_cleaner = tun_cleaner;
+        self
+    }
+
+    #[must_use]
+    pub fn with_native_tun_controller(
+        mut self,
+        native_tun_controller: Arc<dyn NativeTunController>,
+    ) -> Self {
+        self.native_tun_controller = native_tun_controller;
         self
     }
 
@@ -320,6 +345,11 @@ impl SupervisorActor {
     ) -> Result<SupervisorSnapshot, SupervisorError> {
         self.stop()?;
 
+        let backend = supervisor_tun_backend(self.deps.target_os, request.tun_enabled);
+        if backend.is_native() {
+            return self.start_native_tun(request, backend);
+        }
+
         if self.deps.target_os == TargetOs::Windows && request.tun_enabled {
             self.deps.tun_cleaner.cleanup_before_start()?;
         }
@@ -334,6 +364,7 @@ impl SupervisorActor {
             active_profile_id: request.active_profile_id.clone(),
             main: None,
             pre: None,
+            native_tun: None,
             elevated: Vec::new(),
             job,
             last_request: Some(request.clone()),
@@ -378,6 +409,32 @@ impl SupervisorActor {
         Ok(self.running.snapshot())
     }
 
+    fn start_native_tun(
+        &mut self,
+        request: SupervisorStartRequest,
+        backend: TunBackend,
+    ) -> Result<SupervisorSnapshot, SupervisorError> {
+        let native_request = native_tun_start_request(&request, backend)?;
+        self.deps.native_tun_controller.start(native_request)?;
+
+        let running_core_type = request
+            .pre
+            .as_ref()
+            .map_or(request.main.core_type, |pre| pre.core_type);
+        self.running = RunningCore {
+            active_profile_id: request.active_profile_id.clone(),
+            main: None,
+            pre: None,
+            native_tun: Some(RunningNativeTun { backend }),
+            elevated: Vec::new(),
+            job: None,
+            last_request: Some(request),
+            running_core_type: Some(running_core_type),
+        };
+
+        Ok(self.running.snapshot())
+    }
+
     fn stop(&mut self) -> Result<SupervisorSnapshot, SupervisorError> {
         let running = std::mem::replace(&mut self.running, RunningCore::empty());
 
@@ -392,6 +449,12 @@ impl SupervisorActor {
 
     fn stop_running(&self, running: &RunningCore) -> Result<(), SupervisorError> {
         let mut first_error = None;
+
+        if let Some(native_tun) = &running.native_tun {
+            if let Err(error) = self.deps.native_tun_controller.stop(native_tun.backend) {
+                first_error.get_or_insert(SupervisorError::from(error));
+            }
+        }
 
         for handle in &running.elevated {
             self.sudo_kill(handle, running)?;
@@ -513,6 +576,10 @@ fn process_uses_unix_sudo(
     spec: &CoreProcessSpec,
     tun_enabled: bool,
 ) -> bool {
+    if supervisor_tun_backend(deps.target_os, tun_enabled) != TunBackend::Process {
+        return false;
+    }
+
     should_use_unix_sudo(
         deps.target_os,
         spec.core_type,
@@ -521,14 +588,61 @@ fn process_uses_unix_sudo(
     )
 }
 
+fn supervisor_tun_backend(target_os: TargetOs, tun_enabled: bool) -> TunBackend {
+    if tun_enabled {
+        tun_backend(target_os)
+    } else {
+        TunBackend::Process
+    }
+}
+
+fn native_tun_start_request(
+    request: &SupervisorStartRequest,
+    backend: TunBackend,
+) -> Result<NativeTunStartRequest, SupervisorError> {
+    let main_config_path =
+        request
+            .main
+            .config_path
+            .clone()
+            .ok_or(SupervisorError::MissingNativeTunConfigPath {
+                role: ProcessRole::Main,
+            })?;
+    let pre_config_path = request
+        .pre
+        .as_ref()
+        .map(|pre| {
+            pre.config_path
+                .clone()
+                .ok_or(SupervisorError::MissingNativeTunConfigPath {
+                    role: ProcessRole::Pre,
+                })
+        })
+        .transpose()?;
+
+    Ok(NativeTunStartRequest {
+        backend,
+        active_profile_id: request.active_profile_id.clone(),
+        main_launch: request.main.launch.clone(),
+        pre_launch: request.pre.as_ref().map(|pre| pre.launch.clone()),
+        main_config_path,
+        pre_config_path,
+    })
+}
+
 struct RunningCore {
     active_profile_id: Option<String>,
     main: Option<ProcessHandle>,
     pre: Option<ProcessHandle>,
+    native_tun: Option<RunningNativeTun>,
     elevated: Vec<ProcessHandle>,
     job: Option<Box<dyn ProcessJob>>,
     last_request: Option<SupervisorStartRequest>,
     running_core_type: Option<CoreType>,
+}
+
+struct RunningNativeTun {
+    backend: TunBackend,
 }
 
 impl RunningCore {
@@ -537,6 +651,7 @@ impl RunningCore {
             active_profile_id: None,
             main: None,
             pre: None,
+            native_tun: None,
             elevated: Vec::new(),
             job: None,
             last_request: None,
@@ -570,7 +685,7 @@ impl RunningCore {
     }
 
     fn snapshot(&self) -> SupervisorSnapshot {
-        let connected = self.main.is_some();
+        let connected = self.main.is_some() || self.native_tun.is_some();
         SupervisorSnapshot {
             state: if connected {
                 SupervisorConnectionState::Connected
@@ -621,12 +736,16 @@ pub enum SupervisorError {
     Process(#[from] ProcessError),
     #[error(transparent)]
     TunCleanup(#[from] TunCleanupError),
+    #[error(transparent)]
+    NativeTun(#[from] NativeTunError),
     #[error("process job error: {0}")]
     Job(String),
     #[error("elevation error: {0}")]
     Elevation(String),
     #[error("sudo kill target pid {pid} does not match a tracked elevated process")]
     UnknownSudoKillTarget { pid: u32 },
+    #[error("missing runtime config path for native TUN {role:?} process")]
+    MissingNativeTunConfigPath { role: ProcessRole },
     #[error("sudo kill for pid {pid} failed with status {status_code:?}: {stderr}")]
     SudoKillFailed {
         pid: u32,
@@ -770,6 +889,36 @@ mod tests {
         }
     }
 
+    struct RecordingNativeTunController {
+        events: SharedEvents,
+    }
+
+    impl NativeTunController for RecordingNativeTunController {
+        fn status(&self, backend: TunBackend) -> voya_platform::tun::NativeTunStatus {
+            voya_platform::tun::NativeTunStatus {
+                backend,
+                provider_state: voya_platform::tun::NativeTunProviderState::Stopped,
+                component_ready: true,
+                message: None,
+            }
+        }
+
+        fn start(&self, request: NativeTunStartRequest) -> Result<(), NativeTunError> {
+            self.events.push(format!(
+                "native:start:{:?}:main={}:pre={}",
+                request.backend,
+                request.main_config_path.display(),
+                request.pre_config_path.is_some()
+            ));
+            Ok(())
+        }
+
+        fn stop(&self, backend: TunBackend) -> Result<(), NativeTunError> {
+            self.events.push(format!("native:stop:{backend:?}"));
+            Ok(())
+        }
+    }
+
     struct RecordingJobFactory {
         events: SharedEvents,
     }
@@ -822,7 +971,7 @@ mod tests {
         let events = SharedEvents::default();
         let elevation = Arc::new(ElevationState::new());
         elevation.set_granted(true);
-        let supervisor = supervisor_with(&events, TargetOs::Macos, elevation);
+        let supervisor = supervisor_with(&events, TargetOs::Linux, elevation);
 
         let snapshot = supervisor
             .start(SupervisorStartRequest {
@@ -1154,7 +1303,7 @@ sleep 30
     }
 
     #[tokio::test]
-    async fn supervisor_windows_tun_cleanup_runs_before_process_start_and_assigns_job() {
+    async fn supervisor_windows_non_tun_process_start_assigns_job() {
         let events = SharedEvents::default();
         let elevation = Arc::new(ElevationState::new());
         let deps = SupervisorDeps::new(Arc::new(FakeRunner::new(events.clone())), elevation)
@@ -1178,7 +1327,7 @@ sleep 30
                     CoreType::sing_box,
                     launch("/tmp/sing-box-pre", "run -c pre.json --disable-color"),
                 )),
-                tun_enabled: true,
+                tun_enabled: false,
                 sudo_script_dir: "/tmp/voya/scripts".into(),
                 restart_on_crash: false,
             })
@@ -1188,12 +1337,59 @@ sleep 30
         assert_eq!(
             events.lock().as_slice(),
             [
-                "tun:cleanup",
                 "job:create",
                 "spawn:Main:pid=100:stdin=false",
                 "job:assign:Main:pid=100",
                 "spawn:Pre:pid=101:stdin=false",
                 "job:assign:Pre:pid=101"
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn supervisor_windows_tun_uses_native_service_backend_without_process_spawn() {
+        let events = SharedEvents::default();
+        let elevation = Arc::new(ElevationState::new());
+        let deps = SupervisorDeps::new(Arc::new(FakeRunner::new(events.clone())), elevation)
+            .with_target_os(TargetOs::Windows)
+            .with_native_tun_controller(Arc::new(RecordingNativeTunController {
+                events: events.clone(),
+            }));
+        let supervisor = CoreSupervisor::spawn(deps);
+
+        let snapshot = supervisor
+            .start(SupervisorStartRequest {
+                active_profile_id: Some("active".to_string()),
+                main: CoreProcessSpec::new(
+                    CoreType::sing_box,
+                    launch("/tmp/sing-box", "run -c config.json --disable-color"),
+                )
+                .with_config_path("/tmp/voya/config.json"),
+                pre: Some(
+                    CoreProcessSpec::new(
+                        CoreType::sing_box,
+                        launch("/tmp/sing-box-pre", "run -c pre.json --disable-color"),
+                    )
+                    .with_config_path("/tmp/voya/pre.json"),
+                ),
+                tun_enabled: true,
+                sudo_script_dir: "/tmp/voya/scripts".into(),
+                restart_on_crash: false,
+            })
+            .await
+            .expect("native tun start");
+
+        assert_eq!(snapshot.state, SupervisorConnectionState::Connected);
+        assert_eq!(snapshot.main_pid, None);
+        assert_eq!(snapshot.pre_pid, None);
+
+        supervisor.stop().await.expect("native tun stop");
+
+        assert_eq!(
+            events.lock().as_slice(),
+            [
+                "native:start:WindowsService:main=/tmp/voya/config.json:pre=true",
+                "native:stop:WindowsService"
             ]
         );
     }

@@ -1475,6 +1475,8 @@ export type TransportExtraItem_Serialize = {
 	KcpMtu?: number | null,
 };
 
+export type TunBackend = "process" | "macosPacketTunnel" | "windowsService" | "unsupported";
+
 export type TunChanged = {
 	enabled: boolean,
 };
@@ -1502,11 +1504,19 @@ export type TunPreflight = {
 
 export type TunPreflightState = "ready" | "needsElevation" | "manualCheck" | "unsupported";
 
+export type TunProviderState = "notApplicable" | "missingComponent" | "permissionRequired" | "stopped" | "starting" | "running" | "error";
+
 export type TunStatus = {
 	enabled: boolean,
+	backend: TunBackend,
+	providerState: TunProviderState,
 	allowEnableTun: boolean,
 	requiresElevation: boolean,
 	elevationGranted: boolean,
+	needsVpnPermission: boolean,
+	needsServiceInstall: boolean,
+	nativeComponentReady: boolean,
+	lastProviderError: string | null,
 	restoreOnDisconnect: boolean,
 	preflight: TunPreflight,
 };

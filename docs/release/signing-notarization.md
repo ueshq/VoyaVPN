@@ -97,15 +97,37 @@ Stable fail-closed checks:
 
 Owner: macOS release owner.
 
-System: macOS release machine or macOS CI runner, Developer ID certificate, Apple notarization service, Tauri bundle output.
+System: macOS release machine or macOS CI runner, Developer ID certificate,
+Apple notarization service, Tauri bundle output, PacketTunnel extension, and
+embedded sing-box `Libbox.framework`.
 
 | Checkpoint | Owner | System | Verification | Rollback notes |
 | --- | --- | --- | --- | --- |
 | Import Developer ID identity | macOS release owner | macOS keychain or signing runner | The signing identity is visible to `codesign` and access is restricted to the build process. | Delete the keychain item or ephemeral keychain, revoke if exposed, and stop macOS publication. |
 | Build signed release package | macOS release owner | `pnpm tauri:build` in prepared signing environment | `.app` and `.dmg` are produced from the frozen commit and version. | Delete the local build output and rebuild from the same commit after fixing config or credentials. |
-| Verify code signature | macOS release owner | `codesign` | `codesign --verify --deep --strict --verbose=2 <path-to-VoyaVPN.app>` passes and signer identity matches the release record. | Do not notarize or publish. Re-sign from clean artifacts. |
-| Submit and staple notarization | macOS release owner | `xcrun notarytool` and `xcrun stapler` | Notary submission is accepted, stapling succeeds, and `xcrun stapler validate <path>` passes for the distributed artifact. | Do not publish. Rebuild, re-sign, resubmit, or hold macOS beta. |
-| Gatekeeper launch smoke | macOS platform owner | Clean macOS machine | `spctl` assessment and first launch from DMG pass; sudo TUN, proxy restore, and uninstall smoke are recorded in [os-smoke-matrix.md](os-smoke-matrix.md). | Pull macOS assets or keep them in staging until the issue is fixed. |
+| Build and embed PacketTunnel runtime | macOS release owner | sing-box source, `Libbox.xcframework`, Tauri `.app` bundle | `pnpm native:macos:libbox`, `pnpm native:macos:tunnel`, and `pnpm native:macos:tunnel:verify` pass with `VOYAVPN_REQUIRE_LIBBOX=1` and `VOYAVPN_REQUIRE_CODESIGN=1`. | Do not notarize or publish. Rebuild libbox or fix provisioning/signing. |
+| Verify code signature | macOS release owner | `codesign` | `pnpm native:macos:app:sign` passes; `codesign --verify --deep --strict --verbose=2 <path-to-VoyaVPN.app>` passes and signer identity matches the release record. | Do not notarize or publish. Re-sign from clean artifacts. |
+| Submit and staple notarization | macOS release owner | `xcrun notarytool` and `xcrun stapler` | `pnpm native:macos:app:notarize` succeeds; notary submission is accepted, stapling succeeds, and `xcrun stapler validate <path>` passes for the distributed artifact. | Do not publish. Rebuild, re-sign, resubmit, or hold macOS beta. |
+| Gatekeeper launch smoke | macOS platform owner | Clean macOS machine | `spctl` assessment and first launch from DMG pass; PacketTunnel VPN authorization, terminal TUN traffic, proxy restore, and uninstall smoke are recorded in [os-smoke-matrix.md](os-smoke-matrix.md). | Pull macOS assets or keep them in staging until the issue is fixed. |
+
+Native tunnel release command shape:
+
+```sh
+pnpm native:macos:libbox
+export VOYAVPN_MACOS_APP_BUNDLE="$PWD/target/release/bundle/macos/VoyaVPN.app"
+export VOYAVPN_CODESIGN_IDENTITY="<Developer ID Application identity>"
+export VOYAVPN_REQUIRE_LIBBOX=1
+export VOYAVPN_REQUIRE_CODESIGN=1
+pnpm native:macos:tunnel
+pnpm native:macos:tunnel:verify
+pnpm native:macos:app:sign
+pnpm native:macos:app:notarize
+```
+
+Use `VOYAVPN_NOTARY_KEYCHAIN_PROFILE` for notarization when possible. The
+fallback environment variables are `VOYAVPN_NOTARY_APPLE_ID`,
+`VOYAVPN_NOTARY_TEAM_ID`, and `VOYAVPN_NOTARY_PASSWORD`; keep them in the
+approved secret system only.
 
 ## Windows Signing
 

@@ -171,6 +171,7 @@ impl<'runtime> RuntimeManager<'runtime> {
             .ok_or(RuntimeError::MissingCoreInfo(core_type))?;
 
         Ok(CoreProcessSpec::new(core_type, launch)
+            .with_config_path(self.paths.bin_config_file(config_file_name))
             .with_display_log(context.node.display_log)
             .with_may_need_sudo(true))
     }

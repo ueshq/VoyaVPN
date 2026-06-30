@@ -247,6 +247,13 @@ export function HomeScreen() {
         // Obtain system authorization on demand (one native prompt, no stored
         // password) before switching TUN on.
         const current = await tunStatus();
+        if (current.backend !== "process" && !current.nativeComponentReady) {
+          pushToast({
+            description: current.lastProviderError ?? "Native tunnel component is not installed.",
+            title: t("status.tunEnableFailed"),
+          });
+          return;
+        }
         if (current.requiresElevation && !current.elevationGranted) {
           const granted = await tunRequestElevation();
           if (!granted.elevationGranted) {
