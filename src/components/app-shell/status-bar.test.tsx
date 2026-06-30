@@ -252,16 +252,7 @@ describe("StatusBar", () => {
     expect(tunControl).toHaveTextContent("TUN off");
   });
 
-  it("shows sing-box for the active profile while disconnected", async () => {
-    vi.mocked(listProfiles).mockResolvedValue([makeProfile()]);
-
-    renderStatusBar();
-
-    await waitFor(() => expect(screen.getByTestId("status-bar")).toHaveTextContent("sing-box"));
-    expect(screen.queryByText("No active node")).not.toBeInTheDocument();
-  });
-
-  it("shows the running core while connected", async () => {
+  it("does not show the running core in the status bar", async () => {
     const connectedStatus: RuntimeStatusResponse = {
       activeProfileId: "profile-0",
       mainPid: 100,
@@ -281,7 +272,9 @@ describe("StatusBar", () => {
 
     renderStatusBar();
 
-    await waitFor(() => expect(screen.getByTestId("status-bar")).toHaveTextContent("sing-box"));
+    await waitFor(() => expect(screen.getByText("Profiles: 1")).toBeInTheDocument());
+    expect(screen.getByTestId("status-bar")).not.toHaveTextContent("sing-box");
+    expect(screen.getByTestId("status-bar")).toHaveTextContent("PID 100");
   });
 
   it("requests system authorization on demand before switching TUN on", async () => {
@@ -335,9 +328,8 @@ describe("StatusBar", () => {
     );
   });
 
-  it("surfaces core info, proxy mode, and TUN in the small-window overflow menu", async () => {
+  it("surfaces PID, proxy mode, and TUN in the small-window overflow menu", async () => {
     const user = userEvent.setup();
-    vi.mocked(listProfiles).mockResolvedValue([makeProfile()]);
     vi.mocked(setSystemProxyMode).mockResolvedValue(sysProxyStatus);
 
     renderStatusBar();
@@ -347,8 +339,7 @@ describe("StatusBar", () => {
     await user.click(screen.getByLabelText("More controls"));
 
     const menu = await screen.findByRole("menu");
-    // Core info that md: would otherwise hide is reachable here.
-    expect(within(menu).getByRole("menuitem", { name: "sing-box" })).toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitem", { name: "sing-box" })).toBeNull();
     expect(within(menu).getByText("No PID")).toBeInTheDocument();
     // Proxy mode selection and TUN toggle stay reachable on small windows.
     expect(within(menu).getByRole("menuitemradio", { name: "System proxy cleared" })).toBeInTheDocument();

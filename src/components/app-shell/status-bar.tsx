@@ -37,7 +37,6 @@ import type {
   TunChanged,
   TunStatus,
 } from "@/ipc/bindings";
-import { CORE_TYPES, formatCoreType } from "@/lib/core-types";
 import { formatBytesPerSecond } from "@/lib/formatting";
 import { useMountedRef } from "@/lib/use-mounted-ref";
 import { cn, getErrorMessage } from "@/lib/utils";
@@ -104,13 +103,8 @@ export function StatusBar() {
   }, [mountedRef, setCoreState, setSysProxy, setTun]);
 
   const state = coreState?.state ?? "disconnected";
-  const activeProfile = profilesQuery.data?.find((item) => item?.isActive) ?? null;
-  const runningCoreType = coreState?.runningCoreType ?? null;
-  const displayedCoreType = runningCoreType ?? (activeProfile ? CORE_TYPES.singBox : null);
   const StateIcon = state === "connected" ? Power : state === "disconnected" ? WifiOff : LoaderCircle;
   const stateLabel = t(`status.${state}`);
-  const coreLabel = displayedCoreType ? formatCoreType(displayedCoreType) : t("status.noActiveProfile");
-  const coreTitle = activeProfile ? coreLabel : t("status.noActiveProfile");
   const pidLabel = coreState?.mainPid ? `PID ${coreState.mainPid}` : t("status.noPid");
   const requestedProxyMode = sysProxy?.requestedMode ?? "forcedClear";
   const effectiveProxyLabel = formatSysProxy(sysProxy?.effectiveMode, t);
@@ -182,13 +176,6 @@ export function StatusBar() {
         <span className="min-w-0 truncate">{routeLabel}</span>
       </Badge>
       <div className="hidden min-w-0 items-center gap-1.5 md:flex">
-        <Badge
-          className="h-5 max-w-28 justify-start bg-background px-2 text-subtle"
-          title={coreTitle}
-          variant="outline"
-        >
-          <span className="min-w-0 truncate">{coreLabel}</span>
-        </Badge>
         <Badge
           className="h-5 max-w-24 justify-start bg-background px-2 text-subtle"
           title={pidLabel}
@@ -271,7 +258,7 @@ export function StatusBar() {
           <TooltipContent side="top">{tunActionLabel}</TooltipContent>
         </Tooltip>
       </div>
-      {/* Below md: the core info, proxy mode, and TUN controls above are hidden;
+      {/* Below md: the PID, proxy mode, and TUN controls above are hidden;
           surface them here so small windows keep access to every key control. */}
       <Menubar className="h-7 shrink-0 border-0 bg-transparent p-0 shadow-none md:hidden">
         <MenubarMenu>
@@ -283,7 +270,6 @@ export function StatusBar() {
             <MoreHorizontal className="size-3.5" aria-hidden="true" />
           </MenubarTrigger>
           <MenubarContent align="start">
-            <MenubarItem disabled>{coreLabel}</MenubarItem>
             <MenubarItem disabled>{pidLabel}</MenubarItem>
             <MenubarSeparator />
             <MenubarRadioGroup
