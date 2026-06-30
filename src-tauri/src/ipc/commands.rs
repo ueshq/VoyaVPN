@@ -495,8 +495,9 @@ pub async fn disconnect_core<R: tauri::Runtime>(
 ) -> Result<RuntimeStatusResponse, AppError> {
     emit_runtime_log(&app, LogLevel::Info, "Disconnecting core supervisor")?;
     emit_core_state(&app, CoreState::Disconnecting, None, None)?;
+    let runtime = runtime_manager(&state);
 
-    match runtime_manager(&state).disconnect().await {
+    match runtime.disconnect().await {
         Ok(snapshot) => {
             match restore_system_proxy(&app, &state) {
                 Ok(status) => emit_sysproxy_changed(&app, &status)?,
@@ -514,6 +515,24 @@ pub async fn disconnect_core<R: tauri::Runtime>(
         Err(error) => {
             let message = error.to_string();
             emit_runtime_log(&app, LogLevel::Error, &message)?;
+            match runtime.status().await {
+                Ok(snapshot) => {
+                    emit_core_state(
+                        &app,
+                        core_state_from_snapshot(&snapshot),
+                        None,
+                        Some(&snapshot),
+                    )?;
+                }
+                Err(status_error) => {
+                    emit_runtime_log(
+                        &app,
+                        LogLevel::Warn,
+                        &format!("Runtime status refresh after disconnect failure failed: {status_error}"),
+                    )?;
+                    emit_core_state(&app, CoreState::Connected, None, None)?;
+                }
+            }
             Err(runtime_error(error))
         }
     }
@@ -2835,6 +2854,13 @@ fn runtime_status_response(snapshot: SupervisorSnapshot) -> RuntimeStatusRespons
     }
 }
 
+fn core_state_from_snapshot(snapshot: &SupervisorSnapshot) -> CoreState {
+    match snapshot.state {
+        SupervisorConnectionState::Disconnected => CoreState::Disconnected,
+        SupervisorConnectionState::Connected => CoreState::Connected,
+    }
+}
+
 fn system_proxy_status_response(status: SystemProxyStatus) -> SystemProxyStatusResponse {
     SystemProxyStatusResponse {
         requested_mode: status.requested_type,
@@ -3532,5 +3558,38 @@ fn sysproxy_mode(mode: SysProxyType) -> super::events::SysProxyMode {
         SysProxyType::ForcedChange => super::events::SysProxyMode::ForcedChange,
         SysProxyType::Unchanged => super::events::SysProxyMode::Unchanged,
         SysProxyType::Pac => super::events::SysProxyMode::Pac,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use voya_core::CoreType;
+
+    use super::*;
+
+    #[test]
+    fn core_state_from_snapshot_maps_connected() {
+        let snapshot = SupervisorSnapshot {
+            state: SupervisorConnectionState::Connected,
+            active_profile_id: Some("active".to_string()),
+            main_pid: Some(42),
+            pre_pid: None,
+            running_core_type: Some(CoreType::sing_box),
+        };
+
+        assert!(matches!(
+            core_state_from_snapshot(&snapshot),
+            CoreState::Connected
+        ));
+    }
+
+    #[test]
+    fn core_state_from_snapshot_maps_disconnected() {
+        let snapshot = SupervisorSnapshot::disconnected();
+
+        assert!(matches!(
+            core_state_from_snapshot(&snapshot),
+            CoreState::Disconnected
+        ));
     }
 }

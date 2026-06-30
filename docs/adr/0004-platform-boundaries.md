@@ -26,7 +26,7 @@ Boundary ownership:
 - `voya-platform::process`: process spawning, termination, permissions, stdout/stderr streaming, and Windows job containment.
 - `voya-platform::elevation`: Unix `sudo -S` flow and Windows elevation integration.
 - `voya-platform::tun`: TUN setup/teardown helpers and platform-specific preflight.
-- `voya-platform::sysproxy` and `voya-platform::pac`: forced clear/change, unchanged, and Windows-only PAC behavior.
+- `voya-platform::sysproxy` and `voya-platform::pac`: forced clear/change, unchanged, and Windows/macOS PAC behavior.
 - `voya-platform::autostart` and `voya-platform::hotkeys`: login startup and global shortcut adapters.
 - `src-tauri`: tray, app window lifecycle, capabilities, plugins, sidecar packaging, and user-facing Tauri integration.
 

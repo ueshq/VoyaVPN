@@ -1,5 +1,13 @@
 import { IpcCommandError, tunRequestElevation } from "@/ipc";
-import type { CoreStateEvent, RuntimeStatusResponse } from "@/ipc/bindings";
+import type {
+  CoreStateEvent,
+  RuntimeStatusResponse,
+  SysProxyChanged,
+  SysProxyMode,
+  SystemProxyStatusResponse,
+  TunChanged,
+  TunStatus,
+} from "@/ipc/bindings";
 import type { MissingCorePayload } from "@/stores/modal-store";
 
 /**
@@ -14,6 +22,49 @@ export function statusToCoreState(status: RuntimeStatusResponse): CoreStateEvent
     prePid: status.prePid,
     runningCoreType: status.runningCoreType,
     state: status.state,
+  };
+}
+
+/** Maps the string `SysProxyMode` to the numeric `SysProxyType` the backend expects. */
+export const SYS_PROXY_TYPE = {
+  forcedClear: 0,
+  forcedChange: 1,
+  unchanged: 2,
+  pac: 3,
+} as const satisfies Record<SysProxyMode, number>;
+
+// The selector offers exactly three modes — off / smart / global — in this
+// order. `unchanged` is intentionally not surfaced (the backend enum still
+// supports it); PAC is always offered (it silently no-ops on the rare platform
+// without PAC support).
+export const PROXY_MODE_OPTIONS: SysProxyMode[] = ["forcedClear", "pac", "forcedChange"];
+
+export function sysProxyTypeToMode(mode: number): SysProxyMode {
+  switch (mode) {
+    case SYS_PROXY_TYPE.forcedChange:
+      return "forcedChange";
+    case SYS_PROXY_TYPE.unchanged:
+      return "unchanged";
+    case SYS_PROXY_TYPE.pac:
+      return "pac";
+    case SYS_PROXY_TYPE.forcedClear:
+    default:
+      return "forcedClear";
+  }
+}
+
+export function statusToSysProxyChanged(status: SystemProxyStatusResponse): SysProxyChanged {
+  return {
+    effectiveMode: sysProxyTypeToMode(status.effectiveMode),
+    pacAvailable: status.pacAvailable,
+    proxy: status.proxy,
+    requestedMode: sysProxyTypeToMode(status.requestedMode),
+  };
+}
+
+export function statusToTunChanged(status: TunStatus): TunChanged {
+  return {
+    enabled: status.enabled,
   };
 }
 

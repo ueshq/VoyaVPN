@@ -310,11 +310,15 @@ fn tray_privileged_action(id: &str) -> Option<TrayPrivilegedAction> {
         TRAY_PROXY_CLEAR => Some(TrayPrivilegedAction::Proxy(SysProxyType::ForcedClear)),
         TRAY_PROXY_SET => Some(TrayPrivilegedAction::Proxy(SysProxyType::ForcedChange)),
         TRAY_PROXY_UNCHANGED => Some(TrayPrivilegedAction::Proxy(SysProxyType::Unchanged)),
-        TRAY_PROXY_PAC if cfg!(target_os = "windows") => {
+        TRAY_PROXY_PAC if tray_pac_available() => {
             Some(TrayPrivilegedAction::Proxy(SysProxyType::Pac))
         }
         _ => None,
     }
+}
+
+fn tray_pac_available() -> bool {
+    cfg!(any(target_os = "windows", target_os = "macos"))
 }
 
 fn handle_tray_privileged_action<R: tauri::Runtime>(
@@ -431,7 +435,7 @@ fn build_tray_proxy_menu<R: tauri::Runtime>(
     config: &AppConfig,
 ) -> tauri::Result<Submenu<R>> {
     let active = config.system_proxy_item.sys_proxy_type;
-    let pac_available = cfg!(target_os = "windows");
+    let pac_available = tray_pac_available();
     let mut items = vec![
         CheckMenuItem::with_id(
             app,

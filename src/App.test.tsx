@@ -705,12 +705,16 @@ describe("App", () => {
     expect(screen.getByRole("status", { name: "Stale: Stopped" })).toBeInTheDocument();
     expect(screen.getByText("Up 512 B/s")).toBeInTheDocument();
     expect(screen.getByText("Down 2.0 KB/s")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Rule" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Global" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Direct" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Delay test" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
+    // Scope toolbar-control assertions to the Clash Proxies region. The home
+    // hero's system-proxy selector also exposes "Direct"/"Global" buttons, so
+    // scoping keeps these queries unambiguous and robust to shell layout.
+    const proxies = screen.getByRole("region", { name: "Clash Proxies" });
+    expect(within(proxies).getByRole("button", { name: "Rule" })).toBeInTheDocument();
+    expect(within(proxies).getByRole("button", { name: "Global" })).toBeInTheDocument();
+    expect(within(proxies).getByRole("button", { name: "Direct" })).toBeInTheDocument();
+    expect(within(proxies).getByRole("button", { name: "Reload" })).toBeInTheDocument();
+    expect(within(proxies).getByRole("button", { name: "Delay test" })).toBeInTheDocument();
+    expect(within(proxies).getByRole("button", { name: "Refresh" })).toBeInTheDocument();
   });
 
   it("shows failed monitor status with its message in Clash Connections while keeping data controls visible", async () => {

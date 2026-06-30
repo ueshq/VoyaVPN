@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ArrowDown,
-  ArrowUp,
-  Clock,
-  Cpu,
   LoaderCircle,
   Power,
   PowerOff,
@@ -16,20 +12,37 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { useI18n } from "@/i18n/use-i18n";
 import {
   connectActiveProfile,
   disconnectCore,
   listProfiles,
   restartCore,
+  runtimeStatus,
+  setSystemProxyMode,
+  setTunEnabled,
+  systemProxyStatus,
+  tunRequestElevation,
+  tunStatus,
   useRuntimeEventStore,
 } from "@/ipc";
-import { formatCoreType } from "@/lib/core-types";
-import { formatBytesPerSecond } from "@/lib/formatting";
-import { cn } from "@/lib/utils";
+import type { SysProxyMode } from "@/ipc/bindings";
+import { cn, getErrorMessage } from "@/lib/utils";
 import { useModalStore } from "@/stores/modal-store";
+import { useToastStore } from "@/stores/toast-store";
 
-import { missingCorePayload, runWithElevation, statusToCoreState } from "./runtime-action";
+import {
+  missingCorePayload,
+  PROXY_MODE_OPTIONS,
+  runWithElevation,
+  statusToCoreState,
+  statusToSysProxyChanged,
+  statusToTunChanged,
+  SYS_PROXY_TYPE,
+} from "./runtime-action";
 
 type RuntimeAction = "connect" | "disconnect" | "restart";
 
@@ -46,9 +59,16 @@ export function HomeScreen() {
   const { t } = useI18n();
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const setCoreState = useRuntimeEventStore((state) => state.setCoreState);
-  const statistics = useRuntimeEventStore((state) => state.statistics);
+  const sysProxy = useRuntimeEventStore((state) => state.sysProxy);
+  const setSysProxy = useRuntimeEventStore((state) => state.setSysProxy);
+  const tun = useRuntimeEventStore((state) => state.tun);
+  const setTun = useRuntimeEventStore((state) => state.setTun);
   const openModal = useModalStore((state) => state.openModal);
+  const pushToast = useToastStore((state) => state.pushToast);
   const [pendingAction, setPendingAction] = useState<RuntimeAction | null>(null);
+  // TUN toggling is tracked separately from connect/disconnect so the two
+  // controls never block each other.
+  const [tunPending, setTunPending] = useState(false);
   // Shares the ProfilesScreen query cache (same key) so resolving the active
   // node's name here costs no extra fetch and stays in sync after a switch.
   const profilesQuery = useQuery({
@@ -56,12 +76,36 @@ export function HomeScreen() {
     queryKey: ["profiles", { filter: "" }],
   });
 
+  // Home owns the system-proxy / TUN controls, so it seeds their live OS state
+  // into the store on mount. Transient `sysProxyChanged` / `tunChanged` events
+  // keep it fresh afterwards.
+  useEffect(() => {
+    let cancelled = false;
+
+    void systemProxyStatus()
+      .then((status) => {
+        if (!cancelled) {
+          setSysProxy(statusToSysProxyChanged(status));
+        }
+      })
+      .catch(() => undefined);
+    void tunStatus()
+      .then((status) => {
+        if (!cancelled) {
+          setTun(statusToTunChanged(status));
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [setSysProxy, setTun]);
+
   const state = coreState?.state ?? "disconnected";
   const connected = state === "connected";
   const inProgress = state === "connecting" || state === "disconnecting";
   const busy = inProgress || pendingAction !== null;
-
-  const duration = useConnectedDuration(connected);
 
   const headline = connected
     ? t("home.protected")
@@ -78,10 +122,8 @@ export function HomeScreen() {
 
   const activeProfile = profilesQuery.data?.find((item) => item.isActive) ?? null;
   const nodeLabel = activeProfile?.profile.Remarks || coreState?.activeProfileId || t("home.noNode");
-  const coreLabel = coreState?.runningCoreType ? formatCoreType(coreState.runningCoreType) : t("status.noCore");
-  const uploadLabel = formatBytesPerSecond(statistics?.uploadBytesPerSecond ?? 0);
-  const downloadLabel = formatBytesPerSecond(statistics?.downloadBytesPerSecond ?? 0);
-  const durationLabel = connected ? formatDuration(duration) : "—";
+  const requestedProxyMode = sysProxy?.requestedMode ?? "forcedClear";
+  const tunEnabled = tun?.enabled ?? false;
 
   async function runRuntimeAction(action: RuntimeAction) {
     setPendingAction(action);
@@ -99,9 +141,63 @@ export function HomeScreen() {
       const missingCore = missingCorePayload(error);
       if (missingCore) {
         openModal("missingCore", { missingCore });
+      } else {
+        pushToast({
+          description: getErrorMessage(error),
+          title: runtimeActionLabel(action, t),
+        });
       }
+      await refreshRuntimeState();
     } finally {
       setPendingAction(null);
+    }
+  }
+
+  async function refreshRuntimeState() {
+    try {
+      const status = await runtimeStatus();
+      setCoreState(statusToCoreState(status));
+    } catch {
+      return;
+    }
+  }
+
+  async function runProxyMode(mode: SysProxyMode) {
+    try {
+      const status = await setSystemProxyMode(SYS_PROXY_TYPE[mode]);
+      setSysProxy(statusToSysProxyChanged(status));
+    } catch {
+      return;
+    }
+  }
+
+  async function runTunToggle() {
+    const nextEnabled = !(tun?.enabled ?? false);
+
+    setTunPending(true);
+    try {
+      if (nextEnabled) {
+        // Obtain system authorization on demand (one native prompt, no stored
+        // password) before switching TUN on.
+        const current = await tunStatus();
+        if (current.requiresElevation && !current.elevationGranted) {
+          const granted = await tunRequestElevation();
+          if (!granted.elevationGranted) {
+            // User cancelled the native dialog — leave TUN off.
+            return;
+          }
+        }
+      }
+
+      const status = await setTunEnabled(nextEnabled);
+      setTun(statusToTunChanged(status));
+    } catch (error) {
+      pushToast({
+        description: getErrorMessage(error),
+        title: t(nextEnabled ? "status.tunEnableFailed" : "status.tunDisableFailed"),
+      });
+    } finally {
+      setTunPending(false);
     }
   }
 
@@ -171,7 +267,55 @@ export function HomeScreen() {
           ) : null}
         </div>
 
-        <dl className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="w-full rounded-lg bg-surface-raised px-4 shadow-raised">
+          <div className="flex items-center justify-between gap-3 py-2.5">
+            <span className="text-sm font-medium text-foreground">{t("status.sysProxyMode")}</span>
+            <div
+              aria-label={t("status.sysProxyMode")}
+              className="flex h-7 items-center rounded-md bg-muted p-0.5"
+              role="group"
+            >
+              {PROXY_MODE_OPTIONS.map((mode) => {
+                const selected = requestedProxyMode === mode;
+                const modeLabel = sysProxyLabel(mode, t);
+
+                return (
+                  <Button
+                    key={mode}
+                    aria-label={modeLabel}
+                    aria-pressed={selected}
+                    className={cn(
+                      "h-6 rounded-sm px-2.5 text-sm leading-none shadow-none focus-visible:relative focus-visible:z-10",
+                      selected
+                        ? "bg-background text-foreground hover:bg-background hover:text-foreground"
+                        : "text-subtlest hover:bg-background/60 hover:text-foreground",
+                    )}
+                    onClick={() => void runProxyMode(mode)}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    {modeLabel}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+          <Separator />
+          <div className="flex items-center justify-between gap-3 py-2.5">
+            <Label className="text-sm font-medium text-foreground" htmlFor="home-tun-switch">
+              {t("status.tun")}
+            </Label>
+            <Switch
+              checked={tunEnabled}
+              disabled={tunPending}
+              id="home-tun-switch"
+              onCheckedChange={() => void runTunToggle()}
+            />
+          </div>
+        </div>
+
+        <dl className="w-full">
           <StatTile
             actionLabel={t("home.changeNode")}
             icon={Server}
@@ -181,10 +325,6 @@ export function HomeScreen() {
             title={nodeLabel}
             value={nodeLabel}
           />
-          <StatTile icon={Cpu} label={t("home.core")} value={coreLabel} />
-          <StatTile emphasis icon={Clock} label={t("home.duration")} value={durationLabel} />
-          <StatTile emphasis icon={ArrowUp} label={t("home.upload")} value={uploadLabel} />
-          <StatTile emphasis icon={ArrowDown} label={t("home.download")} value={downloadLabel} />
         </dl>
       </div>
     </section>
@@ -193,7 +333,6 @@ export function HomeScreen() {
 
 function StatTile({
   actionLabel,
-  emphasis = false,
   icon: Icon,
   label,
   mono = false,
@@ -202,7 +341,6 @@ function StatTile({
   value,
 }: {
   actionLabel?: string;
-  emphasis?: boolean;
   icon: LucideIcon;
   label: string;
   mono?: boolean;
@@ -224,7 +362,6 @@ function StatTile({
       <dd
         className={cn(
           "min-w-0 truncate text-sm font-medium text-foreground",
-          emphasis && "font-mono tabular-nums",
           mono && "font-mono text-xs",
         )}
         title={title ?? value}
@@ -245,32 +382,25 @@ function StatTile({
   );
 }
 
-function useConnectedDuration(connected: boolean) {
-  const [elapsedMs, setElapsedMs] = useState(0);
-
-  useEffect(() => {
-    if (!connected) {
-      return undefined;
-    }
-
-    const startedAt = Date.now();
-    const interval = window.setInterval(() => setElapsedMs(Math.max(0, Date.now() - startedAt)), 1_000);
-
-    return () => {
-      window.clearInterval(interval);
-      setElapsedMs(0);
-    };
-  }, [connected]);
-
-  return connected ? elapsedMs : 0;
+function sysProxyLabel(mode: SysProxyMode, t: ReturnType<typeof useI18n>["t"]) {
+  switch (mode) {
+    case "forcedChange":
+      return t("status.sysProxyGlobal");
+    case "pac":
+      return t("status.sysProxySmart");
+    case "forcedClear":
+    default:
+      return t("status.sysProxyOff");
+  }
 }
 
-function formatDuration(ms: number) {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const pad = (value: number) => String(value).padStart(2, "0");
-
-  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
+function runtimeActionLabel(action: RuntimeAction, t: ReturnType<typeof useI18n>["t"]) {
+  switch (action) {
+    case "connect":
+      return t("actions.connect");
+    case "disconnect":
+      return t("actions.disconnect");
+    case "restart":
+      return t("actions.restart");
+  }
 }

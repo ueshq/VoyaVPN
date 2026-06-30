@@ -54,7 +54,9 @@ impl SystemProxyManager {
         config: &mut AppConfig,
         mode: SysProxyType,
     ) -> Result<SystemProxyStatus, SystemProxyManagerError> {
-        if mode == SysProxyType::Pac && self.target_os != TargetOs::Windows {
+        if mode == SysProxyType::Pac
+            && !matches!(self.target_os, TargetOs::Windows | TargetOs::Macos)
+        {
             return Err(SystemProxyManagerError::PacUnavailable(self.target_os));
         }
 
@@ -166,7 +168,7 @@ impl SystemProxyManager {
 
 #[derive(Debug, Error)]
 pub enum SystemProxyManagerError {
-    #[error("PAC mode is only available on Windows, not {0:?}")]
+    #[error("PAC mode is only available on Windows or macOS, not {0:?}")]
     PacUnavailable(TargetOs),
     #[error(transparent)]
     Path(#[from] PathError),
@@ -197,7 +199,7 @@ fn request_sets_local_proxy(request: &SystemProxyRequest) -> bool {
         (
             SysProxyType::ForcedChange,
             TargetOs::Windows | TargetOs::Linux | TargetOs::Macos
-        ) | (SysProxyType::Pac, TargetOs::Windows)
+        ) | (SysProxyType::Pac, TargetOs::Windows | TargetOs::Macos)
     )
 }
 
@@ -269,24 +271,47 @@ mod tests {
     }
 
     #[test]
-    fn sysproxy_manager_rejects_pac_mode_off_windows() {
+    fn sysproxy_manager_rejects_pac_mode_on_unsupported_platforms() {
+        for target_os in [TargetOs::Linux, TargetOs::Other] {
+            let runner = Arc::new(RecordingRunner::default());
+            let pac = Arc::new(RecordingPac::default());
+            let manager = manager(target_os, runner, pac);
+            let mut config = AppConfig::default();
+
+            let error = manager
+                .set_mode(&mut config, SysProxyType::Pac)
+                .expect_err("pac should be hidden and rejected on unsupported platforms");
+
+            assert!(matches!(
+                error,
+                SystemProxyManagerError::PacUnavailable(os) if os == target_os
+            ));
+            assert_eq!(
+                config.system_proxy_item.sys_proxy_type,
+                SysProxyType::ForcedClear
+            );
+        }
+    }
+
+    #[test]
+    fn sysproxy_manager_accepts_macos_pac_and_sets_dirty_marker() {
+        let app_dir = unique_app_dir("macos-pac-dirty");
         let runner = Arc::new(RecordingRunner::default());
         let pac = Arc::new(RecordingPac::default());
-        let manager = manager(TargetOs::Macos, runner, pac);
+        let manager =
+            manager_with_app_dir(TargetOs::Macos, runner, Arc::clone(&pac), app_dir.clone());
         let mut config = AppConfig::default();
 
-        let error = manager
+        let status = manager
             .set_mode(&mut config, SysProxyType::Pac)
-            .expect_err("pac should be hidden and rejected off Windows");
+            .expect("macos pac");
 
-        assert!(matches!(
-            error,
-            SystemProxyManagerError::PacUnavailable(TargetOs::Macos)
-        ));
-        assert_eq!(
-            config.system_proxy_item.sys_proxy_type,
-            SysProxyType::ForcedClear
-        );
+        assert_eq!(status.requested_type, SysProxyType::Pac);
+        assert_eq!(status.effective_type, SysProxyType::Pac);
+        assert_eq!(config.system_proxy_item.sys_proxy_type, SysProxyType::Pac);
+        assert!(manager.dirty_marker_path().is_file());
+        assert_eq!(*pac.starts.lock().expect("starts"), 1);
+        let _ = fs::remove_dir_all(app_dir);
     }
 
     #[test]

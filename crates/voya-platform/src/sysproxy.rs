@@ -131,6 +131,9 @@ pub enum SystemProxyAction {
     MacosClear {
         script: ScriptInvocation,
     },
+    MacosSetPac {
+        script: ScriptInvocation,
+    },
     UnsupportedPac,
 }
 
@@ -168,8 +171,7 @@ impl SystemProxyService {
     ) -> Result<SystemProxyStatus, SystemProxyError> {
         let plan = plan_system_proxy(request)?;
 
-        if request.target_os == TargetOs::Windows && plan.status.effective_type != SysProxyType::Pac
-        {
+        if plan.status.effective_type != SysProxyType::Pac {
             self.pac_manager.stop();
         }
 
@@ -197,6 +199,15 @@ impl SystemProxyService {
                     },
                 )?;
             }
+            SystemProxyAction::MacosSetPac { script } => {
+                self.pac_manager.start(PacStartConfig {
+                    http_port: request.socks_port,
+                    pac_port: request.pac_port,
+                    config_dir: request.config_dir.clone(),
+                    custom_pac_path: request.item.custom_system_proxy_pac_path.clone(),
+                })?;
+                run_script(&*self.runner, script)?;
+            }
             SystemProxyAction::LinuxSet { script, .. }
             | SystemProxyAction::LinuxClear { script }
             | SystemProxyAction::MacosSet { script, .. }
@@ -215,11 +226,11 @@ impl SystemProxyService {
 
 #[must_use]
 pub fn platform_pac_manager() -> Arc<dyn PacManager> {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     {
-        Arc::new(WindowsPacManager::default())
+        Arc::new(LocalPacManager::default())
     }
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         Arc::new(UnsupportedPacManager)
     }
@@ -255,11 +266,11 @@ impl PacManager for UnsupportedPacManager {
 }
 
 #[derive(Debug, Default)]
-pub struct WindowsPacManager {
+pub struct LocalPacManager {
     state: Mutex<Option<RunningPacServer>>,
 }
 
-impl PacManager for WindowsPacManager {
+impl PacManager for LocalPacManager {
     fn start(&self, config: PacStartConfig) -> Result<(), SystemProxyError> {
         let mut guard = self
             .state
@@ -304,7 +315,7 @@ impl PacManager for WindowsPacManager {
     }
 
     fn is_supported(&self) -> bool {
-        cfg!(windows)
+        cfg!(any(windows, target_os = "macos"))
     }
 }
 
@@ -356,7 +367,7 @@ impl Drop for RunningPacServer {
 
 #[must_use]
 pub const fn pac_available(target_os: TargetOs) -> bool {
-    matches!(target_os, TargetOs::Windows)
+    matches!(target_os, TargetOs::Windows | TargetOs::Macos)
 }
 
 pub fn plan_system_proxy(
@@ -429,14 +440,20 @@ pub fn plan_system_proxy(
         }
         (SysProxyType::Unchanged, _) => SystemProxyAction::Noop,
         (SysProxyType::Pac, TargetOs::Windows) => {
-            let pac_url = format!(
-                "http://{}:{}/pac?t={}",
-                LOOPBACK, request.pac_port, request.pac_url_nonce
-            );
+            let pac_url = pac_url(request);
             status.proxy = Some(pac_url.clone());
             status.pac_url = Some(pac_url.clone());
             status.exceptions.clear();
             SystemProxyAction::WindowsSetPac { pac_url }
+        }
+        (SysProxyType::Pac, TargetOs::Macos) => {
+            let pac_url = pac_url(request);
+            status.proxy = Some(pac_url.clone());
+            status.pac_url = Some(pac_url.clone());
+            status.exceptions.clear();
+            SystemProxyAction::MacosSetPac {
+                script: macos_pac_script_invocation(request, &pac_url),
+            }
         }
         (SysProxyType::Pac, TargetOs::Other) => {
             return Err(SystemProxyError::UnsupportedPlatform(TargetOs::Other));
@@ -448,6 +465,13 @@ pub fn plan_system_proxy(
     };
 
     Ok(SystemProxyPlan { action, status })
+}
+
+fn pac_url(request: &SystemProxyRequest) -> String {
+    format!(
+        "http://{}:{}/pac?t={}",
+        LOOPBACK, request.pac_port, request.pac_url_nonce
+    )
 }
 
 pub fn build_windows_proxy_settings(
@@ -702,21 +726,7 @@ fn macos_script_invocation(
     mode: &str,
     manual: Option<(&str, i32, &str)>,
 ) -> ScriptInvocation {
-    let (executable, generated_script) =
-        if let Some(custom_script) = custom_script_path(&request.item) {
-            (custom_script, None)
-        } else {
-            let executable = request.script_dir.join(MACOS_PROXY_SCRIPT_NAME);
-            (
-                executable.clone(),
-                Some(GeneratedScript::new(
-                    request.script_dir.clone(),
-                    executable,
-                    MACOS_PROXY_SCRIPT,
-                    true,
-                )),
-            )
-        };
+    let (executable, generated_script) = macos_script_target(request);
     let mut arguments = vec![mode.to_string()];
     if let Some((host, port, exceptions)) = manual {
         arguments.push(host.to_string());
@@ -734,6 +744,32 @@ fn macos_script_invocation(
         executable,
         arguments,
         generated_script,
+    }
+}
+
+fn macos_pac_script_invocation(request: &SystemProxyRequest, pac_url: &str) -> ScriptInvocation {
+    let (executable, generated_script) = macos_script_target(request);
+    ScriptInvocation {
+        executable,
+        arguments: vec!["pac".to_string(), pac_url.to_string()],
+        generated_script,
+    }
+}
+
+fn macos_script_target(request: &SystemProxyRequest) -> (PathBuf, Option<GeneratedScript>) {
+    if let Some(custom_script) = custom_script_path(&request.item) {
+        (custom_script, None)
+    } else {
+        let executable = request.script_dir.join(MACOS_PROXY_SCRIPT_NAME);
+        (
+            executable.clone(),
+            Some(GeneratedScript::new(
+                request.script_dir.clone(),
+                executable,
+                MACOS_PROXY_SCRIPT,
+                true,
+            )),
+        )
     }
 }
 
@@ -1000,7 +1036,10 @@ const MACOS_PROXY_SCRIPT: &str = r#"#!/bin/sh
 mode="$1"
 host="$2"
 port="$3"
-shift 3 2>/dev/null || true
+pac_url="$2"
+if [ "$mode" = "set" ]; then
+  shift 3 2>/dev/null || true
+fi
 
 services="$(networksetup -listallnetworkservices | grep -v '^\*')"
 printf "%s\n" "$services" | while IFS= read -r service; do
@@ -1010,12 +1049,20 @@ printf "%s\n" "$services" | while IFS= read -r service; do
     networksetup -setsecurewebproxy "$service" "$host" "$port"
     networksetup -setsocksfirewallproxy "$service" "$host" "$port"
     networksetup -setproxybypassdomains "$service" "$@"
+    networksetup -setautoproxystate "$service" off
+  elif [ "$mode" = "pac" ]; then
+    networksetup -setwebproxystate "$service" off
+    networksetup -setsecurewebproxystate "$service" off
+    networksetup -setsocksfirewallproxystate "$service" off
+    networksetup -setautoproxyurl "$service" "$pac_url"
+    networksetup -setautoproxystate "$service" on
   elif [ "$mode" = "clear" ]; then
     networksetup -setwebproxystate "$service" off
     networksetup -setsecurewebproxystate "$service" off
     networksetup -setsocksfirewallproxystate "$service" off
+    networksetup -setautoproxystate "$service" off
   else
-    echo "Usage: $0 set <host> <port> [bypass...] | clear" >&2
+    echo "Usage: $0 set <host> <port> [bypass...] | pac <url> | clear" >&2
     exit 1
   fi
 done
@@ -1029,7 +1076,7 @@ pub enum SystemProxyError {
     UnsupportedPlatform(TargetOs),
     #[error("invalid system proxy exception {value:?}: {reason}")]
     InvalidProxyException { value: String, reason: &'static str },
-    #[error("PAC mode is only supported on Windows, not {0:?}")]
+    #[error("PAC mode is only supported on Windows or macOS, not {0:?}")]
     PacUnsupported(TargetOs),
     #[error(transparent)]
     Process(#[from] ProcessError),
@@ -1219,7 +1266,15 @@ mod tests {
     }
 
     #[test]
-    fn sysproxy_pac_is_windows_only_and_stops_when_switching_away() {
+    fn sysproxy_pac_availability_matches_supported_platforms() {
+        assert!(pac_available(TargetOs::Windows));
+        assert!(pac_available(TargetOs::Macos));
+        assert!(!pac_available(TargetOs::Linux));
+        assert!(!pac_available(TargetOs::Other));
+    }
+
+    #[test]
+    fn sysproxy_pac_is_windows_and_macos_only_and_stops_when_switching_away() {
         let linux_pac = plan_system_proxy(&request(TargetOs::Linux, SysProxyType::Pac))
             .expect("linux pac plan");
         assert_eq!(linux_pac.status.effective_type, SysProxyType::Unchanged);
@@ -1228,13 +1283,38 @@ mod tests {
             SystemProxyAction::UnsupportedPac
         ));
 
+        let macos_pac = plan_system_proxy(&request(TargetOs::Macos, SysProxyType::Pac))
+            .expect("macos pac plan");
+        assert_eq!(macos_pac.status.effective_type, SysProxyType::Pac);
+        assert_eq!(
+            macos_pac.status.pac_url.as_deref(),
+            Some("http://127.0.0.1:10811/pac?t=123")
+        );
+        assert_eq!(
+            macos_pac.status.proxy.as_deref(),
+            Some("http://127.0.0.1:10811/pac?t=123")
+        );
+        let SystemProxyAction::MacosSetPac { script } = macos_pac.action else {
+            panic!("expected macos pac set");
+        };
+        assert_eq!(
+            script.arguments,
+            ["pac", "http://127.0.0.1:10811/pac?t=123"]
+        );
+
         let runner = Arc::new(RecordingRunner::default());
         let pac = Arc::new(FakePacManager::default());
         let service = SystemProxyService::new(runner, pac.clone());
         service
-            .apply(&request(TargetOs::Windows, SysProxyType::ForcedClear))
-            .expect("clear");
-        assert_eq!(*pac.stops.lock().expect("stops"), 1);
+            .apply(&request(TargetOs::Macos, SysProxyType::ForcedClear))
+            .expect("macos clear");
+        service
+            .apply(&request(TargetOs::Macos, SysProxyType::ForcedChange))
+            .expect("macos set");
+        service
+            .apply(&request(TargetOs::Macos, SysProxyType::Unchanged))
+            .expect("macos unchanged");
+        assert_eq!(*pac.stops.lock().expect("stops"), 3);
     }
 
     #[test]
@@ -1326,6 +1406,41 @@ mod tests {
             .oneshots()
             .iter()
             .any(|spawn| spawn.arguments.iter().any(|arg| arg == "AutoConfigURL")));
+    }
+
+    #[test]
+    fn sysproxy_service_starts_macos_pac_and_runs_autoproxy_script() {
+        let runner = Arc::new(RecordingRunner::default());
+        let pac = Arc::new(FakePacManager::default());
+        let service = SystemProxyService::new(runner.clone(), pac.clone());
+
+        let status = service
+            .apply(&request(TargetOs::Macos, SysProxyType::Pac))
+            .expect("pac");
+
+        assert_eq!(status.effective_type, SysProxyType::Pac);
+        assert_eq!(
+            status.pac_url.as_deref(),
+            Some("http://127.0.0.1:10811/pac?t=123")
+        );
+        assert_eq!(pac.starts.lock().expect("starts").len(), 1);
+        let oneshots = runner.oneshots();
+        assert_eq!(oneshots.len(), 1);
+        assert_eq!(
+            oneshots[0].arguments,
+            ["pac", "http://127.0.0.1:10811/pac?t=123"]
+        );
+        let generated = oneshots[0]
+            .generated_scripts
+            .first()
+            .expect("managed macos script");
+        assert!(generated.contents.contains("-setautoproxyurl"));
+        assert!(generated
+            .contents
+            .contains("-setautoproxystate \"$service\" off"));
+        assert!(generated
+            .contents
+            .contains("-setautoproxystate \"$service\" on"));
     }
 
     fn unique_temp_root(name: &str) -> PathBuf {

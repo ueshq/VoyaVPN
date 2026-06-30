@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,9 +8,13 @@ import type {
   ProfileItem_Deserialize,
   ProfileListItem_Serialize,
   RuntimeStatusResponse,
-  StatisticsSnapshot,
+  SysProxyChanged,
+  SystemProxyStatusResponse,
+  TunChanged,
+  TunStatus,
 } from "@/ipc/bindings";
 import { useModalStore } from "@/stores/modal-store";
+import { useToastStore } from "@/stores/toast-store";
 
 import { CONFIG_TYPES } from "@/features/profiles/profile-constants";
 import { HomeScreen } from "./home-screen";
@@ -18,14 +22,20 @@ import { HomeScreen } from "./home-screen";
 type RuntimeState = {
   coreState: CoreStateEvent | null;
   setCoreState: (state: CoreStateEvent) => void;
-  statistics: StatisticsSnapshot | null;
+  sysProxy: SysProxyChanged | null;
+  setSysProxy: (state: SysProxyChanged) => void;
+  tun: TunChanged | null;
+  setTun: (state: TunChanged) => void;
 };
 
 const runtimeMock = vi.hoisted(() => {
   const state: RuntimeState = {
     coreState: null,
     setCoreState: vi.fn(),
-    statistics: null,
+    sysProxy: null,
+    setSysProxy: vi.fn(),
+    tun: null,
+    setTun: vi.fn(),
   };
   const useRuntimeEventStore = Object.assign(
     (selector: (value: RuntimeState) => unknown) => selector(state),
@@ -40,6 +50,12 @@ const ipcMock = vi.hoisted(() => ({
   disconnectCore: vi.fn(),
   listProfiles: vi.fn(),
   restartCore: vi.fn(),
+  runtimeStatus: vi.fn(),
+  setSystemProxyMode: vi.fn(),
+  setTunEnabled: vi.fn(),
+  systemProxyStatus: vi.fn(),
+  tunRequestElevation: vi.fn(),
+  tunStatus: vi.fn(),
 }));
 
 const disconnectedStatus: RuntimeStatusResponse = {
@@ -58,12 +74,42 @@ const connectedStatus: RuntimeStatusResponse = {
   state: "connected",
 };
 
+const sysProxyStatus: SystemProxyStatusResponse = {
+  effectiveMode: 0,
+  exceptions: "",
+  pacAvailable: false,
+  pacUrl: null,
+  proxy: null,
+  requestedMode: 0,
+};
+
+const tunStatusResponse: TunStatus = {
+  allowEnableTun: true,
+  enabled: false,
+  preflight: {
+    notes: [],
+    platform: "macos",
+    routeRestoreNote: "",
+    state: "ready",
+    windowsCleanupDevices: [],
+  },
+  requiresElevation: false,
+  restoreOnDisconnect: true,
+  elevationGranted: true,
+};
+
 vi.mock("@/ipc", () => ({
   connectActiveProfile: ipcMock.connectActiveProfile,
   disconnectCore: ipcMock.disconnectCore,
   IpcCommandError: class IpcCommandError extends Error {},
   listProfiles: ipcMock.listProfiles,
   restartCore: ipcMock.restartCore,
+  runtimeStatus: ipcMock.runtimeStatus,
+  setSystemProxyMode: ipcMock.setSystemProxyMode,
+  setTunEnabled: ipcMock.setTunEnabled,
+  systemProxyStatus: ipcMock.systemProxyStatus,
+  tunRequestElevation: ipcMock.tunRequestElevation,
+  tunStatus: ipcMock.tunStatus,
   useRuntimeEventStore: runtimeMock.useRuntimeEventStore,
 }));
 
@@ -83,12 +129,20 @@ describe("HomeScreen", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     runtimeMock.state.coreState = null;
-    runtimeMock.state.statistics = null;
+    runtimeMock.state.sysProxy = null;
+    runtimeMock.state.tun = null;
     ipcMock.connectActiveProfile.mockResolvedValue(connectedStatus);
     ipcMock.disconnectCore.mockResolvedValue(disconnectedStatus);
     ipcMock.restartCore.mockResolvedValue(connectedStatus);
+    ipcMock.runtimeStatus.mockResolvedValue(disconnectedStatus);
     ipcMock.listProfiles.mockResolvedValue([]);
+    ipcMock.setSystemProxyMode.mockResolvedValue(sysProxyStatus);
+    ipcMock.setTunEnabled.mockResolvedValue(tunStatusResponse);
+    ipcMock.systemProxyStatus.mockResolvedValue(sysProxyStatus);
+    ipcMock.tunRequestElevation.mockResolvedValue(tunStatusResponse);
+    ipcMock.tunStatus.mockResolvedValue(tunStatusResponse);
     useModalStore.setState({ stack: [] });
+    useToastStore.setState({ toasts: [] });
   });
 
   afterEach(() => {
@@ -104,7 +158,7 @@ describe("HomeScreen", () => {
     expect(screen.getByText("No active node")).toBeInTheDocument();
   });
 
-  it("lights up the protected state and surfaces node and core", () => {
+  it("lights up the protected state and surfaces the selected node only in the stat area", () => {
     runtimeMock.state.coreState = {
       activeProfileId: "node-tokyo",
       mainPid: 4242,
@@ -118,7 +172,10 @@ describe("HomeScreen", () => {
     expect(screen.getByText("Protected")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
     expect(screen.getByText("node-tokyo")).toBeInTheDocument();
-    expect(screen.getByText("sing-box")).toBeInTheDocument();
+    expect(screen.queryByText("Core")).not.toBeInTheDocument();
+    expect(screen.queryByText("Duration")).not.toBeInTheDocument();
+    expect(screen.queryByText("Upload")).not.toBeInTheDocument();
+    expect(screen.queryByText("Download")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Restart" })).toBeInTheDocument();
   });
 
@@ -153,6 +210,99 @@ describe("HomeScreen", () => {
     await user.click(screen.getByRole("button", { name: "Change node" }));
 
     expect(useModalStore.getState().stack.at(-1)?.kind).toBe("nodePicker");
+  });
+
+  it("refreshes runtime state and surfaces errors when disconnect fails", async () => {
+    const user = userEvent.setup();
+    const disconnectError = new Error("sudo kill failed");
+    runtimeMock.state.coreState = {
+      activeProfileId: "node-tokyo",
+      mainPid: 4242,
+      prePid: null,
+      runningCoreType: 24,
+      state: "connected",
+    };
+    ipcMock.disconnectCore.mockRejectedValue(disconnectError);
+    ipcMock.runtimeStatus.mockResolvedValue(connectedStatus);
+
+    renderHome();
+
+    await user.click(screen.getByRole("button", { name: "Disconnect" }));
+
+    await waitFor(() => expect(ipcMock.runtimeStatus).toHaveBeenCalledTimes(1));
+    expect(runtimeMock.state.setCoreState).toHaveBeenCalledWith({
+      activeProfileId: "node-tokyo",
+      mainPid: 4242,
+      prePid: null,
+      runningCoreType: 24,
+      state: "connected",
+    });
+    expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
+      description: "sudo kill failed",
+      title: "Disconnect",
+    });
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeEnabled();
+  });
+
+  it("offers the three system-proxy modes and applies the picked one", async () => {
+    const user = userEvent.setup();
+
+    renderHome();
+
+    expect(screen.getByRole("button", { name: "Direct" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Smart" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Global" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Global" }));
+    expect(ipcMock.setSystemProxyMode).toHaveBeenCalledWith(1);
+
+    await user.click(screen.getByRole("button", { name: "Smart" }));
+    expect(ipcMock.setSystemProxyMode).toHaveBeenCalledWith(3);
+  });
+
+  it("requests system authorization on demand before switching TUN on", async () => {
+    const user = userEvent.setup();
+    ipcMock.tunStatus.mockResolvedValue({
+      ...tunStatusResponse,
+      requiresElevation: true,
+      elevationGranted: false,
+    });
+    ipcMock.tunRequestElevation.mockResolvedValue({
+      ...tunStatusResponse,
+      requiresElevation: true,
+      elevationGranted: true,
+    });
+    ipcMock.setTunEnabled.mockResolvedValue({ ...tunStatusResponse, enabled: true });
+
+    renderHome();
+
+    await user.click(screen.getByRole("switch", { name: "TUN" }));
+
+    await waitFor(() => expect(ipcMock.tunRequestElevation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(ipcMock.setTunEnabled).toHaveBeenCalledWith(true));
+    expect(runtimeMock.state.setTun).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
+  });
+
+  it("leaves TUN off when the authorization dialog is cancelled", async () => {
+    const user = userEvent.setup();
+    ipcMock.tunStatus.mockResolvedValue({
+      ...tunStatusResponse,
+      requiresElevation: true,
+      elevationGranted: false,
+    });
+    ipcMock.tunRequestElevation.mockResolvedValue({
+      ...tunStatusResponse,
+      requiresElevation: true,
+      elevationGranted: false,
+    });
+
+    renderHome();
+
+    await user.click(screen.getByRole("switch", { name: "TUN" }));
+
+    await waitFor(() => expect(ipcMock.tunRequestElevation).toHaveBeenCalledTimes(1));
+    expect(ipcMock.setTunEnabled).not.toHaveBeenCalled();
+    expect(runtimeMock.state.setTun).not.toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
   });
 });
 
