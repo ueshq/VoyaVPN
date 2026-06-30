@@ -1,15 +1,6 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import {
-  LoaderCircle,
-  Power,
-  PowerOff,
-  RotateCw,
-  Server,
-  ShieldCheck,
-  ShieldOff,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { LoaderCircle, Power, PowerOff, RotateCw, ShieldCheck, ShieldOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -22,6 +13,7 @@ import {
   listProfiles,
   restartCore,
   runtimeStatus,
+  setActiveProfile,
   setSystemProxyMode,
   setTunEnabled,
   systemProxyStatus,
@@ -34,6 +26,7 @@ import { cn, getErrorMessage } from "@/lib/utils";
 import { useModalStore } from "@/stores/modal-store";
 import { useToastStore } from "@/stores/toast-store";
 
+import { NodeList } from "./node-list";
 import {
   missingCorePayload,
   PROXY_MODE_OPTIONS,
@@ -65,10 +58,19 @@ export function HomeScreen() {
   const setTun = useRuntimeEventStore((state) => state.setTun);
   const openModal = useModalStore((state) => state.openModal);
   const pushToast = useToastStore((state) => state.pushToast);
+  const queryClient = useQueryClient();
   const [pendingAction, setPendingAction] = useState<RuntimeAction | null>(null);
   // TUN toggling is tracked separately from connect/disconnect so the two
   // controls never block each other.
   const [tunPending, setTunPending] = useState(false);
+  // Local node selection (blue highlight). Seeded from the persisted active
+  // profile; single-clicks move it without touching the backend.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Tracks the active profile the selection was last seeded from, so re-seeding
+  // only fires when the active profile actually changes.
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  // The node whose switch+connect is currently in flight (spinner / re-entry guard).
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
   // Shares the ProfilesScreen query cache (same key) so resolving the active
   // node's name here costs no extra fetch and stays in sync after a switch.
   const profilesQuery = useQuery({
@@ -105,7 +107,7 @@ export function HomeScreen() {
   const state = coreState?.state ?? "disconnected";
   const connected = state === "connected";
   const inProgress = state === "connecting" || state === "disconnecting";
-  const busy = inProgress || pendingAction !== null;
+  const busy = inProgress || pendingAction !== null || switchingId !== null;
 
   const headline = connected
     ? t("home.protected")
@@ -121,9 +123,22 @@ export function HomeScreen() {
       : "";
 
   const activeProfile = profilesQuery.data?.find((item) => item.isActive) ?? null;
-  const nodeLabel = activeProfile?.profile.Remarks || coreState?.activeProfileId || t("home.noNode");
+  const activeProfileId = activeProfile?.profile.IndexId ?? null;
+  // The green "live" dot follows the node that is actually running, which differs
+  // from the persisted-active node only while disconnected.
+  const runningId = connected ? (coreState?.activeProfileId ?? null) : null;
   const requestedProxyMode = sysProxy?.requestedMode ?? "forcedClear";
   const tunEnabled = tun?.enabled ?? false;
+
+  // Seed the local selection from the persisted active profile and re-sync it
+  // whenever the active profile changes (e.g. after a switch). Adjusting state
+  // during render (React's documented pattern) instead of in an effect avoids a
+  // cascading-render lint and an extra paint. A single-click only moves
+  // `selectedId`, not the active profile, so the selection is never clobbered.
+  if (activeProfileId && activeProfileId !== seededFor) {
+    setSeededFor(activeProfileId);
+    setSelectedId(activeProfileId);
+  }
 
   async function runRuntimeAction(action: RuntimeAction) {
     setPendingAction(action);
@@ -160,6 +175,58 @@ export function HomeScreen() {
     } catch {
       return;
     }
+  }
+
+  // Switch the active profile to `indexId` and apply it: restart the tunnel when
+  // already connected, otherwise connect. Drives double-click / Enter and the
+  // Connect button when its selection differs from the active profile.
+  async function switchActiveAndApply(indexId: string) {
+    if (switchingId !== null) {
+      return;
+    }
+
+    setSelectedId(indexId);
+    setSwitchingId(indexId);
+    const wasConnected = connected;
+    try {
+      await setActiveProfile(indexId);
+      const status = await runWithElevation(() =>
+        wasConnected ? restartCore() : connectActiveProfile(),
+      );
+      setCoreState(statusToCoreState(status));
+    } catch (error) {
+      const missingCore = missingCorePayload(error);
+      if (missingCore) {
+        openModal("missingCore", { missingCore });
+      } else {
+        pushToast({
+          description: getErrorMessage(error),
+          title: t(wasConnected ? "actions.restart" : "actions.connect"),
+        });
+        await refreshRuntimeState();
+      }
+    } finally {
+      // The active profile changed in the DB regardless of connect success, so
+      // refresh the cache that drives the active-node highlight.
+      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      setSwitchingId(null);
+    }
+  }
+
+  function handlePrimaryAction() {
+    if (connected) {
+      void runRuntimeAction("disconnect");
+
+      return;
+    }
+    // Connect to the locally-selected node. When it differs from the persisted
+    // active profile, switch first so connect uses it; otherwise connect directly.
+    if (selectedId && selectedId !== activeProfileId) {
+      void switchActiveAndApply(selectedId);
+
+      return;
+    }
+    void runRuntimeAction("connect");
   }
 
   async function runProxyMode(mode: SysProxyMode) {
@@ -212,8 +279,8 @@ export function HomeScreen() {
       data-testid="home-screen"
       role="region"
     >
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center gap-6 px-6 py-8">
-        <div className="flex flex-col items-center gap-4 text-center">
+      <div className="mx-auto flex w-full min-h-0 max-w-2xl flex-1 flex-col items-center gap-6 px-6 py-8">
+        <div className="flex shrink-0 flex-col items-center gap-4 text-center">
           <span
             aria-hidden="true"
             className={cn(
@@ -238,12 +305,12 @@ export function HomeScreen() {
           </div>
         </div>
 
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex shrink-0 flex-col items-center gap-3">
           <Button
             aria-label={primaryLabel}
             className={cn("h-14 w-60 gap-2 rounded-lg text-base font-semibold", !connected && "shadow-raised")}
             disabled={busy}
-            onClick={() => void runRuntimeAction(connected ? "disconnect" : "connect")}
+            onClick={handlePrimaryAction}
             size="lg"
             type="button"
             variant={connected ? "outline" : "default"}
@@ -267,7 +334,7 @@ export function HomeScreen() {
           ) : null}
         </div>
 
-        <div className="w-full rounded-lg bg-surface-raised px-4 shadow-raised">
+        <div className="w-full shrink-0 rounded-lg bg-surface-raised px-4 shadow-raised">
           <div className="flex items-center justify-between gap-3 py-2.5">
             <span className="text-sm font-medium text-foreground">{t("status.sysProxyMode")}</span>
             <div
@@ -315,70 +382,17 @@ export function HomeScreen() {
           </div>
         </div>
 
-        <dl className="w-full">
-          <StatTile
-            actionLabel={t("home.changeNode")}
-            icon={Server}
-            label={t("home.node")}
-            mono
-            onClick={() => openModal("nodePicker")}
-            title={nodeLabel}
-            value={nodeLabel}
-          />
-        </dl>
+        <NodeList
+          isPending={profilesQuery.isPending}
+          onActivate={(indexId) => void switchActiveAndApply(indexId)}
+          onSelect={(indexId) => setSelectedId(indexId)}
+          profiles={profilesQuery.data ?? []}
+          runningId={runningId}
+          selectedId={selectedId}
+          switchingId={switchingId}
+        />
       </div>
     </section>
-  );
-}
-
-function StatTile({
-  actionLabel,
-  icon: Icon,
-  label,
-  mono = false,
-  onClick,
-  title,
-  value,
-}: {
-  actionLabel?: string;
-  icon: LucideIcon;
-  label: string;
-  mono?: boolean;
-  onClick?: () => void;
-  title?: string;
-  value: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "relative flex min-w-0 flex-col gap-1 rounded-lg bg-surface-raised px-3 py-2.5 shadow-raised",
-        onClick && "transition-colors hover:bg-surface-overlay",
-      )}
-    >
-      <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-subtle">
-        <Icon className="size-3.5" aria-hidden="true" />
-        <span className="min-w-0 truncate">{label}</span>
-      </dt>
-      <dd
-        className={cn(
-          "min-w-0 truncate text-sm font-medium text-foreground",
-          mono && "font-mono text-xs",
-        )}
-        title={title ?? value}
-      >
-        {value}
-      </dd>
-      {onClick ? (
-        // A stretched, transparent button keeps the `<dl>`/`<dt>`/`<dd>` markup
-        // valid while giving the tile a real, keyboard-focusable activation target.
-        <button
-          aria-label={actionLabel ?? label}
-          className="absolute inset-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-          onClick={onClick}
-          type="button"
-        />
-      ) : null}
-    </div>
   );
 }
 

@@ -7,7 +7,6 @@ export type ModalKind =
   | "backup"
   | "fullConfigTemplate"
   | "missingCore"
-  | "nodePicker"
   | "qr"
   | "settings"
   | "updates";

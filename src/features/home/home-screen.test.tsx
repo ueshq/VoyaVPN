@@ -13,7 +13,6 @@ import type {
   TunChanged,
   TunStatus,
 } from "@/ipc/bindings";
-import { useModalStore } from "@/stores/modal-store";
 import { useToastStore } from "@/stores/toast-store";
 
 import { CONFIG_TYPES } from "@/features/profiles/profile-constants";
@@ -51,6 +50,7 @@ const ipcMock = vi.hoisted(() => ({
   listProfiles: vi.fn(),
   restartCore: vi.fn(),
   runtimeStatus: vi.fn(),
+  setActiveProfile: vi.fn(),
   setSystemProxyMode: vi.fn(),
   setTunEnabled: vi.fn(),
   systemProxyStatus: vi.fn(),
@@ -105,6 +105,7 @@ vi.mock("@/ipc", () => ({
   listProfiles: ipcMock.listProfiles,
   restartCore: ipcMock.restartCore,
   runtimeStatus: ipcMock.runtimeStatus,
+  setActiveProfile: ipcMock.setActiveProfile,
   setSystemProxyMode: ipcMock.setSystemProxyMode,
   setTunEnabled: ipcMock.setTunEnabled,
   systemProxyStatus: ipcMock.systemProxyStatus,
@@ -125,6 +126,14 @@ function renderHome() {
   );
 }
 
+const connectedCoreState: CoreStateEvent = {
+  activeProfileId: "node-tokyo",
+  mainPid: 4242,
+  prePid: null,
+  runningCoreType: 24,
+  state: "connected",
+};
+
 describe("HomeScreen", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -136,12 +145,12 @@ describe("HomeScreen", () => {
     ipcMock.restartCore.mockResolvedValue(connectedStatus);
     ipcMock.runtimeStatus.mockResolvedValue(disconnectedStatus);
     ipcMock.listProfiles.mockResolvedValue([]);
+    ipcMock.setActiveProfile.mockResolvedValue(makeProfile(0));
     ipcMock.setSystemProxyMode.mockResolvedValue(sysProxyStatus);
     ipcMock.setTunEnabled.mockResolvedValue(tunStatusResponse);
     ipcMock.systemProxyStatus.mockResolvedValue(sysProxyStatus);
     ipcMock.tunRequestElevation.mockResolvedValue(tunStatusResponse);
     ipcMock.tunStatus.mockResolvedValue(tunStatusResponse);
-    useModalStore.setState({ stack: [] });
     useToastStore.setState({ toasts: [] });
   });
 
@@ -149,46 +158,97 @@ describe("HomeScreen", () => {
     cleanup();
   });
 
-  it("renders the calm unprotected hero by default", () => {
+  it("renders the calm unprotected hero with an empty node list by default", async () => {
     renderHome();
 
     expect(screen.getByRole("region", { name: "Connection home" })).toBeInTheDocument();
     expect(screen.getByText("Not protected")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
-    expect(screen.getByText("No active node")).toBeInTheDocument();
+    expect(await screen.findByText("No nodes available")).toBeInTheDocument();
   });
 
-  it("lights up the protected state and surfaces the selected node only in the stat area", () => {
-    runtimeMock.state.coreState = {
-      activeProfileId: "node-tokyo",
-      mainPid: 4242,
-      prePid: null,
-      runningCoreType: 24,
-      state: "connected",
-    };
+  it("lights up the protected state and marks the running node in the list", async () => {
+    runtimeMock.state.coreState = connectedCoreState;
+    ipcMock.listProfiles.mockResolvedValue([
+      makeActiveProfile({ IndexId: "node-tokyo", Remarks: "Tokyo Edge" }),
+    ]);
 
     renderHome();
 
     expect(screen.getByText("Protected")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
-    expect(screen.getByText("node-tokyo")).toBeInTheDocument();
-    expect(screen.queryByText("Core")).not.toBeInTheDocument();
-    expect(screen.queryByText("Duration")).not.toBeInTheDocument();
-    expect(screen.queryByText("Upload")).not.toBeInTheDocument();
-    expect(screen.queryByText("Download")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Restart" })).toBeInTheDocument();
+
+    const row = await screen.findByRole("option", { name: /Tokyo Edge/ });
+    // Blue selection is seeded to the active node; the green "live" dot marks the
+    // node that is actually running.
+    expect(row).toHaveAttribute("aria-selected", "true");
+    expect(row.querySelector(".bg-connected")).not.toBeNull();
   });
 
-  it("resolves the active node name from the profiles cache", async () => {
+  it("selects a node locally on single click without touching the backend", async () => {
     ipcMock.listProfiles.mockResolvedValue([
-      makeProfile(1, { IndexId: "node-tokyo", Remarks: "Other Node" }),
-      makeActiveProfile({ IndexId: "node-osaka", Remarks: "Osaka Edge" }),
+      makeActiveProfile({ IndexId: "osaka", Remarks: "Osaka Edge" }),
+      makeProfile(1, { IndexId: "tokyo", Remarks: "Tokyo Edge" }),
     ]);
 
+    const user = userEvent.setup();
     renderHome();
 
-    // Falls back to the running id until the query resolves, then shows Remarks.
-    expect(await screen.findByText("Osaka Edge")).toBeInTheDocument();
+    await user.click(await screen.findByRole("option", { name: /Tokyo Edge/ }));
+
+    expect(screen.getByRole("option", { name: /Tokyo Edge/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("option", { name: /Osaka Edge/ })).toHaveAttribute("aria-selected", "false");
+    expect(ipcMock.setActiveProfile).not.toHaveBeenCalled();
+    expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
+    expect(ipcMock.restartCore).not.toHaveBeenCalled();
+  });
+
+  it("switches and connects on double click while disconnected", async () => {
+    ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { IndexId: "tokyo", Remarks: "Tokyo Edge" })]);
+
+    const user = userEvent.setup();
+    renderHome();
+
+    await user.dblClick(await screen.findByRole("option", { name: /Tokyo Edge/ }));
+
+    expect(ipcMock.setActiveProfile).toHaveBeenCalledWith("tokyo");
+    await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1));
+    expect(ipcMock.restartCore).not.toHaveBeenCalled();
+  });
+
+  it("switches and restarts on double click while connected", async () => {
+    runtimeMock.state.coreState = {
+      activeProfileId: "node-old",
+      mainPid: 1,
+      prePid: null,
+      runningCoreType: 24,
+      state: "connected",
+    };
+    ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { IndexId: "tokyo", Remarks: "Tokyo Edge" })]);
+
+    const user = userEvent.setup();
+    renderHome();
+
+    await user.dblClick(await screen.findByRole("option", { name: /Tokyo Edge/ }));
+
+    expect(ipcMock.setActiveProfile).toHaveBeenCalledWith("tokyo");
+    await waitFor(() => expect(ipcMock.restartCore).toHaveBeenCalledTimes(1));
+    expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
+  });
+
+  it("activates the focused node on Enter", async () => {
+    ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { IndexId: "tokyo", Remarks: "Tokyo Edge" })]);
+
+    const user = userEvent.setup();
+    renderHome();
+
+    const tokyo = await screen.findByRole("option", { name: /Tokyo Edge/ });
+    tokyo.focus();
+    await user.keyboard("{Enter}");
+
+    expect(ipcMock.setActiveProfile).toHaveBeenCalledWith("tokyo");
+    await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1));
   });
 
   it("invokes the connect action from the primary key", async () => {
@@ -202,26 +262,61 @@ describe("HomeScreen", () => {
     expect(ipcMock.disconnectCore).not.toHaveBeenCalled();
   });
 
-  it("opens the node picker from the clickable Node tile", async () => {
-    const user = userEvent.setup();
+  it("connects to the locally selected node, switching the active profile first", async () => {
+    ipcMock.listProfiles.mockResolvedValue([
+      makeActiveProfile({ IndexId: "osaka", Remarks: "Osaka Edge" }),
+      makeProfile(1, { IndexId: "tokyo", Remarks: "Tokyo Edge" }),
+    ]);
 
+    const user = userEvent.setup();
     renderHome();
 
-    await user.click(screen.getByRole("button", { name: "Change node" }));
+    await user.click(await screen.findByRole("option", { name: /Tokyo Edge/ }));
+    await user.click(screen.getByRole("button", { name: "Connect" }));
 
-    expect(useModalStore.getState().stack.at(-1)?.kind).toBe("nodePicker");
+    expect(ipcMock.setActiveProfile).toHaveBeenCalledWith("tokyo");
+    await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1));
+    // The active profile is switched before connect so the tunnel uses it.
+    expect(ipcMock.setActiveProfile.mock.invocationCallOrder[0]).toBeLessThan(
+      ipcMock.connectActiveProfile.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("connects directly when the selection already matches the active node", async () => {
+    ipcMock.listProfiles.mockResolvedValue([
+      makeActiveProfile({ IndexId: "osaka", Remarks: "Osaka Edge" }),
+    ]);
+
+    const user = userEvent.setup();
+    renderHome();
+
+    await screen.findByRole("option", { name: /Osaka Edge/ });
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+
+    await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1));
+    expect(ipcMock.setActiveProfile).not.toHaveBeenCalled();
+  });
+
+  it("filters the node list by remarks", async () => {
+    ipcMock.listProfiles.mockResolvedValue([
+      makeProfile(1, { IndexId: "tokyo", Remarks: "Tokyo Edge" }),
+      makeProfile(2, { IndexId: "osaka", Remarks: "Osaka Edge" }),
+    ]);
+
+    const user = userEvent.setup();
+    renderHome();
+
+    await screen.findByRole("option", { name: /Tokyo Edge/ });
+    await user.type(screen.getByRole("textbox", { name: "Search nodes…" }), "osaka");
+
+    expect(screen.queryByRole("option", { name: /Tokyo Edge/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Osaka Edge/ })).toBeInTheDocument();
   });
 
   it("refreshes runtime state and surfaces errors when disconnect fails", async () => {
     const user = userEvent.setup();
     const disconnectError = new Error("sudo kill failed");
-    runtimeMock.state.coreState = {
-      activeProfileId: "node-tokyo",
-      mainPid: 4242,
-      prePid: null,
-      runningCoreType: 24,
-      state: "connected",
-    };
+    runtimeMock.state.coreState = connectedCoreState;
     ipcMock.disconnectCore.mockRejectedValue(disconnectError);
     ipcMock.runtimeStatus.mockResolvedValue(connectedStatus);
 
