@@ -15,7 +15,7 @@ use sqlx::{
 };
 use thiserror::Error;
 use voya_core::{
-    AppConfig, ConfigType, CoreType, DnsItem, FullConfigTemplateItem, ProfileExItem, ProfileItem,
+    AppConfig, ConfigType, DnsItem, FullConfigTemplateItem, ProfileExItem, ProfileItem,
     RoutingItem, ServerStatItem, SubItem,
 };
 
@@ -153,7 +153,7 @@ const IMPORT_DELETE_STATEMENTS: &[&str] = &[
 const IMPORT_INSERT_STATEMENTS: &[&str] = &[
     r#"
     INSERT INTO main.profile_items (
-        index_id, config_type, core_type, config_version, subid, is_sub,
+        index_id, config_type, config_version, subid, is_sub,
         pre_socks_port, display_log, remarks, address, port, password,
         username, network, stream_security, allow_insecure, sni, alpn,
         fingerprint, public_key, short_id, spider_x, mldsa65_verify,
@@ -161,7 +161,7 @@ const IMPORT_INSERT_STATEMENTS: &[&str] = &[
         protocol_extra, transport_extra
     )
     SELECT
-        index_id, config_type, core_type, config_version, subid, is_sub,
+        index_id, config_type, config_version, subid, is_sub,
         pre_socks_port, display_log, remarks, address, port, password,
         username, network, stream_security, allow_insecure, sni, alpn,
         fingerprint, public_key, short_id, spider_x, mldsa65_verify,
@@ -211,21 +211,21 @@ const IMPORT_INSERT_STATEMENTS: &[&str] = &[
     "#,
     r#"
     INSERT INTO main.dns_items (
-        id, remarks, enabled, core_type, use_system_hosts, normal_dns,
+        id, remarks, enabled, use_system_hosts, normal_dns,
         tun_dns, domain_strategy4_freedom, domain_dns_address
     )
     SELECT
-        id, remarks, enabled, core_type, use_system_hosts, normal_dns,
+        id, remarks, enabled, use_system_hosts, normal_dns,
         tun_dns, domain_strategy4_freedom, domain_dns_address
     FROM backup.dns_items
     "#,
     r#"
     INSERT INTO main.full_config_template_items (
-        id, remarks, enabled, core_type, config, tun_config,
+        id, remarks, enabled, config, tun_config,
         add_proxy_only, proxy_detour
     )
     SELECT
-        id, remarks, enabled, core_type, config, tun_config,
+        id, remarks, enabled, config, tun_config,
         add_proxy_only, proxy_detour
     FROM backup.full_config_template_items
     "#,
@@ -525,12 +525,11 @@ impl<'pool> ProfileRepository<'pool> {
     pub async fn upsert(&self, item: &ProfileItem) -> Result<()> {
         let protocol_extra = blob::protocol_extra_to_text(&item.protocol_extra)?;
         let transport_extra = blob::transport_extra_to_text(&item.transport_extra)?;
-        let core_type = item.core_type.map(CoreType::as_i32);
 
         sqlx::query(
             r#"
             INSERT INTO profile_items (
-                index_id, config_type, core_type, config_version, subid, is_sub,
+                index_id, config_type, config_version, subid, is_sub,
                 pre_socks_port, display_log, remarks, address, port, password,
                 username, network, stream_security, allow_insecure, sni, alpn,
                 fingerprint, public_key, short_id, spider_x, mldsa65_verify,
@@ -538,11 +537,10 @@ impl<'pool> ProfileRepository<'pool> {
                 protocol_extra, transport_extra
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?
             )
             ON CONFLICT(index_id) DO UPDATE SET
                 config_type = excluded.config_type,
-                core_type = excluded.core_type,
                 config_version = excluded.config_version,
                 subid = excluded.subid,
                 is_sub = excluded.is_sub,
@@ -574,7 +572,6 @@ impl<'pool> ProfileRepository<'pool> {
         )
         .bind(&item.index_id)
         .bind(item.config_type.as_i32())
-        .bind(core_type)
         .bind(item.config_version)
         .bind(&item.subid)
         .bind(item.is_sub)
@@ -1303,13 +1300,12 @@ impl<'pool> DnsRepository<'pool> {
         sqlx::query(
             r#"
             INSERT INTO dns_items (
-                id, remarks, enabled, core_type, use_system_hosts,
+                id, remarks, enabled, use_system_hosts,
                 normal_dns, tun_dns, domain_strategy4_freedom, domain_dns_address
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 remarks = excluded.remarks,
                 enabled = excluded.enabled,
-                core_type = excluded.core_type,
                 use_system_hosts = excluded.use_system_hosts,
                 normal_dns = excluded.normal_dns,
                 tun_dns = excluded.tun_dns,
@@ -1320,7 +1316,6 @@ impl<'pool> DnsRepository<'pool> {
         .bind(&item.id)
         .bind(&item.remarks)
         .bind(item.enabled)
-        .bind(item.core_type.as_i32())
         .bind(item.use_system_hosts)
         .bind(&item.normal_dns)
         .bind(&item.tun_dns)
@@ -1341,17 +1336,15 @@ impl<'pool> DnsRepository<'pool> {
         row.map(row_to_dns).transpose()
     }
 
-    pub async fn get_by_core_type(&self, core_type: CoreType) -> Result<Option<DnsItem>> {
+    pub async fn get_default(&self) -> Result<Option<DnsItem>> {
         let row = sqlx::query(
             r#"
             SELECT *
             FROM dns_items
-            WHERE core_type = ?
             ORDER BY enabled DESC, id
             LIMIT 1
             "#,
         )
-        .bind(core_type.as_i32())
         .fetch_optional(self.pool)
         .await?;
 
@@ -1359,7 +1352,7 @@ impl<'pool> DnsRepository<'pool> {
     }
 
     pub async fn list(&self) -> Result<Vec<DnsItem>> {
-        let rows = sqlx::query("SELECT * FROM dns_items ORDER BY core_type, id")
+        let rows = sqlx::query("SELECT * FROM dns_items ORDER BY id")
             .fetch_all(self.pool)
             .await?;
 
@@ -1391,13 +1384,12 @@ impl<'pool> FullConfigTemplateRepository<'pool> {
         sqlx::query(
             r#"
             INSERT INTO full_config_template_items (
-                id, remarks, enabled, core_type, config,
+                id, remarks, enabled, config,
                 tun_config, add_proxy_only, proxy_detour
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 remarks = excluded.remarks,
                 enabled = excluded.enabled,
-                core_type = excluded.core_type,
                 config = excluded.config,
                 tun_config = excluded.tun_config,
                 add_proxy_only = excluded.add_proxy_only,
@@ -1407,7 +1399,6 @@ impl<'pool> FullConfigTemplateRepository<'pool> {
         .bind(&item.id)
         .bind(&item.remarks)
         .bind(item.enabled)
-        .bind(item.core_type.as_i32())
         .bind(&item.config)
         .bind(&item.tun_config)
         .bind(item.add_proxy_only)
@@ -1427,20 +1418,15 @@ impl<'pool> FullConfigTemplateRepository<'pool> {
         row.map(row_to_full_config_template).transpose()
     }
 
-    pub async fn get_by_core_type(
-        &self,
-        core_type: CoreType,
-    ) -> Result<Option<FullConfigTemplateItem>> {
+    pub async fn get_default(&self) -> Result<Option<FullConfigTemplateItem>> {
         let row = sqlx::query(
             r#"
             SELECT *
             FROM full_config_template_items
-            WHERE core_type = ?
             ORDER BY enabled DESC, id
             LIMIT 1
             "#,
         )
-        .bind(core_type.as_i32())
         .fetch_optional(self.pool)
         .await?;
 
@@ -1448,7 +1434,7 @@ impl<'pool> FullConfigTemplateRepository<'pool> {
     }
 
     pub async fn list(&self) -> Result<Vec<FullConfigTemplateItem>> {
-        let rows = sqlx::query("SELECT * FROM full_config_template_items ORDER BY core_type, id")
+        let rows = sqlx::query("SELECT * FROM full_config_template_items ORDER BY id")
             .fetch_all(self.pool)
             .await?;
 
@@ -1545,7 +1531,6 @@ fn row_to_profile(row: SqliteRow) -> Result<ProfileItem> {
 
 fn row_to_profile_ref(row: &SqliteRow) -> Result<ProfileItem> {
     let config_type_value = row.try_get::<i32, _>("config_type")?;
-    let core_type_value = row.try_get::<Option<i32>, _>("core_type")?;
     let protocol_extra = row.try_get::<String, _>("protocol_extra")?;
     let transport_extra = row.try_get::<String, _>("transport_extra")?;
 
@@ -1555,7 +1540,6 @@ fn row_to_profile_ref(row: &SqliteRow) -> Result<ProfileItem> {
             enum_name: "ConfigType",
             value: config_type_value,
         })?,
-        core_type: decode_profile_core_type(core_type_value),
         config_version: row.try_get("config_version")?,
         subid: row.try_get("subid")?,
         is_sub: row.try_get("is_sub")?,
@@ -1584,14 +1568,6 @@ fn row_to_profile_ref(row: &SqliteRow) -> Result<ProfileItem> {
         protocol_extra: blob::protocol_extra_from_text(&protocol_extra)?,
         transport_extra: blob::transport_extra_from_text(&transport_extra)?,
     })
-}
-
-// Unlike `ConfigType`, an unrecognized persisted `core_type` is recoverable:
-// `None` already means "use the default core". Tolerate unknown discriminants
-// (e.g. legacy Xray rows from before sing-box became the only core) by falling
-// back to the default rather than failing the entire profile listing.
-fn decode_profile_core_type(value: Option<i32>) -> Option<CoreType> {
-    value.and_then(CoreType::from_i32)
 }
 
 fn row_to_profile_ex(row: SqliteRow) -> Result<ProfileExItem> {
@@ -1669,16 +1645,10 @@ fn row_to_routing(row: SqliteRow) -> Result<RoutingItem> {
 }
 
 fn row_to_dns(row: SqliteRow) -> Result<DnsItem> {
-    let core_type_value = row.try_get::<i32, _>("core_type")?;
-
     Ok(DnsItem {
         id: row.try_get("id")?,
         remarks: row.try_get("remarks")?,
         enabled: row.try_get("enabled")?,
-        core_type: CoreType::from_i32(core_type_value).ok_or(DbError::InvalidEnum {
-            enum_name: "CoreType",
-            value: core_type_value,
-        })?,
         use_system_hosts: row.try_get("use_system_hosts")?,
         normal_dns: row.try_get("normal_dns")?,
         tun_dns: row.try_get("tun_dns")?,
@@ -1688,16 +1658,10 @@ fn row_to_dns(row: SqliteRow) -> Result<DnsItem> {
 }
 
 fn row_to_full_config_template(row: SqliteRow) -> Result<FullConfigTemplateItem> {
-    let core_type_value = row.try_get::<i32, _>("core_type")?;
-
     Ok(FullConfigTemplateItem {
         id: row.try_get("id")?,
         remarks: row.try_get("remarks")?,
         enabled: row.try_get("enabled")?,
-        core_type: CoreType::from_i32(core_type_value).ok_or(DbError::InvalidEnum {
-            enum_name: "CoreType",
-            value: core_type_value,
-        })?,
         config: row.try_get("config")?,
         tun_config: row.try_get("tun_config")?,
         add_proxy_only: row.try_get("add_proxy_only")?,
@@ -1743,6 +1707,7 @@ mod tests {
             "flow",
             "id",
             "security",
+            "core_type",
         ] {
             assert!(
                 !columns.iter().any(|column| column == obsolete),
@@ -1755,7 +1720,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn full_config_template_repository_round_trips_by_core_type() {
+    async fn full_config_template_repository_round_trips_default_template() {
         let database = Database::connect_in_memory()
             .await
             .expect("database test operation should succeed");
@@ -1763,7 +1728,6 @@ mod tests {
             id: "template-sing-box".to_string(),
             remarks: "sing-box template".to_string(),
             enabled: true,
-            core_type: CoreType::sing_box,
             config: Some(r#"{"outbounds":[]}"#.to_string()),
             tun_config: Some(r#"{"inbounds":[]}"#.to_string()),
             add_proxy_only: Some(true),
@@ -1777,12 +1741,46 @@ mod tests {
             .expect("database test operation should succeed");
         let loaded = database
             .full_config_templates()
-            .get_by_core_type(CoreType::sing_box)
+            .get_default()
             .await
             .expect("database test operation should succeed")
             .expect("template should be present");
 
         assert_eq!(loaded, item);
+    }
+
+    #[tokio::test]
+    async fn dns_schema_omits_core_type_column() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("database test operation should succeed");
+        let rows = sqlx::query("PRAGMA table_info(dns_items)")
+            .fetch_all(database.pool())
+            .await
+            .expect("database test operation should succeed");
+        let columns = rows
+            .iter()
+            .map(|row| row.get::<String, _>("name"))
+            .collect::<Vec<_>>();
+
+        assert!(!columns.iter().any(|column| column == "core_type"));
+    }
+
+    #[tokio::test]
+    async fn full_config_template_schema_omits_core_type_column() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("database test operation should succeed");
+        let rows = sqlx::query("PRAGMA table_info(full_config_template_items)")
+            .fetch_all(database.pool())
+            .await
+            .expect("database test operation should succeed");
+        let columns = rows
+            .iter()
+            .map(|row| row.get::<String, _>("name"))
+            .collect::<Vec<_>>();
+
+        assert!(!columns.iter().any(|column| column == "core_type"));
     }
 
     #[tokio::test]
@@ -2202,33 +2200,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn profile_repository_treats_unknown_profile_core_type_as_default() {
-        let database = Database::connect_in_memory()
-            .await
-            .expect("database test operation should succeed");
-        let profile = sample_profile();
-        database
-            .profiles()
-            .upsert(&profile)
-            .await
-            .expect("database test operation should succeed");
-        sqlx::query("UPDATE profile_items SET core_type = 2 WHERE index_id = ?")
-            .bind(&profile.index_id)
-            .execute(database.pool())
-            .await
-            .expect("database test operation should succeed");
-
-        let listed = database
-            .profiles()
-            .list_with_profile_ex(None)
-            .await
-            .expect("unknown profile core type should not break profile listing");
-
-        assert_eq!(listed.len(), 1);
-        assert_eq!(listed[0].0.core_type, None);
-    }
-
-    #[tokio::test]
     async fn profile_batch_operations_roll_back_on_mid_batch_error() {
         let database = Database::connect_in_memory()
             .await
@@ -2637,7 +2608,6 @@ mod tests {
         ProfileItem {
             index_id: "profile-1".to_string(),
             config_type: ConfigType::Shadowsocks,
-            core_type: Some(CoreType::sing_box),
             remarks: "Demo".to_string(),
             address: "example.com".to_string(),
             port: 443,

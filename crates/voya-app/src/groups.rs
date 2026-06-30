@@ -1,13 +1,13 @@
 use thiserror::Error;
 use voya_core::{
     generate_singbox_config_value, group_preview_from_values, list_group_child_candidates,
-    validate_group_profile, AppConfig, CoreConfigContextBuilder, CoreGenPlatform, CoreType,
-    DnsItem, GroupChildCandidate, GroupPreview, GroupValidationResult, ProfileItem,
-    ProfileListItem, RoutingItem, SingboxConfigError, SubItem,
+    validate_group_profile, AppConfig, CoreConfigContextBuilder, CoreGenPlatform, DnsItem,
+    GroupChildCandidate, GroupPreview, GroupValidationResult, ProfileItem, ProfileListItem,
+    RoutingItem, SingboxConfigError, SubItem,
 };
 use voya_db::{Database, DbError};
 
-use crate::coregen::{CoreTypeFallback, SnapshotCoreGenData, SnapshotCoreGenEnv};
+use crate::coregen::{SnapshotCoreGenData, SnapshotCoreGenEnv};
 use crate::profiles::{ProfileManager, ProfileManagerError};
 
 pub type Result<T> = std::result::Result<T, GroupManagerError>;
@@ -82,7 +82,7 @@ impl<'db> GroupManager<'db> {
             dns_items: &dns_items,
             subs: &subs,
         };
-        let singbox_value = self.preview_value(config, profile, &source, CoreType::sing_box)?;
+        let singbox_value = self.preview_value(config, profile, &source)?;
 
         validation.warnings.extend(
             singbox_value
@@ -137,14 +137,11 @@ impl<'db> GroupManager<'db> {
         config: &AppConfig,
         profile: &ProfileItem,
         source: &GroupPreviewSource<'_>,
-        core_type: CoreType,
     ) -> Result<PreviewValue> {
-        let mut node = profile.clone();
-        node.core_type = Some(core_type);
+        let node = profile.clone();
         let env = SnapshotCoreGenEnv::new(
             config,
             CoreGenPlatform::Linux,
-            CoreTypeFallback::Fixed(core_type),
             SnapshotCoreGenData {
                 profiles: source
                     .profiles

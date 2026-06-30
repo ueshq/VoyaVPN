@@ -3104,10 +3104,6 @@ fn dns_error(error: DnsManagerError) -> AppError {
             message: "DNS settings validation failed".to_string(),
             issues,
         }),
-        error => AppError::Dns(DnsCommandError {
-            message: error.to_string(),
-            issues: Vec::new(),
-        }),
     }
 }
 

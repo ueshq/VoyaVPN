@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Activity, Gauge, LoaderCircle, MoreHorizontal, Plug, Power, Shield, WifiOff } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -13,20 +13,14 @@ import {
   MenubarRadioGroup,
   MenubarRadioItem,
   MenubarSeparator,
-  MenubarSub,
-  MenubarSubContent,
-  MenubarSubTrigger,
   MenubarTrigger,
 } from "@/components/ui/menubar";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/use-i18n";
 import {
-  IpcCommandError,
   listProfiles,
-  restartCore,
   runtimeStatus,
-  saveProfile,
   setTunEnabled,
   setSystemProxyMode,
   systemProxyStatus,
@@ -36,8 +30,6 @@ import {
 } from "@/ipc";
 import type {
   CoreStateEvent,
-  CoreType,
-  ProfileListItem_Serialize,
   RuntimeStatusResponse,
   SysProxyChanged,
   SysProxyMode,
@@ -45,16 +37,10 @@ import type {
   TunChanged,
   TunStatus,
 } from "@/ipc/bindings";
-import {
-  CORE_SWITCH_OPTIONS,
-  defaultCoreTypeForConfig,
-  effectiveProfileCoreType,
-  formatCoreType,
-} from "@/lib/core-types";
+import { CORE_TYPES, formatCoreType } from "@/lib/core-types";
 import { formatBytesPerSecond } from "@/lib/formatting";
 import { useMountedRef } from "@/lib/use-mounted-ref";
 import { cn, getErrorMessage } from "@/lib/utils";
-import { useModalStore } from "@/stores/modal-store";
 import { shellTabRoutes, useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
 
@@ -69,7 +55,6 @@ const PROFILES_QUERY_KEY = ["profiles", { filter: "" }] as const;
 
 export function StatusBar() {
   const { t } = useI18n();
-  const queryClient = useQueryClient();
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const setCoreState = useRuntimeEventStore((state) => state.setCoreState);
   const statistics = useRuntimeEventStore((state) => state.statistics);
@@ -77,10 +62,9 @@ export function StatusBar() {
   const setSysProxy = useRuntimeEventStore((state) => state.setSysProxy);
   const tun = useRuntimeEventStore((state) => state.tun);
   const setTun = useRuntimeEventStore((state) => state.setTun);
-  const openModal = useModalStore((state) => state.openModal);
   const pushToast = useToastStore((state) => state.pushToast);
   const activeTab = useShellStore((state) => state.activeTab);
-  const [pendingAction, setPendingAction] = useState<"core" | "tun" | null>(null);
+  const [pendingAction, setPendingAction] = useState<"tun" | null>(null);
   const initialStatusGenerationRef = useRef(0);
   const mountedRef = useMountedRef();
   const profilesQuery = useQuery({
@@ -120,23 +104,13 @@ export function StatusBar() {
   }, [mountedRef, setCoreState, setSysProxy, setTun]);
 
   const state = coreState?.state ?? "disconnected";
-  const connected = state === "connected";
   const activeProfile = profilesQuery.data?.find((item) => item?.isActive) ?? null;
-  const profileCoreType = activeProfile ? effectiveProfileCoreType(activeProfile.profile) : null;
   const runningCoreType = coreState?.runningCoreType ?? null;
-  const displayedCoreType = runningCoreType ?? profileCoreType;
+  const displayedCoreType = runningCoreType ?? (activeProfile ? CORE_TYPES.singBox : null);
   const StateIcon = state === "connected" ? Power : state === "disconnected" ? WifiOff : LoaderCircle;
   const stateLabel = t(`status.${state}`);
   const coreLabel = displayedCoreType ? formatCoreType(displayedCoreType) : t("status.noActiveProfile");
-  const defaultCoreLabel = activeProfile
-    ? formatCoreType(defaultCoreTypeForConfig(activeProfile.profile.ConfigType))
-    : "";
-  const coreTitle = activeProfile
-    ? activeProfile.profile.CoreType == null
-      ? t("status.coreDefaultActive", { core: defaultCoreLabel })
-      : coreLabel
-    : t("status.noActiveProfile");
-  const coreSwitchValue = coreSwitchValueFor(activeProfile?.profile.CoreType ?? null);
+  const coreTitle = activeProfile ? coreLabel : t("status.noActiveProfile");
   const pidLabel = coreState?.mainPid ? `PID ${coreState.mainPid}` : t("status.noPid");
   const requestedProxyMode = sysProxy?.requestedMode ?? "forcedClear";
   const effectiveProxyLabel = formatSysProxy(sysProxy?.effectiveMode, t);
@@ -154,53 +128,6 @@ export function StatusBar() {
       setSysProxy(statusToSysProxyChanged(status));
     } catch {
       return;
-    }
-  }
-
-  async function runCoreSwitch(value: string) {
-    if (!activeProfile || pendingAction === "core") {
-      return;
-    }
-
-    const nextCoreType = coreTypeFromSwitchValue(value);
-    const currentCoreType = activeProfile.profile.CoreType ?? null;
-    if (currentCoreType === nextCoreType) {
-      return;
-    }
-
-    setPendingAction("core");
-    try {
-      const savedProfile = await saveProfile({
-        ...activeProfile.profile,
-        CoreType: nextCoreType,
-      });
-
-      queryClient.setQueryData<ProfileListItem_Serialize[]>(PROFILES_QUERY_KEY, (current) =>
-        current?.map((item) =>
-          item.profile.IndexId === savedProfile.profile.IndexId
-            ? { ...savedProfile, isActive: item.isActive }
-            : item,
-        ),
-      );
-      void queryClient.invalidateQueries({ queryKey: ["profiles"] });
-
-      if (connected) {
-        const status = await restartCore();
-        setCoreState(statusToCoreState(status));
-      }
-    } catch (error) {
-      const missingCore = missingCorePayload(error);
-      if (missingCore) {
-        openModal("missingCore", { missingCore });
-        return;
-      }
-
-      pushToast({
-        description: getErrorMessage(error),
-        title: t("status.coreSwitchFailed"),
-      });
-    } finally {
-      setPendingAction(null);
     }
   }
 
@@ -255,29 +182,13 @@ export function StatusBar() {
         <span className="min-w-0 truncate">{routeLabel}</span>
       </Badge>
       <div className="hidden min-w-0 items-center gap-1.5 md:flex">
-        <Menubar className="h-auto min-w-0 border-0 bg-transparent p-0 shadow-none">
-          <MenubarMenu>
-            <MenubarTrigger
-              aria-label={t("status.coreSwitch")}
-              className={cn(
-                "h-5 max-w-28 justify-start rounded-md border border-border bg-background px-2 py-0 text-xs font-medium text-subtle shadow-none",
-                "hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
-              )}
-              disabled={!activeProfile || pendingAction === "core"}
-              title={coreTitle}
-            >
-              <span className="min-w-0 truncate">{pendingAction === "core" ? t("status.savingCore") : coreLabel}</span>
-            </MenubarTrigger>
-            <MenubarContent align="start">
-              <CoreSwitchRadioItems
-                defaultCoreLabel={defaultCoreLabel}
-                onValueChange={(value) => void runCoreSwitch(value)}
-                t={t}
-                value={coreSwitchValue}
-              />
-            </MenubarContent>
-          </MenubarMenu>
-        </Menubar>
+        <Badge
+          className="h-5 max-w-28 justify-start bg-background px-2 text-subtle"
+          title={coreTitle}
+          variant="outline"
+        >
+          <span className="min-w-0 truncate">{coreLabel}</span>
+        </Badge>
         <Badge
           className="h-5 max-w-24 justify-start bg-background px-2 text-subtle"
           title={pidLabel}
@@ -372,19 +283,7 @@ export function StatusBar() {
             <MoreHorizontal className="size-3.5" aria-hidden="true" />
           </MenubarTrigger>
           <MenubarContent align="start">
-            <MenubarSub>
-              <MenubarSubTrigger disabled={!activeProfile || pendingAction === "core"}>
-                {pendingAction === "core" ? t("status.savingCore") : coreLabel}
-              </MenubarSubTrigger>
-              <MenubarSubContent>
-                <CoreSwitchRadioItems
-                  defaultCoreLabel={defaultCoreLabel}
-                  onValueChange={(value) => void runCoreSwitch(value)}
-                  t={t}
-                  value={coreSwitchValue}
-                />
-              </MenubarSubContent>
-            </MenubarSub>
+            <MenubarItem disabled>{coreLabel}</MenubarItem>
             <MenubarItem disabled>{pidLabel}</MenubarItem>
             <MenubarSeparator />
             <MenubarRadioGroup
@@ -483,36 +382,6 @@ function proxyModeOptions(pacAvailable: boolean): SysProxyMode[] {
     : ["forcedClear", "forcedChange", "unchanged"];
 }
 
-function CoreSwitchRadioItems({
-  defaultCoreLabel,
-  onValueChange,
-  t,
-  value,
-}: {
-  defaultCoreLabel: string;
-  onValueChange: (value: string) => void;
-  t: ReturnType<typeof useI18n>["t"];
-  value: string;
-}) {
-  return (
-    <MenubarRadioGroup onValueChange={onValueChange} value={value}>
-      {CORE_SWITCH_OPTIONS.map((option) => (
-        <MenubarRadioItem key={option.value} value={option.value}>
-          {"label" in option ? option.label : t(option.labelKey, { core: defaultCoreLabel })}
-        </MenubarRadioItem>
-      ))}
-    </MenubarRadioGroup>
-  );
-}
-
-function coreSwitchValueFor(coreType: CoreType | null): string {
-  return coreType == null ? "default" : String(coreType);
-}
-
-function coreTypeFromSwitchValue(value: string): CoreType | null {
-  return value === "default" ? null : Number(value);
-}
-
 function shortSysProxy(mode: SysProxyMode, t: ReturnType<typeof useI18n>["t"]) {
   switch (mode) {
     case "forcedChange":
@@ -539,14 +408,4 @@ function formatSysProxy(mode: SysProxyMode | undefined, t: ReturnType<typeof use
     default:
       return t("status.sysProxyUnchanged");
   }
-}
-
-function missingCorePayload(error: unknown) {
-  if (!(error instanceof IpcCommandError) || error.appError.kind !== "missingCore") {
-    return null;
-  }
-
-  const missingCore = error.appError.message;
-
-  return { coreType: missingCore.coreType, message: missingCore.message };
 }

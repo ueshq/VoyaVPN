@@ -3719,7 +3719,6 @@ mod tests {
         let node = ProfileItem {
             index_id: "n-vless".to_string(),
             config_type: ConfigType::VLESS,
-            core_type: Some(CoreType::sing_box),
             remarks: "vless-ws".to_string(),
             address: "server.example".to_string(),
             port: 443,
@@ -4005,7 +4004,6 @@ mod tests {
         let chain = ProfileItem {
             index_id: "chain".to_string(),
             config_type: ConfigType::ProxyChain,
-            core_type: Some(CoreType::sing_box),
             remarks: "chain".to_string(),
             protocol_extra: ProtocolExtraItem {
                 child_items: Some("n1,n2".to_string()),
@@ -4191,7 +4189,6 @@ mod tests {
         let group = ProfileItem {
             index_id: "group".to_string(),
             config_type: ConfigType::PolicyGroup,
-            core_type: Some(CoreType::sing_box),
             remarks: "fallback".to_string(),
             protocol_extra: ProtocolExtraItem {
                 child_items: Some("n1,n1,n2".to_string()),
@@ -4317,7 +4314,6 @@ mod tests {
         context.protect_domain_list = vec!["ech.example".to_string()];
         context.raw_dns_item = Some(DnsItem {
             enabled: true,
-            core_type: CoreType::sing_box,
             normal_dns: Some(
                 r#"{"servers":[{"tag":"remote","type":"udp","server":"1.1.1.1","detour":"proxy"}],"rules":[],"final":"remote"}"#.to_string(),
             ),
@@ -4393,7 +4389,6 @@ mod tests {
         context.protect_domain_list = vec!["ech.example".to_string()];
         context.raw_dns_item = Some(DnsItem {
             enabled: true,
-            core_type: CoreType::sing_box,
             normal_dns: Some(
                 r#"{"servers":[{"tag":"only-local","type":"udp","server":"1.1.1.1"}],"rules":[],"final":"only-local"}"#.to_string(),
             ),
@@ -4531,7 +4526,6 @@ mod tests {
         let group = ProfileItem {
             index_id: "group".to_string(),
             config_type: ConfigType::PolicyGroup,
-            core_type: Some(CoreType::sing_box),
             remarks: "group".to_string(),
             protocol_extra: ProtocolExtraItem {
                 child_items: Some("g1,g2".to_string()),
@@ -4552,7 +4546,6 @@ mod tests {
         let chain = ProfileItem {
             index_id: "chain".to_string(),
             config_type: ConfigType::ProxyChain,
-            core_type: Some(CoreType::sing_box),
             remarks: "chain".to_string(),
             protocol_extra: ProtocolExtraItem {
                 child_items: Some("c1,c2".to_string()),
@@ -4666,7 +4659,6 @@ mod tests {
 
     fn base_remote_node() -> ProfileItem {
         ProfileItem {
-            core_type: Some(CoreType::sing_box),
             remarks: "remote".to_string(),
             address: "server.example".to_string(),
             port: 443,
@@ -4681,7 +4673,6 @@ mod tests {
         ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::SOCKS,
-            core_type: Some(CoreType::sing_box),
             remarks: remarks.to_string(),
             address: LOOPBACK.to_string(),
             port: 1080,

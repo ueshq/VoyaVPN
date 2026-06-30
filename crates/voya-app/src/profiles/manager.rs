@@ -547,7 +547,7 @@ fn generate_profile_id() -> String {
 
 #[cfg(test)]
 mod tests {
-    use voya_core::{ConfigType, CoreType, MoveAction, ProfileSortKey, ProtocolExtraItem};
+    use voya_core::{ConfigType, MoveAction, ProfileSortKey, ProtocolExtraItem};
 
     use super::*;
 
@@ -777,7 +777,6 @@ mod tests {
         ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::VMess,
-            core_type: Some(CoreType::sing_box),
             remarks: remarks.to_string(),
             address: " example.com ".to_string(),
             port,

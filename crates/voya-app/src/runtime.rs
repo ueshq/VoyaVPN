@@ -17,7 +17,7 @@ use voya_platform::{
     paths::{AppPaths, PathError},
 };
 
-use crate::coregen::{CoreTypeFallback, SnapshotCoreGenData, SnapshotCoreGenEnv};
+use crate::coregen::{SnapshotCoreGenData, SnapshotCoreGenEnv};
 use crate::supervisor::{
     CoreProcessSpec, CoreSupervisor, SupervisorError, SupervisorSnapshot, SupervisorStartRequest,
 };
@@ -268,7 +268,6 @@ pub(crate) async fn load_runtime_core_gen_env(
     Ok(SnapshotCoreGenEnv::new(
         config,
         core_gen_platform(target_os),
-        CoreTypeFallback::ConfigDefaults,
         SnapshotCoreGenData {
             profiles: database.profiles().list().await?,
             routings: database.routings().list().await?,
@@ -346,7 +345,6 @@ mod tests {
             id: "dns-sing-box".to_string(),
             remarks: "sing-box".to_string(),
             enabled: true,
-            core_type: CoreType::sing_box,
             normal_dns: Some(r#"{"servers":[{"tag":"direct","address":"1.1.1.1"}]}"#.to_string()),
             ..DnsItem::default()
         };
@@ -362,7 +360,7 @@ mod tests {
                 .await
                 .expect("runtime test operation should succeed");
 
-        assert_eq!(env.get_dns_item(CoreType::sing_box), Some(item));
+        assert_eq!(env.get_dns_item(), Some(item));
     }
 
     #[tokio::test]
@@ -389,7 +387,6 @@ mod tests {
         let profile = ProfileItem {
             index_id: "active".to_string(),
             config_type: ConfigType::VLESS,
-            core_type: Some(CoreType::sing_box),
             remarks: "Runtime".to_string(),
             address: "example.test".to_string(),
             port: 443,
@@ -531,7 +528,6 @@ mod tests {
         let profile = ProfileItem {
             index_id: "active".to_string(),
             config_type: ConfigType::VLESS,
-            core_type: Some(CoreType::sing_box),
             remarks: "Runtime".to_string(),
             address: "example.test".to_string(),
             port: 443,
@@ -626,7 +622,6 @@ mod tests {
         ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::VLESS,
-            core_type: Some(CoreType::sing_box),
             remarks: "Runtime".to_string(),
             address: "example.test".to_string(),
             port: 443,

@@ -47,7 +47,6 @@ const dnsItemSchema = z.object({
   Id: z.string().optional(),
   Remarks: z.string().optional(),
   Enabled: z.boolean().optional(),
-  CoreType: z.number().int().optional(),
   UseSystemHosts: z.boolean().optional(),
   NormalDNS: optionalNullableText,
   TunDNS: optionalNullableText,

@@ -12,9 +12,7 @@ use serde_json::{Map, Value};
 use thiserror::Error;
 use url::Url;
 
-use crate::{
-    ConfigType, CoreType, MultipleLoad, ProfileItem, ProtocolExtraItem, TransportExtraItem,
-};
+use crate::{ConfigType, MultipleLoad, ProfileItem, ProtocolExtraItem, TransportExtraItem};
 
 const DEFAULT_SECURITY: &str = "auto";
 const DEFAULT_NETWORK: &str = "raw";
@@ -918,7 +916,6 @@ pub fn parse_full_custom_config(
             "json",
             trimmed,
             sub_remarks.unwrap_or("hysteria2_custom"),
-            Some(CoreType::sing_box),
         )]);
     }
 
@@ -1740,7 +1737,6 @@ fn parse_singbox_custom(
         "json",
         input,
         sub_remarks.unwrap_or("singbox_custom"),
-        Some(CoreType::sing_box),
     )))
 }
 
@@ -1749,7 +1745,6 @@ fn custom_import(
     extension: &str,
     contents: &str,
     remarks: &str,
-    core_type: Option<CoreType>,
 ) -> CustomConfigImport {
     CustomConfigImport {
         kind,
@@ -1757,7 +1752,6 @@ fn custom_import(
         contents: contents.to_string(),
         profile: ProfileItem {
             config_type: ConfigType::Custom,
-            core_type,
             address: String::new(),
             remarks: remarks.to_string(),
             ..ProfileItem::default()
@@ -1846,14 +1840,6 @@ fn parse_inner_single(input: &str) -> Result<ProfileItem, ShareError> {
     if item.config_version != 4 {
         return Err(ShareError::InvalidInner {
             reason: "unsupported config version".to_string(),
-        });
-    }
-    if item
-        .core_type
-        .is_some_and(|core_type| core_type != CoreType::sing_box)
-    {
-        return Err(ShareError::InvalidInner {
-            reason: "unsupported core type".to_string(),
         });
     }
     if item.protocol_extra.multiple_load.is_some_and(|load| {
@@ -2420,14 +2406,9 @@ mod share_tests {
         let mut app_config = AppConfig::default();
         app_config.core_basic_item.def_fingerprint = "firefox".to_string();
 
-        let mut singbox_node = node;
-        singbox_node.core_type = Some(CoreType::sing_box);
-        let singbox_value = generate_singbox_config_value(&fmt_test_context(
-            CoreType::sing_box,
-            app_config,
-            singbox_node,
-        ))
-        .expect("sing-box config should generate");
+        let singbox_value =
+            generate_singbox_config_value(&fmt_test_context(CoreType::sing_box, app_config, node))
+                .expect("sing-box config should generate");
         let singbox_proxy = proxy_outbound(&singbox_value);
         assert_eq!(
             singbox_proxy

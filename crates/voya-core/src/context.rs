@@ -251,8 +251,6 @@ pub enum ContextBuildError {
 pub trait CoreGenEnv {
     fn platform(&self) -> CoreGenPlatform;
 
-    fn get_core_type(&self, profile: &ProfileItem, config_type: ConfigType) -> CoreType;
-
     fn get_active_profile(&self, config: &AppConfig) -> Option<ProfileItem> {
         let active_id = config.index_id.trim();
         if active_id.is_empty() {
@@ -271,9 +269,9 @@ pub trait CoreGenEnv {
 
     fn get_sub_item(&self, subid: &str) -> Option<SubItem>;
 
-    fn get_full_config_template_item(&self, core_type: CoreType) -> Option<FullConfigTemplateItem>;
+    fn get_full_config_template_item(&self) -> Option<FullConfigTemplateItem>;
 
-    fn get_dns_item(&self, core_type: CoreType) -> Option<DnsItem>;
+    fn get_dns_item(&self) -> Option<DnsItem>;
 
     fn get_default_routing(&self, config: &AppConfig) -> Option<RoutingItem>;
 
@@ -318,16 +316,15 @@ where
     #[must_use]
     pub fn build(&self, config: &AppConfig, node: &ProfileItem) -> CoreConfigContextBuilderResult {
         let run_core_type = CoreType::sing_box;
-        let core_type = generator_core_type(run_core_type);
         let mut context = CoreConfigContext {
             node: node.clone(),
             run_core_type,
             routing_item: self.env.get_default_routing(config),
-            raw_dns_item: self.env.get_dns_item(core_type),
+            raw_dns_item: self.env.get_dns_item(),
             simple_dns_item: config.simple_dns_item.clone(),
             all_proxies_map: BTreeMap::new(),
             app_config: config.clone(),
-            full_config_template: self.env.get_full_config_template_item(core_type),
+            full_config_template: self.env.get_full_config_template_item(),
             server_test_item_map: BTreeMap::new(),
             is_tun_enabled: config.tun_mode_item.enable_tun,
             protect_domain_list: Vec::new(),
@@ -394,8 +391,7 @@ where
     ) -> Option<CoreConfigContextBuilderResult> {
         let config = &node_context.app_config;
         let node = &node_context.node;
-        let core_type = self.env.get_core_type(node, node.config_type);
-        let pre_socks_item = pre_socks_item(config, node, core_type, self.env)?;
+        let pre_socks_item = pre_socks_item(config, node, self.env)?;
         let mut pre_socks_result = self.build(config, &pre_socks_item);
         let pre_socks_domains = pre_socks_result.context.protect_domain_list.clone();
         pre_socks_result.context.protect_domain_list = node_context.protect_domain_list.clone();
@@ -490,7 +486,6 @@ where
         let chain_node = ProfileItem {
             index_id: self.env.next_virtual_chain_id(node, &child_items),
             config_type: ConfigType::ProxyChain,
-            core_type: Some(CoreType::sing_box),
             remarks: node.remarks.clone(),
             protocol_extra: ProtocolExtraItem {
                 group_type: Some("ProxyChain".to_string()),
@@ -729,15 +724,9 @@ where
     }
 }
 
-fn generator_core_type(run_core_type: CoreType) -> CoreType {
-    let _ = run_core_type;
-    CoreType::sing_box
-}
-
 fn pre_socks_item<E: CoreGenEnv>(
     config: &AppConfig,
     node: &ProfileItem,
-    _core_type: CoreType,
     env: &E,
 ) -> Option<ProfileItem> {
     let enable_legacy_protect =
@@ -748,7 +737,6 @@ fn pre_socks_item<E: CoreGenEnv>(
         && enable_legacy_protect
     {
         return Some(ProfileItem {
-            core_type: Some(CoreType::sing_box),
             config_type: ConfigType::SOCKS,
             address: LOOPBACK.to_string(),
             port: env.get_local_port(InboundProtocol::socks),
@@ -758,7 +746,6 @@ fn pre_socks_item<E: CoreGenEnv>(
 
     if node.config_type == ConfigType::Custom && matches!(node.pre_socks_port, Some(1..=65535)) {
         return Some(ProfileItem {
-            core_type: Some(CoreType::sing_box),
             config_type: ConfigType::SOCKS,
             address: LOOPBACK.to_string(),
             port: node.pre_socks_port.unwrap_or_default(),
@@ -1101,11 +1088,6 @@ mod tests {
             self.platform
         }
 
-        fn get_core_type(&self, profile: &ProfileItem, config_type: ConfigType) -> CoreType {
-            let _ = config_type;
-            profile.core_type.unwrap_or(CoreType::sing_box)
-        }
-
         fn get_profile_by_index_id(&self, index_id: &str) -> Option<ProfileItem> {
             self.profiles
                 .iter()
@@ -1139,21 +1121,12 @@ mod tests {
             self.subs.iter().find(|sub| sub.id == subid).cloned()
         }
 
-        fn get_full_config_template_item(
-            &self,
-            core_type: CoreType,
-        ) -> Option<FullConfigTemplateItem> {
-            self.templates
-                .iter()
-                .find(|template| template.core_type == core_type)
-                .cloned()
+        fn get_full_config_template_item(&self) -> Option<FullConfigTemplateItem> {
+            self.templates.first().cloned()
         }
 
-        fn get_dns_item(&self, core_type: CoreType) -> Option<DnsItem> {
-            self.dns_items
-                .iter()
-                .find(|dns| dns.core_type == core_type)
-                .cloned()
+        fn get_dns_item(&self) -> Option<DnsItem> {
+            self.dns_items.first().cloned()
         }
 
         fn get_default_routing(&self, config: &AppConfig) -> Option<RoutingItem> {
@@ -1180,10 +1153,7 @@ mod tests {
 
     #[test]
     fn context_build_active_resolves_template_dns_routing_and_active_node() {
-        let active = ProfileItem {
-            core_type: Some(CoreType::sing_box),
-            ..vless_profile("active", "Active", "active.example.com")
-        };
+        let active = vless_profile("active", "Active", "active.example.com");
         let config = app_config("active");
         let env = MemoryEnv {
             profiles: vec![active],
@@ -1194,12 +1164,10 @@ mod tests {
             }],
             dns_items: vec![DnsItem {
                 id: "dns".to_string(),
-                core_type: CoreType::sing_box,
                 ..DnsItem::default()
             }],
             templates: vec![FullConfigTemplateItem {
                 id: "template".to_string(),
-                core_type: CoreType::sing_box,
                 enabled: true,
                 ..FullConfigTemplateItem::default()
             }],
@@ -1382,7 +1350,6 @@ mod tests {
             .expect("pre socks context")
             .context;
         assert_eq!(pre_context.node.config_type, ConfigType::SOCKS);
-        assert_eq!(pre_context.node.core_type, Some(CoreType::sing_box));
         assert_eq!(pre_context.node.address, LOOPBACK);
         assert_eq!(pre_context.node.port, 20808);
     }
@@ -1409,7 +1376,6 @@ mod tests {
             .expect("custom pre socks context")
             .context;
         assert_eq!(pre_context.node.config_type, ConfigType::SOCKS);
-        assert_eq!(pre_context.node.core_type, Some(CoreType::sing_box));
         assert_eq!(pre_context.node.port, 18888);
     }
 
@@ -1427,7 +1393,6 @@ mod tests {
         ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::VLESS,
-            core_type: Some(CoreType::sing_box),
             remarks: remarks.to_string(),
             address: address.to_string(),
             port: 443,

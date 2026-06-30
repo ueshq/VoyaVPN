@@ -43,7 +43,6 @@ mod tests {
             node: ProfileItem {
                 index_id: "node".to_string(),
                 config_type: ConfigType::SOCKS,
-                core_type: Some(CoreType::sing_box),
                 remarks: "Node".to_string(),
                 address: "127.0.0.1".to_string(),
                 port: 1080,

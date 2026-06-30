@@ -1,5 +1,4 @@
 import type { ConfigType, MoveAction, SpeedActionType } from "@/ipc/bindings";
-import { CORE_TYPES } from "@/lib/core-types";
 
 export const CONFIG_TYPES = {
   VMess: 1,
@@ -17,8 +16,6 @@ export const CONFIG_TYPES = {
   PolicyGroup: 101,
   ProxyChain: 102,
 } as const satisfies Record<string, ConfigType>;
-
-export { CORE_TYPES };
 
 export const MOVE_ACTIONS = {
   Top: 1,
@@ -69,11 +66,6 @@ export const PROFILE_PROTOCOL_LABELS = PROFILE_PROTOCOLS.reduce<Record<number, s
   },
   {},
 );
-
-export const CORE_TYPE_OPTIONS = [
-  { label: "Default", value: "" },
-  { label: "sing-box", value: String(CORE_TYPES.singBox) },
-];
 
 export const NETWORK_OPTIONS = [
   { label: "TCP / Raw", value: "tcp" },

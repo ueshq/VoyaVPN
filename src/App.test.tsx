@@ -235,7 +235,6 @@ vi.mock("@/ipc", () => ({
         Id: "dns-singbox",
         Remarks: "sing-box",
         Enabled: false,
-        CoreType: 24,
         UseSystemHosts: false,
       },
       defaults: {

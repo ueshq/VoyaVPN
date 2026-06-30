@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use thiserror::Error;
 use voya_core::{
-    CoreType, DnsItem, SimpleDnsItem, SingboxDns, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS,
+    DnsItem, SimpleDnsItem, SingboxDns, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS,
     DEFAULT_REMOTE_DNS, DEFAULT_SINGBOX_DNS_NORMAL,
 };
 use voya_db::{Database, DbError};
@@ -53,8 +53,6 @@ pub enum DnsManagerError {
     Database(#[from] DbError),
     #[error("DNS settings validation failed")]
     Validation(Vec<DnsValidationIssue>),
-    #[error("DNS item for {0:?} is required")]
-    MissingCoreDnsItem(CoreType),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -69,7 +67,7 @@ impl<'db> DnsManager<'db> {
     }
 
     pub async fn load_settings(&self, simple_dns_item: &SimpleDnsItem) -> Result<DnsSettings> {
-        let singbox_dns_item = self.ensure_core_dns_item(CoreType::sing_box).await?;
+        let singbox_dns_item = self.ensure_dns_item().await?;
 
         Ok(DnsSettings {
             simple_dns_item: normalize_simple_dns(simple_dns_item.clone()),
@@ -80,7 +78,7 @@ impl<'db> DnsManager<'db> {
 
     pub async fn save_settings(&self, mut settings: DnsSettings) -> Result<DnsSettings> {
         settings.simple_dns_item = normalize_simple_dns(settings.simple_dns_item);
-        normalize_dns_item(&mut settings.singbox_dns_item, CoreType::sing_box);
+        normalize_dns_item(&mut settings.singbox_dns_item);
 
         validate_settings(&settings)?;
 
@@ -95,9 +93,9 @@ impl<'db> DnsManager<'db> {
         })
     }
 
-    async fn ensure_core_dns_item(&self, core_type: CoreType) -> Result<DnsItem> {
-        if let Some(mut item) = self.database.dns().get_by_core_type(core_type).await? {
-            normalize_dns_item(&mut item, core_type);
+    async fn ensure_dns_item(&self) -> Result<DnsItem> {
+        if let Some(mut item) = self.database.dns().get_default().await? {
+            normalize_dns_item(&mut item);
             if item.enabled && item.normal_dns.as_deref().is_none_or(str::is_empty) {
                 item.enabled = false;
                 self.database.dns().upsert(&item).await?;
@@ -105,7 +103,7 @@ impl<'db> DnsManager<'db> {
             return Ok(item);
         }
 
-        let item = default_dns_item(core_type);
+        let item = default_dns_item();
         self.database.dns().upsert(&item).await?;
 
         Ok(item)
@@ -113,11 +111,10 @@ impl<'db> DnsManager<'db> {
 }
 
 #[must_use]
-pub fn default_dns_item(core_type: CoreType) -> DnsItem {
+pub fn default_dns_item() -> DnsItem {
     DnsItem {
         id: generate_dns_id(),
         remarks: "sing-box".to_string(),
-        core_type,
         enabled: false,
         ..DnsItem::default()
     }
@@ -145,7 +142,7 @@ fn normalize_simple_dns(mut item: SimpleDnsItem) -> SimpleDnsItem {
     item
 }
 
-fn normalize_dns_item(item: &mut DnsItem, core_type: CoreType) {
+fn normalize_dns_item(item: &mut DnsItem) {
     if item.id.trim().is_empty() {
         item.id = generate_dns_id();
     }
@@ -154,7 +151,6 @@ fn normalize_dns_item(item: &mut DnsItem, core_type: CoreType) {
     } else {
         item.remarks = item.remarks.trim().to_string();
     }
-    item.core_type = core_type;
     item.normal_dns = clean_optional_string(item.normal_dns.take());
     item.tun_dns = clean_optional_string(item.tun_dns.take());
     item.domain_strategy4_freedom = clean_optional_string(item.domain_strategy4_freedom.take());
@@ -326,7 +322,7 @@ mod tests {
         assert_eq!(
             database
                 .dns()
-                .get_by_core_type(CoreType::sing_box)
+                .get_default()
                 .await
                 .expect("DNS manager test operation should succeed")
                 .expect("DNS manager test operation should succeed")

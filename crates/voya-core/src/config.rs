@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{ConfigType, CoreType, GlobalHotkey, GridOrientation, RuleMode, SysProxyType};
+use crate::{GlobalHotkey, GridOrientation, RuleMode, SysProxyType};
 
 pub const DEFAULT_LOCAL_PORT: i32 = 10808;
 pub const DEFAULT_LOG_LEVEL: &str = "warning";
@@ -47,7 +47,6 @@ pub struct AppConfig {
     pub fragment4_ray_item: Fragment4RayItem,
     pub inbound: Vec<InItem>,
     pub global_hotkeys: Vec<KeyEventItem>,
-    pub core_type_item: Vec<CoreTypeItem>,
     #[serde(rename = "SimpleDNSItem")]
     pub simple_dns_item: SimpleDnsItem,
 }
@@ -78,7 +77,6 @@ impl Default for AppConfig {
             fragment4_ray_item: Fragment4RayItem::default(),
             inbound: vec![InItem::default()],
             global_hotkeys: Vec::new(),
-            core_type_item: Vec::new(),
             simple_dns_item: SimpleDnsItem::default(),
         }
     }
@@ -560,22 +558,6 @@ impl Default for KeyEventItem {
             control: false,
             shift: false,
             key_code: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(default, rename_all = "PascalCase")]
-pub struct CoreTypeItem {
-    pub config_type: ConfigType,
-    pub core_type: CoreType,
-}
-
-impl Default for CoreTypeItem {
-    fn default() -> Self {
-        Self {
-            config_type: ConfigType::VMess,
-            core_type: CoreType::sing_box,
         }
     }
 }

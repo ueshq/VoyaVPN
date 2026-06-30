@@ -245,7 +245,6 @@ fn singbox_vless_ws_tls_mux_outbound() -> Value {
     let node = ProfileItem {
         index_id: "n-vless".to_string(),
         config_type: ConfigType::VLESS,
-        core_type: Some(CoreType::sing_box),
         remarks: "vless-ws".to_string(),
         address: "server.example".to_string(),
         port: 443,
@@ -285,7 +284,6 @@ fn singbox_tuic_tls_outbound() -> Value {
     let node = ProfileItem {
         index_id: "n-tuic".to_string(),
         config_type: ConfigType::TUIC,
-        core_type: Some(CoreType::sing_box),
         remarks: "tuic-tls".to_string(),
         address: "tuic.example".to_string(),
         port: 443,
@@ -309,7 +307,6 @@ fn singbox_anytls_tls_outbound() -> Value {
     let node = ProfileItem {
         index_id: "n-anytls".to_string(),
         config_type: ConfigType::Anytls,
-        core_type: Some(CoreType::sing_box),
         remarks: "anytls-tls".to_string(),
         address: "anytls.example".to_string(),
         port: 8443,
@@ -328,7 +325,6 @@ fn singbox_naive_quic_tls_outbound() -> Value {
     let node = ProfileItem {
         index_id: "n-naive".to_string(),
         config_type: ConfigType::Naive,
-        core_type: Some(CoreType::sing_box),
         remarks: "naive-quic".to_string(),
         address: "naive.example".to_string(),
         port: 443,
@@ -370,7 +366,6 @@ fn singbox_proxy_chain_detour() -> Value {
     let chain = ProfileItem {
         index_id: "chain".to_string(),
         config_type: ConfigType::ProxyChain,
-        core_type: Some(CoreType::sing_box),
         remarks: "chain".to_string(),
         protocol_extra: ProtocolExtraItem {
             child_items: Some("n1,n2".to_string()),
@@ -393,7 +388,6 @@ fn singbox_policy_group_selector() -> Value {
     let group = ProfileItem {
         index_id: "group".to_string(),
         config_type: ConfigType::PolicyGroup,
-        core_type: Some(CoreType::sing_box),
         remarks: "fallback".to_string(),
         protocol_extra: ProtocolExtraItem {
             child_items: Some("n1,n1,n2".to_string()),
@@ -508,7 +502,6 @@ fn singbox_context(app_config: AppConfig, node: ProfileItem) -> CoreConfigContex
 
 fn singbox_base_remote_node() -> ProfileItem {
     ProfileItem {
-        core_type: Some(CoreType::sing_box),
         remarks: "remote".to_string(),
         address: "server.example".to_string(),
         port: 443,
@@ -523,7 +516,6 @@ fn singbox_socks_node(index_id: &str, remarks: &str) -> ProfileItem {
     ProfileItem {
         index_id: index_id.to_string(),
         config_type: ConfigType::SOCKS,
-        core_type: Some(CoreType::sing_box),
         remarks: remarks.to_string(),
         address: LOOPBACK.to_string(),
         port: 1080,

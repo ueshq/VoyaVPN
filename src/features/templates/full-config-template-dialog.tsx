@@ -18,16 +18,14 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useI18n } from "@/i18n/use-i18n";
 import { loadFullConfigTemplates, saveFullConfigTemplate } from "@/ipc";
-import type { CoreType, FullConfigTemplateItem_Serialize } from "@/ipc/bindings";
+import type { FullConfigTemplateItem_Serialize } from "@/ipc/bindings";
 import { cn, getErrorMessage } from "@/lib/utils";
-import { CORE_TYPES } from "@/features/profiles/profile-constants";
 
 type TemplateTab = "singbox";
 
 type TemplateForm = {
   AddProxyOnly: boolean;
   Config: string;
-  CoreType: CoreType;
   Enabled: boolean;
   Id: string;
   ProxyDetour: string;
@@ -37,12 +35,12 @@ type TemplateForm = {
 
 const editorExtensions = [json()];
 
-const templateTabs: Array<{ coreType: CoreType; label: string; value: TemplateTab }> = [
-  { coreType: CORE_TYPES.singBox, label: "sing-box", value: "singbox" },
+const templateTabs: Array<{ label: string; value: TemplateTab }> = [
+  { label: "sing-box", value: "singbox" },
 ];
 
 const emptyForms = Object.fromEntries(
-  templateTabs.map((tab) => [tab.value, createEmptyForm(tab.coreType, tab.label)]),
+  templateTabs.map((tab) => [tab.value, createEmptyForm(tab.label)]),
 ) as Record<TemplateTab, TemplateForm>;
 
 export function FullConfigTemplateDialog() {
@@ -103,7 +101,6 @@ export function FullConfigTemplateDialog() {
       const savedTemplate = await saveFullConfigTemplate({
         AddProxyOnly: activeForm.AddProxyOnly,
         Config: config,
-        CoreType: activeForm.CoreType,
         Enabled: activeForm.Enabled,
         Id: activeForm.Id,
         ProxyDetour: activeForm.ProxyDetour.trim() || null,
@@ -282,9 +279,9 @@ function ToggleField({
 function materializeForms(templates: FullConfigTemplateItem_Serialize[]): Record<TemplateTab, TemplateForm> {
   return Object.fromEntries(
     templateTabs.map((tab) => {
-      const item = templates.find((template) => template.CoreType === tab.coreType);
+      const item = templates[0];
 
-      return [tab.value, item ? toForm(item, tab.label) : createEmptyForm(tab.coreType, tab.label)];
+      return [tab.value, item ? toForm(item, tab.label) : createEmptyForm(tab.label)];
     }),
   ) as Record<TemplateTab, TemplateForm>;
 }
@@ -293,7 +290,6 @@ function toForm(template: FullConfigTemplateItem_Serialize, fallbackLabel: strin
   return {
     AddProxyOnly: template.AddProxyOnly ?? false,
     Config: formatJsonForEditor(template.Config),
-    CoreType: template.CoreType,
     Enabled: template.Enabled,
     Id: template.Id,
     ProxyDetour: template.ProxyDetour ?? "",
@@ -302,11 +298,10 @@ function toForm(template: FullConfigTemplateItem_Serialize, fallbackLabel: strin
   };
 }
 
-function createEmptyForm(coreType: CoreType, label: string): TemplateForm {
+function createEmptyForm(label: string): TemplateForm {
   return {
     AddProxyOnly: false,
     Config: "",
-    CoreType: coreType,
     Enabled: false,
     Id: "",
     ProxyDetour: "",

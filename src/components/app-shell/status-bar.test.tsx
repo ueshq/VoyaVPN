@@ -78,18 +78,8 @@ const tunStatusResponse: TunStatus = {
 };
 
 vi.mock("@/ipc", () => ({
-  IpcCommandError: class IpcCommandError extends Error {
-    readonly appError: unknown;
-
-    constructor(appError: unknown) {
-      super(typeof appError === "object" && appError ? JSON.stringify(appError) : "IPC command failed");
-      this.appError = appError;
-    }
-  },
   listProfiles: vi.fn(() => Promise.resolve([])),
-  restartCore: vi.fn(),
   runtimeStatus: vi.fn(() => Promise.resolve(disconnectedStatus)),
-  saveProfile: vi.fn(),
   setSystemProxyMode: vi.fn(),
   setTunEnabled: vi.fn(),
   tunRequestElevation: vi.fn(),
@@ -99,11 +89,8 @@ vi.mock("@/ipc", () => ({
 }));
 
 import {
-  IpcCommandError,
   listProfiles,
-  restartCore,
   runtimeStatus,
-  saveProfile,
   setSystemProxyMode,
   setTunEnabled,
   tunRequestElevation,
@@ -134,7 +121,6 @@ function makeProfile(
       CertSha: "",
       ConfigType: 1,
       ConfigVersion: 4,
-      CoreType: null,
       DisplayLog: true,
       EchConfigList: "",
       Finalmask: "",
@@ -202,11 +188,7 @@ describe("StatusBar", () => {
     useModalStore.setState({ stack: [] });
     useToastStore.setState({ toasts: [] });
     vi.mocked(listProfiles).mockResolvedValue([]);
-    vi.mocked(restartCore).mockReset();
     vi.mocked(runtimeStatus).mockResolvedValue(disconnectedStatus);
-    vi.mocked(saveProfile).mockImplementation(async (profile) =>
-      makeProfile(0, profile, true),
-    );
     vi.mocked(setSystemProxyMode).mockReset();
     vi.mocked(tunStatus).mockResolvedValue(tunStatusResponse);
     vi.mocked(tunRequestElevation).mockReset();
@@ -270,48 +252,16 @@ describe("StatusBar", () => {
     expect(tunControl).toHaveTextContent("TUN off");
   });
 
-  it("shows the effective active profile core while disconnected", async () => {
-    vi.mocked(listProfiles).mockResolvedValue([makeProfile(0, { CoreType: null })]);
+  it("shows sing-box for the active profile while disconnected", async () => {
+    vi.mocked(listProfiles).mockResolvedValue([makeProfile()]);
 
     renderStatusBar();
 
-    await waitFor(() => expect(screen.getByLabelText("Switch core")).toHaveTextContent("sing-box"));
+    await waitFor(() => expect(screen.getByTestId("status-bar")).toHaveTextContent("sing-box"));
     expect(screen.queryByText("No active node")).not.toBeInTheDocument();
   });
 
-  it("saves the selected core on the active profile without restarting while disconnected", async () => {
-    const user = userEvent.setup();
-    vi.mocked(listProfiles).mockResolvedValue([makeProfile(0, { CoreType: null })]);
-
-    renderStatusBar();
-
-    await waitFor(() => expect(screen.getByLabelText("Switch core")).toHaveTextContent("sing-box"));
-    await user.click(screen.getByLabelText("Switch core"));
-    await user.click(await screen.findByRole("menuitemradio", { name: "sing-box" }));
-
-    await waitFor(() =>
-      expect(saveProfile).toHaveBeenCalledWith(expect.objectContaining({ CoreType: 24 })),
-    );
-    expect(restartCore).not.toHaveBeenCalled();
-  });
-
-  it("saves the default core selection as null", async () => {
-    const user = userEvent.setup();
-    vi.mocked(listProfiles).mockResolvedValue([makeProfile(0, { CoreType: 24 })]);
-
-    renderStatusBar();
-
-    await waitFor(() => expect(screen.getByLabelText("Switch core")).toHaveTextContent("sing-box"));
-    await user.click(screen.getByLabelText("Switch core"));
-    await user.click(await screen.findByRole("menuitemradio", { name: "Default" }));
-
-    await waitFor(() =>
-      expect(saveProfile).toHaveBeenCalledWith(expect.objectContaining({ CoreType: null })),
-    );
-  });
-
-  it("restarts the connected core after saving a new active profile core", async () => {
-    const user = userEvent.setup();
+  it("shows the running core while connected", async () => {
     const connectedStatus: RuntimeStatusResponse = {
       activeProfileId: "profile-0",
       mainPid: 100,
@@ -319,11 +269,6 @@ describe("StatusBar", () => {
       runningCoreType: 24,
       state: "connected",
     };
-    const switchedStatus: RuntimeStatusResponse = {
-      ...connectedStatus,
-      runningCoreType: 24,
-    };
-
     runtimeMock.state.coreState = {
       activeProfileId: "profile-0",
       mainPid: 100,
@@ -332,83 +277,11 @@ describe("StatusBar", () => {
       state: "connected",
     };
     vi.mocked(runtimeStatus).mockResolvedValue(connectedStatus);
-    vi.mocked(listProfiles).mockResolvedValue([makeProfile(0, { CoreType: 24 })]);
-    vi.mocked(restartCore).mockResolvedValue(switchedStatus);
+    vi.mocked(listProfiles).mockResolvedValue([makeProfile()]);
 
     renderStatusBar();
 
-    await waitFor(() => expect(screen.getByLabelText("Switch core")).toHaveTextContent("sing-box"));
-    await user.click(screen.getByLabelText("Switch core"));
-    await user.click(await screen.findByRole("menuitemradio", { name: "Default" }));
-
-    await waitFor(() =>
-      expect(saveProfile).toHaveBeenCalledWith(expect.objectContaining({ CoreType: null })),
-    );
-    await waitFor(() => expect(restartCore).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(saveProfile).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(restartCore).mock.invocationCallOrder[0],
-    );
-    expect(runtimeMock.state.setCoreState).toHaveBeenCalledWith(
-      expect.objectContaining({ runningCoreType: 24, state: "connected" }),
-    );
-  });
-
-  it("opens the missing-core modal when restart reports a missing core", async () => {
-    const user = userEvent.setup();
-
-    runtimeMock.state.coreState = {
-      activeProfileId: "profile-0",
-      mainPid: 100,
-      prePid: null,
-      runningCoreType: 24,
-      state: "connected",
-    };
-    vi.mocked(listProfiles).mockResolvedValue([makeProfile(0, { CoreType: null })]);
-    vi.mocked(restartCore).mockRejectedValue(
-      new IpcCommandError({
-        kind: "missingCore",
-        message: { coreType: 24, message: "missing sing-box" },
-      } as never),
-    );
-
-    renderStatusBar();
-
-    await waitFor(() => expect(screen.getByLabelText("Switch core")).toHaveTextContent("sing-box"));
-    await user.click(screen.getByLabelText("Switch core"));
-    await user.click(await screen.findByRole("menuitemradio", { name: "sing-box" }));
-
-    await waitFor(() =>
-      expect(useModalStore.getState().stack.at(-1)).toMatchObject({
-        kind: "missingCore",
-        missingCore: { coreType: 24 },
-      }),
-    );
-  });
-
-  it("toasts when a connected core switch fails", async () => {
-    const user = userEvent.setup();
-
-    runtimeMock.state.coreState = {
-      activeProfileId: "profile-0",
-      mainPid: 100,
-      prePid: null,
-      runningCoreType: 24,
-      state: "connected",
-    };
-    vi.mocked(listProfiles).mockResolvedValue([makeProfile(0, { CoreType: null })]);
-    vi.mocked(restartCore).mockRejectedValue(
-      new IpcCommandError({ kind: "runtime", message: "core start failed" } as never),
-    );
-
-    renderStatusBar();
-
-    await waitFor(() => expect(screen.getByLabelText("Switch core")).toHaveTextContent("sing-box"));
-    await user.click(screen.getByLabelText("Switch core"));
-    await user.click(await screen.findByRole("menuitemradio", { name: "sing-box" }));
-
-    await waitFor(() =>
-      expect(useToastStore.getState().toasts.at(-1)?.title).toBe("Core switch failed"),
-    );
+    await waitFor(() => expect(screen.getByTestId("status-bar")).toHaveTextContent("sing-box"));
   });
 
   it("requests system authorization on demand before switching TUN on", async () => {
@@ -464,7 +337,7 @@ describe("StatusBar", () => {
 
   it("surfaces core info, proxy mode, and TUN in the small-window overflow menu", async () => {
     const user = userEvent.setup();
-    vi.mocked(listProfiles).mockResolvedValue([makeProfile(0, { CoreType: null })]);
+    vi.mocked(listProfiles).mockResolvedValue([makeProfile()]);
     vi.mocked(setSystemProxyMode).mockResolvedValue(sysProxyStatus);
 
     renderStatusBar();

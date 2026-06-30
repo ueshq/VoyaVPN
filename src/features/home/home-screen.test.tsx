@@ -173,7 +173,6 @@ function makeProfile(index: number, overrides: ProfileItem_Deserialize = {}): Pr
       CertSha: "",
       ConfigType: CONFIG_TYPES.VMess,
       ConfigVersion: 4,
-      CoreType: null,
       DisplayLog: true,
       EchConfigList: "",
       Finalmask: "",

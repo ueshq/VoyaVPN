@@ -199,7 +199,6 @@ export type AppConfig_Deserialize = {
 	Fragment4RayItem?: Fragment4RayItem_Deserialize,
 	Inbound?: InItem_Deserialize[],
 	GlobalHotkeys?: KeyEventItem_Deserialize[],
-	CoreTypeItem?: CoreTypeItem[],
 	SimpleDNSItem?: SimpleDnsItem_Deserialize,
 };
 
@@ -227,7 +226,6 @@ export type AppConfig_Serialize = {
 	Fragment4RayItem: Fragment4RayItem_Serialize,
 	Inbound: InItem_Serialize[],
 	GlobalHotkeys: KeyEventItem_Serialize[],
-	CoreTypeItem: CoreTypeItem[],
 	SimpleDNSItem: SimpleDnsItem_Serialize,
 };
 
@@ -489,11 +487,6 @@ export type CoreStateEvent = {
 
 export type CoreType = number;
 
-export type CoreTypeItem = {
-	ConfigType?: ConfigType,
-	CoreType?: CoreType,
-};
-
 export type DemoRequest = {
 	message: string,
 };
@@ -535,7 +528,6 @@ export type DnsItem_Deserialize = {
 	Id?: string,
 	Remarks?: string,
 	Enabled?: boolean,
-	CoreType?: CoreType,
 	UseSystemHosts?: boolean,
 	NormalDNS?: string | null,
 	TunDNS?: string | null,
@@ -547,7 +539,6 @@ export type DnsItem_Serialize = {
 	Id: string,
 	Remarks: string,
 	Enabled: boolean,
-	CoreType: CoreType,
 	UseSystemHosts: boolean,
 	NormalDNS?: string | null,
 	TunDNS?: string | null,
@@ -612,7 +603,6 @@ export type FullConfigTemplateItem_Deserialize = {
 	Id?: string,
 	Remarks?: string,
 	Enabled?: boolean,
-	CoreType?: CoreType,
 	Config?: string | null,
 	TunConfig?: string | null,
 	AddProxyOnly?: boolean | null,
@@ -623,7 +613,6 @@ export type FullConfigTemplateItem_Serialize = {
 	Id: string,
 	Remarks: string,
 	Enabled: boolean,
-	CoreType: CoreType,
 	Config?: string | null,
 	TunConfig?: string | null,
 	AddProxyOnly?: boolean | null,
@@ -931,7 +920,6 @@ export type ProfileItem = ProfileItem_Serialize | ProfileItem_Deserialize;
 export type ProfileItem_Deserialize = {
 	IndexId?: string,
 	ConfigType?: ConfigType,
-	CoreType?: CoreType | null,
 	ConfigVersion?: number,
 	Subid?: string,
 	IsSub?: boolean,
@@ -964,7 +952,6 @@ export type ProfileItem_Deserialize = {
 export type ProfileItem_Serialize = {
 	IndexId: string,
 	ConfigType: ConfigType,
-	CoreType?: CoreType | null,
 	ConfigVersion: number,
 	Subid: string,
 	IsSub: boolean,

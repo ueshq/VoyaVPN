@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import type { ProfileItem_Deserialize, ProfileItem_Serialize } from "@/ipc/bindings";
 
-import { CONFIG_TYPES, CORE_TYPES, type ProfileProtocol } from "./profile-constants";
+import { CONFIG_TYPES, type ProfileProtocol } from "./profile-constants";
 
 const optionalText = z.string().optional();
 const optionalNullableText = z.string().nullable().optional();
@@ -57,7 +57,6 @@ const transportExtraSchema = z
 
 const commonProfileSchema = z.object({
   IndexId: optionalText,
-  CoreType: z.number().int().nullable().optional(),
   ConfigVersion: z.number().int().default(4),
   Subid: optionalText,
   IsSub: z.boolean().default(false),
@@ -101,7 +100,6 @@ export const profileFormSchema = z.discriminatedUnion("ConfigType", [
   commonProfileSchema.extend({
     Address: z.string().trim().min(1, "Config path or JSON source is required"),
     ConfigType: z.literal(CONFIG_TYPES.Custom),
-    CoreType: z.number().int().default(CORE_TYPES.singBox),
     Port: z.number().int().min(0).max(65535).default(0),
   }),
   serverProfileSchema.extend({ ConfigType: z.literal(CONFIG_TYPES.Shadowsocks) }),
@@ -139,7 +137,6 @@ export function normalizeProfileForForm(profile: ProfileItem_Deserialize | Profi
     ...createBaseProfile(configType),
     ...profile,
     ConfigType: configType,
-    CoreType: profile.CoreType ?? null,
     Port: Number(profile.Port ?? defaultPort(configType)),
     IsSub: profile.IsSub ?? false,
     DisplayLog: profile.DisplayLog ?? true,
@@ -181,7 +178,6 @@ export function prepareGroupDraftForPreview(
 function parsedProfileToIpcPayload(parsed: ParsedProfileFormValues): ProfileItem_Deserialize {
   return scrubEmptyStrings({
     ...parsed,
-    CoreType: parsed.CoreType ?? null,
     ConfigVersion: 4,
     Port: Number(parsed.Port ?? 0),
     ProtocolExtra: scrubEmptyStrings(parsed.ProtocolExtra ?? {}),
@@ -192,7 +188,6 @@ function parsedProfileToIpcPayload(parsed: ParsedProfileFormValues): ProfileItem
 function createBaseProfile(configType: ProfileProtocol): ProfileItem_Deserialize {
   return {
     ConfigType: configType,
-    CoreType: null,
     ConfigVersion: 4,
     Subid: "",
     IsSub: false,

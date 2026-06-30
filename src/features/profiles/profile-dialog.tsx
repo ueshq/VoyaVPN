@@ -42,7 +42,6 @@ import { GroupBuilder } from "@/features/groups";
 
 import {
   CONFIG_TYPES,
-  CORE_TYPE_OPTIONS,
   NETWORK_OPTIONS,
   PROFILE_PROTOCOLS,
   SECURITY_OPTIONS,
@@ -123,7 +122,7 @@ export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile }: P
         <form className="min-h-0 overflow-y-auto pe-1" id="profile-form" onSubmit={(event) => void submit(event)}>
           <div className="grid gap-4">
             <Panel title={t("panes.profiles.panels.profile")}>
-              <div className="grid gap-3 lg:grid-cols-[14rem_1fr_8rem]">
+              <div className="grid gap-3 lg:grid-cols-[14rem_1fr]">
                 <SelectField
                   control={form.control}
                   label={t("panes.profiles.fields.protocol")}
@@ -143,13 +142,6 @@ export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile }: P
                 />
 
                 <TextField error={errors.Remarks?.message} label={t("panes.profiles.fields.remarks")} {...register("Remarks")} />
-                <SelectField
-                  control={form.control}
-                  label={t("panes.profiles.fields.core")}
-                  name="CoreType"
-                  options={CORE_TYPE_OPTIONS}
-                  parseValue={(value) => (value === "" ? null : Number(value))}
-                />
               </div>
 
               <div className="grid gap-3 lg:grid-cols-[1fr_7rem_12rem]">

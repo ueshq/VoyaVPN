@@ -369,7 +369,7 @@ mod tests {
 
     use crate::{
         generate_singbox_config_value, AppConfig, CoreConfigContextBuilder, CoreGenEnv,
-        CoreGenPlatform, CoreType, DnsItem, FullConfigTemplateItem, InboundProtocol, MultipleLoad,
+        CoreGenPlatform, DnsItem, FullConfigTemplateItem, InboundProtocol, MultipleLoad,
         ProtocolExtraItem, RoutingItem, SubItem,
     };
 
@@ -443,18 +443,13 @@ mod tests {
         profiles: &[ProfileItem],
         validation: GroupValidationResult,
     ) -> GroupPreview {
-        let singbox = generated_value(profile, profiles, CoreType::sing_box);
+        let singbox = generated_value(profile, profiles);
 
         group_preview_from_values(validation, Some(&singbox))
     }
 
-    fn generated_value(
-        profile: &ProfileItem,
-        profiles: &[ProfileItem],
-        core_type: CoreType,
-    ) -> Value {
-        let mut node = profile.clone();
-        node.core_type = Some(core_type);
+    fn generated_value(profile: &ProfileItem, profiles: &[ProfileItem]) -> Value {
+        let node = profile.clone();
         let mut env_profiles = profiles.to_vec();
         if let Some(existing) = env_profiles
             .iter_mut()
@@ -466,7 +461,6 @@ mod tests {
         }
         let env = PreviewEnv {
             profiles: env_profiles,
-            core_type,
         };
         let config = AppConfig {
             index_id: node.index_id.clone(),
@@ -497,7 +491,6 @@ mod tests {
         ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::VLESS,
-            core_type: Some(CoreType::sing_box),
             remarks: remarks.to_string(),
             address: format!("{index_id}.example.test"),
             port: 443,
@@ -515,7 +508,6 @@ mod tests {
         ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::PolicyGroup,
-            core_type: Some(CoreType::sing_box),
             remarks: remarks.to_string(),
             address: "group".to_string(),
             protocol_extra: ProtocolExtraItem {
@@ -532,7 +524,6 @@ mod tests {
         ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::ProxyChain,
-            core_type: Some(CoreType::sing_box),
             remarks: remarks.to_string(),
             address: "chain".to_string(),
             protocol_extra: ProtocolExtraItem {
@@ -547,16 +538,11 @@ mod tests {
     #[derive(Debug, Clone)]
     struct PreviewEnv {
         profiles: Vec<ProfileItem>,
-        core_type: CoreType,
     }
 
     impl CoreGenEnv for PreviewEnv {
         fn platform(&self) -> CoreGenPlatform {
             CoreGenPlatform::Linux
-        }
-
-        fn get_core_type(&self, _profile: &ProfileItem, _config_type: ConfigType) -> CoreType {
-            self.core_type
         }
 
         fn get_profile_by_index_id(&self, index_id: &str) -> Option<ProfileItem> {
@@ -592,14 +578,11 @@ mod tests {
             None
         }
 
-        fn get_full_config_template_item(
-            &self,
-            _core_type: CoreType,
-        ) -> Option<FullConfigTemplateItem> {
+        fn get_full_config_template_item(&self) -> Option<FullConfigTemplateItem> {
             None
         }
 
-        fn get_dns_item(&self, _core_type: CoreType) -> Option<DnsItem> {
+        fn get_dns_item(&self) -> Option<DnsItem> {
             None
         }
 

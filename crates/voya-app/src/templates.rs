@@ -1,6 +1,6 @@
 use serde_json::Value;
 use thiserror::Error;
-use voya_core::{CoreType, FullConfigTemplateItem};
+use voya_core::FullConfigTemplateItem;
 use voya_db::{Database, DbError};
 
 #[derive(Debug, Error)]
@@ -24,7 +24,7 @@ impl<'db> FullConfigTemplateManager<'db> {
     }
 
     pub async fn load_templates(&self) -> Result<Vec<FullConfigTemplateItem>> {
-        let sing_box = self.ensure_template(CoreType::sing_box).await?;
+        let sing_box = self.ensure_template().await?;
 
         Ok(vec![sing_box])
     }
@@ -42,17 +42,12 @@ impl<'db> FullConfigTemplateManager<'db> {
         Ok(item)
     }
 
-    async fn ensure_template(&self, core_type: CoreType) -> Result<FullConfigTemplateItem> {
-        if let Some(item) = self
-            .database
-            .full_config_templates()
-            .get_by_core_type(core_type)
-            .await?
-        {
+    async fn ensure_template(&self) -> Result<FullConfigTemplateItem> {
+        if let Some(item) = self.database.full_config_templates().get_default().await? {
             return Ok(item);
         }
 
-        let item = default_template(core_type)?;
+        let item = default_template()?;
         self.database.full_config_templates().upsert(&item).await?;
 
         Ok(item)
@@ -60,7 +55,7 @@ impl<'db> FullConfigTemplateManager<'db> {
 }
 
 fn normalize_template(item: &mut FullConfigTemplateItem) -> Result<()> {
-    let defaults = default_template(item.core_type)?;
+    let defaults = default_template()?;
 
     item.id = item.id.trim().to_string();
     if item.id.is_empty() {
@@ -80,11 +75,10 @@ fn normalize_template(item: &mut FullConfigTemplateItem) -> Result<()> {
     Ok(())
 }
 
-fn default_template(core_type: CoreType) -> Result<FullConfigTemplateItem> {
+fn default_template() -> Result<FullConfigTemplateItem> {
     Ok(FullConfigTemplateItem {
         id: "full-template-sing-box".to_string(),
         remarks: "sing-box".to_string(),
-        core_type,
         ..FullConfigTemplateItem::default()
     })
 }
@@ -126,7 +120,7 @@ mod tests {
             .expect("template test operation should succeed");
 
         assert_eq!(templates.len(), 1);
-        assert_eq!(templates[0].core_type, CoreType::sing_box);
+        assert_eq!(templates[0].remarks, "sing-box");
         assert_eq!(
             database
                 .full_config_templates()
@@ -147,7 +141,6 @@ mod tests {
 
         let error = manager
             .save_template(FullConfigTemplateItem {
-                core_type: CoreType::sing_box,
                 config: Some("[]".to_string()),
                 ..FullConfigTemplateItem::default()
             })

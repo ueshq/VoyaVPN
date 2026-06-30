@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use thiserror::Error;
-use voya_core::{AppConfig, CoreType, DnsItem, PresetType, SimpleDnsDefaults, SimpleDnsItem};
+use voya_core::{AppConfig, DnsItem, PresetType, SimpleDnsDefaults, SimpleDnsItem};
 use voya_db::{Database, DbError};
 use voya_net::{
     PresetDnsTemplateClient, PresetDnsTemplateFetchOptions, RegionalPreset, RegionalPresetCatalog,
@@ -101,8 +101,8 @@ impl<'db> PresetManager<'db> {
         config.const_item.route_rules_template_source_url = None;
         config.simple_dns_item = SimpleDnsDefaults::builtin();
 
-        let mut singbox = self.current_dns_item(CoreType::sing_box).await?;
-        reset_dns_item(&mut singbox, CoreType::sing_box);
+        let mut singbox = self.current_dns_item().await?;
+        reset_dns_item(&mut singbox);
         self.database.dns().upsert(&singbox).await?;
 
         Ok(PresetApplyResult {
@@ -137,9 +137,8 @@ impl<'db> PresetManager<'db> {
             .fetch(&sources.dns_template_source_url, &fetch_options)
             .await;
 
-        let current_singbox = self.current_dns_item(CoreType::sing_box).await?;
+        let current_singbox = self.current_dns_item().await?;
         let (mut singbox, singbox_dns_fetched) = external_dns_item(
-            CoreType::sing_box,
             current_singbox,
             templates.singbox_template.as_deref(),
             &client,
@@ -173,18 +172,17 @@ impl<'db> PresetManager<'db> {
         })
     }
 
-    async fn current_dns_item(&self, core_type: CoreType) -> Result<DnsItem> {
+    async fn current_dns_item(&self) -> Result<DnsItem> {
         Ok(self
             .database
             .dns()
-            .get_by_core_type(core_type)
+            .get_default()
             .await?
-            .unwrap_or_else(|| default_dns_item(core_type)))
+            .unwrap_or_else(default_dns_item))
     }
 }
 
 async fn external_dns_item(
-    core_type: CoreType,
     current: DnsItem,
     template_content: Option<&str>,
     client: &PresetDnsTemplateClient,
@@ -203,7 +201,6 @@ async fn external_dns_item(
     template.id = current.id;
     template.enabled = current.enabled;
     template.remarks = current.remarks;
-    template.core_type = core_type;
 
     (template, true)
 }
@@ -234,21 +231,21 @@ where
         .flatten()
 }
 
-fn reset_dns_item(item: &mut DnsItem, core_type: CoreType) {
+fn reset_dns_item(item: &mut DnsItem) {
     let id = std::mem::take(&mut item.id);
     let remarks = if item.remarks.trim().is_empty() {
-        default_dns_item(core_type).remarks
+        default_dns_item().remarks
     } else {
         item.remarks.trim().to_string()
     };
 
-    *item = default_dns_item(core_type);
+    *item = default_dns_item();
     item.id = id;
     item.remarks = remarks;
 }
 
-fn default_dns_item(core_type: CoreType) -> DnsItem {
-    crate::dns::default_dns_item(core_type)
+fn default_dns_item() -> DnsItem {
+    crate::dns::default_dns_item()
 }
 
 fn is_http_url(value: &str) -> bool {
@@ -325,7 +322,7 @@ mod tests {
 
         let singbox = database
             .dns()
-            .get_by_core_type(CoreType::sing_box)
+            .get_default()
             .await
             .expect("preset manager test operation should succeed")
             .expect("preset manager test operation should succeed");
@@ -389,7 +386,7 @@ mod tests {
 
         let singbox = database
             .dns()
-            .get_by_core_type(CoreType::sing_box)
+            .get_default()
             .await
             .expect("preset manager test operation should succeed")
             .expect("preset manager test operation should succeed");

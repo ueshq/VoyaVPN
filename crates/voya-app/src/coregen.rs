@@ -1,28 +1,12 @@
 use std::collections::BTreeMap;
 
 use voya_core::{
-    AppConfig, ConfigType, CoreGenEnv, CoreGenPlatform, CoreType, DnsItem, FullConfigTemplateItem,
-    InboundProtocol, ProfileItem, RoutingItem, SubItem,
+    AppConfig, CoreGenEnv, CoreGenPlatform, DnsItem, FullConfigTemplateItem, InboundProtocol,
+    ProfileItem, RoutingItem, SubItem,
 };
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum CoreTypeFallback {
-    ConfigDefaults,
-    Fixed(CoreType),
-}
-
-impl CoreTypeFallback {
-    const fn resolve(self, config_type: ConfigType) -> CoreType {
-        match self {
-            Self::ConfigDefaults => default_core_type(config_type),
-            Self::Fixed(core_type) => core_type,
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub(crate) struct SnapshotCoreGenEnv {
-    core_type_items: Vec<(ConfigType, CoreType)>,
     local_socks_port: i32,
     platform: CoreGenPlatform,
     profiles: Vec<ProfileItem>,
@@ -31,7 +15,6 @@ pub(crate) struct SnapshotCoreGenEnv {
     full_config_templates: Vec<FullConfigTemplateItem>,
     subs: Vec<SubItem>,
     singbox_ruleset_paths: BTreeMap<String, String>,
-    fallback: CoreTypeFallback,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -47,15 +30,9 @@ impl SnapshotCoreGenEnv {
     pub(crate) fn new(
         config: &AppConfig,
         platform: CoreGenPlatform,
-        fallback: CoreTypeFallback,
         data: SnapshotCoreGenData,
     ) -> Self {
         Self {
-            core_type_items: config
-                .core_type_item
-                .iter()
-                .map(|item| (item.config_type, item.core_type))
-                .collect(),
             local_socks_port: config
                 .inbound
                 .first()
@@ -67,7 +44,6 @@ impl SnapshotCoreGenEnv {
             full_config_templates: data.full_config_templates,
             subs: data.subs,
             singbox_ruleset_paths: BTreeMap::new(),
-            fallback,
         }
     }
 
@@ -83,19 +59,6 @@ impl SnapshotCoreGenEnv {
 impl CoreGenEnv for SnapshotCoreGenEnv {
     fn platform(&self) -> CoreGenPlatform {
         self.platform
-    }
-
-    fn get_core_type(&self, profile: &ProfileItem, config_type: ConfigType) -> CoreType {
-        profile
-            .core_type
-            .or_else(|| {
-                self.core_type_items
-                    .iter()
-                    .find_map(|(candidate, core_type)| {
-                        (*candidate == config_type).then_some(*core_type)
-                    })
-            })
-            .unwrap_or_else(|| self.fallback.resolve(config_type))
     }
 
     fn get_profile_by_index_id(&self, index_id: &str) -> Option<ProfileItem> {
@@ -131,18 +94,12 @@ impl CoreGenEnv for SnapshotCoreGenEnv {
         self.subs.iter().find(|sub| sub.id == subid).cloned()
     }
 
-    fn get_full_config_template_item(&self, core_type: CoreType) -> Option<FullConfigTemplateItem> {
-        self.full_config_templates
-            .iter()
-            .find(|item| item.core_type == core_type)
-            .cloned()
+    fn get_full_config_template_item(&self) -> Option<FullConfigTemplateItem> {
+        self.full_config_templates.first().cloned()
     }
 
-    fn get_dns_item(&self, core_type: CoreType) -> Option<DnsItem> {
-        self.dns_items
-            .iter()
-            .find(|item| item.core_type == core_type)
-            .cloned()
+    fn get_dns_item(&self) -> Option<DnsItem> {
+        self.dns_items.first().cloned()
     }
 
     fn get_default_routing(&self, config: &AppConfig) -> Option<RoutingItem> {
@@ -169,8 +126,4 @@ impl CoreGenEnv for SnapshotCoreGenEnv {
     fn next_virtual_chain_id(&self, node: &ProfileItem, child_index_ids: &[String]) -> String {
         format!("inner-{}-{}", node.index_id, child_index_ids.join("-"))
     }
-}
-
-const fn default_core_type(_config_type: ConfigType) -> CoreType {
-    CoreType::sing_box
 }

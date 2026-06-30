@@ -739,7 +739,7 @@ mod tests {
         net::TcpListener,
         sync::Mutex,
     };
-    use voya_core::{CoreType, ProtocolExtraItem};
+    use voya_core::ProtocolExtraItem;
 
     use super::*;
 
@@ -1452,7 +1452,6 @@ mod tests {
         ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::VLESS,
-            core_type: Some(CoreType::sing_box),
             remarks: remarks.to_string(),
             address: "example.test".to_string(),
             port: 443,

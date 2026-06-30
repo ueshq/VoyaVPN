@@ -1121,19 +1121,11 @@ async fn select_test_items(
                 socks_port,
                 config_type: profile.config_type,
                 queue_num,
-                core_type: profile
-                    .core_type
-                    .or_else(|| configured_core_type(config, profile.config_type))
-                    .unwrap_or_else(|| default_core_type(profile.config_type)),
+                core_type: CoreType::sing_box,
                 profile,
             })
         })
         .collect()
-}
-
-const fn default_core_type(config_type: ConfigType) -> CoreType {
-    let _ = config_type;
-    CoreType::sing_box
 }
 
 fn group_prepared_items(
@@ -1417,14 +1409,6 @@ async fn persist_speedtest_result(database: &Database, result: &SpeedTestResult)
     }
 
     Ok(())
-}
-
-fn configured_core_type(config: &AppConfig, config_type: ConfigType) -> Option<CoreType> {
-    config
-        .core_type_item
-        .iter()
-        .find(|item| item.config_type == config_type)
-        .map(|item| item.core_type)
 }
 
 fn normalize_action(action: SpeedActionType) -> SpeedActionType {
@@ -2028,7 +2012,6 @@ mod tests {
         let profile = ProfileItem {
             index_id: index_id.to_string(),
             config_type: ConfigType::VMess,
-            core_type: Some(CoreType::sing_box),
             remarks: index_id.to_string(),
             address: "127.0.0.1".to_string(),
             port,

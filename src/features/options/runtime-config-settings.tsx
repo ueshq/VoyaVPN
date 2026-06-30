@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Braces, Save, Settings2 } from "lucide-react";
+import { Save, Settings2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,10 +13,9 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/i18n/use-i18n";
 import { loadAppConfig, saveAppConfig } from "@/ipc";
-import type { AppConfig_Serialize, CoreTypeItem, SysProxyType } from "@/ipc/bindings";
+import type { AppConfig_Serialize, SysProxyType } from "@/ipc/bindings";
 import { getErrorMessage } from "@/lib/utils";
 
 type ObjectSectionKey =
@@ -42,7 +41,6 @@ export function RuntimeConfigSettings() {
   const { t } = useI18n();
   const [config, setConfig] = useState<AppConfig_Serialize | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mappingText, setMappingText] = useState("[]");
   const [saved, setSaved] = useState(false);
   const [working, setWorking] = useState(true);
 
@@ -56,7 +54,6 @@ export function RuntimeConfigSettings() {
         }
         const normalized = withRuntimeDefaults(loaded);
         setConfig(normalized);
-        setMappingText(formatMapping(normalized.CoreTypeItem));
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -98,12 +95,8 @@ export function RuntimeConfigSettings() {
     setError(null);
     setSaved(false);
     try {
-      const savedConfig = await saveAppConfig({
-        ...config,
-        CoreTypeItem: parseMapping(mappingText),
-      });
+      const savedConfig = await saveAppConfig(config);
       setConfig(savedConfig);
-      setMappingText(formatMapping(savedConfig.CoreTypeItem));
       setSaved(true);
     } catch (error) {
       setError(getErrorMessage(error));
@@ -423,21 +416,6 @@ export function RuntimeConfigSettings() {
 
         <TabsContent value="mapping">
           <div className="grid gap-3">
-            <div className="grid gap-1">
-              <Label className="flex items-center gap-2 text-xs text-muted-foreground" htmlFor="core-type-mapping">
-                <Braces className="size-4" aria-hidden="true" />
-                CoreTypeItem
-              </Label>
-              <Textarea
-                className="min-h-44 resize-y bg-card font-mono text-xs"
-                id="core-type-mapping"
-                onChange={(event) => {
-                  setSaved(false);
-                  setMappingText(event.currentTarget.value);
-                }}
-                value={mappingText}
-              />
-            </div>
             <div className="grid gap-3 md:grid-cols-2">
               <TextField
                 label="Const.GeoSourceUrl"
@@ -564,42 +542,6 @@ function nullableText(value: string): string | null {
   return value.trim() ? value : null;
 }
 
-function formatMapping(value: CoreTypeItem[]): string {
-  return JSON.stringify(value ?? [], null, 2);
-}
-
-function parseMapping(value: string): CoreTypeItem[] {
-  const parsed = JSON.parse(value) as unknown;
-  if (!Array.isArray(parsed)) {
-    throw new Error("CoreTypeItem must be a JSON array.");
-  }
-
-  return parsed.map((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) {
-      throw new Error("CoreTypeItem entries must be JSON objects.");
-    }
-
-    const record = item as Record<string, unknown>;
-    return {
-      ConfigType: optionalInteger(record.ConfigType),
-      CoreType: optionalInteger(record.CoreType),
-    };
-  });
-}
-
-function optionalInteger(value: unknown): number | undefined {
-  if (value === null || value === undefined || value === "") {
-    return undefined;
-  }
-
-  const numberValue = Number(value);
-  if (!Number.isInteger(numberValue)) {
-    throw new Error("CoreTypeItem ConfigType/CoreType must be integers.");
-  }
-
-  return numberValue;
-}
-
 function withRuntimeDefaults(config: AppConfig_Serialize): AppConfig_Serialize {
   const loose = config as AppConfig_Serialize & Record<string, unknown>;
 
@@ -625,7 +567,6 @@ function withRuntimeDefaults(config: AppConfig_Serialize): AppConfig_Serialize {
       SendThrough: null,
       ...(loose.CoreBasicItem as Record<string, unknown> | undefined),
     },
-    CoreTypeItem: Array.isArray(loose.CoreTypeItem) ? (loose.CoreTypeItem as CoreTypeItem[]) : [],
     Fragment4RayItem: {
       ...(loose.Fragment4RayItem as Record<string, unknown> | undefined),
     },

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{ConfigType, CoreType, MultipleLoad, RuleType};
+use crate::{ConfigType, MultipleLoad, RuleType};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize, Type)]
 #[serde(default, rename_all = "PascalCase")]
@@ -90,8 +90,6 @@ pub struct TransportExtraItem {
 pub struct ProfileItem {
     pub index_id: String,
     pub config_type: ConfigType,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub core_type: Option<CoreType>,
     pub config_version: i32,
     pub subid: String,
     pub is_sub: bool,
@@ -128,7 +126,6 @@ impl Default for ProfileItem {
         Self {
             index_id: String::new(),
             config_type: ConfigType::VMess,
-            core_type: None,
             config_version: 4,
             subid: String::new(),
             is_sub: true,
@@ -346,13 +343,12 @@ impl Default for RulesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(default, rename_all = "PascalCase")]
 pub struct DnsItem {
     pub id: String,
     pub remarks: String,
     pub enabled: bool,
-    pub core_type: CoreType,
     pub use_system_hosts: bool,
     #[serde(rename = "NormalDNS", skip_serializing_if = "Option::is_none")]
     pub normal_dns: Option<String>,
@@ -362,22 +358,6 @@ pub struct DnsItem {
     pub domain_strategy4_freedom: Option<String>,
     #[serde(rename = "DomainDNSAddress", skip_serializing_if = "Option::is_none")]
     pub domain_dns_address: Option<String>,
-}
-
-impl Default for DnsItem {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            remarks: String::new(),
-            enabled: false,
-            core_type: CoreType::sing_box,
-            use_system_hosts: false,
-            normal_dns: None,
-            tun_dns: None,
-            domain_strategy4_freedom: None,
-            domain_dns_address: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Type)]
@@ -534,7 +514,6 @@ pub struct FullConfigTemplateItem {
     pub id: String,
     pub remarks: String,
     pub enabled: bool,
-    pub core_type: CoreType,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -551,7 +530,6 @@ impl Default for FullConfigTemplateItem {
             id: String::new(),
             remarks: String::new(),
             enabled: false,
-            core_type: CoreType::sing_box,
             config: None,
             tun_config: None,
             add_proxy_only: Some(false),
