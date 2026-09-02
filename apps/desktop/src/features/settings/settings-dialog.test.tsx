@@ -11,9 +11,12 @@ import { SettingsSurface } from "./settings-dialog";
 import { SettingsScreen } from "./settings-screen";
 
 const ipcMocks = vi.hoisted(() => ({
+  IpcCommandError: class MockIpcCommandError extends Error {},
   appUpdateStatus: vi.fn(),
   loadAppSettings: vi.fn(),
+  loadDnsSettings: vi.fn(),
   saveAppSettings: vi.fn(),
+  saveDnsSettings: vi.fn(),
   updateGeoAssets: vi.fn(),
   updateSrsAssets: vi.fn(),
 }));
@@ -33,7 +36,24 @@ describe("unified settings surface", () => {
     await changeLocale("en");
     ipcMocks.appUpdateStatus.mockResolvedValue({ currentVersion: "0.1.0", message: null, state: "ready" });
     ipcMocks.loadAppSettings.mockResolvedValue(makeAppSettings());
+    ipcMocks.loadDnsSettings.mockResolvedValue({
+      addCommonHosts: null,
+      blockBindingQuery: null,
+      bootstrap: null,
+      direct: null,
+      directExpectedIps: null,
+      directStrategy: null,
+      fakeIp: null,
+      globalFakeIp: null,
+      hosts: null,
+      parallelQuery: null,
+      proxyStrategy: null,
+      remote: null,
+      serveStale: null,
+      useSystemHosts: null,
+    });
     ipcMocks.saveAppSettings.mockImplementation(async (settings) => settings);
+    ipcMocks.saveDnsSettings.mockImplementation(async (settings) => settings);
     ipcMocks.updateGeoAssets.mockResolvedValue([]);
     ipcMocks.updateSrsAssets.mockResolvedValue([]);
     updaterMocks.check.mockResolvedValue(null);
@@ -82,6 +102,17 @@ describe("unified settings surface", () => {
         core: expect.objectContaining({ defaultUserAgent: "saved-agent" }),
       }),
     );
+  });
+
+  it("hosts the DNS pane as a settings tab with its own save action", async () => {
+    const user = userEvent.setup();
+    renderSurface();
+
+    await user.click(await screen.findByRole("tab", { name: "DNS" }));
+
+    expect(await screen.findByLabelText("Remote DNS")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "DNS" })).toBeInTheDocument();
+    expect(ipcMocks.loadDnsSettings).toHaveBeenCalledTimes(1);
   });
 
   it("renders the in-shell settings screen and navigates away freely while clean", async () => {

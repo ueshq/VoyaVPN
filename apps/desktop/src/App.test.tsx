@@ -400,7 +400,6 @@ describe("App", () => {
     expect(screen.getByRole("tab", { name: /Home/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Profiles/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Routing/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /DNS/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Proxy Groups/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Connections/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Logs/ })).toBeInTheDocument();

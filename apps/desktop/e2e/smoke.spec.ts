@@ -255,10 +255,12 @@ test("edits routing and DNS settings without network or OS side effects", async 
   await expect(page.getByText("Smoke direct rule")).toBeVisible();
   await expect(page.getByText("domain:example.test")).toBeVisible();
 
-  await page.getByRole("tab", { name: "DNS" }).click();
-  await expect(page.getByRole("heading", { exact: true, name: "DNS" })).toBeVisible();
-  await page.getByRole("checkbox", { exact: true, name: "FakeIP" }).check();
-  await page.getByLabel("Remote DNS").fill("https://dns.google/dns-query");
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByText("FakeIP").first()).toBeVisible();
+  await page.getByRole("tab", { name: "Settings" }).click();
+  const settings = page.getByRole("region", { name: "Settings" });
+  await settings.getByRole("tab", { name: "DNS" }).click();
+  await expect(settings.getByRole("heading", { exact: true, name: "DNS" })).toBeVisible();
+  await settings.getByRole("checkbox", { exact: true, name: "FakeIP" }).check();
+  await settings.getByLabel("Remote DNS").fill("https://dns.google/dns-query");
+  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(settings.getByText("FakeIP").first()).toBeVisible();
 });

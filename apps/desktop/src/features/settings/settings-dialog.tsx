@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Cpu, Gauge, Globe2, Network, RefreshCw, Settings2, type LucideIcon } from "lucide-react";
+import { Cpu, Database, Gauge, Globe2, Network, RefreshCw, Settings2, type LucideIcon } from "lucide-react";
 
 import { Button } from "@voya/ui/components/button";
 import { Tabs, TabsContent } from "@voya/ui/components/tabs";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
+import { DnsPane } from "@/features/dns/dns-pane";
 import { UpdatesPanel } from "@/features/updates";
 
 import { CoreTab } from "./core-tab";
@@ -18,13 +19,14 @@ import {
   type AppSettingsController,
 } from "./use-app-settings";
 
-export type SettingsTab = "core" | "general" | "network" | "sources" | "tests" | "updates";
+export type SettingsTab = "core" | "dns" | "general" | "network" | "sources" | "tests" | "updates";
 
 const tabDefs: Array<{ icon: LucideIcon; labelKey: TranslationKey; value: SettingsTab }> = [
   { icon: Settings2, labelKey: "settings.tabGeneral", value: "general" },
   { icon: Globe2, labelKey: "options.sources", value: "sources" },
   { icon: Cpu, labelKey: "options.runtimeCore", value: "core" },
   { icon: Network, labelKey: "options.runtimeNetwork", value: "network" },
+  { icon: Database, labelKey: "tabs.dns", value: "dns" },
   { icon: Gauge, labelKey: "settings.tabTests", value: "tests" },
   { icon: RefreshCw, labelKey: "settings.tabUpdates", value: "updates" },
 ];
@@ -117,6 +119,8 @@ function SettingsPane({
       return <CoreTab controller={controller} />;
     case "network":
       return <NetworkTab controller={controller} />;
+    case "dns":
+      return <DnsPane />;
     case "tests":
       return <TestsTab controller={controller} />;
     case "updates":

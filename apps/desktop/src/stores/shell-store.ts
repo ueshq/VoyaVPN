@@ -4,7 +4,6 @@ export type ShellTab =
   | "home"
   | "profiles"
   | "routing"
-  | "dns"
   | "proxy-groups"
   | "proxy-connections"
   | "logs"
@@ -13,7 +12,6 @@ export type ShellTab =
 export const shellTabRoutes = {
   "proxy-connections": "/proxy/connections",
   "proxy-groups": "/proxy/groups",
-  dns: "/dns",
   home: "/home",
   logs: "/logs",
   profiles: "/profiles",

@@ -10,12 +10,15 @@ const capability = JSON.parse(
 );
 
 describe("desktop window capabilities", () => {
-  it("lets the settings close listener finish Tauri's close lifecycle", () => {
-    expect(capability.windows).toContain("settings");
+  it("scopes the capability to the single main window with caption-button permissions", () => {
+    expect(capability.windows).toEqual(["main"]);
     expect(capability.permissions).toEqual(
       expect.arrayContaining([
+        "core:window:allow-minimize",
+        "core:window:allow-toggle-maximize",
         "core:window:allow-close",
         "core:window:allow-destroy",
+        "core:window:allow-start-dragging",
       ]),
     );
   });

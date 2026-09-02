@@ -26,9 +26,6 @@ const RoutingScreen = lazy(() =>
     default: RoutingScreen,
   })),
 );
-const DnsScreen = lazy(() =>
-  import("@/features/dns/dns-screen").then(({ DnsScreen }) => ({ default: DnsScreen })),
-);
 const ProxyGroupsScreen = lazy(() =>
   import("@/features/proxy/proxy-groups-screen").then(({ ProxyGroupsScreen }) => ({
     default: ProxyGroupsScreen,
@@ -60,8 +57,6 @@ function renderActiveScreen(tab: ShellTab) {
       return <ProfilesScreen />;
     case "routing":
       return <RoutingScreen />;
-    case "dns":
-      return <DnsScreen />;
     case "proxy-groups":
       return <ProxyGroupsScreen />;
     case "proxy-connections":
