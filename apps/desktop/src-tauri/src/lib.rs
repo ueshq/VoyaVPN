@@ -24,6 +24,9 @@ use voya_app::{
         SharedAppConfigSource, StatisticsEventSink, StatisticsManager,
         StatisticsSnapshot as AppStatisticsSnapshot,
     },
+    subscriptions::{
+        AutoUpdateOutcome, SubscriptionAutoUpdateScheduler, SubscriptionAutoUpdateSink,
+    },
     supervisor::{CoreSupervisor, NativeTunExitEvent, SupervisorDeps, SupervisorEventSink},
     sysproxy::SystemProxyManager,
 };
@@ -42,11 +45,12 @@ const TRAY_HIDE: &str = "tray-hide";
 const TRAY_QUIT: &str = "tray-quit";
 pub(crate) struct AppState {
     services: AppServices,
-    config_mutations: ConfigMutationCoordinator,
+    config_mutations: Arc<ConfigMutationCoordinator>,
     core_seed_resource_dir: Option<PathBuf>,
     elevation_manager: ElevationManager,
     supervisor: CoreSupervisor,
     statistics_manager: StatisticsManager,
+    subscription_auto_update: SubscriptionAutoUpdateScheduler,
     speedtest_manager: SpeedtestManager,
     system_proxy_manager: SystemProxyManager,
     proxy_monitor_controller: ProxyMonitorController,
@@ -83,6 +87,10 @@ impl AppState {
 
     pub(crate) fn statistics_manager(&self) -> &StatisticsManager {
         &self.statistics_manager
+    }
+
+    pub(crate) fn subscription_auto_update(&self) -> &SubscriptionAutoUpdateScheduler {
+        &self.subscription_auto_update
     }
 
     pub(crate) fn speedtest_manager(&self) -> SpeedtestManager {
@@ -159,7 +167,7 @@ pub fn run() {
                 }
             };
             let shared_config = Arc::new(RwLock::new(config.clone()));
-            let config_mutations = services.config_mutations(Arc::clone(&shared_config));
+            let config_mutations = Arc::new(services.config_mutations(Arc::clone(&shared_config)));
             tauri::async_runtime::block_on(services.initialize_profile_metrics())?;
             let core_seed_resource_dir = Some(core_seed_resources_dir(app.path().resource_dir()?));
             match (TargetOs::current(), core_seed_resource_dir.as_ref()) {
@@ -207,6 +215,15 @@ pub fn run() {
                     app: app.handle().clone(),
                 }),
             );
+            let subscription_auto_update = SubscriptionAutoUpdateScheduler::spawn(
+                services.database().clone(),
+                Arc::clone(&config_mutations),
+                supervisor.clone(),
+                TargetOs::current(),
+                Arc::new(TauriSubscriptionAutoUpdateSink {
+                    app: app.handle().clone(),
+                }),
+            );
             drop(runtime_guard);
             if !skip_persisted_proxy_apply {
                 if let Err(error) = system_proxy_manager.apply_config(&config, false) {
@@ -229,6 +246,7 @@ pub fn run() {
                 elevation_manager,
                 supervisor,
                 statistics_manager,
+                subscription_auto_update,
                 speedtest_manager,
                 system_proxy_manager,
                 proxy_monitor_controller: ProxyMonitorController::new(),
@@ -310,6 +328,72 @@ struct TauriProxyRuntimeEventSink {
 
 struct TauriSupervisorEventSink {
     app: tauri::AppHandle,
+}
+
+struct TauriSubscriptionAutoUpdateSink {
+    app: tauri::AppHandle,
+}
+
+impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
+    fn update_completed(&self, outcome: AutoUpdateOutcome) {
+        if let Some(error) = &outcome.error {
+            let message = format!(
+                "Automatic subscription update failed for {}: {error}",
+                outcome.remarks
+            );
+            if let Err(emit_error) =
+                ipc::commands::emit_runtime_log(&self.app, ipc::events::LogLevel::Warn, &message)
+            {
+                tracing::warn!(?emit_error, "failed to emit auto-update failure log");
+            }
+            // Only the first failure of a streak surfaces as a user notice;
+            // retries stay in the log until the subscription recovers.
+            if outcome.consecutive_failures == 1 {
+                let notice = ipc::events::AppEvent::Notice(voya_contracts::AppNotice {
+                    level: voya_contracts::AppNoticeLevel::Warning,
+                    title: format!("Subscription auto-update failed: {}", outcome.remarks),
+                    message: Some(error.clone()),
+                });
+                if let Err(emit_error) = notice.emit(&self.app) {
+                    tracing::warn!(?emit_error, "failed to emit auto-update failure notice");
+                }
+            }
+            return;
+        }
+
+        let imported = outcome.result.as_ref().map_or(0, |result| result.imported);
+        let message = format!(
+            "Automatic subscription update finished for {} ({imported} profiles imported)",
+            outcome.remarks
+        );
+        if let Err(emit_error) =
+            ipc::commands::emit_runtime_log(&self.app, ipc::events::LogLevel::Info, &message)
+        {
+            tracing::warn!(?emit_error, "failed to emit auto-update log");
+        }
+
+        let mut keys = vec![
+            vec!["subscriptions".to_string()],
+            vec!["subscription-metadata".to_string()],
+            vec!["profiles".to_string()],
+            vec!["profile-ex".to_string()],
+        ];
+        if outcome.config_changed {
+            keys.push(vec!["active-profile".to_string()]);
+        }
+        let event = ipc::events::InvalidateEvent {
+            keys: keys
+                .into_iter()
+                .map(|query_key| ipc::events::QueryInvalidation {
+                    query_key,
+                    reason: "subscription-auto-updated".to_string(),
+                })
+                .collect(),
+        };
+        if let Err(emit_error) = event.emit(&self.app) {
+            tracing::warn!(?emit_error, "failed to emit auto-update invalidation");
+        }
+    }
 }
 
 impl SupervisorEventSink for TauriSupervisorEventSink {
@@ -435,6 +519,11 @@ fn process_role_label(role: ProcessRole) -> &'static str {
 }
 
 fn shutdown_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    // Stop the auto-update scheduler before the runtime disconnects so no
+    // background subscription commit races the shutdown sequence.
+    if let Some(state) = app.try_state::<AppState>() {
+        state.subscription_auto_update().close();
+    }
     disconnect_runtime_for_exit(app);
     revoke_elevation_for_exit(app);
     restore_system_proxy_for_exit(app);

@@ -65,6 +65,11 @@ impl AppServices {
         ConfigMutationCoordinator::new(self.database.clone(), config)
     }
 
+    #[must_use]
+    pub fn database(&self) -> &Database {
+        &self.database
+    }
+
     pub fn config_from_settings(
         &self,
         settings: &AppSettingsV1,
