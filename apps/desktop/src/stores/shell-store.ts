@@ -6,14 +6,15 @@ export type ShellTab =
   | "routing"
   | "proxy-groups"
   | "proxy-connections"
-  | "logs"
   | "settings";
+
+/** Sub-view of the Connections page: the live connection table or the log tail. */
+export type ConnectionsView = "connections" | "logs";
 
 export const shellTabRoutes = {
   "proxy-connections": "/proxy/connections",
   "proxy-groups": "/proxy/groups",
   home: "/home",
-  logs: "/logs",
   profiles: "/profiles",
   routing: "/routing",
   settings: "/settings",
@@ -38,6 +39,9 @@ type ShellState = {
   /** Tab blocked by the navigation guard, awaiting the user's decision. */
   pendingTab: ShellTab | null;
   clearPendingTab: () => void;
+  /** Active sub-view of the Connections page; survives leaving the page. */
+  connectionsView: ConnectionsView;
+  setConnectionsView: (view: ConnectionsView) => void;
   /**
    * Per-section collapsed flags for the sidebar's grouped nav, keyed by an
    * arbitrary section id (`true` = collapsed). Absent keys are treated as
@@ -65,6 +69,8 @@ export const useShellStore = create<ShellState>((set) => ({
   setNavigationGuard: (navigationGuard) => set({ navigationGuard }),
   pendingTab: null,
   clearPendingTab: () => set({ pendingTab: null }),
+  connectionsView: "connections",
+  setConnectionsView: (connectionsView) => set({ connectionsView }),
   collapsedSections: {},
   toggleSection: (section) =>
     set((state) => ({

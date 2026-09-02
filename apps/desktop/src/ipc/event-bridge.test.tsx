@@ -29,6 +29,7 @@ const bridgeMocks = vi.hoisted(() => {
     pushTransientEvent: vi.fn(),
     refreshSpeedtestStatus: vi.fn(() => Promise.resolve()),
     requestTab: vi.fn(),
+    setConnectionsView: vi.fn(),
     transientStreamEventListen: listenFor("transientStreamEvent"),
   };
 });
@@ -52,7 +53,10 @@ vi.mock("@/ipc/runtime-event-store", () => ({
 
 vi.mock("@/stores/shell-store", () => ({
   useShellStore: {
-    getState: () => ({ requestTab: bridgeMocks.requestTab }),
+    getState: () => ({
+      requestTab: bridgeMocks.requestTab,
+      setConnectionsView: bridgeMocks.setConnectionsView,
+    }),
   },
 }));
 
@@ -142,5 +146,15 @@ describe("EventBridge", () => {
 
     expect(bridgeMocks.pushTransientEvent).toHaveBeenCalledWith(transient);
     expect(bridgeMocks.requestTab).toHaveBeenCalledWith("proxy-connections");
+    expect(bridgeMocks.setConnectionsView).toHaveBeenCalledWith("connections");
+
+    act(() => {
+      bridgeMocks.listeners.appEvent[0]?.({
+        payload: { kind: "selectTab", payload: "logs" },
+      });
+    });
+
+    expect(bridgeMocks.setConnectionsView).toHaveBeenLastCalledWith("logs");
+    expect(bridgeMocks.requestTab).toHaveBeenLastCalledWith("proxy-connections");
   });
 });

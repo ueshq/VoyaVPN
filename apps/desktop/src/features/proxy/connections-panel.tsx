@@ -3,7 +3,7 @@ import type * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { VisibilityState } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Activity, ArrowDown, ArrowUp, Columns3, Inbox, Plug, PlugZap, RefreshCw, RotateCcw, Search, Trash2, XCircle } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, Columns3, Inbox, PlugZap, RefreshCw, RotateCcw, Search, Trash2, XCircle } from "lucide-react";
 
 import {
   dataTableHeader,
@@ -13,7 +13,6 @@ import {
   dataTableRowSelected,
 } from "@/components/app-shell/data-table-surface";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
-import { PageHeader, PageHeaderHeading, PageSection } from "@/components/app-shell/page-section";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { EmptyState } from "@voya/ui/components/empty-state";
@@ -175,7 +174,7 @@ const emptySnapshot: ProxyConnectionsSnapshot = {
 };
 const proxyConnectionsQueryKey = ["proxy-connections"] as const;
 
-export function ProxyConnectionsScreen() {
+export function ConnectionsPanel() {
   const queryClient = useQueryClient();
   const { t } = useI18n();
   const monitorStatus = useRuntimeEventStore((state) => state.proxyMonitorStatus);
@@ -291,16 +290,16 @@ export function ProxyConnectionsScreen() {
   }
 
   return (
-    <PageSection aria-label={t("tabs.proxyConnections")}>
-      <PageHeader>
-        <PageHeaderHeading icon={Plug} title={t("tabs.proxyConnections")}>
-          <Badge className="gap-2 bg-background px-2 py-1 font-normal text-muted-foreground" variant="outline">
-            <Activity className="size-4 text-muted-foreground" aria-hidden="true" />
-            <span className="tabular-nums">{t("proxy.cumulativeUpload", { total: formatBytes(snapshot.uploadTotal) })}</span>
-            <span className="tabular-nums">{t("proxy.cumulativeDownload", { total: formatBytes(snapshot.downloadTotal) })}</span>
-          </Badge>
-          <ProxyMonitorStatusBadge className="max-w-[16rem]" status={monitorStatus} />
-        </PageHeaderHeading>
+    <div className="flex h-full min-h-0 flex-col">
+      {/* Toolbar row: the hosting Connections page owns the h1; this panel keeps
+          its cumulative totals, monitor badge, and table controls. */}
+      <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b bg-surface-raised px-4 py-2">
+        <Badge className="gap-2 bg-background px-2 py-1 font-normal text-muted-foreground" variant="outline">
+          <Activity className="size-4 text-muted-foreground" aria-hidden="true" />
+          <span className="tabular-nums">{t("proxy.cumulativeUpload", { total: formatBytes(snapshot.uploadTotal) })}</span>
+          <span className="tabular-nums">{t("proxy.cumulativeDownload", { total: formatBytes(snapshot.downloadTotal) })}</span>
+        </Badge>
+        <ProxyMonitorStatusBadge className="max-w-[16rem]" status={monitorStatus} />
         <div className="relative ms-auto w-64 max-w-[40vw]">
           <Search
             className="pointer-events-none absolute start-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -377,7 +376,7 @@ export function ProxyConnectionsScreen() {
         >
           <RefreshCw className={cn("size-4", connectionsQuery.isFetching && "animate-spin")} aria-hidden="true" />
         </Button>
-      </PageHeader>
+      </div>
 
       {connectionsQuery.error ? <InlinePageError>{getErrorMessage(connectionsQuery.error)}</InlinePageError> : null}
 
@@ -440,7 +439,7 @@ export function ProxyConnectionsScreen() {
           <EmptyState icon={Inbox} title={t("panes.proxyConnections.empty")} />
         )}
       </div>
-    </PageSection>
+    </div>
   );
 }
 

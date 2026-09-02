@@ -11,7 +11,7 @@ import type {
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
 import { getErrorMessage } from "@voya/utils/error";
-import { useShellStore } from "@/stores/shell-store";
+import { type ConnectionsView, type ShellTab, useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
 
 type Unlisten = () => void;
@@ -140,22 +140,29 @@ function routeAppEvent(event: AppEvent) {
         title: event.payload.title,
       });
       return;
-    case "selectTab":
-      useShellStore.getState().requestTab(toShellTab(event.payload));
+    case "selectTab": {
+      const target = toShellTarget(event.payload);
+      // Set the sub-view before navigating so a blocked navigation (settings
+      // leave guard) still lands on the right sub-tab once it resolves.
+      if (target.view) {
+        useShellStore.getState().setConnectionsView(target.view);
+      }
+      useShellStore.getState().requestTab(target.tab);
       return;
+    }
   }
 }
 
-function toShellTab(tab: ShellTabTarget) {
+function toShellTarget(tab: ShellTabTarget): { tab: ShellTab; view?: ConnectionsView } {
   switch (tab) {
     case "profiles":
-      return "profiles";
+      return { tab: "profiles" };
     case "proxyGroups":
-      return "proxy-groups";
+      return { tab: "proxy-groups" };
     case "proxyConnections":
-      return "proxy-connections";
+      return { tab: "proxy-connections", view: "connections" };
     case "logs":
-      return "logs";
+      return { tab: "proxy-connections", view: "logs" };
   }
 }
 

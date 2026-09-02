@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProxyConnectionItem, ProxyConnectionsSnapshot } from "@/ipc/bindings";
 import { useConnectionColumnsStore } from "@/stores/connection-columns-store";
 
-import { ProxyConnectionsScreen } from "./proxy-connections-screen";
+import { ConnectionsPanel } from "./connections-panel";
 
 const ipcMocks = vi.hoisted(() => {
   const state = {
@@ -51,7 +51,7 @@ function renderConnections() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <ProxyConnectionsScreen />
+      <ConnectionsPanel />
     </QueryClientProvider>,
   );
 }
@@ -61,7 +61,7 @@ afterEach(() => {
   queryClients.clear();
 });
 
-describe("ProxyConnectionsScreen", () => {
+describe("ConnectionsPanel", () => {
   beforeEach(() => {
     ipcMocks.proxyCloseConnection.mockReset().mockResolvedValue({
       connections: [],

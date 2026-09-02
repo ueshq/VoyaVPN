@@ -1,4 +1,4 @@
-import { Home, Network, Plug, Route, ScrollText, Settings, Shield } from "lucide-react";
+import { Home, Network, Plug, Route, Settings, Shield } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { BrandMark } from "@/assets/brand-mark";
@@ -27,7 +27,6 @@ const networkNav: NavItem[] = [
   { icon: Route, titleKey: "tabs.routing", value: "routing" },
   { icon: Network, titleKey: "tabs.proxyGroups", value: "proxy-groups" },
   { icon: Plug, titleKey: "tabs.proxyConnections", value: "proxy-connections" },
-  { icon: ScrollText, titleKey: "tabs.logs", value: "logs" },
 ];
 
 export function AppSidebar() {

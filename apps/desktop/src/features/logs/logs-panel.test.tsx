@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LogLevel, LogLineEvent } from "@/ipc/bindings";
 
-import { LogsScreen } from "./logs-screen";
+import { LogsPanel } from "./logs-panel";
 
 type LogsState = { clearLogs: () => void; logLines: LogLineEvent[] };
 
@@ -29,9 +29,9 @@ beforeEach(() => {
   storeMock.state.logLines = [];
 });
 
-describe("LogsScreen", () => {
+describe("LogsPanel", () => {
   it("shows the empty state when there are no log lines", () => {
-    render(<LogsScreen />);
+    render(<LogsPanel />);
 
     expect(screen.getByText("No log lines")).toBeInTheDocument();
     expect(screen.queryAllByTestId("log-line")).toHaveLength(0);
@@ -44,7 +44,7 @@ describe("LogsScreen", () => {
       line(3, "error", "tunnel closed"),
     ];
 
-    render(<LogsScreen />);
+    render(<LogsPanel />);
 
     const rows = screen.getAllByTestId("log-line");
     expect(rows).toHaveLength(3);
@@ -59,7 +59,7 @@ describe("LogsScreen", () => {
     const user = userEvent.setup();
     storeMock.state.logLines = [line(1, "info", "core started"), line(2, "info", "dns query resolved")];
 
-    render(<LogsScreen />);
+    render(<LogsPanel />);
 
     await user.type(screen.getByRole("searchbox", { name: "Filter log lines" }), "dns");
 
@@ -71,7 +71,7 @@ describe("LogsScreen", () => {
     const user = userEvent.setup();
     storeMock.state.logLines = [line(1, "info", "core started"), line(2, "error", "tunnel closed")];
 
-    render(<LogsScreen />);
+    render(<LogsPanel />);
 
     await user.click(screen.getByRole("button", { name: "Toggle error logs" }));
 
@@ -83,7 +83,7 @@ describe("LogsScreen", () => {
     const user = userEvent.setup();
     storeMock.state.logLines = [line(1, "info", "core started")];
 
-    render(<LogsScreen />);
+    render(<LogsPanel />);
 
     await user.type(screen.getByRole("searchbox", { name: "Filter log lines" }), "zzzz");
 
@@ -95,7 +95,7 @@ describe("LogsScreen", () => {
     const user = userEvent.setup();
     storeMock.state.logLines = [line(1, "info", "core started")];
 
-    render(<LogsScreen />);
+    render(<LogsPanel />);
 
     await user.click(screen.getByRole("button", { name: "Clear" }));
 

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownToLine, ScrollText, Search, Trash2 } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
-import { PageHeader, PageHeaderHeading, PageSection } from "@/components/app-shell/page-section";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { EmptyState } from "@voya/ui/components/empty-state";
@@ -21,7 +20,7 @@ const ROW_HEIGHT = 28;
 // momentum or sub-pixel rounding does not break the follow-tail behaviour.
 const STICK_THRESHOLD = 24;
 
-export function LogsScreen() {
+export function LogsPanel() {
   const { t } = useI18n();
   const clearLogs = useRuntimeEventStore((state) => state.clearLogs);
   const logLines = useRuntimeEventStore((state) => state.logLines);
@@ -123,20 +122,22 @@ export function LogsScreen() {
           start: index * ROW_HEIGHT,
         }));
 
+  const countLabel = hasLogs
+    ? isFiltered
+      ? `${filtered.length.toLocaleString()} / ${logLines.length.toLocaleString()}`
+      : logLines.length.toLocaleString()
+    : null;
+
   return (
-    <PageSection aria-label={t("tabs.logs")}>
-      <PageHeader>
-        <PageHeaderHeading
-          count={
-            hasLogs
-              ? isFiltered
-                ? `${filtered.length.toLocaleString()} / ${logLines.length.toLocaleString()}`
-                : logLines.length.toLocaleString()
-              : undefined
-          }
-          icon={ScrollText}
-          title={t("tabs.logs")}
-        />
+    <section aria-label={t("tabs.logs")} className="flex h-full min-h-0 flex-col">
+      {/* Toolbar row: the hosting Connections page owns the h1; this panel keeps
+          only its count badge and controls, styled like a PageHeader strip. */}
+      <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b bg-surface-raised px-4 py-2">
+        {countLabel == null ? null : (
+          <Badge className="h-6 bg-background tabular-nums text-muted-foreground" variant="outline">
+            {countLabel}
+          </Badge>
+        )}
 
         <div className="relative ms-auto min-w-[12rem] flex-1 sm:flex-none">
           <Search
@@ -181,7 +182,7 @@ export function LogsScreen() {
           <Trash2 className="size-4" aria-hidden="true" />
           {t("actions.clear")}
         </Button>
-      </PageHeader>
+      </div>
 
       {!hasLogs ? (
         <EmptyState className="min-h-0 flex-1 content-center" icon={ScrollText} title={t("panes.logs.empty")} />
@@ -247,7 +248,7 @@ export function LogsScreen() {
           ) : null}
         </div>
       )}
-    </PageSection>
+    </section>
   );
 }
 

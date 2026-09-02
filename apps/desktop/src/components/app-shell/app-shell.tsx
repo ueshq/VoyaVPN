@@ -31,13 +31,10 @@ const ProxyGroupsScreen = lazy(() =>
     default: ProxyGroupsScreen,
   })),
 );
-const ProxyConnectionsScreen = lazy(() =>
-  import("@/features/proxy/proxy-connections-screen").then(({ ProxyConnectionsScreen }) => ({
-    default: ProxyConnectionsScreen,
+const ConnectionsScreen = lazy(() =>
+  import("@/features/proxy/connections-screen").then(({ ConnectionsScreen }) => ({
+    default: ConnectionsScreen,
   })),
-);
-const LogsScreen = lazy(() =>
-  import("@/features/logs/logs-screen").then(({ LogsScreen }) => ({ default: LogsScreen })),
 );
 const SettingsScreen = lazy(() =>
   import("@/features/settings/settings-screen").then(({ SettingsScreen }) => ({
@@ -60,9 +57,7 @@ function renderActiveScreen(tab: ShellTab) {
     case "proxy-groups":
       return <ProxyGroupsScreen />;
     case "proxy-connections":
-      return <ProxyConnectionsScreen />;
-    case "logs":
-      return <LogsScreen />;
+      return <ConnectionsScreen />;
     case "settings":
       return <SettingsScreen />;
     default:

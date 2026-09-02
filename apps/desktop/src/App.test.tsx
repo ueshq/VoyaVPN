@@ -365,7 +365,12 @@ describe("App", () => {
     vi.useRealTimers();
     resetTestDom();
     runtimeStoreMock.reset();
-    useShellStore.setState({ activeTab: "profiles" });
+    useShellStore.setState({
+      activeTab: "profiles",
+      connectionsView: "connections",
+      navigationGuard: null,
+      pendingTab: null,
+    });
     useToastStore.setState({ toasts: [] });
     usePreferencesStore.setState({ themeMode: "system" });
     window.history.replaceState({}, "", "/");
@@ -402,7 +407,6 @@ describe("App", () => {
     expect(screen.getByRole("tab", { name: /Routing/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Proxy Groups/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Connections/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Logs/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Settings/ })).toBeInTheDocument();
     expect(statusBar).toHaveTextContent("Disconnected");
     expect(statusBar).toHaveTextContent("Route: /profiles");
@@ -452,7 +456,7 @@ describe("App", () => {
   });
 
   it("shows Connections immediately and defers monitor plus query work", async () => {
-    await import("@/features/proxy/proxy-connections-screen");
+    await import("@/features/proxy/connections-screen");
     vi.useFakeTimers();
     (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
 
@@ -537,6 +541,33 @@ describe("App", () => {
       stale: false,
       state: "running",
     });
+  });
+
+  it("keeps the proxy monitor running while viewing the logs sub-tab", async () => {
+    vi.useFakeTimers();
+    (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
+
+    renderApp();
+
+    await activateTab(/Connections/);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(proxyStartMonitor).toHaveBeenCalledTimes(1);
+
+    const page = screen.getByRole("region", { name: "Connections" });
+    const logsTab = within(page).getByRole("tab", { name: "Logs" });
+    await act(async () => {
+      fireEvent.mouseDown(logsTab);
+      fireEvent.click(logsTab);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("No log lines")).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(proxyStopMonitor).not.toHaveBeenCalled();
   });
 
   it("marks cached proxy monitor data failed and shows a toast when start fails", async () => {
@@ -634,7 +665,7 @@ describe("App", () => {
 
     renderApp();
 
-    await user.click(screen.getByRole("tab", { name: /Connections/ }));
+    await user.click(mainNavTab(/Connections/));
     await waitFor(() => expect(screen.getByText("alpha.example:443")).toBeInTheDocument());
 
     expect(screen.getByRole("status", { name: `Failed: ${message}` })).toBeInTheDocument();
@@ -660,7 +691,7 @@ describe("App", () => {
 
     renderApp();
 
-    await user.click(screen.getByRole("tab", { name: /Connections/ }));
+    await user.click(mainNavTab(/Connections/));
     await waitFor(() => expect(screen.getByText("alpha.example:443")).toBeInTheDocument());
 
     await user.click(screen.getByText("alpha.example:443"));
@@ -697,7 +728,7 @@ describe("App", () => {
 
     renderApp();
 
-    await user.click(screen.getByRole("tab", { name: /Connections/ }));
+    await user.click(mainNavTab(/Connections/));
     await waitFor(() => expect(proxyListConnections).toHaveBeenCalledTimes(1));
     expect(screen.getByText("cached.example:443")).toBeInTheDocument();
 
@@ -741,7 +772,7 @@ describe("App", () => {
 
     renderApp();
 
-    await user.click(screen.getByRole("tab", { name: /Connections/ }));
+    await user.click(mainNavTab(/Connections/));
     await waitFor(() => expect(screen.getByText("alpha.example:443")).toBeInTheDocument());
 
     await user.click(screen.getByText("alpha.example:443"));
@@ -784,7 +815,7 @@ describe("App", () => {
 
     renderApp();
 
-    await user.click(screen.getByRole("tab", { name: /Connections/ }));
+    await user.click(mainNavTab(/Connections/));
 
     await waitFor(() => expect(screen.getByText("bulk-0.example:443")).toBeInTheDocument());
     expect(screen.queryAllByText(/bulk-\d+\.example:443/).length).toBeLessThan(80);
@@ -798,9 +829,13 @@ describe("App", () => {
   });
 });
 
+function mainNavTab(name: RegExp) {
+  return within(screen.getByRole("tablist", { name: "Main sections" })).getByRole("tab", { name });
+}
+
 async function activateTab(name: RegExp) {
   await act(async () => {
-    fireEvent.click(screen.getByRole("tab", { name }));
+    fireEvent.click(mainNavTab(name));
     await Promise.resolve();
   });
 }

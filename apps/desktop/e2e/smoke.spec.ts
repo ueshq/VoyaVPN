@@ -214,6 +214,12 @@ test("uses the proxy groups and connections routes through the proxy runtime IPC
   await page.getByRole("button", { exact: true, name: "Close" }).click();
   await expect(page.getByText("No connections", { exact: true })).toBeVisible();
 
+  const connectionsPage = page.getByRole("region", { name: "Connections" });
+  await connectionsPage.getByRole("tab", { name: "Logs" }).click();
+  await expect(page.getByText("No log lines", { exact: true })).toBeVisible();
+  await connectionsPage.getByRole("tab", { name: "Connections" }).click();
+  await expect(page.getByText("No connections", { exact: true })).toBeVisible();
+
   const commands = await page.evaluate(() => {
     const state = window.__VOYA_SMOKE__.state as {
       calls: Array<{ command: string }>;
