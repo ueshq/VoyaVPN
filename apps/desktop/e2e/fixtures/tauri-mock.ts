@@ -125,8 +125,6 @@ export async function installTauriSmokeMock(page: Page) {
         case "plugin:updater|download_and_install":
         case "plugin:process|restart":
           return Promise.resolve(null);
-        case "open_settings_window":
-          return Promise.resolve(null);
         case "load_ui_preferences":
           return Promise.resolve(clone(state.settings.appearance));
         case "load_app_settings":
@@ -433,7 +431,7 @@ export async function installTauriSmokeMock(page: Page) {
       invoke,
       metadata: {
         currentWindow: {
-          label: window.location.search.includes("window=settings") ? "settings" : "main",
+          label: "main",
         },
       },
       transformCallback(callback: Callback) {

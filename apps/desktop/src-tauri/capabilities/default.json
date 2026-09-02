@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default desktop permissions for the VoyaVPN app windows.",
-  "windows": ["main", "settings"],
+  "windows": ["main"],
   "permissions": [
     "core:default",
     "dialog:default",

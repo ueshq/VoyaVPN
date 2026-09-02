@@ -15,24 +15,6 @@
         "windowEffects": {
           "effects": ["acrylic"]
         }
-      },
-      {
-        "label": "settings",
-        "create": false,
-        "url": "index.html?window=settings",
-        "title": "VoyaVPN Settings",
-        "width": 900,
-        "height": 700,
-        "minWidth": 760,
-        "minHeight": 600,
-        "center": true,
-        "resizable": true,
-        "decorations": false,
-        "transparent": true,
-        "shadow": true,
-        "windowEffects": {
-          "effects": ["acrylic"]
-        }
       }
     ]
   }

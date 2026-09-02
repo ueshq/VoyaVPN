@@ -70,7 +70,6 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::update_srs_assets,
         commands::install_core_seed,
         window::get_window_chrome_config,
-        window::open_settings_window::<tauri::Wry>,
         window::set_window_acrylic,
     ]
 }

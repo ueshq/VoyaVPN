@@ -11,7 +11,6 @@ use tauri::{
     Manager, RunEvent,
 };
 use tauri_specta::Event;
-use tokio::sync::Mutex as AsyncMutex;
 use voya_app::{
     config_mutation::ConfigMutationCoordinator,
     elevation::ElevationManager,
@@ -51,7 +50,6 @@ pub(crate) struct AppState {
     speedtest_manager: SpeedtestManager,
     system_proxy_manager: SystemProxyManager,
     proxy_monitor_controller: ProxyMonitorController,
-    settings_window_lock: AsyncMutex<()>,
 }
 
 impl AppState {
@@ -97,10 +95,6 @@ impl AppState {
 
     pub(crate) fn proxy_monitor_controller(&self) -> ProxyMonitorController {
         self.proxy_monitor_controller.clone()
-    }
-
-    pub(crate) fn settings_window_lock(&self) -> &AsyncMutex<()> {
-        &self.settings_window_lock
     }
 }
 
@@ -238,7 +232,6 @@ pub fn run() {
                 speedtest_manager,
                 system_proxy_manager,
                 proxy_monitor_controller: ProxyMonitorController::new(),
-                settings_window_lock: AsyncMutex::new(()),
             });
 
             specta_builder.mount_events(app);

@@ -85,12 +85,6 @@ export const commands = {
 	 */
 	getWindowChromeConfig: () => typedError<WindowChromeConfig, AppError>(__TAURI_INVOKE("get_window_chrome_config")),
 	/**
-	 *  Open the settings window from its fixed Tauri configuration template.
-	 *  Serializing creation avoids a check-then-create race when the user invokes
-	 *  the command more than once before the first webview has finished building.
-	 */
-	openSettingsWindow: () => typedError<null, AppError>(__TAURI_INVOKE("open_settings_window")),
-	/**
 	 *  Tint the Windows Acrylic blur material to match the in-app light/dark theme.
 	 *  The frontend drives its own (non-system) theme, so this command sets the tint
 	 *  explicitly per mode to keep the native material's base color aligned with the

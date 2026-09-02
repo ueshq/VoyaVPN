@@ -18,18 +18,6 @@
         "height": 760,
         "minWidth": 960,
         "minHeight": 640
-      },
-      {
-        "label": "settings",
-        "create": false,
-        "url": "index.html?window=settings",
-        "title": "VoyaVPN Settings",
-        "width": 900,
-        "height": 700,
-        "minWidth": 760,
-        "minHeight": 600,
-        "center": true,
-        "resizable": true
       }
     ],
     "security": {
