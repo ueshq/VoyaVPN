@@ -222,8 +222,10 @@ vi.mock("@/ipc", () => ({
       useSystemHosts: null,
     }),
   ),
+  listProcessCandidates: vi.fn(() => Promise.resolve([])),
   listRoutings: vi.fn(() => Promise.resolve([])),
   listProfiles: vi.fn(() => Promise.resolve([])),
+  listSubscriptionMetadata: vi.fn(() => Promise.resolve([])),
   listSubscriptions: vi.fn(() => Promise.resolve([])),
   loadAppSettings: vi.fn(() => new Promise(() => undefined)),
   loadUiPreferences: vi.fn(() => Promise.resolve({ language: "en", theme: "system" })),
@@ -266,42 +268,16 @@ vi.mock("@/ipc", () => ({
       platform: "linux",
     }),
   ),
-  setSystemProxyMode: vi.fn(() =>
+  setConnectionMode: vi.fn(() =>
     Promise.resolve({
-      effectiveMode: "forcedClear",
-      exceptions: "",
+      mode: "proxyOnly",
       pacAvailable: false,
-      pacUrl: null,
-      proxy: null,
-      requestedMode: "forcedClear",
+      pacEnabled: false,
+      processRulesEffective: false,
+      vpnAvailable: true,
     }),
   ),
   setWindowAcrylic: vi.fn(() => Promise.resolve(null)),
-  setTunEnabled: vi.fn(() =>
-    Promise.resolve({
-      allowEnableTun: true,
-      backend: "process",
-      enabled: false,
-      elevationGranted: false,
-      lastProviderError: null,
-      nativeComponentReady: true,
-      needsServiceInstall: false,
-      needsVpnPermission: false,
-      preflight: {
-        notes: [],
-        platform: "linux",
-        routeRestoreNote: "",
-        state: "ready",
-        windowsCleanupDevices: [],
-      },
-      expectedProviderPath: null,
-      providerPathMismatch: false,
-      providerState: "notApplicable",
-      requiresElevation: false,
-      resolvedProviderPath: null,
-      restoreOnDisconnect: true,
-    }),
-  ),
   speedtestStatus: vi.fn(() => Promise.resolve({ running: false })),
   sortProfiles: vi.fn(),
   tunRequestElevation: vi.fn(),
@@ -422,7 +398,7 @@ describe("App", () => {
     const hero = await screen.findByRole("region", { name: "Connection home" });
     // The app name is the Home page's h1 (the sidebar brand is a plain label).
     expect(within(hero).getByRole("heading", { level: 1, name: "VoyaVPN" })).toBeInTheDocument();
-    expect(within(hero).getByRole("switch", { name: "Connect" })).toBeInTheDocument();
+    expect(within(hero).getByRole("button", { name: "Connect" })).toBeInTheDocument();
     expect(within(hero).getByText("Not protected")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-footer")).toHaveTextContent("Disconnected");
   });
@@ -648,7 +624,7 @@ describe("App", () => {
     expect(within(proxies).getByRole("button", { name: "Global" })).toBeInTheDocument();
     expect(within(proxies).getByRole("button", { name: "Direct" })).toBeInTheDocument();
     expect(within(proxies).getByRole("button", { name: "Reload core configuration" })).toBeInTheDocument();
-    expect(within(proxies).getByRole("button", { name: "Running proxy group delay test" })).toBeInTheDocument();
+    expect(within(proxies).getByRole("button", { name: "Test all" })).toBeInTheDocument();
     expect(within(proxies).getByRole("button", { name: "Refresh runtime state" })).toBeInTheDocument();
   });
 

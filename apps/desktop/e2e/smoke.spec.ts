@@ -187,16 +187,18 @@ test("adds and imports profiles, activates one, and connects through the fake ru
   await shareQrDialog.getByRole("button", { name: "Close" }).first().click();
 
   await page.getByRole("tab", { name: "Home" }).click();
+  await expect(page.getByTestId("home-subscription-card")).toBeVisible();
+  await expect(page.getByTestId("home-mode-switcher")).toBeVisible();
   const importedNode = page.getByRole("option", { name: /Smoke Imported VLESS/ });
   await importedNode.dblclick();
   await expect(importedNode).toHaveAttribute("aria-selected", "true");
-  const connectSwitch = page.getByRole("switch", { name: "Connect" });
-  await expect(connectSwitch).toBeChecked();
+  const connectButton = page.getByTestId("home-connect-button");
+  await expect(connectButton).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByTestId("home-status-card")).toContainText("PID 4242");
   await expect(page.getByTestId("sidebar-footer")).toContainText("Connected");
 
-  await connectSwitch.click();
-  await expect(connectSwitch).not.toBeChecked();
+  await connectButton.click();
+  await expect(connectButton).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByTestId("sidebar-footer")).toContainText("Disconnected");
 });
 

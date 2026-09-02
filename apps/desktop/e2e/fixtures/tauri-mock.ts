@@ -98,6 +98,22 @@ export async function installTauriSmokeMock(page: Page) {
       },
     };
 
+    function connectionModeStatus() {
+      const mode = state.tun.enabled
+        ? "vpn"
+        : ["forcedChange", "pac"].includes(state.sysProxy.requestedMode)
+          ? "systemProxy"
+          : "proxyOnly";
+
+      return {
+        mode,
+        pacAvailable: state.sysProxy.pacAvailable,
+        pacEnabled: state.sysProxy.requestedMode === "pac",
+        processRulesEffective: mode === "vpn",
+        vpnAvailable: true,
+      };
+    }
+
     function invoke(command: string, args: CommandArgs = {}) {
       state.calls.push({ command, args });
 
@@ -177,6 +193,25 @@ export async function installTauriSmokeMock(page: Page) {
         case "set_tun_enabled":
           state.tun = { ...state.tun, enabled: Boolean(args.enabled) };
           return Promise.resolve(clone(state.tun));
+        case "connection_mode_status":
+          return Promise.resolve(connectionModeStatus());
+        case "set_connection_mode": {
+          const mode = String(args.mode ?? "proxyOnly");
+          const pacEnabled = args.pacEnabled === true;
+          if (mode === "vpn") {
+            state.tun = { ...state.tun, enabled: true };
+          } else {
+            state.tun = { ...state.tun, enabled: false };
+            const requestedMode =
+              mode === "systemProxy" ? (pacEnabled ? "pac" : "forcedChange") : "forcedClear";
+            state.sysProxy = {
+              ...state.sysProxy,
+              effectiveMode: requestedMode,
+              requestedMode,
+            };
+          }
+          return Promise.resolve(connectionModeStatus());
+        }
         case "list_profiles":
           return Promise.resolve(filterProfiles(state.profiles, args.filter));
         case "save_profile": {
@@ -234,9 +269,14 @@ export async function installTauriSmokeMock(page: Page) {
           });
         case "list_subscriptions":
           return Promise.resolve([]);
+        case "list_subscription_metadata":
+          return Promise.resolve([]);
+        case "list_process_candidates":
+          return Promise.resolve([]);
         case "save_subscription":
           return Promise.resolve({
             additionalUrl: "",
+            autoUpdateIntervalMinutes: null,
             converterTarget: null,
             enabled: true,
             filter: null,

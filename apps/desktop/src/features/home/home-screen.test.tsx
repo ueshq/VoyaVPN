@@ -4,16 +4,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  ConnectionModeStatus,
   CoreStateEvent,
   ProfileListEntry,
   RuntimeStatusResponse,
+  StatisticsSnapshot,
   SysProxyChanged,
   SystemProxyStatusResponse,
   TunChanged,
   TunStatus,
 } from "@/ipc/bindings";
-import { changeLocale } from "@voya/i18n";
-import { makeAppSettings } from "@/features/settings/app-settings.test-fixture";
 import { useToastStore } from "@/stores/toast-store";
 import { makeProfileFixture } from "@/test/profile-fixture";
 
@@ -22,6 +22,7 @@ import { HomeScreen } from "./home-screen";
 type RuntimeState = {
   coreState: CoreStateEvent | null;
   setCoreState: (state: CoreStateEvent) => void;
+  statistics: StatisticsSnapshot | null;
   sysProxy: SysProxyChanged | null;
   setSysProxy: (state: SysProxyChanged) => void;
   tun: TunChanged | null;
@@ -32,6 +33,7 @@ const runtimeMock = vi.hoisted(() => {
   const state: RuntimeState = {
     coreState: null,
     setCoreState: vi.fn(),
+    statistics: null,
     sysProxy: null,
     setSysProxy: vi.fn(),
     tun: null,
@@ -45,24 +47,22 @@ const runtimeMock = vi.hoisted(() => {
   return { state, useRuntimeEventStore };
 });
 
-const versionMock = vi.hoisted(() => ({
-  getVersion: vi.fn(() => Promise.resolve("0.1.0")),
-}));
-
 const ipcMock = vi.hoisted(() => ({
   connectActiveProfile: vi.fn(),
+  deleteSubscriptions: vi.fn(),
   disconnectCore: vi.fn(),
   listProfiles: vi.fn(),
-  loadAppSettings: vi.fn(),
-  saveAppSettings: vi.fn(),
+  listSubscriptionMetadata: vi.fn(),
+  listSubscriptions: vi.fn(),
   restartCore: vi.fn(),
   runtimeStatus: vi.fn(),
+  saveSubscription: vi.fn(),
   setActiveProfile: vi.fn(),
-  setSystemProxyMode: vi.fn(),
-  setTunEnabled: vi.fn(),
+  setConnectionMode: vi.fn(),
   systemProxyStatus: vi.fn(),
   tunRequestElevation: vi.fn(),
   tunStatus: vi.fn(),
+  updateSubscriptions: vi.fn(),
 }));
 
 const disconnectedStatus: RuntimeStatusResponse = {
@@ -90,6 +90,14 @@ const sysProxyStatus: SystemProxyStatusResponse = {
   requestedMode: "forcedClear",
 };
 
+const connectionModeStatus: ConnectionModeStatus = {
+  mode: "proxyOnly",
+  pacAvailable: false,
+  pacEnabled: false,
+  processRulesEffective: false,
+  vpnAvailable: true,
+};
+
 const tunStatusResponse: TunStatus = {
   allowEnableTun: true,
   backend: "process",
@@ -114,25 +122,23 @@ const tunStatusResponse: TunStatus = {
   restoreOnDisconnect: true,
 };
 
-vi.mock("@/ipc/updater", () => ({
-  getVersion: () => versionMock.getVersion(),
-}));
-
 vi.mock("@/ipc", () => ({
   connectActiveProfile: ipcMock.connectActiveProfile,
+  deleteSubscriptions: ipcMock.deleteSubscriptions,
   disconnectCore: ipcMock.disconnectCore,
   IpcCommandError: class IpcCommandError extends Error {},
   listProfiles: ipcMock.listProfiles,
-  loadAppSettings: ipcMock.loadAppSettings,
-  saveAppSettings: ipcMock.saveAppSettings,
+  listSubscriptionMetadata: ipcMock.listSubscriptionMetadata,
+  listSubscriptions: ipcMock.listSubscriptions,
   restartCore: ipcMock.restartCore,
   runtimeStatus: ipcMock.runtimeStatus,
+  saveSubscription: ipcMock.saveSubscription,
   setActiveProfile: ipcMock.setActiveProfile,
-  setSystemProxyMode: ipcMock.setSystemProxyMode,
-  setTunEnabled: ipcMock.setTunEnabled,
+  setConnectionMode: ipcMock.setConnectionMode,
   systemProxyStatus: ipcMock.systemProxyStatus,
   tunRequestElevation: ipcMock.tunRequestElevation,
   tunStatus: ipcMock.tunStatus,
+  updateSubscriptions: ipcMock.updateSubscriptions,
   useRuntimeEventStore: runtimeMock.useRuntimeEventStore,
 }));
 
@@ -156,10 +162,15 @@ const connectedCoreState: CoreStateEvent = {
   state: "connected",
 };
 
+function connectButton() {
+  return screen.getByTestId("home-connect-button");
+}
+
 describe("HomeScreen", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     runtimeMock.state.coreState = null;
+    runtimeMock.state.statistics = null;
     runtimeMock.state.sysProxy = null;
     runtimeMock.state.tun = null;
     ipcMock.connectActiveProfile.mockResolvedValue(connectedStatus);
@@ -167,12 +178,10 @@ describe("HomeScreen", () => {
     ipcMock.restartCore.mockResolvedValue(connectedStatus);
     ipcMock.runtimeStatus.mockResolvedValue(disconnectedStatus);
     ipcMock.listProfiles.mockResolvedValue([]);
-    ipcMock.loadAppSettings.mockResolvedValue(makeAppSettings());
-    ipcMock.saveAppSettings.mockImplementation(async (settings) => settings);
-    versionMock.getVersion.mockResolvedValue("0.1.0");
+    ipcMock.listSubscriptionMetadata.mockResolvedValue([]);
+    ipcMock.listSubscriptions.mockResolvedValue([]);
     ipcMock.setActiveProfile.mockResolvedValue(makeProfile(0));
-    ipcMock.setSystemProxyMode.mockResolvedValue(sysProxyStatus);
-    ipcMock.setTunEnabled.mockResolvedValue(tunStatusResponse);
+    ipcMock.setConnectionMode.mockResolvedValue(connectionModeStatus);
     ipcMock.systemProxyStatus.mockResolvedValue(sysProxyStatus);
     ipcMock.tunRequestElevation.mockResolvedValue(tunStatusResponse);
     ipcMock.tunStatus.mockResolvedValue(tunStatusResponse);
@@ -188,13 +197,14 @@ describe("HomeScreen", () => {
 
     expect(screen.getByRole("region", { name: "Connection home" })).toBeInTheDocument();
     expect(screen.getByText("Not protected")).toBeInTheDocument();
-    const connectSwitch = screen.getByRole("switch", { name: "Connect" });
-    expect(connectSwitch).toBeEnabled();
-    expect(connectSwitch).not.toBeChecked();
+    const connect = connectButton();
+    expect(connect).toBeEnabled();
+    expect(connect).toHaveAttribute("aria-pressed", "false");
+    expect(connect).toHaveAccessibleName("Connect");
     expect(await screen.findByText("No nodes available")).toBeInTheDocument();
   });
 
-  it("lights up the protected state and marks the running node in the list", async () => {
+  it("lights up the protected state with node info and marks the running node", async () => {
     runtimeMock.state.coreState = connectedCoreState;
     ipcMock.listProfiles.mockResolvedValue([
       makeActiveProfile({ id: "node-tokyo", remarks: "Tokyo Edge" }),
@@ -203,8 +213,12 @@ describe("HomeScreen", () => {
     renderHome();
 
     expect(screen.getByText("Protected")).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "Connect" })).toBeChecked();
+    expect(screen.getByTestId("home-status-card")).toHaveTextContent("PID 4242");
+    expect(connectButton()).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Restart" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Current node: Tokyo Edge" }),
+    ).toBeInTheDocument();
 
     const row = await screen.findByRole("option", { name: /Tokyo Edge/ });
     // Blue selection is seeded to the active node; the green "live" dot marks the
@@ -278,12 +292,12 @@ describe("HomeScreen", () => {
     await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1));
   });
 
-  it("invokes the connect action from the primary key", async () => {
+  it("invokes the connect action from the central button", async () => {
     const user = userEvent.setup();
 
     renderHome();
 
-    await user.click(screen.getByRole("switch", { name: "Connect" }));
+    await user.click(connectButton());
 
     expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1);
     expect(ipcMock.disconnectCore).not.toHaveBeenCalled();
@@ -299,7 +313,7 @@ describe("HomeScreen", () => {
     renderHome();
 
     await user.click(await screen.findByRole("option", { name: /Tokyo Edge/ }));
-    await user.click(screen.getByRole("switch", { name: "Connect" }));
+    await user.click(connectButton());
 
     expect(ipcMock.setActiveProfile).toHaveBeenCalledWith("tokyo");
     await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1));
@@ -318,7 +332,7 @@ describe("HomeScreen", () => {
     renderHome();
 
     await screen.findByRole("option", { name: /Osaka Edge/ });
-    await user.click(screen.getByRole("switch", { name: "Connect" }));
+    await user.click(connectButton());
 
     await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1));
     expect(ipcMock.setActiveProfile).not.toHaveBeenCalled();
@@ -349,7 +363,7 @@ describe("HomeScreen", () => {
 
     renderHome();
 
-    await user.click(screen.getByRole("switch", { name: "Connect" }));
+    await user.click(connectButton());
 
     await waitFor(() => expect(ipcMock.runtimeStatus).toHaveBeenCalledTimes(1));
     expect(runtimeMock.state.setCoreState).toHaveBeenCalledWith({
@@ -363,133 +377,109 @@ describe("HomeScreen", () => {
       description: "sudo kill failed",
       title: "Disconnect",
     });
-    expect(screen.getByRole("switch", { name: "Connect" })).toBeEnabled();
+    expect(connectButton()).toBeEnabled();
   });
 
-  it("changes and persists the language from the quick actions card", async () => {
+  it("shows the subscription card empty state with an add path", async () => {
     const user = userEvent.setup();
-
-    try {
-      renderHome();
-
-      await user.click(screen.getByRole("combobox", { name: "Language" }));
-      await user.click(await screen.findByRole("option", { name: "简体中文" }));
-
-      await waitFor(() => expect(ipcMock.saveAppSettings).toHaveBeenCalledTimes(1));
-      expect(ipcMock.saveAppSettings).toHaveBeenCalledWith(
-        expect.objectContaining({
-          appearance: expect.objectContaining({ language: "zh-Hans" }),
-        }),
-      );
-    } finally {
-      // i18next is a module-level singleton: restore the locale so other suites
-      // keep asserting English strings, and drop the persisted-side channel.
-      await changeLocale("en");
-      window.localStorage.removeItem("voyavpn.locale");
-    }
-  });
-
-  it("renders the app version row", async () => {
-    renderHome();
-
-    expect(screen.getByText("Version")).toBeInTheDocument();
-    expect(await screen.findByText("0.1.0")).toBeInTheDocument();
-  });
-
-  it("falls back to a dash when the version is unavailable", async () => {
-    versionMock.getVersion.mockRejectedValue(new Error("no runtime"));
 
     renderHome();
 
-    expect(await screen.findByText("—")).toBeInTheDocument();
+    expect(await screen.findByText("No subscription")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add subscription" }));
+    expect(await screen.findByRole("dialog", { name: "Subscriptions" })).toBeInTheDocument();
   });
 
-  it("offers and applies all three system-proxy modes when PAC is supported", async () => {
+  it("offers the three connection modes and applies system proxy", async () => {
     const user = userEvent.setup();
+
+    renderHome();
+
+    const switcher = screen.getByTestId("home-mode-switcher");
+    expect(switcher).toHaveAccessibleName("Connection mode");
+    expect(screen.getByRole("button", { name: "Proxy only" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "System proxy" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "VPN" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "System proxy" }));
+    await waitFor(() =>
+      expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("systemProxy", null),
+    );
+  });
+
+  it("surfaces the PAC toggle only in system proxy mode and disables it without support", async () => {
     runtimeMock.state.sysProxy = {
-      effectiveMode: "forcedClear",
-      pacAvailable: true,
+      effectiveMode: "forcedChange",
+      pacAvailable: false,
       proxy: null,
-      requestedMode: "forcedClear",
+      requestedMode: "forcedChange",
     };
 
     renderHome();
 
-    expect(screen.getByRole("button", { name: "Direct" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Smart" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Global" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Global" }));
-    expect(ipcMock.setSystemProxyMode).toHaveBeenCalledWith("forcedChange");
-
-    await user.click(screen.getByRole("button", { name: "Smart" }));
-    expect(ipcMock.setSystemProxyMode).toHaveBeenCalledWith("pac");
-  });
-
-  it("keeps Smart visible but disabled when PAC is unavailable", async () => {
-    const user = userEvent.setup();
-
-    renderHome();
-
-    const smart = screen.getByRole("button", { name: "Smart" });
-    expect(smart).toBeDisabled();
+    const pac = screen.getByRole("switch", { name: "Smart mode (PAC)" });
+    expect(pac).toBeDisabled();
     expect(screen.getByText("Smart proxy is not supported on this platform.")).toBeInTheDocument();
-    await user.click(smart);
-    expect(ipcMock.setSystemProxyMode).not.toHaveBeenCalledWith("pac");
   });
 
-  it("shows the backend reason and restores controls when proxy mode switching fails", async () => {
+  it("toggles PAC through the unified mode command when supported", async () => {
     const user = userEvent.setup();
     runtimeMock.state.sysProxy = {
-      effectiveMode: "forcedClear",
+      effectiveMode: "forcedChange",
       pacAvailable: true,
       proxy: null,
-      requestedMode: "forcedClear",
+      requestedMode: "forcedChange",
     };
-    ipcMock.setSystemProxyMode.mockRejectedValue(new Error("desktop policy rejected PAC"));
 
     renderHome();
-    const smart = screen.getByRole("button", { name: "Smart" });
-    await user.click(smart);
+
+    await user.click(screen.getByRole("switch", { name: "Smart mode (PAC)" }));
+    await waitFor(() => expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("systemProxy", true));
+  });
+
+  it("shows the backend reason and restores controls when mode switching fails", async () => {
+    const user = userEvent.setup();
+    ipcMock.setConnectionMode.mockRejectedValue(new Error("desktop policy rejected the mode"));
+
+    renderHome();
+    const systemProxy = screen.getByRole("button", { name: "System proxy" });
+    await user.click(systemProxy);
 
     await waitFor(() =>
       expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
-        description: "desktop policy rejected PAC",
+        description: "desktop policy rejected the mode",
         severity: "error",
-        title: "Failed to change system proxy mode",
+        title: "Failed to change connection mode",
       }),
     );
-    expect(smart).toBeEnabled();
+    expect(systemProxy).toBeEnabled();
   });
 
-  it("prevents duplicate proxy mode submissions while one is pending", async () => {
+  it("prevents duplicate mode submissions while one is pending", async () => {
     const user = userEvent.setup();
-    runtimeMock.state.sysProxy = {
-      effectiveMode: "forcedClear",
-      pacAvailable: true,
-      proxy: null,
-      requestedMode: "forcedClear",
-    };
-    let resolveMode: ((status: SystemProxyStatusResponse) => void) | undefined;
-    ipcMock.setSystemProxyMode.mockImplementation(
+    let resolveMode: ((status: ConnectionModeStatus) => void) | undefined;
+    ipcMock.setConnectionMode.mockImplementation(
       () =>
-        new Promise<SystemProxyStatusResponse>((resolve) => {
+        new Promise<ConnectionModeStatus>((resolve) => {
           resolveMode = resolve;
         }),
     );
 
     renderHome();
-    const global = screen.getByRole("button", { name: "Global" });
-    await user.click(global);
-    expect(global).toBeDisabled();
-    await user.click(global);
-    expect(ipcMock.setSystemProxyMode).toHaveBeenCalledTimes(1);
+    const systemProxy = screen.getByRole("button", { name: "System proxy" });
+    await user.click(systemProxy);
+    expect(systemProxy).toBeDisabled();
+    await user.click(systemProxy);
+    expect(ipcMock.setConnectionMode).toHaveBeenCalledTimes(1);
 
-    resolveMode?.({ ...sysProxyStatus, effectiveMode: "forcedChange", requestedMode: "forcedChange" });
-    await waitFor(() => expect(global).toBeEnabled());
+    resolveMode?.({ ...connectionModeStatus, mode: "systemProxy" });
+    await waitFor(() => expect(systemProxy).toBeEnabled());
   });
 
-  it("requests system authorization on demand before switching TUN on", async () => {
+  it("requests system authorization on demand before entering VPN mode", async () => {
     const user = userEvent.setup();
     ipcMock.tunStatus.mockResolvedValue({
       ...tunStatusResponse,
@@ -501,18 +491,16 @@ describe("HomeScreen", () => {
       requiresElevation: true,
       elevationGranted: true,
     });
-    ipcMock.setTunEnabled.mockResolvedValue({ ...tunStatusResponse, enabled: true });
 
     renderHome();
 
-    await user.click(screen.getByRole("switch", { name: "TUN" }));
+    await user.click(screen.getByRole("button", { name: "VPN" }));
 
     await waitFor(() => expect(ipcMock.tunRequestElevation).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(ipcMock.setTunEnabled).toHaveBeenCalledWith(true));
-    expect(runtimeMock.state.setTun).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
+    await waitFor(() => expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("vpn", null));
   });
 
-  it("blocks native TUN enable when the platform component is missing", async () => {
+  it("blocks VPN mode when the platform component is missing", async () => {
     const user = userEvent.setup();
     ipcMock.tunStatus.mockResolvedValue({
       ...tunStatusResponse,
@@ -524,17 +512,17 @@ describe("HomeScreen", () => {
 
     renderHome();
 
-    await user.click(screen.getByRole("switch", { name: "TUN" }));
+    await user.click(screen.getByRole("button", { name: "VPN" }));
 
     await waitFor(() => expect(ipcMock.tunStatus).toHaveBeenCalled());
-    expect(ipcMock.setTunEnabled).not.toHaveBeenCalled();
+    expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
     expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
       description: "PacketTunnel extension is not bundled in this build",
       title: "Failed to enable TUN",
     });
   });
 
-  it("blocks native TUN enable when PlugInKit elected a stale provider path", async () => {
+  it("blocks VPN mode when PlugInKit elected a stale provider path", async () => {
     const user = userEvent.setup();
     ipcMock.tunStatus.mockResolvedValue({
       ...tunStatusResponse,
@@ -548,17 +536,17 @@ describe("HomeScreen", () => {
 
     renderHome();
 
-    await user.click(screen.getByRole("switch", { name: "TUN" }));
+    await user.click(screen.getByRole("button", { name: "VPN" }));
 
     await waitFor(() => expect(ipcMock.tunStatus).toHaveBeenCalled());
-    expect(ipcMock.setTunEnabled).not.toHaveBeenCalled();
+    expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
     expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
       description: expect.stringContaining("pnpm native:macos:ne:doctor --fix"),
       title: "Failed to enable TUN",
     });
   });
 
-  it("leaves TUN off when the authorization dialog is cancelled", async () => {
+  it("leaves the mode unchanged when the authorization dialog is cancelled", async () => {
     const user = userEvent.setup();
     ipcMock.tunStatus.mockResolvedValue({
       ...tunStatusResponse,
@@ -573,11 +561,10 @@ describe("HomeScreen", () => {
 
     renderHome();
 
-    await user.click(screen.getByRole("switch", { name: "TUN" }));
+    await user.click(screen.getByRole("button", { name: "VPN" }));
 
     await waitFor(() => expect(ipcMock.tunRequestElevation).toHaveBeenCalledTimes(1));
-    expect(ipcMock.setTunEnabled).not.toHaveBeenCalled();
-    expect(runtimeMock.state.setTun).not.toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
+    expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
   });
 });
 

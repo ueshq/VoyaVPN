@@ -23,6 +23,7 @@ import { ScrollArea } from "@voya/ui/components/scroll-area";
 import { Skeleton } from "@voya/ui/components/skeleton";
 import {
   deleteSubscriptions,
+  listSubscriptionMetadata,
   listSubscriptions,
   saveSubscription,
   updateSubscriptions,
@@ -31,6 +32,9 @@ import type { Subscription } from "@/ipc/bindings";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { cn } from "@voya/ui/lib/utils";
+
+import { SubscriptionMetaLine } from "./subscription-card";
+import { metadataBySubscriptionId } from "./subscription-usage";
 
 type SubscriptionsDialogProps = {
   onChanged: () => void;
@@ -41,6 +45,7 @@ type SubscriptionsDialogProps = {
 function createBlankSubscription(): Subscription {
   return {
     additionalUrl: "",
+    autoUpdateIntervalMinutes: null,
     converterTarget: null,
     enabled: true,
     filter: null,
@@ -53,22 +58,46 @@ function createBlankSubscription(): Subscription {
   };
 }
 
+/** UI edits the interval in hours; the DTO stores minutes (0/empty = off). */
+function intervalHoursFromMinutes(minutes: number | null): string {
+  if (minutes == null || minutes <= 0) {
+    return "";
+  }
+  return String(Math.round((minutes / 60) * 10) / 10);
+}
+
+function intervalMinutesFromHours(hours: string): number | null {
+  const parsed = Number.parseFloat(hours);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+  return Math.max(1, Math.round(parsed * 60));
+}
+
 export function SubscriptionsDialog({ onChanged, onOpenChange, open }: SubscriptionsDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<Subscription>(() => createBlankSubscription());
+  const [intervalHours, setIntervalHours] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState("");
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const queryClient = useQueryClient();
   const subscriptionsQuery = useQuery({
     enabled: open,
     queryFn: listSubscriptions,
     queryKey: ["subscriptions"],
   });
+  const metadataQuery = useQuery({
+    enabled: open,
+    queryFn: listSubscriptionMetadata,
+    queryKey: ["subscription-metadata"],
+  });
   const subscriptions = subscriptionsQuery.data ?? [];
+  const metadataById = metadataBySubscriptionId(metadataQuery.data ?? []);
 
   async function refreshSubscriptions() {
     await queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
+    await queryClient.invalidateQueries({ queryKey: ["subscription-metadata"] });
     onChanged();
   }
 
@@ -88,9 +117,13 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
 
   async function handleSave() {
     await run(async () => {
-      const saved = await saveSubscription(form);
+      const saved = await saveSubscription({
+        ...form,
+        autoUpdateIntervalMinutes: intervalMinutesFromHours(intervalHours),
+      });
       setSelectedId(saved.id);
       setForm(saved);
+      setIntervalHours(intervalHoursFromMinutes(saved.autoUpdateIntervalMinutes));
 
       return t("panes.subscriptions.saved");
     });
@@ -104,6 +137,7 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
       await deleteSubscriptions([selectedId]);
       setSelectedId("");
       setForm(createBlankSubscription());
+      setIntervalHours("");
 
       return t("panes.subscriptions.deleted");
     });
@@ -141,6 +175,7 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
                 onClick={() => {
                   setSelectedId("");
                   setForm(createBlankSubscription());
+                  setIntervalHours("");
                 }}
                 size="icon"
                 type="button"
@@ -171,6 +206,7 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
                         onClick={() => {
                           setSelectedId(item.id);
                           setForm(item);
+                          setIntervalHours(intervalHoursFromMinutes(item.autoUpdateIntervalMinutes));
                         }}
                         type="button"
                       >
@@ -179,6 +215,12 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
                           {item.enabled ? t("panes.subscriptions.enabled") : t("panes.subscriptions.disabled")}
                         </Badge>
                         <span className="col-span-2 truncate text-xs text-muted-foreground">{item.url}</span>
+                        <SubscriptionMetaLine
+                          className="col-span-2"
+                          language={language}
+                          metadata={metadataById.get(item.id)}
+                          t={t}
+                        />
                       </button>
                     ))
                   )}
@@ -225,6 +267,17 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
                   onChange={(value) => setForm((current) => ({ ...current, converterTarget: value || null }))}
                   value={form.converterTarget ?? ""}
                 />
+              </div>
+              <div className="grid gap-1">
+                <TextField
+                  label={t("panes.subscriptions.autoUpdateInterval")}
+                  min={0}
+                  onChange={setIntervalHours}
+                  step="0.5"
+                  type="number"
+                  value={intervalHours}
+                />
+                <p className="text-xs text-muted-foreground">{t("panes.subscriptions.autoUpdateHint")}</p>
               </div>
               <div className="flex h-9 items-center rounded-md border bg-card px-3 shadow-xs">
                 <Label

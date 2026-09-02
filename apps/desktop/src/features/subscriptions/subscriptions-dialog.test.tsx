@@ -9,6 +9,7 @@ import { SubscriptionsDialog } from "./subscriptions-dialog";
 
 const ipcMocks = vi.hoisted(() => ({
   deleteSubscriptions: vi.fn(),
+  listSubscriptionMetadata: vi.fn(),
   listSubscriptions: vi.fn(),
   saveSubscription: vi.fn(),
   updateSubscriptions: vi.fn(),
@@ -44,6 +45,7 @@ afterEach(() => {
 describe("SubscriptionsDialog", () => {
   beforeEach(() => {
     Object.values(ipcMocks).forEach((mock) => mock.mockReset());
+    ipcMocks.listSubscriptionMetadata.mockResolvedValue([]);
   });
 
   it("renders a skeleton loading region while sources load", async () => {
@@ -156,6 +158,7 @@ describe("SubscriptionsDialog", () => {
 function makeSubscription(): Subscription {
   return {
     additionalUrl: "",
+    autoUpdateIntervalMinutes: null,
     converterTarget: null,
     enabled: true,
     filter: null,

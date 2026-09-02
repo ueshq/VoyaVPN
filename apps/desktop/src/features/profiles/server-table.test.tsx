@@ -21,6 +21,7 @@ const ipcMocks = vi.hoisted(() => ({
   importProfilesFromText: vi.fn(),
   listGroupChildCandidates: vi.fn(),
   listProfiles: vi.fn(),
+  listSubscriptionMetadata: vi.fn(() => Promise.resolve([])),
   listSubscriptions: vi.fn(),
   moveProfile: vi.fn(),
   previewGroupProfile: vi.fn(),

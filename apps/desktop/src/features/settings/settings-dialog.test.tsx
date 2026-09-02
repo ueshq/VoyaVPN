@@ -13,10 +13,15 @@ import { SettingsScreen } from "./settings-screen";
 const ipcMocks = vi.hoisted(() => ({
   IpcCommandError: class MockIpcCommandError extends Error {},
   appUpdateStatus: vi.fn(),
+  connectionModeStatus: vi.fn(() => Promise.resolve(null)),
+  deleteRoutingRules: vi.fn(),
+  listProcessCandidates: vi.fn(() => Promise.resolve([])),
+  listRoutings: vi.fn(() => Promise.resolve([])),
   loadAppSettings: vi.fn(),
   loadDnsSettings: vi.fn(),
   saveAppSettings: vi.fn(),
   saveDnsSettings: vi.fn(),
+  saveRoutingRule: vi.fn(),
   updateGeoAssets: vi.fn(),
   updateSrsAssets: vi.fn(),
 }));

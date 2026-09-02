@@ -35,8 +35,11 @@ import type {
   SpeedtestRunResult,
   SpeedtestStatus,
   Subscription,
+  SubscriptionMetadata,
   SubscriptionUpdateResult,
-  SysProxyType,
+  ConnectionMode,
+  ConnectionModeStatus,
+  ProcessCandidate,
   SystemProxyStatusResponse,
   TunProviderDiagnostics,
   TunStatus,
@@ -107,20 +110,12 @@ export async function systemProxyStatus(): Promise<SystemProxyStatusResponse> {
   return unwrapCommandResult(await commands.systemProxyStatus());
 }
 
-export async function setSystemProxyMode(mode: SysProxyType): Promise<SystemProxyStatusResponse> {
-  return unwrapCommandResult(await commands.setSystemProxyMode(mode));
-}
-
 export async function tunStatus(): Promise<TunStatus> {
   return unwrapCommandResult(await commands.tunStatus());
 }
 
 export async function tunProviderDiagnostics(): Promise<TunProviderDiagnostics> {
   return unwrapCommandResult(await commands.tunProviderDiagnostics());
-}
-
-export async function setTunEnabled(enabled: boolean): Promise<TunStatus> {
-  return unwrapCommandResult(await commands.setTunEnabled(enabled));
 }
 
 export async function tunRequestElevation(): Promise<TunStatus> {
@@ -238,6 +233,25 @@ export async function updateSubscriptions(
   proxyUrl: string | null = null,
 ): Promise<SubscriptionUpdateResult> {
   return unwrapCommandResult(await commands.updateSubscriptions(subscriptionId, preferProxy, proxyUrl));
+}
+
+export async function listSubscriptionMetadata(): Promise<SubscriptionMetadata[]> {
+  return unwrapCommandResult(await commands.listSubscriptionMetadata());
+}
+
+export async function connectionModeStatus(): Promise<ConnectionModeStatus> {
+  return unwrapCommandResult(await commands.connectionModeStatus());
+}
+
+export async function setConnectionMode(
+  mode: ConnectionMode,
+  pacEnabled: boolean | null = null,
+): Promise<ConnectionModeStatus> {
+  return unwrapCommandResult(await commands.setConnectionMode(mode, pacEnabled));
+}
+
+export async function listProcessCandidates(): Promise<ProcessCandidate[]> {
+  return unwrapCommandResult(await commands.listProcessCandidates());
 }
 
 export async function listRoutings(): Promise<Routing_Serialize[]> {

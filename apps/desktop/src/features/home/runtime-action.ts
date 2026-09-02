@@ -3,8 +3,6 @@ import type {
   CoreStateEvent,
   RuntimeStatusResponse,
   SysProxyChanged,
-  SysProxyMode,
-  SysProxyType,
   SystemProxyStatusResponse,
   TunChanged,
   TunStatus,
@@ -25,20 +23,6 @@ export function statusToCoreState(status: RuntimeStatusResponse): CoreStateEvent
     state: status.state,
   };
 }
-
-/** Maps the UI mode to the stable string contract accepted by the backend. */
-export const SYS_PROXY_TYPE = {
-  forcedClear: "forcedClear",
-  forcedChange: "forcedChange",
-  unchanged: "unchanged",
-  pac: "pac",
-} as const satisfies Record<SysProxyMode, SysProxyType>;
-
-// The selector offers exactly three modes — off / smart / global — in this
-// order. `unchanged` is intentionally not surfaced (the backend enum still
-// supports it); the home screen keeps PAC visible but disables it when the
-// backend reports that the platform cannot apply PAC settings.
-export const PROXY_MODE_OPTIONS: SysProxyMode[] = ["forcedClear", "pac", "forcedChange"];
 
 export function statusToSysProxyChanged(status: SystemProxyStatusResponse): SysProxyChanged {
   return {

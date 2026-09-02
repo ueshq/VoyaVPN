@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Gauge, Inbox, Network, RefreshCw, RotateCw, Wifi, WifiOff } from "lucide-react";
+import { Check, Gauge, Inbox, Network, RefreshCw, RotateCw, Wifi, WifiOff, Zap } from "lucide-react";
 
 import {
   dataTableHeader,
@@ -34,6 +34,8 @@ import { getErrorMessage } from "@voya/utils/error";
 import { cn } from "@voya/ui/lib/utils";
 import { ProxyMonitorStatusBadge } from "@/features/proxy/proxy-monitor-status-badge";
 
+import { isAutoGroup, orderProxyGroups } from "./proxy-group-order";
+
 const trafficModeOptions: Array<{ labelKey: TranslationKey; value: TrafficMode }> = [
   { labelKey: "proxy.trafficModeRule", value: "rule" },
   { labelKey: "proxy.trafficModeGlobal", value: "global" },
@@ -52,9 +54,12 @@ export function ProxyGroupsScreen() {
     queryKey: ["proxy-groups"],
   });
   const snapshot = groupsQuery.data;
+  // Auto (urltest/fallback) groups pin first, Hiddify-style, and win the
+  // default selection so delay-based auto-select is the landing view.
+  const orderedGroups = useMemo(() => orderProxyGroups(snapshot?.groups ?? []), [snapshot?.groups]);
   const selectedGroup = useMemo(
-    () => selectGroup(snapshot?.groups ?? [], selectedGroupName),
-    [selectedGroupName, snapshot?.groups],
+    () => selectGroup(orderedGroups, selectedGroupName),
+    [orderedGroups, selectedGroupName],
   );
   const selectedNodes = selectedGroup?.nodes ?? [];
 
@@ -146,15 +151,14 @@ export function ProxyGroupsScreen() {
             {t("actions.reloadCoreConfig")}
           </Button>
           <Button
-            aria-label={t("actions.runningProxyGroupDelayTest")}
+            aria-label={t("proxy.testAll")}
             disabled={delayMutation.isPending}
             onClick={() => runDelayTest([])}
             size="sm"
             type="button"
-            variant="outline"
           >
-            <Gauge className="size-4" aria-hidden="true" />
-            {t("actions.runningProxyGroupDelayTest")}
+            <Zap className="size-4" aria-hidden="true" />
+            {t("proxy.testAll")}
           </Button>
           <Button
             aria-label={t("actions.refreshRuntimeState")}
@@ -180,8 +184,8 @@ export function ProxyGroupsScreen() {
           </div>
           <ScrollArea className="h-[calc(100%-2.5rem)]">
             <div className="p-2">
-              {snapshot?.groups.length ? (
-                snapshot.groups.map((group) => (
+              {orderedGroups.length ? (
+                orderedGroups.map((group) => (
                   <button
                     key={group.name}
                     className={cn(
@@ -191,7 +195,17 @@ export function ProxyGroupsScreen() {
                     onClick={() => setSelectedGroupName(group.name)}
                     type="button"
                   >
-                    <span className="min-w-0 truncate font-medium">{group.name}</span>
+                    <span className="flex min-w-0 items-center gap-1.5 font-medium">
+                      {isAutoGroup(group) ? (
+                        <Zap className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      ) : null}
+                      <span className="min-w-0 truncate">{group.name}</span>
+                      {isAutoGroup(group) ? (
+                        <Badge className="bg-background text-muted-foreground" variant="outline">
+                          {t("proxy.autoBadge")}
+                        </Badge>
+                      ) : null}
+                    </span>
                     <Badge
                       className="justify-self-end bg-background tabular-nums text-muted-foreground"
                       variant="outline"
@@ -199,10 +213,13 @@ export function ProxyGroupsScreen() {
                       {group.nodes.length}
                     </Badge>
                     <Badge
-                      className="col-span-2 max-w-full justify-start truncate bg-background text-muted-foreground"
+                      className="col-span-2 max-w-full justify-start gap-1.5 truncate bg-background text-muted-foreground"
                       title={group.now ?? t("proxy.noActive")}
                       variant="outline"
                     >
+                      {group.now ? (
+                        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-connected" />
+                      ) : null}
                       {group.now ?? t("proxy.noActive")}
                     </Badge>
                   </button>
@@ -224,6 +241,23 @@ export function ProxyGroupsScreen() {
                 {selectedGroup.proxyType}
               </Badge>
             ) : null}
+            {selectedGroup?.now ? (
+              <Badge
+                className="max-w-56 gap-1.5 border-connected/30 bg-connected/10 text-connected"
+                title={selectedGroup.now}
+                variant="outline"
+              >
+                <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-connected" />
+                <span className="min-w-0 truncate">{selectedGroup.now}</span>
+                <span className="tabular-nums">
+                  {formatDelay(
+                    delayResults[selectedGroup.now]?.delay ??
+                      selectedGroup.nodes.find((node) => node.name === selectedGroup.now)?.delay,
+                    "",
+                  )}
+                </span>
+              </Badge>
+            ) : null}
             <div className="ms-auto flex items-center gap-2">
               <Button
                 disabled={!selectedGroup || delayMutation.isPending}
@@ -238,6 +272,11 @@ export function ProxyGroupsScreen() {
             </div>
           </div>
 
+          {selectedGroup && isAutoGroup(selectedGroup) ? (
+            <p className="shrink-0 border-b bg-surface-sunken px-4 py-1.5 text-xs text-muted-foreground">
+              {t("proxy.autoManagedHint")}
+            </p>
+          ) : null}
           <ProxyNodeGrid
             delayResults={delayResults}
             nodes={selectedNodes}

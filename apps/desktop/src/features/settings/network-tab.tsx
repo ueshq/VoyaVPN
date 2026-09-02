@@ -1,5 +1,10 @@
+import { useState } from "react";
+import { AppWindow } from "lucide-react";
+
+import { Button } from "@voya/ui/components/button";
 import { Separator } from "@voya/ui/components/separator";
 import { useI18n } from "@voya/i18n/use-i18n";
+import { PerAppProxyDialog } from "@/features/routing/per-app-proxy-dialog";
 
 import { CheckboxField, NumberField, TextField } from "./runtime-fields";
 import { SettingsCheckboxGroup, SettingsGroup, SettingsRow } from "./settings-form";
@@ -9,6 +14,7 @@ import type { AppSettingsController } from "./use-app-settings";
 export function NetworkTab({ controller }: { controller: AppSettingsController }) {
   const { t } = useI18n();
   const { settings, error, update, working } = controller;
+  const [perAppOpen, setPerAppOpen] = useState(false);
 
   if (!settings) {
     return <p className="text-xs text-muted-foreground">{working ? t("options.loading") : error}</p>;
@@ -56,6 +62,21 @@ export function NetworkTab({ controller }: { controller: AppSettingsController }
         <TextField id="rt-sysproxy-pac-path" label={t("settings.network.customPacPath")} onChange={(value) => patchSystemProxy({ customPacPath: nullableText(value) })} value={settings.network.systemProxy.customPacPath ?? ""} />
         <TextField id="rt-sysproxy-script-path" label={t("settings.network.customScriptPath")} onChange={(value) => patchSystemProxy({ customScriptPath: nullableText(value) })} value={settings.network.systemProxy.customScriptPath ?? ""} />
       </SettingsGroup>
+
+      <Separator />
+
+      {/* Immediate action, deliberately outside the draft/Save-all model: the
+          editor writes routing rules directly through its own dialog. */}
+      <SettingsGroup>
+        <SettingsRow description={t("panes.routing.perAppDescription")} label={t("settings.perAppProxy")}>
+          <Button onClick={() => setPerAppOpen(true)} size="sm" type="button" variant="outline">
+            <AppWindow aria-hidden="true" className="size-4" />
+            {t("actions.edit")}
+          </Button>
+        </SettingsRow>
+      </SettingsGroup>
+
+      {perAppOpen ? <PerAppProxyDialog onOpenChange={setPerAppOpen} open={perAppOpen} /> : null}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { loadAppSettings, saveAppSettings } from "@/ipc";
 import type {
@@ -13,25 +13,6 @@ import { applyUiPreferences, UI_PREFERENCES_QUERY_KEY } from "./ui-preferences";
 const PREFERENCES_STORAGE_KEY = "voyavpn.preferences";
 const LOCALE_STORAGE_KEY = "voyavpn.locale";
 const APP_SETTINGS_QUERY_KEY = ["app-settings"] as const;
-
-/**
- * One-shot persist of the UI language into the app-settings DB, bypassing the
- * draft/dirty controller (which is footer-shaped and stale-prone for a single
- * immediate write). Syncs both query caches with the authoritative save result
- * so an in-shell Settings screen opened later starts from the saved state.
- */
-export async function persistLanguage(queryClient: QueryClient, language: string): Promise<void> {
-  const current = await loadAppSettings();
-  if (current.appearance.language === language) {
-    return;
-  }
-  const authoritative = await saveAppSettings({
-    ...current,
-    appearance: { ...current.appearance, language },
-  });
-  queryClient.setQueryData(APP_SETTINGS_QUERY_KEY, authoritative);
-  queryClient.setQueryData(UI_PREFERENCES_QUERY_KEY, authoritative.appearance);
-}
 
 export type AppSettingsController = {
   settings: AppSettingsV1 | null;
