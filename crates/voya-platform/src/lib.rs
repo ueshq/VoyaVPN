@@ -3,6 +3,7 @@
 //! OS-specific paths, process control, system proxy, TUN, autostart, elevation,
 //! and hotkey adapters are isolated here.
 
+pub mod apps;
 pub mod autostart;
 pub mod coreinfo;
 pub mod elevation;

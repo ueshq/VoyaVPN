@@ -66,6 +66,12 @@ export const commands = {
 	deleteRoutingRules: (routingId: string, ruleIds: string[]) => typedError<Routing_Serialize, AppError>(__TAURI_INVOKE("delete_routing_rules", { routingId, ruleIds })),
 	moveRoutingRule: (routingId: string, ruleId: string, action: MoveAction, position: number | null) => typedError<Routing_Serialize, AppError>(__TAURI_INVOKE("move_routing_rule", { routingId, ruleId, action, position })),
 	importConfigTemplate: (selection: ConfigTemplateSelection, preferProxy: boolean, proxyUrl: string | null) => typedError<ConfigTemplateImportResult, AppError>(__TAURI_INVOKE("import_config_template", { selection, preferProxy, proxyUrl })),
+	/**
+	 *  Enumerates running processes (and installed applications where the OS
+	 *  makes that cheap) for the per-app proxy picker. Blocking OS enumeration
+	 *  runs off the async runtime.
+	 */
+	listProcessCandidates: () => typedError<ProcessCandidate[], AppError>(__TAURI_INVOKE("list_process_candidates")),
 	proxyListGroups: () => typedError<ProxyGroupsSnapshot, AppError>(__TAURI_INVOKE("proxy_list_groups")),
 	proxyTestDelay: (nodeNames: string[]) => typedError<ProxyDelayTestResult[], AppError>(__TAURI_INVOKE("proxy_test_delay", { nodeNames })),
 	proxySelectNode: (groupName: string, nodeName: string) => typedError<ProxyGroupsSnapshot, AppError>(__TAURI_INVOKE("proxy_select_node", { groupName, nodeName })),
@@ -428,6 +434,19 @@ export type NetworkSettings = {
 	systemProxy: SystemProxySettings,
 	inbounds: InboundSettings[],
 };
+
+/**
+ *  A running process or installed application offered by the per-app proxy
+ *  picker; `process_name` is the executable basename sing-box matches on.
+ */
+export type ProcessCandidate = {
+	displayName: string,
+	processName: string,
+	executablePath: string | null,
+	source: ProcessCandidateSource,
+};
+
+export type ProcessCandidateSource = "runningProcess" | "installedApplication";
 
 export type Profile = {
 	id: string,

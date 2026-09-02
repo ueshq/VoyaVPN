@@ -57,6 +57,25 @@ pub const fn sysproxy_type_from_contract(
 }
 
 #[must_use]
+pub fn process_candidate_to_contract(
+    value: voya_platform::apps::ProcessCandidate,
+) -> voya_contracts::ProcessCandidate {
+    voya_contracts::ProcessCandidate {
+        display_name: value.display_name,
+        process_name: value.process_name,
+        executable_path: value.executable_path,
+        source: match value.source {
+            voya_platform::apps::ProcessCandidateSource::RunningProcess => {
+                voya_contracts::ProcessCandidateSource::RunningProcess
+            }
+            voya_platform::apps::ProcessCandidateSource::InstalledApplication => {
+                voya_contracts::ProcessCandidateSource::InstalledApplication
+            }
+        },
+    }
+}
+
+#[must_use]
 pub fn server_stat_to_contract(value: voya_core::ServerStatItem) -> voya_contracts::ServerStatItem {
     voya_contracts::ServerStatItem {
         index_id: value.index_id,

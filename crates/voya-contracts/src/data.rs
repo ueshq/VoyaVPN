@@ -83,6 +83,24 @@ impl Default for Subscription {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ProcessCandidateSource {
+    RunningProcess,
+    InstalledApplication,
+}
+
+/// A running process or installed application offered by the per-app proxy
+/// picker; `process_name` is the executable basename sing-box matches on.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProcessCandidate {
+    pub display_name: String,
+    pub process_name: String,
+    pub executable_path: Option<String>,
+    pub source: ProcessCandidateSource,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum RoutingRuleScope {
