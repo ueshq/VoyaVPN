@@ -5270,7 +5270,6 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-updater",
  "tauri-specta",
- "tokio",
  "tracing",
  "voya-app",
  "voya-contracts",

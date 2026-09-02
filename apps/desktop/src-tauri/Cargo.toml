@@ -44,7 +44,6 @@ tauri-plugin-global-shortcut = "2.3.2"
 tauri-plugin-process = "2.3.1"
 tauri-plugin-updater = "2.10.1"
 tauri-specta.workspace = true
-tokio = { workspace = true, features = ["sync"] }
 tracing.workspace = true
 voya-app.workspace = true
 voya-contracts.workspace = true
