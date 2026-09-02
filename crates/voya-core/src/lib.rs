@@ -12,6 +12,7 @@ pub mod fmt;
 pub mod groups;
 pub(crate) mod protocol_common;
 pub mod singbox;
+pub mod subscription_userinfo;
 
 pub use config::*;
 pub use context::*;
@@ -20,6 +21,7 @@ pub use enums::*;
 pub use fmt::*;
 pub use groups::*;
 pub use singbox::*;
+pub use subscription_userinfo::*;
 
 #[cfg(test)]
 pub(crate) mod golden;

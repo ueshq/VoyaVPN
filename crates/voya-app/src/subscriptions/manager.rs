@@ -7,9 +7,11 @@ use std::{
 use regex::Regex;
 use thiserror::Error;
 use voya_core::{
-    parse_full_custom_config, parse_share_link, parse_ss_sip008, parse_voya_profile_bundle,
+    parse_full_custom_config, parse_profile_update_interval_minutes, parse_share_link,
+    parse_ss_sip008, parse_subscription_userinfo, parse_voya_profile_bundle,
     parse_wireguard_config, profile_items_match, AppConfig, ConfigType, ImportProfilesResult,
-    ProfileExItem, ProfileItem, SubItem, SubscriptionUpdateResult,
+    ProfileExItem, ProfileItem, SubItem, SubMetadataItem, SubscriptionUpdateResult,
+    SubscriptionUserInfo,
 };
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 use voya_net::{
@@ -64,6 +66,10 @@ impl<'db> SubscriptionManager<'db> {
     #[must_use]
     pub(crate) const fn from_session(database: DatabaseSession<'db>) -> Self {
         Self { database }
+    }
+
+    pub async fn list_subscription_metadata(&self) -> Result<Vec<SubMetadataItem>> {
+        Ok(self.database.subscription_metadata().list().await?)
     }
 
     pub async fn list_subscriptions(&self) -> Result<Vec<SubItem>> {
@@ -375,6 +381,7 @@ impl<'db> SubscriptionManager<'db> {
                 ));
                 continue;
             }
+            self.persist_subscription_metadata(&prepared_import).await?;
             match self
                 .import_profiles_from_text(
                     config,
@@ -413,6 +420,47 @@ impl<'db> SubscriptionManager<'db> {
         }
 
         Ok(result)
+    }
+
+    /// Records server-reported usage headers for a fetched subscription. The
+    /// `subscription-userinfo` values replace the stored figures only when the
+    /// header was present; `last_update_at` always reflects the fetch. A
+    /// server-suggested update interval is adopted only while the user has not
+    /// configured one.
+    async fn persist_subscription_metadata(
+        &self,
+        prepared: &PreparedSubscriptionImport,
+    ) -> Result<()> {
+        let repository = self.database.subscription_metadata();
+        let mut metadata =
+            repository
+                .get(&prepared.item.id)
+                .await?
+                .unwrap_or_else(|| SubMetadataItem {
+                    subscription_id: prepared.item.id.clone(),
+                    ..SubMetadataItem::default()
+                });
+        if let Some(user_info) = prepared.user_info {
+            metadata.upload_bytes = user_info.upload_bytes;
+            metadata.download_bytes = user_info.download_bytes;
+            metadata.total_bytes = user_info.total_bytes;
+            metadata.expire_at = user_info.expire_unix_seconds;
+        }
+        if let Some(title) = &prepared.profile_title {
+            metadata.profile_title = Some(title.clone());
+        }
+        metadata.last_update_at = Some(prepared.fetched_at_unix);
+        repository.upsert(&metadata).await?;
+
+        if prepared.item.auto_update_interval_minutes.is_none() {
+            if let Some(minutes) = prepared.suggested_interval_minutes {
+                let mut item = prepared.item.clone();
+                item.auto_update_interval_minutes = Some(minutes);
+                self.database.subscriptions().upsert(&item).await?;
+            }
+        }
+
+        Ok(())
     }
 
     async fn parse_import_text(
@@ -521,6 +569,26 @@ impl PreparedSubscriptionUpdate {
 struct PreparedSubscriptionImport {
     item: SubItem,
     content: String,
+    user_info: Option<SubscriptionUserInfo>,
+    profile_title: Option<String>,
+    suggested_interval_minutes: Option<i32>,
+    fetched_at_unix: i64,
+}
+
+fn header_value<'headers>(
+    headers: &'headers [(String, String)],
+    name: &str,
+) -> Option<&'headers str> {
+    headers
+        .iter()
+        .find(|(header, _)| header == name)
+        .map(|(_, value)| value.as_str())
+}
+
+fn unix_now_seconds() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| i64::try_from(elapsed.as_secs()).unwrap_or(0))
 }
 
 async fn prepare_subscription_snapshot(
@@ -566,7 +634,21 @@ async fn prepare_subscription_snapshot(
         };
         match fetch_subscription(&client, &source, &options).await {
             Ok(fetch) if !fetch.content.trim().is_empty() => {
+                let headers = fetch
+                    .downloads
+                    .first()
+                    .map(|download| download.headers.as_slice())
+                    .unwrap_or_default();
                 imports.push(PreparedSubscriptionImport {
+                    user_info: header_value(headers, "subscription-userinfo")
+                        .and_then(parse_subscription_userinfo),
+                    profile_title: header_value(headers, "profile-title")
+                        .map(str::trim)
+                        .filter(|title| !title.is_empty())
+                        .map(str::to_string),
+                    suggested_interval_minutes: header_value(headers, "profile-update-interval")
+                        .and_then(parse_profile_update_interval_minutes),
+                    fetched_at_unix: unix_now_seconds(),
                     item,
                     content: fetch.content,
                 });
@@ -940,6 +1022,121 @@ mod tests {
         assert_eq!(
             seen_user_agents.lock().await.as_slice(),
             ["SubUA/3", "SubUA/3", "SubUA/3"]
+        );
+    }
+
+    #[tokio::test]
+    async fn subscription_update_persists_userinfo_metadata_and_adopts_interval() {
+        let seen_user_agents = Arc::new(Mutex::new(Vec::new()));
+        let node = "vless://uuid-a@example.test:443#US%20A".to_string();
+        let base = spawn_http_fixture_with_headers(
+            HashMap::from([(
+                "/meta".to_string(),
+                (
+                    node.clone(),
+                    vec![
+                        (
+                            "Subscription-Userinfo".to_string(),
+                            "upload=100; download=200; total=1000; expire=1924992000".to_string(),
+                        ),
+                        ("Profile-Update-Interval".to_string(), "12".to_string()),
+                        ("Profile-Title".to_string(), "Demo Plan".to_string()),
+                    ],
+                ),
+            )]),
+            1,
+            Arc::clone(&seen_user_agents),
+        )
+        .await;
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+        let sub = manager
+            .save_subscription(
+                &mut config,
+                SubItem {
+                    id: "sub-meta".to_string(),
+                    remarks: "Meta".to_string(),
+                    url: format!("{base}/meta"),
+                    ..SubItem::default()
+                },
+            )
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        manager
+            .update_subscriptions(&mut config, Some(&sub.id), false, None)
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        let metadata = database
+            .subscription_metadata()
+            .get(&sub.id)
+            .await
+            .expect("metadata should load")
+            .expect("metadata should exist");
+        assert_eq!(metadata.upload_bytes, Some(100));
+        assert_eq!(metadata.download_bytes, Some(200));
+        assert_eq!(metadata.total_bytes, Some(1000));
+        assert_eq!(metadata.expire_at, Some(1_924_992_000));
+        assert_eq!(metadata.profile_title.as_deref(), Some("Demo Plan"));
+        assert!(metadata.last_update_at.is_some_and(|at| at > 0));
+        assert_eq!(
+            database
+                .subscriptions()
+                .get(&sub.id)
+                .await
+                .expect("subscription should load")
+                .expect("subscription should exist")
+                .auto_update_interval_minutes,
+            Some(720),
+            "server-suggested interval should be adopted when the user has not set one"
+        );
+
+        // A later fetch without usage headers keeps the stored figures but
+        // refreshes last_update_at, and never overrides a user-set interval.
+        let plain_base = spawn_http_fixture(
+            HashMap::from([("/meta".to_string(), node)]),
+            1,
+            Arc::clone(&seen_user_agents),
+        )
+        .await;
+        let mut updated_sub = database
+            .subscriptions()
+            .get(&sub.id)
+            .await
+            .expect("subscription should load")
+            .expect("subscription should exist");
+        updated_sub.url = format!("{plain_base}/meta");
+        updated_sub.auto_update_interval_minutes = Some(30);
+        manager
+            .save_subscription(&mut config, updated_sub)
+            .await
+            .expect("subscription manager test operation should succeed");
+        manager
+            .update_subscriptions(&mut config, Some(&sub.id), false, None)
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        let metadata = database
+            .subscription_metadata()
+            .get(&sub.id)
+            .await
+            .expect("metadata should load")
+            .expect("metadata should exist");
+        assert_eq!(metadata.total_bytes, Some(1000));
+        assert_eq!(metadata.profile_title.as_deref(), Some("Demo Plan"));
+        assert_eq!(
+            database
+                .subscriptions()
+                .get(&sub.id)
+                .await
+                .expect("subscription should load")
+                .expect("subscription should exist")
+                .auto_update_interval_minutes,
+            Some(30)
         );
     }
 
@@ -1566,6 +1763,19 @@ mod tests {
         max_requests: usize,
         seen_user_agents: Arc<Mutex<Vec<String>>>,
     ) -> String {
+        let routes = routes
+            .into_iter()
+            .map(|(path, body)| (path, (body, Vec::new())))
+            .collect();
+
+        spawn_http_fixture_with_headers(routes, max_requests, seen_user_agents).await
+    }
+
+    async fn spawn_http_fixture_with_headers(
+        routes: HashMap<String, (String, Vec<(String, String)>)>,
+        max_requests: usize,
+        seen_user_agents: Arc<Mutex<Vec<String>>>,
+    ) -> String {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
             .expect("subscription manager test operation should succeed");
@@ -1600,14 +1810,18 @@ mod tests {
                         })
                         .unwrap_or_default();
                     seen_user_agents.lock().await.push(user_agent);
-                    let body = routes.get(path).cloned().unwrap_or_default();
+                    let (body, extra_headers) = routes.get(path).cloned().unwrap_or_default();
                     let status = if routes.contains_key(path) {
                         "200 OK"
                     } else {
                         "404 Not Found"
                     };
+                    let extra_headers = extra_headers
+                        .iter()
+                        .map(|(name, value)| format!("{name}: {value}\r\n"))
+                        .collect::<String>();
                     let response = format!(
-                        "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        "HTTP/1.1 {status}\r\nContent-Length: {}\r\n{extra_headers}Connection: close\r\n\r\n{body}",
                         body.len()
                     );
                     let _ = socket.write_all(response.as_bytes()).await;

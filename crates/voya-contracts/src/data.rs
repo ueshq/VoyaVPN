@@ -14,6 +14,26 @@ pub struct Subscription {
     pub filter: Option<String>,
     pub converter_target: Option<String>,
     pub pre_socks_port: Option<i32>,
+    pub auto_update_interval_minutes: Option<i32>,
+}
+
+/// Usage metadata reported by the subscription server on the latest successful
+/// fetch (`subscription-userinfo` and `profile-title` response headers).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SubscriptionMetadata {
+    pub subscription_id: String,
+    #[specta(type = Option<f64>)]
+    pub upload_bytes: Option<i64>,
+    #[specta(type = Option<f64>)]
+    pub download_bytes: Option<i64>,
+    #[specta(type = Option<f64>)]
+    pub total_bytes: Option<i64>,
+    #[specta(type = Option<f64>)]
+    pub expire_at: Option<i64>,
+    #[specta(type = Option<f64>)]
+    pub last_update_at: Option<i64>,
+    pub profile_title: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
@@ -58,6 +78,7 @@ impl Default for Subscription {
             filter: None,
             converter_target: None,
             pre_socks_port: None,
+            auto_update_interval_minutes: None,
         }
     }
 }

@@ -5,6 +5,7 @@ mod server_stat;
 mod settings;
 mod state;
 mod subscription;
+mod subscription_metadata;
 
 pub use profile::ProfileRepository;
 pub use profile_ex::ProfileExRepository;
@@ -13,3 +14,4 @@ pub use server_stat::ServerStatRepository;
 pub use settings::SettingsRepository;
 pub use state::{AppStateRecord, AppStateRepository};
 pub use subscription::SubscriptionRepository;
+pub use subscription_metadata::SubscriptionMetadataRepository;

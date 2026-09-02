@@ -11,7 +11,8 @@ use tokio::sync::Mutex;
 
 use crate::{
     AppStateRepository, DbError, ProfileExRepository, ProfileRepository, Result, RoutingRepository,
-    ServerStatRepository, SettingsRepository, SubscriptionRepository,
+    ServerStatRepository, SettingsRepository, SubscriptionMetadataRepository,
+    SubscriptionRepository,
 };
 
 pub const DATABASE_NAME: &str = "voyavpn.sqlite";
@@ -107,6 +108,11 @@ impl Database {
     }
 
     #[must_use]
+    pub fn subscription_metadata(&self) -> SubscriptionMetadataRepository<'_> {
+        SubscriptionMetadataRepository::new(&self.pool)
+    }
+
+    #[must_use]
     pub fn routings(&self) -> RoutingRepository<'_> {
         RoutingRepository::new(&self.pool)
     }
@@ -151,6 +157,11 @@ impl UnitOfWork {
     #[must_use]
     pub fn subscriptions(&self) -> SubscriptionRepository<'_> {
         SubscriptionRepository::new_in_transaction(&self.transaction)
+    }
+
+    #[must_use]
+    pub fn subscription_metadata(&self) -> SubscriptionMetadataRepository<'_> {
+        SubscriptionMetadataRepository::new_in_transaction(&self.transaction)
     }
 
     #[must_use]
@@ -214,6 +225,14 @@ impl<'database> DatabaseSession<'database> {
         match self {
             Self::Database(database) => database.subscriptions(),
             Self::UnitOfWork(unit_of_work) => unit_of_work.subscriptions(),
+        }
+    }
+
+    #[must_use]
+    pub fn subscription_metadata(self) -> SubscriptionMetadataRepository<'database> {
+        match self {
+            Self::Database(database) => database.subscription_metadata(),
+            Self::UnitOfWork(unit_of_work) => unit_of_work.subscription_metadata(),
         }
     }
 

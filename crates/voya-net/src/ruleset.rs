@@ -701,6 +701,7 @@ mod tests {
                 RawFixtureResponse {
                     status: "200 OK".to_string(),
                     content_length: Some(declared_length),
+                    extra_headers: Vec::new(),
                     body: b"dat".to_vec(),
                 },
             )]),

@@ -4,7 +4,7 @@ use sqlx::Row;
 use voya_contracts::{AppSettingsV1, CURRENT_SCHEMA_VERSION};
 use voya_core::{
     ProfileExItem, ProfileItem, ProfileProtocol, ProfileTransport, RoutingItem, RuleType,
-    RulesItem, ServerEndpoint, ServerStatItem, SubItem, TlsMode, TlsSettings,
+    RulesItem, ServerEndpoint, ServerStatItem, SubItem, SubMetadataItem, TlsMode, TlsSettings,
 };
 
 use crate::AppStateRecord;
@@ -94,6 +94,7 @@ async fn fresh_schema_contains_only_current_tables_and_columns() {
             "routing_items",
             "schema_metadata",
             "server_stat_items",
+            "subscription_metadata",
             "subscriptions",
         ]
     );
@@ -527,6 +528,97 @@ async fn subscription_repository_persists_orders_and_deletes_sub_profiles() {
         .get("sub-profile")
         .await
         .expect("database test operation should succeed")
+        .is_none());
+}
+
+#[tokio::test]
+async fn subscription_metadata_round_trips_and_cascades_with_subscription_delete() {
+    let database = Database::connect_in_memory()
+        .await
+        .expect("database test operation should succeed");
+    let subscription = SubItem {
+        id: "sub-meta".to_string(),
+        remarks: "Meta".to_string(),
+        url: "https://example.test/meta".to_string(),
+        auto_update_interval_minutes: Some(360),
+        ..SubItem::default()
+    };
+    database
+        .subscriptions()
+        .upsert(&subscription)
+        .await
+        .expect("subscription should persist");
+    assert_eq!(
+        database
+            .subscriptions()
+            .get("sub-meta")
+            .await
+            .expect("subscription should load")
+            .expect("subscription should exist")
+            .auto_update_interval_minutes,
+        Some(360)
+    );
+
+    let metadata = SubMetadataItem {
+        subscription_id: "sub-meta".to_string(),
+        upload_bytes: Some(1024),
+        download_bytes: Some(2048),
+        total_bytes: Some(10_737_418_240),
+        expire_at: Some(1_924_992_000),
+        last_update_at: Some(1_756_800_000),
+        profile_title: Some("Demo Plan".to_string()),
+    };
+    database
+        .subscription_metadata()
+        .upsert(&metadata)
+        .await
+        .expect("metadata should persist");
+    let loaded = database
+        .subscription_metadata()
+        .get("sub-meta")
+        .await
+        .expect("metadata should load")
+        .expect("metadata should exist");
+    assert_eq!(loaded, metadata);
+
+    let updated = SubMetadataItem {
+        download_bytes: Some(4096),
+        expire_at: None,
+        ..metadata
+    };
+    database
+        .subscription_metadata()
+        .upsert(&updated)
+        .await
+        .expect("metadata upsert should replace");
+    assert_eq!(
+        database
+            .subscription_metadata()
+            .list()
+            .await
+            .expect("metadata should list"),
+        vec![updated]
+    );
+
+    let orphan_error = database
+        .subscription_metadata()
+        .upsert(&SubMetadataItem {
+            subscription_id: "missing-subscription".to_string(),
+            ..SubMetadataItem::default()
+        })
+        .await;
+    assert!(orphan_error.is_err(), "orphan metadata must be rejected");
+
+    assert!(database
+        .subscriptions()
+        .delete("sub-meta")
+        .await
+        .expect("subscription delete should succeed"));
+    assert!(database
+        .subscription_metadata()
+        .get("sub-meta")
+        .await
+        .expect("metadata lookup should succeed")
         .is_none());
 }
 

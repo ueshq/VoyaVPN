@@ -54,6 +54,7 @@ where
 {
     let mut keys = BTreeSet::new();
     keys.insert(vec!["subscriptions".to_string()]);
+    keys.insert(vec!["subscription-metadata".to_string()]);
     if profiles_changed {
         keys.insert(vec!["profiles".to_string()]);
         keys.insert(vec!["profile-ex".to_string()]);

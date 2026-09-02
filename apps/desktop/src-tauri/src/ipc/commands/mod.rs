@@ -17,7 +17,7 @@ use voya_app::contract_map::{
     import_profiles_to_contract, move_action_from_contract, profile_dedupe_to_contract,
     profile_from_contract, profile_list_to_contract, profile_sort_key_from_contract,
     routing_from_contract, routing_to_contract, rule_from_contract, subscription_from_contract,
-    subscription_to_contract, subscription_update_to_contract,
+    subscription_metadata_to_contract, subscription_to_contract, subscription_update_to_contract,
 };
 use voya_app::dns::DnsManagerError;
 use voya_app::elevation::ElevationError;
@@ -63,9 +63,9 @@ use voya_contracts::{
     ProxyGroupsSnapshot, ProxyMonitorStatus, QrCodeImage, QrScanResult, ResourceUpdateFile,
     Routing as RoutingContract, RoutingRule as RoutingRuleContract, RuntimeConnectionState,
     RuntimeStatusResponse, SpeedTestResult, SpeedtestRunResult, SpeedtestStatus,
-    Subscription as SubscriptionContract, SubscriptionUpdateResult as SubscriptionUpdateContract,
-    SysProxyType as ContractSysProxyType, SystemProxyStatusResponse, TunProviderDiagnostics,
-    TunStatus,
+    Subscription as SubscriptionContract, SubscriptionMetadata as SubscriptionMetadataContract,
+    SubscriptionUpdateResult as SubscriptionUpdateContract, SysProxyType as ContractSysProxyType,
+    SystemProxyStatusResponse, TunProviderDiagnostics, TunStatus,
 };
 use voya_platform::{
     coreinfo::{

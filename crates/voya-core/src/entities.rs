@@ -492,6 +492,7 @@ pub struct SubItem {
     pub filter: Option<String>,
     pub convert_target: Option<String>,
     pub pre_socks_port: Option<i32>,
+    pub auto_update_interval_minutes: Option<i32>,
 }
 
 impl Default for SubItem {
@@ -507,8 +508,22 @@ impl Default for SubItem {
             filter: None,
             convert_target: None,
             pre_socks_port: None,
+            auto_update_interval_minutes: None,
         }
     }
+}
+
+/// Server-reported subscription usage captured from response headers
+/// (`subscription-userinfo`, `profile-title`) on the latest successful fetch.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SubMetadataItem {
+    pub subscription_id: String,
+    pub upload_bytes: Option<i64>,
+    pub download_bytes: Option<i64>,
+    pub total_bytes: Option<i64>,
+    pub expire_at: Option<i64>,
+    pub last_update_at: Option<i64>,
+    pub profile_title: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]

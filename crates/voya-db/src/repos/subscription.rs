@@ -36,8 +36,8 @@ impl<'executor> SubscriptionRepository<'executor> {
                 r#"
             INSERT INTO subscriptions (
                 id, remarks, url, more_url, enabled, user_agent, sort, filter,
-                convert_target, pre_socks_port
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                convert_target, pre_socks_port, auto_update_interval_minutes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 remarks = excluded.remarks,
                 url = excluded.url,
@@ -47,7 +47,8 @@ impl<'executor> SubscriptionRepository<'executor> {
                 sort = excluded.sort,
                 filter = excluded.filter,
                 convert_target = excluded.convert_target,
-                pre_socks_port = excluded.pre_socks_port
+                pre_socks_port = excluded.pre_socks_port,
+                auto_update_interval_minutes = excluded.auto_update_interval_minutes
             "#,
             )
             .bind(&item.id)
@@ -59,7 +60,8 @@ impl<'executor> SubscriptionRepository<'executor> {
             .bind(item.sort)
             .bind(&item.filter)
             .bind(&item.convert_target)
-            .bind(item.pre_socks_port),
+            .bind(item.pre_socks_port)
+            .bind(item.auto_update_interval_minutes),
             execute
         )?;
 
@@ -129,5 +131,6 @@ fn row_to_subscription(row: SqliteRow) -> Result<SubItem> {
         filter: row.try_get("filter")?,
         convert_target: row.try_get("convert_target")?,
         pre_socks_port: row.try_get("pre_socks_port")?,
+        auto_update_interval_minutes: row.try_get("auto_update_interval_minutes")?,
     })
 }

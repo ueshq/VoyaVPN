@@ -84,9 +84,22 @@ impl DownloadRequest {
     }
 }
 
+/// Response headers surfaced to callers, restricted to this allowlist so the
+/// download layer never leaks arbitrary server headers upward.
+pub const CAPTURED_RESPONSE_HEADERS: [&str; 6] = [
+    "subscription-userinfo",
+    "profile-update-interval",
+    "profile-title",
+    "profile-web-page-url",
+    "support-url",
+    "content-disposition",
+];
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DownloadResponse {
     pub body: String,
+    /// Allowlisted response headers as lowercased `(name, value)` pairs.
+    pub headers: Vec<(String, String)>,
     pub used_proxy: bool,
     pub attempts: Vec<DownloadAttempt>,
 }
@@ -120,6 +133,22 @@ impl DownloadBody for Vec<u8> {
 
     fn is_empty(&self) -> bool {
         Vec::is_empty(self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BodyWithHeaders<T> {
+    body: T,
+    headers: Vec<(String, String)>,
+}
+
+impl<T: DownloadBody> DownloadBody for BodyWithHeaders<T> {
+    fn byte_len(&self) -> usize {
+        self.body.byte_len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.body.is_empty()
     }
 }
 
@@ -166,7 +195,8 @@ impl DownloadClient {
             .await?;
 
         Ok(DownloadResponse {
-            body: response.body,
+            body: response.body.body,
+            headers: response.body.headers,
             used_proxy: response.used_proxy,
             attempts: response.attempts,
         })
@@ -541,7 +571,7 @@ fn request_text_boxed<'a>(
     url: &'a str,
     user_agent: Option<&'a str>,
     response_body_limit: usize,
-) -> DownloadRequestFuture<'a, String> {
+) -> DownloadRequestFuture<'a, BodyWithHeaders<String>> {
     Box::pin(request_text(client, url, user_agent, response_body_limit))
 }
 
@@ -595,15 +625,32 @@ async fn request_text(
     url: &str,
     user_agent: Option<&str>,
     response_body_limit: usize,
-) -> Result<String> {
+) -> Result<BodyWithHeaders<String>> {
     request(
         client,
         url,
         user_agent,
         response_body_limit,
-        read_response_text_limited,
+        |response, limit| async move {
+            let headers = capture_response_headers(&response);
+            let body = read_response_text_limited(response, limit).await?;
+            Ok(BodyWithHeaders { body, headers })
+        },
     )
     .await
+}
+
+fn capture_response_headers(response: &reqwest::Response) -> Vec<(String, String)> {
+    CAPTURED_RESPONSE_HEADERS
+        .iter()
+        .filter_map(|name| {
+            response
+                .headers()
+                .get(*name)
+                .and_then(|value| value.to_str().ok())
+                .map(|value| ((*name).to_string(), value.to_string()))
+        })
+        .collect()
 }
 
 async fn request_bytes(
@@ -736,6 +783,7 @@ pub(crate) mod test_support {
     pub(crate) struct RawFixtureResponse {
         pub(crate) status: String,
         pub(crate) content_length: Option<usize>,
+        pub(crate) extra_headers: Vec<(String, String)>,
         pub(crate) body: Vec<u8>,
     }
 
@@ -763,15 +811,24 @@ pub(crate) mod test_support {
                     let response = routes.get(path).cloned().unwrap_or(RawFixtureResponse {
                         status: "404 Not Found".to_string(),
                         content_length: Some(9),
+                        extra_headers: Vec::new(),
                         body: b"not found".to_vec(),
                     });
+                    let extra_headers = response
+                        .extra_headers
+                        .iter()
+                        .map(|(name, value)| format!("{name}: {value}\r\n"))
+                        .collect::<String>();
                     let header = match response.content_length {
                         Some(length) => format!(
-                            "HTTP/1.1 {}\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n",
+                            "HTTP/1.1 {}\r\nContent-Length: {length}\r\n{extra_headers}Connection: close\r\n\r\n",
                             response.status
                         ),
                         None => {
-                            format!("HTTP/1.1 {}\r\nConnection: close\r\n\r\n", response.status)
+                            format!(
+                                "HTTP/1.1 {}\r\n{extra_headers}Connection: close\r\n\r\n",
+                                response.status
+                            )
                         }
                     };
                     let _ = socket.write_all(header.as_bytes()).await;
@@ -848,6 +905,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn download_text_captures_allowlisted_headers_case_insensitively() {
+        let base = spawn_raw_http_fixture(
+            HashMap::from([(
+                "/sub".to_string(),
+                RawFixtureResponse {
+                    status: "200 OK".to_string(),
+                    content_length: Some(4),
+                    extra_headers: vec![
+                        (
+                            "Subscription-Userinfo".to_string(),
+                            "upload=1; download=2; total=3; expire=4".to_string(),
+                        ),
+                        ("PROFILE-TITLE".to_string(), "Demo".to_string()),
+                        ("x-secret-header".to_string(), "must-not-leak".to_string()),
+                    ],
+                    body: b"body".to_vec(),
+                },
+            )]),
+            1,
+        )
+        .await;
+
+        let response = DownloadClient::new()
+            .download_text(DownloadRequest::direct(format!("{base}/sub")))
+            .await
+            .expect("download should succeed");
+
+        assert_eq!(
+            response.headers,
+            vec![
+                (
+                    "subscription-userinfo".to_string(),
+                    "upload=1; download=2; total=3; expire=4".to_string()
+                ),
+                ("profile-title".to_string(), "Demo".to_string()),
+            ]
+        );
+    }
+
+    #[tokio::test]
     async fn download_text_rejects_declared_response_above_limit() {
         let base = spawn_raw_http_fixture(
             HashMap::from([(
@@ -855,6 +952,7 @@ mod tests {
                 RawFixtureResponse {
                     status: "200 OK".to_string(),
                     content_length: Some(6),
+                    extra_headers: Vec::new(),
                     body: b"abcdef".to_vec(),
                 },
             )]),
@@ -891,6 +989,7 @@ mod tests {
                 RawFixtureResponse {
                     status: "200 OK".to_string(),
                     content_length: None,
+                    extra_headers: Vec::new(),
                     body: b"abcdef".to_vec(),
                 },
             )]),

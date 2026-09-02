@@ -44,6 +44,7 @@ export const commands = {
 	previewGroupProfile: (profile: Profile) => typedError<GroupPreview, AppError>(__TAURI_INVOKE("preview_group_profile", { profile })),
 	saveGroupProfile: (profile: Profile) => typedError<ProfileListEntry, AppError>(__TAURI_INVOKE("save_group_profile", { profile })),
 	listSubscriptions: () => typedError<Subscription[], AppError>(__TAURI_INVOKE("list_subscriptions")),
+	listSubscriptionMetadata: () => typedError<SubscriptionMetadata[], AppError>(__TAURI_INVOKE("list_subscription_metadata")),
 	saveSubscription: (item: Subscription) => typedError<Subscription, AppError>(__TAURI_INVOKE("save_subscription", { item })),
 	deleteSubscriptions: (ids: string[]) => typedError<number, AppError>(__TAURI_INVOKE("delete_subscriptions", { ids })),
 	importProfilesFromText: (text: string, subscriptionId: string | null) => typedError<ImportProfilesResult, AppError>(__TAURI_INVOKE("import_profiles_from_text", { text, subscriptionId })),
@@ -693,6 +694,21 @@ export type Subscription = {
 	filter: string | null,
 	converterTarget: string | null,
 	preSocksPort: number | null,
+	autoUpdateIntervalMinutes: number | null,
+};
+
+/**
+ *  Usage metadata reported by the subscription server on the latest successful
+ *  fetch (`subscription-userinfo` and `profile-title` response headers).
+ */
+export type SubscriptionMetadata = {
+	subscriptionId: string,
+	uploadBytes: number | null,
+	downloadBytes: number | null,
+	totalBytes: number | null,
+	expireAt: number | null,
+	lastUpdateAt: number | null,
+	profileTitle: string | null,
 };
 
 export type SubscriptionUpdateResult = {

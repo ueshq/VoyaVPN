@@ -16,6 +16,25 @@ pub async fn list_subscriptions(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn list_subscription_metadata(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<SubscriptionMetadataContract>, AppError> {
+    state
+        .services()
+        .subscriptions()
+        .list_subscription_metadata()
+        .await
+        .map(|items| {
+            items
+                .into_iter()
+                .map(subscription_metadata_to_contract)
+                .collect()
+        })
+        .map_err(subscription_error)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn save_subscription<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,

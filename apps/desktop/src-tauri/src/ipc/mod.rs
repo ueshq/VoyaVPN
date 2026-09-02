@@ -41,6 +41,7 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::preview_group_profile,
         commands::save_group_profile::<tauri::Wry>,
         commands::list_subscriptions,
+        commands::list_subscription_metadata,
         commands::save_subscription::<tauri::Wry>,
         commands::delete_subscriptions::<tauri::Wry>,
         commands::import_profiles_from_text::<tauri::Wry>,
@@ -88,6 +89,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_contracts::GroupPreview>()
         .typ::<voya_contracts::GroupPreviewRoute>()
         .typ::<voya_contracts::Subscription>()
+        .typ::<voya_contracts::SubscriptionMetadata>()
         .typ::<voya_contracts::ImportProfilesResult>()
         .typ::<voya_contracts::SubscriptionUpdateResult>()
         .typ::<voya_contracts::Routing>()

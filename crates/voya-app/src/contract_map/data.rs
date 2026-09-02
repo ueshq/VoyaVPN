@@ -1,11 +1,12 @@
 use voya_contracts::{
     DnsSettings as DnsContract, ImportProfilesResult as ImportProfilesContract,
     Routing as RoutingContract, RoutingRule as RoutingRuleContract, RoutingRuleScope,
-    Subscription as SubscriptionContract, SubscriptionUpdateResult as SubscriptionUpdateContract,
+    Subscription as SubscriptionContract, SubscriptionMetadata as SubscriptionMetadataContract,
+    SubscriptionUpdateResult as SubscriptionUpdateContract,
 };
 use voya_core::{
     ImportProfilesResult, RoutingItem, RuleType, RulesItem, SimpleDnsItem, SubItem,
-    SubscriptionUpdateResult,
+    SubMetadataItem, SubscriptionUpdateResult,
 };
 
 use crate::dns::DnsSettings;
@@ -23,6 +24,20 @@ pub fn subscription_to_contract(item: SubItem) -> SubscriptionContract {
         filter: item.filter,
         converter_target: item.convert_target,
         pre_socks_port: item.pre_socks_port,
+        auto_update_interval_minutes: item.auto_update_interval_minutes,
+    }
+}
+
+#[must_use]
+pub fn subscription_metadata_to_contract(item: SubMetadataItem) -> SubscriptionMetadataContract {
+    SubscriptionMetadataContract {
+        subscription_id: item.subscription_id,
+        upload_bytes: item.upload_bytes,
+        download_bytes: item.download_bytes,
+        total_bytes: item.total_bytes,
+        expire_at: item.expire_at,
+        last_update_at: item.last_update_at,
+        profile_title: item.profile_title,
     }
 }
 
@@ -39,6 +54,7 @@ pub fn subscription_from_contract(item: SubscriptionContract) -> SubItem {
         filter: item.filter,
         convert_target: item.converter_target,
         pre_socks_port: item.pre_socks_port,
+        auto_update_interval_minutes: item.auto_update_interval_minutes,
     }
 }
 
