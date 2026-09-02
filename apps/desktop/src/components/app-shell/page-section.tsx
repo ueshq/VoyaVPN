@@ -20,7 +20,7 @@ function PageSection({ className, ...props }: React.ComponentProps<"section">) {
 
 // Hiddify-style large page identity: the page's single `<h1>` above the toolbar
 // strip. Screens keep `PageHeader` as a pure toolbar row; embedded/secondary
-// surfaces keep the small `PageHeaderHeading` h2 underneath this h1.
+// surfaces render their own small `<h2>` underneath this h1.
 function PageTitle({
   actions,
   className,

@@ -10,7 +10,7 @@ describe("formatting", () => {
     expect(formatBytes(1024 * 1024 * 1024)).toBe("1.0 GB");
   });
 
-  it("formats live byte rates with the status bar precision", () => {
+  it("formats live byte rates with the sidebar speed-row precision", () => {
     expect(formatBytesPerSecond(512)).toBe("512 B/s");
     expect(formatBytesPerSecond(2048)).toBe("2.0 KB/s");
     expect(formatBytesPerSecond(10 * 1024)).toBe("10 KB/s");

@@ -111,7 +111,7 @@ describe("unified settings surface", () => {
     await user.click(await screen.findByRole("tab", { name: "DNS" }));
 
     expect(await screen.findByLabelText("Remote DNS")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 3, name: "DNS" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "DNS" })).toBeInTheDocument();
     expect(ipcMocks.loadDnsSettings).toHaveBeenCalledTimes(1);
   });
 

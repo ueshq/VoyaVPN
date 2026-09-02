@@ -17,7 +17,6 @@ describe("desktop window capabilities", () => {
         "core:window:allow-minimize",
         "core:window:allow-toggle-maximize",
         "core:window:allow-close",
-        "core:window:allow-destroy",
         "core:window:allow-start-dragging",
       ]),
     );

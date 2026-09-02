@@ -1,3 +1,4 @@
+import type * as React from "react";
 import { ArrowDown, ArrowUp, Home, LoaderCircle, Network, Plug, Power, Route, Settings, Shield, WifiOff } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -39,6 +40,31 @@ export function AppSidebar() {
   const activeTab = useShellStore((state) => state.activeTab);
   const requestTab = useShellStore((state) => state.requestTab);
 
+  // Manual-activation tablist keyboard pattern: arrows move focus between the
+  // roving-tabIndex tabs (Enter/Space then activates the native button). The
+  // roving tabIndex alone made inactive tabs unreachable by keyboard.
+  function handleNavKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+    const keys = ["ArrowDown", "ArrowUp", "Home", "End"];
+    if (!keys.includes(event.key)) {
+      return;
+    }
+    const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]'));
+    if (tabs.length === 0) {
+      return;
+    }
+    const current = tabs.indexOf(document.activeElement as HTMLElement);
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? tabs.length - 1
+          : event.key === "ArrowDown"
+            ? (current + 1 + tabs.length) % tabs.length
+            : (current - 1 + tabs.length) % tabs.length;
+    event.preventDefault();
+    tabs[next]?.focus();
+  }
+
   return (
     <aside className="flex h-full min-h-0 w-72 flex-col border-e border-sidebar-border bg-sidebar text-sidebar-foreground">
       {/* Brand block: a plain label, not a heading — the page-level h1 lives in
@@ -52,6 +78,7 @@ export function AppSidebar() {
         aria-label={t("tabs.aria")}
         aria-orientation="vertical"
         className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-2"
+        onKeyDown={handleNavKeyDown}
         role="tablist"
       >
         {navItems.map((item) => (

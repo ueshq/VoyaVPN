@@ -455,7 +455,8 @@
     "trafficModeRule": "Rule",
     "type": "Type",
     "udp": "UDP",
-    "upload": "Up"
+    "upload": "Up",
+    "viewTabsAria": "Connection views"
   },
   "qr": {
     "clipboardImageUnavailable": "Clipboard image read is unavailable in this WebView.",

@@ -68,6 +68,9 @@ export function HomeScreen() {
   const home = useHomeRuntime(t);
   const queryClient = useQueryClient();
   const pushToast = useToastStore((state) => state.pushToast);
+  // Serialize language persists at the UI level: the select is disabled while a
+  // write is in flight so rapid switches cannot interleave the read-modify-write.
+  const [languageSaving, setLanguageSaving] = useState(false);
   const versionQuery = useQuery({
     queryFn: () => getVersion(),
     queryKey: ["app-version"],
@@ -89,12 +92,13 @@ export function HomeScreen() {
   const pidLabel = home.mainPid ? `PID ${home.mainPid}` : t("status.noPid");
 
   async function changeLanguage(code: Locale) {
-    if (code === language) {
+    if (code === language || languageSaving) {
       return;
     }
     // Apply instantly (i18next + localStorage), then persist to the settings DB
     // so the choice survives a cold start. On persist failure the UI keeps the
     // switched language and a toast explains what did not stick.
+    setLanguageSaving(true);
     await setLocale(code);
     try {
       await persistLanguage(queryClient, code);
@@ -104,6 +108,8 @@ export function HomeScreen() {
         severity: "error",
         title: t("status.languageSaveFailed"),
       });
+    } finally {
+      setLanguageSaving(false);
     }
   }
 
@@ -156,7 +162,7 @@ export function HomeScreen() {
               <Label className="text-sm font-medium text-foreground" htmlFor="home-language-select">
                 {t("modal.language")}
               </Label>
-              <Select onValueChange={(value) => void changeLanguage(value as Locale)} value={language}>
+              <Select disabled={languageSaving} onValueChange={(value) => void changeLanguage(value as Locale)} value={language}>
                 <SelectTrigger className="w-40" id="home-language-select">
                   <SelectValue />
                 </SelectTrigger>

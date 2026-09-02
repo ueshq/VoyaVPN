@@ -359,7 +359,7 @@ runtime configuration and enables TUN.
 First run should not assume any core executable is present in debug or dry-run packages. Stable packages copy the approved sing-box seed into app data when present. Missing sing-box seed assets do not fall back to an online sing-box download; rebuild or reinstall the package so the seed is present.
 
 1. App startup creates the app config, `bin/`, `binConfigs/`, log, and temp directories.
-2. The profile table and status bar may show profiles before cores exist, but connect should surface a typed missing-core error instead of failing silently.
+2. The profile table may show profiles before cores exist, but connect should surface a typed missing-core error instead of failing silently.
 3. On startup or connect, the approved sing-box seed is copied from package resources into app data only when `bin/sing_box/` is missing.
 4. The user opens Check Updates for app, geo, and SRS updates. The update manager fetches through proxy first when available, then falls back to direct download.
 5. Core launch discovery uses the app data `bin/sing_box/` tree populated from the bundled seed.

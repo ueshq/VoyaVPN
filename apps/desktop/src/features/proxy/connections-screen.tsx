@@ -31,7 +31,7 @@ export function ConnectionsScreen() {
       >
         <PageTitle
           actions={
-            <TabsList>
+            <TabsList aria-label={t("proxy.viewTabsAria")}>
               <TabsTrigger value="connections">{t("tabs.connections")}</TabsTrigger>
               <TabsTrigger value="logs">{t("tabs.logs")}</TabsTrigger>
             </TabsList>

@@ -64,6 +64,13 @@ export function SettingsScreen() {
             <AlertDialogTitle>{t("settings.closeUnsavedTitle")}</AlertDialogTitle>
             <AlertDialogDescription>{t("settings.closeUnsavedDescription")}</AlertDialogDescription>
           </AlertDialogHeader>
+          {/* Save failures must surface inside the dialog — the surface footer's
+              error line sits behind the modal overlay where it cannot be seen. */}
+          {controller.error ? (
+            <p className="text-xs text-destructive" role="alert">
+              {controller.error}
+            </p>
+          ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
             <AlertDialogAction

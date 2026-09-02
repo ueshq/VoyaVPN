@@ -32,7 +32,7 @@ export function DnsPane() {
   return (
     <section aria-label={t("panes.dns.title")} className="mx-auto grid w-full max-w-3xl gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-sm font-semibold">{t("panes.dns.title")}</h3>
+        <h2 className="text-sm font-semibold">{t("panes.dns.title")}</h2>
         <Badge variant="outline">{form?.fakeIp ? t("panes.dns.fakeIp") : t("panes.dns.standard")}</Badge>
         {issueCount ? (
           <Badge variant="destructive">

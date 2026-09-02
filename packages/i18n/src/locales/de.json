@@ -455,7 +455,8 @@
     "trafficModeRule": "Rule",
     "type": "Type",
     "udp": "UDP",
-    "upload": "Up"
+    "upload": "Up",
+    "viewTabsAria": "Verbindungsansichten"
   },
   "qr": {
     "clipboardImageUnavailable": "Clipboard image read is unavailable in this WebView.",
@@ -576,7 +577,7 @@
   },
   "tabs": {
     "aria": "Main sections",
-    "connections": "Connections",
+    "connections": "Verbindungen",
     "dns": "DNS",
     "home": "Start",
     "logs": "Logs",

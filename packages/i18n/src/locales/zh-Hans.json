@@ -455,7 +455,8 @@
     "trafficModeRule": "规则",
     "type": "类型",
     "udp": "UDP",
-    "upload": "上行"
+    "upload": "上行",
+    "viewTabsAria": "连接视图"
   },
   "qr": {
     "clipboardImageUnavailable": "当前 WebView 不支持读取剪贴板图片。",

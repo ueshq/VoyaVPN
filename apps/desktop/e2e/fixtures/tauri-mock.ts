@@ -109,7 +109,6 @@ export async function installTauriSmokeMock(page: Page) {
         case "plugin:event|emit_to":
         case "plugin:resources|close":
         case "plugin:window|close":
-        case "plugin:window|set_title":
           return Promise.resolve(null);
         case "plugin:app|version":
           return Promise.resolve("0.1.0");

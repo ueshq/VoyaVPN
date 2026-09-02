@@ -29,7 +29,7 @@ describe("DnsPane", () => {
     renderPane();
 
     const remote = await screen.findByLabelText("Remote DNS");
-    expect(screen.getByRole("heading", { level: 3, name: "DNS" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "DNS" })).toBeInTheDocument();
     expect(screen.getByText("Standard")).toBeInTheDocument();
 
     await user.type(remote, "https://dns.google/dns-query");

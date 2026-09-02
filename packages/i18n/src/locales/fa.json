@@ -455,7 +455,8 @@
     "trafficModeRule": "قانون",
     "type": "نوع",
     "udp": "UDP",
-    "upload": "ارسال"
+    "upload": "ارسال",
+    "viewTabsAria": "نمای اتصال‌ها"
   },
   "qr": {
     "clipboardImageUnavailable": "Clipboard image read is unavailable in this WebView.",
