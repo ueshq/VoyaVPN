@@ -54,7 +54,6 @@
   "modal": {
     "language": "語言",
     "settings": "設定",
-    "settingsDescription": "通用、來源、核心、網路、測試與更新設定。",
     "theme": "主題"
   },
   "options": {
@@ -583,7 +582,8 @@
     "profiles": "設定檔",
     "proxyConnections": "連線",
     "proxyGroups": "代理群組",
-    "routing": "路由"
+    "routing": "路由",
+    "settings": "設定"
   },
   "updates": {
     "appInstalled": "應用程式更新已安裝：{{version}}",

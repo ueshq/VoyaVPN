@@ -68,13 +68,7 @@ function SettingsSurfaceView({
   }
 
   return (
-    <section
-      aria-describedby="settings-window-description"
-      aria-labelledby="settings-window-title"
-      className="flex min-h-0 flex-1 flex-col overflow-hidden"
-    >
-      <h1 className="sr-only" id="settings-window-title">{t("modal.settings")}</h1>
-      <p className="sr-only" id="settings-window-description">{t("modal.settingsDescription")}</p>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <Tabs className="flex min-h-0 flex-1 flex-col gap-0" dir={direction} onValueChange={handleTabChange} value={tab}>
         <SettingsTabBar>
           {tabDefs.map((def) => (
@@ -102,7 +96,7 @@ function SettingsSurfaceView({
         </span>
         {controller.error ? <span className="text-xs text-destructive" role="alert">{controller.error}</span> : null}
       </footer>
-    </section>
+    </div>
   );
 }
 

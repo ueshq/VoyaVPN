@@ -42,6 +42,11 @@ const ProxyConnectionsScreen = lazy(() =>
 const LogsScreen = lazy(() =>
   import("@/features/logs/logs-screen").then(({ LogsScreen }) => ({ default: LogsScreen })),
 );
+const SettingsScreen = lazy(() =>
+  import("@/features/settings/settings-screen").then(({ SettingsScreen }) => ({
+    default: SettingsScreen,
+  })),
+);
 
 // Render only the active screen. Replaces the Radix `Tabs`/`TabsContent` fan-out
 // (which already unmounted inactive panels) so the grid shell can drop the tab
@@ -63,6 +68,8 @@ function renderActiveScreen(tab: ShellTab) {
       return <ProxyConnectionsScreen />;
     case "logs":
       return <LogsScreen />;
+    case "settings":
+      return <SettingsScreen />;
     default:
       return null;
   }

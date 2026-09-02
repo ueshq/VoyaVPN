@@ -7,7 +7,7 @@ import { Button } from "@voya/ui/components/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@voya/ui/components/tooltip";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
-import { listProfiles, openSettingsWindow, runtimeStatus, tunProviderDiagnostics, useRuntimeEventStore } from "@/ipc";
+import { listProfiles, runtimeStatus, tunProviderDiagnostics, useRuntimeEventStore } from "@/ipc";
 import type { CoreState, CoreStateEvent, RuntimeStatusResponse, TunProviderDiagnostics } from "@/ipc/bindings";
 import { getErrorMessage } from "@voya/utils/error";
 import { formatBytesPerSecond } from "@voya/utils/formatting";
@@ -97,16 +97,8 @@ export function StatusBar() {
     }
   }
 
-  async function openSettings() {
-    try {
-      await openSettingsWindow();
-    } catch (error) {
-      pushToast({
-        description: getErrorMessage(error),
-        severity: "error",
-        title: settingsLabel,
-      });
-    }
+  function openSettings() {
+    useShellStore.getState().requestTab("settings");
   }
 
   return (
@@ -188,7 +180,7 @@ export function StatusBar() {
             <Button
               aria-label={settingsLabel}
               className="size-6 text-muted-foreground hover:text-foreground"
-              onClick={() => void openSettings()}
+              onClick={openSettings}
               size="icon-xs"
               title={settingsLabel}
               type="button"

@@ -69,10 +69,6 @@ export async function saveAppSettings(settings: AppSettingsV1): Promise<AppSetti
   return unwrapCommandResult(await commands.saveAppSettings(settings));
 }
 
-export async function openSettingsWindow(): Promise<void> {
-  unwrapCommandResult(await commands.openSettingsWindow());
-}
-
 export async function generateQrCode(content: string): Promise<QrCodeImage> {
   return unwrapCommandResult(await commands.generateQrCode(content));
 }

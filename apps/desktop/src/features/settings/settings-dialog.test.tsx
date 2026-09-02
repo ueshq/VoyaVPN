@@ -1,17 +1,17 @@
 import type { ReactNode } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
+import { useShellStore } from "@/stores/shell-store";
 import { makeAppSettings } from "./app-settings.test-fixture";
 import { SettingsSurface } from "./settings-dialog";
-import { SettingsWindow } from "./settings-window";
+import { SettingsScreen } from "./settings-screen";
 
 const ipcMocks = vi.hoisted(() => ({
   appUpdateStatus: vi.fn(),
-  getWindowChromeConfig: vi.fn(),
   loadAppSettings: vi.fn(),
   saveAppSettings: vi.fn(),
   updateGeoAssets: vi.fn(),
@@ -21,19 +21,8 @@ const updaterMocks = vi.hoisted(() => ({
   check: vi.fn(),
   getVersion: vi.fn(),
 }));
-const windowMocks = vi.hoisted(() => ({
-  closeWindow: vi.fn(),
-  onWindowCloseRequested: vi.fn(),
-  setWindowTitle: vi.fn(),
-}));
-
-type CloseRequestedHandler = (event: { preventDefault: () => void }) => void;
-
-let closeRequestedHandler: CloseRequestedHandler | undefined;
-let windowClosed = false;
 
 vi.mock("@/ipc", () => ipcMocks);
-vi.mock("@/ipc/window", () => windowMocks);
 vi.mock("@/ipc/process", () => ({ relaunch: vi.fn() }));
 vi.mock("@/ipc/updater", () => updaterMocks);
 
@@ -42,7 +31,6 @@ describe("unified settings surface", () => {
     cleanup();
     vi.clearAllMocks();
     await changeLocale("en");
-    ipcMocks.getWindowChromeConfig.mockResolvedValue({ titleBarLayout: "none" });
     ipcMocks.appUpdateStatus.mockResolvedValue({ currentVersion: "0.1.0", message: null, state: "ready" });
     ipcMocks.loadAppSettings.mockResolvedValue(makeAppSettings());
     ipcMocks.saveAppSettings.mockImplementation(async (settings) => settings);
@@ -50,18 +38,11 @@ describe("unified settings surface", () => {
     ipcMocks.updateSrsAssets.mockResolvedValue([]);
     updaterMocks.check.mockResolvedValue(null);
     updaterMocks.getVersion.mockResolvedValue("0.1.0");
-    closeRequestedHandler = undefined;
-    windowClosed = false;
-    windowMocks.closeWindow.mockImplementation(async () => {
-      dispatchCloseRequest();
+    useShellStore.setState({
+      activeTab: "settings",
+      navigationGuard: null,
+      pendingTab: null,
     });
-    windowMocks.onWindowCloseRequested.mockImplementation(async (handler: CloseRequestedHandler) => {
-      closeRequestedHandler = handler;
-      return () => {
-        if (closeRequestedHandler === handler) closeRequestedHandler = undefined;
-      };
-    });
-    windowMocks.setWindowTitle.mockResolvedValue(undefined);
   });
 
   afterEach(cleanup);
@@ -103,88 +84,80 @@ describe("unified settings surface", () => {
     );
   });
 
-  it("closes a clean settings window immediately", async () => {
-    renderWindow();
+  it("renders the in-shell settings screen and navigates away freely while clean", async () => {
+    renderScreen();
     await screen.findByRole("region", { name: "Settings" });
-    await waitFor(() => expect(windowMocks.onWindowCloseRequested).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: "General", selected: true })).toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: "Escape" });
+    act(() => useShellStore.getState().requestTab("home"));
 
-    await waitFor(() => expect(windowMocks.closeWindow).toHaveBeenCalledTimes(1));
-    expect(windowClosed).toBe(true);
+    expect(useShellStore.getState().activeTab).toBe("home");
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   });
 
-  it("guards a native close request while settings are dirty and honors cancel", async () => {
+  it("guards navigation while settings are dirty and honors cancel", async () => {
     const user = userEvent.setup();
-    renderWindow();
+    renderScreen();
     await user.click(await screen.findByRole("button", { name: "Light" }));
-    await waitFor(() => expect(windowMocks.onWindowCloseRequested).toHaveBeenCalledTimes(1));
 
-    expect(dispatchCloseRequest()).toBe(true);
+    act(() => useShellStore.getState().requestTab("home"));
+
     expect(await screen.findByRole("alertdialog")).toHaveTextContent("Unsaved settings");
-    expect(windowMocks.closeWindow).not.toHaveBeenCalled();
-    expect(windowClosed).toBe(false);
+    expect(useShellStore.getState().activeTab).toBe("settings");
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(windowMocks.closeWindow).not.toHaveBeenCalled();
-    expect(windowClosed).toBe(false);
+    expect(useShellStore.getState().activeTab).toBe("settings");
+    expect(useShellStore.getState().pendingTab).toBeNull();
   });
 
-  it("discards dirty settings and allows the reentrant close request", async () => {
+  it("discards dirty settings and completes the blocked navigation", async () => {
     const user = userEvent.setup();
-    renderWindow();
+    renderScreen();
     await user.click(await screen.findByRole("button", { name: "Light" }));
 
-    fireEvent.keyDown(window, { key: "Escape" });
-    await user.click(await screen.findByRole("button", { name: "Discard changes" }));
+    act(() => useShellStore.getState().requestTab("home"));
+    const dialog = within(await screen.findByRole("alertdialog"));
+    await user.click(dialog.getByRole("button", { name: "Discard changes" }));
 
-    await waitFor(() => expect(windowMocks.closeWindow).toHaveBeenCalledTimes(1));
-    expect(windowClosed).toBe(true);
+    await waitFor(() => expect(useShellStore.getState().activeTab).toBe("home"));
   });
 
-  it("saves dirty settings and allows the reentrant close request", async () => {
+  it("saves dirty settings and completes the blocked navigation", async () => {
     const user = userEvent.setup();
-    renderWindow();
+    renderScreen();
     await user.click(await screen.findByRole("button", { name: "Light" }));
 
-    fireEvent.keyDown(window, { key: "Escape" });
-    await user.click(await screen.findByRole("button", { name: "Save all" }));
+    act(() => useShellStore.getState().requestTab("home"));
+    const dialog = within(await screen.findByRole("alertdialog"));
+    await user.click(dialog.getByRole("button", { name: "Save all" }));
 
     await waitFor(() => expect(ipcMocks.saveAppSettings).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(windowMocks.closeWindow).toHaveBeenCalledTimes(1));
-    expect(windowClosed).toBe(true);
+    await waitFor(() => expect(useShellStore.getState().activeTab).toBe("home"));
   });
 
-  it("keeps the window open when saving dirty settings fails", async () => {
+  it("keeps the settings tab active when saving dirty settings fails", async () => {
     const user = userEvent.setup();
     ipcMocks.saveAppSettings.mockRejectedValueOnce(new Error("save failed"));
-    renderWindow();
+    renderScreen();
     await user.click(await screen.findByRole("button", { name: "Light" }));
 
-    fireEvent.keyDown(window, { key: "Escape" });
-    await user.click(await screen.findByRole("button", { name: "Save all" }));
+    act(() => useShellStore.getState().requestTab("home"));
+    const dialog = within(await screen.findByRole("alertdialog"));
+    await user.click(dialog.getByRole("button", { name: "Save all" }));
 
     await waitFor(() => expect(ipcMocks.saveAppSettings).toHaveBeenCalledTimes(1));
-    expect(windowMocks.closeWindow).not.toHaveBeenCalled();
-    expect(windowClosed).toBe(false);
+    expect(useShellStore.getState().activeTab).toBe("settings");
     expect(screen.getByRole("alertdialog")).toBeVisible();
   });
 });
-
-function dispatchCloseRequest() {
-  const preventDefault = vi.fn();
-  closeRequestedHandler?.({ preventDefault });
-  const prevented = preventDefault.mock.calls.length > 0;
-  if (!prevented) windowClosed = true;
-  return prevented;
-}
 
 function renderSurface() {
   return renderWithQuery(<SettingsSurface />);
 }
 
-function renderWindow() {
-  return renderWithQuery(<SettingsWindow />);
+function renderScreen() {
+  return renderWithQuery(<SettingsScreen />);
 }
 
 function renderWithQuery(children: ReactNode) {

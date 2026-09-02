@@ -1,6 +1,14 @@
 import { create } from "zustand";
 
-export type ShellTab = "home" | "profiles" | "routing" | "dns" | "proxy-groups" | "proxy-connections" | "logs";
+export type ShellTab =
+  | "home"
+  | "profiles"
+  | "routing"
+  | "dns"
+  | "proxy-groups"
+  | "proxy-connections"
+  | "logs"
+  | "settings";
 
 export const shellTabRoutes = {
   "proxy-connections": "/proxy/connections",
@@ -10,6 +18,7 @@ export const shellTabRoutes = {
   logs: "/logs",
   profiles: "/profiles",
   routing: "/routing",
+  settings: "/settings",
 } as const satisfies Record<ShellTab, string>;
 
 type ShellState = {

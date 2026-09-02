@@ -20,13 +20,7 @@ type RegisteredUnlisten = {
   unlisten: Unlisten;
 };
 
-export type EventBridgeSurface = "main" | "settings";
-
-type EventBridgeProps = {
-  surface?: EventBridgeSurface;
-};
-
-export function EventBridge({ surface = "main" }: EventBridgeProps) {
+export function EventBridge() {
   const queryClient = useQueryClient();
   const mountedRef = useMountedRef();
   const listenerGenerationRef = useRef(0);
@@ -36,14 +30,12 @@ export function EventBridge({ surface = "main" }: EventBridgeProps) {
       return undefined;
     }
 
-    if (surface === "main") {
-      void useRuntimeEventStore
-        .getState()
-        .refreshSpeedtestStatus()
-        .catch((error: unknown) => {
-          reportEventBridgeError("failed to refresh speedtest status", error);
-        });
-    }
+    void useRuntimeEventStore
+      .getState()
+      .refreshSpeedtestStatus()
+      .catch((error: unknown) => {
+        reportEventBridgeError("failed to refresh speedtest status", error);
+      });
 
     const generation = ++listenerGenerationRef.current;
     const unlisteners: RegisteredUnlisten[] = [];
@@ -56,20 +48,15 @@ export function EventBridge({ surface = "main" }: EventBridgeProps) {
       ),
       registerEventListener("appEvent", () =>
         events.appEvent.listen((event) => {
-          routeAppEvent(event.payload, surface);
+          routeAppEvent(event.payload);
+        }),
+      ),
+      registerEventListener("transientStreamEvent", () =>
+        events.transientStreamEvent.listen((event) => {
+          routeTransientStream(event.payload);
         }),
       ),
     ];
-
-    if (surface === "main") {
-      listenerRegistrations.push(
-        registerEventListener("transientStreamEvent", () =>
-          events.transientStreamEvent.listen((event) => {
-            routeTransientStream(event.payload);
-          }),
-        ),
-      );
-    }
 
     void Promise.allSettled(listenerRegistrations);
 
@@ -101,7 +88,7 @@ export function EventBridge({ surface = "main" }: EventBridgeProps) {
       listenerGenerationRef.current += 1;
       drainUnlisteners(unlisteners);
     };
-  }, [mountedRef, queryClient, surface]);
+  }, [mountedRef, queryClient]);
 
   return null;
 }
@@ -144,7 +131,7 @@ function routeTransientStream(event: TransientStreamEvent) {
   useRuntimeEventStore.getState().pushTransientEvent(event);
 }
 
-function routeAppEvent(event: AppEvent, surface: EventBridgeSurface) {
+function routeAppEvent(event: AppEvent) {
   switch (event.kind) {
     case "notice":
       useToastStore.getState().pushToast({
@@ -154,9 +141,7 @@ function routeAppEvent(event: AppEvent, surface: EventBridgeSurface) {
       });
       return;
     case "selectTab":
-      if (surface === "main") {
-        useShellStore.getState().requestTab(toShellTab(event.payload));
-      }
+      useShellStore.getState().requestTab(toShellTab(event.payload));
       return;
   }
 }

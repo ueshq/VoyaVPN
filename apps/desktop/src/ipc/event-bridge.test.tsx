@@ -79,7 +79,7 @@ describe("EventBridge", () => {
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
   });
 
-  it("keeps invalidations and notices in a settings surface without subscribing to main-window streams", async () => {
+  it("routes invalidations and notices to the query cache and toast store", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -87,21 +87,16 @@ describe("EventBridge", () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <EventBridge surface="settings" />
+        <EventBridge />
       </QueryClientProvider>,
     );
 
     await waitFor(() => expect(bridgeMocks.invalidateEventListen).toHaveBeenCalledOnce());
     expect(bridgeMocks.appEventListen).toHaveBeenCalledOnce();
-    expect(bridgeMocks.transientStreamEventListen).not.toHaveBeenCalled();
-    expect(bridgeMocks.refreshSpeedtestStatus).not.toHaveBeenCalled();
 
     act(() => {
       bridgeMocks.listeners.invalidateEvent[0]?.({
         payload: { keys: [{ queryKey: ["ui-preferences"] }] },
-      });
-      bridgeMocks.listeners.appEvent[0]?.({
-        payload: { kind: "selectTab", payload: "logs" },
       });
       bridgeMocks.listeners.appEvent[0]?.({
         payload: {
@@ -120,14 +115,14 @@ describe("EventBridge", () => {
     });
   });
 
-  it("routes transient streams and tab selection only in the main surface", async () => {
+  it("routes transient streams and tab selection through the shell store", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
 
     render(
       <QueryClientProvider client={queryClient}>
-        <EventBridge surface="main" />
+        <EventBridge />
       </QueryClientProvider>,
     );
 

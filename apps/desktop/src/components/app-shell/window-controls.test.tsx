@@ -43,7 +43,7 @@ describe("Windows title-bar controls", () => {
       resize = listener;
       return unlisten;
     });
-    const { unmount } = render(<WindowControls onClose={vi.fn()} />);
+    const { unmount } = render(<WindowControls />);
 
     expect(await screen.findByRole("button", { name: "Restore" })).toBeInTheDocument();
     resize?.();
@@ -52,15 +52,13 @@ describe("Windows title-bar controls", () => {
     expect(unlisten).toHaveBeenCalledOnce();
   });
 
-  it("renders a draggable title and delegates an injected close handler", async () => {
+  it("renders a draggable brand label and closes through the window IPC", async () => {
     const user = userEvent.setup();
-    const onClose = vi.fn();
-    const { container } = render(<TitleBar onClose={onClose} title="Voya Test" />);
+    const { container } = render(<TitleBar />);
 
-    expect(screen.getByText("Voya Test")).toBeInTheDocument();
+    expect(screen.getByText("VoyaVPN")).toBeInTheDocument();
     expect(container.querySelector("[data-tauri-drag-region]")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close" }));
-    expect(onClose).toHaveBeenCalledOnce();
-    expect(windowMocks.closeWindow).not.toHaveBeenCalled();
+    expect(windowMocks.closeWindow).toHaveBeenCalledOnce();
   });
 });

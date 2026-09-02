@@ -16,7 +16,7 @@ import {
  * `@/ipc/window` and deliberately sit outside the drag region so every click
  * registers. The maximize glyph swaps to a restore glyph while maximized.
  */
-export function WindowControls({ onClose }: { onClose?: () => void }) {
+export function WindowControls() {
   const { t } = useI18n();
   const [maximized, setMaximized] = useState(false);
 
@@ -73,7 +73,7 @@ export function WindowControls({ onClose }: { onClose?: () => void }) {
       <button
         aria-label={t("window.close")}
         className="flex h-full w-12 items-center justify-center text-foreground/70 transition-colors hover:bg-destructive hover:text-white"
-        onClick={() => (onClose ? onClose() : void closeWindow())}
+        onClick={() => void closeWindow()}
         type="button"
       >
         <X className="size-4" aria-hidden="true" />

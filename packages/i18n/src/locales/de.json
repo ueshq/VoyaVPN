@@ -54,7 +54,6 @@
   "modal": {
     "language": "Language",
     "settings": "Settings",
-    "settingsDescription": "General, sources, core, network, tests, and update preferences.",
     "theme": "Theme"
   },
   "options": {
@@ -583,7 +582,8 @@
     "profiles": "Profiles",
     "proxyConnections": "Connections",
     "proxyGroups": "Proxy Groups",
-    "routing": "Routing"
+    "routing": "Routing",
+    "settings": "Einstellungen"
   },
   "updates": {
     "appInstalled": "App update installed: {{version}}",

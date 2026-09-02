@@ -28,9 +28,7 @@ vi.mock("@/ipc/window", () => ({
   closeWindow: vi.fn(() => Promise.resolve()),
   isWindowMaximized: vi.fn(() => Promise.resolve(false)),
   minimizeWindow: vi.fn(() => Promise.resolve()),
-  onWindowCloseRequested: vi.fn(() => Promise.resolve(() => undefined)),
   onWindowResized: vi.fn(() => Promise.resolve(() => undefined)),
-  setWindowTitle: vi.fn(() => Promise.resolve()),
   toggleMaximizeWindow: vi.fn(() => Promise.resolve()),
 }));
 vi.mock("@/ipc/updater", () => ({
@@ -231,7 +229,6 @@ vi.mock("@/ipc", () => ({
   loadUiPreferences: vi.fn(() => Promise.resolve({ language: "en", theme: "system" })),
   moveRoutingRule: vi.fn(),
   moveProfile: vi.fn(),
-  openSettingsWindow: vi.fn(() => Promise.resolve()),
   previewGroupProfile: vi.fn(() =>
     Promise.resolve({
       validation: { childIndexIds: [], errors: [], normalizedChildItems: "", valid: true, warnings: [] },
@@ -407,6 +404,7 @@ describe("App", () => {
     expect(screen.getByRole("tab", { name: /Proxy Groups/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Connections/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Logs/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Settings/ })).toBeInTheDocument();
     expect(statusBar).toHaveTextContent("Disconnected");
     expect(statusBar).toHaveTextContent("Route: /profiles");
     expect(within(statusBar).getByRole("button", { name: "Settings" })).toBeInTheDocument();
@@ -442,14 +440,16 @@ describe("App", () => {
     await waitFor(() => expect(document.documentElement).toHaveClass("dark"));
   });
 
-  it("renders the settings surface only for the internal settings window URL", async () => {
-    window.history.replaceState({}, "", "/?window=settings");
-
+  it("opens the in-shell settings screen from the sidebar tab", async () => {
     renderApp();
 
+    await activateTab(/Settings/);
+
     expect(await screen.findByRole("region", { name: "Settings" })).toBeInTheDocument();
-    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("status-bar")).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("tab", { name: "General", selected: true }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("complementary")).toBeInTheDocument();
   });
 
   it("shows Connections immediately and defers monitor plus query work", async () => {

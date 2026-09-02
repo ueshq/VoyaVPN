@@ -1,4 +1,4 @@
-import { Database, Home, Network, Plug, Route, ScrollText, Shield } from "lucide-react";
+import { Database, Home, Network, Plug, Route, ScrollText, Settings, Shield } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { BrandMark } from "@/assets/brand-mark";
@@ -20,6 +20,7 @@ type NavItem = { icon: LucideIcon; titleKey: TranslationKey; value: ShellTab };
 const primaryNav: NavItem[] = [
   { icon: Home, titleKey: "tabs.home", value: "home" },
   { icon: Shield, titleKey: "tabs.profiles", value: "profiles" },
+  { icon: Settings, titleKey: "tabs.settings", value: "settings" },
 ];
 
 const networkNav: NavItem[] = [

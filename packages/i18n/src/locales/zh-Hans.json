@@ -54,7 +54,6 @@
   "modal": {
     "language": "语言",
     "settings": "设置",
-    "settingsDescription": "通用、来源、核心、网络、测试与更新设置。",
     "theme": "主题"
   },
   "options": {
@@ -583,7 +582,8 @@
     "profiles": "配置",
     "proxyConnections": "连接",
     "proxyGroups": "代理组",
-    "routing": "路由"
+    "routing": "路由",
+    "settings": "设置"
   },
   "updates": {
     "appInstalled": "应用更新已安装：{{version}}",

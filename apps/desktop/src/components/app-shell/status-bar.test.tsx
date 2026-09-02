@@ -45,13 +45,12 @@ const disconnectedStatus: RuntimeStatusResponse = {
 
 vi.mock("@/ipc", () => ({
   listProfiles: vi.fn(() => Promise.resolve([])),
-  openSettingsWindow: vi.fn(() => Promise.resolve()),
   runtimeStatus: vi.fn(() => Promise.resolve(disconnectedStatus)),
   tunProviderDiagnostics: vi.fn(),
   useRuntimeEventStore: runtimeMock.useRuntimeEventStore,
 }));
 
-import { listProfiles, openSettingsWindow, runtimeStatus, tunProviderDiagnostics } from "@/ipc";
+import { listProfiles, runtimeStatus, tunProviderDiagnostics } from "@/ipc";
 import { useShellStore } from "@/stores/shell-store";
 
 const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
@@ -112,8 +111,6 @@ describe("StatusBar", () => {
     useToastStore.setState({ toasts: [] });
     vi.mocked(listProfiles).mockResolvedValue([]);
     vi.mocked(runtimeStatus).mockResolvedValue(disconnectedStatus);
-    vi.mocked(openSettingsWindow).mockReset();
-    vi.mocked(openSettingsWindow).mockResolvedValue(undefined);
     vi.mocked(tunProviderDiagnostics).mockReset();
     vi.mocked(tunProviderDiagnostics).mockResolvedValue(packetTunnelDiagnostics);
   });
@@ -152,7 +149,7 @@ describe("StatusBar", () => {
     expect(screen.getByText("Route: /routing")).toBeInTheDocument();
   });
 
-  it("places Settings as the final status bar action and opens the settings window", async () => {
+  it("places Settings as the final status bar action and navigates to the settings tab", async () => {
     const user = userEvent.setup();
 
     renderStatusBar();
@@ -163,23 +160,7 @@ describe("StatusBar", () => {
 
     await user.click(settingsButton);
 
-    expect(openSettingsWindow).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows a toast when the settings window cannot be opened", async () => {
-    const user = userEvent.setup();
-    vi.mocked(openSettingsWindow).mockRejectedValue(new Error("settings window unavailable"));
-
-    renderStatusBar();
-
-    await user.click(screen.getByRole("button", { name: "Settings" }));
-
-    await waitFor(() =>
-      expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
-        description: "settings window unavailable",
-        title: "Settings",
-      }),
-    );
+    expect(useShellStore.getState().activeTab).toBe("settings");
   });
 
   it("drops the runtime keys now owned by the hero", async () => {

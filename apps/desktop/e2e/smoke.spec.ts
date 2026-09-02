@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/");
 });
 
-test("loads the app shell and requests the settings window", async ({ page }) => {
+test("loads the app shell and opens in-shell settings", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "VoyaVPN" })).toBeVisible();
   await expect(page.getByTestId("status-bar")).toContainText("Disconnected");
   await expect(page.getByRole("tab", { name: "Home" })).toHaveAttribute("aria-selected", "true");
@@ -18,18 +18,18 @@ test("loads the app shell and requests the settings window", async ({ page }) =>
 
   await page.getByRole("button", { name: "Settings" }).click();
 
-  const openCall = await page.evaluate(() => {
+  await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
+  const openCalls = await page.evaluate(() => {
     const state = window.__VOYA_SMOKE__.state as {
-      calls: Array<{ args: Record<string, unknown>; command: string }>;
+      calls: Array<{ command: string }>;
     };
-    return state.calls.filter((call) => call.command === "open_settings_window").at(-1);
+    return state.calls.filter((call) => call.command === "open_settings_window").length;
   });
-  expect(openCall).toEqual({ args: {}, command: "open_settings_window" });
-  await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
+  expect(openCalls).toBe(0);
 });
 
-test("loads the dedicated settings surface", async ({ page }) => {
-  await page.goto("/?window=settings");
+test("guards unsaved settings when leaving the settings tab", async ({ page }) => {
+  await page.getByRole("tab", { name: "Settings" }).click();
 
   const settings = page.getByRole("region", { name: "Settings" });
   await expect(settings).toBeVisible();
@@ -43,31 +43,17 @@ test("loads the dedicated settings surface", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expect(hotkeyCapture).toHaveValue("Esc");
 
-  const closeCallsWhileRecording = await page.evaluate(() => {
-    const state = window.__VOYA_SMOKE__.state as {
-      calls: Array<{ command: string }>;
-    };
-    return state.calls.filter((call) => call.command === "plugin:window|close").length;
-  });
-  expect(closeCallsWhileRecording).toBe(0);
-
   await hotkeyCapture.blur();
-  await page.keyboard.press("Escape");
+  await page.getByRole("tab", { name: "Home" }).click();
   const unsavedDialog = page.getByRole("alertdialog");
   await expect(unsavedDialog).toBeVisible();
   await unsavedDialog.getByRole("button", { name: "Discard changes" }).click();
-  await expect.poll(async () =>
-    page.evaluate(() => {
-      const state = window.__VOYA_SMOKE__.state as {
-        calls: Array<{ command: string }>;
-      };
-      return state.calls.filter((call) => call.command === "plugin:window|close").length;
-    }),
-  ).toBe(1);
+  await expect(page.getByRole("region", { name: "Connection home" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Settings" })).toHaveCount(0);
 });
 
 test("imports the default configuration template from the Settings sources card", async ({ page }) => {
-  await page.goto("/?window=settings");
+  await page.getByRole("tab", { name: "Settings" }).click();
 
   const settings = page.getByRole("region", { name: "Settings" });
   await settings.getByRole("tab", { name: "Sources" }).click();

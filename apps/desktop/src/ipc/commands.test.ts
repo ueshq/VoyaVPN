@@ -23,7 +23,6 @@ const wrapperNames = [
   "loadUiPreferences",
   "loadAppSettings",
   "saveAppSettings",
-  "openSettingsWindow",
   "generateQrCode",
   "scanScreenQr",
   "fetchCertificate",
@@ -101,11 +100,7 @@ describe("typed IPC command facade", () => {
       commandMocks[name].mockResolvedValueOnce({ data: marker, status: "ok" });
       const wrapper = ipc[name] as (...args: unknown[]) => Promise<unknown>;
       const result = await wrapper();
-      if (name === "openSettingsWindow") {
-        expect(result).toBeUndefined();
-      } else {
-        expect(result).toBe(marker);
-      }
+      expect(result).toBe(marker);
       expect(commandMocks[name]).toHaveBeenCalledOnce();
     }
   });

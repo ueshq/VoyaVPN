@@ -54,7 +54,6 @@
   "modal": {
     "language": "زبان",
     "settings": "تنظیمات",
-    "settingsDescription": "تنظیمات عمومی، منابع، هسته، شبکه، تست‌ها و به‌روزرسانی‌ها.",
     "theme": "پوسته"
   },
   "options": {
@@ -583,7 +582,8 @@
     "profiles": "نمایه ها",
     "proxyConnections": "اتصال‌ها",
     "proxyGroups": "گروه‌های پراکسی",
-    "routing": "مسیریابی"
+    "routing": "مسیریابی",
+    "settings": "تنظیمات"
   },
   "updates": {
     "appInstalled": "به روزرسانی برنامه نصب شد: {{version}}",

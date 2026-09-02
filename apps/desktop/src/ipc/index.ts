@@ -55,7 +55,6 @@ export {
   setSystemProxyMode,
   setTunEnabled,
   setWindowAcrylic,
-  openSettingsWindow,
   sortProfiles,
   systemProxyStatus,
   tunRequestElevation,
