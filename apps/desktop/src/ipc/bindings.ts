@@ -23,6 +23,15 @@ export const commands = {
 	runtimeStatus: () => typedError<RuntimeStatusResponse, AppError>(__TAURI_INVOKE("runtime_status")),
 	systemProxyStatus: () => typedError<SystemProxyStatusResponse, AppError>(__TAURI_INVOKE("system_proxy_status")),
 	setSystemProxyMode: (mode: SysProxyType) => typedError<SystemProxyStatusResponse, AppError>(__TAURI_INVOKE("set_system_proxy_mode", { mode })),
+	connectionModeStatus: () => typedError<ConnectionModeStatus, AppError>(__TAURI_INVOKE("connection_mode_status")),
+	/**
+	 *  Switches the app between the three Hiddify-style connection modes by
+	 *  mutating the persisted system proxy + TUN primitives in one transaction.
+	 *  Entering VPN runs the full TUN preflight; only a TUN flag change restarts
+	 *  a connected core, while proxy-only/system-proxy switches re-apply the OS
+	 *  proxy live.
+	 */
+	setConnectionMode: (mode: ConnectionMode, pacEnabled: boolean | null) => typedError<ConnectionModeStatus, AppError>(__TAURI_INVOKE("set_connection_mode", { mode, pacEnabled })),
 	tunStatus: () => typedError<TunStatus, AppError>(__TAURI_INVOKE("tun_status")),
 	tunProviderDiagnostics: () => typedError<TunProviderDiagnostics, AppError>(__TAURI_INVOKE("tun_provider_diagnostics")),
 	setTunEnabled: (enabled: boolean) => typedError<TunStatus, AppError>(__TAURI_INVOKE("set_tun_enabled", { enabled })),
@@ -209,6 +218,30 @@ export type ConfigTemplateImportResult = {
 };
 
 export type ConfigTemplateSelection = { type: "default" } | { type: "custom"; sources: ConfigSourceSettings };
+
+/**
+ *  Hiddify-style top-level connection mode. A derived view over the two
+ *  persisted primitives (system proxy type + TUN flag), never stored itself.
+ */
+export type ConnectionMode = 
+/**  Local inbounds only; the OS proxy is cleared and TUN stays off. */
+"proxyOnly" | 
+/**  OS system proxy points at the local inbound (optionally via PAC). */
+"systemProxy" | 
+/**  TUN mode; all traffic is routed through the virtual interface. */
+"vpn";
+
+export type ConnectionModeStatus = {
+	mode: ConnectionMode,
+	pacEnabled: boolean,
+	pacAvailable: boolean,
+	vpnAvailable: boolean,
+	/**
+	 *  sing-box process rules only match traffic entering through TUN, so
+	 *  per-app rules are effective only while `mode` is `Vpn`.
+	 */
+	processRulesEffective: boolean,
+};
 
 export type CoreSeedInstallResult = {
 	coreType: CoreType,

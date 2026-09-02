@@ -20,6 +20,8 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::runtime_status,
         commands::system_proxy_status,
         commands::set_system_proxy_mode::<tauri::Wry>,
+        commands::connection_mode_status,
+        commands::set_connection_mode::<tauri::Wry>,
         commands::tun_status,
         commands::tun_provider_diagnostics,
         commands::set_tun_enabled::<tauri::Wry>,

@@ -91,6 +91,7 @@ const IPC_LIST_MAX_ITEMS: usize = 1024;
 const MISSING_CORE_SEARCH_DIR_LABEL: &str = "application core directory";
 
 mod app;
+mod connection;
 mod dns;
 mod groups;
 mod lifecycle;
@@ -107,6 +108,7 @@ mod tun;
 mod updates;
 
 pub use app::*;
+pub use connection::*;
 pub use dns::*;
 pub use groups::*;
 pub use presets::*;

@@ -18,6 +18,31 @@ pub enum SysProxyType {
     Pac,
 }
 
+/// Hiddify-style top-level connection mode. A derived view over the two
+/// persisted primitives (system proxy type + TUN flag), never stored itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ConnectionMode {
+    /// Local inbounds only; the OS proxy is cleared and TUN stays off.
+    ProxyOnly,
+    /// OS system proxy points at the local inbound (optionally via PAC).
+    SystemProxy,
+    /// TUN mode; all traffic is routed through the virtual interface.
+    Vpn,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ConnectionModeStatus {
+    pub mode: ConnectionMode,
+    pub pac_enabled: bool,
+    pub pac_available: bool,
+    pub vpn_available: bool,
+    /// sing-box process rules only match traffic entering through TUN, so
+    /// per-app rules are effective only while `mode` is `Vpn`.
+    pub process_rules_effective: bool,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ServerStatItem {

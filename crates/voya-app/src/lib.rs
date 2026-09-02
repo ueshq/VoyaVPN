@@ -6,6 +6,7 @@
 pub mod autostart;
 pub mod certificates;
 pub mod config_mutation;
+pub mod connection_mode;
 pub mod contract_map;
 mod coregen;
 pub mod dns;
