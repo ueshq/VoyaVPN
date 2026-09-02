@@ -155,7 +155,7 @@ function routeAppEvent(event: AppEvent, surface: EventBridgeSurface) {
       return;
     case "selectTab":
       if (surface === "main") {
-        useShellStore.getState().setActiveTab(toShellTab(event.payload));
+        useShellStore.getState().requestTab(toShellTab(event.payload));
       }
       return;
   }

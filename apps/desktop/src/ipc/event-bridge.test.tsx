@@ -28,7 +28,7 @@ const bridgeMocks = vi.hoisted(() => {
     pushToast: vi.fn(),
     pushTransientEvent: vi.fn(),
     refreshSpeedtestStatus: vi.fn(() => Promise.resolve()),
-    setActiveTab: vi.fn(),
+    requestTab: vi.fn(),
     transientStreamEventListen: listenFor("transientStreamEvent"),
   };
 });
@@ -52,7 +52,7 @@ vi.mock("@/ipc/runtime-event-store", () => ({
 
 vi.mock("@/stores/shell-store", () => ({
   useShellStore: {
-    getState: () => ({ setActiveTab: bridgeMocks.setActiveTab }),
+    getState: () => ({ requestTab: bridgeMocks.requestTab }),
   },
 }));
 
@@ -112,7 +112,7 @@ describe("EventBridge", () => {
     });
 
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["ui-preferences"] });
-    expect(bridgeMocks.setActiveTab).not.toHaveBeenCalled();
+    expect(bridgeMocks.requestTab).not.toHaveBeenCalled();
     expect(bridgeMocks.pushToast).toHaveBeenCalledWith({
       description: "Saved",
       severity: "info",
@@ -146,6 +146,6 @@ describe("EventBridge", () => {
     });
 
     expect(bridgeMocks.pushTransientEvent).toHaveBeenCalledWith(transient);
-    expect(bridgeMocks.setActiveTab).toHaveBeenCalledWith("proxy-connections");
+    expect(bridgeMocks.requestTab).toHaveBeenCalledWith("proxy-connections");
   });
 });

@@ -33,7 +33,7 @@ const networkNav: NavItem[] = [
 export function AppSidebar() {
   const { t } = useI18n();
   const activeTab = useShellStore((state) => state.activeTab);
-  const setActiveTab = useShellStore((state) => state.setActiveTab);
+  const requestTab = useShellStore((state) => state.requestTab);
 
   function renderNavItem(item: NavItem) {
     return (
@@ -43,7 +43,7 @@ export function AppSidebar() {
         icon={item.icon}
         id={`shell-tab-${item.value}`}
         label={t(item.titleKey)}
-        onSelect={() => setActiveTab(item.value)}
+        onSelect={() => requestTab(item.value)}
         panelId={SHELL_PANEL_ID}
       />
     );
