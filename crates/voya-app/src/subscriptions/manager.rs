@@ -7,20 +7,21 @@ use std::{
 use regex::Regex;
 use thiserror::Error;
 use voya_core::{
-    parse_full_custom_config, parse_profile_update_interval_minutes, parse_share_link,
-    parse_ss_sip008, parse_subscription_userinfo, parse_voya_profile_bundle,
+    parse_full_custom_config, parse_share_link, parse_ss_sip008, parse_voya_profile_bundle,
     parse_wireguard_config, profile_items_match, AppConfig, ConfigType, ImportProfilesResult,
-    MultipleLoad, ProfileExItem, ProfileItem, ProfileProtocol, SubItem, SubMetadataItem,
-    SubscriptionUpdateResult, SubscriptionUserInfo,
+    ProfileExItem, ProfileItem, ProfileProtocol, SubItem, SubMetadataItem,
+    SubscriptionUpdateResult,
 };
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
-use voya_net::{
-    decode_base64_payload, DownloadError, SubscriptionClient, SubscriptionFetchOptions,
-    SubscriptionFetchResult, SubscriptionFetchSource,
-};
+use voya_net::{decode_base64_payload, DownloadError};
 
-use crate::groups::{GroupManager, GroupManagerError};
+use crate::groups::GroupManagerError;
 use crate::profiles::{normalize_profile, ProfileManager, ProfileManagerError};
+
+use super::update_flow::{
+    ensure_subscription_auto_group, persist_subscription_metadata, prepare_subscription_snapshot,
+    PreparedSubscriptionUpdate,
+};
 
 static SUBSCRIPTION_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -341,9 +342,13 @@ impl<'db> SubscriptionManager<'db> {
         let mut messages = parsed_import.messages;
         if let Some(id) = subscription_id {
             if !imported_index_ids.is_empty() && config.gui_item.auto_create_subscription_group {
-                if let Some(group_remarks) = self
-                    .ensure_subscription_auto_group(config, id, no_active_profile_at_entry)
-                    .await?
+                if let Some(group_remarks) = ensure_subscription_auto_group(
+                    self.database,
+                    config,
+                    id,
+                    no_active_profile_at_entry,
+                )
+                .await?
                 {
                     messages.push(format!("{group_remarks}->auto group created"));
                 }
@@ -368,56 +373,6 @@ impl<'db> SubscriptionManager<'db> {
             updated_index_ids,
             messages,
         })
-    }
-
-    /// Creates the delay-based "Auto" policy group for a subscription on its
-    /// first successful import. Children resolve dynamically from the
-    /// subscription at config-generation time, so the group is created once
-    /// and never refreshed; a user-modified group with the same source is
-    /// left untouched. Returns the group remarks when one was created.
-    async fn ensure_subscription_auto_group(
-        &self,
-        config: &mut AppConfig,
-        subscription_id: &str,
-        activate: bool,
-    ) -> Result<Option<String>> {
-        let profiles = self.database.profiles().list().await?;
-        let already_exists = profiles.iter().any(|profile| {
-            matches!(
-                &profile.protocol,
-                ProfileProtocol::PolicyGroup {
-                    source_subscription_id: Some(source),
-                    ..
-                } if source == subscription_id
-            )
-        });
-        if already_exists {
-            return Ok(None);
-        }
-        let Some(subscription) = self.database.subscriptions().get(subscription_id).await? else {
-            return Ok(None);
-        };
-
-        let remarks = format!("{} · Auto", subscription.remarks);
-        let group = ProfileItem {
-            remarks: remarks.clone(),
-            protocol: ProfileProtocol::PolicyGroup {
-                child_profile_ids: Vec::new(),
-                source_subscription_id: Some(subscription_id.to_string()),
-                filter: None,
-                strategy: MultipleLoad::LeastPing,
-            },
-            ..ProfileItem::default()
-        };
-        let saved = GroupManager::from_session(self.database)
-            .save_group_profile(config, group)
-            .await
-            .map_err(|error| SubscriptionManagerError::Group(Box::new(error)))?;
-        if activate {
-            config.index_id.clone_from(&saved.profile.index_id);
-        }
-
-        Ok(Some(remarks))
     }
 
     pub async fn update_subscriptions(
@@ -472,7 +427,7 @@ impl<'db> SubscriptionManager<'db> {
                 ));
                 continue;
             }
-            self.persist_subscription_metadata(&prepared_import).await?;
+            persist_subscription_metadata(self.database, &prepared_import).await?;
             match self
                 .import_profiles_from_text(
                     config,
@@ -511,47 +466,6 @@ impl<'db> SubscriptionManager<'db> {
         }
 
         Ok(result)
-    }
-
-    /// Records server-reported usage headers for a fetched subscription. The
-    /// `subscription-userinfo` values replace the stored figures only when the
-    /// header was present; `last_update_at` always reflects the fetch. A
-    /// server-suggested update interval is adopted only while the user has not
-    /// configured one.
-    async fn persist_subscription_metadata(
-        &self,
-        prepared: &PreparedSubscriptionImport,
-    ) -> Result<()> {
-        let repository = self.database.subscription_metadata();
-        let mut metadata =
-            repository
-                .get(&prepared.item.id)
-                .await?
-                .unwrap_or_else(|| SubMetadataItem {
-                    subscription_id: prepared.item.id.clone(),
-                    ..SubMetadataItem::default()
-                });
-        if let Some(user_info) = prepared.user_info {
-            metadata.upload_bytes = user_info.upload_bytes;
-            metadata.download_bytes = user_info.download_bytes;
-            metadata.total_bytes = user_info.total_bytes;
-            metadata.expire_at = user_info.expire_unix_seconds;
-        }
-        if let Some(title) = &prepared.profile_title {
-            metadata.profile_title = Some(title.clone());
-        }
-        metadata.last_update_at = Some(prepared.fetched_at_unix);
-        repository.upsert(&metadata).await?;
-
-        if prepared.item.auto_update_interval_minutes.is_none() {
-            if let Some(minutes) = prepared.suggested_interval_minutes {
-                let mut item = prepared.item.clone();
-                item.auto_update_interval_minutes = Some(minutes);
-                self.database.subscriptions().upsert(&item).await?;
-            }
-        }
-
-        Ok(())
     }
 
     async fn parse_import_text(
@@ -637,134 +551,6 @@ impl<'db> SubscriptionManager<'db> {
     }
 }
 
-#[derive(Debug)]
-pub struct PreparedSubscriptionUpdate {
-    imports: Vec<PreparedSubscriptionImport>,
-    result: SubscriptionUpdateResult,
-}
-
-impl PreparedSubscriptionUpdate {
-    #[must_use]
-    pub fn has_imports(&self) -> bool {
-        !self.imports.is_empty()
-    }
-
-    #[must_use]
-    pub fn into_result(self) -> SubscriptionUpdateResult {
-        self.result
-    }
-}
-
-#[derive(Debug)]
-struct PreparedSubscriptionImport {
-    item: SubItem,
-    content: String,
-    user_info: Option<SubscriptionUserInfo>,
-    profile_title: Option<String>,
-    suggested_interval_minutes: Option<i32>,
-    fetched_at_unix: i64,
-}
-
-fn header_value<'headers>(
-    headers: &'headers [(String, String)],
-    name: &str,
-) -> Option<&'headers str> {
-    headers
-        .iter()
-        .find(|(header, _)| header == name)
-        .map(|(_, value)| value.as_str())
-}
-
-fn unix_now_seconds() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| i64::try_from(elapsed.as_secs()).unwrap_or(0))
-}
-
-async fn prepare_subscription_snapshot(
-    config: &AppConfig,
-    subscriptions: Vec<SubItem>,
-    subscription_id: Option<&str>,
-    prefer_proxy: bool,
-    proxy_url: Option<&str>,
-) -> Result<PreparedSubscriptionUpdate> {
-    let client = SubscriptionClient::new();
-    let mut result = SubscriptionUpdateResult::default();
-    let mut imports = Vec::new();
-    let subscription_id = subscription_id
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-
-    for item in subscriptions {
-        if subscription_id.is_some_and(|wanted| wanted != item.id) {
-            continue;
-        }
-        if item.id.trim().is_empty() || item.url.trim().is_empty() || !is_http_url(&item.url) {
-            result.skipped = result.skipped.saturating_add(1);
-            continue;
-        }
-        if !item.enabled {
-            result.skipped = result.skipped.saturating_add(1);
-            result
-                .messages
-                .push(format!("{}->subscription update skipped", item.remarks));
-            continue;
-        }
-
-        let source = SubscriptionFetchSource {
-            url: item.url.clone(),
-            more_url: item.more_url.clone(),
-            user_agent: item.user_agent.clone(),
-            convert_target: item.convert_target.clone(),
-            sub_convert_url: config.const_item.sub_convert_url.clone(),
-        };
-        let options = SubscriptionFetchOptions {
-            prefer_proxy,
-            proxy_url: proxy_url.map(str::to_string),
-        };
-        match fetch_subscription(&client, &source, &options).await {
-            Ok(fetch) if !fetch.content.trim().is_empty() => {
-                let headers = fetch
-                    .downloads
-                    .first()
-                    .map(|download| download.headers.as_slice())
-                    .unwrap_or_default();
-                imports.push(PreparedSubscriptionImport {
-                    user_info: header_value(headers, "subscription-userinfo")
-                        .and_then(parse_subscription_userinfo),
-                    profile_title: header_value(headers, "profile-title")
-                        .map(str::trim)
-                        .filter(|title| !title.is_empty())
-                        .map(str::to_string),
-                    suggested_interval_minutes: header_value(headers, "profile-update-interval")
-                        .and_then(parse_profile_update_interval_minutes),
-                    fetched_at_unix: unix_now_seconds(),
-                    item,
-                    content: fetch.content,
-                });
-            }
-            Ok(_) => {
-                result.skipped = result.skipped.saturating_add(1);
-                result.messages.push(format!(
-                    "{}->fetched empty subscription content",
-                    item.remarks
-                ));
-            }
-            Err(error) => {
-                result.skipped = result.skipped.saturating_add(1);
-                let message = if is_empty_download_error(&error) {
-                    "fetched empty subscription content".to_string()
-                } else {
-                    error.to_string()
-                };
-                result.messages.push(format!("{}->{message}", item.remarks));
-            }
-        }
-    }
-
-    Ok(PreparedSubscriptionUpdate { imports, result })
-}
-
 #[derive(Debug, Default)]
 struct ParsedImportText {
     profiles: Vec<ProfileItem>,
@@ -820,18 +606,6 @@ fn should_report_line_parse_error(line: &str) -> bool {
 fn line_has_prefix_ci(line: &str, prefix: &str) -> bool {
     line.get(..prefix.len())
         .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
-}
-
-async fn fetch_subscription(
-    client: &SubscriptionClient,
-    source: &SubscriptionFetchSource,
-    options: &SubscriptionFetchOptions,
-) -> std::result::Result<SubscriptionFetchResult, DownloadError> {
-    #[cfg(not(test))]
-    let result = client.fetch(source, options).await;
-    #[cfg(test)]
-    let result = client.fetch_allowing_local_for_tests(source, options).await;
-    result
 }
 
 fn normalize_subscription(item: &mut SubItem) {
@@ -931,7 +705,7 @@ fn update_existing_profile_cache(
     }
 }
 
-fn is_http_url(value: &str) -> bool {
+pub(super) fn is_http_url(value: &str) -> bool {
     let value = value.trim();
     value.starts_with("https://") || value.starts_with("http://")
 }
@@ -942,18 +716,6 @@ fn extract_remarks_from_url(url: &str) -> Option<String> {
         let (key, value) = part.split_once('=')?;
         (key.eq_ignore_ascii_case("remarks") && !value.is_empty()).then(|| value.to_string())
     })
-}
-
-fn is_empty_download_error(error: &DownloadError) -> bool {
-    match error {
-        DownloadError::AttemptsFailed { attempts, .. } => {
-            !attempts.is_empty()
-                && attempts.iter().all(|attempt| {
-                    attempt.bytes == 0 && attempt.error.as_deref() == Some("empty response")
-                })
-        }
-        _ => false,
-    }
 }
 
 fn generate_subscription_id() -> String {
