@@ -10,8 +10,8 @@ use voya_core::{
     parse_full_custom_config, parse_profile_update_interval_minutes, parse_share_link,
     parse_ss_sip008, parse_subscription_userinfo, parse_voya_profile_bundle,
     parse_wireguard_config, profile_items_match, AppConfig, ConfigType, ImportProfilesResult,
-    ProfileExItem, ProfileItem, SubItem, SubMetadataItem, SubscriptionUpdateResult,
-    SubscriptionUserInfo,
+    MultipleLoad, ProfileExItem, ProfileItem, ProfileProtocol, SubItem, SubMetadataItem,
+    SubscriptionUpdateResult, SubscriptionUserInfo,
 };
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 use voya_net::{
@@ -19,6 +19,7 @@ use voya_net::{
     SubscriptionFetchResult, SubscriptionFetchSource,
 };
 
+use crate::groups::{GroupManager, GroupManagerError};
 use crate::profiles::{normalize_profile, ProfileManager, ProfileManagerError};
 
 static SUBSCRIPTION_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -31,6 +32,8 @@ pub enum SubscriptionManagerError {
     Database(#[from] DbError),
     #[error(transparent)]
     Profile(#[from] ProfileManagerError),
+    #[error(transparent)]
+    Group(#[from] Box<GroupManagerError>),
     #[error(transparent)]
     Download(#[from] DownloadError),
     #[error("subscription {0} was not found")]
@@ -147,6 +150,32 @@ impl<'db> SubscriptionManager<'db> {
             }
         }
 
+        // Auto groups keep their own subscription_id NULL so re-imports never
+        // prune them; clean up any group whose source subscription is gone.
+        let orphaned_group_ids = self
+            .database
+            .profiles()
+            .list()
+            .await?
+            .into_iter()
+            .filter(|profile| {
+                matches!(
+                    &profile.protocol,
+                    ProfileProtocol::PolicyGroup {
+                        source_subscription_id: Some(source),
+                        ..
+                    } if ids.contains(source)
+                )
+            })
+            .map(|profile| profile.index_id)
+            .collect::<Vec<_>>();
+        if !orphaned_group_ids.is_empty() {
+            self.database
+                .profiles()
+                .delete_many(&orphaned_group_ids)
+                .await?;
+        }
+
         let subs = self.database.subscriptions().list().await?;
         if !config.sub_index_id.is_empty()
             && !subs.iter().any(|item| item.id == config.sub_index_id)
@@ -169,6 +198,7 @@ impl<'db> SubscriptionManager<'db> {
         let subscription_id = subscription_id
             .map(str::trim)
             .filter(|value| !value.is_empty());
+        let no_active_profile_at_entry = config.index_id.trim().is_empty();
         let sub_item = match subscription_id {
             Some(id) => self.database.subscriptions().get(id).await?,
             None => None,
@@ -308,6 +338,17 @@ impl<'db> SubscriptionManager<'db> {
             0
         };
 
+        let mut messages = parsed_import.messages;
+        if let Some(id) = subscription_id {
+            if !imported_index_ids.is_empty() && config.gui_item.auto_create_subscription_group {
+                if let Some(group_remarks) = self
+                    .ensure_subscription_auto_group(config, id, no_active_profile_at_entry)
+                    .await?
+                {
+                    messages.push(format!("{group_remarks}->auto group created"));
+                }
+            }
+        }
         profile_manager.ensure_active_profile(config).await?;
 
         Ok(ImportProfilesResult {
@@ -325,8 +366,58 @@ impl<'db> SubscriptionManager<'db> {
             subscription_id: subscription_id.map(str::to_string),
             imported_index_ids,
             updated_index_ids,
-            messages: parsed_import.messages,
+            messages,
         })
+    }
+
+    /// Creates the delay-based "Auto" policy group for a subscription on its
+    /// first successful import. Children resolve dynamically from the
+    /// subscription at config-generation time, so the group is created once
+    /// and never refreshed; a user-modified group with the same source is
+    /// left untouched. Returns the group remarks when one was created.
+    async fn ensure_subscription_auto_group(
+        &self,
+        config: &mut AppConfig,
+        subscription_id: &str,
+        activate: bool,
+    ) -> Result<Option<String>> {
+        let profiles = self.database.profiles().list().await?;
+        let already_exists = profiles.iter().any(|profile| {
+            matches!(
+                &profile.protocol,
+                ProfileProtocol::PolicyGroup {
+                    source_subscription_id: Some(source),
+                    ..
+                } if source == subscription_id
+            )
+        });
+        if already_exists {
+            return Ok(None);
+        }
+        let Some(subscription) = self.database.subscriptions().get(subscription_id).await? else {
+            return Ok(None);
+        };
+
+        let remarks = format!("{} · Auto", subscription.remarks);
+        let group = ProfileItem {
+            remarks: remarks.clone(),
+            protocol: ProfileProtocol::PolicyGroup {
+                child_profile_ids: Vec::new(),
+                source_subscription_id: Some(subscription_id.to_string()),
+                filter: None,
+                strategy: MultipleLoad::LeastPing,
+            },
+            ..ProfileItem::default()
+        };
+        let saved = GroupManager::from_session(self.database)
+            .save_group_profile(config, group)
+            .await
+            .map_err(|error| SubscriptionManagerError::Group(Box::new(error)))?;
+        if activate {
+            config.index_id.clone_from(&saved.profile.index_id);
+        }
+
+        Ok(Some(remarks))
     }
 
     pub async fn update_subscriptions(
@@ -525,8 +616,7 @@ impl<'db> SubscriptionManager<'db> {
             if let Ok(custom_imports) = parse_full_custom_config(&content, None) {
                 profiles.extend(custom_imports.into_iter().map(|import| {
                     let mut profile = import.profile;
-                    if let voya_core::ProfileProtocol::Custom { source, .. } = &mut profile.protocol
-                    {
+                    if let ProfileProtocol::Custom { source, .. } = &mut profile.protocol {
                         *source = import.contents;
                     }
                     profile
@@ -972,6 +1062,7 @@ mod tests {
             .expect("subscription manager test operation should succeed");
         let manager = SubscriptionManager::new(&database);
         let mut config = AppConfig::default();
+        config.gui_item.auto_create_subscription_group = false;
         config.const_item.sub_convert_url = Some(format!("{base}/convert?url={{0}}"));
         manager
             .save_subscription(
@@ -1023,6 +1114,149 @@ mod tests {
             seen_user_agents.lock().await.as_slice(),
             ["SubUA/3", "SubUA/3", "SubUA/3"]
         );
+    }
+
+    #[tokio::test]
+    async fn subscription_import_creates_auto_group_once_and_activates_on_first_import() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+        let sub = manager
+            .save_subscription(
+                &mut config,
+                SubItem {
+                    id: "sub-auto".to_string(),
+                    remarks: "Airport".to_string(),
+                    url: "https://example.test/auto".to_string(),
+                    ..SubItem::default()
+                },
+            )
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        let result = manager
+            .import_profiles_from_text(
+                &mut config,
+                "vless://uuid-a@example.test:443#US%20A\nvless://uuid-b@example.test:443#US%20B",
+                Some(&sub.id),
+            )
+            .await
+            .expect("subscription manager test operation should succeed");
+        assert_eq!(result.imported, 2);
+        assert!(result
+            .messages
+            .iter()
+            .any(|message| message.contains("auto group created")));
+
+        let auto_groups = database
+            .profiles()
+            .list()
+            .await
+            .expect("profiles should list")
+            .into_iter()
+            .filter(|profile| {
+                matches!(
+                    &profile.protocol,
+                    ProfileProtocol::PolicyGroup {
+                        source_subscription_id: Some(source),
+                        ..
+                    } if source == &sub.id
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(auto_groups.len(), 1);
+        let auto_group = &auto_groups[0];
+        assert_eq!(auto_group.remarks, "Airport · Auto");
+        assert_eq!(
+            auto_group.subscription_id, None,
+            "auto group must survive subscription re-imports"
+        );
+        assert_eq!(
+            config.index_id, auto_group.index_id,
+            "first import should activate the auto group"
+        );
+
+        // A second import neither duplicates the group nor steals activation.
+        config.index_id = "some-user-choice".to_string();
+        let second = manager
+            .import_profiles_from_text(
+                &mut config,
+                "vless://uuid-c@example.test:443#US%20C",
+                Some(&sub.id),
+            )
+            .await
+            .expect("subscription manager test operation should succeed");
+        assert!(!second
+            .messages
+            .iter()
+            .any(|message| message.contains("auto group created")));
+        let group_count = database
+            .profiles()
+            .list()
+            .await
+            .expect("profiles should list")
+            .into_iter()
+            .filter(|profile| matches!(&profile.protocol, ProfileProtocol::PolicyGroup { .. }))
+            .count();
+        assert_eq!(group_count, 1);
+
+        // Deleting the subscription removes the auto group.
+        manager
+            .delete_subscriptions(&mut config, std::slice::from_ref(&sub.id))
+            .await
+            .expect("subscription manager test operation should succeed");
+        let remaining_groups = database
+            .profiles()
+            .list()
+            .await
+            .expect("profiles should list")
+            .into_iter()
+            .filter(|profile| matches!(&profile.protocol, ProfileProtocol::PolicyGroup { .. }))
+            .count();
+        assert_eq!(remaining_groups, 0);
+    }
+
+    #[tokio::test]
+    async fn subscription_import_skips_auto_group_when_setting_disabled() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+        config.gui_item.auto_create_subscription_group = false;
+        let sub = manager
+            .save_subscription(
+                &mut config,
+                SubItem {
+                    id: "sub-noauto".to_string(),
+                    remarks: "Plain".to_string(),
+                    url: "https://example.test/plain".to_string(),
+                    ..SubItem::default()
+                },
+            )
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        manager
+            .import_profiles_from_text(
+                &mut config,
+                "vless://uuid-a@example.test:443#US%20A",
+                Some(&sub.id),
+            )
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        let group_count = database
+            .profiles()
+            .list()
+            .await
+            .expect("profiles should list")
+            .into_iter()
+            .filter(|profile| matches!(&profile.protocol, ProfileProtocol::PolicyGroup { .. }))
+            .count();
+        assert_eq!(group_count, 0);
     }
 
     #[tokio::test]
@@ -1528,6 +1762,7 @@ mod tests {
             .expect("subscription manager test operation should succeed");
         let manager = SubscriptionManager::new(&database);
         let mut config = AppConfig::default();
+        config.gui_item.auto_create_subscription_group = false;
         let text = test_vless_link("same.example.test", "manual node");
         let manual = manager
             .import_profiles_from_text(&mut config, &text, None)

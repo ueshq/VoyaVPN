@@ -147,6 +147,7 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
             autostart: config.gui_item.auto_run,
             statistics: config.gui_item.enable_statistics,
             realtime_speed: config.gui_item.display_real_time_speed,
+            auto_create_subscription_group: Some(config.gui_item.auto_create_subscription_group),
         },
         core: contracts::CoreSettings {
             log_enabled: config.core_basic_item.log_enabled,
@@ -318,6 +319,10 @@ pub fn app_config_from_settings(
             auto_run: settings.behavior.autostart,
             enable_statistics: settings.behavior.statistics,
             display_real_time_speed: settings.behavior.realtime_speed,
+            auto_create_subscription_group: settings
+                .behavior
+                .auto_create_subscription_group
+                .unwrap_or(true),
         },
         ui_item: UiItem {
             current_theme: Some(theme_to_config(settings.appearance.theme).to_string()),

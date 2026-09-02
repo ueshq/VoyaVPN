@@ -134,11 +134,25 @@ impl Default for GrpcItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GuiItem {
     pub auto_run: bool,
     pub enable_statistics: bool,
     pub display_real_time_speed: bool,
+    /// Create a delay-based "Auto" policy group when a subscription first
+    /// imports profiles (Hiddify-style automatic node selection).
+    pub auto_create_subscription_group: bool,
+}
+
+impl Default for GuiItem {
+    fn default() -> Self {
+        Self {
+            auto_run: false,
+            enable_statistics: false,
+            display_real_time_speed: false,
+            auto_create_subscription_group: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

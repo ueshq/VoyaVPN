@@ -74,6 +74,10 @@ pub struct BehaviorSettings {
     pub autostart: bool,
     pub statistics: bool,
     pub realtime_speed: bool,
+    /// `None` means enabled (the default); optional so settings blobs saved by
+    /// older builds keep deserializing under `deny_unknown_fields`.
+    #[serde(default)]
+    pub auto_create_subscription_group: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]

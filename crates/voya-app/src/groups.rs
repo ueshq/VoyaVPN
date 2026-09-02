@@ -43,7 +43,7 @@ impl<'db> GroupManager<'db> {
     }
 
     #[must_use]
-    const fn from_session(database: DatabaseSession<'db>) -> Self {
+    pub(crate) const fn from_session(database: DatabaseSession<'db>) -> Self {
         Self { database }
     }
 

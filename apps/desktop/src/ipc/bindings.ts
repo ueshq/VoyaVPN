@@ -187,6 +187,11 @@ export type BehaviorSettings = {
 	autostart: boolean,
 	statistics: boolean,
 	realtimeSpeed: boolean,
+	/**
+	 *  `None` means enabled (the default); optional so settings blobs saved by
+	 *  older builds keep deserializing under `deny_unknown_fields`.
+	 */
+	autoCreateSubscriptionGroup?: boolean | null,
 };
 
 export type CertificateFetchRequest = {
