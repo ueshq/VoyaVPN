@@ -41,9 +41,11 @@ export function AppSidebar() {
 
   return (
     <aside className="flex h-full min-h-0 w-72 flex-col border-e border-sidebar-border bg-sidebar text-sidebar-foreground">
+      {/* Brand block: a plain label, not a heading — the page-level h1 lives in
+          the content area (Home renders the app name as its PageTitle). */}
       <div className="flex shrink-0 items-center gap-3 px-5 pt-5 pb-4">
         <BrandMark className="size-9 shrink-0 rounded-xl" aria-hidden="true" />
-        <h1 className="truncate text-base font-semibold leading-none">{t("app.name")}</h1>
+        <p className="truncate text-base font-semibold leading-none">{t("app.name")}</p>
       </div>
 
       <nav

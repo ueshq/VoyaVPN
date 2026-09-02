@@ -9,15 +9,18 @@ import ru from "./locales/ru.json";
 import zhHans from "./locales/zh-Hans.json";
 import zhHant from "./locales/zh-Hant.json";
 
+// `nativeName` is each language's own name — locale-invariant data (never
+// translated), so a language picker stays readable whatever the current UI
+// language is.
 export const localeOptions = [
-  { code: "en", label: "EN", direction: "ltr" },
-  { code: "zh-Hans", label: "简", direction: "ltr" },
-  { code: "zh-Hant", label: "繁", direction: "ltr" },
-  { code: "fr", label: "FR", direction: "ltr" },
-  { code: "fa", label: "FA", direction: "rtl" },
-  { code: "hu", label: "HU", direction: "ltr" },
-  { code: "ru", label: "RU", direction: "ltr" },
-  { code: "de", label: "DE", direction: "ltr" },
+  { code: "en", label: "EN", nativeName: "English", direction: "ltr" },
+  { code: "zh-Hans", label: "简", nativeName: "简体中文", direction: "ltr" },
+  { code: "zh-Hant", label: "繁", nativeName: "繁體中文", direction: "ltr" },
+  { code: "fr", label: "FR", nativeName: "Français", direction: "ltr" },
+  { code: "fa", label: "FA", nativeName: "فارسی", direction: "rtl" },
+  { code: "hu", label: "HU", nativeName: "Magyar", direction: "ltr" },
+  { code: "ru", label: "RU", nativeName: "Русский", direction: "ltr" },
+  { code: "de", label: "DE", nativeName: "Deutsch", direction: "ltr" },
 ] as const;
 
 export type Locale = (typeof localeOptions)[number]["code"];

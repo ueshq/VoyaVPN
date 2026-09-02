@@ -190,9 +190,13 @@ test("adds and imports profiles, activates one, and connects through the fake ru
   const importedNode = page.getByRole("option", { name: /Smoke Imported VLESS/ });
   await importedNode.dblclick();
   await expect(importedNode).toHaveAttribute("aria-selected", "true");
+  const connectSwitch = page.getByRole("switch", { name: "Connect" });
+  await expect(connectSwitch).toBeChecked();
+  await expect(page.getByTestId("home-status-card")).toContainText("PID 4242");
   await expect(page.getByTestId("sidebar-footer")).toContainText("Connected");
 
-  await page.getByRole("button", { exact: true, name: "Disconnect" }).click();
+  await connectSwitch.click();
+  await expect(connectSwitch).not.toBeChecked();
   await expect(page.getByTestId("sidebar-footer")).toContainText("Disconnected");
 });
 

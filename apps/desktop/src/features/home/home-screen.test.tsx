@@ -12,6 +12,8 @@ import type {
   TunChanged,
   TunStatus,
 } from "@/ipc/bindings";
+import { changeLocale } from "@voya/i18n";
+import { makeAppSettings } from "@/features/settings/app-settings.test-fixture";
 import { useToastStore } from "@/stores/toast-store";
 import { makeProfileFixture } from "@/test/profile-fixture";
 
@@ -43,10 +45,16 @@ const runtimeMock = vi.hoisted(() => {
   return { state, useRuntimeEventStore };
 });
 
+const versionMock = vi.hoisted(() => ({
+  getVersion: vi.fn(() => Promise.resolve("0.1.0")),
+}));
+
 const ipcMock = vi.hoisted(() => ({
   connectActiveProfile: vi.fn(),
   disconnectCore: vi.fn(),
   listProfiles: vi.fn(),
+  loadAppSettings: vi.fn(),
+  saveAppSettings: vi.fn(),
   restartCore: vi.fn(),
   runtimeStatus: vi.fn(),
   setActiveProfile: vi.fn(),
@@ -106,11 +114,17 @@ const tunStatusResponse: TunStatus = {
   restoreOnDisconnect: true,
 };
 
+vi.mock("@/ipc/updater", () => ({
+  getVersion: () => versionMock.getVersion(),
+}));
+
 vi.mock("@/ipc", () => ({
   connectActiveProfile: ipcMock.connectActiveProfile,
   disconnectCore: ipcMock.disconnectCore,
   IpcCommandError: class IpcCommandError extends Error {},
   listProfiles: ipcMock.listProfiles,
+  loadAppSettings: ipcMock.loadAppSettings,
+  saveAppSettings: ipcMock.saveAppSettings,
   restartCore: ipcMock.restartCore,
   runtimeStatus: ipcMock.runtimeStatus,
   setActiveProfile: ipcMock.setActiveProfile,
@@ -153,6 +167,9 @@ describe("HomeScreen", () => {
     ipcMock.restartCore.mockResolvedValue(connectedStatus);
     ipcMock.runtimeStatus.mockResolvedValue(disconnectedStatus);
     ipcMock.listProfiles.mockResolvedValue([]);
+    ipcMock.loadAppSettings.mockResolvedValue(makeAppSettings());
+    ipcMock.saveAppSettings.mockImplementation(async (settings) => settings);
+    versionMock.getVersion.mockResolvedValue("0.1.0");
     ipcMock.setActiveProfile.mockResolvedValue(makeProfile(0));
     ipcMock.setSystemProxyMode.mockResolvedValue(sysProxyStatus);
     ipcMock.setTunEnabled.mockResolvedValue(tunStatusResponse);
@@ -171,7 +188,9 @@ describe("HomeScreen", () => {
 
     expect(screen.getByRole("region", { name: "Connection home" })).toBeInTheDocument();
     expect(screen.getByText("Not protected")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
+    const connectSwitch = screen.getByRole("switch", { name: "Connect" });
+    expect(connectSwitch).toBeEnabled();
+    expect(connectSwitch).not.toBeChecked();
     expect(await screen.findByText("No nodes available")).toBeInTheDocument();
   });
 
@@ -184,7 +203,7 @@ describe("HomeScreen", () => {
     renderHome();
 
     expect(screen.getByText("Protected")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Connect" })).toBeChecked();
     expect(screen.getByRole("button", { name: "Restart" })).toBeInTheDocument();
 
     const row = await screen.findByRole("option", { name: /Tokyo Edge/ });
@@ -264,7 +283,7 @@ describe("HomeScreen", () => {
 
     renderHome();
 
-    await user.click(screen.getByRole("button", { name: "Connect" }));
+    await user.click(screen.getByRole("switch", { name: "Connect" }));
 
     expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1);
     expect(ipcMock.disconnectCore).not.toHaveBeenCalled();
@@ -280,7 +299,7 @@ describe("HomeScreen", () => {
     renderHome();
 
     await user.click(await screen.findByRole("option", { name: /Tokyo Edge/ }));
-    await user.click(screen.getByRole("button", { name: "Connect" }));
+    await user.click(screen.getByRole("switch", { name: "Connect" }));
 
     expect(ipcMock.setActiveProfile).toHaveBeenCalledWith("tokyo");
     await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1));
@@ -299,7 +318,7 @@ describe("HomeScreen", () => {
     renderHome();
 
     await screen.findByRole("option", { name: /Osaka Edge/ });
-    await user.click(screen.getByRole("button", { name: "Connect" }));
+    await user.click(screen.getByRole("switch", { name: "Connect" }));
 
     await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1));
     expect(ipcMock.setActiveProfile).not.toHaveBeenCalled();
@@ -330,7 +349,7 @@ describe("HomeScreen", () => {
 
     renderHome();
 
-    await user.click(screen.getByRole("button", { name: "Disconnect" }));
+    await user.click(screen.getByRole("switch", { name: "Connect" }));
 
     await waitFor(() => expect(ipcMock.runtimeStatus).toHaveBeenCalledTimes(1));
     expect(runtimeMock.state.setCoreState).toHaveBeenCalledWith({
@@ -344,7 +363,45 @@ describe("HomeScreen", () => {
       description: "sudo kill failed",
       title: "Disconnect",
     });
-    expect(screen.getByRole("button", { name: "Disconnect" })).toBeEnabled();
+    expect(screen.getByRole("switch", { name: "Connect" })).toBeEnabled();
+  });
+
+  it("changes and persists the language from the quick actions card", async () => {
+    const user = userEvent.setup();
+
+    try {
+      renderHome();
+
+      await user.click(screen.getByRole("combobox", { name: "Language" }));
+      await user.click(await screen.findByRole("option", { name: "简体中文" }));
+
+      await waitFor(() => expect(ipcMock.saveAppSettings).toHaveBeenCalledTimes(1));
+      expect(ipcMock.saveAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appearance: expect.objectContaining({ language: "zh-Hans" }),
+        }),
+      );
+    } finally {
+      // i18next is a module-level singleton: restore the locale so other suites
+      // keep asserting English strings, and drop the persisted-side channel.
+      await changeLocale("en");
+      window.localStorage.removeItem("voyavpn.locale");
+    }
+  });
+
+  it("renders the app version row", async () => {
+    renderHome();
+
+    expect(screen.getByText("Version")).toBeInTheDocument();
+    expect(await screen.findByText("0.1.0")).toBeInTheDocument();
+  });
+
+  it("falls back to a dash when the version is unavailable", async () => {
+    versionMock.getVersion.mockRejectedValue(new Error("no runtime"));
+
+    renderHome();
+
+    expect(await screen.findByText("—")).toBeInTheDocument();
   });
 
   it("offers and applies all three system-proxy modes when PAC is supported", async () => {

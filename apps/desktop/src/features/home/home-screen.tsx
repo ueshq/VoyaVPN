@@ -1,12 +1,24 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { LoaderCircle, Power, PowerOff, RotateCw, ShieldCheck, ShieldOff } from "lucide-react";
+import { LoaderCircle, RotateCw, ShieldCheck, ShieldOff } from "lucide-react";
 
 import { Button } from "@voya/ui/components/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@voya/ui/components/card";
 import { Label } from "@voya/ui/components/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@voya/ui/components/select";
 import { Separator } from "@voya/ui/components/separator";
 import { Switch } from "@voya/ui/components/switch";
+import { PageTitle } from "@/components/app-shell/page-section";
 import { useI18n } from "@voya/i18n/use-i18n";
+import type { Locale } from "@voya/i18n";
+import { getVersion } from "@/ipc/updater";
+import { persistLanguage } from "@/features/settings/use-app-settings";
 import {
   connectActiveProfile,
   disconnectCore,
@@ -42,17 +54,25 @@ type RuntimeAction = "connect" | "disconnect" | "restart";
 type Translation = ReturnType<typeof useI18n>["t"];
 
 /**
- * Connection home Hero — the default view and signature surface. Single-accent
- * discipline: the idle connect CTA is brand blue (`--primary`); affirmative green
- * (`--connected` / `--connected-glow`) is reserved for the achieved protected
- * state (status disc + headline). It only reuses the existing runtime actions and
- * {@link useRuntimeEventStore}; no new IPC is introduced. Decorative motion (the
- * status-light spinner) inherits the global `prefers-reduced-motion` guard in
- * globals.css.
+ * Connection home — the default view: the app-name page title, a Quick Actions
+ * card (connection status header + connect toggle, system proxy, TUN, language,
+ * version rows), and the node list card. Single-accent discipline: interactive
+ * chrome stays brand blue; affirmative green (`--connected` / `--connected-glow`)
+ * is reserved for the achieved protected state (status disc + headline). It only
+ * reuses the existing runtime actions and {@link useRuntimeEventStore}; no new
+ * IPC is introduced. Decorative motion (the status-light spinner) inherits the
+ * global `prefers-reduced-motion` guard in globals.css.
  */
 export function HomeScreen() {
-  const { t } = useI18n();
+  const { language, localeOptions, setLocale, t } = useI18n();
   const home = useHomeRuntime(t);
+  const queryClient = useQueryClient();
+  const pushToast = useToastStore((state) => state.pushToast);
+  const versionQuery = useQuery({
+    queryFn: () => getVersion(),
+    queryKey: ["app-version"],
+    staleTime: Infinity,
+  });
 
   const headline = home.connected
     ? t("home.protected")
@@ -66,6 +86,26 @@ export function HomeScreen() {
     : home.state === "disconnected"
       ? t("home.unprotectedHint")
       : "";
+  const pidLabel = home.mainPid ? `PID ${home.mainPid}` : t("status.noPid");
+
+  async function changeLanguage(code: Locale) {
+    if (code === language) {
+      return;
+    }
+    // Apply instantly (i18next + localStorage), then persist to the settings DB
+    // so the choice survives a cold start. On persist failure the UI keeps the
+    // switched language and a toast explains what did not stick.
+    await setLocale(code);
+    try {
+      await persistLanguage(queryClient, code);
+    } catch (error) {
+      pushToast({
+        description: getErrorMessage(error),
+        severity: "error",
+        title: t("status.languageSaveFailed"),
+      });
+    }
+  }
 
   return (
     <section
@@ -73,35 +113,86 @@ export function HomeScreen() {
       className="flex h-full min-h-0 flex-col overflow-y-auto"
       data-testid="home-screen"
     >
-      <div className="mx-auto flex w-full min-h-0 max-w-2xl flex-1 flex-col items-center gap-6 px-6 py-8">
-        <ConnectionStatus connected={home.connected} headline={headline} hint={hint} inProgress={home.inProgress} />
-        <RuntimeActions
-          busy={home.busy}
-          connected={home.connected}
-          onPrimaryAction={home.handlePrimaryAction}
-          onRestart={home.restart}
-          t={t}
-        />
-        <NetworkControls
-          onProxyModeChange={home.changeProxyMode}
-          onTunToggle={home.toggleTun}
-          pacAvailable={home.pacAvailable}
-          proxyPending={home.proxyPending}
-          requestedProxyMode={home.requestedProxyMode}
-          t={t}
-          tunEnabled={home.tunEnabled}
-          tunPending={home.tunPending}
-          tunProviderSummary={home.tunProviderSummary}
-        />
-        <NodeList
-          isPending={home.profilesPending}
-          onActivate={home.activateProfile}
-          onSelect={home.selectProfile}
-          profiles={home.profiles}
-          runningId={home.runningId}
-          selectedId={home.selectedId}
-          switchingId={home.switchingId}
-        />
+      <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-6 pb-8">
+        <PageTitle className="px-0" title={t("app.name")} />
+
+        <Card className="shrink-0 gap-0 py-0">
+          <CardHeader className="border-b px-4 py-4" data-testid="home-status-card">
+            <ConnectionStatus
+              connected={home.connected}
+              headline={headline}
+              hint={hint}
+              inProgress={home.inProgress}
+              pidLabel={pidLabel}
+            />
+          </CardHeader>
+          <CardContent className="px-4">
+            <ConnectRow
+              busy={home.busy}
+              checked={home.connected || home.state === "connecting"}
+              connected={home.connected}
+              onPrimaryAction={home.handlePrimaryAction}
+              onRestart={home.restart}
+              t={t}
+            />
+            <Separator />
+            <SysProxyRow
+              onProxyModeChange={home.changeProxyMode}
+              pacAvailable={home.pacAvailable}
+              proxyPending={home.proxyPending}
+              requestedProxyMode={home.requestedProxyMode}
+              t={t}
+            />
+            <Separator />
+            <TunRow
+              onTunToggle={home.toggleTun}
+              t={t}
+              tunEnabled={home.tunEnabled}
+              tunPending={home.tunPending}
+              tunProviderSummary={home.tunProviderSummary}
+            />
+            <Separator />
+            <div className="flex items-center justify-between gap-3 py-2.5">
+              <Label className="text-sm font-medium text-foreground" htmlFor="home-language-select">
+                {t("modal.language")}
+              </Label>
+              <Select onValueChange={(value) => void changeLanguage(value as Locale)} value={language}>
+                <SelectTrigger className="w-40" id="home-language-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {localeOptions.map((locale) => (
+                    <SelectItem key={locale.code} value={locale.code}>
+                      {locale.nativeName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between gap-3 py-2.5">
+              <span className="text-sm font-medium text-foreground">{t("home.version")}</span>
+              <span className="text-sm tabular-nums text-muted-foreground">{versionQuery.data ?? "—"}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-4 flex min-h-0 flex-1 flex-col gap-3 py-4">
+          <CardHeader className="px-4">
+            <CardTitle className="text-sm font-semibold">{t("home.nodes")}</CardTitle>
+          </CardHeader>
+          <CardContent className="flex min-h-0 flex-1 flex-col px-4">
+            <NodeList
+              isPending={home.profilesPending}
+              onActivate={home.activateProfile}
+              onSelect={home.selectProfile}
+              profiles={home.profiles}
+              runningId={home.runningId}
+              selectedId={home.selectedId}
+              switchingId={home.switchingId}
+            />
+          </CardContent>
+        </Card>
       </div>
     </section>
   );
@@ -393,6 +484,7 @@ function useHomeRuntime(t: Translation) {
     connected,
     handlePrimaryAction,
     inProgress,
+    mainPid: coreState?.mainPid ?? null,
     pacAvailable,
     profiles: profilesQuery.data ?? [],
     profilesPending: profilesQuery.isPending,
@@ -411,173 +503,189 @@ function useHomeRuntime(t: Translation) {
   };
 }
 
+// Compact horizontal status block in the Quick Actions card header. Its muted
+// hint doubles as the card's explanatory line; the PID meta keeps the runtime
+// detail the removed status bar used to carry.
 function ConnectionStatus({
   connected,
   headline,
   hint,
   inProgress,
+  pidLabel,
 }: {
   connected: boolean;
   headline: string;
   hint: string;
   inProgress: boolean;
+  pidLabel: string;
 }) {
   const StatusIcon = connected ? ShieldCheck : inProgress ? LoaderCircle : ShieldOff;
 
   return (
-    <div className="flex shrink-0 flex-col items-center gap-4 text-center">
+    <div className="flex items-center gap-4">
       <span
         aria-hidden="true"
         className={cn(
-          "flex size-20 items-center justify-center rounded-full border transition-colors",
+          "flex size-12 shrink-0 items-center justify-center rounded-full border transition-colors",
           connected
             ? "border-connected/40 bg-connected/10 text-connected shadow-[var(--connected-glow)]"
             : "border-border bg-surface-sunken text-muted-foreground",
         )}
       >
-        <StatusIcon className={cn("size-9", inProgress && "animate-spin")} />
+        <StatusIcon className={cn("size-6", inProgress && "animate-spin")} />
       </span>
-      <div className="space-y-1">
+      <div className="min-w-0">
         <p
           className={cn(
-            "font-display text-2xl font-semibold tracking-tight",
+            "font-display text-lg font-semibold tracking-tight",
             connected ? "text-connected" : "text-foreground",
           )}
         >
           {headline}
         </p>
-        {hint ? <p className="text-sm text-muted-foreground">{hint}</p> : null}
+        {hint ? <p className="mt-0.5 text-sm text-muted-foreground">{hint}</p> : null}
+        {connected ? <p className="mt-0.5 text-xs tabular-nums text-subtlest">{pidLabel}</p> : null}
       </div>
     </div>
   );
 }
 
-function RuntimeActions({
+// The reference design's toggle: the switch is a pure presentation swap over the
+// toggle-shaped `handlePrimaryAction` (connected → disconnect; a diverged local
+// selection → switch-and-connect; otherwise connect). The accessible name stays
+// a constant "Connect"; state travels via `aria-checked`.
+function ConnectRow({
   busy,
+  checked,
   connected,
   onPrimaryAction,
   onRestart,
   t,
 }: {
   busy: boolean;
+  checked: boolean;
   connected: boolean;
   onPrimaryAction: () => void;
   onRestart: () => void;
   t: Translation;
 }) {
-  const primaryLabel = connected ? t("actions.disconnect") : t("actions.connect");
-  const PrimaryIcon = busy ? LoaderCircle : connected ? PowerOff : Power;
-
   return (
-    <div className="flex shrink-0 flex-col items-center gap-3">
-      <Button
-        aria-label={primaryLabel}
-        className={cn("h-14 w-60 gap-2 rounded-lg text-base font-semibold", !connected && "shadow-raised")}
-        disabled={busy}
-        onClick={onPrimaryAction}
-        size="lg"
-        type="button"
-        variant={connected ? "outline" : "default"}
-      >
-        <PrimaryIcon className={cn("size-5", busy && "animate-spin")} aria-hidden="true" />
-        {primaryLabel}
-      </Button>
-      {connected ? (
-        <Button
-          aria-label={t("actions.restart")}
-          className="gap-2"
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <Label className="text-sm font-medium text-foreground" htmlFor="home-connect-switch">
+        {t("actions.connect")}
+      </Label>
+      <div className="flex items-center gap-2">
+        {connected ? (
+          <Button
+            aria-label={t("actions.restart")}
+            className="gap-2"
+            disabled={busy}
+            onClick={onRestart}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            <RotateCw className="size-4" aria-hidden="true" />
+            {t("actions.restart")}
+          </Button>
+        ) : null}
+        {busy ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin text-muted-foreground" /> : null}
+        <Switch
+          aria-busy={busy || undefined}
+          checked={checked}
           disabled={busy}
-          onClick={onRestart}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
-          <RotateCw className="size-4" aria-hidden="true" />
-          {t("actions.restart")}
-        </Button>
-      ) : null}
+          id="home-connect-switch"
+          onCheckedChange={() => onPrimaryAction()}
+        />
+      </div>
     </div>
   );
 }
 
-function NetworkControls({
+function SysProxyRow({
   onProxyModeChange,
-  onTunToggle,
   pacAvailable,
   proxyPending,
   requestedProxyMode,
+  t,
+}: {
+  onProxyModeChange: (mode: SysProxyMode) => void;
+  pacAvailable: boolean;
+  proxyPending: SysProxyMode | null;
+  requestedProxyMode: SysProxyMode;
+  t: Translation;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <span className="text-sm font-medium text-foreground">{t("status.sysProxyMode")}</span>
+      <div className="flex flex-col items-end gap-1">
+        <div
+          aria-busy={proxyPending !== null}
+          aria-label={t("status.sysProxyMode")}
+          className="flex h-7 items-center rounded-md bg-muted p-0.5"
+          role="group"
+        >
+          {PROXY_MODE_OPTIONS.map((mode) => {
+            const selected = requestedProxyMode === mode;
+            const modeLabel = sysProxyLabel(mode, t);
+            const pacUnavailable = mode === "pac" && !pacAvailable;
+
+            return (
+              <Button
+                key={mode}
+                aria-describedby={pacUnavailable ? "home-pac-unavailable" : undefined}
+                aria-label={modeLabel}
+                aria-pressed={selected}
+                className={cn(
+                  "h-6 rounded-sm px-2.5 text-sm leading-none shadow-none focus-visible:relative focus-visible:z-10",
+                  selected
+                    ? "bg-background text-foreground hover:bg-background hover:text-foreground"
+                    : "text-subtlest hover:bg-background/60 hover:text-foreground",
+                )}
+                disabled={proxyPending !== null || pacUnavailable}
+                onClick={() => onProxyModeChange(mode)}
+                size="sm"
+                title={pacUnavailable ? t("status.sysProxyPacUnavailable") : undefined}
+                type="button"
+                variant="ghost"
+              >
+                {modeLabel}
+              </Button>
+            );
+          })}
+        </div>
+        {!pacAvailable ? (
+          <p className="max-w-64 text-end text-xs text-subtlest" id="home-pac-unavailable">
+            {t("status.sysProxyPacUnavailable")}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function TunRow({
+  onTunToggle,
   t,
   tunEnabled,
   tunPending,
   tunProviderSummary,
 }: {
-  onProxyModeChange: (mode: SysProxyMode) => void;
   onTunToggle: () => void;
-  pacAvailable: boolean;
-  proxyPending: SysProxyMode | null;
-  requestedProxyMode: SysProxyMode;
   t: Translation;
   tunEnabled: boolean;
   tunPending: boolean;
   tunProviderSummary: string | null;
 }) {
   return (
-    <div className="w-full shrink-0 rounded-lg bg-surface-raised px-4 shadow-raised">
-      <div className="flex items-center justify-between gap-3 py-2.5">
-        <span className="text-sm font-medium text-foreground">{t("status.sysProxyMode")}</span>
-        <div className="flex flex-col items-end gap-1">
-          <div
-            aria-busy={proxyPending !== null}
-            aria-label={t("status.sysProxyMode")}
-            className="flex h-7 items-center rounded-md bg-muted p-0.5"
-            role="group"
-          >
-            {PROXY_MODE_OPTIONS.map((mode) => {
-              const selected = requestedProxyMode === mode;
-              const modeLabel = sysProxyLabel(mode, t);
-              const pacUnavailable = mode === "pac" && !pacAvailable;
-
-              return (
-                <Button
-                  key={mode}
-                  aria-describedby={pacUnavailable ? "home-pac-unavailable" : undefined}
-                  aria-label={modeLabel}
-                  aria-pressed={selected}
-                  className={cn(
-                    "h-6 rounded-sm px-2.5 text-sm leading-none shadow-none focus-visible:relative focus-visible:z-10",
-                    selected
-                      ? "bg-background text-foreground hover:bg-background hover:text-foreground"
-                      : "text-subtlest hover:bg-background/60 hover:text-foreground",
-                  )}
-                  disabled={proxyPending !== null || pacUnavailable}
-                  onClick={() => onProxyModeChange(mode)}
-                  size="sm"
-                  title={pacUnavailable ? t("status.sysProxyPacUnavailable") : undefined}
-                  type="button"
-                  variant="ghost"
-                >
-                  {modeLabel}
-                </Button>
-              );
-            })}
-          </div>
-          {!pacAvailable ? (
-            <p className="max-w-64 text-end text-xs text-subtlest" id="home-pac-unavailable">
-              {t("status.sysProxyPacUnavailable")}
-            </p>
-          ) : null}
-        </div>
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <div className="min-w-0">
+        <Label className="text-sm font-medium text-foreground" htmlFor="home-tun-switch">
+          {t("status.tun")}
+        </Label>
+        {tunProviderSummary ? <p className="mt-0.5 truncate text-xs text-subtlest">{tunProviderSummary}</p> : null}
       </div>
-      <Separator />
-      <div className="flex items-center justify-between gap-3 py-2.5">
-        <div className="min-w-0">
-          <Label className="text-sm font-medium text-foreground" htmlFor="home-tun-switch">
-            {t("status.tun")}
-          </Label>
-          {tunProviderSummary ? <p className="mt-0.5 truncate text-xs text-subtlest">{tunProviderSummary}</p> : null}
-        </div>
-        <Switch checked={tunEnabled} disabled={tunPending} id="home-tun-switch" onCheckedChange={onTunToggle} />
-      </div>
+      <Switch checked={tunEnabled} disabled={tunPending} id="home-tun-switch" onCheckedChange={onTunToggle} />
     </div>
   );
 }

@@ -402,7 +402,6 @@ describe("App", () => {
     const footer = screen.getByTestId("sidebar-footer");
     const tablist = screen.getByRole("tablist", { name: "Main sections" });
 
-    expect(screen.getByRole("heading", { name: "VoyaVPN" })).toBeInTheDocument();
     const tabNames = within(tablist)
       .getAllByRole("tab")
       .map((tab) => tab.textContent);
@@ -421,7 +420,9 @@ describe("App", () => {
     renderApp();
 
     const hero = await screen.findByRole("region", { name: "Connection home" });
-    expect(within(hero).getByRole("button", { name: "Connect" })).toBeInTheDocument();
+    // The app name is the Home page's h1 (the sidebar brand is a plain label).
+    expect(within(hero).getByRole("heading", { level: 1, name: "VoyaVPN" })).toBeInTheDocument();
+    expect(within(hero).getByRole("switch", { name: "Connect" })).toBeInTheDocument();
     expect(within(hero).getByText("Not protected")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-footer")).toHaveTextContent("Disconnected");
   });
