@@ -27,7 +27,7 @@ export function SidebarNavItem({
       aria-controls={panelId}
       aria-selected={active}
       className={cn(
-        "flex w-full items-center gap-2 rounded-sm py-1.5 pr-4 pl-3 text-sm font-medium outline-none transition-colors duration-short ease-out-practical focus-visible:ring-2 focus-visible:ring-ring/50",
+        "flex h-10 w-full shrink-0 items-center gap-3 rounded-md ps-3 pe-4 text-sm font-medium outline-none transition-colors duration-short ease-out-practical focus-visible:ring-2 focus-visible:ring-ring/50",
         active
           ? "bg-accent-blue-light text-brand"
           : "text-sidebar-foreground hover:bg-accent",

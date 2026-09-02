@@ -2,10 +2,10 @@ import { lazy, Suspense, useEffect, useMemo, useRef, type MutableRefObject } fro
 
 import { AppSidebar, SHELL_PANEL_ID } from "@/components/app-shell/app-sidebar";
 import { ModalHost } from "@/components/app-shell/modal-host";
-import { StatusBar } from "@/components/app-shell/status-bar";
 import { TitleBar } from "@/components/app-shell/title-bar";
 import { Toaster } from "@/components/app-shell/toaster";
 import { useAcrylicWindow } from "@/components/app-shell/use-acrylic-window";
+import { useRuntimeStatusSeed } from "@/components/app-shell/use-runtime-status-seed";
 import { useWindowChrome } from "@/components/app-shell/use-window-chrome";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { proxyStartMonitor, proxyStopMonitor, useRuntimeEventStore } from "@/ipc";
@@ -21,7 +21,7 @@ const ProfilesScreen = lazy(() =>
     default: ProfilesScreen,
   })),
 );
-const RoutingScreen = lazy(() =>
+const RulesScreen = lazy(() =>
   import("@/features/routing/routing-screen").then(({ RoutingScreen }) => ({
     default: RoutingScreen,
   })),
@@ -52,11 +52,11 @@ function renderActiveScreen(tab: ShellTab) {
       return <HomeScreen />;
     case "profiles":
       return <ProfilesScreen />;
-    case "routing":
-      return <RoutingScreen />;
-    case "proxy-groups":
+    case "rules":
+      return <RulesScreen />;
+    case "proxies":
       return <ProxyGroupsScreen />;
-    case "proxy-connections":
+    case "connections":
       return <ConnectionsScreen />;
     case "settings":
       return <SettingsScreen />;
@@ -71,12 +71,13 @@ export function AppShell() {
   const { titleBarLayout } = useWindowChrome();
 
   useProxyMonitorLifecycle(activeTab);
+  useRuntimeStatusSeed();
   // Windows borderless chrome is the only Acrylic target; the hook no-ops elsewhere.
   useAcrylicWindow(titleBarLayout === "windows");
 
   return (
     <main className="bg-background text-foreground" dir={direction}>
-      <div className="grid h-screen min-h-[34rem] grid-cols-[auto_1fr] grid-rows-[auto_1fr_auto] overflow-hidden">
+      <div className="grid h-screen min-h-[34rem] grid-cols-[auto_1fr] grid-rows-[auto_1fr] overflow-hidden">
         {/* Titlebar row: the Windows build draws its own borderless title bar
             (it spans both columns); every other platform keeps its native frame
             and leaves this structural row empty (collapsing to zero height). */}
@@ -96,10 +97,6 @@ export function AppShell() {
           tabIndex={0}
         >
           <Suspense fallback={<ScreenFallback />}>{renderActiveScreen(activeTab)}</Suspense>
-        </div>
-
-        <div className="col-span-2 min-w-0">
-          <StatusBar />
         </div>
       </div>
 
@@ -326,7 +323,7 @@ function clearTimer(timerRef: MutableRefObject<number | null>) {
 }
 
 function isProxyTab(tab: ShellTab) {
-  return tab === "proxy-groups" || tab === "proxy-connections";
+  return tab === "proxies" || tab === "connections";
 }
 
 function isTauriRuntime() {

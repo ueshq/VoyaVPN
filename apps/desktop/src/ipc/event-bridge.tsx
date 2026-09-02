@@ -158,11 +158,11 @@ function toShellTarget(tab: ShellTabTarget): { tab: ShellTab; view?: Connections
     case "profiles":
       return { tab: "profiles" };
     case "proxyGroups":
-      return { tab: "proxy-groups" };
+      return { tab: "proxies" };
     case "proxyConnections":
-      return { tab: "proxy-connections", view: "connections" };
+      return { tab: "connections", view: "connections" };
     case "logs":
-      return { tab: "proxy-connections", view: "logs" };
+      return { tab: "connections", view: "logs" };
   }
 }
 

@@ -1,6 +1,6 @@
 import { TriangleAlert } from "lucide-react";
 
-import { PageSection } from "@/components/app-shell/page-section";
+import { PageSection, PageTitle } from "@/components/app-shell/page-section";
 import { Alert, AlertDescription } from "@voya/ui/components/alert";
 import { useI18n } from "@voya/i18n/use-i18n";
 
@@ -15,7 +15,8 @@ export function RoutingScreen() {
   const controller = useRoutingScreen();
 
   return (
-    <PageSection aria-label={t("panes.routing.title")}>
+    <PageSection aria-label={t("tabs.rules")}>
+      <PageTitle title={t("tabs.rules")} />
       <RoutingToolbar controller={controller} />
 
       {controller.operationError ? (

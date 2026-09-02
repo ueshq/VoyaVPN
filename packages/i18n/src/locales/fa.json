@@ -557,8 +557,6 @@
     "disconnecting": "در حال قطع",
     "download": "دریافت {{speed}}",
     "noPid": "بدون PID",
-    "profiles": "نمایه ها: {{count}}",
-    "route": "مسیر: {{route}}",
     "runtimeStatusFailed": "به‌روزرسانی وضعیت اجرا ناموفق بود",
     "sysProxyChangeFailed": "تغییر حالت پراکسی سیستم ناموفق بود",
     "sysProxyGlobal": "Global",
@@ -575,14 +573,13 @@
   },
   "tabs": {
     "aria": "بخش های اصلی",
+    "connections": "اتصال‌ها",
     "dns": "DNS",
     "home": "خانه",
     "logs": "گزارش ها",
-    "network": "شبکه",
     "profiles": "نمایه ها",
-    "proxyConnections": "اتصال‌ها",
-    "proxyGroups": "گروه‌های پراکسی",
-    "routing": "مسیریابی",
+    "proxies": "پروکسی‌ها",
+    "rules": "قوانین",
     "settings": "تنظیمات"
   },
   "updates": {

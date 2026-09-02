@@ -3,6 +3,7 @@ import { useI18n } from "@voya/i18n/use-i18n";
 
 import { CheckboxField, NumberField, TextField } from "./runtime-fields";
 import { SettingsCheckboxGroup, SettingsGroup, SettingsRow } from "./settings-form";
+import { TunDiagnosticsButton } from "./tun-diagnostics-button";
 import type { AppSettingsController } from "./use-app-settings";
 
 export function NetworkTab({ controller }: { controller: AppSettingsController }) {
@@ -41,6 +42,7 @@ export function NetworkTab({ controller }: { controller: AppSettingsController }
         <TextField id="rt-tun-stack" label={t("settings.network.tunStack")} onChange={(stack) => patchTun({ stack })} value={settings.network.tun.stack} />
         <NumberField id="rt-tun-mtu" label={t("settings.network.mtu")} onChange={(mtu) => patchTun({ mtu: mtu ?? 1500 })} value={settings.network.tun.mtu} />
         <TextField id="rt-tun-icmp-routing" label={t("settings.network.icmpRoutingPolicy")} onChange={(icmpRouting) => patchTun({ icmpRouting })} value={settings.network.tun.icmpRouting} />
+        <TunDiagnosticsButton />
       </SettingsGroup>
 
       <Separator />

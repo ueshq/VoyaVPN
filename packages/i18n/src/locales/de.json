@@ -557,8 +557,6 @@
     "disconnecting": "Disconnecting",
     "download": "Down {{speed}}",
     "noPid": "No PID",
-    "profiles": "Profiles: {{count}}",
-    "route": "Route: {{route}}",
     "runtimeStatusFailed": "Laufzeitstatus konnte nicht aktualisiert werden",
     "sysProxyChangeFailed": "Systemproxymodus konnte nicht geändert werden",
     "sysProxyGlobal": "Global",
@@ -575,14 +573,13 @@
   },
   "tabs": {
     "aria": "Main sections",
+    "connections": "Connections",
     "dns": "DNS",
     "home": "Start",
     "logs": "Logs",
-    "network": "Netzwerk",
     "profiles": "Profiles",
-    "proxyConnections": "Connections",
-    "proxyGroups": "Proxy Groups",
-    "routing": "Routing",
+    "proxies": "Proxys",
+    "rules": "Regeln",
     "settings": "Einstellungen"
   },
   "updates": {

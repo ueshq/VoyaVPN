@@ -395,22 +395,22 @@ describe("App", () => {
     delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   });
 
-  it("renders the app shell tabs and status bar", () => {
+  it("renders the six-item sidebar nav with the speed footer", () => {
     renderApp();
 
     const sidebar = screen.getByRole("complementary");
-    const statusBar = screen.getByTestId("status-bar");
+    const footer = screen.getByTestId("sidebar-footer");
+    const tablist = screen.getByRole("tablist", { name: "Main sections" });
 
     expect(screen.getByRole("heading", { name: "VoyaVPN" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Home/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Profiles/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Routing/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Proxy Groups/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Connections/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Settings/ })).toBeInTheDocument();
-    expect(statusBar).toHaveTextContent("Disconnected");
-    expect(statusBar).toHaveTextContent("Route: /profiles");
-    expect(within(statusBar).getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    const tabNames = within(tablist)
+      .getAllByRole("tab")
+      .map((tab) => tab.textContent);
+    expect(tabNames).toEqual(["Home", "Proxies", "Profiles", "Settings", "Connections", "Rules"]);
+    expect(footer).toHaveTextContent("Disconnected");
+    expect(footer).toHaveTextContent("Up 0 B/s");
+    expect(footer).toHaveTextContent("Down 0 B/s");
+    expect(screen.queryByTestId("status-bar")).not.toBeInTheDocument();
     expect(within(sidebar).queryByRole("button", { name: "Settings" })).toBeNull();
     expect(within(sidebar).queryByRole("button", { name: "Theme" })).toBeNull();
   });
@@ -423,8 +423,7 @@ describe("App", () => {
     const hero = await screen.findByRole("region", { name: "Connection home" });
     expect(within(hero).getByRole("button", { name: "Connect" })).toBeInTheDocument();
     expect(within(hero).getByText("Not protected")).toBeInTheDocument();
-    expect(screen.getByTestId("status-bar")).toHaveTextContent("Disconnected");
-    expect(screen.getByTestId("status-bar")).toHaveTextContent("Route: /home");
+    expect(screen.getByTestId("sidebar-footer")).toHaveTextContent("Disconnected");
   });
 
   it("applies the backend RTL locale to the main surface", async () => {
@@ -464,8 +463,7 @@ describe("App", () => {
 
     await activateTab(/Connections/);
 
-    expect(screen.getByRole("heading", { name: "Connections" })).toBeInTheDocument();
-    expect(screen.getByTestId("status-bar")).toHaveTextContent("Route: /proxy/connections");
+    expect(screen.getByRole("heading", { level: 1, name: "Connections" })).toBeInTheDocument();
     expect(proxyStartMonitor).not.toHaveBeenCalled();
     expect(proxyListConnections).not.toHaveBeenCalled();
 
@@ -515,7 +513,7 @@ describe("App", () => {
 
     renderApp();
 
-    await activateTab(/Proxy Groups/);
+    await activateTab(/Proxies/);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(50);
     });
@@ -528,7 +526,7 @@ describe("App", () => {
     expect(proxyStartMonitor).toHaveBeenCalledTimes(1);
     expect(proxyStopMonitor).not.toHaveBeenCalled();
 
-    await activateTab(/Proxy Groups/);
+    await activateTab(/Proxies/);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
@@ -577,7 +575,7 @@ describe("App", () => {
 
     renderApp();
 
-    await activateTab(/Proxy Groups/);
+    await activateTab(/Proxies/);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(100);
     });
@@ -604,7 +602,7 @@ describe("App", () => {
 
     renderApp();
 
-    await activateTab(/Proxy Groups/);
+    await activateTab(/Proxies/);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(100);
     });
@@ -629,20 +627,20 @@ describe("App", () => {
     });
   });
 
-  it("shows stale monitor status in Proxy Groups without replacing toolbar controls", async () => {
+  it("shows stale monitor status in Proxies without replacing toolbar controls", async () => {
     const user = userEvent.setup();
     runtimeStoreMock.getState().setProxyMonitorStopped();
     runtimeStoreMock.getState().setProxyTraffic({ down: 2048, up: 512 });
 
     renderApp();
 
-    await user.click(screen.getByRole("tab", { name: /Proxy Groups/ }));
+    await user.click(mainNavTab(/Proxies/));
 
     expect(screen.getByRole("status", { name: "Stale: Stopped" })).toBeInTheDocument();
-    // Scope toolbar-control assertions to the Proxy Groups region. The home
+    // Scope toolbar-control assertions to the Proxies region. The home
     // hero's system-proxy selector also exposes "Direct"/"Global" buttons, so
     // scoping keeps these queries unambiguous and robust to shell layout.
-    const proxies = screen.getByRole("region", { name: "Proxy Groups" });
+    const proxies = screen.getByRole("region", { name: "Proxies" });
     expect(within(proxies).queryByText(/Up .*\/s/)).not.toBeInTheDocument();
     expect(within(proxies).queryByText(/Down .*\/s/)).not.toBeInTheDocument();
     expect(within(proxies).getByRole("button", { name: "Rule" })).toBeInTheDocument();

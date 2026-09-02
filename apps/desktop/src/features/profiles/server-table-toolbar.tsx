@@ -4,7 +4,6 @@ import {
   FilePlus2,
   Filter,
   RotateCcw,
-  Rows3,
   Rss,
   Search,
   Share2,
@@ -13,7 +12,8 @@ import {
 
 import { Toolbar, ToolbarGroup, ToolbarOverflow } from "@/components/app-shell/toolbar";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
-import { PageHeader, PageHeaderHeading } from "@/components/app-shell/page-section";
+import { PageHeader } from "@/components/app-shell/page-section";
+import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { Input } from "@voya/ui/components/input";
 import {
@@ -59,11 +59,9 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
   return (
     <>
       <PageHeader>
-        <PageHeaderHeading
-          count={t("panes.profiles.toolbar.rows", { rows: profiles.length.toLocaleString() })}
-          icon={Rows3}
-          title={t("panes.profiles.title")}
-        />
+        <Badge className="h-6 bg-background tabular-nums text-muted-foreground" variant="outline">
+          {t("panes.profiles.toolbar.rows", { rows: profiles.length.toLocaleString() })}
+        </Badge>
 
         <div className="relative ms-auto min-w-[14rem]">
           <Search

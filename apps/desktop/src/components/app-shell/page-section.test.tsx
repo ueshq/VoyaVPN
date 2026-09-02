@@ -1,20 +1,13 @@
 import { render } from "@testing-library/react";
-import { ScrollText } from "lucide-react";
 import { describe, expect, it } from "vitest";
 
-import { Badge } from "@voya/ui/components/badge";
-
-import { PageHeader, PageHeaderHeading, PageSection } from "./page-section";
+import { PageHeader, PageSection, PageTitle } from "./page-section";
 
 describe("PageSection primitives", () => {
   it("renders the shared section/header geometry with stable data-slots", () => {
-    const { getByTestId, getByRole } = render(
+    const { getByTestId } = render(
       <PageSection aria-label="Logs" data-testid="section">
-        <PageHeader data-testid="header">
-          <PageHeaderHeading icon={ScrollText} title="Logs">
-            <Badge>3</Badge>
-          </PageHeaderHeading>
-        </PageHeader>
+        <PageHeader data-testid="header" />
       </PageSection>,
     );
 
@@ -31,19 +24,26 @@ describe("PageSection primitives", () => {
     expect(header.className).toContain("px-4");
     expect(header.className).toContain("py-2");
     expect(header.className).toContain("gap-2");
-
-    // The heading exposes the title as a level-2 landmark so screens stay accessible.
-    expect(getByRole("heading", { level: 2, name: "Logs" })).toBeInTheDocument();
   });
 
-  it("merges extra classes onto the heading cluster via cn()", () => {
-    const { getByTestId } = render(
-      <PageHeaderHeading className="ms-auto" data-testid="heading" title="DNS" />,
+  it("renders the large page identity as the page's single h1 with count and actions", () => {
+    const { getByRole, getByTestId, getByText } = render(
+      <PageTitle
+        actions={<button type="button">New</button>}
+        count="12"
+        data-testid="title"
+        title="Profiles"
+      />,
     );
 
-    const heading = getByTestId("heading");
-    expect(heading.dataset.slot).toBe("page-header-heading");
-    expect(heading.className).toContain("flex min-w-0 items-center gap-2");
-    expect(heading.className).toContain("ms-auto");
+    const title = getByTestId("title");
+    expect(title.dataset.slot).toBe("page-title");
+    expect(title.className).toContain("px-6");
+
+    const heading = getByRole("heading", { level: 1, name: "Profiles" });
+    expect(heading.className).toContain("text-2xl");
+    expect(getByText("12")).toBeInTheDocument();
+    // Actions park at the trailing edge via the logical ms-auto push.
+    expect(getByRole("button", { name: "New" }).parentElement?.className).toContain("ms-auto");
   });
 });

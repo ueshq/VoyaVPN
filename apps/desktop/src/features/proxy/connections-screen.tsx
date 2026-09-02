@@ -18,7 +18,7 @@ export function ConnectionsScreen() {
   const setView = useShellStore((state) => state.setConnectionsView);
 
   return (
-    <PageSection aria-label={t("tabs.proxyConnections")}>
+    <PageSection aria-label={t("tabs.connections")}>
       <Tabs
         className="flex min-h-0 flex-1 flex-col gap-0"
         dir={direction}
@@ -32,11 +32,11 @@ export function ConnectionsScreen() {
         <PageTitle
           actions={
             <TabsList>
-              <TabsTrigger value="connections">{t("tabs.proxyConnections")}</TabsTrigger>
+              <TabsTrigger value="connections">{t("tabs.connections")}</TabsTrigger>
               <TabsTrigger value="logs">{t("tabs.logs")}</TabsTrigger>
             </TabsList>
           }
-          title={t("tabs.proxyConnections")}
+          title={t("tabs.connections")}
         />
         <TabsContent className="min-h-0 flex-1" value="connections">
           <ConnectionsPanel />

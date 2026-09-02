@@ -12,11 +12,12 @@ test.beforeEach(async ({ page }) => {
 
 test("loads the app shell and opens in-shell settings", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "VoyaVPN" })).toBeVisible();
-  await expect(page.getByTestId("status-bar")).toContainText("Disconnected");
+  await expect(page.getByTestId("sidebar-footer")).toContainText("Disconnected");
+  await expect(page.getByTestId("sidebar-footer")).toContainText("Up 0 B/s");
   await expect(page.getByRole("tab", { name: "Home" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { exact: true, name: "QR" })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Settings" }).click();
 
   await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
   const openCalls = await page.evaluate(() => {
@@ -189,18 +190,16 @@ test("adds and imports profiles, activates one, and connects through the fake ru
   const importedNode = page.getByRole("option", { name: /Smoke Imported VLESS/ });
   await importedNode.dblclick();
   await expect(importedNode).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByTestId("status-bar")).toContainText("Connected");
-  await expect(page.getByTestId("status-bar")).toContainText("PID 4242");
+  await expect(page.getByTestId("sidebar-footer")).toContainText("Connected");
 
   await page.getByRole("button", { exact: true, name: "Disconnect" }).click();
-  await expect(page.getByTestId("status-bar")).toContainText("Disconnected");
+  await expect(page.getByTestId("sidebar-footer")).toContainText("Disconnected");
 });
 
 test("uses the proxy groups and connections routes through the proxy runtime IPC", async ({ page }) => {
-  await page.getByRole("tab", { name: "Proxy Groups" }).click();
+  await page.getByRole("tab", { name: "Proxies" }).click();
 
-  await expect(page.getByRole("heading", { exact: true, name: "Proxy Groups" })).toBeVisible();
-  await expect(page.getByTestId("status-bar")).toContainText("Route: /proxy/groups");
+  await expect(page.getByRole("heading", { exact: true, name: "Proxies" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Smoke Node VLESS 23 ms Active/ })).toBeVisible();
   await page.getByRole("button", { name: /Smoke Backup Node/ }).click();
   await page.getByRole("button", { exact: true, name: "Test selected" }).click();
@@ -208,7 +207,6 @@ test("uses the proxy groups and connections routes through the proxy runtime IPC
 
   await page.getByRole("tab", { name: "Connections" }).click();
   await expect(page.getByRole("heading", { exact: true, name: "Connections" })).toBeVisible();
-  await expect(page.getByTestId("status-bar")).toContainText("Route: /proxy/connections");
   await expect(page.getByText("smoke.example.test:443", { exact: true })).toBeVisible();
   await page.getByText("smoke.example.test:443", { exact: true }).click();
   await page.getByRole("button", { exact: true, name: "Close" }).click();
@@ -242,8 +240,8 @@ test("uses the proxy groups and connections routes through the proxy runtime IPC
 });
 
 test("edits routing and DNS settings without network or OS side effects", async ({ page }) => {
-  await page.getByRole("tab", { name: "Routing" }).click();
-  await expect(page.getByRole("heading", { exact: true, name: "Routing" })).toBeVisible();
+  await page.getByRole("tab", { name: "Rules" }).click();
+  await expect(page.getByRole("heading", { exact: true, name: "Rules" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Default routing" })).toBeVisible();
 
   await page.getByRole("button", { name: "Profile" }).click();

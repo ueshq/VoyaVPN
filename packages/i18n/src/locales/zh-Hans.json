@@ -557,8 +557,6 @@
     "disconnecting": "断开中",
     "download": "下行 {{speed}}",
     "noPid": "无 PID",
-    "profiles": "配置：{{count}}",
-    "route": "路由：{{route}}",
     "runtimeStatusFailed": "刷新运行状态失败",
     "sysProxyChangeFailed": "切换系统代理模式失败",
     "sysProxyGlobal": "全局代理",
@@ -575,14 +573,13 @@
   },
   "tabs": {
     "aria": "主区域",
+    "connections": "连接",
     "dns": "DNS",
     "home": "主页",
     "logs": "日志",
-    "network": "网络",
     "profiles": "配置",
-    "proxyConnections": "连接",
-    "proxyGroups": "代理组",
-    "routing": "路由",
+    "proxies": "代理",
+    "rules": "规则",
     "settings": "设置"
   },
   "updates": {

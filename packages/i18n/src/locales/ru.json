@@ -557,8 +557,6 @@
     "disconnecting": "Disconnecting",
     "download": "Down {{speed}}",
     "noPid": "No PID",
-    "profiles": "Profiles: {{count}}",
-    "route": "Route: {{route}}",
     "runtimeStatusFailed": "Не удалось обновить состояние выполнения",
     "sysProxyChangeFailed": "Не удалось изменить режим системного прокси",
     "sysProxyGlobal": "Global",
@@ -575,14 +573,13 @@
   },
   "tabs": {
     "aria": "Main sections",
+    "connections": "Connections",
     "dns": "DNS",
     "home": "Главная",
     "logs": "Logs",
-    "network": "Сеть",
     "profiles": "Profiles",
-    "proxyConnections": "Connections",
-    "proxyGroups": "Proxy Groups",
-    "routing": "Routing",
+    "proxies": "Прокси",
+    "rules": "Правила",
     "settings": "Настройки"
   },
   "updates": {

@@ -154,7 +154,7 @@
   --border-dialog: #d1d9e0;
   --shadow-dialog: rgb(140 149 159 / 0.3);
 
-  /* Primer layered chrome — sidebar/titlebar/statusbar paint the muted canvas distinct from content. */
+  /* Primer layered chrome — sidebar/titlebar paint the muted canvas distinct from content. */
   --sidebar: #f6f8fa;
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
@@ -304,7 +304,7 @@
    web / macOS never match and keep the flat opaque surfaces declared above.
 
    The veil must live on exactly ONE element. bg-sidebar is painted by several stacked
-   chrome cells (title bar + sidebar + status bar) and the shell root <main> paints
+   chrome cells (title bar + sidebar) and the shell root <main> paints
    bg-background over the whole grid; a translucent color on any of them would multiply
    layer-on-layer and crush the chrome back to near-opaque. So every chrome surface
    paints nothing (--sidebar: transparent) and the shell root <main> is cleared, leaving

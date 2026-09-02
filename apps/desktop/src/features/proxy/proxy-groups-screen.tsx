@@ -8,7 +8,7 @@ import {
   dataTableRowSelected,
 } from "@/components/app-shell/data-table-surface";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
-import { PageHeader, PageHeaderActions, PageHeaderHeading, PageSection } from "@/components/app-shell/page-section";
+import { PageHeader, PageHeaderActions, PageSection, PageTitle } from "@/components/app-shell/page-section";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { EmptyState } from "@voya/ui/components/empty-state";
@@ -111,11 +111,10 @@ export function ProxyGroupsScreen() {
   }
 
   return (
-    <PageSection aria-label={t("tabs.proxyGroups")}>
+    <PageSection aria-label={t("tabs.proxies")}>
+      <PageTitle title={t("tabs.proxies")} />
       <PageHeader>
-        <PageHeaderHeading icon={Network} title={t("tabs.proxyGroups")}>
-          <ProxyMonitorStatusBadge className="max-w-[15rem]" status={monitorStatus} />
-        </PageHeaderHeading>
+        <ProxyMonitorStatusBadge className="max-w-[15rem]" status={monitorStatus} />
         <PageHeaderActions>
           <div className="hidden h-9 items-center rounded-lg bg-muted p-[3px] md:flex">
             {trafficModeOptions.map((option) => (

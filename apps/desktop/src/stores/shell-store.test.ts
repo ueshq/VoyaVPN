@@ -21,9 +21,9 @@ describe("useShellStore navigation guard", () => {
   it("navigates when the guard allows the switch", () => {
     useShellStore.getState().setNavigationGuard(() => true);
 
-    useShellStore.getState().requestTab("routing");
+    useShellStore.getState().requestTab("rules");
 
-    expect(useShellStore.getState().activeTab).toBe("routing");
+    expect(useShellStore.getState().activeTab).toBe("rules");
     expect(useShellStore.getState().pendingTab).toBeNull();
   });
 
@@ -53,8 +53,8 @@ describe("useShellStore navigation guard", () => {
     expect(useShellStore.getState().pendingTab).toBeNull();
 
     useShellStore.setState({ pendingTab: "profiles" });
-    useShellStore.getState().setActiveTab("routing");
-    expect(useShellStore.getState().activeTab).toBe("routing");
+    useShellStore.getState().setActiveTab("rules");
+    expect(useShellStore.getState().activeTab).toBe("rules");
     expect(useShellStore.getState().pendingTab).toBeNull();
   });
 });

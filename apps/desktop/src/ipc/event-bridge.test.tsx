@@ -145,7 +145,7 @@ describe("EventBridge", () => {
     });
 
     expect(bridgeMocks.pushTransientEvent).toHaveBeenCalledWith(transient);
-    expect(bridgeMocks.requestTab).toHaveBeenCalledWith("proxy-connections");
+    expect(bridgeMocks.requestTab).toHaveBeenCalledWith("connections");
     expect(bridgeMocks.setConnectionsView).toHaveBeenCalledWith("connections");
 
     act(() => {
@@ -155,6 +155,6 @@ describe("EventBridge", () => {
     });
 
     expect(bridgeMocks.setConnectionsView).toHaveBeenLastCalledWith("logs");
-    expect(bridgeMocks.requestTab).toHaveBeenLastCalledWith("proxy-connections");
+    expect(bridgeMocks.requestTab).toHaveBeenLastCalledWith("connections");
   });
 });

@@ -1,6 +1,6 @@
-import { Pencil, Play, Plus, Route, Trash2 } from "lucide-react";
+import { Pencil, Play, Plus, Trash2 } from "lucide-react";
 
-import { PageHeader, PageHeaderHeading } from "@/components/app-shell/page-section";
+import { PageHeader } from "@/components/app-shell/page-section";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -19,9 +19,7 @@ export function RoutingToolbar({ controller }: { controller: RoutingScreenContro
 
   return (
     <PageHeader>
-      <PageHeaderHeading icon={Route} title={t("panes.routing.title")}>
-        <Badge variant="outline">{t("panes.routing.profileCount", { count: routings.length })}</Badge>
-      </PageHeaderHeading>
+      <Badge variant="outline">{t("panes.routing.profileCount", { count: routings.length })}</Badge>
 
       <Button className="ms-auto" onClick={() => setRoutingDialog({ mode: "create" })} size="sm" type="button">
         <Plus className="size-4" aria-hidden="true" />

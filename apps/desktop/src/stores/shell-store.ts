@@ -1,24 +1,9 @@
 import { create } from "zustand";
 
-export type ShellTab =
-  | "home"
-  | "profiles"
-  | "routing"
-  | "proxy-groups"
-  | "proxy-connections"
-  | "settings";
+export type ShellTab = "home" | "proxies" | "profiles" | "settings" | "connections" | "rules";
 
 /** Sub-view of the Connections page: the live connection table or the log tail. */
 export type ConnectionsView = "connections" | "logs";
-
-export const shellTabRoutes = {
-  "proxy-connections": "/proxy/connections",
-  "proxy-groups": "/proxy/groups",
-  home: "/home",
-  profiles: "/profiles",
-  routing: "/routing",
-  settings: "/settings",
-} as const satisfies Record<ShellTab, string>;
 
 type ShellState = {
   activeTab: ShellTab;
@@ -42,14 +27,6 @@ type ShellState = {
   /** Active sub-view of the Connections page; survives leaving the page. */
   connectionsView: ConnectionsView;
   setConnectionsView: (view: ConnectionsView) => void;
-  /**
-   * Per-section collapsed flags for the sidebar's grouped nav, keyed by an
-   * arbitrary section id (`true` = collapsed). Absent keys are treated as
-   * expanded, so new sections default open without seeding this map.
-   */
-  collapsedSections: Record<string, boolean>;
-  /** Flip a sidebar section between collapsed and expanded. */
-  toggleSection: (section: string) => void;
 };
 
 export const useShellStore = create<ShellState>((set) => ({
@@ -71,12 +48,4 @@ export const useShellStore = create<ShellState>((set) => ({
   clearPendingTab: () => set({ pendingTab: null }),
   connectionsView: "connections",
   setConnectionsView: (connectionsView) => set({ connectionsView }),
-  collapsedSections: {},
-  toggleSection: (section) =>
-    set((state) => ({
-      collapsedSections: {
-        ...state.collapsedSections,
-        [section]: !state.collapsedSections[section],
-      },
-    })),
 }));
