@@ -114,8 +114,34 @@ fn status_from_request(request: &AutostartRequest) -> AutostartStatus {
     }
 }
 
+/// Resolve the path a login entry should launch.
+///
+/// Inside an AppImage `current_exe()` points at the transient `/tmp/.mount_*`
+/// FUSE mount, which no longer exists once the app quits, so an autostart entry
+/// written from it silently never launches. The runtime exports `APPIMAGE` with
+/// the real `.AppImage` path, so prefer it whenever it names an existing file.
 fn current_executable() -> Result<PathBuf, AutostartManagerError> {
-    env::current_exe().map_err(AutostartManagerError::CurrentExe)
+    let current_exe = env::current_exe().map_err(AutostartManagerError::CurrentExe)?;
+    let app_image = env::var_os("APPIMAGE").map(PathBuf::from);
+
+    Ok(resolve_autostart_executable(
+        app_image,
+        current_exe,
+        Path::is_file,
+    ))
+}
+
+/// Pure half of [`current_executable`], so the AppImage preference is testable
+/// without mutating process-wide environment state.
+fn resolve_autostart_executable(
+    app_image: Option<PathBuf>,
+    current_exe: PathBuf,
+    exists: impl Fn(&Path) -> bool,
+) -> PathBuf {
+    match app_image {
+        Some(path) if path.is_absolute() && exists(&path) => path,
+        _ => current_exe,
+    }
 }
 
 fn home_dir() -> Result<PathBuf, AutostartManagerError> {
@@ -172,6 +198,44 @@ mod autostart_app_tests {
     use voya_platform::autostart::AutostartAdapter;
 
     use super::*;
+
+    #[test]
+    fn autostart_prefers_the_appimage_path_over_the_transient_mount() {
+        // Inside an AppImage current_exe() is /tmp/.mount_*/usr/bin/voyavpn, which
+        // is gone by the time the login entry runs.
+        let resolved = resolve_autostart_executable(
+            Some(PathBuf::from("/home/u/Apps/VoyaVPN.AppImage")),
+            PathBuf::from("/tmp/.mount_abc/usr/bin/voyavpn"),
+            |_| true,
+        );
+
+        assert_eq!(resolved, PathBuf::from("/home/u/Apps/VoyaVPN.AppImage"));
+    }
+
+    #[test]
+    fn autostart_ignores_an_appimage_path_that_is_relative_or_missing() {
+        let missing = resolve_autostart_executable(
+            Some(PathBuf::from("/home/u/Apps/Gone.AppImage")),
+            PathBuf::from("/usr/bin/voyavpn"),
+            |_| false,
+        );
+        assert_eq!(missing, PathBuf::from("/usr/bin/voyavpn"));
+
+        let relative = resolve_autostart_executable(
+            Some(PathBuf::from("relative/VoyaVPN.AppImage")),
+            PathBuf::from("/usr/bin/voyavpn"),
+            |_| true,
+        );
+        assert_eq!(relative, PathBuf::from("/usr/bin/voyavpn"));
+    }
+
+    #[test]
+    fn autostart_falls_back_to_current_exe_outside_an_appimage() {
+        let resolved =
+            resolve_autostart_executable(None, PathBuf::from("/usr/bin/voyavpn"), |_| true);
+
+        assert_eq!(resolved, PathBuf::from("/usr/bin/voyavpn"));
+    }
 
     #[derive(Default)]
     struct FakeAutostartAdapter {

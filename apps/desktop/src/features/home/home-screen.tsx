@@ -88,6 +88,7 @@ export function HomeScreen() {
             ) : null}
             <ConnectionModeSwitcher
               connectionMode={home.connectionMode}
+              modeBusy={home.modeBusy}
               modePending={home.modePending}
               onModeChange={home.changeConnectionMode}
               onPacToggle={home.togglePac}

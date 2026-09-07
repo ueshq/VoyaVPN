@@ -560,6 +560,49 @@ describe("HomeScreen", () => {
     await waitFor(() => expect(systemProxy).toBeEnabled());
   });
 
+  it("refuses a mode switch while a connect is still in flight", async () => {
+    const user = userEvent.setup();
+    // Flipping TUN mid-connect persists the flag but cannot restart a core that
+    // is not Connected yet, so the UI would claim VPN over a non-TUN core.
+    let resolveConnect: ((status: RuntimeStatusResponse) => void) | undefined;
+    ipcMock.connectActiveProfile.mockImplementation(
+      () =>
+        new Promise<RuntimeStatusResponse>((resolve) => {
+          resolveConnect = resolve;
+        }),
+    );
+
+    renderHome();
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+
+    const systemProxy = screen.getByRole("button", { name: "System proxy" });
+    expect(systemProxy).toBeDisabled();
+    await user.click(systemProxy);
+    expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
+
+    resolveConnect?.(connectedStatus);
+    await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps a committed mode change successful when only the status refresh fails", async () => {
+    const user = userEvent.setup();
+    // The backend already persisted and emitted its post-commit events, so a
+    // failing follow-up read must not be reported as a failed mode change.
+    ipcMock.systemProxyStatus.mockRejectedValue(new Error("status read failed"));
+
+    renderHome();
+    await user.click(screen.getByRole("button", { name: "System proxy" }));
+
+    await waitFor(() =>
+      expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("systemProxy", null),
+    );
+    await waitFor(() => {
+      const titles = useToastStore.getState().toasts.map((toast) => toast.title);
+      expect(titles).toContain("Failed to read system proxy status");
+      expect(titles).not.toContain("Failed to change connection mode");
+    });
+  });
+
   it("requests system authorization on demand before entering VPN mode", async () => {
     const user = userEvent.setup();
     ipcMock.tunStatus.mockResolvedValue({

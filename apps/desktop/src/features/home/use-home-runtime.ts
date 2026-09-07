@@ -117,6 +117,9 @@ export function useHomeRuntime(t: Translation) {
   const connected = state === "connected";
   const inProgress = state === "connecting" || state === "disconnecting";
   const busy = inProgress || pendingAction !== null || switchingId !== null;
+  // One guard for both mode-mutating controls: they write the same config
+  // transaction, so letting them overlap races two `set_connection_mode` calls.
+  const modeBusy = busy || modePending !== null || pacPending;
 
   const activeProfile = profilesQuery.data?.find((item) => item.isActive) ?? null;
   const activeProfileId = activeProfile?.profile.id ?? null;
@@ -297,8 +300,37 @@ export function useHomeRuntime(t: Translation) {
     return true;
   }
 
+  /**
+   * Re-seed the switcher from authoritative status. The backend already emitted
+   * `sysProxyChanged`/`tunChanged` post-commit, so a failure here means the mode
+   * change still succeeded — it must never be reported as a mode-change failure.
+   */
+  async function refreshConnectionModeStatus() {
+    try {
+      setSysProxy(statusToSysProxyChanged(await systemProxyStatus()));
+    } catch (error) {
+      pushToast({
+        description: getErrorMessage(error),
+        severity: "error",
+        title: t("status.sysProxyStatusFailed"),
+      });
+    }
+    try {
+      setTun(statusToTunChanged(await tunStatus()));
+    } catch (error) {
+      pushToast({
+        description: getErrorMessage(error),
+        severity: "error",
+        title: t("status.tunStatusFailed"),
+      });
+    }
+  }
+
   async function runConnectionMode(mode: ConnectionMode, pacEnabled: boolean | null = null) {
-    if (modePending !== null || (mode === connectionMode && pacEnabled === null)) {
+    // `modeBusy` also covers a pending connect/disconnect/restart: flipping TUN
+    // while the core is still starting persists the flag but cannot restart the
+    // not-yet-connected core, leaving the UI claiming VPN over a non-TUN core.
+    if (modeBusy || (mode === connectionMode && pacEnabled === null)) {
       return;
     }
 
@@ -308,23 +340,22 @@ export function useHomeRuntime(t: Translation) {
         return;
       }
       await setConnectionMode(mode, pacEnabled);
-      // The backend also emits sysProxyChanged/tunChanged post-commit; seeding
-      // from fresh status keeps the switcher exact without waiting on events.
-      setSysProxy(statusToSysProxyChanged(await systemProxyStatus()));
-      setTun(statusToTunChanged(await tunStatus()));
     } catch (error) {
       pushToast({
         description: getErrorMessage(error),
         severity: "error",
         title: t("status.connectionModeChangeFailed"),
       });
+      return;
     } finally {
       setModePending(null);
     }
+
+    await refreshConnectionModeStatus();
   }
 
   async function runPacToggle() {
-    if (pacPending || connectionMode !== "systemProxy") {
+    if (modeBusy || connectionMode !== "systemProxy") {
       return;
     }
     setPacPending(true);
@@ -374,6 +405,7 @@ export function useHomeRuntime(t: Translation) {
     handlePrimaryAction,
     inProgress,
     mainPid: coreState?.mainPid ?? null,
+    modeBusy,
     modePending,
     pacActive,
     pacAvailable,

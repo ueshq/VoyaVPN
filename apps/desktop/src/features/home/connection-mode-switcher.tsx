@@ -14,6 +14,7 @@ import type { Translation } from "./use-home-runtime";
  */
 export function ConnectionModeSwitcher({
   connectionMode,
+  modeBusy,
   modePending,
   onModeChange,
   onPacToggle,
@@ -24,6 +25,7 @@ export function ConnectionModeSwitcher({
   tunProviderSummary,
 }: {
   connectionMode: ConnectionMode;
+  modeBusy: boolean;
   modePending: ConnectionMode | null;
   onModeChange: (mode: ConnectionMode) => void;
   onPacToggle: () => void;
@@ -55,7 +57,7 @@ export function ConnectionModeSwitcher({
                   ? "bg-background text-foreground hover:bg-background hover:text-foreground"
                   : "text-subtlest hover:bg-background/60 hover:text-foreground",
               )}
-              disabled={modePending !== null}
+              disabled={modeBusy}
               onClick={() => onModeChange(mode)}
               size="sm"
               type="button"
@@ -76,9 +78,10 @@ export function ConnectionModeSwitcher({
             {t("home.pacToggle")}
           </Label>
           <Switch
+            aria-busy={pacPending}
             aria-describedby={pacAvailable ? undefined : "home-pac-unavailable"}
             checked={pacActive}
-            disabled={pacPending || !pacAvailable}
+            disabled={modeBusy || !pacAvailable}
             id="home-pac-switch"
             onCheckedChange={onPacToggle}
           />
