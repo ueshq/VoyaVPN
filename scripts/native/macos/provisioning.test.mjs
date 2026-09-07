@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assertProfileCapabilities,
   certificateSha1Fingerprint,
   findMatchingIdentities,
   formatProfileSelectionError,
@@ -268,5 +269,47 @@ describe("formatProfileSelectionError", () => {
   it("mentions when no profiles exist at all", () => {
     const message = formatProfileSelectionError("macOS app", "app.voyavpn.desktop", [], "/certs");
     expect(message).toContain("No .provisionprofile/.mobileprovision files were found");
+  });
+});
+
+describe("shared provisioning capability check", () => {
+  function profile(networkExtensions, appGroups = ["group.app.voyavpn.desktop"]) {
+    return { appGroups, networkExtensions, path: "/tmp/VoyaVPN.provisionprofile" };
+  }
+
+  it("accepts the distribution-specific NetworkExtension value", () => {
+    expect(() =>
+      assertProfileCapabilities(profile(["packet-tunnel-provider-systemextension"]), {
+        label: "PacketTunnel",
+        distribution: "developer-id",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertProfileCapabilities(profile(["packet-tunnel-provider"]), {
+        label: "PacketTunnel",
+        distribution: "app-store",
+      }),
+    ).not.toThrow();
+  });
+
+  // sign-app.mjs used to skip the distribution-specific check whenever the
+  // profile merely contained the generic value, so a Developer ID app was
+  // signed without `-systemextension` and shipped mis-entitled.
+  it("rejects a Developer ID profile that only carries the generic value", () => {
+    expect(() =>
+      assertProfileCapabilities(profile(["packet-tunnel-provider"]), {
+        label: "App",
+        distribution: "developer-id",
+      }),
+    ).toThrow(/does not include packet-tunnel-provider-systemextension/u);
+  });
+
+  it("rejects a profile without the shared app group", () => {
+    expect(() =>
+      assertProfileCapabilities(profile(["packet-tunnel-provider"], []), {
+        label: "App",
+        distribution: "app-store",
+      }),
+    ).toThrow(/does not include group\.app\.voyavpn\.desktop/u);
   });
 });

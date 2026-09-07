@@ -9,6 +9,7 @@ pub mod context;
 pub mod entities;
 pub mod enums;
 pub mod fmt;
+pub(crate) mod group_children;
 pub mod groups;
 pub(crate) mod protocol_common;
 pub mod singbox;

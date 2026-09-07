@@ -1,4 +1,8 @@
-use std::{path::Path, sync::Arc};
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 use thiserror::Error;
 pub use voya_contracts::{
@@ -17,11 +21,69 @@ use voya_platform::{
     },
 };
 
+/// How long one macOS PacketTunnel registration probe is reused.
+///
+/// The probe forks `pluginkit -mAvvv` and canonicalizes the paths it returns —
+/// 100-500 ms — and `TunManager` is rebuilt per IPC call, so without a shared
+/// memo it ran on every Home mount, twice per connection-mode switch and on
+/// every connect/disconnect. The window is deliberately only a few seconds:
+/// the whole point of the check is to notice a PlugInKit election made
+/// *outside* the app (see the macOS NetworkExtension section of AGENTS.md), so
+/// a long TTL would hide exactly the misconfiguration it exists to catch.
+const PROVIDER_REGISTRATION_TTL: Duration = Duration::from_secs(5);
+
+/// Short-lived memo of the macOS provider-registration probe.
+///
+/// Shared across the per-command `TunManager` instances; a manager built
+/// without one gets a private, empty cache and therefore probes once, which is
+/// what every unit test wants.
+#[derive(Debug, Default)]
+pub struct ProviderRegistrationCache {
+    entry: Mutex<Option<CachedRegistration>>,
+}
+
+#[derive(Debug, Clone)]
+struct CachedRegistration {
+    probed_at: Instant,
+    status: ProviderRegistrationStatus,
+}
+
+impl ProviderRegistrationCache {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Forget the memo so the next status re-probes PlugInKit.
+    pub fn invalidate(&self) {
+        if let Ok(mut entry) = self.entry.lock() {
+            *entry = None;
+        }
+    }
+
+    fn fresh_at(&self, now: Instant) -> Option<ProviderRegistrationStatus> {
+        let entry = self.entry.lock().ok()?;
+        let cached = entry.as_ref()?;
+        (now.duration_since(cached.probed_at) < PROVIDER_REGISTRATION_TTL)
+            .then(|| cached.status.clone())
+    }
+
+    fn store(&self, now: Instant, status: &ProviderRegistrationStatus) {
+        if let Ok(mut entry) = self.entry.lock() {
+            *entry = Some(CachedRegistration {
+                probed_at: now,
+                status: status.clone(),
+            });
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct TunManager {
     elevation: Arc<ElevationState>,
     native_tun: Arc<dyn NativeTunController>,
     provider_resolver: Arc<dyn ProviderRegistrationResolver>,
+    registration_cache: Arc<ProviderRegistrationCache>,
     target_os: TargetOs,
 }
 
@@ -54,8 +116,19 @@ impl TunManager {
             elevation,
             native_tun,
             provider_resolver: Arc::new(PlatformProviderRegistrationResolver),
+            registration_cache: Arc::new(ProviderRegistrationCache::new()),
             target_os,
         }
+    }
+
+    /// Share one registration memo across the per-command managers.
+    #[must_use]
+    pub fn with_provider_registration_cache(
+        mut self,
+        registration_cache: Arc<ProviderRegistrationCache>,
+    ) -> Self {
+        self.registration_cache = registration_cache;
+        self
     }
 
     #[must_use]
@@ -68,7 +141,7 @@ impl TunManager {
     }
 
     pub fn status(&self, config: &AppConfig) -> Result<TunStatus, TunManagerError> {
-        self.status_with_report(config)
+        self.status_with_report(config, RegistrationFreshness::Cached)
             .map(|(status, _report)| status)
     }
 
@@ -96,7 +169,10 @@ impl TunManager {
         config: &AppConfig,
         enabled: bool,
     ) -> Result<TunStatus, TunManagerError> {
-        let (status, report) = self.status_with_report(config)?;
+        // Always re-probe here: this is the gate that refuses to enable TUN when
+        // PlugInKit elected another bundle's provider, so it must never decide
+        // on a memo taken before the user fixed (or broke) the installation.
+        let (status, report) = self.status_with_report(config, RegistrationFreshness::Probe)?;
         if enabled && status.provider_path_mismatch {
             return Err(TunManagerError::ProviderPathMismatch {
                 expected: status.expected_provider_path.unwrap_or_default(),
@@ -122,11 +198,12 @@ impl TunManager {
     fn status_with_report(
         &self,
         config: &AppConfig,
+        freshness: RegistrationFreshness,
     ) -> Result<(TunStatus, TunPreflightReport), TunManagerError> {
         let elevation_granted = self.elevation.is_granted();
         let report = tun_preflight(self.target_os, elevation_granted);
         let native_status = self.native_tun.status(report.backend);
-        let registration = self.provider_registration_status(report.backend);
+        let registration = self.provider_registration(report.backend, freshness);
         let provider_state = tun_provider_state(native_status.provider_state);
         let status = TunStatus {
             enabled: config.tun_mode_item.enable_tun,
@@ -152,6 +229,10 @@ impl TunManager {
     }
 
     pub fn provider_diagnostics(&self) -> Result<TunProviderDiagnostics, TunManagerError> {
+        // The user is asking why TUN will not start, so the memo goes: whatever
+        // the next status reports has to reflect the same machine state as the
+        // diagnostics they are looking at.
+        self.registration_cache.invalidate();
         let backend = tun_backend(self.platform_backend());
         Ok(tun_provider_diagnostics_response(
             backend,
@@ -161,6 +242,28 @@ impl TunManager {
 
     fn platform_backend(&self) -> PlatformTunBackend {
         voya_platform::tun::tun_backend(self.target_os)
+    }
+
+    /// The registration status, from the shared memo when it is still fresh.
+    fn provider_registration(
+        &self,
+        backend: PlatformTunBackend,
+        freshness: RegistrationFreshness,
+    ) -> ProviderRegistrationStatus {
+        if backend != PlatformTunBackend::MacosPacketTunnel {
+            return ProviderRegistrationStatus::default();
+        }
+
+        let now = Instant::now();
+        if freshness == RegistrationFreshness::Cached {
+            if let Some(cached) = self.registration_cache.fresh_at(now) {
+                return cached;
+            }
+        }
+
+        let status = self.provider_registration_status(backend);
+        self.registration_cache.store(now, &status);
+        status
     }
 
     fn provider_registration_status(
@@ -220,7 +323,14 @@ impl TunManager {
     }
 }
 
-#[derive(Debug, Default)]
+/// Whether a status read may answer from the registration memo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RegistrationFreshness {
+    Cached,
+    Probe,
+}
+
+#[derive(Debug, Default, Clone)]
 struct ProviderRegistrationStatus {
     path_mismatch: bool,
     resolved_provider_path: Option<String>,
@@ -349,6 +459,126 @@ mod tests {
         ) -> Result<Vec<std::path::PathBuf>, voya_platform::tun::NativeTunError> {
             Ok(self.resolved.clone())
         }
+    }
+
+    /// Counts PlugInKit probes so the memo can be observed without forking
+    /// `pluginkit`, and lets the test re-elect a different bundle mid-run.
+    #[derive(Debug)]
+    struct CountingProviderResolver {
+        expected: std::path::PathBuf,
+        resolved: Mutex<Vec<std::path::PathBuf>>,
+        probes: Mutex<u32>,
+    }
+
+    impl CountingProviderResolver {
+        fn new(expected: &str) -> Self {
+            Self {
+                expected: std::path::PathBuf::from(expected),
+                resolved: Mutex::new(vec![std::path::PathBuf::from(expected)]),
+                probes: Mutex::new(0),
+            }
+        }
+
+        fn probes(&self) -> u32 {
+            *self.probes.lock().expect("probe count")
+        }
+
+        fn elect(&self, path: &str) {
+            *self.resolved.lock().expect("resolved paths") = vec![std::path::PathBuf::from(path)];
+        }
+    }
+
+    impl ProviderRegistrationResolver for CountingProviderResolver {
+        fn expected_provider_path(&self, _bundle_id: &str) -> Option<std::path::PathBuf> {
+            Some(self.expected.clone())
+        }
+
+        fn resolved_provider_paths(
+            &self,
+            _bundle_id: &str,
+        ) -> Result<Vec<std::path::PathBuf>, voya_platform::tun::NativeTunError> {
+            *self.probes.lock().expect("probe count") += 1;
+            Ok(self.resolved.lock().expect("resolved paths").clone())
+        }
+    }
+
+    const EXPECTED_PROVIDER: &str =
+        "/Applications/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex";
+    const OTHER_PROVIDER: &str =
+        "/Users/afu/Dev/VoyaVPN/target/release/bundle/macos/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex";
+
+    fn macos_manager(
+        resolver: &Arc<CountingProviderResolver>,
+        cache: &Arc<ProviderRegistrationCache>,
+    ) -> TunManager {
+        TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Macos)
+            .with_provider_resolver(Arc::clone(resolver) as Arc<dyn ProviderRegistrationResolver>)
+            .with_provider_registration_cache(Arc::clone(cache))
+    }
+
+    /// `TunManager` is rebuilt per IPC call, so the memo has to live outside it:
+    /// the Home screen alone reads the status on mount and after every action.
+    #[test]
+    fn the_registration_memo_is_shared_across_per_command_managers() {
+        let config = AppConfig::default();
+        let resolver = Arc::new(CountingProviderResolver::new(EXPECTED_PROVIDER));
+        let cache = Arc::new(ProviderRegistrationCache::new());
+
+        for _ in 0..3 {
+            macos_manager(&resolver, &cache)
+                .status(&config)
+                .expect("status");
+        }
+
+        assert_eq!(
+            resolver.probes(),
+            1,
+            "pluginkit must not be forked per call"
+        );
+    }
+
+    #[test]
+    fn invalidating_the_registration_memo_forces_a_reprobe() {
+        let config = AppConfig::default();
+        let resolver = Arc::new(CountingProviderResolver::new(EXPECTED_PROVIDER));
+        let cache = Arc::new(ProviderRegistrationCache::new());
+        let manager = macos_manager(&resolver, &cache);
+
+        manager.status(&config).expect("first status");
+        cache.invalidate();
+        manager.status(&config).expect("status after invalidation");
+
+        assert_eq!(resolver.probes(), 2);
+    }
+
+    /// The memo may make a status read stale, but it must never make the enable
+    /// gate stale: a bundle elected after the last status would otherwise be
+    /// allowed to start.
+    #[test]
+    fn enabling_tun_reprobes_instead_of_trusting_the_memo() {
+        let mut config = AppConfig::default();
+        let resolver = Arc::new(CountingProviderResolver::new(EXPECTED_PROVIDER));
+        let cache = Arc::new(ProviderRegistrationCache::new());
+        let manager = macos_manager(&resolver, &cache);
+
+        let status = manager.status(&config).expect("status");
+        assert!(!status.provider_path_mismatch);
+
+        resolver.elect(OTHER_PROVIDER);
+        assert!(matches!(
+            manager.set_enabled(&mut config, true),
+            Err(TunManagerError::ProviderPathMismatch { .. })
+        ));
+        assert_eq!(resolver.probes(), 2);
+        assert!(!config.tun_mode_item.enable_tun);
+        // The fresh probe replaces the memo, so the next status agrees with it.
+        assert!(
+            manager
+                .status(&config)
+                .expect("status after the re-election")
+                .provider_path_mismatch
+        );
+        assert_eq!(resolver.probes(), 2);
     }
 
     #[test]

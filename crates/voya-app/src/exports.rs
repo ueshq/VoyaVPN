@@ -51,6 +51,9 @@ impl<'db> ExportManager<'db> {
                 BASE64_STANDARD.encode(export_share_links(&profiles, config)?)
             }
             ExportProfilesFormat::VoyaBundle => export_voya_profile_bundle(&profiles)?,
+            // A client configuration describes one running core, so a
+            // multi-row selection exports the first profile only; the other
+            // formats are lists and export every selected row.
             ExportProfilesFormat::ClientConfig => {
                 self.export_client_config(paths, config, target_os, &profiles[0])
                     .await?
@@ -167,5 +170,89 @@ mod tests {
         assert_eq!(lines.len(), 2);
         assert!(lines[0].contains("two.example.test"));
         assert!(lines[1].contains("one.example.test"));
+    }
+
+    #[tokio::test]
+    async fn export_manager_builds_a_client_config_from_the_first_selected_profile() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("database test operation should succeed");
+        for id in ["one", "two"] {
+            database
+                .profiles()
+                .upsert(&ProfileItem {
+                    index_id: id.to_string(),
+                    remarks: id.to_string(),
+                    protocol: ProfileProtocol::Vless {
+                        server: ServerEndpoint {
+                            address: format!("{id}.example.test"),
+                            port: 443,
+                        },
+                        uuid: "00000000-0000-0000-0000-000000000000".to_string(),
+                        flow: None,
+                        encryption: Some("none".to_string()),
+                    },
+                    ..ProfileItem::default()
+                })
+                .await
+                .expect("database test operation should succeed");
+        }
+
+        let manager = ExportManager::new(&database);
+        let paths = AppPaths::new(std::env::temp_dir().join("voyavpn-export-test"));
+        let result = manager
+            .export_profiles(
+                &paths,
+                &AppConfig::default(),
+                TargetOs::Linux,
+                ExportProfilesRequest {
+                    index_ids: vec!["two".to_string(), "one".to_string()],
+                    format: ExportProfilesFormat::ClientConfig,
+                },
+            )
+            .await
+            .expect("export test operation should succeed");
+
+        assert!(
+            result.text.contains("two.example.test"),
+            "a client configuration is generated for the first selected profile"
+        );
+        assert!(!result.text.contains("one.example.test"));
+        assert_eq!(result.format, ExportProfilesFormat::ClientConfig);
+    }
+
+    #[tokio::test]
+    async fn export_manager_rejects_an_empty_or_unknown_selection() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("database test operation should succeed");
+        let manager = ExportManager::new(&database);
+        let paths = AppPaths::new(std::env::temp_dir().join("voyavpn-export-test"));
+
+        for (index_ids, expected_missing) in [
+            (Vec::new(), None),
+            (vec!["ghost".to_string()], Some("ghost")),
+        ] {
+            let error = manager
+                .export_profiles(
+                    &paths,
+                    &AppConfig::default(),
+                    TargetOs::Linux,
+                    ExportProfilesRequest {
+                        index_ids,
+                        format: ExportProfilesFormat::ClientConfig,
+                    },
+                )
+                .await
+                .expect_err("an unusable selection must not reach config generation");
+
+            match (error, expected_missing) {
+                (ExportManagerError::EmptySelection, None) => {}
+                (ExportManagerError::ProfileNotFound(id), Some(expected)) => {
+                    assert_eq!(id, expected);
+                }
+                (error, expected) => panic!("unexpected {error:?} for {expected:?}"),
+            }
+        }
     }
 }

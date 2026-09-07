@@ -30,7 +30,16 @@
     "dedupeProfilesTitle": "删除重复的配置？",
     "deleteProfilesConfirm": "删除",
     "deleteProfilesDescription": "已选择的 {{count}} 个配置将被永久删除。此操作无法撤销。",
-    "deleteProfilesTitle": "删除配置？"
+    "deleteProfilesTitle": "删除配置？",
+    "deleteRoutingConfirm": "删除",
+    "deleteRoutingDescription": "“{{name}}”及其 {{count}} 条规则将被永久删除。此操作无法撤销。",
+    "deleteRoutingRuleConfirm": "删除",
+    "deleteRoutingRuleDescription": "选中的路由规则将被永久删除。此操作无法撤销。",
+    "deleteRoutingRuleTitle": "删除规则？",
+    "deleteRoutingTitle": "删除路由配置？",
+    "deleteSubscriptionConfirm": "删除",
+    "deleteSubscriptionDescription": "“{{name}}”及其导入的所有节点将被永久删除。此操作无法撤销。",
+    "deleteSubscriptionTitle": "删除订阅？"
   },
   "home": {
     "aria": "连接主页",
@@ -101,6 +110,24 @@
     "hotkeyKey": "热键按键",
     "hotkeyKeyPlaceholder": "按下按键",
     "hotkeyShowWindow": "显示窗口",
+    "keyName": {
+      "backspace": "退格",
+      "delete": "Delete",
+      "down": "下",
+      "end": "End",
+      "enter": "回车",
+      "escape": "Esc",
+      "home": "Home",
+      "insert": "Insert",
+      "left": "左",
+      "pageDown": "下翻页",
+      "pageUp": "上翻页",
+      "right": "右",
+      "space": "空格",
+      "tab": "Tab",
+      "unknown": "按键 {{keyCode}}",
+      "up": "上"
+    },
     "loading": "正在加载",
     "routeTemplateSource": "路由模板来源",
     "runtimeCore": "核心",
@@ -136,6 +163,7 @@
       "chainMarker": "Chain",
       "chooseChildren": "Choose children",
       "chooseDescription": "Choose servers, policy groups, or proxy chains for the current group.",
+      "draftName": "草稿分组",
       "filterChildren": "Filter child profiles",
       "groupFallback": "Group",
       "groupMarker": "Group",
@@ -302,7 +330,17 @@
         "clipboard": "从剪贴板导入",
         "clipboardEmpty": "剪贴板为空。",
         "clipboardUnavailable": "当前 WebView 不支持读取剪贴板文本。",
-        "discardedNodeOverrides": "已丢弃 {{count}} 个节点级覆盖项，将使用全局设置。"
+        "discardedNodeOverrides": "已丢弃 {{count}} 个节点级覆盖项，将使用全局设置。",
+        "summary": {
+          "deduped": "已跳过内容中的 {{count}} 个重复项。",
+          "failed": "{{count}} 个解析失败。",
+          "filtered": "已过滤 {{count}} 个。",
+          "imported": "已导入 {{count}} 个配置。",
+          "removedDuplicates": "已移除 {{count}} 个重复项。",
+          "skipped": "已跳过 {{count}} 个。",
+          "target": "目标：{{target}}。",
+          "updated": "已更新 {{count}} 个。"
+        }
       },
       "importDialog": {
         "description": "Import share links, subscription URLs, or JSON payloads.",
@@ -353,7 +391,6 @@
       "speedtest": {
         "buttonTitle": "{{label}} 测速",
         "cancelTitle": "取消测速",
-        "fast": "快速",
         "mixed": "混合",
         "more": "更多测速",
         "real": "真连",
@@ -376,7 +413,14 @@
         "rows": "{{rows}} 条",
         "subscriptions": "订阅"
       },
-      "untitled": "未命名"
+      "untitled": "未命名",
+      "validation": {
+        "addressRequired": "请填写地址",
+        "configSourceRequired": "请填写配置路径或 JSON 来源",
+        "credentialRequired": "请填写密码或 ID",
+        "remarksRequired": "请填写备注",
+        "uuidRequired": "请填写 UUID"
+      }
     },
     "proxyConnections": {
       "columns": {
@@ -498,6 +542,8 @@
     "node": "节点",
     "process": "进程",
     "reloadConfigFailed": "重载内核配置失败",
+    "requiresCore": "请先连接",
+    "requiresCoreDescription": "内核运行后才能查看代理分组。",
     "selectNodeFailed": "切换节点失败",
     "source": "来源",
     "testAll": "全部测速",
@@ -512,6 +558,7 @@
     "viewTabsAria": "连接视图"
   },
   "qr": {
+    "clipboardImageMissing": "剪贴板中没有图片。",
     "clipboardImageUnavailable": "当前 WebView 不支持读取剪贴板图片。",
     "clipboardUnavailable": "当前 WebView 不支持读取剪贴板文本。",
     "content": "内容",
@@ -521,6 +568,11 @@
     "scanClipboardImage": "剪贴板图片",
     "scanImage": "扫描图片",
     "scanScreen": "屏幕",
+    "screenCaptureUnavailable": "此 WebView 不支持屏幕捕获。",
+    "screenFrameUnavailable": "屏幕捕获未生成视频帧。",
+    "screenFrameUnencodable": "无法编码捕获的屏幕画面。",
+    "screenFrameUnreadable": "无法读取捕获的屏幕画面。",
+    "screenStreamUnavailable": "无法加载捕获的屏幕流。",
     "screenUnavailable": "当前平台或权限状态不支持屏幕二维码扫描。"
   },
   "settings": {
@@ -662,6 +714,21 @@
     "title": "检查更新",
     "updateNow": "立即更新",
     "waiting": "等待"
+  },
+  "validation": {
+    "dnsSettings": "DNS 设置校验未通过",
+    "expectedIps": "预期 IP 必须以英文逗号分隔，且不能包含空格",
+    "hostsLine": "每行 hosts 必须包含一个域名和至少一个解析结果",
+    "invalid": "该值无效",
+    "listItem": "列表项不能为空",
+    "network": "network 只能是 tcp、udp 或 tcp,udp",
+    "port": "端口必须是以英文逗号分隔的端口或端口区间",
+    "portRange": "端口取值需在 0 到 65535 之间，且区间必须递增",
+    "remarksLength": "备注不能超过 256 个字符",
+    "urlCredentials": "URL 不能包含用户名或密码",
+    "urlHost": "URL 必须包含主机名",
+    "urlHttps": "URL 必须使用 https://",
+    "urlInvalid": "URL 无效"
   },
   "window": {
     "close": "关闭",

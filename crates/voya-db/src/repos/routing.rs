@@ -1,35 +1,24 @@
 use sqlx::{sqlite::SqliteRow, Row};
-use tokio::sync::Mutex;
 use voya_core::RoutingItem;
 
 use crate::{
     blob,
-    executor::{run_query, RepositoryExecutor},
+    executor::{delete_each, repository_constructors, run_query, RepositoryExecutor},
     Result,
 };
 
+/// `active_routing_id` is nullable — a fresh database has none, and deleting the
+/// active set clears it through `ON DELETE SET NULL` — and SQLite evaluates
+/// `NULL = r.id` to NULL rather than false. Decoding that into `is_active: bool`
+/// fails, so every listing wraps the comparison in `COALESCE(..., 0)`.
 #[derive(Debug, Clone, Copy)]
 pub struct RoutingRepository<'executor> {
     executor: RepositoryExecutor<'executor>,
 }
 
+repository_constructors!(RoutingRepository);
+
 impl<'executor> RoutingRepository<'executor> {
-    #[must_use]
-    pub(crate) const fn new(pool: &'executor sqlx::SqlitePool) -> Self {
-        Self {
-            executor: RepositoryExecutor::Pool(pool),
-        }
-    }
-
-    #[must_use]
-    pub(crate) const fn new_in_transaction(
-        transaction: &'executor Mutex<sqlx::Transaction<'static, sqlx::Sqlite>>,
-    ) -> Self {
-        Self {
-            executor: RepositoryExecutor::Transaction(transaction),
-        }
-    }
-
     pub async fn upsert(&self, item: &RoutingItem) -> Result<()> {
         let rule_set = blob::rules_to_text(&item.rule_set)?;
         run_query!(
@@ -71,20 +60,22 @@ impl<'executor> RoutingRepository<'executor> {
         Ok(())
     }
 
+    /// Single-row lookup, deliberately strict; only [`Self::list`] skips rows it
+    /// cannot decode.
     pub async fn get(&self, id: &str) -> Result<Option<RoutingItem>> {
         let row = run_query!(self.executor, sqlx::query(
-            "SELECT r.*, (s.active_routing_id = r.id) AS is_active FROM routing_items r CROSS JOIN app_state s WHERE r.id = ?",
+            "SELECT r.*, COALESCE(s.active_routing_id = r.id, 0) AS is_active FROM routing_items r CROSS JOIN app_state s WHERE r.id = ?",
         ).bind(id), fetch_optional)?;
 
-        row.map(row_to_routing).transpose()
+        row.map(|row| row_to_routing(&row)).transpose()
     }
 
     pub async fn list(&self) -> Result<Vec<RoutingItem>> {
         let rows = run_query!(self.executor, sqlx::query(
-            "SELECT r.*, (s.active_routing_id = r.id) AS is_active FROM routing_items r CROSS JOIN app_state s ORDER BY r.sort, r.id",
+            "SELECT r.*, COALESCE(s.active_routing_id = r.id, 0) AS is_active FROM routing_items r CROSS JOIN app_state s ORDER BY r.sort, r.id",
         ), fetch_all)?;
 
-        rows.into_iter().map(row_to_routing).collect()
+        decode_routing_rows(&rows)
     }
 
     pub async fn active(&self) -> Result<Option<RoutingItem>> {
@@ -92,15 +83,15 @@ impl<'executor> RoutingRepository<'executor> {
             "SELECT r.*, 1 AS is_active FROM routing_items r JOIN app_state s ON s.active_routing_id = r.id ORDER BY r.sort, r.id LIMIT 1",
         ), fetch_optional)?;
 
-        row.map(row_to_routing).transpose()
+        row.map(|row| row_to_routing(&row)).transpose()
     }
 
     pub async fn first(&self) -> Result<Option<RoutingItem>> {
         let row = run_query!(self.executor, sqlx::query(
-            "SELECT r.*, (s.active_routing_id = r.id) AS is_active FROM routing_items r CROSS JOIN app_state s ORDER BY r.sort, r.id LIMIT 1",
+            "SELECT r.*, COALESCE(s.active_routing_id = r.id, 0) AS is_active FROM routing_items r CROSS JOIN app_state s ORDER BY r.sort, r.id LIMIT 1",
         ), fetch_optional)?;
 
-        row.map(row_to_routing).transpose()
+        row.map(|row| row_to_routing(&row)).transpose()
     }
 
     pub async fn exists(&self, id: &str) -> Result<bool> {
@@ -148,37 +139,47 @@ impl<'executor> RoutingRepository<'executor> {
     }
 
     pub async fn delete_many(&self, ids: &[String]) -> Result<u64> {
-        match self.executor {
-            RepositoryExecutor::Pool(pool) => {
-                let mut transaction = pool.begin().await?;
-                let mut deleted = 0;
-                for id in ids {
-                    let result = sqlx::query("DELETE FROM routing_items WHERE id = ?")
-                        .bind(id)
-                        .execute(&mut *transaction)
-                        .await?;
-                    deleted += result.rows_affected();
-                }
-                transaction.commit().await?;
-                Ok(deleted)
-            }
-            RepositoryExecutor::Transaction(transaction) => {
-                let mut transaction = transaction.lock().await;
-                let mut deleted = 0;
-                for id in ids {
-                    let result = sqlx::query("DELETE FROM routing_items WHERE id = ?")
-                        .bind(id)
-                        .execute(&mut **transaction)
-                        .await?;
-                    deleted += result.rows_affected();
-                }
-                Ok(deleted)
-            }
-        }
+        delete_each(self.executor, "DELETE FROM routing_items WHERE id = ?", ids).await
     }
 }
 
-fn row_to_routing(row: SqliteRow) -> Result<RoutingItem> {
+/// Decodes a listing's rows, dropping the ones this build cannot read.
+///
+/// `rule_set` is an untagged, unversioned JSON blob of the domain rule type, so
+/// a set written by a newer build fails on its own row. Propagating that would
+/// leave the routing screen empty and unrecoverable rather than showing the
+/// remaining rule sets, so bad rows are logged and skipped while genuine
+/// database faults still propagate.
+fn decode_routing_rows(rows: &[SqliteRow]) -> Result<Vec<RoutingItem>> {
+    let mut decoded = Vec::with_capacity(rows.len());
+    let mut skipped_rows = 0usize;
+
+    for row in rows {
+        match row_to_routing(row) {
+            Ok(item) => decoded.push(item),
+            Err(error) if error.is_row_payload() => {
+                skipped_rows += 1;
+                tracing::warn!(
+                    id = %row.try_get::<String, _>("id").unwrap_or_default(),
+                    error = %error,
+                    "skipping a stored routing set this build cannot decode"
+                );
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
+    if skipped_rows > 0 {
+        tracing::warn!(
+            skipped_rows,
+            "some routing sets were hidden because their stored rules could not be decoded"
+        );
+    }
+
+    Ok(decoded)
+}
+
+fn row_to_routing(row: &SqliteRow) -> Result<RoutingItem> {
     let rule_set = row.try_get::<String, _>("rule_set")?;
     let rules = blob::rules_from_text(&rule_set)?;
 

@@ -9,6 +9,12 @@ pub struct ServerEndpoint {
     pub port: i32,
 }
 
+/// Persisted as-is inside the profile blob column, so every field that is not
+/// structurally required carries `#[serde(default)]`: a row written before that
+/// field existed must still decode after an upgrade instead of being skipped as
+/// undecodable. `#[serde(default)]` only affects deserialization, so the
+/// serialized shape pinned by `voya-db`'s blob fixture is unchanged. New fields
+/// must be added with `#[serde(default)]` for the same reason.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(
     tag = "kind",
@@ -20,27 +26,34 @@ pub enum ProfileProtocol {
     Vmess {
         server: ServerEndpoint,
         uuid: String,
+        #[serde(default)]
         cipher: Option<String>,
     },
     Custom {
         source: String,
+        #[serde(default)]
         filter: Option<String>,
     },
     Shadowsocks {
         server: ServerEndpoint,
         password: String,
         method: String,
+        #[serde(default)]
         udp_over_tcp: bool,
     },
     Socks {
         server: ServerEndpoint,
+        #[serde(default)]
         username: String,
+        #[serde(default)]
         password: String,
     },
     Vless {
         server: ServerEndpoint,
         uuid: String,
+        #[serde(default)]
         flow: Option<String>,
+        #[serde(default)]
         encryption: Option<String>,
     },
     Trojan {
@@ -50,28 +63,39 @@ pub enum ProfileProtocol {
     Hysteria2 {
         server: ServerEndpoint,
         password: String,
+        #[serde(default)]
         port_hops: Option<String>,
+        #[serde(default)]
         obfuscation_password: Option<String>,
     },
     Tuic {
         server: ServerEndpoint,
         uuid: String,
         password: String,
+        #[serde(default)]
         congestion_control: Option<String>,
     },
     WireGuard {
         server: ServerEndpoint,
         private_key: String,
+        #[serde(default)]
         peer_public_key: Option<String>,
+        #[serde(default)]
         preshared_key: Option<String>,
+        #[serde(default)]
         interface_address: Option<String>,
+        #[serde(default)]
         allowed_ips: Option<String>,
+        #[serde(default)]
         reserved: Option<String>,
+        #[serde(default)]
         mtu: Option<i32>,
     },
     Http {
         server: ServerEndpoint,
+        #[serde(default)]
         username: String,
+        #[serde(default)]
         password: String,
     },
     Anytls {
@@ -82,18 +106,27 @@ pub enum ProfileProtocol {
         server: ServerEndpoint,
         username: String,
         password: String,
+        #[serde(default)]
         quic: bool,
+        #[serde(default)]
         congestion_control: Option<String>,
+        #[serde(default)]
         insecure_concurrency: Option<i32>,
+        #[serde(default)]
         udp_over_tcp: bool,
     },
     PolicyGroup {
+        #[serde(default)]
         child_profile_ids: Vec<String>,
+        #[serde(default)]
         source_subscription_id: Option<String>,
+        #[serde(default)]
         filter: Option<String>,
+        #[serde(default)]
         strategy: MultipleLoad,
     },
     ProxyChain {
+        #[serde(default)]
         child_profile_ids: Vec<String>,
     },
 }
@@ -290,6 +323,8 @@ impl ProfileProtocol {
     }
 }
 
+/// Every field is optional by nature and defaulted on deserialization for the
+/// same forward-compatibility reason as [`ProfileProtocol`].
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(
     tag = "kind",
@@ -299,40 +334,61 @@ impl ProfileProtocol {
 )]
 pub enum ProfileTransport {
     Tcp {
+        #[serde(default)]
         header: Option<String>,
+        #[serde(default)]
         host: Option<String>,
+        #[serde(default)]
         path: Option<String>,
     },
     Kcp {
+        #[serde(default)]
         header: Option<String>,
+        #[serde(default)]
         seed: Option<String>,
+        #[serde(default)]
         mtu: Option<i32>,
     },
     Websocket {
+        #[serde(default)]
         host: Option<String>,
+        #[serde(default)]
         path: Option<String>,
     },
     HttpUpgrade {
+        #[serde(default)]
         host: Option<String>,
+        #[serde(default)]
         path: Option<String>,
     },
     Xhttp {
+        #[serde(default)]
         host: Option<String>,
+        #[serde(default)]
         path: Option<String>,
+        #[serde(default)]
         mode: Option<String>,
+        #[serde(default)]
         extra: Option<String>,
     },
     Http2 {
+        #[serde(default)]
         host: Option<String>,
+        #[serde(default)]
         path: Option<String>,
     },
     Grpc {
+        #[serde(default)]
         authority: Option<String>,
+        #[serde(default)]
         service_name: Option<String>,
+        #[serde(default)]
         mode: Option<String>,
     },
     Quic {
+        #[serde(default)]
         host: Option<String>,
+        #[serde(default)]
         path: Option<String>,
     },
 }
@@ -383,15 +439,24 @@ impl ProfileTransport {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TlsMode {
+    /// Plain TLS, and the default a TLS block decodes to when `mode` is absent.
+    #[default]
     Tls,
     Reality,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+/// Persisted as-is inside the profile blob column.
+///
+/// The container-level `#[serde(default)]` is what makes an older row survive
+/// an upgrade: a TLS block written before a field existed decodes with that
+/// field defaulted instead of failing with `missing field` and being skipped.
+/// It changes deserialization only, so the shape pinned by `voya-db`'s blob
+/// fixture is unchanged, and it covers fields added later automatically.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct TlsSettings {
     pub mode: TlsMode,
     pub server_name: Option<String>,

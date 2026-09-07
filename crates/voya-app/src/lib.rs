@@ -26,6 +26,7 @@ pub mod redaction;
 pub mod routing;
 pub mod runtime;
 pub mod services;
+pub mod settings_flow;
 pub mod settings_save;
 pub mod shutdown;
 pub mod speedtest;

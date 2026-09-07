@@ -242,14 +242,7 @@ impl<'db> ProfileManager<'db> {
             return Err(ProfileManagerError::ProfileNotFound(index_id.to_string()));
         };
 
-        for (offset, (profile, _)) in items.iter().enumerate() {
-            self.profile_ex()
-                .set_sort(
-                    &profile.index_id,
-                    (i32::try_from(offset).unwrap_or(i32::MAX - 1) + 1) * DEFAULT_PROFILE_SORT_STEP,
-                )
-                .await?;
-        }
+        self.renumber_sort(&items).await?;
 
         let count = items.len();
         let next_sort = match action {
@@ -298,17 +291,34 @@ impl<'db> ProfileManager<'db> {
             .list_with_profile_ex(subscription_id)
             .await?;
         sort_profile_pairs(&mut items, sort_key, ascending);
-
-        for (offset, (profile, _)) in items.iter().enumerate() {
-            self.profile_ex()
-                .set_sort(
-                    &profile.index_id,
-                    (i32::try_from(offset).unwrap_or(i32::MAX - 1) + 1) * DEFAULT_PROFILE_SORT_STEP,
-                )
-                .await?;
-        }
+        self.renumber_sort(&items).await?;
 
         self.list_profiles(config, subscription_id, None).await
+    }
+
+    /// Rewrites the gap-based sort keys so the list reads `10, 20, 30, …`.
+    ///
+    /// The gaps are what let `move_profile` place a row between two neighbours
+    /// with a single `±1` write. Rows that already carry their target value are
+    /// left out of the batch, because after the first renumber a move only
+    /// actually shifts the rows between the old and the new position.
+    ///
+    /// Every remaining row goes out through `set_sort_many`, which applies the
+    /// whole ordering in one transaction. Writing them one at a time cost an
+    /// autocommit — and its fsync — per profile, so reordering a large
+    /// subscription paid hundreds of commits for a single user gesture.
+    async fn renumber_sort(&self, items: &[(ProfileItem, ProfileExItem)]) -> Result<()> {
+        let reordered = items
+            .iter()
+            .enumerate()
+            .filter_map(|(offset, (profile, profile_ex))| {
+                let sort =
+                    (i32::try_from(offset).unwrap_or(i32::MAX - 1) + 1) * DEFAULT_PROFILE_SORT_STEP;
+                (profile_ex.sort != sort).then_some((profile.index_id.as_str(), sort))
+            })
+            .collect::<Vec<_>>();
+
+        self.profile_ex().set_sort_many(&reordered).await
     }
 
     pub async fn dedupe_profiles(
@@ -723,7 +733,7 @@ fn generate_profile_id() -> String {
 mod tests {
     use voya_core::{
         MoveAction, MultipleLoad, ProfileProtocol, ProfileSortKey, ProfileTransport,
-        ServerEndpoint, TlsMode, TlsSettings,
+        ServerEndpoint, SubItem, TlsMode, TlsSettings,
     };
 
     use super::*;
@@ -847,6 +857,84 @@ mod tests {
         assert_eq!(sorted[0].profile.remarks, "C");
     }
 
+    /// Reordering inside a subscription must renumber only that subscription's
+    /// rows, and `MoveAction::Position` must land the row at the requested
+    /// index rather than anywhere the gap-based numbering happens to allow.
+    #[tokio::test]
+    async fn scoped_move_and_sort_reorder_only_the_selected_subscription() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("profile manager test operation should succeed");
+        database
+            .subscriptions()
+            .upsert(&SubItem {
+                id: "sub-scope".to_string(),
+                remarks: "Scoped".to_string(),
+                url: "https://example.test/scope".to_string(),
+                ..SubItem::default()
+            })
+            .await
+            .expect("profile manager test operation should succeed");
+        let manager = ProfileManager::new(&database);
+        let mut config = AppConfig::default();
+        let outsider = manager
+            .save_profile(&mut config, sample_profile("outsider", "Outsider", 500))
+            .await
+            .expect("profile manager test operation should succeed");
+        for (index_id, remarks, port) in
+            [("s1", "S1", 1000), ("s2", "S2", 2000), ("s3", "S3", 3000)]
+        {
+            let mut profile = sample_profile(index_id, remarks, port);
+            profile.subscription_id = Some("sub-scope".to_string());
+            manager
+                .save_profile(&mut config, profile)
+                .await
+                .expect("profile manager test operation should succeed");
+        }
+
+        let moved = manager
+            .move_profile(
+                &config,
+                Some("sub-scope"),
+                "s3",
+                MoveAction::Position,
+                Some(0),
+            )
+            .await
+            .expect("profile manager test operation should succeed");
+        assert_eq!(
+            moved
+                .iter()
+                .map(|item| item.profile.remarks.as_str())
+                .collect::<Vec<_>>(),
+            vec!["S3", "S1", "S2"],
+            "a scoped move must list only the subscription's own profiles"
+        );
+
+        let sorted = manager
+            .sort_profiles(&config, Some("sub-scope"), ProfileSortKey::Port, false)
+            .await
+            .expect("profile manager test operation should succeed");
+        assert_eq!(
+            sorted
+                .iter()
+                .map(|item| item.profile.remarks.as_str())
+                .collect::<Vec<_>>(),
+            vec!["S3", "S2", "S1"]
+        );
+
+        let outsider_sort = manager
+            .profile_ex()
+            .ensure(&outsider.profile.index_id)
+            .await
+            .expect("profile manager test operation should succeed")
+            .sort;
+        assert_eq!(
+            outsider_sort, outsider.profile_ex.sort,
+            "profiles outside the scope keep their sort"
+        );
+    }
+
     #[tokio::test]
     async fn profile_dedupe_respects_keep_older_and_ignores_complex_profiles() {
         let database = Database::connect_in_memory()
@@ -932,6 +1020,72 @@ mod tests {
         assert_eq!(updated.speed, 45.0);
         assert_eq!(updated.message.as_deref(), Some("ok"));
         assert_eq!(updated.ip_info.as_deref(), Some("US"));
+    }
+
+    /// `renumber_sort` pushes the whole ordering through one batched write, so
+    /// the gap-based keys it hands out and the speedtest results it must leave
+    /// alone are pinned here.
+    #[tokio::test]
+    async fn renumber_sort_rewrites_gap_based_keys_without_touching_measurements() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("profile manager test operation should succeed");
+        let manager = ProfileManager::new(&database);
+        let mut config = AppConfig::default();
+        for (index_id, remarks, port) in [
+            ("r1", "R1", 4000),
+            ("r2", "R2", 3000),
+            ("r3", "R3", 2000),
+            ("r4", "R4", 1000),
+        ] {
+            manager
+                .save_profile(&mut config, sample_profile(index_id, remarks, port))
+                .await
+                .expect("profile manager test operation should succeed");
+        }
+        manager
+            .profile_ex()
+            .set_test_delay("r1", 123)
+            .await
+            .expect("profile manager test operation should succeed");
+
+        let sorted = manager
+            .sort_profiles(&config, None, ProfileSortKey::Port, true)
+            .await
+            .expect("profile manager test operation should succeed");
+
+        assert_eq!(
+            sorted
+                .iter()
+                .map(|item| (item.profile.remarks.as_str(), item.profile_ex.sort))
+                .collect::<Vec<_>>(),
+            vec![("R4", 10), ("R3", 20), ("R2", 30), ("R1", 40)],
+            "a renumber must hand out the gap-based keys in listing order"
+        );
+        assert_eq!(
+            manager
+                .profile_ex()
+                .ensure("r1")
+                .await
+                .expect("profile manager test operation should succeed")
+                .delay,
+            123,
+            "a batched renumber must not discard speedtest results"
+        );
+
+        // Re-running the same sort has nothing left to move, and must still
+        // report the same order rather than shifting rows by a step.
+        let resorted = manager
+            .sort_profiles(&config, None, ProfileSortKey::Port, true)
+            .await
+            .expect("profile manager test operation should succeed");
+        assert_eq!(
+            resorted
+                .iter()
+                .map(|item| (item.profile.remarks.as_str(), item.profile_ex.sort))
+                .collect::<Vec<_>>(),
+            vec![("R4", 10), ("R3", 20), ("R2", 30), ("R1", 40)]
+        );
     }
 
     fn sample_profile(index_id: &str, remarks: &str, port: i32) -> ProfileItem {

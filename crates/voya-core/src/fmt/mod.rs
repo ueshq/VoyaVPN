@@ -14,6 +14,7 @@ use serde_json::{Map, Value};
 use url::Url;
 
 use crate::{
+    protocol_common::{nonempty_str, shadowsocks_plugin_for, RAW_HEADER_HTTP},
     ConfigType, MultipleLoad, ProfileItem, ProfileProtocol, ProfileTransport, ServerEndpoint,
     TlsMode, TlsSettings,
 };
@@ -21,7 +22,6 @@ use crate::{
 const DEFAULT_SECURITY: &str = "auto";
 const DEFAULT_NETWORK: &str = "raw";
 const RAW_NETWORK_ALIAS: &str = "tcp";
-const RAW_HEADER_HTTP: &str = "http";
 const NONE: &str = "none";
 const STREAM_SECURITY_TLS: &str = "tls";
 const STREAM_SECURITY_REALITY: &str = "reality";

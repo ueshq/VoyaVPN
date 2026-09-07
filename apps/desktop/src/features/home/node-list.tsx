@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 import { LoaderCircle, Search } from "lucide-react";
 
 import { Badge } from "@voya/ui/components/badge";
@@ -24,6 +25,11 @@ import { profileAddress, profilePort } from "@/features/profiles/profile-display
  * that is actually running (`runningId`), kept distinct from the blue local
  * selection. Rows reuse the former node-picker row markup and the server-table
  * formatting helpers; no new IPC is introduced.
+ *
+ * Keyboard behaviour follows the listbox pattern the roles promise: one tab stop
+ * for the whole list (roving tabindex) with Up/Down/Home/End moving the active
+ * option, so a large subscription does not put hundreds of tab stops between the
+ * search box and the controls below it.
  */
 export function NodeList({
   busy,
@@ -46,6 +52,7 @@ export function NodeList({
 }) {
   const { t } = useI18n();
   const [filterText, setFilterText] = useState("");
+  const listRef = useRef<HTMLUListElement>(null);
 
   // Keep the imported order stable (no active-pin sort) so rows never jump
   // around in an always-visible list; only filter by remarks / address.
@@ -63,6 +70,25 @@ export function NodeList({
   }, [profiles, filterText]);
 
   const showEmpty = !isPending && filtered.length === 0;
+  const selectedIndex = filtered.findIndex((item) => item.profile.id === selectedId);
+  // With nothing selected the first row carries the tab stop, so the list is
+  // always reachable from the keyboard.
+  const tabStopIndex = selectedIndex >= 0 ? selectedIndex : 0;
+
+  function moveActiveOption(event: KeyboardEvent<HTMLUListElement>) {
+    // Move relative to the option that actually holds focus, which is the tab
+    // stop. Anchoring on `selectedIndex` would make the first Arrow press with
+    // nothing selected re-select the row the user is already standing on.
+    const nextIndex = nextOptionIndex(event.key, tabStopIndex, filtered.length);
+    const next = nextIndex === null ? undefined : filtered[nextIndex];
+    if (nextIndex === null || !next) {
+      return;
+    }
+
+    event.preventDefault();
+    onSelect(next.profile.id);
+    listRef.current?.querySelectorAll<HTMLElement>("[role=\"option\"]")[nextIndex]?.focus();
+  }
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-3">
@@ -81,8 +107,14 @@ export function NodeList({
       </div>
 
       <ScrollArea className="-mx-2 min-h-32 flex-1 px-2">
-        <ul aria-label={t("home.selectNode")} className="flex flex-col gap-0.5" role="listbox">
-          {filtered.map((item) => {
+        <ul
+          aria-label={t("home.selectNode")}
+          className="flex flex-col gap-0.5"
+          onKeyDown={moveActiveOption}
+          ref={listRef}
+          role="listbox"
+        >
+          {filtered.map((item, index) => {
             const indexId = item.profile.id;
             const selected = selectedId === indexId;
             const running = runningId === indexId;
@@ -121,7 +153,7 @@ export function NodeList({
                     }
                   }}
                   role="option"
-                  tabIndex={0}
+                  tabIndex={index === tabStopIndex ? 0 : -1}
                 >
                   <span aria-hidden="true" className="flex size-2 shrink-0 items-center justify-center">
                     {running ? <span className="size-1.5 rounded-full bg-connected" /> : null}
@@ -160,4 +192,24 @@ export function NodeList({
       </ScrollArea>
     </div>
   );
+}
+
+/** Listbox arrow-key semantics: Down/Up step and clamp, Home/End jump. */
+function nextOptionIndex(key: string, currentIndex: number, count: number): number | null {
+  if (count === 0) {
+    return null;
+  }
+
+  switch (key) {
+    case "ArrowDown":
+      return currentIndex < 0 ? 0 : Math.min(currentIndex + 1, count - 1);
+    case "ArrowUp":
+      return currentIndex < 0 ? count - 1 : Math.max(currentIndex - 1, 0);
+    case "Home":
+      return 0;
+    case "End":
+      return count - 1;
+    default:
+      return null;
+  }
 }

@@ -1,7 +1,5 @@
-use tokio::sync::Mutex;
-
 use crate::{
-    executor::{run_query, RepositoryExecutor},
+    executor::{repository_constructors, run_query, RepositoryExecutor},
     Result,
 };
 
@@ -16,23 +14,9 @@ pub struct AppStateRepository<'executor> {
     executor: RepositoryExecutor<'executor>,
 }
 
+repository_constructors!(AppStateRepository);
+
 impl<'executor> AppStateRepository<'executor> {
-    #[must_use]
-    pub(crate) const fn new(pool: &'executor sqlx::SqlitePool) -> Self {
-        Self {
-            executor: RepositoryExecutor::Pool(pool),
-        }
-    }
-
-    #[must_use]
-    pub(crate) const fn new_in_transaction(
-        transaction: &'executor Mutex<sqlx::Transaction<'static, sqlx::Sqlite>>,
-    ) -> Self {
-        Self {
-            executor: RepositoryExecutor::Transaction(transaction),
-        }
-    }
-
     pub async fn load(&self) -> Result<AppStateRecord> {
         let (active_profile_id, active_routing_id) = run_query!(
             self.executor,

@@ -2,16 +2,36 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { relative, resolve } from "node:path";
 
 import { productionLineCount, splitRustProduction } from "./architecture-analyzer.mjs";
+import {
+  clashBoundaryRules,
+  contractsCasingRule,
+  findUndocumentedUnsafe,
+  KNOWN_UNSAFE_WITHOUT_SAFETY_COMMENT,
+  manifestDependencyRules,
+  resolveTestModuleFiles,
+  retiredCompatibilityRules,
+  shellDtoRule,
+  shellRules,
+  voyaAppRules,
+  voyaCoreRules,
+} from "./architecture-rules.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const failures = [];
 
-const rustFiles = ["crates", "apps/desktop/src-tauri/src"]
+const rustSources = ["crates", "apps/desktop/src-tauri/src"]
   .flatMap((directory) => walk(resolve(root, directory)))
   .filter((path) => path.endsWith(".rs"))
-  .filter((path) => !path.includes("/migrations/"))
-  .filter((path) => !path.endsWith("/tests.rs"))
-  .filter((path) => !path.endsWith("/golden.rs"));
+  .filter((path) => !path.includes("/migrations/"));
+
+// Exempt the modules that are actually declared `#[cfg(test)] mod <name>;`
+// instead of every file that happens to be named tests.rs or golden.rs.
+const testModuleFiles = resolveTestModuleFiles({
+  files: rustSources,
+  read: (path) => readFileSync(path, "utf8"),
+});
+const rustFiles = rustSources.filter((path) => !testModuleFiles.has(path));
+const usedUnsafeAllowlistEntries = new Set();
 
 for (const path of rustFiles) {
   const source = readFileSync(path, "utf8");
@@ -25,87 +45,46 @@ for (const path of rustFiles) {
   }
 
   if (path.includes("/crates/voya-app/src/")) {
-    reject(
-      path,
-      production,
-      /\b(?:reqwest|tokio_tungstenite|tokio::net|tokio::fs|std::fs)\b/,
-      "voya-app must use network and filesystem adapters",
-    );
-    reject(path, production, /\bspecta\b/, "voya-app must expose IPC through voya-contracts");
+    applyRules(path, source, production, voyaAppRules);
   }
 
   if (path.includes("/crates/voya-core/src/")) {
-    reject(path, production, /#\[cfg\(target_os\b/, "voya-core must be OS independent");
-    reject(path, production, /\bspecta\b/, "voya-core must not depend on IPC type generation");
+    applyRules(path, source, production, voyaCoreRules);
   }
 
   if (path.includes("/apps/desktop/src-tauri/src/") && !path.includes("/src/bin/")) {
-    reject(
-      path,
-      source,
-      /#\[cfg\(test\)\]/,
-      "tests belong in app/contracts/platform crates because the Tauri shell lib harness is disabled",
-    );
-    reject(
-      path,
-      production,
-      /\bvoya_(?:core|db)::/,
-      "the Tauri shell must reach domain and persistence through voya-app facades",
-    );
+    applyRules(path, source, production, shellRules);
     if (!path.endsWith("/ipc/events.rs")) {
-      reject(
-        path,
-        production,
-        /#\[derive\([^\]]*\bType\b/,
-        "business and command DTOs belong in voya-contracts",
-      );
+      applyRules(path, source, production, [shellDtoRule]);
     }
   }
 
   requireSafetyComments(path, production);
 
   if (!path.endsWith("/crates/voya-net/src/clash.rs")) {
-    reject(path, production, /serde\([^\n]*\balias\s*=/, "serde aliases are retired outside the documented Clash API boundary");
-    reject(
-      path,
-      production,
-      /rename_all\s*=\s*"PascalCase"/,
-      "v2rayN-style PascalCase serialization is retired outside the Clash API boundary",
-    );
+    applyRules(path, source, production, clashBoundaryRules);
   }
 
-  reject(path, production, /v2rayn:\/\//i, "the private v2rayn:// format is retired");
-  reject(
-    path,
-    production,
-    /\b(?:AppConfigStore|ProtocolExtraItem|TransportExtraItem|remove_retired_voya_config_fields|prev_profile|next_profile)\b/,
-    "retired configuration compatibility code is forbidden",
-  );
+  applyRules(path, source, production, retiredCompatibilityRules);
 }
 
-const shellManifestPath = resolve(root, "apps/desktop/src-tauri/Cargo.toml");
-reject(
-  shellManifestPath,
-  readFileSync(shellManifestPath, "utf8"),
-  /^voya-(?:core|db)(?:\.workspace)?\s*=/m,
-  "the Tauri shell must not depend directly on voya-core or voya-db",
-);
+reportUnusedUnsafeAllowlistEntries();
 
-const appManifestPath = resolve(root, "crates/voya-app/Cargo.toml");
-reject(
-  appManifestPath,
-  readFileSync(appManifestPath, "utf8"),
-  /^specta(?:\.workspace)?\s*=/m,
-  "voya-app must not depend on Specta",
+applyManifestRules(
+  "apps/desktop/src-tauri/Cargo.toml",
+  manifestDependencyRules(
+    "voya-(?:core|db)",
+    "the Tauri shell must not depend directly on voya-core or voya-db",
+  ),
+);
+applyManifestRules(
+  "crates/voya-app/Cargo.toml",
+  manifestDependencyRules("specta", "voya-app must not depend on Specta"),
 );
 
 for (const path of walk(resolve(root, "crates/voya-contracts/src")).filter((item) => item.endsWith(".rs"))) {
-  reject(
-    path,
-    readFileSync(path, "utf8"),
-    /rename_all\s*=\s*"PascalCase"/,
-    "public contracts must use camelCase",
-  );
+  const source = readFileSync(path, "utf8");
+  applyRules(path, source, source, [contractsCasingRule]);
 }
 
 if (failures.length > 0) {
@@ -114,21 +93,42 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`Architecture checks passed (${rustFiles.length} Rust production files).`);
+console.log(
+  `Architecture checks passed (${rustFiles.length} Rust production files, ${testModuleFiles.size} declared test modules exempt).`,
+);
 
-function reject(path, source, pattern, message) {
-  if (pattern.test(source)) failures.push(`${display(path)}: ${message}`);
+function applyRules(path, raw, production, rules) {
+  for (const rule of rules) {
+    const source = rule.scope === "raw" ? raw : production;
+    if (rule.pattern.test(source)) {
+      failures.push(`${display(path)}: ${rule.message}`);
+    }
+  }
+}
+
+function applyManifestRules(relativePath, rules) {
+  const path = resolve(root, relativePath);
+  const source = readFileSync(path, "utf8");
+  applyRules(path, source, source, rules);
 }
 
 function requireSafetyComments(path, source) {
-  const lines = source.split(/\r?\n/);
-  for (let index = 0; index < lines.length; index += 1) {
-    if (!/\bunsafe\s*(?:\{|impl\b)/.test(lines[index])) continue;
-    const context = lines.slice(Math.max(0, index - 3), index).join("\n");
-    if (!/SAFETY:/.test(context)) {
-      failures.push(`${display(path)}:${index + 1}: unsafe code requires a nearby SAFETY comment`);
-    }
+  const { findings, usedAllowlistEntries } = findUndocumentedUnsafe(source, { path: display(path) });
+  for (const index of usedAllowlistEntries) usedUnsafeAllowlistEntries.add(index);
+  for (const finding of findings) {
+    failures.push(`${display(path)}:${finding.line}: unsafe code requires a nearby SAFETY comment`);
   }
+}
+
+function reportUnusedUnsafeAllowlistEntries() {
+  // A stale entry is reported, not failed: the owning crate may fix its SAFETY
+  // comment at any time, and this gate must not turn red when it does.
+  KNOWN_UNSAFE_WITHOUT_SAFETY_COMMENT.forEach((entry, index) => {
+    if (usedUnsafeAllowlistEntries.has(index)) return;
+    console.warn(
+      `Stale unsafe allowlist entry (delete it from architecture-rules.mjs): ${entry.path} — ${entry.line}`,
+    );
+  });
 }
 
 function walk(directory) {
@@ -139,5 +139,6 @@ function walk(directory) {
 }
 
 function display(path) {
-  return relative(root, path);
+  // Forward slashes so messages and allowlist keys match on Windows too.
+  return relative(root, path).replaceAll("\\", "/");
 }

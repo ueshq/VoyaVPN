@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { inspectI18nSource, isUserVisibleText } from "./i18n-analyzer.mjs";
+import {
+  inspectI18nSource,
+  isKnownHardcodedText,
+  isUserVisibleText,
+  KNOWN_HARDCODED_TEXT,
+} from "./i18n-analyzer.mjs";
 
 const knownKeys = new Set(["actions.save", "form.placeholder"]);
 
@@ -42,5 +47,81 @@ describe("i18n AST analyzer", () => {
     expect(isUserVisibleText("AES-256-GCM")).toBe(false);
     expect(isUserVisibleText("https://example.com/config.json")).toBe(false);
     expect(isUserVisibleText("Save changes")).toBe(true);
+  });
+
+  // `{value || "Unknown"}` renders the fallback in every locale; before this
+  // the analyzer descended into `+` only, so the whole family passed the gate.
+  it("detects text rendered through ||, ?? and && fallbacks", () => {
+    const result = inspect(`
+      export function Fixture() {
+        return (
+          <div>
+            <span>{strategy || "default"}</span>
+            <span>{name ?? "Unnamed profile"}</span>
+            <span>{loading && "Loading nodes"}</span>
+            <span title={label || "Fallback title"} />
+          </div>
+        );
+      }
+    `);
+
+    expect(result.hardcodedText.map((item) => item.detail).sort()).toEqual([
+      "Fallback title",
+      "Loading nodes",
+      "Unnamed profile",
+      "default",
+    ]);
+  });
+
+  it("inspects both sides of || and ?? but only the rendered side of &&", () => {
+    const result = inspect(`
+      export function Fixture() {
+        return (
+          <div>
+            <span>{"Primary label" || fallback}</span>
+            <span>{"Never rendered" && other}</span>
+          </div>
+        );
+      }
+    `);
+
+    expect(result.hardcodedText.map((item) => item.detail)).toEqual(["Primary label"]);
+  });
+
+  it("treats upper-case identifiers as technical but not upper-case words", () => {
+    for (const technical of ["SOCKS5", "HTTP/2", "X25519", "AES-256", "TLS", "QUIC", "REALITY", "XHTTP", "KCP"]) {
+      expect(isUserVisibleText(technical), technical).toBe(false);
+    }
+    // The old `^[A-Z][A-Z0-9_.+/-]{1,15}$` pattern accepted all of these.
+    for (const visible of ["OK", "SAVE", "CANCEL", "ERROR", "RETRY"]) {
+      expect(isUserVisibleText(visible), visible).toBe(true);
+    }
+  });
+
+  it("flags hardcoded text in every shipped script, not only Latin and CJK", () => {
+    expect(isUserVisibleText("Сохранить изменения")).toBe(true);
+    expect(isUserVisibleText("ذخیره تغییرات")).toBe(true);
+    expect(isUserVisibleText("保存")).toBe(true);
+    expect(isUserVisibleText("1.2.3")).toBe(false);
+    expect(isUserVisibleText("   ")).toBe(false);
+  });
+
+  it("suppresses only the exact allowlisted path and text", () => {
+    // A synthetic entry, so the test keeps working once the shipped allowlist
+    // is empty — which is the state the next assertion demands.
+    const entry = { path: "apps/desktop/src/features/settings/general-tab.tsx", text: "Key" };
+    const allowlist = [entry];
+
+    expect(isKnownHardcodedText(entry.path, entry.text, allowlist)).toBe(true);
+    expect(isKnownHardcodedText(entry.path, `${entry.text}!`, allowlist)).toBe(false);
+    expect(
+      isKnownHardcodedText("apps/desktop/src/features/other.tsx", entry.text, allowlist),
+    ).toBe(false);
+  });
+
+  it("ships no suppressions", () => {
+    // Every entry here is text a locale gate cannot see. Adding one is a
+    // deliberate, temporary act; this assertion makes it visible in review.
+    expect(KNOWN_HARDCODED_TEXT).toEqual([]);
   });
 });

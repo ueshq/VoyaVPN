@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  AppError,
   ConnectionModeStatus,
   CoreStateEvent,
   ProfileListEntry,
@@ -14,6 +15,7 @@ import type {
   TunChanged,
   TunStatus,
 } from "@/ipc/bindings";
+import { useModalStore } from "@/stores/modal-store";
 import { useToastStore } from "@/stores/toast-store";
 import { makeProfileFixture } from "@/test/profile-fixture";
 
@@ -47,23 +49,40 @@ const runtimeMock = vi.hoisted(() => {
   return { state, useRuntimeEventStore };
 });
 
-const ipcMock = vi.hoisted(() => ({
-  connectActiveProfile: vi.fn(),
-  deleteSubscriptions: vi.fn(),
-  disconnectCore: vi.fn(),
-  listProfiles: vi.fn(),
-  listSubscriptionMetadata: vi.fn(),
-  listSubscriptions: vi.fn(),
-  restartCore: vi.fn(),
-  runtimeStatus: vi.fn(),
-  saveSubscription: vi.fn(),
-  setActiveProfile: vi.fn(),
-  setConnectionMode: vi.fn(),
-  systemProxyStatus: vi.fn(),
-  tunRequestElevation: vi.fn(),
-  tunStatus: vi.fn(),
-  updateSubscriptions: vi.fn(),
-}));
+const ipcMock = vi.hoisted(() => {
+  // Faithful stand-in for the real error class: `runWithElevation` and
+  // `missingCorePayload` branch on `appError.kind`, so a bare
+  // `class extends Error {}` makes the sudo-retry and missing-core paths
+  // unreachable from this suite.
+  class MockIpcCommandError extends Error {
+    readonly appError: AppError;
+
+    constructor(appError: AppError, message = "ipc failed") {
+      super(message);
+      this.appError = appError;
+      this.name = "IpcCommandError";
+    }
+  }
+
+  return {
+    IpcCommandError: MockIpcCommandError,
+    connectActiveProfile: vi.fn(),
+    deleteSubscriptions: vi.fn(),
+    disconnectCore: vi.fn(),
+    listProfiles: vi.fn(),
+    listSubscriptionMetadata: vi.fn(),
+    listSubscriptions: vi.fn(),
+    restartCore: vi.fn(),
+    runtimeStatus: vi.fn(),
+    saveSubscription: vi.fn(),
+    setActiveProfile: vi.fn(),
+    setConnectionMode: vi.fn(),
+    systemProxyStatus: vi.fn(),
+    tunRequestElevation: vi.fn(),
+    tunStatus: vi.fn(),
+    updateSubscriptions: vi.fn(),
+  };
+});
 
 const disconnectedStatus: RuntimeStatusResponse = {
   activeProfileId: null,
@@ -126,7 +145,7 @@ vi.mock("@/ipc", () => ({
   connectActiveProfile: ipcMock.connectActiveProfile,
   deleteSubscriptions: ipcMock.deleteSubscriptions,
   disconnectCore: ipcMock.disconnectCore,
-  IpcCommandError: class IpcCommandError extends Error {},
+  IpcCommandError: ipcMock.IpcCommandError,
   listProfiles: ipcMock.listProfiles,
   listSubscriptionMetadata: ipcMock.listSubscriptionMetadata,
   listSubscriptions: ipcMock.listSubscriptions,
@@ -189,6 +208,7 @@ describe("HomeScreen", () => {
     ipcMock.tunRequestElevation.mockResolvedValue(tunStatusResponse);
     ipcMock.tunStatus.mockResolvedValue(tunStatusResponse);
     useToastStore.setState({ toasts: [] });
+    useModalStore.setState({ stack: [] });
   });
 
   afterEach(() => {
@@ -293,6 +313,42 @@ describe("HomeScreen", () => {
 
     expect(ipcMock.setActiveProfile).toHaveBeenCalledWith("tokyo");
     await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps one tab stop and moves the active node with the arrow keys", async () => {
+    ipcMock.listProfiles.mockResolvedValue([
+      makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" }),
+      makeProfile(2, { id: "osaka", remarks: "Osaka Edge" }),
+      makeProfile(3, { id: "seoul", remarks: "Seoul Edge" }),
+    ]);
+
+    const user = userEvent.setup();
+    renderHome();
+
+    const tokyo = await screen.findByRole("option", { name: /Tokyo Edge/ });
+    const osaka = screen.getByRole("option", { name: /Osaka Edge/ });
+    const seoul = screen.getByRole("option", { name: /Seoul Edge/ });
+    // Only one option is in the tab order; the rest are reached with arrows.
+    expect(tokyo).toHaveAttribute("tabindex", "0");
+    expect(osaka).toHaveAttribute("tabindex", "-1");
+
+    tokyo.focus();
+    await user.keyboard("{ArrowDown}");
+    expect(osaka).toHaveAttribute("aria-selected", "true");
+    expect(osaka).toHaveFocus();
+    expect(osaka).toHaveAttribute("tabindex", "0");
+    expect(tokyo).toHaveAttribute("tabindex", "-1");
+
+    await user.keyboard("{End}");
+    expect(seoul).toHaveFocus();
+    await user.keyboard("{ArrowUp}");
+    expect(osaka).toHaveFocus();
+    await user.keyboard("{Home}");
+    expect(tokyo).toHaveFocus();
+
+    // Navigating is local: it never touches the backend.
+    expect(ipcMock.setActiveProfile).not.toHaveBeenCalled();
+    expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
   });
 
   it("invokes the connect action from the central button", async () => {
@@ -433,6 +489,75 @@ describe("HomeScreen", () => {
 
     expect(screen.queryByRole("option", { name: /Tokyo Edge/ })).not.toBeInTheDocument();
     expect(screen.getByRole("option", { name: /Osaka Edge/ })).toBeInTheDocument();
+  });
+
+  // The core is fetched on first run, so a connect against a machine without it
+  // is the onboarding path rather than an error to toast away.
+  it("opens the missing-core recovery modal instead of a toast", async () => {
+    ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
+    ipcMock.connectActiveProfile.mockRejectedValue(
+      new ipcMock.IpcCommandError({
+        kind: "missingCore",
+        message: {
+          candidates: [],
+          coreType: "singBox",
+          downloadUrl: "https://example.test/core",
+          message: "sing-box is not installed",
+          searchDir: "/cores",
+        },
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderHome();
+    await screen.findByRole("option", { name: /Tokyo Edge/ });
+    await user.click(connectButton());
+
+    await waitFor(() => expect(useModalStore.getState().stack).toHaveLength(1));
+    expect(useModalStore.getState().stack[0]).toMatchObject({
+      kind: "missingCore",
+      missingCore: { coreType: "singBox", message: "sing-box is not installed" },
+    });
+    expect(useToastStore.getState().toasts).toHaveLength(0);
+  });
+
+  it("requests system authorization once and retries a connect that needed it", async () => {
+    ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
+    ipcMock.connectActiveProfile
+      .mockRejectedValueOnce(new ipcMock.IpcCommandError({ kind: "sudo", message: "needs root" }))
+      .mockResolvedValue(connectedStatus);
+    ipcMock.tunRequestElevation.mockResolvedValue({ ...tunStatusResponse, elevationGranted: true });
+
+    const user = userEvent.setup();
+    renderHome();
+    await screen.findByRole("option", { name: /Tokyo Edge/ });
+    await user.click(connectButton());
+
+    await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(2));
+    expect(ipcMock.tunRequestElevation).toHaveBeenCalledTimes(1);
+    expect(useToastStore.getState().toasts).toHaveLength(0);
+    expect(useModalStore.getState().stack).toHaveLength(0);
+  });
+
+  it("keeps the original failure when the authorization dialog is declined", async () => {
+    ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
+    ipcMock.connectActiveProfile.mockRejectedValue(
+      new ipcMock.IpcCommandError({ kind: "sudo", message: "needs root" }, "sudo helper refused"),
+    );
+    ipcMock.tunRequestElevation.mockResolvedValue({ ...tunStatusResponse, elevationGranted: false });
+
+    const user = userEvent.setup();
+    renderHome();
+    await screen.findByRole("option", { name: /Tokyo Edge/ });
+    await user.click(connectButton());
+
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
+        description: "sudo helper refused",
+        severity: "error",
+      }),
+    );
+    expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1);
   });
 
   it("refreshes runtime state and surfaces errors when disconnect fails", async () => {

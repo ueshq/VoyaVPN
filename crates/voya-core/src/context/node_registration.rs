@@ -5,9 +5,13 @@ pub(super) fn pre_socks_item<E: CoreGenEnv>(
     node: &ProfileItem,
     env: &E,
 ) -> Option<ProfileItem> {
+    // The topology is an injected platform fact, not something derived from
+    // `CoreGenPlatform`: macOS runs TUN inside the single NetworkExtension
+    // config (ADR 0005), so `build_all` must not synthesize a pre-socks context
+    // there even though macOS is "non-Windows".
     if node.config_type() != ConfigType::Custom
         && config.tun_mode_item.enable_tun
-        && env.platform().is_non_windows()
+        && env.tun_topology().is_pre_socks()
     {
         return Some(socks_profile(env.get_local_port(InboundProtocol::socks)));
     }

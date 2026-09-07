@@ -86,6 +86,18 @@ pub fn validate_app_settings(
         route_rules_template_source_url: settings.sources.routing_template.clone(),
     })
     .map_err(|error| AppSettingsValidationError::InvalidSource(error.to_string()))?;
+    // Validated on the save path only: the mapping in `app_config_from_settings`
+    // also runs when a stored configuration is loaded, so rejecting there would
+    // block startup on a value that is already persisted. It has to be rejected
+    // somewhere, because `parse_udp_test_target` fills in the named kind's
+    // default host — a half-typed `dns:` would silently probe a server the user
+    // never named.
+    voya_udptest::validate_udp_test_target(&settings.speed_test.udp_target).map_err(|_| {
+        AppSettingsValidationError::InvalidText {
+            field: "UDP test target",
+            reason: "value must be host:port, optionally prefixed with a test kind",
+        }
+    })?;
     if !(576..=65_535).contains(&settings.network.tun.mtu) {
         return Err(AppSettingsValidationError::InvalidTunMtu);
     }
@@ -264,6 +276,23 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
             show_window_shortcut,
         },
     }
+}
+
+/// Map the settings contract onto a full `AppConfig`.
+///
+/// The active profile and routing ids are not part of the settings contract, so
+/// they are carried over from the configuration being replaced.
+pub fn config_from_settings(
+    settings: &contracts::AppSettingsV1,
+    current: &AppConfig,
+) -> Result<AppConfig, SettingsContractError> {
+    let state = AppStateRecord {
+        active_profile_id: (!current.index_id.is_empty()).then(|| current.index_id.clone()),
+        active_routing_id: (!current.routing_basic_item.routing_index_id.is_empty())
+            .then(|| current.routing_basic_item.routing_index_id.clone()),
+    };
+
+    app_config_from_settings(settings, &state)
 }
 
 pub fn app_config_from_settings(
@@ -573,9 +602,183 @@ where
 mod tests {
     use std::sync::Mutex;
 
-    use voya_core::KeyEventItem;
-
     use super::*;
+
+    /// Every scalar and string in `AppConfig` gets a distinct value, so a
+    /// same-typed neighbour swap in either mapper (`up_mbps`/`down_mbps`,
+    /// `idle_timeout`/`health_check_timeout`, `direct`/`remote`/`bootstrap`
+    /// DNS, `custom_pac_path`/`custom_script_path`, …) fails here instead of
+    /// silently shipping. Struct literals guarantee that every field is
+    /// assigned; nothing but distinct values proves it is assigned correctly.
+    fn distinctly_valued_config() -> AppConfig {
+        AppConfig {
+            index_id: "active-profile-id".to_string(),
+            core_basic_item: CoreBasicItem {
+                log_enabled: true,
+                loglevel: "debug".to_string(),
+                mux_enabled: true,
+                def_allow_insecure: true,
+                def_fingerprint: "fingerprint-value".to_string(),
+                def_user_agent: "user-agent-value".to_string(),
+                send_through: Some("send-through-value".to_string()),
+                bind_interface: Some("bind-interface-value".to_string()),
+                enable_fragment: true,
+                enable_cache_file4_sbox: false,
+            },
+            tun_mode_item: TunModeItem {
+                enable_tun: true,
+                auto_route: false,
+                strict_route: true,
+                stack: "gvisor".to_string(),
+                mtu: 1301,
+                enable_ipv6_address: true,
+                icmp_routing: "icmp-routing-value".to_string(),
+            },
+            grpc_item: GrpcItem {
+                idle_timeout: Some(11),
+                health_check_timeout: Some(12),
+                permit_without_stream: Some(true),
+            },
+            routing_basic_item: RoutingBasicItem {
+                domain_strategy: "domain-strategy-value".to_string(),
+                domain_strategy4_singbox: "singbox-domain-strategy-value".to_string(),
+                routing_index_id: "active-routing-id".to_string(),
+            },
+            gui_item: GuiItem {
+                auto_run: true,
+                enable_statistics: false,
+                display_real_time_speed: true,
+                auto_create_subscription_group: false,
+            },
+            ui_item: UiItem {
+                current_theme: Some("Dark".to_string()),
+                current_language: "zh-Hans".to_string(),
+            },
+            const_item: voya_core::ConstItem {
+                sub_convert_url: Some("https://convert.test/sub".to_string()),
+                geo_source_url: Some("https://geo.test/{0}.dat".to_string()),
+                srs_source_url: Some("https://srs.test/{0}.srs".to_string()),
+                route_rules_template_source_url: Some("https://template.test/routing".to_string()),
+            },
+            speed_test_item: SpeedTestItem {
+                speed_test_timeout: 21,
+                speed_test_url: "https://speed.test/download".to_string(),
+                speed_ping_test_url: "https://speed.test/latency".to_string(),
+                mixed_concurrency_count: 22,
+                ipapi_url: "https://speed.test/ip".to_string(),
+                udp_test_target: "udp.test:5353".to_string(),
+                speed_test_page_size: Some(23),
+                speed_test_delay_interval: Some(24),
+            },
+            mux4_sbox_item: Mux4SboxItem {
+                protocol: "h2mux".to_string(),
+                max_connections: 31,
+                padding: Some(true),
+            },
+            hysteria_item: HysteriaItem {
+                up_mbps: 41,
+                down_mbps: 42,
+                hop_interval: 43,
+            },
+            proxy_ui_item: ProxyUiItem {
+                traffic_mode: TrafficMode::Global,
+                node_sorting: 51,
+            },
+            system_proxy_item: SystemProxyItem {
+                sys_proxy_type: SysProxyType::Pac,
+                system_proxy_exceptions: "exceptions-value".to_string(),
+                not_proxy_local_address: false,
+                system_proxy_advanced_protocol: "advanced-protocol-value".to_string(),
+                custom_system_proxy_pac_path: Some("/tmp/custom-pac-path".to_string()),
+                custom_system_proxy_script_path: Some("/tmp/custom-script-path".to_string()),
+            },
+            inbound: vec![InItem {
+                local_port: 61,
+                protocol: "inbound-protocol".to_string(),
+                sniffing_enabled: false,
+                allow_lan_conn: true,
+                new_port4_lan: false,
+                user: "inbound-user".to_string(),
+                pass: "inbound-pass".to_string(),
+                second_local_port_enabled: true,
+            }],
+            show_window_shortcut: Some(KeyEventItem {
+                alt: true,
+                control: false,
+                shift: true,
+                key_code: Some(71),
+            }),
+            simple_dns_item: SimpleDnsItem {
+                use_system_hosts: Some(true),
+                add_common_hosts: Some(false),
+                fake_ip: Some(true),
+                global_fake_ip: Some(false),
+                block_binding_query: Some(true),
+                direct_dns: Some("direct-dns-value".to_string()),
+                remote_dns: Some("remote-dns-value".to_string()),
+                bootstrap_dns: Some("bootstrap-dns-value".to_string()),
+                strategy4_freedom: Some("direct-strategy-value".to_string()),
+                strategy4_proxy: Some("proxy-strategy-value".to_string()),
+                serve_stale: Some(true),
+                parallel_query: Some(false),
+                hosts: Some("hosts-value".to_string()),
+                direct_expected_ips: Some("direct-expected-ips-value".to_string()),
+            },
+        }
+    }
+
+    #[test]
+    fn settings_mapping_round_trips_every_distinct_field() {
+        let config = distinctly_valued_config();
+        let state = AppStateRecord {
+            active_profile_id: Some(config.index_id.clone()),
+            active_routing_id: Some(config.routing_basic_item.routing_index_id.clone()),
+        };
+
+        let settings = settings_from_app_config(&config);
+        let restored = app_config_from_settings(&settings, &state).expect("round trip");
+
+        assert_eq!(restored, config);
+    }
+
+    /// The state record, not the settings contract, owns the active ids, so an
+    /// empty selection must survive the trip as an empty string rather than
+    /// being resurrected from the previous configuration.
+    #[test]
+    fn settings_mapping_carries_the_active_ids_from_the_state_record() {
+        let config = distinctly_valued_config();
+        let settings = settings_from_app_config(&config);
+
+        let restored = app_config_from_settings(&settings, &AppStateRecord::default())
+            .expect("round trip without an active selection");
+
+        assert!(restored.index_id.is_empty());
+        assert!(restored.routing_basic_item.routing_index_id.is_empty());
+        assert_eq!(
+            restored.hysteria_item.up_mbps, config.hysteria_item.up_mbps,
+            "everything outside the state record must still round trip"
+        );
+    }
+
+    /// `config_from_settings` is what the save transaction uses: it must take
+    /// the active ids from the configuration being replaced, because they are
+    /// not part of the settings contract at all.
+    #[test]
+    fn config_from_settings_preserves_the_active_selection() {
+        let config = distinctly_valued_config();
+        let settings = settings_from_app_config(&AppConfig::default());
+
+        let restored = config_from_settings(&settings, &config);
+
+        assert_eq!(restored.index_id, config.index_id);
+        assert_eq!(
+            restored.routing_basic_item.routing_index_id,
+            config.routing_basic_item.routing_index_id
+        );
+        assert_eq!(restored.ui_item, AppConfig::default().ui_item);
+    }
+
+    use voya_core::KeyEventItem;
 
     #[derive(Default)]
     struct FakeSideEffects {
@@ -716,6 +919,36 @@ mod tests {
             validate_app_settings(&settings),
             Err(AppSettingsValidationError::InvalidTunMtu)
         );
+    }
+
+    /// A stored target is resolved with `parse_udp_test_target`, which fills in
+    /// the named kind's default host, so a half-typed entry that reached the
+    /// database would probe a server the user never named.
+    #[test]
+    fn settings_validation_rejects_a_malformed_udp_test_target() {
+        let mut settings = contracts::AppSettingsV1::default();
+        validate_app_settings(&settings).expect("the default UDP target is well formed");
+
+        for target in ["dns:", "unknown:example.com", "2001:db8::1"] {
+            settings.speed_test.udp_target = target.to_string();
+            assert_eq!(
+                validate_app_settings(&settings),
+                Err(AppSettingsValidationError::InvalidText {
+                    field: "UDP test target",
+                    reason: "value must be host:port, optionally prefixed with a test kind",
+                }),
+                "{target} should be rejected"
+            );
+        }
+
+        // An empty target is the "use the built-in default" shape, not a typo.
+        for target in ["1.1.1.1:53", "dns:1.1.1.1:53", "ntp:pool.ntp.org", ""] {
+            settings.speed_test.udp_target = target.to_string();
+            assert!(
+                validate_app_settings(&settings).is_ok(),
+                "{target} should be accepted"
+            );
+        }
     }
 
     #[test]

@@ -16,7 +16,7 @@ use voya_platform::{
     coreinfo::{
         all_core_infos, copy_seed_core_asset, discover_executable,
         discover_packaged_seed_executable, get_core_info, CoreInfo, CoreInfoError, CoreLaunch,
-        CoreSeedCopyOutcome, TargetOs,
+        TargetOs,
     },
     filesystem,
     paths::{AppPaths, PathError},
@@ -25,7 +25,7 @@ use voya_platform::{
 
 use crate::coregen::{SnapshotCoreGenData, SnapshotCoreGenEnv};
 use crate::supervisor::{
-    CoreProcessSpec, CoreSupervisor, SupervisorConnectionState, SupervisorError,
+    ClashApiSecret, CoreProcessSpec, CoreSupervisor, SupervisorConnectionState, SupervisorError,
     SupervisorSnapshot, SupervisorStartRequest,
 };
 use crate::updates::local_singbox_ruleset_paths;
@@ -166,15 +166,29 @@ impl<'runtime> RuntimeManager<'runtime> {
             .await?
             .ok_or_else(|| RuntimeError::ActiveProfileNotFound(active_profile_id.to_string()))?;
 
-        let env =
-            load_runtime_core_gen_env(self.database, &self.paths, config, self.target_os).await?;
+        // Minted per launch and never persisted: the core it authenticates dies
+        // with this request, so a leaked token from an earlier run is useless.
+        let clash_api_secret = ClashApiSecret::generate();
+        let env = load_runtime_core_gen_env(self.database, &self.paths, config, self.target_os)
+            .await?
+            .with_clash_api_secret(clash_api_secret.clone());
         let contexts = runtime_config_contexts(&env, config, &active_profile, self.target_os);
+        let validation = contexts.combined_validator_result();
         if !contexts.success() {
-            let validation = contexts.combined_validator_result();
             return Err(RuntimeError::Validation {
                 errors: validation.errors,
                 warnings: validation.warnings,
             });
+        }
+        // A config that generates but is suspicious used to say nothing at all:
+        // the warnings only travelled on the error variant. `warn` is the level
+        // the desktop log layer forwards to the Logs panel, so these reach the
+        // user rather than only the file log.
+        for warning in &validation.warnings {
+            tracing::warn!(
+                profile = %active_profile.index_id,
+                "core config generation warning: {warning}"
+            );
         }
 
         let main_config_path = write_runtime_config(
@@ -199,6 +213,10 @@ impl<'runtime> RuntimeManager<'runtime> {
             tun_enabled: config.tun_mode_item.enable_tun,
             sudo_script_dir: self.paths.temp_dir().join(SUDO_SCRIPT_DIR_NAME),
             restart_on_crash: true,
+            // Taken from the generated main context, not from the TUN setting:
+            // those disagree on a pre-socks topology.
+            clash_api_port: contexts.main_result.context.clash_api_port(),
+            clash_api_secret: Some(clash_api_secret),
         };
 
         match self.supervisor.start(request).await {
@@ -236,42 +254,93 @@ impl<'runtime> RuntimeManager<'runtime> {
         core_type: CoreType,
         core_info: &CoreInfo,
     ) -> Result<PathBuf, RuntimeError> {
-        if let Some(executable) = self.packaged_seed_executable(core_info)? {
-            return Ok(executable);
+        resolve_core_executable(
+            &self.paths,
+            self.core_seed_resource_dir.as_deref(),
+            core_info,
+            core_type,
+            self.target_os,
+        )
+        .map_err(Into::into)
+    }
+}
+
+/// Locates the executable for `core_type`, staging the packaged seed if needed.
+///
+/// Shared with the speedtest backend: a probe core has to resolve exactly the
+/// binary the runtime would launch, and two copies of this had already drifted
+/// into subtly different macOS handling.
+pub(crate) fn resolve_core_executable(
+    paths: &AppPaths,
+    core_seed_resource_dir: Option<&Path>,
+    core_info: &CoreInfo,
+    core_type: CoreType,
+    target_os: TargetOs,
+) -> Result<PathBuf, CoreInfoError> {
+    if let Some(executable) =
+        packaged_seed_executable(core_seed_resource_dir, core_info, target_os)?
+    {
+        return Ok(executable);
+    }
+
+    if let Some(seed_resource_dir) = core_seed_resource_dir {
+        copy_seed_core_asset(paths, seed_resource_dir, core_type)?;
+    }
+
+    discover_executable(paths, core_info)
+}
+
+/// On macOS the seed inside the app bundle is launched where it lies.
+///
+/// Copying it into app data would strip the bundle's code signature context and
+/// break the notarized launch, so the copy-then-discover path is Windows/Linux
+/// only.
+fn packaged_seed_executable(
+    core_seed_resource_dir: Option<&Path>,
+    core_info: &CoreInfo,
+    target_os: TargetOs,
+) -> Result<Option<PathBuf>, CoreInfoError> {
+    if target_os != TargetOs::Macos {
+        return Ok(None);
+    }
+
+    let Some(seed_resource_dir) = core_seed_resource_dir else {
+        return Ok(None);
+    };
+
+    discover_packaged_seed_executable(seed_resource_dir, core_info, target_os)
+}
+
+/// Failure to write a generated core config, with the path that failed.
+///
+/// The runtime and the speedtest backend each have their own `WriteConfig`
+/// error variant, so the shared writer reports both halves and lets the caller
+/// wrap them.
+#[derive(Debug)]
+pub(crate) struct CoreConfigWriteError {
+    pub(crate) path: PathBuf,
+    pub(crate) source: io::Error,
+}
+
+/// Writes generated core JSON into the runtime config directory.
+///
+/// Every generated config embeds outbound credentials (passwords, UUIDs,
+/// Reality private keys) and now the Clash API bearer token as well, so it is
+/// written 0600 and never through a symlink.
+pub(crate) fn write_core_config(
+    paths: &AppPaths,
+    file_name: &str,
+    json: &str,
+) -> Result<PathBuf, CoreConfigWriteError> {
+    let path = paths.bin_config_file(file_name);
+    filesystem::write_private_file_with_parent(&path, json).map_err(|source| {
+        CoreConfigWriteError {
+            path: path.clone(),
+            source,
         }
+    })?;
 
-        self.copy_seed_core_asset(core_type)?;
-        discover_executable(&self.paths, core_info).map_err(Into::into)
-    }
-
-    fn packaged_seed_executable(
-        &self,
-        core_info: &CoreInfo,
-    ) -> Result<Option<PathBuf>, RuntimeError> {
-        if self.target_os != TargetOs::Macos {
-            return Ok(None);
-        }
-
-        let Some(seed_resource_dir) = &self.core_seed_resource_dir else {
-            return Ok(None);
-        };
-
-        discover_packaged_seed_executable(seed_resource_dir, core_info, self.target_os)
-            .map_err(Into::into)
-    }
-
-    fn copy_seed_core_asset(
-        &self,
-        core_type: CoreType,
-    ) -> Result<Option<CoreSeedCopyOutcome>, RuntimeError> {
-        let Some(seed_resource_dir) = &self.core_seed_resource_dir else {
-            return Ok(None);
-        };
-
-        copy_seed_core_asset(&self.paths, seed_resource_dir, core_type)
-            .map(Some)
-            .map_err(Into::into)
-    }
+    Ok(path)
 }
 
 fn runtime_config_contexts(
@@ -291,6 +360,20 @@ fn runtime_config_contexts(
     builder.build_all(config, active_profile)
 }
 
+/// Whether TUN must be served by one config on this host.
+///
+/// `CoreConfigContextBuilder::build_all` no longer needs this for the *TUN
+/// topology* decision: `CoreGenEnv::tun_topology()` reports `SingleProcess` on
+/// macOS and Windows, so `pre_socks_item` already declines to split there.
+///
+/// It still guards `pre_socks_item`'s *other* trigger — a `ConfigType::Custom`
+/// profile whose subscription declares a `pre_socks_port` — which fires
+/// regardless of platform or TUN. Taking that split with a native backend
+/// breaks TUN outright: `build_all` clears `is_tun_enabled` on the main context
+/// and moves the TUN inbound to the pre-socks one, while both native backends
+/// ignore `NativeTunStartRequest::pre_config_path` and hand only the main
+/// config to the PacketTunnel provider / Windows service. The provider would
+/// then start a config with no `tun` inbound at all.
 fn should_use_single_native_tun_config(config: &AppConfig, target_os: TargetOs) -> bool {
     config.tun_mode_item.enable_tun
         && matches!(
@@ -305,17 +388,10 @@ fn write_runtime_config(
     context: &CoreConfigContext,
 ) -> Result<PathBuf, RuntimeError> {
     let json = generate_singbox_config_json(context)?;
-    let path = paths.bin_config_file(file_name);
-    // The generated config embeds outbound credentials (passwords, UUIDs,
-    // Reality private keys), so it is written 0600 and never through a symlink.
-    filesystem::write_private_file_with_parent(&path, json).map_err(|source| {
-        RuntimeError::WriteConfig {
-            path: path.clone(),
-            source,
-        }
-    })?;
-
-    Ok(path)
+    write_core_config(paths, file_name, &json).map_err(|error| RuntimeError::WriteConfig {
+        path: error.path,
+        source: error.source,
+    })
 }
 
 fn cleanup_runtime_state(paths: &AppPaths) -> Result<(), RuntimeError> {
@@ -417,7 +493,9 @@ mod tests {
     };
 
     use super::*;
-    use crate::supervisor::SupervisorDeps;
+    use crate::proxy_runtime::proxy_runtime_endpoint;
+    use crate::supervisor::{ClashApiAccess, SupervisorDeps};
+    use voya_net::clash::ClashApiEndpoint;
 
     static TEMP_PATH_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -552,6 +630,263 @@ mod tests {
             "the non-TUN main core must not be launched as root"
         );
         assert!(pre_spec.may_need_sudo);
+    }
+
+    #[test]
+    fn runtime_clash_api_port_matches_the_generated_main_config() {
+        // The Clash API port used to be recomputed downstream from
+        // `tun_mode_item.enable_tun`. On the Linux TUN topology the builder
+        // clears `is_tun_enabled` on the *main* context and gives the TUN
+        // inbound to the pre-socks one, so that formula addressed the wrong
+        // process. The supervisor now carries the port the main config
+        // actually wrote, and this pins the two together.
+        let profile = active_singbox_profile("active");
+        let config = AppConfig {
+            index_id: "active".to_string(),
+            tun_mode_item: voya_core::TunModeItem {
+                enable_tun: true,
+                ..voya_core::TunModeItem::default()
+            },
+            ..AppConfig::default()
+        };
+        let env = SnapshotCoreGenEnv::new(
+            &config,
+            CoreGenPlatform::Linux,
+            SnapshotCoreGenData {
+                profiles: vec![profile.clone()],
+                ..SnapshotCoreGenData::default()
+            },
+        );
+
+        let contexts = runtime_config_contexts(&env, &config, &profile, TargetOs::Linux);
+        let main_context = &contexts.main_result.context;
+        assert!(
+            !main_context.is_tun_enabled,
+            "Linux TUN puts the TUN inbound on the pre-socks process"
+        );
+
+        let generated: serde_json::Value = serde_json::from_str(
+            &generate_singbox_config_json(main_context)
+                .expect("runtime test operation should succeed"),
+        )
+        .expect("runtime test operation should succeed");
+        let external_controller = generated["experimental"]["clash_api"]["external_controller"]
+            .as_str()
+            .expect("the generated main config exposes a Clash API");
+        let generated_port: u16 = external_controller
+            .rsplit_once(':')
+            .expect("external_controller is host:port")
+            .1
+            .parse()
+            .expect("external_controller port is numeric");
+
+        assert_eq!(
+            u16::try_from(main_context.clash_api_port())
+                .expect("runtime test operation should succeed"),
+            generated_port,
+            "the port handed to the supervisor must be the one the core opens"
+        );
+        assert_eq!(
+            proxy_runtime_endpoint(&ClashApiAccess::unauthenticated(generated_port)),
+            Some(ClashApiEndpoint::loopback(generated_port)),
+            "the proxy runtime must dial the running core's Clash API"
+        );
+    }
+
+    /// The Clash API listens on loopback, which is not a trust boundary: any
+    /// local process — or any page a browser can be pointed at — could read the
+    /// live connection list and re-route every flow. The generated config must
+    /// therefore demand a token, and the supervisor must hand callers the same
+    /// one so the app can still talk to its own core.
+    #[tokio::test]
+    async fn runtime_connect_locks_the_clash_api_behind_a_per_launch_secret() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("runtime test operation should succeed");
+        let paths = temp_paths();
+        paths
+            .ensure_dirs()
+            .expect("runtime test operation should succeed");
+        write_fake_core_executable(&paths, CoreType::sing_box);
+        let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
+            Arc::new(RecordingRunner::default()),
+            Arc::new(voya_platform::privilege::ElevationState::new()),
+        ));
+        let manager =
+            RuntimeManager::with_target_os(&database, paths.clone(), supervisor, TargetOs::Linux);
+        let config = AppConfig {
+            index_id: "active".to_string(),
+            ..AppConfig::default()
+        };
+        database
+            .profiles()
+            .upsert(&active_singbox_profile("active"))
+            .await
+            .expect("runtime test operation should succeed");
+
+        let connected = manager
+            .connect(&config)
+            .await
+            .expect("runtime test operation should succeed");
+
+        let generated: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(paths.bin_config_file(MAIN_CONFIG_FILE_NAME))
+                .expect("runtime test operation should succeed"),
+        )
+        .expect("runtime test operation should succeed");
+        let written_secret = generated["experimental"]["clash_api"]["secret"]
+            .as_str()
+            .expect("the generated main config must require a bearer token");
+        let access = connected.clash_api_access();
+
+        assert_eq!(
+            access.secret.as_ref().map(ClashApiSecret::as_str),
+            Some(written_secret),
+            "the supervisor must report the token the core will actually check"
+        );
+        assert_eq!(
+            proxy_runtime_endpoint(&access)
+                .expect("a connected core exposes an endpoint")
+                .secret
+                .as_deref(),
+            Some(written_secret),
+            "every Clash API client must present the token"
+        );
+    }
+
+    /// Two launches must never share a token: a value that leaked from an
+    /// earlier run would otherwise keep working against the current core.
+    #[test]
+    fn runtime_clash_api_secret_is_fresh_per_launch() {
+        assert_ne!(
+            ClashApiSecret::generate().as_str(),
+            ClashApiSecret::generate().as_str()
+        );
+    }
+
+    /// A profile whose generation only warns still connects, so the warning has
+    /// to travel somewhere other than the error variant. This pins the warning
+    /// surviving generation rather than the log line itself, which `tracing`
+    /// owns.
+    #[test]
+    fn runtime_successful_generation_still_reports_its_warnings() {
+        let profile = active_singbox_profile("active");
+        let config = AppConfig {
+            index_id: "active".to_string(),
+            ..AppConfig::default()
+        };
+        // A rule with a blank outbound tag generates fine — it just silently
+        // does nothing, which is exactly the case a warning has to reach.
+        let routing = RoutingItem {
+            id: "routing-active".to_string(),
+            remarks: "Active routing".to_string(),
+            rule_set: vec![RulesItem {
+                id: "rule-blank-outbound".to_string(),
+                outbound_tag: Some("   ".to_string()),
+                domain: Some(vec!["full:example.com".to_string()]),
+                rule_type: Some(RuleType::Routing),
+                ..RulesItem::default()
+            }],
+            ..RoutingItem::default()
+        };
+        let env = SnapshotCoreGenEnv::new(
+            &config,
+            CoreGenPlatform::Linux,
+            SnapshotCoreGenData {
+                profiles: vec![profile.clone()],
+                routings: vec![routing],
+                ..SnapshotCoreGenData::default()
+            },
+        );
+
+        let contexts = runtime_config_contexts(&env, &config, &profile, TargetOs::Linux);
+
+        assert!(contexts.success(), "the config still generates");
+        assert!(
+            !contexts.combined_validator_result().warnings.is_empty(),
+            "a rule with no outbound tag must warn"
+        );
+    }
+
+    /// `build_all` reads the injected `tun_topology()` fact, so macOS keeps the
+    /// TUN inbound in the single config the PacketTunnel provider is handed.
+    #[test]
+    fn runtime_macos_tun_builds_one_context_that_owns_the_tun_inbound() {
+        let profile = active_singbox_profile("active");
+        let config = AppConfig {
+            index_id: "active".to_string(),
+            tun_mode_item: voya_core::TunModeItem {
+                enable_tun: true,
+                ..voya_core::TunModeItem::default()
+            },
+            ..AppConfig::default()
+        };
+        let env = SnapshotCoreGenEnv::new(
+            &config,
+            CoreGenPlatform::MacOS,
+            SnapshotCoreGenData {
+                profiles: vec![profile.clone()],
+                ..SnapshotCoreGenData::default()
+            },
+        );
+
+        for contexts in [
+            runtime_config_contexts(&env, &config, &profile, TargetOs::Macos),
+            CoreConfigContextBuilder::new(&env).build_all(&config, &profile),
+        ] {
+            assert!(contexts.pre_socks_result.is_none());
+            assert!(contexts.main_result.context.is_tun_enabled);
+        }
+    }
+
+    /// Why `should_use_single_native_tun_config` still exists: `build_all` also
+    /// splits for a custom profile whose subscription declares a pre-socks
+    /// port, and that split clears the TUN inbound on the only config a native
+    /// backend ever starts.
+    #[test]
+    fn runtime_macos_tun_keeps_a_custom_pre_socks_profile_in_one_config() {
+        let profile = ProfileItem {
+            index_id: "active".to_string(),
+            remarks: "Custom".to_string(),
+            subscription_id: Some("sub".to_string()),
+            protocol: ProfileProtocol::Custom {
+                source: "{}".to_string(),
+                filter: None,
+            },
+            ..ProfileItem::default()
+        };
+        let config = AppConfig {
+            index_id: "active".to_string(),
+            tun_mode_item: voya_core::TunModeItem {
+                enable_tun: true,
+                ..voya_core::TunModeItem::default()
+            },
+            ..AppConfig::default()
+        };
+        let env = SnapshotCoreGenEnv::new(
+            &config,
+            CoreGenPlatform::MacOS,
+            SnapshotCoreGenData {
+                profiles: vec![profile.clone()],
+                subs: vec![voya_core::SubItem {
+                    id: "sub".to_string(),
+                    pre_socks_port: Some(20_809),
+                    ..voya_core::SubItem::default()
+                }],
+                ..SnapshotCoreGenData::default()
+            },
+        );
+
+        let split = CoreConfigContextBuilder::new(&env).build_all(&config, &profile);
+        assert!(
+            split.pre_socks_result.is_some() && !split.main_result.context.is_tun_enabled,
+            "build_all alone would hand the provider a config with no tun inbound"
+        );
+
+        let contexts = runtime_config_contexts(&env, &config, &profile, TargetOs::Macos);
+
+        assert!(contexts.pre_socks_result.is_none());
+        assert!(contexts.main_result.context.is_tun_enabled);
     }
 
     #[tokio::test]

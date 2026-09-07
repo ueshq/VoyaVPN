@@ -2,11 +2,12 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LogLevel, LogLineEvent } from "@/ipc/bindings";
+import type { LogLevel } from "@/ipc/bindings";
+import type { StoredLogLine } from "@/ipc/runtime-event-store";
 
 import { LogsPanel } from "./logs-panel";
 
-type LogsState = { clearLogs: () => void; logLines: LogLineEvent[] };
+type LogsState = { clearLogs: () => void; logLines: StoredLogLine[] };
 
 const storeMock = vi.hoisted(() => {
   const state: LogsState = {
@@ -20,8 +21,12 @@ const storeMock = vi.hoisted(() => {
 
 vi.mock("@/ipc", () => ({ useRuntimeEventStore: storeMock }));
 
-function line(id: number, level: LogLevel, text: string): LogLineEvent {
-  return { id, level, line: text };
+// 2026-06-01T08:09:10 local time; the panel renders the store's receipt stamp,
+// not a render-time clock read.
+const RECEIVED_AT = new Date(2026, 5, 1, 8, 9, 10).getTime();
+
+function line(id: number, level: LogLevel, text: string, receivedAt = RECEIVED_AT): StoredLogLine {
+  return { id, level, line: text, receivedAt };
 }
 
 beforeEach(() => {
@@ -53,6 +58,19 @@ describe("LogsPanel", () => {
     for (const row of rows) {
       expect(within(row).getByText(/^\d{2}:\d{2}:\d{2}$/)).toBeInTheDocument();
     }
+  });
+
+  it("shows each line's receipt time rather than one shared panel-open time", () => {
+    storeMock.state.logLines = [
+      line(1, "info", "buffered while the panel was hidden", new Date(2026, 5, 1, 8, 9, 10).getTime()),
+      line(2, "info", "arrived a minute later", new Date(2026, 5, 1, 8, 10, 30).getTime()),
+    ];
+
+    render(<LogsPanel />);
+
+    const [first, second] = screen.getAllByTestId("log-line");
+    expect(within(first!).getByText("08:09:10")).toBeInTheDocument();
+    expect(within(second!).getByText("08:10:30")).toBeInTheDocument();
   });
 
   it("filters lines by search text", async () => {

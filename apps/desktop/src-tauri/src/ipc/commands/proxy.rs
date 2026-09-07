@@ -6,9 +6,11 @@ pub async fn proxy_list_groups(
     state: tauri::State<'_, AppState>,
 ) -> Result<ProxyGroupsSnapshot, AppError> {
     let config = current_config(&state)?;
+    let clash_api = current_clash_api_access(&state).await;
 
-    ProxyRuntimeManager::new()
-        .groups(&config)
+    state
+        .proxy_runtime()
+        .groups(&config, &clash_api)
         .await
         .map_err(proxy_runtime_error)
 }
@@ -26,9 +28,11 @@ pub async fn proxy_test_delay(
         AppError::ProxyRuntime,
     )?;
     let config = current_config(&state)?;
+    let clash_api = current_clash_api_access(&state).await;
 
-    ProxyRuntimeManager::new()
-        .test_delay(&config, node_names)
+    state
+        .proxy_runtime()
+        .test_delay(&config, &clash_api, node_names)
         .await
         .map_err(proxy_runtime_error)
 }
@@ -54,8 +58,10 @@ pub async fn proxy_select_node<R: tauri::Runtime>(
         AppError::ProxyRuntime,
     )?;
     let config = current_config(&state)?;
-    let snapshot = ProxyRuntimeManager::new()
-        .select_node(&config, &group_name, &node_name)
+    let clash_api = current_clash_api_access(&state).await;
+    let snapshot = state
+        .proxy_runtime()
+        .select_node(&config, &clash_api, &group_name, &node_name)
         .await
         .map_err(proxy_runtime_error)?;
 
@@ -69,10 +75,11 @@ pub async fn proxy_select_node<R: tauri::Runtime>(
 pub async fn proxy_list_connections(
     state: tauri::State<'_, AppState>,
 ) -> Result<ProxyConnectionsSnapshot, AppError> {
-    let config = current_config(&state)?;
+    let clash_api = current_clash_api_access(&state).await;
 
-    ProxyRuntimeManager::new()
-        .connections(&config)
+    state
+        .proxy_runtime()
+        .connections(&clash_api)
         .await
         .map_err(proxy_runtime_error)
 }
@@ -90,9 +97,10 @@ pub async fn proxy_close_connection<R: tauri::Runtime>(
         IPC_ID_MAX_CHARS,
         AppError::ProxyRuntime,
     )?;
-    let config = current_config(&state)?;
-    let snapshot = ProxyRuntimeManager::new()
-        .close_connection(&config, connection_id.as_deref())
+    let clash_api = current_clash_api_access(&state).await;
+    let snapshot = state
+        .proxy_runtime()
+        .close_connection(&clash_api, connection_id.as_deref())
         .await
         .map_err(proxy_runtime_error)?;
 
@@ -121,8 +129,10 @@ pub async fn proxy_set_traffic_mode<R: tauri::Runtime>(
     }
     let config = commit_config_mutation(mutation).await?;
     if changed && mode != TrafficMode::Unchanged {
-        if let Err(error) = ProxyRuntimeManager::new()
-            .set_traffic_mode(&config, mode)
+        let clash_api = current_clash_api_access(&state).await;
+        if let Err(error) = state
+            .proxy_runtime()
+            .set_traffic_mode(&clash_api, mode)
             .await
         {
             report_post_commit_error(
@@ -159,10 +169,11 @@ pub async fn proxy_reload_config<R: tauri::Runtime>(
         IPC_PATH_MAX_CHARS,
         AppError::ProxyRuntime,
     )?;
-    let config = current_config(&state)?;
+    let clash_api = current_clash_api_access(&state).await;
 
-    ProxyRuntimeManager::new()
-        .reload_config(&config, path.as_deref())
+    state
+        .proxy_runtime()
+        .reload_config(&clash_api, path.as_deref())
         .await
         .map_err(proxy_runtime_error)?;
     emit_proxy_runtime_invalidation(&app, "proxy-config-reloaded")?;
@@ -176,19 +187,10 @@ pub async fn proxy_start_monitor(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<ProxyMonitorStatus, AppError> {
-    let config = match current_config(&state) {
-        Ok(config) => config,
-        Err(error) => {
-            emit_proxy_monitor_status(
-                &app,
-                &ProxyMonitorStatus::failed("Proxy monitor failed to read current config"),
-            );
-            return Err(error);
-        }
-    };
+    let clash_api = current_clash_api_access(&state).await;
 
     match state.proxy_monitor_controller().start(
-        &config,
+        &clash_api,
         std::sync::Arc::new(crate::TauriProxyRuntimeEventSink { app: app.clone() }),
     ) {
         Ok(status) => {

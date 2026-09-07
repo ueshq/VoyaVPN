@@ -12,6 +12,7 @@ serde_json.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tracing.workspace = true
 voya-core.workspace = true
 voya-contracts.workspace = true
 

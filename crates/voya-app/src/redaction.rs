@@ -62,9 +62,13 @@ pub fn redact_url_userinfo(value: &str) -> String {
 
         let authority_start = scheme_end + 3;
         let authority_end = find_url_authority_end(bytes, authority_start);
+        // The *last* '@' inside the authority terminates the userinfo: an
+        // unescaped '@' is legal in a password and Go's `net/url` (what sing-box
+        // echoes) splits the same way. Taking the first one would copy the tail
+        // of the password through verbatim.
         let userinfo_end = bytes[authority_start..authority_end]
             .iter()
-            .position(|byte| *byte == b'@')
+            .rposition(|byte| *byte == b'@')
             .map(|offset| authority_start + offset);
         let Some(userinfo_end) = userinfo_end else {
             search_from = authority_end;
@@ -214,6 +218,16 @@ mod tests {
         let line = "subscription MySub has no URL configured";
 
         assert_eq!(redact_urls(line), line);
+    }
+
+    /// An unescaped '@' inside the password used to terminate the userinfo
+    /// early, leaking everything after it into the log stream.
+    #[test]
+    fn redaction_removes_credentials_containing_an_at_sign() {
+        let redacted = redact_url_userinfo("dial socks5://alice:p@ssw0rd@127.0.0.1:1080 now");
+
+        assert_eq!(redacted, "dial socks5://<redacted>@127.0.0.1:1080 now");
+        assert!(!redacted.contains("ssw0rd"));
     }
 
     #[test]

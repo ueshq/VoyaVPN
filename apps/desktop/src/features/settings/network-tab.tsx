@@ -6,10 +6,21 @@ import { Separator } from "@voya/ui/components/separator";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { PerAppProxyDialog } from "@/features/routing/per-app-proxy-dialog";
 
-import { CheckboxField, NumberField, TextField } from "./runtime-fields";
+import { CheckboxField, NumberField, SelectField, TextField } from "./runtime-fields";
 import { SettingsCheckboxGroup, SettingsGroup, SettingsRow } from "./settings-form";
 import { TunDiagnosticsButton } from "./tun-diagnostics-button";
 import type { AppSettingsController } from "./use-app-settings";
+
+// Both are closed sets in sing-box, and neither is validated on save: an unknown
+// stack only fails when the core is next started, and an unknown ICMP policy is
+// silently coerced to "rule". Free text could therefore change behaviour with no
+// feedback at all, so the UI offers exactly the accepted values.
+const TUN_STACKS = ["system", "gvisor", "mixed"];
+const TUN_ICMP_ROUTING = ["rule", "direct", "unreachable", "drop", "reply"];
+// What the generator falls back to when the stored value is empty; showing it
+// keeps the control honest about what the core will actually use.
+const DEFAULT_TUN_STACK = "gvisor";
+const DEFAULT_TUN_ICMP_ROUTING = "rule";
 
 export function NetworkTab({ controller }: { controller: AppSettingsController }) {
   const { t } = useI18n();
@@ -45,9 +56,21 @@ export function NetworkTab({ controller }: { controller: AppSettingsController }
           <CheckboxField checked={settings.network.tun.strictRoute} label={t("settings.network.tunStrictRoute")} onChange={(strictRoute) => patchTun({ strictRoute })} />
           <CheckboxField checked={settings.network.tun.ipv6Enabled} label={t("settings.network.enableIpv6Address")} onChange={(ipv6Enabled) => patchTun({ ipv6Enabled })} />
         </SettingsCheckboxGroup>
-        <TextField id="rt-tun-stack" label={t("settings.network.tunStack")} onChange={(stack) => patchTun({ stack })} value={settings.network.tun.stack} />
+        <SelectField
+          id="rt-tun-stack"
+          label={t("settings.network.tunStack")}
+          onChange={(stack) => patchTun({ stack })}
+          options={TUN_STACKS}
+          value={settings.network.tun.stack || DEFAULT_TUN_STACK}
+        />
         <NumberField id="rt-tun-mtu" label={t("settings.network.mtu")} onChange={(mtu) => patchTun({ mtu: mtu ?? 1500 })} value={settings.network.tun.mtu} />
-        <TextField id="rt-tun-icmp-routing" label={t("settings.network.icmpRoutingPolicy")} onChange={(icmpRouting) => patchTun({ icmpRouting })} value={settings.network.tun.icmpRouting} />
+        <SelectField
+          id="rt-tun-icmp-routing"
+          label={t("settings.network.icmpRoutingPolicy")}
+          onChange={(icmpRouting) => patchTun({ icmpRouting })}
+          options={TUN_ICMP_ROUTING}
+          value={settings.network.tun.icmpRouting || DEFAULT_TUN_ICMP_ROUTING}
+        />
         <TunDiagnosticsButton />
       </SettingsGroup>
 

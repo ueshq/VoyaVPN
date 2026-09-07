@@ -1,0 +1,21 @@
+[
+  {
+    "type": "vmess",
+    "tag": "proxy",
+    "server": "bind.example",
+    "server_port": 443,
+    "uuid": "00000000-0000-0000-0000-000000000041",
+    "security": "auto",
+    "alter_id": 0,
+    "bind_interface": "eth0",
+    "tls": {
+      "enabled": true,
+      "server_name": "bind.example",
+      "insecure": false
+    }
+  },
+  {
+    "type": "direct",
+    "tag": "direct"
+  }
+]

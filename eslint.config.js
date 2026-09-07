@@ -64,6 +64,33 @@ export default tseslint.config(
     },
   },
   {
+    // The type-aware tier. `projectService` above already builds the full
+    // TypeScript program for every .ts/.tsx file, so these rules cost nothing
+    // extra — and they are the only check for the failure mode an IPC-heavy app
+    // actually has: a dropped `commands.*()` / `mutateAsync()` promise, or an
+    // async handler passed straight to `onClick`/`onSubmit`. The ~34
+    // hand-written `void somePromise()` statements in apps/desktop/src show the
+    // team was already policing this by hand.
+    //
+    // `no-unnecessary-condition`, `require-await`, `no-unnecessary-type-assertion`
+    // and `consistent-type-imports` are deliberately *not* enabled: measured on
+    // this tree they report 100 / 25 / 18 / 5 findings, which is a codemod, not
+    // a gate. `switch-exhaustiveness-check` runs with
+    // `considerDefaultExhaustiveForUnions` so a switch that already has a
+    // `default:` arm is accepted, while a bare switch over an `AppError` or
+    // event union must list every member.
+    files: ["apps/*/src/**/*.{ts,tsx}", "packages/**/*.{ts,tsx}", "apps/desktop/e2e/**/*.ts"],
+    rules: {
+      "@typescript-eslint/await-thenable": "error",
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": "error",
+      "@typescript-eslint/switch-exhaustiveness-check": [
+        "error",
+        { considerDefaultExhaustiveForUnions: true },
+      ],
+    },
+  },
+  {
     files: ["apps/desktop/src/ipc/bindings.ts"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",

@@ -107,6 +107,22 @@ describe("typed IPC command facade", () => {
     }
   });
 
+  // 100% coverage on this module proves every wrapper is reachable, not that it
+  // forwards its arguments: several wrappers take multiple same-typed positional
+  // parameters (or defaulted ones) that tsc cannot tell apart, so a transposition
+  // would pass the loop above untouched.
+  it.each(forwardingCases())(
+    "forwards %s to the generated binding positionally",
+    async (name, args, expected) => {
+      commandMocks[name].mockResolvedValueOnce({ data: null, status: "ok" });
+      const wrapper = ipc[name] as (...wrapperArgs: unknown[]) => Promise<unknown>;
+
+      await wrapper(...args);
+
+      expect(commandMocks[name]).toHaveBeenCalledWith(...expected);
+    },
+  );
+
   it.each(appErrors())("preserves and formats the $kind backend error", async ({ error, message }) => {
     commandMocks.loadUiPreferences.mockResolvedValueOnce({ error, status: "error" });
 
@@ -118,6 +134,50 @@ describe("typed IPC command facade", () => {
     });
   });
 });
+
+type WrapperName = (typeof wrapperNames)[number];
+
+/** `[wrapper, call arguments, arguments the generated binding must receive]`. */
+function forwardingCases(): Array<[WrapperName, unknown[], unknown[]]> {
+  const rule = { id: "rule-1", remarks: "Managed" };
+  const templateSelection = { geo: true };
+
+  return [
+    // Defaulted parameters have to survive an argument-less call.
+    ["listProfiles", [], [null, null]],
+    ["listProfiles", ["sub-1", "tokyo"], ["sub-1", "tokyo"]],
+    ["listGroupChildCandidates", [], [null, null]],
+    ["listGroupChildCandidates", ["index-1", "tok"], ["index-1", "tok"]],
+    ["dedupeProfiles", [], [null, null]],
+    ["dedupeProfiles", ["sub-1", true], ["sub-1", true]],
+    ["proxyTestDelay", [], [[]]],
+    ["proxyCloseConnection", [], [null]],
+    ["proxyReloadConfig", [], [null]],
+    ["updateSubscriptions", [], [null, true, null]],
+    ["updateSubscriptions", ["sub-1", false, "http://proxy.test"], ["sub-1", false, "http://proxy.test"]],
+    ["importProfilesFromText", ["vmess://link"], ["vmess://link", null]],
+    ["importConfigTemplate", [templateSelection], [templateSelection, true, null]],
+    ["setConnectionMode", ["vpn"], ["vpn", null]],
+    // Same-typed positional parameters: a transposition here is invisible to tsc.
+    ["moveProfile", ["sub-1", "index-1", "up"], ["sub-1", "index-1", "up", null]],
+    ["moveProfile", ["sub-1", "index-1", "position", 3], ["sub-1", "index-1", "position", 3]],
+    ["sortProfiles", ["sub-1", "remarks", false], ["sub-1", "remarks", false]],
+    ["moveRoutingRule", ["routing-1", "rule-1", "top"], ["routing-1", "rule-1", "top", null]],
+    ["moveRoutingRule", ["routing-1", "rule-1", "position", 2], ["routing-1", "rule-1", "position", 2]],
+    ["deleteRoutingRules", ["routing-1", ["rule-1", "rule-2"]], ["routing-1", ["rule-1", "rule-2"]]],
+    ["saveRoutingRule", ["routing-1", rule], ["routing-1", rule]],
+    ["proxySelectNode", ["Proxy", "Tokyo"], ["Proxy", "Tokyo"]],
+    ["setActiveProfile", ["index-1"], ["index-1"]],
+    ["setActiveRouting", ["routing-1"], ["routing-1"]],
+    ["deleteProfiles", [["index-1"]], [["index-1"]]],
+    ["deleteSubscriptions", [["sub-1"]], [["sub-1"]]],
+    ["deleteRoutings", [["routing-1"]], [["routing-1"]]],
+    ["installCoreSeed", ["singBox"], ["singBox"]],
+    ["setWindowAcrylic", [true], [true]],
+    ["generateQrCode", ["vmess://link"], ["vmess://link"]],
+    ["calculateCertificateSha256", ["-----BEGIN"], ["-----BEGIN"]],
+  ];
+}
 
 function appErrors(): Array<{ error: AppError; kind: AppError["kind"]; message: string }> {
   const stringKinds = [

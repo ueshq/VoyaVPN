@@ -652,3 +652,6 @@ pub const fn move_action_from_contract(action: MoveAction) -> CoreMoveAction {
         MoveAction::Position => CoreMoveAction::Position,
     }
 }
+
+#[cfg(test)]
+mod tests;

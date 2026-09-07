@@ -30,7 +30,16 @@
     "dedupeProfilesTitle": "Supprimer les profils en double ?",
     "deleteProfilesConfirm": "Delete",
     "deleteProfilesDescription": "{{count}} selected profile(s) will be permanently deleted. This action cannot be undone.",
-    "deleteProfilesTitle": "Delete profiles?"
+    "deleteProfilesTitle": "Delete profiles?",
+    "deleteRoutingConfirm": "Supprimer",
+    "deleteRoutingDescription": "« {{name}} » et ses {{count}} règle(s) seront définitivement supprimés. Cette action est irréversible.",
+    "deleteRoutingRuleConfirm": "Supprimer",
+    "deleteRoutingRuleDescription": "La règle de routage sélectionnée sera définitivement supprimée. Cette action est irréversible.",
+    "deleteRoutingRuleTitle": "Supprimer la règle ?",
+    "deleteRoutingTitle": "Supprimer le profil de routage ?",
+    "deleteSubscriptionConfirm": "Supprimer",
+    "deleteSubscriptionDescription": "« {{name}} » et tous les profils importés depuis cet abonnement seront définitivement supprimés. Cette action est irréversible.",
+    "deleteSubscriptionTitle": "Supprimer l’abonnement ?"
   },
   "home": {
     "aria": "Accueil de connexion",
@@ -101,6 +110,24 @@
     "hotkeyKey": "Hotkey key",
     "hotkeyKeyPlaceholder": "Appuyez sur une touche",
     "hotkeyShowWindow": "Show window",
+    "keyName": {
+      "backspace": "Retour arrière",
+      "delete": "Suppr",
+      "down": "Bas",
+      "end": "Fin",
+      "enter": "Entrée",
+      "escape": "Échap",
+      "home": "Origine",
+      "insert": "Inser",
+      "left": "Gauche",
+      "pageDown": "Page suiv.",
+      "pageUp": "Page préc.",
+      "right": "Droite",
+      "space": "Espace",
+      "tab": "Tab",
+      "unknown": "Touche {{keyCode}}",
+      "up": "Haut"
+    },
     "loading": "Loading",
     "routeTemplateSource": "Source du modèle de routage",
     "runtimeCore": "Core",
@@ -136,6 +163,7 @@
       "chainMarker": "Chain",
       "chooseChildren": "Choose children",
       "chooseDescription": "Choose servers, policy groups, or proxy chains for the current group.",
+      "draftName": "Groupe brouillon",
       "filterChildren": "Filter child profiles",
       "groupFallback": "Group",
       "groupMarker": "Group",
@@ -302,7 +330,17 @@
         "clipboard": "Import from clipboard",
         "clipboardEmpty": "Clipboard is empty.",
         "clipboardUnavailable": "Clipboard text read is unavailable in this WebView.",
-        "discardedNodeOverrides": "Discarded {{count}} node-level override(s); global settings will be used."
+        "discardedNodeOverrides": "Discarded {{count}} node-level override(s); global settings will be used.",
+        "summary": {
+          "deduped": "{{count}} doublon(s) ignoré(s) dans les données.",
+          "failed": "{{count}} n'ont pas pu être analysés.",
+          "filtered": "{{count}} filtré(s).",
+          "imported": "{{count}} profil(s) importé(s).",
+          "removedDuplicates": "{{count}} doublon(s) supprimé(s).",
+          "skipped": "{{count}} ignoré(s).",
+          "target": "Cible : {{target}}.",
+          "updated": "{{count}} mis à jour."
+        }
       },
       "importDialog": {
         "description": "Import share links, subscription URLs, or JSON payloads.",
@@ -353,7 +391,6 @@
       "speedtest": {
         "buttonTitle": "{{label}} speedtest",
         "cancelTitle": "Cancel speedtest",
-        "fast": "Fast",
         "mixed": "Mixed",
         "more": "More speed tests",
         "real": "Real",
@@ -376,7 +413,14 @@
         "rows": "{{rows}} rows",
         "subscriptions": "Subscriptions"
       },
-      "untitled": "Untitled"
+      "untitled": "Untitled",
+      "validation": {
+        "addressRequired": "l'adresse est obligatoire",
+        "configSourceRequired": "un chemin de configuration ou une source JSON est obligatoire",
+        "credentialRequired": "un mot de passe ou un ID est obligatoire",
+        "remarksRequired": "les remarques sont obligatoires",
+        "uuidRequired": "l'UUID est obligatoire"
+      }
     },
     "proxyConnections": {
       "columns": {
@@ -498,6 +542,8 @@
     "node": "Node",
     "process": "Process",
     "reloadConfigFailed": "Échec du rechargement de la configuration du cœur",
+    "requiresCore": "Connectez-vous d’abord",
+    "requiresCoreDescription": "Les groupes de proxy sont disponibles une fois le cœur en cours d’exécution.",
     "selectNodeFailed": "Échec du changement de nœud",
     "source": "Source",
     "testAll": "Tout tester",
@@ -512,6 +558,7 @@
     "viewTabsAria": "Vues des connexions"
   },
   "qr": {
+    "clipboardImageMissing": "Le presse-papiers ne contient pas d'image.",
     "clipboardImageUnavailable": "Clipboard image read is unavailable in this WebView.",
     "clipboardUnavailable": "Clipboard text read is unavailable in this WebView.",
     "content": "Content",
@@ -521,6 +568,11 @@
     "scanClipboardImage": "Clipboard image",
     "scanImage": "Scan image",
     "scanScreen": "Screen",
+    "screenCaptureUnavailable": "La capture d'écran est indisponible dans ce WebView.",
+    "screenFrameUnavailable": "La capture d'écran n'a produit aucune image vidéo.",
+    "screenFrameUnencodable": "Impossible d'encoder l'image d'écran capturée.",
+    "screenFrameUnreadable": "Impossible de lire l'image d'écran capturée.",
+    "screenStreamUnavailable": "Impossible de charger le flux d'écran capturé.",
     "screenUnavailable": "Screen QR scanning is unavailable on this platform or permission state."
   },
   "settings": {
@@ -662,6 +714,21 @@
     "title": "Check Updates",
     "updateNow": "Update now",
     "waiting": "Waiting"
+  },
+  "validation": {
+    "dnsSettings": "La validation des paramètres DNS a échoué",
+    "expectedIps": "Les IP attendues doivent être séparées par des virgules, sans espaces.",
+    "hostsLine": "Chaque ligne hosts doit contenir un domaine et au moins une réponse.",
+    "invalid": "Cette valeur n’est pas valide.",
+    "listItem": "Les éléments de la liste ne peuvent pas être vides.",
+    "network": "Le réseau doit être tcp, udp ou tcp,udp.",
+    "port": "Le port doit être une liste de ports ou de plages séparée par des virgules.",
+    "portRange": "Les ports doivent être compris entre 0 et 65535 et les plages doivent être croissantes.",
+    "remarksLength": "Les remarques ne peuvent pas dépasser 256 caractères.",
+    "urlCredentials": "L’URL ne doit pas contenir d’identifiants.",
+    "urlHost": "L’URL doit contenir un hôte.",
+    "urlHttps": "L’URL doit utiliser https://.",
+    "urlInvalid": "L’URL n’est pas valide."
   },
   "window": {
     "close": "Fermer",

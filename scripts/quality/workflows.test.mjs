@@ -179,6 +179,57 @@ describe("GitHub Actions workflows", () => {
     expect(unpinned).toEqual([]);
   });
 
+  // Without a build cache every job recompiled the whole Tauri workspace
+  // (webkit2gtk, tao/wry, sqlx, tokio, specta) from scratch on every run.
+  it("caches the cargo build directory in every CI job that compiles the workspace", () => {
+    const compilesWorkspace = /cargo (?:check|clippy|test|build)\b|tauri:build|check:rust:|check:desktop:smoke/;
+    const uncached = [];
+
+    for (const [job, body] of workflowJobs(readWorkflow("ci.yml"))) {
+      const text = body.join("\n");
+      if (!compilesWorkspace.test(text)) {
+        continue;
+      }
+      if (!/uses:\s*Swatinem\/rust-cache@[0-9a-f]{40}\b/.test(text)) {
+        uncached.push(`ci.yml:${job}`);
+      }
+    }
+
+    expect(uncached).toEqual([]);
+  });
+
+  // `cargo install` builds these tools from source; the cache turns a pinned
+  // version into a no-op. Swatinem/rust-cache deliberately skips ~/.cargo/bin,
+  // so each tool needs its own actions/cache entry.
+  it("caches the binary of every cargo-installed tool", () => {
+    const missing = [];
+
+    for (const file of workflowFiles()) {
+      for (const [job, body] of workflowJobs(readWorkflow(file))) {
+        const text = body.join("\n");
+        // Comments mention `cargo install` too; only real steps count.
+        const commands = body.filter((line) => !line.trim().startsWith("#")).join("\n");
+        for (const match of commands.matchAll(/cargo install (\S+)/gu)) {
+          const tool = match[1];
+          if (!text.includes(`~/.cargo/bin/${tool}`) || !/uses:\s*actions\/cache@[0-9a-f]{40}\b/.test(text)) {
+            missing.push(`${file}:${job}:${tool}`);
+          }
+        }
+      }
+    }
+
+    expect(missing).toEqual([]);
+  });
+
+  it("documents why the release package matrix opts out of the Rust build cache", () => {
+    const packageJob = workflowJobs(readWorkflow("release.yml")).get("package");
+
+    expect(packageJob).toBeDefined();
+    const text = packageJob.join("\n");
+    expect(text).not.toContain("Swatinem/rust-cache@");
+    expect(text).toContain("deliberately has no Swatinem/rust-cache step");
+  });
+
   it("lints Rust on every platform-check runner so OS-gated code is covered", () => {
     const platformCheck = workflowJobs(readWorkflow("ci.yml")).get("platform-check");
     expect(platformCheck).toBeDefined();

@@ -51,6 +51,14 @@
       ]
     },
     {
+      "outbound": "direct",
+      "clash_mode": "Direct"
+    },
+    {
+      "outbound": "proxy",
+      "clash_mode": "Global"
+    },
+    {
       "outbound": "proxy",
       "domain_suffix": [
         "anthropic.com",
@@ -81,14 +89,6 @@
         "mistral.ai",
         "huggingface.co"
       ]
-    },
-    {
-      "outbound": "direct",
-      "clash_mode": "Direct"
-    },
-    {
-      "outbound": "proxy",
-      "clash_mode": "Global"
     }
   ],
   "final": "proxy"

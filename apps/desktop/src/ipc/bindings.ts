@@ -7,6 +7,14 @@ import * as __TAURI_EVENT from "@tauri-apps/api/event";
 export const commands = {
 	loadUiPreferences: () => typedError<AppearanceSettings, AppError>(__TAURI_INVOKE("load_ui_preferences")),
 	loadAppSettings: () => typedError<AppSettingsV1, AppError>(__TAURI_INVOKE("load_app_settings")),
+	/**
+	 *  Thin adapter over `voya_app::settings_flow`.
+	 * 
+	 *  Validation, the pre-commit OS side effects, the commit and both rollback
+	 *  paths are the transaction in voya-app, where they are unit-tested; the only
+	 *  things left here are turning `AppError`s back out of it and dispatching the
+	 *  runtime action it selected.
+	 */
 	saveAppSettings: (settings: AppSettingsV1) => typedError<AppSettingsV1, AppError>(__TAURI_INVOKE("save_app_settings", { settings })),
 	generateQrCode: (content: string) => typedError<QrCodeImage, AppError>(__TAURI_INVOKE("generate_qr_code", { content })),
 	scanScreenQr: () => typedError<QrScanResult, AppError>(__TAURI_INVOKE("scan_screen_qr")),

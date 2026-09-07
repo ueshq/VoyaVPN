@@ -42,6 +42,7 @@ const TECHNICAL_TEXT_ALLOWLIST = new Set([
   "IP",
   "IPv6",
   "JSON",
+  "KCP",
   "KB/s",
   "MB/s",
   "Mbps",
@@ -52,6 +53,8 @@ const TECHNICAL_TEXT_ALLOWLIST = new Set([
   "Policy Group",
   "Proxy Chain",
   "QR",
+  "QUIC",
+  "REALITY",
   "SOCKS",
   "Shadowsocks",
   "TCP",
@@ -67,6 +70,7 @@ const TECHNICAL_TEXT_ALLOWLIST = new Set([
   "VoyaVPN",
   "WebSocket",
   "WireGuard",
+  "XHTTP",
   "macOS PacketTunnel",
   "gRPC",
   "sing-box",
@@ -81,7 +85,11 @@ const TECHNICAL_TEXT_PATTERNS = [
   /^(?:https?|socks5):\/\//u,
   /^(?:aes|chacha20|xchacha20|2022-blake3)-[a-z0-9-]+$/iu,
   /^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$/u,
-  /^[A-Z][A-Z0-9_.+/-]{1,15}$/u,
+  // Upper-case *identifiers*, not upper-case words: the token must carry a
+  // digit or separator (SOCKS5, HTTP/2, AES-256, X25519). The previous
+  // `^[A-Z][A-Z0-9_.+/-]{1,15}$` accepted any short shout-case word, so
+  // `OK`, `SAVE`, `CANCEL`, `ERROR` and `RETRY` all passed as "technical".
+  /^[A-Z][A-Z0-9]*[0-9_.+/-][A-Z0-9_.+/-]*$/u,
 ];
 
 export function inspectI18nSource({ path, source, knownKeys = new Set() }) {
@@ -113,6 +121,15 @@ export function inspectI18nSource({ path, source, knownKeys = new Set() }) {
       inspectVisibleExpression(node.whenFalse);
     } else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
       inspectVisibleExpression(node.left);
+      inspectVisibleExpression(node.right);
+    } else if (isRenderedFallback(node)) {
+      // `{value || "Unknown"}` and `{value ?? "Unknown"}` render either side, so
+      // both operands are user-visible; `{loading && "Loading"}` renders only
+      // the right one. Without these the fallback string is an untranslated
+      // literal that still reaches the screen in every locale.
+      if (node.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken) {
+        inspectVisibleExpression(node.left);
+      }
       inspectVisibleExpression(node.right);
     } else if (ts.isTemplateExpression(node)) {
       recordText(node.head, node.head.text);
@@ -173,9 +190,29 @@ export function inspectI18nSource({ path, source, knownKeys = new Set() }) {
   return { dynamicKeys, hardcodedText, invalidKeys };
 }
 
+/**
+ * Hardcoded strings that predate the `||` / `??` / `&&` fallback rule and live
+ * in files this tooling batch may not edit. Matched on repository-relative path
+ * plus the exact normalized text, so an entry cannot suppress anything else.
+ * A stale entry is reported by `i18n.mjs`, never failed, so the owning feature
+ * can delete it whenever the locale key lands.
+ *
+ * Empty on purpose: keep it that way. The last entry covered `keyCodeLabel`'s
+ * `Key ${keyCode}` fallback in general-tab.tsx, which now resolves
+ * `options.keyName.*` like every other named keycap.
+ */
+export const KNOWN_HARDCODED_TEXT = [];
+
+export function isKnownHardcodedText(relativePath, text, allowlist = KNOWN_HARDCODED_TEXT) {
+  return allowlist.some((entry) => entry.path === relativePath && entry.text === text);
+}
+
 export function isUserVisibleText(value) {
   const text = normalizeText(value);
-  if (text.length === 0 || !/[A-Za-z\u3400-\u9fff]/u.test(text)) {
+  // \p{L} rather than Latin+CJK only: Russian, Persian, Hungarian and French
+  // are shipped locales, so hardcoded Cyrillic or Persian text must be caught
+  // by the same rule that catches hardcoded English.
+  if (text.length === 0 || !/\p{L}/u.test(text)) {
     return false;
   }
   if (TECHNICAL_TEXT_ALLOWLIST.has(text)) {
@@ -199,6 +236,16 @@ function isUiHelperReturn(node) {
     current = current.parent;
   }
   return false;
+}
+
+const RENDERED_FALLBACK_OPERATORS = new Set([
+  ts.SyntaxKind.BarBarToken,
+  ts.SyntaxKind.QuestionQuestionToken,
+  ts.SyntaxKind.AmpersandAmpersandToken,
+]);
+
+function isRenderedFallback(node) {
+  return ts.isBinaryExpression(node) && RENDERED_FALLBACK_OPERATORS.has(node.operatorToken.kind);
 }
 
 function isTextLiteral(node) {

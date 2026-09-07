@@ -185,6 +185,15 @@ pub struct ProcessOutput {
     pub stderr: String,
 }
 
+/// Supervises OS child processes.
+///
+/// **Every method blocks the calling thread**, some of them for seconds:
+/// `run_oneshot` waits for the child to exit (the sudo-kill helper sleeps for
+/// at least a second, and an elevation prompt only returns once the user
+/// answers it) and `stop` waits for the child to be signalled and reaped, up to
+/// `CHILD_STOP_TIMEOUT`. Async callers must therefore go through
+/// `tokio::task::spawn_blocking` or a dedicated OS thread, and a Tauri command
+/// reaching them must be `async` or it freezes the window from the UI thread.
 pub trait ProcessRunner: Send + Sync {
     fn spawn(&self, request: ProcessSpawn) -> Result<ProcessHandle, ProcessError>;
     fn run_oneshot(&self, request: ProcessSpawn) -> Result<ProcessOutput, ProcessError>;
@@ -402,7 +411,7 @@ impl ProcessRunner for StdProcessRunner {
             return Ok(());
         };
 
-        child.stop()
+        child.stop(handle.id())
     }
 
     fn set_exit_handler(&self, handler: Option<Arc<dyn ProcessExitHandler>>) {
@@ -425,7 +434,7 @@ impl Drop for StdProcessRunner {
         };
 
         for (pid, child) in children {
-            if let Err(error) = child.stop() {
+            if let Err(error) = child.stop(pid) {
                 tracing::warn!(
                     pid,
                     ?error,
@@ -441,19 +450,36 @@ struct ChildControl {
 }
 
 impl ChildControl {
-    fn stop(&self) -> Result<(), ProcessError> {
+    fn stop(&self, process_id: u32) -> Result<(), ProcessError> {
+        self.stop_with_timeout(process_id, CHILD_STOP_TIMEOUT)
+    }
+
+    /// Asks the reaper thread to signal and wait for the child.
+    ///
+    /// The wait is bounded: callers reach this from a tokio worker and from the
+    /// Tauri main thread, and an unbounded `recv()` would pin either of them for
+    /// as long as the child refuses to die.
+    fn stop_with_timeout(&self, process_id: u32, timeout: Duration) -> Result<(), ProcessError> {
         let (reply_tx, reply_rx) = mpsc::channel();
         if self
             .stop_tx
             .send(ChildCommand::Stop { reply: reply_tx })
             .is_err()
         {
+            // The reaper already returned, which it only does after the child
+            // has exited or been killed.
             return Ok(());
         }
 
-        match reply_rx.recv() {
+        match reply_rx.recv_timeout(timeout) {
             Ok(result) => result,
-            Err(_) => Ok(()),
+            // Same reasoning: the reaper dropped the reply channel on its way
+            // out, so the child is no longer running.
+            Err(mpsc::RecvTimeoutError::Disconnected) => Ok(()),
+            Err(mpsc::RecvTimeoutError::Timeout) => Err(ProcessError::StopTimeout {
+                process_id,
+                timeout_ms: timeout.as_millis(),
+            }),
         }
     }
 }
@@ -465,6 +491,14 @@ enum ChildCommand {
 }
 
 const CHILD_REAPER_POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+/// Upper bound on [`ProcessRunner::stop`].
+///
+/// The reaper picks the stop request up within one poll interval and then only
+/// has to `kill()` and `wait()`, so a healthy stop finishes in milliseconds.
+/// The budget exists so a child stuck in an uninterruptible state surfaces as
+/// [`ProcessError::StopTimeout`] instead of blocking the caller forever.
+const CHILD_STOP_TIMEOUT: Duration = Duration::from_secs(10);
 
 fn spawn_child_reaper(
     handle: ProcessHandle,
@@ -646,7 +680,10 @@ mod scripts;
 pub use scripts::write_generated_scripts;
 
 mod job;
-pub use job::{NoopProcessJobFactory, PlatformProcessJobFactory, ProcessJob, ProcessJobFactory};
+pub use job::{
+    JobAssignedRunner, NoopProcessJobFactory, PlatformProcessJobFactory, ProcessJob,
+    ProcessJobFactory,
+};
 
 #[derive(Debug, Error)]
 pub enum ProcessError {
@@ -663,6 +700,8 @@ pub enum ProcessError {
     Wait(io::Error),
     #[error("failed to stop process: {0}")]
     Stop(io::Error),
+    #[error("timed out after {timeout_ms}ms waiting for process {process_id} to stop")]
+    StopTimeout { process_id: u32, timeout_ms: u128 },
     #[error("failed to write generated script {path}: {source}")]
     WriteGeneratedScript { path: PathBuf, source: io::Error },
     #[error("generated script path {path} is outside managed directory {directory}")]
@@ -986,6 +1025,48 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn process_stop_gives_up_instead_of_blocking_when_the_reaper_never_replies() {
+        // A reaper wedged in `wait()` keeps the receiver alive without ever
+        // answering; before the bounded wait this pinned the caller forever.
+        let (stop_tx, stop_rx) = mpsc::channel::<ChildCommand>();
+        let control = ChildControl { stop_tx };
+
+        let started = std::time::Instant::now();
+        let error = control
+            .stop_with_timeout(4242, Duration::from_millis(50))
+            .expect_err("an unanswered stop must time out");
+
+        assert!(
+            matches!(
+                error,
+                ProcessError::StopTimeout {
+                    process_id: 4242,
+                    timeout_ms: 50
+                }
+            ),
+            "unexpected error: {error}"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "stop must return as soon as the budget is spent"
+        );
+        assert!(
+            matches!(stop_rx.try_recv(), Ok(ChildCommand::Stop { .. })),
+            "the stop request must still have reached the reaper"
+        );
+    }
+
+    #[test]
+    fn process_stop_succeeds_when_the_reaper_already_exited() {
+        let (stop_tx, stop_rx) = mpsc::channel::<ChildCommand>();
+        drop(stop_rx);
+
+        ChildControl { stop_tx }
+            .stop_with_timeout(4242, Duration::from_millis(50))
+            .expect("a reaped child must not report a stop failure");
     }
 
     #[test]

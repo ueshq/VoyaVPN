@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -293,8 +294,9 @@ impl<'db> RoutingManager<'db> {
         let existing = self.database.routings().list().await?;
         if let Some(prefix) = prepared.version_prefix.as_deref() {
             if let Some(existing_item) = existing
-                .into_iter()
+                .iter()
                 .find(|item| item.remarks.starts_with(prefix))
+                .cloned()
             {
                 let mut active = existing_item;
                 if !active.enabled {
@@ -324,9 +326,30 @@ impl<'db> RoutingManager<'db> {
         let mut max_sort = self.database.routings().max_sort().await?;
         let mut routing_ids = Vec::with_capacity(prepared.items.len());
         let mut active_routing_id = None;
+        let mut claimed_ids = BTreeSet::new();
+        let mut inserted = 0_usize;
         for (index, item) in prepared.items.iter_mut().enumerate() {
-            max_sort += DEFAULT_ROUTING_SORT_STEP;
-            item.sort = max_sort;
+            // "Import template" is a repeatable action, so re-applying the same
+            // template must refresh the routings it produced last time instead
+            // of appending another identical set. A self-contained bundle
+            // carries no id, so `remarks` is the only stable identity it has;
+            // each existing routing is claimed at most once so a template with
+            // repeated remarks still yields one row per item.
+            let previous = existing
+                .iter()
+                .find(|candidate| {
+                    candidate.remarks == item.remarks && !claimed_ids.contains(&candidate.id)
+                })
+                .map(|candidate| (candidate.id.clone(), candidate.sort));
+            if let Some((previous_id, previous_sort)) = previous {
+                claimed_ids.insert(previous_id.clone());
+                item.id = previous_id;
+                item.sort = previous_sort;
+            } else {
+                inserted += 1;
+                max_sort += DEFAULT_ROUTING_SORT_STEP;
+                item.sort = max_sort;
+            }
             normalize_routing_item(item);
             self.database.routings().upsert(item).await?;
             if index == 0 {
@@ -343,7 +366,7 @@ impl<'db> RoutingManager<'db> {
         Ok(RoutingTemplateApplyResult {
             routing_ids,
             active_routing_id,
-            reused_existing_routing: false,
+            reused_existing_routing: inserted == 0,
         })
     }
 
@@ -783,6 +806,71 @@ mod tests {
                 .remarks,
             "V4-Bypass mainland (Whitelist)"
         );
+    }
+
+    /// Re-importing an external template is a repeatable button, and the
+    /// external path has no `V4-` version prefix to reuse, so without
+    /// remarks-keyed replacement every click appended another full copy.
+    #[tokio::test]
+    async fn routing_manager_replaces_external_template_routings_on_reimport() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("routing manager test operation should succeed");
+        let manager = RoutingManager::new(&database);
+        let mut config = AppConfig::default();
+
+        let first = manager
+            .apply_prepared_config_template(&mut config, external_template("direct"))
+            .await
+            .expect("routing manager test operation should succeed");
+        let second = manager
+            .apply_prepared_config_template(&mut config, external_template("proxy"))
+            .await
+            .expect("routing manager test operation should succeed");
+
+        assert!(!first.reused_existing_routing);
+        assert!(second.reused_existing_routing);
+        assert_eq!(second.routing_ids, first.routing_ids);
+        let routings = database
+            .routings()
+            .list()
+            .await
+            .expect("routing manager test operation should succeed");
+        assert_eq!(routings.len(), 2, "{routings:?}");
+        assert_eq!(
+            routings
+                .iter()
+                .map(|item| item.remarks.as_str())
+                .collect::<Vec<_>>(),
+            vec!["External A", "External B"]
+        );
+        assert!(routings
+            .iter()
+            .all(|item| item.rule_set[0].outbound_tag.as_deref() == Some("proxy")));
+        assert_eq!(
+            config.routing_basic_item.routing_index_id,
+            first.routing_ids[0]
+        );
+    }
+
+    fn external_template(outbound_tag: &str) -> PreparedRoutingTemplate {
+        PreparedRoutingTemplate {
+            version_prefix: None,
+            items: ["External A", "External B"]
+                .into_iter()
+                .map(|remarks| RoutingItem {
+                    remarks: remarks.to_string(),
+                    rule_set: vec![RulesItem {
+                        remarks: Some(remarks.to_string()),
+                        outbound_tag: Some(outbound_tag.to_string()),
+                        domain: Some(vec!["full:external.example.com".to_string()]),
+                        rule_type: Some(RuleType::Routing),
+                        ..RulesItem::default()
+                    }],
+                    ..RoutingItem::default()
+                })
+                .collect(),
+        }
     }
 
     #[test]

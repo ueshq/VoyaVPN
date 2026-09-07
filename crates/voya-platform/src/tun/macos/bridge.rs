@@ -14,6 +14,19 @@ mod macos_packet_tunnel_bridge {
 
     use super::{NativeTunError, TunBackend};
 
+    // These declarations mirror the `voya_macos_packet_tunnel_*` definitions in
+    // `crates/voya-platform/native/macos_packet_tunnel_bridge.m`, which this
+    // crate's own `build.rs` compiles and statically links, so the two sides
+    // cannot drift apart at run time: `char *` is `*mut c_char`, `const char *`
+    // is `*const c_char`, `int64_t` is `i64`, and no declaration is variadic.
+    // The Objective-C side copies each borrowed argument into an `NSString`
+    // before returning and never retains a Rust pointer or calls back into
+    // Rust, so arguments only have to stay valid for the duration of the call.
+    // Every string return is a `strdup` buffer whose ownership moves to the
+    // caller, is never aliased, and is released exactly once by
+    // `voya_macos_packet_tunnel_free` (a plain `free`, the matching allocator).
+    // SAFETY: calling these functions therefore only requires the argument
+    // lifetime and return ownership contract described above.
     unsafe extern "C" {
         fn voya_macos_packet_tunnel_status() -> *mut c_char;
         fn voya_macos_packet_tunnel_start(

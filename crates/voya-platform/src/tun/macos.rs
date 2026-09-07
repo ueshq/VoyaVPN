@@ -18,15 +18,80 @@ use bridge::{macos_packet_tunnel_bridge_start, macos_packet_tunnel_bridge_stop};
 /// the user approves or removes the extension, so a short cache is enough.
 const SYSTEM_EXTENSION_STATE_TTL: Duration = Duration::from_secs(30);
 
-pub(super) fn macos_packet_tunnel_status() -> NativeTunStatus {
-    if let Err(status) = require_bundled_component(
-        macos_packet_tunnel_component_path(),
-        "PacketTunnel extension is not bundled in this build",
-    ) {
-        return status;
+/// The untyped string protocol the ObjC bridge answers with. Mirrored from
+/// `crates/voya-platform/native/macos_packet_tunnel_bridge.m`; the tests below
+/// assert the two sides still agree, because nothing else does.
+const BRIDGE_OK: &str = "ok";
+const BRIDGE_ERROR_PREFIX: &str = "error:";
+const BRIDGE_PERMISSION_REQUIRED_PREFIX: &str = "permissionRequired:";
+
+const MISSING_COMPONENT_MESSAGE: &str = "PacketTunnel extension is not bundled in this build";
+const SYSTEM_EXTENSION_APPROVAL_MESSAGE: &str =
+    "Approve the VoyaVPN PacketTunnel system extension in System Settings, then enable TUN again.";
+const PACKAGING_MODE_SYSTEM_EXTENSION: &str = "systemExtension";
+
+/// The OS-observable facts the macOS status decision table reads.
+///
+/// Each probe spawns a process or crosses the ObjC bridge, so they stay behind
+/// a seam and behind method calls rather than an eager snapshot: the table must
+/// keep short-circuiting them, and the fail-closed ordering ADR-0005 depends on
+/// is then table-testable on every CI platform instead of only on macOS.
+trait PacketTunnelProbe {
+    fn component_present(&self) -> bool;
+    fn packaging_error(&self) -> Option<String>;
+    fn packaging_mode(&self) -> Option<&'static str>;
+    fn system_extension_activated(&self) -> bool;
+    fn bridge_status(&self) -> Result<String, NativeTunError>;
+    /// Bridge last-error and provider status-file context, joined onto `base`
+    /// for the terminal (Stopped/Error) states.
+    fn status_message(&self, base: Option<String>, state: NativeTunProviderState) -> String;
+}
+
+struct PlatformPacketTunnelProbe;
+
+impl PacketTunnelProbe for PlatformPacketTunnelProbe {
+    fn component_present(&self) -> bool {
+        macos_packet_tunnel_component_path().is_some_and(|path| path.exists())
     }
 
-    if let Some(message) = macos_packet_tunnel_packaging_error() {
+    fn packaging_error(&self) -> Option<String> {
+        macos_packet_tunnel_packaging_error()
+    }
+
+    fn packaging_mode(&self) -> Option<&'static str> {
+        macos_packet_tunnel_packaging_mode()
+    }
+
+    fn system_extension_activated(&self) -> bool {
+        macos_system_extension_is_activated()
+    }
+
+    fn bridge_status(&self) -> Result<String, NativeTunError> {
+        macos_packet_tunnel_bridge_status()
+    }
+
+    fn status_message(&self, base: Option<String>, state: NativeTunProviderState) -> String {
+        macos_packet_tunnel_status_message(base, state)
+    }
+}
+
+pub(super) fn macos_packet_tunnel_status() -> NativeTunStatus {
+    macos_packet_tunnel_status_from(&PlatformPacketTunnelProbe)
+}
+
+/// Decides the macOS provider state. The branch order is the fail-closed
+/// contract: a missing or mispackaged component and an unapproved system
+/// extension are reported before the bridge is consulted, so the UI explains
+/// what to fix instead of showing a generic error.
+fn macos_packet_tunnel_status_from(probe: &dyn PacketTunnelProbe) -> NativeTunStatus {
+    if !probe.component_present() {
+        return NativeTunStatus::missing_component(
+            TunBackend::MacosPacketTunnel,
+            MISSING_COMPONENT_MESSAGE,
+        );
+    }
+
+    if let Some(message) = probe.packaging_error() {
         return NativeTunStatus {
             backend: TunBackend::MacosPacketTunnel,
             provider_state: NativeTunProviderState::Error,
@@ -35,62 +100,93 @@ pub(super) fn macos_packet_tunnel_status() -> NativeTunStatus {
         };
     }
 
-    if macos_packet_tunnel_packaging_mode() == Some("systemExtension")
-        && !macos_system_extension_is_activated()
+    if probe.packaging_mode() == Some(PACKAGING_MODE_SYSTEM_EXTENSION)
+        && !probe.system_extension_activated()
     {
         return NativeTunStatus {
             backend: TunBackend::MacosPacketTunnel,
             provider_state: NativeTunProviderState::PermissionRequired,
             component_ready: true,
-            message: Some(
-                "Approve the VoyaVPN PacketTunnel system extension in System Settings, then enable TUN again."
-                    .to_string(),
-            ),
+            message: Some(SYSTEM_EXTENSION_APPROVAL_MESSAGE.to_string()),
         };
     }
 
-    match macos_packet_tunnel_bridge_status() {
-        Ok(output) if output.starts_with("error:") => NativeTunStatus {
-            backend: TunBackend::MacosPacketTunnel,
-            provider_state: NativeTunProviderState::Error,
-            component_ready: true,
-            message: Some(macos_packet_tunnel_status_message(
-                Some(output.trim_start_matches("error:").to_string()),
-                NativeTunProviderState::Error,
-            )),
-        },
-        Ok(output) => {
-            let provider_state = parse_macos_provider_state(&output);
-            NativeTunStatus {
-                backend: TunBackend::MacosPacketTunnel,
-                provider_state,
-                component_ready: true,
-                message: macos_packet_tunnel_terminal_message(provider_state),
-            }
-        }
-        Err(error) => NativeTunStatus {
-            backend: TunBackend::MacosPacketTunnel,
-            provider_state: NativeTunProviderState::Error,
-            component_ready: true,
-            message: Some(macos_packet_tunnel_status_message(
-                Some(error.to_string()),
-                NativeTunProviderState::Error,
-            )),
-        },
+    let (provider_state, base) = match probe.bridge_status() {
+        Ok(output) if output.starts_with(BRIDGE_ERROR_PREFIX) => (
+            NativeTunProviderState::Error,
+            Some(strip_bridge_error_prefix(&output).to_string()),
+        ),
+        Ok(output) => (parse_macos_provider_state(&output), None),
+        Err(error) => (NativeTunProviderState::Error, Some(error.to_string())),
+    };
+
+    NativeTunStatus {
+        backend: TunBackend::MacosPacketTunnel,
+        provider_state,
+        component_ready: true,
+        message: macos_packet_tunnel_terminal_message(probe, provider_state, base),
     }
 }
 
-fn macos_packet_tunnel_terminal_message(provider_state: NativeTunProviderState) -> Option<String> {
-    if matches!(
-        provider_state,
-        NativeTunProviderState::Stopped | NativeTunProviderState::Error
-    ) {
-        let message = macos_packet_tunnel_status_message(None, provider_state);
-        if !message.is_empty() {
-            return Some(message);
-        }
+/// Stopped and Error carry every message the probe can offer; the running and
+/// starting states stay quiet unless the bridge itself reported something.
+fn macos_packet_tunnel_terminal_message(
+    probe: &dyn PacketTunnelProbe,
+    provider_state: NativeTunProviderState,
+    base: Option<String>,
+) -> Option<String> {
+    if base.is_none()
+        && !matches!(
+            provider_state,
+            NativeTunProviderState::Stopped | NativeTunProviderState::Error
+        )
+    {
+        return None;
     }
-    None
+
+    let message = probe.status_message(base, provider_state);
+    (!message.is_empty()).then_some(message)
+}
+
+fn strip_bridge_error_prefix(output: &str) -> &str {
+    output.strip_prefix(BRIDGE_ERROR_PREFIX).unwrap_or(output)
+}
+
+/// Parses the bridge's `start` reply.
+///
+/// Kept free of `cfg` because the only caller is macOS-only: without this the
+/// contract with the ObjC side never compiles, let alone runs, in Linux CI.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn parse_bridge_start_output(output: &str) -> Result<(), NativeTunError> {
+    if output == BRIDGE_OK {
+        return Ok(());
+    }
+    if let Some(message) = output.strip_prefix(BRIDGE_PERMISSION_REQUIRED_PREFIX) {
+        return Err(NativeTunError::PermissionRequired {
+            backend: TunBackend::MacosPacketTunnel,
+            message: message.to_string(),
+        });
+    }
+
+    Err(bridge_command_failed("start macOS PacketTunnel", output))
+}
+
+/// Parses the bridge's `stop` reply; see [`parse_bridge_start_output`].
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn parse_bridge_stop_output(output: &str) -> Result<(), NativeTunError> {
+    if output == BRIDGE_OK {
+        return Ok(());
+    }
+
+    Err(bridge_command_failed("stop macOS PacketTunnel", output))
+}
+
+fn bridge_command_failed(action: &'static str, output: &str) -> NativeTunError {
+    NativeTunError::CommandFailed {
+        action,
+        status_code: None,
+        output: strip_bridge_error_prefix(output).to_string(),
+    }
 }
 
 /// Status must stay cheap: it runs on every `tun_status` IPC, on every TUN
@@ -103,19 +199,26 @@ fn macos_packet_tunnel_status_message(
     base: Option<String>,
     provider_state: NativeTunProviderState,
 ) -> String {
-    let mut messages = Vec::new();
-    push_unique_message(&mut messages, base);
+    let mut messages = vec![base];
     if matches!(
         provider_state,
         NativeTunProviderState::Stopped | NativeTunProviderState::Error
     ) {
-        push_unique_message(&mut messages, macos_packet_tunnel_last_error());
-        if let Some(status) = macos_packet_tunnel_status_file() {
-            push_unique_message(&mut messages, status.last_error);
-        }
+        messages.push(macos_packet_tunnel_last_error());
+        messages.push(macos_packet_tunnel_status_file().and_then(|status| status.last_error));
     }
 
-    messages.join("; ")
+    join_unique_messages(messages)
+}
+
+/// Joins the message sources with `; `, dropping blanks and repeats: the bridge
+/// last error and the provider status file usually carry the same text.
+fn join_unique_messages(messages: impl IntoIterator<Item = Option<String>>) -> String {
+    let mut unique = Vec::new();
+    for message in messages {
+        push_unique_message(&mut unique, message);
+    }
+    unique.join("; ")
 }
 
 /// Reads the provider-written status JSON from the App Group container. This is
@@ -289,25 +392,10 @@ fn macos_packet_tunnel_container_path() -> Option<PathBuf> {
 
 fn normalize_bridge_optional_output(output: String) -> Option<String> {
     let value = output.trim();
-    if value.is_empty() || value.starts_with("error:") {
+    if value.is_empty() || value.starts_with(BRIDGE_ERROR_PREFIX) {
         return None;
     }
     Some(value.to_string())
-}
-
-/// Resolve a bundled macOS PacketTunnel component path, returning a
-/// `missing_component` status when it is absent from the build.
-fn require_bundled_component(
-    path: Option<PathBuf>,
-    missing_message: &'static str,
-) -> Result<PathBuf, NativeTunStatus> {
-    match path {
-        Some(path) if path.exists() => Ok(path),
-        _ => Err(NativeTunStatus::missing_component(
-            TunBackend::MacosPacketTunnel,
-            missing_message,
-        )),
-    }
 }
 
 pub(super) fn parse_macos_provider_state(output: &str) -> NativeTunProviderState {
@@ -560,17 +648,9 @@ pub(super) fn start_macos_packet_tunnel(
         backend: TunBackend::MacosPacketTunnel,
         message,
     };
-    require_bundled_component(
-        macos_packet_tunnel_component_path(),
-        "PacketTunnel extension is not bundled in this build",
-    )
-    .map_err(|status| {
-        component_missing(
-            status
-                .message
-                .unwrap_or_else(|| "PacketTunnel extension is missing".to_string()),
-        )
-    })?;
+    if !PlatformPacketTunnelProbe.component_present() {
+        return Err(component_missing(MISSING_COMPONENT_MESSAGE.to_string()));
+    }
     if let Some(message) = macos_packet_tunnel_packaging_error() {
         return Err(component_missing(message));
     }
@@ -637,21 +717,7 @@ fn start_macos_packet_tunnel_with_bridge(
         request.active_profile_id.as_deref(),
         MACOS_PACKET_TUNNEL_START_TIMEOUT_MS,
     )?;
-    if output == "ok" {
-        return Ok(());
-    }
-    if let Some(message) = output.strip_prefix("permissionRequired:") {
-        return Err(NativeTunError::PermissionRequired {
-            backend: TunBackend::MacosPacketTunnel,
-            message: message.to_string(),
-        });
-    }
-
-    Err(NativeTunError::CommandFailed {
-        action: "start macOS PacketTunnel",
-        status_code: None,
-        output: output.trim_start_matches("error:").to_string(),
-    })
+    parse_bridge_start_output(&output)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -670,19 +736,422 @@ pub(super) fn stop_macos_packet_tunnel() -> Result<(), NativeTunError> {
 
 #[cfg(target_os = "macos")]
 fn stop_macos_packet_tunnel_with_bridge() -> Result<(), NativeTunError> {
-    let output = macos_packet_tunnel_bridge_stop()?;
-    if output == "ok" {
-        return Ok(());
-    }
-
-    Err(NativeTunError::CommandFailed {
-        action: "stop macOS PacketTunnel",
-        status_code: None,
-        output: output.trim_start_matches("error:").to_string(),
-    })
+    parse_bridge_stop_output(&macos_packet_tunnel_bridge_stop()?)
 }
 
 #[cfg(not(target_os = "macos"))]
 fn stop_macos_packet_tunnel_with_bridge() -> Result<(), NativeTunError> {
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+
+    use super::*;
+
+    /// The ObjC bridge source, so a rename on either side of the untyped string
+    /// protocol fails a test instead of silently degrading the UI.
+    const BRIDGE_SOURCE: &str = include_str!("../../native/macos_packet_tunnel_bridge.m");
+
+    #[derive(Clone, Copy)]
+    enum FakeBridgeStatus {
+        Output(&'static str),
+        Failure(&'static str),
+    }
+
+    struct FakeProbe {
+        component_present: bool,
+        packaging_error: Option<&'static str>,
+        packaging_mode: Option<&'static str>,
+        system_extension_activated: bool,
+        bridge_status: FakeBridgeStatus,
+        terminal_context: Option<&'static str>,
+        calls: RefCell<Vec<&'static str>>,
+    }
+
+    impl FakeProbe {
+        fn ready(bridge_status: FakeBridgeStatus) -> Self {
+            Self {
+                component_present: true,
+                packaging_error: None,
+                packaging_mode: Some("appExtension"),
+                system_extension_activated: false,
+                bridge_status,
+                terminal_context: None,
+                calls: RefCell::new(Vec::new()),
+            }
+        }
+
+        fn record(&self, call: &'static str) {
+            self.calls.borrow_mut().push(call);
+        }
+
+        fn calls(&self) -> Vec<&'static str> {
+            self.calls.borrow().clone()
+        }
+    }
+
+    impl PacketTunnelProbe for FakeProbe {
+        fn component_present(&self) -> bool {
+            self.record("component_present");
+            self.component_present
+        }
+
+        fn packaging_error(&self) -> Option<String> {
+            self.record("packaging_error");
+            self.packaging_error.map(str::to_string)
+        }
+
+        fn packaging_mode(&self) -> Option<&'static str> {
+            self.record("packaging_mode");
+            self.packaging_mode
+        }
+
+        fn system_extension_activated(&self) -> bool {
+            self.record("system_extension_activated");
+            self.system_extension_activated
+        }
+
+        fn bridge_status(&self) -> Result<String, NativeTunError> {
+            self.record("bridge_status");
+            match self.bridge_status {
+                FakeBridgeStatus::Output(output) => Ok(output.to_string()),
+                FakeBridgeStatus::Failure(message) => Err(NativeTunError::CommandFailed {
+                    action: "query macOS PacketTunnel status",
+                    status_code: None,
+                    output: message.to_string(),
+                }),
+            }
+        }
+
+        fn status_message(&self, base: Option<String>, state: NativeTunProviderState) -> String {
+            self.record("status_message");
+            let mut messages = vec![base];
+            if matches!(
+                state,
+                NativeTunProviderState::Stopped | NativeTunProviderState::Error
+            ) {
+                messages.push(self.terminal_context.map(str::to_string));
+            }
+            join_unique_messages(messages)
+        }
+    }
+
+    #[test]
+    fn macos_status_reports_a_missing_component_before_probing_anything_else() {
+        let probe = FakeProbe {
+            component_present: false,
+            ..FakeProbe::ready(FakeBridgeStatus::Output("running"))
+        };
+
+        let status = macos_packet_tunnel_status_from(&probe);
+
+        assert_eq!(
+            status.provider_state,
+            NativeTunProviderState::MissingComponent
+        );
+        assert!(!status.component_ready);
+        assert_eq!(status.message.as_deref(), Some(MISSING_COMPONENT_MESSAGE));
+        assert_eq!(
+            probe.calls(),
+            ["component_present"],
+            "a missing component must not reach the bridge"
+        );
+    }
+
+    #[test]
+    fn macos_status_reports_a_packaging_error_before_probing_the_bridge() {
+        let probe = FakeProbe {
+            packaging_error: Some("re-run pnpm native:macos:tunnel"),
+            ..FakeProbe::ready(FakeBridgeStatus::Output("running"))
+        };
+
+        let status = macos_packet_tunnel_status_from(&probe);
+
+        assert_eq!(status.provider_state, NativeTunProviderState::Error);
+        assert!(
+            !status.component_ready,
+            "a mispackaged extension is not usable"
+        );
+        assert_eq!(
+            status.message.as_deref(),
+            Some("re-run pnpm native:macos:tunnel")
+        );
+        assert_eq!(probe.calls(), ["component_present", "packaging_error"]);
+    }
+
+    #[test]
+    fn macos_status_asks_for_approval_before_probing_the_bridge() {
+        let probe = FakeProbe {
+            packaging_mode: Some(PACKAGING_MODE_SYSTEM_EXTENSION),
+            system_extension_activated: false,
+            ..FakeProbe::ready(FakeBridgeStatus::Output("running"))
+        };
+
+        let status = macos_packet_tunnel_status_from(&probe);
+
+        assert_eq!(
+            status.provider_state,
+            NativeTunProviderState::PermissionRequired,
+            "an unapproved system extension must not be reported as a generic error"
+        );
+        assert!(status.component_ready);
+        assert_eq!(
+            status.message.as_deref(),
+            Some(SYSTEM_EXTENSION_APPROVAL_MESSAGE)
+        );
+        assert!(
+            !probe.calls().contains(&"bridge_status"),
+            "an unapproved system extension must not reach the bridge"
+        );
+    }
+
+    #[test]
+    fn macos_status_consults_the_bridge_once_the_system_extension_is_approved() {
+        let probe = FakeProbe {
+            packaging_mode: Some(PACKAGING_MODE_SYSTEM_EXTENSION),
+            system_extension_activated: true,
+            ..FakeProbe::ready(FakeBridgeStatus::Output("running"))
+        };
+
+        let status = macos_packet_tunnel_status_from(&probe);
+
+        assert_eq!(status.provider_state, NativeTunProviderState::Running);
+        assert_eq!(status.message, None, "a healthy tunnel needs no message");
+        assert!(probe.calls().contains(&"system_extension_activated"));
+        assert!(probe.calls().contains(&"bridge_status"));
+    }
+
+    #[test]
+    fn macos_status_maps_bridge_output_to_provider_states() {
+        for (output, expected) in [
+            ("running", NativeTunProviderState::Running),
+            ("starting", NativeTunProviderState::Starting),
+            ("stopped", NativeTunProviderState::Stopped),
+            (
+                "permissionRequired",
+                NativeTunProviderState::PermissionRequired,
+            ),
+            ("gibberish", NativeTunProviderState::Error),
+        ] {
+            let status = macos_packet_tunnel_status_from(&FakeProbe::ready(
+                FakeBridgeStatus::Output(output),
+            ));
+
+            assert_eq!(
+                status.provider_state, expected,
+                "unexpected state for bridge output {output:?}"
+            );
+            assert!(status.component_ready);
+        }
+    }
+
+    #[test]
+    fn macos_status_unwraps_an_error_reply_and_appends_terminal_context() {
+        let probe = FakeProbe {
+            terminal_context: Some("provider stopped: sing-box runtime unavailable"),
+            ..FakeProbe::ready(FakeBridgeStatus::Output(
+                "error:VoyaVPN PacketTunnel session is unavailable.",
+            ))
+        };
+
+        let status = macos_packet_tunnel_status_from(&probe);
+
+        assert_eq!(status.provider_state, NativeTunProviderState::Error);
+        assert_eq!(
+            status.message.as_deref(),
+            Some(
+                "VoyaVPN PacketTunnel session is unavailable.; provider stopped: sing-box runtime unavailable"
+            ),
+            "the error: marker is stripped and the provider context is joined on"
+        );
+    }
+
+    #[test]
+    fn macos_status_surfaces_a_failed_bridge_call_as_an_error() {
+        let probe = FakeProbe::ready(FakeBridgeStatus::Failure("bridge returned a null response"));
+
+        let status = macos_packet_tunnel_status_from(&probe);
+
+        assert_eq!(status.provider_state, NativeTunProviderState::Error);
+        assert!(status
+            .message
+            .as_deref()
+            .is_some_and(|message| message.contains("bridge returned a null response")));
+    }
+
+    #[test]
+    fn macos_status_explains_a_stopped_tunnel_with_provider_context() {
+        let probe = FakeProbe {
+            terminal_context: Some("failed: sing-box runtime unavailable"),
+            ..FakeProbe::ready(FakeBridgeStatus::Output("stopped"))
+        };
+
+        let status = macos_packet_tunnel_status_from(&probe);
+
+        assert_eq!(status.provider_state, NativeTunProviderState::Stopped);
+        assert_eq!(
+            status.message.as_deref(),
+            Some("failed: sing-box runtime unavailable")
+        );
+    }
+
+    #[test]
+    fn macos_status_leaves_a_stopped_tunnel_without_a_message_when_nothing_explains_it() {
+        let status =
+            macos_packet_tunnel_status_from(&FakeProbe::ready(FakeBridgeStatus::Output("stopped")));
+
+        assert_eq!(status.provider_state, NativeTunProviderState::Stopped);
+        assert_eq!(status.message, None);
+    }
+
+    #[test]
+    fn macos_bridge_start_reply_is_parsed_into_typed_outcomes() {
+        parse_bridge_start_output("ok").expect("ok must succeed");
+
+        let permission = parse_bridge_start_output(
+            "permissionRequired:Approve the VoyaVPN PacketTunnel system extension in System Settings, then enable TUN again.",
+        )
+        .expect_err("permissionRequired must fail");
+        assert!(
+            matches!(
+                &permission,
+                NativeTunError::PermissionRequired {
+                    backend: TunBackend::MacosPacketTunnel,
+                    message,
+                } if message.starts_with("Approve the VoyaVPN PacketTunnel")
+            ),
+            "unexpected error: {permission}"
+        );
+
+        let failure =
+            parse_bridge_start_output("error:VoyaVPN PacketTunnel manager is unavailable.")
+                .expect_err("error must fail");
+        assert!(
+            matches!(
+                &failure,
+                NativeTunError::CommandFailed {
+                    action: "start macOS PacketTunnel",
+                    status_code: None,
+                    output,
+                } if output == "VoyaVPN PacketTunnel manager is unavailable."
+            ),
+            "unexpected error: {failure}"
+        );
+
+        let unexpected =
+            parse_bridge_start_output("running").expect_err("unexpected output must fail closed");
+        assert!(
+            matches!(
+                &unexpected,
+                NativeTunError::CommandFailed { output, .. } if output == "running"
+            ),
+            "unexpected error: {unexpected}"
+        );
+    }
+
+    #[test]
+    fn macos_bridge_stop_reply_is_parsed_into_typed_outcomes() {
+        parse_bridge_stop_output("ok").expect("ok must succeed");
+
+        let failure = parse_bridge_stop_output("error:no manager").expect_err("error must fail");
+        assert!(
+            matches!(
+                &failure,
+                NativeTunError::CommandFailed {
+                    action: "stop macOS PacketTunnel",
+                    output,
+                    ..
+                } if output == "no manager"
+            ),
+            "unexpected error: {failure}"
+        );
+    }
+
+    #[test]
+    fn macos_bridge_string_protocol_matches_the_objective_c_source() {
+        for literal in [
+            BRIDGE_OK,
+            BRIDGE_ERROR_PREFIX,
+            BRIDGE_PERMISSION_REQUIRED_PREFIX,
+        ] {
+            assert!(
+                BRIDGE_SOURCE.contains(&format!("@\"{literal}")),
+                "{literal:?} is not produced by macos_packet_tunnel_bridge.m any more"
+            );
+        }
+
+        for state in ["running", "starting", "stopped", "permissionRequired"] {
+            assert_ne!(
+                parse_macos_provider_state(state),
+                NativeTunProviderState::Error,
+                "the bridge status vocabulary must stay parseable"
+            );
+            assert!(
+                BRIDGE_SOURCE.contains(&format!("@\"{state}\"")),
+                "{state:?} is not produced by macos_packet_tunnel_bridge.m any more"
+            );
+        }
+    }
+
+    #[test]
+    fn macos_bridge_error_prefix_is_stripped_exactly_once() {
+        assert_eq!(strip_bridge_error_prefix("error:boom"), "boom");
+        assert_eq!(strip_bridge_error_prefix("boom"), "boom");
+        assert_eq!(
+            strip_bridge_error_prefix("error:error:boom"),
+            "error:boom",
+            "a message that legitimately mentions error: must survive"
+        );
+    }
+
+    #[test]
+    fn macos_status_messages_are_trimmed_deduplicated_and_joined() {
+        assert_eq!(
+            join_unique_messages([
+                Some("  boom  ".to_string()),
+                Some("boom".to_string()),
+                None,
+                Some("   ".to_string()),
+                Some("later".to_string()),
+            ]),
+            "boom; later"
+        );
+        assert_eq!(join_unique_messages([None, Some(String::new())]), "");
+    }
+
+    #[test]
+    fn macos_push_unique_message_keeps_the_first_occurrence() {
+        let mut messages = vec!["first".to_string()];
+        push_unique_message(&mut messages, Some("first".to_string()));
+        push_unique_message(&mut messages, Some("\tfirst\n".to_string()));
+        push_unique_message(&mut messages, None);
+        push_unique_message(&mut messages, Some(" second ".to_string()));
+
+        assert_eq!(messages, ["first", "second"]);
+    }
+
+    #[test]
+    fn macos_log_tail_keeps_the_last_lines_in_order() {
+        assert_eq!(tail_lines("a\nb\nc\nd", 2), ["c", "d"]);
+        assert_eq!(tail_lines("a\nb", 10), ["a", "b"]);
+        assert!(tail_lines("", 10).is_empty());
+        assert!(tail_lines("a\nb", 0).is_empty());
+    }
+
+    #[test]
+    fn macos_optional_bridge_output_drops_blanks_and_error_replies() {
+        assert_eq!(normalize_bridge_optional_output(String::new()), None);
+        assert_eq!(normalize_bridge_optional_output("  \n".to_string()), None);
+        assert_eq!(
+            normalize_bridge_optional_output("error:no container".to_string()),
+            None,
+            "an error reply is not a container path or a last error"
+        );
+        assert_eq!(
+            normalize_bridge_optional_output("  /Users/afu/Library  ".to_string()),
+            Some("/Users/afu/Library".to_string())
+        );
+    }
 }

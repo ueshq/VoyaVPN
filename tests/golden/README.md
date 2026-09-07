@@ -44,7 +44,7 @@ tests/golden/
 - `summary`: non-empty behavior description.
 - `hotspots`: non-empty tags identifying the parity risks covered by the case.
 - `reference_paths`: non-empty v2rayN-relative source or test paths that justify the reference behavior.
-- `core_acceptance`: per-case boolean metadata. The current optional binary acceptance test is global rather than driven by this field.
+- `core_acceptance`: opts the case into binary acceptance. When it is `true`, `acceptance_configs_for_case()` in `crates/voya-core/src/golden.rs` must return at least one full config for the case, and `sing-box check -c` runs against each of them; the manifest test fails if the entry is missing.
 - `volatile_fields`: JSON Pointer entries to remove from both reference and generated JSON before comparison. Each entry has a `pointer` and a non-empty `reason`.
 
 The two preview fixtures in `groups/` are an exception to the matrix layout. `crates/voya-core/src/groups.rs` loads `mixed_child_policy_group_preview.json` and `proxy_chain_two_three_hop_preview.json` directly with `include_str!`; they are not matrix cases and must not be added to `matrix.json`.
@@ -93,4 +93,4 @@ Golden JSON diffing always runs for every matrix case. Core binary acceptance is
 sing-box check -c <generated-config>
 ```
 
-The runner first uses `VOYA_SINGBOX_BIN` when set, then searches `PATH` for `sing-box` (or `sing-box.exe`). If the binary is unavailable, it prints a skip reason while JSON parity remains authoritative for deterministic checks. The current acceptance test checks one generated config, not each case marked with `core_acceptance`.
+The runner first uses `VOYA_SINGBOX_BIN` when set, then searches `PATH` for `sing-box` (or `sing-box.exe`). If the binary is unavailable, it prints a skip reason while JSON parity remains authoritative for deterministic checks. Every case marked `core_acceptance` is checked, once per config returned by `acceptance_configs_for_case()`.

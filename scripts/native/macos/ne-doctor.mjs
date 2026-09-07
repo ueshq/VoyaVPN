@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { capture, repoRootFromScript, requireDarwin, run } from "../../lib/common.mjs";
+import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, run } from "../../lib/common.mjs";
+import { defaultIsProcessRunning, voyaRuntimeExecutables } from "./local-runtime.mjs";
 import {
   packetTunnelBundleIdentifier as providerBundleId,
   packetTunnelLayout,
@@ -15,6 +16,7 @@ function parseArgs(argv) {
     app: defaultAppBundle,
     dev: false,
     fix: false,
+    yes: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -23,6 +25,8 @@ function parseArgs(argv) {
       options.fix = true;
     } else if (arg === "--dev") {
       options.dev = true;
+    } else if (arg === "--yes" || arg === "-y") {
+      options.yes = true;
     } else if (arg === "--app") {
       const value = argv[index + 1];
       if (!value) {
@@ -48,8 +52,11 @@ Checks macOS PacketTunnel registrations for ${providerBundleId}.
 
 Options:
   --fix        Unregister stale appex entries, refresh the selected app, then re-check.
+               Refuses to run while VoyaVPN is running, or when the selected app
+               has no PacketTunnel provider.
   --app PATH   Legal VoyaVPN.app path. Defaults to /Applications/VoyaVPN.app.
-  --dev        Also allow target/release/bundle/macos/VoyaVPN.app for local release builds.`);
+  --dev        Also allow target/release/bundle/macos/VoyaVPN.app for local release builds.
+  --yes, -y    Confirm removing more than one registration in a single --fix.`);
 }
 
 function throwIfSpawnFailed(result) {
@@ -104,7 +111,13 @@ export function parsePluginkitMatches(output) {
   const matches = [];
   const seen = new Set();
   const escapedId = providerBundleId.replaceAll(".", "\\.");
-  const pathPattern = new RegExp(`((?:/|file:/)[^\\s"']*${escapedId}\\.appex)`, "g");
+  // Bundle paths may contain spaces (`~/My Builds/VoyaVPN.app/...`), so the run
+  // cannot exclude whitespace. Instead the path must start at a delimiter —
+  // line start, whitespace, `=`, a quote, `(` or `,` — and is matched lazily up
+  // to the provider's `.appex`, which keeps several paths on one line separable.
+  // The previous `[^\s"']*` silently truncated a spaced path to its last
+  // segment, and `--fix` then unregistered that nonexistent path.
+  const pathPattern = new RegExp(`(?:^|[\\s="'(,])((?:file:)?/[^"'\\n]*?${escapedId}\\.appex)`, "g");
 
   for (const line of output.split(/\r?\n/)) {
     for (const match of line.matchAll(pathPattern)) {
@@ -312,8 +325,62 @@ function registerLegalApp(appBundle) {
   }
 }
 
-function fix(entries, legalApps) {
+/**
+ * Decides what `--fix` may unregister, before anything is unregistered.
+ *
+ * `fix()` used to unregister every stale entry first and only then call
+ * `registerLegalApp`, which throws when the selected app has no provider. A
+ * mistyped `--app` makes *every* existing registration "not legal" and
+ * therefore stale (classify()), so the machine was left with no PacketTunnel
+ * registration at all before the error surfaced. PlugInKit registration is
+ * machine-global state shared by every VoyaVPN.app on the box, so all three
+ * preconditions are checked up front and nothing is torn down on failure.
+ */
+export function planPacketTunnelFix(
+  entries,
+  { providerPath, providerExists, runningExecutables = [], assumeYes = false } = {},
+) {
+  if (!providerExists) {
+    throw new Error(
+      `Legal PacketTunnel provider is missing: ${providerPath}. `
+        + "Pass --app <path to a built VoyaVPN.app> (add --dev for the repo release bundle); "
+        + "nothing was unregistered.",
+    );
+  }
+
+  if (runningExecutables.length > 0) {
+    throw new Error(
+      `VoyaVPN is still running (${runningExecutables.join(", ")}). `
+        + "Quit VoyaVPN before --fix so registrations are not torn down under a live provider; "
+        + "nothing was unregistered.",
+    );
+  }
+
   const stale = entries.filter((entry) => entry.stale && entry.type === "appex");
+  if (stale.length > 1 && !assumeYes) {
+    throw new Error(
+      `--fix would unregister ${stale.length} PacketTunnel registrations:\n`
+        + stale.map((entry) => `  ${entry.path}`).join("\n")
+        + "\nRe-run with --yes to confirm; nothing was unregistered.",
+    );
+  }
+
+  return stale;
+}
+
+function runningVoyaExecutables(isProcessRunning = defaultIsProcessRunning) {
+  return voyaRuntimeExecutables.filter((executable) => isProcessRunning(executable));
+}
+
+function fix(entries, legalApps, options) {
+  const provider = selectedProviderForApp(legalApps[0]);
+  const stale = planPacketTunnelFix(entries, {
+    providerPath: provider.path,
+    providerExists: existsSync(provider.path),
+    runningExecutables: runningVoyaExecutables(),
+    assumeYes: options.yes,
+  });
+
   for (const entry of stale) {
     console.log(`Unregistering stale PacketTunnel provider: ${entry.path}`);
     unregisterEntry(entry);
@@ -331,7 +398,7 @@ function main() {
 
   if (options.fix) {
     console.log("Applying PlugInKit registration repair...");
-    fix(entries, legalApps);
+    fix(entries, legalApps, options);
     entries = classify(collectPluginkitMatches(), legalApps);
     console.log("");
     console.log("Post-fix report:");
@@ -363,9 +430,11 @@ function main() {
   }
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+if (isCliEntrypoint(import.meta.url)) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }

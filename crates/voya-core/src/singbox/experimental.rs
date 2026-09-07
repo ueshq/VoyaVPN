@@ -3,10 +3,11 @@ use super::*;
 pub(super) fn gen_experimental(config: &mut SingboxConfig, context: &CoreConfigContext) {
     let mut experimental = config.experimental.clone().unwrap_or_default();
     experimental.clash_api = Some(SingboxClashApi {
-        external_controller: Some(format!(
-            "{LOOPBACK}:{}",
-            state_port2(&context.app_config, context.is_tun_enabled)
-        )),
+        // `clash_api_port` is the single source of truth for this process's
+        // controller port: with the Linux pre-socks split the main config keeps
+        // the base api2 port while only the TUN config takes api2 + 1.
+        external_controller: Some(format!("{LOOPBACK}:{}", context.clash_api_port())),
+        secret: nonempty_string(context.clash_api_secret.as_deref()),
         store_selected: None,
     });
 

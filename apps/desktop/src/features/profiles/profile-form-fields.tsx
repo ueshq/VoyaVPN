@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type * as React from "react";
 import { Controller } from "react-hook-form";
 import type { Control, FieldPath, UseFormRegister } from "react-hook-form";
@@ -41,7 +42,11 @@ type TextFieldProps = React.InputHTMLAttributes<HTMLInputElement> & {
 };
 
 export function TextField({ className, error, id, label, ...props }: TextFieldProps) {
-  const inputId = id ?? fieldId(label);
+  // Ids are generated, never derived from the label: a translated label such as
+  // "备注" contains no ASCII word characters, so a slugified id collapsed to the
+  // empty string and broke every label/input association in CJK, ru and fa.
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
   const errorId = `${inputId}-error`;
   const {
     "aria-describedby": ariaDescribedBy,
@@ -99,7 +104,8 @@ export function SelectField({
   options,
   parseValue,
 }: SelectFieldProps) {
-  const inputId = id ?? fieldId(label);
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
   const errorId = `${inputId}-error`;
 
   return (
@@ -164,7 +170,8 @@ type CheckboxFieldProps = {
 };
 
 export function CheckboxField({ className, control, id, label, name }: CheckboxFieldProps) {
-  const inputId = id ?? fieldId(label);
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
 
   return (
     <Controller
@@ -191,10 +198,6 @@ export function CheckboxField({ className, control, id, label, name }: CheckboxF
       )}
     />
   );
-}
-
-function fieldId(label: string) {
-  return label.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replaceAll(/^-|-$/g, "");
 }
 
 const EMPTY_SELECT_VALUE = "__voyavpn_empty__";

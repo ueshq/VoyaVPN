@@ -107,9 +107,12 @@ pub enum MoveAction {
     Position,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MultipleLoad {
+    /// Also the strategy a policy group decodes to when `strategy` is absent,
+    /// matching the fallback the sing-box selector builder already uses.
+    #[default]
     LeastPing,
     Fallback,
     Random,

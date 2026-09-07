@@ -26,10 +26,7 @@ use voya_core::{
 use voya_db::{Database, DbError};
 use voya_net::probe::{tcp_connect_delay, tcp_port_is_open, NetworkProbeError, SocksHttpProbe};
 use voya_platform::{
-    coreinfo::{
-        copy_seed_core_asset, discover_executable, discover_packaged_seed_executable,
-        get_core_info, CoreInfo, CoreInfoError, TargetOs,
-    },
+    coreinfo::{get_core_info, CoreInfoError, TargetOs},
     filesystem,
     paths::{AppPaths, PathError},
     process::{ProcessError, ProcessHandle, ProcessRole, ProcessRunner, ProcessSpawn},
@@ -41,9 +38,6 @@ use crate::runtime::{core_launch_plan, load_runtime_core_gen_env};
 
 const TCPING_TIMEOUT: Duration = Duration::from_secs(5);
 const REALPING_FALLBACK_URL: &str = "https://www.google.com/generate_204";
-const SPEEDTEST_CONFIG_PREFIX: &str = "configTest";
-const SPEEDTEST_READY_TIMEOUT: Duration = Duration::from_secs(3);
-const SPEEDTEST_READY_INTERVAL: Duration = Duration::from_millis(50);
 const SPEEDTEST_BATCH_PAGE_SIZE: usize = 1000;
 const SPEEDTEST_DELAY_INTERVAL: Duration = Duration::from_secs(1);
 const LOOPBACK_ADDR: &str = "127.0.0.1";
@@ -89,6 +83,8 @@ pub enum SpeedtestError {
     InvalidSocksPort(i32),
     #[error("speedtest job lock is poisoned")]
     JobLockPoisoned,
+    #[error("speedtest background task failed: {0}")]
+    BackgroundTask(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -113,6 +109,30 @@ pub struct RealPingProbeResult {
 struct PreparedSpeedtestItem {
     item: ServerTestItem,
     entry: SpeedtestConfigEntry,
+}
+
+/// Outcome of preparing a selection. One unusable profile must not abort the
+/// run, so validation and port-reservation failures travel alongside the items
+/// that are ready to test and are reported as per-item results instead.
+#[derive(Debug, Clone, Default)]
+struct PreparedSpeedtestBatch {
+    prepared: Vec<PreparedSpeedtestItem>,
+    failures: Vec<SpeedtestItemFailure>,
+}
+
+#[derive(Debug, Clone)]
+struct SpeedtestItemFailure {
+    index_id: String,
+    message: String,
+}
+
+impl SpeedtestItemFailure {
+    fn new(index_id: String, message: impl Into<String>) -> Self {
+        Self {
+            index_id,
+            message: message.into(),
+        }
+    }
 }
 
 pub trait SpeedtestProbe: Send + Sync {
@@ -231,7 +251,16 @@ impl SpeedtestProbe for ReqwestSpeedtestProbe {
     }
 }
 
-pub trait SpeedtestCoreSession: Send {}
+pub trait SpeedtestCoreSession: Send {
+    /// Tears the probe core down off the Tokio workers; stopping a child blocks
+    /// until the reaper thread has killed and waited it. `Drop` stays as a
+    /// best-effort fallback for panics and early returns, and is what the
+    /// default implementation falls back to.
+    fn close(self: Box<Self>) -> BoxFuture<'static, ()> {
+        drop(self);
+        Box::pin(async {})
+    }
+}
 
 pub trait SpeedtestCoreBackend: Send + Sync {
     fn start(
@@ -240,126 +269,11 @@ pub trait SpeedtestCoreBackend: Send + Sync {
         entries: Vec<SpeedtestConfigEntry>,
         cancel: CancellationFlag,
     ) -> BoxFuture<'static, Result<Box<dyn SpeedtestCoreSession>>>;
-}
 
-#[derive(Clone)]
-pub struct ProcessSpeedtestCoreBackend {
-    paths: AppPaths,
-    core_seed_resource_dir: Option<PathBuf>,
-    runner: Arc<dyn ProcessRunner>,
-    target_os: TargetOs,
-}
-
-impl ProcessSpeedtestCoreBackend {
-    #[must_use]
-    pub fn new(
-        paths: AppPaths,
-        core_seed_resource_dir: Option<PathBuf>,
-        runner: Arc<dyn ProcessRunner>,
-    ) -> Self {
-        Self {
-            paths,
-            core_seed_resource_dir,
-            runner,
-            target_os: TargetOs::current(),
-        }
-    }
-
-    #[must_use]
-    pub fn with_target_os(mut self, target_os: TargetOs) -> Self {
-        self.target_os = target_os;
-        self
-    }
-}
-
-impl SpeedtestCoreBackend for ProcessSpeedtestCoreBackend {
-    fn start(
-        &self,
-        core_type: CoreType,
-        entries: Vec<SpeedtestConfigEntry>,
-        cancel: CancellationFlag,
-    ) -> BoxFuture<'static, Result<Box<dyn SpeedtestCoreSession>>> {
-        let paths = self.paths.clone();
-        let core_seed_resource_dir = self.core_seed_resource_dir.clone();
-        let runner = Arc::clone(&self.runner);
-        let target_os = self.target_os;
-        Box::pin(async move {
-            check_cancelled(&cancel)?;
-            let config_file_name =
-                format!("{SPEEDTEST_CONFIG_PREFIX}-{}.json", uuid::Uuid::new_v4());
-            let config_path =
-                write_speedtest_config(&paths, &config_file_name, core_type, &entries)?;
-            let mut session = ProcessSpeedtestCoreSession {
-                config_path,
-                handle: None,
-                runner: Arc::clone(&runner),
-            };
-            let core_info =
-                get_core_info(core_type).ok_or(SpeedtestError::MissingCoreInfo(core_type))?;
-            let executable = match packaged_seed_executable(
-                core_seed_resource_dir.as_ref(),
-                core_info,
-                target_os,
-            )? {
-                Some(executable) => executable,
-                None => {
-                    if let Some(seed_dir) = &core_seed_resource_dir {
-                        let _ = copy_seed_core_asset(&paths, seed_dir, core_type)?;
-                    }
-                    discover_executable(&paths, core_info)?
-                }
-            };
-            let launch = core_launch_plan(core_type, executable, &paths, &config_file_name)
-                .ok_or(SpeedtestError::MissingCoreInfo(core_type))?;
-            let spawn = ProcessSpawn::from_core_launch(ProcessRole::Probe, &launch, true)?;
-            let handle = runner.spawn(spawn)?;
-            session.handle = Some(handle);
-            wait_for_speedtest_ports(&entries, &cancel).await?;
-
-            Ok(Box::new(session) as Box<dyn SpeedtestCoreSession>)
-        })
-    }
-}
-
-fn packaged_seed_executable(
-    core_seed_resource_dir: Option<&PathBuf>,
-    core_info: &CoreInfo,
-    target_os: TargetOs,
-) -> Result<Option<PathBuf>> {
-    if target_os != TargetOs::Macos {
-        return Ok(None);
-    }
-
-    let Some(seed_dir) = core_seed_resource_dir else {
-        return Ok(None);
-    };
-
-    discover_packaged_seed_executable(seed_dir, core_info, target_os).map_err(Into::into)
-}
-
-struct ProcessSpeedtestCoreSession {
-    config_path: PathBuf,
-    handle: Option<ProcessHandle>,
-    runner: Arc<dyn ProcessRunner>,
-}
-
-impl SpeedtestCoreSession for ProcessSpeedtestCoreSession {}
-
-impl Drop for ProcessSpeedtestCoreSession {
-    fn drop(&mut self) {
-        if let Some(handle) = self.handle.take() {
-            if let Err(error) = self.runner.stop(&handle) {
-                tracing::warn!(?error, "failed to stop speedtest core process");
-            }
-        }
-        if let Err(error) = filesystem::remove_file_if_exists(&self.config_path) {
-            tracing::warn!(
-                path = %self.config_path.display(),
-                ?error,
-                "failed to remove speedtest config"
-            );
-        }
-    }
+    /// Kills every probe core that is still running. Tauri ends the process
+    /// with `std::process::exit`, so neither `Drop` nor the pending speedtest
+    /// future ever reaps them — the shell has to ask for it explicitly.
+    fn stop_all(&self) {}
 }
 
 #[derive(Clone)]
@@ -371,7 +285,11 @@ pub struct SpeedtestManager {
     active_cancel: Arc<Mutex<Option<CancellationFlag>>>,
 }
 
+mod core_backend;
 mod manager;
+
+pub use core_backend::ProcessSpeedtestCoreBackend;
+
 async fn select_test_items(
     database: &Database,
     config: &AppConfig,
@@ -458,6 +376,11 @@ fn speedtest_page_size(config: &AppConfig, selected_count: usize) -> usize {
     configured.min(selected_count.max(1))
 }
 
+/// Pause between batch pages, in **seconds**. The contract field feeding
+/// `speed_test_delay_interval` is still spelled `delay_interval_ms`, but both
+/// the UI label and this conversion treat it as seconds; the name is a
+/// misnomer, not a unit conversion, and `speedtest_delay_interval_is_seconds`
+/// pins that.
 fn speedtest_delay_interval(config: &AppConfig) -> Duration {
     config
         .speed_test_item
@@ -485,86 +408,6 @@ fn dedicated_concurrency_count(
         mixed_concurrency_count(config, selected_count)
     } else {
         1
-    }
-}
-
-fn find_free_speedtest_port(start: i32, used_ports: &mut HashSet<u16>) -> Result<u16> {
-    let mut port = u16::try_from(start).map_err(|_| SpeedtestError::InvalidSocksPort(start))?;
-    loop {
-        if !used_ports.contains(&port) && local_port_available(port) {
-            used_ports.insert(port);
-            return Ok(port);
-        }
-        if port == u16::MAX {
-            return Err(SpeedtestError::NoAvailablePort(start));
-        }
-        port = port.saturating_add(1);
-    }
-}
-
-fn local_port_available(port: u16) -> bool {
-    TcpListener::bind((LOOPBACK_ADDR, port)).is_ok()
-}
-
-fn write_speedtest_config(
-    paths: &AppPaths,
-    file_name: &str,
-    core_type: CoreType,
-    entries: &[SpeedtestConfigEntry],
-) -> Result<PathBuf> {
-    let _ = core_type;
-    let json = generate_singbox_speedtest_config_json(entries)?;
-    let path = paths.bin_config_file(file_name);
-    // Speedtest configs carry the same outbound credentials as the runtime
-    // config, so they get the same 0600 + O_NOFOLLOW treatment.
-    filesystem::write_private_file_with_parent(&path, json).map_err(|source| {
-        SpeedtestError::WriteConfig {
-            path: path.clone(),
-            source,
-        }
-    })?;
-
-    Ok(path)
-}
-
-fn cleanup_stale_speedtest_configs(paths: &AppPaths) {
-    if let Err(error) =
-        filesystem::remove_matching_files(paths.bin_config_dir(), SPEEDTEST_CONFIG_PREFIX, ".json")
-    {
-        tracing::warn!(
-            path = %paths.bin_config_dir().display(),
-            ?error,
-            "failed to remove stale speedtest configs"
-        );
-    }
-}
-
-async fn wait_for_speedtest_ports(
-    entries: &[SpeedtestConfigEntry],
-    cancel: &CancellationFlag,
-) -> Result<()> {
-    let started = Instant::now();
-    loop {
-        check_cancelled(cancel)?;
-        let mut all_ready = true;
-        for entry in entries {
-            let port = u16::try_from(entry.port)
-                .map_err(|_| SpeedtestError::InvalidSocksPort(entry.port))?;
-            if !tcp_port_is_open(LOOPBACK_ADDR, port).await {
-                all_ready = false;
-                break;
-            }
-        }
-        if all_ready {
-            return Ok(());
-        }
-        if started.elapsed() >= SPEEDTEST_READY_TIMEOUT {
-            return Err(SpeedtestError::Io(io::Error::new(
-                io::ErrorKind::TimedOut,
-                "temporary speedtest core did not expose a local SOCKS port",
-            )));
-        }
-        time::sleep(SPEEDTEST_READY_INTERVAL).await;
     }
 }
 
@@ -598,6 +441,13 @@ fn speedtest_error_message(error: &SpeedtestError) -> String {
     }
 }
 
+/// Marks the whole selection as pending before the first probe starts.
+///
+/// The two or three writes per profile run inside a single transaction: every
+/// `ProfileExManager` update is otherwise its own autocommit round trip, so a
+/// 1000-profile selection paid thousands of journalled commits before any core
+/// even launched. Callbacks fire after the commit so nothing is announced that
+/// is not yet durable.
 async fn clear_previous_results<F>(
     database: &Database,
     action: SpeedTestKind,
@@ -607,29 +457,36 @@ async fn clear_previous_results<F>(
 where
     F: Fn(SpeedTestResult) + Send + Sync,
 {
-    let profile_ex = ProfileExManager::new(database);
-    for item in selected {
-        match action {
-            SpeedTestKind::TcpConnect | SpeedTestKind::Latency | SpeedTestKind::Udp => {
-                profile_ex.set_test_delay(&item.index_id, 0).await?;
-                profile_ex
-                    .set_test_message(&item.index_id, "Speedtesting")
-                    .await?;
-            }
-            SpeedTestKind::Download => {
-                profile_ex.set_test_speed(&item.index_id, 0.0).await?;
-                profile_ex
-                    .set_test_message(&item.index_id, "Speedtesting wait")
-                    .await?;
-            }
-            SpeedTestKind::Mixed => {
-                profile_ex.set_test_delay(&item.index_id, 0).await?;
-                profile_ex.set_test_speed(&item.index_id, 0.0).await?;
-                profile_ex
-                    .set_test_message(&item.index_id, "Speedtesting wait")
-                    .await?;
+    let unit_of_work = database.begin().await?;
+    {
+        let profile_ex = ProfileExManager::new_in(&unit_of_work);
+        for item in selected {
+            match action {
+                SpeedTestKind::TcpConnect | SpeedTestKind::Latency | SpeedTestKind::Udp => {
+                    profile_ex.set_test_delay(&item.index_id, 0).await?;
+                    profile_ex
+                        .set_test_message(&item.index_id, "Speedtesting")
+                        .await?;
+                }
+                SpeedTestKind::Download => {
+                    profile_ex.set_test_speed(&item.index_id, 0.0).await?;
+                    profile_ex
+                        .set_test_message(&item.index_id, "Speedtesting wait")
+                        .await?;
+                }
+                SpeedTestKind::Mixed => {
+                    profile_ex.set_test_delay(&item.index_id, 0).await?;
+                    profile_ex.set_test_speed(&item.index_id, 0.0).await?;
+                    profile_ex
+                        .set_test_message(&item.index_id, "Speedtesting wait")
+                        .await?;
+                }
             }
         }
+    }
+    unit_of_work.commit().await?;
+
+    for item in selected {
         on_result(make_pending_result(action, item.index_id.clone()));
     }
 
@@ -664,6 +521,25 @@ fn make_pending_result(action: SpeedTestKind, index_id: String) -> SpeedTestResu
             message: Some("Speedtesting wait".to_string()),
             ip_info: None,
         },
+    }
+}
+
+/// Terminal result for a profile that never got tested. It clears the pending
+/// "Speedtesting" marker `clear_previous_results` wrote, so a failed or
+/// cancelled run cannot leave rows stuck in that state across restarts.
+fn make_failure_result(
+    action: SpeedTestKind,
+    index_id: String,
+    message: impl Into<String>,
+) -> SpeedTestResult {
+    let speed = matches!(action, SpeedTestKind::Download | SpeedTestKind::Mixed).then_some(0.0);
+    SpeedTestResult {
+        action,
+        index_id,
+        delay: Some(-1),
+        speed,
+        message: Some(message.into()),
+        ip_info: None,
     }
 }
 
@@ -709,25 +585,21 @@ fn millis_i32(duration: Duration) -> i32 {
 mod tests {
     use std::{
         collections::HashSet as StdHashSet,
-        fs,
         net::TcpListener as StdTcpListener,
         sync::{atomic::AtomicUsize, Mutex as StdMutex},
     };
 
     use voya_core::{ProfileExItem, ProfileProtocol, ServerEndpoint};
     use voya_db::Database;
-    use voya_platform::{
-        coreinfo::{core_type_dir_name, executable_name_for_current_os},
-        paths::core_seed_resources_dir,
-        test_support::RecordingRunner,
-    };
 
     use super::*;
 
     #[derive(Default)]
     struct RecordingProbe {
         calls: Arc<StdMutex<Vec<String>>>,
-        block_realping: bool,
+        /// How many `realping` calls hold open until the run is cancelled, so
+        /// a test can block the first run and let a superseding one through.
+        blocking_realpings: Arc<AtomicUsize>,
         download_delay: Duration,
     }
 
@@ -763,13 +635,18 @@ mod tests {
             cancel: CancellationFlag,
         ) -> BoxFuture<'static, Result<RealPingProbeResult>> {
             let calls = Arc::clone(&self.calls);
-            let block = self.block_realping;
+            let blocking = Arc::clone(&self.blocking_realpings);
             Box::pin(async move {
                 calls
                     .lock()
                     .expect("speedtest test operation should succeed")
                     .push(format!("realping:{socks_port}"));
-                if block {
+                let blocks = blocking
+                    .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |budget| {
+                        budget.checked_sub(1)
+                    })
+                    .is_ok();
+                if blocks {
                     while !is_cancelled(&cancel) {
                         time::sleep(Duration::from_millis(10)).await;
                     }
@@ -830,6 +707,13 @@ mod tests {
         starts: Arc<StdMutex<Vec<RecordedCoreStart>>>,
         active: Arc<AtomicUsize>,
         max_active: Arc<AtomicUsize>,
+        stop_all_calls: Arc<AtomicUsize>,
+        /// Makes `start` fail the way a missing core binary or a readiness
+        /// timeout does.
+        start_failure: bool,
+        /// Cancels from inside `start`, the way the real backend does while it
+        /// waits for the probe core's SOCKS ports.
+        cancel_in_start: bool,
     }
 
     impl RecordingCoreBackend {
@@ -843,6 +727,10 @@ mod tests {
         fn max_active(&self) -> usize {
             self.max_active.load(Ordering::SeqCst)
         }
+
+        fn stop_all_calls(&self) -> usize {
+            self.stop_all_calls.load(Ordering::SeqCst)
+        }
     }
 
     impl SpeedtestCoreBackend for RecordingCoreBackend {
@@ -850,11 +738,13 @@ mod tests {
             &self,
             core_type: CoreType,
             entries: Vec<SpeedtestConfigEntry>,
-            _cancel: CancellationFlag,
+            cancel: CancellationFlag,
         ) -> BoxFuture<'static, Result<Box<dyn SpeedtestCoreSession>>> {
             let starts = Arc::clone(&self.starts);
             let active = Arc::clone(&self.active);
             let max_active = Arc::clone(&self.max_active);
+            let start_failure = self.start_failure;
+            let cancel_in_start = self.cancel_in_start;
             Box::pin(async move {
                 starts
                     .lock()
@@ -863,10 +753,24 @@ mod tests {
                         core_type,
                         ports: entries.iter().map(|entry| entry.port).collect(),
                     });
+                if cancel_in_start {
+                    cancel.store(true, Ordering::SeqCst);
+                    return Err(SpeedtestError::Cancelled);
+                }
+                if start_failure {
+                    return Err(SpeedtestError::Io(io::Error::new(
+                        io::ErrorKind::NotFound,
+                        "no probe core",
+                    )));
+                }
                 let active_now = active.fetch_add(1, Ordering::SeqCst) + 1;
                 max_active.fetch_max(active_now, Ordering::SeqCst);
                 Ok(Box::new(RecordingCoreSession { active }) as Box<dyn SpeedtestCoreSession>)
             })
+        }
+
+        fn stop_all(&self) {
+            self.stop_all_calls.fetch_add(1, Ordering::SeqCst);
         }
     }
 
@@ -881,42 +785,6 @@ mod tests {
     }
 
     impl SpeedtestCoreSession for RecordingCoreSession {}
-
-    #[tokio::test]
-    async fn process_speedtest_core_backend_uses_packaged_seed_directly_on_macos() {
-        let paths = test_paths();
-        let seed_root = core_seed_resources_dir(paths.app_dir().join("resources"));
-        let executable_name = executable_name_for_current_os("sing-box");
-        let seed_exe = seed_root
-            .join(core_type_dir_name(CoreType::sing_box))
-            .join(&executable_name);
-        fs::create_dir_all(seed_exe.parent().expect("seed core dir"))
-            .expect("speedtest test operation should succeed");
-        fs::write(&seed_exe, b"seed-sing-box").expect("speedtest test operation should succeed");
-        let runner = RecordingRunner::default();
-        let backend = ProcessSpeedtestCoreBackend::new(
-            paths.clone(),
-            Some(seed_root),
-            Arc::new(runner.clone()),
-        )
-        .with_target_os(TargetOs::Macos);
-
-        backend
-            .start(
-                CoreType::sing_box,
-                Vec::new(),
-                Arc::new(AtomicBool::new(false)),
-            )
-            .await
-            .expect("speedtest test operation should succeed");
-
-        let app_data_exe =
-            paths.core_bin_file(core_type_dir_name(CoreType::sing_box), executable_name);
-        let spawns = runner.spawns();
-        assert_eq!(spawns.len(), 1);
-        assert_eq!(spawns[0].executable, seed_exe);
-        assert!(!app_data_exe.exists());
-    }
 
     #[tokio::test]
     async fn speedtest_manager_mixedtest_combines_realping_and_speedtest() {
@@ -1195,28 +1063,6 @@ mod tests {
         assert!(!unique_ports.contains(&reserved_port));
     }
 
-    #[test]
-    fn cleanup_stale_speedtest_configs_removes_only_speedtest_json_files() {
-        let paths = test_paths();
-        fs::create_dir_all(paths.bin_config_dir())
-            .expect("speedtest test operation should succeed");
-        let stale = paths.bin_config_file("configTest-old.json");
-        let current_style_stale = paths.bin_config_file("configTest-123.json");
-        let runtime_config = paths.bin_config_file("config.json");
-        let similar_name = paths.bin_config_file("configTest-not-json.txt");
-        fs::write(&stale, "{}").expect("speedtest test operation should succeed");
-        fs::write(&current_style_stale, "{}").expect("speedtest test operation should succeed");
-        fs::write(&runtime_config, "{}").expect("speedtest test operation should succeed");
-        fs::write(&similar_name, "{}").expect("speedtest test operation should succeed");
-
-        cleanup_stale_speedtest_configs(&paths);
-
-        assert!(!stale.exists());
-        assert!(!current_style_stale.exists());
-        assert!(runtime_config.exists());
-        assert!(similar_name.exists());
-    }
-
     #[tokio::test]
     async fn speedtest_manager_cancel_stops_active_jobs() {
         let database = Database::connect_in_memory()
@@ -1225,8 +1071,7 @@ mod tests {
         insert_profile(&database, "a", 443).await;
         insert_profile(&database, "b", 8443).await;
         let probe = Arc::new(RecordingProbe {
-            calls: Arc::new(StdMutex::new(Vec::new())),
-            block_realping: true,
+            blocking_realpings: Arc::new(AtomicUsize::new(usize::MAX)),
             ..RecordingProbe::default()
         });
         let backend = Arc::new(RecordingCoreBackend::default());
@@ -1278,7 +1123,292 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn speedtest_manager_records_a_failed_core_start_per_profile() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
+        insert_profile(&database, "a", 443).await;
+        insert_profile(&database, "b", 8443).await;
+        let probe = Arc::new(RecordingProbe::default());
+        let backend = Arc::new(RecordingCoreBackend {
+            start_failure: true,
+            ..RecordingCoreBackend::default()
+        });
+        let manager =
+            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+
+        let run = manager
+            .run(
+                &database,
+                &AppConfig::default(),
+                SpeedTestKind::Latency,
+                Vec::new(),
+            )
+            .await
+            .expect("a core that will not start must not abort the run");
+
+        assert!(!run.cancelled);
+        assert!(
+            probe.calls().is_empty(),
+            "no profile can be probed without a core"
+        );
+        assert_eq!(run.results.len(), 2);
+        for index_id in ["a", "b"] {
+            let profile_ex = profile_ex_row(&database, index_id).await;
+            assert_eq!(profile_ex.delay, -1);
+            assert_ne!(
+                profile_ex.message.as_deref(),
+                Some("Speedtesting"),
+                "{index_id} must not stay pending after a failed run"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn speedtest_manager_reports_a_cancel_during_core_start_as_a_cancelled_run() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
+        insert_profile(&database, "a", 443).await;
+        insert_profile(&database, "b", 8443).await;
+        let probe = Arc::new(RecordingProbe::default());
+        let backend = Arc::new(RecordingCoreBackend {
+            cancel_in_start: true,
+            ..RecordingCoreBackend::default()
+        });
+        let manager =
+            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+
+        let run = manager
+            .run(
+                &database,
+                &AppConfig::default(),
+                SpeedTestKind::Mixed,
+                Vec::new(),
+            )
+            .await
+            .expect("a cancel while a core starts is a cancelled run, not an error");
+
+        assert!(run.cancelled);
+        assert_eq!(run.completed_count, 0);
+        assert!(probe.calls().is_empty());
+        for index_id in ["a", "b"] {
+            let profile_ex = profile_ex_row(&database, index_id).await;
+            assert_eq!(profile_ex.delay, -1);
+            assert_eq!(profile_ex.message.as_deref(), Some("cancelled"));
+        }
+    }
+
+    #[tokio::test]
+    async fn speedtest_manager_skips_invalid_profiles_and_tests_the_rest() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
+        insert_profile(&database, "good", 443).await;
+        insert_profile_with_uuid(&database, "bad", 8443, "not-a-guid").await;
+        let probe = Arc::new(RecordingProbe::default());
+        let backend = Arc::new(RecordingCoreBackend::default());
+        let manager =
+            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+
+        let run = manager
+            .run(
+                &database,
+                &AppConfig::default(),
+                SpeedTestKind::Latency,
+                Vec::new(),
+            )
+            .await
+            .expect("an invalid profile must not abort the run");
+
+        assert_eq!(run.selected_count, 2);
+        let starts = backend.starts();
+        assert_eq!(starts.len(), 1);
+        assert_eq!(
+            starts[0].ports.len(),
+            1,
+            "only the valid profile reaches the temporary core"
+        );
+        assert_eq!(probe.calls().len(), 1);
+        let good = profile_ex_row(&database, "good").await;
+        assert_eq!(good.delay, 44);
+        let bad = profile_ex_row(&database, "bad").await;
+        assert_eq!(bad.delay, -1);
+        assert!(
+            bad.message
+                .as_deref()
+                .is_some_and(|message| message.contains("invalid Password")),
+            "the validator error is reported as the profile's result: {:?}",
+            bad.message
+        );
+    }
+
+    #[tokio::test]
+    async fn speedtest_manager_pages_batches_and_waits_between_them_in_seconds() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
+        insert_profile(&database, "a", 443).await;
+        insert_profile(&database, "b", 8443).await;
+        let probe = Arc::new(RecordingProbe::default());
+        let backend = Arc::new(RecordingCoreBackend::default());
+        let manager =
+            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+        let mut config = AppConfig::default();
+        config.speed_test_item.speed_test_page_size = Some(1);
+        config.speed_test_item.speed_test_delay_interval = Some(1);
+
+        let started = Instant::now();
+        manager
+            .run(&database, &config, SpeedTestKind::Latency, Vec::new())
+            .await
+            .expect("speedtest test operation should succeed");
+        let elapsed = started.elapsed();
+
+        let starts = backend.starts();
+        assert_eq!(starts.len(), 2, "one temporary core per page");
+        assert!(starts.iter().all(|start| start.ports.len() == 1));
+        assert_eq!(probe.calls().len(), 2);
+        assert!(
+            elapsed >= Duration::from_secs(1),
+            "the configured delay interval is seconds, not milliseconds ({elapsed:?})"
+        );
+        assert!(
+            elapsed < Duration::from_secs(10),
+            "one page boundary means exactly one pause ({elapsed:?})"
+        );
+    }
+
+    #[tokio::test]
+    async fn speedtest_manager_supersedes_an_overlapping_run() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
+        insert_profile(&database, "a", 443).await;
+        // Only the first run's probe blocks, so the superseding run can finish
+        // while its predecessor is still parked.
+        let probe = Arc::new(RecordingProbe {
+            blocking_realpings: Arc::new(AtomicUsize::new(1)),
+            ..RecordingProbe::default()
+        });
+        let backend = Arc::new(RecordingCoreBackend::default());
+        let manager =
+            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+        let mut config = AppConfig::default();
+        config.speed_test_item.mixed_concurrency_count = 1;
+
+        let first_manager = manager.clone();
+        let first_database = database.clone();
+        let first_config = config.clone();
+        let first = tokio::spawn(async move {
+            first_manager
+                .run(
+                    &first_database,
+                    &first_config,
+                    SpeedTestKind::Mixed,
+                    Vec::new(),
+                )
+                .await
+                .expect("the superseded run still completes")
+        });
+
+        loop {
+            if probe
+                .calls()
+                .iter()
+                .any(|call| call.starts_with("realping:"))
+            {
+                break;
+            }
+            time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(
+            manager
+                .status()
+                .expect("speedtest test operation should succeed")
+                .running
+        );
+
+        let second = manager
+            .run(&database, &config, SpeedTestKind::Mixed, Vec::new())
+            .await
+            .expect("the superseding run completes");
+        let first = first
+            .await
+            .expect("speedtest test operation should succeed");
+
+        assert!(
+            first.cancelled,
+            "starting a run supersedes the previous one"
+        );
+        assert!(
+            !second.cancelled,
+            "the superseding run must not inherit its predecessor's cancel flag"
+        );
+        assert!(
+            !manager
+                .status()
+                .expect("speedtest test operation should succeed")
+                .running,
+            "only the run that owns the slot may release it"
+        );
+    }
+
+    #[test]
+    fn speedtest_manager_shutdown_cancels_and_reaps_probe_cores() {
+        let backend = Arc::new(RecordingCoreBackend::default());
+        let manager = SpeedtestManager::with_probe_and_backend(
+            test_paths(),
+            Arc::new(RecordingProbe::default()),
+            backend.clone(),
+        );
+
+        manager.shutdown();
+
+        assert_eq!(
+            backend.stop_all_calls(),
+            1,
+            "exit must reap probe cores; Drop never runs under std::process::exit"
+        );
+    }
+
+    #[test]
+    fn speedtest_delay_interval_is_seconds() {
+        let mut config = AppConfig::default();
+        assert_eq!(speedtest_delay_interval(&config), SPEEDTEST_DELAY_INTERVAL);
+
+        config.speed_test_item.speed_test_delay_interval = Some(3);
+        assert_eq!(
+            speedtest_delay_interval(&config),
+            Duration::from_secs(3),
+            "the contract field is named delay_interval_ms but carries seconds"
+        );
+
+        config.speed_test_item.speed_test_delay_interval = Some(0);
+        assert_eq!(speedtest_delay_interval(&config), SPEEDTEST_DELAY_INTERVAL);
+    }
+
+    async fn profile_ex_row(database: &Database, index_id: &str) -> ProfileExItem {
+        database
+            .profile_exs()
+            .get(index_id)
+            .await
+            .expect("speedtest test operation should succeed")
+            .expect("speedtest test operation should succeed")
+    }
+
     async fn insert_profile(database: &Database, index_id: &str, port: i32) {
+        insert_profile_with_uuid(
+            database,
+            index_id,
+            port,
+            "00000000-0000-0000-0000-000000000000",
+        )
+        .await;
+    }
+
+    async fn insert_profile_with_uuid(database: &Database, index_id: &str, port: i32, uuid: &str) {
         let profile = ProfileItem {
             index_id: index_id.to_string(),
             remarks: index_id.to_string(),
@@ -1287,7 +1417,7 @@ mod tests {
                     address: "127.0.0.1".to_string(),
                     port,
                 },
-                uuid: "00000000-0000-0000-0000-000000000000".to_string(),
+                uuid: uuid.to_string(),
                 cipher: Some("auto".to_string()),
             },
             ..ProfileItem::default()

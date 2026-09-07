@@ -96,15 +96,6 @@ pub(crate) fn singbox_supports_config_type(config_type: ConfigType) -> bool {
     )
 }
 
-pub(super) fn singbox_network(node: &ProfileItem) -> String {
-    let network = trimmed(node.network());
-    if network.is_empty() {
-        DEFAULT_NETWORK.to_string()
-    } else {
-        network.to_string()
-    }
-}
-
 pub(super) fn vmess_security(protocol: &ProfileProtocol) -> String {
     let security = match protocol {
         ProfileProtocol::Vmess { cipher, .. } => cipher.as_deref().unwrap_or_default(),
@@ -138,7 +129,7 @@ pub(super) fn effective_fingerprint(context: &CoreConfigContext) -> Option<Strin
 }
 
 fn singbox_utls_fingerprint(value: &str) -> Option<String> {
-    let fingerprint = trimmed(value).to_ascii_lowercase();
+    let fingerprint = value.trim().to_ascii_lowercase();
     if SINGBOX_UTLS_FINGERPRINTS.contains(&fingerprint.as_str()) {
         Some(fingerprint)
     } else {
@@ -164,7 +155,7 @@ pub(super) fn nonempty_string(value: Option<&str>) -> Option<String> {
     nonempty_str(value).map(str::to_string)
 }
 
-pub(super) fn state_port2(app_config: &AppConfig, is_tun_enabled: bool) -> i32 {
+pub(crate) fn state_port2(app_config: &AppConfig, is_tun_enabled: bool) -> i32 {
     inbound_port(app_config, InboundProtocol::api2) + i32::from(is_tun_enabled)
 }
 

@@ -1,3 +1,5 @@
+use super::core_backend::{cleanup_stale_speedtest_configs, reserve_speedtest_ports};
+
 use super::*;
 
 impl SpeedtestManager {
@@ -153,6 +155,13 @@ impl SpeedtestManager {
         }
 
         let cancelled = is_cancelled(&cancel);
+        // Every profile got a "Speedtesting" marker before the first probe, so
+        // anything the run never reached has to be written back to a terminal
+        // state or it stays pending forever, including across restarts.
+        let pending =
+            finalize_pending_results(database, action, &selected, &results, cancelled, &on_result)
+                .await?;
+        results.extend(pending);
 
         Ok(SpeedtestRunResult {
             action,
@@ -161,6 +170,19 @@ impl SpeedtestManager {
             completed_count,
             results,
         })
+    }
+
+    /// Cancels the active run and kills every probe core synchronously.
+    ///
+    /// Tauri ends the process with `std::process::exit`, so managed state, the
+    /// pending `run_speedtest` future and its session values are never dropped.
+    /// The shell has to call this from its exit handler, otherwise probe cores
+    /// outlive the app holding loopback listeners and open tunnels.
+    pub fn shutdown(&self) {
+        if let Err(error) = self.cancel() {
+            tracing::warn!(?error, "failed to cancel speedtest during shutdown");
+        }
+        self.core_backend.stop_all();
     }
 
     pub fn cancel(&self) -> Result<bool> {
@@ -266,29 +288,51 @@ impl SpeedtestManager {
     where
         F: Fn(SpeedTestResult) + Send + Sync,
     {
-        let prepared = self
-            .prepare_speedtest_items(database, config, items.iter().cloned())
+        let batch = self
+            .prepare_speedtest_items(database, config, items)
             .await?;
-        let mut results = Vec::new();
-        for (core_type, group) in group_prepared_items(prepared) {
+        let mut results = record_item_failures(database, action, batch.failures, on_result).await?;
+        for (core_type, group) in group_prepared_items(batch.prepared) {
             if is_cancelled(&cancel) {
                 break;
             }
             let page_size = speedtest_page_size(config, group.len());
             let batch_count = group.chunks(page_size).len();
-            for (batch_index, batch) in group.chunks(page_size).enumerate() {
+            for (batch_index, page) in group.chunks(page_size).enumerate() {
                 if is_cancelled(&cancel) {
                     break;
                 }
-                let entries = batch
+                let entries = page
                     .iter()
                     .map(|prepared| prepared.entry.clone())
                     .collect::<Vec<_>>();
-                let _session = self
+                let session = match self
                     .core_backend
                     .start(core_type, entries, Arc::clone(&cancel))
-                    .await?;
-                for prepared in batch {
+                    .await
+                {
+                    Ok(session) => session,
+                    Err(SpeedtestError::Cancelled) => break,
+                    Err(error) => {
+                        // A core that will not start fails this page, not the
+                        // whole run: record every profile in it and continue.
+                        tracing::warn!(?error, ?core_type, "speedtest core failed to start");
+                        let failures = page
+                            .iter()
+                            .map(|prepared| {
+                                SpeedtestItemFailure::new(
+                                    prepared.item.index_id.clone(),
+                                    speedtest_error_message(&error),
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        results.extend(
+                            record_item_failures(database, action, failures, on_result).await?,
+                        );
+                        continue;
+                    }
+                };
+                for prepared in page {
                     if is_cancelled(&cancel) {
                         break;
                     }
@@ -304,6 +348,7 @@ impl SpeedtestManager {
                         .await?;
                     results.extend(item_results);
                 }
+                session.close().await;
                 if batch_index + 1 < batch_count && !is_cancelled(&cancel) {
                     time::sleep(speedtest_delay_interval(config)).await;
                 }
@@ -326,12 +371,31 @@ impl SpeedtestManager {
         F: Fn(SpeedTestResult) + Send + Sync,
     {
         let core_type = prepared.entry.context.run_core_type;
-        let _session = self
+        let index_id = prepared.item.index_id.clone();
+        let session = match self
             .core_backend
             .start(core_type, vec![prepared.entry], Arc::clone(&cancel))
-            .await?;
-        self.run_item(database, config, action, prepared.item, cancel, on_result)
             .await
+        {
+            Ok(session) => session,
+            // Only cancellation ends the whole run; every other start failure
+            // is this profile's result.
+            Err(SpeedtestError::Cancelled) => return Err(SpeedtestError::Cancelled),
+            Err(error) => {
+                tracing::warn!(%index_id, ?error, "speedtest core failed to start");
+                let failures = vec![SpeedtestItemFailure::new(
+                    index_id,
+                    speedtest_error_message(&error),
+                )];
+                return record_item_failures(database, action, failures, on_result).await;
+            }
+        };
+        let results = self
+            .run_item(database, config, action, prepared.item, cancel, on_result)
+            .await;
+        session.close().await;
+
+        results
     }
 
     async fn run_concurrent_dedicated_items<F>(
@@ -350,13 +414,13 @@ impl SpeedtestManager {
             return Ok(Vec::new());
         }
 
-        let prepared = self
-            .prepare_speedtest_items(database, config, items.iter().cloned())
+        let batch = self
+            .prepare_speedtest_items(database, config, items)
             .await?;
+        let mut results = record_item_failures(database, action, batch.failures, on_result).await?;
         let concurrency = dedicated_concurrency_count(action, config, items.len());
-        let mut pending = prepared.into_iter();
+        let mut pending = batch.prepared.into_iter();
         let mut in_flight = FuturesUnordered::new();
-        let mut results = Vec::new();
 
         while in_flight.len() < concurrency {
             let Some(prepared) = pending.next() else {
@@ -376,7 +440,13 @@ impl SpeedtestManager {
         }
 
         while let Some(item_results) = in_flight.next().await {
-            results.extend(item_results?);
+            match item_results {
+                Ok(item_results) => results.extend(item_results),
+                // Cancellation is a normal end of the run, not a failure; the
+                // untested profiles are cleared by the finalizer.
+                Err(SpeedtestError::Cancelled) => break,
+                Err(error) => return Err(error),
+            }
             while in_flight.len() < concurrency {
                 let Some(prepared) = pending.next() else {
                     break;
@@ -398,32 +468,47 @@ impl SpeedtestManager {
         Ok(results)
     }
 
-    async fn prepare_speedtest_items<I>(
+    async fn prepare_speedtest_items(
         &self,
         database: &Database,
         config: &AppConfig,
-        items: I,
-    ) -> Result<Vec<PreparedSpeedtestItem>>
-    where
-        I: IntoIterator<Item = ServerTestItem>,
-    {
+        items: &[ServerTestItem],
+    ) -> Result<PreparedSpeedtestBatch> {
         let env = load_runtime_core_gen_env(database, &self.paths, config, self.target_os).await?;
         let builder = CoreConfigContextBuilder::new(&env);
-        let mut used_ports = HashSet::new();
-        let mut prepared = Vec::new();
+        let reserved = reserve_speedtest_ports(
+            items
+                .iter()
+                .map(|item| i32::from(item.socks_port))
+                .collect(),
+        )
+        .await?;
+        let mut batch = PreparedSpeedtestBatch::default();
 
-        for mut item in items {
-            let socks_port = find_free_speedtest_port(i32::from(item.socks_port), &mut used_ports)?;
+        for (mut item, socks_port) in items.iter().cloned().zip(reserved) {
+            let socks_port = match socks_port {
+                Ok(socks_port) => socks_port,
+                Err(error) => {
+                    batch.failures.push(SpeedtestItemFailure::new(
+                        item.index_id,
+                        speedtest_error_message(&error),
+                    ));
+                    continue;
+                }
+            };
             item.socks_port = socks_port;
             let build = builder.build(config, &item.profile);
             if !build.success() {
-                return Err(SpeedtestError::Validation {
-                    index_id: item.index_id,
-                    message: build.validator_result.errors.join("; "),
-                });
+                // One unusable profile in the selection must not cancel the
+                // profiles that are still testable.
+                batch.failures.push(SpeedtestItemFailure::new(
+                    item.index_id,
+                    build.validator_result.errors.join("; "),
+                ));
+                continue;
             }
             item.core_type = build.context.run_core_type;
-            prepared.push(PreparedSpeedtestItem {
+            batch.prepared.push(PreparedSpeedtestItem {
                 entry: SpeedtestConfigEntry {
                     index_id: item.index_id.clone(),
                     port: i32::from(socks_port),
@@ -433,7 +518,7 @@ impl SpeedtestManager {
             });
         }
 
-        Ok(prepared)
+        Ok(batch)
     }
 
     async fn run_tcping(
@@ -453,7 +538,7 @@ impl SpeedtestManager {
             message: Some(delay.to_string()),
             ip_info: None,
         };
-        persist_speedtest_result(database, &result).await?;
+        persist_speedtest_result_with_retry(database, &result).await?;
 
         Ok(result)
     }
@@ -492,7 +577,7 @@ impl SpeedtestManager {
                 }
             }
         };
-        persist_speedtest_result(database, &result).await?;
+        persist_speedtest_result_with_retry(database, &result).await?;
 
         Ok(result)
     }
@@ -531,7 +616,7 @@ impl SpeedtestManager {
                 }
             }
         };
-        persist_speedtest_result(database, &result).await?;
+        persist_speedtest_result_with_retry(database, &result).await?;
 
         Ok(result)
     }
@@ -558,7 +643,7 @@ impl SpeedtestManager {
             message: Some(delay.to_string()),
             ip_info: None,
         };
-        persist_speedtest_result(database, &result).await?;
+        persist_speedtest_result_with_retry(database, &result).await?;
 
         Ok(result)
     }
@@ -589,5 +674,197 @@ impl SpeedtestManager {
         }
 
         Ok(())
+    }
+}
+
+/// Persists and reports a terminal result for profiles that could not be
+/// tested, so a bad profile or a core that refuses to start is a per-item
+/// failure instead of an aborted run.
+async fn record_item_failures<F>(
+    database: &Database,
+    action: SpeedTestKind,
+    failures: Vec<SpeedtestItemFailure>,
+    on_result: &F,
+) -> Result<Vec<SpeedTestResult>>
+where
+    F: Fn(SpeedTestResult) + Send + Sync,
+{
+    let mut results = Vec::with_capacity(failures.len());
+    for failure in failures {
+        let result = make_failure_result(action, failure.index_id, failure.message);
+        persist_speedtest_result_with_retry(database, &result).await?;
+        on_result(result.clone());
+        results.push(result);
+    }
+
+    Ok(results)
+}
+
+/// Clears the pre-run markers of every selected profile the run never reached.
+/// `clear_previous_results` writes "Speedtesting" for the whole selection up
+/// front, so a cancel or an early stop would otherwise leave those rows
+/// pending forever.
+async fn finalize_pending_results<F>(
+    database: &Database,
+    action: SpeedTestKind,
+    selected: &[ServerTestItem],
+    results: &[SpeedTestResult],
+    cancelled: bool,
+    on_result: &F,
+) -> Result<Vec<SpeedTestResult>>
+where
+    F: Fn(SpeedTestResult) + Send + Sync,
+{
+    let tested = results
+        .iter()
+        .map(|result| result.index_id.as_str())
+        .collect::<HashSet<_>>();
+    let message = if cancelled { "cancelled" } else { "skipped" };
+    let untested = selected
+        .iter()
+        .filter(|item| !tested.contains(item.index_id.as_str()))
+        .map(|item| SpeedtestItemFailure::new(item.index_id.clone(), message))
+        .collect::<Vec<_>>();
+
+    record_item_failures(database, action, untested, on_result).await
+}
+
+/// Longest a contended write is retried before the result is given up on.
+const PERSIST_RETRY_MAX_ATTEMPTS: u32 = 5;
+/// First backoff step; doubles per attempt, so the total wait stays under a
+/// second even in the worst case.
+const PERSIST_RETRY_INITIAL_DELAY: Duration = Duration::from_millis(20);
+
+/// Persists one result, riding out a contended SQLite write.
+///
+/// The database runs in WAL with a busy timeout, so `SQLITE_BUSY` should be
+/// rare — but it is still reachable (a checkpoint, or a write that started
+/// before the busy handler could be armed). Propagating it aborted the whole
+/// run and threw away every probe that had already completed, which is a far
+/// worse outcome than waiting a few tens of milliseconds for one row.
+async fn persist_speedtest_result_with_retry(
+    database: &Database,
+    result: &SpeedTestResult,
+) -> Result<()> {
+    let mut delay = PERSIST_RETRY_INITIAL_DELAY;
+    for attempt in 1..PERSIST_RETRY_MAX_ATTEMPTS {
+        match persist_speedtest_result(database, result).await {
+            Err(error) if is_database_contention(&error) => {
+                tracing::debug!(
+                    index_id = %result.index_id,
+                    attempt,
+                    "speedtest result write contended; retrying"
+                );
+                time::sleep(delay).await;
+                delay = delay.saturating_mul(2);
+            }
+            outcome => return outcome,
+        }
+    }
+
+    persist_speedtest_result(database, result).await
+}
+
+/// Whether a persistence failure is SQLite telling us to come back later.
+///
+/// `voya-app` has no `sqlx` dependency (the architecture gate keeps the
+/// persistence boundary inside `voya-db`), so the classification walks the
+/// error source chain and matches SQLite's own wording for `SQLITE_BUSY`,
+/// `SQLITE_BUSY_SNAPSHOT` and `SQLITE_LOCKED`. Misreading an unrelated error as
+/// contention only costs a few retries, and the loop is bounded either way.
+fn is_database_contention(error: &SpeedtestError) -> bool {
+    let mut source: Option<&(dyn std::error::Error + 'static)> = Some(error);
+    while let Some(current) = source {
+        let message = current.to_string().to_ascii_lowercase();
+        if message.contains("database is locked") || message.contains("database table is locked") {
+            return true;
+        }
+        source = current.source();
+    }
+
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn speedtest_persist_retry_recognizes_a_contended_write() {
+        // SQLite reports `SQLITE_BUSY` / `SQLITE_BUSY_SNAPSHOT` as "database is
+        // locked"; sqlx passes that message through unchanged.
+        let busy = SpeedtestError::Database(DbError::Io {
+            path: PathBuf::from("voya.db"),
+            source: io::Error::other("database is locked"),
+        });
+
+        assert!(
+            is_database_contention(&busy),
+            "SQLITE_BUSY must be retried, not turned into a lost speedtest run"
+        );
+    }
+
+    #[test]
+    fn speedtest_persist_retry_ignores_unrelated_failures() {
+        let cancelled = SpeedtestError::Cancelled;
+        let missing = SpeedtestError::MissingCoreInfo(CoreType::sing_box);
+
+        assert!(!is_database_contention(&cancelled));
+        assert!(!is_database_contention(&missing));
+    }
+
+    #[tokio::test]
+    async fn speedtest_persist_retry_writes_the_result_through() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
+        database
+            .profiles()
+            .upsert(&ProfileItem {
+                index_id: "active".to_string(),
+                remarks: "Active".to_string(),
+                ..ProfileItem::default()
+            })
+            .await
+            .expect("speedtest test operation should succeed");
+
+        persist_speedtest_result_with_retry(
+            &database,
+            &SpeedTestResult {
+                action: SpeedTestKind::TcpConnect,
+                index_id: "active".to_string(),
+                delay: Some(42),
+                speed: None,
+                message: Some("42".to_string()),
+                ip_info: None,
+            },
+        )
+        .await
+        .expect("speedtest test operation should succeed");
+
+        assert_eq!(
+            database
+                .profile_exs()
+                .get("active")
+                .await
+                .expect("speedtest test operation should succeed")
+                .expect("the probe result is persisted")
+                .delay,
+            42
+        );
+    }
+
+    /// The backoff has to stay short enough that a contended write never looks
+    /// like a hung run to the user.
+    #[test]
+    fn speedtest_persist_retry_backoff_is_bounded() {
+        let mut total = Duration::ZERO;
+        let mut delay = PERSIST_RETRY_INITIAL_DELAY;
+        for _ in 1..PERSIST_RETRY_MAX_ATTEMPTS {
+            total += delay;
+            delay = delay.saturating_mul(2);
+        }
+
+        assert!(total < Duration::from_secs(1), "{total:?}");
     }
 }

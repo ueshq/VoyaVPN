@@ -146,14 +146,45 @@ fn validate_proxy_ports(context: &CoreConfigContext) -> Result<(), SingboxConfig
     Ok(())
 }
 
+/// The `log.level` values sing-box accepts, per
+/// <https://sing-box.sagernet.org/configuration/log/>. sing-box refuses the
+/// whole config on any other value, so nothing outside this set may be
+/// forwarded verbatim.
+const SINGBOX_LOG_LEVELS: &[&str] = &["trace", "debug", "info", "warn", "error", "fatal", "panic"];
+
+/// Level emitted when the stored app level is empty, disabled, or unrecognised.
+///
+/// It is the sing-box spelling of `crate::DEFAULT_LOG_LEVEL`. Anything quieter
+/// would hide connection failures, and anything louder would make a stale or
+/// hand-edited setting silently opt the core into per-connection logging.
+const SINGBOX_FALLBACK_LOG_LEVEL: &str = "warn";
+
+/// Translates the app's log level onto sing-box's accepted `log.level` set.
+///
+/// The settings UI stores `none`/`trace`/`debug`/`info`/`warn`/`warning`/`error`,
+/// so `warning` needs sing-box's spelling and `none` (which is expressed as
+/// `log.disabled` instead) must not reach `log.level` at all.
+fn singbox_log_level(configured: &str) -> &'static str {
+    let lowercased = configured.trim().to_ascii_lowercase();
+    let normalized = lowercased.as_str();
+    // The app inherited v2rayN's `warning`; sing-box only accepts `warn`.
+    if normalized == "warning" {
+        return "warn";
+    }
+    SINGBOX_LOG_LEVELS
+        .iter()
+        .copied()
+        .find(|level| *level == normalized)
+        .unwrap_or(SINGBOX_FALLBACK_LOG_LEVEL)
+}
+
 fn gen_log(config: &mut SingboxConfig, context: &CoreConfigContext) {
     let mut log = config.log.clone().unwrap_or_default();
-    log.level = match context.app_config.core_basic_item.loglevel.as_str() {
-        "debug" | "info" | "error" => context.app_config.core_basic_item.loglevel.clone(),
-        "warning" => "warn".to_string(),
-        _ => log.level,
-    };
-    if context.app_config.core_basic_item.loglevel == "none" {
+    let configured = context.app_config.core_basic_item.loglevel.trim();
+    // Always overwrite: the sample config ships `debug`, so leaving an
+    // unmapped level in place would run the core at its noisiest setting.
+    log.level = singbox_log_level(configured).to_string();
+    if configured.eq_ignore_ascii_case("none") {
         log.disabled = Some(true);
     }
     if context.app_config.core_basic_item.log_enabled {

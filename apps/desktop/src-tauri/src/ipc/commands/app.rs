@@ -18,6 +18,12 @@ pub fn load_app_settings(state: tauri::State<'_, AppState>) -> Result<AppSetting
     ))
 }
 
+/// Thin adapter over `voya_app::settings_flow`.
+///
+/// Validation, the pre-commit OS side effects, the commit and both rollback
+/// paths are the transaction in voya-app, where they are unit-tested; the only
+/// things left here are turning `AppError`s back out of it and dispatching the
+/// runtime action it selected.
 #[tauri::command]
 #[specta::specta]
 pub async fn save_app_settings<R: tauri::Runtime>(
@@ -25,60 +31,23 @@ pub async fn save_app_settings<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     settings: AppSettingsV1,
 ) -> Result<AppSettingsV1, AppError> {
-    validate_app_settings(&settings).map_err(|error| AppError::State(error.to_string()))?;
-
-    let mut mutation = begin_config_mutation(&state).await?;
-    let original = mutation.config().clone();
-    let target = state
-        .services()
-        .config_from_settings(&settings, &original)
-        .map_err(|error| AppError::State(error.to_string()))?;
-    let runtime_changed = saved_config_requires_runtime_restart(&original, &target);
-    let system_proxy_changed = original.system_proxy_item != target.system_proxy_item;
     let side_effects = TauriSettingsSideEffects {
         autostart: AutostartManager::new(),
         hotkeys: HotkeyManager::new(std::sync::Arc::new(TauriHotkeyRegistrar {
             app: app.clone(),
         })),
     };
-    let applied_side_effects = match apply_settings_side_effects(&side_effects, &original, &target)
-    {
-        Ok(applied) => applied,
-        Err(failure) => {
-            tracing::error!(stage = ?failure.stage, error = ?failure.source, "settings side effect failed");
-            log_settings_compensation_errors(&failure.compensation_errors);
-            return Err(failure.source);
-        }
-    };
+    let outcome = voya_app::settings_flow::save_app_settings(
+        state.config_mutations(),
+        &side_effects,
+        &settings,
+    )
+    .await
+    .map_err(settings_save_error)?;
 
-    *mutation.config_mut() = target.clone();
-    if let Err(error) = commit_config_mutation(mutation).await {
-        let compensation_errors =
-            compensate_settings_side_effects(&side_effects, &original, applied_side_effects);
-        log_settings_compensation_errors(&compensation_errors);
-        return Err(error);
-    }
+    apply_settings_runtime_action(&app, &state, &outcome).await;
 
-    let apply_result = match settings_runtime_action(runtime_changed, system_proxy_changed) {
-        SettingsRuntimeAction::Restart => {
-            restart_if_connected_after_config_change(&app, &state, &target, "Settings saved").await
-        }
-        SettingsRuntimeAction::ReapplySystemProxy => {
-            apply_system_proxy_if_connected_after_config_change(&app, &state, &target).await
-        }
-        SettingsRuntimeAction::None => Ok(()),
-    };
-
-    if let Err(error) = apply_result {
-        report_post_commit_error(
-            &app,
-            "Settings saved; runtime update failed",
-            &format!("{error:?}"),
-            AppNoticeLevel::Warning,
-        );
-    }
-
-    if original != target {
+    if outcome.changed {
         if let Err(error) = emit_settings_bundle_invalidation(&app, "app-settings-saved") {
             tracing::error!(
                 ?error,
@@ -87,7 +56,49 @@ pub async fn save_app_settings<R: tauri::Runtime>(
         }
     }
 
-    Ok(voya_app::settings_save::settings_from_app_config(&target))
+    Ok(outcome.settings)
+}
+
+/// Bring the running core in line with the settings that were just committed.
+///
+/// Everything here happens after the commit, so a failure is a warning notice
+/// rather than a command error: the settings *are* saved.
+async fn apply_settings_runtime_action<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    state: &AppState,
+    outcome: &SettingsSaveOutcome,
+) {
+    match outcome.runtime_action {
+        SettingsRuntimeAction::Restart => {
+            restart_after_config_change(app, state, &outcome.config, ConfigChange::APP_SETTINGS)
+                .await;
+        }
+        SettingsRuntimeAction::ReapplySystemProxy => {
+            if let Err(error) =
+                apply_system_proxy_if_connected_after_config_change(app, state, &outcome.config)
+                    .await
+            {
+                report_post_commit_error(
+                    app,
+                    "Settings saved; runtime update failed",
+                    &format!("{error:?}"),
+                    AppNoticeLevel::Warning,
+                );
+            }
+        }
+        SettingsRuntimeAction::None => {}
+    }
+}
+
+fn settings_save_error(error: SettingsSaveError<AppError>) -> AppError {
+    match error {
+        SettingsSaveError::Validation(error) => AppError::State(error.to_string()),
+        SettingsSaveError::Contract(error) => AppError::State(error.to_string()),
+        // The adapter's own typed error, so the frontend still sees
+        // `autostart`/`hotkey` rather than a flattened string.
+        SettingsSaveError::SideEffect { source, .. } => source,
+        SettingsSaveError::Commit(error) => config_mutation_error(error),
+    }
 }
 
 #[derive(Clone)]
@@ -113,12 +124,6 @@ impl SettingsSideEffectAdapter for TauriSettingsSideEffects {
             .register_from_config(config)
             .map(|_| ())
             .map_err(hotkey_error)
-    }
-}
-
-fn log_settings_compensation_errors(errors: &[AppError]) {
-    for error in errors {
-        tracing::error!(?error, "failed to compensate settings side effect");
     }
 }
 

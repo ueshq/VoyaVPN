@@ -251,35 +251,88 @@ where
     .map_err(|error| AppError::EventEmit(error.to_string()))
 }
 
-pub(super) async fn restart_if_connected_after_routing_change<R>(
-    app: &tauri::AppHandle<R>,
-    state: &AppState,
-    config: &AppConfig,
-) -> Result<(), AppError>
-where
-    R: tauri::Runtime,
-{
-    restart_if_connected_after_config_change(app, state, config, "Routing changed").await
+/// Names one committed configuration change for the restart that follows it.
+///
+/// Every mutating command used to spell both strings out inline around an
+/// identical eight-line `if let Err(..) { report_post_commit_error(..) }`
+/// block; the label was the only thing that varied.
+#[derive(Clone, Copy)]
+pub(super) struct ConfigChange {
+    /// Reason recorded by the core flow's log line.
+    reason: &'static str,
+    /// Notice title used when the follow-up restart fails.
+    restart_failed_title: &'static str,
 }
 
-/// Restarts the core after a configuration change, if it is running.
+impl ConfigChange {
+    /// Every routing mutation shares the same core-flow reason and only differs
+    /// in which operation the failure notice names.
+    const fn routing(restart_failed_title: &'static str) -> Self {
+        Self {
+            reason: "Routing changed",
+            restart_failed_title,
+        }
+    }
+
+    pub(super) const ROUTING_SAVED: Self = Self::routing("Routing saved; core restart failed");
+    pub(super) const ROUTING_DELETED: Self = Self::routing("Routing deleted; core restart failed");
+    pub(super) const ROUTING_SELECTED: Self =
+        Self::routing("Routing selected; core restart failed");
+    pub(super) const ROUTING_RULE_SAVED: Self =
+        Self::routing("Routing rule saved; core restart failed");
+    pub(super) const ROUTING_RULES_DELETED: Self =
+        Self::routing("Routing rules deleted; core restart failed");
+    pub(super) const ROUTING_RULE_MOVED: Self =
+        Self::routing("Routing rule moved; core restart failed");
+    pub(super) const DNS: Self = Self {
+        reason: "DNS changed",
+        restart_failed_title: "DNS saved; core restart failed",
+    };
+    pub(super) const CONFIG_TEMPLATE: Self = Self {
+        reason: "Config template imported",
+        restart_failed_title: "Template imported; core restart failed",
+    };
+    pub(super) const TUN: Self = Self {
+        reason: "TUN changed",
+        restart_failed_title: "TUN saved; core restart failed",
+    };
+    pub(super) const CONNECTION_MODE: Self = Self {
+        reason: "Connection mode changed",
+        restart_failed_title: "Connection mode saved; core restart failed",
+    };
+    pub(super) const APP_SETTINGS: Self = Self {
+        reason: "Settings saved",
+        restart_failed_title: "Settings saved; runtime update failed",
+    };
+}
+
+/// Restarts the core after a committed configuration change, if it is running.
 ///
 /// The whole sequence — the connecting/connected events, the system proxy, the
 /// TUN status, and the recovery when the restart fails — lives in
 /// `voya_app::core_flow`, shared with connect/disconnect and the crash paths.
-pub(super) async fn restart_if_connected_after_config_change<R>(
+/// The change is already persisted when this runs, so a restart failure is a
+/// warning notice rather than a command error.
+pub(super) async fn restart_after_config_change<R>(
     app: &tauri::AppHandle<R>,
     state: &AppState,
     config: &AppConfig,
-    reason: &str,
-) -> Result<(), AppError>
-where
+    change: ConfigChange,
+) where
     R: tauri::Runtime,
 {
-    core_flow(app, state)
-        .restart_if_connected(config, reason)
+    if let Err(error) = core_flow(app, state)
+        .restart_if_connected(config, change.reason)
         .await
         .map_err(runtime_error)
+    {
+        report_post_commit_error(
+            app,
+            change.restart_failed_title,
+            &format!("{error:?}"),
+            AppNoticeLevel::Warning,
+        );
+    }
 }
 
 pub(super) async fn apply_system_proxy_if_connected_after_config_change<R>(

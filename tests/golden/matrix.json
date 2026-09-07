@@ -298,6 +298,59 @@
         "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs"
       ],
       "core_acceptance": true
+    },
+    {
+      "id": "singbox-outbound-shadowsocks-plugins",
+      "core": "sing-box",
+      "fixture": "singbox/outbounds/shadowsocks_plugins.json",
+      "generated": "singbox.outbound.shadowsocks_plugins",
+      "summary": "sing-box Shadowsocks SIP003 plugins: obfs-local and v2ray-plugin option strings come from the same model the share-link exporter uses, so a new option cannot reach one surface only.",
+      "hotspots": [
+        "protocol",
+        "shadowsocks",
+        "plugin",
+        "serialization"
+      ],
+      "reference_paths": [
+        "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs",
+        "ServiceLib/Handler/Fmt/ShadowsocksFmt.cs"
+      ],
+      "core_acceptance": true
+    },
+    {
+      "id": "singbox-outbound-policy-group-strategies",
+      "core": "sing-box",
+      "fixture": "singbox/outbounds/policy_group_strategies.json",
+      "generated": "singbox.outbound.policy_group_strategies",
+      "summary": "sing-box policy-group output for all five MultipleLoad strategies: only Fallback emits a urltest tolerance, the other four collapse to a plain urltest.",
+      "hotspots": [
+        "policy-group",
+        "selector",
+        "urltest"
+      ],
+      "reference_paths": [
+        "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs",
+        "ServiceLib.Tests/CoreConfig/Singbox/CoreConfigSingboxServiceTests.cs"
+      ],
+      "core_acceptance": true
+    },
+    {
+      "id": "singbox-route-bind-interface-windows",
+      "core": "sing-box",
+      "fixture": "singbox/route/bind_interface_windows.json",
+      "generated": "singbox.route.bind_interface_windows",
+      "summary": "Windows platform variant: bind_interface reaches remote outbounds with TUN off, and never the direct outbound (ADR 0003 requires a fixture per platform).",
+      "hotspots": [
+        "platform",
+        "windows",
+        "bind-interface",
+        "outbounds"
+      ],
+      "reference_paths": [
+        "ServiceLib/Services/CoreConfig/Singbox/SingboxConfigService.cs",
+        "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs"
+      ],
+      "core_acceptance": true
     }
   ]
 }

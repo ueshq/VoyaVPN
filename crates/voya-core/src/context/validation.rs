@@ -91,10 +91,6 @@ pub fn validate_node(item: &ProfileItem, core_type: CoreType) -> NodeValidatorRe
     result
 }
 
-pub(super) fn profile_is_valid(item: &ProfileItem) -> bool {
-    validate_node(item, CoreType::sing_box).success()
-}
-
 fn get_network(item: &ProfileItem) -> String {
     let network = item.network().trim();
     if network.is_empty() {
@@ -209,5 +205,314 @@ pub(super) fn nonempty(value: &str) -> Option<&str> {
         None
     } else {
         Some(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{MultipleLoad, TlsSettings};
+
+    #[test]
+    fn validate_node_rejection_table_covers_every_branch() {
+        // A false positive here silently shrinks a policy group's selector, so
+        // every rejection needs a case pinning its exact message.
+        let cases: &[(&str, ProfileItem, &[&str])] = &[
+            ("valid vless", vless_node(), &[]),
+            (
+                "empty address",
+                with_server(vless_node(), "", 443),
+                &["invalid Address"],
+            ),
+            (
+                "zero port",
+                with_server(vless_node(), "node.example", 0),
+                &["invalid Port"],
+            ),
+            (
+                "port above range",
+                with_server(vless_node(), "node.example", 65536),
+                &["invalid Port"],
+            ),
+            (
+                "kcp transport",
+                with_transport(
+                    vless_node(),
+                    ProfileTransport::Kcp {
+                        header: None,
+                        seed: None,
+                        mtu: None,
+                    },
+                ),
+                &["sing_box does not support network kcp"],
+            ),
+            (
+                "xhttp transport",
+                with_transport(
+                    vless_node(),
+                    ProfileTransport::Xhttp {
+                        host: None,
+                        path: None,
+                        mode: None,
+                        extra: None,
+                    },
+                ),
+                &["sing_box does not support network xhttp"],
+            ),
+            (
+                "grpc on a protocol without transports",
+                with_transport(
+                    socks_node(),
+                    ProfileTransport::Grpc {
+                        authority: None,
+                        service_name: None,
+                        mode: None,
+                    },
+                ),
+                &["sing_box does not support protocol SOCKS with network grpc"],
+            ),
+            (
+                "shadowsocks over grpc",
+                with_transport(
+                    shadowsocks_node("aes-256-gcm"),
+                    ProfileTransport::Grpc {
+                        authority: None,
+                        service_name: None,
+                        mode: None,
+                    },
+                ),
+                // Shadowsocks is in the transport-capable table, so only the
+                // narrower Shadowsocks allow-list rejects this pair.
+                &["sing_box does not support Shadowsocks with network grpc"],
+            ),
+            (
+                "vmess with a non-uuid id",
+                vmess_node("not-a-uuid"),
+                &["invalid Password"],
+            ),
+            (
+                "vless with an unknown flow",
+                with_flow(vless_node(), "bogus-flow"),
+                &["invalid Flow"],
+            ),
+            (
+                "shadowsocks with an unsupported cipher",
+                shadowsocks_node("aes-256-eax"),
+                &["invalid SsMethod"],
+            ),
+            (
+                "reality without a public key",
+                with_tls(
+                    vless_node(),
+                    TlsSettings {
+                        mode: TlsMode::Reality,
+                        ..tls()
+                    },
+                ),
+                &["invalid PublicKey"],
+            ),
+            (
+                "final mask that is not a JSON object",
+                with_tls(
+                    vless_node(),
+                    TlsSettings {
+                        final_mask: Some("[1,2]".to_string()),
+                        ..tls()
+                    },
+                ),
+                &["invalid Finalmask"],
+            ),
+        ];
+
+        for (label, node, expected) in cases {
+            let result = validate_node(node, CoreType::sing_box);
+            assert_eq!(
+                result.errors,
+                expected
+                    .iter()
+                    .map(|error| (*error).to_string())
+                    .collect::<Vec<_>>(),
+                "unexpected validation errors for `{label}`"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_node_accepts_every_singbox_supported_protocol_over_raw() {
+        for node in [
+            vless_node(),
+            vmess_node("00000000-0000-0000-0000-000000000000"),
+            shadowsocks_node("chacha20-ietf-poly1305"),
+            socks_node(),
+        ] {
+            let result = validate_node(&node, CoreType::sing_box);
+            assert!(
+                result.success(),
+                "{:?} rejected: {:?}",
+                node.protocol,
+                result
+            );
+        }
+    }
+
+    #[test]
+    fn validate_node_skips_custom_and_group_profiles() {
+        let group = ProfileItem {
+            protocol: ProfileProtocol::PolicyGroup {
+                child_profile_ids: Vec::new(),
+                source_subscription_id: None,
+                filter: None,
+                strategy: MultipleLoad::LeastPing,
+            },
+            ..ProfileItem::default()
+        };
+        let custom = ProfileItem {
+            protocol: ProfileProtocol::Custom {
+                source: String::new(),
+                filter: None,
+            },
+            ..ProfileItem::default()
+        };
+
+        assert!(validate_node(&group, CoreType::sing_box).success());
+        assert!(validate_node(&custom, CoreType::sing_box).success());
+    }
+
+    #[test]
+    fn is_guid_like_accepts_braced_and_bare_forms() {
+        assert!(is_guid_like("00000000-0000-0000-0000-000000000000"));
+        assert!(is_guid_like("{00000000-0000-0000-0000-000000000000}"));
+        assert!(is_guid_like("(00000000-0000-0000-0000-000000000000)"));
+        assert!(is_guid_like("00000000000000000000000000000000"));
+        assert!(!is_guid_like("0000000000000000000000000000000g"));
+        assert!(!is_guid_like("0000-0000-0000-0000-000000000000"));
+        assert!(!is_guid_like(""));
+    }
+
+    #[test]
+    fn is_domain_rejects_asset_file_names_and_addresses() {
+        assert!(is_domain("a-b.example"));
+        assert!(is_domain("node.example.com"));
+        assert!(!is_domain("rules.json"));
+        assert!(!is_domain("Rules.YAML"));
+        assert!(!is_domain("1.2.3.4"));
+        assert!(!is_domain("2606:4700::1111"));
+        assert!(!is_domain("https://example.com"));
+        assert!(!is_domain("example.com/path"));
+        assert!(!is_domain(""));
+        assert!(!is_domain("1234"));
+    }
+
+    fn tls() -> TlsSettings {
+        TlsSettings {
+            mode: TlsMode::Tls,
+            server_name: None,
+            alpn: Vec::new(),
+            reality_public_key: None,
+            reality_short_id: None,
+            reality_spider_x: None,
+            mldsa65_verify: None,
+            certificate_pem: None,
+            certificate_sha256: Vec::new(),
+            ech_config: Vec::new(),
+            final_mask: None,
+        }
+    }
+
+    fn raw_transport() -> ProfileTransport {
+        ProfileTransport::Tcp {
+            header: None,
+            host: None,
+            path: None,
+        }
+    }
+
+    fn endpoint(address: &str, port: i32) -> ServerEndpoint {
+        ServerEndpoint {
+            address: address.to_string(),
+            port,
+        }
+    }
+
+    fn vless_node() -> ProfileItem {
+        ProfileItem {
+            index_id: "vless".to_string(),
+            remarks: "VLESS".to_string(),
+            protocol: ProfileProtocol::Vless {
+                server: endpoint("node.example", 443),
+                uuid: "00000000-0000-0000-0000-000000000000".to_string(),
+                flow: Some(String::new()),
+                encryption: Some("none".to_string()),
+            },
+            transport: Some(raw_transport()),
+            ..ProfileItem::default()
+        }
+    }
+
+    fn vmess_node(uuid: &str) -> ProfileItem {
+        ProfileItem {
+            index_id: "vmess".to_string(),
+            remarks: "VMess".to_string(),
+            protocol: ProfileProtocol::Vmess {
+                server: endpoint("node.example", 443),
+                uuid: uuid.to_string(),
+                cipher: None,
+            },
+            transport: Some(raw_transport()),
+            ..ProfileItem::default()
+        }
+    }
+
+    fn shadowsocks_node(method: &str) -> ProfileItem {
+        ProfileItem {
+            index_id: "ss".to_string(),
+            remarks: "Shadowsocks".to_string(),
+            protocol: ProfileProtocol::Shadowsocks {
+                server: endpoint("node.example", 443),
+                password: "secret".to_string(),
+                method: method.to_string(),
+                udp_over_tcp: false,
+            },
+            transport: Some(raw_transport()),
+            ..ProfileItem::default()
+        }
+    }
+
+    fn socks_node() -> ProfileItem {
+        ProfileItem {
+            index_id: "socks".to_string(),
+            remarks: "SOCKS".to_string(),
+            protocol: ProfileProtocol::Socks {
+                server: endpoint("node.example", 1080),
+                username: String::new(),
+                password: String::new(),
+            },
+            transport: Some(raw_transport()),
+            ..ProfileItem::default()
+        }
+    }
+
+    fn with_server(mut node: ProfileItem, address: &str, port: i32) -> ProfileItem {
+        if let ProfileProtocol::Vless { server, .. } = &mut node.protocol {
+            *server = endpoint(address, port);
+        }
+        node
+    }
+
+    fn with_transport(mut node: ProfileItem, transport: ProfileTransport) -> ProfileItem {
+        node.transport = Some(transport);
+        node
+    }
+
+    fn with_flow(mut node: ProfileItem, flow: &str) -> ProfileItem {
+        if let ProfileProtocol::Vless { flow: value, .. } = &mut node.protocol {
+            *value = Some(flow.to_string());
+        }
+        node
+    }
+
+    fn with_tls(mut node: ProfileItem, tls: TlsSettings) -> ProfileItem {
+        node.tls = Some(tls);
+        node
     }
 }

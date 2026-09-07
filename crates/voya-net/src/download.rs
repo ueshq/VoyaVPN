@@ -2,21 +2,41 @@ use reqwest::{Client, Proxy};
 use std::{
     collections::HashMap,
     future::Future,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     pin::Pin,
     sync::{Arc, Mutex},
     time::Duration,
 };
 use thiserror::Error;
 
+pub(crate) mod redirect;
+
+pub(crate) use redirect::is_denied_local_host;
+use redirect::redirect_policy;
+
 /// Shared user agent prefix for network clients.
 pub const USER_AGENT_PREFIX: &str = "VoyaVPN";
 
+/// Whole-request deadline. It bounds the Clash REST client and text downloads, which are always
+/// small — subscriptions and routing templates are capped at `DEFAULT_TEXT_RESPONSE_LIMIT_BYTES`.
 pub(crate) const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+/// Idle deadline applied to every download client. Byte downloads carry geo databases and rule
+/// sets of many megabytes, which exceed `HTTP_REQUEST_TIMEOUT` over a throttled proxy even while
+/// data keeps flowing, so they are bounded by silence rather than by total elapsed time.
+pub(crate) const HTTP_READ_TIMEOUT: Duration = Duration::from_secs(30);
+/// Absolute ceiling for a byte download. It exists only so a server that dribbles one byte just
+/// inside every read timeout cannot pin the task forever; a real asset transfer finishes far
+/// inside it even on a heavily throttled link.
+pub(crate) const HTTP_ASSET_REQUEST_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 pub(crate) const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-pub(crate) const HTTP_REDIRECT_LIMIT: usize = 5;
 pub const DEFAULT_TEXT_RESPONSE_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 pub const DEFAULT_BINARY_RESPONSE_LIMIT_BYTES: usize = 512 * 1024 * 1024;
+
+/// Recorded on a `DownloadAttempt` whose request succeeded but returned no bytes.
+///
+/// Callers distinguish "the server answered with nothing" (an expired or emptied subscription)
+/// from a transport failure, so the marker is a shared constant matched through
+/// [`DownloadAttempt::is_empty_response`] rather than a message that can be reworded.
+pub const EMPTY_RESPONSE_ATTEMPT_ERROR: &str = "empty response";
 
 pub type Result<T> = std::result::Result<T, DownloadError>;
 
@@ -48,12 +68,36 @@ pub enum DownloadError {
     },
 }
 
+impl DownloadError {
+    /// Reports whether every attempt reached the server and came back empty.
+    ///
+    /// Callers use this to tell an emptied subscription apart from a transport failure without
+    /// reproducing the [`EMPTY_RESPONSE_ATTEMPT_ERROR`] literal.
+    #[must_use]
+    pub fn is_empty_response(&self) -> bool {
+        match self {
+            Self::AttemptsFailed { attempts, .. } => {
+                !attempts.is_empty() && attempts.iter().all(DownloadAttempt::is_empty_response)
+            }
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DownloadAttempt {
     pub url: String,
     pub via_proxy: bool,
     pub bytes: usize,
     pub error: Option<String>,
+}
+
+impl DownloadAttempt {
+    /// Reports whether this attempt returned a successful but empty body.
+    #[must_use]
+    pub fn is_empty_response(&self) -> bool {
+        self.bytes == 0 && self.error.as_deref() == Some(EMPTY_RESPONSE_ATTEMPT_ERROR)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -168,6 +212,7 @@ type DownloadBodyRequest<T> =
 pub struct DownloadClient {
     direct_client: std::result::Result<Client, String>,
     proxy_clients: Arc<Mutex<HashMap<String, Client>>>,
+    read_timeout: Duration,
 }
 
 impl Default for DownloadClient {
@@ -179,9 +224,23 @@ impl Default for DownloadClient {
 impl DownloadClient {
     #[must_use]
     pub fn new() -> Self {
+        Self::with_read_timeout(HTTP_READ_TIMEOUT)
+    }
+
+    /// Builds a client whose transfers are bounded by silence instead of by total elapsed time,
+    /// so a slow multi-megabyte asset download can be exercised in milliseconds.
+    #[cfg(any(test, feature = "test-utils"))]
+    #[must_use]
+    pub fn with_read_timeout_for_tests(read_timeout: Duration) -> Self {
+        Self::with_read_timeout(read_timeout)
+    }
+
+    fn with_read_timeout(read_timeout: Duration) -> Self {
         Self {
-            direct_client: build_http_client(None).map_err(|error| error.to_string()),
+            direct_client: build_download_http_client(None, read_timeout)
+                .map_err(|error| error.to_string()),
             proxy_clients: Arc::new(Mutex::new(HashMap::new())),
+            read_timeout,
         }
     }
 
@@ -267,7 +326,7 @@ impl DownloadClient {
                                 url: request.url.clone(),
                                 via_proxy: true,
                                 bytes: body.byte_len(),
-                                error: Some("empty response".to_string()),
+                                error: Some(EMPTY_RESPONSE_ATTEMPT_ERROR.to_string()),
                             }),
                             Err(error) => attempts.push(DownloadAttempt {
                                 url: request.url.clone(),
@@ -331,7 +390,7 @@ impl DownloadClient {
                     url: request.url.clone(),
                     via_proxy: false,
                     bytes: body.byte_len(),
-                    error: Some("empty response".to_string()),
+                    error: Some(EMPTY_RESPONSE_ATTEMPT_ERROR.to_string()),
                 });
                 Err(DownloadError::AttemptsFailed {
                     url: request.url,
@@ -378,9 +437,11 @@ impl DownloadClient {
         }
 
         let client =
-            build_http_client(Some(proxy_url)).map_err(|source| DownloadError::Request {
-                url: url.to_string(),
-                source,
+            build_download_http_client(Some(proxy_url), self.read_timeout).map_err(|source| {
+                DownloadError::Request {
+                    url: url.to_string(),
+                    source,
+                }
             })?;
         clients.insert(proxy_url.to_string(), client.clone());
 
@@ -388,128 +449,46 @@ impl DownloadClient {
     }
 }
 
+/// Builds the client used outside the download stack (currently the Clash REST transport), which
+/// only ever exchanges small payloads and therefore keeps a whole-request deadline.
 pub(crate) fn build_http_client(
     proxy_url: Option<&str>,
 ) -> std::result::Result<Client, reqwest::Error> {
+    http_client_builder(proxy_url, HTTP_READ_TIMEOUT)?
+        .timeout(HTTP_REQUEST_TIMEOUT)
+        .build()
+}
+
+/// Builds a download client without a whole-request deadline: `download_text` applies its own
+/// per-request one, while byte downloads rely on `read_timeout` so a large asset transfer that
+/// keeps making progress is never cut off mid-flight.
+fn build_download_http_client(
+    proxy_url: Option<&str>,
+    read_timeout: Duration,
+) -> std::result::Result<Client, reqwest::Error> {
+    http_client_builder(proxy_url, read_timeout)?.build()
+}
+
+fn http_client_builder(
+    proxy_url: Option<&str>,
+    read_timeout: Duration,
+) -> std::result::Result<reqwest::ClientBuilder, reqwest::Error> {
     // Trust policy shared with `certificates::client_config`: the bundled webpki roots plus
     // the roots the operating system trusts, so self-hosted servers behind a private CA the
     // OS already trusts work in both paths. Both flags default to true; setting them keeps the
     // policy explicit and fails the build if the reqwest root features are ever dropped.
-    let mut builder = Client::builder()
-        .timeout(HTTP_REQUEST_TIMEOUT)
+    let builder = Client::builder()
         .connect_timeout(HTTP_CONNECT_TIMEOUT)
+        .read_timeout(read_timeout)
         .tls_built_in_webpki_certs(true)
         .tls_built_in_native_certs(true)
         .redirect(redirect_policy());
-    builder = if let Some(proxy_url) = proxy_url {
+
+    Ok(if let Some(proxy_url) = proxy_url {
         builder.proxy(Proxy::all(proxy_url)?)
     } else {
         builder.no_proxy()
-    };
-
-    builder.build()
-}
-
-fn redirect_policy() -> reqwest::redirect::Policy {
-    reqwest::redirect::Policy::custom(|attempt| {
-        match validate_redirect_attempt(attempt.previous(), attempt.url()) {
-            Ok(()) => attempt.follow(),
-            Err(error) => attempt.error(error),
-        }
     })
-}
-
-fn validate_redirect_attempt(
-    previous: &[reqwest::Url],
-    next: &reqwest::Url,
-) -> std::result::Result<(), RedirectPolicyError> {
-    if previous.len() > HTTP_REDIRECT_LIMIT {
-        return Err(RedirectPolicyError::TooManyRedirects {
-            limit: HTTP_REDIRECT_LIMIT,
-        });
-    }
-
-    if let Some(previous) = previous
-        .last()
-        .filter(|previous| previous.scheme() == "https" && next.scheme() == "http")
-    {
-        return Err(RedirectPolicyError::HttpsDowngrade {
-            from: previous.as_str().to_string(),
-            to: next.as_str().to_string(),
-        });
-    }
-    if url_has_denied_local_host(next) && !previous.last().is_some_and(url_has_denied_local_host) {
-        return Err(RedirectPolicyError::LocalNetworkTarget {
-            to: next.as_str().to_string(),
-        });
-    }
-
-    Ok(())
-}
-
-pub(crate) fn is_denied_local_host(host: &str) -> bool {
-    let normalized = host
-        .trim_end_matches('.')
-        .trim_start_matches('[')
-        .trim_end_matches(']')
-        .to_ascii_lowercase();
-    if normalized == "localhost" || normalized.ends_with(".localhost") {
-        return true;
-    }
-
-    normalized.parse::<IpAddr>().is_ok_and(is_denied_local_ip)
-}
-
-fn is_denied_local_ip(ip: IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(ip) => is_denied_local_ipv4(ip),
-        IpAddr::V6(ip) => is_denied_local_ipv6(ip),
-    }
-}
-
-fn is_denied_local_ipv4(ip: Ipv4Addr) -> bool {
-    let octets = ip.octets();
-    // 0.0.0.0 is delivered to the local host by connect() on Linux and macOS.
-    ip.is_unspecified() || ip.is_loopback() || (octets[0] == 169 && octets[1] == 254)
-}
-
-fn is_denied_local_ipv6(ip: Ipv6Addr) -> bool {
-    if ip.is_unspecified() || ip.is_loopback() {
-        return true;
-    }
-    // IPv4-mapped (::ffff:127.0.0.1) and IPv4-compatible (::127.0.0.1) forms are delivered to
-    // the embedded IPv4 address by dual-stack sockets, so they inherit the IPv4 policy.
-    if let Some(embedded) = ip.to_ipv4_mapped().or_else(|| ipv4_compatible(ip)) {
-        return is_denied_local_ipv4(embedded);
-    }
-
-    (ip.segments()[0] & 0xffc0) == 0xfe80
-}
-
-/// Extracts the IPv4 address embedded in a deprecated IPv4-compatible `::a.b.c.d` address.
-fn ipv4_compatible(ip: Ipv6Addr) -> Option<Ipv4Addr> {
-    let segments = ip.segments();
-    if segments[..6].iter().any(|segment| *segment != 0) {
-        return None;
-    }
-
-    Some(Ipv4Addr::from(
-        (u32::from(segments[6]) << 16) | u32::from(segments[7]),
-    ))
-}
-
-fn url_has_denied_local_host(url: &reqwest::Url) -> bool {
-    url.host_str().is_some_and(is_denied_local_host)
-}
-
-#[derive(Debug, Error)]
-enum RedirectPolicyError {
-    #[error("too many redirects: maximum {limit}")]
-    TooManyRedirects { limit: usize },
-    #[error("refusing HTTPS to HTTP redirect from {from} to {to}")]
-    HttpsDowngrade { from: String, to: String },
-    #[error("refusing redirect to loopback or link-local URL {to}")]
-    LocalNetworkTarget { to: String },
 }
 
 #[derive(Debug, Error)]
@@ -620,6 +599,7 @@ async fn request<T, ExtractBody, ExtractFuture>(
     url: &str,
     user_agent: Option<&str>,
     response_body_limit: usize,
+    total_timeout: Option<Duration>,
     extract_body: ExtractBody,
 ) -> Result<T>
 where
@@ -631,9 +611,14 @@ where
         .filter(|value| !value.is_empty())
         .unwrap_or(USER_AGENT_PREFIX);
 
-    let response = client
+    let mut builder = client
         .get(url)
-        .header(reqwest::header::USER_AGENT, user_agent)
+        .header(reqwest::header::USER_AGENT, user_agent);
+    if let Some(total_timeout) = total_timeout {
+        builder = builder.timeout(total_timeout);
+    }
+
+    let response = builder
         .send()
         .await
         .map_err(|source| DownloadError::Request {
@@ -662,6 +647,7 @@ async fn request_text(
         url,
         user_agent,
         response_body_limit,
+        Some(HTTP_REQUEST_TIMEOUT),
         |response, limit| async move {
             let headers = capture_response_headers(&response);
             let body = read_response_text_limited(response, limit).await?;
@@ -690,11 +676,15 @@ async fn request_bytes(
     user_agent: Option<&str>,
     response_body_limit: usize,
 ) -> Result<Vec<u8>> {
+    // Geo databases and rule sets run to hundreds of megabytes, so a transfer that keeps
+    // delivering is bounded by the client's read timeout rather than by `HTTP_REQUEST_TIMEOUT`;
+    // the far larger ceiling below only stops a pathologically slow server.
     request(
         client,
         url,
         user_agent,
         response_body_limit,
+        Some(HTTP_ASSET_REQUEST_TIMEOUT),
         read_response_bytes_limited,
     )
     .await
@@ -871,6 +861,44 @@ pub(crate) mod test_support {
         format!("http://{address}")
     }
 
+    /// Announces `declared_chunks` copies of `chunk` and then delivers `sent_chunks` of them,
+    /// one every `gap`. Equal counts mirror a slow but healthy transfer; a `sent_chunks` of zero
+    /// mirrors a server that answers and then goes silent.
+    pub(crate) async fn spawn_dripping_http_fixture(
+        declared_chunks: usize,
+        sent_chunks: usize,
+        chunk: &'static [u8],
+        gap: std::time::Duration,
+    ) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("HTTP fixture should bind");
+        let address = listener.local_addr().expect("HTTP fixture address");
+
+        tokio::spawn(async move {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            let mut buffer = vec![0; 4096];
+            let _ = socket.read(&mut buffer).await;
+            let length = declared_chunks.saturating_mul(chunk.len());
+            let header =
+                format!("HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n");
+            let _ = socket.write_all(header.as_bytes()).await;
+            let _ = socket.flush().await;
+            for _ in 0..sent_chunks {
+                tokio::time::sleep(gap).await;
+                if socket.write_all(chunk).await.is_err() || socket.flush().await.is_err() {
+                    return;
+                }
+            }
+            // Hold the connection open so a withheld body stalls the client instead of ending it.
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        });
+
+        format!("http://{address}")
+    }
+
     fn request_path(request: &str) -> &str {
         request
             .lines()
@@ -897,13 +925,88 @@ mod tests {
 
     use super::*;
     use crate::download::test_support::{
-        spawn_http_fixture, spawn_raw_http_fixture, spawn_redirect_chain_fixture,
-        RawFixtureResponse,
+        spawn_dripping_http_fixture, spawn_http_fixture, spawn_raw_http_fixture,
+        spawn_redirect_chain_fixture, RawFixtureResponse,
     };
 
     #[test]
     fn user_agent_prefix_names_the_app() {
         assert_eq!(USER_AGENT_PREFIX, "VoyaVPN");
+    }
+
+    /// Byte downloads carry geo databases and rule sets that outlast any fixed whole-request
+    /// deadline over a throttled link, so progress must keep the transfer alive and only silence
+    /// may end it.
+    #[tokio::test]
+    async fn download_bytes_tolerates_a_slow_transfer_but_fails_on_a_stalled_one() {
+        let read_timeout = Duration::from_millis(400);
+        let slow = spawn_dripping_http_fixture(8, 8, b"chunk", Duration::from_millis(80)).await;
+
+        let response = DownloadClient::with_read_timeout_for_tests(read_timeout)
+            .download_bytes(DownloadRequest::direct(format!("{slow}/asset.dat")))
+            .await
+            .expect("a transfer that keeps making progress should not be cut off");
+
+        assert_eq!(response.body, b"chunk".repeat(8));
+
+        let stalled = spawn_dripping_http_fixture(8, 0, b"chunk", Duration::from_millis(80)).await;
+        let error = DownloadClient::with_read_timeout_for_tests(read_timeout)
+            .download_bytes(DownloadRequest::direct(format!("{stalled}/asset.dat")))
+            .await
+            .expect_err("a stalled transfer should fail on the read timeout");
+
+        assert!(
+            matches!(error, DownloadError::AttemptsFailed { .. }),
+            "{error:?}"
+        );
+    }
+
+    #[test]
+    fn empty_responses_are_recognised_without_matching_the_message_text() {
+        let empty = DownloadError::AttemptsFailed {
+            url: "https://sub.example.test/link".to_string(),
+            attempts: vec![DownloadAttempt {
+                url: "https://sub.example.test/link".to_string(),
+                via_proxy: false,
+                bytes: 0,
+                error: Some(EMPTY_RESPONSE_ATTEMPT_ERROR.to_string()),
+            }],
+        };
+        assert!(empty.is_empty_response());
+
+        let refused = DownloadError::AttemptsFailed {
+            url: "https://sub.example.test/link".to_string(),
+            attempts: vec![DownloadAttempt {
+                url: "https://sub.example.test/link".to_string(),
+                via_proxy: false,
+                bytes: 0,
+                error: Some("connection refused".to_string()),
+            }],
+        };
+        assert!(!refused.is_empty_response());
+
+        assert!(!DownloadError::AttemptsFailed {
+            url: "https://sub.example.test/link".to_string(),
+            attempts: Vec::new(),
+        }
+        .is_empty_response());
+    }
+
+    #[tokio::test]
+    async fn empty_body_downloads_report_an_empty_response_attempt() {
+        let base = spawn_http_fixture(
+            HashMap::from([("/sub".to_string(), String::new())]),
+            1,
+            Arc::new(Mutex::new(Vec::new())),
+        )
+        .await;
+
+        let error = DownloadClient::new()
+            .download_text(DownloadRequest::direct(format!("{base}/sub")))
+            .await
+            .expect_err("an empty body should fail the download");
+
+        assert!(error.is_empty_response(), "{error:?}");
     }
 
     #[tokio::test]
@@ -1050,105 +1153,15 @@ mod tests {
     }
 
     #[test]
-    fn redirect_policy_rejects_https_to_http_downgrade() {
-        let previous = [reqwest::Url::parse("https://example.test/sub").expect("previous URL")];
-        let next = reqwest::Url::parse("http://example.test/sub").expect("next URL");
-
-        let error = validate_redirect_attempt(&previous, &next)
-            .expect_err("HTTPS to HTTP redirect should fail");
-
-        assert!(
-            matches!(error, RedirectPolicyError::HttpsDowngrade { .. }),
-            "{error:?}"
-        );
-    }
-
-    #[test]
-    fn redirect_policy_rejects_public_to_local_target() {
-        let previous = [reqwest::Url::parse("https://example.test/sub").expect("previous URL")];
-        let next = reqwest::Url::parse("https://127.0.0.1/sub").expect("next URL");
-
-        let error = validate_redirect_attempt(&previous, &next)
-            .expect_err("public to loopback redirect should fail");
-
-        assert!(
-            matches!(error, RedirectPolicyError::LocalNetworkTarget { .. }),
-            "{error:?}"
-        );
-    }
-
-    #[test]
-    fn local_host_guard_rejects_unspecified_and_ipv4_mapped_forms() {
-        for host in [
-            "localhost",
-            "127.0.0.1",
-            "127.9.9.9",
-            "0.0.0.0",
-            "169.254.1.10",
-            "[::1]",
-            "[::]",
-            "[::ffff:127.0.0.1]",
-            "[::ffff:169.254.1.1]",
-            "[::127.0.0.1]",
-            "[fe80::1]",
-        ] {
-            assert!(is_denied_local_host(host), "{host} should be denied");
-        }
-
-        for host in [
-            "example.test",
-            "1.1.1.1",
-            "192.168.1.10",
-            "[::ffff:1.1.1.1]",
-            "[2606:4700::1111]",
-        ] {
-            assert!(!is_denied_local_host(host), "{host} should be allowed");
-        }
-    }
-
-    #[test]
-    fn redirect_policy_rejects_ipv4_mapped_loopback_target() {
-        let previous = [reqwest::Url::parse("https://example.test/sub").expect("previous URL")];
-        let next = reqwest::Url::parse("https://[::ffff:127.0.0.1]/sub").expect("next URL");
-
-        let error = validate_redirect_attempt(&previous, &next)
-            .expect_err("IPv4-mapped loopback redirect should fail");
-
-        assert!(
-            matches!(error, RedirectPolicyError::LocalNetworkTarget { .. }),
-            "{error:?}"
-        );
-    }
-
-    #[test]
     fn download_clients_build_with_webpki_and_native_trust_roots() {
         build_http_client(None).expect("direct client trusts webpki and native roots");
         build_http_client(Some("socks5://127.0.0.1:1080"))
             .expect("proxy client trusts webpki and native roots");
     }
 
-    #[test]
-    fn redirect_policy_rejects_more_than_configured_limit() {
-        let previous = (0..=HTTP_REDIRECT_LIMIT)
-            .map(|index| {
-                reqwest::Url::parse(&format!("https://example.test/r{index}"))
-                    .expect("previous URL")
-            })
-            .collect::<Vec<_>>();
-        let next = reqwest::Url::parse("https://example.test/final").expect("next URL");
-
-        let error = validate_redirect_attempt(&previous, &next)
-            .expect_err("redirect chain above limit should fail");
-
-        assert!(
-            matches!(error, RedirectPolicyError::TooManyRedirects { limit } if limit == HTTP_REDIRECT_LIMIT),
-            "{error:?}"
-        );
-    }
-
     #[tokio::test]
     async fn download_rejects_redirect_chain_above_limit() {
-        let base = spawn_redirect_chain_fixture(HTTP_REDIRECT_LIMIT + 1).await;
+        let base = spawn_redirect_chain_fixture(redirect::HTTP_REDIRECT_LIMIT + 1).await;
 
         let error = DownloadClient::new()
             .download_text(DownloadRequest::direct(format!("{base}/r0")))

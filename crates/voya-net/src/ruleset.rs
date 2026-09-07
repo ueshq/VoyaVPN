@@ -14,6 +14,14 @@ use crate::{DownloadAttempt, DownloadClient, DownloadError, DownloadRequest, USE
 const RULESET_ASSET_RESPONSE_LIMIT_BYTES: usize = 256 * 1024 * 1024;
 static STAGING_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
+/// First bytes of a sing-box binary rule set (`common/srs`).
+const SRS_MAGIC: &[u8] = b"SRS";
+/// Metadata marker every MaxMind database carries near its end.
+const MMDB_METADATA_MARKER: &[u8] = b"\xab\xcd\xefMaxMind.com";
+/// Bytes that only ever start a text response. A captive portal, a proxy block page or a CDN
+/// error page answers 200 with HTML, and none of the accepted asset formats begin like this.
+const TEXTUAL_BODY_PREFIXES: &[&[u8]] = &[b"<", b"\xef\xbb\xbf<", b"{", b"HTTP/"];
+
 pub const DEFAULT_GEO_SOURCE_URL: &str =
     "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/{0}.dat";
 pub const DEFAULT_SINGBOX_RULESET_URL: &str =
@@ -209,7 +217,7 @@ impl RulesetGeoClient {
         options: &AssetAcquisitionOptions,
     ) -> Result<Vec<AcquiredRulesetGeoAsset>> {
         let target_dir = target_dir.as_ref();
-        let staging = StagingDir::create(target_dir)?;
+        let staging = StagingDir::create(target_dir).await?;
         let mut acquired = Vec::new();
 
         for asset in assets {
@@ -235,10 +243,12 @@ impl RulesetGeoClient {
             });
         }
 
-        staging.commit(
-            target_dir,
-            assets.iter().map(|asset| asset.file_name.as_str()),
-        )?;
+        staging
+            .commit(
+                target_dir,
+                assets.iter().map(|asset| asset.file_name.as_str()),
+            )
+            .await?;
         Ok(acquired)
     }
 
@@ -249,7 +259,7 @@ impl RulesetGeoClient {
         options: &AssetAcquisitionOptions,
     ) -> Result<Vec<AcquiredRulesetGeoAsset>> {
         let target_dir = target_dir.as_ref();
-        let staging = StagingDir::create(target_dir)?;
+        let staging = StagingDir::create(target_dir).await?;
         let mut acquired = Vec::new();
 
         for asset in assets {
@@ -275,10 +285,12 @@ impl RulesetGeoClient {
             });
         }
 
-        staging.commit(
-            target_dir,
-            assets.iter().map(|asset| asset.file_name.as_str()),
-        )?;
+        staging
+            .commit(
+                target_dir,
+                assets.iter().map(|asset| asset.file_name.as_str()),
+            )
+            .await?;
         Ok(acquired)
     }
 
@@ -296,10 +308,16 @@ impl RulesetGeoClient {
             .await?;
         let bytes = validate_asset(file_name, &response.body, allowed_extensions)?;
         let staged_path = staging_dir.join(file_name);
+        // Asset bodies run to hundreds of megabytes, so the write goes through tokio's blocking
+        // pool instead of stalling the worker that also serves IPC and the statistics stream.
         if let Some(parent) = staged_path.parent() {
-            fs::create_dir_all(parent).map_err(|source| asset_io(parent, source))?;
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|source| asset_io(parent, source))?;
         }
-        fs::write(&staged_path, response.body).map_err(|source| asset_io(&staged_path, source))?;
+        tokio::fs::write(&staged_path, response.body)
+            .await
+            .map_err(|source| asset_io(&staged_path, source))?;
 
         Ok(StagedAsset {
             attempts: response.attempts,
@@ -320,11 +338,15 @@ struct StagingDir {
 }
 
 impl StagingDir {
-    fn create(target_dir: &Path) -> Result<Self> {
-        fs::create_dir_all(target_dir).map_err(|source| asset_io(target_dir, source))?;
+    async fn create(target_dir: &Path) -> Result<Self> {
+        tokio::fs::create_dir_all(target_dir)
+            .await
+            .map_err(|source| asset_io(target_dir, source))?;
         let sequence = STAGING_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let path = target_dir.join(format!(".voya-stage-{}-{sequence}", std::process::id()));
-        fs::create_dir(&path).map_err(|source| asset_io(&path, source))?;
+        tokio::fs::create_dir(&path)
+            .await
+            .map_err(|source| asset_io(&path, source))?;
         Ok(Self { path })
     }
 
@@ -338,7 +360,7 @@ impl StagingDir {
     /// file is never observed truncated. Any live file is first renamed aside into the staging
     /// directory, which keeps the batch all-or-nothing — if one asset fails to publish, the
     /// already published ones are rolled back to the files they replaced.
-    fn commit<'a>(
+    async fn commit<'a>(
         &self,
         target_dir: &Path,
         file_names: impl Iterator<Item = &'a str>,
@@ -348,19 +370,19 @@ impl StagingDir {
         for file_name in file_names {
             let staged = self.path.join(file_name);
             let target = target_dir.join(file_name);
-            let replaced = match self.move_aside(file_name, &target) {
+            let replaced = match self.move_aside(file_name, &target).await {
                 Ok(replaced) => replaced,
                 Err(error) => {
-                    rollback(&published);
+                    rollback(&published).await;
                     return Err(error);
                 }
             };
-            if let Err(source) = fs::rename(&staged, &target) {
+            if let Err(source) = tokio::fs::rename(&staged, &target).await {
                 let error = asset_io(&target, source);
                 if let Some(replaced) = replaced {
-                    let _ = fs::rename(&replaced, &target);
+                    let _ = tokio::fs::rename(&replaced, &target).await;
                 }
-                rollback(&published);
+                rollback(&published).await;
                 return Err(error);
             }
             published.push(PublishedAsset { target, replaced });
@@ -372,9 +394,9 @@ impl StagingDir {
     /// Renames an existing live asset into the staging directory so it can be restored.
     ///
     /// Returns `None` when there was no live file to preserve.
-    fn move_aside(&self, file_name: &str, target: &Path) -> Result<Option<PathBuf>> {
+    async fn move_aside(&self, file_name: &str, target: &Path) -> Result<Option<PathBuf>> {
         let replaced = self.path.join(format!("{file_name}.voya-replaced"));
-        match fs::rename(target, &replaced) {
+        match tokio::fs::rename(target, &replaced).await {
             Ok(()) => Ok(Some(replaced)),
             Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(source) => Err(asset_io(target, source)),
@@ -387,20 +409,23 @@ struct PublishedAsset {
     replaced: Option<PathBuf>,
 }
 
-fn rollback(published: &[PublishedAsset]) {
+async fn rollback(published: &[PublishedAsset]) {
     for asset in published.iter().rev() {
         match &asset.replaced {
             Some(replaced) => {
-                let _ = fs::rename(replaced, &asset.target);
+                let _ = tokio::fs::rename(replaced, &asset.target).await;
             }
             None => {
-                let _ = fs::remove_file(&asset.target);
+                let _ = tokio::fs::remove_file(&asset.target).await;
             }
         }
     }
 }
 
 impl Drop for StagingDir {
+    /// Best-effort cleanup of the leftover staging directory. It only ever holds the backups of
+    /// files already renamed onto their live paths, so this is a handful of syscalls rather than
+    /// the multi-megabyte writes that `stage_asset` keeps off the runtime thread.
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }
@@ -506,6 +531,11 @@ fn download_request(url: &str, options: &AssetAcquisitionOptions) -> DownloadReq
     }
 }
 
+/// Checks that a downloaded body is the asset it claims to be before it can replace a live file.
+///
+/// `download_bytes` treats any non-empty 2xx body as a success, so a captive portal or a proxy
+/// block page would otherwise be committed over a working `geosite-cn.srs` and leave the core
+/// unable to start. Each accepted extension therefore carries a cheap structural check.
 fn validate_asset(file_name: &str, body: &[u8], allowed_extensions: &[&str]) -> Result<u64> {
     let path = Path::new(file_name);
     let mut components = path.components();
@@ -531,8 +561,49 @@ fn validate_asset(file_name: &str, body: &[u8], allowed_extensions: &[&str]) -> 
             reason: "empty file".to_string(),
         });
     }
+    if let Err(reason) = validate_asset_content(extension, body) {
+        return Err(RulesetGeoError::InvalidAsset {
+            path: path.to_path_buf(),
+            reason,
+        });
+    }
 
     Ok(u64::try_from(body.len()).unwrap_or(u64::MAX))
+}
+
+fn validate_asset_content(extension: &str, body: &[u8]) -> std::result::Result<(), String> {
+    let textual_prefix = TEXTUAL_BODY_PREFIXES
+        .iter()
+        .copied()
+        .find(|prefix| body.starts_with(prefix));
+    if let Some(prefix) = textual_prefix {
+        return Err(format!(
+            "expected binary {extension} data but the response starts with {:?}",
+            String::from_utf8_lossy(prefix)
+        ));
+    }
+
+    match extension {
+        "srs" => body
+            .starts_with(SRS_MAGIC)
+            .then_some(())
+            .ok_or_else(|| "sing-box rule sets must start with the SRS magic bytes".to_string()),
+        "mmdb" | "metadb" => contains(body, MMDB_METADATA_MARKER)
+            .then_some(())
+            .ok_or_else(|| "MaxMind databases must carry the metadata marker".to_string()),
+        // v2ray `.dat` files are protobuf, which has no fixed magic; rejecting textual bodies
+        // above is the strongest check available without parsing the schema.
+        _ => Ok(()),
+    }
+}
+
+/// Reports whether `haystack` contains `needle`. The MaxMind marker sits in the trailing
+/// metadata section, so only the tail of a large database is scanned.
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    const MMDB_METADATA_TAIL_BYTES: usize = 128 * 1024;
+    let tail = &haystack[haystack.len().saturating_sub(MMDB_METADATA_TAIL_BYTES)..];
+
+    tail.windows(needle.len()).any(|window| window == needle)
 }
 
 fn collect_srs_from_rule(
@@ -637,7 +708,7 @@ mod tests {
         let base = spawn_http_fixture(
             HashMap::from([
                 ("/geosite.dat".to_string(), b"geosite-dat".to_vec()),
-                ("/geosite-cn.srs".to_string(), b"srs-binary".to_vec()),
+                ("/geosite-cn.srs".to_string(), b"SRS-binary".to_vec()),
             ]),
             2,
             Arc::clone(&seen_user_agents),
@@ -736,14 +807,16 @@ mod tests {
         let _ = fs::remove_dir_all(target_root);
     }
 
-    #[test]
-    fn failed_commit_restores_every_replaced_asset() {
+    #[tokio::test]
+    async fn failed_commit_restores_every_replaced_asset() {
         let target_root = unique_temp_root("ruleset-commit-rollback");
         fs::create_dir_all(&target_root).expect("target directory");
         fs::write(target_root.join("geosite.dat"), b"old-geosite").expect("old geosite");
         fs::write(target_root.join("geoip.dat"), b"old-geoip").expect("old geoip");
 
-        let staging = StagingDir::create(&target_root).expect("staging directory");
+        let staging = StagingDir::create(&target_root)
+            .await
+            .expect("staging directory");
         fs::write(staging.path().join("geosite.dat"), b"new-geosite").expect("staged geosite");
         fs::write(staging.path().join("Country.mmdb"), b"new-country").expect("staged country");
         // "geoip.dat" is deliberately absent from staging, so publishing it fails after the two
@@ -754,6 +827,7 @@ mod tests {
                 &target_root,
                 ["geosite.dat", "Country.mmdb", "geoip.dat"].into_iter(),
             )
+            .await
             .expect_err("commit of a missing staged asset should fail");
 
         assert!(
@@ -782,18 +856,21 @@ mod tests {
         let _ = fs::remove_dir_all(target_root);
     }
 
-    #[test]
-    fn commit_publishes_every_staged_asset() {
+    #[tokio::test]
+    async fn commit_publishes_every_staged_asset() {
         let target_root = unique_temp_root("ruleset-commit");
         fs::create_dir_all(&target_root).expect("target directory");
         fs::write(target_root.join("geosite.dat"), b"old-geosite").expect("old geosite");
 
-        let staging = StagingDir::create(&target_root).expect("staging directory");
+        let staging = StagingDir::create(&target_root)
+            .await
+            .expect("staging directory");
         fs::write(staging.path().join("geosite.dat"), b"new-geosite").expect("staged geosite");
         fs::write(staging.path().join("geoip.dat"), b"new-geoip").expect("staged geoip");
 
         staging
             .commit(&target_root, ["geosite.dat", "geoip.dat"].into_iter())
+            .await
             .expect("commit");
 
         assert_eq!(
@@ -816,6 +893,86 @@ mod tests {
             validate_asset("geoip.dat", b"data", &["dat"]).expect("valid asset"),
             4
         );
+    }
+
+    /// Captive portals and proxy block pages answer 200 with HTML, which `download_bytes` reports
+    /// as a successful non-empty body, so the shape of the payload has to be checked here.
+    #[test]
+    fn asset_validation_rejects_block_pages_and_wrong_formats() {
+        for body in [
+            b"<!DOCTYPE html><html><body>blocked</body></html>".as_slice(),
+            b"\xef\xbb\xbf<html>blocked</html>".as_slice(),
+            b"{\"message\":\"not found\"}".as_slice(),
+        ] {
+            assert!(
+                validate_asset("geosite.dat", body, &["dat"]).is_err(),
+                "textual body should not pass as a .dat asset"
+            );
+            assert!(
+                validate_asset("geosite-cn.srs", body, &["srs"]).is_err(),
+                "textual body should not pass as a .srs asset"
+            );
+        }
+
+        assert!(
+            validate_asset("geosite-cn.srs", b"\x00binary-but-not-srs", &["srs"]).is_err(),
+            "a .srs asset without the SRS magic should be rejected"
+        );
+        assert!(
+            validate_asset("Country.mmdb", b"\x00binary-but-not-maxmind", &["mmdb"]).is_err(),
+            "an .mmdb asset without the metadata marker should be rejected"
+        );
+
+        validate_asset("geosite-cn.srs", b"SRS\x03\x00rules", &["srs"]).expect("valid rule set");
+        validate_asset("geosite.dat", b"\x0a\x05china", &["dat"]).expect("valid protobuf dat");
+        validate_asset(
+            "Country.mmdb",
+            b"\x00records\xab\xcd\xefMaxMind.com\x00",
+            &["mmdb"],
+        )
+        .expect("valid MaxMind database");
+    }
+
+    #[tokio::test]
+    async fn html_block_page_never_replaces_a_working_ruleset() {
+        let base = spawn_http_fixture(
+            HashMap::from([(
+                "/geosite-cn.srs".to_string(),
+                b"<html><body>Access denied by network policy</body></html>".to_vec(),
+            )]),
+            1,
+            Arc::new(Mutex::new(Vec::new())),
+        )
+        .await;
+        let target_root = unique_temp_root("ruleset-block-page");
+        fs::create_dir_all(&target_root).expect("target directory");
+        fs::write(target_root.join("geosite-cn.srs"), b"SRS\x03good").expect("live rule set");
+
+        let error = RulesetGeoClient::new()
+            .acquire_srs_assets(
+                &[SrsAsset {
+                    kind: "geosite".to_string(),
+                    name: "cn".to_string(),
+                    tag: "geosite-cn".to_string(),
+                    file_name: "geosite-cn.srs".to_string(),
+                    url: format!("{base}/geosite-cn.srs"),
+                }],
+                &target_root,
+                &AssetAcquisitionOptions::default(),
+            )
+            .await
+            .expect_err("an HTML body should not be accepted as a rule set");
+
+        assert!(
+            matches!(error, RulesetGeoError::InvalidAsset { .. }),
+            "{error:?}"
+        );
+        assert_eq!(
+            fs::read(target_root.join("geosite-cn.srs")).expect("rule set"),
+            b"SRS\x03good"
+        );
+
+        let _ = fs::remove_dir_all(target_root);
     }
 
     #[tokio::test]

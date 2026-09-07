@@ -392,6 +392,8 @@ async fn a_restarted_core_refreshes_the_snapshot_without_touching_the_system_pro
                         main_pid: Some(12),
                         pre_pid: None,
                         running_core_type: Some(CoreType::sing_box),
+                        clash_api_port: None,
+                        clash_api_secret: None,
                     },
                 },
             },

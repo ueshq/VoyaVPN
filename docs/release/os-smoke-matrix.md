@@ -21,7 +21,7 @@ Record:
 - OS name, version, architecture, desktop environment when relevant, and clean-user status.
 - Install mode: unsigned debug package, signed package, or release build.
 - CDN release index entry, updater metadata entry, core manifest entry, and artifact URL host for stable runs.
-- Core binaries used, versions, paths, and whether they were downloaded on first run or preinstalled.
+- Core binaries used, versions, and paths, plus the packaged seed SHA-256 they were copied from. Every package bundles the sing-box seed; the app has no first-run download path, so a missing core means a package built without a staged seed, not a failed download.
 - Redacted test server or subscription source.
 - Before and after OS proxy, routes, TUN devices, autostart entries, hotkeys, and running process state.
 - Logs, screenshots, terminal output, and exact commands proving pass or fail.

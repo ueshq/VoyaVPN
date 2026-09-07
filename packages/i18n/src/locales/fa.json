@@ -30,7 +30,16 @@
     "dedupeProfilesTitle": "پروفایل‌های تکراری حذف شوند؟",
     "deleteProfilesConfirm": "حذف",
     "deleteProfilesDescription": "{{count}} نمایه انتخاب‌شده برای همیشه حذف خواهد شد. این عمل قابل بازگشت نیست.",
-    "deleteProfilesTitle": "نمایه‌ها حذف شوند؟"
+    "deleteProfilesTitle": "نمایه‌ها حذف شوند؟",
+    "deleteRoutingConfirm": "حذف",
+    "deleteRoutingDescription": "«{{name}}» و {{count}} قانون آن برای همیشه حذف می‌شوند. این عمل قابل بازگشت نیست.",
+    "deleteRoutingRuleConfirm": "حذف",
+    "deleteRoutingRuleDescription": "قانون مسیریابی انتخاب‌شده برای همیشه حذف می‌شود. این عمل قابل بازگشت نیست.",
+    "deleteRoutingRuleTitle": "قانون حذف شود؟",
+    "deleteRoutingTitle": "نمایهٔ مسیریابی حذف شود؟",
+    "deleteSubscriptionConfirm": "حذف",
+    "deleteSubscriptionDescription": "«{{name}}» و همهٔ نمایه‌های واردشده از آن برای همیشه حذف می‌شوند. این عمل قابل بازگشت نیست.",
+    "deleteSubscriptionTitle": "اشتراک حذف شود؟"
   },
   "home": {
     "aria": "خانهٔ اتصال",
@@ -101,6 +110,24 @@
     "hotkeyKey": "کلید میانبر",
     "hotkeyKeyPlaceholder": "یک کلید را فشار دهید",
     "hotkeyShowWindow": "نمایش پنجره",
+    "keyName": {
+      "backspace": "بازگشت به عقب",
+      "delete": "Delete",
+      "down": "پایین",
+      "end": "End",
+      "enter": "Enter",
+      "escape": "Esc",
+      "home": "Home",
+      "insert": "Insert",
+      "left": "چپ",
+      "pageDown": "صفحه پایین",
+      "pageUp": "صفحه بالا",
+      "right": "راست",
+      "space": "فاصله",
+      "tab": "Tab",
+      "unknown": "کلید {{keyCode}}",
+      "up": "بالا"
+    },
     "loading": "Loading",
     "routeTemplateSource": "منبع الگوی مسیریابی",
     "runtimeCore": "Core",
@@ -136,6 +163,7 @@
       "chainMarker": "Chain",
       "chooseChildren": "Choose children",
       "chooseDescription": "Choose servers, policy groups, or proxy chains for the current group.",
+      "draftName": "گروه پیش‌نویس",
       "filterChildren": "Filter child profiles",
       "groupFallback": "Group",
       "groupMarker": "Group",
@@ -302,7 +330,17 @@
         "clipboard": "Import from clipboard",
         "clipboardEmpty": "Clipboard is empty.",
         "clipboardUnavailable": "Clipboard text read is unavailable in this WebView.",
-        "discardedNodeOverrides": "Discarded {{count}} node-level override(s); global settings will be used."
+        "discardedNodeOverrides": "Discarded {{count}} node-level override(s); global settings will be used.",
+        "summary": {
+          "deduped": "{{count}} مورد تکراری در داده‌ها نادیده گرفته شد.",
+          "failed": "{{count}} مورد تجزیه نشد.",
+          "filtered": "{{count}} مورد فیلتر شد.",
+          "imported": "{{count}} نمایه وارد شد.",
+          "removedDuplicates": "{{count}} مورد تکراری حذف شد.",
+          "skipped": "{{count}} مورد رد شد.",
+          "target": "مقصد: {{target}}.",
+          "updated": "{{count}} مورد به‌روزرسانی شد."
+        }
       },
       "importDialog": {
         "description": "Import share links, subscription URLs, or JSON payloads.",
@@ -353,7 +391,6 @@
       "speedtest": {
         "buttonTitle": "{{label}} speedtest",
         "cancelTitle": "Cancel speedtest",
-        "fast": "Fast",
         "mixed": "Mixed",
         "more": "More speed tests",
         "real": "Real",
@@ -376,7 +413,14 @@
         "rows": "{{rows}} rows",
         "subscriptions": "Subscriptions"
       },
-      "untitled": "Untitled"
+      "untitled": "Untitled",
+      "validation": {
+        "addressRequired": "نشانی الزامی است",
+        "configSourceRequired": "مسیر پیکربندی یا منبع JSON الزامی است",
+        "credentialRequired": "رمز عبور یا شناسه الزامی است",
+        "remarksRequired": "توضیحات الزامی است",
+        "uuidRequired": "شناسهٔ UUID الزامی است"
+      }
     },
     "proxyConnections": {
       "columns": {
@@ -498,6 +542,8 @@
     "node": "گره",
     "process": "فرایند",
     "reloadConfigFailed": "بارگذاری دوبارهٔ پیکربندی هسته ناموفق بود",
+    "requiresCore": "ابتدا متصل شوید",
+    "requiresCoreDescription": "گروه‌های پروکسی پس از اجرای هسته در دسترس قرار می‌گیرند.",
     "selectNodeFailed": "تغییر گره ناموفق بود",
     "source": "مبدا",
     "testAll": "آزمایش همه",
@@ -512,6 +558,7 @@
     "viewTabsAria": "نمای اتصال‌ها"
   },
   "qr": {
+    "clipboardImageMissing": "کلیپ‌بورد حاوی تصویر نیست.",
     "clipboardImageUnavailable": "Clipboard image read is unavailable in this WebView.",
     "clipboardUnavailable": "Clipboard text read is unavailable in this WebView.",
     "content": "محتوا",
@@ -521,6 +568,11 @@
     "scanClipboardImage": "Clipboard image",
     "scanImage": "اسکن تصویر",
     "scanScreen": "Screen",
+    "screenCaptureUnavailable": "ضبط صفحه در این WebView در دسترس نیست.",
+    "screenFrameUnavailable": "ضبط صفحه هیچ فریم ویدیویی تولید نکرد.",
+    "screenFrameUnencodable": "رمزگذاری فریم ضبط‌شدهٔ صفحه ممکن نشد.",
+    "screenFrameUnreadable": "خواندن فریم ضبط‌شدهٔ صفحه ممکن نشد.",
+    "screenStreamUnavailable": "بارگیری جریان ضبط‌شدهٔ صفحه ممکن نشد.",
     "screenUnavailable": "Screen QR scanning is unavailable on this platform or permission state."
   },
   "settings": {
@@ -662,6 +714,21 @@
     "title": "بررسی به روزرسانی",
     "updateNow": "اکنون به‌روزرسانی کن",
     "waiting": "در انتظار"
+  },
+  "validation": {
+    "dnsSettings": "اعتبارسنجی تنظیمات DNS ناموفق بود",
+    "expectedIps": "آی‌پی‌های مورد انتظار باید با ویرگول جدا شوند و فاصله نداشته باشند.",
+    "hostsLine": "هر سطر hosts باید یک دامنه و دست‌کم یک پاسخ داشته باشد.",
+    "invalid": "این مقدار معتبر نیست.",
+    "listItem": "موارد فهرست نمی‌توانند خالی باشند.",
+    "network": "شبکه باید tcp، udp یا tcp,udp باشد.",
+    "port": "درگاه باید فهرستی از درگاه‌ها یا بازه‌ها جداشده با ویرگول باشد.",
+    "portRange": "مقدار درگاه باید بین ۰ تا ۶۵۵۳۵ باشد و بازه‌ها صعودی باشند.",
+    "remarksLength": "توضیحات نباید بیش از ۲۵۶ نویسه باشد.",
+    "urlCredentials": "نشانی نباید شامل نام کاربری یا گذرواژه باشد.",
+    "urlHost": "نشانی باید شامل نام میزبان باشد.",
+    "urlHttps": "نشانی باید از https:// استفاده کند.",
+    "urlInvalid": "نشانی معتبر نیست."
   },
   "window": {
     "close": "بستن",

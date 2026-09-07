@@ -32,16 +32,7 @@ pub async fn save_dns_settings<R: tauri::Runtime>(
     mutation.config_mut().simple_dns_item = saved.simple_dns_item.clone();
     let config = commit_config_mutation(mutation).await?;
     emit_dns_invalidation(&app, "dns-settings-saved")?;
-    if let Err(error) =
-        restart_if_connected_after_config_change(&app, &state, &config, "DNS changed").await
-    {
-        report_post_commit_error(
-            &app,
-            "DNS saved; core restart failed",
-            &format!("{error:?}"),
-            AppNoticeLevel::Warning,
-        );
-    }
+    restart_after_config_change(&app, &state, &config, ConfigChange::DNS).await;
 
     Ok(dns_to_contract(saved))
 }

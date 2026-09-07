@@ -1,33 +1,34 @@
-use tokio::sync::Mutex;
 use voya_contracts::{AppSettingsV1, CURRENT_SCHEMA_VERSION};
 
 use crate::{
-    executor::{run_query, RepositoryExecutor},
+    executor::{repository_constructors, run_query, RepositoryExecutor},
     AppStateRecord, DbError, Result,
 };
 
+/// Stores the IPC settings DTO verbatim as the on-disk settings payload.
+///
+/// `voya_contracts::AppSettingsV1` is therefore two contracts at once: the type
+/// tauri-specta exports to `bindings.ts`, and the JSON layout of every installed
+/// database's `app_settings.payload`. Because the contract and its nested
+/// structs carry `deny_unknown_fields`, a field edited for UI reasons is a
+/// storage-format change — removing or renaming one makes [`Self::load`] fail
+/// for every existing install, which `AppServices::load_config` propagates into
+/// `setup()` and turns into a launch failure.
+///
+/// Any change to `AppSettingsV1` must therefore either stay backwards
+/// compatible (add fields with `#[serde(default)]`, never remove or rename) or
+/// bump `CURRENT_SCHEMA_VERSION` with a migration. The
+/// `persisted_settings_payload_from_an_earlier_build_still_loads` test pins the
+/// current layout against a checked-in fixture so an accidental break is caught
+/// here rather than on a user's machine.
 #[derive(Debug, Clone, Copy)]
 pub struct SettingsRepository<'executor> {
     executor: RepositoryExecutor<'executor>,
 }
 
+repository_constructors!(SettingsRepository);
+
 impl<'executor> SettingsRepository<'executor> {
-    #[must_use]
-    pub(crate) const fn new(pool: &'executor sqlx::SqlitePool) -> Self {
-        Self {
-            executor: RepositoryExecutor::Pool(pool),
-        }
-    }
-
-    #[must_use]
-    pub(crate) const fn new_in_transaction(
-        transaction: &'executor Mutex<sqlx::Transaction<'static, sqlx::Sqlite>>,
-    ) -> Self {
-        Self {
-            executor: RepositoryExecutor::Transaction(transaction),
-        }
-    }
-
     pub async fn load(&self) -> Result<AppSettingsV1> {
         let row = run_query!(
             self.executor,

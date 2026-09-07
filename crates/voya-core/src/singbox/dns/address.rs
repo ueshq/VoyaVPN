@@ -96,17 +96,18 @@ fn parse_url_parts(input: &str) -> Option<(String, String, Option<u16>, String)>
             ));
         }
     }
+    // Anything with a scheme has already been handled by `Url::parse`; if that
+    // failed the input is malformed, not a bare authority.
     if input.contains("://") {
         return None;
     }
 
-    let (scheme, rest) = input
-        .split_once("://")
-        .map_or(("", input), |(scheme, rest)| (scheme, rest));
-    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
-    let authority = &rest[..authority_end];
-    let path = if authority_end < rest.len() && rest[authority_end..].starts_with('/') {
-        rest[authority_end..]
+    // Schemeless fallback: a bare `host`, `host:port` or `[v6]:port`, with an
+    // optional path that only the DoH/H3 branch keeps.
+    let authority_end = input.find(['/', '?', '#']).unwrap_or(input.len());
+    let authority = &input[..authority_end];
+    let path = if authority_end < input.len() && input[authority_end..].starts_with('/') {
+        input[authority_end..]
             .split('#')
             .next()
             .unwrap_or_default()
@@ -118,7 +119,7 @@ fn parse_url_parts(input: &str) -> Option<(String, String, Option<u16>, String)>
     if domain.is_empty() {
         Some((input.to_string(), String::new(), None, String::new()))
     } else {
-        Some((domain, scheme.to_string(), port, path))
+        Some((domain, String::new(), port, path))
     }
 }
 

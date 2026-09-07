@@ -9,20 +9,28 @@ use tokio::{
     task::JoinHandle,
     time,
 };
-use voya_core::{AppConfig, CoreType, InboundProtocol, ServerStatItem, DEFAULT_LOCAL_PORT};
+use voya_core::{AppConfig, CoreType, ServerStatItem};
 use voya_db::{Database, DbError};
 use voya_net::clash::{
-    decode_traffic_message, ClashApiEndpoint, ClashWebSocketClient, ClashWebSocketEvent,
-    ClashWebSocketResource,
+    decode_traffic_message, ClashWebSocketClient, ClashWebSocketEvent, ClashWebSocketResource,
 };
 
 use crate::{
     backoff::{sleep_or_shutdown, WebSocketReconnectBackoff},
+    proxy_runtime::proxy_runtime_endpoint,
     supervisor::{CoreSupervisor, SupervisorSnapshot},
 };
 
 const STATISTICS_CHANNEL_SIZE: usize = 64;
 const COALESCE_INTERVAL: Duration = Duration::from_secs(1);
+/// How long measured bytes may sit in memory before SQLite sees them.
+///
+/// The per-second row rewrite this replaces cost 3600 write transactions an
+/// hour for a counter nobody reads until the app is reopened, and every one of
+/// them competed with the mutations the user is actually waiting on.
+const TRAFFIC_FLUSH_INTERVAL: Duration = Duration::from_secs(10);
+/// Coalesced ticks per flush. The aggregator's only clock is its tick.
+const TRAFFIC_FLUSH_TICKS: u64 = TRAFFIC_FLUSH_INTERVAL.as_secs() / COALESCE_INTERVAL.as_secs();
 const SINGBOX_RECONNECT_INITIAL_DELAY: Duration = Duration::from_secs(1);
 const SINGBOX_RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
 const SINGBOX_INITIAL_DELAY: Duration = Duration::from_secs(5);
@@ -102,8 +110,6 @@ pub struct StatisticsConfigSnapshot {
     pub enable_statistics: bool,
     pub display_real_time_speed: bool,
     pub active_profile_id: Option<String>,
-    pub state_port: u16,
-    pub state_port2: u16,
 }
 
 impl StatisticsConfigSnapshot {
@@ -113,11 +119,6 @@ impl StatisticsConfigSnapshot {
             enable_statistics: config.gui_item.enable_statistics,
             display_real_time_speed: config.gui_item.display_real_time_speed,
             active_profile_id: nonempty(config.index_id.clone()),
-            state_port: clamp_port(inbound_port(config, InboundProtocol::api)),
-            state_port2: clamp_port(
-                inbound_port(config, InboundProtocol::api2)
-                    + i32::from(config.tun_mode_item.enable_tun),
-            ),
         }
     }
 
@@ -235,22 +236,142 @@ pub async fn apply_statistics_sample(
     }
 
     let server_stat = if let Some(active_profile_id) = &config.active_profile_id {
-        Some(
-            database
-                .server_stats()
-                .add_traffic(
-                    active_profile_id,
-                    date_now,
-                    sample.proxy_up_bytes,
-                    sample.proxy_down_bytes,
-                )
-                .await?,
-        )
+        Some(add_traffic(database, active_profile_id, date_now, sample).await?)
     } else {
         None
     };
 
     Ok(Some(snapshot_from_sample(config, sample, server_stat)))
+}
+
+async fn add_traffic(
+    database: &Database,
+    index_id: &str,
+    date_now: i64,
+    sample: ServerSpeedSample,
+) -> Result<ServerStatItem> {
+    database
+        .server_stats()
+        .add_traffic(
+            index_id,
+            date_now,
+            sample.proxy_up_bytes,
+            sample.proxy_down_bytes,
+        )
+        .await
+        .map_err(Into::into)
+}
+
+/// Traffic measured but not yet written to SQLite.
+///
+/// The UI still gets a snapshot every second; only the database round trip is
+/// batched. `baseline` is the last row the database returned, so the projected
+/// totals keep climbing between flushes instead of freezing at the last write.
+#[derive(Debug, Default)]
+struct TrafficWriteBuffer {
+    /// Row the buffered bytes belong to. Both halves matter: crediting a
+    /// profile switch or a midnight rollover to the wrong row would move
+    /// traffic between profiles or between days.
+    target: Option<(String, i64)>,
+    buffered: ServerSpeedSample,
+    baseline: Option<ServerStatItem>,
+}
+
+impl TrafficWriteBuffer {
+    fn targets(&self, index_id: &str, date_now: i64) -> bool {
+        self.target
+            .as_ref()
+            .is_some_and(|(id, day)| id == index_id && *day == date_now)
+    }
+
+    fn push(&mut self, index_id: &str, date_now: i64, sample: ServerSpeedSample) {
+        self.target = Some((index_id.to_string(), date_now));
+        self.buffered.add(sample);
+    }
+
+    /// Totals as the database *would* report them once the buffer is flushed.
+    fn projected(&self) -> Option<ServerStatItem> {
+        let baseline = self.baseline.clone()?;
+
+        Some(ServerStatItem {
+            total_up: baseline
+                .total_up
+                .saturating_add(self.buffered.proxy_up_bytes),
+            total_down: baseline
+                .total_down
+                .saturating_add(self.buffered.proxy_down_bytes),
+            today_up: baseline
+                .today_up
+                .saturating_add(self.buffered.proxy_up_bytes),
+            today_down: baseline
+                .today_down
+                .saturating_add(self.buffered.proxy_down_bytes),
+            ..baseline
+        })
+    }
+}
+
+/// Writes whatever the buffer holds and adopts the row the database returns.
+///
+/// A buffer with no traffic is a no-op, so calling this on every profile
+/// switch, day rollover and shutdown costs nothing when there is nothing to
+/// save.
+async fn flush_traffic_buffer(database: &Database, buffer: &mut TrafficWriteBuffer) -> Result<()> {
+    let Some((index_id, date_now)) = buffer.target.clone() else {
+        return Ok(());
+    };
+    if !buffer.buffered.has_traffic() {
+        return Ok(());
+    }
+
+    let stat = add_traffic(database, &index_id, date_now, buffer.buffered).await?;
+    buffer.buffered = ServerSpeedSample::default();
+    buffer.baseline = Some(stat);
+
+    Ok(())
+}
+
+/// Applies one coalesced tick.
+///
+/// Returns the snapshot the UI renders, which is unchanged in cadence and
+/// content — the only difference is that most ticks no longer touch SQLite.
+async fn record_statistics_tick(
+    database: &Database,
+    config: &StatisticsConfigSnapshot,
+    buffer: &mut TrafficWriteBuffer,
+    sample: ServerSpeedSample,
+    date_now: i64,
+    flush_due: bool,
+) -> Result<Option<StatisticsSnapshot>> {
+    if !config.enabled() {
+        // Statistics were switched off mid-run; the bytes already measured
+        // still belong in the database.
+        flush_traffic_buffer(database, buffer).await?;
+        return Ok(None);
+    }
+    let Some(index_id) = config.active_profile_id.clone() else {
+        flush_traffic_buffer(database, buffer).await?;
+        return Ok(Some(snapshot_from_sample(config, sample, None)));
+    };
+    if !buffer.targets(&index_id, date_now) {
+        flush_traffic_buffer(database, buffer).await?;
+        *buffer = TrafficWriteBuffer::default();
+    }
+    if sample.has_traffic() {
+        buffer.push(&index_id, date_now, sample);
+    }
+    // The first write after a switch goes straight through: without a baseline
+    // row there is nothing to project the running totals from, and the panel
+    // would show no lifetime figure for the whole first flush window.
+    if flush_due || buffer.baseline.is_none() {
+        flush_traffic_buffer(database, buffer).await?;
+    }
+
+    Ok(Some(snapshot_from_sample(
+        config,
+        sample,
+        buffer.projected(),
+    )))
 }
 
 #[must_use]
@@ -263,13 +384,6 @@ pub fn parse_singbox_traffic_sample(source: &str) -> Option<ServerSpeedSample> {
         direct_up_bytes: 0,
         direct_down_bytes: 0,
     })
-}
-
-#[must_use]
-pub fn singbox_state_port2(config: &AppConfig) -> u16 {
-    clamp_port(
-        inbound_port(config, InboundProtocol::api2) + i32::from(config.tun_mode_item.enable_tun),
-    )
 }
 
 #[must_use]
@@ -300,6 +414,9 @@ async fn run_statistics_aggregator(
     let mut interval = time::interval(COALESCE_INTERVAL);
     let mut pending = ServerSpeedSample::default();
     let mut emitted_traffic = false;
+    let mut day_marker = current_day_marker();
+    let mut buffer = TrafficWriteBuffer::default();
+    let mut ticks_since_flush = 0_u64;
 
     loop {
         tokio::select! {
@@ -319,7 +436,30 @@ async fn run_statistics_aggregator(
                 let sample = pending;
                 pending = ServerSpeedSample::default();
                 let config = config_source.snapshot();
-                match apply_statistics_sample(&database, &config, sample, current_day_marker()).await {
+                let current_day = current_day_marker();
+                if current_day != day_marker {
+                    // Buffered bytes were measured yesterday, and the rollover
+                    // is about to zero today's counters for every row.
+                    if let Err(error) = flush_traffic_buffer(&database, &mut buffer).await {
+                        tracing::warn!(?error, "failed to flush statistics before day rollover");
+                    }
+                }
+                day_marker = roll_over_statistics_day(&database, day_marker, current_day).await;
+                ticks_since_flush = ticks_since_flush.saturating_add(1);
+                let flush_due = ticks_since_flush >= TRAFFIC_FLUSH_TICKS;
+                if flush_due {
+                    ticks_since_flush = 0;
+                }
+                match record_statistics_tick(
+                    &database,
+                    &config,
+                    &mut buffer,
+                    sample,
+                    day_marker,
+                    flush_due,
+                )
+                .await
+                {
                     Ok(Some(snapshot)) => {
                         if should_emit_statistics(sample.has_traffic(), emitted_traffic) {
                             emitted_traffic = sample.has_traffic();
@@ -331,6 +471,13 @@ async fn run_statistics_aggregator(
                 }
             }
         }
+    }
+
+    // Best effort: `close()` only signals, so the process may still exit before
+    // this lands — but on the graceful path it saves up to a flush window of
+    // traffic that batching would otherwise have discarded.
+    if let Err(error) = flush_traffic_buffer(&database, &mut buffer).await {
+        tracing::warn!(?error, "failed to flush buffered statistics on shutdown");
     }
 }
 
@@ -370,7 +517,21 @@ async fn run_singbox_statistics_service(
             }
             continue;
         }
-        let Some(identity) = singbox_process_identity(&supervisor).await else {
+        let snapshot = supervisor.status().await.ok();
+        // The supervisor reports the port the running main config actually
+        // listens on, and the bearer token that config demands. Recomputing the
+        // port from the TUN setting is wrong on a pre-socks topology, where the
+        // main process keeps `api2` and the pre-socks one takes `api2 + 1`:
+        // statistics would then be read from the pre-socks process, which has
+        // no per-node counters at all. The token exists only in the config that
+        // launch generated, so it can only come from here.
+        let access = snapshot
+            .as_ref()
+            .map(SupervisorSnapshot::clash_api_access)
+            .unwrap_or_default();
+        let Some(identity) = snapshot
+            .and_then(|snapshot| core_process_identity(snapshot, core_type_matches_singbox))
+        else {
             active_identity = None;
             reconnect_backoff.reset();
             if sleep_or_shutdown(SINGBOX_RECONNECT_INITIAL_DELAY, &mut shutdown).await {
@@ -381,7 +542,7 @@ async fn run_singbox_statistics_service(
         if update_active_identity(&mut active_identity, identity) {
             reconnect_backoff.reset();
         }
-        let Some(state_port) = available_state_port(config.state_port2) else {
+        let Some(endpoint) = proxy_runtime_endpoint(&access) else {
             active_identity = None;
             reconnect_backoff.reset();
             tracing::debug!("skipping sing-box statistics because state port is unavailable");
@@ -391,7 +552,7 @@ async fn run_singbox_statistics_service(
             continue;
         };
 
-        let client = ClashWebSocketClient::new(ClashApiEndpoint::loopback(state_port));
+        let client = ClashWebSocketClient::new(endpoint);
         match time::timeout(
             SINGBOX_WS_CONNECT_TIMEOUT,
             client.connect(ClashWebSocketResource::Traffic),
@@ -443,6 +604,24 @@ async fn run_singbox_statistics_service(
             break;
         }
     }
+}
+
+/// Rolls every stored profile over when the calendar day changes.
+///
+/// `add_traffic` only rolls the row it touches, so without this every profile
+/// other than the active one keeps showing yesterday's "today" totals until the
+/// next launch runs `initialize_data`. Returns the marker to keep using.
+async fn roll_over_statistics_day(database: &Database, previous: i64, current: i64) -> i64 {
+    if previous != current {
+        if let Err(error) = database.server_stats().reset_rollover(current).await {
+            tracing::warn!(
+                ?error,
+                "failed to roll server statistics over to the new day"
+            );
+        }
+    }
+
+    current
 }
 
 async fn singbox_process_identity(supervisor: &CoreSupervisor) -> Option<CoreProcessIdentity> {
@@ -516,23 +695,11 @@ fn core_type_matches_singbox(core_type: CoreType) -> bool {
     true
 }
 
-fn available_state_port(port: u16) -> Option<u16> {
+/// A zero state port means the generated config exposes no Clash API, so both
+/// the statistics service and the proxy monitor skip connecting instead of
+/// dialling 127.0.0.1:0.
+pub(crate) fn available_state_port(port: u16) -> Option<u16> {
     (port != 0).then_some(port)
-}
-
-fn inbound_port(app_config: &AppConfig, protocol: InboundProtocol) -> i32 {
-    app_config
-        .inbound
-        .iter()
-        .find(|item| item.protocol == "socks")
-        .map(|item| item.local_port)
-        .or_else(|| app_config.inbound.first().map(|item| item.local_port))
-        .unwrap_or(DEFAULT_LOCAL_PORT)
-        + protocol.port_offset()
-}
-
-fn clamp_port(port: i32) -> u16 {
-    u16::try_from(port.clamp(0, i32::from(u16::MAX))).unwrap_or(u16::MAX)
 }
 
 fn nonempty(value: String) -> Option<String> {
@@ -562,8 +729,12 @@ mod tests {
     }
 
     #[test]
-    fn statistics_config_uses_singbox_state_port2() {
-        let mut config = AppConfig {
+    fn statistics_config_snapshot_does_not_carry_a_state_port() {
+        // The port used to be recomputed here from `tun_mode_item.enable_tun`,
+        // which disagreed with the generated config on a pre-socks topology.
+        // It now travels on the supervisor snapshot, so a config change no
+        // longer has to restart the statistics loop to pick it up.
+        let base = AppConfig {
             inbound: vec![InItem {
                 local_port: 12000,
                 protocol: "socks".to_string(),
@@ -575,11 +746,13 @@ mod tests {
             },
             ..AppConfig::default()
         };
+        let mut without_tun = base.clone();
+        without_tun.tun_mode_item.enable_tun = false;
 
-        assert_eq!(singbox_state_port2(&config), 12006);
-
-        config.tun_mode_item.enable_tun = false;
-        assert_eq!(singbox_state_port2(&config), 12005);
+        assert_eq!(
+            StatisticsConfigSnapshot::from_app_config(&base),
+            StatisticsConfigSnapshot::from_app_config(&without_tun)
+        );
     }
 
     #[test]
@@ -595,6 +768,8 @@ mod tests {
             main_pid: Some(100),
             pre_pid: None,
             running_core_type: Some(CoreType::sing_box),
+            clash_api_port: None,
+            clash_api_secret: None,
         };
         let restarted = SupervisorSnapshot {
             main_pid: Some(101),
@@ -617,22 +792,9 @@ mod tests {
 
     #[test]
     fn statistics_state_port_zero_is_unavailable() {
-        let mut config = AppConfig {
-            inbound: vec![InItem {
-                local_port: -4,
-                protocol: "socks".to_string(),
-                ..InItem::default()
-            }],
-            ..AppConfig::default()
-        };
-
-        config
-            .inbound
-            .first_mut()
-            .expect("test config has an inbound")
-            .local_port = -5;
-        assert_eq!(singbox_state_port2(&config), 0);
-        assert_eq!(available_state_port(singbox_state_port2(&config)), None);
+        // A generated config with no Clash API reports port 0; dialling
+        // 127.0.0.1:0 would connect to an arbitrary local listener.
+        assert_eq!(available_state_port(0), None);
         assert_eq!(available_state_port(1), Some(1));
     }
 
@@ -655,8 +817,6 @@ mod tests {
             enable_statistics: true,
             display_real_time_speed: true,
             active_profile_id: Some("active".to_string()),
-            state_port: 10812,
-            state_port2: 10813,
         };
 
         let snapshot = apply_statistics_sample(
@@ -722,8 +882,6 @@ mod tests {
             enable_statistics: true,
             display_real_time_speed: true,
             active_profile_id: Some("active".to_string()),
-            state_port: 10812,
-            state_port2: 10813,
         };
 
         let idle = ServerSpeedSample::default();
@@ -787,8 +945,6 @@ mod tests {
             enable_statistics: true,
             display_real_time_speed: false,
             active_profile_id: Some("active".to_string()),
-            state_port: 10812,
-            state_port2: 10813,
         };
 
         let snapshot = apply_statistics_sample(
@@ -814,6 +970,203 @@ mod tests {
         assert_eq!(stat.total_up, 105);
         assert_eq!(stat.total_down, 207);
         assert_eq!(stat.date_now, 2);
+    }
+
+    #[tokio::test]
+    async fn statistics_day_change_rolls_over_every_profile_not_only_the_active_one() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("statistics test operation should succeed");
+        for index_id in ["active", "idle"] {
+            database
+                .profiles()
+                .upsert(&sample_profile(index_id))
+                .await
+                .expect("statistics test operation should succeed");
+            database
+                .server_stats()
+                .upsert(&ServerStatItem {
+                    index_id: index_id.to_string(),
+                    total_up: 100,
+                    total_down: 200,
+                    today_up: 90,
+                    today_down: 180,
+                    date_now: 1,
+                })
+                .await
+                .expect("statistics test operation should succeed");
+        }
+
+        assert_eq!(roll_over_statistics_day(&database, 1, 1).await, 1);
+        assert_eq!(
+            stat_row(&database, "idle").await.today_up,
+            90,
+            "a tick inside the same day must not touch stored totals"
+        );
+
+        assert_eq!(roll_over_statistics_day(&database, 1, 2).await, 2);
+
+        let idle = stat_row(&database, "idle").await;
+        assert_eq!(idle.today_up, 0);
+        assert_eq!(idle.today_down, 0);
+        assert_eq!(idle.date_now, 2);
+        assert_eq!(idle.total_up, 100, "lifetime totals survive the rollover");
+        assert_eq!(stat_row(&database, "active").await.today_up, 0);
+    }
+
+    /// The per-second row rewrite was the remaining half of the statistics
+    /// write amplification: the panel is refreshed every second, but SQLite
+    /// only has to learn the totals in batches.
+    #[tokio::test]
+    async fn statistics_buffers_traffic_and_writes_it_once_per_flush_window() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("statistics test operation should succeed");
+        database
+            .profiles()
+            .upsert(&sample_profile("active"))
+            .await
+            .expect("statistics test operation should succeed");
+        let config = enabled_config("active");
+        let mut buffer = TrafficWriteBuffer::default();
+        let sample = ServerSpeedSample {
+            proxy_up_bytes: 10,
+            proxy_down_bytes: 20,
+            ..ServerSpeedSample::default()
+        };
+
+        // Tick 1 writes through to establish a baseline the UI can project from.
+        let first = tick(&database, &config, &mut buffer, sample, false).await;
+        assert_eq!(stat_row(&database, "active").await.total_up, 10);
+
+        // Ticks 2..=4 stay in memory, but the UI keeps counting.
+        for expected_total in [20, 30, 40] {
+            let snapshot = tick(&database, &config, &mut buffer, sample, false).await;
+            assert_eq!(
+                snapshot
+                    .server_stat
+                    .as_ref()
+                    .expect("a projected row")
+                    .total_up,
+                expected_total
+            );
+            assert_eq!(
+                stat_row(&database, "active").await.total_up,
+                10,
+                "only the first tick may have reached SQLite"
+            );
+        }
+        assert_eq!(
+            first
+                .server_stat
+                .as_ref()
+                .expect("a projected row")
+                .total_up,
+            10
+        );
+
+        tick(&database, &config, &mut buffer, sample, true).await;
+
+        assert_eq!(stat_row(&database, "active").await.total_up, 50);
+        assert_eq!(stat_row(&database, "active").await.total_down, 100);
+    }
+
+    /// A flush window's worth of traffic must not evaporate because the app
+    /// closed between flushes.
+    #[tokio::test]
+    async fn statistics_shutdown_flush_saves_what_the_buffer_still_holds() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("statistics test operation should succeed");
+        database
+            .profiles()
+            .upsert(&sample_profile("active"))
+            .await
+            .expect("statistics test operation should succeed");
+        let config = enabled_config("active");
+        let mut buffer = TrafficWriteBuffer::default();
+        let sample = ServerSpeedSample {
+            proxy_up_bytes: 7,
+            proxy_down_bytes: 11,
+            ..ServerSpeedSample::default()
+        };
+
+        tick(&database, &config, &mut buffer, sample, false).await;
+        tick(&database, &config, &mut buffer, sample, false).await;
+        assert_eq!(stat_row(&database, "active").await.total_up, 7);
+
+        flush_traffic_buffer(&database, &mut buffer)
+            .await
+            .expect("statistics test operation should succeed");
+
+        assert_eq!(stat_row(&database, "active").await.total_up, 14);
+        assert_eq!(stat_row(&database, "active").await.total_down, 22);
+    }
+
+    /// Buffered bytes belong to the profile they were measured on; a switch
+    /// that did not flush first would credit them to the new profile.
+    #[tokio::test]
+    async fn statistics_profile_switch_flushes_the_previous_profile_first() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("statistics test operation should succeed");
+        for index_id in ["first", "second"] {
+            database
+                .profiles()
+                .upsert(&sample_profile(index_id))
+                .await
+                .expect("statistics test operation should succeed");
+        }
+        let mut buffer = TrafficWriteBuffer::default();
+        let sample = ServerSpeedSample {
+            proxy_up_bytes: 5,
+            ..ServerSpeedSample::default()
+        };
+
+        let first = enabled_config("first");
+        tick(&database, &first, &mut buffer, sample, false).await;
+        tick(&database, &first, &mut buffer, sample, false).await;
+
+        let second = enabled_config("second");
+        tick(&database, &second, &mut buffer, sample, false).await;
+
+        assert_eq!(stat_row(&database, "first").await.total_up, 10);
+        assert_eq!(stat_row(&database, "second").await.total_up, 5);
+    }
+
+    #[test]
+    fn statistics_flush_window_spans_ten_coalesced_ticks() {
+        assert_eq!(TRAFFIC_FLUSH_TICKS, 10);
+    }
+
+    fn enabled_config(active_profile_id: &str) -> StatisticsConfigSnapshot {
+        StatisticsConfigSnapshot {
+            enable_statistics: true,
+            display_real_time_speed: true,
+            active_profile_id: Some(active_profile_id.to_string()),
+        }
+    }
+
+    async fn tick(
+        database: &Database,
+        config: &StatisticsConfigSnapshot,
+        buffer: &mut TrafficWriteBuffer,
+        sample: ServerSpeedSample,
+        flush_due: bool,
+    ) -> StatisticsSnapshot {
+        record_statistics_tick(database, config, buffer, sample, 10, flush_due)
+            .await
+            .expect("statistics test operation should succeed")
+            .expect("an enabled config always reports a snapshot")
+    }
+
+    async fn stat_row(database: &Database, index_id: &str) -> ServerStatItem {
+        database
+            .server_stats()
+            .get(index_id)
+            .await
+            .expect("statistics test operation should succeed")
+            .expect("statistics test operation should succeed")
     }
 
     fn sample_profile(index_id: &str) -> ProfileItem {

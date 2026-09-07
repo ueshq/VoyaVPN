@@ -11,8 +11,8 @@ use voya_core::{
 };
 use voya_db::DatabaseSession;
 use voya_net::{
-    DownloadError, SubscriptionClient, SubscriptionFetchOptions, SubscriptionFetchResult,
-    SubscriptionFetchSource,
+    DownloadError, FailedSubscriptionSource, SubscriptionClient, SubscriptionFetchOptions,
+    SubscriptionFetchResult, SubscriptionFetchSource,
 };
 
 use crate::{groups::GroupManager, redaction::redact_urls};
@@ -90,6 +90,7 @@ pub(super) async fn prepare_subscription_snapshot(
         };
         match fetch_subscription(&client, &source, &options).await {
             Ok(fetch) if !fetch.content.trim().is_empty() => {
+                push_failed_more_url_warnings(&mut result, &item.remarks, &fetch.failed_more_urls);
                 let headers = fetch
                     .downloads
                     .first()
@@ -109,22 +110,22 @@ pub(super) async fn prepare_subscription_snapshot(
                     content: fetch.content,
                 });
             }
-            Ok(_) => {
+            Ok(fetch) => {
                 result.skipped = result.skipped.saturating_add(1);
+                // The warnings precede the outcome note because
+                // `unusable_update_message` reports the last message as the
+                // reason this subscription failed, and a dead mirror is not it.
+                push_failed_more_url_warnings(&mut result, &item.remarks, &fetch.failed_more_urls);
                 result
                     .messages
                     .push(subscription_message(&item.remarks, EMPTY_FETCH_MESSAGE));
             }
             Err(error) => {
                 result.skipped = result.skipped.saturating_add(1);
-                let message = if is_empty_download_error(&error) {
-                    EMPTY_FETCH_MESSAGE.to_string()
-                } else {
-                    error.to_string()
-                };
-                result
-                    .messages
-                    .push(subscription_message(&item.remarks, &message));
+                result.messages.push(subscription_message(
+                    &item.remarks,
+                    &fetch_failure_message(&error),
+                ));
             }
         }
     }
@@ -270,20 +271,42 @@ fn subscription_message(remarks: &str, message: &str) -> String {
     format!("{remarks}->{}", redact_urls(message))
 }
 
-fn is_empty_download_error(error: &DownloadError) -> bool {
-    match error {
-        DownloadError::AttemptsFailed { attempts, .. } => {
-            !attempts.is_empty()
-                && attempts.iter().all(|attempt| {
-                    attempt.bytes == 0 && attempt.error.as_deref() == Some("empty response")
-                })
-        }
-        _ => false,
+/// Turns a failed fetch into the note shown for the subscription.
+///
+/// "The server answered with nothing" is a product state (an expired or emptied
+/// plan), not a transport failure, so it gets the same wording as a successful
+/// but empty body. The distinction comes from `DownloadError::is_empty_response`
+/// so the two crates cannot drift apart over the wording of an attempt error.
+fn fetch_failure_message(error: &DownloadError) -> String {
+    if error.is_empty_response() {
+        EMPTY_FETCH_MESSAGE.to_string()
+    } else {
+        error.to_string()
+    }
+}
+
+/// Reports every `more_url` mirror that could not be fetched.
+///
+/// The counters are deliberately untouched: the primary list decides whether the
+/// subscription updated, so a dead mirror is a warning the user can act on
+/// rather than a failure that would mark a successful import as skipped.
+fn push_failed_more_url_warnings(
+    result: &mut SubscriptionUpdateResult,
+    remarks: &str,
+    failed: &[FailedSubscriptionSource],
+) {
+    for failure in failed {
+        result.messages.push(subscription_message(
+            remarks,
+            &format!("additional subscription URL failed: {}", failure.error),
+        ));
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use voya_net::{DownloadAttempt, EMPTY_RESPONSE_ATTEMPT_ERROR};
+
     use super::*;
 
     #[test]
@@ -303,6 +326,68 @@ mod tests {
         assert_eq!(
             subscription_message("MySub", EMPTY_FETCH_MESSAGE),
             "MySub->fetched empty subscription content"
+        );
+    }
+
+    /// Pins the empty-body classification to `voya-net`'s marker instead of a
+    /// copy of its text, so rewording the attempt error cannot silently turn an
+    /// emptied subscription back into a raw transport-failure toast.
+    #[test]
+    fn an_all_empty_attempt_list_is_reported_as_empty_content() {
+        let empty = DownloadError::AttemptsFailed {
+            url: "https://sub.example.test/link".to_string(),
+            attempts: vec![DownloadAttempt {
+                url: "https://sub.example.test/link".to_string(),
+                via_proxy: false,
+                bytes: 0,
+                error: Some(EMPTY_RESPONSE_ATTEMPT_ERROR.to_string()),
+            }],
+        };
+        assert_eq!(fetch_failure_message(&empty), EMPTY_FETCH_MESSAGE);
+
+        let refused = DownloadError::AttemptsFailed {
+            url: "https://sub.example.test/link".to_string(),
+            attempts: vec![DownloadAttempt {
+                url: "https://sub.example.test/link".to_string(),
+                via_proxy: false,
+                bytes: 0,
+                error: Some("connection refused".to_string()),
+            }],
+        };
+        assert_ne!(fetch_failure_message(&refused), EMPTY_FETCH_MESSAGE);
+        assert!(fetch_failure_message(&refused).contains("connection refused"));
+    }
+
+    #[test]
+    fn failed_more_url_mirrors_are_reported_as_warnings() {
+        let mut result = SubscriptionUpdateResult::default();
+
+        push_failed_more_url_warnings(
+            &mut result,
+            "MySub",
+            &[FailedSubscriptionSource {
+                url: "https://mirror.example.test/link?token=abc123".to_string(),
+                error:
+                    "download failed for https://mirror.example.test/link?token=abc123: timed out"
+                        .to_string(),
+            }],
+        );
+
+        assert_eq!(result.messages.len(), 1);
+        let message = &result.messages[0];
+        assert!(
+            message.starts_with("MySub->additional subscription URL failed:"),
+            "{message}"
+        );
+        assert!(
+            message.contains(crate::redaction::REDACTED_URL),
+            "{message}"
+        );
+        assert!(!message.contains("token=abc123"), "{message}");
+        assert_eq!(
+            (result.skipped, result.updated, result.imported),
+            (0, 0, 0),
+            "a dead mirror is a warning, not a failed subscription"
         );
     }
 }

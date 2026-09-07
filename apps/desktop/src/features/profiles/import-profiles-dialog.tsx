@@ -29,6 +29,9 @@ import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { importProfilesFromText, listSubscriptions, scanScreenQr } from "@/ipc";
 import type { ImportProfilesResult } from "@/ipc/bindings";
 
+import { qrScanErrorCode } from "./qr-errors";
+import { formatImportSummary } from "./server-table-actions";
+
 type ImportProfilesDialogProps = {
   onImported: (result: ImportProfilesResult) => Promise<void> | void;
   onOpenChange: (open: boolean) => void;
@@ -62,8 +65,8 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
   const targetLabel = useMemo(() => {
     const selected = subscriptions.find((item) => item.id === selectedSubid);
 
-    return selected ? selected.remarks : "Manual import";
-  }, [selectedSubid, subscriptions]);
+    return selected ? selected.remarks : t("panes.profiles.importDialog.manual");
+  }, [selectedSubid, subscriptions, t]);
 
   async function handleImport() {
     if (!canImport) {
@@ -74,18 +77,24 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
     setResultText(null);
     try {
       const result = await importProfilesFromText(text, selectedSubid || null);
-      setResultText(formatImportResult(result, targetLabel));
+      setText("");
+      await onImported(result);
+      if (result.imported > 0) {
+        // The profiles banner already owns the summary once the dialog closes;
+        // rendering it here too produced two sentences for one import.
+        onOpenChange(false);
+        return;
+      }
+
+      setResultText(
+        `${formatImportSummary(result, t)} ${t("panes.profiles.import.summary.target", { target: targetLabel })}`,
+      );
       setResultMessages(
-        (result.messages ?? []).map((message) => ({
+        result.messages.map((message) => ({
           id: `import-message-${++nextResultMessageIdRef.current}`,
           text: message,
         })),
       );
-      setText("");
-      await onImported(result);
-      if ((result.imported ?? 0) > 0) {
-        onOpenChange(false);
-      }
     } catch (error) {
       setError(redactOperationalError(error));
     }
@@ -199,9 +208,26 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
   }
 
   function formatQrError(error: unknown) {
-    return error instanceof Error && error.name === "QrNotFoundError"
-      ? t("qr.noQrFound")
-      : getErrorMessage(error);
+    switch (qrScanErrorCode(error)) {
+      case "clipboardImageMissing":
+        return t("qr.clipboardImageMissing");
+      case "clipboardImageUnavailable":
+        return t("qr.clipboardImageUnavailable");
+      case "notFound":
+        return t("qr.noQrFound");
+      case "screenCaptureUnavailable":
+        return t("qr.screenCaptureUnavailable");
+      case "screenFrameUnavailable":
+        return t("qr.screenFrameUnavailable");
+      case "screenFrameUnencodable":
+        return t("qr.screenFrameUnencodable");
+      case "screenFrameUnreadable":
+        return t("qr.screenFrameUnreadable");
+      case "screenStreamUnavailable":
+        return t("qr.screenStreamUnavailable");
+      default:
+        return getErrorMessage(error);
+    }
   }
 
   return (
@@ -393,37 +419,4 @@ function encodeSelectValue(value: string) {
 
 function decodeSelectValue(value: string) {
   return value === EMPTY_SELECT_VALUE ? "" : value;
-}
-
-function formatImportResult(result: ImportProfilesResult, targetLabel: string) {
-  const imported = result.imported ?? 0;
-  const updated = result.updated ?? 0;
-  const skipped = result.skipped ?? 0;
-  const details = [`${imported} imported`, `${skipped} skipped`];
-  const parsed = result.parsed ?? null;
-  const filtered = result.filtered ?? 0;
-  const deduped = result.deduped ?? 0;
-  const failed = result.failed ?? 0;
-  const removedDuplicates = result.removedDuplicates ?? 0;
-
-  if (updated > 0) {
-    details.push(`${updated} updated`);
-  }
-  if (removedDuplicates > 0) {
-    details.push(`${removedDuplicates} duplicates removed`);
-  }
-  if (parsed !== null) {
-    details.push(`${parsed} parsed`);
-  }
-  if (filtered > 0) {
-    details.push(`${filtered} filtered`);
-  }
-  if (deduped > 0) {
-    details.push(`${deduped} payload duplicate`);
-  }
-  if (failed > 0) {
-    details.push(`${failed} failed`);
-  }
-
-  return `${details.join(", ")} for ${targetLabel}.`;
 }

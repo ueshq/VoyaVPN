@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { capture, repoRootFromScript } from "../../lib/common.mjs";
+import { requiredNetworkExtensionValue } from "./tunnel-layout.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const defaultDecodedDir = resolve(repoRoot, "target", "native", "macos", "decoded-provisioning-profiles");
@@ -177,6 +178,30 @@ export function selectProvisioningProfile(profiles, criteria, now = new Date()) 
     rejections.push({ path: profile.path, name: profile.name, reason });
   }
   return { profile: null, rejections };
+}
+
+const requiredAppGroup = "group.app.voyavpn.desktop";
+
+/**
+ * The one profile-capability check, shared by build-tunnel, sign-app and
+ * verify-tunnel.
+ *
+ * These three grew three hand-rolled copies and the copies diverged: sign-app
+ * skipped the distribution-specific NetworkExtension value whenever the profile
+ * merely contained the generic `packet-tunnel-provider`, so a Developer ID
+ * profile without `packet-tunnel-provider-systemextension` passed signing and
+ * `writeProfileEntitlements` then wrote the profile's entitlements verbatim
+ * into a mis-entitled app.
+ */
+export function assertProfileCapabilities(profile, { label, distribution }) {
+  if (!profile.appGroups.includes(requiredAppGroup)) {
+    throw new Error(`${label} provisioning profile ${profile.path} does not include ${requiredAppGroup}.`);
+  }
+
+  const requiredValue = requiredNetworkExtensionValue(distribution);
+  if (!profile.networkExtensions.includes(requiredValue)) {
+    throw new Error(`${label} provisioning profile ${profile.path} does not include ${requiredValue}.`);
+  }
 }
 
 export function formatProfileSelectionError(label, bundleIdentifier, rejections, profileDir) {

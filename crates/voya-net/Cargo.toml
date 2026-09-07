@@ -22,7 +22,7 @@ serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.10"
 thiserror.workspace = true
-tokio = { workspace = true, features = ["io-util", "macros", "net", "time"] }
+tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "time"] }
 tokio-rustls = "0.26"
 tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
 tracing.workspace = true

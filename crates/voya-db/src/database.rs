@@ -67,13 +67,36 @@ impl Database {
             .foreign_keys(true)
             .synchronous(SqliteSynchronous::Normal)
             .busy_timeout(BUSY_TIMEOUT);
+
+        // Validate, switch to WAL and migrate on a throwaway single-connection
+        // pool, then drop it before opening the pool the application keeps.
+        //
+        // sqlx caches prepared statements per connection, and that cache holds
+        // the column metadata each statement was prepared against. A migration
+        // that runs `ALTER TABLE … ADD COLUMN` after a connection has already
+        // served a query leaves that connection able to hand back rows shaped
+        // like the *old* schema, which decodes as an out-of-bounds column read
+        // for every query issued afterwards on it. Migrating in isolation means
+        // no connection in the long-lived pool can predate the schema it serves.
+        {
+            let migration_pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(options.clone())
+                .await?;
+            let result = async {
+                validate_existing_schema(&migration_pool, path).await?;
+                enable_write_ahead_logging(&migration_pool).await?;
+                MIGRATOR.run(&migration_pool).await.map_err(DbError::from)
+            }
+            .await;
+            migration_pool.close().await;
+            result?;
+        }
+
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
             .connect_with(options)
             .await?;
-        validate_existing_schema(&pool, path).await?;
-        enable_write_ahead_logging(&pool).await?;
-        MIGRATOR.run(&pool).await?;
 
         Ok(Self {
             pool,
@@ -105,46 +128,6 @@ impl Database {
         self.path.as_deref()
     }
 
-    #[must_use]
-    pub fn profiles(&self) -> ProfileRepository<'_> {
-        ProfileRepository::new(&self.pool)
-    }
-
-    #[must_use]
-    pub fn profile_exs(&self) -> ProfileExRepository<'_> {
-        ProfileExRepository::new(&self.pool)
-    }
-
-    #[must_use]
-    pub fn server_stats(&self) -> ServerStatRepository<'_> {
-        ServerStatRepository::new(&self.pool)
-    }
-
-    #[must_use]
-    pub fn subscriptions(&self) -> SubscriptionRepository<'_> {
-        SubscriptionRepository::new(&self.pool)
-    }
-
-    #[must_use]
-    pub fn subscription_metadata(&self) -> SubscriptionMetadataRepository<'_> {
-        SubscriptionMetadataRepository::new(&self.pool)
-    }
-
-    #[must_use]
-    pub fn routings(&self) -> RoutingRepository<'_> {
-        RoutingRepository::new(&self.pool)
-    }
-
-    #[must_use]
-    pub fn settings(&self) -> SettingsRepository<'_> {
-        SettingsRepository::new(&self.pool)
-    }
-
-    #[must_use]
-    pub fn app_state(&self) -> AppStateRepository<'_> {
-        AppStateRepository::new(&self.pool)
-    }
-
     pub async fn begin(&self) -> Result<UnitOfWork> {
         Ok(UnitOfWork {
             transaction: Mutex::new(self.pool.begin_with(BEGIN_IMMEDIATE).await?),
@@ -157,46 +140,6 @@ impl Database {
 }
 
 impl UnitOfWork {
-    #[must_use]
-    pub fn profiles(&self) -> ProfileRepository<'_> {
-        ProfileRepository::new_in_transaction(&self.transaction)
-    }
-
-    #[must_use]
-    pub fn profile_exs(&self) -> ProfileExRepository<'_> {
-        ProfileExRepository::new_in_transaction(&self.transaction)
-    }
-
-    #[must_use]
-    pub fn server_stats(&self) -> ServerStatRepository<'_> {
-        ServerStatRepository::new_in_transaction(&self.transaction)
-    }
-
-    #[must_use]
-    pub fn subscriptions(&self) -> SubscriptionRepository<'_> {
-        SubscriptionRepository::new_in_transaction(&self.transaction)
-    }
-
-    #[must_use]
-    pub fn subscription_metadata(&self) -> SubscriptionMetadataRepository<'_> {
-        SubscriptionMetadataRepository::new_in_transaction(&self.transaction)
-    }
-
-    #[must_use]
-    pub fn routings(&self) -> RoutingRepository<'_> {
-        RoutingRepository::new_in_transaction(&self.transaction)
-    }
-
-    #[must_use]
-    pub fn settings(&self) -> SettingsRepository<'_> {
-        SettingsRepository::new_in_transaction(&self.transaction)
-    }
-
-    #[must_use]
-    pub fn app_state(&self) -> AppStateRepository<'_> {
-        AppStateRepository::new_in_transaction(&self.transaction)
-    }
-
     pub async fn commit(self) -> Result<()> {
         self.transaction.into_inner().commit().await?;
         Ok(())
@@ -213,70 +156,58 @@ impl<'database> DatabaseSession<'database> {
     pub const fn from_unit_of_work(unit_of_work: &'database UnitOfWork) -> Self {
         Self::UnitOfWork(unit_of_work)
     }
+}
 
-    #[must_use]
-    pub fn profiles(self) -> ProfileRepository<'database> {
-        match self {
-            Self::Database(database) => database.profiles(),
-            Self::UnitOfWork(unit_of_work) => unit_of_work.profiles(),
+/// Declares the same repository accessor on all three session types.
+///
+/// Every repository needs one accessor on [`Database`] (autocommit on the pool),
+/// one on [`UnitOfWork`] (joining the caller's transaction) and one on
+/// [`DatabaseSession`] that dispatches between them. Written out that was three
+/// bodies per repository whose only variable is the type, and adding a
+/// repository meant remembering all three.
+macro_rules! session_accessors {
+    ($($accessor:ident => $repository:ident),+ $(,)?) => {
+        impl Database {
+            $(
+                #[must_use]
+                pub fn $accessor(&self) -> $repository<'_> {
+                    $repository::new(&self.pool)
+                }
+            )+
         }
-    }
 
-    #[must_use]
-    pub fn profile_exs(self) -> ProfileExRepository<'database> {
-        match self {
-            Self::Database(database) => database.profile_exs(),
-            Self::UnitOfWork(unit_of_work) => unit_of_work.profile_exs(),
+        impl UnitOfWork {
+            $(
+                #[must_use]
+                pub fn $accessor(&self) -> $repository<'_> {
+                    $repository::new_in_transaction(&self.transaction)
+                }
+            )+
         }
-    }
 
-    #[must_use]
-    pub fn server_stats(self) -> ServerStatRepository<'database> {
-        match self {
-            Self::Database(database) => database.server_stats(),
-            Self::UnitOfWork(unit_of_work) => unit_of_work.server_stats(),
+        impl<'database> DatabaseSession<'database> {
+            $(
+                #[must_use]
+                pub fn $accessor(self) -> $repository<'database> {
+                    match self {
+                        Self::Database(database) => database.$accessor(),
+                        Self::UnitOfWork(unit_of_work) => unit_of_work.$accessor(),
+                    }
+                }
+            )+
         }
-    }
+    };
+}
 
-    #[must_use]
-    pub fn subscriptions(self) -> SubscriptionRepository<'database> {
-        match self {
-            Self::Database(database) => database.subscriptions(),
-            Self::UnitOfWork(unit_of_work) => unit_of_work.subscriptions(),
-        }
-    }
-
-    #[must_use]
-    pub fn subscription_metadata(self) -> SubscriptionMetadataRepository<'database> {
-        match self {
-            Self::Database(database) => database.subscription_metadata(),
-            Self::UnitOfWork(unit_of_work) => unit_of_work.subscription_metadata(),
-        }
-    }
-
-    #[must_use]
-    pub fn routings(self) -> RoutingRepository<'database> {
-        match self {
-            Self::Database(database) => database.routings(),
-            Self::UnitOfWork(unit_of_work) => unit_of_work.routings(),
-        }
-    }
-
-    #[must_use]
-    pub fn settings(self) -> SettingsRepository<'database> {
-        match self {
-            Self::Database(database) => database.settings(),
-            Self::UnitOfWork(unit_of_work) => unit_of_work.settings(),
-        }
-    }
-
-    #[must_use]
-    pub fn app_state(self) -> AppStateRepository<'database> {
-        match self {
-            Self::Database(database) => database.app_state(),
-            Self::UnitOfWork(unit_of_work) => unit_of_work.app_state(),
-        }
-    }
+session_accessors! {
+    profiles => ProfileRepository,
+    profile_exs => ProfileExRepository,
+    server_stats => ServerStatRepository,
+    subscriptions => SubscriptionRepository,
+    subscription_metadata => SubscriptionMetadataRepository,
+    routings => RoutingRepository,
+    settings => SettingsRepository,
+    app_state => AppStateRepository,
 }
 
 /// Switches the database file to write-ahead logging.

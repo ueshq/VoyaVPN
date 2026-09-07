@@ -1,6 +1,15 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "includeEntryExports": true,
+  // This scan hides test files so it can find code no shipped path reaches.
+  // That also means an export whose only *external* reader is a test looks
+  // dead here even when the module itself uses it — `routingProfileSchema`
+  // (the source of `RoutingFormPayload` and of `routingProfileFieldsSchema`)
+  // and `StoredLogLine` (the element type of the store's `logLines`) are both
+  // that shape. Exports nothing reads, in their own file or anywhere else, are
+  // still reported, and the default scan above still checks reachability with
+  // tests included.
+  "ignoreExportsUsedInFile": true,
   "ignoreWorkspaces": [".", "apps/mobile", "apps/web"],
   "workspaces": {
     "apps/desktop": {

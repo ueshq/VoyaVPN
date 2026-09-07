@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use specta_typescript::Typescript;
@@ -10,13 +10,15 @@ use tauri::{
     tray::TrayIconBuilder,
     Manager, RunEvent,
 };
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_specta::Event;
 use voya_app::{
     config_mutation::ConfigMutationCoordinator,
     elevation::ElevationManager,
     logging::process_log_level_to_contract,
     proxy_runtime::{
-        ProxyConnectionsSnapshot, ProxyMonitorController, ProxyRuntimeEventSink, ProxyTrafficEvent,
+        ProxyConnectionsSnapshot, ProxyMonitorController, ProxyRuntimeEventSink,
+        ProxyRuntimeManager, ProxyTrafficEvent,
     },
     redaction::{redact_url_userinfo, redact_urls},
     services::{AppConfig, AppServices},
@@ -33,13 +35,15 @@ use voya_app::{
         CoreExitEvent, CoreSupervisor, NativeTunExitEvent, SupervisorDeps, SupervisorEventSink,
     },
     sysproxy::SystemProxyManager,
+    tun::ProviderRegistrationCache,
 };
 use voya_platform::{
     coreinfo::{copy_seed_core_assets, TargetOs},
     filesystem::reject_incompatible_config,
     paths::{core_seed_resources_dir, AppPaths},
     process::{
-        classify_core_log_line, ProcessLogSink, ProcessOutputStream, ProcessRole, StdProcessRunner,
+        classify_core_log_line, JobAssignedRunner, PlatformProcessJobFactory, ProcessLogSink,
+        ProcessOutputStream, ProcessRole, ProcessRunner, StdProcessRunner,
     },
     sysproxy::{platform_pac_manager, SystemProxyService},
 };
@@ -64,6 +68,13 @@ pub(crate) struct AppState {
     speedtest_manager: SpeedtestManager,
     system_proxy_manager: SystemProxyManager,
     proxy_monitor_controller: ProxyMonitorController,
+    /// One manager — and therefore one reqwest client, TLS config and keep-alive
+    /// pool — for every proxy command. Building it per command threw the
+    /// loopback connection to the core away after each click.
+    proxy_runtime: ProxyRuntimeManager,
+    /// One PlugInKit registration memo for every `TunManager` the commands
+    /// build, so the `pluginkit` fork is not repeated on every status read.
+    provider_registration_cache: Arc<ProviderRegistrationCache>,
 }
 
 impl AppState {
@@ -114,6 +125,14 @@ impl AppState {
     pub(crate) fn proxy_monitor_controller(&self) -> ProxyMonitorController {
         self.proxy_monitor_controller.clone()
     }
+
+    pub(crate) fn proxy_runtime(&self) -> &ProxyRuntimeManager {
+        &self.proxy_runtime
+    }
+
+    pub(crate) fn provider_registration_cache(&self) -> Arc<ProviderRegistrationCache> {
+        Arc::clone(&self.provider_registration_cache)
+    }
 }
 
 pub fn export_bindings(path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
@@ -155,132 +174,201 @@ pub fn run() {
             }
         })
         .setup(move |app| {
-            let app_config_dir = app.path().app_config_dir()?;
-            reject_incompatible_config(&app_config_dir.join("guiNConfig.json"), 1)?;
-            let runtime_paths = AppPaths::new(&app_config_dir);
-            runtime_paths.ensure_dirs()?;
-            // Installed before the first `tracing::warn!` below so the startup
-            // recovery paths are captured too.
-            logging::install(app.handle().clone(), runtime_paths.log_dir());
-            let services = tauri::async_runtime::block_on(AppServices::connect(
-                &app_config_dir.join("voyavpn.sqlite"),
-                runtime_paths.clone(),
-            ))?;
-            let config = tauri::async_runtime::block_on(services.load_config())?;
-            let system_proxy_manager = SystemProxyManager::new(
-                SystemProxyService::new(Arc::new(StdProcessRunner::new()), platform_pac_manager()),
-                runtime_paths.clone(),
-            );
-            // Startup only *undoes* a proxy a crashed run left behind. The
-            // persisted mode is deliberately not applied: nothing is listening
-            // on the local port until the user connects, and `connect` applies
-            // the mode itself once the core is up. Applying it here pointed the
-            // machine at a dead port on every launch.
-            match system_proxy_manager.restore_dirty_proxy_if_needed(&config) {
-                Ok(true) => {
-                    tracing::warn!("restored system proxy from previous dirty shutdown marker");
-                }
-                Ok(false) => {}
-                Err(error) => tracing::warn!(
-                    ?error,
-                    "failed to restore system proxy from dirty shutdown marker"
-                ),
+            if let Err(error) = initialize(app, &specta_builder) {
+                // Nothing can be shown from here: every dialog API round-trips
+                // through the main thread's event loop, which only starts after
+                // `setup` returns, so a blocking dialog would hang the launch.
+                // The message is stashed and rendered on `RunEvent::Ready`.
+                tracing::error!(%error, "VoyaVPN failed to start");
+                record_startup_failure(error.to_string());
             }
-            let shared_config = Arc::new(RwLock::new(config.clone()));
-            let config_mutations = Arc::new(services.config_mutations(Arc::clone(&shared_config)));
-            tauri::async_runtime::block_on(services.initialize_profile_metrics())?;
-            let core_seed_resource_dir = Some(core_seed_resources_dir(app.path().resource_dir()?));
-            match (TargetOs::current(), core_seed_resource_dir.as_ref()) {
-                (TargetOs::Macos, _) => {
-                    tracing::debug!("skipped packaged core seed copy at startup on macOS");
-                }
-                (_, Some(seed_dir)) => {
-                    if let Err(error) = copy_seed_core_assets(&runtime_paths, seed_dir) {
-                        tracing::warn!(
-                            ?error,
-                            "failed to copy packaged core seed assets at startup"
-                        );
-                    }
-                }
-                (_, None) => {}
-            }
-            let runner: Arc<dyn voya_platform::process::ProcessRunner> = Arc::new(
-                StdProcessRunner::with_log_sink(Arc::new(TauriProcessLogSink {
-                    app: app.handle().clone(),
-                })),
-            );
-            let elevation_manager = ElevationManager::new(
-                Arc::clone(&runner),
-                runtime_paths.temp_dir().to_path_buf(),
-                runtime_paths.bin_dir().to_path_buf(),
-            );
-            // A crash never reaches the exit-time revoke, so a previous run can
-            // leave a root launcher + NOPASSWD drop-in installed. Sweep it
-            // before the supervisor can spawn anything through it.
-            elevation_manager.revoke_stale_grant();
-            let speedtest_runner = StdProcessRunner::with_log_sink(Arc::new(TauriProcessLogSink {
-                app: app.handle().clone(),
-            }));
-            let runtime_handle = tauri::async_runtime::handle();
-            let runtime_guard = runtime_handle.inner().enter();
-            let supervisor = CoreSupervisor::spawn(
-                SupervisorDeps::platform_with_runner(
-                    Arc::clone(&runner),
-                    elevation_manager.state(),
-                )
-                .with_event_sink(Arc::new(TauriSupervisorEventSink {
-                    app: app.handle().clone(),
-                })),
-            );
-            let statistics_manager = services.spawn_statistics(
-                supervisor.clone(),
-                Arc::new(SharedAppConfigSource::new(Arc::clone(&shared_config))),
-                Arc::new(TauriStatisticsEventSink {
-                    app: app.handle().clone(),
-                }),
-            );
-            let subscription_auto_update = SubscriptionAutoUpdateScheduler::spawn(
-                services.database().clone(),
-                Arc::clone(&config_mutations),
-                supervisor.clone(),
-                TargetOs::current(),
-                Arc::new(TauriSubscriptionAutoUpdateSink {
-                    app: app.handle().clone(),
-                }),
-            );
-            drop(runtime_guard);
-            if let Err(error) =
-                ipc::commands::register_show_window_shortcut_for_config(app.handle(), &config)
-            {
-                tracing::warn!(?error, "failed to register persisted global hotkeys");
-            }
-            let speedtest_manager = services
-                .speedtest_manager(core_seed_resource_dir.clone(), Arc::new(speedtest_runner));
-            app.manage(AppState {
-                services,
-                config_mutations,
-                core_seed_resource_dir,
-                elevation_manager,
-                supervisor,
-                statistics_manager,
-                subscription_auto_update,
-                speedtest_manager,
-                system_proxy_manager,
-                proxy_monitor_controller: ProxyMonitorController::new(),
-            });
-
-            specta_builder.mount_events(app);
-            setup_tray(app)?;
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("failed to build VoyaVPN");
 
     app.run(|app, event| {
-        if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
-            shutdown_for_exit(app);
+        match event {
+            // The first point at which a native dialog can be shown.
+            RunEvent::Ready => report_startup_failure(app),
+            RunEvent::ExitRequested { .. } | RunEvent::Exit => shutdown_for_exit(app),
+            _ => {}
         }
     });
+}
+
+/// Everything the app needs before it can serve a single command.
+///
+/// Split out of `setup` so a failure is a value rather than a `?` that
+/// disappears into `build().expect(..)`: in a packaged build (no console on
+/// Windows, a bundle on macOS) that made the process vanish with no
+/// explanation, including for `reject_incompatible_config`, which is a
+/// deliberate, user-actionable refusal.
+fn initialize(
+    app: &mut tauri::App,
+    specta_builder: &tauri_specta::Builder<tauri::Wry>,
+) -> Result<(), Box<dyn Error>> {
+    let app_config_dir = app.path().app_config_dir()?;
+    reject_incompatible_config(&app_config_dir.join("guiNConfig.json"), 1)?;
+    let runtime_paths = AppPaths::new(&app_config_dir);
+    runtime_paths.ensure_dirs()?;
+    // Installed before the first `tracing::warn!` below so the startup
+    // recovery paths are captured too.
+    logging::install(app.handle().clone(), runtime_paths.log_dir());
+    let services = tauri::async_runtime::block_on(AppServices::connect(
+        &app_config_dir.join("voyavpn.sqlite"),
+        runtime_paths.clone(),
+    ))?;
+    let config = tauri::async_runtime::block_on(services.load_config())?;
+    let system_proxy_manager = SystemProxyManager::new(
+        SystemProxyService::new(Arc::new(StdProcessRunner::new()), platform_pac_manager()),
+        runtime_paths.clone(),
+    );
+    // Startup only *undoes* a proxy a crashed run left behind. The
+    // persisted mode is deliberately not applied: nothing is listening
+    // on the local port until the user connects, and `connect` applies
+    // the mode itself once the core is up. Applying it here pointed the
+    // machine at a dead port on every launch.
+    match system_proxy_manager.restore_dirty_proxy_if_needed(&config) {
+        Ok(true) => {
+            tracing::warn!("restored system proxy from previous dirty shutdown marker");
+        }
+        Ok(false) => {}
+        Err(error) => tracing::warn!(
+            ?error,
+            "failed to restore system proxy from dirty shutdown marker"
+        ),
+    }
+    let shared_config = Arc::new(RwLock::new(config.clone()));
+    let config_mutations = Arc::new(services.config_mutations(Arc::clone(&shared_config)));
+    tauri::async_runtime::block_on(services.initialize_profile_metrics())?;
+    let core_seed_resource_dir = Some(core_seed_resources_dir(app.path().resource_dir()?));
+    match (TargetOs::current(), core_seed_resource_dir.as_ref()) {
+        (TargetOs::Macos, _) => {
+            tracing::debug!("skipped packaged core seed copy at startup on macOS");
+        }
+        (_, Some(seed_dir)) => {
+            if let Err(error) = copy_seed_core_assets(&runtime_paths, seed_dir) {
+                tracing::warn!(
+                    ?error,
+                    "failed to copy packaged core seed assets at startup"
+                );
+            }
+        }
+        (_, None) => {}
+    }
+    let runner: Arc<dyn ProcessRunner> = Arc::new(StdProcessRunner::with_log_sink(Arc::new(
+        TauriProcessLogSink {
+            app: app.handle().clone(),
+        },
+    )));
+    let elevation_manager = ElevationManager::new(
+        Arc::clone(&runner),
+        runtime_paths.temp_dir().to_path_buf(),
+        runtime_paths.bin_dir().to_path_buf(),
+    );
+    // A crash never reaches the exit-time revoke, so a previous run can
+    // leave a root launcher + NOPASSWD drop-in installed. Sweep it
+    // before the supervisor can spawn anything through it.
+    elevation_manager.revoke_stale_grant();
+    // Probe cores get the same kill-with-the-app job object the supervisor
+    // gives the real core below via `SupervisorDeps::platform_with_runner`.
+    let speedtest_runner = JobAssignedRunner::new(
+        StdProcessRunner::with_log_sink(Arc::new(TauriProcessLogSink {
+            app: app.handle().clone(),
+        })),
+        &PlatformProcessJobFactory,
+    );
+    let runtime_handle = tauri::async_runtime::handle();
+    let runtime_guard = runtime_handle.inner().enter();
+    let supervisor = CoreSupervisor::spawn(
+        SupervisorDeps::platform_with_runner(Arc::clone(&runner), elevation_manager.state())
+            .with_event_sink(Arc::new(TauriSupervisorEventSink {
+                app: app.handle().clone(),
+            })),
+    );
+    let statistics_manager = services.spawn_statistics(
+        supervisor.clone(),
+        Arc::new(SharedAppConfigSource::new(Arc::clone(&shared_config))),
+        Arc::new(TauriStatisticsEventSink {
+            app: app.handle().clone(),
+        }),
+    );
+    let subscription_auto_update = SubscriptionAutoUpdateScheduler::spawn(
+        services.database().clone(),
+        Arc::clone(&config_mutations),
+        supervisor.clone(),
+        TargetOs::current(),
+        Arc::new(TauriSubscriptionAutoUpdateSink {
+            app: app.handle().clone(),
+        }),
+    );
+    drop(runtime_guard);
+    let speedtest_manager =
+        services.speedtest_manager(core_seed_resource_dir.clone(), Arc::new(speedtest_runner));
+    app.manage(AppState {
+        services,
+        config_mutations,
+        core_seed_resource_dir,
+        elevation_manager,
+        supervisor,
+        statistics_manager,
+        subscription_auto_update,
+        speedtest_manager,
+        system_proxy_manager,
+        proxy_monitor_controller: ProxyMonitorController::new(),
+        proxy_runtime: ProxyRuntimeManager::new(),
+        provider_registration_cache: Arc::new(ProviderRegistrationCache::new()),
+    });
+
+    specta_builder.mount_events(app);
+    setup_tray(app)?;
+    // Registering global hotkeys mutates machine state, so it runs last:
+    // an accelerator claimed for a launch that then failed would stay
+    // claimed for the rest of the session.
+    if let Err(error) =
+        ipc::commands::register_show_window_shortcut_for_config(app.handle(), &config)
+    {
+        tracing::warn!(?error, "failed to register persisted global hotkeys");
+    }
+    Ok(())
+}
+
+/// A fatal startup failure waiting for an event loop to show it on.
+static STARTUP_FAILURE: Mutex<Option<String>> = Mutex::new(None);
+
+fn record_startup_failure(message: String) {
+    if let Ok(mut failure) = STARTUP_FAILURE.lock() {
+        *failure = Some(message);
+    }
+}
+
+/// Tell the user why the app is closing, then close it.
+///
+/// The dialog is deliberately non-blocking: `RunEvent::Ready` is delivered on
+/// the main thread, and the dialog itself has to be dispatched to that same
+/// thread, so waiting for it here would deadlock the event loop it needs.
+fn report_startup_failure<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    let Some(message) = STARTUP_FAILURE.lock().ok().and_then(|mut slot| slot.take()) else {
+        return;
+    };
+    // The window is live but unusable — no `AppState` was ever managed — so it
+    // is hidden rather than left behind the dialog failing every command.
+    if let Some(window) = app.get_webview_window("main") {
+        if let Err(error) = window.hide() {
+            tracing::warn!(
+                ?error,
+                "failed to hide the main window after a startup failure"
+            );
+        }
+    }
+
+    let handle = app.clone();
+    app.dialog()
+        .message(message)
+        .title("VoyaVPN could not start")
+        .kind(MessageDialogKind::Error)
+        .show(move |_| handle.exit(1));
 }
 
 fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
@@ -496,6 +584,16 @@ impl ProxyRuntimeEventSink for TauriProxyRuntimeEventSink {
 
 impl ProcessLogSink for TauriProcessLogSink {
     fn line(&self, role: ProcessRole, _stream: ProcessOutputStream, line: String) {
+        // Speedtest spawns one throwaway core per node, each with its own
+        // startup banner, and every line here costs a JSON-serialized IPC event
+        // plus a store write in the webview. A latency run over a few hundred
+        // nodes therefore drowned the Logs panel in output about cores the user
+        // never started. The lines still reach the rotating file log through
+        // `drain_child_pipe`'s `tracing` call, which is where a probe failure is
+        // actually diagnosed.
+        if role == ProcessRole::Probe {
+            return;
+        }
         // The stream carries no severity: sing-box writes every level to stderr
         // unless `log.output` is set, so the level comes from the line itself.
         let level = process_log_level_to_contract(classify_core_log_line(&line));
@@ -534,13 +632,33 @@ fn shutdown_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     if !SHUTDOWN_LATCH.begin() {
         return;
     }
-    // Stop the auto-update scheduler before the runtime disconnects so no
-    // background subscription commit races the shutdown sequence.
+    // Signalled before the runtime is torn down so the scheduler stops taking
+    // on new subscriptions, abandons an in-flight download, and discards a
+    // fetch that already finished rather than publishing it into a runtime that
+    // is going away. `close()` only signals — the scheduler exposes no
+    // awaitable shutdown — so a commit that had already begun races the rest of
+    // this teardown and is cut off by the process exit. SQLite keeps that write
+    // atomic, so the cost is an update that has to be redone next launch.
     if let Some(state) = app.try_state::<AppState>() {
         state.subscription_auto_update().close();
+        // Tauri exits the process directly, so nothing here is ever dropped:
+        // a speedtest still in flight would leave its temporary sing-box probe
+        // cores running with open outbound tunnels after the app is gone.
+        state.speedtest_manager().shutdown();
     }
-    disconnect_runtime_for_exit(app);
-    revoke_elevation_for_exit(app);
+    // The root launcher is the only passwordless way to kill an elevated core,
+    // so it is only removed once the core is confirmed stopped. Removing it
+    // while a root sing-box still holds the TUN device would strand that
+    // process with no kill path at all; leaving it installed lets the next
+    // launch's stale-grant sweep clean up instead.
+    if disconnect_runtime_for_exit(app) {
+        revoke_elevation_for_exit(app);
+    } else {
+        tracing::error!(
+            "keeping the TUN elevation launcher installed: the core did not stop, \
+             so removing it would leave an elevated core with no kill path"
+        );
+    }
     restore_system_proxy_for_exit(app);
 }
 
@@ -553,13 +671,19 @@ fn revoke_elevation_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     state.elevation_manager().revoke();
 }
 
-fn disconnect_runtime_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+/// Stop the core. Returns whether it is known to be gone.
+fn disconnect_runtime_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
     let Some(state) = app.try_state::<AppState>() else {
-        return;
+        // Startup never got far enough to spawn anything through the launcher.
+        return true;
     };
     let runtime = state.services().runtime(state.supervisor());
-    if let Err(error) = tauri::async_runtime::block_on(runtime.disconnect()) {
-        tracing::warn!(?error, "failed to disconnect runtime on exit");
+    match tauri::async_runtime::block_on(runtime.disconnect()) {
+        Ok(_) => true,
+        Err(error) => {
+            tracing::warn!(?error, "failed to disconnect runtime on exit");
+            false
+        }
     }
 }
 

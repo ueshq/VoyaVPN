@@ -4,8 +4,8 @@ import type { DnsSettings } from "@/ipc/bindings";
 
 import { DNS_STRATEGIES } from "./dns-constants";
 
-export type DnsFieldErrors = Record<string, string>;
-
+// Issue messages are translation keys (see lib/zod-errors.ts); the DNS pane
+// renders them through `t`, so nothing here may be a display string.
 const nullableText = z.string().nullable();
 
 export const dnsSettingsSchema: z.ZodType<DnsSettings> = z.object({
@@ -30,16 +30,13 @@ function validateHosts(value: string | null | undefined, context: z.RefinementCt
     return;
   }
 
-  value.split(/\r?\n/).forEach((line, index) => {
+  value.split(/\r?\n/).forEach((line) => {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) {
       return;
     }
     if (trimmed.split(/\s+/).length < 2) {
-      context.addIssue({
-        code: "custom",
-        message: `Host line ${index + 1} must contain a domain and at least one answer`,
-      });
+      context.addIssue({ code: "custom", message: "validation.hostsLine" });
     }
   });
 }
@@ -55,16 +52,6 @@ function validateExpectedIps(value: string | null | undefined, context: z.Refine
       .map((part) => part.trim())
       .some((part) => part !== "" && /\s/.test(part))
   ) {
-    context.addIssue({
-      code: "custom",
-      message: "Expected IPs must be comma-separated without embedded whitespace",
-    });
+    context.addIssue({ code: "custom", message: "validation.expectedIps" });
   }
-}
-
-
-export function zodIssuesToErrorMap(error: z.ZodError): DnsFieldErrors {
-  return Object.fromEntries(
-    error.issues.map((issue) => [issue.path.join(".") || "form", issue.message]),
-  );
 }

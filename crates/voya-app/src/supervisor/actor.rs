@@ -13,14 +13,35 @@ struct ProcessSpawnPlan {
 }
 
 impl SupervisorActor {
-    pub(super) fn new(deps: SupervisorDeps, tx: mpsc::WeakSender<SupervisorCommand>) -> Self {
+    pub(super) fn new(
+        deps: SupervisorDeps,
+        tx: mpsc::WeakSender<SupervisorCommand>,
+        runtime: Option<tokio::runtime::Handle>,
+    ) -> Self {
         Self {
             deps,
             tx,
+            runtime,
             running: RunningCore::empty(),
             native_tun_generation: 0,
             restart_generation: 0,
             crash: CrashTracker::default(),
+        }
+    }
+
+    /// Schedule supervisor-owned background work on the app's runtime.
+    ///
+    /// `tokio::spawn` would panic here: the actor loop runs on its own OS
+    /// thread, outside any runtime context.
+    fn spawn_task<F>(&self, future: F)
+    where
+        F: std::future::Future<Output = ()> + Send + 'static,
+    {
+        match &self.runtime {
+            Some(runtime) => {
+                runtime.spawn(future);
+            }
+            None => tracing::warn!("supervisor background task skipped: no runtime handle"),
         }
     }
 
@@ -136,10 +157,13 @@ impl SupervisorActor {
         request: SupervisorStartRequest,
         plan: ProcessSpawnPlan,
     ) -> Result<SupervisorSnapshot, SupervisorError> {
-        if self.deps.target_os == TargetOs::Windows && request.tun_enabled {
-            self.deps.tun_cleaner.cleanup_before_start()?;
-        }
-
+        // No Windows wintun cleanup here: this path is only reached when the
+        // backend is `Process`, and Windows + `tun_enabled` always resolves to
+        // the native `WindowsService` backend, so the branch that used to live
+        // here was unreachable. Wiring `TunCleaner` into `start_native_tun`
+        // instead is not a rename: `pnputil /remove-device` exits non-zero when
+        // the device is absent, which `windows_cleanup_result` reports as a
+        // hard error, so it would fail every start on a clean machine.
         let job = if self.deps.target_os == TargetOs::Windows {
             self.deps.job_factory.create_job()?
         } else {
@@ -416,7 +440,7 @@ impl SupervisorActor {
             request,
         });
 
-        tokio::spawn(async move {
+        self.spawn_task(async move {
             tokio::time::sleep(delay).await;
             let Some(tx) = tx.upgrade() else {
                 return;
@@ -500,7 +524,7 @@ impl SupervisorActor {
         let controller = Arc::clone(&self.deps.native_tun_controller);
         let tx = self.tx.clone();
         let interval = self.deps.native_tun_health_interval;
-        tokio::spawn(async move {
+        self.spawn_task(async move {
             loop {
                 if tx.upgrade().is_none() {
                     return;

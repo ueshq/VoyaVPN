@@ -143,12 +143,8 @@ fn gen_dns_rules(config: &mut SingboxConfig, context: &CoreConfigContext) {
         });
     }
 
-    append_priority_proxy_dns_rules(
-        &mut rules,
-        SINGBOX_REMOTE_DNS_TAG,
-        priority_proxy_dns_strategy(context),
-    );
-
+    // Mirror the route generator: clash_mode wins over the priority-proxy list
+    // so Direct mode resolves these names through the direct resolver too.
     rules.push(SingboxRule {
         server: Some(SINGBOX_REMOTE_DNS_TAG.to_string()),
         strategy: domain_strategy4_sbox(simple_dns.strategy4_proxy.as_deref()),
@@ -161,6 +157,12 @@ fn gen_dns_rules(config: &mut SingboxConfig, context: &CoreConfigContext) {
         clash_mode: Some("Direct".to_string()),
         ..SingboxRule::default()
     });
+
+    append_priority_proxy_dns_rules(
+        &mut rules,
+        SINGBOX_REMOTE_DNS_TAG,
+        priority_proxy_dns_strategy(context),
+    );
 
     for (host, addresses) in parse_hosts_to_dictionary(simple_dns.hosts.as_deref()) {
         let Some(predefined) = addresses.first() else {

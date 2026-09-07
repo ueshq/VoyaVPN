@@ -4,6 +4,9 @@ import { appBundleIdentifier as defaultProviderId } from "./tunnel-layout.mjs";
 const packetTunnelExecutable = "VoyaPacketTunnel";
 const defaultReplacementTarget = "/Applications/VoyaVPN.app";
 const defaultGuiExecutables = ["voyavpn", "VoyaVPN"];
+
+/** Every VoyaVPN executable whose presence blocks a destructive local mutation. */
+export const voyaRuntimeExecutables = [...defaultGuiExecutables, packetTunnelExecutable];
 const sleeper = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
 
 function escapeRegExp(value) {
@@ -17,7 +20,12 @@ function commandFailure(program, args, result) {
   );
 }
 
-function defaultIsProcessRunning(executable) {
+/**
+ * `pgrep -x` presence probe, exported so machine-global tools (the
+ * NetworkExtension doctor) can refuse to mutate PlugInKit under a live app
+ * instead of hand-rolling a fourth copy of this check.
+ */
+export function defaultIsProcessRunning(executable) {
   const program = "/usr/bin/pgrep";
   const args = ["-x", executable];
   const result = spawnSync(program, args, { encoding: "utf8" });

@@ -40,21 +40,8 @@ pub async fn set_connection_mode<R: tauri::Runtime>(
         .map_err(connection_mode_error)?;
 
     if outcome.tun_flag_changed {
-        if let Err(error) = restart_if_connected_after_config_change(
-            &app,
-            &state,
-            &outcome.config,
-            "Connection mode changed",
-        )
-        .await
-        {
-            report_post_commit_error(
-                &app,
-                "Connection mode saved; core restart failed",
-                &format!("{error:?}"),
-                AppNoticeLevel::Warning,
-            );
-        }
+        restart_after_config_change(&app, &state, &outcome.config, ConfigChange::CONNECTION_MODE)
+            .await;
     }
 
     Ok(outcome.status)

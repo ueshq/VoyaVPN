@@ -13,13 +13,12 @@ import {
   ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import type { RoutingRule, RoutingRuleScope } from "@/ipc/bindings";
+import { translateFieldErrors, zodIssuesToErrorMap, type FieldErrorMap } from "@/lib/zod-errors";
 
 import { RULE_TYPES } from "./routing-constants";
 import { CheckboxField, SelectField, TextAreaField, TextField } from "./routing-form-fields";
 import {
   routingRuleSchema,
-  zodIssuesToErrorMap,
-  type ErrorMap,
   type RoutingRulePayload,
 } from "./routing-form-schema";
 import { formToRule, ruleToForm } from "./routing-form-values";
@@ -39,7 +38,8 @@ export function RoutingRuleDialog({
 }) {
   const { t } = useI18n();
   const [form, setForm] = useState(() => ruleToForm(rule));
-  const [fieldErrors, setFieldErrors] = useState<ErrorMap>({});
+  const [fieldErrors, setFieldErrors] = useState<FieldErrorMap>({});
+  const errors = translateFieldErrors(t, fieldErrors);
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -70,13 +70,13 @@ export function RoutingRuleDialog({
         >
           <div className="grid gap-3 sm:grid-cols-[1fr_10rem_10rem]">
             <TextField
-              error={fieldErrors.remarks}
+              error={errors.remarks}
               label={t("panes.routing.remarks")}
               onChange={(value) => setForm((current) => ({ ...current, remarks: value }))}
               value={form.remarks}
             />
             <SelectField
-              error={fieldErrors.scope}
+              error={errors.scope}
               label={t("panes.routing.ruleScope")}
               onChange={(value) => setForm((current) => ({ ...current, scope: value as RoutingRuleScope }))}
               options={[
@@ -87,7 +87,7 @@ export function RoutingRuleDialog({
               value={String(form.scope)}
             />
             <TextField
-              error={fieldErrors.outbound}
+              error={errors.outbound}
               label={t("panes.routing.outbound")}
               onChange={(value) => setForm((current) => ({ ...current, outbound: value }))}
               value={form.outbound}
@@ -95,19 +95,19 @@ export function RoutingRuleDialog({
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <TextField
-              error={fieldErrors.port}
+              error={errors.port}
               label={t("panes.routing.port")}
               onChange={(value) => setForm((current) => ({ ...current, port: value }))}
               value={form.port}
             />
             <TextField
-              error={fieldErrors.network}
+              error={errors.network}
               label={t("panes.routing.network")}
               onChange={(value) => setForm((current) => ({ ...current, network: value }))}
               value={form.network}
             />
             <TextField
-              error={fieldErrors.kind}
+              error={errors.kind}
               label={t("panes.routing.type")}
               onChange={(value) => setForm((current) => ({ ...current, kind: value }))}
               value={form.kind}
@@ -115,31 +115,31 @@ export function RoutingRuleDialog({
           </div>
           <div className="grid gap-3 lg:grid-cols-2">
             <TextAreaField
-              error={fieldErrors.domain}
+              error={errors.domain}
               label={t("panes.routing.domain")}
               onChange={(value) => setForm((current) => ({ ...current, domain: value }))}
               value={form.domain}
             />
             <TextAreaField
-              error={fieldErrors.ip}
+              error={errors.ip}
               label="IP"
               onChange={(value) => setForm((current) => ({ ...current, ip: value }))}
               value={form.ip}
             />
             <TextAreaField
-              error={fieldErrors.protocol}
+              error={errors.protocol}
               label={t("panes.routing.protocol")}
               onChange={(value) => setForm((current) => ({ ...current, protocol: value }))}
               value={form.protocol}
             />
             <TextAreaField
-              error={fieldErrors.process}
+              error={errors.process}
               label={t("panes.routing.process")}
               onChange={(value) => setForm((current) => ({ ...current, process: value }))}
               value={form.process}
             />
             <TextAreaField
-              error={fieldErrors.inboundTags}
+              error={errors.inboundTags}
               label={t("panes.routing.inboundTags")}
               onChange={(value) => setForm((current) => ({ ...current, inboundTags: value }))}
               value={form.inboundTags}

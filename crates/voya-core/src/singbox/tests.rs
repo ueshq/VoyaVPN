@@ -567,6 +567,400 @@ fn singbox_dns_address_uses_dhcp_interface_and_unbracketed_ipv6() {
 }
 
 #[test]
+fn singbox_clash_api_port_follows_the_context_not_the_tun_setting() {
+    // Linux + TUN splits into two processes: the main config keeps the base
+    // api2 port and only the pre-socks (TUN) config takes api2 + 1. Deriving
+    // the port from `tun_mode_item.enable_tun` instead would point every
+    // client at the TUN process, which has no selector or urltest outbounds.
+    let mut app_config = AppConfig::default();
+    app_config.tun_mode_item.enable_tun = true;
+    let api2_port = inbound_port(&app_config, InboundProtocol::api2);
+
+    let mut main_context = test_context(app_config.clone(), base_remote_node());
+    main_context.is_tun_enabled = false;
+    let mut pre_context = test_context(app_config, socks_node("pre", "pre-socks"));
+    pre_context.is_tun_enabled = true;
+
+    assert_eq!(main_context.clash_api_port(), api2_port);
+    assert_eq!(pre_context.clash_api_port(), api2_port + 1);
+    for context in [&main_context, &pre_context] {
+        let generated = generate_singbox_config(context).expect("sing-box config should generate");
+        assert_eq!(
+            generated
+                .experimental
+                .and_then(|experimental| experimental.clash_api)
+                .and_then(|clash_api| clash_api.external_controller),
+            Some(format!("{LOOPBACK}:{}", context.clash_api_port()))
+        );
+    }
+}
+
+#[test]
+fn singbox_clash_api_secret_is_emitted_only_when_injected() {
+    let clash_api = |secret: Option<&str>| {
+        let mut context = test_context(AppConfig::default(), base_remote_node());
+        context.clash_api_secret = secret.map(str::to_string);
+        generate_singbox_config(&context)
+            .expect("sing-box config should generate")
+            .experimental
+            .and_then(|experimental| experimental.clash_api)
+            .expect("clash api block")
+    };
+
+    assert_eq!(clash_api(None).secret, None);
+    assert_eq!(clash_api(Some("   ")).secret, None);
+    let guarded = clash_api(Some("token-1234"));
+    assert_eq!(guarded.secret.as_deref(), Some("token-1234"));
+    assert_eq!(
+        serde_json::to_value(&guarded)
+            .expect("clash api should serialize to JSON")
+            .get("secret")
+            .and_then(Value::as_str),
+        Some("token-1234")
+    );
+}
+
+/// One `parse_dns_address` expectation: input, then the expected
+/// `(kind, server, port, path)` the parser should produce.
+type DnsAddressCase = (
+    &'static str,
+    &'static str,
+    Option<&'static str>,
+    Option<i32>,
+    Option<&'static str>,
+);
+
+#[test]
+fn singbox_dns_address_table_covers_local_scheme_and_path_branches() {
+    let cases: &[DnsAddressCase] = &[
+        ("local", "local", None, None, None),
+        ("localhost", "local", None, None, None),
+        ("8.8.8.8", "udp", Some("8.8.8.8"), None, None),
+        ("8.8.8.8:5353", "udp", Some("8.8.8.8"), Some(5353), None),
+        ("tls://1.1.1.1", "tls", Some("1.1.1.1"), None, None),
+        ("udp+local://1.1.1.1", "udp", Some("1.1.1.1"), None, None),
+        (
+            "https://dns.example/dns-query?x=1",
+            "https",
+            Some("dns.example"),
+            None,
+            Some("/dns-query?x=1"),
+        ),
+        (
+            "h3://dns.example/q",
+            "h3",
+            Some("dns.example"),
+            None,
+            Some("/q"),
+        ),
+        // Only the HTTP-family transports carry a path; a DoT authority with a
+        // trailing slash must not leak one into the config.
+        ("tls://dns.example/", "tls", Some("dns.example"), None, None),
+        (
+            "quic://dns.example/ignored",
+            "quic",
+            Some("dns.example"),
+            None,
+            None,
+        ),
+        (
+            "dns.example/dns-query",
+            "udp",
+            Some("dns.example"),
+            None,
+            None,
+        ),
+    ];
+
+    for (input, kind, server, port, path) in cases {
+        let parsed = parse_dns_address(input)
+            .unwrap_or_else(|| panic!("`{input}` should parse as a DNS server"));
+        assert_eq!(&parsed.r#type, kind, "type for `{input}`");
+        assert_eq!(parsed.server.as_deref(), *server, "server for `{input}`");
+        assert_eq!(parsed.server_port, *port, "port for `{input}`");
+        assert_eq!(parsed.path.as_deref(), *path, "path for `{input}`");
+    }
+
+    for input in ["", "   ", "1.1.1.1:70000", "8.8.8.8:0", "://nope"] {
+        assert!(
+            parse_dns_address(input).is_none(),
+            "`{input}` must not parse as a DNS server"
+        );
+    }
+
+    // A comma or semicolon list keeps only the first non-empty entry.
+    let first = parse_dns_address(" , 9.9.9.9, 1.1.1.1").expect("first DNS address");
+    assert_eq!(first.server.as_deref(), Some("9.9.9.9"));
+
+    // The fallback default is used when the primary address is unusable.
+    let fallback = parse_dns_address_or_default("1.1.1.1:0", "8.8.4.4");
+    assert_eq!(fallback.server.as_deref(), Some("8.8.4.4"));
+}
+
+#[test]
+fn singbox_dns_helper_tables_parse_hosts_strategies_and_rcodes() {
+    let hosts = parse_hosts_to_dictionary(Some(concat!(
+        "# comment line\n",
+        "\n",
+        "bare-line-without-value\n",
+        "example.test 1.1.1.1 2.2.2.2\n",
+        "example.test 3.3.3.3\n",
+        "block.test #3\n"
+    )));
+    assert_eq!(
+        hosts.get("example.test").map(Vec::as_slice),
+        Some(
+            ["1.1.1.1", "2.2.2.2", "3.3.3.3"]
+                .map(str::to_string)
+                .as_slice()
+        )
+    );
+    assert_eq!(
+        hosts.get("block.test").map(Vec::as_slice),
+        Some(["#3".to_string()].as_slice())
+    );
+    assert!(!hosts.contains_key("bare-line-without-value"));
+    assert!(!hosts.contains_key("# comment line"));
+
+    assert_eq!(domain_strategy4_sbox(None), None);
+    assert_eq!(domain_strategy4_sbox(Some("AsIs")), None);
+    assert_eq!(
+        domain_strategy4_sbox(Some("UseIPv4")).as_deref(),
+        Some("prefer_ipv4")
+    );
+    assert_eq!(
+        domain_strategy4_sbox(Some("UseIPv6")).as_deref(),
+        Some("prefer_ipv6")
+    );
+    assert_eq!(
+        domain_strategy4_sbox(Some("ForceIPv4")).as_deref(),
+        Some("ipv4_only")
+    );
+    assert_eq!(
+        domain_strategy4_sbox(Some("ForceIPv6v4")).as_deref(),
+        Some("ipv6_only")
+    );
+
+    assert_eq!(dns_rcode(0), "NOERROR");
+    assert_eq!(dns_rcode(1), "FORMERR");
+    assert_eq!(dns_rcode(2), "SERVFAIL");
+    assert_eq!(dns_rcode(3), "NXDOMAIN");
+    assert_eq!(dns_rcode(4), "NOTIMP");
+    assert_eq!(dns_rcode(5), "REFUSED");
+    assert_eq!(dns_rcode(99), "NOERROR");
+
+    assert!(is_domain_name("target.example"));
+    assert!(!is_domain_name("1.2.3.4"));
+    assert!(!is_domain_name("2606:4700::1111"));
+    assert!(!is_domain_name("localhost"));
+    assert!(!is_domain_name(""));
+
+    let (ip_cidr, regions, region_name) =
+        parse_direct_expected_ips(Some("geoip:cn; 192.0.2.0/24 ,geoip:hk"));
+    assert_eq!(ip_cidr, vec!["192.0.2.0/24".to_string()]);
+    assert_eq!(regions, vec!["cn".to_string(), "hk".to_string()]);
+    assert_eq!(region_name, "hk");
+    assert_eq!(
+        parse_direct_expected_ips(None),
+        (Vec::new(), Vec::new(), String::new())
+    );
+}
+
+#[test]
+fn singbox_shadowsocks_plugin_options_come_from_the_shared_model() {
+    let obfs = ProfileItem {
+        index_id: "ss-obfs".to_string(),
+        remarks: "ss-obfs".to_string(),
+        protocol: ProfileProtocol::Shadowsocks {
+            server: endpoint("ss.example", 8388),
+            password: "secret".to_string(),
+            method: "aes-256-gcm".to_string(),
+            udp_over_tcp: false,
+        },
+        transport: Some(ProfileTransport::Tcp {
+            header: Some("http".to_string()),
+            host: Some("obfs.example,second.example".to_string()),
+            path: None,
+        }),
+        tls: None,
+        ..ProfileItem::default()
+    };
+    let value = generated_proxy_outbound_value(AppConfig::default(), obfs);
+    assert_eq!(value["plugin"].as_str(), Some("obfs-local"));
+    assert_eq!(
+        value["plugin_opts"].as_str(),
+        Some("obfs=http;obfs-host=obfs.example")
+    );
+
+    let websocket = ProfileItem {
+        index_id: "ss-ws".to_string(),
+        remarks: "ss-ws".to_string(),
+        protocol: ProfileProtocol::Shadowsocks {
+            server: endpoint("ss.example", 8388),
+            password: "secret".to_string(),
+            method: "aes-256-gcm".to_string(),
+            udp_over_tcp: false,
+        },
+        transport: Some(ProfileTransport::Websocket {
+            host: Some("ws.example".to_string()),
+            path: Some("/path?a=1,2".to_string()),
+        }),
+        tls: Some(tls_settings(TlsMode::Tls, Some("ws.example"))),
+        ..ProfileItem::default()
+    };
+    let value = generated_proxy_outbound_value(AppConfig::default(), websocket);
+    assert_eq!(value["plugin"].as_str(), Some("v2ray-plugin"));
+    assert_eq!(
+        value["plugin_opts"].as_str(),
+        Some("mode=websocket;host=ws.example;path=/path?a\\=1\\,2;tls;mux=0")
+    );
+}
+
+#[test]
+fn singbox_chain_through_policy_group_clones_the_upstream_branch() {
+    // `[Group, node]` chains fan the upstream hop out once per group member;
+    // the `-clone-` outbounds this produces had no test at all.
+    let n1 = socks_node("n1", "node-1");
+    let n2 = socks_node("n2", "node-2");
+    let n3 = socks_node("n3", "node-3");
+    let group = ProfileItem {
+        index_id: "group".to_string(),
+        remarks: "Group".to_string(),
+        protocol: ProfileProtocol::PolicyGroup {
+            child_profile_ids: vec!["n1".to_string(), "n2".to_string()],
+            source_subscription_id: None,
+            filter: None,
+            strategy: MultipleLoad::LeastPing,
+        },
+        ..ProfileItem::default()
+    };
+    let chain = ProfileItem {
+        index_id: "chain".to_string(),
+        remarks: "Chain".to_string(),
+        protocol: ProfileProtocol::ProxyChain {
+            child_profile_ids: vec!["group".to_string(), "n3".to_string()],
+        },
+        ..ProfileItem::default()
+    };
+    let mut context = test_context(AppConfig::default(), chain);
+    for node in [n1, n2, n3, group] {
+        context.all_proxies_map.insert(node.index_id.clone(), node);
+    }
+
+    let generated = generate_singbox_config(&context).expect("sing-box config should generate");
+    let detour_of = |tag: &str| {
+        generated
+            .outbounds
+            .iter()
+            .find(|outbound| outbound.tag == tag)
+            .unwrap_or_else(|| panic!("outbound `{tag}` should exist"))
+            .detour
+            .clone()
+    };
+
+    assert_eq!(
+        detour_of("proxy-clone-1").as_deref(),
+        Some("chain-proxy-1-Group-1-node-1")
+    );
+    assert_eq!(
+        detour_of("proxy-clone-2").as_deref(),
+        Some("chain-proxy-1-Group-2-node-2")
+    );
+    // Each branch terminates at its own group member, which keeps the two
+    // chains independent instead of sharing the last hop.
+    assert_eq!(detour_of("chain-proxy-1-Group-1-node-1"), None);
+    assert_eq!(detour_of("chain-proxy-1-Group-2-node-2"), None);
+
+    let selector = generated
+        .outbounds
+        .iter()
+        .find(|outbound| outbound.tag == PROXY_TAG)
+        .expect("selector outbound");
+    assert_eq!(
+        selector.outbounds.as_ref(),
+        Some(&vec![
+            "proxy-auto".to_string(),
+            "proxy-clone-1".to_string(),
+            "proxy-clone-2".to_string()
+        ])
+    );
+}
+
+#[test]
+fn singbox_dns_bootstrap_and_expected_ips_reach_servers_and_rules() {
+    let mut app_config = AppConfig::default();
+    app_config.simple_dns_item.bootstrap_dns = Some("223.5.5.5:5353".to_string());
+    app_config.simple_dns_item.direct_dns = Some("tls://dot.example".to_string());
+    app_config.simple_dns_item.remote_dns = Some("https://remote.example/dns-query".to_string());
+    app_config.simple_dns_item.direct_expected_ips = Some("geoip:cn,192.0.2.0/24".to_string());
+    app_config.simple_dns_item.add_common_hosts = Some(false);
+    app_config.simple_dns_item.strategy4_freedom = Some("UseIPv4".to_string());
+    let mut context = test_context(app_config, base_remote_node());
+    context.routing_item = Some(RoutingItem {
+        rule_set: vec![RulesItem {
+            outbound_tag: Some(DIRECT_TAG.to_string()),
+            domain: Some(vec!["geosite:cn".to_string()]),
+            rule_type: Some(RuleType::DNS),
+            ..RulesItem::default()
+        }],
+        ..RoutingItem::default()
+    });
+
+    let dns = generate_singbox_config(&context)
+        .expect("sing-box config should generate")
+        .dns
+        .expect("DNS config should be generated");
+    let bootstrap = dns
+        .servers
+        .iter()
+        .find(|server| server.tag == SINGBOX_LOCAL_DNS_TAG)
+        .expect("bootstrap DNS server");
+    assert_eq!(bootstrap.r#type, "udp");
+    assert_eq!(bootstrap.server.as_deref(), Some("223.5.5.5"));
+    assert_eq!(bootstrap.server_port, Some(5353));
+
+    let direct = dns
+        .servers
+        .iter()
+        .find(|server| server.tag == SINGBOX_DIRECT_DNS_TAG)
+        .expect("direct DNS server");
+    assert_eq!(direct.r#type, "tls");
+    assert_eq!(direct.server.as_deref(), Some("dot.example"));
+    assert_eq!(direct.server_port, None);
+    assert_eq!(
+        direct.domain_resolver.as_deref(),
+        Some(SINGBOX_LOCAL_DNS_TAG)
+    );
+
+    let remote = dns
+        .servers
+        .iter()
+        .find(|server| server.tag == SINGBOX_REMOTE_DNS_TAG)
+        .expect("remote DNS server");
+    assert_eq!(remote.r#type, "https");
+    assert_eq!(remote.path.as_deref(), Some("/dns-query"));
+    assert_eq!(remote.detour.as_deref(), Some(PROXY_TAG));
+
+    // The expected-IP split clones the direct rule so the matching geosite half
+    // is constrained to the expected regions and CIDRs.
+    let expected = dns
+        .rules
+        .iter()
+        .find(|rule| {
+            rule.rule_set
+                .as_ref()
+                .is_some_and(|items| items.iter().any(|item| item == "geoip-cn"))
+        })
+        .expect("expected-ip DNS rule");
+    assert_eq!(expected.server.as_deref(), Some(SINGBOX_DIRECT_DNS_TAG));
+    assert_eq!(
+        expected.ip_cidr.as_ref(),
+        Some(&vec!["192.0.2.0/24".to_string()])
+    );
+    assert_eq!(expected.strategy.as_deref(), Some("prefer_ipv4"));
+}
+
+#[test]
 fn singbox_wireguard_reserved_requires_exactly_three_bytes() {
     assert_eq!(
         parse_wireguard_reserved(Some("1, 2, 255")),
@@ -1048,7 +1442,7 @@ fn singbox_macos_tun_inbound_lets_singbox_allocate_utun() {
 }
 
 #[test]
-fn singbox_priority_proxy_domains_follow_sniff_and_precede_direct_rules() {
+fn singbox_priority_proxy_domains_follow_clash_mode_and_precede_user_rules() {
     let mut app_config = AppConfig::default();
     app_config.tun_mode_item.enable_tun = true;
     app_config.tun_mode_item.enable_ipv6_address = false;
@@ -1103,7 +1497,9 @@ fn singbox_priority_proxy_domains_follow_sniff_and_precede_direct_rules() {
         .expect("direct final route rule");
     assert!(sniff_index < priority_route_index);
     assert!(dns_hijack_index < priority_route_index);
-    assert!(priority_route_index < direct_mode_index);
+    // Direct mode must win over the priority list, otherwise a user who chose
+    // "Direct" still tunnels these vendors and loses the mode they asked for.
+    assert!(direct_mode_index < priority_route_index);
     assert!(priority_route_index < direct_final_index);
 
     let dns = generated.dns.expect("DNS config should be generated");
@@ -1126,7 +1522,7 @@ fn singbox_priority_proxy_domains_follow_sniff_and_precede_direct_rules() {
                 && rule.clash_mode.as_deref() == Some("Direct")
         })
         .expect("Direct DNS mode rule");
-    assert!(priority_dns_index < direct_mode_index);
+    assert!(direct_mode_index < priority_dns_index);
 }
 
 #[test]
@@ -1240,6 +1636,55 @@ fn singbox_speedtest_config_routes_policy_group_and_proxy_chain_entries() {
         .outbounds
         .iter()
         .any(|outbound| outbound.tag.starts_with("proxy12101")));
+}
+
+#[test]
+fn singbox_log_level_maps_app_levels_onto_singbox_names() {
+    // (stored app level, generated `log.level`, generated `log.disabled`)
+    let cases = [
+        (crate::DEFAULT_LOG_LEVEL, "warn", None),
+        ("warning", "warn", None),
+        ("warn", "warn", None),
+        ("trace", "trace", None),
+        ("debug", "debug", None),
+        ("info", "info", None),
+        ("error", "error", None),
+        ("  Info  ", "info", None),
+        ("none", "warn", Some(true)),
+        ("verbose", "warn", None),
+        ("", "warn", None),
+    ];
+
+    for (configured, expected_level, expected_disabled) in cases {
+        let mut app_config = AppConfig::default();
+        app_config.core_basic_item.loglevel = configured.to_string();
+        let generated =
+            generate_singbox_config(&test_context(app_config, socks_node("log", "Log")))
+                .expect("sing-box config should generate");
+        let log = generated.log.as_ref().expect("sing-box log section");
+
+        assert_eq!(log.level, expected_level, "log level for `{configured}`");
+        assert_eq!(
+            log.disabled, expected_disabled,
+            "log disabled for `{configured}`"
+        );
+    }
+}
+
+#[test]
+fn singbox_default_log_level_is_generated_as_warn() {
+    let value = generate_singbox_config_value(&test_context(
+        AppConfig::default(),
+        socks_node("log", "Log"),
+    ))
+    .expect("sing-box config should generate");
+
+    assert_eq!(
+        value.pointer("/log/level"),
+        Some(&Value::String("warn".to_string()))
+    );
+    // `none` is the only level that disables logging, so the default must not.
+    assert_eq!(value.pointer("/log/disabled"), None);
 }
 
 fn assert_speedtest_singbox_route(generated: &SingboxConfig, port: i32) {

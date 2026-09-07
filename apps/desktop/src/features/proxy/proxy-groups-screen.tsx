@@ -45,7 +45,12 @@ const trafficModeOptions: Array<{ labelKey: TranslationKey; value: TrafficMode }
 export function ProxyGroupsScreen() {
   const queryClient = useQueryClient();
   const { t } = useI18n();
+  const coreState = useRuntimeEventStore((state) => state.coreState);
   const monitorStatus = useRuntimeEventStore((state) => state.proxyMonitorStatus);
+  // The Clash API only exists while the core runs; without this guard the screen
+  // renders its raw transport failure ("error sending request for url …") as if
+  // it were a proxy problem.
+  const coreDisconnected = coreState != null && coreState.state !== "connected";
   const [delayResults, setDelayResults] = useState<Record<string, ProxyDelayTestResult>>({});
   const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null);
 
@@ -182,117 +187,128 @@ export function ProxyGroupsScreen() {
         </PageHeaderActions>
       </PageHeader>
 
-      {groupsQuery.error ? <InlinePageError>{getErrorMessage(groupsQuery.error)}</InlinePageError> : null}
+      {coreDisconnected ? (
+        <EmptyState
+          className="min-h-0 flex-1 content-center"
+          description={t("proxy.requiresCoreDescription")}
+          icon={WifiOff}
+          title={t("proxy.requiresCore")}
+        />
+      ) : (
+        <>
+        {groupsQuery.error ? <InlinePageError>{getErrorMessage(groupsQuery.error)}</InlinePageError> : null}
 
-      <div className="grid min-h-0 flex-1 grid-cols-[18rem_minmax(0,1fr)] overflow-hidden">
-        <aside className="min-h-0 border-r">
-          <div className="flex h-10 items-center justify-between border-b px-4">
-            <span className="text-xs font-medium uppercase text-muted-foreground">{t("proxy.groups")}</span>
-            <span className="text-xs tabular-nums text-muted-foreground">{snapshot?.groups.length ?? 0}</span>
-          </div>
-          <ScrollArea className="h-[calc(100%-2.5rem)]">
-            <div className="p-2">
-              {orderedGroups.length ? (
-                orderedGroups.map((group) => (
-                  <button
-                    key={group.name}
-                    className={cn(
-                      "mb-1 grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-md border border-transparent px-3 py-2 text-start text-sm outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                      selectedGroup?.name === group.name ? dataTableRowSelected : dataTableRowHover,
+        <div className="grid min-h-0 flex-1 grid-cols-[18rem_minmax(0,1fr)] overflow-hidden">
+          <aside className="min-h-0 border-r">
+            <div className="flex h-10 items-center justify-between border-b px-4">
+              <span className="text-xs font-medium uppercase text-muted-foreground">{t("proxy.groups")}</span>
+              <span className="text-xs tabular-nums text-muted-foreground">{snapshot?.groups.length ?? 0}</span>
+            </div>
+            <ScrollArea className="h-[calc(100%-2.5rem)]">
+              <div className="p-2">
+                {orderedGroups.length ? (
+                  orderedGroups.map((group) => (
+                    <button
+                      key={group.name}
+                      className={cn(
+                        "mb-1 grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-md border border-transparent px-3 py-2 text-start text-sm outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                        selectedGroup?.name === group.name ? dataTableRowSelected : dataTableRowHover,
+                      )}
+                      onClick={() => setSelectedGroupName(group.name)}
+                      type="button"
+                    >
+                      <span className="flex min-w-0 items-center gap-1.5 font-medium">
+                        {isAutoGroup(group) ? (
+                          <Zap className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                        ) : null}
+                        <span className="min-w-0 truncate">{group.name}</span>
+                        {isAutoGroup(group) ? (
+                          <Badge className="bg-background text-muted-foreground" variant="outline">
+                            {t("proxy.autoBadge")}
+                          </Badge>
+                        ) : null}
+                      </span>
+                      <Badge
+                        className="justify-self-end bg-background tabular-nums text-muted-foreground"
+                        variant="outline"
+                      >
+                        {group.nodes.length}
+                      </Badge>
+                      <Badge
+                        className="col-span-2 max-w-full justify-start gap-1.5 truncate bg-background text-muted-foreground"
+                        title={group.now ?? t("proxy.noActive")}
+                        variant="outline"
+                      >
+                        {group.now ? (
+                          <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-connected" />
+                        ) : null}
+                        {group.now ?? t("proxy.noActive")}
+                      </Badge>
+                    </button>
+                  ))
+                ) : (
+                  <EmptyState className="py-10" icon={Network} title={t("panes.proxyGroups.empty")} />
+                )}
+              </div>
+            </ScrollArea>
+          </aside>
+
+          <div className="flex min-h-0 flex-col overflow-hidden">
+            <div className="flex h-10 shrink-0 items-center gap-2 border-b px-4">
+              <span className="min-w-0 truncate text-sm font-medium">
+                {selectedGroup?.name ?? t("panes.proxyGroups.title")}
+              </span>
+              {selectedGroup?.proxyType ? (
+                <Badge className="bg-background text-muted-foreground" variant="outline">
+                  {selectedGroup.proxyType}
+                </Badge>
+              ) : null}
+              {selectedGroup?.now ? (
+                <Badge
+                  className="max-w-56 gap-1.5 border-connected/30 bg-connected/10 text-connected"
+                  title={selectedGroup.now}
+                  variant="outline"
+                >
+                  <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-connected" />
+                  <span className="min-w-0 truncate">{selectedGroup.now}</span>
+                  <span className="tabular-nums">
+                    {formatDelay(
+                      delayResults[selectedGroup.now]?.delay ??
+                        selectedGroup.nodes.find((node) => node.name === selectedGroup.now)?.delay,
+                      "",
                     )}
-                    onClick={() => setSelectedGroupName(group.name)}
-                    type="button"
-                  >
-                    <span className="flex min-w-0 items-center gap-1.5 font-medium">
-                      {isAutoGroup(group) ? (
-                        <Zap className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                      ) : null}
-                      <span className="min-w-0 truncate">{group.name}</span>
-                      {isAutoGroup(group) ? (
-                        <Badge className="bg-background text-muted-foreground" variant="outline">
-                          {t("proxy.autoBadge")}
-                        </Badge>
-                      ) : null}
-                    </span>
-                    <Badge
-                      className="justify-self-end bg-background tabular-nums text-muted-foreground"
-                      variant="outline"
-                    >
-                      {group.nodes.length}
-                    </Badge>
-                    <Badge
-                      className="col-span-2 max-w-full justify-start gap-1.5 truncate bg-background text-muted-foreground"
-                      title={group.now ?? t("proxy.noActive")}
-                      variant="outline"
-                    >
-                      {group.now ? (
-                        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-connected" />
-                      ) : null}
-                      {group.now ?? t("proxy.noActive")}
-                    </Badge>
-                  </button>
-                ))
-              ) : (
-                <EmptyState className="py-10" icon={Network} title={t("panes.proxyGroups.empty")} />
-              )}
+                  </span>
+                </Badge>
+              ) : null}
+              <div className="ms-auto flex items-center gap-2">
+                <Button
+                  disabled={!selectedGroup || delayMutation.isPending}
+                  onClick={runSelectedDelayTest}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  <Gauge className="size-4" aria-hidden="true" />
+                  {t("actions.testSelected")}
+                </Button>
+              </div>
             </div>
-          </ScrollArea>
-        </aside>
 
-        <div className="flex min-h-0 flex-col overflow-hidden">
-          <div className="flex h-10 shrink-0 items-center gap-2 border-b px-4">
-            <span className="min-w-0 truncate text-sm font-medium">
-              {selectedGroup?.name ?? t("panes.proxyGroups.title")}
-            </span>
-            {selectedGroup?.proxyType ? (
-              <Badge className="bg-background text-muted-foreground" variant="outline">
-                {selectedGroup.proxyType}
-              </Badge>
+            {selectedGroup && isAutoGroup(selectedGroup) ? (
+              <p className="shrink-0 border-b bg-surface-sunken px-4 py-1.5 text-xs text-muted-foreground">
+                {t("proxy.autoManagedHint")}
+              </p>
             ) : null}
-            {selectedGroup?.now ? (
-              <Badge
-                className="max-w-56 gap-1.5 border-connected/30 bg-connected/10 text-connected"
-                title={selectedGroup.now}
-                variant="outline"
-              >
-                <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-connected" />
-                <span className="min-w-0 truncate">{selectedGroup.now}</span>
-                <span className="tabular-nums">
-                  {formatDelay(
-                    delayResults[selectedGroup.now]?.delay ??
-                      selectedGroup.nodes.find((node) => node.name === selectedGroup.now)?.delay,
-                    "",
-                  )}
-                </span>
-              </Badge>
-            ) : null}
-            <div className="ms-auto flex items-center gap-2">
-              <Button
-                disabled={!selectedGroup || delayMutation.isPending}
-                onClick={runSelectedDelayTest}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                <Gauge className="size-4" aria-hidden="true" />
-                {t("actions.testSelected")}
-              </Button>
-            </div>
+            <ProxyNodeGrid
+              delayResults={delayResults}
+              nodes={selectedNodes}
+              onSelect={selectNode}
+              selectable={selectedGroup?.proxyType.toLowerCase() === "selector"}
+            />
           </div>
-
-          {selectedGroup && isAutoGroup(selectedGroup) ? (
-            <p className="shrink-0 border-b bg-surface-sunken px-4 py-1.5 text-xs text-muted-foreground">
-              {t("proxy.autoManagedHint")}
-            </p>
-          ) : null}
-          <ProxyNodeGrid
-            delayResults={delayResults}
-            nodes={selectedNodes}
-            onSelect={selectNode}
-            selectable={selectedGroup?.proxyType.toLowerCase() === "selector"}
-          />
         </div>
-      </div>
+        </>
+      )}
     </PageSection>
   );
 }

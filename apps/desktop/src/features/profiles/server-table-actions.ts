@@ -73,41 +73,42 @@ export function exportFileFilter(kind: ProfileExportKind) {
       : { extensions: ["txt"], name: "Text" };
 }
 
-export function formatImportOperationMessage(result: ImportProfilesResult, t: TranslateFn) {
-  const imported = result.imported ?? 0;
-  const updated = result.updated ?? 0;
-  const skipped = result.skipped ?? 0;
-  const failed = result.failed ?? 0;
-  const filtered = result.filtered ?? 0;
-  const deduped = result.deduped ?? 0;
-  const removedDuplicates = result.removedDuplicates ?? 0;
-  const discardedNodeOverrides = result.discardedNodeOverrides ?? 0;
-  const parts = [`Imported ${imported.toLocaleString()} profile${imported === 1 ? "" : "s"}.`];
+/**
+ * Single localized summary for an `ImportProfilesResult`, shared by the import
+ * dialog and the profiles toolbar banner so one import can never produce two
+ * differently worded sentences.
+ */
+export function formatImportSummary(result: ImportProfilesResult, t: TranslateFn) {
+  const parts = [
+    t("panes.profiles.import.summary.imported", { count: result.imported.toLocaleString() }),
+  ];
 
-  if (updated > 0) {
-    parts.push(`${updated.toLocaleString()} updated.`);
+  if (result.updated > 0) {
+    parts.push(t("panes.profiles.import.summary.updated", { count: result.updated.toLocaleString() }));
   }
-  if (removedDuplicates > 0) {
+  if (result.removedDuplicates > 0) {
     parts.push(
-      `${removedDuplicates.toLocaleString()} duplicate${removedDuplicates === 1 ? "" : "s"} removed.`,
+      t("panes.profiles.import.summary.removedDuplicates", {
+        count: result.removedDuplicates.toLocaleString(),
+      }),
     );
   }
-  if (skipped > 0) {
-    parts.push(`${skipped.toLocaleString()} skipped.`);
+  if (result.skipped > 0) {
+    parts.push(t("panes.profiles.import.summary.skipped", { count: result.skipped.toLocaleString() }));
   }
-  if (failed > 0) {
-    parts.push(`${failed.toLocaleString()} failed to parse.`);
+  if (result.failed > 0) {
+    parts.push(t("panes.profiles.import.summary.failed", { count: result.failed.toLocaleString() }));
   }
-  if (filtered > 0) {
-    parts.push(`${filtered.toLocaleString()} filtered.`);
+  if (result.filtered > 0) {
+    parts.push(t("panes.profiles.import.summary.filtered", { count: result.filtered.toLocaleString() }));
   }
-  if (deduped > 0) {
-    parts.push(`${deduped.toLocaleString()} duplicate${deduped === 1 ? "" : "s"} skipped from payload.`);
+  if (result.deduped > 0) {
+    parts.push(t("panes.profiles.import.summary.deduped", { count: result.deduped.toLocaleString() }));
   }
-  if (discardedNodeOverrides > 0) {
+  if (result.discardedNodeOverrides > 0) {
     parts.push(
       t("panes.profiles.import.discardedNodeOverrides", {
-        count: discardedNodeOverrides.toLocaleString(),
+        count: result.discardedNodeOverrides.toLocaleString(),
       }),
     );
   }

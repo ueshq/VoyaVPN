@@ -9,14 +9,24 @@ type PersistedPreferences = {
 
 type PreferencesState = {
   setThemeMode: (themeMode: ThemeMode) => void;
+  setThemePreview: (themePreview: ThemeMode | null) => void;
   themeMode: ThemeMode;
+  /**
+   * Transient override applied while the Settings surface previews an unsaved
+   * appearance. It is deliberately outside `partialize`, so a preview never
+   * reaches localStorage and a discarded preview needs no rollback.
+   */
+  themePreview: ThemeMode | null;
 };
 
 export const usePreferencesStore = create<PreferencesState>()(
   persist(
     (set) => ({
-      setThemeMode: (themeMode) => set({ themeMode }),
+      // Committing a theme also ends any preview of it.
+      setThemeMode: (themeMode) => set({ themeMode, themePreview: null }),
+      setThemePreview: (themePreview) => set({ themePreview }),
       themeMode: "system",
+      themePreview: null,
     }),
     {
       name: "voyavpn.preferences",

@@ -1,10 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{ConfigType, ProfileItem};
+use crate::{
+    group_children::{resolve_group_children, GroupChildSource},
+    ConfigType, ProfileItem,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -127,8 +129,12 @@ pub fn validate_group_profile(
     let mut root = profile.clone();
     root.index_id.clone_from(&root_id);
     map.insert(root_id.clone(), root);
+    let source = MapChildSource {
+        map: &map,
+        ordered: profiles,
+    };
 
-    let child_index_ids = effective_child_ids(profile, &map, &mut result, true);
+    let child_index_ids = effective_child_ids(profile, &source, &mut result, true);
     if child_index_ids.is_empty() {
         result.errors.push(format!(
             "{} has no valid child profiles",
@@ -143,7 +149,7 @@ pub fn validate_group_profile(
 
     let mut stack = Vec::new();
     let mut visiting = BTreeSet::new();
-    detect_cycle(&root_id, &map, &mut visiting, &mut stack, &mut result);
+    detect_cycle(&root_id, &source, &mut visiting, &mut stack, &mut result);
 
     result.child_index_ids = child_index_ids;
     result.normalized_child_items = join_profile_id_list(&result.child_index_ids);
@@ -176,83 +182,78 @@ fn effective_profile_id(profile: &ProfileItem) -> String {
         .to_string()
 }
 
+/// Group children as the sing-box generator will see them.
+///
+/// The ordering, filtering and dedupe rules live in [`crate::group_children`]
+/// so this preview cannot disagree with the selector the runtime context
+/// builds; only the severity of each issue is decided here.
 fn effective_child_ids(
     profile: &ProfileItem,
-    map: &BTreeMap<String, ProfileItem>,
+    source: &MapChildSource<'_>,
     result: &mut GroupValidationResult,
     report_missing: bool,
 ) -> Vec<String> {
-    let mut child_index_ids = Vec::new();
-    let mut seen = BTreeSet::new();
-
-    for child_id in profile.protocol.child_profile_ids() {
-        if !map.contains_key(child_id) {
-            if report_missing {
-                result
-                    .errors
-                    .push(format!("child profile was not found: {child_id}"));
-            }
-            continue;
+    let resolution = resolve_group_children(&profile.protocol, source);
+    if report_missing {
+        for index_id in &resolution.missing_child_ids {
+            result
+                .errors
+                .push(format!("child profile was not found: {index_id}"));
         }
-        push_unique_child(&mut child_index_ids, &mut seen, child_id, result);
-    }
-
-    if let crate::ProfileProtocol::PolicyGroup {
-        source_subscription_id: Some(subscription_id),
-        filter,
-        ..
-    } = &profile.protocol
-    {
-        // An unparsable filter must select nothing: falling back to "no filter"
-        // would preview a filtered group as an all-nodes group.
-        let filter = match filter.as_deref().and_then(nonempty) {
-            Some(pattern) => match Regex::new(pattern) {
-                Ok(filter) => Some(filter),
-                Err(_) => {
-                    if report_missing {
-                        result
-                            .errors
-                            .push(format!("invalid subscription filter regex: {pattern}"));
-                    }
-                    return child_index_ids;
-                }
-            },
-            None => None,
-        };
-
-        for child in map.values().filter(|candidate| {
-            candidate.subscription_id.as_deref() == Some(subscription_id)
-                && !candidate.config_type().is_complex_type()
-                && filter
-                    .as_ref()
-                    .is_none_or(|filter| filter.is_match(&candidate.remarks))
-        }) {
-            push_unique_child(&mut child_index_ids, &mut seen, &child.index_id, result);
+        if let Some(pattern) = &resolution.invalid_filter {
+            result
+                .errors
+                .push(format!("invalid subscription filter regex: {pattern}"));
+        }
+        for index_id in &resolution.duplicate_child_ids {
+            push_unique_warning(
+                result,
+                format!("duplicate child profile ignored: {index_id}"),
+            );
         }
     }
 
-    child_index_ids
+    resolution
+        .children
+        .into_iter()
+        .map(|child| child.index_id)
+        .collect()
 }
 
-fn push_unique_child(
-    child_index_ids: &mut Vec<String>,
-    seen: &mut BTreeSet<String>,
-    child_id: &str,
-    result: &mut GroupValidationResult,
-) {
-    if seen.insert(child_id.to_string()) {
-        child_index_ids.push(child_id.to_string());
-    } else {
-        let warning = format!("duplicate child profile ignored: {child_id}");
-        if !result.warnings.contains(&warning) {
-            result.warnings.push(warning);
-        }
+struct MapChildSource<'map> {
+    /// Explicit-child lookups, including the synthesized root of a draft group.
+    map: &'map BTreeMap<String, ProfileItem>,
+    /// The caller's own profile order, which is the order the runtime env
+    /// reports subscription members in.
+    ordered: &'map [ProfileItem],
+}
+
+impl GroupChildSource for MapChildSource<'_> {
+    fn children_by_index_ids(&self, index_ids: &[String]) -> Vec<ProfileItem> {
+        index_ids
+            .iter()
+            .filter_map(|index_id| self.map.get(index_id).cloned())
+            .collect()
+    }
+
+    fn children_by_subscription_id(&self, subscription_id: &str) -> Vec<ProfileItem> {
+        self.ordered
+            .iter()
+            .filter(|candidate| candidate.subscription_id.as_deref() == Some(subscription_id))
+            .cloned()
+            .collect()
+    }
+}
+
+fn push_unique_warning(result: &mut GroupValidationResult, warning: String) {
+    if !result.warnings.contains(&warning) {
+        result.warnings.push(warning);
     }
 }
 
 fn detect_cycle(
     index_id: &str,
-    map: &BTreeMap<String, ProfileItem>,
+    source: &MapChildSource<'_>,
     visiting: &mut BTreeSet<String>,
     stack: &mut Vec<String>,
     result: &mut GroupValidationResult,
@@ -268,7 +269,7 @@ fn detect_cycle(
         return;
     }
 
-    let Some(profile) = map.get(index_id) else {
+    let Some(profile) = source.map.get(index_id) else {
         return;
     };
     if !profile.config_type().is_group_type() {
@@ -278,8 +279,8 @@ fn detect_cycle(
     visiting.insert(index_id.to_string());
     stack.push(index_id.to_string());
 
-    for child_id in effective_child_ids(profile, map, result, false) {
-        detect_cycle(&child_id, map, visiting, stack, result);
+    for child_id in effective_child_ids(profile, source, result, false) {
+        detect_cycle(&child_id, source, visiting, stack, result);
     }
 
     stack.pop();

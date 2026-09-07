@@ -44,6 +44,17 @@ impl<'db> ProfileExManager<'db> {
         self.update(index_id, |item| item.sort = sort).await
     }
 
+    /// Applies a whole ordering as one transaction.
+    ///
+    /// Reordering used to loop over [`Self::set_sort`], which is a read-modify-
+    /// write that autocommits per row; a subscription with hundreds of profiles
+    /// therefore paid hundreds of fsynced commits for one user gesture. The
+    /// repository writes only the `sort` column, which is all the read-modify-
+    /// write ever changed here.
+    pub async fn set_sort_many(&self, entries: &[(&str, i32)]) -> Result<()> {
+        Ok(self.database.profile_exs().set_sort_many(entries).await?)
+    }
+
     pub async fn set_test_delay(&self, index_id: &str, delay: i32) -> Result<ProfileExItem> {
         self.update(index_id, |item| item.delay = delay).await
     }

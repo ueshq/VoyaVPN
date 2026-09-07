@@ -12,8 +12,8 @@ use crate::{
     context::SS_SECURITIES_IN_SINGBOX,
     protocol_common::{
         first_list_value, inbound_port, inbound_protocol_tag, nonempty_str, parse_pem_chain,
-        parse_wireguard_reserved, protocol_name, raw_http_user_agent, split_list, trimmed,
-        wireguard_allowed_ips, wireguard_public_key, DEFAULT_NETWORK, DEFAULT_SECURITY,
+        parse_wireguard_reserved, protocol_name, raw_http_user_agent, shadowsocks_plugin_for,
+        split_list, wireguard_allowed_ips, wireguard_public_key, DEFAULT_SECURITY, RAW_HEADER_HTTP,
         WIREGUARD_DEFAULT_ADDRESS, WIREGUARD_DEFAULT_MTU,
     },
     AppConfig, ConfigType, CoreConfigContext, InItem, InboundProtocol, MultipleLoad, ProfileItem,
@@ -22,8 +22,6 @@ use crate::{
     DIRECT_TAG, LOOPBACK, PROXY_TAG,
 };
 
-const RAW_HEADER_HTTP: &str = "http";
-const STREAM_SECURITY_TLS: &str = "tls";
 const USER_AGENT_HEADER: &str = "Sec-WebSocket-Protocol";
 const DEFAULT_HYSTERIA2_HOP_INTERVAL: i32 = 30;
 const DEFAULT_TUN_STACK: &str = "gvisor";
@@ -36,6 +34,21 @@ const SINGBOX_HOSTS_DNS_TAG: &str = "hosts_dns";
 const SINGBOX_FAKE_DNS_TAG: &str = "fake_dns";
 const SINGBOX_FAKEIP_INET4_RANGE: &str = "198.18.0.0/15";
 const SINGBOX_FAKEIP_INET6_RANGE: &str = "fc00::/18";
+/// Vendors whose endpoints VoyaVPN forces through the proxy in Rule mode.
+///
+/// These hosts geo-block or hard-fail on a direct connection from the regions
+/// this app targets, so a "Rule" routing table that would otherwise send them
+/// direct produces a broken tool rather than a faster one. The rules are
+/// appended *after* the `clash_mode` rules (see
+/// `crate::singbox::routing::gen_routing` and
+/// `crate::singbox::dns::gen_dns_rules`) so an explicit Direct or Global mode
+/// still wins; within Rule mode they precede the user's own rules.
+///
+/// **This overrides user routing intent.** Inside Rule mode a user rule that
+/// sends one of these suffixes direct is generated after the priority rule and
+/// therefore never matches, and the names are always resolved through the
+/// remote DNS server. Switching to Direct mode is the only opt-out today.
+/// Editing the list changes generated JSON; see `docs/adr/0006-priority-proxy-domain-list.md`.
 const PRIORITY_PROXY_DOMAIN_SUFFIXES: &[&str] = &[
     "anthropic.com",
     "claude.ai",

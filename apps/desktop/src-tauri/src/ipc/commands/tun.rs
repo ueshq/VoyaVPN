@@ -66,16 +66,7 @@ pub async fn set_tun_enabled<R: tauri::Runtime>(
             AppNoticeLevel::Warning,
         );
     }
-    if let Err(error) =
-        restart_if_connected_after_config_change(&app, &state, &config, "TUN changed").await
-    {
-        report_post_commit_error(
-            &app,
-            "TUN saved; core restart failed",
-            &format!("{error:?}"),
-            AppNoticeLevel::Warning,
-        );
-    }
+    restart_after_config_change(&app, &state, &config, ConfigChange::TUN).await;
 
     Ok(status)
 }

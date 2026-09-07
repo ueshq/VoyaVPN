@@ -3,14 +3,14 @@ use std::{
     net::IpAddr,
 };
 
-use regex::Regex;
 use serde_json::Value;
 use thiserror::Error;
 
 use crate::{
-    singbox::support::singbox_supports_config_type, AppConfig, ConfigType, CoreType,
-    InboundProtocol, ProfileItem, ProfileProtocol, ProfileTransport, RoutingItem, RulesItem,
-    ServerEndpoint, SimpleDnsItem, SubItem, TlsMode,
+    group_children::{resolve_group_children, GroupChildSource},
+    singbox::support::{singbox_supports_config_type, state_port2},
+    AppConfig, ConfigType, CoreType, InboundProtocol, ProfileItem, ProfileProtocol,
+    ProfileTransport, RoutingItem, RulesItem, ServerEndpoint, SimpleDnsItem, SubItem, TlsMode,
 };
 
 pub const PROXY_TAG: &str = "proxy";
@@ -70,10 +70,36 @@ impl CoreGenPlatform {
     pub const fn is_macos(self) -> bool {
         matches!(self, Self::MacOS)
     }
+}
+
+/// How TUN is delivered on the host, injected as a platform fact.
+///
+/// ADR 0005 moved macOS to a single in-process NetworkExtension config, so the
+/// topology can no longer be inferred from [`CoreGenPlatform`] alone: Windows
+/// (service backend) and macOS (PacketTunnel provider) both carry TUN inside
+/// the one generated config, while Linux still splits into a privileged TUN
+/// process and an unprivileged SOCKS process.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TunTopology {
+    /// One sing-box process owns both the TUN inbound and the remote outbounds.
+    SingleProcess,
+    /// A privileged TUN process forwards into an unprivileged SOCKS process.
+    PreSocks,
+}
+
+impl TunTopology {
+    /// Default topology for a platform when the caller injects nothing better.
+    #[must_use]
+    pub const fn for_platform(platform: CoreGenPlatform) -> Self {
+        match platform {
+            CoreGenPlatform::Windows | CoreGenPlatform::MacOS => Self::SingleProcess,
+            CoreGenPlatform::Linux => Self::PreSocks,
+        }
+    }
 
     #[must_use]
-    pub const fn is_non_windows(self) -> bool {
-        !self.is_windows()
+    pub const fn is_pre_socks(self) -> bool {
+        matches!(self, Self::PreSocks)
     }
 }
 
@@ -147,6 +173,12 @@ pub struct CoreConfigContext {
     pub protect_domain_list: Vec<String>,
     pub platform: CoreGenPlatform,
     pub singbox_ruleset_paths: BTreeMap<String, String>,
+    /// Bearer token the generated `experimental.clash_api` requires.
+    ///
+    /// Injected by the orchestration layer (a per-launch random value) so
+    /// `voya-core` stays deterministic; `None` emits no `secret`, which is what
+    /// golden fixtures and previews use.
+    pub clash_api_secret: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -170,6 +202,7 @@ impl Default for CoreConfigContext {
             protect_domain_list: Vec::new(),
             platform: CoreGenPlatform::Linux,
             singbox_ruleset_paths: BTreeMap::new(),
+            clash_api_secret: None,
         }
     }
 }
@@ -183,6 +216,17 @@ impl CoreConfigContext {
     #[must_use]
     pub fn is_macos(&self) -> bool {
         self.platform.is_macos()
+    }
+
+    /// Port this context's `experimental.clash_api.external_controller` binds.
+    ///
+    /// The pre-socks split gives the TUN process `api2 + 1` and leaves the main
+    /// process on `api2`, so callers must read the port back from the context
+    /// they generated instead of re-deriving it from
+    /// `tun_mode_item.enable_tun`, which disagrees on the Linux TUN path.
+    #[must_use]
+    pub fn clash_api_port(&self) -> i32 {
+        state_port2(&self.app_config, self.is_tun_enabled)
     }
 }
 
@@ -245,6 +289,21 @@ pub enum ContextBuildError {
 
 pub trait CoreGenEnv {
     fn platform(&self) -> CoreGenPlatform;
+
+    /// TUN process topology for this host.
+    ///
+    /// Overriding this is how a caller tells `voya-core` that TUN runs inside
+    /// the single generated config (macOS PacketTunnel, Windows service)
+    /// instead of the Linux pre-socks split; see [`TunTopology`].
+    fn tun_topology(&self) -> TunTopology {
+        TunTopology::for_platform(self.platform())
+    }
+
+    /// Per-launch bearer token for the generated Clash API, if the caller has
+    /// one. Injected so config generation stays deterministic.
+    fn get_clash_api_secret(&self) -> Option<String> {
+        None
+    }
 
     fn get_active_profile(&self, config: &AppConfig) -> Option<ProfileItem> {
         let active_id = config.index_id.trim();
@@ -317,6 +376,7 @@ where
             protect_domain_list: Vec::new(),
             platform: self.env.platform(),
             singbox_ruleset_paths: self.env.get_singbox_ruleset_paths(),
+            clash_api_secret: self.env.get_clash_api_secret(),
         };
 
         let (active_node, node_result) = self.resolve_node(&mut context, node);
@@ -536,57 +596,17 @@ where
         protocol: &ProfileProtocol,
         result: &mut NodeValidatorResult,
     ) -> Vec<ProfileItem> {
-        let mut items = Vec::new();
-        items.extend(self.sub_child_profile_items(protocol, result));
-        items.extend(self.selected_child_profile_items(protocol));
-        items
-    }
-
-    fn selected_child_profile_items(&self, protocol: &ProfileProtocol) -> Vec<ProfileItem> {
-        let child_ids = protocol.child_profile_ids();
-        if child_ids.is_empty() {
-            return Vec::new();
+        let resolution = resolve_group_children(protocol, self);
+        if let Some(pattern) = &resolution.invalid_filter {
+            result.push_error(format!("invalid subscription filter regex: {pattern}"));
         }
-        self.env.get_profile_items_ordered_by_index_ids(child_ids)
-    }
-
-    fn sub_child_profile_items(
-        &self,
-        protocol: &ProfileProtocol,
-        result: &mut NodeValidatorResult,
-    ) -> Vec<ProfileItem> {
-        let ProfileProtocol::PolicyGroup {
-            source_subscription_id: Some(subscription_id),
-            filter,
-            ..
-        } = protocol
-        else {
-            return Vec::new();
-        };
-        // An unparsable filter must select nothing: falling back to "no filter"
-        // would silently turn a filtered group into an all-nodes group.
-        let filter = match filter.as_deref().and_then(nonempty) {
-            Some(pattern) => match Regex::new(pattern) {
-                Ok(filter) => Some(filter),
-                Err(_) => {
-                    result.push_error(format!("invalid subscription filter regex: {pattern}"));
-                    return Vec::new();
-                }
-            },
-            None => None,
-        };
-
-        self.env
-            .get_profile_items_by_subscription_id(subscription_id)
-            .into_iter()
-            .filter(|profile| {
-                !profile.config_type().is_complex_type()
-                    && profile_is_valid(profile)
-                    && filter
-                        .as_ref()
-                        .is_none_or(|filter| filter.is_match(&profile.remarks))
-            })
-            .collect()
+        for index_id in &resolution.missing_child_ids {
+            result.push_warning(format!("group child profile was not found: {index_id}"));
+        }
+        for index_id in &resolution.duplicate_child_ids {
+            result.push_warning(format!("duplicate group child ignored: {index_id}"));
+        }
+        resolution.children
     }
 
     fn resolve_rule_outbounds(
@@ -648,6 +668,23 @@ where
         context
             .all_proxies_map
             .insert(format!("remark:{outbound_tag}"), active_rule_node);
+    }
+}
+
+impl<E> GroupChildSource for CoreConfigContextBuilder<'_, E>
+where
+    E: CoreGenEnv,
+{
+    fn children_by_index_ids(&self, index_ids: &[String]) -> Vec<ProfileItem> {
+        if index_ids.is_empty() {
+            return Vec::new();
+        }
+        self.env.get_profile_items_ordered_by_index_ids(index_ids)
+    }
+
+    fn children_by_subscription_id(&self, subscription_id: &str) -> Vec<ProfileItem> {
+        self.env
+            .get_profile_items_by_subscription_id(subscription_id)
     }
 }
 
@@ -1011,6 +1048,100 @@ mod tests {
         assert!(result.success());
         assert!(result.main_result.context.is_tun_enabled);
         assert!(result.pre_socks_result.is_none());
+    }
+
+    #[test]
+    fn context_build_all_keeps_single_process_tun_on_macos() {
+        // ADR 0005 runs macOS TUN inside the NetworkExtension config, so
+        // `build_all` must not synthesize a pre-socks context there. Before the
+        // topology became an injected fact this only worked because voya-app
+        // bypassed `build_all` entirely.
+        let active = vless_profile("active", "Active", "active.example.com");
+        let mut config = app_config("active");
+        config.tun_mode_item.enable_tun = true;
+        let env = MemoryEnv {
+            platform: CoreGenPlatform::MacOS,
+            profiles: vec![active.clone()],
+            ..MemoryEnv::default()
+        };
+
+        let result = CoreConfigContextBuilder::new(&env).build_all(&config, &active);
+
+        assert!(result.success());
+        assert!(result.pre_socks_result.is_none());
+        assert!(result.main_result.context.is_tun_enabled);
+    }
+
+    #[test]
+    fn context_clash_api_port_splits_between_main_and_pre_socks_on_linux() {
+        let active = vless_profile("active", "Active", "active.example.com");
+        let mut config = app_config("active");
+        config.tun_mode_item.enable_tun = true;
+        let env = MemoryEnv {
+            platform: CoreGenPlatform::Linux,
+            profiles: vec![active.clone()],
+            ..MemoryEnv::default()
+        };
+
+        let result = CoreConfigContextBuilder::new(&env).build_all(&config, &active);
+
+        let main_port = result.main_result.context.clash_api_port();
+        let pre_port = result
+            .pre_socks_result
+            .as_ref()
+            .expect("pre socks context")
+            .context
+            .clash_api_port();
+        assert_eq!(pre_port, main_port + 1);
+    }
+
+    #[test]
+    fn context_group_children_put_subscription_members_before_explicit_ids() {
+        // Validation (`crate::groups`) and generation must agree on this order,
+        // so both go through `crate::group_children`.
+        let explicit = vless_profile("explicit", "Explicit", "explicit.example.com");
+        let sub_leaf = ProfileItem {
+            subscription_id: Some("sub".to_string()),
+            ..vless_profile("sub-leaf", "Sub Leaf", "sub.example.com")
+        };
+        let invalid_sub_leaf = ProfileItem {
+            subscription_id: Some("sub".to_string()),
+            ..vless_profile("invalid-sub-leaf", "Sub Broken", "")
+        };
+        let mut group = group_profile("group", "Group", "explicit,missing,explicit");
+        if let ProfileProtocol::PolicyGroup {
+            source_subscription_id,
+            ..
+        } = &mut group.protocol
+        {
+            *source_subscription_id = Some("sub".to_string());
+        }
+        let env = MemoryEnv {
+            profiles: vec![explicit, sub_leaf, invalid_sub_leaf, group.clone()],
+            ..MemoryEnv::default()
+        };
+
+        let result = CoreConfigContextBuilder::new(&env).build(&app_config("group"), &group);
+
+        assert!(result.success(), "{:?}", result.validator_result);
+        assert_eq!(
+            result
+                .context
+                .all_proxies_map
+                .get("group")
+                .map(|profile| profile.protocol.child_profile_ids()),
+            Some(["sub-leaf".to_string(), "explicit".to_string()].as_slice())
+        );
+        assert!(result
+            .validator_result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("group child profile was not found: missing")));
+        assert!(result
+            .validator_result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("duplicate group child ignored: explicit")));
     }
 
     #[test]

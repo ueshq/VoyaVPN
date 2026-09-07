@@ -1,16 +1,21 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, type MutableRefObject } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 
 import { AppSidebar, SHELL_PANEL_ID } from "@/components/app-shell/app-sidebar";
 import { AppErrorBoundary } from "@/components/app-shell/error-boundary";
 import { ModalHost } from "@/components/app-shell/modal-host";
+import {
+  createProxyMonitorController,
+  proxyMonitorErrorMessage,
+  type ProxyMonitorController,
+  type ProxyMonitorPhase,
+} from "@/components/app-shell/proxy-monitor-controller";
 import { TitleBar } from "@/components/app-shell/title-bar";
 import { Toaster } from "@/components/app-shell/toaster";
 import { useAcrylicWindow } from "@/components/app-shell/use-acrylic-window";
 import { useRuntimeStatusSeed } from "@/components/app-shell/use-runtime-status-seed";
 import { useWindowChrome } from "@/components/app-shell/use-window-chrome";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { proxyStartMonitor, proxyStopMonitor, useRuntimeEventStore } from "@/ipc";
-import type { ProxyMonitorStatus } from "@/ipc/bindings";
+import { useRuntimeEventStore } from "@/ipc";
 import { type ShellTab, useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
 
@@ -117,215 +122,54 @@ function ScreenFallback() {
   return <div className="h-full animate-pulse bg-surface-raised/40" aria-label={t("status.loadingScreen")} />;
 }
 
+/**
+ * Binds the proxy-monitor controller to the shell: the tab decides whether a
+ * proxy-runtime surface is on screen, the controller owns everything else.
+ */
 function useProxyMonitorLifecycle(activeTab: ShellTab) {
   const { t } = useI18n();
   const pushToast = useToastStore((state) => state.pushToast);
-  const messages = useMemo<ProxyMonitorMessages>(
+  const messages = useMemo(
     () => ({
-      startFallback: t("status.proxyMonitorStartFailed"),
-      stopFallback: t("status.proxyMonitorStopFailed"),
+      start: t("status.proxyMonitorStartFailed"),
+      stop: t("status.proxyMonitorStopFailed"),
       title: t("status.proxyRuntime"),
     }),
     [t],
   );
-  const startTimerRef = useRef<number | null>(null);
-  const stopTimerRef = useRef<number | null>(null);
-  const runningRef = useRef(false);
-  const startingRef = useRef(false);
-  const stoppingRef = useRef(false);
-  const wantsMonitorRef = useRef(false);
+  // The controller is created once; this ref keeps its error path pointing at
+  // the current locale's messages without recreating the state machine.
+  const reportErrorRef = useRef<(error: unknown, phase: ProxyMonitorPhase) => void>(() => undefined);
+  const controllerRef = useRef<ProxyMonitorController | null>(null);
+
+  useEffect(() => {
+    reportErrorRef.current = (error, phase) => {
+      const message = proxyMonitorErrorMessage(error, phase === "start" ? messages.start : messages.stop);
+
+      useRuntimeEventStore.getState().setProxyMonitorFailed(message);
+      pushToast({ description: message, severity: "error", title: messages.title });
+    };
+  }, [messages, pushToast]);
 
   useEffect(() => {
     if (!isTauriRuntime()) {
       return undefined;
     }
 
-    wantsMonitorRef.current = isProxyTab(activeTab);
-    clearTimer(startTimerRef);
-    clearTimer(stopTimerRef);
+    const controller = createProxyMonitorController({
+      onError: (error, phase) => reportErrorRef.current(error, phase),
+    });
+    controllerRef.current = controller;
 
-    if (wantsMonitorRef.current) {
-      if (!runningRef.current && !startingRef.current && !stoppingRef.current) {
-        scheduleProxyMonitorStart({
-          pushToast,
-          messages,
-          runningRef,
-          startingRef,
-          startTimerRef,
-          stoppingRef,
-          stopTimerRef,
-          wantsMonitorRef,
-        });
-      }
+    return () => {
+      controllerRef.current = null;
+      controller.dispose();
+    };
+  }, []);
 
-      return undefined;
-    }
-
-    if (runningRef.current || startingRef.current || stoppingRef.current) {
-      scheduleProxyMonitorStop({
-        pushToast,
-        messages,
-        runningRef,
-        startingRef,
-        startTimerRef,
-        stoppingRef,
-        stopTimerRef,
-        wantsMonitorRef,
-      });
-    }
-
-    return undefined;
-  }, [activeTab, messages, pushToast]);
-
-  useEffect(
-    () => () => {
-      clearTimer(startTimerRef);
-      clearTimer(stopTimerRef);
-      wantsMonitorRef.current = false;
-      if (runningRef.current) {
-        void proxyStopMonitor().catch((error: unknown) => {
-          console.error("[proxy-monitor] failed to stop during cleanup", error);
-        });
-      }
-    },
-    [],
-  );
-}
-
-type PushToast = ReturnType<typeof useToastStore.getState>["pushToast"];
-
-type ProxyMonitorMessages = {
-  startFallback: string;
-  stopFallback: string;
-  title: string;
-};
-
-type ProxyMonitorLifecycleRefs = {
-  runningRef: MutableRefObject<boolean>;
-  startingRef: MutableRefObject<boolean>;
-  startTimerRef: MutableRefObject<number | null>;
-  stoppingRef: MutableRefObject<boolean>;
-  stopTimerRef: MutableRefObject<number | null>;
-  wantsMonitorRef: MutableRefObject<boolean>;
-};
-
-function scheduleProxyMonitorStart({
-  messages,
-  pushToast,
-  runningRef,
-  startingRef,
-  startTimerRef,
-  stoppingRef,
-  stopTimerRef,
-  wantsMonitorRef,
-}: ProxyMonitorLifecycleRefs & { messages: ProxyMonitorMessages; pushToast: PushToast }) {
-  clearTimer(startTimerRef);
-  startTimerRef.current = window.setTimeout(() => {
-    startTimerRef.current = null;
-    if (!wantsMonitorRef.current || runningRef.current || startingRef.current || stoppingRef.current) {
-      return;
-    }
-
-    startingRef.current = true;
-    useRuntimeEventStore.getState().setProxyMonitorStarting();
-    void proxyStartMonitor()
-      .then((status) => {
-        applyProxyMonitorStatus(status, runningRef);
-        if (!wantsMonitorRef.current && status.running) {
-          scheduleProxyMonitorStop({
-            pushToast,
-            messages,
-            runningRef,
-            startingRef,
-            startTimerRef,
-            stoppingRef,
-            stopTimerRef,
-            wantsMonitorRef,
-          });
-        }
-      })
-      .catch((error) => {
-        const message = proxyMonitorErrorMessage(error, messages.startFallback);
-
-        runningRef.current = false;
-        useRuntimeEventStore.getState().setProxyMonitorFailed(message);
-        pushToast({ description: message, severity: "error", title: messages.title });
-      })
-      .finally(() => {
-        startingRef.current = false;
-      });
-  }, 100);
-}
-
-function scheduleProxyMonitorStop({
-  messages,
-  pushToast,
-  runningRef,
-  startingRef,
-  startTimerRef,
-  stoppingRef,
-  stopTimerRef,
-  wantsMonitorRef,
-}: ProxyMonitorLifecycleRefs & { messages: ProxyMonitorMessages; pushToast: PushToast }) {
-  clearTimer(stopTimerRef);
-  stopTimerRef.current = window.setTimeout(() => {
-    stopTimerRef.current = null;
-    if (!runningRef.current && !startingRef.current && !stoppingRef.current) {
-      return;
-    }
-
-    stoppingRef.current = true;
-    void proxyStopMonitor()
-      .then((status) => {
-        applyProxyMonitorStatus(status, runningRef);
-      })
-      .catch((error) => {
-        const message = proxyMonitorErrorMessage(error, messages.stopFallback);
-
-        runningRef.current = false;
-        useRuntimeEventStore.getState().setProxyMonitorFailed(message);
-        pushToast({ description: message, severity: "error", title: messages.title });
-      })
-      .finally(() => {
-        stoppingRef.current = false;
-        if (wantsMonitorRef.current && !runningRef.current && !startingRef.current) {
-          scheduleProxyMonitorStart({
-            pushToast,
-            messages,
-            runningRef,
-            startingRef,
-            startTimerRef,
-            stoppingRef,
-            stopTimerRef,
-            wantsMonitorRef,
-          });
-        }
-      });
-  }, 2_000);
-}
-
-function applyProxyMonitorStatus(status: ProxyMonitorStatus, runningRef: MutableRefObject<boolean>) {
-  runningRef.current = status.running;
-  useRuntimeEventStore.getState().setProxyMonitorStatus(status);
-}
-
-function proxyMonitorErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  if (typeof error === "string" && error) {
-    return error;
-  }
-
-  return fallback;
-}
-
-function clearTimer(timerRef: MutableRefObject<number | null>) {
-  if (timerRef.current !== null) {
-    window.clearTimeout(timerRef.current);
-    timerRef.current = null;
-  }
+  useEffect(() => {
+    controllerRef.current?.setWanted(isProxyTab(activeTab));
+  }, [activeTab]);
 }
 
 function isProxyTab(tab: ShellTab) {

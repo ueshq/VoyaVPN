@@ -16,7 +16,9 @@ import type {
   ProxyConnectionItem,
   ProxyConnectionsSnapshot,
   ProxyTrafficEvent,
+  SpeedtestStatus,
 } from "@/ipc/bindings";
+import type { RuntimeEventState, RuntimeProxyMonitorStatus } from "@/ipc/runtime-event-store";
 import { usePreferencesStore } from "@/stores/preferences-store";
 import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
@@ -36,47 +38,19 @@ vi.mock("@/ipc/updater", () => ({
   getVersion: vi.fn(() => Promise.resolve("0.1.0")),
 }));
 
-type TestProxyMonitorState = "starting" | "running" | "stopped" | "failed";
+// The double is checked against the real store type (`satisfies` in `makeState`),
+// so a member added to `RuntimeEventState` cannot silently go unmodelled here and
+// leave these tests asserting the fake's own bookkeeping.
+type TestProxyMonitorState = RuntimeProxyMonitorStatus["state"];
 
-type TestProxyMonitorStatus = {
-  message: string | null;
-  running: boolean;
-  stale: boolean;
-  state: TestProxyMonitorState;
-};
-
-type TestRuntimeEventState = {
-  clearLogs: () => void;
-  proxyConnections: ProxyConnectionsSnapshot | null;
-  proxyMonitorStatus: TestProxyMonitorStatus;
-  proxyTraffic: ProxyTrafficEvent | null;
-  coreState: null;
-  lastTransientEvent: null;
-  logLines: never[];
-  pushTransientEvent: () => void;
-  serverStatsByProfileId: Record<string, never>;
-  setProxyConnections: (snapshot: ProxyConnectionsSnapshot) => void;
-  setProxyMonitorFailed: (message?: string | null) => void;
-  setProxyMonitorRunning: (message?: string | null) => void;
-  setProxyMonitorStarting: (message?: string | null) => void;
-  setProxyMonitorStatus: (status: TestProxyMonitorStatus) => void;
-  setProxyMonitorStopped: (message?: string | null) => void;
-  setProxyTraffic: (event: ProxyTrafficEvent) => void;
-  setCoreState: () => void;
-  setSysProxy: () => void;
-  setTun: () => void;
-  speedtestResultsByProfileId: Record<string, never>;
-  statistics: null;
-  sysProxy: null;
-  tun: null;
-};
+type TestProxyMonitorStatus = RuntimeProxyMonitorStatus;
 
 type TestRuntimeEventStore = {
-  getState: () => TestRuntimeEventState;
+  getState: () => RuntimeEventState;
   reset: () => void;
   useRuntimeEventStore: {
-    (selector: (state: TestRuntimeEventState) => unknown): unknown;
-    getState: () => TestRuntimeEventState;
+    (selector: (state: RuntimeEventState) => unknown): unknown;
+    getState: () => RuntimeEventState;
   };
 };
 
@@ -87,7 +61,7 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
     stale: true,
     state: "stopped",
   };
-  let state: TestRuntimeEventState;
+  let state: RuntimeEventState;
 
   function makeMonitorStatus(
     monitorState: TestProxyMonitorState,
@@ -98,7 +72,7 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
     return { message, running, stale, state: monitorState };
   }
 
-  function makeState(): TestRuntimeEventState {
+  function makeState(): RuntimeEventState {
     const nextState = {
       clearLogs: vi.fn(),
       proxyConnections: null,
@@ -108,6 +82,7 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
       lastTransientEvent: null,
       logLines: [],
       pushTransientEvent: vi.fn(),
+      refreshSpeedtestStatus: vi.fn(() => Promise.resolve()),
       serverStatsByProfileId: {},
       setProxyConnections: vi.fn((snapshot: ProxyConnectionsSnapshot) => {
         state.proxyConnections = snapshot;
@@ -136,13 +111,20 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
         state.proxyTraffic = event;
       }),
       setCoreState: vi.fn(),
+      setSpeedtestRunning: vi.fn((speedtestRunning: boolean) => {
+        state.speedtestRunning = speedtestRunning;
+      }),
+      setSpeedtestStatus: vi.fn((status: SpeedtestStatus) => {
+        state.speedtestRunning = status.running;
+      }),
       setSysProxy: vi.fn(),
       setTun: vi.fn(),
       speedtestResultsByProfileId: {},
+      speedtestRunning: false,
       statistics: null,
       sysProxy: null,
       tun: null,
-    } satisfies TestRuntimeEventState;
+    } satisfies RuntimeEventState;
 
     return nextState;
   }
@@ -150,7 +132,7 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
   state = makeState();
 
   const useRuntimeEventStore = Object.assign(
-    vi.fn((selector: (state: TestRuntimeEventState) => unknown) => selector(state)),
+    vi.fn((selector: (state: RuntimeEventState) => unknown) => selector(state)),
     {
       getState: vi.fn(() => state),
     },

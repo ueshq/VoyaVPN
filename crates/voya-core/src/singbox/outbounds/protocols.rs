@@ -1,7 +1,6 @@
 use super::*;
 
 pub(crate) fn build_outbound(context: &CoreConfigContext, node: &ProfileItem) -> SingboxOutbound {
-    let network = singbox_network(node);
     let mut outbound = SingboxOutbound {
         r#type: protocol_name(node.config_type()).to_string(),
         tag: PROXY_TAG.to_string(),
@@ -26,14 +25,14 @@ pub(crate) fn build_outbound(context: &CoreConfigContext, node: &ProfileItem) ->
             outbound.method = Some(shadowsocks_method(&node.protocol));
             outbound.password = Some(password.clone());
             outbound.udp_over_tcp = (*udp_over_tcp).then_some(true);
-            fill_shadowsocks_plugin(&mut outbound, node, &network);
+            fill_shadowsocks_plugin(&mut outbound, node);
             fill_outbound_mux(&mut outbound, context, node);
         }
         ProfileProtocol::Socks {
             username, password, ..
         } => {
             outbound.version = Some("5".to_string());
-            if !trimmed(username).is_empty() && !trimmed(password).is_empty() {
+            if !username.trim().is_empty() && !password.trim().is_empty() {
                 outbound.username = Some(username.clone());
                 outbound.password = Some(password.clone());
             }
@@ -41,7 +40,7 @@ pub(crate) fn build_outbound(context: &CoreConfigContext, node: &ProfileItem) ->
         ProfileProtocol::Http {
             username, password, ..
         } => {
-            if !trimmed(username).is_empty() && !trimmed(password).is_empty() {
+            if !username.trim().is_empty() && !password.trim().is_empty() {
                 outbound.username = Some(username.clone());
                 outbound.password = Some(password.clone());
             }
@@ -151,61 +150,14 @@ pub(crate) fn build_wireguard_endpoint(node: &ProfileItem) -> Option<SingboxEndp
     })
 }
 
-fn fill_shadowsocks_plugin(outbound: &mut SingboxOutbound, node: &ProfileItem, network: &str) {
-    let is_http_obfs = matches!(
-        &node.transport,
-        Some(ProfileTransport::Tcp { header, .. })
-            if header.as_deref() == Some(RAW_HEADER_HTTP)
-    );
-    if is_http_obfs {
-        let Some(ProfileTransport::Tcp { host, .. }) = &node.transport else {
-            return;
-        };
-        outbound.plugin = Some("obfs-local".to_string());
-        outbound.plugin_opts = Some(format!(
-            "obfs=http;obfs-host={};",
-            host.as_deref().unwrap_or_default()
-        ));
+fn fill_shadowsocks_plugin(outbound: &mut SingboxOutbound, node: &ProfileItem) {
+    // `shadowsocks_plugin_for` owns the option list; sing-box only differs from
+    // the share-link form in splitting the plugin name out of the options.
+    let Some(plugin) = shadowsocks_plugin_for(node) else {
         return;
-    }
-
-    let mut plugin_args = String::new();
-    if network == "ws" {
-        if let Some(ProfileTransport::Websocket { host, path }) = &node.transport {
-            plugin_args.push_str("mode=websocket;");
-            plugin_args.push_str(&format!("host={};", first_list_value(host.as_deref())));
-            let path = path
-                .as_deref()
-                .unwrap_or_default()
-                .replace('\\', "\\\\")
-                .replace('=', "\\=")
-                .replace(',', "\\,");
-            plugin_args.push_str(&format!("path={path};"));
-        }
-    }
-    if node.stream_security() == STREAM_SECURITY_TLS {
-        plugin_args.push_str("tls;");
-        let certs = node
-            .tls
-            .as_ref()
-            .and_then(|tls| tls.certificate_pem.as_deref())
-            .map(parse_pem_chain)
-            .unwrap_or_default();
-        if let Some(cert) = certs.first() {
-            let base64_content = cert
-                .replace("-----BEGIN CERTIFICATE-----\n", "")
-                .replace("\n-----END CERTIFICATE-----\n", "")
-                .trim()
-                .replace('=', "\\=");
-            plugin_args.push_str(&format!("certRaw={base64_content};"));
-        }
-    }
-    if !plugin_args.is_empty() {
-        plugin_args.push_str("mux=0;");
-        plugin_args.pop();
-        outbound.plugin = Some("v2ray-plugin".to_string());
-        outbound.plugin_opts = Some(plugin_args);
-    }
+    };
+    outbound.plugin = Some(plugin.name.to_string());
+    outbound.plugin_opts = Some(plugin.render_opts());
 }
 
 fn fill_hysteria2_fields(
@@ -267,7 +219,7 @@ fn fill_outbound_mux(
     if !context.app_config.core_basic_item.mux_enabled {
         return;
     }
-    let protocol = trimmed(&context.app_config.mux4_sbox_item.protocol);
+    let protocol = context.app_config.mux4_sbox_item.protocol.trim();
     if protocol.is_empty() {
         return;
     }

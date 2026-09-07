@@ -1,9 +1,8 @@
 use sqlx::{sqlite::SqliteRow, Row};
-use tokio::sync::Mutex;
 use voya_core::SubItem;
 
 use crate::{
-    executor::{run_query, RepositoryExecutor},
+    executor::{repository_constructors, run_query, RepositoryExecutor},
     Result,
 };
 
@@ -12,23 +11,9 @@ pub struct SubscriptionRepository<'executor> {
     executor: RepositoryExecutor<'executor>,
 }
 
+repository_constructors!(SubscriptionRepository);
+
 impl<'executor> SubscriptionRepository<'executor> {
-    #[must_use]
-    pub(crate) const fn new(pool: &'executor sqlx::SqlitePool) -> Self {
-        Self {
-            executor: RepositoryExecutor::Pool(pool),
-        }
-    }
-
-    #[must_use]
-    pub(crate) const fn new_in_transaction(
-        transaction: &'executor Mutex<sqlx::Transaction<'static, sqlx::Sqlite>>,
-    ) -> Self {
-        Self {
-            executor: RepositoryExecutor::Transaction(transaction),
-        }
-    }
-
     pub async fn upsert(&self, item: &SubItem) -> Result<()> {
         run_query!(
             self.executor,

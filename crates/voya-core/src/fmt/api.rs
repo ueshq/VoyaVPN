@@ -48,10 +48,10 @@ pub enum ShareError {
     InvalidVoyaBundle { reason: String },
 }
 
+/// Full-config import formats VoyaVPN can actually run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CustomConfigKind {
     SingBox,
-    Hysteria2,
 }
 
 #[derive(Debug, Clone, PartialEq)]

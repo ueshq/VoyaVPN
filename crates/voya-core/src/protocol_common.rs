@@ -1,7 +1,10 @@
-use crate::{AppConfig, ConfigType, InboundProtocol, ProfileProtocol, DEFAULT_LOCAL_PORT};
+use crate::{
+    AppConfig, ConfigType, InboundProtocol, ProfileItem, ProfileProtocol, ProfileTransport,
+    DEFAULT_LOCAL_PORT, STREAM_SECURITY_TLS,
+};
 
 pub(crate) const DEFAULT_SECURITY: &str = "auto";
-pub(crate) const DEFAULT_NETWORK: &str = "raw";
+pub(crate) const RAW_HEADER_HTTP: &str = "http";
 pub(crate) const WIREGUARD_DEFAULT_ADDRESS: &str = "172.16.0.2/32";
 pub(crate) const WIREGUARD_DEFAULT_ALLOWED_IPS: &[&str] = &["0.0.0.0/0", "::/0"];
 pub(crate) const WIREGUARD_DEFAULT_MTU: i32 = 1280;
@@ -65,6 +68,112 @@ pub(crate) fn parse_pem_chain(pem_chain: &str) -> Vec<String> {
     certs
 }
 
+/// The SIP003 plugin a Shadowsocks node carries, derived once for both the
+/// share-link exporter (`crate::fmt`) and the sing-box generator
+/// (`crate::singbox`).
+///
+/// Both surfaces encode the same `obfs`/`v2ray-plugin` option list; building it
+/// in one place is what keeps a new option from reaching a share link but not
+/// the generated config, or the reverse.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ShadowsocksPlugin {
+    pub name: &'static str,
+    /// Ordered options. `None` renders as a bare flag (`tls`).
+    pub opts: Vec<(String, Option<String>)>,
+}
+
+impl ShadowsocksPlugin {
+    /// `k=v;flag;k=v` — sing-box's `plugin_opts`, and the tail of a SIP002
+    /// `plugin=` value.
+    pub(crate) fn render_opts(&self) -> String {
+        self.opts
+            .iter()
+            .map(|(key, value)| match value {
+                Some(value) => format!("{key}={value}"),
+                None => key.clone(),
+            })
+            .collect::<Vec<_>>()
+            .join(";")
+    }
+
+    /// `name;k=v;flag` — the SIP002 `plugin=` query value.
+    pub(crate) fn render_share(&self) -> String {
+        let opts = self.render_opts();
+        if opts.is_empty() {
+            self.name.to_string()
+        } else {
+            format!("{};{opts}", self.name)
+        }
+    }
+}
+
+pub(crate) fn shadowsocks_plugin_for(item: &ProfileItem) -> Option<ShadowsocksPlugin> {
+    if let Some(ProfileTransport::Tcp { header, host, .. }) = &item.transport {
+        if header.as_deref() == Some(RAW_HEADER_HTTP) {
+            return Some(ShadowsocksPlugin {
+                name: "obfs-local",
+                opts: vec![
+                    ("obfs".to_string(), Some(RAW_HEADER_HTTP.to_string())),
+                    (
+                        "obfs-host".to_string(),
+                        Some(first_list_value(host.as_deref())),
+                    ),
+                ],
+            });
+        }
+    }
+
+    let mut opts = Vec::new();
+    if let Some(ProfileTransport::Websocket { host, path }) = &item.transport {
+        opts.push(("mode".to_string(), Some("websocket".to_string())));
+        opts.push(("host".to_string(), Some(first_list_value(host.as_deref()))));
+        opts.push((
+            "path".to_string(),
+            Some(escape_plugin_value(path.as_deref().unwrap_or_default())),
+        ));
+    }
+    if item.stream_security() == STREAM_SECURITY_TLS {
+        opts.push(("tls".to_string(), None));
+        if let Some(certificate) = item
+            .tls
+            .as_ref()
+            .and_then(|tls| tls.certificate_pem.as_deref())
+            .and_then(first_pem_body)
+        {
+            opts.push(("certRaw".to_string(), Some(certificate.replace('=', "\\="))));
+        }
+    }
+    if opts.is_empty() {
+        return None;
+    }
+
+    // v2ray-plugin multiplexing is incompatible with the way both cores dial
+    // the plugin, so the option list always pins it off.
+    opts.push(("mux".to_string(), Some("0".to_string())));
+    Some(ShadowsocksPlugin {
+        name: "v2ray-plugin",
+        opts,
+    })
+}
+
+fn escape_plugin_value(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('=', "\\=")
+        .replace(',', "\\,")
+}
+
+fn first_pem_body(certificate_pem: &str) -> Option<String> {
+    let certificate = parse_pem_chain(certificate_pem).into_iter().next()?;
+    let body = certificate
+        .trim()
+        .trim_start_matches("-----BEGIN CERTIFICATE-----")
+        .trim_end_matches("-----END CERTIFICATE-----")
+        .trim()
+        .to_string();
+    (!body.is_empty()).then_some(body)
+}
+
 pub(crate) fn wireguard_public_key(protocol: &ProfileProtocol) -> Option<String> {
     let ProfileProtocol::WireGuard {
         peer_public_key, ..
@@ -120,10 +229,6 @@ pub(crate) fn split_list(value: &str) -> Option<Vec<String>> {
 
 pub(crate) fn nonempty_str(value: Option<&str>) -> Option<&str> {
     value.map(str::trim).filter(|value| !value.is_empty())
-}
-
-pub(crate) fn trimmed(value: &str) -> &str {
-    value.trim()
 }
 
 pub(crate) fn first_list_value(value: Option<&str>) -> String {

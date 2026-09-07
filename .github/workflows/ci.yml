@@ -131,6 +131,9 @@ jobs:
       - name: Check architecture boundaries
         run: pnpm run check:architecture
 
+      - name: Check lockfile single versions
+        run: pnpm run check:lockfile
+
       - name: Lint Rust
         run: pnpm run check:rust:clippy
 

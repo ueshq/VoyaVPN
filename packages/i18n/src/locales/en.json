@@ -30,7 +30,16 @@
     "dedupeProfilesTitle": "Remove duplicate profiles?",
     "deleteProfilesConfirm": "Delete",
     "deleteProfilesDescription": "{{count}} selected profile(s) will be permanently deleted. This action cannot be undone.",
-    "deleteProfilesTitle": "Delete profiles?"
+    "deleteProfilesTitle": "Delete profiles?",
+    "deleteRoutingConfirm": "Delete",
+    "deleteRoutingDescription": "“{{name}}” and its {{count}} rule(s) will be permanently deleted. This action cannot be undone.",
+    "deleteRoutingRuleConfirm": "Delete",
+    "deleteRoutingRuleDescription": "The selected routing rule will be permanently deleted. This action cannot be undone.",
+    "deleteRoutingRuleTitle": "Delete rule?",
+    "deleteRoutingTitle": "Delete routing profile?",
+    "deleteSubscriptionConfirm": "Delete",
+    "deleteSubscriptionDescription": "“{{name}}” and every profile imported from it will be permanently deleted. This action cannot be undone.",
+    "deleteSubscriptionTitle": "Delete subscription?"
   },
   "home": {
     "aria": "Connection home",
@@ -101,6 +110,24 @@
     "hotkeyKey": "Hotkey key",
     "hotkeyKeyPlaceholder": "Press a key",
     "hotkeyShowWindow": "Show window",
+    "keyName": {
+      "backspace": "Backspace",
+      "delete": "Delete",
+      "down": "Down",
+      "end": "End",
+      "enter": "Enter",
+      "escape": "Esc",
+      "home": "Home",
+      "insert": "Insert",
+      "left": "Left",
+      "pageDown": "Page Down",
+      "pageUp": "Page Up",
+      "right": "Right",
+      "space": "Space",
+      "tab": "Tab",
+      "unknown": "Key {{keyCode}}",
+      "up": "Up"
+    },
     "loading": "Loading",
     "routeTemplateSource": "Routing template source",
     "runtimeCore": "Core",
@@ -136,6 +163,7 @@
       "chainMarker": "Chain",
       "chooseChildren": "Choose children",
       "chooseDescription": "Choose servers, policy groups, or proxy chains for the current group.",
+      "draftName": "Draft group",
       "filterChildren": "Filter child profiles",
       "groupFallback": "Group",
       "groupMarker": "Group",
@@ -302,7 +330,17 @@
         "clipboard": "Import from clipboard",
         "clipboardEmpty": "Clipboard is empty.",
         "clipboardUnavailable": "Clipboard text read is unavailable in this WebView.",
-        "discardedNodeOverrides": "Discarded {{count}} node-level override(s); global settings will be used."
+        "discardedNodeOverrides": "Discarded {{count}} node-level override(s); global settings will be used.",
+        "summary": {
+          "deduped": "{{count}} duplicate(s) skipped from payload.",
+          "failed": "{{count}} failed to parse.",
+          "filtered": "{{count}} filtered.",
+          "imported": "Imported {{count}} profile(s).",
+          "removedDuplicates": "{{count}} duplicate(s) removed.",
+          "skipped": "{{count}} skipped.",
+          "target": "Target: {{target}}.",
+          "updated": "{{count}} updated."
+        }
       },
       "importDialog": {
         "description": "Import share links, subscription URLs, or JSON payloads.",
@@ -353,7 +391,6 @@
       "speedtest": {
         "buttonTitle": "{{label}} speedtest",
         "cancelTitle": "Cancel speedtest",
-        "fast": "Fast",
         "mixed": "Mixed",
         "more": "More speed tests",
         "real": "Real",
@@ -376,7 +413,14 @@
         "rows": "{{rows}} rows",
         "subscriptions": "Subscriptions"
       },
-      "untitled": "Untitled"
+      "untitled": "Untitled",
+      "validation": {
+        "addressRequired": "address is required",
+        "configSourceRequired": "Config path or JSON source is required",
+        "credentialRequired": "password or ID is required",
+        "remarksRequired": "remarks are required",
+        "uuidRequired": "UUID is required"
+      }
     },
     "proxyConnections": {
       "columns": {
@@ -498,6 +542,8 @@
     "node": "Node",
     "process": "Process",
     "reloadConfigFailed": "Failed to reload the core configuration",
+    "requiresCore": "Connect first",
+    "requiresCoreDescription": "Proxy groups become available once the core is running.",
     "selectNodeFailed": "Failed to switch node",
     "source": "Source",
     "testAll": "Test all",
@@ -512,6 +558,7 @@
     "viewTabsAria": "Connection views"
   },
   "qr": {
+    "clipboardImageMissing": "Clipboard does not contain an image.",
     "clipboardImageUnavailable": "Clipboard image read is unavailable in this WebView.",
     "clipboardUnavailable": "Clipboard text read is unavailable in this WebView.",
     "content": "Content",
@@ -521,6 +568,11 @@
     "scanClipboardImage": "Clipboard image",
     "scanImage": "Scan image",
     "scanScreen": "Screen",
+    "screenCaptureUnavailable": "Screen capture is unavailable in this WebView.",
+    "screenFrameUnavailable": "Screen capture did not produce a video frame.",
+    "screenFrameUnencodable": "Unable to encode captured screen frame.",
+    "screenFrameUnreadable": "Unable to read captured screen frame.",
+    "screenStreamUnavailable": "Unable to load captured screen stream.",
     "screenUnavailable": "Screen QR scanning is unavailable on this platform or permission state."
   },
   "settings": {
@@ -662,6 +714,21 @@
     "title": "Check Updates",
     "updateNow": "Update now",
     "waiting": "Waiting"
+  },
+  "validation": {
+    "dnsSettings": "DNS settings validation failed",
+    "expectedIps": "Expected IPs must be comma-separated without embedded whitespace",
+    "hostsLine": "Every host line must contain a domain and at least one answer",
+    "invalid": "This value is not valid",
+    "listItem": "List items cannot be empty",
+    "network": "Network must be tcp, udp, or tcp,udp",
+    "port": "Port must be a comma-separated list of ports or ranges",
+    "portRange": "Port values must be between 0 and 65535 and ranges must ascend",
+    "remarksLength": "Remarks must be 256 characters or fewer",
+    "urlCredentials": "The URL must not include credentials",
+    "urlHost": "The URL must include a host",
+    "urlHttps": "The URL must use https://",
+    "urlInvalid": "The URL is not valid"
   },
   "window": {
     "close": "Close",

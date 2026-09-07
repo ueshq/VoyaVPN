@@ -92,8 +92,9 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
         config.route.rules.push(hosts_resolve_rule);
     }
 
-    append_priority_proxy_route_rules(&mut config.route.rules);
-
+    // The clash_mode rules come first so an explicit Direct (or Global) mode
+    // still decides where traffic goes; the priority-proxy list only overrides
+    // the user's own rules inside Rule mode.
     config.route.rules.push(SingboxRule {
         outbound: Some(DIRECT_TAG.to_string()),
         clash_mode: Some("Direct".to_string()),
@@ -104,6 +105,8 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
         clash_mode: Some("Global".to_string()),
         ..SingboxRule::default()
     });
+
+    append_priority_proxy_route_rules(&mut config.route.rules);
 
     let routing = context.routing_item.as_ref();
     let domain_strategy = routing

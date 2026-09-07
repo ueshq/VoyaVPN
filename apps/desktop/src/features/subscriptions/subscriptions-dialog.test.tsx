@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -125,9 +125,68 @@ describe("SubscriptionsDialog", () => {
     await waitFor(() => expect(ipcMocks.updateSubscriptions).toHaveBeenLastCalledWith(null, true, null));
 
     await user.click(screen.getByRole("button", { name: "Delete" }));
+    await confirmDeletion(user);
     await waitFor(() => expect(ipcMocks.deleteSubscriptions).toHaveBeenCalledWith(["sub-1"]));
     expect(await screen.findByText("Subscription deleted")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
+  });
+
+  // Deleting a source cascades to every profile imported from it, so the command
+  // must not fire on the first click.
+  it("does not delete a source until the confirmation is accepted", async () => {
+    const user = userEvent.setup();
+    ipcMocks.listSubscriptions.mockResolvedValue([makeSubscription()]);
+    ipcMocks.deleteSubscriptions.mockResolvedValue(1);
+
+    renderDialog();
+    await user.click(await screen.findByRole("button", { name: /Fixture sub/ }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    const confirmation = await screen.findByRole("alertdialog");
+    expect(confirmation).toHaveTextContent("Fixture sub");
+    expect(ipcMocks.deleteSubscriptions).not.toHaveBeenCalled();
+
+    await user.click(within(confirmation).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(ipcMocks.deleteSubscriptions).not.toHaveBeenCalled();
+  });
+
+  // `save` on a source with an empty id mints a fresh row per call, so a second
+  // click before the first resolves would create a duplicate subscription.
+  it("refuses a second action while one is still in flight", async () => {
+    const user = userEvent.setup();
+    ipcMocks.listSubscriptions.mockResolvedValue([]);
+    let resolveSave: ((value: Subscription) => void) | undefined;
+    ipcMocks.saveSubscription.mockReturnValue(
+      new Promise<Subscription>((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+
+    renderDialog();
+    await screen.findByText("No subscriptions");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeDisabled());
+    expect(screen.getByRole("button", { name: "Update all" })).toBeDisabled();
+
+    resolveSave?.(makeSubscription());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
+    expect(ipcMocks.saveSubscription).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives every input a stable id that does not depend on the translated label", async () => {
+    ipcMocks.listSubscriptions.mockResolvedValue([]);
+
+    renderDialog();
+
+    await screen.findByText("No subscriptions");
+    expect(screen.getByLabelText("Remarks")).toHaveAttribute("id", "subscription-remarks");
+    expect(screen.getByLabelText("User agent")).toHaveAttribute("id", "subscription-user-agent");
+    expect(screen.getByLabelText("Auto-update interval (hours)")).toHaveAttribute(
+      "id",
+      "subscription-auto-update-interval",
+    );
   });
 
   // A source whose download failed comes back as a *successful* command with
@@ -198,6 +257,11 @@ describe("SubscriptionsDialog", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });
+
+async function confirmDeletion(user: ReturnType<typeof userEvent.setup>) {
+  const confirmation = await screen.findByRole("alertdialog");
+  await user.click(within(confirmation).getByRole("button", { name: "Delete" }));
+}
 
 function makeSubscription(): Subscription {
   return {

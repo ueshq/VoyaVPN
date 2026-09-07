@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { changeLocale } from "@voya/i18n";
 import type { AppError, DnsSettings } from "@/ipc/bindings";
 
 import { useDnsSettings } from "./use-dns-settings";
@@ -29,8 +30,9 @@ vi.mock("@/ipc", () => ipcMocks);
 const clients = new Set<QueryClient>();
 
 describe("useDnsSettings", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    await changeLocale("en");
     ipcMocks.loadDnsSettings.mockResolvedValue(dnsSettings());
     ipcMocks.saveDnsSettings.mockImplementation(async (settings: DnsSettings) => settings);
   });
@@ -54,6 +56,9 @@ describe("useDnsSettings", () => {
     );
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["dns"] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["app-config"] });
+    // Settings "Save all" posts the whole bundle including `dns`; without this
+    // invalidation its cached snapshot would silently revert what was saved here.
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["app-settings"] });
     await waitFor(() => expect(result.current.isDirty).toBe(false));
 
     act(() => result.current.updateSimple({ remote: "8.8.8.8" }));
@@ -70,8 +75,11 @@ describe("useDnsSettings", () => {
     await act(() => result.current.handleSave());
 
     expect(ipcMocks.saveDnsSettings).not.toHaveBeenCalled();
+    // Schema messages are translation keys; the hook renders them through `t`.
     expect(result.current.operationError).toBe("DNS settings validation failed");
-    expect(result.current.fieldErrors.hosts).toContain("domain and at least one answer");
+    expect(result.current.fieldErrors.hosts).toBe(
+      "Every host line must contain a domain and at least one answer",
+    );
     expect(result.current.issueCount).toBe(1);
   });
 

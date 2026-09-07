@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AppearanceSettings } from "@/ipc/bindings";
+import type { AppDnsSettings, AppearanceSettings } from "@/ipc/bindings";
 
 import { makeAppSettings } from "./app-settings.test-fixture";
 import { useAppSettings } from "./use-app-settings";
@@ -13,8 +13,9 @@ const ipcMocks = vi.hoisted(() => ({
   saveAppSettings: vi.fn(),
 }));
 const preferenceMocks = vi.hoisted(() => ({
-  applyUiPreferences: vi.fn((preferences: AppearanceSettings) => {
+  applyUiPreferences: vi.fn((preferences: AppearanceSettings, options?: { persist?: boolean }) => {
     void preferences;
+    void options;
     return Promise.resolve();
   }),
 }));
@@ -55,25 +56,20 @@ describe("useAppSettings", () => {
     await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("clean"));
   });
 
-  it("previews theme changes and restores the original preference on discard", async () => {
+  it("previews an appearance without persisting it and restores the original on discard", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem("voyavpn.preferences", "stored-theme");
-    window.localStorage.setItem("voyavpn.locale", "zh-Hans");
-    preferenceMocks.applyUiPreferences.mockImplementation(async (preferences) => {
-      window.localStorage.setItem("voyavpn.preferences", JSON.stringify(preferences.theme));
-      window.localStorage.setItem("voyavpn.locale", preferences.language);
-    });
     renderProbe();
     await screen.findByText("clean");
 
     await user.click(screen.getByRole("button", { name: "Preview dark" }));
+    // `persist: false` is what keeps an unsaved edit out of localStorage; the
+    // controller must never fall back to snapshotting the storage keys itself.
     await waitFor(() =>
-      expect(preferenceMocks.applyUiPreferences).toHaveBeenCalledWith({ language: "en", theme: "dark" }),
+      expect(preferenceMocks.applyUiPreferences).toHaveBeenCalledWith(
+        { language: "en", theme: "dark" },
+        { persist: false },
+      ),
     );
-    await waitFor(() => {
-      expect(window.localStorage.getItem("voyavpn.preferences")).toBe("stored-theme");
-      expect(window.localStorage.getItem("voyavpn.locale")).toBe("zh-Hans");
-    });
     await user.click(screen.getByRole("button", { name: "Discard" }));
 
     await waitFor(() =>
@@ -81,6 +77,37 @@ describe("useAppSettings", () => {
     );
     expect(screen.getByTestId("theme")).toHaveTextContent("system");
     expect(screen.getByTestId("state")).toHaveTextContent("clean");
+  });
+
+  it("posts the freshest DNS block even when the draft was seeded before the DNS pane saved", async () => {
+    const user = userEvent.setup();
+    const { client } = renderProbe();
+    await screen.findByText("clean");
+
+    // Seed the whole-bundle draft first (dns = the snapshot loaded on open)…
+    await user.click(screen.getByRole("button", { name: "Edit two sections" }));
+    // …then let the DNS pane write its own section through its own command.
+    client.setQueryData(["dns"], freshDns());
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(ipcMocks.saveAppSettings).toHaveBeenCalledTimes(1));
+    expect(ipcMocks.saveAppSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ dns: freshDns() }),
+    );
+  });
+
+  it("keeps the draft's own DNS block when the DNS pane was never opened", async () => {
+    const user = userEvent.setup();
+    renderProbe();
+    await screen.findByText("clean");
+
+    await user.click(screen.getByRole("button", { name: "Edit two sections" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(ipcMocks.saveAppSettings).toHaveBeenCalledTimes(1));
+    expect(ipcMocks.saveAppSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ dns: makeAppSettings().dns }),
+    );
   });
 
   it("reloads the authoritative snapshot after a failed save", async () => {
@@ -203,9 +230,16 @@ function renderBareProbe() {
 
 function renderProbe() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <Probe />
-    </QueryClientProvider>,
-  );
+  return {
+    client,
+    ...render(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>,
+    ),
+  };
+}
+
+function freshDns(): AppDnsSettings {
+  return { ...makeAppSettings().dns, remote: "https://dns.example.test/dns-query" };
 }

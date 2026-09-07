@@ -4,6 +4,8 @@ use voya_core::{
     AppConfig, CoreGenEnv, CoreGenPlatform, InboundProtocol, ProfileItem, RoutingItem, SubItem,
 };
 
+use crate::supervisor::ClashApiSecret;
+
 #[derive(Debug, Clone)]
 pub(crate) struct SnapshotCoreGenEnv {
     local_socks_port: i32,
@@ -12,6 +14,7 @@ pub(crate) struct SnapshotCoreGenEnv {
     routings: Vec<RoutingItem>,
     subs: Vec<SubItem>,
     singbox_ruleset_paths: BTreeMap<String, String>,
+    clash_api_secret: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -37,6 +40,7 @@ impl SnapshotCoreGenEnv {
             routings: data.routings,
             subs: data.subs,
             singbox_ruleset_paths: BTreeMap::new(),
+            clash_api_secret: None,
         }
     }
 
@@ -45,6 +49,17 @@ impl SnapshotCoreGenEnv {
         singbox_ruleset_paths: BTreeMap<String, String>,
     ) -> Self {
         self.singbox_ruleset_paths = singbox_ruleset_paths;
+        self
+    }
+
+    /// Requires the generated `experimental.clash_api` to present this bearer
+    /// token.
+    ///
+    /// Only the runtime launch path sets it: an exported client config or a
+    /// preview must stay reproducible, and a golden fixture must keep
+    /// generating byte-identical JSON, so the default is no secret at all.
+    pub(crate) fn with_clash_api_secret(mut self, clash_api_secret: ClashApiSecret) -> Self {
+        self.clash_api_secret = Some(clash_api_secret.into_token());
         self
     }
 }
@@ -107,5 +122,40 @@ impl CoreGenEnv for SnapshotCoreGenEnv {
 
     fn get_singbox_ruleset_paths(&self) -> BTreeMap<String, String> {
         self.singbox_ruleset_paths.clone()
+    }
+
+    fn get_clash_api_secret(&self) -> Option<String> {
+        self.clash_api_secret.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn coregen_env_emits_no_clash_api_secret_by_default() {
+        // Golden fixtures and exported client configs go through the same env,
+        // so an unrequested secret would change generated JSON everywhere.
+        let env = SnapshotCoreGenEnv::new(
+            &AppConfig::default(),
+            CoreGenPlatform::Linux,
+            SnapshotCoreGenData::default(),
+        );
+
+        assert_eq!(env.get_clash_api_secret(), None);
+    }
+
+    #[test]
+    fn coregen_env_carries_an_injected_clash_api_secret() {
+        let secret = ClashApiSecret::generate();
+        let env = SnapshotCoreGenEnv::new(
+            &AppConfig::default(),
+            CoreGenPlatform::Linux,
+            SnapshotCoreGenData::default(),
+        )
+        .with_clash_api_secret(secret.clone());
+
+        assert_eq!(env.get_clash_api_secret().as_deref(), Some(secret.as_str()));
     }
 }

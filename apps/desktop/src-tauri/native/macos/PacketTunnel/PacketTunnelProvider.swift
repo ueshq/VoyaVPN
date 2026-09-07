@@ -12,11 +12,21 @@ private let runtimeConfigRelativePath = "Library/Application Support/VoyaVPN/pac
 private let providerStatusRelativePath = "Library/Application Support/VoyaVPN/packet-tunnel-status.json"
 private let providerLogRelativePath = "Library/Application Support/VoyaVPN/provider.log"
 private let providerLogMaxBytes = 512 * 1024
+/// Bytes carried into the fresh generation when the log rotates. The host tails
+/// `provider.log` for diagnostics, so a rotation must not blank the evidence.
+private let providerLogCarryOverBytes = 64 * 1024
 
 public final class PacketTunnelProvider: NEPacketTunnelProvider {
     private static let logger = Logger(subsystem: "app.voyavpn.desktop.PacketTunnel", category: "PacketTunnelProvider")
     private static var providerStatusURLOverride: URL?
     private static var providerLogURLOverride: URL?
+    /// Serializes provider-log appends. libbox forwards every sing-box log line
+    /// here from arbitrary Go threads, and the handle, byte counter and
+    /// formatter below are shared mutable state.
+    private static let providerLogQueue = DispatchQueue(label: "app.voyavpn.desktop.PacketTunnel.log")
+    private static let providerLogTimestampFormatter = ISO8601DateFormatter()
+    private static var providerLogHandle: FileHandle?
+    private static var providerLogBytes = 0
 
     #if canImport(Libbox)
         private var commandServer: LibboxCommandServer?
@@ -159,6 +169,9 @@ public final class PacketTunnelProvider: NEPacketTunnelProvider {
     private static func configureDiagnostics(_ runtimeConfig: PacketTunnelRuntimeConfig) {
         providerStatusURLOverride = containedDiagnosticsURL(runtimeConfig.statusPath, kind: "status")
         providerLogURLOverride = containedDiagnosticsURL(runtimeConfig.logPath, kind: "log")
+        // The cached log handle belongs to the previous destination; drop it so
+        // the next line opens the one this run was configured with.
+        providerLogQueue.sync { closeProviderLog() }
     }
 
     /// Accept a host-supplied diagnostics path only when it resolves inside the
@@ -284,25 +297,80 @@ public final class PacketTunnelProvider: NEPacketTunnelProvider {
         return Array(breadcrumbs.suffix(20))
     }
 
+    /// Appends one line to the provider log.
+    ///
+    /// This sits on the sing-box logging path inside the process that carries
+    /// every packet, so it must not cost anything proportional to the file:
+    /// the handle stays open and is appended to, and the file is rotated once
+    /// it crosses the cap instead of being read back, trimmed and atomically
+    /// rewritten per line. The write stays synchronous on a serial queue so a
+    /// log burst applies backpressure instead of growing an unbounded backlog
+    /// inside the tunnel process.
     fileprivate static func appendProviderLog(_ message: String) {
+        let timestamp = Date()
+        providerLogQueue.sync {
+            writeProviderLogLine(timestamp: timestamp, message: message)
+        }
+    }
+
+    private static func writeProviderLogLine(timestamp: Date, message: String) {
+        let line = "\(providerLogTimestampFormatter.string(from: timestamp)) \(message)\n"
+        guard let data = line.data(using: .utf8) else {
+            return
+        }
+
         do {
             let url = try providerLogURL()
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            let line = "\(ISO8601DateFormatter().string(from: Date())) \(message)\n"
-            var data = (try? Data(contentsOf: url)) ?? Data()
-            if let lineData = line.data(using: .utf8) {
-                data.append(lineData)
+            try providerLogFileHandle(url).write(contentsOf: data)
+            providerLogBytes += data.count
+            if providerLogBytes > providerLogMaxBytes {
+                try rotateProviderLog(url)
             }
-            if data.count > providerLogMaxBytes {
-                data = Data(data.suffix(providerLogMaxBytes))
-            }
-            try data.write(to: url, options: .atomic)
         } catch {
+            // Drop the handle so the next line re-opens instead of retrying
+            // against a descriptor whose file may have been replaced.
+            closeProviderLog()
             logger.error("failed to write PacketTunnel log: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    private static func providerLogFileHandle(_ url: URL) throws -> FileHandle {
+        if let providerLogHandle {
+            return providerLogHandle
+        }
+
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+        }
+        let handle = try FileHandle(forWritingTo: url)
+        providerLogBytes = Int(try handle.seekToEnd())
+        providerLogHandle = handle
+        return handle
+    }
+
+    /// Moves the current generation aside and starts a new one, keeping the most
+    /// recent lines so the host's log tail survives the rotation.
+    private static func rotateProviderLog(_ url: URL) throws {
+        closeProviderLog()
+        let rotated = url.appendingPathExtension("1")
+        try? FileManager.default.removeItem(at: rotated)
+        try FileManager.default.moveItem(at: url, to: rotated)
+
+        let carryOver = (try? Data(contentsOf: rotated))
+            .map { Data($0.suffix(providerLogCarryOverBytes)) } ?? Data()
+        FileManager.default.createFile(atPath: url.path, contents: carryOver)
+    }
+
+    /// Closes the cached handle; `providerLogBytes` is recomputed from the file
+    /// the next time one is opened.
+    private static func closeProviderLog() {
+        try? providerLogHandle?.close()
+        providerLogHandle = nil
+        providerLogBytes = 0
     }
 }
 

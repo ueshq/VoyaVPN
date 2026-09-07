@@ -17,6 +17,11 @@ use layout::{
 
 #[cfg(windows)]
 const SERVICE_NAME: &str = "VoyaVPNTunnelService";
+/// Where a service start failure is recorded. An SCM-hosted process has no
+/// stderr, so without this the `sing-box check` output — the only thing that
+/// explains most TUN start failures — was written to a discarded stream.
+#[cfg(windows)]
+const SERVICE_ERROR_LOG_NAME: &str = "tunnel-service-error.log";
 const STAGED_CONFIG_NAME: &str = "config.json";
 const SING_BOX_EXES: &[&str] = if cfg!(windows) {
     &["sing-box.exe", "sing-box-client.exe"]
@@ -111,6 +116,9 @@ fn run_service(args: Vec<std::ffi::OsString>) -> Result<(), ServiceError> {
         service_manager::{ServiceManager, ServiceManagerAccess},
     };
 
+    /// Reported for every non-terminal transition and for a clean stop.
+    const SUCCESS_EXIT: ServiceExitCode = ServiceExitCode::Win32(0);
+
     define_windows_service!(ffi_service_main, service_main);
 
     fn service_main(arguments: Vec<std::ffi::OsString>) {
@@ -132,22 +140,68 @@ fn run_service(args: Vec<std::ffi::OsString>) -> Result<(), ServiceError> {
                 _ => ServiceControlHandlerResult::NotImplemented,
             })?;
 
-        set_service_status(&status_handle, ServiceState::StartPending)?;
-        let plan = RuntimePlan::from_config_path(&config_path, ServiceLayout::from_environment()?)?;
+        set_service_status(&status_handle, ServiceState::StartPending, SUCCESS_EXIT)?;
+        // Every failure below has to reach the SCM. Returning early out of
+        // `run_windows_service` used to leave the service in StartPending until
+        // the SCM gave up with a generic 1067, and the exit code was hard-coded
+        // to Win32(0), so a crashed core and a clean stop looked identical to
+        // the desktop app's `sc.exe query` poll.
+        let result = run_windows_session(&status_handle, &config_path, &stop_rx);
+        let exit_code = match &result {
+            Ok(()) => SUCCESS_EXIT,
+            Err(error) => {
+                report_service_failure(error);
+                ServiceExitCode::ServiceSpecific(error.service_exit_code())
+            }
+        };
+        let _ = set_service_status(&status_handle, ServiceState::Stopped, exit_code);
+
+        result
+    }
+
+    fn run_windows_session(
+        status_handle: &service_control_handler::ServiceStatusHandle,
+        config_path: &Path,
+        stop_rx: &mpsc::Receiver<()>,
+    ) -> Result<(), ServiceError> {
+        let plan = RuntimePlan::from_config_path(config_path, ServiceLayout::from_environment()?)?;
         plan.validate()?;
         let mut child = plan.spawn()?;
-        set_service_status(&status_handle, ServiceState::Running)?;
+        set_service_status(status_handle, ServiceState::Running, SUCCESS_EXIT)?;
 
-        let result = wait_for_child_or_stop(&mut child, &stop_rx);
-        set_service_status(&status_handle, ServiceState::StopPending)?;
+        let result = wait_for_child_or_stop(&mut child, stop_rx);
+        // Best effort: the core still has to be reaped even if the SCM refuses
+        // the transition, and the caller reports the real outcome.
+        let _ = set_service_status(status_handle, ServiceState::StopPending, SUCCESS_EXIT);
         stop_child(&mut child);
-        set_service_status(&status_handle, ServiceState::Stopped)?;
+
         result
+    }
+
+    /// Record why the service could not start, where a human can find it.
+    fn report_service_failure(error: &ServiceError) {
+        // The path is derived from the service's own installed location, never
+        // from the caller-supplied start argument: this runs as SYSTEM.
+        let Ok(layout) = ServiceLayout::from_environment() else {
+            return;
+        };
+        if fs::create_dir_all(&layout.staging_dir).is_err() {
+            return;
+        }
+        let seconds = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|since_epoch| since_epoch.as_secs())
+            .unwrap_or_default();
+        let _ = fs::write(
+            layout.staging_dir.join(SERVICE_ERROR_LOG_NAME),
+            format!("[{seconds}] {error}\n"),
+        );
     }
 
     fn set_service_status(
         status_handle: &service_control_handler::ServiceStatusHandle,
         state: ServiceState,
+        exit_code: ServiceExitCode,
     ) -> Result<(), ServiceError> {
         status_handle.set_service_status(ServiceStatus {
             service_type: ServiceType::OWN_PROCESS,
@@ -157,7 +211,7 @@ fn run_service(args: Vec<std::ffi::OsString>) -> Result<(), ServiceError> {
             } else {
                 ServiceControlAccept::empty()
             },
-            exit_code: ServiceExitCode::Win32(0),
+            exit_code,
             checkpoint: 0,
             wait_hint: Duration::from_secs(10),
             process_id: None,
@@ -467,6 +521,36 @@ enum ServiceError {
     Unsupported(String),
     #[cfg(windows)]
     WindowsService(windows_service::Error),
+}
+
+#[cfg(windows)]
+impl ServiceError {
+    /// Service-specific exit code reported to the SCM.
+    ///
+    /// `sc query`/`sc queryex` surfaces this verbatim, so the desktop app's
+    /// service poll can tell a rejected config from a missing core from a
+    /// crashed sing-box instead of seeing `Stopped` for all of them.
+    fn service_exit_code(&self) -> u32 {
+        match self {
+            Self::InvalidArgs(_) => 1,
+            Self::InvalidConfigPath { .. }
+            | Self::InvalidConfigJson { .. }
+            | Self::InvalidConfigOption { .. }
+            | Self::ConfigTooLarge { .. } => 2,
+            Self::Staging { .. }
+            | Self::Canonicalize { .. }
+            | Self::CurrentDir(_)
+            | Self::ServiceLocation(_) => 3,
+            Self::MissingSingBox(_) => 4,
+            Self::CheckSingBox { .. } => 5,
+            Self::SingBoxCheckFailed { .. } => 6,
+            Self::SpawnSingBox { .. } => 7,
+            Self::WaitSingBox(_) => 8,
+            Self::SingBoxExited(_) => 9,
+            Self::Unsupported(_) => 10,
+            Self::WindowsService(_) => 11,
+        }
+    }
 }
 
 impl std::fmt::Display for ServiceError {

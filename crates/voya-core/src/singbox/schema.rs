@@ -700,6 +700,15 @@ pub struct SingboxExperimental {
 pub struct SingboxClashApi {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_controller: Option<String>,
+    /// Bearer token required by the Clash API server.
+    ///
+    /// sing-box only installs its auth middleware when this is non-empty, and
+    /// it answers CORS preflights with `Access-Control-Allow-Origin: *`, so an
+    /// external controller without a secret is readable and writable by any
+    /// local process and by browser pages that do not enforce Private Network
+    /// Access.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secret: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub store_selected: Option<bool>,
 }

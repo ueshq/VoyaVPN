@@ -21,6 +21,7 @@ import {
   SelectField,
   TextField,
 } from "./profile-form-fields";
+import { profileValidationMessage } from "./profile-form-errors";
 import { addressLabel } from "./profile-form-utils";
 import {
   createDefaultProfile,
@@ -123,11 +124,19 @@ function ProfileDialogForm({
                 options={localizeProfileProtocols(t)}
               />
 
-              <TextField error={errors.remarks?.message} label={t("panes.profiles.fields.remarks")} {...register("remarks")} />
+              <TextField
+                error={profileValidationMessage(errors.remarks?.message, t)}
+                label={t("panes.profiles.fields.remarks")}
+                {...register("remarks")}
+              />
             </div>
 
             <div className="grid gap-3 lg:grid-cols-[1fr_7rem]">
-              <TextField error={errors.address?.message} label={addressLabel(configType, t)} {...register("address")} />
+              <TextField
+                error={profileValidationMessage(errors.address?.message, t)}
+                label={addressLabel(configType, t)}
+                {...register("address")}
+              />
               <TextField
                 error={errors.port?.message}
                 inputMode="numeric"
@@ -142,10 +151,10 @@ function ProfileDialogForm({
             configType={configType}
             control={form.control}
             getValues={getValues}
-            passwordError={errors.password?.message}
+            passwordError={profileValidationMessage(errors.password?.message, t)}
             register={register}
             setValue={setValue}
-            usernameError={errors.username?.message}
+            usernameError={profileValidationMessage(errors.username?.message, t)}
           />
           <TransportPanel control={form.control} register={register} />
           <SecurityPanel

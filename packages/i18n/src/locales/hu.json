@@ -30,7 +30,16 @@
     "dedupeProfilesTitle": "Törli az ismétlődő profilokat?",
     "deleteProfilesConfirm": "Delete",
     "deleteProfilesDescription": "{{count}} selected profile(s) will be permanently deleted. This action cannot be undone.",
-    "deleteProfilesTitle": "Delete profiles?"
+    "deleteProfilesTitle": "Delete profiles?",
+    "deleteRoutingConfirm": "Törlés",
+    "deleteRoutingDescription": "A(z) „{{name}}” és {{count}} szabálya véglegesen törlődik. A művelet nem vonható vissza.",
+    "deleteRoutingRuleConfirm": "Törlés",
+    "deleteRoutingRuleDescription": "A kijelölt útválasztási szabály véglegesen törlődik. A művelet nem vonható vissza.",
+    "deleteRoutingRuleTitle": "Törli a szabályt?",
+    "deleteRoutingTitle": "Törli az útválasztási profilt?",
+    "deleteSubscriptionConfirm": "Törlés",
+    "deleteSubscriptionDescription": "A(z) „{{name}}” és az onnan importált összes profil véglegesen törlődik. A művelet nem vonható vissza.",
+    "deleteSubscriptionTitle": "Törli az előfizetést?"
   },
   "home": {
     "aria": "Kapcsolat kezdőlap",
@@ -101,6 +110,24 @@
     "hotkeyKey": "Hotkey key",
     "hotkeyKeyPlaceholder": "Nyomjon meg egy billentyűt",
     "hotkeyShowWindow": "Show window",
+    "keyName": {
+      "backspace": "Backspace",
+      "delete": "Delete",
+      "down": "Le",
+      "end": "End",
+      "enter": "Enter",
+      "escape": "Esc",
+      "home": "Home",
+      "insert": "Insert",
+      "left": "Balra",
+      "pageDown": "Page Down",
+      "pageUp": "Page Up",
+      "right": "Jobbra",
+      "space": "Szóköz",
+      "tab": "Tab",
+      "unknown": "Billentyű {{keyCode}}",
+      "up": "Fel"
+    },
     "loading": "Loading",
     "routeTemplateSource": "Útválasztási sablon forrása",
     "runtimeCore": "Core",
@@ -136,6 +163,7 @@
       "chainMarker": "Chain",
       "chooseChildren": "Choose children",
       "chooseDescription": "Choose servers, policy groups, or proxy chains for the current group.",
+      "draftName": "Vázlatcsoport",
       "filterChildren": "Filter child profiles",
       "groupFallback": "Group",
       "groupMarker": "Group",
@@ -302,7 +330,17 @@
         "clipboard": "Import from clipboard",
         "clipboardEmpty": "Clipboard is empty.",
         "clipboardUnavailable": "Clipboard text read is unavailable in this WebView.",
-        "discardedNodeOverrides": "Discarded {{count}} node-level override(s); global settings will be used."
+        "discardedNodeOverrides": "Discarded {{count}} node-level override(s); global settings will be used.",
+        "summary": {
+          "deduped": "{{count}} duplikátum kihagyva a tartalomból.",
+          "failed": "{{count}} elemzése sikertelen.",
+          "filtered": "{{count}} kiszűrve.",
+          "imported": "{{count}} profil importálva.",
+          "removedDuplicates": "{{count}} duplikátum eltávolítva.",
+          "skipped": "{{count}} kihagyva.",
+          "target": "Cél: {{target}}.",
+          "updated": "{{count}} frissítve."
+        }
       },
       "importDialog": {
         "description": "Import share links, subscription URLs, or JSON payloads.",
@@ -353,7 +391,6 @@
       "speedtest": {
         "buttonTitle": "{{label}} speedtest",
         "cancelTitle": "Cancel speedtest",
-        "fast": "Fast",
         "mixed": "Mixed",
         "more": "More speed tests",
         "real": "Real",
@@ -376,7 +413,14 @@
         "rows": "{{rows}} rows",
         "subscriptions": "Subscriptions"
       },
-      "untitled": "Untitled"
+      "untitled": "Untitled",
+      "validation": {
+        "addressRequired": "a cím kötelező",
+        "configSourceRequired": "konfigurációs útvonal vagy JSON-forrás kötelező",
+        "credentialRequired": "jelszó vagy azonosító kötelező",
+        "remarksRequired": "a megjegyzés kötelező",
+        "uuidRequired": "az UUID kötelező"
+      }
     },
     "proxyConnections": {
       "columns": {
@@ -498,6 +542,8 @@
     "node": "Node",
     "process": "Process",
     "reloadConfigFailed": "A mag konfigurációjának újratöltése sikertelen",
+    "requiresCore": "Előbb csatlakozzon",
+    "requiresCoreDescription": "A proxycsoportok akkor érhetők el, ha a mag fut.",
     "selectNodeFailed": "A csomópont váltása sikertelen",
     "source": "Source",
     "testAll": "Összes tesztelése",
@@ -512,6 +558,7 @@
     "viewTabsAria": "Kapcsolatnézetek"
   },
   "qr": {
+    "clipboardImageMissing": "A vágólap nem tartalmaz képet.",
     "clipboardImageUnavailable": "Clipboard image read is unavailable in this WebView.",
     "clipboardUnavailable": "Clipboard text read is unavailable in this WebView.",
     "content": "Content",
@@ -521,6 +568,11 @@
     "scanClipboardImage": "Clipboard image",
     "scanImage": "Scan image",
     "scanScreen": "Screen",
+    "screenCaptureUnavailable": "A képernyőrögzítés nem érhető el ebben a WebView-ban.",
+    "screenFrameUnavailable": "A képernyőrögzítés nem adott videokockát.",
+    "screenFrameUnencodable": "A rögzített képernyőkocka nem kódolható.",
+    "screenFrameUnreadable": "A rögzített képernyőkocka nem olvasható.",
+    "screenStreamUnavailable": "A rögzített képernyőfolyam nem tölthető be.",
     "screenUnavailable": "Screen QR scanning is unavailable on this platform or permission state."
   },
   "settings": {
@@ -662,6 +714,21 @@
     "title": "Check Updates",
     "updateNow": "Update now",
     "waiting": "Waiting"
+  },
+  "validation": {
+    "dnsSettings": "A DNS-beállítások ellenőrzése sikertelen",
+    "expectedIps": "A várt IP-címeket vesszővel kell elválasztani, szóköz nélkül.",
+    "hostsLine": "Minden hosts sornak tartalmaznia kell egy tartományt és legalább egy választ.",
+    "invalid": "Ez az érték nem érvényes.",
+    "listItem": "A lista elemei nem lehetnek üresek.",
+    "network": "A hálózat csak tcp, udp vagy tcp,udp lehet.",
+    "port": "A port vesszővel elválasztott portok vagy tartományok listája lehet.",
+    "portRange": "A portoknak 0 és 65535 között kell lenniük, a tartományoknak növekvőnek kell lenniük.",
+    "remarksLength": "A megjegyzés legfeljebb 256 karakter lehet.",
+    "urlCredentials": "Az URL nem tartalmazhat bejelentkezési adatokat.",
+    "urlHost": "Az URL-nek tartalmaznia kell gazdagépnevet.",
+    "urlHttps": "Az URL-nek https:// protokollt kell használnia.",
+    "urlInvalid": "Az URL érvénytelen."
   },
   "window": {
     "close": "Bezárás",

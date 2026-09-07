@@ -75,20 +75,12 @@ pub(super) fn parse_positive_i32(value: &str) -> Option<i32> {
     value.parse::<i32>().ok().filter(|value| *value > 0)
 }
 
+/// A plain-TLS block with nothing else set.
+///
+/// `TlsSettings::default()` is that value; the named wrapper keeps the intent
+/// readable at the `get_or_insert_with` call sites.
 pub(super) fn default_tls_settings() -> TlsSettings {
-    TlsSettings {
-        mode: TlsMode::Tls,
-        server_name: None,
-        alpn: Vec::new(),
-        reality_public_key: None,
-        reality_short_id: None,
-        reality_spider_x: None,
-        mldsa65_verify: None,
-        certificate_pem: None,
-        certificate_sha256: Vec::new(),
-        ech_config: Vec::new(),
-        final_mask: None,
-    }
+    TlsSettings::default()
 }
 
 pub(super) fn ensure_type(
@@ -216,10 +208,6 @@ pub(super) fn nonempty_option(value: &Option<String>) -> Option<&str> {
     nonempty_str(value.as_deref())
 }
 
-pub(super) fn nonempty_str(value: Option<&str>) -> Option<&str> {
-    value.filter(|value| !value.is_empty())
-}
-
 pub(super) fn push_encoded_opt(query: &mut QueryPairs, key: &str, value: &Option<String>) {
     if let Some(value) = nonempty_option(value) {
         query.push((key.to_string(), url_encode(value)));
@@ -273,15 +261,6 @@ pub(super) fn pretty_json_or_self(input: &str) -> String {
         .unwrap_or_else(|_| input.to_string())
 }
 
-pub(super) fn extract_first_pem_body(cert: &str) -> Option<String> {
-    let begin = "-----BEGIN CERTIFICATE-----";
-    let end = "-----END CERTIFICATE-----";
-    let start = cert.find(begin)? + begin.len();
-    let rest = &cert[start..];
-    let finish = rest.find(end)?;
-    Some(rest[..finish].trim().replace('\r', ""))
-}
-
 pub(super) fn base64_encode(input: &str, remove_padding: bool) -> String {
     let mut encoded = STANDARD.encode(input.as_bytes());
     if remove_padding {
@@ -329,10 +308,13 @@ pub(super) fn url_decode(input: &str) -> String {
     percent_decode_str(input).decode_utf8_lossy().into_owned()
 }
 
+/// Comma-separated list with per-item trimming, matching
+/// `crate::singbox::support::split_csv` so an `alpn`/`pcs`/`ech` list parses
+/// the same way on both sides of a round trip.
 pub(super) fn split_csv(input: &str) -> Vec<String> {
     input
-        .replace(['\r', '\n'], "")
         .split(',')
+        .map(str::trim)
         .filter(|item| !item.is_empty())
         .map(str::to_string)
         .collect::<Vec<_>>()

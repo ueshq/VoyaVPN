@@ -38,6 +38,32 @@ export function packagingModeForDistribution(distribution) {
   return distribution === "developer-id" ? "system-extension" : "app-extension";
 }
 
+/**
+ * The PacketTunnel bundle's CFBundleShortVersionString / CFBundleVersion.
+ *
+ * App Store Connect rejects an embedded extension whose version fields differ
+ * from the containing app (ITMS-90473), so the container's own Info.plist wins
+ * and the root package.json version is the fallback for a bundle that has not
+ * been written yet. These used to be the literals "0.1.0" and "1" inside
+ * build-tunnel.mjs, which drift on any version bump and already disagreed with
+ * each other.
+ */
+export function resolvePacketTunnelVersions({ appShortVersion, appBundleVersion, packageVersion } = {}) {
+  const marketing = text(appShortVersion) || text(packageVersion);
+  if (!marketing) {
+    throw new Error(
+      "Unable to resolve a PacketTunnel version: the app Info.plist has no CFBundleShortVersionString "
+        + "and package.json has no version.",
+    );
+  }
+
+  return { build: text(appBundleVersion) || marketing, marketing };
+}
+
+function text(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 export function requiredNetworkExtensionValue(distribution) {
   return distribution === "developer-id" ? "packet-tunnel-provider-systemextension" : "packet-tunnel-provider";
 }

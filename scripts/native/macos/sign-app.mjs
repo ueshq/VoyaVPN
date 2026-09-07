@@ -1,14 +1,14 @@
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { capture, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
+import { capture, isCliEntrypoint, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
 import {
   appBundleIdentifier,
   packetTunnelBundleIdentifier,
   packetTunnelLayout,
-  requiredNetworkExtensionValue,
   distributionFromIdentityName,
 } from "./tunnel-layout.mjs";
 import {
+  assertProfileCapabilities,
   distributionProfileLabel,
   formatProfileSelectionError,
   localProvisioningUdid,
@@ -49,15 +49,7 @@ function validateProvisioningProfile(profile, criteria, label, bundleIdentifier)
   if (reason) {
     throw new Error(`${label} provisioning profile ${profile.path} cannot be used: ${reason}.`);
   }
-  if (!profile.appGroups.includes("group.app.voyavpn.desktop")) {
-    throw new Error(`${label} provisioning profile does not include group.app.voyavpn.desktop.`);
-  }
-  if (!profile.networkExtensions.includes("packet-tunnel-provider")) {
-    const requiredValue = requiredNetworkExtensionValue(criteria.distribution);
-    if (!profile.networkExtensions.includes(requiredValue)) {
-      throw new Error(`${label} provisioning profile does not include ${requiredValue}.`);
-    }
-  }
+  assertProfileCapabilities(profile, { label, distribution: criteria.distribution });
 }
 
 function missingProfileError(label, bundleIdentifier, explicitEnvName, rejections) {
@@ -223,9 +215,13 @@ function main() {
   console.log(`macOS app bundle signed for ${distribution}: ${appBundle}`);
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+// Guarded so importing this module (a unit test, another script) cannot start
+// codesigning the app bundle as a side effect of the import.
+if (isCliEntrypoint(import.meta.url)) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }

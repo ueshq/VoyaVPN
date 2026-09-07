@@ -1,7 +1,28 @@
+use voya_app::supervisor::ClashApiAccess;
+
 use super::*;
 
 pub(super) fn current_config(state: &AppState) -> Result<AppConfig, AppError> {
     Ok(state.config_mutations().current_config())
+}
+
+/// How to reach the Clash API of the core that is actually running, if any.
+///
+/// The generated main config decides both the port and the bearer token it
+/// demands, so the supervisor snapshot is the only authority for either. An
+/// empty value means no core is connected and there is nothing to dial.
+///
+/// The token is never logged or returned over IPC: it stays inside this
+/// process, is redacted in `Debug`, and only reaches the Clash clients.
+pub(super) async fn current_clash_api_access(state: &AppState) -> ClashApiAccess {
+    state
+        .supervisor()
+        .status()
+        .await
+        .ok()
+        .as_ref()
+        .map(SupervisorSnapshot::clash_api_access)
+        .unwrap_or_default()
 }
 
 pub(super) async fn begin_config_mutation(
@@ -150,7 +171,11 @@ pub(super) fn speedtest_manager(state: &AppState) -> SpeedtestManager {
 }
 
 pub(super) fn tun_manager(state: &AppState) -> TunManager {
+    // A fresh manager per command is fine — it is a handle, not a resource —
+    // but the PlugInKit registration memo has to outlive it, or every status
+    // read forks `pluginkit` again.
     TunManager::new(state.elevation_manager().state())
+        .with_provider_registration_cache(state.provider_registration_cache())
 }
 
 pub(super) fn update_manager(state: &AppState) -> UpdateManager<'_> {

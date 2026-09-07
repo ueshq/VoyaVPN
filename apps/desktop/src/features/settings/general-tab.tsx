@@ -6,7 +6,7 @@ import { Input } from "@voya/ui/components/input";
 import { Separator } from "@voya/ui/components/separator";
 import { cn } from "@voya/ui/lib/utils";
 import { useI18n } from "@voya/i18n/use-i18n";
-import type { TranslationKey } from "@voya/i18n";
+import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import type { ThemeMode } from "@/stores/preferences-store";
 
 import {
@@ -162,7 +162,7 @@ export function GeneralTab({ controller }: { controller: AppSettingsController }
                 }
               }}
               readOnly
-              value={keyCodeLabel(settings.shortcuts.showWindowShortcut?.keyCode ?? null)}
+              value={keyCodeLabel(t, settings.shortcuts.showWindowShortcut?.keyCode ?? null)}
             />
             <Button
               className="h-7 px-2 text-xs"
@@ -256,7 +256,17 @@ function buildHotkeyKeyCodes(): ReadonlyMap<string, number> {
 
 const HOTKEY_KEY_CODES = buildHotkeyKeyCodes();
 
-function keyCodeLabel(keyCode: number | null): string {
+/**
+ * Renders the keycap shown in the hotkey field.
+ *
+ * Digit, letter and function keycaps are the glyph printed on the key and stay
+ * untranslated in every locale; the *named* keys ("Backspace", "Page Up", …)
+ * and the unknown-code fallback are prose, so they come from
+ * `options.keyName.*`. The map is rebuilt per call rather than hoisted because
+ * its values are locale-dependent, and this runs once per render of a single
+ * read-only input.
+ */
+function keyCodeLabel(t: TranslationFunction, keyCode: number | null): string {
   if (!keyCode) return "";
   if ((keyCode >= 48 && keyCode <= 57) || (keyCode >= 65 && keyCode <= 90)) {
     return String.fromCharCode(keyCode);
@@ -264,21 +274,21 @@ function keyCodeLabel(keyCode: number | null): string {
   if (keyCode >= 112 && keyCode <= 135) return `F${keyCode - 111}`;
   return (
     {
-      8: "Backspace",
-      9: "Tab",
-      13: "Enter",
-      27: "Esc",
-      32: "Space",
-      33: "Page Up",
-      34: "Page Down",
-      35: "End",
-      36: "Home",
-      37: "Left",
-      38: "Up",
-      39: "Right",
-      40: "Down",
-      45: "Insert",
-      46: "Delete",
-    }[keyCode] ?? `Key ${keyCode}`
+      8: t("options.keyName.backspace"),
+      9: t("options.keyName.tab"),
+      13: t("options.keyName.enter"),
+      27: t("options.keyName.escape"),
+      32: t("options.keyName.space"),
+      33: t("options.keyName.pageUp"),
+      34: t("options.keyName.pageDown"),
+      35: t("options.keyName.end"),
+      36: t("options.keyName.home"),
+      37: t("options.keyName.left"),
+      38: t("options.keyName.up"),
+      39: t("options.keyName.right"),
+      40: t("options.keyName.down"),
+      45: t("options.keyName.insert"),
+      46: t("options.keyName.delete"),
+    }[keyCode] ?? t("options.keyName.unknown", { keyCode })
   );
 }

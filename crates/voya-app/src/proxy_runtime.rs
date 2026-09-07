@@ -21,7 +21,8 @@ use voya_net::clash::{
 
 use crate::{
     backoff::{sleep_or_shutdown, WebSocketReconnectBackoff},
-    statistics::singbox_state_port2,
+    statistics::available_state_port,
+    supervisor::ClashApiAccess,
 };
 
 /// Fallback per-node latency budget when the configured speed-test timeout is
@@ -99,8 +100,12 @@ where
         Self { transport }
     }
 
-    pub async fn groups(&self, config: &AppConfig) -> Result<ProxyGroupsSnapshot> {
-        let client = self.client(config)?;
+    pub async fn groups(
+        &self,
+        config: &AppConfig,
+        access: &ClashApiAccess,
+    ) -> Result<ProxyGroupsSnapshot> {
+        let client = self.client(access)?;
         let proxies = client.get_proxies().await?;
         let providers = client.get_proxy_providers().await.unwrap_or_default();
 
@@ -112,8 +117,8 @@ where
         ))
     }
 
-    pub async fn connections(&self, config: &AppConfig) -> Result<ProxyConnectionsSnapshot> {
-        self.client(config)?
+    pub async fn connections(&self, access: &ClashApiAccess) -> Result<ProxyConnectionsSnapshot> {
+        self.client(access)?
             .get_connections()
             .await
             .map(connections_snapshot)
@@ -123,10 +128,11 @@ where
     pub async fn select_node(
         &self,
         config: &AppConfig,
+        access: &ClashApiAccess,
         group_name: &str,
         node_name: &str,
     ) -> Result<ProxyGroupsSnapshot> {
-        let client = self.client(config)?;
+        let client = self.client(access)?;
         let proxies = client.get_proxies().await?;
         let group = proxies
             .proxies
@@ -140,15 +146,16 @@ where
         }
 
         client.select_proxy(group_name, node_name).await?;
-        self.groups(config).await
+        self.groups(config, access).await
     }
 
     pub async fn test_delay(
         &self,
         config: &AppConfig,
+        access: &ClashApiAccess,
         node_names: Vec<String>,
     ) -> Result<Vec<ProxyDelayTestResult>> {
-        let client = self.client(config)?;
+        let client = self.client(access)?;
         let names = if node_names.is_empty() {
             client
                 .get_proxies()
@@ -192,29 +199,29 @@ where
         Ok(results)
     }
 
-    pub async fn set_traffic_mode(&self, config: &AppConfig, mode: TrafficMode) -> Result<()> {
+    pub async fn set_traffic_mode(&self, access: &ClashApiAccess, mode: TrafficMode) -> Result<()> {
         let Some(mode) = traffic_mode_api_value(mode) else {
             return Err(ProxyRuntimeError::InvalidTrafficMode(mode));
         };
 
-        self.client(config)?
+        self.client(access)?
             .set_rule_mode(mode)
             .await
             .map_err(Into::into)
     }
 
-    pub async fn reload_config(&self, config: &AppConfig, path: Option<&str>) -> Result<()> {
-        let client = self.client(config)?;
+    pub async fn reload_config(&self, access: &ClashApiAccess, path: Option<&str>) -> Result<()> {
+        let client = self.client(access)?;
         let _ = client.close_connection(None).await;
         client.reload_config(path).await.map_err(Into::into)
     }
 
     pub async fn close_connection(
         &self,
-        config: &AppConfig,
+        access: &ClashApiAccess,
         connection_id: Option<&str>,
     ) -> Result<ProxyConnectionsSnapshot> {
-        let client = self.client(config)?;
+        let client = self.client(access)?;
         client.close_connection(connection_id).await?;
         client
             .get_connections()
@@ -223,8 +230,8 @@ where
             .map_err(Into::into)
     }
 
-    fn client(&self, config: &AppConfig) -> Result<ClashRestClient<T>> {
-        let endpoint = proxy_runtime_endpoint(config).ok_or(ProxyRuntimeError::InvalidStatePort)?;
+    fn client(&self, access: &ClashApiAccess) -> Result<ClashRestClient<T>> {
+        let endpoint = proxy_runtime_endpoint(access).ok_or(ProxyRuntimeError::InvalidStatePort)?;
         Ok(ClashRestClient::with_transport(
             endpoint,
             self.transport.clone(),
@@ -245,14 +252,14 @@ impl ProxyMonitorController {
 
     pub fn start(
         &self,
-        config: &AppConfig,
+        access: &ClashApiAccess,
         sink: Arc<dyn ProxyRuntimeEventSink>,
     ) -> Result<ProxyMonitorStatus> {
         let mut guard = self
             .handle
             .lock()
             .map_err(|_| ProxyRuntimeError::MonitorLockPoisoned)?;
-        let Some(endpoint) = proxy_runtime_endpoint(config) else {
+        let Some(endpoint) = proxy_runtime_endpoint(access) else {
             if let Some(handle) = guard.take() {
                 handle.stop();
             }
@@ -272,12 +279,10 @@ impl ProxyMonitorController {
         }
 
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
-        let traffic_task = runtime.spawn(run_proxy_ws_monitor(
-            endpoint.clone(),
-            ClashWebSocketResource::Traffic,
-            Arc::clone(&sink),
-            shutdown_rx.clone(),
-        ));
+        // Only the connections stream is opened here. The statistics service
+        // already holds a /traffic websocket against the same sing-box state
+        // port, so a second one would decode every frame twice for numbers the
+        // proxy screens do not read.
         let connections_task = runtime.spawn(run_proxy_ws_monitor(
             endpoint.clone(),
             ClashWebSocketResource::Connections,
@@ -287,7 +292,7 @@ impl ProxyMonitorController {
         *guard = Some(ProxyMonitorHandle {
             endpoint,
             shutdown: shutdown_tx,
-            tasks: vec![traffic_task, connections_task],
+            tasks: vec![connections_task],
         });
 
         Ok(ProxyMonitorStatus::running())
@@ -389,14 +394,27 @@ pub fn route_proxy_ws_event(sink: &dyn ProxyRuntimeEventSink, event: ClashWebSoc
     }
 }
 
+/// Resolves the Clash API endpoint of the core that is *running*.
+///
+/// `access` is what the supervisor reports for the live core: the port the
+/// generated main config wrote into `experimental.clash_api`, and the bearer
+/// token it wrote into `experimental.clash_api.secret`. That snapshot is the
+/// only authority — on a pre-socks topology the builder clears
+/// `is_tun_enabled` on the main context, so recomputing the port from
+/// `tun_mode_item.enable_tun` would address the pre-socks process instead, and
+/// the token exists only in the config that launch generated. `None` means no
+/// core is running, so there is no Clash API to talk to.
 #[must_use]
-pub fn proxy_runtime_endpoint(config: &AppConfig) -> Option<ClashApiEndpoint> {
-    available_proxy_state_port(config).map(ClashApiEndpoint::loopback)
-}
+pub fn proxy_runtime_endpoint(access: &ClashApiAccess) -> Option<ClashApiEndpoint> {
+    let port = available_state_port(access.port?)?;
 
-fn available_proxy_state_port(config: &AppConfig) -> Option<u16> {
-    let port = singbox_state_port2(config);
-    (port != 0).then_some(port)
+    Some(ClashApiEndpoint {
+        secret: access
+            .secret
+            .as_ref()
+            .map(|secret| secret.as_str().to_string()),
+        ..ClashApiEndpoint::loopback(port)
+    })
 }
 
 #[must_use]
@@ -623,6 +641,7 @@ mod tests {
     use voya_net::clash::{ClashHttpMethod, ClashHttpRequest};
 
     use super::*;
+    use crate::supervisor::ClashApiSecret;
 
     #[derive(Clone)]
     struct NoopProxyRuntimeEventSink;
@@ -630,6 +649,12 @@ mod tests {
     impl ProxyRuntimeEventSink for NoopProxyRuntimeEventSink {
         fn emit_traffic(&self, _event: ProxyTrafficEvent) {}
         fn emit_connections(&self, _event: ProxyConnectionsSnapshot) {}
+    }
+
+    /// A running core reachable on `port` with no bearer token, which is what
+    /// every test that only cares about routing and payloads needs.
+    fn access(port: u16) -> ClashApiAccess {
+        ClashApiAccess::unauthenticated(port)
     }
 
     #[derive(Clone, Default)]
@@ -739,15 +764,10 @@ mod tests {
         }
     }
 
-    fn config_with_local_port(local_port: i32) -> AppConfig {
-        let mut config = config();
-        config
-            .inbound
-            .first_mut()
-            .expect("default config has an inbound")
-            .local_port = local_port;
-        config
-    }
+    /// The port a running core reports. It must match the URLs `MockTransport`
+    /// registers, which are built from the same `DEFAULT_LOCAL_PORT + 5`
+    /// offset the generated `experimental.clash_api` uses.
+    const RUNTIME_PORT: u16 = (DEFAULT_LOCAL_PORT + 5) as u16;
 
     fn monitor_handle_snapshot(
         controller: &ProxyMonitorController,
@@ -759,6 +779,11 @@ mod tests {
 
     fn monitor_handle_is_none(controller: &ProxyMonitorController) -> bool {
         controller.handle.lock().expect("monitor lock").is_none()
+    }
+
+    fn monitor_task_count(controller: &ProxyMonitorController) -> usize {
+        let guard = controller.handle.lock().expect("monitor lock");
+        guard.as_ref().map_or(0, |handle| handle.tasks.len())
     }
 
     fn shutdown_requested(shutdown: &watch::Sender<bool>) -> bool {
@@ -774,7 +799,7 @@ mod tests {
         let manager = ProxyRuntimeManager::with_transport(transport.clone());
 
         manager
-            .set_traffic_mode(&config(), TrafficMode::Direct)
+            .set_traffic_mode(&access(RUNTIME_PORT), TrafficMode::Direct)
             .await
             .expect("set traffic mode");
 
@@ -796,7 +821,7 @@ mod tests {
         let manager = ProxyRuntimeManager::with_transport(transport.clone());
 
         manager
-            .reload_config(&config(), Some("/tmp/config.yaml"))
+            .reload_config(&access(RUNTIME_PORT), Some("/tmp/config.yaml"))
             .await
             .expect("reload");
 
@@ -831,7 +856,7 @@ mod tests {
         let manager = ProxyRuntimeManager::with_transport(transport.clone());
 
         let snapshot = manager
-            .select_node(&config(), "Proxy", "B")
+            .select_node(&config(), &access(RUNTIME_PORT), "Proxy", "B")
             .await
             .expect("select proxy");
 
@@ -851,7 +876,7 @@ mod tests {
         let manager = ProxyRuntimeManager::with_transport(transport);
 
         let results = manager
-            .test_delay(&config(), vec!["A".to_string()])
+            .test_delay(&config(), &access(RUNTIME_PORT), vec!["A".to_string()])
             .await
             .expect("delay");
 
@@ -874,7 +899,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         let results = manager
-            .test_delay(&config(), names.clone())
+            .test_delay(&config(), &access(RUNTIME_PORT), names.clone())
             .await
             .expect("delay");
 
@@ -931,13 +956,14 @@ mod tests {
         let manager = ProxyRuntimeManager::with_transport(transport.clone());
 
         let error = manager
-            .connections(&config_with_local_port(-5))
+            .connections(&ClashApiAccess::default())
             .await
-            .expect_err("zero proxy runtime state port should be rejected");
+            .expect_err("no running core means no Clash API to dial");
 
         assert!(matches!(error, ProxyRuntimeError::InvalidStatePort));
         assert!(transport.requests().is_empty());
-        assert_eq!(proxy_runtime_endpoint(&config_with_local_port(-5)), None);
+        assert_eq!(proxy_runtime_endpoint(&ClashApiAccess::default()), None);
+        assert_eq!(proxy_runtime_endpoint(&access(0)), None);
     }
 
     #[test]
@@ -983,7 +1009,7 @@ mod tests {
         let controller = ProxyMonitorController::new();
 
         let error = controller
-            .start(&config(), Arc::new(NoopProxyRuntimeEventSink))
+            .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
             .expect_err("monitor start should require a runtime");
 
         assert!(matches!(
@@ -1043,7 +1069,7 @@ mod tests {
         let controller = ProxyMonitorController::new();
 
         let status = controller
-            .start(&config(), Arc::new(NoopProxyRuntimeEventSink))
+            .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
             .expect("monitor start");
 
         assert_eq!(status, ProxyMonitorStatus::running());
@@ -1054,18 +1080,93 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn proxy_monitor_opens_only_the_connections_websocket() {
+        let controller = ProxyMonitorController::new();
+
+        controller
+            .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
+            .expect("monitor start");
+
+        assert_eq!(
+            monitor_task_count(&controller),
+            1,
+            "the statistics service already streams /traffic from the same port"
+        );
+        assert_eq!(
+            controller.stop().expect("monitor stop"),
+            ProxyMonitorStatus::stopped()
+        );
+    }
+
+    #[test]
+    fn proxy_runtime_endpoint_follows_the_running_core_port() {
+        assert_eq!(
+            proxy_runtime_endpoint(&access(RUNTIME_PORT)),
+            Some(ClashApiEndpoint::loopback(RUNTIME_PORT)),
+            "the monitor and the statistics service must dial the port the \
+             running core reported, not one recomputed from the config"
+        );
+        assert_eq!(proxy_runtime_endpoint(&ClashApiAccess::default()), None);
+        assert_eq!(proxy_runtime_endpoint(&access(0)), None);
+    }
+
+    /// Without the token every REST call and websocket upgrade against a
+    /// secured core answers 401, so the app would lose its own proxy screens
+    /// the moment the Clash API stopped being anonymous.
+    #[test]
+    fn proxy_runtime_endpoint_carries_the_running_core_secret() {
+        let secret = ClashApiSecret::generate();
+
+        let endpoint = proxy_runtime_endpoint(&ClashApiAccess::new(
+            Some(RUNTIME_PORT),
+            Some(secret.clone()),
+        ))
+        .expect("a connected core exposes an endpoint");
+
+        assert_eq!(endpoint.secret.as_deref(), Some(secret.as_str()));
+        assert_eq!(
+            proxy_runtime_endpoint(&access(RUNTIME_PORT))
+                .expect("an unsecured core still resolves")
+                .secret,
+            None
+        );
+    }
+
+    /// Every REST call goes out with `Authorization: Bearer <token>`; the
+    /// transport turns `bearer_token` into that header.
+    #[tokio::test]
+    async fn proxy_runtime_rest_requests_present_the_bearer_token() {
+        let secret = ClashApiSecret::generate();
+        let transport = MockTransport::default();
+        transport.respond("/configs", Value::Null);
+        let manager = ProxyRuntimeManager::with_transport(transport.clone());
+
+        manager
+            .set_traffic_mode(
+                &ClashApiAccess::new(Some(RUNTIME_PORT), Some(secret.clone())),
+                TrafficMode::Direct,
+            )
+            .await
+            .expect("set traffic mode");
+
+        let requests = transport.requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].bearer_token.as_deref(), Some(secret.as_str()));
+    }
+
+    #[tokio::test]
     async fn proxy_monitor_zero_state_port_stops_without_endpoint() {
         let controller = ProxyMonitorController::new();
 
         controller
-            .start(&config(), Arc::new(NoopProxyRuntimeEventSink))
+            .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
             .expect("initial monitor start");
         let (_, first_shutdown) = monitor_handle_snapshot(&controller);
 
         assert_eq!(
             controller
                 .start(
-                    &config_with_local_port(-5),
+                    &ClashApiAccess::default(),
                     Arc::new(NoopProxyRuntimeEventSink)
                 )
                 .expect("zero port monitor start"),
@@ -1082,7 +1183,7 @@ mod tests {
 
         assert_eq!(
             controller
-                .start(&config(), Arc::new(NoopProxyRuntimeEventSink))
+                .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
                 .expect("first monitor start"),
             ProxyMonitorStatus::running()
         );
@@ -1090,7 +1191,7 @@ mod tests {
 
         assert_eq!(
             controller
-                .start(&config(), Arc::new(NoopProxyRuntimeEventSink))
+                .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
                 .expect("second monitor start"),
             ProxyMonitorStatus::running()
         );
@@ -1110,7 +1211,7 @@ mod tests {
         let controller = ProxyMonitorController::new();
 
         controller
-            .start(&config(), Arc::new(NoopProxyRuntimeEventSink))
+            .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
             .expect("first monitor start");
         let (first_endpoint, first_shutdown) = monitor_handle_snapshot(&controller);
         assert_eq!(
@@ -1122,7 +1223,7 @@ mod tests {
 
         assert_eq!(
             controller
-                .start(&config(), Arc::new(NoopProxyRuntimeEventSink))
+                .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
                 .expect("restart after stop"),
             ProxyMonitorStatus::running()
         );
@@ -1140,12 +1241,11 @@ mod tests {
     #[tokio::test]
     async fn proxy_monitor_different_endpoint_replaces_previous_handle() {
         let controller = ProxyMonitorController::new();
-        let initial_config = config();
-        let replacement_config = config_with_local_port(DEFAULT_LOCAL_PORT + 100);
+        let replacement_port = RUNTIME_PORT + 100;
 
         assert_eq!(
             controller
-                .start(&initial_config, Arc::new(NoopProxyRuntimeEventSink))
+                .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
                 .expect("initial monitor start"),
             ProxyMonitorStatus::running()
         );
@@ -1153,18 +1253,21 @@ mod tests {
 
         assert_eq!(
             controller
-                .start(&replacement_config, Arc::new(NoopProxyRuntimeEventSink))
+                .start(
+                    &access(replacement_port),
+                    Arc::new(NoopProxyRuntimeEventSink)
+                )
                 .expect("replacement monitor start"),
             ProxyMonitorStatus::running()
         );
         let (replacement_endpoint, replacement_shutdown) = monitor_handle_snapshot(&controller);
 
         assert_eq!(
-            proxy_runtime_endpoint(&initial_config).as_ref(),
+            proxy_runtime_endpoint(&access(RUNTIME_PORT)).as_ref(),
             Some(&initial_endpoint)
         );
         assert_eq!(
-            proxy_runtime_endpoint(&replacement_config).as_ref(),
+            proxy_runtime_endpoint(&access(replacement_port)).as_ref(),
             Some(&replacement_endpoint)
         );
         assert_ne!(initial_endpoint, replacement_endpoint);
@@ -1183,7 +1286,7 @@ mod tests {
         let clone = controller.clone();
 
         clone
-            .start(&config(), Arc::new(NoopProxyRuntimeEventSink))
+            .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
             .expect("monitor start through clone");
         assert!(!monitor_handle_is_none(&controller));
 

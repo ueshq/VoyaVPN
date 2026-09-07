@@ -30,6 +30,18 @@ pub struct SubscriptionFetchOptions {
 pub struct SubscriptionFetchResult {
     pub content: String,
     pub downloads: Vec<DownloadResponse>,
+    /// Extra `more_url` mirrors that could not be fetched, in source order.
+    ///
+    /// A dead mirror is reported rather than propagated: the primary list has already been
+    /// downloaded and decoded at that point, and discarding it would block every update for the
+    /// subscription until the user edited the entry.
+    pub failed_more_urls: Vec<FailedSubscriptionSource>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FailedSubscriptionSource {
+    pub url: String,
+    pub error: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -109,12 +121,17 @@ impl SubscriptionClient {
         };
         downloads.push(main);
 
+        let mut failed_more_urls = Vec::new();
         if source
             .convert_target
             .as_deref()
             .is_some_and(|value| !value.trim().is_empty())
         {
-            return Ok(SubscriptionFetchResult { content, downloads });
+            return Ok(SubscriptionFetchResult {
+                content,
+                downloads,
+                failed_more_urls,
+            });
         }
 
         for url in source
@@ -123,17 +140,18 @@ impl SubscriptionClient {
             .map(str::trim)
             .filter(|url| !url.is_empty())
         {
-            validate_subscription_url(url, url_policy)?;
-            let additional = self
-                .download
-                .download_text(DownloadRequest {
-                    url: url.to_string(),
-                    user_agent: nonempty(source.user_agent.clone()),
-                    prefer_proxy: options.prefer_proxy,
-                    proxy_url: options.proxy_url.clone(),
-                    response_body_limit: Some(SUBSCRIPTION_RESPONSE_LIMIT_BYTES),
-                })
-                .await?;
+            // The primary list is already downloaded and decoded here, so a rejected or dead
+            // mirror is recorded and skipped instead of failing the whole subscription.
+            let additional = match self.fetch_more_url(url, source, options, url_policy).await {
+                Ok(additional) => additional,
+                Err(error) => {
+                    failed_more_urls.push(FailedSubscriptionSource {
+                        url: url.to_string(),
+                        error: error.to_string(),
+                    });
+                    continue;
+                }
+            };
             let body =
                 decode_base64_payload(&additional.body).unwrap_or_else(|| additional.body.clone());
             if !body.is_empty() {
@@ -145,7 +163,30 @@ impl SubscriptionClient {
             downloads.push(additional);
         }
 
-        Ok(SubscriptionFetchResult { content, downloads })
+        Ok(SubscriptionFetchResult {
+            content,
+            downloads,
+            failed_more_urls,
+        })
+    }
+
+    async fn fetch_more_url(
+        &self,
+        url: &str,
+        source: &SubscriptionFetchSource,
+        options: &SubscriptionFetchOptions,
+        url_policy: SubscriptionUrlPolicy,
+    ) -> Result<DownloadResponse> {
+        validate_subscription_url(url, url_policy)?;
+        self.download
+            .download_text(DownloadRequest {
+                url: url.to_string(),
+                user_agent: nonempty(source.user_agent.clone()),
+                prefer_proxy: options.prefer_proxy,
+                proxy_url: options.proxy_url.clone(),
+                response_body_limit: Some(SUBSCRIPTION_RESPONSE_LIMIT_BYTES),
+            })
+            .await
     }
 }
 
@@ -375,6 +416,47 @@ mod tests {
             seen_user_agents.lock().await.as_slice(),
             ["SubUA/2", "SubUA/2"]
         );
+    }
+
+    /// One dead mirror must not cost the user every update for the subscription: the primary
+    /// list is already downloaded by then, so the failure is reported alongside it.
+    #[tokio::test]
+    async fn subscription_fetch_keeps_primary_content_when_a_more_url_fails() {
+        let main = STANDARD.encode("vless://id-a@example.test:443#A");
+        let good = STANDARD.encode("trojan://secret@example.test:443#B");
+        let seen_user_agents = Arc::new(Mutex::new(Vec::new()));
+        let base = spawn_http_fixture(
+            HashMap::from([("/main".to_string(), main), ("/good".to_string(), good)]),
+            3,
+            Arc::clone(&seen_user_agents),
+        )
+        .await;
+
+        let result = SubscriptionClient::new()
+            .fetch_with_url_policy(
+                &SubscriptionFetchSource {
+                    url: format!("{base}/main"),
+                    more_url: format!("{base}/missing, {base}/good"),
+                    user_agent: String::new(),
+                    convert_target: None,
+                    sub_convert_url: None,
+                },
+                &SubscriptionFetchOptions {
+                    prefer_proxy: false,
+                    proxy_url: None,
+                },
+                SubscriptionUrlPolicy::AllowLocalForTests,
+            )
+            .await
+            .expect("a failing more_url should not discard the primary content");
+
+        assert_eq!(
+            result.content,
+            "vless://id-a@example.test:443#A\ntrojan://secret@example.test:443#B"
+        );
+        assert_eq!(result.downloads.len(), 2);
+        assert_eq!(result.failed_more_urls.len(), 1);
+        assert_eq!(result.failed_more_urls[0].url, format!("{base}/missing"));
     }
 
     #[tokio::test]

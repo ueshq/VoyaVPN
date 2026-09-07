@@ -28,25 +28,6 @@ export function LogsPanel() {
   const [search, setSearch] = useState("");
   const [activeLevels, setActiveLevels] = useState<Set<LogLevel>>(() => new Set(LOG_LEVELS));
 
-  // LogLineEvent carries no timestamp, so stamp each id the first render it
-  // appears and prune ids the store has dropped (it keeps only the last 500).
-  const timestampsRef = useRef<Map<number, string>>(new Map());
-  const timestamps = timestampsRef.current;
-  const liveIds = new Set<number>();
-  for (const line of logLines) {
-    liveIds.add(line.id);
-    if (!timestamps.has(line.id)) {
-      timestamps.set(line.id, formatTimestamp(new Date()));
-    }
-  }
-  if (timestamps.size > liveIds.size) {
-    for (const id of timestamps.keys()) {
-      if (!liveIds.has(id)) {
-        timestamps.delete(id);
-      }
-    }
-  }
-
   const needle = search.trim().toLowerCase();
   const filtered = useMemo(
     () =>
@@ -215,7 +196,12 @@ export function LogsPanel() {
                       key={line.id}
                       style={{ height: ROW_HEIGHT, transform: `translateY(${virtualRow.start}px)` }}
                     >
-                      <time className="tabular-nums text-muted-foreground">{timestamps.get(line.id) ?? ""}</time>
+                      {/* The store stamps `receivedAt` when the event arrives; a
+                          render-time stamp would give every line buffered while
+                          this panel was unmounted the same panel-open time. */}
+                      <time className="tabular-nums text-muted-foreground">
+                        {formatTimestamp(line.receivedAt)}
+                      </time>
                       <Badge
                         className={cn(
                           "h-5 justify-center rounded-sm px-1.5 font-mono uppercase",
@@ -252,7 +238,8 @@ export function LogsPanel() {
   );
 }
 
-function formatTimestamp(date: Date) {
+function formatTimestamp(receivedAt: number) {
+  const date = new Date(receivedAt);
   const pad = (value: number) => value.toString().padStart(2, "0");
 
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;

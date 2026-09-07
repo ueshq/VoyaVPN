@@ -1,5 +1,47 @@
 import type { Page } from "@playwright/test";
 
+// `tsconfig.e2e.json` pulls `src/ipc/bindings.ts` into this project purely so
+// the mock can be checked against the generated contract: every `satisfies`
+// below is erased at runtime, but a backend DTO that gains, loses or retypes a
+// field now fails `pnpm --filter @voya/desktop typecheck` instead of failing a
+// smoke assertion with a confusing message.
+import type {
+  AppSettingsV1,
+  AppUpdaterStatus,
+  ConfigSourceSettings,
+  ConfigTemplateImportResult,
+  ConnectionModeStatus,
+  DnsSettings,
+  ExportProfilesResult,
+  GroupChildCandidate,
+  GroupPreview,
+  ImportProfilesResult,
+  ProcessCandidate,
+  ProfileDedupeResult,
+  ProfileKind,
+  ProxyConnectionsSnapshot,
+  ProxyDelayTestResult,
+  ProxyGroupsSnapshot,
+  ProxyMonitorStatus,
+  QrCodeImage,
+  ResourceUpdateFile,
+  Routing_Serialize,
+  RoutingRule,
+  RuntimeStatusResponse,
+  SpeedTestKind,
+  SpeedtestRunResult,
+  SpeedtestStatus,
+  Subscription,
+  SubscriptionMetadata,
+  SubscriptionUpdateResult,
+  SysProxyType,
+  SystemProxyStatusResponse,
+  TrafficMode,
+  TrafficModeResponse,
+  TunStatus,
+  WindowChromeConfig,
+} from "../../src/ipc/bindings";
+
 export async function installTauriSmokeMock(page: Page) {
   await page.addInitScript(() => {
     type CommandArgs = Record<string, unknown>;
@@ -10,53 +52,51 @@ export async function installTauriSmokeMock(page: Page) {
       traffic: Record<string, unknown>;
       isActive: boolean;
     };
-    type Routing = {
-      id: string;
-      remarks: string;
-      sourceUrl: string;
-      rules: Rule[];
-      enabled: boolean;
-      locked: boolean;
-      icon: string;
-      singboxRulesetPath: string;
-      domainStrategy: string;
-      singboxDomainStrategy: string;
-      sort: number;
-      isActive: boolean;
-    };
-    type Rule = {
-      id: string;
-      kind?: string | null;
-      port?: string | null;
-      network?: string | null;
-      inboundTags?: string[] | null;
-      outbound?: string | null;
-      ip?: string[] | null;
-      domain?: string[] | null;
-      protocol?: string[] | null;
-      process?: string[] | null;
-      enabled: boolean;
-      remarks?: string | null;
-      scope?: "all" | "routing" | "dns" | null;
+    // Hand-written copies of these two drifted from the backend; the generated
+    // shapes are the contract, so alias them instead of restating them.
+    type Routing = Routing_Serialize;
+    type Rule = RoutingRule;
+    // Everything the mock keeps between commands. Typing it against the
+    // generated DTOs is what makes the per-command `satisfies` below cheap:
+    // every handler that returns a slice of state is checked for free.
+    type MockState = {
+      calls: Array<{ command: string; args: CommandArgs }>;
+      dns: DnsSettings;
+      profiles: ProfileRow[];
+      proxy: ProxyGroupsSnapshot;
+      unhandled: string[];
+      routings: Routing[];
+      runtime: RuntimeStatusResponse;
+      sources: ConfigSourceSettings;
+      settings: AppSettingsV1;
+      sysProxy: SystemProxyStatusResponse;
+      tun: TunStatus;
     };
     type Callback = (event: { id: number; event: string; payload: unknown }) => void;
+    type Listener = { eventId: number; eventName: string; handlerId: number };
 
     const callbacks = new Map<number, Callback>();
+    const listeners: Listener[] = [];
     let nextCallbackId = 1;
     let nextProfileId = 1;
     let nextRoutingId = 1;
     let nextRuleId = 1;
 
-    const state = {
+    const state: MockState = {
       calls: [] as Array<{ command: string; args: CommandArgs }>,
       dns: makeDnsSettings(),
       profiles: [] as ProfileRow[],
+      proxy: makeProxyGroups(),
+      // Every command the mock does not implement lands here so a smoke run can
+      // fail loudly instead of silently exercising an error path (the way the
+      // unmocked boot-time `get_window_chrome_config` used to).
+      unhandled: [] as string[],
       routings: [makeRouting("routing-default", "Default routing", true)],
       runtime: {
-        activeProfileId: null as string | null,
-        mainPid: null as number | null,
-        prePid: null as number | null,
-        runningCoreType: null as string | null,
+        activeProfileId: null,
+        mainPid: null,
+        prePid: null,
+        runningCoreType: null,
         state: "disconnected",
       },
       sources: {
@@ -98,7 +138,7 @@ export async function installTauriSmokeMock(page: Page) {
       },
     };
 
-    function connectionModeStatus() {
+    function connectionModeStatus(): ConnectionModeStatus {
       const mode = state.tun.enabled
         ? "vpn"
         : ["forcedChange", "pac"].includes(state.sysProxy.requestedMode)
@@ -118,9 +158,26 @@ export async function installTauriSmokeMock(page: Page) {
       state.calls.push({ command, args });
 
       switch (command) {
-        case "plugin:event|listen":
-          return Promise.resolve(nextCallbackId++);
-        case "plugin:event|unlisten":
+        case "plugin:event|listen": {
+          // The event name and handler id have to be recorded: `emit` must reach
+          // only the listeners registered for that event, otherwise a
+          // TransientStreamEvent payload would also be routed as an
+          // InvalidateEvent and an AppEvent.
+          const eventId = nextCallbackId++;
+          listeners.push({
+            eventId,
+            eventName: String(args.event ?? ""),
+            handlerId: Number(args.handler ?? 0),
+          });
+          return Promise.resolve(eventId);
+        }
+        case "plugin:event|unlisten": {
+          const index = listeners.findIndex((listener) => listener.eventId === Number(args.eventId ?? -1));
+          if (index >= 0) {
+            listeners.splice(index, 1);
+          }
+          return Promise.resolve(null);
+        }
         case "plugin:event|emit":
         case "plugin:event|emit_to":
         case "plugin:resources|close":
@@ -140,6 +197,10 @@ export async function installTauriSmokeMock(page: Page) {
         case "plugin:updater|download_and_install":
         case "plugin:process|restart":
           return Promise.resolve(null);
+        case "get_window_chrome_config":
+          // Called on every boot by use-window-chrome; leaving it unmocked meant
+          // the shell silently fell back through its catch on each smoke run.
+          return Promise.resolve({ titleBarLayout: "none" } satisfies WindowChromeConfig);
         case "load_ui_preferences":
           return Promise.resolve(clone(state.settings.appearance));
         case "load_app_settings":
@@ -181,8 +242,8 @@ export async function installTauriSmokeMock(page: Page) {
         case "set_system_proxy_mode":
           state.sysProxy = {
             ...state.sysProxy,
-            effectiveMode: String(args.mode ?? "forcedClear"),
-            requestedMode: String(args.mode ?? "forcedClear"),
+            effectiveMode: String(args.mode ?? "forcedClear") as SysProxyType,
+            requestedMode: String(args.mode ?? "forcedClear") as SysProxyType,
           };
           return Promise.resolve(clone(state.sysProxy));
         case "tun_status":
@@ -248,31 +309,33 @@ export async function installTauriSmokeMock(page: Page) {
         case "sort_profiles":
           return Promise.resolve(clone(state.profiles));
         case "dedupe_profiles":
-          return Promise.resolve({ kept: state.profiles.length, removedProfileIds: [], total: state.profiles.length });
+          return Promise.resolve(
+            { kept: state.profiles.length, removedProfileIds: [], total: state.profiles.length } satisfies ProfileDedupeResult,
+          );
         case "list_group_child_candidates":
           return Promise.resolve(
             state.profiles.map((row) => ({
               address: profileAddress(row.profile),
-              protocol: readRecord(row.profile, "protocol").kind,
-              profileId: row.profile.id,
+              protocol: readRecord(row.profile, "protocol").kind as ProfileKind,
+              profileId: String(row.profile.id),
               isGroup: ["policyGroup", "proxyChain"].includes(String(readRecord(row.profile, "protocol").kind)),
               reason: null,
-              remarks: row.profile.remarks,
+              remarks: String(row.profile.remarks),
               selectable: true,
-              subscriptionId: row.profile.subscriptionId,
-            })),
+              subscriptionId: nullableString(row.profile.subscriptionId),
+            }) satisfies GroupChildCandidate),
           );
         case "preview_group_profile":
           return Promise.resolve({
             singboxRoutes: [],
             validation: { childProfileIds: [], errors: [], valid: true, warnings: [] },
-          });
+          } satisfies GroupPreview);
         case "list_subscriptions":
-          return Promise.resolve([]);
+          return Promise.resolve([] satisfies Subscription[]);
         case "list_subscription_metadata":
-          return Promise.resolve([]);
+          return Promise.resolve([] satisfies SubscriptionMetadata[]);
         case "list_process_candidates":
-          return Promise.resolve([]);
+          return Promise.resolve([] satisfies ProcessCandidate[]);
         case "save_subscription":
           return Promise.resolve({
             additionalUrl: "",
@@ -286,7 +349,7 @@ export async function installTauriSmokeMock(page: Page) {
             sort: 0,
             url: "",
             userAgent: "",
-          });
+          } satisfies Subscription);
         case "delete_subscriptions":
           return Promise.resolve(0);
         case "export_profile_share_links": {
@@ -302,25 +365,46 @@ export async function installTauriSmokeMock(page: Page) {
             return `vless://${encodeURIComponent(String(protocol.uuid ?? protocol.password ?? ""))}@${String(server.address)}:${String(server.port)}#${encodeURIComponent(String(profile.remarks))}`;
           });
 
-          return Promise.resolve({ count: links.length, format: "shareLinks", text: links.join("\n") });
+          return Promise.resolve(
+            { count: links.length, format: "shareLinks", text: links.join("\n") } satisfies ExportProfilesResult,
+          );
         }
         case "import_profiles_from_text": {
           const row = upsertProfile(importedProfile(String(args.text ?? "")));
-          return Promise.resolve({ imported: 1, importedProfileIds: [row.profile.id], removedExisting: 0, skipped: 0, subscriptionId: args.subscriptionId ?? null });
+          // Mirrors every field of the generated `ImportProfilesResult`; a
+          // partial shape let the dialog paper over the contract with `??`.
+          return Promise.resolve({
+            deduped: 0,
+            discardedNodeOverrides: 0,
+            failed: 0,
+            filtered: 0,
+            imported: 1,
+            importedProfileIds: [String(row.profile.id)],
+            messages: [],
+            parsed: 1,
+            removedDuplicates: 0,
+            removedExisting: 0,
+            skipped: 0,
+            subscriptionId: nullableString(args.subscriptionId),
+            updated: 0,
+            updatedProfileIds: [],
+          } satisfies ImportProfilesResult);
         }
         case "update_subscriptions":
-          return Promise.resolve({ imported: 0, messages: [], removedExisting: 0, skipped: 0, updated: 0 });
+          return Promise.resolve(
+            { imported: 0, messages: [], removedExisting: 0, skipped: 0, updated: 0 } satisfies SubscriptionUpdateResult,
+          );
         case "run_speedtest":
           return Promise.resolve({
-            action: readRecord(args, "request").kind,
+            action: readRecord(args, "request").kind as SpeedTestKind,
             cancelled: false,
             completedCount: 0,
             results: [],
             selectedCount: 0,
-          });
+          } satisfies SpeedtestRunResult);
         case "cancel_speedtest":
         case "speedtest_status":
-          return Promise.resolve({ running: false });
+          return Promise.resolve({ running: false } satisfies SpeedtestStatus);
         case "list_routings":
           return Promise.resolve(clone(state.routings));
         case "save_routing": {
@@ -385,12 +469,19 @@ export async function installTauriSmokeMock(page: Page) {
             ...routing,
             isActive: index === 0,
           }));
+          // `ConfigTemplateImportResult` is {sources, routingIds, activeRoutingId,
+          // reusedExistingRouting}; the old inbounds/systemProxy/tun shape does
+          // not exist in the contract and left sources-tab reading `undefined`.
           return Promise.resolve({
-            inbounds: clone(state.settings.network.inbounds),
-            sources: clone(state.sources),
-            systemProxy: clone(state.settings.network.systemProxy),
-            tun: clone(state.settings.network.tun),
-          });
+            activeRoutingId: state.routings.find((routing) => routing.isActive)?.id ?? null,
+            reusedExistingRouting: true,
+            routingIds: state.routings.map((routing) => routing.id),
+            sources: {
+              geoSourceUrl: state.sources.geoSourceUrl,
+              routeRulesTemplateSourceUrl: state.sources.routeRulesTemplateSourceUrl,
+              srsSourceUrl: state.sources.srsSourceUrl,
+            },
+          } satisfies ConfigTemplateImportResult);
         }
         case "load_dns_settings":
           return Promise.resolve(clone(state.dns));
@@ -398,24 +489,30 @@ export async function installTauriSmokeMock(page: Page) {
           state.dns = mergeDeep(state.dns, readRecord(args, "settings"));
           return Promise.resolve(clone(state.dns));
         case "proxy_list_groups":
-          return Promise.resolve({
-            groups: [
-              {
-                name: "PROXY",
-                nodes: [
-                  { active: true, delay: 23, delayLabel: "23 ms", name: "Smoke Node", proxyType: "VLESS", testable: true, udp: true },
-                  { active: false, delay: 41, delayLabel: "41 ms", name: "Smoke Backup Node", proxyType: "VLESS", testable: true, udp: true },
-                ],
-                now: "Smoke Node",
-                proxyType: "Selector",
-              },
-            ],
-            trafficMode: "rule",
-          });
+          return Promise.resolve(clone(state.proxy));
         case "proxy_test_delay":
-          return Promise.resolve(readStringArray(args, "nodeNames").map((name) => ({ delay: 23, message: null, name })));
-        case "proxy_select_node":
-          return invoke("proxy_list_groups", args);
+          return Promise.resolve(
+            readStringArray(args, "nodeNames").map((name) => ({ delay: 23, message: null, name }) satisfies ProxyDelayTestResult),
+          );
+        case "proxy_select_node": {
+          // Selecting has to move `now`/`active`, otherwise the assertion that a
+          // click switched the node can only ever observe the seeded snapshot.
+          const groupName = String(args.groupName ?? "");
+          const nodeName = String(args.nodeName ?? "");
+          state.proxy = {
+            ...state.proxy,
+            groups: state.proxy.groups.map((group) =>
+              group.name === groupName
+                ? {
+                    ...group,
+                    nodes: group.nodes.map((node) => ({ ...node, active: node.name === nodeName })),
+                    now: nodeName,
+                  }
+                : group,
+            ),
+          };
+          return Promise.resolve(clone(state.proxy));
+        }
         case "proxy_list_connections":
           return Promise.resolve({
             connections: [
@@ -438,30 +535,31 @@ export async function installTauriSmokeMock(page: Page) {
             ],
             downloadTotal: 2048,
             uploadTotal: 1024,
-          });
+          } satisfies ProxyConnectionsSnapshot);
         case "proxy_close_connection":
-          return Promise.resolve({ connections: [], downloadTotal: 0, uploadTotal: 0 });
+          return Promise.resolve({ connections: [], downloadTotal: 0, uploadTotal: 0 } satisfies ProxyConnectionsSnapshot);
         case "proxy_set_traffic_mode":
           state.settings.proxy.trafficMode = String(args.mode ?? "rule");
-          return Promise.resolve({ mode: state.settings.proxy.trafficMode });
+          return Promise.resolve({ mode: state.settings.proxy.trafficMode as TrafficMode } satisfies TrafficModeResponse);
         case "proxy_reload_config":
           return Promise.resolve(null);
         case "proxy_start_monitor":
-          return Promise.resolve({ message: null, running: true, stale: false, state: "running" });
+          return Promise.resolve({ message: null, running: true, stale: false, state: "running" } satisfies ProxyMonitorStatus);
         case "proxy_stop_monitor":
-          return Promise.resolve({ message: null, running: false, stale: true, state: "stopped" });
+          return Promise.resolve({ message: null, running: false, stale: true, state: "stopped" } satisfies ProxyMonitorStatus);
         case "generate_qr_code":
           return Promise.resolve({
             mimeType: "image/svg+xml",
             svg: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><rect width=\"64\" height=\"64\" fill=\"white\"/><rect x=\"8\" y=\"8\" width=\"16\" height=\"16\" fill=\"black\"/><rect x=\"40\" y=\"8\" width=\"16\" height=\"16\" fill=\"black\"/><rect x=\"8\" y=\"40\" width=\"16\" height=\"16\" fill=\"black\"/><rect x=\"32\" y=\"32\" width=\"8\" height=\"8\" fill=\"black\"/></svg>",
-          });
+          } satisfies QrCodeImage);
         case "app_update_status":
-          return Promise.resolve({ currentVersion: "0.1.0", message: null, state: "ready" });
+          return Promise.resolve({ currentVersion: "0.1.0", message: null, state: "ready" } satisfies AppUpdaterStatus);
         case "update_geo_assets":
-          return Promise.resolve([{ bytes: 1024, name: "geoip.db", usedProxy: false }]);
+          return Promise.resolve([{ bytes: 1024, name: "geoip.db", usedProxy: false }] satisfies ResourceUpdateFile[]);
         case "update_srs_assets":
-          return Promise.resolve([{ bytes: 512, name: "rules.srs", usedProxy: false }]);
+          return Promise.resolve([{ bytes: 512, name: "rules.srs", usedProxy: false }] satisfies ResourceUpdateFile[]);
         default:
+          state.unhandled.push(command);
           throw { kind: "state", message: `Unhandled smoke command: ${command}` };
       }
     }
@@ -489,7 +587,11 @@ export async function installTauriSmokeMock(page: Page) {
     };
     window.__VOYA_SMOKE__ = {
       emit(event: string, payload: unknown) {
-        callbacks.forEach((callback, id) => callback({ event, id, payload }));
+        listeners
+          .filter((listener) => listener.eventName === event)
+          .forEach((listener) => {
+            callbacks.get(listener.handlerId)?.({ event, id: listener.handlerId, payload });
+          });
       },
       state,
     };
@@ -576,7 +678,7 @@ export async function installTauriSmokeMock(page: Page) {
         } : null,
         transport: text.includes("type=ws")
           ? { host: "cdn.example.test", kind: "websocket", path: "/ws" }
-          : { header: null, kind: "tcp" },
+          : { header: null, host: null, kind: "tcp", path: null },
       });
     }
 
@@ -602,7 +704,7 @@ export async function installTauriSmokeMock(page: Page) {
       return String(server.address ?? protocol.source ?? "");
     }
 
-    function upsertRouting(input: Record<string, unknown>) {
+    function upsertRouting(input: Record<string, unknown>): Routing {
       const id = String(input.id ?? `routing-smoke-${nextRoutingId++}`);
       const existingIndex = state.routings.findIndex((routing) => routing.id === id);
       const existing = existingIndex >= 0 ? state.routings[existingIndex] : null;
@@ -665,7 +767,7 @@ export async function installTauriSmokeMock(page: Page) {
       };
     }
 
-    function makeAppSettings() {
+    function makeAppSettings(): AppSettingsV1 {
       return {
         schemaVersion: 1,
         appearance: { language: "en", theme: "system" },
@@ -758,7 +860,24 @@ export async function installTauriSmokeMock(page: Page) {
       };
     }
 
-    function makeDnsSettings() {
+    function makeProxyGroups(): ProxyGroupsSnapshot {
+      return {
+        groups: [
+          {
+            name: "PROXY",
+            nodes: [
+              { active: true, delay: 23, delayLabel: "23 ms", name: "Smoke Node", proxyType: "VLESS", testable: true, udp: true },
+              { active: false, delay: 41, delayLabel: "41 ms", name: "Smoke Backup Node", proxyType: "VLESS", testable: true, udp: true },
+            ],
+            now: "Smoke Node",
+            proxyType: "Selector",
+          },
+        ],
+        trafficMode: "rule",
+      };
+    }
+
+    function makeDnsSettings(): DnsSettings {
       return {
         addCommonHosts: true,
         blockBindingQuery: false,
@@ -830,9 +949,6 @@ export async function installTauriSmokeMock(page: Page) {
 
 declare global {
   interface Window {
-    __TAURI_EVENT_PLUGIN_INTERNALS__: {
-      unregisterListener: () => undefined;
-    };
     __TAURI_INTERNALS__: {
       invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
       metadata: {

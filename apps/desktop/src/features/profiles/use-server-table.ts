@@ -21,7 +21,9 @@ import type {
   Profile,
   ProfileListEntry,
   ProfileSortKey,
+  ServerStatItem,
   SpeedTestKind,
+  SpeedTestResult,
   SpeedTestTarget,
 } from "@/ipc/bindings";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -31,7 +33,7 @@ import { useProfileColumnsStore } from "@/stores/profile-columns-store";
 import {
   exportFileFilter,
   exportFileName,
-  formatImportOperationMessage,
+  formatImportSummary,
   isShareLinkExport,
   profilesQueryKey,
   runProfileExport,
@@ -45,6 +47,17 @@ import {
 } from "./server-table-columns";
 import { CONFIG_TYPES } from "./profile-constants";
 import { applyLiveUpdates } from "./server-table-live-updates";
+
+// The statistics stream ticks once per second while traffic flows and the
+// speedtest stream bursts one pending marker per selected profile, so the live
+// maps are only subscribed to while a column that can actually show them is
+// visible. Subscribing unconditionally re-rendered the whole virtualized table
+// (and rebuilt the TanStack row model) once per second to update cells that are
+// hidden by default.
+const TRAFFIC_COLUMN_IDS = ["todayUp", "todayDown", "totalUp", "totalDown"];
+const METRIC_COLUMN_IDS = ["delay", "speed", "ipInfo"];
+const EMPTY_SERVER_STATS: Record<string, ServerStatItem> = {};
+const EMPTY_SPEEDTEST_RESULTS: Record<string, SpeedTestResult> = {};
 
 type DialogState =
   | { mode: "create"; profile?: null }
@@ -69,8 +82,14 @@ export function useServerTable() {
   const columnVisibility = useProfileColumnsStore((state) => state.columnVisibility);
   const setColumnVisibility = useProfileColumnsStore((state) => state.setColumnVisibility);
   const resetColumnVisibility = useProfileColumnsStore((state) => state.resetColumnVisibility);
-  const serverStatsByProfileId = useRuntimeEventStore((state) => state.serverStatsByProfileId);
-  const speedtestResultsByProfileId = useRuntimeEventStore((state) => state.speedtestResultsByProfileId);
+  const trafficColumnsVisible = TRAFFIC_COLUMN_IDS.some((id) => columnVisibility[id] !== false);
+  const metricColumnsVisible = METRIC_COLUMN_IDS.some((id) => columnVisibility[id] !== false);
+  const serverStatsByProfileId = useRuntimeEventStore((state) =>
+    trafficColumnsVisible ? state.serverStatsByProfileId : EMPTY_SERVER_STATS,
+  );
+  const speedtestResultsByProfileId = useRuntimeEventStore((state) =>
+    metricColumnsVisible ? state.speedtestResultsByProfileId : EMPTY_SPEEDTEST_RESULTS,
+  );
   const speedtestRunning = useRuntimeEventStore((state) => state.speedtestRunning);
   const setSpeedtestRunning = useRuntimeEventStore((state) => state.setSpeedtestRunning);
   const queryClient = useQueryClient();
@@ -249,7 +268,7 @@ export function useServerTable() {
 
   async function handleDialogImport(result: ImportProfilesResult) {
     setOperationError(null);
-    setOperationMessage(formatImportOperationMessage(result, t));
+    setOperationMessage(formatImportSummary(result, t));
     const importedIndexIds = result.importedProfileIds;
     if (importedIndexIds.length > 0) {
       setFilterText("");

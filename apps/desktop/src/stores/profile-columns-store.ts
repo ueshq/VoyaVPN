@@ -1,6 +1,6 @@
-import { functionalUpdate, type Updater, type VisibilityState } from "@tanstack/react-table";
-import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import type { VisibilityState } from "@tanstack/react-table";
+
+import { createColumnVisibilityStore } from "./column-visibility-store";
 
 /**
  * Default profiles-table column visibility. Only the high-signal columns ship
@@ -27,56 +27,7 @@ const DEFAULT_PROFILE_COLUMN_VISIBILITY: VisibilityState = {
   subscriptionId: true,
 };
 
-type ProfileColumnsState = {
-  columnVisibility: VisibilityState;
-  resetColumnVisibility: () => void;
-  setColumnVisibility: (updater: Updater<VisibilityState>) => void;
-};
-
-export const useProfileColumnsStore = create<ProfileColumnsState>()(
-  persist(
-    (set) => ({
-      columnVisibility: { ...DEFAULT_PROFILE_COLUMN_VISIBILITY },
-      resetColumnVisibility: () => set({ columnVisibility: { ...DEFAULT_PROFILE_COLUMN_VISIBILITY } }),
-      setColumnVisibility: (updater) =>
-        set((state) => ({ columnVisibility: functionalUpdate(updater, state.columnVisibility) })),
-    }),
-    {
-      name: "voyavpn.profileColumns",
-      partialize: (state) => ({ columnVisibility: state.columnVisibility }),
-      // Overlay persisted choices on top of the current defaults so columns
-      // added in a future release inherit their default visibility instead of
-      // disappearing for users with an older persisted map.
-      merge: (persistedState, currentState) => ({
-        ...currentState,
-        columnVisibility: {
-          ...DEFAULT_PROFILE_COLUMN_VISIBILITY,
-          ...readPersistedVisibility(persistedState),
-        },
-      }),
-      storage: createJSONStorage(() => window.localStorage),
-    },
-  ),
+export const useProfileColumnsStore = createColumnVisibilityStore(
+  "voyavpn.profileColumns",
+  DEFAULT_PROFILE_COLUMN_VISIBILITY,
 );
-
-function readPersistedVisibility(persistedState: unknown): VisibilityState {
-  if (!persistedState || typeof persistedState !== "object") {
-    return {};
-  }
-
-  const candidate = (persistedState as { columnVisibility?: unknown }).columnVisibility;
-
-  if (!candidate || typeof candidate !== "object") {
-    return {};
-  }
-
-  const result: VisibilityState = {};
-
-  for (const [key, value] of Object.entries(candidate as Record<string, unknown>)) {
-    if (typeof value === "boolean") {
-      result[key] = value;
-    }
-  }
-
-  return result;
-}

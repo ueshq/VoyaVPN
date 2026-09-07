@@ -50,8 +50,8 @@ impl ShareFmt for ShadowsocksFmt {
 
         let user_info = base64_encode(&format!("{method}:{password}"), true);
         let mut query = Vec::new();
-        if let Some(plugin) = shadowsocks_plugin(item) {
-            query.push(("plugin".to_string(), url_encode(&plugin)));
+        if let Some(plugin) = shadowsocks_plugin_for(item) {
+            query.push(("plugin".to_string(), url_encode(&plugin.render_share())));
         }
 
         Ok(to_uri(
@@ -240,59 +240,4 @@ fn parse_shadowsocks_plugin(plugin: &str, item: &mut ProfileItem) -> Result<(), 
         }
     }
     Ok(())
-}
-
-fn shadowsocks_plugin(item: &ProfileItem) -> Option<String> {
-    let mut plugin = String::new();
-    let mut plugin_args = String::new();
-
-    let is_http_obfs = matches!(
-        &item.transport,
-        Some(ProfileTransport::Tcp { header, .. })
-            if header.as_deref() == Some(RAW_HEADER_HTTP)
-    );
-    if is_http_obfs {
-        let Some(ProfileTransport::Tcp { host, .. }) = &item.transport else {
-            return None;
-        };
-        plugin = "obfs-local".to_string();
-        plugin_args = format!("obfs=http;obfs-host={};", host.as_deref().unwrap_or(""));
-    } else {
-        if let Some(ProfileTransport::Websocket { host, path }) = &item.transport {
-            plugin_args.push_str("mode=websocket;");
-            plugin_args.push_str(&format!("host={};", host.as_deref().unwrap_or("")));
-            let path = path
-                .as_deref()
-                .unwrap_or("")
-                .replace('\\', "\\\\")
-                .replace('=', "\\=")
-                .replace(',', "\\,");
-            plugin_args.push_str(&format!("path={path};"));
-        }
-        if item.stream_security() == STREAM_SECURITY_TLS {
-            plugin_args.push_str("tls;");
-            if let Some(cert_raw) = item
-                .tls
-                .as_ref()
-                .and_then(|tls| tls.certificate_pem.as_deref())
-                .and_then(extract_first_pem_body)
-            {
-                plugin_args.push_str(&format!("certRaw={};", cert_raw.replace('=', "\\=")));
-            }
-        }
-        if !plugin_args.is_empty() {
-            plugin = "v2ray-plugin".to_string();
-            plugin_args.push_str("mux=0;");
-        }
-    }
-
-    if plugin.is_empty() {
-        None
-    } else {
-        let mut result = format!("{plugin};{plugin_args}");
-        if result.ends_with(';') {
-            result.pop();
-        }
-        Some(result)
-    }
 }

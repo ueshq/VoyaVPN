@@ -1,9 +1,8 @@
 use sqlx::{sqlite::SqliteRow, Row};
-use tokio::sync::Mutex;
 use voya_core::ServerStatItem;
 
 use crate::{
-    executor::{run_query, RepositoryExecutor},
+    executor::{repository_constructors, run_query, RepositoryExecutor},
     Result,
 };
 
@@ -12,23 +11,9 @@ pub struct ServerStatRepository<'executor> {
     executor: RepositoryExecutor<'executor>,
 }
 
+repository_constructors!(ServerStatRepository);
+
 impl<'executor> ServerStatRepository<'executor> {
-    #[must_use]
-    pub(crate) const fn new(pool: &'executor sqlx::SqlitePool) -> Self {
-        Self {
-            executor: RepositoryExecutor::Pool(pool),
-        }
-    }
-
-    #[must_use]
-    pub(crate) const fn new_in_transaction(
-        transaction: &'executor Mutex<sqlx::Transaction<'static, sqlx::Sqlite>>,
-    ) -> Self {
-        Self {
-            executor: RepositoryExecutor::Transaction(transaction),
-        }
-    }
-
     pub async fn upsert(&self, item: &ServerStatItem) -> Result<()> {
         run_query!(
             self.executor,
@@ -132,6 +117,20 @@ impl<'executor> ServerStatRepository<'executor> {
         Ok(result.rows_affected())
     }
 
+    /// Adds one sample to a profile's counters and returns the stored row.
+    ///
+    /// The statistics aggregator calls this every second for as long as a core
+    /// is connected, so it is one statement rather than the read-modify-write it
+    /// used to be (`ensure`'s SELECT, its rollover upsert, then a second
+    /// upsert). Each of those was its own autocommit transaction on the pool,
+    /// which meant two to three journalled commits per second just to bump four
+    /// integers. Doing the arithmetic in SQL also makes the update atomic
+    /// against any other writer.
+    ///
+    /// Unqualified column names in `DO UPDATE SET` are the row's values from
+    /// before this insert, so the `CASE` compares the stored day against the
+    /// sample's and starts the daily counters over when they differ — the day
+    /// rollover `ensure` performed with an extra statement.
     pub async fn add_traffic(
         &self,
         index_id: &str,
@@ -139,15 +138,40 @@ impl<'executor> ServerStatRepository<'executor> {
         proxy_up: i64,
         proxy_down: i64,
     ) -> Result<ServerStatItem> {
-        let mut item = self.ensure(index_id, date_now).await?;
-        item.today_up = item.today_up.saturating_add(proxy_up.max(0));
-        item.today_down = item.today_down.saturating_add(proxy_down.max(0));
-        item.total_up = item.total_up.saturating_add(proxy_up.max(0));
-        item.total_down = item.total_down.saturating_add(proxy_down.max(0));
-        item.date_now = date_now;
-        self.upsert(&item).await?;
+        let up = proxy_up.max(0);
+        let down = proxy_down.max(0);
+        let row = run_query!(
+            self.executor,
+            sqlx::query(
+                r#"
+            INSERT INTO server_stat_items (
+                index_id, total_up, total_down, today_up, today_down, date_now
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(index_id) DO UPDATE SET
+                total_up = total_up + excluded.total_up,
+                total_down = total_down + excluded.total_down,
+                today_up = CASE
+                    WHEN date_now = excluded.date_now THEN today_up + excluded.today_up
+                    ELSE excluded.today_up
+                END,
+                today_down = CASE
+                    WHEN date_now = excluded.date_now THEN today_down + excluded.today_down
+                    ELSE excluded.today_down
+                END,
+                date_now = excluded.date_now
+            RETURNING *
+            "#,
+            )
+            .bind(index_id)
+            .bind(up)
+            .bind(down)
+            .bind(up)
+            .bind(down)
+            .bind(date_now),
+            fetch_one
+        )?;
 
-        Ok(item)
+        row_to_server_stat(row)
     }
 
     pub async fn clone_stat(

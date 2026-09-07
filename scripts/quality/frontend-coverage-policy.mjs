@@ -1,0 +1,161 @@
+/**
+ * Which frontend modules the coverage gate actually protects.
+ *
+ * The first version of this policy listed nine files that were all already at
+ * 97.5-100% lines, so the 80% floor could not fail for any code that existed,
+ * while the global average absorbed runtime modules sitting at 0-42%. The list
+ * below is rebuilt around the modules whose behaviour changes proxy/TUN state
+ * or drops backend events, with two tiers:
+ *
+ * - `criticalModules`: fully covered contracts, all four metrics >= 80%.
+ * - `runtimeModules`: a ratchet. Each floor sits roughly ten points under the
+ *   coverage the module had when it was added, so the gate fails on a
+ *   regression instead of only on a catastrophe. **Raise the floor whenever you
+ *   raise the coverage** — that is the whole point of the tier.
+ *
+ * `untestedModules` is reported, never failed: those files have no meaningful
+ * tests yet, and the report keeps the gap visible in every CI log and asks for
+ * a promotion into `runtimeModules` once tests land.
+ */
+
+export const globalMinimums = {
+  lines: 80,
+  statements: 80,
+  functions: 80,
+  branches: 70,
+};
+
+// Kept module-local: it is only ever the default for `evaluateCoverage`.
+const criticalMinimum = 80;
+
+export const criticalModules = [
+  "apps/desktop/src/ipc/commands.ts",
+  "apps/desktop/src/ipc/process.ts",
+  "apps/desktop/src/ipc/updater.ts",
+  "apps/desktop/src/features/settings/use-app-settings.ts",
+  "apps/desktop/src/features/dns/use-dns-settings.ts",
+  "apps/desktop/src/features/home/connection-mode.ts",
+  "apps/desktop/src/features/profiles/profile-form-schema.ts",
+  "apps/desktop/src/features/proxy/proxy-group-order.ts",
+  "apps/desktop/src/features/routing/per-app-proxy-rule.ts",
+  "apps/desktop/src/features/routing/routing-form-schema.ts",
+  "apps/desktop/src/features/routing/routing-form-values.ts",
+  "apps/desktop/src/features/routing/routing-profile-dialog.tsx",
+  "apps/desktop/src/features/routing/routing-rule-dialog.tsx",
+  "apps/desktop/src/features/routing/use-routing-screen.ts",
+  "apps/desktop/src/stores/shell-store.ts",
+  "packages/utils/src/formatting.ts",
+  "packages/utils/src/operational-redaction.ts",
+];
+
+export const runtimeModules = [
+  // The single mounted bridge for all three ADR-0002 event channels.
+  { path: "apps/desktop/src/ipc/event-bridge.tsx", lines: 65, branches: 45 },
+  { path: "apps/desktop/src/ipc/runtime-event-store.ts", lines: 65, branches: 50 },
+  // Connect/disconnect and mode switching on the home screen.
+  { path: "apps/desktop/src/features/home/use-home-runtime.ts", lines: 65, branches: 50 },
+  { path: "apps/desktop/src/features/home/runtime-action.ts", lines: 50, branches: 25 },
+  // Proxy-monitor lifecycle.
+  { path: "apps/desktop/src/components/app-shell/app-shell.tsx", lines: 75, branches: 55 },
+  { path: "apps/desktop/src/features/profiles/use-server-table.ts", lines: 75, branches: 55 },
+  { path: "apps/desktop/src/features/profiles/server-table-actions.ts", lines: 55, branches: 45 },
+  // Certificate fetch/hash panel in the profile dialog: 97/80 when promoted.
+  { path: "apps/desktop/src/features/profiles/profile-security-panel.tsx", lines: 85, branches: 70 },
+  { path: "apps/desktop/src/features/groups/group-builder.tsx", lines: 60, branches: 40 },
+  { path: "apps/desktop/src/features/proxy/proxy-groups-screen.tsx", lines: 60, branches: 65 },
+  { path: "apps/desktop/src/features/updates/app-update-flow.ts", lines: 85, branches: 75 },
+  { path: "apps/desktop/src/stores/preferences-store.ts", lines: 80, branches: 55 },
+  { path: "apps/desktop/src/stores/toast-store.ts", lines: 70, branches: 80 },
+  { path: "apps/desktop/src/stores/connection-columns-store.ts", lines: 45, branches: 10 },
+  { path: "apps/desktop/src/stores/profile-columns-store.ts", lines: 45, branches: 10 },
+];
+
+/**
+ * Modules with no meaningful tests. Reported so the gap stays visible; promote
+ * one into `runtimeModules` (with a floor) as soon as it gets tests.
+ */
+export const untestedModules = [
+  { path: "apps/desktop/src/components/app-shell/modal-host.tsx", promoteAbove: 40 },
+  { path: "apps/desktop/src/features/routing/routing-rules-panel.tsx", promoteAbove: 40 },
+  { path: "apps/desktop/src/features/routing/routing-dialogs.tsx", promoteAbove: 40 },
+  { path: "apps/desktop/src/stores/modal-store.ts", promoteAbove: 40 },
+];
+
+const METRICS = ["lines", "functions", "branches", "statements"];
+
+function percent(entry, metric) {
+  const value = entry?.[metric]?.pct;
+  return typeof value === "number" ? value : null;
+}
+
+/**
+ * @param {(relativePath: string) => object | undefined} lookup
+ *   Resolves a repository-relative path to its coverage-summary entry.
+ */
+export function evaluateCoverage({ total, lookup, policy = {} }) {
+  const {
+    globals = globalMinimums,
+    critical = criticalModules,
+    runtime = runtimeModules,
+    untested = untestedModules,
+    criticalFloor = criticalMinimum,
+  } = policy;
+
+  const failures = [];
+  const warnings = [];
+
+  for (const metric of METRICS) {
+    const actual = percent(total, metric);
+    const minimum = globals[metric];
+    if (typeof minimum !== "number") continue;
+    if (actual === null || actual < minimum) {
+      failures.push(`total: ${metric} ${actual ?? "missing"}% < ${minimum}%`);
+    }
+  }
+
+  for (const relativePath of critical) {
+    const entry = lookup(relativePath);
+    if (!entry) {
+      failures.push(`${relativePath}: missing from the coverage report`);
+      continue;
+    }
+    for (const metric of METRICS) {
+      const actual = percent(entry, metric);
+      if (actual === null || actual < criticalFloor) {
+        failures.push(`${relativePath}: ${metric} ${actual ?? "missing"}% < ${criticalFloor}%`);
+      }
+    }
+  }
+
+  for (const module of runtime) {
+    const entry = lookup(module.path);
+    if (!entry) {
+      failures.push(`${module.path}: missing from the coverage report`);
+      continue;
+    }
+    for (const metric of ["lines", "branches"]) {
+      const minimum = module[metric];
+      if (typeof minimum !== "number") continue;
+      const actual = percent(entry, metric);
+      if (actual === null || actual < minimum) {
+        failures.push(`${module.path}: ${metric} ${actual ?? "missing"}% < ${minimum}% (runtime floor)`);
+      }
+    }
+  }
+
+  for (const module of untested) {
+    const entry = lookup(module.path);
+    if (!entry) {
+      warnings.push(`${module.path}: still absent from the coverage report`);
+      continue;
+    }
+    const actual = percent(entry, "lines") ?? 0;
+    warnings.push(
+      actual >= module.promoteAbove
+        ? `${module.path}: now at ${actual}% lines — move it into runtimeModules with a floor`
+        : `${module.path}: ${actual}% lines, still untested`,
+    );
+  }
+
+  return { failures, warnings };
+}

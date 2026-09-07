@@ -30,7 +30,16 @@
     "dedupeProfilesTitle": "Удалить дубликаты профилей?",
     "deleteProfilesConfirm": "Delete",
     "deleteProfilesDescription": "{{count}} selected profile(s) will be permanently deleted. This action cannot be undone.",
-    "deleteProfilesTitle": "Delete profiles?"
+    "deleteProfilesTitle": "Delete profiles?",
+    "deleteRoutingConfirm": "Удалить",
+    "deleteRoutingDescription": "«{{name}}» и его правила ({{count}}) будут удалены безвозвратно. Это действие нельзя отменить.",
+    "deleteRoutingRuleConfirm": "Удалить",
+    "deleteRoutingRuleDescription": "Выбранное правило маршрутизации будет удалено безвозвратно. Это действие нельзя отменить.",
+    "deleteRoutingRuleTitle": "Удалить правило?",
+    "deleteRoutingTitle": "Удалить профиль маршрутизации?",
+    "deleteSubscriptionConfirm": "Удалить",
+    "deleteSubscriptionDescription": "«{{name}}» и все импортированные из него профили будут удалены безвозвратно. Это действие нельзя отменить.",
+    "deleteSubscriptionTitle": "Удалить подписку?"
   },
   "home": {
     "aria": "Главная подключения",
@@ -101,6 +110,24 @@
     "hotkeyKey": "Hotkey key",
     "hotkeyKeyPlaceholder": "Нажмите клавишу",
     "hotkeyShowWindow": "Show window",
+    "keyName": {
+      "backspace": "Backspace",
+      "delete": "Delete",
+      "down": "Вниз",
+      "end": "End",
+      "enter": "Enter",
+      "escape": "Esc",
+      "home": "Home",
+      "insert": "Insert",
+      "left": "Влево",
+      "pageDown": "Page Down",
+      "pageUp": "Page Up",
+      "right": "Вправо",
+      "space": "Пробел",
+      "tab": "Tab",
+      "unknown": "Клавиша {{keyCode}}",
+      "up": "Вверх"
+    },
     "loading": "Loading",
     "routeTemplateSource": "Источник шаблона маршрутизации",
     "runtimeCore": "Core",
@@ -136,6 +163,7 @@
       "chainMarker": "Chain",
       "chooseChildren": "Choose children",
       "chooseDescription": "Choose servers, policy groups, or proxy chains for the current group.",
+      "draftName": "Черновая группа",
       "filterChildren": "Filter child profiles",
       "groupFallback": "Group",
       "groupMarker": "Group",
@@ -302,7 +330,17 @@
         "clipboard": "Import from clipboard",
         "clipboardEmpty": "Clipboard is empty.",
         "clipboardUnavailable": "Clipboard text read is unavailable in this WebView.",
-        "discardedNodeOverrides": "Discarded {{count}} node-level override(s); global settings will be used."
+        "discardedNodeOverrides": "Discarded {{count}} node-level override(s); global settings will be used.",
+        "summary": {
+          "deduped": "Пропущено дубликатов в данных: {{count}}.",
+          "failed": "Не удалось разобрать: {{count}}.",
+          "filtered": "Отфильтровано: {{count}}.",
+          "imported": "Импортировано профилей: {{count}}.",
+          "removedDuplicates": "Удалено дубликатов: {{count}}.",
+          "skipped": "Пропущено: {{count}}.",
+          "target": "Цель: {{target}}.",
+          "updated": "Обновлено: {{count}}."
+        }
       },
       "importDialog": {
         "description": "Import share links, subscription URLs, or JSON payloads.",
@@ -353,7 +391,6 @@
       "speedtest": {
         "buttonTitle": "{{label}} speedtest",
         "cancelTitle": "Cancel speedtest",
-        "fast": "Fast",
         "mixed": "Mixed",
         "more": "More speed tests",
         "real": "Real",
@@ -376,7 +413,14 @@
         "rows": "{{rows}} rows",
         "subscriptions": "Subscriptions"
       },
-      "untitled": "Untitled"
+      "untitled": "Untitled",
+      "validation": {
+        "addressRequired": "укажите адрес",
+        "configSourceRequired": "укажите путь к конфигурации или источник JSON",
+        "credentialRequired": "укажите пароль или ID",
+        "remarksRequired": "укажите примечание",
+        "uuidRequired": "укажите UUID"
+      }
     },
     "proxyConnections": {
       "columns": {
@@ -498,6 +542,8 @@
     "node": "Node",
     "process": "Process",
     "reloadConfigFailed": "Не удалось перезагрузить конфигурацию ядра",
+    "requiresCore": "Сначала подключитесь",
+    "requiresCoreDescription": "Группы прокси станут доступны после запуска ядра.",
     "selectNodeFailed": "Не удалось переключить узел",
     "source": "Source",
     "testAll": "Проверить все",
@@ -512,6 +558,7 @@
     "viewTabsAria": "Виды подключений"
   },
   "qr": {
+    "clipboardImageMissing": "В буфере обмена нет изображения.",
     "clipboardImageUnavailable": "Clipboard image read is unavailable in this WebView.",
     "clipboardUnavailable": "Clipboard text read is unavailable in this WebView.",
     "content": "Content",
@@ -521,6 +568,11 @@
     "scanClipboardImage": "Clipboard image",
     "scanImage": "Scan image",
     "scanScreen": "Screen",
+    "screenCaptureUnavailable": "Захват экрана недоступен в этом WebView.",
+    "screenFrameUnavailable": "Захват экрана не выдал видеокадр.",
+    "screenFrameUnencodable": "Не удалось закодировать снятый кадр экрана.",
+    "screenFrameUnreadable": "Не удалось прочитать снятый кадр экрана.",
+    "screenStreamUnavailable": "Не удалось загрузить поток захвата экрана.",
     "screenUnavailable": "Screen QR scanning is unavailable on this platform or permission state."
   },
   "settings": {
@@ -662,6 +714,21 @@
     "title": "Check Updates",
     "updateNow": "Update now",
     "waiting": "Waiting"
+  },
+  "validation": {
+    "dnsSettings": "Не удалось проверить настройки DNS",
+    "expectedIps": "Ожидаемые IP-адреса должны разделяться запятыми без пробелов.",
+    "hostsLine": "Каждая строка hosts должна содержать домен и хотя бы один ответ.",
+    "invalid": "Значение недопустимо.",
+    "listItem": "Элементы списка не могут быть пустыми.",
+    "network": "Сеть должна быть tcp, udp или tcp,udp.",
+    "port": "Порт должен быть списком портов или диапазонов, разделённых запятыми.",
+    "portRange": "Значения портов должны быть от 0 до 65535, а диапазоны — возрастающими.",
+    "remarksLength": "Примечание не должно превышать 256 символов.",
+    "urlCredentials": "URL не должен содержать учётные данные.",
+    "urlHost": "URL должен содержать имя хоста.",
+    "urlHttps": "URL должен использовать https://.",
+    "urlInvalid": "Некорректный URL."
   },
   "window": {
     "close": "Закрыть",

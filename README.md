@@ -102,17 +102,31 @@ Run the complete local CI parity suite:
 pnpm run verify:local
 ```
 
-Run the final gate checks individually:
+Run the final gate checks individually. `scripts/quality/verify-local.mjs` is the
+source of truth for this list and its order; CI's `baseline` job runs the same
+steps:
 
 ```sh
-pnpm run check:rust:test
+pnpm run check:architecture
+pnpm run check:lockfile
+pnpm run check:rust:fmt
+pnpm run check:rust:clippy
 pnpm run check:rust:deps
+pnpm run check:rust:test
 pnpm run check:frontend:typecheck
-pnpm run check:frontend:test
+pnpm run check:frontend:coverage
 pnpm run check:frontend:lint
+pnpm run check:frontend:bundle
+pnpm run check:frontend:smoke:mock
 pnpm run check:dead-code
-pnpm check:bindings
+pnpm run check:sing-box
+pnpm run check:bindings
+pnpm run check:i18n
 ```
+
+`pnpm run check:frontend:test` runs the same suite without the coverage gate, and
+`pnpm run check:desktop:smoke` (packaged shell through `tauri-driver`) runs in its
+own Linux CI job rather than in `verify:local`.
 
 Run one desktop frontend test file:
 

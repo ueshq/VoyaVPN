@@ -194,15 +194,12 @@ pub fn parse_full_custom_config(
     if let Some(import) = parse_singbox_custom(trimmed, sub_remarks)? {
         return Ok(vec![import]);
     }
-    if contains_all_ci(trimmed, &["server", "auth", "up", "down", "listen"]) {
-        return Ok(vec![custom_import(
-            CustomConfigKind::Hysteria2,
-            "json",
-            trimmed,
-            sub_remarks.unwrap_or("hysteria2_custom"),
-        )]);
-    }
 
+    // There is deliberately no "looks like a Hysteria2 native config" fallback:
+    // VoyaVPN only supervises sing-box, so importing such text produced a
+    // profile that could not run and whose first diagnostic was a `sing-box
+    // check` failure at connect time. Reporting the import as invalid here
+    // keeps the failure at the point the user can act on it.
     Err(ShareError::InvalidFullConfig)
 }
 

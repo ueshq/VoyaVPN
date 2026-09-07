@@ -4,8 +4,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
+import type { ImportProfilesResult } from "@/ipc/bindings";
 
 import { ImportProfilesDialog } from "./import-profiles-dialog";
+import { QrScanError } from "./qr-errors";
 
 const ipcMocks = vi.hoisted(() => ({
   importProfilesFromText: vi.fn(),
@@ -51,13 +53,9 @@ beforeEach(async () => {
   Object.values(ipcMocks).forEach((mock) => mock.mockReset());
   Object.values(scannerMocks).forEach((mock) => mock.mockReset());
   ipcMocks.listSubscriptions.mockResolvedValue([]);
-  ipcMocks.importProfilesFromText.mockResolvedValue({
-    imported: 1,
-    importedProfileIds: ["profile-from-qr"],
-    removedExisting: 0,
-    skipped: 0,
-    subscriptionId: null,
-  });
+  ipcMocks.importProfilesFromText.mockResolvedValue(
+    makeImportResult({ imported: 1, importedProfileIds: ["profile-from-qr"], parsed: 1 }),
+  );
 });
 
 afterEach(() => {
@@ -68,6 +66,44 @@ afterEach(() => {
   } else {
     Reflect.deleteProperty(navigator, "clipboard");
   }
+});
+
+describe("ImportProfilesDialog import results", () => {
+  it("keeps the dialog open with a localized summary when nothing was imported", async () => {
+    const user = userEvent.setup();
+    ipcMocks.importProfilesFromText.mockResolvedValue(
+      makeImportResult({ failed: 2, messages: ["line 3: unsupported scheme"], parsed: 2, skipped: 1 }),
+    );
+    const { onOpenChange } = renderDialog();
+
+    fireEvent.change(await screen.findByLabelText("Import payload"), {
+      target: { value: "vless://uuid@example.test:443#US" },
+    });
+    await user.click(screen.getByRole("button", { name: "Import payload" }));
+
+    // One import produces exactly one summary: the dialog owns it while it stays
+    // open, the profiles banner owns it once it closes.
+    expect(
+      await screen.findByText(
+        "Imported 0 profile(s). 1 skipped. 2 failed to parse. Target: Manual import.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("line 3: unsupported scheme")).toBeInTheDocument();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("closes without a second summary once something was imported", async () => {
+    const user = userEvent.setup();
+    const { onOpenChange } = renderDialog();
+
+    fireEvent.change(await screen.findByLabelText("Import payload"), {
+      target: { value: "vless://uuid@example.test:443#US" },
+    });
+    await user.click(screen.getByRole("button", { name: "Import payload" }));
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(screen.queryByText(/Imported 1 profile/)).not.toBeInTheDocument();
+  });
 });
 
 describe("ImportProfilesDialog QR scanning", () => {
@@ -166,9 +202,7 @@ describe("ImportProfilesDialog QR scanning", () => {
   });
 
   it("shows the localized no-QR result without changing the payload", async () => {
-    scannerMocks.scanQrBlob.mockRejectedValue(
-      Object.assign(new Error("No QR code found."), { name: "QrNotFoundError" }),
-    );
+    scannerMocks.scanQrBlob.mockRejectedValue(new QrScanError("notFound"));
     renderDialog();
 
     fireEvent.change(await screen.findByLabelText("Scan image"), {
@@ -179,4 +213,41 @@ describe("ImportProfilesDialog QR scanning", () => {
     expect(screen.getByLabelText("Import payload")).toHaveValue("");
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
   });
+
+  it("translates every scanner failure code instead of surfacing its raw message", async () => {
+    scannerMocks.readClipboardImageBlob.mockRejectedValue(new QrScanError("clipboardImageMissing"));
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { read: vi.fn() },
+    });
+    renderDialog();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Clipboard image" }));
+
+    // The scanner throws codes, so the sentence comes from the locale files.
+    expect(await screen.findByText("Clipboard does not contain an image.")).toBeInTheDocument();
+    expect(screen.queryByText("clipboardImageMissing")).not.toBeInTheDocument();
+  });
 });
+
+// Full `ImportProfilesResult` shape; a partial one is what let the dialog paper
+// over non-nullable contract fields with `??`.
+function makeImportResult(overrides: Partial<ImportProfilesResult> = {}): ImportProfilesResult {
+  return {
+    deduped: 0,
+    discardedNodeOverrides: 0,
+    failed: 0,
+    filtered: 0,
+    imported: 0,
+    importedProfileIds: [],
+    messages: [],
+    parsed: 0,
+    removedDuplicates: 0,
+    removedExisting: 0,
+    skipped: 0,
+    subscriptionId: null,
+    updated: 0,
+    updatedProfileIds: [],
+    ...overrides,
+  };
+}

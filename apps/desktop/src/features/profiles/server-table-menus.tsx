@@ -19,7 +19,7 @@ import {
   Wifi,
   Zap,
 } from "lucide-react";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@voya/ui/components/button";
@@ -43,6 +43,7 @@ import {
 } from "@voya/ui/components/menubar";
 import { moveProfile } from "@/ipc";
 import type { ProfileListEntry, SpeedTestKind, SpeedTestTarget } from "@/ipc/bindings";
+import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
 import { MOVE_ACTIONS, SPEED_ACTIONS } from "./profile-constants";
@@ -50,8 +51,56 @@ import type { ProfileExportKind } from "./server-table-actions";
 import type { TranslateFn } from "./server-table-columns";
 import type { ServerTableController } from "./use-server-table";
 
-// Speedtest split button: the default `Fast` ping runs straight from the primary
-// control, while the chevron opens a menu for the remaining probe modes plus the
+// The Menubar and ContextMenu variants of the same list are rendered from one
+// descriptor array through an injected item primitive, so a new export kind or
+// probe mode is added once instead of two or three times (which is how the
+// duplicated Fast/Real latency entry went unnoticed).
+type MenuItemProps = {
+  children: ReactNode;
+  disabled?: boolean;
+  onSelect?: () => void;
+  title?: string;
+};
+
+type MenuItemComponent = (props: MenuItemProps) => ReactNode;
+type MenuSeparatorComponent = (props: { className?: string }) => ReactNode;
+
+type MenuPrimitives = {
+  Item: MenuItemComponent;
+  Separator: MenuSeparatorComponent;
+};
+
+const MENUBAR_PRIMITIVES: MenuPrimitives = { Item: MenubarItem, Separator: MenubarSeparator };
+const CONTEXT_MENU_PRIMITIVES: MenuPrimitives = { Item: ContextMenuItem, Separator: ContextMenuSeparator };
+
+type ExportMenuEntry =
+  | { icon: LucideIcon; kind: ProfileExportKind; labelKey: TranslationKey; mode: "export" | "save" }
+  | { icon: LucideIcon; labelKey: TranslationKey; mode: "qr" }
+  | { mode: "separator" };
+
+const EXPORT_MENU_ENTRIES: readonly ExportMenuEntry[] = [
+  { icon: Link, kind: "shareLinks", labelKey: "panes.profiles.export.shareLinks", mode: "export" },
+  { icon: Share2, kind: "shareBase64", labelKey: "panes.profiles.export.shareBase64", mode: "export" },
+  { icon: Link, kind: "voyaBundle", labelKey: "panes.profiles.export.voyaBundle", mode: "export" },
+  { icon: FileJson2, kind: "clientConfig", labelKey: "panes.profiles.export.clientConfig", mode: "export" },
+  { mode: "separator" },
+  { icon: QrCode, labelKey: "panes.profiles.export.showQr", mode: "qr" },
+  { icon: Download, kind: "shareLinks", labelKey: "panes.profiles.export.saveShareLinks", mode: "save" },
+  { icon: FileJson2, kind: "clientConfig", labelKey: "panes.profiles.export.saveClientConfig", mode: "save" },
+];
+
+// `latency` is the real-delay probe; there is no separate cheap "fast" kind in
+// `SpeedTestKind`, so the menu offers each probe exactly once.
+const SPEED_MENU_ENTRIES: ReadonlyArray<{ action: SpeedTestKind; icon: LucideIcon; labelKey: TranslationKey }> = [
+  { action: SPEED_ACTIONS.TcpConnect, icon: Activity, labelKey: "panes.profiles.speedtest.tcp" },
+  { action: SPEED_ACTIONS.Latency, icon: Clock, labelKey: "panes.profiles.speedtest.real" },
+  { action: SPEED_ACTIONS.Udp, icon: Radio, labelKey: "panes.profiles.speedtest.udp" },
+  { action: SPEED_ACTIONS.Download, icon: Gauge, labelKey: "panes.profiles.speedtest.speed" },
+  { action: SPEED_ACTIONS.Mixed, icon: Wifi, labelKey: "panes.profiles.speedtest.mixed" },
+];
+
+// Speedtest split button: the default real-delay probe runs straight from the
+// primary control, while the chevron opens a menu for every probe mode plus the
 // running-only Stop. The dropdown reuses the Menubar primitive (no new
 // dependency) so its trigger and items expose `menuitem` roles, mirroring the
 // Columns menu.
@@ -100,40 +149,11 @@ export function SpeedtestSplitButton({
             </Button>
           </MenubarTrigger>
           <MenubarContent align="start">
-            <SpeedMenuItem
-              action={SPEED_ACTIONS.TcpConnect}
-              disabled={running}
-              icon={Activity}
-              label={t("panes.profiles.speedtest.tcp")}
+            <SpeedMenuItems
               onRun={onRun}
-            />
-            <SpeedMenuItem
-              action={SPEED_ACTIONS.Latency}
-              disabled={running}
-              icon={Clock}
-              label={t("panes.profiles.speedtest.real")}
-              onRun={onRun}
-            />
-            <SpeedMenuItem
-              action={SPEED_ACTIONS.Udp}
-              disabled={running}
-              icon={Radio}
-              label={t("panes.profiles.speedtest.udp")}
-              onRun={onRun}
-            />
-            <SpeedMenuItem
-              action={SPEED_ACTIONS.Download}
-              disabled={running}
-              icon={Gauge}
-              label={t("panes.profiles.speedtest.speed")}
-              onRun={onRun}
-            />
-            <SpeedMenuItem
-              action={SPEED_ACTIONS.Mixed}
-              disabled={running}
-              icon={Wifi}
-              label={t("panes.profiles.speedtest.mixed")}
-              onRun={onRun}
+              primitives={MENUBAR_PRIMITIVES}
+              running={running}
+              t={t}
             />
             <MenubarSeparator />
             <MenubarItem
@@ -198,47 +218,11 @@ export function ProfileRowContextMenu({
             {t("panes.profiles.menu.speedtest")}
           </ContextMenuSubTrigger>
           <ContextMenuSubContent>
-            <ContextSpeedMenuItem
-              action={SPEED_ACTIONS.Latency}
-              disabled={speedtestRunning}
-              icon={Zap}
-              label={t("panes.profiles.speedtest.fast")}
+            <SpeedMenuItems
               onRun={runTargetSpeedtest}
-            />
-            <ContextSpeedMenuItem
-              action={SPEED_ACTIONS.TcpConnect}
-              disabled={speedtestRunning}
-              icon={Activity}
-              label={t("panes.profiles.speedtest.tcp")}
-              onRun={runTargetSpeedtest}
-            />
-            <ContextSpeedMenuItem
-              action={SPEED_ACTIONS.Latency}
-              disabled={speedtestRunning}
-              icon={Clock}
-              label={t("panes.profiles.speedtest.real")}
-              onRun={runTargetSpeedtest}
-            />
-            <ContextSpeedMenuItem
-              action={SPEED_ACTIONS.Udp}
-              disabled={speedtestRunning}
-              icon={Radio}
-              label={t("panes.profiles.speedtest.udp")}
-              onRun={runTargetSpeedtest}
-            />
-            <ContextSpeedMenuItem
-              action={SPEED_ACTIONS.Download}
-              disabled={speedtestRunning}
-              icon={Gauge}
-              label={t("panes.profiles.speedtest.speed")}
-              onRun={runTargetSpeedtest}
-            />
-            <ContextSpeedMenuItem
-              action={SPEED_ACTIONS.Mixed}
-              disabled={speedtestRunning}
-              icon={Wifi}
-              label={t("panes.profiles.speedtest.mixed")}
-              onRun={runTargetSpeedtest}
+              primitives={CONTEXT_MENU_PRIMITIVES}
+              running={speedtestRunning}
+              t={t}
             />
             <ContextMenuSeparator />
             <ContextMenuItem
@@ -281,10 +265,11 @@ export function ProfileRowContextMenu({
             {t("panes.profiles.export.export")}
           </ContextMenuSubTrigger>
           <ContextMenuSubContent>
-            <ContextExportMenuItems
+            <ExportMenuItems
               onExport={(kind) => void handleExport(kind, [indexId])}
               onSave={(kind) => void handleExport(kind, [indexId], false, true)}
               onShowQr={() => void handleExport("shareLinks", [indexId], true)}
+              primitives={CONTEXT_MENU_PRIMITIVES}
               t={t}
             />
           </ContextMenuSubContent>
@@ -303,132 +288,66 @@ export function ExportMenuItems({
   onExport,
   onSave,
   onShowQr,
+  // The toolbar renders inside a Menubar; the row menu passes the ContextMenu
+  // primitives so both surfaces map the same descriptor list.
+  primitives: { Item, Separator } = MENUBAR_PRIMITIVES,
   t,
 }: {
   onExport: (kind: ProfileExportKind) => void;
   onSave: (kind: ProfileExportKind) => void;
   onShowQr: () => void;
+  primitives?: MenuPrimitives;
   t: TranslateFn;
 }) {
   return (
     <>
-      <MenubarItem onSelect={() => onExport("shareLinks")}>
-        <Link className="size-4" aria-hidden="true" />
-        {t("panes.profiles.export.shareLinks")}
-      </MenubarItem>
-      <MenubarItem onSelect={() => onExport("shareBase64")}>
-        <Share2 className="size-4" aria-hidden="true" />
-        {t("panes.profiles.export.shareBase64")}
-      </MenubarItem>
-      <MenubarItem onSelect={() => onExport("voyaBundle")}>
-        <Link className="size-4" aria-hidden="true" />
-        {t("panes.profiles.export.voyaBundle")}
-      </MenubarItem>
-      <MenubarItem onSelect={() => onExport("clientConfig")}>
-        <FileJson2 className="size-4" aria-hidden="true" />
-        {t("panes.profiles.export.clientConfig")}
-      </MenubarItem>
-      <MenubarSeparator />
-      <MenubarItem onSelect={onShowQr}>
-        <QrCode className="size-4" aria-hidden="true" />
-        {t("panes.profiles.export.showQr")}
-      </MenubarItem>
-      <MenubarItem onSelect={() => onSave("shareLinks")}>
-        <Download className="size-4" aria-hidden="true" />
-        {t("panes.profiles.export.saveShareLinks")}
-      </MenubarItem>
-      <MenubarItem onSelect={() => onSave("clientConfig")}>
-        <FileJson2 className="size-4" aria-hidden="true" />
-        {t("panes.profiles.export.saveClientConfig")}
-      </MenubarItem>
+      {EXPORT_MENU_ENTRIES.map((entry, index) => {
+        if (entry.mode === "separator") {
+          return <Separator key={`export-separator-${index}`} />;
+        }
+
+        const Icon = entry.icon;
+        const onSelect =
+          entry.mode === "qr"
+            ? onShowQr
+            : entry.mode === "save"
+              ? () => onSave(entry.kind)
+              : () => onExport(entry.kind);
+
+        return (
+          <Item key={entry.labelKey} onSelect={onSelect}>
+            <Icon className="size-4" aria-hidden="true" />
+            {t(entry.labelKey)}
+          </Item>
+        );
+      })}
     </>
   );
 }
 
-function ContextExportMenuItems({
-  onExport,
-  onSave,
-  onShowQr,
+function SpeedMenuItems({
+  onRun,
+  primitives: { Item } = MENUBAR_PRIMITIVES,
+  running,
   t,
 }: {
-  onExport: (kind: ProfileExportKind) => void;
-  onSave: (kind: ProfileExportKind) => void;
-  onShowQr: () => void;
+  onRun: (kind: SpeedTestKind) => Promise<void>;
+  primitives?: MenuPrimitives;
+  running: boolean;
   t: TranslateFn;
 }) {
   return (
     <>
-      <ContextMenuItem onSelect={() => onExport("shareLinks")}>
-        <Link className="size-4" aria-hidden="true" />
-        {t("panes.profiles.export.shareLinks")}
-      </ContextMenuItem>
-      <ContextMenuItem onSelect={() => onExport("shareBase64")}>
-        <Share2 className="size-4" aria-hidden="true" />
-        {t("panes.profiles.export.shareBase64")}
-      </ContextMenuItem>
-      <ContextMenuItem onSelect={() => onExport("voyaBundle")}>
-        <Link className="size-4" aria-hidden="true" />
-        {t("panes.profiles.export.voyaBundle")}
-      </ContextMenuItem>
-      <ContextMenuItem onSelect={() => onExport("clientConfig")}>
-        <FileJson2 className="size-4" aria-hidden="true" />
-        {t("panes.profiles.export.clientConfig")}
-      </ContextMenuItem>
-      <ContextMenuSeparator />
-      <ContextMenuItem onSelect={onShowQr}>
-        <QrCode className="size-4" aria-hidden="true" />
-        {t("panes.profiles.export.showQr")}
-      </ContextMenuItem>
-      <ContextMenuItem onSelect={() => onSave("shareLinks")}>
-        <Download className="size-4" aria-hidden="true" />
-        {t("panes.profiles.export.saveShareLinks")}
-      </ContextMenuItem>
-      <ContextMenuItem onSelect={() => onSave("clientConfig")}>
-        <FileJson2 className="size-4" aria-hidden="true" />
-        {t("panes.profiles.export.saveClientConfig")}
-      </ContextMenuItem>
+      {SPEED_MENU_ENTRIES.map((entry) => {
+        const Icon = entry.icon;
+
+        return (
+          <Item disabled={running} key={entry.labelKey} onSelect={() => void onRun(entry.action)}>
+            <Icon className="size-4" aria-hidden="true" />
+            {t(entry.labelKey)}
+          </Item>
+        );
+      })}
     </>
-  );
-}
-
-function SpeedMenuItem({
-  action,
-  disabled,
-  icon: Icon,
-  label,
-  onRun,
-}: {
-  action: SpeedTestKind;
-  disabled: boolean;
-  icon: LucideIcon;
-  label: string;
-  onRun: (kind: SpeedTestKind) => Promise<void>;
-}) {
-  return (
-    <MenubarItem disabled={disabled} onSelect={() => void onRun(action)}>
-      <Icon className="size-4" aria-hidden="true" />
-      {label}
-    </MenubarItem>
-  );
-}
-
-function ContextSpeedMenuItem({
-  action,
-  disabled,
-  icon: Icon,
-  label,
-  onRun,
-}: {
-  action: SpeedTestKind;
-  disabled: boolean;
-  icon: LucideIcon;
-  label: string;
-  onRun: (kind: SpeedTestKind) => Promise<void>;
-}) {
-  return (
-    <ContextMenuItem disabled={disabled} onSelect={() => void onRun(action)}>
-      <Icon className="size-4" aria-hidden="true" />
-      {label}
-    </ContextMenuItem>
   );
 }

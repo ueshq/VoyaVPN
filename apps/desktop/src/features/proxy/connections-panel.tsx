@@ -177,6 +177,7 @@ const proxyConnectionsQueryKey = ["proxy-connections"] as const;
 export function ConnectionsPanel() {
   const queryClient = useQueryClient();
   const { t } = useI18n();
+  const coreState = useRuntimeEventStore((state) => state.coreState);
   const monitorStatus = useRuntimeEventStore((state) => state.proxyMonitorStatus);
   const storeSnapshot = useRuntimeEventStore((state) => state.proxyConnections);
   const setProxyConnections = useRuntimeEventStore((state) => state.setProxyConnections);
@@ -382,7 +383,13 @@ export function ConnectionsPanel() {
         </Button>
       </div>
 
-      {connectionsQuery.error ? <InlinePageError>{getErrorMessage(connectionsQuery.error)}</InlinePageError> : null}
+      {/* The Clash API only exists while the core runs, so a disconnected core
+          must not surface as a raw transport error on the connections table. */}
+      {coreState != null && coreState.state !== "connected" ? (
+        <InlinePageError>{t("proxy.requiresCoreDescription")}</InlinePageError>
+      ) : connectionsQuery.error ? (
+        <InlinePageError>{getErrorMessage(connectionsQuery.error)}</InlinePageError>
+      ) : null}
 
       <div className="min-h-0 flex-1 overflow-auto bg-surface-sunken" ref={viewportRef}>
         <div

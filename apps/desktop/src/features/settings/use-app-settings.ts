@@ -1,18 +1,16 @@
 import { useCallback, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { loadAppSettings, saveAppSettings } from "@/ipc";
 import type {
+  AppDnsSettings,
   AppSettingsV1,
   AppearanceSettings,
 } from "@/ipc/bindings";
+import { APP_SETTINGS_QUERY_KEY, DNS_QUERY_KEY } from "@/lib/query-keys";
 import { getErrorMessage } from "@voya/utils/error";
 
 import { applyUiPreferences, UI_PREFERENCES_QUERY_KEY } from "./ui-preferences";
-
-const PREFERENCES_STORAGE_KEY = "voyavpn.preferences";
-const LOCALE_STORAGE_KEY = "voyavpn.locale";
-const APP_SETTINGS_QUERY_KEY = ["app-settings"] as const;
 
 export type AppSettingsController = {
   settings: AppSettingsV1 | null;
@@ -68,7 +66,8 @@ export function useAppSettings(): AppSettingsController {
   const setAppearance = useCallback(
     (preferences: AppearanceSettings) => {
       update((current) => ({ ...current, appearance: preferences }));
-      void applyUiPreferencesPreview(preferences).catch((previewError: unknown) => {
+      // Preview only: the appearance is not persisted until Save-all succeeds.
+      void applyUiPreferences(preferences, { persist: false }).catch((previewError: unknown) => {
         setOperationError(getErrorMessage(previewError));
       });
     },
@@ -95,7 +94,7 @@ export function useAppSettings(): AppSettingsController {
     setOperationError(null);
     setSaved(false);
     try {
-      const authoritative = await saveAppSettings(settings);
+      const authoritative = await saveAppSettings(withFreshestDns(settings, queryClient));
       queryClient.setQueryData(APP_SETTINGS_QUERY_KEY, authoritative);
       setDraft(null);
       setSaved(true);
@@ -132,24 +131,23 @@ export function useAppSettings(): AppSettingsController {
   };
 }
 
-async function applyUiPreferencesPreview(preferences: AppearanceSettings) {
-  const stored = new Map(
-    [PREFERENCES_STORAGE_KEY, LOCALE_STORAGE_KEY].map((key) => [
-      key,
-      window.localStorage.getItem(key),
-    ]),
-  );
-  try {
-    await applyUiPreferences(preferences);
-  } finally {
-    for (const [key, value] of stored) {
-      if (value === null) {
-        window.localStorage.removeItem(key);
-      } else {
-        window.localStorage.setItem(key, value);
-      }
-    }
-  }
+/**
+ * No Settings tab edits `settings.dns`: the DNS pane writes the same backend
+ * field through its own command pair. This controller seeds its draft once from
+ * the cached bundle (`update()` uses `current ?? settingsQuery.data`), so a DNS
+ * save made after that seeding would be silently reverted by Save-all — and,
+ * because the backend compares `simple_dns_item` to decide on a restart, the
+ * core would be restarted with the reverted resolvers. Always post the freshest
+ * DNS block instead of the draft's snapshot of it.
+ */
+function withFreshestDns(settings: AppSettingsV1, queryClient: QueryClient): AppSettingsV1 {
+  // The DNS pane writes this cache synchronously when its own save succeeds, so
+  // it is the authoritative DNS block whenever the pane has been used at all.
+  // `DnsSettings` (its DTO) and `AppDnsSettings` (the bundle's block) are the
+  // same shape; the backend maps one onto the other.
+  const dns = queryClient.getQueryData<AppDnsSettings>(DNS_QUERY_KEY);
+
+  return dns ? { ...settings, dns } : settings;
 }
 
 function settingsEqual(left: AppSettingsV1, right: AppSettingsV1) {

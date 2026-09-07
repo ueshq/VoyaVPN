@@ -1,11 +1,6 @@
 import { BrowserQRCodeReader } from "@zxing/browser";
 
-class QrNotFoundError extends Error {
-  constructor(options?: ErrorOptions) {
-    super("No QR code found.", options);
-    this.name = "QrNotFoundError";
-  }
-}
+import { QrScanError } from "./qr-errors";
 
 export async function scanQrBlob(blob: Blob): Promise<string> {
   const objectUrl = URL.createObjectURL(blob);
@@ -14,16 +9,16 @@ export async function scanQrBlob(blob: Blob): Promise<string> {
     const text = result.getText().trim();
 
     if (!text) {
-      throw new QrNotFoundError();
+      throw new QrScanError("notFound");
     }
 
     return text;
   } catch (error) {
-    if (error instanceof QrNotFoundError) {
+    if (error instanceof QrScanError) {
       throw error;
     }
 
-    throw new QrNotFoundError({ cause: error });
+    throw new QrScanError("notFound", { cause: error });
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
@@ -31,7 +26,7 @@ export async function scanQrBlob(blob: Blob): Promise<string> {
 
 export async function readClipboardImageBlob(): Promise<Blob> {
   if (!navigator.clipboard?.read) {
-    throw new Error("Clipboard image read is unavailable in this WebView.");
+    throw new QrScanError("clipboardImageUnavailable");
   }
 
   const items = await navigator.clipboard.read();
@@ -42,12 +37,12 @@ export async function readClipboardImageBlob(): Promise<Blob> {
     }
   }
 
-  throw new Error("Clipboard does not contain an image.");
+  throw new QrScanError("clipboardImageMissing");
 }
 
 export async function scanDisplayMediaQr(): Promise<string> {
   if (!navigator.mediaDevices?.getDisplayMedia) {
-    throw new Error("Screen capture is unavailable in this WebView.");
+    throw new QrScanError("screenCaptureUnavailable");
   }
 
   const stream = await navigator.mediaDevices.getDisplayMedia({ audio: false, video: true });
@@ -64,7 +59,7 @@ export async function scanDisplayMediaQr(): Promise<string> {
     const width = video.videoWidth;
     const height = video.videoHeight;
     if (width <= 0 || height <= 0) {
-      throw new Error("Screen capture did not produce a video frame.");
+      throw new QrScanError("screenFrameUnavailable");
     }
 
     const canvas = document.createElement("canvas");
@@ -72,7 +67,7 @@ export async function scanDisplayMediaQr(): Promise<string> {
     canvas.height = height;
     const context = canvas.getContext("2d");
     if (!context) {
-      throw new Error("Unable to read captured screen frame.");
+      throw new QrScanError("screenFrameUnreadable");
     }
 
     context.drawImage(video, 0, 0, width, height);
@@ -96,7 +91,7 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
         return;
       }
 
-      reject(new Error("Unable to encode captured screen frame."));
+      reject(new QrScanError("screenFrameUnencodable"));
     }, "image/png");
   });
 }
@@ -119,7 +114,7 @@ function waitForVideoMetadata(video: HTMLVideoElement): Promise<void> {
 
     function handleError() {
       cleanup();
-      reject(new Error("Unable to load captured screen stream."));
+      reject(new QrScanError("screenStreamUnavailable"));
     }
 
     video.addEventListener("loadedmetadata", handleLoadedMetadata, { once: true });

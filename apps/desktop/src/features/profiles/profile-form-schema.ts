@@ -10,6 +10,19 @@ import type {
 
 import { CONFIG_TYPES, type ProfileProtocol as ProfileKind } from "./profile-constants";
 
+/**
+ * Validation failures carry locale-independent codes instead of English
+ * sentences: the editor renders them through `profileValidationMessage`, so the
+ * text a user sees comes from the locale system like every other visible string.
+ */
+export const PROFILE_VALIDATION_CODES = {
+  addressRequired: "voya.profile.address.required",
+  configSourceRequired: "voya.profile.configSource.required",
+  credentialRequired: "voya.profile.credential.required",
+  remarksRequired: "voya.profile.remarks.required",
+  uuidRequired: "voya.profile.uuid.required",
+} as const;
+
 const optionalText = z.string().optional();
 const optionalNullableText = z.string().nullable().optional();
 const optionalNullableBool = z.boolean().nullable().optional();
@@ -55,8 +68,8 @@ const commonProfileSchema = z.object({
   indexId: optionalText,
   subscriptionId: optionalNullableText,
   displayLog: z.boolean().default(true),
-  remarks: z.string().trim().min(1, "remarks are required"),
-  address: z.string().trim().min(1, "address is required"),
+  remarks: z.string().trim().min(1, PROFILE_VALIDATION_CODES.remarksRequired),
+  address: z.string().trim().min(1, PROFILE_VALIDATION_CODES.addressRequired),
   port: z.number().int().min(0).max(65535),
   password: optionalText,
   username: optionalText,
@@ -77,7 +90,7 @@ const commonProfileSchema = z.object({
 });
 
 const serverProfileSchema = commonProfileSchema.extend({
-  password: z.string().trim().min(1, "password or ID is required"),
+  password: z.string().trim().min(1, PROFILE_VALIDATION_CODES.credentialRequired),
 });
 
 const authProfileSchema = commonProfileSchema.extend({
@@ -90,13 +103,13 @@ const authProfileSchema = commonProfileSchema.extend({
 // an empty uuid (it is simply omitted from the generated outbound), so the
 // requirement has to be enforced here.
 const tuicProfileSchema = serverProfileSchema.extend({
-  username: z.string().trim().min(1, "UUID is required"),
+  username: z.string().trim().min(1, PROFILE_VALIDATION_CODES.uuidRequired),
 });
 
 export const profileFormSchema = z.discriminatedUnion("configType", [
   serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.VMess) }),
   commonProfileSchema.extend({
-    address: z.string().trim().min(1, "Config path or JSON source is required"),
+    address: z.string().trim().min(1, PROFILE_VALIDATION_CODES.configSourceRequired),
     configType: z.literal(CONFIG_TYPES.Custom),
     port: z.number().int().min(0).max(65535).default(0),
   }),
@@ -165,6 +178,9 @@ export function prepareProfileForSave(values: ProfileFormValues | ParsedProfileF
 
 export function prepareGroupDraftForPreview(
   values: ProfileFormValues | ParsedProfileFormValues | PartialGroupDraft,
+  // Callers pass the translated placeholder; the literal is only the fallback
+  // for a draft that never reaches a rendered surface.
+  fallbackRemarks = "Draft group",
 ): Profile {
   const configType = (values as { configType?: ProfileKind }).configType ?? CONFIG_TYPES.PolicyGroup;
   const draft = {
@@ -172,7 +188,7 @@ export function prepareGroupDraftForPreview(
     ...(values as Record<string, unknown>),
     address: (values as { address?: string }).address || defaultAddress(configType),
     configType,
-    remarks: (values as { remarks?: string }).remarks?.trim() || "Draft group",
+    remarks: (values as { remarks?: string }).remarks?.trim() || fallbackRemarks,
     port: Number((values as { port?: number }).port ?? 0),
     protocolOptions: {
       ...((values as { protocolOptions?: Record<string, unknown> }).protocolOptions ?? {}),

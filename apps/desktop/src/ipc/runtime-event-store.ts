@@ -2,7 +2,6 @@ import { create } from "zustand";
 import { z } from "zod";
 
 import type {
-  ProxyConnectionItem,
   ProxyConnectionsSnapshot,
   ProxyMonitorState,
   ProxyMonitorStatus,
@@ -28,14 +27,23 @@ export type RuntimeProxyMonitorStatus = {
   state: RuntimeProxyMonitorState;
 };
 
-type RuntimeEventState = {
+/**
+ * `LogLineEvent` carries no timestamp, so the store stamps the moment the line
+ * reached the frontend. Stamping here (once, at receipt) rather than in the
+ * panel keeps buffered lines truthful: the Logs panel unmounts whenever the
+ * Connections screen shows another sub-view, and a render-time stamp would give
+ * every buffered line the panel-open time.
+ */
+export type StoredLogLine = LogLineEvent & { receivedAt: number };
+
+export type RuntimeEventState = {
   clearLogs: () => void;
   proxyConnections: ProxyConnectionsSnapshot | null;
   proxyMonitorStatus: RuntimeProxyMonitorStatus;
   proxyTraffic: ProxyTrafficEvent | null;
   coreState: CoreStateEvent | null;
   lastTransientEvent: TransientStreamEvent | null;
-  logLines: LogLineEvent[];
+  logLines: StoredLogLine[];
   pushTransientEvent: (event: TransientStreamEvent) => void;
   refreshSpeedtestStatus: () => Promise<void>;
   serverStatsByProfileId: Record<string, ServerStatItem>;
@@ -59,39 +67,23 @@ type RuntimeEventState = {
 };
 
 type ProxyConnectionsEvent = Extract<TransientStreamEvent, { kind: "proxyConnections" }>;
+type LogLineTransientEvent = Extract<TransientStreamEvent, { kind: "logLine" }>;
 type StatisticsEvent = Extract<TransientStreamEvent, { kind: "statistics" }>;
 type FrameHandle = number | ReturnType<typeof setTimeout>;
 
+const MAX_LOG_LINES = 500;
+const MAX_PROXY_CONNECTIONS = 10_000;
+
 let pendingProxyConnectionsEvent: ProxyConnectionsEvent | null = null;
 let pendingProxyConnectionsFrame: FrameHandle | null = null;
+let pendingLogLines: StoredLogLine[] = [];
+let pendingLogLineEvent: LogLineTransientEvent | null = null;
+let pendingLogLinesFrame: FrameHandle | null = null;
 
 const payloadStringSchema = z.string().max(4096);
 const nullablePayloadStringSchema = payloadStringSchema.nullable();
 const nonnegativeFiniteNumberSchema = z.number().finite().nonnegative();
 const nullableNonnegativeFiniteNumberSchema = nonnegativeFiniteNumberSchema.nullable();
-
-const proxyConnectionItemSchema: z.ZodType<ProxyConnectionItem> = z.object({
-  chains: z.array(payloadStringSchema).max(512),
-  connectionType: nullablePayloadStringSchema,
-  destination: payloadStringSchema,
-  download: nullableNonnegativeFiniteNumberSchema,
-  host: payloadStringSchema,
-  id: nullablePayloadStringSchema,
-  network: nullablePayloadStringSchema,
-  process: nullablePayloadStringSchema,
-  processPath: nullablePayloadStringSchema,
-  rule: nullablePayloadStringSchema,
-  rulePayload: nullablePayloadStringSchema,
-  source: payloadStringSchema,
-  start: payloadStringSchema,
-  upload: nullableNonnegativeFiniteNumberSchema,
-});
-
-const proxyConnectionsSnapshotSchema: z.ZodType<ProxyConnectionsSnapshot> = z.object({
-  connections: z.array(proxyConnectionItemSchema).max(10_000),
-  downloadTotal: nullableNonnegativeFiniteNumberSchema,
-  uploadTotal: nullableNonnegativeFiniteNumberSchema,
-});
 
 const serverStatItemSchema: z.ZodType<ServerStatItem> = z.object({
   dateNow: nullableNonnegativeFiniteNumberSchema,
@@ -121,7 +113,11 @@ const initialProxyMonitorStatus: RuntimeProxyMonitorStatus = {
 };
 
 export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
-  clearLogs: () => set({ logLines: [] }),
+  clearLogs: () => {
+    pendingLogLines = [];
+    pendingLogLineEvent = null;
+    set({ logLines: [] });
+  },
   proxyConnections: null,
   proxyMonitorStatus: initialProxyMonitorStatus,
   proxyTraffic: null,
@@ -153,13 +149,38 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
       return;
     }
 
+    // The shell emits one event per core stdout/stderr line, which at debug
+    // verbosity is hundreds per second. Buffer them and apply one `set` per
+    // frame (the proxy-connections treatment) instead of copying the capped
+    // array twice and notifying every subscriber per line.
+    if (event.kind === "logLine") {
+      pendingLogLines.push({ ...event.payload, receivedAt: Date.now() });
+      if (pendingLogLines.length > MAX_LOG_LINES) {
+        pendingLogLines = pendingLogLines.slice(-MAX_LOG_LINES);
+      }
+      pendingLogLineEvent = event;
+      if (pendingLogLinesFrame === null) {
+        pendingLogLinesFrame = scheduleFrame(() => {
+          const batch = pendingLogLines;
+          const nextEvent = pendingLogLineEvent;
+          pendingLogLines = [];
+          pendingLogLineEvent = null;
+          pendingLogLinesFrame = null;
+          if (batch.length === 0 || !nextEvent) {
+            return;
+          }
+
+          set((state) => ({
+            lastTransientEvent: nextEvent,
+            logLines: [...state.logLines, ...batch].slice(-MAX_LOG_LINES),
+          }));
+        });
+      }
+      return;
+    }
+
     set((state) => {
       switch (event.kind) {
-        case "logLine":
-          return {
-            lastTransientEvent: event,
-            logLines: [...state.logLines, event.payload].slice(-500),
-          };
         case "coreState":
           return { coreState: event.payload, lastTransientEvent: event };
         case "statistics": {
@@ -266,14 +287,40 @@ function markProxyDataFresh(status: RuntimeProxyMonitorStatus): RuntimeProxyMoni
   return { ...status, stale: false };
 }
 
+/**
+ * Envelope-only validation. The snapshot is produced by the Rust side from the
+ * specta-generated contract and arrives on every Clash websocket push (the whole
+ * connection table, once a second), so re-validating all fourteen fields of up
+ * to ten thousand items per push buys nothing; only the shape the reducers and
+ * the connections table actually depend on is checked.
+ */
 function parseProxyConnectionsSnapshot(payload: unknown): ProxyConnectionsSnapshot | null {
-  const result = proxyConnectionsSnapshotSchema.safeParse(payload);
-  return result.success ? result.data : null;
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  const { connections, downloadTotal, uploadTotal } = payload;
+  if (!Array.isArray(connections) || connections.length > MAX_PROXY_CONNECTIONS) {
+    return null;
+  }
+  if (!isNullableNonnegativeFinite(downloadTotal) || !isNullableNonnegativeFinite(uploadTotal)) {
+    return null;
+  }
+
+  return payload as ProxyConnectionsSnapshot;
 }
 
 function parseStatisticsSnapshot(payload: unknown): StatisticsSnapshot | null {
   const result = statisticsSnapshotSchema.safeParse(payload);
   return result.success ? result.data : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNullableNonnegativeFinite(value: unknown): boolean {
+  return value === null || (typeof value === "number" && Number.isFinite(value) && value >= 0);
 }
 
 function scheduleFrame(callback: () => void): FrameHandle {

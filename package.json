@@ -23,6 +23,7 @@
     "check:bindings": "node scripts/quality/bindings.mjs --check",
     "check:i18n": "node scripts/quality/i18n.mjs --check",
     "check:architecture": "node scripts/quality/architecture.mjs",
+    "check:lockfile": "node scripts/quality/lockfile-duplicates.mjs",
     "check:rust:fmt": "cargo fmt --all --check",
     "check:rust:clippy": "cargo clippy --workspace --all-targets -- -D warnings",
     "check:rust:deps": "cargo machete",
@@ -31,7 +32,7 @@
     "check:frontend:test": "pnpm test --run",
     "check:frontend:lint": "pnpm lint",
     "check:frontend:bundle": "pnpm build && node scripts/quality/frontend-bundle.mjs",
-    "check:frontend:coverage": "pnpm test --run --coverage --coverage.reporter=text-summary --coverage.reporter=json-summary --coverage.include='apps/desktop/src/**/*.{ts,tsx}' --coverage.include='packages/*/src/**/*.{ts,tsx}' --coverage.exclude=apps/desktop/src/ipc/bindings.ts --coverage.thresholds.lines=70 --coverage.thresholds.functions=70 --coverage.thresholds.branches=60 --coverage.thresholds.statements=70 && node scripts/quality/frontend-coverage.mjs",
+    "check:frontend:coverage": "pnpm test --run --coverage && node scripts/quality/frontend-coverage.mjs",
     "check:dead-code": "knip --treat-config-hints-as-errors && knip --strict --no-config-hints --config knip.production.jsonc",
     "check:sing-box": "node scripts/quality/sing-box.mjs",
     "core:sing-box:install": "node scripts/core/install-sing-box.mjs --force",
@@ -60,8 +61,8 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
     "knip": "^6.31.0",
-    "typescript": "^6.0.3",
+    "typescript": "catalog:",
     "typescript-eslint": "^8.60.0",
-    "vitest": "^4.1.7"
+    "vitest": "catalog:"
   }
 }

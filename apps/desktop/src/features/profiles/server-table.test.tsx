@@ -1,9 +1,11 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, vi } from "vitest";
 
-import type { Profile } from "@/ipc/bindings";
+import { changeLocale } from "@voya/i18n";
+
+import type { ImportProfilesResult, Profile } from "@/ipc/bindings";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useProfileColumnsStore } from "@/stores/profile-columns-store";
 import { makeProfileFixture } from "@/test/profile-fixture";
@@ -108,6 +110,20 @@ async function selectComboboxOption(label: string, optionLabel: string) {
   await user.click(within(listbox).getByRole("option", { name: new RegExp(`^${escapeRegExp(optionLabel)}`) }));
 }
 
+// Locale switches never touch localStorage, and the default locale is restored
+// even when the body throws, so one test cannot leak a language into the next.
+async function withLocale(locale: "en" | "zh-Hans", body: () => Promise<void>) {
+  await changeLocale(locale, { persist: false });
+  try {
+    await body();
+  } finally {
+    // Unmount first: restoring the language while the tree is still mounted
+    // would re-render it outside act().
+    cleanup();
+    await changeLocale("en", { persist: false });
+  }
+}
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -154,7 +170,9 @@ describe("ProfilesScreen", () => {
       text: indexIds.map((indexId) => `vless://${indexId}@example.test:443`).join("\n"),
     }));
     ipcMocks.generateQrCode.mockResolvedValue({ mimeType: "image/svg+xml", svg: "<svg />" });
-    ipcMocks.importProfilesFromText.mockResolvedValue({ imported: 1, importedProfileIds: ["profile-new"], removedExisting: 0, skipped: 0, subscriptionId: null });
+    ipcMocks.importProfilesFromText.mockResolvedValue(
+      makeImportResult({ imported: 1, importedProfileIds: ["profile-new"] }),
+    );
     ipcMocks.listGroupChildCandidates.mockResolvedValue([]);
     ipcMocks.listSubscriptions.mockResolvedValue([]);
     ipcMocks.moveProfile.mockResolvedValue([]);
@@ -435,6 +453,41 @@ describe("ProfilesScreen", () => {
     expect(screen.getAllByText("8.0 KB").length).toBeGreaterThan(0);
   });
 
+  it("keeps the statistics stream out of the table until a traffic column is visible", async () => {
+    ipcMocks.listProfiles.mockResolvedValue([makeProfile(0)]);
+
+    renderProfiles();
+
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+
+    act(() => {
+      useRuntimeEventStore.setState({
+        serverStatsByProfileId: {
+          "profile-0": {
+            dateNow: 20260101,
+            indexId: "profile-0",
+            todayDown: 4096,
+            todayUp: 2048,
+            totalDown: 8192,
+            totalUp: 4096,
+          },
+        },
+      });
+    });
+
+    // Traffic columns ship hidden, so the once-per-second statistics stream must
+    // not rebuild the row model to update cells nobody can see.
+    expect(screen.queryByText("4.0 KB")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("menuitem", { name: "Columns" }));
+    await userEvent.click(await screen.findByRole("menuitemcheckbox", { name: "Total up" }));
+    await userEvent.keyboard("{Escape}");
+
+    // Revealing the column subscribes to the live map and shows the live value.
+    expect(await screen.findByRole("columnheader", { name: "Total up" })).toBeInTheDocument();
+    expect(await screen.findByText("4.0 KB")).toBeInTheDocument();
+  });
+
   it("restores default columns from the column menu reset action", async () => {
     ipcMocks.listProfiles.mockResolvedValue(makeProfiles(3));
 
@@ -494,18 +547,13 @@ describe("ProfilesScreen", () => {
     ipcMocks.listProfiles
       .mockResolvedValueOnce([])
       .mockResolvedValue([importedProfile, secondImportedProfile]);
-    ipcMocks.importProfilesFromText.mockResolvedValue({
-      deduped: 0,
-      failed: 0,
-      filtered: 0,
-      imported: 2,
-      importedProfileIds: ["profile-imported", "profile-imported-second"],
-      messages: [],
-      parsed: 2,
-      removedExisting: 0,
-      skipped: 0,
-      subscriptionId: null,
-    });
+    ipcMocks.importProfilesFromText.mockResolvedValue(
+      makeImportResult({
+        imported: 2,
+        importedProfileIds: ["profile-imported", "profile-imported-second"],
+        parsed: 2,
+      }),
+    );
 
     renderProfiles();
 
@@ -520,7 +568,7 @@ describe("ProfilesScreen", () => {
     const rows = screen.getAllByTestId("server-row");
     expect(rows[0]).toHaveAttribute("aria-selected", "true");
     expect(rows[1]).toHaveAttribute("aria-selected", "false");
-    expect(screen.getByText("Imported 2 profiles.")).toBeInTheDocument();
+    expect(screen.getByText("Imported 2 profile(s).")).toBeInTheDocument();
   });
 
   it("refreshes and selects a profile imported from a scanned screen QR code", async () => {
@@ -537,18 +585,9 @@ describe("ProfilesScreen", () => {
       status: "found",
       text: "vless://uuid@example.test:443#Scanned",
     });
-    ipcMocks.importProfilesFromText.mockResolvedValue({
-      deduped: 0,
-      failed: 0,
-      filtered: 0,
-      imported: 1,
-      importedProfileIds: ["profile-scanned"],
-      messages: [],
-      parsed: 1,
-      removedExisting: 0,
-      skipped: 0,
-      subscriptionId: null,
-    });
+    ipcMocks.importProfilesFromText.mockResolvedValue(
+      makeImportResult({ imported: 1, importedProfileIds: ["profile-scanned"], parsed: 1 }),
+    );
 
     renderProfiles();
 
@@ -564,7 +603,7 @@ describe("ProfilesScreen", () => {
 
     expect(await screen.findByText("Scanned node")).toBeInTheDocument();
     expect(screen.getByTestId("server-row")).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("Imported 1 profile.")).toBeInTheDocument();
+    expect(screen.getByText("Imported 1 profile(s).")).toBeInTheDocument();
   });
 
   it("imports profiles directly from clipboard text", async () => {
@@ -580,21 +619,14 @@ describe("ProfilesScreen", () => {
     );
     ipcMocks.importProfilesFromText.mockImplementation(async () => {
       imported = true;
-      return {
-        deduped: 0,
-        failed: 0,
-        filtered: 0,
+      return makeImportResult({
         imported: 1,
         importedProfileIds: ["profile-clipboard"],
-        messages: [],
         parsed: 1,
-        removedExisting: 0,
         removedDuplicates: 2,
-        skipped: 0,
-        subscriptionId: null,
         updated: 1,
         updatedProfileIds: ["profile-clipboard"],
-      };
+      });
     });
 
     renderProfiles();
@@ -612,7 +644,9 @@ describe("ProfilesScreen", () => {
     expect(await screen.findByText("Clipboard node")).toBeInTheDocument();
     expect(filterInput).toHaveValue("");
     expect(screen.getByTestId("server-row")).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("Imported 1 profile. 1 updated. 2 duplicates removed.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Imported 1 profile(s). 1 updated. 2 duplicate(s) removed."),
+    ).toBeInTheDocument();
   });
 
   it("does not import when clipboard text is empty", async () => {
@@ -918,6 +952,105 @@ describe("ProfilesScreen", () => {
     );
   });
 
+  it("gives every editor field a real id in a locale whose labels have no ASCII letters", async () => {
+    ipcMocks.listProfiles.mockResolvedValue([]);
+
+    // Ids used to be slugified from the translated label, so "备注" collapsed to
+    // the empty string and every input in the dialog shared `id=""`.
+    await withLocale("zh-Hans", async () => {
+      renderProfiles();
+
+      fireEvent.click(await screen.findByRole("button", { name: "新增" }));
+      const dialog = await screen.findByRole("dialog", { name: "新增配置" });
+      const remarks = within(dialog).getByLabelText("备注");
+      const address = within(dialog).getByLabelText("地址");
+
+      expect(remarks.id).not.toBe("");
+      expect(address.id).not.toBe("");
+      expect(address.id).not.toBe(remarks.id);
+      expect(dialog.querySelectorAll('[id=""]')).toHaveLength(0);
+    });
+  });
+
+  it("renders required-field errors through the locale system", async () => {
+    ipcMocks.listProfiles.mockResolvedValue([]);
+
+    await withLocale("zh-Hans", async () => {
+      renderProfiles();
+
+      fireEvent.click(await screen.findByRole("button", { name: "新增" }));
+      fireEvent.click(await screen.findByRole("button", { name: /保存/ }));
+
+      // The zod schema carries codes; the visible sentence comes from the locale.
+      expect(await screen.findByText("请填写备注")).toBeInTheDocument();
+      expect(screen.getByText("请填写地址")).toBeInTheDocument();
+      expect(screen.getByText("请填写密码或 ID")).toBeInTheDocument();
+      expect(ipcMocks.saveProfile).not.toHaveBeenCalled();
+    });
+  });
+
+  it("localizes the import summary banner", async () => {
+    mockClipboardReadText("vless://uuid@example.test:443#US");
+    ipcMocks.listProfiles.mockResolvedValue([]);
+    ipcMocks.importProfilesFromText.mockResolvedValue(
+      makeImportResult({ failed: 2, imported: 3, skipped: 1 }),
+    );
+
+    await withLocale("zh-Hans", async () => {
+      renderProfiles();
+
+      await userEvent.click(await screen.findByRole("menuitem", { name: "更多操作" }));
+      await userEvent.click(await screen.findByRole("menuitem", { name: "从剪贴板导入" }));
+
+      expect(
+        await screen.findByText("已导入 3 个配置。 已跳过 1 个。 2 个解析失败。"),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("offers each speedtest probe exactly once in the row menu", async () => {
+    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(1));
+
+    renderProfiles();
+
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+    const menu = await openRowContextMenu();
+    const speedMenu = await openContextSubmenu(menu, "Speedtest");
+
+    // "Fast" used to sit next to "Real" while dispatching the same `latency`
+    // probe, so the menu offered one operation under two labels.
+    expect(within(speedMenu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      "TCP",
+      "Real",
+      "UDP",
+      "Speed",
+      "Mixed",
+      "Stop",
+    ]);
+  });
+
+  it("renders the shared export entries through the context-menu primitives", async () => {
+    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(1));
+
+    renderProfiles();
+
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+    const menu = await openRowContextMenu();
+    const exportMenu = await openContextSubmenu(menu, "Export");
+
+    // Both menus map the same descriptor list, so the row menu must carry every
+    // export kind the toolbar offers.
+    expect(within(exportMenu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      "Share links",
+      "Share links (Base64)",
+      "Voya profile bundle",
+      "Client config",
+      "Show QR",
+      "Save share links",
+      "Save client config",
+    ]);
+  });
+
   it("confirms before deduping and cancels without deleting duplicates", async () => {
     ipcMocks.listProfiles.mockResolvedValue(makeProfiles(3));
 
@@ -1075,6 +1208,28 @@ describe("ProfilesScreen", () => {
     );
   }, 10_000);
 });
+
+// Every field of the generated `ImportProfilesResult`; overriding only what a
+// test cares about keeps the mocks from drifting away from the contract.
+function makeImportResult(overrides: Partial<ImportProfilesResult> = {}): ImportProfilesResult {
+  return {
+    deduped: 0,
+    discardedNodeOverrides: 0,
+    failed: 0,
+    filtered: 0,
+    imported: 0,
+    importedProfileIds: [],
+    messages: [],
+    parsed: 0,
+    removedDuplicates: 0,
+    removedExisting: 0,
+    skipped: 0,
+    subscriptionId: null,
+    updated: 0,
+    updatedProfileIds: [],
+    ...overrides,
+  };
+}
 
 function makeProfiles(count: number) {
   return Array.from({ length: count }, (_, index) => makeProfile(index));

@@ -128,6 +128,9 @@ pub(crate) fn generated_value_for_case(case: &GoldenCase) -> Value {
         "singbox.outbound.hysteria2_minimal" => singbox_hysteria2_minimal_outbound(),
         "singbox.outbound.vmess_h2_tls" => singbox_vmess_h2_tls_outbound(),
         "singbox.outbound.vless_quic_tls" => singbox_vless_quic_tls_outbound(),
+        "singbox.outbound.shadowsocks_plugins" => singbox_shadowsocks_plugins_outbounds(),
+        "singbox.outbound.policy_group_strategies" => singbox_policy_group_strategies(),
+        "singbox.route.bind_interface_windows" => singbox_bind_interface_windows_outbounds(),
         generated => panic!(
             "golden case `{}` references unknown generated selector `{generated}`",
             case.id
@@ -427,6 +430,135 @@ fn singbox_vless_quic_tls_context() -> CoreConfigContext {
     singbox_context(AppConfig::default(), node)
 }
 
+/// The five `MultipleLoad` strategies, four of which collapse to a plain
+/// urltest group; only `Fallback` adds a `tolerance`.
+const POLICY_GROUP_STRATEGIES: &[(&str, MultipleLoad)] = &[
+    ("leastPing", MultipleLoad::LeastPing),
+    ("fallback", MultipleLoad::Fallback),
+    ("random", MultipleLoad::Random),
+    ("roundRobin", MultipleLoad::RoundRobin),
+    ("leastLoad", MultipleLoad::LeastLoad),
+];
+
+fn singbox_shadowsocks_plugin_contexts() -> [CoreConfigContext; 2] {
+    // The SIP003 option string is built once for both the share link and the
+    // generated config (`crate::protocol_common::shadowsocks_plugin_for`), so
+    // this fixture is what pins the generated half of that contract.
+    let obfs = ProfileItem {
+        index_id: "n-ss-obfs".to_string(),
+        remarks: "ss-obfs".to_string(),
+        protocol: ProfileProtocol::Shadowsocks {
+            server: endpoint("ss.example", 8388),
+            password: "ss-pass".to_string(),
+            method: "aes-256-gcm".to_string(),
+            udp_over_tcp: false,
+        },
+        transport: Some(ProfileTransport::Tcp {
+            header: Some("http".to_string()),
+            // `obfs-host` is a single authority: only the first entry is used.
+            host: Some("obfs.example,second.example".to_string()),
+            path: None,
+        }),
+        tls: None,
+        ..ProfileItem::default()
+    };
+    let websocket = ProfileItem {
+        index_id: "n-ss-ws".to_string(),
+        remarks: "ss-ws".to_string(),
+        protocol: ProfileProtocol::Shadowsocks {
+            server: endpoint("ss.example", 8389),
+            password: "ss-pass".to_string(),
+            method: "aes-256-gcm".to_string(),
+            udp_over_tcp: true,
+        },
+        transport: Some(ProfileTransport::Websocket {
+            host: Some("ws.example".to_string()),
+            path: Some("/ws".to_string()),
+        }),
+        tls: Some(tls_settings("ws.example", &[], Vec::new())),
+        ..ProfileItem::default()
+    };
+
+    [
+        singbox_context(AppConfig::default(), obfs),
+        singbox_context(AppConfig::default(), websocket),
+    ]
+}
+
+fn singbox_shadowsocks_plugins_outbounds() -> Value {
+    let [obfs, websocket] = singbox_shadowsocks_plugin_contexts();
+    serde_json::json!({
+        "obfs": proxy_outbound_of(obfs),
+        "v2rayPlugin": proxy_outbound_of(websocket),
+    })
+}
+
+fn singbox_policy_group_strategy_context(strategy: MultipleLoad) -> CoreConfigContext {
+    let n1 = singbox_socks_node("n1", "node-1");
+    let n2 = singbox_socks_node("n2", "node-2");
+    let group = ProfileItem {
+        index_id: "group".to_string(),
+        remarks: "strategy".to_string(),
+        protocol: ProfileProtocol::PolicyGroup {
+            child_profile_ids: vec!["n1".to_string(), "n2".to_string()],
+            source_subscription_id: None,
+            filter: None,
+            strategy,
+        },
+        ..ProfileItem::default()
+    };
+    let mut context = singbox_context(AppConfig::default(), group);
+    context.all_proxies_map.insert(n1.index_id.clone(), n1);
+    context.all_proxies_map.insert(n2.index_id.clone(), n2);
+    context
+}
+
+fn singbox_policy_group_strategies() -> Value {
+    let mut strategies = Map::new();
+    for (label, strategy) in POLICY_GROUP_STRATEGIES {
+        let generated = generate_singbox_config(&singbox_policy_group_strategy_context(*strategy))
+            .expect("policy group config should generate");
+        let groups = generated
+            .outbounds
+            .iter()
+            .filter(|outbound| matches!(outbound.r#type.as_str(), "selector" | "urltest"))
+            .collect::<Vec<_>>();
+        strategies.insert(
+            (*label).to_string(),
+            serde_json::to_value(groups).expect("policy group outbounds serialize"),
+        );
+    }
+    Value::Object(strategies)
+}
+
+fn singbox_bind_interface_windows_context() -> CoreConfigContext {
+    // Windows applies `bind_interface` with TUN off; every other platform needs
+    // TUN for it to take effect (`singbox::support::apply_outbound_bind_interface`).
+    let mut config = AppConfig::default();
+    config.core_basic_item.bind_interface = Some("eth0".to_string());
+    let node = ProfileItem {
+        index_id: "n-win".to_string(),
+        remarks: "win-bind".to_string(),
+        protocol: ProfileProtocol::Vmess {
+            server: endpoint("bind.example", 443),
+            uuid: "00000000-0000-0000-0000-000000000041".to_string(),
+            cipher: Some("auto".to_string()),
+        },
+        transport: Some(raw_transport()),
+        tls: Some(tls_settings("bind.example", &[], Vec::new())),
+        ..ProfileItem::default()
+    };
+    let mut context = singbox_context(config, node);
+    context.platform = CoreGenPlatform::Windows;
+    context
+}
+
+fn singbox_bind_interface_windows_outbounds() -> Value {
+    let generated = generate_singbox_config(&singbox_bind_interface_windows_context())
+        .expect("Windows bind_interface config should generate");
+    serde_json::to_value(generated.outbounds).expect("Windows outbounds serialize")
+}
+
 fn singbox_proxy_outbound(config: AppConfig, node: ProfileItem) -> Value {
     proxy_outbound_of(singbox_context(config, node))
 }
@@ -573,16 +705,22 @@ fn singbox_pre_socks_configs() -> Vec<Value> {
 
 fn singbox_pre_socks_snapshot() -> Value {
     let configs = singbox_pre_socks_configs();
+    // `clashApi` is part of the snapshot because the split assigns the base
+    // api2 port to the main process and api2 + 1 to the TUN process; a client
+    // that re-derives the port from `tun_mode_item.enable_tun` talks to the
+    // wrong core.
     serde_json::json!({
         "main": {
             "inbounds": configs[0]["inbounds"],
             "outbounds": configs[0]["outbounds"],
             "routeFinal": configs[0]["route"]["final"],
+            "clashApi": configs[0]["experimental"]["clash_api"],
         },
         "preSocks": {
             "inbounds": configs[1]["inbounds"],
             "outbounds": configs[1]["outbounds"],
             "routeFinal": configs[1]["route"]["final"],
+            "clashApi": configs[1]["experimental"]["clash_api"],
         },
     })
 }
@@ -899,6 +1037,26 @@ fn acceptance_configs_for_case(case: &GoldenCase) -> Vec<Value> {
             vec![
                 generate_singbox_config_value(&singbox_vless_quic_tls_context())
                     .expect("VLESS quic acceptance config should generate"),
+            ]
+        }
+        "singbox.outbound.shadowsocks_plugins" => singbox_shadowsocks_plugin_contexts()
+            .into_iter()
+            .map(|context| {
+                generate_singbox_config_value(&context)
+                    .expect("Shadowsocks plugin acceptance config should generate")
+            })
+            .collect(),
+        "singbox.outbound.policy_group_strategies" => POLICY_GROUP_STRATEGIES
+            .iter()
+            .map(|(_, strategy)| {
+                generate_singbox_config_value(&singbox_policy_group_strategy_context(*strategy))
+                    .expect("policy group acceptance config should generate")
+            })
+            .collect(),
+        "singbox.route.bind_interface_windows" => {
+            vec![
+                generate_singbox_config_value(&singbox_bind_interface_windows_context())
+                    .expect("Windows bind_interface acceptance config should generate"),
             ]
         }
         _ => Vec::new(),

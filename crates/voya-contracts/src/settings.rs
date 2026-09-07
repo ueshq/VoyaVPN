@@ -3,6 +3,24 @@ use specta::Type;
 
 use crate::CURRENT_SCHEMA_VERSION;
 
+// LOAD-BEARING FOR PERSISTENCE, not just for IPC.
+//
+// `voya_db::SettingsRepository` stores this exact type as the JSON payload of
+// `app_settings`, so this struct and every nested settings struct below is also
+// the on-disk schema of every installed database. They all carry
+// `deny_unknown_fields`, which makes both directions breaking: removing or
+// renaming a field rejects payloads written by earlier builds, and adding one
+// without `#[serde(default)]` rejects them for the missing key. Either way
+// `load()` fails for existing installs, `AppServices::load_config` propagates
+// it out of `setup()`, and the app cannot launch.
+//
+// So: add fields with `#[serde(default)]`, never remove or rename one, and
+// bump `CURRENT_SCHEMA_VERSION` with a migration when the layout really has to
+// change. voya-db pins the current layout against a checked-in fixture
+// (`crates/voya-db/fixtures/app_settings_v1.json`).
+//
+// Deliberately a plain comment, not a doc comment: specta copies doc comments
+// into `bindings.ts`, and this note is for Rust authors only.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AppSettingsV1 {

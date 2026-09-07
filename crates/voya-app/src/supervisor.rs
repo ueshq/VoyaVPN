@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{fmt, path::PathBuf, sync::Arc, time::Duration};
 
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
@@ -21,6 +21,81 @@ use voya_platform::{
     },
     tun::{NoopTunCleaner, PlatformTunCleaner, TunCleaner, TunCleanupError},
 };
+
+/// Bearer token the running core's Clash API requires.
+///
+/// sing-box's Clash API listens on loopback, which is *not* a trust boundary:
+/// any local process, and any web page a browser can be pointed at, could
+/// otherwise read the live connection list, switch every route to direct or pin
+/// a node. A fresh token is minted per core launch, written into the generated
+/// `experimental.clash_api.secret`, and demanded of every REST call and
+/// websocket upgrade.
+///
+/// The value is deliberately opaque: `Debug` redacts it so a token can never
+/// reach a tracing field, a log file or a crash report, and reading it back
+/// takes the explicit [`ClashApiSecret::as_str`].
+#[derive(Clone, PartialEq, Eq)]
+pub struct ClashApiSecret(String);
+
+impl fmt::Debug for ClashApiSecret {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("ClashApiSecret(<redacted>)")
+    }
+}
+
+impl ClashApiSecret {
+    /// Mints a token for one core launch.
+    ///
+    /// Two v4 UUIDs give 244 random bits from the platform CSPRNG (each carries
+    /// 122; six bits are version and variant markers). `uuid` is already a
+    /// workspace dependency, so this adds no new supply-chain surface.
+    #[must_use]
+    pub fn generate() -> Self {
+        Self(format!(
+            "{}{}",
+            uuid::Uuid::new_v4().simple(),
+            uuid::Uuid::new_v4().simple()
+        ))
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn into_token(self) -> String {
+        self.0
+    }
+}
+
+/// Everything a Clash API client needs to reach the core that is *running*.
+///
+/// Port and token are minted together by one core launch and are useless apart:
+/// a stale token against a restarted core is a 401, and the port alone is a
+/// 401 too. Carrying them as one value keeps every caller from re-deriving
+/// either half.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ClashApiAccess {
+    pub port: Option<u16>,
+    pub secret: Option<ClashApiSecret>,
+}
+
+impl ClashApiAccess {
+    #[must_use]
+    pub const fn new(port: Option<u16>, secret: Option<ClashApiSecret>) -> Self {
+        Self { port, secret }
+    }
+
+    /// Access to a core on `port` that needs no token. Test and preview helper.
+    #[must_use]
+    pub const fn unauthenticated(port: u16) -> Self {
+        Self {
+            port: Some(port),
+            secret: None,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreProcessSpec {
@@ -70,6 +145,17 @@ pub struct SupervisorStartRequest {
     pub tun_enabled: bool,
     pub sudo_script_dir: PathBuf,
     pub restart_on_crash: bool,
+    /// Clash API port of the *main* generated config.
+    ///
+    /// This cannot be recomputed from `AppConfig`: on a pre-socks topology the
+    /// builder clears `is_tun_enabled` on the main context, so the main process
+    /// listens on `api2` while the pre-socks one takes `api2 + 1`. Deriving it
+    /// from the TUN setting instead would point every client at the pre-socks
+    /// process, which has no selector or per-node statistics.
+    pub clash_api_port: i32,
+    /// Bearer token the *main* generated config wrote into
+    /// `experimental.clash_api.secret`, if the caller minted one.
+    pub clash_api_secret: Option<ClashApiSecret>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,6 +171,10 @@ pub struct SupervisorSnapshot {
     pub main_pid: Option<u32>,
     pub pre_pid: Option<u32>,
     pub running_core_type: Option<CoreType>,
+    /// Clash API port the running main config actually listens on.
+    pub clash_api_port: Option<i32>,
+    /// Bearer token the running main config demands on that port.
+    pub clash_api_secret: Option<ClashApiSecret>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,6 +209,23 @@ impl SupervisorSnapshot {
             main_pid: None,
             pre_pid: None,
             running_core_type: None,
+            clash_api_port: None,
+            clash_api_secret: None,
+        }
+    }
+
+    /// How to reach the running core's Clash API.
+    ///
+    /// Both halves are cleared while nothing is running, so a caller that hands
+    /// this straight to a client dials nothing instead of dialling a port the
+    /// previous core no longer owns.
+    #[must_use]
+    pub fn clash_api_access(&self) -> ClashApiAccess {
+        ClashApiAccess {
+            port: self
+                .clash_api_port
+                .and_then(|port| u16::try_from(port).ok()),
+            secret: self.clash_api_secret.clone(),
         }
     }
 }
@@ -239,21 +346,45 @@ pub struct CoreSupervisor {
 }
 
 impl CoreSupervisor {
+    /// Start the supervisor actor.
+    ///
+    /// The actor loop gets an OS thread of its own rather than a tokio task.
+    /// Every handler is synchronous and blocks for as long as the OS takes:
+    /// `ChildControl::stop` waits on the reaper thread's `kill`+`wait`, the
+    /// sudo kill runs a launcher script that sleeps a second before polling,
+    /// and the macOS PacketTunnel bridge waits up to 20 s for the provider to
+    /// activate and again for it to connect. On a tokio worker that removed a
+    /// worker from the pool for the whole call — a Tokio contract violation
+    /// that, on a low-core machine with a second blocking call in flight, stalls
+    /// event emission app-wide. Commands still queue behind a long Start/Stop
+    /// because the actor is deliberately sequential; that is the actor model,
+    /// not the defect this addresses.
     #[must_use]
     pub fn spawn(deps: SupervisorDeps) -> Self {
         let (tx, mut rx) = mpsc::channel(16);
         let supervisor = Self { tx: tx.clone() };
+        let runtime = tokio::runtime::Handle::current();
         deps.runner
             .set_exit_handler(Some(Arc::new(SupervisorProcessExitHandler {
                 tx: tx.downgrade(),
-                runtime: tokio::runtime::Handle::current(),
+                runtime: runtime.clone(),
             })));
-        tokio::spawn(async move {
-            let mut actor = SupervisorActor::new(deps, tx.downgrade());
-            while let Some(command) = rx.recv().await {
-                actor.handle(command);
-            }
-        });
+        // Only the returned `CoreSupervisor` holds a strong sender, so the loop
+        // ends — and the actor's `Drop` stops the running core — as soon as the
+        // last handle goes away.
+        let actor_tx = tx.downgrade();
+        drop(tx);
+        if let Err(error) = std::thread::Builder::new()
+            .name("core-supervisor".to_string())
+            .spawn(move || {
+                let mut actor = SupervisorActor::new(deps, actor_tx, Some(runtime));
+                while let Some(command) = rx.blocking_recv() {
+                    actor.handle(command);
+                }
+            })
+        {
+            tracing::error!(?error, "failed to start the core supervisor thread");
+        }
 
         supervisor
     }
@@ -377,6 +508,10 @@ struct DelayedRestart {
 struct SupervisorActor {
     deps: SupervisorDeps,
     tx: mpsc::WeakSender<SupervisorCommand>,
+    /// The actor loop runs off the runtime, so background work it schedules
+    /// (the crash backoff timer, the native TUN health watcher) needs an
+    /// explicit handle. `None` in unit tests that drive the actor directly.
+    runtime: Option<tokio::runtime::Handle>,
     running: RunningCore,
     native_tun_generation: u64,
     restart_generation: u64,
@@ -509,6 +644,9 @@ impl RunningCore {
 
     fn snapshot(&self) -> SupervisorSnapshot {
         let connected = self.main.is_some() || self.native_tun.is_some();
+        // Port and token both describe a *live* Clash API, so a stale request
+        // must not leak either of them once the core is gone.
+        let live_request = connected.then_some(self.last_request.as_ref()).flatten();
         SupervisorSnapshot {
             state: if connected {
                 SupervisorConnectionState::Connected
@@ -519,6 +657,8 @@ impl RunningCore {
             main_pid: self.main.as_ref().map(ProcessHandle::id),
             pre_pid: self.pre.as_ref().map(ProcessHandle::id),
             running_core_type: self.running_core_type,
+            clash_api_port: live_request.map(|request| request.clash_api_port),
+            clash_api_secret: live_request.and_then(|request| request.clash_api_secret.clone()),
         }
     }
 }
@@ -613,10 +753,7 @@ mod tests {
         time::{Duration, Instant},
     };
 
-    use voya_platform::{
-        process::{ProcessOutput, ProcessRunner},
-        tun::TunCleanupError,
-    };
+    use voya_platform::process::{ProcessOutput, ProcessRunner};
 
     use super::*;
 
@@ -669,8 +806,14 @@ mod tests {
         }
 
         fn with_oneshot_output(self, output: ProcessOutput) -> Self {
-            *self.oneshot_output.lock().expect("oneshot output") = output;
+            self.set_oneshot_output(output);
             self
+        }
+
+        /// Change what the launcher returns mid-test, so a sudo kill can start
+        /// failing after the first start succeeded.
+        fn set_oneshot_output(&self, output: ProcessOutput) {
+            *self.oneshot_output.lock().expect("oneshot output") = output;
         }
 
         fn oneshot_requests(&self) -> Vec<ProcessSpawn> {
@@ -723,17 +866,6 @@ mod tests {
         fn stop(&self, handle: &ProcessHandle) -> Result<(), ProcessError> {
             self.events
                 .push(format!("stop:{:?}:pid={}", handle.role(), handle.id()));
-            Ok(())
-        }
-    }
-
-    struct RecordingTunCleaner {
-        events: SharedEvents,
-    }
-
-    impl TunCleaner for RecordingTunCleaner {
-        fn cleanup_before_start(&self) -> Result<(), TunCleanupError> {
-            self.events.push("tun:cleanup");
             Ok(())
         }
     }
@@ -939,6 +1071,8 @@ mod tests {
                 tun_enabled: true,
                 sudo_script_dir: "/tmp/voya/scripts".into(),
                 restart_on_crash: false,
+                clash_api_port: 0,
+                clash_api_secret: None,
             })
             .await
             .expect("start");
@@ -983,6 +1117,8 @@ mod tests {
                 tun_enabled: true,
                 sudo_script_dir: "/tmp/voya/scripts".into(),
                 restart_on_crash: false,
+                clash_api_port: 0,
+                clash_api_secret: None,
             })
             .await
             .expect("start");
@@ -1034,6 +1170,8 @@ mod tests {
                 tun_enabled: true,
                 sudo_script_dir: "/tmp/voya/scripts".into(),
                 restart_on_crash: false,
+                clash_api_port: 0,
+                clash_api_secret: None,
             })
             .await
             .expect("start");
@@ -1069,7 +1207,7 @@ mod tests {
 
         {
             let (tx, _rx) = mpsc::channel(1);
-            let mut actor = SupervisorActor::new(deps, tx.downgrade());
+            let mut actor = SupervisorActor::new(deps, tx.downgrade(), None);
             actor
                 .start(SupervisorStartRequest {
                     active_profile_id: Some("active".to_string()),
@@ -1081,6 +1219,8 @@ mod tests {
                     tun_enabled: true,
                     sudo_script_dir: "/tmp/voya/scripts".into(),
                     restart_on_crash: false,
+                    clash_api_port: 0,
+                    clash_api_secret: None,
                 })
                 .expect("start");
         }
@@ -1110,6 +1250,8 @@ mod tests {
             tun_enabled: true,
             sudo_script_dir: "/tmp/voya/scripts".into(),
             restart_on_crash: false,
+            clash_api_port: 0,
+            clash_api_secret: None,
         };
 
         let missing = supervisor
@@ -1146,6 +1288,8 @@ mod tests {
             tun_enabled: false,
             sudo_script_dir: "/tmp/voya/scripts".into(),
             restart_on_crash: true,
+            clash_api_port: 0,
+            clash_api_secret: None,
         };
 
         let snapshot = supervisor.start(request).await.expect("start");
@@ -1226,6 +1370,8 @@ sleep 30
                 tun_enabled: false,
                 sudo_script_dir: temp_dir.join("scripts"),
                 restart_on_crash: true,
+                clash_api_port: 0,
+                clash_api_secret: None,
             })
             .await
             .expect("start");
@@ -1261,9 +1407,6 @@ sleep 30
         let elevation = Arc::new(ElevationState::new());
         let deps = SupervisorDeps::new(Arc::new(FakeRunner::new(events.clone())), elevation)
             .with_target_os(TargetOs::Windows)
-            .with_tun_cleaner(Arc::new(RecordingTunCleaner {
-                events: events.clone(),
-            }))
             .with_job_factory(Arc::new(RecordingJobFactory {
                 events: events.clone(),
             }));
@@ -1283,6 +1426,8 @@ sleep 30
                 tun_enabled: false,
                 sudo_script_dir: "/tmp/voya/scripts".into(),
                 restart_on_crash: false,
+                clash_api_port: 0,
+                clash_api_secret: None,
             })
             .await
             .expect("start");
@@ -1328,6 +1473,8 @@ sleep 30
                 tun_enabled: true,
                 sudo_script_dir: "/tmp/voya/scripts".into(),
                 restart_on_crash: false,
+                clash_api_port: 0,
+                clash_api_secret: None,
             })
             .await
             .expect("native tun start");
@@ -1375,6 +1522,8 @@ sleep 30
                 tun_enabled: true,
                 sudo_script_dir: "/tmp/voya/scripts".into(),
                 restart_on_crash: true,
+                clash_api_port: 0,
+                clash_api_secret: None,
             })
             .await
             .expect("native tun start");
@@ -1430,6 +1579,8 @@ sleep 30
                 tun_enabled: true,
                 sudo_script_dir: "/tmp/voya/scripts".into(),
                 restart_on_crash: false,
+                clash_api_port: 0,
+                clash_api_secret: None,
             })
             .await
             .expect("sing-box start");
@@ -1463,6 +1614,8 @@ sleep 30
                 tun_enabled: true,
                 sudo_script_dir: "/tmp/voya/scripts".into(),
                 restart_on_crash: false,
+                clash_api_port: 0,
+                clash_api_secret: None,
             })
             .await
             .expect_err("pre spawn failure");
@@ -1498,6 +1651,8 @@ sleep 30
             tun_enabled: false,
             sudo_script_dir: "/tmp/voya/scripts".into(),
             restart_on_crash: true,
+            clash_api_port: 0,
+            clash_api_secret: None,
         }
     }
 
@@ -1805,6 +1960,8 @@ sleep 30
             tun_enabled: true,
             sudo_script_dir: "/tmp/voya/scripts".into(),
             restart_on_crash: false,
+            clash_api_port: 0,
+            clash_api_secret: None,
         };
 
         supervisor.start(request.clone()).await.expect("start");
@@ -1849,5 +2006,267 @@ sleep 30
             SupervisorConnectionState::Disconnected,
             "the old core was stopped, so the shell must be told the core is down"
         );
+    }
+    /// `Restart` is not a distinct state machine — it is `Start`, which stops
+    /// the running core itself — but nothing asserted that ordering.
+    #[tokio::test]
+    async fn supervisor_restart_stops_the_previous_core_before_spawning_a_new_one() {
+        let events = SharedEvents::default();
+        let supervisor = supervisor_with(&events, TargetOs::Linux, Arc::new(ElevationState::new()));
+
+        let first = supervisor.start(crash_test_request()).await.expect("start");
+        let second = supervisor
+            .restart(crash_test_request())
+            .await
+            .expect("restart");
+
+        assert_eq!(second.state, SupervisorConnectionState::Connected);
+        assert_ne!(first.main_pid, second.main_pid);
+        assert_eq!(
+            events.lock().as_slice(),
+            [
+                "spawn:Main:pid=100:stdin=false",
+                "stop:Main:pid=100",
+                "spawn:Main:pid=101:stdin=false"
+            ]
+        );
+    }
+
+    /// Each native TUN start spawns its own health watcher, and the watcher from
+    /// the superseded start is still alive after a restart: it observes the
+    /// `Stopped` the restart itself caused. The generation guard is what stops
+    /// that from tearing the freshly started provider down again.
+    #[tokio::test]
+    async fn supervisor_ignores_the_health_watcher_of_a_superseded_native_tun_start() {
+        let events = SharedEvents::default();
+        let controller = Arc::new(FlippableNativeTunController::new(
+            events.clone(),
+            TunBackend::WindowsService,
+        ));
+        let sink = RecordingSupervisorEventSink::default();
+        let deps = SupervisorDeps::new(
+            Arc::new(FakeRunner::new(events.clone())),
+            Arc::new(ElevationState::new()),
+        )
+        .with_target_os(TargetOs::Windows)
+        .with_native_tun_controller(controller.clone())
+        .with_native_tun_health_interval(Duration::from_millis(10))
+        .with_event_sink(Arc::new(sink.clone()));
+        let supervisor = CoreSupervisor::spawn(deps);
+
+        supervisor
+            .start(native_tun_test_request())
+            .await
+            .expect("first native tun start");
+        let restarted = supervisor
+            .restart(native_tun_test_request())
+            .await
+            .expect("native tun restart");
+        assert_eq!(restarted.state, SupervisorConnectionState::Connected);
+
+        controller.set_provider_state(
+            NativeTunProviderState::Error,
+            Some("provider exited".to_string()),
+        );
+        for _ in 0..50 {
+            if supervisor.status().await.expect("status").state
+                == SupervisorConnectionState::Disconnected
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        // Give the watcher from the first generation several more ticks to
+        // deliver its own terminal report.
+        tokio::time::sleep(Duration::from_millis(60)).await;
+
+        assert_eq!(
+            supervisor.status().await.expect("status").state,
+            SupervisorConnectionState::Disconnected
+        );
+        let reported = sink.events();
+        assert_eq!(
+            reported.len(),
+            1,
+            "only the current generation may report the provider exit: {reported:?}"
+        );
+        assert_eq!(reported[0].message, "provider exited");
+    }
+
+    /// The pre-process is tracked for crash restarts too: when it dies the whole
+    /// pair is replaced, not just the main core.
+    #[tokio::test]
+    async fn supervisor_restarts_both_processes_when_the_pre_process_crashes() {
+        let events = SharedEvents::default();
+        let sink = RecordingSupervisorEventSink::default();
+        let deps = SupervisorDeps::new(
+            Arc::new(FakeRunner::new(events.clone())),
+            Arc::new(ElevationState::new()),
+        )
+        .with_target_os(TargetOs::Linux)
+        .with_event_sink(Arc::new(sink.clone()));
+        let supervisor = CoreSupervisor::spawn(deps);
+
+        let snapshot = supervisor
+            .start(SupervisorStartRequest {
+                pre: Some(
+                    CoreProcessSpec::new(
+                        CoreType::sing_box,
+                        launch("/tmp/sing-box-pre", "run -c pre.json --disable-color"),
+                    )
+                    .with_may_need_sudo(false),
+                ),
+                ..crash_test_request()
+            })
+            .await
+            .expect("start");
+
+        let restarted = supervisor
+            .process_exited(snapshot.pre_pid.expect("pre pid"), Some(1))
+            .await
+            .expect("a pre-process crash restarts the pair");
+
+        assert_eq!(restarted.state, SupervisorConnectionState::Connected);
+        assert_ne!(restarted.main_pid, snapshot.main_pid);
+        assert_ne!(restarted.pre_pid, snapshot.pre_pid);
+        assert!(matches!(
+            sink.outcomes().last(),
+            Some(CoreExitOutcome::Restarted { attempt: 1, .. })
+        ));
+        assert_eq!(
+            events.lock().as_slice(),
+            [
+                "spawn:Main:pid=100:stdin=false",
+                "spawn:Pre:pid=101:stdin=false",
+                "stop:Main:pid=100",
+                "stop:Pre:pid=101",
+                "spawn:Main:pid=102:stdin=false",
+                "spawn:Pre:pid=103:stdin=false"
+            ]
+        );
+    }
+
+    /// A start begins by stopping the previous core. If that stop fails — the
+    /// launcher could not kill an elevated core — the old core is still running,
+    /// so the start must abort and leave the tracked pids alone rather than
+    /// spawn a second core over the top of it.
+    #[tokio::test]
+    async fn supervisor_start_keeps_the_running_core_when_the_sudo_kill_fails() {
+        let events = SharedEvents::default();
+        let elevation = Arc::new(ElevationState::new());
+        elevation.set_granted(true);
+        let runner = Arc::new(FakeRunner::new(events.clone()));
+        let deps = SupervisorDeps::new(
+            Arc::clone(&runner) as Arc<dyn ProcessRunner>,
+            Arc::clone(&elevation),
+        )
+        .with_target_os(TargetOs::Linux);
+        let supervisor = CoreSupervisor::spawn(deps);
+        let request = SupervisorStartRequest {
+            active_profile_id: Some("active".to_string()),
+            main: CoreProcessSpec::new(
+                CoreType::sing_box,
+                launch("/tmp/sing-box", "run -c config.json --disable-color"),
+            ),
+            pre: None,
+            tun_enabled: true,
+            sudo_script_dir: "/tmp/voya/scripts".into(),
+            restart_on_crash: false,
+            clash_api_port: 0,
+            clash_api_secret: None,
+        };
+
+        let first = supervisor.start(request.clone()).await.expect("start");
+        runner.set_oneshot_output(ProcessOutput {
+            status_code: Some(1),
+            stdout: String::new(),
+            stderr: "kill: operation not permitted".to_string(),
+        });
+
+        let error = supervisor
+            .start(request)
+            .await
+            .expect_err("the elevated core could not be stopped");
+
+        assert!(matches!(error, SupervisorError::SudoKillFailed { .. }));
+        let snapshot = supervisor.status().await.expect("status");
+        assert_eq!(snapshot.state, SupervisorConnectionState::Connected);
+        assert_eq!(snapshot.main_pid, first.main_pid);
+        assert_eq!(
+            events
+                .lock()
+                .iter()
+                .filter(|event| event.starts_with("spawn:Main"))
+                .count(),
+            1,
+            "a failed teardown must not leave two cores running"
+        );
+    }
+
+    /// A token that reaches a tracing field ends up in the rolling log file and
+    /// in every bug report attached to it, which is the same exposure the
+    /// secret exists to close.
+    #[test]
+    fn supervisor_clash_api_secret_never_appears_in_debug_output() {
+        let secret = ClashApiSecret::generate();
+        let request = SupervisorStartRequest {
+            clash_api_secret: Some(secret.clone()),
+            ..crash_test_request()
+        };
+        let snapshot = SupervisorSnapshot {
+            clash_api_secret: Some(secret.clone()),
+            ..SupervisorSnapshot::disconnected()
+        };
+
+        for rendered in [format!("{request:?}"), format!("{snapshot:?}")] {
+            assert!(!rendered.contains(secret.as_str()), "{rendered}");
+            assert!(rendered.contains("<redacted>"), "{rendered}");
+        }
+        assert_eq!(secret.as_str().len(), 64, "two v4 UUIDs of hex digits");
+    }
+
+    #[tokio::test]
+    async fn supervisor_reports_the_clash_api_secret_only_while_connected() {
+        let events = SharedEvents::default();
+        let supervisor = supervisor_with(&events, TargetOs::Linux, Arc::new(ElevationState::new()));
+        let secret = ClashApiSecret::generate();
+
+        let connected = supervisor
+            .start(SupervisorStartRequest {
+                clash_api_port: 9_190,
+                clash_api_secret: Some(secret.clone()),
+                ..crash_test_request()
+            })
+            .await
+            .expect("start");
+        assert_eq!(
+            connected.clash_api_access(),
+            ClashApiAccess::new(Some(9_190), Some(secret))
+        );
+
+        let disconnected = supervisor.stop().await.expect("stop");
+
+        assert_eq!(
+            disconnected.clash_api_access(),
+            ClashApiAccess::default(),
+            "a stale token must not outlive the core that accepted it"
+        );
+    }
+
+    fn native_tun_test_request() -> SupervisorStartRequest {
+        SupervisorStartRequest {
+            active_profile_id: Some("active".to_string()),
+            main: CoreProcessSpec::new(
+                CoreType::sing_box,
+                launch("/tmp/sing-box", "run -c config.json --disable-color"),
+            )
+            .with_config_path("/tmp/voya/config.json"),
+            pre: None,
+            tun_enabled: true,
+            sudo_script_dir: "/tmp/voya/scripts".into(),
+            restart_on_crash: true,
+            clash_api_port: 0,
+            clash_api_secret: None,
+        }
     }
 }

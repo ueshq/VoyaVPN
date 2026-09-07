@@ -1,7 +1,5 @@
 import { useEffect } from "react";
 
-import { applyDocumentLocale } from "@voya/i18n";
-import { useI18n } from "@voya/i18n/use-i18n";
 import { applyUiPreferences, useUiPreferencesQuery } from "@/features/settings/ui-preferences";
 import {
   resolveThemeMode,
@@ -11,8 +9,8 @@ import {
 
 export function PreferencesBridge() {
   const preferencesQuery = useUiPreferencesQuery();
-  const themeMode = usePreferencesStore((state) => state.themeMode);
-  const { language } = useI18n();
+  // A Settings preview overrides the stored mode until it is saved or discarded.
+  const themeMode = usePreferencesStore((state) => state.themePreview ?? state.themeMode);
 
   useEffect(() => {
     if (preferencesQuery.data) {
@@ -20,11 +18,9 @@ export function PreferencesBridge() {
     }
   }, [preferencesQuery.data]);
 
+  // `changeLocale` already stamps `lang`/`dir` on the document element, so the
+  // bridge does not repeat it; it only owns the theme class.
   useThemeEffects(themeMode);
-
-  useEffect(() => {
-    applyDocumentLocale(language);
-  }, [language]);
 
   return null;
 }

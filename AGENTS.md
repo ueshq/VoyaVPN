@@ -32,19 +32,33 @@ pnpm --filter @voya/desktop build  # Build only the desktop app
 pnpm tauri:build --debug # Unsigned debug Tauri packages (no signing creds needed)
 
 pnpm run verify:local       # Full local verification suite — run this before declaring work done
+```
 
-# Individual gates (mirror CI jobs):
-pnpm run check:rust:test # Workspace tests (see note below) + shell binary test target
+`scripts/quality/verify-local.mjs` is the source of truth for the gate list: its
+steps are exactly the gates the CI `baseline` job runs, in the same order. Run
+them individually while iterating:
+
+```sh
+pnpm run check:architecture        # Crate/layer boundary rules (see "Architecture gate" below)
+pnpm run check:lockfile            # One resolved version per duplication-sensitive package
+pnpm run check:rust:fmt            # cargo fmt --all --check
+pnpm run check:rust:clippy         # clippy --workspace --all-targets -D warnings
+pnpm run check:rust:deps           # cargo-machete 0.9.2; install it locally first
+pnpm run check:rust:test           # Workspace tests (see note below) + shell binary test targets
 pnpm run check:frontend:typecheck  # pnpm -r run typecheck
-pnpm run check:frontend:test       # Vitest once across configured projects
-pnpm --filter @voya/desktop test --run src/features/profiles/server-table.test.tsx  # Single desktop test file
+pnpm run check:frontend:coverage   # Vitest once + global thresholds + per-module coverage floors
 pnpm run check:frontend:lint       # ESLint
-pnpm run check:rust:fmt  # cargo fmt --all --check
-pnpm run check:rust:clippy   # clippy --workspace --all-targets -D warnings
-pnpm run check:rust:deps     # cargo-machete 0.9.2; install it locally first
-pnpm run check:dead-code     # Knip workspace scan + strict production scan
-pnpm check:bindings      # Fail if generated IPC bindings drift (see IPC below)
-pnpm check:i18n          # Check locale key alignment, usage, dynamic keys, and visible hardcoded text
+pnpm run check:frontend:bundle     # Production build + bundle size budgets
+pnpm run check:frontend:smoke:mock # Playwright renderer smoke against the Tauri IPC mock
+pnpm run check:dead-code           # Knip workspace scan + strict production scan
+pnpm run check:sing-box            # Generated sing-box config acceptance
+pnpm run check:bindings            # Fail if generated IPC bindings drift (see IPC below)
+pnpm run check:i18n                # Locale key alignment, usage, dynamic keys, visible hardcoded text
+
+# Not part of verify:local; CI runs them in their own jobs:
+pnpm run check:desktop:smoke       # Packaged shell through tauri-driver (Linux CI)
+pnpm run check:frontend:test       # Vitest once, without the coverage gate
+pnpm --filter @voya/desktop test --run src/features/profiles/server-table.test.tsx  # Single desktop test file
 ```
 
 Single Rust test: `cargo test -p voya-core <test_name>` (substitute the owning crate).
@@ -82,6 +96,41 @@ A Rust workspace of layered crates plus the Tauri desktop shell, React app, and 
 
 Command-boundary errors are converted into a typed `AppError` union exposed to TypeScript; crate-internal errors may use local enums.
 
+### Architecture gate (`pnpm run check:architecture`)
+
+`scripts/quality/architecture.mjs` is the first step of `verify:local` and of the
+CI `baseline` job. It enforces rules that neither Clippy nor ESLint can express,
+so read it before moving code between crates:
+
+- **800 production lines per Rust file.** Lines inside terminal `#[cfg(test)]`
+  modules do not count. Split by responsibility when a module outgrows the cap
+  (that is what `crates/voya-app/src/subscriptions/update_flow.rs` is).
+- **`#[cfg(test)]` items must be terminal test modules.** Everything after the
+  first top-level `#[cfg(test)]` must be `#[cfg(test)] mod …` declarations, so
+  the production/test split is decidable without compiling.
+- **`unsafe` needs a `SAFETY:` comment** within the three preceding lines.
+  This covers `unsafe {`, `unsafe impl`, `unsafe extern`, and `unsafe fn`.
+- **`voya-core` must be OS independent and deterministic:** no `#[cfg]` on
+  `target_os`/`target_family`/`windows`/`unix`, no `cfg!()` on those, and no
+  `std::fs`/`std::net`/`std::process`/`std::env`, `SystemTime::now`,
+  `Instant::now`, or `rand`. Inject clocks, randomness, ports, and platform facts.
+- **`voya-app` reaches the network and filesystem through adapters:** no
+  `reqwest`, `tokio_tungstenite`, `tokio::net`, `tokio::fs`, `std::fs`,
+  `std::net`, `std::process`, or `tokio::process` (grouped imports such as
+  `use std::{fs, io};` are matched too), and no `specta`.
+- **The Tauri shell has no tests, no direct domain access, and no DTOs:** no
+  `#[cfg(test)]` (its lib test harness is disabled), no `voya_core::`/`voya_db::`,
+  and no `#[derive(… Type …)]` outside `ipc/events.rs`. Manifest checks reject a
+  direct, renamed, or `[dependencies.…]`-table dependency on `voya-core`/`voya-db`
+  in the shell and on `specta` in `voya-app`.
+- **Retired v2rayN compatibility stays retired:** no `serde(alias = …)` or
+  `rename_all = "PascalCase"` outside `crates/voya-net/src/clash.rs`, no
+  `v2rayn://`, and no retired config-compat identifiers. `voya-contracts` must be
+  camelCase everywhere.
+
+The rule set itself is unit-tested in `scripts/quality/architecture-analyzer.test.mjs`
+and `scripts/quality/architecture-rules.test.mjs`.
+
 ## Config generation parity (highest-risk area)
 
 Config generation correctness is judged by the **generated sing-box JSON**, not entity snapshots. Golden testing is the parity contract:
@@ -93,7 +142,7 @@ Config generation correctness is judged by the **generated sing-box JSON**, not 
 
 ## Cores and i18n
 
-- The sing-box core binary is **not redistributed by default** (GPL/AGPL). It is fetched on first run: `postinstall` runs `scripts/core/install-sing-box.mjs` (force re-fetch with `pnpm core:sing-box:install`).
+- The sing-box core seed (GPL-3.0-or-later) is **bundled into every locally built package, debug and dry-run included** — there is no download-on-first-run path in the app. `postinstall` runs `scripts/core/install-sing-box.mjs`, which fetches the SHA-256-pinned upstream archive at `pnpm install` time into `resources/core-seeds/sing_box/` and copies it into the per-user app-data dir (`VOYAVPN_APP_CONFIG_DIR`, otherwise the OS default). `scripts/tauri/cli.mjs` re-stages the seed for every `tauri build` and injects a generated `bundle.resources` overlay, so the seed ships inside the package; the app copies it into app data `bin/` on first run. Skip/force with `VOYAVPN_SKIP_SING_BOX_POSTINSTALL`, `VOYAVPN_FETCH_SING_BOX_ON_INSTALL` (CI postinstall opt-in), `VOYAVPN_FORCE_SING_BOX_FETCH`, or `pnpm core:sing-box:install --force`. Bumping the pin is documented in `docs/release/sing-box-seed-pinning.md`; any package handed to a third party carries GPL redistribution obligations (see `docs/release/THIRD_PARTY_NOTICES.md`).
 - Locale files (`packages/i18n/src/locales/*.json`) are maintained directly by Voya and are the sole language source. There are no ResX imports, overlays, or upstream snapshots. `pnpm check:i18n` checks locale alignment and production usage.
 
 ## macOS NetworkExtension hygiene
@@ -121,4 +170,5 @@ become the elected provider for `app.voyavpn.desktop.PacketTunnel`.
 - Clippy is strict: `unwrap_used`, `dbg_macro`, `todo`, and `all` are warnings, and CI runs clippy with `-D warnings` — avoid `.unwrap()`/`.expect()` outside tests and setup.
 - The ADRs indexed in `docs/adr/README.md` are the authoritative design record — consult them before changing crate boundaries or the IPC contract.
 - Commit messages in this repo are written in Chinese with `type:` prefixes (feat/fix/refactor/chore/docs); multiple changes are often combined in one message.
+- **CI OS coverage.** Clippy with `-D warnings` runs on ubuntu-24.04, macos-15 and windows-2025 (`platform-check`), so `#[cfg(windows)]` / `#[cfg(target_os = "macos")]` code is linted by the strict workspace lints. Rust *tests* run only on Linux on purpose: no `#[cfg(test)]` module in the workspace is OS-gated, so a cross-OS run would re-execute the same suite at triple the wall-clock cost. If you add an OS-gated test module, add `pnpm run check:rust:test` to that matrix in the same change. OS behaviour that only a real machine can exercise is covered at release time by `docs/release/os-smoke-matrix.md`.
 - Renderer smoke tests use Playwright with a Tauri IPC mock (`pnpm check:frontend:smoke:mock`); Linux CI separately runs the packaged shell through `tauri-driver` (`pnpm check:desktop:smoke`). Release tooling and runbooks live in `scripts/release/` and `docs/release/`.

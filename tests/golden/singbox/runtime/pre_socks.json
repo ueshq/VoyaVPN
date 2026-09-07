@@ -44,7 +44,10 @@
         "type": "direct"
       }
     ],
-    "routeFinal": "proxy"
+    "routeFinal": "proxy",
+    "clashApi": {
+      "external_controller": "127.0.0.1:10813"
+    }
   },
   "preSocks": {
     "inbounds": [
@@ -80,6 +83,9 @@
         "type": "direct"
       }
     ],
-    "routeFinal": "proxy"
+    "routeFinal": "proxy",
+    "clashApi": {
+      "external_controller": "127.0.0.1:10814"
+    }
   }
 }

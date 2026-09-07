@@ -1,35 +1,40 @@
 use sqlx::{sqlite::SqliteRow, Row};
-use tokio::sync::Mutex;
 use voya_core::{ConfigType, ProfileExItem, ProfileItem};
 
 use crate::{
     blob,
-    executor::{run_query, RepositoryExecutor},
+    executor::{delete_each, repository_constructors, run_query, RepositoryExecutor},
     DbError, ProfileExRepository, Result,
 };
+
+/// The one listing query behind every profile list path.
+///
+/// `list`, `list_by_subscription_id` and `list_with_profile_ex` used to repeat
+/// this join and sort five times, so a sort fix or a new column had to be
+/// applied in five places. The subscription filter is expressed as a nullable
+/// bind instead of a second query string: passing `NULL` selects everything.
+const PROFILE_LIST_QUERY: &str = r#"
+    SELECT
+        p.*,
+        COALESCE(e.delay, 0) AS ex_delay,
+        COALESCE(e.speed, 0.0) AS ex_speed,
+        COALESCE(e.sort, 0) AS ex_sort,
+        e.message AS ex_message,
+        e.ip_info AS ex_ip_info
+    FROM profile_items p
+    LEFT JOIN profile_ex_items e ON p.index_id = e.index_id
+    WHERE (? IS NULL OR p.subscription_id = ?)
+    ORDER BY COALESCE(e.sort, 0), p.index_id
+"#;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ProfileRepository<'executor> {
     executor: RepositoryExecutor<'executor>,
 }
 
+repository_constructors!(ProfileRepository);
+
 impl<'executor> ProfileRepository<'executor> {
-    #[must_use]
-    pub(crate) const fn new(pool: &'executor sqlx::SqlitePool) -> Self {
-        Self {
-            executor: RepositoryExecutor::Pool(pool),
-        }
-    }
-
-    #[must_use]
-    pub(crate) const fn new_in_transaction(
-        transaction: &'executor Mutex<sqlx::Transaction<'static, sqlx::Sqlite>>,
-    ) -> Self {
-        Self {
-            executor: RepositoryExecutor::Transaction(transaction),
-        }
-    }
-
     pub async fn upsert(&self, item: &ProfileItem) -> Result<()> {
         let protocol = blob::profile_protocol_to_text(&item.protocol)?;
         let transport = item
@@ -88,6 +93,10 @@ impl<'executor> ProfileRepository<'executor> {
             .await
     }
 
+    /// Single-row lookup, deliberately strict.
+    ///
+    /// A caller that asked for one profile has to hear that its stored payload
+    /// cannot be decoded; only the list paths trade that for showing the rest.
     pub async fn get(&self, index_id: &str) -> Result<Option<ProfileItem>> {
         let row = run_query!(
             self.executor,
@@ -95,119 +104,39 @@ impl<'executor> ProfileRepository<'executor> {
             fetch_optional
         )?;
 
-        row.map(row_to_profile).transpose()
+        row.map(|row| row_to_profile(&row)).transpose()
     }
 
     pub async fn list(&self) -> Result<Vec<ProfileItem>> {
-        let rows = run_query!(
-            self.executor,
-            sqlx::query(
-                r#"
-            SELECT p.*
-            FROM profile_items p
-            LEFT JOIN profile_ex_items e ON p.index_id = e.index_id
-            ORDER BY COALESCE(e.sort, 0), p.index_id
-            "#,
-            ),
-            fetch_all
-        )?;
-
-        rows.into_iter().map(row_to_profile).collect()
+        self.list_by_subscription_id(None).await
     }
 
     pub async fn list_by_subscription_id(
         &self,
         subscription_id: Option<&str>,
     ) -> Result<Vec<ProfileItem>> {
-        let rows = if let Some(subscription_id) = subscription_id.filter(|value| !value.is_empty())
-        {
-            run_query!(
-                self.executor,
-                sqlx::query(
-                    r#"
-                SELECT p.*
-                FROM profile_items p
-                LEFT JOIN profile_ex_items e ON p.index_id = e.index_id
-                WHERE p.subscription_id = ?
-                ORDER BY COALESCE(e.sort, 0), p.index_id
-                "#,
-                )
-                .bind(subscription_id),
-                fetch_all
-            )?
-        } else {
-            run_query!(
-                self.executor,
-                sqlx::query(
-                    r#"
-                SELECT p.*
-                FROM profile_items p
-                LEFT JOIN profile_ex_items e ON p.index_id = e.index_id
-                ORDER BY COALESCE(e.sort, 0), p.index_id
-                "#,
-                ),
-                fetch_all
-            )?
-        };
-
-        rows.into_iter().map(row_to_profile).collect()
+        Ok(self
+            .list_with_profile_ex(subscription_id)
+            .await?
+            .into_iter()
+            .map(|(profile, _)| profile)
+            .collect())
     }
 
     pub async fn list_with_profile_ex(
         &self,
         subscription_id: Option<&str>,
     ) -> Result<Vec<(ProfileItem, ProfileExItem)>> {
-        let rows = if let Some(subscription_id) = subscription_id.filter(|value| !value.is_empty())
-        {
-            run_query!(
-                self.executor,
-                sqlx::query(
-                    r#"
-                SELECT
-                    p.*,
-                    COALESCE(e.delay, 0) AS ex_delay,
-                    COALESCE(e.speed, 0.0) AS ex_speed,
-                    COALESCE(e.sort, 0) AS ex_sort,
-                    e.message AS ex_message,
-                    e.ip_info AS ex_ip_info
-                FROM profile_items p
-                LEFT JOIN profile_ex_items e ON p.index_id = e.index_id
-                WHERE p.subscription_id = ?
-                ORDER BY COALESCE(e.sort, 0), p.index_id
-                "#,
-                )
+        let subscription_id = subscription_id.filter(|value| !value.is_empty());
+        let rows = run_query!(
+            self.executor,
+            sqlx::query(PROFILE_LIST_QUERY)
+                .bind(subscription_id)
                 .bind(subscription_id),
-                fetch_all
-            )?
-        } else {
-            run_query!(
-                self.executor,
-                sqlx::query(
-                    r#"
-                SELECT
-                    p.*,
-                    COALESCE(e.delay, 0) AS ex_delay,
-                    COALESCE(e.speed, 0.0) AS ex_speed,
-                    COALESCE(e.sort, 0) AS ex_sort,
-                    e.message AS ex_message,
-                    e.ip_info AS ex_ip_info
-                FROM profile_items p
-                LEFT JOIN profile_ex_items e ON p.index_id = e.index_id
-                ORDER BY COALESCE(e.sort, 0), p.index_id
-                "#,
-                ),
-                fetch_all
-            )?
-        };
+            fetch_all
+        )?;
 
-        rows.into_iter()
-            .map(|row| {
-                let profile = row_to_profile_ref(&row)?;
-                let profile_ex = row_to_profile_ex_joined(&row)?;
-
-                Ok((profile, profile_ex))
-            })
-            .collect()
+        decode_profile_rows(&rows)
     }
 
     pub async fn exists(&self, index_id: &str) -> Result<bool> {
@@ -232,33 +161,12 @@ impl<'executor> ProfileRepository<'executor> {
     }
 
     pub async fn delete_many(&self, index_ids: &[String]) -> Result<u64> {
-        match self.executor {
-            RepositoryExecutor::Pool(pool) => {
-                let mut transaction = pool.begin().await?;
-                let mut deleted = 0;
-                for index_id in index_ids {
-                    let result = sqlx::query("DELETE FROM profile_items WHERE index_id = ?")
-                        .bind(index_id)
-                        .execute(&mut *transaction)
-                        .await?;
-                    deleted += result.rows_affected();
-                }
-                transaction.commit().await?;
-                Ok(deleted)
-            }
-            RepositoryExecutor::Transaction(transaction) => {
-                let mut transaction = transaction.lock().await;
-                let mut deleted = 0;
-                for index_id in index_ids {
-                    let result = sqlx::query("DELETE FROM profile_items WHERE index_id = ?")
-                        .bind(index_id)
-                        .execute(&mut **transaction)
-                        .await?;
-                    deleted += result.rows_affected();
-                }
-                Ok(deleted)
-            }
-        }
+        delete_each(
+            self.executor,
+            "DELETE FROM profile_items WHERE index_id = ?",
+            index_ids,
+        )
+        .await
     }
 
     pub async fn delete_by_subscription_id(&self, subscription_id: &str) -> Result<u64> {
@@ -273,11 +181,46 @@ impl<'executor> ProfileRepository<'executor> {
     }
 }
 
-fn row_to_profile(row: SqliteRow) -> Result<ProfileItem> {
-    row_to_profile_ref(&row)
+/// Decodes a listing's rows, dropping the ones this build cannot read.
+///
+/// The stored protocol/transport/TLS blobs are strict domain types with no
+/// version tag, so a row written by a newer build, or one whose `config_type`
+/// column disagrees with its blob, fails on its own. Propagating that would make
+/// every profile screen, the runtime's config generation, group resolution and
+/// subscription import fail together — the user could no longer see, connect to
+/// or even delete a server, and the only recovery would be deleting the database
+/// file. Bad rows are therefore logged and skipped, while genuine database
+/// faults (a missing column, a closed pool) still propagate.
+fn decode_profile_rows(rows: &[SqliteRow]) -> Result<Vec<(ProfileItem, ProfileExItem)>> {
+    let mut decoded = Vec::with_capacity(rows.len());
+    let mut skipped_rows = 0usize;
+
+    for row in rows {
+        match row_to_profile(row) {
+            Ok(profile) => decoded.push((profile, row_to_profile_ex_joined(row)?)),
+            Err(error) if error.is_row_payload() => {
+                skipped_rows += 1;
+                tracing::warn!(
+                    index_id = %row.try_get::<String, _>("index_id").unwrap_or_default(),
+                    error = %error,
+                    "skipping a stored profile this build cannot decode"
+                );
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
+    if skipped_rows > 0 {
+        tracing::warn!(
+            skipped_rows,
+            "some profiles were hidden because their stored payload could not be decoded"
+        );
+    }
+
+    Ok(decoded)
 }
 
-fn row_to_profile_ref(row: &SqliteRow) -> Result<ProfileItem> {
+fn row_to_profile(row: &SqliteRow) -> Result<ProfileItem> {
     let config_type_value = row.try_get::<String, _>("config_type")?;
     let subscription_id = row.try_get::<Option<String>, _>("subscription_id")?;
     let protocol = blob::profile_protocol_from_text(&row.try_get::<String, _>("protocol")?)?;

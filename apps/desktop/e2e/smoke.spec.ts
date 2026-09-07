@@ -1,13 +1,74 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
 import { installTauriSmokeMock } from "./fixtures/tauri-mock";
 
 const importFixture = readFileSync(new URL("./fixtures/vless-share-link.txt", import.meta.url), "utf8").trim();
 
+type SmokeCall = { args: Record<string, unknown>; command: string };
+
+async function smokeCalls(page: Page) {
+  return page.evaluate(() => {
+    const state = window.__VOYA_SMOKE__.state as { calls: SmokeCall[] };
+    return state.calls;
+  });
+}
+
+/**
+ * "Connected" is a substring of "Disconnected", so the footer state must be
+ * matched as an exact node text or the assertion is vacuous.
+ */
+function coreStateBadge(page: Page, state: "Connected" | "Disconnected") {
+  return page.getByTestId("sidebar-footer").getByText(state, { exact: true });
+}
+
+/**
+ * Push a connected core state through the transient-stream channel. The event
+ * bridge registers its listeners asynchronously after mount, so the event is
+ * re-emitted until the shell has actually observed it.
+ */
+async function connectFakeCore(page: Page) {
+  // The boot-time runtime_status seed writes "disconnected" into the store, so
+  // wait for it before emitting or it can overwrite the connected state right
+  // after the poll observed it.
+  await expect
+    .poll(async () => (await smokeCalls(page)).some((call) => call.command === "runtime_status"))
+    .toBe(true);
+
+  await expect
+    .poll(async () => {
+      await page.evaluate(() => {
+        window.__VOYA_SMOKE__.emit("transient-stream-event", {
+          kind: "coreState",
+          payload: {
+            activeProfileId: null,
+            mainPid: 4242,
+            prePid: null,
+            runningCoreType: "singBox",
+            state: "connected",
+          },
+        });
+      });
+      return coreStateBadge(page, "Connected").count();
+    })
+    .toBeGreaterThan(0);
+}
+
 test.beforeEach(async ({ page }) => {
   await installTauriSmokeMock(page);
   await page.goto("/");
+});
+
+test.afterEach(async ({ page }) => {
+  // A command the mock does not implement rejects through the `default:` branch,
+  // and callers such as use-window-chrome swallow that rejection. Failing here
+  // keeps a newly added boot-time command from silently going untested.
+  const unhandled = await page.evaluate(() => {
+    const state = window.__VOYA_SMOKE__.state as { unhandled: string[] };
+    return state.unhandled;
+  });
+  expect(unhandled).toEqual([]);
 });
 
 test("loads the app shell and opens in-shell settings", async ({ page }) => {
@@ -20,13 +81,11 @@ test("loads the app shell and opens in-shell settings", async ({ page }) => {
   await page.getByRole("tab", { name: "Settings" }).click();
 
   await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
-  const openCalls = await page.evaluate(() => {
-    const state = window.__VOYA_SMOKE__.state as {
-      calls: Array<{ command: string }>;
-    };
-    return state.calls.filter((call) => call.command === "open_settings_window").length;
-  });
-  expect(openCalls).toBe(0);
+  // Settings render inside the main shell: no window plugin call may be made to
+  // spawn or drive a second window. (Counting a command that no longer exists in
+  // bindings.ts, as this test used to, could never fail.)
+  const calls = await smokeCalls(page);
+  expect(calls.filter((call) => call.command.startsWith("plugin:window|"))).toEqual([]);
 });
 
 test("guards unsaved settings when leaving the settings tab", async ({ page }) => {
@@ -200,7 +259,7 @@ test("adds and imports profiles, activates one, and connects through the fake ru
   const connectButton = page.getByTestId("home-connect-button");
   await expect(connectButton).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByTestId("home-status-card")).toContainText("PID 4242");
-  await expect(page.getByTestId("sidebar-footer")).toContainText("Connected");
+  await expect(coreStateBadge(page, "Connected")).toBeVisible();
 
   await connectButton.click();
   await expect(connectButton).toHaveAttribute("aria-pressed", "false");
@@ -208,11 +267,17 @@ test("adds and imports profiles, activates one, and connects through the fake ru
 });
 
 test("uses the proxy groups and connections routes through the proxy runtime IPC", async ({ page }) => {
+  // The proxy screens only talk to the Clash API while the core runs.
+  await connectFakeCore(page);
   await page.getByRole("tab", { name: "Proxies" }).click();
 
   await expect(page.getByRole("heading", { exact: true, name: "Proxies" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Smoke Node VLESS 23 ms Active/ })).toBeVisible();
   await page.getByRole("button", { name: /Smoke Backup Node/ }).click();
+  // The selection has to be observable in the UI, not just in the call ledger.
+  await expect(page.getByRole("button", { name: /Smoke Backup Node VLESS 41 ms Active/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Smoke Node VLESS 23 ms/ })).toBeEnabled();
+
   await page.getByRole("button", { exact: true, name: "Test selected" }).click();
   await page.getByRole("button", { exact: true, name: "Direct" }).click();
 
@@ -229,14 +294,9 @@ test("uses the proxy groups and connections routes through the proxy runtime IPC
   await connectionsPage.getByRole("tab", { name: "Connections" }).click();
   await expect(page.getByText("No connections", { exact: true })).toBeVisible();
 
-  const commands = await page.evaluate(() => {
-    const state = window.__VOYA_SMOKE__.state as {
-      calls: Array<{ command: string }>;
-    };
-    return state.calls.map((call) => call.command);
-  });
+  const calls = await smokeCalls(page);
 
-  expect(commands).toEqual(
+  expect(calls.map((call) => call.command)).toEqual(
     expect.arrayContaining([
       "proxy_list_groups",
       "proxy_select_node",
@@ -247,7 +307,14 @@ test("uses the proxy groups and connections routes through the proxy runtime IPC
       "proxy_close_connection",
     ]),
   );
-  expect(commands.some((command) => command.startsWith("clash_"))).toBe(false);
+  expect(calls.filter((call) => call.command === "proxy_select_node").at(-1)?.args).toMatchObject({
+    groupName: "PROXY",
+    nodeName: "Smoke Backup Node",
+  });
+  // Only testable nodes of the shown group are probed.
+  expect(calls.filter((call) => call.command === "proxy_test_delay").at(-1)?.args.nodeNames).toEqual(
+    expect.arrayContaining(["Smoke Node", "Smoke Backup Node"]),
+  );
 });
 
 test("edits routing and DNS settings without network or OS side effects", async ({ page }) => {
@@ -277,5 +344,67 @@ test("edits routing and DNS settings without network or OS side effects", async 
   await settings.getByRole("checkbox", { exact: true, name: "FakeIP" }).check();
   await settings.getByLabel("Remote DNS").fill("https://dns.google/dns-query");
   await settings.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(settings.getByText("FakeIP").first()).toBeVisible();
+
+  // Asserting the static "FakeIP" label proves nothing about the save; read the
+  // recorded payload instead.
+  await expect
+    .poll(async () => (await smokeCalls(page)).filter((call) => call.command === "save_dns_settings").length)
+    .toBeGreaterThan(0);
+
+  const dnsCall = (await smokeCalls(page)).filter((call) => call.command === "save_dns_settings").at(-1);
+  expect(dnsCall?.args).toMatchObject({
+    settings: { fakeIp: true, remote: "https://dns.google/dns-query" },
+  });
+});
+
+test("routes the three IPC event channels into the shell", async ({ page }) => {
+  await expect(coreStateBadge(page, "Disconnected")).toBeVisible();
+
+  // Transient stream: core state and statistics land in the sidebar footer.
+  await connectFakeCore(page);
+  await page.evaluate(() => {
+    window.__VOYA_SMOKE__.emit("transient-stream-event", {
+      kind: "statistics",
+      payload: {
+        activeProfileId: null,
+        directDownloadBytesPerSecond: 0,
+        directUploadBytesPerSecond: 0,
+        downloadBytesPerSecond: 4096,
+        proxyDownloadBytesPerSecond: 4096,
+        proxyUploadBytesPerSecond: 2048,
+        serverStat: null,
+        uploadBytesPerSecond: 2048,
+      },
+    });
+  });
+
+  await expect(coreStateBadge(page, "Disconnected")).toHaveCount(0);
+  await expect(page.getByTestId("sidebar-footer")).toContainText("Up 2.0 KB/s");
+  await expect(page.getByTestId("sidebar-footer")).toContainText("Down 4.0 KB/s");
+
+  // Imperative app event: a notice becomes a toast. Delivery is per event name,
+  // so this payload must not reach the invalidate/transient handlers.
+  await page.evaluate(() => {
+    window.__VOYA_SMOKE__.emit("app-event", {
+      kind: "notice",
+      payload: { level: "warning", message: "Smoke notice detail", title: "Smoke notice" },
+    });
+  });
+  await expect(page.getByText("Smoke notice detail", { exact: true })).toBeVisible();
+  await expect(coreStateBadge(page, "Connected")).toBeVisible();
+
+  // Invalidation: the profiles query refetches.
+  await page.getByRole("tab", { name: "Profiles" }).click();
+  await expect(page.getByRole("button", { exact: true, name: "Add" })).toBeVisible();
+  const before = (await smokeCalls(page)).filter((call) => call.command === "list_profiles").length;
+
+  await page.evaluate(() => {
+    window.__VOYA_SMOKE__.emit("invalidate-event", {
+      keys: [{ queryKey: ["profiles"], reason: "smoke" }],
+    });
+  });
+
+  await expect
+    .poll(async () => (await smokeCalls(page)).filter((call) => call.command === "list_profiles").length)
+    .toBeGreaterThan(before);
 });

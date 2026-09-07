@@ -13,12 +13,12 @@ pub mod ruleset;
 pub use download::{
     DownloadAttempt, DownloadBytesResponse, DownloadClient, DownloadError, DownloadRequest,
     DownloadResponse, Result, DEFAULT_BINARY_RESPONSE_LIMIT_BYTES,
-    DEFAULT_TEXT_RESPONSE_LIMIT_BYTES, USER_AGENT_PREFIX,
+    DEFAULT_TEXT_RESPONSE_LIMIT_BYTES, EMPTY_RESPONSE_ATTEMPT_ERROR, USER_AGENT_PREFIX,
 };
 pub use subscription::{
-    build_subscription_url, decode_base64_payload, SubscriptionClient, SubscriptionFetchOptions,
-    SubscriptionFetchResult, SubscriptionFetchSource, DEFAULT_SUB_CONVERT_CONFIG,
-    DEFAULT_SUB_CONVERT_URL,
+    build_subscription_url, decode_base64_payload, FailedSubscriptionSource, SubscriptionClient,
+    SubscriptionFetchOptions, SubscriptionFetchResult, SubscriptionFetchSource,
+    DEFAULT_SUB_CONVERT_CONFIG, DEFAULT_SUB_CONVERT_URL,
 };
 pub use url::{validate_absolute_http_url, validate_absolute_https_url, UrlValidationError};
 

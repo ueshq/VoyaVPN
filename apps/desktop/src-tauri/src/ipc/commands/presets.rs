@@ -51,17 +51,7 @@ pub async fn import_config_template<R: tauri::Runtime>(
     };
     let config = commit_config_mutation(mutation).await?;
     emit_preset_invalidation(&app, "config-template-imported")?;
-    if let Err(error) =
-        restart_if_connected_after_config_change(&app, &state, &config, "Config template imported")
-            .await
-    {
-        report_post_commit_error(
-            &app,
-            "Template imported; core restart failed",
-            &format!("{error:?}"),
-            AppNoticeLevel::Warning,
-        );
-    }
+    restart_after_config_change(&app, &state, &config, ConfigChange::CONFIG_TEMPLATE).await;
 
     Ok(result)
 }

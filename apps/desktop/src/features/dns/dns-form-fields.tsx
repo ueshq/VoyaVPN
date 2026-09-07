@@ -5,6 +5,7 @@ import { Input } from "@voya/ui/components/input";
 import { Label } from "@voya/ui/components/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@voya/ui/components/select";
 import { Textarea } from "@voya/ui/components/textarea";
+import { useI18n } from "@voya/i18n/use-i18n";
 import { cn } from "@voya/ui/lib/utils";
 
 import { DNS_STRATEGIES, EMPTY_SELECT_VALUE } from "./dns-constants";
@@ -40,24 +41,34 @@ export function CheckboxField({
 }
 
 export function TextField({
+  error,
   label,
   onChange,
   value,
 }: {
+  error?: string;
   label: string;
   onChange: (value: string) => void;
   value: string;
 }) {
   const id = useId();
+  const errorId = `${id}-error`;
 
   return (
     <div className="grid gap-1.5">
       <Label htmlFor={id}>{label}</Label>
       <Input
+        aria-describedby={error ? errorId : undefined}
+        aria-invalid={error ? true : undefined}
         id={id}
         onChange={(event) => onChange(event.target.value)}
         value={value}
       />
+      {error ? (
+        <span className="text-xs text-destructive" id={errorId}>
+          {error}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -71,6 +82,7 @@ export function SelectField({
   onChange: (value: string) => void;
   value: string;
 }) {
+  const { t } = useI18n();
   const id = useId();
   const selectValue = value === "" ? EMPTY_SELECT_VALUE : value;
 
@@ -87,7 +99,7 @@ export function SelectField({
         <SelectContent>
           {DNS_STRATEGIES.map((strategy) => (
             <SelectItem key={strategy || EMPTY_SELECT_VALUE} value={strategy || EMPTY_SELECT_VALUE}>
-              {strategy || "default"}
+              {strategy || t("panes.routing.defaultValue")}
             </SelectItem>
           ))}
         </SelectContent>

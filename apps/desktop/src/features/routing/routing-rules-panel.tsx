@@ -30,8 +30,8 @@ import type { RoutingScreenController } from "./use-routing-screen";
 export function RoutingRulesPanel({ controller }: { controller: RoutingScreenController }) {
   const { t } = useI18n();
   const {
-    deleteSelectedRule,
     moveSelectedRule,
+    requestDeleteRule,
     selectedRouting,
     selectedRule,
     setRuleDialog,
@@ -60,7 +60,6 @@ export function RoutingRulesPanel({ controller }: { controller: RoutingScreenCon
             {t("panes.routing.rule")}
           </Button>
           <Button
-            aria-label={t("panes.routing.moveRuleUp")}
             disabled={!selectedRule}
             onClick={() => selectedRule && setRuleDialog({ mode: "edit", rule: selectedRule })}
             size="sm"
@@ -71,7 +70,7 @@ export function RoutingRulesPanel({ controller }: { controller: RoutingScreenCon
             {t("actions.edit")}
           </Button>
           <Button
-            aria-label={t("panes.routing.moveRuleDown")}
+            aria-label={t("panes.routing.moveRuleUp")}
             disabled={!selectedRouting || !selectedRule}
             onClick={() => moveSelectedRule(MOVE_ACTIONS.Up)}
             size="icon"
@@ -81,6 +80,7 @@ export function RoutingRulesPanel({ controller }: { controller: RoutingScreenCon
             <ArrowUp className="size-4" aria-hidden="true" />
           </Button>
           <Button
+            aria-label={t("panes.routing.moveRuleDown")}
             disabled={!selectedRouting || !selectedRule}
             onClick={() => moveSelectedRule(MOVE_ACTIONS.Down)}
             size="icon"
@@ -91,7 +91,7 @@ export function RoutingRulesPanel({ controller }: { controller: RoutingScreenCon
           </Button>
           <Button
             disabled={!selectedRouting || !selectedRule}
-            onClick={deleteSelectedRule}
+            onClick={requestDeleteRule}
             size="sm"
             type="button"
             variant="outline"

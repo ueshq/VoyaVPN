@@ -29,7 +29,7 @@ describe("routing editor dialogs", () => {
     await user.type(screen.getByLabelText("Source URL"), "http://example.test/routes.json");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(await screen.findByText("URL must use https://")).toBeInTheDocument();
+    expect(await screen.findByText("The URL must use https://")).toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
 
     await user.clear(screen.getByLabelText("Source URL"));
@@ -69,6 +69,50 @@ describe("routing editor dialogs", () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ id: "route-1" })));
   });
 
+  // Rules the dialog cannot even show must not silently block Save: a stored
+  // rule that fails a stricter validator is carried through untouched.
+  it("submits an existing profile whose stored rules would fail the rule validator", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const brokenRule = { ...rule(), port: "not-a-port" };
+    render(
+      <RoutingProfileDialog
+        mode="edit"
+        onOpenChange={vi.fn()}
+        onSubmit={onSubmit}
+        open
+        routing={{ ...routing(), rules: [brokenRule] }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ rules: [brokenRule] })),
+    );
+  });
+
+  // Anything the dialog has no field for still has to be reported, or Save is a
+  // silent no-op.
+  it("renders a form-level error for an issue it has no field for", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(
+      <RoutingProfileDialog
+        mode="edit"
+        onOpenChange={vi.fn()}
+        onSubmit={onSubmit}
+        open
+        routing={{ ...routing(), domainStrategy: "NotAStrategy" }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("This value is not valid")).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it("validates, canonicalizes, and submits a new routing rule", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
@@ -85,8 +129,10 @@ describe("routing editor dialogs", () => {
     await user.type(screen.getByLabelText("port"), "invalid");
     await user.type(screen.getByLabelText("network"), "icmp");
     await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(await screen.findByText("port must be a comma-separated list of ports or ranges")).toBeInTheDocument();
-    expect(screen.getByText("network must be tcp, udp, or tcp,udp")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Port must be a comma-separated list of ports or ranges"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Network must be tcp, udp, or tcp,udp")).toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
 
     await user.clear(screen.getByLabelText("port"));

@@ -115,3 +115,20 @@ pub enum DbError {
         source: serde_json::Error,
     },
 }
+
+impl DbError {
+    /// True when the error describes one stored row's payload instead of the
+    /// database as a whole.
+    ///
+    /// The persisted blobs are the raw serde shape of the domain types, so a row
+    /// written by a newer build (an unknown protocol `kind`, a field this build
+    /// does not know) or edited by hand fails to decode on its own. List paths
+    /// skip such rows — failing the whole query would hide every other server and
+    /// leave the user unable to see, connect to, or delete anything — while
+    /// single-row lookups still report them. Everything else (a missing column, a
+    /// closed pool) is a whole-database fault and must keep propagating.
+    #[must_use]
+    pub fn is_row_payload(&self) -> bool {
+        matches!(self, Self::Blob(_) | Self::InvalidEnum { .. })
+    }
+}

@@ -30,6 +30,9 @@ const FAILURE_BACKOFF_MAX_DOUBLINGS: u32 = 6;
 /// Never re-attempt the same subscription faster than this, regardless of
 /// how short its configured interval is.
 const MIN_ATTEMPT_SPACING_SECONDS: i64 = 60;
+/// Reported when `close()` interrupts an attempt. It is not a source failure,
+/// but it is not a success either: the schedule must retry it next launch.
+const SHUTDOWN_MESSAGE: &str = "subscription auto-update stopped for shutdown";
 
 /// Result of one automatic update attempt, delivered to the host sink.
 #[derive(Debug, Clone)]
@@ -141,6 +144,13 @@ impl SubscriptionAutoUpdateScheduler {
         Self { shutdown, handle }
     }
 
+    /// Requests shutdown without waiting for the loop to stop.
+    ///
+    /// An in-flight run abandons its download, skips the subscriptions it has
+    /// not started, and discards a fetch that finished after the request rather
+    /// than committing a configuration into a runtime that is being torn down.
+    /// A commit already in progress still runs to completion — SQLite keeps it
+    /// atomic — and dropping the scheduler aborts the task outright.
     pub fn close(&self) {
         let _ = self.shutdown.send(true);
     }
@@ -167,6 +177,9 @@ async fn run_scheduler(
     // interval after launch instead of racing app startup.
     interval.tick().await;
     let mut attempts: BTreeMap<String, AttemptState> = BTreeMap::new();
+    // A second handle on the same signal: the `select!` below borrows
+    // `shutdown` for the whole statement, so the run itself needs its own.
+    let mut run_shutdown = shutdown.clone();
 
     loop {
         tokio::select! {
@@ -183,8 +196,14 @@ async fn run_scheduler(
                     target_os,
                     sink.as_ref(),
                     &mut attempts,
+                    &mut run_shutdown,
                 )
                 .await;
+                // A run interrupted by shutdown consumes the notification the
+                // arm above waits on, so leave from here instead.
+                if *run_shutdown.borrow() {
+                    break;
+                }
             }
         }
     }
@@ -197,6 +216,7 @@ async fn run_due_updates(
     target_os: TargetOs,
     sink: &dyn SubscriptionAutoUpdateSink,
     attempts: &mut BTreeMap<String, AttemptState>,
+    shutdown: &mut watch::Receiver<bool>,
 ) {
     let now = unix_now_seconds();
     let (subs, metadata) = match (
@@ -212,13 +232,20 @@ async fn run_due_updates(
     attempts.retain(|id, _| subs.iter().any(|sub| &sub.id == id));
 
     for id in due_subscription_ids(now, &subs, &metadata, attempts) {
+        // `close()` is called during app shutdown, immediately before the
+        // runtime is torn down; starting another fetch/commit cycle here would
+        // publish a configuration into a runtime that is already going away.
+        if *shutdown.borrow() {
+            break;
+        }
         let Some(item) = subs.iter().find(|sub| sub.id == id) else {
             continue;
         };
         let entry = attempts.entry(id.clone()).or_default();
         entry.last_attempt_unix = unix_now_seconds();
 
-        let outcome = run_single_update(database, coordinator, supervisor, target_os, item).await;
+        let outcome =
+            run_single_update(database, coordinator, supervisor, target_os, item, shutdown).await;
         let entry = attempts.entry(id).or_default();
         if outcome.error.is_none() {
             entry.consecutive_failures = 0;
@@ -238,6 +265,7 @@ async fn run_single_update(
     supervisor: &CoreSupervisor,
     target_os: TargetOs,
     item: &SubItem,
+    shutdown: &mut watch::Receiver<bool>,
 ) -> AutoUpdateOutcome {
     let mut outcome = AutoUpdateOutcome {
         subscription_id: item.id.clone(),
@@ -259,15 +287,23 @@ async fn run_single_update(
     } else {
         None
     };
-    let prepared = match SubscriptionManager::new(database)
-        .prepare_subscription_update(
+    // A download runs for as long as its timeout allows, so shutdown has to be
+    // able to abandon it rather than only being noticed between subscriptions.
+    let manager = SubscriptionManager::new(database);
+    let fetched = tokio::select! {
+        biased;
+        _ = shutdown.changed() => {
+            outcome.error = Some(SHUTDOWN_MESSAGE.to_string());
+            return outcome;
+        }
+        fetched = manager.prepare_subscription_update(
             &config_snapshot,
             Some(&item.id),
             connected,
             proxy_url.as_deref(),
-        )
-        .await
-    {
+        ) => fetched,
+    };
+    let prepared = match fetched {
         Ok(prepared) => prepared,
         Err(error) => {
             outcome.error = Some(redact_urls(&error.to_string()));
@@ -286,6 +322,12 @@ async fn run_single_update(
         return outcome;
     }
 
+    // Committing here would race the runtime teardown that follows `close()`,
+    // so a fetch that finished after the request is discarded instead.
+    if *shutdown.borrow() {
+        outcome.error = Some(SHUTDOWN_MESSAGE.to_string());
+        return outcome;
+    }
     let mut mutation = match coordinator.begin().await {
         Ok(mutation) => mutation,
         Err(error) => {
@@ -343,7 +385,177 @@ fn unix_now_seconds() -> i64 {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Mutex, RwLock};
+
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+    };
+    use voya_core::AppConfig;
+    use voya_platform::{privilege::ElevationState, test_support::RecordingRunner};
+
+    use crate::supervisor::SupervisorDeps;
+
     use super::*;
+
+    #[derive(Default)]
+    struct RecordingSink {
+        outcomes: Mutex<Vec<AutoUpdateOutcome>>,
+    }
+
+    impl RecordingSink {
+        fn outcomes(&self) -> Vec<AutoUpdateOutcome> {
+            match self.outcomes.lock() {
+                Ok(outcomes) => outcomes.clone(),
+                Err(poisoned) => poisoned.into_inner().clone(),
+            }
+        }
+    }
+
+    impl SubscriptionAutoUpdateSink for RecordingSink {
+        fn update_completed(&self, outcome: AutoUpdateOutcome) {
+            match self.outcomes.lock() {
+                Ok(mut outcomes) => outcomes.push(outcome),
+                Err(poisoned) => poisoned.into_inner().push(outcome),
+            }
+        }
+    }
+
+    /// Serves `body` once on `/sub` and then stops accepting.
+    async fn spawn_subscription_fixture(body: &'static str) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("auto-update test operation should succeed");
+        let address = listener
+            .local_addr()
+            .expect("auto-update test operation should succeed");
+
+        tokio::spawn(async move {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            let mut buffer = vec![0; 4096];
+            let _ = socket.read(&mut buffer).await;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = socket.write_all(response.as_bytes()).await;
+        });
+
+        format!("http://{address}/sub")
+    }
+
+    fn scheduler_supervisor() -> CoreSupervisor {
+        CoreSupervisor::spawn(SupervisorDeps::new(
+            Arc::new(RecordingRunner::default()),
+            Arc::new(ElevationState::new()),
+        ))
+    }
+
+    async fn scheduler_database(url: String) -> Database {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("auto-update test operation should succeed");
+        database
+            .subscriptions()
+            .upsert(&SubItem {
+                id: "junk".to_string(),
+                remarks: "Junk".to_string(),
+                url,
+                enabled: true,
+                auto_update_interval_minutes: Some(60),
+                ..SubItem::default()
+            })
+            .await
+            .expect("auto-update test operation should succeed");
+
+        database
+    }
+
+    /// An expired plan or a login redirect answers 200 with something that
+    /// parses to no profile. Counting that as success would reset the backoff
+    /// and move `last_update_at` forward, hiding a dead source forever.
+    #[tokio::test]
+    async fn a_response_with_nothing_importable_counts_as_a_failed_attempt() {
+        let url = spawn_subscription_fixture("<html>your plan has expired</html>").await;
+        let database = scheduler_database(url).await;
+        let coordinator = ConfigMutationCoordinator::new(
+            database.clone(),
+            Arc::new(RwLock::new(AppConfig::default())),
+        );
+        let sink = RecordingSink::default();
+        let mut attempts = BTreeMap::new();
+        let (_shutdown, mut shutdown_rx) = watch::channel(false);
+
+        run_due_updates(
+            &database,
+            &coordinator,
+            &scheduler_supervisor(),
+            TargetOs::Linux,
+            &sink,
+            &mut attempts,
+            &mut shutdown_rx,
+        )
+        .await;
+
+        let outcomes = sink.outcomes();
+        assert_eq!(outcomes.len(), 1, "{outcomes:?}");
+        assert!(outcomes[0].error.is_some(), "{:?}", outcomes[0]);
+        assert_eq!(outcomes[0].consecutive_failures, 1);
+        assert_eq!(
+            attempts.get("junk").map(|state| state.consecutive_failures),
+            Some(1)
+        );
+        assert_eq!(
+            database
+                .subscription_metadata()
+                .get("junk")
+                .await
+                .expect("auto-update test operation should succeed")
+                .and_then(|metadata| metadata.last_update_at),
+            None,
+            "a junk response must not mark the subscription current"
+        );
+    }
+
+    /// `close()` runs immediately before the runtime is disconnected, so a
+    /// requested shutdown must stop the scheduler from starting more work.
+    #[tokio::test]
+    async fn a_requested_shutdown_stops_the_run_before_it_fetches_anything() {
+        let url = spawn_subscription_fixture("vless://uuid@example.test:443#Node").await;
+        let database = scheduler_database(url).await;
+        let coordinator = ConfigMutationCoordinator::new(
+            database.clone(),
+            Arc::new(RwLock::new(AppConfig::default())),
+        );
+        let sink = RecordingSink::default();
+        let mut attempts = BTreeMap::new();
+        let (shutdown, mut shutdown_rx) = watch::channel(false);
+        shutdown
+            .send(true)
+            .expect("auto-update test operation should succeed");
+
+        run_due_updates(
+            &database,
+            &coordinator,
+            &scheduler_supervisor(),
+            TargetOs::Linux,
+            &sink,
+            &mut attempts,
+            &mut shutdown_rx,
+        )
+        .await;
+
+        assert!(sink.outcomes().is_empty());
+        assert!(attempts.is_empty());
+        assert!(database
+            .profiles()
+            .list()
+            .await
+            .expect("auto-update test operation should succeed")
+            .is_empty());
+    }
 
     fn sub(id: &str, interval_minutes: Option<i32>, enabled: bool) -> SubItem {
         SubItem {

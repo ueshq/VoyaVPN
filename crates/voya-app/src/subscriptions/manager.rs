@@ -18,6 +18,7 @@ use voya_net::{decode_base64_payload, DownloadError};
 use crate::groups::GroupManagerError;
 use crate::profiles::{normalize_profile, ProfileManager, ProfileManagerError};
 
+use super::ownership::{plan_subscription_group_cleanup, profile_is_adoptable};
 use super::update_flow::{
     ensure_subscription_auto_group, persist_subscription_metadata, prepare_subscription_snapshot,
     PreparedSubscriptionUpdate,
@@ -144,28 +145,17 @@ impl<'db> SubscriptionManager<'db> {
 
         // Auto groups keep their own subscription_id NULL so re-imports never
         // prune them; clean up any group whose source subscription is gone.
-        let orphaned_group_ids = self
-            .database
-            .profiles()
-            .list()
-            .await?
-            .into_iter()
-            .filter(|profile| {
-                matches!(
-                    &profile.protocol,
-                    ProfileProtocol::PolicyGroup {
-                        source_subscription_id: Some(source),
-                        ..
-                    } if ids.contains(source)
-                )
-            })
-            .map(|profile| profile.index_id)
-            .collect::<Vec<_>>();
-        if !orphaned_group_ids.is_empty() {
+        // A group the user authored only loses its dynamic source — deleting it
+        // would take the explicit children and the filter with it.
+        let cleanup = plan_subscription_group_cleanup(&self.database.profiles().list().await?, ids);
+        if !cleanup.deleted_index_ids.is_empty() {
             self.database
                 .profiles()
-                .delete_many(&orphaned_group_ids)
+                .delete_many(&cleanup.deleted_index_ids)
                 .await?;
+        }
+        for group in &cleanup.detached_groups {
+            self.database.profiles().upsert(group).await?;
         }
 
         ProfileManager::from_session(self.database)
@@ -185,12 +175,22 @@ impl<'db> SubscriptionManager<'db> {
             .map(str::trim)
             .filter(|value| !value.is_empty());
         let no_active_profile_at_entry = config.index_id.trim().is_empty();
-        let sub_item = match subscription_id {
-            Some(id) => self.database.subscriptions().get(id).await?,
+        // Resolve the target up front: `profile_items.subscription_id` has a
+        // foreign key, so continuing with an unknown id would fail the upsert
+        // with a raw "FOREIGN KEY constraint failed" instead of naming the
+        // missing subscription.
+        let filter = match subscription_id {
+            Some(id) => {
+                self.database
+                    .subscriptions()
+                    .get(id)
+                    .await?
+                    .ok_or_else(|| SubscriptionManagerError::SubscriptionNotFound(id.to_string()))?
+                    .filter
+            }
             None => None,
         };
-        let filter = sub_item.as_ref().and_then(|item| item.filter.as_deref());
-        let regex = compile_filter(filter)?;
+        let regex = compile_filter(filter.as_deref())?;
         let old_profiles = if subscription_id.is_some() {
             self.database
                 .profiles()
@@ -255,7 +255,9 @@ impl<'db> SubscriptionManager<'db> {
                 .iter()
                 .enumerate()
                 .filter_map(|(index, (existing, _))| {
-                    profile_items_match(existing, &profile, false).then_some(index)
+                    (profile_is_adoptable(existing, subscription_id)
+                        && profile_items_match(existing, &profile, false))
+                    .then_some(index)
                 })
                 .collect::<Vec<_>>();
 
@@ -301,25 +303,21 @@ impl<'db> SubscriptionManager<'db> {
                 .await?
         };
 
-        let removed_existing = if subscription_id.is_some() {
-            if let Some(id) = subscription_id {
-                let retained_current_sub_index_ids: BTreeSet<&str> =
-                    imported_index_ids.iter().map(String::as_str).collect();
-                let stale_index_ids = old_profiles
-                    .iter()
-                    .filter(|profile| {
-                        profile.subscription_id.as_deref() == Some(id)
-                            && !retained_current_sub_index_ids.contains(profile.index_id.as_str())
-                    })
-                    .map(|profile| profile.index_id.clone())
-                    .collect::<Vec<_>>();
-                self.database
-                    .profiles()
-                    .delete_many(&stale_index_ids)
-                    .await?
-            } else {
-                0
-            }
+        let removed_existing = if let Some(id) = subscription_id {
+            let retained_current_sub_index_ids: BTreeSet<&str> =
+                imported_index_ids.iter().map(String::as_str).collect();
+            let stale_index_ids = old_profiles
+                .iter()
+                .filter(|profile| {
+                    profile.subscription_id.as_deref() == Some(id)
+                        && !retained_current_sub_index_ids.contains(profile.index_id.as_str())
+                })
+                .map(|profile| profile.index_id.clone())
+                .collect::<Vec<_>>();
+            self.database
+                .profiles()
+                .delete_many(&stale_index_ids)
+                .await?
         } else {
             0
         };
@@ -736,7 +734,7 @@ mod tests {
         net::TcpListener,
         sync::Mutex,
     };
-    use voya_core::{ProfileProtocol, ProfileTransport, ServerEndpoint};
+    use voya_core::{MultipleLoad, ProfileProtocol, ProfileTransport, ServerEndpoint};
 
     use super::*;
 
@@ -867,6 +865,61 @@ mod tests {
         );
     }
 
+    /// A dead `more_url` mirror is invisible to the user unless the update
+    /// reports it: the primary list still imports, so nothing else in the result
+    /// would ever mention the missing source.
+    #[tokio::test]
+    async fn subscription_update_warns_about_a_failed_more_url_without_failing_the_update() {
+        let seen_user_agents = Arc::new(Mutex::new(Vec::new()));
+        let main = STANDARD.encode("vless://uuid-a@example.test:443#US%20A");
+        let base = spawn_http_fixture(
+            HashMap::from([("/main".to_string(), main)]),
+            2,
+            Arc::clone(&seen_user_agents),
+        )
+        .await;
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+        config.gui_item.auto_create_subscription_group = false;
+        manager
+            .save_subscription(SubItem {
+                id: "sub-mirror".to_string(),
+                remarks: "Mirrored".to_string(),
+                url: format!("{base}/main"),
+                more_url: format!("{base}/missing"),
+                ..SubItem::default()
+            })
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        let result = manager
+            .update_subscriptions(&mut config, None, false, None)
+            .await
+            .expect("a failing mirror must not fail the subscription update");
+
+        assert_eq!(result.updated, 1);
+        assert_eq!(result.imported, 1);
+        assert_eq!(result.skipped, 0);
+        assert!(
+            result.messages.iter().any(|message| {
+                message.starts_with("Mirrored->additional subscription URL failed:")
+            }),
+            "{:?}",
+            result.messages
+        );
+        assert!(
+            result
+                .messages
+                .iter()
+                .any(|message| message == "Mirrored->imported 1 profiles"),
+            "{:?}",
+            result.messages
+        );
+    }
+
     #[tokio::test]
     async fn subscription_import_creates_auto_group_once_and_activates_on_first_import() {
         let database = Database::connect_in_memory()
@@ -964,6 +1017,87 @@ mod tests {
             .filter(|profile| matches!(&profile.protocol, ProfileProtocol::PolicyGroup { .. }))
             .count();
         assert_eq!(remaining_groups, 0);
+    }
+
+    /// The group builder lets a user pair explicit children with a dynamic
+    /// source subscription. Deleting that subscription must not take the
+    /// user-authored group (and its selection/sort/speed data) with it.
+    #[tokio::test]
+    async fn deleting_a_subscription_detaches_user_groups_and_drops_only_its_auto_group() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let profile_manager = ProfileManager::new(&database);
+        let mut config = AppConfig::default();
+        let sub = manager
+            .save_subscription(SubItem {
+                id: "sub-doomed".to_string(),
+                remarks: "Doomed".to_string(),
+                url: "https://example.test/doomed".to_string(),
+                ..SubItem::default()
+            })
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manual = profile_manager
+            .save_profile(&mut config, sample_profile("manual-node", "Manual"))
+            .await
+            .expect("subscription manager test operation should succeed");
+        manager
+            .import_profiles_from_text(
+                &mut config,
+                &test_vless_link("doomed.example.test", "doomed node"),
+                Some(&sub.id),
+            )
+            .await
+            .expect("subscription manager test operation should succeed");
+        let user_group = profile_manager
+            .save_profile(
+                &mut config,
+                ProfileItem {
+                    index_id: "user-group".to_string(),
+                    remarks: "My mix".to_string(),
+                    protocol: ProfileProtocol::PolicyGroup {
+                        child_profile_ids: vec![manual.profile.index_id.clone()],
+                        source_subscription_id: Some(sub.id.clone()),
+                        filter: None,
+                        strategy: MultipleLoad::LeastPing,
+                    },
+                    ..ProfileItem::default()
+                },
+            )
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        manager
+            .delete_subscriptions(&mut config, std::slice::from_ref(&sub.id))
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        let groups = database
+            .profiles()
+            .list()
+            .await
+            .expect("profiles should list")
+            .into_iter()
+            .filter(|profile| matches!(&profile.protocol, ProfileProtocol::PolicyGroup { .. }))
+            .collect::<Vec<_>>();
+        assert_eq!(groups.len(), 1, "{groups:?}");
+        assert_eq!(groups[0].index_id, user_group.profile.index_id);
+        let ProfileProtocol::PolicyGroup {
+            child_profile_ids,
+            source_subscription_id,
+            ..
+        } = &groups[0].protocol
+        else {
+            panic!("the surviving profile should still be a policy group");
+        };
+        assert!(
+            source_subscription_id.is_none(),
+            "the user group only loses its dead dynamic source"
+        );
+        assert_eq!(child_profile_ids.len(), 1, "{child_profile_ids:?}");
+        assert_eq!(child_profile_ids[0], manual.profile.index_id);
     }
 
     #[tokio::test]
@@ -1654,6 +1788,115 @@ mod tests {
             profiles[0].subscription_id.as_deref(),
             Some(sub.id.as_str())
         );
+    }
+
+    /// Providers commonly hand out several plan URLs that carry the same
+    /// servers. Re-homing a row to whichever subscription updated last made
+    /// the node flip between both `Auto` groups (children resolve by
+    /// `subscription_id` at generation time) on every update.
+    #[tokio::test]
+    async fn a_node_offered_by_two_subscriptions_stays_with_both() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+        config.gui_item.auto_create_subscription_group = false;
+        for id in ["sub-a", "sub-b"] {
+            manager
+                .save_subscription(SubItem {
+                    id: id.to_string(),
+                    remarks: id.to_string(),
+                    url: format!("https://example.test/{id}"),
+                    ..SubItem::default()
+                })
+                .await
+                .expect("subscription manager test operation should succeed");
+        }
+        let text = test_vless_link("shared.example.test", "shared node");
+
+        let first_a = manager
+            .import_profiles_from_text(&mut config, &text, Some("sub-a"))
+            .await
+            .expect("subscription manager test operation should succeed");
+        let first_b = manager
+            .import_profiles_from_text(&mut config, &text, Some("sub-b"))
+            .await
+            .expect("subscription manager test operation should succeed");
+        let second_a = manager
+            .import_profiles_from_text(&mut config, &text, Some("sub-a"))
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        assert_eq!(first_b.imported, 1);
+        assert_eq!(
+            first_b.updated, 0,
+            "the second subscription must create its own row instead of stealing the first's"
+        );
+        assert_eq!(first_b.removed_duplicates, 0);
+        assert_eq!(second_a.updated, 1);
+        assert_eq!(second_a.imported_index_ids, first_a.imported_index_ids);
+        assert_eq!(
+            second_a.removed_existing, 0,
+            "re-updating the first subscription must not disturb the second"
+        );
+
+        let owners = database
+            .profiles()
+            .list()
+            .await
+            .expect("profiles should list")
+            .into_iter()
+            .filter_map(|profile| profile.subscription_id)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            owners,
+            BTreeSet::from(["sub-a".to_string(), "sub-b".to_string()])
+        );
+        for id in ["sub-a", "sub-b"] {
+            assert_eq!(
+                database
+                    .profiles()
+                    .list_by_subscription_id(Some(id))
+                    .await
+                    .expect("profiles should list")
+                    .len(),
+                1,
+                "{id} should still resolve exactly one child for its auto group"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn importing_into_an_unknown_subscription_names_the_missing_subscription() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+
+        let error = manager
+            .import_profiles_from_text(
+                &mut config,
+                &test_vless_link("ghost.example.test", "ghost"),
+                Some("sub-missing"),
+            )
+            .await
+            .expect_err("an unknown subscription id must not reach the foreign key");
+
+        assert!(
+            matches!(
+                &error,
+                SubscriptionManagerError::SubscriptionNotFound(id) if id == "sub-missing"
+            ),
+            "{error:?}"
+        );
+        assert!(database
+            .profiles()
+            .list()
+            .await
+            .expect("profiles should list")
+            .is_empty());
     }
 
     #[tokio::test]

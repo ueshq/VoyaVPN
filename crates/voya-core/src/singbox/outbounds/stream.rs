@@ -145,7 +145,7 @@ pub(crate) fn fill_outbound_tls(
     match node.tls.as_ref() {
         Some(domain_tls) => apply_outbound_tls(outbound, context, node, domain_tls),
         None if requires_implicit_tls(node.config_type()) => {
-            apply_outbound_tls(outbound, context, node, &implicit_tls_settings());
+            apply_outbound_tls(outbound, context, node, &TlsSettings::default());
         }
         None => {}
     }
@@ -216,22 +216,6 @@ fn requires_implicit_tls(config_type: ConfigType) -> bool {
         config_type,
         ConfigType::Hysteria2 | ConfigType::TUIC | ConfigType::Anytls | ConfigType::Naive
     )
-}
-
-fn implicit_tls_settings() -> TlsSettings {
-    TlsSettings {
-        mode: TlsMode::Tls,
-        server_name: None,
-        alpn: Vec::new(),
-        reality_public_key: None,
-        reality_short_id: None,
-        reality_spider_x: None,
-        mldsa65_verify: None,
-        certificate_pem: None,
-        certificate_sha256: Vec::new(),
-        ech_config: Vec::new(),
-        final_mask: None,
-    }
 }
 
 fn parse_ech(ech_configs: &[String]) -> Option<SingboxEch> {

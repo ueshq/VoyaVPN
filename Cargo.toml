@@ -44,6 +44,10 @@ zeroize = "1.8"
 
 [workspace.lints.rust]
 rust_2018_idioms = "warn"
+# Edition 2021 leaves this allow-by-default, so an `unsafe fn` body may perform
+# unsafe operations with no inner block and therefore no SAFETY comment to
+# review. Warning here keeps the FFI code auditable and matches edition 2024.
+unsafe_op_in_unsafe_fn = "warn"
 unused_lifetimes = "warn"
 unused_qualifications = "warn"
 

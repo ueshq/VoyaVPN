@@ -7,12 +7,14 @@ import type {
   TlsSettings,
 } from "@/ipc/bindings";
 
+import { profileValidationMessage } from "./profile-form-errors";
 import {
   createDefaultProfile,
   normalizeProfileForForm,
   prepareGroupDraftForPreview,
   prepareProfileForSave,
   profileFormSchema,
+  PROFILE_VALIDATION_CODES,
 } from "./profile-form-schema";
 
 const endpoint = { address: "node.example.test", port: 443 };
@@ -95,6 +97,64 @@ describe("profile form contract transformations", () => {
       server: { address: "node.example.test", port: 443 },
       uuid: "uuid-tuic",
     });
+  });
+
+  it("reports required-field failures as locale codes, never as English sentences", () => {
+    const issues = profileFormSchema.safeParse(createDefaultProfile("vmess")).error?.issues ?? [];
+    const byField = Object.fromEntries(issues.map((issue) => [issue.path.join("."), issue.message] as const));
+
+    expect(byField).toMatchObject({
+      address: PROFILE_VALIDATION_CODES.addressRequired,
+      password: PROFILE_VALIDATION_CODES.credentialRequired,
+      remarks: PROFILE_VALIDATION_CODES.remarksRequired,
+    });
+    expect(
+      profileFormSchema.safeParse({ ...createDefaultProfile("tuic"), username: "" }).error?.issues.some(
+        (issue) => issue.message === PROFILE_VALIDATION_CODES.uuidRequired,
+      ),
+    ).toBe(true);
+    expect(
+      profileFormSchema.safeParse(createDefaultProfile("custom")).error?.issues.some(
+        (issue) => issue.message === PROFILE_VALIDATION_CODES.configSourceRequired,
+      ),
+    ).toBe(true);
+  });
+
+  it("maps validation codes onto locale strings and passes anything else through", () => {
+    const t = (key: string) => `t:${key}`;
+
+    expect(profileValidationMessage(PROFILE_VALIDATION_CODES.remarksRequired, t)).toBe(
+      "t:panes.profiles.validation.remarksRequired",
+    );
+    expect(profileValidationMessage(PROFILE_VALIDATION_CODES.addressRequired, t)).toBe(
+      "t:panes.profiles.validation.addressRequired",
+    );
+    expect(profileValidationMessage(PROFILE_VALIDATION_CODES.credentialRequired, t)).toBe(
+      "t:panes.profiles.validation.credentialRequired",
+    );
+    expect(profileValidationMessage(PROFILE_VALIDATION_CODES.uuidRequired, t)).toBe(
+      "t:panes.profiles.validation.uuidRequired",
+    );
+    expect(profileValidationMessage(PROFILE_VALIDATION_CODES.configSourceRequired, t)).toBe(
+      "t:panes.profiles.validation.configSourceRequired",
+    );
+    // zod's own issues (port bounds, ...) have no code and stay verbatim.
+    expect(profileValidationMessage("Too big: expected number to be <=65535", t)).toBe(
+      "Too big: expected number to be <=65535",
+    );
+    expect(profileValidationMessage(undefined, t)).toBeUndefined();
+  });
+
+  it("names an unnamed group draft with the caller's translated placeholder", () => {
+    expect(
+      prepareGroupDraftForPreview({ configType: "policyGroup" }, "草稿分组").remarks,
+    ).toBe("草稿分组");
+    // Without an override the untranslated fallback is used, and an explicit
+    // draft name always wins.
+    expect(prepareGroupDraftForPreview({ configType: "policyGroup" }).remarks).toBe("Draft group");
+    expect(
+      prepareGroupDraftForPreview({ configType: "policyGroup", remarks: " Named " }, "草稿分组").remarks,
+    ).toBe("Named");
   });
 
   it("normalizes partial group drafts and profile reference lists", () => {

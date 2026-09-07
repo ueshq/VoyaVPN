@@ -35,6 +35,7 @@ type LeafPaths<T> = {
 export type TranslationKey = LeafPaths<typeof en>;
 export type TranslationFunction = (key: TranslationKey, options?: Record<string, unknown>) => string;
 
+// localStorage key holding the chosen locale. `changeLocale` is the only writer.
 const storageKey = "voyavpn.locale";
 
 const i18nResources = {
@@ -129,8 +130,16 @@ void i18next.init({
 
 applyDocumentLocale(i18next.resolvedLanguage as Locale);
 
-export async function changeLocale(locale: Locale) {
-  if (typeof window !== "undefined") {
+/**
+ * Switch the UI language.
+ *
+ * `persist: false` previews a locale for the current session only — the Settings
+ * surface needs that so an unsaved appearance edit never becomes the stored
+ * preference. Without it a consumer has to re-declare this module's private
+ * storage key and snapshot/restore localStorage around the call.
+ */
+export async function changeLocale(locale: Locale, options?: { persist?: boolean }) {
+  if (options?.persist !== false && typeof window !== "undefined") {
     window.localStorage.setItem(storageKey, locale);
   }
 

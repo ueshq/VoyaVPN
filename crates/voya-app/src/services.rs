@@ -8,7 +8,7 @@ use std::{path::Path, sync::Arc};
 use thiserror::Error;
 use voya_contracts::{AppSettingsV1, SpeedTestKind};
 pub use voya_core::{AppConfig, CoreType, SysProxyType, TrafficMode, DEFAULT_LOCAL_PORT};
-use voya_db::{AppStateRecord, Database, DbError};
+use voya_db::{Database, DbError};
 use voya_platform::{paths::AppPaths, process::ProcessRunner};
 
 use crate::{
@@ -20,7 +20,10 @@ use crate::{
     profiles::{ProfileExManager, ProfileManager},
     routing::RoutingManager,
     runtime::RuntimeManager,
-    settings_save::{app_config_from_settings, settings_from_app_config, SettingsContractError},
+    settings_save::{
+        app_config_from_settings, config_from_settings, settings_from_app_config,
+        SettingsContractError,
+    },
     speedtest::{SpeedTestResult, SpeedtestManager, SpeedtestRunResult},
     statistics::{StatisticsConfigSource, StatisticsEventSink, StatisticsManager},
     subscriptions::SubscriptionManager,
@@ -80,12 +83,7 @@ impl AppServices {
         settings: &AppSettingsV1,
         current: &AppConfig,
     ) -> Result<AppConfig, SettingsContractError> {
-        let state = AppStateRecord {
-            active_profile_id: (!current.index_id.is_empty()).then(|| current.index_id.clone()),
-            active_routing_id: (!current.routing_basic_item.routing_index_id.is_empty())
-                .then(|| current.routing_basic_item.routing_index_id.clone()),
-        };
-        app_config_from_settings(settings, &state)
+        config_from_settings(settings, current)
     }
 
     pub async fn initialize_profile_metrics(&self) -> crate::profiles::Result<u64> {

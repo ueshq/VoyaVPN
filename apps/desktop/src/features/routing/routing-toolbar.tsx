@@ -14,7 +14,7 @@ export function RoutingToolbar({ controller }: { controller: RoutingScreenContro
   const [perAppOpen, setPerAppOpen] = useState(false);
   const {
     activateSelectedRouting,
-    deleteSelectedRouting,
+    requestDeleteRouting,
     routings,
     selectedRouting,
     setRoutingDialog,
@@ -50,7 +50,7 @@ export function RoutingToolbar({ controller }: { controller: RoutingScreenContro
       </Button>
       <Button
         disabled={!selectedRouting}
-        onClick={deleteSelectedRouting}
+        onClick={requestDeleteRouting}
         size="sm"
         type="button"
         variant="outline"

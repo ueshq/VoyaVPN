@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { capture, repoRootFromScript, requireDarwin, truthy } from "../../lib/common.mjs";
+import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, truthy } from "../../lib/common.mjs";
 import {
   appBundleIdentifier,
   incompatiblePacketTunnelBundle,
@@ -11,7 +11,10 @@ import {
   distributionFromIdentityName,
   normalizeDistribution,
 } from "./tunnel-layout.mjs";
-import { decodeProvisioningProfile as decodeProfileWithDir } from "./provisioning.mjs";
+import {
+  assertProfileCapabilities,
+  decodeProvisioningProfile as decodeProfileWithDir,
+} from "./provisioning.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const appBundle = resolve(
@@ -72,13 +75,7 @@ function verifyProvisioningProfile(path, label, bundleIdentifier) {
   if (profile.bundleIdentifier !== bundleIdentifier) {
     throw new Error(`${label} provisioning profile bundle id mismatch: expected ${bundleIdentifier}, got ${profile.bundleIdentifier}.`);
   }
-  if (!profile.appGroups.includes("group.app.voyavpn.desktop")) {
-    throw new Error(`${label} provisioning profile does not include group.app.voyavpn.desktop.`);
-  }
-  const requiredValue = requiredNetworkExtensionValue(macosDistribution);
-  if (!profile.networkExtensions.includes(requiredValue)) {
-    throw new Error(`${label} provisioning profile does not include ${requiredValue}.`);
-  }
+  assertProfileCapabilities(profile, { label, distribution: macosDistribution });
 
   console.log(`✓ ${label} provisioning profile: ${profile.name || profile.uuid || path}`);
   console.log(`✓ ${label} provisioning profile app id: ${profile.applicationIdentifier}`);
@@ -283,9 +280,13 @@ function main() {
   ]);
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+// Guarded so importing this module (a unit test, another script) cannot start
+// shelling out to codesign/pluginkit as a side effect of the import.
+if (isCliEntrypoint(import.meta.url)) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }

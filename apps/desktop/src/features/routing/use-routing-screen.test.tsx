@@ -47,14 +47,36 @@ describe("useRoutingScreen", () => {
     act(() => {
       result.current.activateSelectedRouting();
       result.current.moveSelectedRule("down");
-      result.current.deleteSelectedRule();
+      result.current.requestDeleteRule();
     });
     await waitFor(() => expect(ipcMocks.setActiveRouting).toHaveBeenCalledWith("route-b"));
     expect(ipcMocks.moveRoutingRule).toHaveBeenCalledWith("route-b", "rule-route-b", "down", null);
-    expect(ipcMocks.deleteRoutingRules).toHaveBeenCalledWith("route-b", ["rule-route-b"]);
+    // Both deletes are unrecoverable, so nothing is sent until confirmation.
+    expect(result.current.pendingDelete).toBe("rule");
+    expect(ipcMocks.deleteRoutingRules).not.toHaveBeenCalled();
 
-    act(() => result.current.deleteSelectedRouting());
+    act(() => result.current.confirmDelete());
+    await waitFor(() => expect(ipcMocks.deleteRoutingRules).toHaveBeenCalledWith("route-b", ["rule-route-b"]));
+
+    act(() => result.current.requestDeleteRouting());
+    expect(result.current.pendingDelete).toBe("routing");
+    expect(ipcMocks.deleteRoutings).not.toHaveBeenCalled();
+
+    act(() => result.current.confirmDelete());
     await waitFor(() => expect(ipcMocks.deleteRoutings).toHaveBeenCalledWith(["route-b"]));
+    expect(result.current.pendingDelete).toBeNull();
+  });
+
+  it("drops a pending delete that is dismissed instead of confirmed", async () => {
+    const { result } = renderController();
+    await waitFor(() => expect(result.current.selectedRouting?.id).toBe("route-a"));
+
+    act(() => result.current.requestDeleteRouting());
+    act(() => result.current.setPendingDelete(null));
+    act(() => result.current.confirmDelete());
+
+    expect(ipcMocks.deleteRoutings).not.toHaveBeenCalled();
+    expect(ipcMocks.deleteRoutingRules).not.toHaveBeenCalled();
   });
 
   it("creates and edits routings while keeping a failed editor open", async () => {
@@ -132,10 +154,11 @@ describe("useRoutingScreen", () => {
     await act(() => result.current.handleSaveRule(rule("new", "New")));
     act(() => {
       result.current.activateSelectedRouting();
-      result.current.deleteSelectedRouting();
+      result.current.requestDeleteRouting();
       result.current.moveSelectedRule("up");
-      result.current.deleteSelectedRule();
+      result.current.requestDeleteRule();
     });
+    act(() => result.current.confirmDelete());
 
     expect(ipcMocks.saveRoutingRule).not.toHaveBeenCalled();
     expect(ipcMocks.setActiveRouting).not.toHaveBeenCalled();

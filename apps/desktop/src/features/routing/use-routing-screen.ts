@@ -25,11 +25,20 @@ type RuleDialogState =
   | { mode: "edit"; rule: RoutingRule }
   | null;
 
+/**
+ * Deleting a routing profile takes its whole rule set with it and cannot be
+ * undone, and both Delete buttons are enabled whenever anything exists (the
+ * selection falls back to the active routing / its first rule). The screen
+ * therefore gates both on an explicit confirmation, exactly like profiles.
+ */
+type PendingRoutingDelete = "routing" | "rule" | null;
+
 export function useRoutingScreen() {
   const queryClient = useQueryClient();
   const [operationError, setOperationError] = useState<string | null>(null);
   const [routingDialog, setRoutingDialog] = useState<RoutingDialogState>(null);
   const [ruleDialog, setRuleDialog] = useState<RuleDialogState>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingRoutingDelete>(null);
   const [selectedRoutingId, setSelectedRoutingId] = useState<string | null>(null);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const routingsQuery = useQuery({
@@ -97,42 +106,62 @@ export function useRoutingScreen() {
     }
   }
 
-  function deleteSelectedRouting() {
-    if (selectedRouting) {
-      void runOperation(async () => {
-        await deleteRoutings([selectedRouting.id]);
-        setSelectedRoutingId(null);
-        setSelectedRuleId(null);
-      });
-    }
-  }
-
   function moveSelectedRule(action: MoveAction) {
     if (selectedRouting && selectedRule) {
       void runOperation(() => moveRoutingRule(selectedRouting.id, selectedRule.id, action, null));
     }
   }
 
-  function deleteSelectedRule() {
+  function requestDeleteRouting() {
+    if (selectedRouting) {
+      setPendingDelete("routing");
+    }
+  }
+
+  function requestDeleteRule() {
     if (selectedRouting && selectedRule) {
+      setPendingDelete("rule");
+    }
+  }
+
+  function confirmDelete() {
+    const pending = pendingDelete;
+    setPendingDelete(null);
+    if (!pending || !selectedRouting) {
+      return;
+    }
+
+    if (pending === "routing") {
+      void runOperation(async () => {
+        await deleteRoutings([selectedRouting.id]);
+        setSelectedRoutingId(null);
+        setSelectedRuleId(null);
+      });
+      return;
+    }
+
+    if (selectedRule) {
       void runOperation(() => deleteRoutingRules(selectedRouting.id, [selectedRule.id]));
     }
   }
 
   return {
     activateSelectedRouting,
-    deleteSelectedRouting,
-    deleteSelectedRule,
+    confirmDelete,
     handleSaveRouting,
     handleSaveRule,
     moveSelectedRule,
     operationError,
+    pendingDelete,
+    requestDeleteRouting,
+    requestDeleteRule,
     routings,
     routingDialog,
     ruleDialog,
     selectRouting,
     selectedRouting,
     selectedRule,
+    setPendingDelete,
     setRoutingDialog,
     setRuleDialog,
     setSelectedRuleId,

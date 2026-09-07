@@ -38,9 +38,26 @@ function normalizeUiPreferences(preferences: AppearanceSettings): NormalizedUiPr
   };
 }
 
-export async function applyUiPreferences(preferences: AppearanceSettings) {
+/**
+ * Apply an appearance bundle to the running UI.
+ *
+ * `persist: false` is the Settings preview mode: the theme lands in the store's
+ * transient `themePreview` slot and the locale switches without touching the
+ * stored preference, so an unsaved edit can never become the persisted one and
+ * a discard needs no localStorage rollback.
+ */
+export async function applyUiPreferences(
+  preferences: AppearanceSettings,
+  options?: { persist?: boolean },
+) {
   const normalized = normalizeUiPreferences(preferences);
-  usePreferencesStore.getState().setThemeMode(normalized.theme);
+  const persist = options?.persist !== false;
+  const preferencesStore = usePreferencesStore.getState();
+  if (persist) {
+    preferencesStore.setThemeMode(normalized.theme);
+  } else {
+    preferencesStore.setThemePreview(normalized.theme);
+  }
 
   const currentLanguage = i18next.resolvedLanguage ?? i18next.language;
   if (currentLanguage === normalized.language) {
@@ -48,7 +65,7 @@ export async function applyUiPreferences(preferences: AppearanceSettings) {
     return;
   }
 
-  await changeLocale(normalized.language);
+  await changeLocale(normalized.language, { persist });
 }
 
 function isLocale(value: string): value is Locale {

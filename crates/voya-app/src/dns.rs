@@ -76,20 +76,88 @@ pub fn validate_settings(settings: &DnsSettings) -> Result<()> {
     let mut issues = Vec::new();
     validate_hosts(
         settings.simple_dns_item.hosts.as_deref(),
-        "simpleDnsItem.hosts",
+        "hosts",
         &mut issues,
     );
     validate_expected_ips(
         settings.simple_dns_item.direct_expected_ips.as_deref(),
-        "simpleDnsItem.directExpectedIPs",
+        "directExpectedIps",
         &mut issues,
     );
+    for (value, field) in [
+        (&settings.simple_dns_item.direct_dns, "direct"),
+        (&settings.simple_dns_item.remote_dns, "remote"),
+        (&settings.simple_dns_item.bootstrap_dns, "bootstrap"),
+    ] {
+        validate_dns_address(value.as_deref(), field, &mut issues);
+    }
 
     if issues.is_empty() {
         Ok(())
     } else {
         Err(DnsManagerError::Validation(issues))
     }
+}
+
+/// Rejects a resolver address that config generation would silently discard.
+///
+/// `voya_core` resolves each address with
+/// `parse_dns_address(value).or_else(|| parse_dns_address(default))`, so an
+/// address it cannot parse is replaced by the built-in resolver without any
+/// signal: the form reports success, the settings screen keeps showing the
+/// typed value, and the running core queries a different server. The check is
+/// deliberately conservative — it only reports what the generator is certain to
+/// reject — so it can never refuse an address that would have worked.
+fn validate_dns_address(value: Option<&str>, field: &str, issues: &mut Vec<DnsValidationIssue>) {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return;
+    };
+    let Some(address) = first_dns_address(value) else {
+        issues.push(issue(field, "DNS address must not be empty"));
+        return;
+    };
+    if matches!(address, "local" | "localhost") {
+        return;
+    }
+    if let Some(port) = dns_address_port(address) {
+        if port.parse::<u16>().ok().filter(|port| *port > 0).is_none() {
+            issues.push(issue(
+                field,
+                format!("`{port}` is not a valid DNS server port (1-65535)"),
+            ));
+        }
+    }
+}
+
+/// The entry config generation actually uses: `voya_core` keeps only the first
+/// item of a comma- or semicolon-separated address list, so validating the rest
+/// would reject values the core never looks at.
+fn first_dns_address(address: &str) -> Option<&str> {
+    let delimiter = if address.contains(',') { ',' } else { ';' };
+    address
+        .split(delimiter)
+        .map(str::trim)
+        .find(|item| !item.is_empty())
+}
+
+/// The explicit port of a DNS address, when it carries one. Mirrors the
+/// authority parsing in `voya_core::singbox`: the scheme and path are dropped,
+/// userinfo is ignored, a bracketed IPv6 host keeps its own colons, and a bare
+/// IPv6 literal has no port at all.
+fn dns_address_port(address: &str) -> Option<&str> {
+    let after_scheme = address.split_once("://").map_or(address, |(_, rest)| rest);
+    let authority = after_scheme
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or(after_scheme);
+    let authority = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, authority)| authority);
+    if let Some(closing_bracket) = authority.rfind(']') {
+        return authority.get(closing_bracket + 1..)?.strip_prefix(':');
+    }
+    let (host, port) = authority.rsplit_once(':')?;
+    (!host.contains(':')).then_some(port)
 }
 
 fn validate_hosts(value: Option<&str>, field: &str, issues: &mut Vec<DnsValidationIssue>) {
@@ -167,5 +235,60 @@ mod tests {
             settings.simple_dns_item.direct_dns.as_deref(),
             Some("1.1.1.1")
         );
+    }
+
+    fn validation_fields(settings: DnsSettings) -> Vec<String> {
+        match validate_settings(&settings) {
+            Ok(()) => Vec::new(),
+            Err(DnsManagerError::Validation(issues)) => {
+                issues.into_iter().map(|issue| issue.field).collect()
+            }
+        }
+    }
+
+    #[test]
+    fn resolver_addresses_the_core_would_discard_are_rejected() {
+        assert_eq!(
+            validation_fields(DnsSettings {
+                simple_dns_item: normalize_simple_dns(SimpleDnsItem {
+                    direct_dns: Some("1.1.1.1:70000".to_string()),
+                    remote_dns: Some("https://dns.example.test:0/dns-query".to_string()),
+                    bootstrap_dns: Some("8.8.8.8:dns".to_string()),
+                    ..SimpleDnsItem::default()
+                }),
+            }),
+            vec![
+                "direct".to_string(),
+                "remote".to_string(),
+                "bootstrap".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn resolver_addresses_the_core_accepts_stay_valid() {
+        for address in [
+            "119.29.29.29",
+            "1.1.1.1:5353",
+            "https://cloudflare-dns.com/dns-query",
+            "tls://8.8.8.8",
+            "local",
+            "2001:4860:4860::8888",
+            "[2001:4860:4860::8888]:53",
+            "dhcp://auto",
+            // Only the first entry reaches the generated config.
+            "1.1.1.1, 8.8.8.8",
+        ] {
+            assert_eq!(
+                validation_fields(DnsSettings {
+                    simple_dns_item: normalize_simple_dns(SimpleDnsItem {
+                        direct_dns: Some(address.to_string()),
+                        ..SimpleDnsItem::default()
+                    }),
+                }),
+                Vec::<String>::new(),
+                "{address} should be accepted"
+            );
+        }
     }
 }

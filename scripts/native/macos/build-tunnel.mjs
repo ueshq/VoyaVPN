@@ -10,19 +10,21 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { capture, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
+import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
 import {
   appBundleIdentifier,
   incompatiblePacketTunnelBundle,
   packetTunnelBundleIdentifier,
   packetTunnelLayout,
-  requiredNetworkExtensionValue,
+  resolvePacketTunnelVersions,
   distributionFromIdentityName,
 } from "./tunnel-layout.mjs";
 import {
+  assertProfileCapabilities,
   distributionProfileLabel,
   formatProfileSelectionError,
   localProvisioningUdid,
+  plistBuddy,
   profileRejectionReason,
   resolveProfileFromEnv,
   resolveSigningIdentity,
@@ -79,6 +81,22 @@ function signingCriteria() {
   };
 }
 
+/**
+ * Reads the containing app's version fields so the embedded PacketTunnel always
+ * matches its container, falling back to the root package.json version when the
+ * app bundle has not been written yet.
+ */
+function packetTunnelVersions() {
+  const appInfoPlist = resolve(appContents, "Info.plist");
+  const hasAppPlist = existsSync(appInfoPlist);
+
+  return resolvePacketTunnelVersions({
+    appShortVersion: hasAppPlist ? plistBuddy(appInfoPlist, "CFBundleShortVersionString", true) : "",
+    appBundleVersion: hasAppPlist ? plistBuddy(appInfoPlist, "CFBundleVersion", true) : "",
+    packageVersion: JSON.parse(readFileSync(resolve(repoRoot, "package.json"), "utf8")).version,
+  });
+}
+
 function writePlist(source, destination, replacements = {}) {
   let text = readFileSync(source, "utf8");
   for (const [from, to] of Object.entries(replacements)) {
@@ -96,14 +114,6 @@ function findProvisioningProfile(bundleIdentifier, envName, criteria) {
   });
 }
 
-function requireProfileCapability(profile, label, capability, values) {
-  for (const value of values) {
-    if (!profile[capability].includes(value)) {
-      throw new Error(`${label} provisioning profile ${profile.path} does not include ${value}.`);
-    }
-  }
-}
-
 function validateProvisioningProfile(profile, label, bundleIdentifier, criteria) {
   const reason = profileRejectionReason(profile, { ...criteria, bundleIdentifier });
   if (reason) {
@@ -112,8 +122,7 @@ function validateProvisioningProfile(profile, label, bundleIdentifier, criteria)
   if (profile.teamIdentifier && !profile.applicationIdentifier.startsWith(`${profile.teamIdentifier}.`)) {
     throw new Error(`${label} provisioning profile application identifier does not match its team identifier.`);
   }
-  requireProfileCapability(profile, label, "appGroups", ["group.app.voyavpn.desktop"]);
-  requireProfileCapability(profile, label, "networkExtensions", [requiredNetworkExtensionValue(criteria.distribution)]);
+  assertProfileCapabilities(profile, { label, distribution: criteria.distribution });
 }
 
 function profileOrWarn(bundleIdentifier, envName, label, criteria) {
@@ -291,8 +300,8 @@ function buildPacketTunnel() {
     {
       "$(PRODUCT_MODULE_NAME)": "VoyaPacketTunnel",
       "$(EXECUTABLE_NAME)": "VoyaPacketTunnel",
-      "$(MARKETING_VERSION)": "0.1.0",
-      "$(CURRENT_PROJECT_VERSION)": "1",
+      "$(MARKETING_VERSION)": packetTunnelVersions().marketing,
+      "$(CURRENT_PROJECT_VERSION)": packetTunnelVersions().build,
       "$(BUNDLE_PACKAGE_TYPE)": tunnelLayout.infoPackageType,
     },
   );
@@ -357,9 +366,13 @@ function main() {
   );
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+// Guarded so importing this module (a unit test, another script) cannot start
+// building an appex as a side effect of the import.
+if (isCliEntrypoint(import.meta.url)) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }

@@ -327,6 +327,15 @@ impl Default for TunModeItem {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SimpleDnsItem {
+    /// UNIMPLEMENTED: no sing-box 1.13 config can express this.
+    ///
+    /// `crate::singbox::dns` emits the DNS hosts server without a `path`, and
+    /// sing-box's hosts transport falls back to the system hosts file whenever
+    /// `path` is empty (`dns/transport/hosts/hosts.go`: `if len(options.Path)
+    /// == 0 { files = append(files, NewFile(DefaultPath)) }`), so an explicit
+    /// empty list does not turn it off either. The setting is persisted and
+    /// shown in the DNS form but changes nothing; it should be removed from the
+    /// contract, the schema and the form rather than wired.
     pub use_system_hosts: Option<bool>,
     pub add_common_hosts: Option<bool>,
     pub fake_ip: Option<bool>,
@@ -337,7 +346,13 @@ pub struct SimpleDnsItem {
     pub bootstrap_dns: Option<String>,
     pub strategy4_freedom: Option<String>,
     pub strategy4_proxy: Option<String>,
+    /// UNIMPLEMENTED: sing-box 1.13's `dns` options have no stale-serving knob
+    /// (`option/dns.go` offers only `disable_cache`, `disable_expire`,
+    /// `independent_cache`, `cache_capacity`, `reverse_mapping`,
+    /// `client_subnet` and `strategy`). Remove it with `use_system_hosts`.
     pub serve_stale: Option<bool>,
+    /// UNIMPLEMENTED: sing-box 1.13 has no parallel-query option either; each
+    /// DNS rule routes to exactly one server. Remove it with `serve_stale`.
     pub parallel_query: Option<bool>,
     pub hosts: Option<String>,
     pub direct_expected_ips: Option<String>,

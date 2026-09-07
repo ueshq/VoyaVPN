@@ -244,6 +244,80 @@ describe("runtime event store", () => {
     expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("proxyConnections");
   });
 
+  it("coalesces log lines into one frame and stamps each at receipt", async () => {
+    vi.useFakeTimers();
+    // Drive the receipt clock with a `Date.now` spy rather than `setSystemTime`:
+    // moving the fake system clock after a frame is already scheduled stops that
+    // frame from ever firing, which would make this assert a timer quirk instead
+    // of the coalescing behaviour.
+    const firstAt = Date.parse("2026-06-01T08:09:10.000Z");
+    const secondAt = Date.parse("2026-06-01T08:10:30.000Z");
+    const now = vi.spyOn(Date, "now");
+
+    now.mockReturnValue(firstAt);
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "logLine",
+      payload: { id: 1, level: "info", line: "core started" },
+    });
+    now.mockReturnValue(secondAt);
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "logLine",
+      payload: { id: 2, level: "warn", line: "slow handshake" },
+    });
+
+    // One `set` per frame, not one per line: the core emits an event per stdout
+    // line, which is hundreds per second at debug verbosity.
+    expect(useRuntimeEventStore.getState().logLines).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(20);
+
+    // Each line keeps the moment it arrived, so lines buffered while the Logs
+    // panel was unmounted do not all read as the panel-open time.
+    expect(useRuntimeEventStore.getState().logLines).toEqual([
+      { id: 1, level: "info", line: "core started", receivedAt: firstAt },
+      { id: 2, level: "warn", line: "slow handshake", receivedAt: secondAt },
+    ]);
+    now.mockRestore();
+    expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("logLine");
+  });
+
+  it("drops buffered log lines when the log is cleared before the frame runs", async () => {
+    vi.useFakeTimers();
+
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "logLine",
+      payload: { id: 1, level: "info", line: "core started" },
+    });
+    useRuntimeEventStore.getState().clearLogs();
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(useRuntimeEventStore.getState().logLines).toEqual([]);
+  });
+
+  it("stores a valid connections snapshot without copying every item", async () => {
+    vi.useFakeTimers();
+    const snapshot = makeConnectionsSnapshot("connection-1", "example.com:443", 200, 100);
+
+    useRuntimeEventStore.getState().pushTransientEvent({ kind: "proxyConnections", payload: snapshot });
+    await vi.advanceTimersByTimeAsync(20);
+
+    // Same object: the payload comes from the specta-generated contract, so only
+    // the envelope is checked instead of 14 fields per connection, once a second.
+    expect(useRuntimeEventStore.getState().proxyConnections).toBe(snapshot);
+  });
+
+  it("rejects a connections payload whose envelope is malformed", async () => {
+    vi.useFakeTimers();
+
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "proxyConnections",
+      payload: { connections: null, downloadTotal: 0, uploadTotal: 0 } as unknown as ProxyConnectionsSnapshot,
+    });
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(useRuntimeEventStore.getState().proxyConnections).toBeNull();
+  });
+
   it("rejects invalid statistics payloads before storing them", () => {
     const invalidStatistics = {
       activeProfileId: "profile-a",

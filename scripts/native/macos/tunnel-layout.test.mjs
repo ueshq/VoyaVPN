@@ -6,6 +6,7 @@ import {
   packetTunnelLayout,
   packagingModeForDistribution,
   requiredNetworkExtensionValue,
+  resolvePacketTunnelVersions,
 } from "./tunnel-layout.mjs";
 
 describe("macOS native tunnel layout", () => {
@@ -42,5 +43,41 @@ describe("macOS native tunnel layout", () => {
     ).toBe("developer-id");
     expect(distributionFromIdentityName("Apple Distribution: Example Team", "auto")).toBe("app-store");
     expect(distributionFromIdentityName("", "auto")).toBe("app-store");
+  });
+});
+
+describe("PacketTunnel version fields", () => {
+  // App Store Connect rejects an embedded extension whose version fields differ
+  // from the containing app, so the container's Info.plist wins.
+  it("takes both fields from the containing app when it is already built", () => {
+    expect(
+      resolvePacketTunnelVersions({
+        appShortVersion: "1.4.2",
+        appBundleVersion: "1.4.2.7",
+        packageVersion: "0.1.0",
+      }),
+    ).toEqual({ build: "1.4.2.7", marketing: "1.4.2" });
+  });
+
+  it("falls back to the root package.json version before the app bundle exists", () => {
+    expect(resolvePacketTunnelVersions({ packageVersion: "0.2.0" })).toEqual({
+      build: "0.2.0",
+      marketing: "0.2.0",
+    });
+    expect(resolvePacketTunnelVersions({ appShortVersion: "  ", appBundleVersion: "", packageVersion: "0.2.0" })).toEqual({
+      build: "0.2.0",
+      marketing: "0.2.0",
+    });
+  });
+
+  it("mirrors the marketing version into CFBundleVersion when the app has none", () => {
+    expect(resolvePacketTunnelVersions({ appShortVersion: "1.4.2", packageVersion: "0.1.0" })).toEqual({
+      build: "1.4.2",
+      marketing: "1.4.2",
+    });
+  });
+
+  it("refuses to guess when no version is available at all", () => {
+    expect(() => resolvePacketTunnelVersions({})).toThrow(/Unable to resolve a PacketTunnel version/u);
   });
 });

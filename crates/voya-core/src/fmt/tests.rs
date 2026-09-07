@@ -21,6 +21,176 @@ fn fmt_share_round_trips_all_supported_protocols() {
 }
 
 #[test]
+fn fmt_share_round_trip_preserves_protocol_transport_and_tls_payloads() {
+    // The all-protocols round trip above only compares six scalars, which is
+    // how a dropped transport, a TLS block derived from the wrong query key or
+    // a rewritten plugin option string stayed invisible. These cases compare
+    // the whole payload for links that are expected to be lossless.
+    let cases = vec![
+        profile(
+            "vless ws tls",
+            ProfileProtocol::Vless {
+                server: endpoint("vless.example", 8443),
+                uuid: "00000000-0000-0000-0000-000000000004".to_string(),
+                flow: None,
+                encryption: Some(NONE.to_string()),
+            },
+            Some(ProfileTransport::Websocket {
+                host: Some("vless.example".to_string()),
+                path: Some("/ws".to_string()),
+            }),
+            Some(tls(TlsMode::Tls, "vless.example")),
+        ),
+        profile(
+            "trojan grpc tls",
+            ProfileProtocol::Trojan {
+                server: endpoint("trojan.example", 443),
+                password: "trojan-pass".to_string(),
+            },
+            Some(ProfileTransport::Grpc {
+                authority: Some("trojan.example".to_string()),
+                service_name: Some("svc".to_string()),
+                mode: Some(GRPC_MULTI_MODE.to_string()),
+            }),
+            Some(tls(TlsMode::Tls, "trojan.example")),
+        ),
+        profile(
+            "trojan httpupgrade reality",
+            ProfileProtocol::Trojan {
+                server: endpoint("reality.example", 443),
+                password: "trojan-pass".to_string(),
+            },
+            Some(ProfileTransport::HttpUpgrade {
+                host: Some("reality.example".to_string()),
+                path: Some("/upgrade".to_string()),
+            }),
+            Some(TlsSettings {
+                reality_public_key: Some("public-key".to_string()),
+                reality_short_id: Some("shortid".to_string()),
+                reality_spider_x: Some("/spider".to_string()),
+                ..tls(TlsMode::Reality, "reality.example")
+            }),
+        ),
+        // The Shadowsocks plugin option string is the one payload both the
+        // exporter and the sing-box generator build, so a round trip through it
+        // is what keeps `crate::protocol_common::shadowsocks_plugin_for` honest.
+        profile(
+            "ss v2ray-plugin ws tls",
+            ProfileProtocol::Shadowsocks {
+                server: endpoint("ss.example", 8388),
+                password: "pass123".to_string(),
+                method: "aes-128-gcm".to_string(),
+                udp_over_tcp: false,
+            },
+            Some(ProfileTransport::Websocket {
+                host: Some("ws.example".to_string()),
+                path: Some("/ws".to_string()),
+            }),
+            Some(tls(TlsMode::Tls, "ws.example")),
+        ),
+    ];
+
+    for source in cases {
+        let uri = export_share_link(&source).expect("export share link");
+        let parsed = parse_share_link(&uri).expect("parse exported share link");
+
+        assert_eq!(parsed.protocol, source.protocol, "protocol for {uri}");
+        assert_eq!(parsed.transport, source.transport, "transport for {uri}");
+        assert_eq!(parsed.tls, source.tls, "tls for {uri}");
+    }
+}
+
+#[test]
+fn fmt_shadowsocks_plugin_export_uses_the_shared_option_model() {
+    let source = profile(
+        "ss obfs",
+        ProfileProtocol::Shadowsocks {
+            server: endpoint("ss.example", 8388),
+            password: "pass123".to_string(),
+            method: "aes-128-gcm".to_string(),
+            udp_over_tcp: false,
+        },
+        Some(ProfileTransport::Tcp {
+            header: Some(RAW_HEADER_HTTP.to_string()),
+            // Only the first authority reaches the plugin: `obfs-host` is a
+            // single host, and the generator has always taken the first entry.
+            host: Some("obfs.example,second.example".to_string()),
+            path: None,
+        }),
+        None,
+    );
+
+    let uri = export_share_link(&source).expect("export obfs shadowsocks link");
+    let plugin = Url::parse(&uri)
+        .expect("obfs link should parse")
+        .query_pairs()
+        .find(|(key, _)| key == "plugin")
+        .map(|(_, value)| value.into_owned())
+        .expect("plugin query value");
+    assert_eq!(plugin, "obfs-local;obfs=http;obfs-host=obfs.example");
+
+    let parsed = parse_share_link(&uri).expect("parse obfs shadowsocks link");
+    assert_eq!(
+        parsed.transport,
+        Some(ProfileTransport::Tcp {
+            header: Some(RAW_HEADER_HTTP.to_string()),
+            host: Some("obfs.example".to_string()),
+            path: None,
+        })
+    );
+}
+
+#[test]
+fn fmt_share_round_trip_documents_hysteria2_lossy_exports() {
+    // A hysteria2 link is not a lossless carrier: `mport` ranges are rewritten
+    // with `-` separators and only the first certificate pin has a query key.
+    let source = profile(
+        "hy2 lossy",
+        ProfileProtocol::Hysteria2 {
+            server: endpoint("hy2.example", 443),
+            password: "hy2-pass".to_string(),
+            port_hops: Some("1000:2000".to_string()),
+            obfuscation_password: Some("obfs-pass".to_string()),
+        },
+        None,
+        Some(TlsSettings {
+            certificate_sha256: vec!["first-pin".to_string(), "second-pin".to_string()],
+            ..tls(TlsMode::Tls, "hy2.example")
+        }),
+    );
+
+    let uri = export_share_link(&source).expect("export hysteria2 link");
+    let parsed = parse_share_link(&uri).expect("parse hysteria2 link");
+
+    assert_eq!(
+        parsed.protocol,
+        ProfileProtocol::Hysteria2 {
+            server: endpoint("hy2.example", 443),
+            password: "hy2-pass".to_string(),
+            port_hops: Some("1000-2000".to_string()),
+            obfuscation_password: Some("obfs-pass".to_string()),
+        }
+    );
+    assert_eq!(
+        parsed
+            .tls
+            .as_ref()
+            .map(|tls| tls.certificate_sha256.as_slice()),
+        Some(["first-pin".to_string()].as_slice())
+    );
+    // TLS-only protocols carry no `type=`, so the parser normalises the missing
+    // transport into the raw default rather than leaving it unset.
+    assert_eq!(
+        parsed.transport,
+        Some(ProfileTransport::Tcp {
+            header: Some(NONE.to_string()),
+            host: None,
+            path: None,
+        })
+    );
+}
+
+#[test]
 fn fmt_share_export_materializes_supported_global_runtime_options() {
     let options = ShareLinkOptions {
         allow_insecure: true,

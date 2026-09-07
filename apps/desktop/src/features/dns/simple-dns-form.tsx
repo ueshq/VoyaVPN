@@ -5,14 +5,14 @@ import type { DnsSettings } from "@/ipc/bindings";
 import { useI18n } from "@voya/i18n/use-i18n";
 
 import { CheckboxField, SelectField, TextAreaField, TextField } from "./dns-form-fields";
-import type { DnsFieldErrors } from "./dns-form-schema";
 
 export function SimpleDnsForm({
   errors,
   settings,
   updateSimple,
 }: {
-  errors: DnsFieldErrors;
+  /** Field path → already-translated message (see lib/zod-errors.ts). */
+  errors: Record<string, string>;
   settings: DnsSettings;
   updateSimple: (patch: Partial<DnsSettings>) => void;
 }) {
@@ -67,16 +67,19 @@ export function SimpleDnsForm({
         </div>
 
         <TextField
+          error={errors.direct}
           label={t("panes.dns.directDns")}
           onChange={(value) => updateSimple({ direct: value })}
           value={settings.direct ?? ""}
         />
         <TextField
+          error={errors.remote}
           label={t("panes.dns.remoteDns")}
           onChange={(value) => updateSimple({ remote: value })}
           value={settings.remote ?? ""}
         />
         <TextField
+          error={errors.bootstrap}
           label={t("panes.dns.bootstrapDns")}
           onChange={(value) => updateSimple({ bootstrap: value })}
           value={settings.bootstrap ?? ""}

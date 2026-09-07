@@ -154,7 +154,7 @@ export function GroupBuilder({
     setPreviewLoading(true);
     setPreviewError(null);
     try {
-      const draft = prepareGroupDraftForPreview(getValues());
+      const draft = prepareGroupDraftForPreview(getValues(), t("panes.groups.draftName"));
       const nextPreview = await previewGroupProfile(draft);
       if (!mountedRef.current || requestId !== previewRequestId.current) {
         return;

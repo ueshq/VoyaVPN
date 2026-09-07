@@ -1,0 +1,108 @@
+{
+  "leastPing": [
+    {
+      "type": "selector",
+      "tag": "proxy",
+      "outbounds": [
+        "proxy-auto",
+        "proxy-1-node-1",
+        "proxy-2-node-2"
+      ],
+      "interrupt_exist_connections": false
+    },
+    {
+      "type": "urltest",
+      "tag": "proxy-auto",
+      "outbounds": [
+        "proxy-1-node-1",
+        "proxy-2-node-2"
+      ],
+      "interrupt_exist_connections": false
+    }
+  ],
+  "fallback": [
+    {
+      "type": "selector",
+      "tag": "proxy",
+      "outbounds": [
+        "proxy-auto",
+        "proxy-1-node-1",
+        "proxy-2-node-2"
+      ],
+      "interrupt_exist_connections": false
+    },
+    {
+      "type": "urltest",
+      "tag": "proxy-auto",
+      "outbounds": [
+        "proxy-1-node-1",
+        "proxy-2-node-2"
+      ],
+      "interrupt_exist_connections": false,
+      "tolerance": 5000
+    }
+  ],
+  "random": [
+    {
+      "type": "selector",
+      "tag": "proxy",
+      "outbounds": [
+        "proxy-auto",
+        "proxy-1-node-1",
+        "proxy-2-node-2"
+      ],
+      "interrupt_exist_connections": false
+    },
+    {
+      "type": "urltest",
+      "tag": "proxy-auto",
+      "outbounds": [
+        "proxy-1-node-1",
+        "proxy-2-node-2"
+      ],
+      "interrupt_exist_connections": false
+    }
+  ],
+  "roundRobin": [
+    {
+      "type": "selector",
+      "tag": "proxy",
+      "outbounds": [
+        "proxy-auto",
+        "proxy-1-node-1",
+        "proxy-2-node-2"
+      ],
+      "interrupt_exist_connections": false
+    },
+    {
+      "type": "urltest",
+      "tag": "proxy-auto",
+      "outbounds": [
+        "proxy-1-node-1",
+        "proxy-2-node-2"
+      ],
+      "interrupt_exist_connections": false
+    }
+  ],
+  "leastLoad": [
+    {
+      "type": "selector",
+      "tag": "proxy",
+      "outbounds": [
+        "proxy-auto",
+        "proxy-1-node-1",
+        "proxy-2-node-2"
+      ],
+      "interrupt_exist_connections": false
+    },
+    {
+      "type": "urltest",
+      "tag": "proxy-auto",
+      "outbounds": [
+        "proxy-1-node-1",
+        "proxy-2-node-2"
+      ],
+      "interrupt_exist_connections": false
+    }
+  ]
+}

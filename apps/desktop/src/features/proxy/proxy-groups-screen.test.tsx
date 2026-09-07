@@ -4,13 +4,14 @@ import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createAppQueryClient } from "@/components/app-shell/query-client";
-import type { ProxyGroupsSnapshot } from "@/ipc/bindings";
+import type { CoreStateEvent, ProxyGroupsSnapshot } from "@/ipc/bindings";
 import { useToastStore } from "@/stores/toast-store";
 
 import { ProxyGroupsScreen } from "./proxy-groups-screen";
 
 const ipcMocks = vi.hoisted(() => {
   const state = {
+    coreState: null as CoreStateEvent | null,
     proxyMonitorStatus: {
       message: null,
       running: true,
@@ -103,6 +104,7 @@ describe("ProxyGroupsScreen", () => {
     ipcMocks.proxySelectNode.mockReset().mockResolvedValue(snapshot());
     ipcMocks.proxySetTrafficMode.mockReset().mockResolvedValue({ mode: "rule" });
     ipcMocks.proxyTestDelay.mockReset().mockResolvedValue([]);
+    ipcMocks.state.coreState = null;
     useToastStore.setState({ toasts: [] });
   });
 
@@ -156,6 +158,26 @@ describe("ProxyGroupsScreen", () => {
         title: "Delay test failed",
       }),
     );
+  });
+
+  // Without the core running the Clash API is simply absent; surfacing its
+  // transport failure reads as a proxy problem the user cannot act on.
+  it("asks the user to connect instead of showing the transport failure", async () => {
+    ipcMocks.state.coreState = {
+      activeProfileId: null,
+      mainPid: null,
+      prePid: null,
+      runningCoreType: null,
+      state: "disconnected",
+    };
+    ipcMocks.proxyListGroups.mockRejectedValue(
+      new Error("Clash request failed: error sending request for url (http://127.0.0.1:9090/proxies)"),
+    );
+
+    renderScreen();
+
+    expect(await screen.findByText("Connect first")).toBeInTheDocument();
+    expect(screen.queryByText(/error sending request/)).not.toBeInTheDocument();
   });
 
   it("keeps quiet while the proxy calls succeed", async () => {

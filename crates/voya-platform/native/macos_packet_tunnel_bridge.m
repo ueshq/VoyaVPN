@@ -32,19 +32,14 @@ static NSError *VoyaMakeError(NSString *message) {
                            userInfo:@{NSLocalizedDescriptionKey: message}];
 }
 
-static void VoyaWait(dispatch_semaphore_t semaphore) {
-    if (![NSThread isMainThread]) {
-        dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
-        return;
-    }
-
-    while (dispatch_semaphore_wait(semaphore, DISPATCH_TIME_NOW) != 0) {
-        @autoreleasepool {
-            NSDate *limit = [NSDate dateWithTimeIntervalSinceNow:0.05];
-            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:limit];
-        }
-    }
-}
+/// Upper bound for every NetworkExtension preference round trip.
+///
+/// `loadAllFromPreferences`/`saveToPreferences`/`loadFromPreferences` normally
+/// answer in well under a second, but `nesessionmanager` can wedge (a stuck
+/// approval dialog, a half-installed system extension). The Rust side calls
+/// these synchronously from a supervisor task, so an unbounded wait would pin
+/// that thread forever; a bounded one surfaces as a normal bridge error.
+static const NSTimeInterval VoyaPreferencesTimeoutSeconds = 15.0;
 
 static BOOL VoyaWaitWithTimeout(dispatch_semaphore_t semaphore, NSTimeInterval timeoutSeconds) {
     NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeoutSeconds];
@@ -161,7 +156,15 @@ static NSArray<NETunnelProviderManager *> *VoyaLoadAllManagers(NSError **outErro
             loadedError = error;
             dispatch_semaphore_signal(semaphore);
         }];
-    VoyaWait(semaphore);
+    // The completion block writes only `__block` storage, which outlives this
+    // frame, so a late reply after the timeout stays safe; the timed-out values
+    // are simply never read.
+    if (!VoyaWaitWithTimeout(semaphore, VoyaPreferencesTimeoutSeconds)) {
+        if (outError != NULL) {
+            *outError = VoyaMakeError(@"Timed out loading the VoyaVPN VPN configuration from system preferences.");
+        }
+        return nil;
+    }
 
     if (loadedError != nil && outError != NULL) {
         *outError = loadedError;
@@ -226,7 +229,12 @@ static BOOL VoyaSaveManager(NETunnelProviderManager *manager, NSError **outError
         saveError = error;
         dispatch_semaphore_signal(semaphore);
     }];
-    VoyaWait(semaphore);
+    if (!VoyaWaitWithTimeout(semaphore, VoyaPreferencesTimeoutSeconds)) {
+        if (outError != NULL) {
+            *outError = VoyaMakeError(@"Timed out saving the VoyaVPN VPN configuration to system preferences.");
+        }
+        return NO;
+    }
 
     if (saveError != nil && outError != NULL) {
         *outError = saveError;
@@ -242,7 +250,12 @@ static BOOL VoyaReloadManager(NETunnelProviderManager *manager, NSError **outErr
         loadError = error;
         dispatch_semaphore_signal(semaphore);
     }];
-    VoyaWait(semaphore);
+    if (!VoyaWaitWithTimeout(semaphore, VoyaPreferencesTimeoutSeconds)) {
+        if (outError != NULL) {
+            *outError = VoyaMakeError(@"Timed out reloading the VoyaVPN VPN configuration from system preferences.");
+        }
+        return NO;
+    }
 
     if (loadError != nil && outError != NULL) {
         *outError = loadError;
@@ -258,7 +271,11 @@ static NSString *VoyaFetchLastDisconnectError(NETunnelProviderSession *session) 
             disconnectError = error;
             dispatch_semaphore_signal(semaphore);
         }];
-        VoyaWait(semaphore);
+        // Diagnostics only: a wedged daemon must not hold up the status query
+        // that asked for this context.
+        if (!VoyaWaitWithTimeout(semaphore, VoyaPreferencesTimeoutSeconds)) {
+            return @"";
+        }
         return disconnectError.localizedDescription ?: @"";
     }
 

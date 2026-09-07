@@ -270,6 +270,17 @@ pub struct NativeTunStartRequest {
     pub pre_config_path: Option<PathBuf>,
 }
 
+/// Drives the platform-native tunnel backend selected by [`tun_backend`].
+///
+/// **Every method blocks the calling thread.** `start` and `stop` wait for the
+/// backend to reach a terminal state: up to
+/// [`MACOS_PACKET_TUNNEL_START_TIMEOUT_MS`] on macOS (plus the unbounded
+/// NetworkExtension preference load/save the bridge performs first) and up to
+/// the Windows service transition budget on Windows, and both read the
+/// generated config from disk on the way in. `status` and `diagnostics` spawn
+/// helper processes. Async callers must therefore go through
+/// `tokio::task::spawn_blocking` or a dedicated OS thread rather than calling
+/// these inline from a `tokio::spawn`ed task.
 pub trait NativeTunController: Send + Sync {
     fn status(&self, backend: TunBackend) -> NativeTunStatus;
     fn start(&self, request: NativeTunStartRequest) -> Result<(), NativeTunError>;

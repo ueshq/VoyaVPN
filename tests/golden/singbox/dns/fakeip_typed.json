@@ -120,6 +120,16 @@
     },
     {
       "server": "remote_dns",
+      "clash_mode": "Global",
+      "strategy": "prefer_ipv6"
+    },
+    {
+      "server": "direct_dns",
+      "clash_mode": "Direct",
+      "strategy": "prefer_ipv4"
+    },
+    {
+      "server": "remote_dns",
       "domain_suffix": [
         "anthropic.com",
         "claude.ai",
@@ -150,16 +160,6 @@
         "huggingface.co"
       ],
       "strategy": "prefer_ipv6"
-    },
-    {
-      "server": "remote_dns",
-      "clash_mode": "Global",
-      "strategy": "prefer_ipv6"
-    },
-    {
-      "server": "direct_dns",
-      "clash_mode": "Direct",
-      "strategy": "prefer_ipv4"
     },
     {
       "action": "predefined",

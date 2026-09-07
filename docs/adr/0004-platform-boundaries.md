@@ -37,7 +37,7 @@ Security and lifecycle rules:
 - Sudo passwords are collected only for TUN/elevated operations, stored in memory only, and zeroized on stop/shutdown.
 - Linux and macOS use the same `sudo -S` shape; OS-specific differences belong inside `voya-platform`.
 - System proxy and TUN changes must restore on disconnect, app exit, crash restart, and forced disable.
-- GPL or AGPL core binaries are not redistributed in installers by default; core acquisition is download-on-first-run or an explicitly approved packaging path.
+- GPL or AGPL core binaries are redistributed only through an approved packaging path with recorded attribution evidence. See the 2026-09 amendment below for the shape that path actually takes.
 
 Persistence remains a fresh VoyaVPN schema. There is no platform-specific legacy migration code and no obsolete v2rayN columns.
 
@@ -66,3 +66,28 @@ constructed from the application-data directory supplied by the Tauri shell,
 and all config, database, log, temp, and downloaded-core paths derive from that
 directory. No environment variable or executable-adjacent fallback may switch
 the persistence root.
+
+## Amendment (2026-09): Core Seed Acquisition Is Build-Time, Not First-Run
+
+The original decision described core acquisition as "download-on-first-run".
+That is not what the code does and never was on this branch:
+
+- `scripts/core/install-sing-box.mjs` (the root `postinstall`) fetches the
+  SHA-256-pinned upstream sing-box archive at `pnpm install` time into
+  `resources/core-seeds/sing_box/` and copies it into the per-user app-data
+  directory. It is skipped by `VOYAVPN_SKIP_SING_BOX_POSTINSTALL`, and skipped
+  by default on CI unless `VOYAVPN_FETCH_SING_BOX_ON_INSTALL=1`.
+- `scripts/tauri/cli.mjs` re-stages the seed for **every** `tauri build`,
+  including `--debug` and credential-free dry runs, and injects a generated
+  `bundle.resources` overlay from `scripts/tauri/core-seeds.mjs`. Every package
+  this repository produces therefore contains the sing-box binary.
+- The app has no runtime download path for the core. `voya-platform` copies the
+  packaged seed into app data `bin/` on first run; a package built without a
+  staged seed simply has no core.
+
+Consequences for the platform boundary are unchanged — seed staging is build
+tooling in `scripts/`, and the copy-to-app-data step stays in `voya-platform` —
+but every locally built artifact carries GPL-3.0-or-later redistribution
+obligations the moment it leaves the build machine. `docs/release/THIRD_PARTY_NOTICES.md`
+is bundled into each package and must keep describing the package's real
+contents; `docs/release/sing-box-seed-pinning.md` owns the pin-bump procedure.
