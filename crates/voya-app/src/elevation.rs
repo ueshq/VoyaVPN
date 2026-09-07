@@ -28,6 +28,7 @@ pub struct ElevationManager {
     target_os: TargetOs,
     temp_dir: PathBuf,
     bin_prefix: PathBuf,
+    launcher_path: Option<PathBuf>,
 }
 
 impl ElevationManager {
@@ -53,7 +54,18 @@ impl ElevationManager {
             target_os,
             temp_dir: temp_dir.into(),
             bin_prefix: bin_prefix.into(),
+            launcher_path: elevate_launcher_path(target_os),
         }
+    }
+
+    /// Override where the root launcher is expected to live.
+    ///
+    /// The real path is fixed per platform; this exists so the stale-grant
+    /// sweep can be exercised without writing to a system directory.
+    #[must_use]
+    pub fn with_launcher_path(mut self, launcher_path: Option<PathBuf>) -> Self {
+        self.launcher_path = launcher_path;
+        self
     }
 
     /// Shared grant flag wired into the supervisor and TUN status reporting.
@@ -102,10 +114,7 @@ impl ElevationManager {
     /// Best-effort: failures are logged, never returned, so app exit is never
     /// blocked.
     pub fn revoke(&self) {
-        let launcher_present = elevate_launcher_path(self.target_os)
-            .and_then(|launcher| filesystem::file_exists(&launcher).ok())
-            .unwrap_or(false);
-        if !launcher_present && !self.state.is_granted() {
+        if !self.launcher_present() && !self.state.is_granted() {
             return;
         }
 
@@ -120,6 +129,34 @@ impl ElevationManager {
             }
         }
         self.state.set_granted(false);
+    }
+
+    /// Remove a launcher + sudoers drop-in left behind by a previous run.
+    ///
+    /// [`Self::revoke`] only ever runs on a clean exit, so a crash, a SIGKILL or
+    /// a power loss leaves the root-owned launcher and its `NOPASSWD` drop-in
+    /// installed indefinitely — a passwordless root primitive for every local
+    /// process, long after the session that asked for it ended. Startup calls
+    /// this before anything can spawn a core, so the grant never outlives the
+    /// app run that requested it.
+    ///
+    /// Returns whether a stale launcher was found. Removal itself is
+    /// best-effort: `sudo -n` fails silently when the drop-in is already gone.
+    pub fn revoke_stale_grant(&self) -> bool {
+        if !self.launcher_present() {
+            return false;
+        }
+
+        tracing::warn!("removing a TUN elevation launcher left behind by a previous run");
+        self.revoke();
+        true
+    }
+
+    fn launcher_present(&self) -> bool {
+        self.launcher_path
+            .as_deref()
+            .and_then(|launcher| filesystem::file_exists(launcher).ok())
+            .unwrap_or(false)
     }
 
     fn stage_install_sources(
@@ -176,7 +213,10 @@ mod tests {
     }
 
     fn manager(runner: Arc<dyn ProcessRunner>, os: TargetOs, name: &str) -> ElevationManager {
+        // The launcher path is overridden so a real installation on the
+        // developer's machine cannot influence the result.
         ElevationManager::with_target_os(runner, unique_temp_dir(name), "/tmp/app/bin", os)
+            .with_launcher_path(Some(unique_temp_dir(name).join("voya-elevate")))
     }
 
     #[test]
@@ -188,6 +228,37 @@ mod tests {
         );
         assert!(!manager.is_granted());
         assert!(!manager.state().is_granted());
+    }
+
+    /// A crash never reaches the exit-time revoke, so the root launcher and its
+    /// NOPASSWD drop-in can outlive the run that installed them. Startup must
+    /// sweep them before anything can use them.
+    #[test]
+    fn startup_sweep_revokes_a_launcher_left_behind_by_a_crash() {
+        let runner = Arc::new(RecordingRunner::default());
+        let work_dir = unique_temp_dir("stale-launcher");
+        std::fs::create_dir_all(&work_dir).expect("create stale launcher dir");
+        let launcher = work_dir.join("voya-elevate");
+        std::fs::write(&launcher, b"#!/bin/sh\n").expect("write stale launcher");
+
+        let manager = manager(runner.clone(), TargetOs::Macos, "stale-launcher")
+            .with_launcher_path(Some(launcher));
+
+        assert!(manager.revoke_stale_grant());
+        assert_eq!(runner.events().as_slice(), ["oneshot:SudoKill"]);
+        assert!(!manager.is_granted());
+
+        let _ = std::fs::remove_dir_all(&work_dir);
+    }
+
+    #[test]
+    fn startup_sweep_is_a_no_op_without_a_stale_launcher() {
+        let runner = Arc::new(RecordingRunner::default());
+        let manager = manager(runner.clone(), TargetOs::Macos, "no-launcher")
+            .with_launcher_path(Some(unique_temp_dir("no-launcher").join("absent")));
+
+        assert!(!manager.revoke_stale_grant());
+        assert!(runner.events().is_empty());
     }
 
     #[test]

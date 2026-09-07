@@ -251,7 +251,7 @@ where
     .map_err(|error| AppError::EventEmit(error.to_string()))
 }
 
-pub(crate) fn emit_current_tun_status<R>(
+pub(crate) async fn emit_current_tun_status<R>(
     app: &tauri::AppHandle<R>,
     state: &AppState,
 ) -> Result<(), AppError>
@@ -259,8 +259,63 @@ where
     R: tauri::Runtime,
 {
     let config = current_config(state)?;
-    let status = tun_manager(state).status(&config).map_err(tun_error)?;
+    let status = tun_status_off_thread(state, config).await?;
     emit_tun_changed(app, &status)
+}
+
+/// Applies the mutation's system proxy state, commits it with a compensating
+/// re-apply of `original`, then refreshes the sysproxy event and the tray.
+///
+/// Shared by `set_system_proxy_mode` and `set_connection_mode`, which differ
+/// only in how they compute the target mode.
+pub(super) async fn commit_system_proxy_mutation<R>(
+    app: &tauri::AppHandle<R>,
+    state: &AppState,
+    mutation: ConfigMutationGuard<'_>,
+    original: &AppConfig,
+) -> Result<SystemProxyStatus, AppError>
+where
+    R: tauri::Runtime,
+{
+    let status =
+        apply_system_proxy(app, state, mutation.config(), false).map_err(sysproxy_error)?;
+
+    if let Err(failure) = commit_with_compensation(commit_config_mutation(mutation), || {
+        apply_system_proxy(app, state, original, false).map(|_| ())
+    })
+    .await
+    {
+        if let Some(compensation_error) = failure.compensation {
+            report_post_commit_error(
+                app,
+                "System proxy recovery failed",
+                &format!(
+                    "The configuration was not saved and restoring the previous system proxy mode failed: {compensation_error}"
+                ),
+                AppNoticeLevel::Error,
+            );
+        }
+        return Err(failure.commit);
+    }
+
+    if let Err(error) = emit_sysproxy_changed(app, &status) {
+        report_post_commit_error(
+            app,
+            "System proxy status refresh failed",
+            &format!("{error:?}"),
+            AppNoticeLevel::Warning,
+        );
+    }
+    if let Err(error) = crate::refresh_tray_menu(app) {
+        report_post_commit_error(
+            app,
+            "Tray refresh failed",
+            &error.to_string(),
+            AppNoticeLevel::Warning,
+        );
+    }
+
+    Ok(status)
 }
 
 pub(super) async fn restart_if_connected_after_routing_change<R>(
@@ -329,7 +384,7 @@ where
                     AppNoticeLevel::Warning,
                 ),
             }
-            if let Err(error) = emit_current_tun_status(app, state) {
+            if let Err(error) = emit_current_tun_status(app, state).await {
                 tracing::warn!(?error, "failed to emit current TUN status");
             }
             Ok(())

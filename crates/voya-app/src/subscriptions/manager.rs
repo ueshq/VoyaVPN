@@ -80,15 +80,9 @@ impl<'db> SubscriptionManager<'db> {
         Ok(self.database.subscriptions().list().await?)
     }
 
-    /// `_config` is unused: subscription selection is not part of the persisted
-    /// application configuration. The parameter stays so callers can keep
-    /// passing the mutation guard's config alongside the other subscription
-    /// mutations that do need it.
-    pub async fn save_subscription(
-        &self,
-        _config: &mut AppConfig,
-        mut item: SubItem,
-    ) -> Result<SubItem> {
+    /// Subscription selection is not part of the persisted application
+    /// configuration, so this mutation touches the database only.
+    pub async fn save_subscription(&self, mut item: SubItem) -> Result<SubItem> {
         normalize_subscription(&mut item);
         if item.remarks.is_empty() {
             return Err(SubscriptionManagerError::MissingRemarks);
@@ -112,11 +106,7 @@ impl<'db> SubscriptionManager<'db> {
         Ok(item)
     }
 
-    pub async fn add_subscription_from_url(
-        &self,
-        config: &mut AppConfig,
-        url: &str,
-    ) -> Result<SubItem> {
+    pub async fn add_subscription_from_url(&self, url: &str) -> Result<SubItem> {
         let url = url.trim();
         if url.is_empty() {
             return Err(SubscriptionManagerError::MissingUrl);
@@ -128,14 +118,11 @@ impl<'db> SubscriptionManager<'db> {
             return Ok(existing);
         }
 
-        self.save_subscription(
-            config,
-            SubItem {
-                remarks: extract_remarks_from_url(url).unwrap_or_else(|| "import_sub".to_string()),
-                url: url.to_string(),
-                ..SubItem::default()
-            },
-        )
+        self.save_subscription(SubItem {
+            remarks: extract_remarks_from_url(url).unwrap_or_else(|| "import_sub".to_string()),
+            url: url.to_string(),
+            ..SubItem::default()
+        })
         .await
     }
 
@@ -214,7 +201,7 @@ impl<'db> SubscriptionManager<'db> {
         };
 
         let parsed_import = self
-            .parse_import_text(config, text, subscription_id.unwrap_or_default())
+            .parse_import_text(text, subscription_id.unwrap_or_default())
             .await?;
         let mut profiles = parsed_import.profiles;
         let parsed = profiles.len();
@@ -482,7 +469,6 @@ impl<'db> SubscriptionManager<'db> {
 
     async fn parse_import_text(
         &self,
-        config: &mut AppConfig,
         text: &str,
         subscription_id: &str,
     ) -> Result<ParsedImportText> {
@@ -512,7 +498,7 @@ impl<'db> SubscriptionManager<'db> {
                     continue;
                 }
                 if allow_subscription_import && is_http_url(line) {
-                    self.add_subscription_from_url(config, line).await?;
+                    self.add_subscription_from_url(line).await?;
                     added_subscription = true;
                     messages.push(format!(
                         "Line {} added as a subscription source; run subscription update to import its profiles.",
@@ -762,16 +748,13 @@ mod tests {
         let manager = SubscriptionManager::new(&database);
         let mut config = AppConfig::default();
         let sub = manager
-            .save_subscription(
-                &mut config,
-                SubItem {
-                    id: "sub-us".to_string(),
-                    remarks: "US sub".to_string(),
-                    url: "https://example.test/sub".to_string(),
-                    filter: Some("US".to_string()),
-                    ..SubItem::default()
-                },
-            )
+            .save_subscription(SubItem {
+                id: "sub-us".to_string(),
+                remarks: "US sub".to_string(),
+                url: "https://example.test/sub".to_string(),
+                filter: Some("US".to_string()),
+                ..SubItem::default()
+            })
             .await
             .expect("subscription manager test operation should succeed");
         let old = ProfileManager::new(&database)
@@ -839,32 +822,26 @@ mod tests {
         config.gui_item.auto_create_subscription_group = false;
         config.const_item.sub_convert_url = Some(format!("{base}/convert?url={{0}}"));
         manager
-            .save_subscription(
-                &mut config,
-                SubItem {
-                    id: "sub-plain".to_string(),
-                    remarks: "Plain".to_string(),
-                    url: format!("{base}/main"),
-                    more_url: format!("{base}/extra"),
-                    user_agent: "SubUA/3".to_string(),
-                    ..SubItem::default()
-                },
-            )
+            .save_subscription(SubItem {
+                id: "sub-plain".to_string(),
+                remarks: "Plain".to_string(),
+                url: format!("{base}/main"),
+                more_url: format!("{base}/extra"),
+                user_agent: "SubUA/3".to_string(),
+                ..SubItem::default()
+            })
             .await
             .expect("subscription manager test operation should succeed");
         manager
-            .save_subscription(
-                &mut config,
-                SubItem {
-                    id: "sub-convert".to_string(),
-                    remarks: "Convert".to_string(),
-                    url: format!("{base}/raw"),
-                    more_url: format!("{base}/should-not-fetch"),
-                    user_agent: "SubUA/3".to_string(),
-                    convert_target: Some("clash".to_string()),
-                    ..SubItem::default()
-                },
-            )
+            .save_subscription(SubItem {
+                id: "sub-convert".to_string(),
+                remarks: "Convert".to_string(),
+                url: format!("{base}/raw"),
+                more_url: format!("{base}/should-not-fetch"),
+                user_agent: "SubUA/3".to_string(),
+                convert_target: Some("clash".to_string()),
+                ..SubItem::default()
+            })
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -898,15 +875,12 @@ mod tests {
         let manager = SubscriptionManager::new(&database);
         let mut config = AppConfig::default();
         let sub = manager
-            .save_subscription(
-                &mut config,
-                SubItem {
-                    id: "sub-auto".to_string(),
-                    remarks: "Airport".to_string(),
-                    url: "https://example.test/auto".to_string(),
-                    ..SubItem::default()
-                },
-            )
+            .save_subscription(SubItem {
+                id: "sub-auto".to_string(),
+                remarks: "Airport".to_string(),
+                url: "https://example.test/auto".to_string(),
+                ..SubItem::default()
+            })
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -1001,15 +975,12 @@ mod tests {
         let mut config = AppConfig::default();
         config.gui_item.auto_create_subscription_group = false;
         let sub = manager
-            .save_subscription(
-                &mut config,
-                SubItem {
-                    id: "sub-noauto".to_string(),
-                    remarks: "Plain".to_string(),
-                    url: "https://example.test/plain".to_string(),
-                    ..SubItem::default()
-                },
-            )
+            .save_subscription(SubItem {
+                id: "sub-noauto".to_string(),
+                remarks: "Plain".to_string(),
+                url: "https://example.test/plain".to_string(),
+                ..SubItem::default()
+            })
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -1062,15 +1033,12 @@ mod tests {
         let manager = SubscriptionManager::new(&database);
         let mut config = AppConfig::default();
         let sub = manager
-            .save_subscription(
-                &mut config,
-                SubItem {
-                    id: "sub-meta".to_string(),
-                    remarks: "Meta".to_string(),
-                    url: format!("{base}/meta"),
-                    ..SubItem::default()
-                },
-            )
+            .save_subscription(SubItem {
+                id: "sub-meta".to_string(),
+                remarks: "Meta".to_string(),
+                url: format!("{base}/meta"),
+                ..SubItem::default()
+            })
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -1120,7 +1088,7 @@ mod tests {
         updated_sub.url = format!("{plain_base}/meta");
         updated_sub.auto_update_interval_minutes = Some(30);
         manager
-            .save_subscription(&mut config, updated_sub)
+            .save_subscription(updated_sub)
             .await
             .expect("subscription manager test operation should succeed");
         manager
@@ -1180,16 +1148,13 @@ mod tests {
             ("url-only", "URL Only", "/url-only", None),
         ] {
             manager
-                .save_subscription(
-                    &mut config,
-                    SubItem {
-                        id: id.to_string(),
-                        remarks: remarks.to_string(),
-                        url: format!("{base}{path}"),
-                        filter: filter.map(str::to_string),
-                        ..SubItem::default()
-                    },
-                )
+                .save_subscription(SubItem {
+                    id: id.to_string(),
+                    remarks: remarks.to_string(),
+                    url: format!("{base}{path}"),
+                    filter: filter.map(str::to_string),
+                    ..SubItem::default()
+                })
                 .await
                 .expect("subscription manager test operation should succeed");
         }
@@ -1282,19 +1247,15 @@ mod tests {
             .await
             .expect("subscription manager test operation should succeed");
         let manager = SubscriptionManager::new(&database);
-        let mut config = AppConfig::default();
 
         let error = manager
-            .save_subscription(
-                &mut config,
-                SubItem {
-                    id: "bad-filter".to_string(),
-                    remarks: "Bad filter".to_string(),
-                    url: "https://example.test/sub".to_string(),
-                    filter: Some("US(".to_string()),
-                    ..SubItem::default()
-                },
-            )
+            .save_subscription(SubItem {
+                id: "bad-filter".to_string(),
+                remarks: "Bad filter".to_string(),
+                url: "https://example.test/sub".to_string(),
+                filter: Some("US(".to_string()),
+                ..SubItem::default()
+            })
             .await
             .expect_err("an uncompilable filter should be rejected by the editor");
 
@@ -1331,15 +1292,12 @@ mod tests {
         let manager = SubscriptionManager::new(&database);
         let mut config = AppConfig::default();
         manager
-            .save_subscription(
-                &mut config,
-                SubItem {
-                    id: "good".to_string(),
-                    remarks: "Good".to_string(),
-                    url: format!("{base}/good"),
-                    ..SubItem::default()
-                },
-            )
+            .save_subscription(SubItem {
+                id: "good".to_string(),
+                remarks: "Good".to_string(),
+                url: format!("{base}/good"),
+                ..SubItem::default()
+            })
             .await
             .expect("subscription manager test operation should succeed");
         // A row stored before filters were validated at save time.
@@ -1410,17 +1368,14 @@ mod tests {
             .await
             .expect("subscription database should connect");
         let manager = SubscriptionManager::new(&database);
-        let mut config = AppConfig::default();
+        let config = AppConfig::default();
         manager
-            .save_subscription(
-                &mut config,
-                SubItem {
-                    id: "empty-network".to_string(),
-                    remarks: "Empty network".to_string(),
-                    url: format!("{base}/empty"),
-                    ..SubItem::default()
-                },
-            )
+            .save_subscription(SubItem {
+                id: "empty-network".to_string(),
+                remarks: "Empty network".to_string(),
+                url: format!("{base}/empty"),
+                ..SubItem::default()
+            })
             .await
             .expect("subscription should be saved");
         let original = config.clone();
@@ -1459,15 +1414,12 @@ mod tests {
         let manager = SubscriptionManager::new(&database);
         let mut config = AppConfig::default();
         manager
-            .save_subscription(
-                &mut config,
-                SubItem {
-                    id: "changing-source".to_string(),
-                    remarks: "Original".to_string(),
-                    url: format!("{base}/profile"),
-                    ..SubItem::default()
-                },
-            )
+            .save_subscription(SubItem {
+                id: "changing-source".to_string(),
+                remarks: "Original".to_string(),
+                url: format!("{base}/profile"),
+                ..SubItem::default()
+            })
             .await
             .expect("subscription should be saved");
         let prepared = manager
@@ -1476,15 +1428,12 @@ mod tests {
             .expect("subscription should be prepared");
         assert!(prepared.has_imports());
         manager
-            .save_subscription(
-                &mut config,
-                SubItem {
-                    id: "changing-source".to_string(),
-                    remarks: "Changed".to_string(),
-                    url: "https://changed.example.test/sub".to_string(),
-                    ..SubItem::default()
-                },
-            )
+            .save_subscription(SubItem {
+                id: "changing-source".to_string(),
+                remarks: "Changed".to_string(),
+                url: "https://changed.example.test/sub".to_string(),
+                ..SubItem::default()
+            })
             .await
             .expect("subscription should change");
 
@@ -1677,15 +1626,12 @@ mod tests {
             .await
             .expect("subscription manager test operation should succeed");
         let sub = manager
-            .save_subscription(
-                &mut config,
-                SubItem {
-                    id: "sub-same".to_string(),
-                    remarks: "Same".to_string(),
-                    url: "https://example.test/sub".to_string(),
-                    ..SubItem::default()
-                },
-            )
+            .save_subscription(SubItem {
+                id: "sub-same".to_string(),
+                remarks: "Same".to_string(),
+                url: "https://example.test/sub".to_string(),
+                ..SubItem::default()
+            })
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -1718,15 +1664,12 @@ mod tests {
         let manager = SubscriptionManager::new(&database);
         let mut config = AppConfig::default();
         let sub = manager
-            .save_subscription(
-                &mut config,
-                SubItem {
-                    id: "sub-refresh".to_string(),
-                    remarks: "Refresh".to_string(),
-                    url: "https://example.test/sub".to_string(),
-                    ..SubItem::default()
-                },
-            )
+            .save_subscription(SubItem {
+                id: "sub-refresh".to_string(),
+                remarks: "Refresh".to_string(),
+                url: "https://example.test/sub".to_string(),
+                ..SubItem::default()
+            })
             .await
             .expect("subscription manager test operation should succeed");
         let first_text = [

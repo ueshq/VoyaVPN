@@ -515,7 +515,9 @@ fn write_speedtest_config(
     let _ = core_type;
     let json = generate_singbox_speedtest_config_json(entries)?;
     let path = paths.bin_config_file(file_name);
-    filesystem::write_file_with_parent(&path, json).map_err(|source| {
+    // Speedtest configs carry the same outbound credentials as the runtime
+    // config, so they get the same 0600 + O_NOFOLLOW treatment.
+    filesystem::write_private_file_with_parent(&path, json).map_err(|source| {
         SpeedtestError::WriteConfig {
             path: path.clone(),
             source,

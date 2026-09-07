@@ -223,6 +223,14 @@ pub enum ProcessLogLevel {
     Error,
 }
 
+/// Tracing target carrying raw child-process output lines.
+///
+/// These lines are unredacted core output and are already delivered to the
+/// desktop log panel through [`ProcessLogSink`], which redacts them. A
+/// subscriber that persists events must therefore opt in to this target
+/// deliberately instead of picking it up through a module-path filter.
+pub const CORE_OUTPUT_TARGET: &str = "voya::core_output";
+
 /// Number of leading whitespace-separated tokens searched for a level token.
 ///
 /// sing-box prefixes its level with a timezone offset, a date and a time, so the
@@ -618,11 +626,17 @@ fn drain_child_pipe<T>(
             }
             match classify_core_log_line(&line) {
                 ProcessLogLevel::Trace | ProcessLogLevel::Debug => {
-                    tracing::debug!(?role, ?stream, "{line}");
+                    tracing::debug!(target: CORE_OUTPUT_TARGET, ?role, ?stream, "{line}");
                 }
-                ProcessLogLevel::Info => tracing::info!(?role, ?stream, "{line}"),
-                ProcessLogLevel::Warn => tracing::warn!(?role, ?stream, "{line}"),
-                ProcessLogLevel::Error => tracing::error!(?role, ?stream, "{line}"),
+                ProcessLogLevel::Info => {
+                    tracing::info!(target: CORE_OUTPUT_TARGET, ?role, ?stream, "{line}");
+                }
+                ProcessLogLevel::Warn => {
+                    tracing::warn!(target: CORE_OUTPUT_TARGET, ?role, ?stream, "{line}");
+                }
+                ProcessLogLevel::Error => {
+                    tracing::error!(target: CORE_OUTPUT_TARGET, ?role, ?stream, "{line}");
+                }
             }
         }
     });

@@ -77,6 +77,25 @@ impl TunManager {
         config: &mut AppConfig,
         enabled: bool,
     ) -> Result<TunStatus, TunManagerError> {
+        let status = self.plan_set_enabled(config, enabled)?;
+        Self::apply_enabled(config, enabled);
+
+        Ok(status)
+    }
+
+    /// Run the enable/disable preflight without touching the configuration.
+    ///
+    /// The probe forks `pluginkit`/`systemextensionsctl`/`sc.exe` and loads
+    /// NetworkExtension preferences, so callers holding a config mutation guard
+    /// can run this off the async runtime against a snapshot and then apply the
+    /// decision with [`Self::apply_enabled`]. The returned status is what the
+    /// config will report once applied — only `enabled` is derived from the
+    /// config, everything else comes from the platform probe.
+    pub fn plan_set_enabled(
+        &self,
+        config: &AppConfig,
+        enabled: bool,
+    ) -> Result<TunStatus, TunManagerError> {
         let (status, report) = self.status_with_report(config)?;
         if enabled && status.provider_path_mismatch {
             return Err(TunManagerError::ProviderPathMismatch {
@@ -92,8 +111,12 @@ impl TunManager {
             };
         }
 
+        Ok(TunStatus { enabled, ..status })
+    }
+
+    /// Apply a change already validated by [`Self::plan_set_enabled`].
+    pub fn apply_enabled(config: &mut AppConfig, enabled: bool) {
         config.tun_mode_item.enable_tun = enabled;
-        self.status(config)
     }
 
     fn status_with_report(
@@ -362,6 +385,39 @@ mod tests {
 
         let status = manager.set_enabled(&mut config, false).expect("disable");
         assert!(!status.enabled);
+        assert!(!config.tun_mode_item.enable_tun);
+    }
+
+    /// The status probe forks OS helpers, so command handlers run it off the
+    /// async runtime against a config snapshot and apply the flag afterwards.
+    /// The planned status must match what the applied config reports.
+    #[test]
+    fn plan_set_enabled_reports_the_post_apply_status_without_mutating() {
+        let mut config = AppConfig::default();
+        let elevation = Arc::new(ElevationState::new());
+        elevation.set_granted(true);
+        let manager = TunManager::with_target_os(elevation, TargetOs::Linux);
+
+        let planned = manager
+            .plan_set_enabled(&config, true)
+            .expect("plan enable with elevation grant");
+        assert!(planned.enabled);
+        assert!(!config.tun_mode_item.enable_tun);
+
+        TunManager::apply_enabled(&mut config, true);
+        assert!(config.tun_mode_item.enable_tun);
+        assert_eq!(manager.status(&config).expect("status"), planned);
+    }
+
+    #[test]
+    fn plan_set_enabled_rejects_without_mutating() {
+        let config = AppConfig::default();
+        let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Linux);
+
+        assert!(matches!(
+            manager.plan_set_enabled(&config, true),
+            Err(TunManagerError::ElevationRequired)
+        ));
         assert!(!config.tun_mode_item.enable_tun);
     }
 

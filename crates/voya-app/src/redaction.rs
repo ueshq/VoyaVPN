@@ -1,3 +1,46 @@
+/// Placeholder substituted for a whole URL by [`redact_urls`].
+pub const REDACTED_URL: &str = "[redacted URL]";
+
+/// Replace whole `http`/`https` URLs with [`REDACTED_URL`].
+///
+/// Subscription links routinely carry the account token in the query string, so
+/// stripping only the userinfo (as [`redact_url_userinfo`] does) is not enough
+/// for text that reaches a toast, the Logs panel or a pasted bug report. The
+/// accepted URL characters mirror `URL_PATTERN` in
+/// `packages/utils/src/operational-redaction.ts`, so a message redacted here
+/// reads the same as one the frontend redacts on the manual paths.
+#[must_use]
+pub fn redact_urls(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut search_from = 0;
+    let mut last_copied = 0;
+    let mut redacted = String::with_capacity(value.len());
+    let mut changed = false;
+
+    while let Some(scheme_end) = find_scheme_separator(bytes, search_from) {
+        let scheme_start = find_scheme_start(bytes, scheme_end);
+        let scheme = &value[scheme_start..scheme_end];
+        if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
+            search_from = scheme_end + 3;
+            continue;
+        }
+
+        let url_end = find_url_end(bytes, scheme_end + 3);
+        redacted.push_str(&value[last_copied..scheme_start]);
+        redacted.push_str(REDACTED_URL);
+        last_copied = url_end;
+        search_from = url_end;
+        changed = true;
+    }
+
+    if changed {
+        redacted.push_str(&value[last_copied..]);
+        redacted
+    } else {
+        value.to_string()
+    }
+}
+
 /// Redact userinfo from URLs embedded in process output.
 ///
 /// The function intentionally avoids parsing the whole line as a URL because
@@ -76,6 +119,18 @@ fn is_url_scheme_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'-' | b'.')
 }
 
+/// A URL runs until the first character that cannot appear in one unescaped.
+fn find_url_end(bytes: &[u8], start: usize) -> usize {
+    bytes[start..]
+        .iter()
+        .position(|byte| is_url_terminator(*byte))
+        .map_or(bytes.len(), |offset| start + offset)
+}
+
+fn is_url_terminator(byte: u8) -> bool {
+    byte.is_ascii_whitespace() || matches!(byte, b'<' | b'>' | b'"' | b'\'' | b')' | b']')
+}
+
 fn find_url_authority_end(bytes: &[u8], start: usize) -> usize {
     bytes[start..]
         .iter()
@@ -129,6 +184,36 @@ mod tests {
 
         assert!(redacted.contains("vless://<redacted>@edge.example:443?security=tls"));
         assert!(!redacted.contains("00000000-0000-0000-0000-000000000000"));
+    }
+
+    #[test]
+    fn url_redaction_removes_subscription_tokens() {
+        let redacted = redact_urls(
+            "MySub->download failed for https://sub.example.test/link?token=abc123&flag=1: timeout",
+        );
+
+        assert_eq!(
+            redacted,
+            "MySub->download failed for [redacted URL] timeout"
+        );
+        assert!(!redacted.contains("token=abc123"));
+    }
+
+    #[test]
+    fn url_redaction_handles_debug_formatted_attempt_lists() {
+        let redacted = redact_urls(
+            r#"all attempts failed for https://sub.example.test/a?token=s3cret: ["https://sub.example.test/a?token=s3cret: connect error"]"#,
+        );
+
+        assert!(!redacted.contains("s3cret"));
+        assert_eq!(redacted.matches(REDACTED_URL).count(), 2);
+    }
+
+    #[test]
+    fn url_redaction_leaves_plain_text_alone() {
+        let line = "subscription MySub has no URL configured";
+
+        assert_eq!(redact_urls(line), line);
     }
 
     #[test]

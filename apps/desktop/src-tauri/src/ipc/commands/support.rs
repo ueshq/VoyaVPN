@@ -200,6 +200,56 @@ pub(super) fn toggle_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     }
 }
 
+/// Runs blocking OS work off the caller's thread.
+///
+/// A non-`async` `#[tauri::command]` is dispatched inline on the webview's main
+/// thread, and even an `async` one would stall a tokio worker while it forks
+/// `pluginkit`/`systemextensionsctl`/`sc.exe`/`networksetup` or waits on an
+/// authorization dialog. Every command that reaches such work funnels through
+/// here, matching the pattern already used by `list_process_candidates`.
+pub(super) async fn run_blocking<T>(
+    label: &'static str,
+    work: impl FnOnce() -> T + Send + 'static,
+) -> Result<T, AppError>
+where
+    T: Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|error| AppError::State(format!("{label} task failed: {error}")))
+}
+
+/// Reads the current TUN status without blocking the caller's thread.
+pub(super) async fn tun_status_off_thread(
+    state: &AppState,
+    config: AppConfig,
+) -> Result<TunStatus, AppError> {
+    let manager = tun_manager(state);
+
+    run_blocking("TUN status", move || manager.status(&config))
+        .await?
+        .map_err(tun_error)
+}
+
+/// Validates a TUN enable/disable request without blocking the caller's thread.
+///
+/// The caller applies the decision with `TunManager::apply_enabled` once it
+/// holds the config mutation guard, so the blocking probe never runs while the
+/// guard's `&mut AppConfig` is borrowed.
+pub(super) async fn plan_tun_enabled_off_thread(
+    state: &AppState,
+    config: AppConfig,
+    enabled: bool,
+) -> Result<TunStatus, AppError> {
+    let manager = tun_manager(state);
+
+    run_blocking("TUN preflight", move || {
+        manager.plan_set_enabled(&config, enabled)
+    })
+    .await?
+    .map_err(tun_error)
+}
+
 pub(super) fn apply_system_proxy<R>(
     _app: &tauri::AppHandle<R>,
     state: &AppState,

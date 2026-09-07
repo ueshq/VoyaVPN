@@ -15,7 +15,7 @@ use voya_net::{
     SubscriptionFetchSource,
 };
 
-use crate::groups::GroupManager;
+use crate::{groups::GroupManager, redaction::redact_urls};
 
 use super::manager::{is_http_url, Result, SubscriptionManagerError};
 
@@ -111,19 +111,20 @@ pub(super) async fn prepare_subscription_snapshot(
             }
             Ok(_) => {
                 result.skipped = result.skipped.saturating_add(1);
-                result.messages.push(format!(
-                    "{}->fetched empty subscription content",
-                    item.remarks
-                ));
+                result
+                    .messages
+                    .push(subscription_message(&item.remarks, EMPTY_FETCH_MESSAGE));
             }
             Err(error) => {
                 result.skipped = result.skipped.saturating_add(1);
                 let message = if is_empty_download_error(&error) {
-                    "fetched empty subscription content".to_string()
+                    EMPTY_FETCH_MESSAGE.to_string()
                 } else {
                     error.to_string()
                 };
-                result.messages.push(format!("{}->{message}", item.remarks));
+                result
+                    .messages
+                    .push(subscription_message(&item.remarks, &message));
             }
         }
     }
@@ -255,6 +256,20 @@ async fn fetch_subscription(
     result
 }
 
+const EMPTY_FETCH_MESSAGE: &str = "fetched empty subscription content";
+
+/// Prefixes a per-subscription update message with its remarks and strips any
+/// URL it carries.
+///
+/// `DownloadError` embeds the subscription URL in every network-failure variant
+/// (and repeats it inside the `Debug`-formatted attempt list), while these
+/// messages end up in `AutoUpdateOutcome::error`, which the shell shows as a
+/// toast and appends to the Logs panel. Subscription links carry the account
+/// token, so the URL never survives into the message.
+fn subscription_message(remarks: &str, message: &str) -> String {
+    format!("{remarks}->{}", redact_urls(message))
+}
+
 fn is_empty_download_error(error: &DownloadError) -> bool {
     match error {
         DownloadError::AttemptsFailed { attempts, .. } => {
@@ -264,5 +279,30 @@ fn is_empty_download_error(error: &DownloadError) -> bool {
                 })
         }
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fetch_failure_messages_never_carry_the_subscription_url() {
+        let message = subscription_message(
+            "MySub",
+            "download failed for https://sub.example.test/link?token=abc123: timed out",
+        );
+
+        assert!(!message.contains("token=abc123"));
+        assert!(!message.contains("sub.example.test"));
+        assert!(message.starts_with("MySub->download failed for [redacted URL]"));
+    }
+
+    #[test]
+    fn fetch_failure_messages_keep_the_subscription_name() {
+        assert_eq!(
+            subscription_message("MySub", EMPTY_FETCH_MESSAGE),
+            "MySub->fetched empty subscription content"
+        );
     }
 }

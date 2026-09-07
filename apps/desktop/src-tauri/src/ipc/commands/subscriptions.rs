@@ -40,18 +40,16 @@ pub async fn save_subscription<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     item: SubscriptionContract,
 ) -> Result<SubscriptionContract, AppError> {
-    let mut mutation = begin_config_mutation(&state).await?;
-    let original = mutation.config().clone();
-    let saved = {
-        let (unit_of_work, config) = mutation.split();
-        SubscriptionManager::new_in(unit_of_work)
-            .save_subscription(config, subscription_from_contract(item))
-            .await
-            .map_err(subscription_error)?
-    };
-    let config_changed = original != *mutation.config();
+    let mutation = begin_config_mutation(&state).await?;
+    // Saving a subscription only writes the subscription row; it never touches
+    // the persisted app config, so no `active-profile` invalidation is needed.
+    let saved = mutation
+        .subscriptions()
+        .save_subscription(subscription_from_contract(item))
+        .await
+        .map_err(subscription_error)?;
     commit_config_mutation(mutation).await?;
-    emit_subscription_invalidation(&app, "subscription-saved", false, config_changed)?;
+    emit_subscription_invalidation(&app, "subscription-saved", false, false)?;
 
     Ok(subscription_to_contract(saved))
 }

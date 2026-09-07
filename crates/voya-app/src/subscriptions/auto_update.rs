@@ -16,6 +16,7 @@ use voya_platform::coreinfo::TargetOs;
 
 use crate::{
     config_mutation::ConfigMutationCoordinator,
+    redaction::redact_urls,
     subscriptions::SubscriptionManager,
     supervisor::{CoreSupervisor, SupervisorConnectionState},
     sysproxy::runtime_default_proxy_url,
@@ -269,7 +270,7 @@ async fn run_single_update(
     {
         Ok(prepared) => prepared,
         Err(error) => {
-            outcome.error = Some(error.to_string());
+            outcome.error = Some(redact_urls(&error.to_string()));
             return outcome;
         }
     };
@@ -288,7 +289,7 @@ async fn run_single_update(
     let mut mutation = match coordinator.begin().await {
         Ok(mutation) => mutation,
         Err(error) => {
-            outcome.error = Some(error.to_string());
+            outcome.error = Some(redact_urls(&error.to_string()));
             return outcome;
         }
     };
@@ -307,10 +308,10 @@ async fn run_single_update(
                     outcome.error = unusable_update_message(&result);
                     outcome.result = Some(result);
                 }
-                Err(error) => outcome.error = Some(error.to_string()),
+                Err(error) => outcome.error = Some(redact_urls(&error.to_string())),
             }
         }
-        Err(error) => outcome.error = Some(error.to_string()),
+        Err(error) => outcome.error = Some(redact_urls(&error.to_string())),
     }
 
     outcome
@@ -361,6 +362,30 @@ mod tests {
             last_update_at,
             ..SubMetadataItem::default()
         }
+    }
+
+    /// Every `AutoUpdateOutcome::error` reaches the user as a toast and a Logs
+    /// panel line, so the subscription URL (which carries the account token)
+    /// must never survive into it.
+    #[test]
+    fn outcome_errors_never_carry_the_subscription_url() {
+        let error = crate::subscriptions::SubscriptionManagerError::Download(
+            voya_net::DownloadError::AttemptsFailed {
+                url: "https://sub.example.test/link?token=abc123".to_string(),
+                attempts: vec![voya_net::DownloadAttempt {
+                    url: "https://sub.example.test/link?token=abc123".to_string(),
+                    via_proxy: false,
+                    bytes: 0,
+                    error: Some("connection refused".to_string()),
+                }],
+            },
+        );
+
+        let reported = redact_urls(&error.to_string());
+
+        assert!(!reported.contains("token=abc123"));
+        assert!(!reported.contains("sub.example.test"));
+        assert!(reported.contains("all download attempts failed for [redacted URL]"));
     }
 
     #[test]

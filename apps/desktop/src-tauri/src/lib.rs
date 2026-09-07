@@ -14,11 +14,13 @@ use tauri_specta::Event;
 use voya_app::{
     config_mutation::ConfigMutationCoordinator,
     elevation::ElevationManager,
+    logging::process_log_level_to_contract,
     proxy_runtime::{
         ProxyConnectionsSnapshot, ProxyMonitorController, ProxyRuntimeEventSink, ProxyTrafficEvent,
     },
-    redaction::redact_url_userinfo,
+    redaction::{redact_url_userinfo, redact_urls},
     services::{AppConfig, AppServices},
+    shutdown::ShutdownLatch,
     speedtest::SpeedtestManager,
     statistics::{
         SharedAppConfigSource, StatisticsEventSink, StatisticsManager,
@@ -34,11 +36,17 @@ use voya_platform::{
     coreinfo::{copy_seed_core_assets, TargetOs},
     filesystem::reject_incompatible_config,
     paths::{core_seed_resources_dir, AppPaths},
-    process::{ProcessLogSink, ProcessOutputStream, ProcessRole, StdProcessRunner},
+    process::{
+        classify_core_log_line, ProcessLogSink, ProcessOutputStream, ProcessRole, StdProcessRunner,
+    },
     sysproxy::{platform_pac_manager, SystemProxyService},
 };
 
 mod ipc;
+mod logging;
+
+/// Latches the exit teardown so it runs once per process.
+static SHUTDOWN_LATCH: ShutdownLatch = ShutdownLatch::new();
 
 const TRAY_SHOW: &str = "tray-show";
 const TRAY_HIDE: &str = "tray-hide";
@@ -116,9 +124,18 @@ pub fn export_bindings(path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
 pub fn run() {
     let specta_builder = ipc::specta_builder();
 
+    // The path is baked in at compile time, so a packaged debug build moved to
+    // another machine would panic before a window exists. `pnpm generate:bindings`
+    // (the `export-bindings` binary) is the canonical path; this convenience
+    // export is limited to `tauri dev` and an explicit opt-in, and never fatal.
     #[cfg(debug_assertions)]
-    export_bindings(Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/ipc/bindings.ts"))
-        .expect("failed to export TypeScript IPC bindings");
+    if tauri::is_dev() || std::env::var_os("VOYAVPN_EXPORT_BINDINGS").is_some() {
+        if let Err(error) =
+            export_bindings(Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/ipc/bindings.ts"))
+        {
+            tracing::warn!(%error, "failed to export TypeScript IPC bindings");
+        }
+    }
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -140,6 +157,9 @@ pub fn run() {
             reject_incompatible_config(&app_config_dir.join("guiNConfig.json"), 1)?;
             let runtime_paths = AppPaths::new(&app_config_dir);
             runtime_paths.ensure_dirs()?;
+            // Installed before the first `tracing::warn!` below so the startup
+            // recovery paths are captured too.
+            logging::install(app.handle().clone(), runtime_paths.log_dir());
             let services = tauri::async_runtime::block_on(AppServices::connect(
                 &app_config_dir.join("voyavpn.sqlite"),
                 runtime_paths.clone(),
@@ -194,6 +214,10 @@ pub fn run() {
                 runtime_paths.temp_dir().to_path_buf(),
                 runtime_paths.bin_dir().to_path_buf(),
             );
+            // A crash never reaches the exit-time revoke, so a previous run can
+            // leave a root launcher + NOPASSWD drop-in installed. Sweep it
+            // before the supervisor can spawn anything through it.
+            elevation_manager.revoke_stale_grant();
             let speedtest_runner = StdProcessRunner::with_log_sink(Arc::new(TauriProcessLogSink {
                 app: app.handle().clone(),
             }));
@@ -277,10 +301,9 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
             |app, event: tauri::menu::MenuEvent| match event.id().as_ref() {
                 TRAY_SHOW => show_main_window(app),
                 TRAY_HIDE => hide_main_window(app),
-                TRAY_QUIT => {
-                    shutdown_for_exit(app);
-                    app.exit(0);
-                }
+                // `exit` raises ExitRequested and Exit, which is where the
+                // teardown runs; calling it here as well would only repeat it.
+                TRAY_QUIT => app.exit(0),
                 _ => {}
             },
         );
@@ -337,6 +360,9 @@ struct TauriSubscriptionAutoUpdateSink {
 impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
     fn update_completed(&self, outcome: AutoUpdateOutcome) {
         if let Some(error) = &outcome.error {
+            // Redacted at the source too; repeated here so a future failure
+            // path cannot put a tokenized subscription URL in a toast.
+            let error = redact_urls(error);
             let message = format!(
                 "Automatic subscription update failed for {}: {error}",
                 outcome.remarks
@@ -430,7 +456,7 @@ impl SupervisorEventSink for TauriSupervisorEventSink {
                     "failed to restore system proxy after native TUN provider exit"
                 );
             }
-            if let Err(error) = ipc::commands::emit_current_tun_status(&app, &state) {
+            if let Err(error) = ipc::commands::emit_current_tun_status(&app, &state).await {
                 tracing::warn!(?error, "failed to emit native TUN status after exit");
             }
             if let Err(error) = ipc::commands::emit_statistics_zero(&app) {
@@ -484,12 +510,10 @@ impl ProxyRuntimeEventSink for TauriProxyRuntimeEventSink {
 }
 
 impl ProcessLogSink for TauriProcessLogSink {
-    fn line(&self, role: ProcessRole, stream: ProcessOutputStream, line: String) {
-        let level = if stream == ProcessOutputStream::Stderr {
-            ipc::events::LogLevel::Warn
-        } else {
-            ipc::events::LogLevel::Info
-        };
+    fn line(&self, role: ProcessRole, _stream: ProcessOutputStream, line: String) {
+        // The stream carries no severity: sing-box writes every level to stderr
+        // unless `log.output` is set, so the level comes from the line itself.
+        let level = process_log_level_to_contract(classify_core_log_line(&line));
         let line = redact_process_log_line(&line);
         let event = ipc::events::TransientStreamEvent::LogLine(ipc::events::LogLineEvent {
             id: ipc::events::next_log_line_id(),
@@ -519,6 +543,12 @@ fn process_role_label(role: ProcessRole) -> &'static str {
 }
 
 fn shutdown_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    // Tauri raises ExitRequested and then Exit for every exit path, so this is
+    // reached at least twice per quit. The sequence re-runs the sudoers revoke
+    // and the per-service system-proxy restore, so it is latched to one pass.
+    if !SHUTDOWN_LATCH.begin() {
+        return;
+    }
     // Stop the auto-update scheduler before the runtime disconnects so no
     // background subscription commit races the shutdown sequence.
     if let Some(state) = app.try_state::<AppState>() {

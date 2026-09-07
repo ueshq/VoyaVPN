@@ -135,10 +135,12 @@ pub fn generate_qr_code(content: String) -> Result<QrCodeImage, AppError> {
     QrCodeManager.generate_svg(&content).map_err(qr_error)
 }
 
+// `async` because capturing every display is a multi-hundred-millisecond
+// blocking operation that would otherwise freeze the window.
 #[tauri::command]
 #[specta::specta]
-pub fn scan_screen_qr() -> Result<QrScanResult, AppError> {
-    Ok(QrCodeManager.scan_screen())
+pub async fn scan_screen_qr() -> Result<QrScanResult, AppError> {
+    run_blocking("screen QR scan", || QrCodeManager.scan_screen()).await
 }
 
 #[tauri::command]

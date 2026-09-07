@@ -257,7 +257,9 @@ fn write_runtime_config(
 ) -> Result<PathBuf, RuntimeError> {
     let json = generate_singbox_config_json(context)?;
     let path = paths.bin_config_file(file_name);
-    filesystem::write_file_with_parent(&path, json).map_err(|source| {
+    // The generated config embeds outbound credentials (passwords, UUIDs,
+    // Reality private keys), so it is written 0600 and never through a symlink.
+    filesystem::write_private_file_with_parent(&path, json).map_err(|source| {
         RuntimeError::WriteConfig {
             path: path.clone(),
             source,

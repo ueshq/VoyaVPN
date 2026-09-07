@@ -1,18 +1,23 @@
 use super::{lifecycle::*, support::*, *};
 
+// `async` because reading the OS proxy state shells out (`networksetup` on
+// macOS, `gsettings` on Linux) once per network service.
 #[tauri::command]
 #[specta::specta]
-pub fn system_proxy_status(
+pub async fn system_proxy_status(
     state: tauri::State<'_, AppState>,
 ) -> Result<SystemProxyStatusResponse, AppError> {
     let config = current_config(&state)?;
     let runtime_config = app_runtime_system_proxy_config(&config, false, TargetOs::current());
+    let manager = state.system_proxy_manager();
 
-    state
-        .system_proxy_manager()
-        .status_with_force_disable(&runtime_config.config, runtime_config.force_disable)
-        .map(system_proxy_status_response)
-        .map_err(sysproxy_error)
+    run_blocking("system proxy status", move || {
+        manager
+            .status_with_force_disable(&runtime_config.config, runtime_config.force_disable)
+            .map(system_proxy_status_response)
+    })
+    .await?
+    .map_err(sysproxy_error)
 }
 
 #[tauri::command]
@@ -35,42 +40,7 @@ pub async fn set_system_proxy_mode<R: tauri::Runtime>(
 
     mutation.config_mut().system_proxy_item.sys_proxy_type =
         voya_app::contract_map::sysproxy_type_from_contract(mode);
-    let status =
-        apply_system_proxy(&app, &state, mutation.config(), false).map_err(sysproxy_error)?;
-
-    if let Err(failure) = commit_with_compensation(commit_config_mutation(mutation), || {
-        apply_system_proxy(&app, &state, &original, false).map(|_| ())
-    })
-    .await
-    {
-        if let Some(compensation_error) = failure.compensation {
-            report_post_commit_error(
-                &app,
-                "System proxy recovery failed",
-                &format!(
-                    "The configuration was not saved and restoring the previous system proxy mode failed: {compensation_error}"
-                ),
-                AppNoticeLevel::Error,
-            );
-        }
-        return Err(failure.commit);
-    }
-    if let Err(error) = emit_sysproxy_changed(&app, &status) {
-        report_post_commit_error(
-            &app,
-            "System proxy status refresh failed",
-            &format!("{error:?}"),
-            AppNoticeLevel::Warning,
-        );
-    }
-    if let Err(error) = crate::refresh_tray_menu(&app) {
-        report_post_commit_error(
-            &app,
-            "Tray refresh failed",
-            &error.to_string(),
-            AppNoticeLevel::Warning,
-        );
-    }
+    let status = commit_system_proxy_mutation(&app, &state, mutation, &original).await?;
 
     Ok(system_proxy_status_response(status))
 }

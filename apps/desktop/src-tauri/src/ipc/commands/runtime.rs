@@ -27,7 +27,7 @@ pub async fn connect_active_profile<R: tauri::Runtime>(
                     &format!("System proxy apply failed: {error}"),
                 )?,
             }
-            emit_current_tun_status(&app, &state)?;
+            emit_current_tun_status(&app, &state).await?;
             Ok(runtime_status_response(snapshot))
         }
         Err(error) => {
@@ -67,7 +67,7 @@ pub async fn disconnect_core<R: tauri::Runtime>(
             }
             emit_runtime_log(&app, LogLevel::Info, "Core supervisor stopped")?;
             emit_core_state(&app, CoreState::Disconnected, None, Some(&snapshot))?;
-            emit_current_tun_status(&app, &state)?;
+            emit_current_tun_status(&app, &state).await?;
             emit_statistics_zero(&app)?;
             Ok(runtime_status_response(snapshot))
         }
@@ -124,7 +124,7 @@ pub async fn restart_core<R: tauri::Runtime>(
                     &format!("System proxy apply failed: {error}"),
                 )?,
             }
-            emit_current_tun_status(&app, &state)?;
+            emit_current_tun_status(&app, &state).await?;
             Ok(runtime_status_response(snapshot))
         }
         Err(error) => {
