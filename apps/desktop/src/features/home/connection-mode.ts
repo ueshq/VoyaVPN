@@ -1,4 +1,4 @@
-import type { ConnectionMode, SysProxyChanged, TunChanged } from "@/ipc/bindings";
+import type { ConnectionMode, SystemProxyStatusResponse, TunStatus } from "@/ipc/bindings";
 
 /** Ordered options for the Hiddify-style mode switcher. */
 export const CONNECTION_MODE_OPTIONS = [
@@ -13,8 +13,8 @@ export const CONNECTION_MODE_OPTIONS = [
  * `forcedChange`/`pac` mean system proxy, everything else is proxy-only.
  */
 export function deriveConnectionMode(
-  sysProxy: SysProxyChanged | null,
-  tun: TunChanged | null,
+  sysProxy: SystemProxyStatusResponse | null,
+  tun: TunStatus | null,
 ): ConnectionMode {
   if (tun?.enabled) {
     return "vpn";
@@ -26,6 +26,6 @@ export function deriveConnectionMode(
   return "proxyOnly";
 }
 
-export function isPacActive(sysProxy: SysProxyChanged | null): boolean {
+export function isPacActive(sysProxy: SystemProxyStatusResponse | null): boolean {
   return sysProxy?.requestedMode === "pac";
 }

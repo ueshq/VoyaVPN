@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 
 import { runtimeStatus, useRuntimeEventStore } from "@/ipc";
-import type { CoreStateEvent, RuntimeStatusResponse } from "@/ipc/bindings";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
 
 /**
@@ -9,6 +8,10 @@ import { useMountedRef } from "@voya/utils/use-mounted-ref";
  * mount, so the shell shows the truth before the first transient-stream event
  * arrives. Lives on `AppShell` (always mounted) rather than any presentational
  * chrome so a redesign of the chrome cannot silently drop the seeding.
+ *
+ * The command and the `coreState` event carry the same `RuntimeStatusResponse`,
+ * so the answer goes into the store unchanged — this used to reshape it through
+ * a local copy of `statusToCoreState`.
  */
 export function useRuntimeStatusSeed() {
   const setCoreState = useRuntimeEventStore((state) => state.setCoreState);
@@ -22,7 +25,7 @@ export function useRuntimeStatusSeed() {
     void runtimeStatus()
       .then((status) => {
         if (isCurrent()) {
-          setCoreState(statusToCoreState(status));
+          setCoreState(status);
         }
       })
       .catch(() => undefined);
@@ -31,14 +34,4 @@ export function useRuntimeStatusSeed() {
       generationRef.current += 1;
     };
   }, [mountedRef, setCoreState]);
-}
-
-function statusToCoreState(status: RuntimeStatusResponse): CoreStateEvent {
-  return {
-    activeProfileId: status.activeProfileId,
-    mainPid: status.mainPid,
-    prePid: status.prePid,
-    runningCoreType: status.runningCoreType,
-    state: status.state,
-  };
 }

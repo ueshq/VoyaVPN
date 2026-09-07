@@ -6,13 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AppError,
   ConnectionModeStatus,
-  CoreStateEvent,
   ProfileListEntry,
   RuntimeStatusResponse,
   StatisticsSnapshot,
-  SysProxyChanged,
   SystemProxyStatusResponse,
-  TunChanged,
   TunStatus,
 } from "@/ipc/bindings";
 import { useModalStore } from "@/stores/modal-store";
@@ -22,13 +19,13 @@ import { makeProfileFixture } from "@/test/profile-fixture";
 import { HomeScreen } from "./home-screen";
 
 type RuntimeState = {
-  coreState: CoreStateEvent | null;
-  setCoreState: (state: CoreStateEvent) => void;
+  coreState: RuntimeStatusResponse | null;
+  setCoreState: (state: RuntimeStatusResponse) => void;
   statistics: StatisticsSnapshot | null;
-  sysProxy: SysProxyChanged | null;
-  setSysProxy: (state: SysProxyChanged) => void;
-  tun: TunChanged | null;
-  setTun: (state: TunChanged) => void;
+  sysProxy: SystemProxyStatusResponse | null;
+  setSysProxy: (state: SystemProxyStatusResponse) => void;
+  tun: TunStatus | null;
+  setTun: (state: TunStatus) => void;
 };
 
 const runtimeMock = vi.hoisted(() => {
@@ -176,14 +173,6 @@ function renderHome() {
   };
 }
 
-const connectedCoreState: CoreStateEvent = {
-  activeProfileId: "node-tokyo",
-  mainPid: 4242,
-  prePid: null,
-  runningCoreType: "singBox",
-  state: "connected",
-};
-
 function connectButton() {
   return screen.getByTestId("home-connect-button");
 }
@@ -228,7 +217,7 @@ describe("HomeScreen", () => {
   });
 
   it("lights up the protected state with node info and marks the running node", async () => {
-    runtimeMock.state.coreState = connectedCoreState;
+    runtimeMock.state.coreState = connectedStatus;
     ipcMock.listProfiles.mockResolvedValue([
       makeActiveProfile({ id: "node-tokyo", remarks: "Tokyo Edge" }),
     ]);
@@ -398,7 +387,7 @@ describe("HomeScreen", () => {
   });
 
   it("refuses node activation while a runtime action is still in flight", async () => {
-    runtimeMock.state.coreState = connectedCoreState;
+    runtimeMock.state.coreState = connectedStatus;
     ipcMock.listProfiles.mockResolvedValue([
       makeActiveProfile({ id: "node-tokyo", remarks: "Tokyo Edge" }),
       makeProfile(1, { id: "osaka", remarks: "Osaka Edge" }),
@@ -422,7 +411,7 @@ describe("HomeScreen", () => {
   });
 
   it("refuses node activation while the backend reports disconnecting", async () => {
-    runtimeMock.state.coreState = { ...connectedCoreState, state: "disconnecting" };
+    runtimeMock.state.coreState = { ...connectedStatus, state: "disconnecting" };
     ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
 
     const user = userEvent.setup();
@@ -574,7 +563,7 @@ describe("HomeScreen", () => {
   it("refreshes runtime state and surfaces errors when disconnect fails", async () => {
     const user = userEvent.setup();
     const disconnectError = new Error("sudo kill failed");
-    runtimeMock.state.coreState = connectedCoreState;
+    runtimeMock.state.coreState = connectedStatus;
     ipcMock.disconnectCore.mockRejectedValue(disconnectError);
     ipcMock.runtimeStatus.mockResolvedValue(connectedStatus);
 
@@ -629,9 +618,9 @@ describe("HomeScreen", () => {
 
   it("surfaces the PAC toggle only in system proxy mode and disables it without support", async () => {
     runtimeMock.state.sysProxy = {
+      ...sysProxyStatus,
       effectiveMode: "forcedChange",
       pacAvailable: false,
-      proxy: null,
       requestedMode: "forcedChange",
     };
 
@@ -645,9 +634,9 @@ describe("HomeScreen", () => {
   it("toggles PAC through the unified mode command when supported", async () => {
     const user = userEvent.setup();
     runtimeMock.state.sysProxy = {
+      ...sysProxyStatus,
       effectiveMode: "forcedChange",
       pacAvailable: true,
-      proxy: null,
       requestedMode: "forcedChange",
     };
 

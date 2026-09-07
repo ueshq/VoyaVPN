@@ -4,14 +4,14 @@ import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createAppQueryClient } from "@/components/app-shell/query-client";
-import type { CoreStateEvent, ProxyGroupsSnapshot } from "@/ipc/bindings";
+import type { ProxyGroupsSnapshot, RuntimeStatusResponse } from "@/ipc/bindings";
 import { useToastStore } from "@/stores/toast-store";
 
 import { ProxyGroupsScreen } from "./proxy-groups-screen";
 
 const ipcMocks = vi.hoisted(() => {
   const state = {
-    coreState: null as CoreStateEvent | null,
+    coreState: null as RuntimeStatusResponse | null,
     proxyMonitorStatus: {
       message: null,
       running: true,

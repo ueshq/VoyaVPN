@@ -596,8 +596,8 @@ export async function installTauriSmokeMock(page: Page) {
         case "proxy_close_connection":
           return Promise.resolve({ connections: [], downloadTotal: 0, uploadTotal: 0 } satisfies ProxyConnectionsSnapshot);
         case "proxy_set_traffic_mode":
-          state.settings.proxy.trafficMode = String(args.mode ?? "rule");
-          return Promise.resolve({ mode: state.settings.proxy.trafficMode as TrafficMode } satisfies TrafficModeResponse);
+          state.settings.proxy.trafficMode = String(args.mode ?? "rule") as TrafficMode;
+          return Promise.resolve({ mode: state.settings.proxy.trafficMode } satisfies TrafficModeResponse);
         case "proxy_reload_config":
           return Promise.resolve(null);
         case "proxy_start_monitor":

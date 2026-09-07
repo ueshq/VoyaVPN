@@ -5,7 +5,7 @@ use std::{
 };
 
 use sqlx::Row;
-use voya_contracts::{AppSettingsV1, CURRENT_SCHEMA_VERSION};
+use voya_contracts::{AppSettingsV1, SysProxyType, TrafficMode, CURRENT_SCHEMA_VERSION};
 use voya_core::{
     MultipleLoad, ProfileExItem, ProfileItem, ProfileProtocol, ProfileTransport, RoutingItem,
     RuleType, RulesItem, ServerEndpoint, ServerStatItem, SubItem, SubMetadataItem, TlsMode,
@@ -31,6 +31,30 @@ const PINNED_BLOB_SHAPES: &str = include_str!("../../fixtures/profile_blobs_v1.j
 /// UI reasons stops every existing install from loading its settings — which
 /// `setup()` turns into a launch failure.
 const PINNED_SETTINGS_PAYLOAD: &str = include_str!("../../fixtures/app_settings_v1.json");
+
+/// Every value `network.systemProxy.mode` can hold, with the string the
+/// `String`-typed version of that field stored.
+///
+/// The field is now a `SysProxyType`. That is only safe because the enum's
+/// `rename_all = "camelCase"` emits precisely these literals, and nothing else
+/// in the suite can catch a drift: `json_shape` compares paths, and both the
+/// old and the new form are a JSON string at the same path. So the values are
+/// pinned here, and `typed_settings_enums_keep_their_persisted_strings` fails
+/// the moment a variant renames.
+const PINNED_SYSTEM_PROXY_MODES: [(SysProxyType, &str); 4] = [
+    (SysProxyType::ForcedClear, "forcedClear"),
+    (SysProxyType::ForcedChange, "forcedChange"),
+    (SysProxyType::Unchanged, "unchanged"),
+    (SysProxyType::Pac, "pac"),
+];
+
+/// The same pinning for `proxy.trafficMode`, now a `TrafficMode`.
+const PINNED_TRAFFIC_MODES: [(TrafficMode, &str); 4] = [
+    (TrafficMode::Rule, "rule"),
+    (TrafficMode::Global, "global"),
+    (TrafficMode::Direct, "direct"),
+    (TrafficMode::Unchanged, "unchanged"),
+];
 
 #[test]
 fn database_name_is_voyavpn_specific() {
@@ -1906,6 +1930,83 @@ async fn persisted_settings_payload_from_an_earlier_build_still_loads() {
         json_shape(&current),
         "the settings layout changed: give every added field `#[serde(default)]`, never remove \
          or rename one, then refresh crates/voya-db/fixtures/app_settings_v1.json"
+    );
+}
+
+/// Two settings fields stopped being `String` and became the `specta` enums
+/// that already described their values. This proves the stored bytes did not
+/// move with them.
+///
+/// For every variant of both fields: a payload an earlier (`String`-typed)
+/// build wrote still deserializes, and re-serializing it reproduces that
+/// payload exactly — same literal at the same path, and every other field
+/// untouched. A renamed variant, a changed `rename_all`, or a swapped default
+/// fails here instead of silently rewriting `app_settings.payload` on the first
+/// save after an upgrade.
+#[test]
+fn typed_settings_enums_keep_their_persisted_strings() {
+    for (mode, stored) in PINNED_SYSTEM_PROXY_MODES {
+        assert_pinned_settings_value(&["network", "systemProxy", "mode"], stored, |settings| {
+            settings.network.system_proxy.mode = mode;
+        });
+    }
+
+    for (mode, stored) in PINNED_TRAFFIC_MODES {
+        assert_pinned_settings_value(&["proxy", "trafficMode"], stored, |settings| {
+            settings.proxy.traffic_mode = mode;
+        });
+    }
+}
+
+/// Round-trips one pinned field value through the persisted representation.
+///
+/// `path` walks into the payload, `stored` is the literal the `String` form
+/// wrote there, and `set` puts the typed variant onto a settings value. The
+/// three assertions are the three ways this could break: a payload written by
+/// the previous build no longer loads, this build writes a different literal, or
+/// this build rewrites some *other* field on the way through.
+fn assert_pinned_settings_value(path: &[&str], stored: &str, set: impl FnOnce(&mut AppSettingsV1)) {
+    let mut expected: serde_json::Value =
+        serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("the pinned payload should be JSON");
+    let mut cursor = &mut expected;
+    for key in path {
+        cursor = cursor
+            .get_mut(key)
+            .unwrap_or_else(|| panic!("the pinned payload should carry `{}`", path.join(".")));
+    }
+    *cursor = serde_json::Value::String(stored.to_string());
+
+    // 1. A payload holding the string an earlier build wrote still loads.
+    let loaded: AppSettingsV1 = serde_json::from_value(expected.clone()).unwrap_or_else(|error| {
+        panic!(
+            "`{}` = \"{stored}\" should still deserialize: {error}",
+            path.join(".")
+        )
+    });
+
+    // 2. And writing it back reproduces that payload byte for byte.
+    let written = serde_json::to_value(&loaded).expect("settings should serialize");
+    assert_eq!(
+        written,
+        expected,
+        "`{}` = \"{stored}\" did not survive a load/save round trip",
+        path.join(".")
+    );
+
+    // 3. The same literal is what the typed variant produces from scratch, so a
+    //    fresh install and an upgraded one store the same bytes.
+    let mut settings = AppSettingsV1::default();
+    set(&mut settings);
+    let fresh = serde_json::to_value(&settings).expect("settings should serialize");
+    let mut cursor = &fresh;
+    for key in path {
+        cursor = &cursor[key];
+    }
+    assert_eq!(
+        cursor,
+        &serde_json::Value::String(stored.to_string()),
+        "`{}` must serialize as the string the `String`-typed field stored",
+        path.join(".")
     );
 }
 

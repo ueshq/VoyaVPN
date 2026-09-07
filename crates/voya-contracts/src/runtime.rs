@@ -8,6 +8,23 @@ pub enum CoreType {
     SingBox,
 }
 
+/// What the core process is doing right now.
+///
+/// The single vocabulary for the runtime's connection state: the status command
+/// returns it inside [`crate::RuntimeStatusResponse`] and the transient
+/// `coreState` stream carries the very same struct, so there is nothing to
+/// translate between a response and an event. `Connecting`/`Disconnecting` are
+/// transitions only the event stream ever reports — a status read observes a
+/// settled supervisor and answers `Connected` or `Disconnected`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum CoreState {
+    Disconnected,
+    Connecting,
+    Connected,
+    Disconnecting,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum SysProxyType {

@@ -116,12 +116,7 @@ pub async fn proxy_set_traffic_mode<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     mode: voya_contracts::TrafficMode,
 ) -> Result<voya_contracts::TrafficModeResponse, AppError> {
-    let mode = match mode {
-        voya_contracts::TrafficMode::Rule => TrafficMode::Rule,
-        voya_contracts::TrafficMode::Global => TrafficMode::Global,
-        voya_contracts::TrafficMode::Direct => TrafficMode::Direct,
-        voya_contracts::TrafficMode::Unchanged => TrafficMode::Unchanged,
-    };
+    let mode = traffic_mode_from_contract(mode);
     let committed = mutate_config(&state, async |_unit_of_work, config| {
         let changed = config.proxy_ui_item.traffic_mode != mode;
         if changed {
@@ -151,12 +146,7 @@ pub async fn proxy_set_traffic_mode<R: tauri::Runtime>(
     emit_proxy_runtime_invalidation(&app, "proxy-traffic-mode-changed", changed);
 
     Ok(voya_contracts::TrafficModeResponse {
-        mode: match config.proxy_ui_item.traffic_mode {
-            TrafficMode::Rule => voya_contracts::TrafficMode::Rule,
-            TrafficMode::Global => voya_contracts::TrafficMode::Global,
-            TrafficMode::Direct => voya_contracts::TrafficMode::Direct,
-            TrafficMode::Unchanged => voya_contracts::TrafficMode::Unchanged,
-        },
+        mode: traffic_mode_to_contract(config.proxy_ui_item.traffic_mode),
     })
 }
 

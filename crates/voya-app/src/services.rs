@@ -5,7 +5,6 @@
 
 use std::{path::Path, sync::Arc};
 
-use thiserror::Error;
 use voya_contracts::{AppSettingsV1, SpeedTestKind};
 pub use voya_core::{AppConfig, CoreType, SysProxyType, TrafficMode, DEFAULT_LOCAL_PORT};
 use voya_db::{Database, DbError};
@@ -20,10 +19,7 @@ use crate::{
     profiles::{ProfileExManager, ProfileManager},
     routing::RoutingManager,
     runtime::RuntimeManager,
-    settings_save::{
-        app_config_from_settings, config_from_settings, settings_from_app_config,
-        SettingsContractError,
-    },
+    settings_save::{app_config_from_settings, config_from_settings, settings_from_app_config},
     speedtest::{SpeedTestResult, SpeedtestManager, SpeedtestRunResult},
     statistics::{StatisticsConfigSource, StatisticsEventSink, StatisticsManager},
     subscriptions::{
@@ -32,14 +28,6 @@ use crate::{
     supervisor::CoreSupervisor,
     updates::UpdateManager,
 };
-
-#[derive(Debug, Error)]
-pub enum AppServicesError {
-    #[error(transparent)]
-    Database(#[from] DbError),
-    #[error(transparent)]
-    Settings(#[from] SettingsContractError),
-}
 
 #[derive(Debug, Clone)]
 pub struct AppServices {
@@ -60,14 +48,18 @@ impl AppServices {
         })
     }
 
-    pub async fn load_config(&self) -> Result<AppConfig, AppServicesError> {
+    /// Read the persisted settings and project them onto an `AppConfig`.
+    ///
+    /// Only the database can fail here: every settings field is typed, so the
+    /// projection itself is total.
+    pub async fn load_config(&self) -> Result<AppConfig, DbError> {
         let settings = self.database.settings().load().await?;
         let state = self.database.app_state().load().await?;
         self.database
             .settings()
             .save_with_state(&settings, &state)
             .await?;
-        Ok(app_config_from_settings(&settings, &state)?)
+        Ok(app_config_from_settings(&settings, &state))
     }
 
     #[must_use]
@@ -75,11 +67,8 @@ impl AppServices {
         ConfigMutationCoordinator::new(self.database.clone(), config)
     }
 
-    pub fn config_from_settings(
-        &self,
-        settings: &AppSettingsV1,
-        current: &AppConfig,
-    ) -> Result<AppConfig, SettingsContractError> {
+    #[must_use]
+    pub fn config_from_settings(&self, settings: &AppSettingsV1, current: &AppConfig) -> AppConfig {
         config_from_settings(settings, current)
     }
 

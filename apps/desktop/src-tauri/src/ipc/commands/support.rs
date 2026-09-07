@@ -346,7 +346,7 @@ pub(crate) fn emit_core_state<R>(
 where
     R: tauri::Runtime,
 {
-    TransientStreamEvent::CoreState(core_state_event(state, active_profile_id, snapshot))
+    TransientStreamEvent::CoreState(runtime_status_event(state, active_profile_id, snapshot))
         .emit(app)
         .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
 }
@@ -379,24 +379,6 @@ where
     TransientStreamEvent::SpeedtestResult(result.clone())
         .emit(app)
         .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
-}
-
-pub(super) fn core_state_event(
-    state: CoreState,
-    active_profile_id: Option<String>,
-    snapshot: Option<&SupervisorSnapshot>,
-) -> CoreStateEvent {
-    CoreStateEvent {
-        state,
-        active_profile_id: snapshot
-            .and_then(|snapshot| snapshot.active_profile_id.clone())
-            .or(active_profile_id),
-        main_pid: snapshot.and_then(|snapshot| snapshot.main_pid),
-        pre_pid: snapshot.and_then(|snapshot| snapshot.pre_pid),
-        running_core_type: snapshot
-            .and_then(|snapshot| snapshot.running_core_type)
-            .map(voya_app::contract_map::core_type_to_contract),
-    }
 }
 
 pub(super) fn report_post_commit_error<R>(

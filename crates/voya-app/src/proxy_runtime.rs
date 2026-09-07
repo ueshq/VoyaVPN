@@ -461,16 +461,7 @@ fn build_proxy_groups_snapshot(
 
     ProxyGroupsSnapshot {
         groups,
-        traffic_mode: contract_traffic_mode(traffic_mode),
-    }
-}
-
-const fn contract_traffic_mode(mode: TrafficMode) -> voya_contracts::TrafficMode {
-    match mode {
-        TrafficMode::Rule => voya_contracts::TrafficMode::Rule,
-        TrafficMode::Global => voya_contracts::TrafficMode::Global,
-        TrafficMode::Direct => voya_contracts::TrafficMode::Direct,
-        TrafficMode::Unchanged => voya_contracts::TrafficMode::Unchanged,
+        traffic_mode: crate::contract_map::traffic_mode_to_contract(traffic_mode),
     }
 }
 

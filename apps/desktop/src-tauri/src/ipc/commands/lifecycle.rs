@@ -159,15 +159,9 @@ pub(crate) fn emit_tun_changed<R>(
 where
     R: tauri::Runtime,
 {
-    TransientStreamEvent::TunChanged(crate::ipc::events::TunChanged {
-        enabled: status.enabled,
-        backend: status.backend,
-        provider_state: status.provider_state,
-        native_component_ready: status.native_component_ready,
-        last_provider_error: status.last_provider_error.clone(),
-    })
-    .emit(app)
-    .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
+    TransientStreamEvent::TunChanged(status.clone())
+        .emit(app)
+        .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
 }
 
 /// Names one committed configuration change for the restart that follows it.
@@ -305,21 +299,7 @@ pub(super) fn emit_sysproxy_changed<R>(
 where
     R: tauri::Runtime,
 {
-    TransientStreamEvent::SysProxyChanged(crate::ipc::events::SysProxyChanged {
-        requested_mode: sysproxy_mode(status.requested_type),
-        effective_mode: sysproxy_mode(status.effective_type),
-        pac_available: status.pac_available,
-        proxy: status.proxy.clone(),
-    })
-    .emit(app)
-    .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
-}
-
-pub(super) fn sysproxy_mode(mode: SysProxyType) -> crate::ipc::events::SysProxyMode {
-    match mode {
-        SysProxyType::ForcedClear => crate::ipc::events::SysProxyMode::ForcedClear,
-        SysProxyType::ForcedChange => crate::ipc::events::SysProxyMode::ForcedChange,
-        SysProxyType::Unchanged => crate::ipc::events::SysProxyMode::Unchanged,
-        SysProxyType::Pac => crate::ipc::events::SysProxyMode::Pac,
-    }
+    TransientStreamEvent::SysProxyChanged(system_proxy_status_response(status.clone()))
+        .emit(app)
+        .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
 }

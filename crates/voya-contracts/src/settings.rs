@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::CURRENT_SCHEMA_VERSION;
+use crate::{SysProxyType, TrafficMode, CURRENT_SCHEMA_VERSION};
 
 // LOAD-BEARING FOR PERSISTENCE, not just for IPC.
 //
@@ -205,7 +205,11 @@ impl Default for InboundSettings {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SystemProxySettings {
-    pub mode: String,
+    /// The persisted OS-proxy mode. Typed rather than a `String`: the enum's
+    /// `rename_all = "camelCase"` emits exactly the four values this field has
+    /// always stored (`forcedClear`, `forcedChange`, `unchanged`, `pac`), so the
+    /// stored payload is unchanged and `voya-db` pins that with a value test.
+    pub mode: SysProxyType,
     pub exceptions: String,
     pub bypass_local: bool,
     pub advanced_protocol: String,
@@ -225,7 +229,7 @@ impl Default for SystemProxySettings {
         // step with `voya_core::SystemProxyItem::default()`; the equivalence is
         // guarded by a test in voya-app's settings mapping layer.
         Self {
-            mode: "forcedClear".to_string(),
+            mode: SysProxyType::ForcedClear,
             exceptions: DEFAULT_SYSTEM_PROXY_EXCEPTIONS.to_string(),
             bypass_local: true,
             advanced_protocol: String::new(),
@@ -364,14 +368,18 @@ impl Default for HysteriaSettings {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProxySettings {
-    pub traffic_mode: String,
+    /// The persisted Clash traffic mode. Typed for the same reason as
+    /// [`SystemProxySettings::mode`]: `rename_all = "camelCase"` emits the very
+    /// strings this field already stores (`rule`, `global`, `direct`,
+    /// `unchanged`).
+    pub traffic_mode: TrafficMode,
     pub node_sorting: i32,
 }
 
 impl Default for ProxySettings {
     fn default() -> Self {
         Self {
-            traffic_mode: "rule".to_string(),
+            traffic_mode: TrafficMode::Rule,
             node_sorting: 0,
         }
     }

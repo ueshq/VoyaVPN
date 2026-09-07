@@ -32,29 +32,15 @@ use voya_net::{certificates::CertificateError, ruleset::RulesetGeoError, Downloa
 use voya_platform::coreinfo::CoreInfoError;
 
 use crate::{
-    autostart::AutostartManagerError,
-    config_mutation::ConfigMutationError,
-    connection_mode::ConnectionModeError,
-    dns::DnsManagerError,
-    elevation::ElevationError,
-    exports::ExportManagerError,
-    groups::GroupManagerError,
-    hotkeys::HotkeyManagerError,
-    input_safety::InputSafetyError,
-    presets::PresetManagerError,
-    profiles::ProfileManagerError,
-    proxy_runtime::ProxyRuntimeError,
-    qr::QrCodeError,
-    routing::RoutingManagerError,
-    runtime::RuntimeError,
-    settings_flow::SettingsSaveError,
-    settings_save::{AppSettingsValidationError, SettingsContractError},
-    speedtest::SpeedtestError,
-    subscriptions::SubscriptionManagerError,
-    supervisor::SupervisorError,
-    sysproxy::SystemProxyManagerError,
-    tun::TunManagerError,
-    updates::UpdateManagerError,
+    autostart::AutostartManagerError, config_mutation::ConfigMutationError,
+    connection_mode::ConnectionModeError, dns::DnsManagerError, elevation::ElevationError,
+    exports::ExportManagerError, groups::GroupManagerError, hotkeys::HotkeyManagerError,
+    input_safety::InputSafetyError, presets::PresetManagerError, profiles::ProfileManagerError,
+    proxy_runtime::ProxyRuntimeError, qr::QrCodeError, routing::RoutingManagerError,
+    runtime::RuntimeError, settings_flow::SettingsSaveError,
+    settings_save::AppSettingsValidationError, speedtest::SpeedtestError,
+    subscriptions::SubscriptionManagerError, supervisor::SupervisorError,
+    sysproxy::SystemProxyManagerError, tun::TunManagerError, updates::UpdateManagerError,
 };
 
 use AppErrorSubsystem as Sub;
@@ -547,21 +533,10 @@ impl From<AppSettingsValidationError> for AppError {
     }
 }
 
-impl From<SettingsContractError> for AppError {
-    fn from(error: SettingsContractError) -> Self {
-        match error {
-            SettingsContractError::InvalidValue { field, .. } => {
-                invalid(Sub::Config, field, &error)
-            }
-        }
-    }
-}
-
 impl From<SettingsSaveError<AppError>> for AppError {
     fn from(error: SettingsSaveError<AppError>) -> Self {
         match error {
             SettingsSaveError::Validation(source) => Self::from(source),
-            SettingsSaveError::Contract(source) => Self::from(source),
             // The adapter's own already-typed failure, so an autostart or
             // hotkey rejection keeps its subsystem instead of being relabelled.
             SettingsSaveError::SideEffect { source, .. } => source,

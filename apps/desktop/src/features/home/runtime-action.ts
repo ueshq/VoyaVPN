@@ -1,47 +1,16 @@
 import { IpcCommandError, tunRequestElevation } from "@/ipc";
-import type {
-  CoreStateEvent,
-  RuntimeStatusResponse,
-  SysProxyChanged,
-  SystemProxyStatusResponse,
-  TunChanged,
-  TunStatus,
-} from "@/ipc/bindings";
 import type { MissingCorePayload } from "@/stores/modal-store";
 
 /**
  * Shared runtime-action helpers used by the Home hero and the node picker. Both
  * surfaces drive the same connect/restart IPC and react to the same elevation /
- * `missingCore` failures, so the mapping lives here instead of being duplicated.
+ * `missingCore` failures, so the handling lives here instead of being duplicated.
+ *
+ * The three `statusTo*` converters that used to live here are gone: the
+ * transient `coreState` / `sysProxyChanged` / `tunChanged` events now carry the
+ * same `RuntimeStatusResponse` / `SystemProxyStatusResponse` / `TunStatus` the
+ * commands return, so a command result goes straight into the store.
  */
-export function statusToCoreState(status: RuntimeStatusResponse): CoreStateEvent {
-  return {
-    activeProfileId: status.activeProfileId,
-    mainPid: status.mainPid,
-    prePid: status.prePid,
-    runningCoreType: status.runningCoreType,
-    state: status.state,
-  };
-}
-
-export function statusToSysProxyChanged(status: SystemProxyStatusResponse): SysProxyChanged {
-  return {
-    effectiveMode: status.effectiveMode,
-    pacAvailable: status.pacAvailable,
-    proxy: status.proxy,
-    requestedMode: status.requestedMode,
-  };
-}
-
-export function statusToTunChanged(status: TunStatus): TunChanged {
-  return {
-    backend: status.backend,
-    enabled: status.enabled,
-    lastProviderError: status.lastProviderError,
-    nativeComponentReady: status.nativeComponentReady,
-    providerState: status.providerState,
-  };
-}
 
 /**
  * A connect/restart failed because the machine needs one-time system

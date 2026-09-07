@@ -365,15 +365,17 @@ export type CoreSettings = {
 	cacheFileEnabled: boolean,
 };
 
+/**
+ *  What the core process is doing right now.
+ * 
+ *  The single vocabulary for the runtime's connection state: the status command
+ *  returns it inside [`crate::RuntimeStatusResponse`] and the transient
+ *  `coreState` stream carries the very same struct, so there is nothing to
+ *  translate between a response and an event. `Connecting`/`Disconnecting` are
+ *  transitions only the event stream ever reports — a status read observes a
+ *  settled supervisor and answers `Connected` or `Disconnected`.
+ */
 export type CoreState = "disconnected" | "connecting" | "connected" | "disconnecting";
-
-export type CoreStateEvent = {
-	state: CoreState,
-	activeProfileId: string | null,
-	mainPid: number | null,
-	prePid: number | null,
-	runningCoreType: CoreType | null,
-};
 
 export type CoreType = "singBox";
 
@@ -681,7 +683,13 @@ export type ProxyNode = {
 };
 
 export type ProxySettings = {
-	trafficMode: string,
+	/**
+	 *  The persisted Clash traffic mode. Typed for the same reason as
+	 *  [`SystemProxySettings::mode`]: `rename_all = "camelCase"` emits the very
+	 *  strings this field already stores (`rule`, `global`, `direct`,
+	 *  `unchanged`).
+	 */
+	trafficMode: TrafficMode,
 	nodeSorting: number,
 };
 
@@ -776,10 +784,20 @@ export type Routing_Serialize = {
 	isActive: boolean,
 };
 
-export type RuntimeConnectionState = "disconnected" | "connected";
-
+/**
+ *  What the runtime is doing, as both an answer and an announcement.
+ * 
+ *  The four runtime commands return this, and `TransientStreamEvent::CoreState`
+ *  carries exactly the same struct, so the frontend stores whichever arrives
+ *  first without reshaping it. It used to be two types — this one plus an
+ *  identically-shaped `CoreStateEvent` — which cost three converters in the
+ *  shell and three more on the frontend to move one fact between them.
+ * 
+ *  `Deserialize` exists because it travels as an event payload, not because
+ *  anything sends one to the backend.
+ */
 export type RuntimeStatusResponse = {
-	state: RuntimeConnectionState,
+	state: CoreState,
 	activeProfileId: string | null,
 	mainPid: number | null,
 	prePid: number | null,
@@ -908,19 +926,16 @@ export type SubscriptionUpdateResult = {
 	messages: string[],
 };
 
-export type SysProxyChanged = {
-	requestedMode: SysProxyMode,
-	effectiveMode: SysProxyMode,
-	pacAvailable: boolean,
-	proxy: string | null,
-};
-
-export type SysProxyMode = "unchanged" | "forcedChange" | "forcedClear" | "pac";
-
 export type SysProxyType = "forcedClear" | "forcedChange" | "unchanged" | "pac";
 
 export type SystemProxySettings = {
-	mode: string,
+	/**
+	 *  The persisted OS-proxy mode. Typed rather than a `String`: the enum's
+	 *  `rename_all = "camelCase"` emits exactly the four values this field has
+	 *  always stored (`forcedClear`, `forcedChange`, `unchanged`, `pac`), so the
+	 *  stored payload is unchanged and `voya-db` pins that with a value test.
+	 */
+	mode: SysProxyType,
 	exceptions: string,
 	bypassLocal: boolean,
 	advancedProtocol: string,
@@ -928,6 +943,13 @@ export type SystemProxySettings = {
 	customScriptPath: string | null,
 };
 
+/**
+ *  The OS proxy state, as both an answer and an announcement.
+ * 
+ *  `TransientStreamEvent::SysProxyChanged` carries this struct; the narrower
+ *  `SysProxyChanged` it replaced duplicated four of these fields and re-declared
+ *  `SysProxyType` under a second name.
+ */
 export type SystemProxyStatusResponse = {
 	requestedMode: SysProxyType,
 	effectiveMode: SysProxyType,
@@ -963,17 +985,17 @@ export type TrafficModeResponse = {
 	mode: TrafficMode,
 };
 
-export type TransientStreamEvent = { kind: "logLine"; payload: LogLineEvent } | { kind: "coreState"; payload: CoreStateEvent } | { kind: "statistics"; payload: StatisticsSnapshot } | { kind: "sysProxyChanged"; payload: SysProxyChanged } | { kind: "tunChanged"; payload: TunChanged } | { kind: "proxyMonitorStatus"; payload: ProxyMonitorStatus } | { kind: "proxyTraffic"; payload: ProxyTrafficEvent } | { kind: "proxyConnections"; payload: ProxyConnectionsSnapshot } | { kind: "speedtestResult"; payload: SpeedTestResult };
+/**
+ *  Live state that is not a query cache.
+ * 
+ *  The three status variants carry the very structs their commands return, so
+ *  the frontend stores an event payload and a command result interchangeably.
+ *  They used to be narrower parallel DTOs, which cost a converter in the shell
+ *  and another on the frontend for each one.
+ */
+export type TransientStreamEvent = { kind: "logLine"; payload: LogLineEvent } | { kind: "coreState"; payload: RuntimeStatusResponse } | { kind: "statistics"; payload: StatisticsSnapshot } | { kind: "sysProxyChanged"; payload: SystemProxyStatusResponse } | { kind: "tunChanged"; payload: TunStatus } | { kind: "proxyMonitorStatus"; payload: ProxyMonitorStatus } | { kind: "proxyTraffic"; payload: ProxyTrafficEvent } | { kind: "proxyConnections"; payload: ProxyConnectionsSnapshot } | { kind: "speedtestResult"; payload: SpeedTestResult };
 
 export type TunBackend = "process" | "macosPacketTunnel" | "windowsService" | "unsupported";
-
-export type TunChanged = {
-	enabled: boolean,
-	backend: TunBackend,
-	providerState: TunProviderState,
-	nativeComponentReady: boolean,
-	lastProviderError: string | null,
-};
 
 export type TunPlatform = "windows" | "linux" | "macos" | "other";
 

@@ -1,23 +1,48 @@
 import { describe, expect, it } from "vitest";
 
-import type { SysProxyChanged, TunChanged } from "@/ipc/bindings";
+import type { SystemProxyStatusResponse, TunStatus } from "@/ipc/bindings";
 import {
   CONNECTION_MODE_OPTIONS,
   deriveConnectionMode,
   isPacActive,
 } from "./connection-mode";
 
-function sysProxy(requestedMode: SysProxyChanged["requestedMode"]): SysProxyChanged {
-  return { requestedMode, effectiveMode: requestedMode, pacAvailable: true, proxy: null };
+function sysProxy(
+  requestedMode: SystemProxyStatusResponse["requestedMode"],
+): SystemProxyStatusResponse {
+  return {
+    requestedMode,
+    effectiveMode: requestedMode,
+    pacAvailable: true,
+    proxy: null,
+    exceptions: "",
+    pacUrl: null,
+  };
 }
 
-function tun(enabled: boolean): TunChanged {
+function tun(enabled: boolean): TunStatus {
   return {
     enabled,
     backend: "process",
     providerState: "notApplicable",
+    allowEnableTun: true,
+    requiresElevation: false,
+    elevationGranted: false,
+    needsVpnPermission: false,
+    needsServiceInstall: false,
     nativeComponentReady: false,
     lastProviderError: null,
+    providerPathMismatch: false,
+    resolvedProviderPath: null,
+    expectedProviderPath: null,
+    restoreOnDisconnect: false,
+    preflight: {
+      platform: "linux",
+      state: "ready",
+      notes: [],
+      routeRestoreNote: "",
+      windowsCleanupDevices: [],
+    },
   };
 }
 

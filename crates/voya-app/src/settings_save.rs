@@ -2,18 +2,18 @@ use thiserror::Error;
 use voya_contracts as contracts;
 use voya_core::{
     AppConfig, CoreBasicItem, GrpcItem, GuiItem, HysteriaItem, InItem, KeyEventItem, Mux4SboxItem,
-    ProxyUiItem, RoutingBasicItem, SimpleDnsItem, SpeedTestItem, SysProxyType, SystemProxyItem,
-    TrafficMode, TunModeItem, UiItem,
+    ProxyUiItem, RoutingBasicItem, SimpleDnsItem, SpeedTestItem, SystemProxyItem, TunModeItem,
+    UiItem,
 };
 use voya_db::AppStateRecord;
 
-use crate::{input_safety, updates};
-
-#[derive(Debug, Error, PartialEq, Eq)]
-pub enum SettingsContractError {
-    #[error("invalid {field} value `{value}` in AppSettingsV1")]
-    InvalidValue { field: &'static str, value: String },
-}
+use crate::{
+    contract_map::{
+        sysproxy_type_from_contract, sysproxy_type_to_contract, traffic_mode_from_contract,
+        traffic_mode_to_contract,
+    },
+    input_safety, updates,
+};
 
 /// Why a submitted settings bundle was rejected.
 ///
@@ -219,7 +219,7 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
                 icmp_routing: config.tun_mode_item.icmp_routing.clone(),
             },
             system_proxy: contracts::SystemProxySettings {
-                mode: system_proxy_mode_to_str(config.system_proxy_item.sys_proxy_type).to_string(),
+                mode: sysproxy_type_to_contract(config.system_proxy_item.sys_proxy_type),
                 exceptions: config.system_proxy_item.system_proxy_exceptions.clone(),
                 bypass_local: config.system_proxy_item.not_proxy_local_address,
                 advanced_protocol: config
@@ -302,7 +302,7 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
             hop_interval_seconds: config.hysteria_item.hop_interval,
         },
         proxy: contracts::ProxySettings {
-            traffic_mode: traffic_mode_to_str(config.proxy_ui_item.traffic_mode).to_string(),
+            traffic_mode: traffic_mode_to_contract(config.proxy_ui_item.traffic_mode),
             node_sorting: config.proxy_ui_item.node_sorting,
         },
         shortcuts: contracts::ShortcutSettings {
@@ -315,10 +315,8 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
 ///
 /// The active profile and routing ids are not part of the settings contract, so
 /// they are carried over from the configuration being replaced.
-pub fn config_from_settings(
-    settings: &contracts::AppSettingsV1,
-    current: &AppConfig,
-) -> Result<AppConfig, SettingsContractError> {
+#[must_use]
+pub fn config_from_settings(settings: &contracts::AppSettingsV1, current: &AppConfig) -> AppConfig {
     let state = AppStateRecord {
         active_profile_id: (!current.index_id.is_empty()).then(|| current.index_id.clone()),
         active_routing_id: (!current.routing_basic_item.routing_index_id.is_empty())
@@ -328,12 +326,11 @@ pub fn config_from_settings(
     app_config_from_settings(settings, &state)
 }
 
+#[must_use]
 pub fn app_config_from_settings(
     settings: &contracts::AppSettingsV1,
     state: &AppStateRecord,
-) -> Result<AppConfig, SettingsContractError> {
-    let system_proxy_type = system_proxy_mode_from_str(&settings.network.system_proxy.mode)?;
-    let traffic_mode = traffic_mode_from_str(&settings.proxy.traffic_mode)?;
+) -> AppConfig {
     let show_window_shortcut = settings
         .shortcuts
         .show_window_shortcut
@@ -345,7 +342,7 @@ pub fn app_config_from_settings(
             key_code: Some(shortcut.key_code),
         });
 
-    Ok(AppConfig {
+    AppConfig {
         index_id: state.active_profile_id.clone().unwrap_or_default(),
         core_basic_item: CoreBasicItem {
             log_enabled: settings.core.log_enabled,
@@ -418,11 +415,11 @@ pub fn app_config_from_settings(
             hop_interval: settings.hysteria.hop_interval_seconds,
         },
         proxy_ui_item: ProxyUiItem {
-            traffic_mode,
+            traffic_mode: traffic_mode_from_contract(settings.proxy.traffic_mode),
             node_sorting: settings.proxy.node_sorting,
         },
         system_proxy_item: SystemProxyItem {
-            sys_proxy_type: system_proxy_type,
+            sys_proxy_type: sysproxy_type_from_contract(settings.network.system_proxy.mode),
             system_proxy_exceptions: settings.network.system_proxy.exceptions.clone(),
             not_proxy_local_address: settings.network.system_proxy.bypass_local,
             system_proxy_advanced_protocol: settings.network.system_proxy.advanced_protocol.clone(),
@@ -465,11 +462,17 @@ pub fn app_config_from_settings(
             hosts: settings.dns.hosts.clone(),
             direct_expected_ips: settings.dns.direct_expected_ips.clone(),
         },
-    })
+    }
 }
 
 /// `None` is the stored shape of "follow the system theme", matching
 /// `UiItem::default()` so contract defaults map onto domain defaults exactly.
+///
+/// Unlike the system-proxy and traffic-mode tables that used to sit here, this
+/// pair is *not* a restatement of serde's `rename_all = "camelCase"`: the domain
+/// stores `Light`/`Dark`/absent, which is neither what `ThemeMode` serializes to
+/// nor a shape `Option<ThemeMode>` could express. Deleting it would rewrite
+/// `ui_item.current_theme` on every install.
 const fn theme_to_config(theme: contracts::ThemeMode) -> Option<&'static str> {
     match theme {
         contracts::ThemeMode::System => None,
@@ -483,50 +486,6 @@ fn theme_from_config(value: Option<&str>) -> contracts::ThemeMode {
         Some("light") => contracts::ThemeMode::Light,
         Some("dark") => contracts::ThemeMode::Dark,
         _ => contracts::ThemeMode::System,
-    }
-}
-
-const fn system_proxy_mode_to_str(value: SysProxyType) -> &'static str {
-    match value {
-        SysProxyType::ForcedClear => "forcedClear",
-        SysProxyType::ForcedChange => "forcedChange",
-        SysProxyType::Unchanged => "unchanged",
-        SysProxyType::Pac => "pac",
-    }
-}
-
-fn system_proxy_mode_from_str(value: &str) -> Result<SysProxyType, SettingsContractError> {
-    match value {
-        "forcedClear" => Ok(SysProxyType::ForcedClear),
-        "forcedChange" => Ok(SysProxyType::ForcedChange),
-        "unchanged" => Ok(SysProxyType::Unchanged),
-        "pac" => Ok(SysProxyType::Pac),
-        _ => Err(SettingsContractError::InvalidValue {
-            field: "network.systemProxy.mode",
-            value: value.to_string(),
-        }),
-    }
-}
-
-const fn traffic_mode_to_str(value: TrafficMode) -> &'static str {
-    match value {
-        TrafficMode::Rule => "rule",
-        TrafficMode::Global => "global",
-        TrafficMode::Direct => "direct",
-        TrafficMode::Unchanged => "unchanged",
-    }
-}
-
-fn traffic_mode_from_str(value: &str) -> Result<TrafficMode, SettingsContractError> {
-    match value {
-        "rule" => Ok(TrafficMode::Rule),
-        "global" => Ok(TrafficMode::Global),
-        "direct" => Ok(TrafficMode::Direct),
-        "unchanged" => Ok(TrafficMode::Unchanged),
-        _ => Err(SettingsContractError::InvalidValue {
-            field: "proxy.trafficMode",
-            value: value.to_string(),
-        }),
     }
 }
 
@@ -634,6 +593,8 @@ where
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
+
+    use voya_core::{SysProxyType, TrafficMode};
 
     use super::*;
 
@@ -769,7 +730,7 @@ mod tests {
         };
 
         let settings = settings_from_app_config(&config);
-        let restored = app_config_from_settings(&settings, &state).expect("round trip");
+        let restored = app_config_from_settings(&settings, &state);
 
         assert_eq!(restored, config);
     }
@@ -782,8 +743,7 @@ mod tests {
         let config = distinctly_valued_config();
         let settings = settings_from_app_config(&config);
 
-        let restored = app_config_from_settings(&settings, &AppStateRecord::default())
-            .expect("round trip without an active selection");
+        let restored = app_config_from_settings(&settings, &AppStateRecord::default());
 
         assert!(restored.index_id.is_empty());
         assert!(restored.routing_basic_item.routing_index_id.is_empty());
@@ -1031,7 +991,7 @@ mod tests {
             active_routing_id: (!current.routing_basic_item.routing_index_id.is_empty())
                 .then(|| current.routing_basic_item.routing_index_id.clone()),
         };
-        app_config_from_settings(settings, &state).expect("settings should map back to a config")
+        app_config_from_settings(settings, &state)
     }
 
     #[test]
@@ -1056,8 +1016,7 @@ mod tests {
         let mut mapped = app_config_from_settings(
             &contracts::AppSettingsV1::default(),
             &AppStateRecord::default(),
-        )
-        .expect("default settings should map to a config");
+        );
         mapped.simple_dns_item = crate::dns::normalize_simple_dns(mapped.simple_dns_item);
 
         assert_eq!(

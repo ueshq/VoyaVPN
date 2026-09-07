@@ -6,15 +6,15 @@ import type {
   ProxyMonitorState,
   ProxyMonitorStatus,
   ProxyTrafficEvent,
-  CoreStateEvent,
   LogLineEvent,
+  RuntimeStatusResponse,
   ServerStatItem,
   SpeedTestResult,
   SpeedtestStatus,
   StatisticsSnapshot,
-  SysProxyChanged,
+  SystemProxyStatusResponse,
   TransientStreamEvent,
-  TunChanged,
+  TunStatus,
 } from "@/ipc/bindings";
 import { speedtestStatus } from "@/ipc/commands";
 
@@ -36,12 +36,20 @@ export type RuntimeProxyMonitorStatus = {
  */
 export type StoredLogLine = LogLineEvent & { receivedAt: number };
 
+/**
+ * Live backend state, held in the shape the backend sends it.
+ *
+ * `coreState`, `sysProxy` and `tun` are the transient-stream payloads *and* the
+ * results of `runtime_status` / `system_proxy_status` / `tun_status`: the
+ * contract uses one type per fact, so a seed and an event are interchangeable
+ * and nothing has to be reshaped on the way in.
+ */
 export type RuntimeEventState = {
   clearLogs: () => void;
   proxyConnections: ProxyConnectionsSnapshot | null;
   proxyMonitorStatus: RuntimeProxyMonitorStatus;
   proxyTraffic: ProxyTrafficEvent | null;
-  coreState: CoreStateEvent | null;
+  coreState: RuntimeStatusResponse | null;
   lastTransientEvent: TransientStreamEvent | null;
   logLines: StoredLogLine[];
   pushTransientEvent: (event: TransientStreamEvent) => void;
@@ -56,14 +64,14 @@ export type RuntimeEventState = {
   setProxyMonitorStatus: (status: ProxyMonitorStatus) => void;
   setProxyMonitorStopped: (message?: string | null) => void;
   setProxyTraffic: (event: ProxyTrafficEvent) => void;
-  setCoreState: (event: CoreStateEvent) => void;
+  setCoreState: (event: RuntimeStatusResponse) => void;
   setSpeedtestRunning: (running: boolean) => void;
   setSpeedtestStatus: (status: SpeedtestStatus) => void;
-  setSysProxy: (event: SysProxyChanged) => void;
-  setTun: (event: TunChanged) => void;
+  setSysProxy: (event: SystemProxyStatusResponse) => void;
+  setTun: (event: TunStatus) => void;
   statistics: StatisticsSnapshot | null;
-  sysProxy: SysProxyChanged | null;
-  tun: TunChanged | null;
+  sysProxy: SystemProxyStatusResponse | null;
+  tun: TunStatus | null;
 };
 
 type ProxyConnectionsEvent = Extract<TransientStreamEvent, { kind: "proxyConnections" }>;

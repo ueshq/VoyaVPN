@@ -27,8 +27,8 @@ use crate::{
     settings_save::{
         apply_settings_side_effects, compensate_settings_side_effects, config_from_settings,
         saved_config_requires_runtime_restart, settings_from_app_config, settings_runtime_action,
-        validate_app_settings, AppSettingsValidationError, SettingsContractError,
-        SettingsRuntimeAction, SettingsSideEffectAdapter, SettingsSideEffectStage,
+        validate_app_settings, AppSettingsValidationError, SettingsRuntimeAction,
+        SettingsSideEffectAdapter, SettingsSideEffectStage,
     },
 };
 
@@ -56,8 +56,6 @@ pub struct SettingsSaveOutcome {
 pub enum SettingsSaveError<E> {
     /// The submitted contract is not acceptable; nothing was touched.
     Validation(AppSettingsValidationError),
-    /// The contract could not be mapped onto an `AppConfig`.
-    Contract(SettingsContractError),
     /// An OS-level side effect was rejected. Nothing was persisted and the
     /// side effects applied before it were rolled back.
     SideEffect {
@@ -90,7 +88,7 @@ where
         .await
         .map_err(SettingsSaveError::Commit)?;
     let original = mutation.config().clone();
-    let target = config_from_settings(settings, &original).map_err(SettingsSaveError::Contract)?;
+    let target = config_from_settings(settings, &original);
     let runtime_action = settings_runtime_action(
         saved_config_requires_runtime_restart(&original, &target),
         original.system_proxy_item != target.system_proxy_item,

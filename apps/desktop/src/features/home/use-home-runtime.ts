@@ -15,20 +15,14 @@ import {
   tunStatus,
   useRuntimeEventStore,
 } from "@/ipc";
-import type { ConnectionMode, TunChanged, TunStatus } from "@/ipc/bindings";
+import type { ConnectionMode, TunStatus } from "@/ipc/bindings";
 import { profilesQueryKey } from "@/ipc/query-keys";
 import { getErrorMessage } from "@voya/utils/error";
 import { useModalStore } from "@/stores/modal-store";
 import { useToastStore } from "@/stores/toast-store";
 
 import { deriveConnectionMode, isPacActive } from "./connection-mode";
-import {
-  missingCorePayload,
-  runWithElevation,
-  statusToCoreState,
-  statusToSysProxyChanged,
-  statusToTunChanged,
-} from "./runtime-action";
+import { missingCorePayload, runWithElevation } from "./runtime-action";
 
 type RuntimeAction = "connect" | "disconnect" | "restart";
 export type Translation = ReturnType<typeof useI18n>["t"];
@@ -80,7 +74,7 @@ export function useHomeRuntime(t: Translation) {
     void systemProxyStatus()
       .then((status) => {
         if (!cancelled) {
-          setSysProxy(statusToSysProxyChanged(status));
+          setSysProxy(status);
         }
       })
       .catch((error: unknown) => {
@@ -95,7 +89,7 @@ export function useHomeRuntime(t: Translation) {
     void tunStatus()
       .then((status) => {
         if (!cancelled) {
-          setTun(statusToTunChanged(status));
+          setTun(status);
         }
       })
       .catch((error: unknown) => {
@@ -179,7 +173,7 @@ export function useHomeRuntime(t: Translation) {
             : restartCore(),
       );
 
-      setCoreState(statusToCoreState(status));
+      setCoreState(status);
     } catch (error) {
       const missingCore = missingCorePayload(error);
       if (missingCore) {
@@ -200,7 +194,7 @@ export function useHomeRuntime(t: Translation) {
   async function refreshRuntimeState() {
     try {
       const status = await runtimeStatus();
-      setCoreState(statusToCoreState(status));
+      setCoreState(status);
     } catch (error) {
       pushToast({
         description: getErrorMessage(error),
@@ -229,7 +223,7 @@ export function useHomeRuntime(t: Translation) {
       const status = await runWithElevation(() =>
         wasConnected ? restartCore() : connectActiveProfile(),
       );
-      setCoreState(statusToCoreState(status));
+      setCoreState(status);
     } catch (error) {
       const missingCore = missingCorePayload(error);
       if (missingCore) {
@@ -307,7 +301,7 @@ export function useHomeRuntime(t: Translation) {
    */
   async function refreshConnectionModeStatus() {
     try {
-      setSysProxy(statusToSysProxyChanged(await systemProxyStatus()));
+      setSysProxy(await systemProxyStatus());
     } catch (error) {
       pushToast({
         description: getErrorMessage(error),
@@ -316,7 +310,7 @@ export function useHomeRuntime(t: Translation) {
       });
     }
     try {
-      setTun(statusToTunChanged(await tunStatus()));
+      setTun(await tunStatus());
     } catch (error) {
       pushToast({
         description: getErrorMessage(error),
@@ -362,7 +356,7 @@ export function useHomeRuntime(t: Translation) {
     try {
       const nextPac = !pacActive;
       await setConnectionMode("systemProxy", nextPac);
-      setSysProxy(statusToSysProxyChanged(await systemProxyStatus()));
+      setSysProxy(await systemProxyStatus());
     } catch (error) {
       pushToast({
         description: getErrorMessage(error),
@@ -434,7 +428,7 @@ function runtimeActionLabel(action: RuntimeAction, t: Translation) {
   }
 }
 
-function tunProviderLabel(tun: TunChanged, t: Translation) {
+function tunProviderLabel(tun: TunStatus, t: Translation) {
   const backend = tunBackendLabel(tun.backend, t);
   const providerState = tunProviderStateLabel(tun.providerState, t);
   if (tun.lastProviderError) {
@@ -451,7 +445,7 @@ function tunProviderPathMismatchDescription(status: TunStatus, t: Translation) {
   });
 }
 
-function tunBackendLabel(backend: TunChanged["backend"], t: Translation) {
+function tunBackendLabel(backend: TunStatus["backend"], t: Translation) {
   switch (backend) {
     case "macosPacketTunnel":
       return t("status.tunBackendMacos");
@@ -465,7 +459,7 @@ function tunBackendLabel(backend: TunChanged["backend"], t: Translation) {
   }
 }
 
-function tunProviderStateLabel(state: TunChanged["providerState"], t: Translation) {
+function tunProviderStateLabel(state: TunStatus["providerState"], t: Translation) {
   switch (state) {
     case "running":
       return t("status.tunProviderRunning");

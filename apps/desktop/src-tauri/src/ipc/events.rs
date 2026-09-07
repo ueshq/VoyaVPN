@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri_specta::Event;
 pub use voya_contracts::{
-    AppNotice, CoreState, CoreStateEvent, LogLevel, LogLineEvent, QueryInvalidation,
-    ShellTabTarget, StatisticsSnapshot, SysProxyChanged, SysProxyMode, TunChanged,
+    AppNotice, CoreState, LogLevel, LogLineEvent, QueryInvalidation, RuntimeStatusResponse,
+    ShellTabTarget, StatisticsSnapshot, SystemProxyStatusResponse, TunStatus,
 };
 use voya_contracts::{
     ProxyConnectionsSnapshot, ProxyMonitorStatus, ProxyTrafficEvent, SpeedTestResult,
@@ -23,14 +23,20 @@ pub struct InvalidateEvent {
     pub keys: Vec<QueryInvalidation>,
 }
 
+/// Live state that is not a query cache.
+///
+/// The three status variants carry the very structs their commands return, so
+/// the frontend stores an event payload and a command result interchangeably.
+/// They used to be narrower parallel DTOs, which cost a converter in the shell
+/// and another on the frontend for each one.
 #[derive(Debug, Clone, Deserialize, Serialize, Type, Event)]
 #[serde(tag = "kind", content = "payload", rename_all = "camelCase")]
 pub enum TransientStreamEvent {
     LogLine(LogLineEvent),
-    CoreState(CoreStateEvent),
+    CoreState(RuntimeStatusResponse),
     Statistics(StatisticsSnapshot),
-    SysProxyChanged(SysProxyChanged),
-    TunChanged(TunChanged),
+    SysProxyChanged(SystemProxyStatusResponse),
+    TunChanged(TunStatus),
     ProxyMonitorStatus(ProxyMonitorStatus),
     ProxyTraffic(ProxyTrafficEvent),
     ProxyConnections(ProxyConnectionsSnapshot),

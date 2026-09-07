@@ -1,7 +1,7 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{CoreType, SysProxyType};
+use crate::{CoreState, CoreType, SysProxyType};
 
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "lowercase")]
@@ -197,17 +197,20 @@ pub struct CoreSeedInstallResult {
     pub installed_files: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub enum RuntimeConnectionState {
-    Disconnected,
-    Connected,
-}
-
-#[derive(Debug, Clone, Serialize, Type)]
+/// What the runtime is doing, as both an answer and an announcement.
+///
+/// The four runtime commands return this, and `TransientStreamEvent::CoreState`
+/// carries exactly the same struct, so the frontend stores whichever arrives
+/// first without reshaping it. It used to be two types — this one plus an
+/// identically-shaped `CoreStateEvent` — which cost three converters in the
+/// shell and three more on the frontend to move one fact between them.
+///
+/// `Deserialize` exists because it travels as an event payload, not because
+/// anything sends one to the backend.
+#[derive(Debug, Clone, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeStatusResponse {
-    pub state: RuntimeConnectionState,
+    pub state: CoreState,
     pub active_profile_id: Option<String>,
     pub main_pid: Option<u32>,
     pub pre_pid: Option<u32>,
@@ -231,7 +234,12 @@ pub struct AppUpdaterStatus {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Type)]
+/// The OS proxy state, as both an answer and an announcement.
+///
+/// `TransientStreamEvent::SysProxyChanged` carries this struct; the narrower
+/// `SysProxyChanged` it replaced duplicated four of these fields and re-declared
+/// `SysProxyType` under a second name.
+#[derive(Debug, Clone, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemProxyStatusResponse {
     pub requested_mode: SysProxyType,

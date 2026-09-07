@@ -675,16 +675,6 @@ fn settings_failures_reach_the_field_and_keep_a_typed_side_effect() {
     assert_eq!(issues[0].field, "network.tun.mtu");
     assert_eq!(validation.subsystem, AppErrorSubsystem::Config);
 
-    let contract: AppError = SettingsContractError::InvalidValue {
-        field: "proxy.trafficMode",
-        value: "sideways".to_string(),
-    }
-    .into();
-    let AppErrorKind::Validation { issues } = &contract.kind else {
-        panic!("expected a validation failure, got {contract:?}");
-    };
-    assert_eq!(issues[0].field, "proxy.trafficMode");
-
     // A rejected side effect keeps the adapter's own already-typed error rather
     // than being relabelled as a settings problem.
     let side_effect: AppError = SettingsSaveError::SideEffect {
@@ -933,7 +923,6 @@ mod guards {
     const fn settings_save(error: &SettingsSaveError<AppError>) {
         match error {
             SettingsSaveError::Validation(_)
-            | SettingsSaveError::Contract(_)
             | SettingsSaveError::SideEffect { .. }
             | SettingsSaveError::Commit(_) => (),
         }

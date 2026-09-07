@@ -17,7 +17,10 @@ use voya_core::{
 };
 
 use super::*;
-use crate::dns::DnsSettings;
+use crate::{
+    dns::DnsSettings,
+    supervisor::{SupervisorConnectionState, SupervisorSnapshot},
+};
 
 fn distinct_rule() -> RulesItem {
     RulesItem {
@@ -619,6 +622,87 @@ fn every_system_proxy_mode_round_trips() {
             "{mode:?}"
         );
     }
+}
+
+#[test]
+fn every_traffic_mode_round_trips() {
+    for mode in [
+        voya_core::TrafficMode::Rule,
+        voya_core::TrafficMode::Global,
+        voya_core::TrafficMode::Direct,
+        voya_core::TrafficMode::Unchanged,
+    ] {
+        assert_eq!(
+            traffic_mode_from_contract(traffic_mode_to_contract(mode)),
+            mode,
+            "{mode:?}"
+        );
+    }
+}
+
+/// The runtime status is now one type for both the command answer and the
+/// `coreState` event, so the two builders have to agree on every field.
+///
+/// A settled supervisor can only be connected or disconnected;
+/// `runtime_status_event` adds the two transitions and, when it has a snapshot,
+/// must fill the other four fields exactly as the response does. The event also
+/// has to prefer the snapshot's active profile over the id the flow was called
+/// with, and fall back to that id when there is no snapshot yet — which is the
+/// whole reason it takes both.
+#[test]
+fn the_status_response_and_the_status_event_agree_on_every_field() {
+    let snapshot = SupervisorSnapshot {
+        state: SupervisorConnectionState::Connected,
+        active_profile_id: Some("running-node".to_string()),
+        main_pid: Some(4242),
+        pre_pid: Some(4243),
+        running_core_type: Some(voya_core::CoreType::sing_box),
+        ..SupervisorSnapshot::disconnected()
+    };
+
+    let response = runtime_status_response(snapshot.clone());
+    let event = runtime_status_event(
+        voya_contracts::CoreState::Connected,
+        Some("requested-node".to_string()),
+        Some(&snapshot),
+    );
+
+    assert!(matches!(
+        response.state,
+        voya_contracts::CoreState::Connected
+    ));
+    assert!(matches!(event.state, voya_contracts::CoreState::Connected));
+    assert_eq!(event.active_profile_id, response.active_profile_id);
+    assert_eq!(event.main_pid, response.main_pid);
+    assert_eq!(event.pre_pid, response.pre_pid);
+    assert_eq!(event.running_core_type, response.running_core_type);
+    // The snapshot wins over the id the flow was invoked with.
+    assert_eq!(event.active_profile_id.as_deref(), Some("running-node"));
+
+    // No snapshot: the transition still names the profile it is connecting to,
+    // and reports no pids because there is no process to report yet.
+    let connecting = runtime_status_event(
+        voya_contracts::CoreState::Connecting,
+        Some("requested-node".to_string()),
+        None,
+    );
+    assert!(matches!(
+        connecting.state,
+        voya_contracts::CoreState::Connecting
+    ));
+    assert_eq!(
+        connecting.active_profile_id.as_deref(),
+        Some("requested-node")
+    );
+    assert_eq!(connecting.main_pid, None);
+    assert_eq!(connecting.pre_pid, None);
+    assert_eq!(connecting.running_core_type, None);
+
+    let disconnected = runtime_status_response(SupervisorSnapshot::disconnected());
+    assert!(matches!(
+        disconnected.state,
+        voya_contracts::CoreState::Disconnected
+    ));
 }
 
 #[test]
