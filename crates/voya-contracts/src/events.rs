@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::ServerStatItem;
+use crate::{LogLineBody, NoticeCode, ServerStatItem};
 
 /// One frontend query cache, named on the wire.
 ///
@@ -65,12 +65,18 @@ pub enum LogLevel {
     Error,
 }
 
+/// One line for the Logs panel.
+///
+/// `body` says who wrote it: the core process (raw passthrough) or the app
+/// itself (a [`crate::LogCode`] the frontend translates). It used to be a
+/// single `line: String`, which meant every sentence the app logged reached
+/// the panel in English whatever the interface language was.
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LogLineEvent {
     pub id: u32,
     pub level: LogLevel,
-    pub line: String,
+    pub body: LogLineBody,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]
@@ -94,12 +100,18 @@ pub enum AppNoticeLevel {
     Error,
 }
 
+/// One toast.
+///
+/// `code` replaced the prose `title` the shell used to spell out at each of its
+/// call sites: those titles were English literals that `pnpm check:i18n` could
+/// not see, and the toast is the most visible text the backend produces.
+/// `detail` stays an untranslated diagnostic — the error behind the notice.
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AppNotice {
     pub level: AppNoticeLevel,
-    pub title: String,
-    pub message: Option<String>,
+    pub code: NoticeCode,
+    pub detail: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]

@@ -35,6 +35,7 @@ pub mod statistics;
 pub mod subscriptions;
 pub mod supervisor;
 pub mod sysproxy;
+pub mod tray;
 pub mod tun;
 pub mod updates;
 

@@ -29,6 +29,7 @@ import type {
   ProxyNode,
   TrafficMode,
 } from "@/ipc/bindings";
+import { speedtestOutcomeText } from "@/ipc/messages";
 import { queryKeys } from "@/ipc/query-keys";
 import { formatDelay } from "@voya/utils/formatting";
 import { getErrorMessage } from "@voya/utils/error";
@@ -269,9 +270,8 @@ export function ProxyGroupsScreen() {
                   <span className="min-w-0 truncate">{selectedGroup.now}</span>
                   <span className="tabular-nums">
                     {formatDelay(
-                      delayResults[selectedGroup.now]?.delay ??
-                        selectedGroup.nodes.find((node) => node.name === selectedGroup.now)?.delay,
-                      "",
+                      delayResults[selectedGroup.now]?.delay
+                        ?? selectedGroup.nodes.find((node) => node.name === selectedGroup.now)?.delay,
                     )}
                   </span>
                 </Badge>
@@ -340,7 +340,13 @@ function ProxyNodeGrid({
       {nodes.length ? (
         nodes.map((node) => {
           const result = delayResults[node.name];
-          const delayLabel = formatDelay(result?.delay ?? node.delay, result?.message ?? node.delayLabel);
+          // The number is formatted here, not in Rust: the backend used to send
+          // a pre-built `"42ms"` label, which fixed the unit spacing and the
+          // numeral system for every locale. A node that did not answer shows
+          // its translated outcome instead.
+          const delayLabel =
+            formatDelay(result?.delay ?? node.delay)
+            || (result && result.outcome !== "completed" ? speedtestOutcomeText(t, result.outcome) : "");
 
           return (
             <button

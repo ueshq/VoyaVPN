@@ -387,10 +387,17 @@ test("routes the three IPC event channels into the shell", async ({ page }) => {
   await page.evaluate(() => {
     window.__VOYA_SMOKE__.emit("app-event", {
       kind: "notice",
-      payload: { level: "warning", message: "Smoke notice detail", title: "Smoke notice" },
+      // A notice is a code plus an untranslated detail; the shell resolves the
+      // code against the locale files to build the toast title.
+      payload: {
+        code: { code: "trayRefreshFailed" },
+        detail: "Smoke notice detail",
+        level: "warning",
+      },
     });
   });
   await expect(page.getByText("Smoke notice detail", { exact: true })).toBeVisible();
+  await expect(page.getByText("Tray refresh failed", { exact: true })).toBeVisible();
   await expect(coreStateBadge(page, "Connected")).toBeVisible();
 
   // Invalidation: the profiles query refetches.

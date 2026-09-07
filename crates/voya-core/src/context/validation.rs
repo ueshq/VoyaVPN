@@ -8,60 +8,59 @@ pub fn validate_node(item: &ProfileItem, core_type: CoreType) -> NodeValidatorRe
     }
 
     if item.address().trim().is_empty() {
-        result.push_error("invalid Address");
+        result.push_error(ValidationCode::InvalidAddress);
     }
     if !(1..=65535).contains(&item.port()) {
-        result.push_error("invalid Port");
+        result.push_error(ValidationCode::InvalidPort);
     }
 
     let network = get_network(item);
     if core_type == CoreType::sing_box {
         if SINGBOX_UNSUPPORTED_TRANSPORTS.contains(&network.as_str()) {
-            result.push_error(format!("sing_box does not support network {network}"));
+            result.push_error(ValidationCode::UnsupportedNetwork {
+                network: network.clone(),
+            });
         }
         if !singbox_supports_config_type(item.config_type()) {
-            result.push_error(format!(
-                "sing_box does not support protocol {:?}",
-                item.config_type()
-            ));
+            result.push_error(ValidationCode::UnsupportedProtocol {
+                protocol: protocol_label(item.config_type()),
+            });
         }
         if !singbox_transport_supported_protocol(item.config_type()) && network != DEFAULT_NETWORK {
-            result.push_error(format!(
-                "sing_box does not support protocol {:?} with network {network}",
-                item.config_type()
-            ));
+            result.push_error(ValidationCode::UnsupportedProtocolNetwork {
+                protocol: protocol_label(item.config_type()),
+                network: network.clone(),
+            });
         }
         if item.config_type() == ConfigType::Shadowsocks
             && !SINGBOX_SHADOWSOCKS_ALLOWED_TRANSPORTS.contains(&network.as_str())
         {
-            result.push_error(format!(
-                "sing_box does not support Shadowsocks with network {network}"
-            ));
+            result.push_error(ValidationCode::UnsupportedShadowsocksNetwork { network });
         }
     }
 
     match &item.protocol {
         ProfileProtocol::Vmess { uuid, .. } => {
             if uuid.trim().is_empty() || !is_guid_like(uuid) {
-                result.push_error("invalid Password");
+                result.push_error(ValidationCode::InvalidPassword);
             }
         }
         ProfileProtocol::Vless { uuid, flow, .. } => {
             if uuid.trim().is_empty() || (!is_guid_like(uuid) && uuid.chars().count() > 30) {
-                result.push_error("invalid Password");
+                result.push_error(ValidationCode::InvalidPassword);
             }
             if !FLOWS.contains(&flow.as_deref().unwrap_or_default().trim()) {
-                result.push_error("invalid Flow");
+                result.push_error(ValidationCode::InvalidFlow);
             }
         }
         ProfileProtocol::Shadowsocks {
             password, method, ..
         } => {
             if password.trim().is_empty() {
-                result.push_error("invalid Password");
+                result.push_error(ValidationCode::InvalidPassword);
             }
             if !SS_SECURITIES_IN_SINGBOX.contains(&method.trim()) {
-                result.push_error("invalid SsMethod");
+                result.push_error(ValidationCode::InvalidShadowsocksMethod);
             }
         }
         _ => {}
@@ -74,7 +73,7 @@ pub fn validate_node(item: &ProfileItem, core_type: CoreType) -> NodeValidatorRe
                 .as_deref()
                 .is_none_or(|key| key.trim().is_empty())
     }) {
-        result.push_error("invalid PublicKey");
+        result.push_error(ValidationCode::InvalidRealityPublicKey);
     }
 
     if let Some(final_mask) = item
@@ -84,11 +83,18 @@ pub fn validate_node(item: &ProfileItem, core_type: CoreType) -> NodeValidatorRe
         .filter(|value| !value.trim().is_empty())
     {
         if serde_json::from_str::<Value>(final_mask).map_or(true, |value| !value.is_object()) {
-            result.push_error("invalid Finalmask");
+            result.push_error(ValidationCode::InvalidFinalMask);
         }
     }
 
     result
+}
+
+/// The protocol name a rejection names, in the spelling the share links and
+/// the UI already use. It is a proper noun, not prose, so it is interpolated
+/// into the translated sentence rather than translated itself.
+fn protocol_label(config_type: ConfigType) -> String {
+    format!("{config_type:?}")
 }
 
 fn get_network(item: &ProfileItem) -> String {
@@ -217,22 +223,22 @@ mod tests {
     fn validate_node_rejection_table_covers_every_branch() {
         // A false positive here silently shrinks a policy group's selector, so
         // every rejection needs a case pinning its exact message.
-        let cases: &[(&str, ProfileItem, &[&str])] = &[
+        let cases: &[(&str, ProfileItem, &[ValidationCode])] = &[
             ("valid vless", vless_node(), &[]),
             (
                 "empty address",
                 with_server(vless_node(), "", 443),
-                &["invalid Address"],
+                &[ValidationCode::InvalidAddress],
             ),
             (
                 "zero port",
                 with_server(vless_node(), "node.example", 0),
-                &["invalid Port"],
+                &[ValidationCode::InvalidPort],
             ),
             (
                 "port above range",
                 with_server(vless_node(), "node.example", 65536),
-                &["invalid Port"],
+                &[ValidationCode::InvalidPort],
             ),
             (
                 "kcp transport",
@@ -244,7 +250,9 @@ mod tests {
                         mtu: None,
                     },
                 ),
-                &["sing_box does not support network kcp"],
+                &[ValidationCode::UnsupportedNetwork {
+                    network: "kcp".to_string(),
+                }],
             ),
             (
                 "xhttp transport",
@@ -257,7 +265,9 @@ mod tests {
                         extra: None,
                     },
                 ),
-                &["sing_box does not support network xhttp"],
+                &[ValidationCode::UnsupportedNetwork {
+                    network: "xhttp".to_string(),
+                }],
             ),
             (
                 "grpc on a protocol without transports",
@@ -269,7 +279,10 @@ mod tests {
                         mode: None,
                     },
                 ),
-                &["sing_box does not support protocol SOCKS with network grpc"],
+                &[ValidationCode::UnsupportedProtocolNetwork {
+                    protocol: "SOCKS".to_string(),
+                    network: "grpc".to_string(),
+                }],
             ),
             (
                 "shadowsocks over grpc",
@@ -283,22 +296,24 @@ mod tests {
                 ),
                 // Shadowsocks is in the transport-capable table, so only the
                 // narrower Shadowsocks allow-list rejects this pair.
-                &["sing_box does not support Shadowsocks with network grpc"],
+                &[ValidationCode::UnsupportedShadowsocksNetwork {
+                    network: "grpc".to_string(),
+                }],
             ),
             (
                 "vmess with a non-uuid id",
                 vmess_node("not-a-uuid"),
-                &["invalid Password"],
+                &[ValidationCode::InvalidPassword],
             ),
             (
                 "vless with an unknown flow",
                 with_flow(vless_node(), "bogus-flow"),
-                &["invalid Flow"],
+                &[ValidationCode::InvalidFlow],
             ),
             (
                 "shadowsocks with an unsupported cipher",
                 shadowsocks_node("aes-256-eax"),
-                &["invalid SsMethod"],
+                &[ValidationCode::InvalidShadowsocksMethod],
             ),
             (
                 "reality without a public key",
@@ -309,7 +324,7 @@ mod tests {
                         ..tls()
                     },
                 ),
-                &["invalid PublicKey"],
+                &[ValidationCode::InvalidRealityPublicKey],
             ),
             (
                 "final mask that is not a JSON object",
@@ -320,7 +335,7 @@ mod tests {
                         ..tls()
                     },
                 ),
-                &["invalid Finalmask"],
+                &[ValidationCode::InvalidFinalMask],
             ),
         ];
 
@@ -330,7 +345,7 @@ mod tests {
                 result.errors,
                 expected
                     .iter()
-                    .map(|error| (*error).to_string())
+                    .map(|code| ValidationMessage::new(code.clone()))
                     .collect::<Vec<_>>(),
                 "unexpected validation errors for `{label}`"
             );

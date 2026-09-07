@@ -7,6 +7,8 @@ import { Button } from "@voya/ui/components/button";
 import { EmptyState } from "@voya/ui/components/empty-state";
 import { Input } from "@voya/ui/components/input";
 import { useI18n } from "@voya/i18n/use-i18n";
+
+import { logLineText } from "@/ipc/messages";
 import { useRuntimeEventStore } from "@/ipc";
 import type { LogLevel } from "@/ipc/bindings";
 import { cn } from "@voya/ui/lib/utils";
@@ -29,12 +31,19 @@ export function LogsPanel() {
   const [activeLevels, setActiveLevels] = useState<Set<LogLevel>>(() => new Set(LOG_LEVELS));
 
   const needle = search.trim().toLowerCase();
+  // Core output arrives as text; the app's own lines arrive as a code and are
+  // resolved here, so both the search and the row show the same string in the
+  // reader's language.
+  const resolved = useMemo(
+    () => logLines.map((line) => ({ ...line, text: logLineText(t, line.body) })),
+    [logLines, t],
+  );
   const filtered = useMemo(
     () =>
-      logLines.filter(
-        (line) => activeLevels.has(line.level) && (needle === "" || line.line.toLowerCase().includes(needle)),
+      resolved.filter(
+        (line) => activeLevels.has(line.level) && (needle === "" || line.text.toLowerCase().includes(needle)),
       ),
-    [activeLevels, logLines, needle],
+    [activeLevels, needle, resolved],
   );
 
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -211,8 +220,8 @@ export function LogsPanel() {
                       >
                         {line.level}
                       </Badge>
-                      <span className="truncate text-foreground" title={line.line}>
-                        {line.line}
+                      <span className="truncate text-foreground" title={line.text}>
+                        {line.text}
                       </span>
                     </li>
                   );

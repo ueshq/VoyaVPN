@@ -26,11 +26,11 @@ use crate::{
 pub enum AppSettingsValidationError {
     #[error("unsupported settings schema version {found}; expected {expected}")]
     UnsupportedSchema { found: u32, expected: u32 },
-    #[error("invalid {label}: {reason}")]
+    #[error("invalid {label}: {}", input_safety_text(reason))]
     InvalidText {
         field: &'static str,
         label: &'static str,
-        reason: &'static str,
+        reason: contracts::ValidationCode,
     },
     #[error(transparent)]
     InvalidSource(#[from] updates::InvalidSourceUrl),
@@ -54,7 +54,43 @@ impl AppSettingsValidationError {
             Self::InvalidHysteriaHopInterval => "hysteria.hopIntervalSeconds",
         }
     }
+
+    /// The rejection as a code the settings dialog can translate.
+    ///
+    /// The `Display` text stays as the diagnostic that reaches the logs and
+    /// `AppError::message`; this is what the user reads. Both halves are needed:
+    /// `field` says which input to mark, `code` says what to write next to it.
+    #[must_use]
+    pub fn code(&self) -> contracts::ValidationCode {
+        match self {
+            Self::UnsupportedSchema { found, expected } => {
+                contracts::ValidationCode::UnsupportedSettingsSchema {
+                    found: *found,
+                    expected: *expected,
+                }
+            }
+            Self::InvalidText { reason, .. } => reason.clone(),
+            Self::InvalidSource(error) => error.reason.clone(),
+            Self::InvalidTunMtu => contracts::ValidationCode::TunMtuOutOfRange {
+                min: TUN_MTU_RANGE.0,
+                max: TUN_MTU_RANGE.1,
+            },
+            Self::NegativeHysteriaBandwidth { .. } => {
+                contracts::ValidationCode::NegativeHysteriaBandwidth
+            }
+            Self::InvalidHysteriaHopInterval => {
+                contracts::ValidationCode::HysteriaHopIntervalTooShort {
+                    minimum_seconds: MIN_HYSTERIA_HOP_INTERVAL_SECONDS,
+                }
+            }
+        }
+    }
 }
+
+/// Accepted TUN MTU, spelled once so the check and the message it produces
+/// cannot drift.
+const TUN_MTU_RANGE: (u32, u32) = (576, 65_535);
+const MIN_HYSTERIA_HOP_INTERVAL_SECONDS: u32 = 5;
 
 pub fn validate_app_settings(
     settings: &contracts::AppSettingsV1,
@@ -121,10 +157,13 @@ pub fn validate_app_settings(
         AppSettingsValidationError::InvalidText {
             field: "speedTest.udpTarget",
             label: "UDP test target",
-            reason: "value must be host:port, optionally prefixed with a test kind",
+            reason: contracts::ValidationCode::InvalidUdpTestTarget,
         }
     })?;
-    if !(576..=65_535).contains(&settings.network.tun.mtu) {
+    if !(i32::try_from(TUN_MTU_RANGE.0).unwrap_or(i32::MAX)
+        ..=i32::try_from(TUN_MTU_RANGE.1).unwrap_or(i32::MAX))
+        .contains(&settings.network.tun.mtu)
+    {
         return Err(AppSettingsValidationError::InvalidTunMtu);
     }
     if settings.hysteria.upload_mbps < 0 {
@@ -137,7 +176,9 @@ pub fn validate_app_settings(
             field: "hysteria.downloadMbps",
         });
     }
-    if settings.hysteria.hop_interval_seconds < 5 {
+    if settings.hysteria.hop_interval_seconds
+        < i32::try_from(MIN_HYSTERIA_HOP_INTERVAL_SECONDS).unwrap_or(i32::MAX)
+    {
         return Err(AppSettingsValidationError::InvalidHysteriaHopInterval);
     }
     Ok(())
@@ -164,12 +205,29 @@ pub fn saved_config_requires_runtime_restart(original: &AppConfig, updated: &App
         || original.simple_dns_item != updated.simple_dns_item
 }
 
-const fn input_safety_reason(error: input_safety::InputSafetyError) -> &'static str {
+/// Why a text field was rejected, as the code the settings dialog translates.
+const fn input_safety_reason(error: input_safety::InputSafetyError) -> contracts::ValidationCode {
     match error {
-        input_safety::InputSafetyError::EmptyValue => "value is required",
-        input_safety::InputSafetyError::TooLong => "value is too long",
-        input_safety::InputSafetyError::ControlCharacters => "control characters are not allowed",
-        input_safety::InputSafetyError::TooManyItems => "too many items",
+        input_safety::InputSafetyError::EmptyValue => contracts::ValidationCode::TextRequired,
+        input_safety::InputSafetyError::TooLong => contracts::ValidationCode::TextTooLong,
+        input_safety::InputSafetyError::ControlCharacters => {
+            contracts::ValidationCode::TextControlCharacters
+        }
+        input_safety::InputSafetyError::TooManyItems => contracts::ValidationCode::TooManyItems,
+    }
+}
+
+/// The English half of a rejection, for the log line and `AppError::message`.
+fn input_safety_text(code: &contracts::ValidationCode) -> &'static str {
+    match code {
+        contracts::ValidationCode::TextRequired => "value is required",
+        contracts::ValidationCode::TextTooLong => "value is too long",
+        contracts::ValidationCode::TextControlCharacters => "control characters are not allowed",
+        contracts::ValidationCode::TooManyItems => "too many items",
+        contracts::ValidationCode::InvalidUdpTestTarget => {
+            "value must be host:port, optionally prefixed with a test kind"
+        }
+        _ => "value is not valid",
     }
 }
 
@@ -929,7 +987,7 @@ mod tests {
                 Err(AppSettingsValidationError::InvalidText {
                     field: "speedTest.udpTarget",
                     label: "UDP test target",
-                    reason: "value must be host:port, optionally prefixed with a test kind",
+                    reason: contracts::ValidationCode::InvalidUdpTestTarget,
                 }),
                 "{target} should be rejected"
             );

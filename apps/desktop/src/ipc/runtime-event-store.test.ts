@@ -76,8 +76,9 @@ describe("runtime event store", () => {
       action: "latency",
       delay: 42,
       indexId: "profile-a",
+      detail: null,
       ipInfo: "US",
-      message: "42",
+      outcome: "completed",
       speed: null,
     };
 
@@ -257,12 +258,16 @@ describe("runtime event store", () => {
     now.mockReturnValue(firstAt);
     useRuntimeEventStore.getState().pushTransientEvent({
       kind: "logLine",
-      payload: { id: 1, level: "info", line: "core started" },
+      payload: { body: { line: "core started", source: "core" }, id: 1, level: "info" },
     });
     now.mockReturnValue(secondAt);
     useRuntimeEventStore.getState().pushTransientEvent({
       kind: "logLine",
-      payload: { id: 2, level: "warn", line: "slow handshake" },
+      payload: {
+        body: { code: { code: "connected" }, detail: null, source: "app" },
+        id: 2,
+        level: "warn",
+      },
     });
 
     // One `set` per frame, not one per line: the core emits an event per stdout
@@ -274,8 +279,13 @@ describe("runtime event store", () => {
     // Each line keeps the moment it arrived, so lines buffered while the Logs
     // panel was unmounted do not all read as the panel-open time.
     expect(useRuntimeEventStore.getState().logLines).toEqual([
-      { id: 1, level: "info", line: "core started", receivedAt: firstAt },
-      { id: 2, level: "warn", line: "slow handshake", receivedAt: secondAt },
+      { body: { line: "core started", source: "core" }, id: 1, level: "info", receivedAt: firstAt },
+      {
+        body: { code: { code: "connected" }, detail: null, source: "app" },
+        id: 2,
+        level: "warn",
+        receivedAt: secondAt,
+      },
     ]);
     now.mockRestore();
     expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("logLine");
@@ -286,7 +296,7 @@ describe("runtime event store", () => {
 
     useRuntimeEventStore.getState().pushTransientEvent({
       kind: "logLine",
-      payload: { id: 1, level: "info", line: "core started" },
+      payload: { body: { line: "core started", source: "core" }, id: 1, level: "info" },
     });
     useRuntimeEventStore.getState().clearLogs();
     await vi.advanceTimersByTimeAsync(20);

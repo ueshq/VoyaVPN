@@ -18,6 +18,8 @@ use voya_db::DbError;
 use voya_net::DownloadError;
 use voya_platform::coreinfo::CoreInfoError;
 
+use voya_core::validation::ValidationCode as CoreValidationCode;
+
 use super::*;
 
 /// A short, comparable name for a kind, so a failed table row reads as
@@ -470,7 +472,11 @@ fn runtime_failures_are_classified() {
         (
             "generation validation",
             RuntimeError::Validation {
-                errors: vec!["no outbound".to_string()],
+                errors: vec![validation_message(
+                    CoreValidationCode::RoutingRuleWithoutOutbound {
+                        rule: "rule".to_string(),
+                    },
+                )],
                 warnings: Vec::new(),
             },
             "validation",
@@ -509,8 +515,17 @@ fn runtime_failures_are_classified() {
 #[test]
 fn every_generation_error_reaches_the_active_profile_field() {
     let mapped: AppError = RuntimeError::Validation {
-        errors: vec!["no outbound".to_string(), "empty chain".to_string()],
-        warnings: vec!["ignored".to_string()],
+        errors: vec![
+            validation_message(CoreValidationCode::RoutingRuleWithoutOutbound {
+                rule: "rule".to_string(),
+            }),
+            validation_message(CoreValidationCode::PolicyGroupWithoutValidChildren),
+        ],
+        warnings: vec![validation_message(
+            CoreValidationCode::GroupDuplicateChildIgnored {
+                profile_id: "child".to_string(),
+            },
+        )],
     }
     .into();
 
@@ -550,7 +565,11 @@ fn group_failures_are_classified() {
         ),
         (
             "validation",
-            GroupManagerError::Validation(vec!["child missing".to_string()]),
+            GroupManagerError::Validation(vec![validation_message(
+                CoreValidationCode::GroupChildNotFound {
+                    profile_id: "child".to_string(),
+                },
+            )]),
             "validation",
             AppErrorSubsystem::Group,
         ),
@@ -601,10 +620,10 @@ fn qr_and_dns_failures_are_classified() {
         ),
     ]);
 
-    let dns: AppError = DnsManagerError::Validation(vec![ValidationIssue {
-        field: "direct".to_string(),
-        message: "invalid resolver".to_string(),
-    }])
+    let dns: AppError = DnsManagerError::Validation(vec![ValidationIssue::new(
+        "direct",
+        voya_contracts::ValidationCode::DnsAddressEmpty,
+    )])
     .into();
     let AppErrorKind::Validation { issues } = &dns.kind else {
         panic!("expected a validation failure, got {dns:?}");
@@ -617,7 +636,7 @@ fn qr_and_dns_failures_are_classified() {
 fn update_source_rejections_reach_the_settings_field_that_holds_them() {
     let mapped: AppError = UpdateManagerError::InvalidSourceUrl(crate::updates::InvalidSourceUrl {
         field: crate::updates::SourceUrlField::GEO,
-        reason: "expected an absolute HTTPS URL",
+        reason: voya_contracts::ValidationCode::SourceUrlNotHttps,
     })
     .into();
 
@@ -940,4 +959,9 @@ mod guards {
             | AppErrorKind::Internal => (),
         }
     }
+}
+
+/// A core validator finding, for the error mappings that carry one.
+fn validation_message(code: CoreValidationCode) -> voya_core::validation::ValidationMessage {
+    voya_core::validation::ValidationMessage::new(code)
 }

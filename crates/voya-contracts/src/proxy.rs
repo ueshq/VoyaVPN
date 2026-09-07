@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
+use crate::SpeedTestOutcome;
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum TrafficMode {
@@ -35,11 +37,15 @@ pub struct ProxyGroup {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
+/// One node inside a proxy group.
+///
+/// There is no `delay_label`: formatting `42` as `"42ms"` in Rust hard-coded
+/// both the unit spacing and the numeral system, and the frontend already owns
+/// `formatDelay`.
 pub struct ProxyNode {
     pub name: String,
     pub proxy_type: String,
     pub delay: Option<i32>,
-    pub delay_label: String,
     pub udp: bool,
     pub active: bool,
     pub testable: bool,
@@ -47,10 +53,15 @@ pub struct ProxyNode {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
+/// One node's delay measurement.
+///
+/// `outcome` replaced a `message` that was the Clash client error's own
+/// `Display` text, which the Proxies screen rendered verbatim in place of the
+/// delay.
 pub struct ProxyDelayTestResult {
     pub name: String,
     pub delay: Option<i32>,
-    pub message: Option<String>,
+    pub outcome: SpeedTestOutcome,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]

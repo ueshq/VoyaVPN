@@ -17,7 +17,7 @@ use futures_util::{
 use thiserror::Error;
 use tokio::time;
 use voya_contracts::SpeedTestKind;
-pub use voya_contracts::{SpeedTestResult, SpeedtestRunResult, SpeedtestStatus};
+pub use voya_contracts::{SpeedTestOutcome, SpeedTestResult, SpeedtestRunResult, SpeedtestStatus};
 use voya_core::{
     generate_singbox_speedtest_config_json, AppConfig, ConfigType, CoreConfigContextBuilder,
     CoreType, InboundProtocol, ProfileItem, SpeedTestItem, SpeedtestConfigEntry,
@@ -34,6 +34,7 @@ use voya_platform::{
 use voya_udptest::{UdpTestError, UdpTestService};
 
 use crate::profiles::ProfileExManager;
+use crate::redaction::redact_urls;
 use crate::runtime::{core_launch_plan, load_runtime_core_gen_env};
 
 const TCPING_TIMEOUT: Duration = Duration::from_secs(5);
@@ -123,14 +124,24 @@ struct PreparedSpeedtestBatch {
 #[derive(Debug, Clone)]
 struct SpeedtestItemFailure {
     index_id: String,
-    message: String,
+    outcome: SpeedTestOutcome,
+    detail: Option<String>,
 }
 
 impl SpeedtestItemFailure {
-    fn new(index_id: String, message: impl Into<String>) -> Self {
+    fn new(index_id: String, outcome: SpeedTestOutcome) -> Self {
         Self {
             index_id,
-            message: message.into(),
+            outcome,
+            detail: None,
+        }
+    }
+
+    fn from_error(index_id: String, error: &SpeedtestError) -> Self {
+        Self {
+            index_id,
+            outcome: speedtest_outcome(error),
+            detail: speedtest_detail(error),
         }
     }
 }
@@ -411,33 +422,84 @@ fn dedicated_concurrency_count(
     }
 }
 
-fn speedtest_error_message(error: &SpeedtestError) -> String {
+/// Classify a probe failure into a persisted, translatable outcome.
+///
+/// Exhaustive on purpose. The previous version ended in `_ => raw`, which put
+/// the error's own `Display` in front of the user and into `profile_ex` — and
+/// for `WriteConfig`/`CreateConfigDir`/`RemoveConfig` that text embeds the
+/// app-data path, which embeds the OS user name.
+fn speedtest_outcome(error: &SpeedtestError) -> SpeedTestOutcome {
     match error {
-        SpeedtestError::Cancelled => "cancelled".to_string(),
-        SpeedtestError::Io(source) if source.kind() == io::ErrorKind::TimedOut => {
-            "request timed out".to_string()
+        SpeedtestError::Cancelled => SpeedTestOutcome::Cancelled,
+        SpeedtestError::Udp(_) => SpeedTestOutcome::UdpTestFailed,
+        SpeedtestError::Network(source) => network_probe_outcome(source),
+        SpeedtestError::Io(source) => io_outcome(source.kind()),
+        // The profile itself could not be turned into a config.
+        SpeedtestError::Validation { .. } | SpeedtestError::SingboxConfig(_) => {
+            SpeedTestOutcome::InvalidProfile
         }
-        SpeedtestError::Network(NetworkProbeError::Http(source)) if source.is_timeout() => {
-            "request timed out".to_string()
+        // The test core could not be found, written out, or launched.
+        SpeedtestError::CoreInfo(_)
+        | SpeedtestError::MissingCoreInfo(_)
+        | SpeedtestError::Path(_)
+        | SpeedtestError::Process(_)
+        | SpeedtestError::CreateConfigDir { .. }
+        | SpeedtestError::WriteConfig { .. }
+        | SpeedtestError::RemoveConfig { .. } => SpeedTestOutcome::CoreUnavailable,
+        SpeedtestError::NoAvailablePort(_) | SpeedtestError::InvalidSocksPort(_) => {
+            SpeedTestOutcome::NoAvailablePort
         }
-        SpeedtestError::Network(NetworkProbeError::Http(source)) if source.is_connect() => {
-            "proxy connection failed".to_string()
+        SpeedtestError::Database(_)
+        | SpeedtestError::Profile(_)
+        | SpeedtestError::JobLockPoisoned
+        | SpeedtestError::BackgroundTask(_) => SpeedTestOutcome::Failed,
+    }
+}
+
+fn network_probe_outcome(error: &NetworkProbeError) -> SpeedTestOutcome {
+    match error {
+        NetworkProbeError::Timeout => SpeedTestOutcome::TimedOut,
+        NetworkProbeError::Http(source) if source.is_timeout() => SpeedTestOutcome::TimedOut,
+        NetworkProbeError::Http(source) if source.is_connect() => {
+            SpeedTestOutcome::ProxyConnectFailed
         }
-        SpeedtestError::Network(NetworkProbeError::Timeout) => "request timed out".to_string(),
-        SpeedtestError::Udp(_) => "UDP test failed".to_string(),
-        _ => {
-            let raw = error.to_string();
-            let lower = raw.to_ascii_lowercase();
-            if lower.contains("timed out") || lower.contains("timeout") {
-                "request timed out".to_string()
-            } else if lower.contains("connection refused") {
-                "proxy connection refused".to_string()
-            } else if lower.contains("connection reset") || lower.contains("connection closed") {
-                "proxy connection closed".to_string()
-            } else {
-                raw
-            }
+        _ => SpeedTestOutcome::Failed,
+    }
+}
+
+const fn io_outcome(kind: io::ErrorKind) -> SpeedTestOutcome {
+    match kind {
+        io::ErrorKind::TimedOut => SpeedTestOutcome::TimedOut,
+        io::ErrorKind::ConnectionRefused => SpeedTestOutcome::ProxyConnectionRefused,
+        io::ErrorKind::ConnectionReset | io::ErrorKind::ConnectionAborted => {
+            SpeedTestOutcome::ProxyConnectionClosed
         }
+        _ => SpeedTestOutcome::ProxyConnectFailed,
+    }
+}
+
+/// A finished measurement is `Completed`; the probes report `-1` when they
+/// gave up without raising, and that is a plain failure.
+const fn measured_outcome(delay: i32) -> SpeedTestOutcome {
+    if delay < 0 {
+        SpeedTestOutcome::Failed
+    } else {
+        SpeedTestOutcome::Completed
+    }
+}
+
+/// The optional technical line shown under a failed probe.
+///
+/// Only the two error families whose `Display` provably cannot name a local
+/// path qualify, and both are redacted anyway: a probe URL carries the user's
+/// own test endpoint. Everything else contributes its code and nothing more.
+fn speedtest_detail(error: &SpeedtestError) -> Option<String> {
+    match error {
+        SpeedtestError::Network(source @ NetworkProbeError::Http(_)) => {
+            Some(redact_urls(&source.to_string()))
+        }
+        SpeedtestError::Udp(source) => Some(redact_urls(&source.to_string())),
+        _ => None,
     }
 }
 
@@ -465,20 +527,20 @@ where
                 SpeedTestKind::TcpConnect | SpeedTestKind::Latency | SpeedTestKind::Udp => {
                     profile_ex.set_test_delay(&item.index_id, 0).await?;
                     profile_ex
-                        .set_test_message(&item.index_id, "Speedtesting")
+                        .set_test_message(&item.index_id, SpeedTestOutcome::Testing.as_stored())
                         .await?;
                 }
                 SpeedTestKind::Download => {
                     profile_ex.set_test_speed(&item.index_id, 0.0).await?;
                     profile_ex
-                        .set_test_message(&item.index_id, "Speedtesting wait")
+                        .set_test_message(&item.index_id, SpeedTestOutcome::Waiting.as_stored())
                         .await?;
                 }
                 SpeedTestKind::Mixed => {
                     profile_ex.set_test_delay(&item.index_id, 0).await?;
                     profile_ex.set_test_speed(&item.index_id, 0.0).await?;
                     profile_ex
-                        .set_test_message(&item.index_id, "Speedtesting wait")
+                        .set_test_message(&item.index_id, SpeedTestOutcome::Waiting.as_stored())
                         .await?;
                 }
             }
@@ -501,7 +563,8 @@ fn make_pending_result(action: SpeedTestKind, index_id: String) -> SpeedTestResu
                 index_id,
                 delay: Some(0),
                 speed: None,
-                message: Some("Speedtesting".to_string()),
+                outcome: SpeedTestOutcome::Testing,
+                detail: None,
                 ip_info: None,
             }
         }
@@ -510,7 +573,8 @@ fn make_pending_result(action: SpeedTestKind, index_id: String) -> SpeedTestResu
             index_id,
             delay: None,
             speed: Some(0.0),
-            message: Some("Speedtesting wait".to_string()),
+            outcome: SpeedTestOutcome::Waiting,
+            detail: None,
             ip_info: None,
         },
         SpeedTestKind::Mixed => SpeedTestResult {
@@ -518,19 +582,21 @@ fn make_pending_result(action: SpeedTestKind, index_id: String) -> SpeedTestResu
             index_id,
             delay: Some(0),
             speed: Some(0.0),
-            message: Some("Speedtesting wait".to_string()),
+            outcome: SpeedTestOutcome::Waiting,
+            detail: None,
             ip_info: None,
         },
     }
 }
 
 /// Terminal result for a profile that never got tested. It clears the pending
-/// "Speedtesting" marker `clear_previous_results` wrote, so a failed or
+/// `Testing`/`Waiting` marker `clear_previous_results` wrote, so a failed or
 /// cancelled run cannot leave rows stuck in that state across restarts.
 fn make_failure_result(
     action: SpeedTestKind,
     index_id: String,
-    message: impl Into<String>,
+    outcome: SpeedTestOutcome,
+    detail: Option<String>,
 ) -> SpeedTestResult {
     let speed = matches!(action, SpeedTestKind::Download | SpeedTestKind::Mixed).then_some(0.0);
     SpeedTestResult {
@@ -538,7 +604,8 @@ fn make_failure_result(
         index_id,
         delay: Some(-1),
         speed,
-        message: Some(message.into()),
+        outcome,
+        detail,
         ip_info: None,
     }
 }
@@ -551,11 +618,12 @@ async fn persist_speedtest_result(database: &Database, result: &SpeedTestResult)
     if let Some(speed) = result.speed {
         profile_ex.set_test_speed(&result.index_id, speed).await?;
     }
-    if let Some(message) = result.message.as_ref() {
-        profile_ex
-            .set_test_message(&result.index_id, message.clone())
-            .await?;
-    }
+    // Only the code is persisted. `detail` stays on the event: it is a
+    // transient diagnostic, and storing prose in this column is exactly what
+    // froze the user's language at the moment the test ran.
+    profile_ex
+        .set_test_message(&result.index_id, result.outcome.as_stored())
+        .await?;
     if let Some(ip_info) = result.ip_info.as_ref() {
         profile_ex
             .set_test_ip_info(&result.index_id, ip_info.clone())
@@ -1159,7 +1227,7 @@ mod tests {
             assert_eq!(profile_ex.delay, -1);
             assert_ne!(
                 profile_ex.message.as_deref(),
-                Some("Speedtesting"),
+                Some(SpeedTestOutcome::Testing.as_stored()),
                 "{index_id} must not stay pending after a failed run"
             );
         }
@@ -1235,12 +1303,10 @@ mod tests {
         assert_eq!(good.delay, 44);
         let bad = profile_ex_row(&database, "bad").await;
         assert_eq!(bad.delay, -1);
-        assert!(
-            bad.message
-                .as_deref()
-                .is_some_and(|message| message.contains("invalid Password")),
-            "the validator error is reported as the profile's result: {:?}",
-            bad.message
+        assert_eq!(
+            bad.message.as_deref(),
+            Some(SpeedTestOutcome::InvalidProfile.as_stored()),
+            "the validator rejection is reported as the profile's outcome"
         );
     }
 

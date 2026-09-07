@@ -129,11 +129,25 @@ impl SourceUrlField {
 /// Separate from [`UpdateManagerError`] so the settings validator can carry it
 /// verbatim — it is `Copy` and comparable, which the settings error is required
 /// to stay.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
-#[error("invalid {}: {reason}", .field.label)]
+/// A rejected asset-source URL.
+///
+/// `reason` is the code the settings dialog translates; the `Display` text is
+/// the English diagnostic that reaches the log and `AppError::message`.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[error("invalid {}: {}", .field.label, source_url_text(.reason))]
 pub struct InvalidSourceUrl {
     pub field: SourceUrlField,
-    pub reason: &'static str,
+    pub reason: voya_contracts::ValidationCode,
+}
+
+fn source_url_text(reason: &voya_contracts::ValidationCode) -> &'static str {
+    match reason {
+        voya_contracts::ValidationCode::SourceUrlNotHttps => "expected an absolute HTTPS URL",
+        voya_contracts::ValidationCode::SourceUrlHasCredentials => {
+            "embedded credentials are not allowed"
+        }
+        _ => "expected an absolute HTTP or HTTPS URL",
+    }
 }
 
 pub fn validate_optional_source_url(
@@ -183,11 +197,13 @@ const fn invalid_source_url(
         field,
         reason: match error {
             voya_net::UrlValidationError::InvalidHttpUrl => {
-                "expected an absolute HTTP or HTTPS URL"
+                voya_contracts::ValidationCode::SourceUrlNotHttp
             }
-            voya_net::UrlValidationError::InvalidHttpsUrl => "expected an absolute HTTPS URL",
+            voya_net::UrlValidationError::InvalidHttpsUrl => {
+                voya_contracts::ValidationCode::SourceUrlNotHttps
+            }
             voya_net::UrlValidationError::EmbeddedCredentials => {
-                "embedded credentials are not allowed"
+                voya_contracts::ValidationCode::SourceUrlHasCredentials
             }
         },
     }

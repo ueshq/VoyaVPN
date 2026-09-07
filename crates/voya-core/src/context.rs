@@ -9,6 +9,7 @@ use thiserror::Error;
 use crate::{
     group_children::{resolve_group_children, GroupChildSource},
     singbox::support::{singbox_supports_config_type, state_port2},
+    validation::{ValidationCode, ValidationMessage, ValidationScope},
     AppConfig, ConfigType, CoreType, InboundProtocol, ProfileItem, ProfileProtocol,
     ProfileTransport, RoutingItem, RulesItem, ServerEndpoint, SimpleDnsItem, SubItem, TlsMode,
 };
@@ -105,8 +106,8 @@ impl TunTopology {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct NodeValidatorResult {
-    pub errors: Vec<String>,
-    pub warnings: Vec<String>,
+    pub errors: Vec<ValidationMessage>,
+    pub warnings: Vec<ValidationMessage>,
 }
 
 impl NodeValidatorResult {
@@ -120,29 +121,31 @@ impl NodeValidatorResult {
         self.errors.is_empty()
     }
 
-    fn push_warning(&mut self, warning: impl Into<String>) {
+    fn push_warning(&mut self, warning: impl Into<ValidationMessage>) {
         self.warnings.push(warning.into());
     }
 
-    fn push_error(&mut self, error: impl Into<String>) {
+    fn push_error(&mut self, error: impl Into<ValidationMessage>) {
         self.errors.push(error.into());
     }
 
-    fn extend_prefixed_warnings(&mut self, prefix: &str, result: &Self) {
+    /// Adopt a child's findings, recording the hop that reached them.
+    ///
+    /// This replaced two `format!("{prefix}: {message}")` helpers: gluing a
+    /// prefix onto a message is what made the composed text untranslatable,
+    /// because neither half could be looked up any more.
+    fn extend_scoped(&mut self, scope: &ValidationScope, result: &Self) {
         self.warnings.extend(
             result
                 .warnings
                 .iter()
-                .map(|warning| format!("{prefix}: {warning}")),
+                .map(|warning| warning.clone().within(scope.clone())),
         );
-    }
-
-    fn extend_prefixed_errors(&mut self, prefix: &str, result: &Self) {
         self.errors.extend(
             result
                 .errors
                 .iter()
-                .map(|error| format!("{prefix}: {error}")),
+                .map(|error| error.clone().within(scope.clone())),
         );
     }
 
@@ -504,10 +507,10 @@ where
 
         for child_node in group_child_list {
             if ancestors.contains(&child_node.index_id) {
-                child_result.push_error(format!(
-                    "group cycle dependency: {} -> {}",
-                    node.remarks, child_node.remarks
-                ));
+                child_result.push_error(ValidationCode::GroupCycle {
+                    group: node.remarks.clone(),
+                    child: child_node.remarks.clone(),
+                });
                 continue;
             }
 
@@ -522,12 +525,11 @@ where
 
             if !child_node.config_type().is_group_type() {
                 let child_node_result = register_single_node(context, &child_node);
-                child_result.extend_prefixed_warnings(
-                    &format!("group child {} / {}", node.remarks, child_node.remarks),
-                    &child_node_result,
-                );
-                child_result.extend_prefixed_errors(
-                    &format!("group child {} / {}", node.remarks, child_node.remarks),
+                child_result.extend_scoped(
+                    &ValidationScope::GroupChild {
+                        group: node.remarks.clone(),
+                        child: child_node.remarks.clone(),
+                    },
                     &child_node_result,
                 );
                 if !child_node_result.success() {
@@ -547,18 +549,11 @@ where
             new_ancestors.insert(child_node.index_id.clone());
             let child_group_result =
                 self.traverse_group_node(context, &child_node, global_visited, &new_ancestors);
-            child_result.extend_prefixed_warnings(
-                &format!(
-                    "group child group {} / {}",
-                    node.remarks, child_node.remarks
-                ),
-                &child_group_result,
-            );
-            child_result.extend_prefixed_errors(
-                &format!(
-                    "group child group {} / {}",
-                    node.remarks, child_node.remarks
-                ),
+            child_result.extend_scoped(
+                &ValidationScope::GroupChild {
+                    group: node.remarks.clone(),
+                    child: child_node.remarks.clone(),
+                },
                 &child_group_result,
             );
             if !child_group_result.success() {
@@ -574,7 +569,9 @@ where
         }
 
         if child_index_ids.is_empty() {
-            child_result.push_error(format!("group has no valid child node: {}", node.remarks));
+            child_result.push_error(ValidationCode::GroupWithoutValidChild {
+                group: node.remarks.clone(),
+            });
             return child_result;
         }
 
@@ -598,13 +595,19 @@ where
     ) -> Vec<ProfileItem> {
         let resolution = resolve_group_children(protocol, self);
         if let Some(pattern) = &resolution.invalid_filter {
-            result.push_error(format!("invalid subscription filter regex: {pattern}"));
+            result.push_error(ValidationCode::InvalidSubscriptionFilter {
+                pattern: pattern.clone(),
+            });
         }
         for index_id in &resolution.missing_child_ids {
-            result.push_warning(format!("group child profile was not found: {index_id}"));
+            result.push_warning(ValidationCode::GroupChildNotFound {
+                profile_id: index_id.clone(),
+            });
         }
         for index_id in &resolution.duplicate_child_ids {
-            result.push_warning(format!("duplicate group child ignored: {index_id}"));
+            result.push_warning(ValidationCode::GroupDuplicateChildIgnored {
+                profile_id: index_id.clone(),
+            });
         }
         resolution.children
     }
@@ -635,33 +638,29 @@ where
     ) {
         let rule_name = rule_item.remarks.as_deref().unwrap_or_default();
         let Some(outbound_tag) = rule_item.outbound_tag.as_deref().and_then(nonempty) else {
-            validator_result
-                .push_warning(format!("routing rule {rule_name} has empty outbound tag"));
+            validator_result.push_warning(ValidationCode::RoutingRuleWithoutOutbound {
+                rule: rule_name.to_string(),
+            });
             return;
         };
 
         // A rule that names an outbound node must not fall back to the active
         // node: routing.rs would silently retarget it to the main proxy.
         let Some(rule_outbound_node) = self.env.get_profile_by_remarks(outbound_tag) else {
-            validator_result.push_error(format!(
-                "routing rule {rule_name} outbound node not found: {outbound_tag}"
-            ));
+            validator_result.push_error(ValidationCode::RoutingRuleOutboundNotFound {
+                rule: rule_name.to_string(),
+                outbound: outbound_tag.to_string(),
+            });
             return;
         };
 
         let (active_rule_node, rule_result) = self.resolve_node(context, &rule_outbound_node);
-        validator_result
-            .warnings
-            .extend(rule_result.warnings.iter().map(|warning| {
-                format!("routing rule {rule_name} outbound {outbound_tag} warning: {warning}")
-            }));
-
+        let scope = ValidationScope::RoutingRuleOutbound {
+            rule: rule_name.to_string(),
+            outbound: outbound_tag.to_string(),
+        };
+        validator_result.extend_scoped(&scope, &rule_result);
         if !rule_result.success() {
-            validator_result
-                .errors
-                .extend(rule_result.errors.iter().map(|error| {
-                    format!("routing rule {rule_name} outbound {outbound_tag} error: {error}")
-                }));
             return;
         }
 
@@ -884,7 +883,7 @@ mod tests {
             .validator_result
             .warnings
             .iter()
-            .any(|warning| warning.contains("cycle dependency")));
+            .any(|warning| matches!(warning.code, ValidationCode::GroupCycle { .. })));
     }
 
     #[test]
@@ -916,7 +915,7 @@ mod tests {
             .validator_result
             .errors
             .iter()
-            .any(|error| error.contains("invalid subscription filter regex")));
+            .any(|error| matches!(error.code, ValidationCode::InvalidSubscriptionFilter { .. })));
         assert!(!result.context.all_proxies_map.contains_key("sub-leaf"));
     }
 
@@ -932,11 +931,11 @@ mod tests {
         let result = CoreConfigContextBuilder::new(&env).build(&app_config("active"), &active);
 
         assert!(!result.success());
-        assert!(result
-            .validator_result
-            .errors
-            .iter()
-            .any(|error| error.contains("outbound node not found: RenamedNode")));
+        assert!(result.validator_result.errors.iter().any(|error| error.code
+            == ValidationCode::RoutingRuleOutboundNotFound {
+                rule: "route through node".to_string(),
+                outbound: "RenamedNode".to_string(),
+            }));
         assert!(!result
             .context
             .all_proxies_map
@@ -963,7 +962,11 @@ mod tests {
             .validator_result
             .errors
             .iter()
-            .any(|error| error.contains("outbound BrokenNode error")));
+            .any(|error| error.scope
+                == vec![ValidationScope::RoutingRuleOutbound {
+                    rule: "route through node".to_string(),
+                    outbound: "BrokenNode".to_string(),
+                }]));
         assert!(!result
             .context
             .all_proxies_map
@@ -1136,12 +1139,18 @@ mod tests {
             .validator_result
             .warnings
             .iter()
-            .any(|warning| warning.contains("group child profile was not found: missing")));
+            .any(|warning| warning.code
+                == ValidationCode::GroupChildNotFound {
+                    profile_id: "missing".to_string(),
+                }));
         assert!(result
             .validator_result
             .warnings
             .iter()
-            .any(|warning| warning.contains("duplicate group child ignored: explicit")));
+            .any(|warning| warning.code
+                == ValidationCode::GroupDuplicateChildIgnored {
+                    profile_id: "explicit".to_string(),
+                }));
     }
 
     #[test]

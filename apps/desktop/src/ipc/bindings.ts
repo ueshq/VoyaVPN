@@ -187,8 +187,9 @@ export type AppErrorEntity = "profile" | "routing" | "routingRule" | "subscripti
  */
 export type AppErrorKind = 
 /**
- *  Submitted values were rejected. `issues` name the offending fields with
- *  the same `field`/`message` pairing the DNS pane already renders.
+ *  Submitted values were rejected. `issues` name the offending fields and
+ *  carry a [`ValidationCode`](crate::ValidationCode) the frontend
+ *  translates, which is the pairing the DNS pane already renders.
  */
 { type: "validation"; issues: ValidationIssue[] } | 
 /**
@@ -231,10 +232,18 @@ export type AppErrorSubsystem =
 
 export type AppEvent = { kind: "notice"; payload: AppNotice } | { kind: "selectTab"; payload: ShellTabTarget };
 
+/**
+ *  One toast.
+ * 
+ *  `code` replaced the prose `title` the shell used to spell out at each of its
+ *  call sites: those titles were English literals that `pnpm check:i18n` could
+ *  not see, and the toast is the most visible text the backend produces.
+ *  `detail` stays an untranslated diagnostic — the error behind the notice.
+ */
 export type AppNotice = {
 	level: AppNoticeLevel,
-	title: string,
-	message: string | null,
+	code: NoticeCode,
+	detail: string | null,
 };
 
 export type AppNoticeLevel = "info" | "warning" | "error";
@@ -344,6 +353,15 @@ export type ConnectionModeStatus = {
 	processRulesEffective: boolean,
 };
 
+/**
+ *  Which core operation a log line is about.
+ * 
+ *  The flow used to interpolate an English fragment ("connect", "Routing
+ *  changed") into its log sentences; the fragment is a code now so the whole
+ *  sentence can be assembled in the reader's language.
+ */
+export type CoreFlowReason = "connect" | "restart" | "disconnect" | "routingChanged" | "dnsChanged" | "configTemplateImported" | "tunChanged" | "connectionModeChanged" | "settingsSaved";
+
 export type CoreSeedInstallResult = {
 	coreType: CoreType,
 	status: CoreSeedInstallStatus,
@@ -451,8 +469,8 @@ export type GroupPreviewRoute = {
 export type GroupValidation = {
 	valid: boolean,
 	childProfileIds: string[],
-	errors: string[],
-	warnings: string[],
+	errors: ValidationIssue[],
+	warnings: ValidationIssue[],
 };
 
 export type GrpcSettings = {
@@ -540,12 +558,66 @@ export type InvalidationScope =
 
 export type LoadStrategy = "leastPing" | "fallback" | "random" | "roundRobin" | "leastLoad";
 
+/**
+ *  A log line the **app** wrote, named by code.
+ * 
+ *  Only lines the app authors are in here. Everything the core process prints
+ *  travels as [`LogLineBody::Core`] and is shown byte for byte.
+ */
+export type LogCode = { code: "connecting" } | { code: "connected" } | { code: "restarting" } | { code: "restarted" } | { code: "disconnecting" } | { code: "disconnected" } | { code: "restartingAfterChange"; reason: CoreFlowReason } | { code: "restartedAfterChange"; reason: CoreFlowReason } | 
+/**  The core exited and was restarted straight away. */
+{ code: "coreExitRestarted"; attempt: number } | 
+/**  The core exited and a restart is scheduled. */
+{ code: "coreExitRetryScheduled"; attempt: number; delayMs: number } | 
+/**  The core exited too often and the app stopped restarting it. */
+{ code: "coreExitGaveUp" } | { code: "nativeTunExited" } | 
+/**
+ *  An operation failed before the supervisor was touched, so the core that
+ *  was already running is still serving traffic.
+ */
+{ code: "previousCoreStillRunning"; reason: CoreFlowReason } | 
+/**  The supervisor could not say what state it ended up in. */
+{ code: "runtimeStatusRefreshFailed"; reason: CoreFlowReason } | 
+/**  A core operation failed; `detail` carries the error. */
+{ code: "coreOperationFailed"; reason: CoreFlowReason } | 
+/**  A change was committed and its follow-up work failed. */
+{ code: "postCommitFailed" } | { code: "speedtestCancellationRequested" } | { code: "subscriptionAutoUpdateFailed"; remarks: string } | { code: "subscriptionAutoUpdateFinished"; remarks: string; imported: number };
+
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
 
+/**  One line in the Logs panel. */
+export type LogLineBody = 
+/**
+ *  Output of the core process, passed through unchanged. It is the core's
+ *  own text in the core's own wording, so translating it is not ours to do.
+ */
+{ source: "core"; line: string } | 
+/**
+ *  A `tracing` event from the app's own instrumentation, forwarded to the
+ *  panel so a failure is visible without opening the file log. Structured
+ *  developer diagnostics with a module target — deliberately untranslated,
+ *  for the same reason a stack trace is.
+ */
+{ source: "diagnostic"; line: string } | 
+/**
+ *  A line the app wrote *for the user*. `detail` is an untranslated
+ *  technical diagnostic (an error's `Display`), shown after the translated
+ *  sentence.
+ */
+{ source: "app"; code: LogCode; detail: string | null };
+
+/**
+ *  One line for the Logs panel.
+ * 
+ *  `body` says who wrote it: the core process (raw passthrough) or the app
+ *  itself (a [`crate::LogCode`] the frontend translates). It used to be a
+ *  single `line: String`, which meant every sentence the app logged reached
+ *  the panel in English whatever the interface language was.
+ */
 export type LogLineEvent = {
 	id: number,
 	level: LogLevel,
-	line: string,
+	body: LogLineBody,
 };
 
 export type MoveAction = "top" | "up" | "down" | "bottom" | "position";
@@ -561,6 +633,16 @@ export type NetworkSettings = {
 	systemProxy: SystemProxySettings,
 	inbounds: InboundSettings[],
 };
+
+/**
+ *  What the backend is telling the user about, as a code the frontend
+ *  translates.
+ * 
+ *  One variant per distinct message rather than a message assembled from
+ *  parts: a notice is a whole sentence in every locale, and languages do not
+ *  agree on how to build one out of a subject and a verb.
+ */
+export type NoticeCode = { code: "profileRefreshFailed" } | { code: "subscriptionRefreshFailed" } | { code: "routingRefreshFailed" } | { code: "dnsRefreshFailed" } | { code: "configurationRefreshFailed" } | { code: "proxyViewRefreshFailed" } | { code: "connectionModeRefreshFailed" } | { code: "settingsRefreshFailed" } | { code: "routingSavedRestartFailed" } | { code: "routingDeletedRestartFailed" } | { code: "routingSelectedRestartFailed" } | { code: "routingRuleSavedRestartFailed" } | { code: "routingRulesDeletedRestartFailed" } | { code: "routingRuleMovedRestartFailed" } | { code: "dnsSavedRestartFailed" } | { code: "templateImportedRestartFailed" } | { code: "tunSavedRestartFailed" } | { code: "connectionModeSavedRestartFailed" } | { code: "settingsSavedRuntimeUpdateFailed" } | { code: "proxyModeSavedRuntimeUpdateFailed" } | { code: "settingsSavedSystemProxyUpdateFailed" } | { code: "systemProxyStatusRefreshFailed" } | { code: "tunStatusRefreshFailed" } | { code: "trayRefreshFailed" } | { code: "coreStopped" } | { code: "nativeTunStopped" } | { code: "coreStartedSystemProxyFailed" } | { code: "systemProxyRestoreFailed" } | { code: "subscriptionAutoUpdateFailed"; remarks: string };
 
 /**
  *  A running process or installed application offered by the per-app proxy
@@ -604,7 +686,11 @@ export type ProfileMetrics = {
 	delayMs: number,
 	speedBytesPerSecond: number | null,
 	sort: number,
-	message: string | null,
+	/**
+	 *  The last probe's outcome, decoded from the persisted `profile_ex`
+	 *  column. `None` means the profile has never been tested.
+	 */
+	outcome: SpeedTestOutcome | null,
 	ipInfo: string | null,
 };
 
@@ -645,10 +731,17 @@ export type ProxyConnectionsSnapshot = {
 	connections: ProxyConnectionItem[],
 };
 
+/**
+ *  One node's delay measurement.
+ * 
+ *  `outcome` replaced a `message` that was the Clash client error's own
+ *  `Display` text, which the Proxies screen rendered verbatim in place of the
+ *  delay.
+ */
 export type ProxyDelayTestResult = {
 	name: string,
 	delay: number | null,
-	message: string | null,
+	outcome: SpeedTestOutcome,
 };
 
 export type ProxyGroup = {
@@ -672,11 +765,17 @@ export type ProxyMonitorStatus = {
 	message: string | null,
 };
 
+/**
+ *  One node inside a proxy group.
+ * 
+ *  There is no `delay_label`: formatting `42` as `"42ms"` in Rust hard-coded
+ *  both the unit spacing and the numeral system, and the frontend already owns
+ *  `formatDelay`.
+ */
 export type ProxyNode = {
 	name: string,
 	proxyType: string,
 	delay: number | null,
-	delayLabel: string,
 	udp: boolean,
 	active: boolean,
 	testable: boolean,
@@ -840,17 +939,58 @@ export type SourceSettings = {
 
 export type SpeedTestKind = "tcpConnect" | "latency" | "udp" | "download" | "mixed";
 
+/**
+ *  How a probe ended, as a code rather than a sentence.
+ * 
+ *  This is **persisted**: it is what `profile_ex.message` holds, so the prose
+ *  that used to live there ("Speedtesting", "request timed out", "Skipped")
+ *  froze the user's language at the moment the test ran. Rows written by
+ *  earlier builds still decode — see [`SpeedTestOutcome::from_stored`].
+ */
+export type SpeedTestOutcome = 
+/**  Selected and queued behind another probe. */
+"waiting" | 
+/**  The probe is running right now. */
+"testing" | 
+/**  The probe finished; `delay` / `speed` carry the measurement. */
+"completed" | "timedOut" | "proxyConnectFailed" | "proxyConnectionRefused" | "proxyConnectionClosed" | "udpTestFailed" | "cancelled" | 
+/**  The run ended before this profile's turn came up. */
+"skipped" | 
+/**  The profile's own configuration is invalid, so nothing was probed. */
+"invalidProfile" | 
+/**  The test core could not be started, or its config could not be written. */
+"coreUnavailable" | 
+/**  No free local port was available for the probe. */
+"noAvailablePort" | 
+/**  A failure with no more specific code. */
+"failed" | 
+/**
+ *  A stored value this build cannot classify — written by a build that
+ *  spelled the column differently. Better than silently dropping the row.
+ */
+"unknown";
+
 export type SpeedTestRequest = {
 	kind: SpeedTestKind,
 	target: SpeedTestTarget,
 };
 
+/**
+ *  One profile's probe result.
+ * 
+ *  `detail` is an untranslated technical line shown under the outcome. It is
+ *  never persisted and never carries a local filesystem path: the failure
+ *  classification used to fall through to the error's own `Display`, which for
+ *  a config-write failure printed the app-data directory into a column the
+ *  profile table renders.
+ */
 export type SpeedTestResult = {
 	action: SpeedTestKind,
 	indexId: string,
 	delay: number | null,
 	speed: number | null,
-	message: string | null,
+	outcome: SpeedTestOutcome,
+	detail: string | null,
 	ipInfo: string | null,
 };
 
@@ -1057,16 +1197,48 @@ export type TunStatus = {
 	preflight: TunPreflight,
 };
 
-/**  One rejected field. */
+/**
+ *  Why a submitted or generated value was rejected.
+ * 
+ *  Produced by `voya_core`'s node/group validators, by the DNS pane's checks
+ *  and by settings validation. [`ValidationCode::Untranslated`] is the
+ *  deliberate escape hatch for the managers that have no code yet: it is
+ *  greppable, it shows the English diagnostic verbatim, and adding a code for
+ *  one is a purely additive change.
+ */
+export type ValidationCode = { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "invalidFinalMask" } | { code: "unsupportedNetwork"; network: string } | { code: "unsupportedProtocol"; protocol: string } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "notAGroupProfile" } | { code: "groupCycle"; group: string; child: string } | 
+/**  The cycle found by the group builder, which knows the whole path. */
+{ code: "groupCyclePath"; path: string[] } | { code: "groupWithoutValidChild"; group: string } | { code: "policyGroupWithoutValidChildren" } | { code: "proxyChainWithoutValidChildren" } | { code: "proxyChainSingleHop" } | { code: "groupChildNotFound"; profileId: string } | { code: "groupDuplicateChildIgnored"; profileId: string } | { code: "invalidSubscriptionFilter"; pattern: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "sourceUrlNotHttp" } | { code: "sourceUrlNotHttps" } | { code: "sourceUrlHasCredentials" } | { code: "invalidUdpTestTarget" } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | 
+/**
+ *  A rejection this contract has no code for. The English `message` is the
+ *  failing manager's own diagnostic and is rendered verbatim.
+ */
+{ code: "untranslated"; message: string };
+
+/**
+ *  One rejected value.
+ * 
+ *  `field` is a stable identifier, not a display label: the DNS pane keys its
+ *  inputs by `direct`/`remote`/`bootstrap`/`hosts`, the settings surface by its
+ *  contract path (`sources.geo`), and the group builder by `children`.
+ */
 export type ValidationIssue = {
-	/**
-	 *  Stable identifier of the offending field, not a display label: the DNS
-	 *  pane keys its inputs by `direct`/`remote`/`bootstrap`/`hosts`, and the
-	 *  settings surface by its contract path (`sources.geo`).
-	 */
 	field: string,
-	message: string,
+	code: ValidationCode,
+	/**  Empty unless the validator descended into a group or a rule outbound. */
+	scope: ValidationScope[],
 };
+
+/**
+ *  Where a validation message was produced, when the validator had to walk
+ *  into a group's children or a routing rule's outbound to find it.
+ * 
+ *  This replaces the `"group child A / B: "` prefixes the validators used to
+ *  glue onto the front of a message, which made the message itself
+ *  untranslatable. The frontend renders the breadcrumb from these entries and
+ *  the translated message after it.
+ */
+export type ValidationScope = { kind: "groupChild"; group: string; child: string } | { kind: "routingRuleOutbound"; rule: string; outbound: string };
 
 export type WindowChromeConfig = {
 	titleBarLayout: TitleBarLayout,

@@ -66,7 +66,7 @@ pub async fn set_tun_enabled<R: tauri::Runtime>(
     if let Err(error) = emit_tun_changed(&app, &status) {
         report_post_commit_error(
             &app,
-            "TUN status refresh failed",
+            NoticeCode::TunStatusRefreshFailed,
             &format!("{error:?}"),
             AppNoticeLevel::Warning,
         );

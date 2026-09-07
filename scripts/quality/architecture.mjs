@@ -12,6 +12,7 @@ import {
   retiredCompatibilityRules,
   shellDtoRule,
   shellRules,
+  untranslatedMessageRule,
   voyaAppRules,
   voyaCoreRules,
 } from "./architecture-rules.mjs";
@@ -66,6 +67,15 @@ for (const path of rustFiles) {
   }
 
   applyRules(path, source, production, retiredCompatibilityRules);
+
+  // The escape hatch from the typed message contract lives in exactly two
+  // files: the contract that declares it, and the one mapper that uses it.
+  if (
+    !path.endsWith("/crates/voya-app/src/contract_map/errors.rs")
+    && !path.endsWith("/crates/voya-contracts/src/messages.rs")
+  ) {
+    applyRules(path, source, production, [untranslatedMessageRule]);
+  }
 }
 
 reportUnusedUnsafeAllowlistEntries();

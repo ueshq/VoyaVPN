@@ -73,8 +73,8 @@ describe("DnsPane", () => {
       new ipcMocks.IpcCommandError({
         kind: {
           issues: [
-            { field: "direct", message: "Direct resolver is invalid" },
-            { field: "bootstrap", message: "Bootstrap resolver is invalid" },
+            { code: { code: "dnsAddressEmpty" }, field: "direct", scope: [] },
+            { code: { code: "dnsAddressPort", port: "0" }, field: "bootstrap", scope: [] },
           ],
           type: "validation",
         },
@@ -88,10 +88,13 @@ describe("DnsPane", () => {
     await user.type(direct, "://");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    const directError = await screen.findByText("Direct resolver is invalid");
+    // The backend sends codes; the pane renders the locale strings for them.
+    const directError = await screen.findByText("The DNS address must not be empty");
     expect(direct).toHaveAttribute("aria-invalid", "true");
     expect(direct).toHaveAttribute("aria-describedby", directError.id);
-    expect(screen.getByText("Bootstrap resolver is invalid")).toBeInTheDocument();
+    expect(
+      screen.getByText("0 is not a valid DNS server port (1-65535)"),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Remote DNS")).not.toHaveAttribute("aria-invalid");
   });
 });

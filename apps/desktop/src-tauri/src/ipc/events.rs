@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri_specta::Event;
 pub use voya_contracts::{
-    AppNotice, CoreState, LogLevel, LogLineEvent, QueryInvalidation, RuntimeStatusResponse,
-    ShellTabTarget, StatisticsSnapshot, SystemProxyStatusResponse, TunStatus,
+    AppNotice, CoreState, LogLevel, LogLineBody, LogLineEvent, QueryInvalidation,
+    RuntimeStatusResponse, ShellTabTarget, StatisticsSnapshot, SystemProxyStatusResponse,
+    TunStatus,
 };
 use voya_contracts::{
     ProxyConnectionsSnapshot, ProxyMonitorStatus, ProxyTrafficEvent, SpeedTestResult,

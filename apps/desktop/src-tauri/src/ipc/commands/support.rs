@@ -320,10 +320,46 @@ pub(super) fn system_proxy_status_response(status: SystemProxyStatus) -> SystemP
     }
 }
 
-pub(crate) fn emit_runtime_log<R>(
+/// A log line the app itself wrote.
+///
+/// `code` is resolved against the locale files by the Logs panel; `detail` is
+/// the untranslated diagnostic printed after it. Core process output does not
+/// come through here — it keeps its own words via [`emit_core_log`].
+pub(crate) fn emit_app_log<R>(
     app: &tauri::AppHandle<R>,
     level: LogLevel,
-    line: &str,
+    code: LogCode,
+    detail: Option<&str>,
+) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    emit_log_line(
+        app,
+        level,
+        LogLineBody::App {
+            code,
+            detail: detail.map(ToString::to_string),
+        },
+    )
+}
+
+/// One line of the core process's own output, passed through verbatim.
+pub(crate) fn emit_core_log<R>(
+    app: &tauri::AppHandle<R>,
+    level: LogLevel,
+    line: String,
+) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    emit_log_line(app, level, LogLineBody::Core { line })
+}
+
+fn emit_log_line<R>(
+    app: &tauri::AppHandle<R>,
+    level: LogLevel,
+    body: LogLineBody,
 ) -> Result<(), AppError>
 where
     R: tauri::Runtime,
@@ -331,7 +367,7 @@ where
     TransientStreamEvent::LogLine(LogLineEvent {
         id: next_log_line_id(),
         level,
-        line: line.to_string(),
+        body,
     })
     .emit(app)
     .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
@@ -381,20 +417,25 @@ where
         .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
 }
 
+/// A change that was already committed, whose follow-up work failed.
+///
+/// `code` names the message; `detail` is the untranslated error behind it, so
+/// it goes to the log line and the toast's second line but never into the
+/// title the user reads.
 pub(super) fn report_post_commit_error<R>(
     app: &tauri::AppHandle<R>,
-    title: &str,
-    message: &str,
+    code: NoticeCode,
+    detail: &str,
     level: AppNoticeLevel,
 ) where
     R: tauri::Runtime,
 {
     match level {
-        AppNoticeLevel::Info => tracing::info!(title, message, "post-commit operation failed"),
+        AppNoticeLevel::Info => tracing::info!(?code, detail, "post-commit operation failed"),
         AppNoticeLevel::Warning => {
-            tracing::warn!(title, message, "post-commit operation failed");
+            tracing::warn!(?code, detail, "post-commit operation failed");
         }
-        AppNoticeLevel::Error => tracing::error!(title, message, "post-commit operation failed"),
+        AppNoticeLevel::Error => tracing::error!(?code, detail, "post-commit operation failed"),
     }
 
     let log_level = match level {
@@ -402,13 +443,13 @@ pub(super) fn report_post_commit_error<R>(
         AppNoticeLevel::Warning => LogLevel::Warn,
         AppNoticeLevel::Error => LogLevel::Error,
     };
-    if let Err(error) = emit_runtime_log(app, log_level, message) {
+    if let Err(error) = emit_app_log(app, log_level, LogCode::PostCommitFailed, Some(detail)) {
         tracing::warn!(?error, "failed to emit post-commit runtime log");
     }
     if let Err(error) = AppEvent::Notice(AppNotice {
         level,
-        title: title.to_string(),
-        message: Some(message.to_string()),
+        code,
+        detail: Some(detail.to_string()),
     })
     .emit(app)
     {

@@ -140,6 +140,23 @@ export const clashBoundaryRules = [
   },
 ];
 
+/**
+ * The one sanctioned escape hatch from the typed message contract.
+ *
+ * `ValidationCode::Untranslated` carries a manager's English `Display` text
+ * straight to the screen, which is exactly what the locale system cannot reach.
+ * It exists so the ~20 managers that have no code yet still say *something*,
+ * and it belongs in the single file that maps manager errors onto `AppError`.
+ * Anywhere else it is a new untranslatable string, so a new producer has to add
+ * a `ValidationCode` variant (and its eight locale entries) instead.
+ */
+export const untranslatedMessageRule = {
+  id: "untranslated-message",
+  pattern: /\bValidationCode::Untranslated\b|\bValidationIssue::untranslated\s*\(/u,
+  message:
+    "untranslated validation text belongs in contract_map/errors.rs; add a ValidationCode variant instead",
+};
+
 export const contractsCasingRule = {
   id: "contracts-casing",
   pattern: /rename_all\s*=\s*"PascalCase"/u,

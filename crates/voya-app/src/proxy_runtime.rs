@@ -6,6 +6,7 @@ use std::{
 use futures_util::{stream, StreamExt};
 use thiserror::Error;
 use tokio::{runtime::Handle, sync::watch, task::JoinHandle, time};
+use voya_contracts::SpeedTestOutcome;
 pub use voya_contracts::{
     ProxyConnectionItem, ProxyConnectionsSnapshot, ProxyDelayTestResult, ProxyGroup,
     ProxyGroupsSnapshot, ProxyMonitorState, ProxyMonitorStatus, ProxyNode, ProxyTrafficEvent,
@@ -179,17 +180,11 @@ where
         // caller asked for them.
         let results = stream::iter(names)
             .map(|name| async move {
-                let response = client
-                    .delay_proxy(&name, timeout_ms, test_url)
-                    .await
-                    .unwrap_or_else(|error| ClashDelayResponse {
-                        delay: None,
-                        message: Some(error.to_string()),
-                    });
+                let response = client.delay_proxy(&name, timeout_ms, test_url).await;
                 ProxyDelayTestResult {
                     name,
-                    delay: response.delay,
-                    message: response.message,
+                    delay: response.as_ref().ok().and_then(|response| response.delay),
+                    outcome: delay_outcome(response.as_ref()),
                 }
             })
             .buffered(concurrency)
@@ -496,10 +491,29 @@ fn proxy_node(name: &str, proxy: &ClashProxy, active: bool) -> ProxyNode {
         name: name.to_string(),
         proxy_type: proxy.proxy_type.clone(),
         delay,
-        delay_label: delay.map_or_else(String::new, |value| format!("{value}ms")),
         udp: proxy.udp,
         active,
         testable: is_testable_type(&proxy.proxy_type),
+    }
+}
+
+/// What a Clash delay probe reported, as a code.
+///
+/// The Proxies screen used to render the transport error's own `Display` where
+/// the delay would have gone, which put untranslated English into a column of
+/// numbers. A delay of `0` or less means the node did not answer.
+fn delay_outcome(
+    response: std::result::Result<&ClashDelayResponse, &ClashError>,
+) -> SpeedTestOutcome {
+    match response {
+        Ok(response) if response.delay.is_some_and(|delay| delay > 0) => {
+            SpeedTestOutcome::Completed
+        }
+        Ok(_) => SpeedTestOutcome::TimedOut,
+        Err(ClashError::Request(message)) if message.to_ascii_lowercase().contains("timed out") => {
+            SpeedTestOutcome::TimedOut
+        }
+        Err(_) => SpeedTestOutcome::Failed,
     }
 }
 
@@ -876,7 +890,7 @@ mod tests {
             vec![ProxyDelayTestResult {
                 name: "A".to_string(),
                 delay: Some(37),
-                message: None,
+                outcome: SpeedTestOutcome::Completed,
             }]
         );
     }

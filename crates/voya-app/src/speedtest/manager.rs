@@ -155,7 +155,7 @@ impl SpeedtestManager {
         }
 
         let cancelled = is_cancelled(&cancel);
-        // Every profile got a "Speedtesting" marker before the first probe, so
+        // Every profile got a `Testing` marker before the first probe, so
         // anything the run never reached has to be written back to a terminal
         // state or it stays pending forever, including across restarts.
         let pending =
@@ -320,9 +320,9 @@ impl SpeedtestManager {
                         let failures = page
                             .iter()
                             .map(|prepared| {
-                                SpeedtestItemFailure::new(
+                                SpeedtestItemFailure::from_error(
                                     prepared.item.index_id.clone(),
-                                    speedtest_error_message(&error),
+                                    &error,
                                 )
                             })
                             .collect::<Vec<_>>();
@@ -383,10 +383,7 @@ impl SpeedtestManager {
             Err(SpeedtestError::Cancelled) => return Err(SpeedtestError::Cancelled),
             Err(error) => {
                 tracing::warn!(%index_id, ?error, "speedtest core failed to start");
-                let failures = vec![SpeedtestItemFailure::new(
-                    index_id,
-                    speedtest_error_message(&error),
-                )];
+                let failures = vec![SpeedtestItemFailure::from_error(index_id, &error)];
                 return record_item_failures(database, action, failures, on_result).await;
             }
         };
@@ -489,10 +486,9 @@ impl SpeedtestManager {
             let socks_port = match socks_port {
                 Ok(socks_port) => socks_port,
                 Err(error) => {
-                    batch.failures.push(SpeedtestItemFailure::new(
-                        item.index_id,
-                        speedtest_error_message(&error),
-                    ));
+                    batch
+                        .failures
+                        .push(SpeedtestItemFailure::from_error(item.index_id, &error));
                     continue;
                 }
             };
@@ -503,7 +499,7 @@ impl SpeedtestManager {
                 // profiles that are still testable.
                 batch.failures.push(SpeedtestItemFailure::new(
                     item.index_id,
-                    build.validator_result.errors.join("; "),
+                    SpeedTestOutcome::InvalidProfile,
                 ));
                 continue;
             }
@@ -535,7 +531,8 @@ impl SpeedtestManager {
             index_id,
             delay: Some(delay),
             speed: None,
-            message: Some(delay.to_string()),
+            outcome: measured_outcome(delay),
+            detail: None,
             ip_info: None,
         };
         persist_speedtest_result_with_retry(database, &result).await?;
@@ -562,7 +559,8 @@ impl SpeedtestManager {
                 index_id,
                 delay: Some(realping.delay),
                 speed: None,
-                message: Some(realping.delay.to_string()),
+                outcome: measured_outcome(realping.delay),
+                detail: None,
                 ip_info: realping.ip_info,
             },
             Err(error) => {
@@ -572,8 +570,12 @@ impl SpeedtestManager {
                     index_id,
                     delay: Some(-1),
                     speed: None,
-                    message: Some(speedtest_error_message(&error)),
-                    ip_info: Some("Skipped".to_string()),
+                    outcome: speedtest_outcome(&error),
+                    detail: speedtest_detail(&error),
+                    // The failure is the outcome now. This used to write
+                    // "Skipped" into the IP-info column, which is neither IP
+                    // information nor translatable.
+                    ip_info: None,
                 }
             }
         };
@@ -601,7 +603,8 @@ impl SpeedtestManager {
                 index_id,
                 delay: None,
                 speed: Some(speed),
-                message: Some(format!("{speed:.0}")),
+                outcome: SpeedTestOutcome::Completed,
+                detail: None,
                 ip_info: None,
             },
             Err(error) => {
@@ -611,7 +614,8 @@ impl SpeedtestManager {
                     index_id,
                     delay: None,
                     speed: Some(0.0),
-                    message: Some(speedtest_error_message(&error)),
+                    outcome: speedtest_outcome(&error),
+                    detail: speedtest_detail(&error),
                     ip_info: None,
                 }
             }
@@ -640,7 +644,8 @@ impl SpeedtestManager {
             index_id,
             delay: Some(delay),
             speed: None,
-            message: Some(delay.to_string()),
+            outcome: measured_outcome(delay),
+            detail: None,
             ip_info: None,
         };
         persist_speedtest_result_with_retry(database, &result).await?;
@@ -691,7 +696,7 @@ where
 {
     let mut results = Vec::with_capacity(failures.len());
     for failure in failures {
-        let result = make_failure_result(action, failure.index_id, failure.message);
+        let result = make_failure_result(action, failure.index_id, failure.outcome, failure.detail);
         persist_speedtest_result_with_retry(database, &result).await?;
         on_result(result.clone());
         results.push(result);
@@ -701,9 +706,8 @@ where
 }
 
 /// Clears the pre-run markers of every selected profile the run never reached.
-/// `clear_previous_results` writes "Speedtesting" for the whole selection up
-/// front, so a cancel or an early stop would otherwise leave those rows
-/// pending forever.
+/// `clear_previous_results` marks the whole selection pending up front, so a
+/// cancel or an early stop would otherwise leave those rows pending forever.
 async fn finalize_pending_results<F>(
     database: &Database,
     action: SpeedTestKind,
@@ -719,11 +723,15 @@ where
         .iter()
         .map(|result| result.index_id.as_str())
         .collect::<HashSet<_>>();
-    let message = if cancelled { "cancelled" } else { "skipped" };
+    let outcome = if cancelled {
+        SpeedTestOutcome::Cancelled
+    } else {
+        SpeedTestOutcome::Skipped
+    };
     let untested = selected
         .iter()
         .filter(|item| !tested.contains(item.index_id.as_str()))
-        .map(|item| SpeedtestItemFailure::new(item.index_id.clone(), message))
+        .map(|item| SpeedtestItemFailure::new(item.index_id.clone(), outcome))
         .collect::<Vec<_>>();
 
     record_item_failures(database, action, untested, on_result).await
@@ -835,7 +843,8 @@ mod tests {
                 index_id: "active".to_string(),
                 delay: Some(42),
                 speed: None,
-                message: Some("42".to_string()),
+                outcome: SpeedTestOutcome::Completed,
+                detail: None,
                 ip_info: None,
             },
         )

@@ -35,6 +35,7 @@ use voya_app::{
         CoreExitEvent, CoreSupervisor, NativeTunExitEvent, SupervisorDeps, SupervisorEventSink,
     },
     sysproxy::SystemProxyManager,
+    tray::tray_labels,
     tun::ProviderRegistrationCache,
 };
 use voya_platform::{
@@ -405,10 +406,19 @@ pub(crate) fn refresh_tray_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) ->
     tray.set_menu(Some(menu))
 }
 
+/// Builds the tray menu in the language the app is set to.
+///
+/// The tray is native, built before any webview exists and rebuilt off the main
+/// thread, so it cannot call `t()`. `voya_app::tray` holds the table; the
+/// language comes from the persisted `ui_item.current_language`, which is the
+/// same value the frontend picks its locale from. Before startup has managed
+/// `AppState` there is no configuration to read and the table's English
+/// fallback applies.
 fn build_tray_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
-    let show = MenuItem::with_id(app, TRAY_SHOW, "Show VoyaVPN", true, None::<&str>)?;
-    let hide = MenuItem::with_id(app, TRAY_HIDE, "Hide Window", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, TRAY_QUIT, "Quit", true, None::<&str>)?;
+    let labels = tray_labels(&current_interface_language(app));
+    let show = MenuItem::with_id(app, TRAY_SHOW, labels.show, true, None::<&str>)?;
+    let hide = MenuItem::with_id(app, TRAY_HIDE, labels.hide, true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, TRAY_QUIT, labels.quit, true, None::<&str>)?;
     let quit_separator = PredefinedMenuItem::separator(app)?;
 
     Menu::with_items(
@@ -443,13 +453,14 @@ impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
             // Redacted at the source too; repeated here so a future failure
             // path cannot put a tokenized subscription URL in a toast.
             let error = redact_urls(error);
-            let message = format!(
-                "Automatic subscription update failed for {}: {error}",
-                outcome.remarks
-            );
-            if let Err(emit_error) =
-                ipc::commands::emit_runtime_log(&self.app, ipc::events::LogLevel::Warn, &message)
-            {
+            if let Err(emit_error) = ipc::commands::emit_app_log(
+                &self.app,
+                ipc::events::LogLevel::Warn,
+                voya_contracts::LogCode::SubscriptionAutoUpdateFailed {
+                    remarks: outcome.remarks.clone(),
+                },
+                Some(&error),
+            ) {
                 tracing::warn!(?emit_error, "failed to emit auto-update failure log");
             }
             // Only the first failure of a streak surfaces as a user notice;
@@ -457,8 +468,10 @@ impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
             if outcome.consecutive_failures == 1 {
                 let notice = ipc::events::AppEvent::Notice(voya_contracts::AppNotice {
                     level: voya_contracts::AppNoticeLevel::Warning,
-                    title: format!("Subscription auto-update failed: {}", outcome.remarks),
-                    message: Some(error.clone()),
+                    code: voya_contracts::NoticeCode::SubscriptionAutoUpdateFailed {
+                        remarks: outcome.remarks.clone(),
+                    },
+                    detail: Some(error.clone()),
                 });
                 if let Err(emit_error) = notice.emit(&self.app) {
                     tracing::warn!(?emit_error, "failed to emit auto-update failure notice");
@@ -468,13 +481,15 @@ impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
         }
 
         let imported = outcome.result.as_ref().map_or(0, |result| result.imported);
-        let message = format!(
-            "Automatic subscription update finished for {} ({imported} profiles imported)",
-            outcome.remarks
-        );
-        if let Err(emit_error) =
-            ipc::commands::emit_runtime_log(&self.app, ipc::events::LogLevel::Info, &message)
-        {
+        if let Err(emit_error) = ipc::commands::emit_app_log(
+            &self.app,
+            ipc::events::LogLevel::Info,
+            voya_contracts::LogCode::SubscriptionAutoUpdateFinished {
+                remarks: outcome.remarks.clone(),
+                imported,
+            },
+            None,
+        ) {
             tracing::warn!(?emit_error, "failed to emit auto-update log");
         }
 
@@ -521,6 +536,22 @@ impl SupervisorEventSink for TauriSupervisorEventSink {
 /// The recovery paths must run even when the config lock is poisoned: the
 /// defaults still restore the system proxy to "no proxy", which is the state a
 /// dead core needs.
+/// The interface language the tray labels itself in.
+///
+/// Read straight from the shared `AppConfig` rather than from a command, so a
+/// tray rebuild triggered off the main thread never has to wait on the runtime.
+fn current_interface_language<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> String {
+    app.try_state::<AppState>()
+        .and_then(|state| {
+            state
+                .config()
+                .read()
+                .ok()
+                .map(|config| config.ui_item.current_language.clone())
+        })
+        .unwrap_or_default()
+}
+
 fn current_config_for_recovery(state: &AppState) -> AppConfig {
     match state.config().read() {
         Ok(guard) => guard.clone(),
@@ -584,13 +615,11 @@ impl ProcessLogSink for TauriProcessLogSink {
         // unless `log.output` is set, so the level comes from the line itself.
         let level = process_log_level_to_contract(classify_core_log_line(&line));
         let line = redact_process_log_line(&line);
-        let event = ipc::events::TransientStreamEvent::LogLine(ipc::events::LogLineEvent {
-            id: ipc::events::next_log_line_id(),
+        if let Err(error) = ipc::commands::emit_core_log(
+            &self.app,
             level,
-            line: format!("[{}] {line}", process_role_label(role)),
-        });
-
-        if let Err(error) = event.emit(&self.app) {
+            format!("[{}] {line}", process_role_label(role)),
+        ) {
             tracing::warn!(?error, "failed to emit process log event");
         }
     }

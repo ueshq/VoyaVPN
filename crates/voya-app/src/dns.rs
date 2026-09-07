@@ -1,4 +1,5 @@
 use thiserror::Error;
+use voya_contracts::ValidationCode;
 pub use voya_contracts::ValidationIssue;
 use voya_core::{SimpleDnsItem, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS, DEFAULT_REMOTE_DNS};
 use voya_db::{Database, DatabaseSession, UnitOfWork};
@@ -113,7 +114,7 @@ fn validate_dns_address(value: Option<&str>, field: &str, issues: &mut Vec<Valid
         return;
     };
     let Some(address) = first_dns_address(value) else {
-        issues.push(issue(field, "DNS address must not be empty"));
+        issues.push(ValidationIssue::new(field, ValidationCode::DnsAddressEmpty));
         return;
     };
     if matches!(address, "local" | "localhost") {
@@ -121,9 +122,11 @@ fn validate_dns_address(value: Option<&str>, field: &str, issues: &mut Vec<Valid
     }
     if let Some(port) = dns_address_port(address) {
         if port.parse::<u16>().ok().filter(|port| *port > 0).is_none() {
-            issues.push(issue(
+            issues.push(ValidationIssue::new(
                 field,
-                format!("`{port}` is not a valid DNS server port (1-65535)"),
+                ValidationCode::DnsAddressPort {
+                    port: port.to_string(),
+                },
             ));
         }
     }
@@ -170,12 +173,11 @@ fn validate_hosts(value: Option<&str>, field: &str, issues: &mut Vec<ValidationI
             continue;
         }
         if line.split_whitespace().count() < 2 {
-            issues.push(issue(
+            issues.push(ValidationIssue::new(
                 field,
-                format!(
-                    "Host line {} must contain a domain and at least one answer",
-                    index + 1
-                ),
+                ValidationCode::DnsHostsLine {
+                    line: u32::try_from(index + 1).unwrap_or(u32::MAX),
+                },
             ));
         }
     }
@@ -190,10 +192,7 @@ fn validate_expected_ips(value: Option<&str>, field: &str, issues: &mut Vec<Vali
         .map(str::trim)
         .any(|part| !part.is_empty() && part.chars().any(char::is_whitespace))
     {
-        issues.push(issue(
-            field,
-            "Expected IPs must be comma-separated without embedded whitespace",
-        ));
+        issues.push(ValidationIssue::new(field, ValidationCode::DnsExpectedIps));
     }
 }
 
@@ -201,13 +200,6 @@ fn clean_optional_string(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-}
-
-fn issue(field: &str, message: impl Into<String>) -> ValidationIssue {
-    ValidationIssue {
-        field: field.to_string(),
-        message: message.into(),
-    }
 }
 
 #[cfg(test)]

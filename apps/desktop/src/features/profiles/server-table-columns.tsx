@@ -2,7 +2,8 @@ import type * as React from "react";
 
 import { Badge } from "@voya/ui/components/badge";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
-import type { ProfileListEntry, ProfileSortKey } from "@/ipc/bindings";
+import type { ProfileListEntry, ProfileSortKey, SpeedTestOutcome } from "@/ipc/bindings";
+import { speedtestOutcomeText } from "@/ipc/messages";
 import { formatDelay, formatSpeed, formatTraffic } from "@voya/utils/formatting";
 
 import { getProtocolLabel } from "./profile-constants";
@@ -95,7 +96,8 @@ export const serverColumns: ServerColumn[] = [
     width: "6rem",
   },
   {
-    cell: (item) => formatSpeedOrMessage(item.metrics.speedBytesPerSecond, item.metrics.message),
+    cell: (item, _rowNumber, t) =>
+      formatSpeedOrOutcome(t, item.metrics.speedBytesPerSecond, item.metrics.outcome),
     id: "speed",
     labelKey: "panes.profiles.columns.labels.speed",
     sortKey: "speed",
@@ -175,24 +177,22 @@ function columnMinWidthRem(width: string) {
   return match ? Number(match[1]) : 8;
 }
 
-function formatSpeedOrMessage(speed: number | null, message?: string | null) {
-  if (isSpeedtestStatusMessage(message)) {
-    return message;
+/**
+ * The speed cell doubles as the speedtest status line.
+ *
+ * A finished probe shows its measured rate; anything else — pending, timed
+ * out, cancelled — shows the translated outcome. The outcome used to be prose
+ * the backend had already written in English, which this column told apart from
+ * a measurement by testing whether it looked like a number.
+ */
+function formatSpeedOrOutcome(
+  t: TranslateFn,
+  speed: number | null,
+  outcome: SpeedTestOutcome | null,
+) {
+  if (outcome && outcome !== "completed") {
+    return speedtestOutcomeText(t, outcome);
   }
 
-  const speedLabel = formatSpeed(speed);
-
-  if (speedLabel) {
-    return speedLabel;
-  }
-
-  if (!message || /^-?\d+(\.\d+)?$/.test(message)) {
-    return "";
-  }
-
-  return message;
-}
-
-function isSpeedtestStatusMessage(message?: string | null) {
-  return Boolean(message && !/^-?\d+(\.\d+)?$/.test(message));
+  return formatSpeed(speed);
 }

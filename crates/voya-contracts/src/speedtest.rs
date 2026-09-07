@@ -30,6 +30,141 @@ pub struct SpeedTestRequest {
     pub target: SpeedTestTarget,
 }
 
+/// How a probe ended, as a code rather than a sentence.
+///
+/// This is **persisted**: it is what `profile_ex.message` holds, so the prose
+/// that used to live there ("Speedtesting", "request timed out", "Skipped")
+/// froze the user's language at the moment the test ran. Rows written by
+/// earlier builds still decode — see [`SpeedTestOutcome::from_stored`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum SpeedTestOutcome {
+    /// Selected and queued behind another probe.
+    Waiting,
+    /// The probe is running right now.
+    Testing,
+    /// The probe finished; `delay` / `speed` carry the measurement.
+    Completed,
+    TimedOut,
+    ProxyConnectFailed,
+    ProxyConnectionRefused,
+    ProxyConnectionClosed,
+    UdpTestFailed,
+    Cancelled,
+    /// The run ended before this profile's turn came up.
+    Skipped,
+    /// The profile's own configuration is invalid, so nothing was probed.
+    InvalidProfile,
+    /// The test core could not be started, or its config could not be written.
+    CoreUnavailable,
+    /// No free local port was available for the probe.
+    NoAvailablePort,
+    /// A failure with no more specific code.
+    Failed,
+    /// A stored value this build cannot classify — written by a build that
+    /// spelled the column differently. Better than silently dropping the row.
+    Unknown,
+}
+
+impl SpeedTestOutcome {
+    /// The exact text written into `profile_ex.message`.
+    ///
+    /// The serde tag, spelled once here so the persisted vocabulary and the
+    /// wire vocabulary can never drift apart.
+    #[must_use]
+    pub const fn as_stored(self) -> &'static str {
+        match self {
+            Self::Waiting => "waiting",
+            Self::Testing => "testing",
+            Self::Completed => "completed",
+            Self::TimedOut => "timedOut",
+            Self::ProxyConnectFailed => "proxyConnectFailed",
+            Self::ProxyConnectionRefused => "proxyConnectionRefused",
+            Self::ProxyConnectionClosed => "proxyConnectionClosed",
+            Self::UdpTestFailed => "udpTestFailed",
+            Self::Cancelled => "cancelled",
+            Self::Skipped => "skipped",
+            Self::InvalidProfile => "invalidProfile",
+            Self::CoreUnavailable => "coreUnavailable",
+            Self::NoAvailablePort => "noAvailablePort",
+            Self::Failed => "failed",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    /// Decode one stored `profile_ex.message` value.
+    ///
+    /// Three generations of value can be in the column and all of them have to
+    /// come back as something the UI can render:
+    ///
+    /// 1. A code this build wrote — matched exactly.
+    /// 2. The English prose earlier builds wrote ("Speedtesting wait",
+    ///    "request timed out", "Skipped") — matched case-insensitively against
+    ///    the table below, so an upgraded install keeps its last results.
+    /// 3. A bare number, which is what the pre-code builds stored for a
+    ///    successful latency or download probe (`delay.to_string()`).
+    ///
+    /// Anything else becomes [`SpeedTestOutcome::Unknown`] rather than failing
+    /// the read: one unrecognisable cell must never hide the profile row.
+    #[must_use]
+    pub fn from_stored(value: &str) -> Option<Self> {
+        let value = value.trim();
+        if value.is_empty() {
+            return None;
+        }
+        let known = [
+            Self::Waiting,
+            Self::Testing,
+            Self::Completed,
+            Self::TimedOut,
+            Self::ProxyConnectFailed,
+            Self::ProxyConnectionRefused,
+            Self::ProxyConnectionClosed,
+            Self::UdpTestFailed,
+            Self::Cancelled,
+            Self::Skipped,
+            Self::InvalidProfile,
+            Self::CoreUnavailable,
+            Self::NoAvailablePort,
+            Self::Failed,
+            Self::Unknown,
+        ];
+        if let Some(outcome) = known
+            .into_iter()
+            .find(|outcome| outcome.as_stored() == value)
+        {
+            return Some(outcome);
+        }
+        if value.parse::<f64>().is_ok() {
+            return Some(Self::Completed);
+        }
+
+        Some(legacy_outcome(&value.to_ascii_lowercase()).unwrap_or(Self::Unknown))
+    }
+}
+
+/// The prose earlier builds persisted, mapped onto the codes that replaced it.
+fn legacy_outcome(lowercase: &str) -> Option<SpeedTestOutcome> {
+    match lowercase {
+        "speedtesting" => Some(SpeedTestOutcome::Testing),
+        "speedtesting wait" => Some(SpeedTestOutcome::Waiting),
+        "request timed out" => Some(SpeedTestOutcome::TimedOut),
+        "proxy connection failed" => Some(SpeedTestOutcome::ProxyConnectFailed),
+        "proxy connection refused" => Some(SpeedTestOutcome::ProxyConnectionRefused),
+        "proxy connection closed" => Some(SpeedTestOutcome::ProxyConnectionClosed),
+        "udp test failed" => Some(SpeedTestOutcome::UdpTestFailed),
+        "skipped" => Some(SpeedTestOutcome::Skipped),
+        _ => None,
+    }
+}
+
+/// One profile's probe result.
+///
+/// `detail` is an untranslated technical line shown under the outcome. It is
+/// never persisted and never carries a local filesystem path: the failure
+/// classification used to fall through to the error's own `Display`, which for
+/// a config-write failure printed the app-data directory into a column the
+/// profile table renders.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SpeedTestResult {
@@ -37,7 +172,8 @@ pub struct SpeedTestResult {
     pub index_id: String,
     pub delay: Option<i32>,
     pub speed: Option<f64>,
-    pub message: Option<String>,
+    pub outcome: SpeedTestOutcome,
+    pub detail: Option<String>,
     pub ip_info: Option<String>,
 }
 
@@ -74,6 +210,86 @@ mod tests {
         assert_eq!(value["kind"], "latency");
         assert_eq!(value["target"]["scope"], "profiles");
         assert_eq!(value["target"]["profileIds"][0], "node-1");
+    }
+
+    #[test]
+    fn stored_outcomes_round_trip_through_their_persisted_spelling() {
+        for outcome in [
+            SpeedTestOutcome::Waiting,
+            SpeedTestOutcome::Testing,
+            SpeedTestOutcome::Completed,
+            SpeedTestOutcome::TimedOut,
+            SpeedTestOutcome::ProxyConnectFailed,
+            SpeedTestOutcome::ProxyConnectionRefused,
+            SpeedTestOutcome::ProxyConnectionClosed,
+            SpeedTestOutcome::UdpTestFailed,
+            SpeedTestOutcome::Cancelled,
+            SpeedTestOutcome::Skipped,
+            SpeedTestOutcome::InvalidProfile,
+            SpeedTestOutcome::CoreUnavailable,
+            SpeedTestOutcome::NoAvailablePort,
+            SpeedTestOutcome::Failed,
+            SpeedTestOutcome::Unknown,
+        ] {
+            assert_eq!(
+                SpeedTestOutcome::from_stored(outcome.as_stored()),
+                Some(outcome),
+                "{outcome:?} did not survive its stored spelling"
+            );
+            // The persisted spelling has to be the wire spelling too, or an
+            // upgrade would need a second vocabulary to translate between them.
+            assert_eq!(
+                serde_json::to_value(outcome).expect("serialize outcome"),
+                serde_json::Value::String(outcome.as_stored().to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn rows_written_by_earlier_builds_still_decode() {
+        // Exactly what `clear_previous_results`, `speedtest_error_message` and
+        // `run_realping` used to write into `profile_ex.message` / `ip_info`.
+        let legacy: &[(&str, SpeedTestOutcome)] = &[
+            ("Speedtesting", SpeedTestOutcome::Testing),
+            ("Speedtesting wait", SpeedTestOutcome::Waiting),
+            ("request timed out", SpeedTestOutcome::TimedOut),
+            (
+                "proxy connection failed",
+                SpeedTestOutcome::ProxyConnectFailed,
+            ),
+            (
+                "proxy connection refused",
+                SpeedTestOutcome::ProxyConnectionRefused,
+            ),
+            (
+                "proxy connection closed",
+                SpeedTestOutcome::ProxyConnectionClosed,
+            ),
+            ("UDP test failed", SpeedTestOutcome::UdpTestFailed),
+            ("cancelled", SpeedTestOutcome::Cancelled),
+            ("Skipped", SpeedTestOutcome::Skipped),
+            // A successful latency probe stored the millisecond count, and a
+            // download probe the byte rate.
+            ("42", SpeedTestOutcome::Completed),
+            ("2048", SpeedTestOutcome::Completed),
+            ("-1", SpeedTestOutcome::Completed),
+            // Anything else must degrade, never fail the row.
+            (
+                "failed to write speedtest config /Users/someone/Library/config.json: denied",
+                SpeedTestOutcome::Unknown,
+            ),
+        ];
+
+        for (stored, expected) in legacy {
+            assert_eq!(
+                SpeedTestOutcome::from_stored(stored),
+                Some(*expected),
+                "legacy value `{stored}` decoded wrongly"
+            );
+        }
+
+        assert_eq!(SpeedTestOutcome::from_stored(""), None);
+        assert_eq!(SpeedTestOutcome::from_stored("   "), None);
     }
 
     #[test]

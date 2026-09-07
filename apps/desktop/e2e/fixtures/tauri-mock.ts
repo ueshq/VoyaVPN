@@ -549,7 +549,7 @@ export async function installTauriSmokeMock(page: Page) {
           return Promise.resolve(clone(state.proxy));
         case "proxy_test_delay":
           return Promise.resolve(
-            readStringArray(args, "nodeNames").map((name) => ({ delay: 23, message: null, name }) satisfies ProxyDelayTestResult),
+            readStringArray(args, "nodeNames").map((name) => ({ delay: 23, name, outcome: "completed" }) satisfies ProxyDelayTestResult),
           );
         case "proxy_select_node": {
           // Selecting has to move `now`/`active`, otherwise the assertion that a
@@ -662,7 +662,7 @@ export async function installTauriSmokeMock(page: Page) {
         metrics: {
           delayMs: existing?.metrics.delayMs ?? -1,
           ipInfo: existing?.metrics.ipInfo ?? null,
-          message: existing?.metrics.message ?? null,
+          outcome: existing?.metrics.outcome ?? null,
           sort: existing?.metrics.sort ?? state.profiles.length,
           speedBytesPerSecond: existing?.metrics.speedBytesPerSecond ?? null,
         },
@@ -922,8 +922,8 @@ export async function installTauriSmokeMock(page: Page) {
           {
             name: "PROXY",
             nodes: [
-              { active: true, delay: 23, delayLabel: "23 ms", name: "Smoke Node", proxyType: "VLESS", testable: true, udp: true },
-              { active: false, delay: 41, delayLabel: "41 ms", name: "Smoke Backup Node", proxyType: "VLESS", testable: true, udp: true },
+              { active: true, delay: 23, name: "Smoke Node", proxyType: "VLESS", testable: true, udp: true },
+              { active: false, delay: 41, name: "Smoke Backup Node", proxyType: "VLESS", testable: true, udp: true },
             ],
             now: "Smoke Node",
             proxyType: "Selector",

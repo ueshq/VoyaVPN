@@ -246,8 +246,8 @@ describe("ProfilesScreen", () => {
     profile.metrics = {
       ...profile.metrics,
       delayMs: -1,
-      ipInfo: "Skipped",
-      message: "request timed out",
+      ipInfo: null,
+      outcome: "timedOut",
       speedBytesPerSecond: 2048,
     };
     ipcMocks.listProfiles.mockResolvedValue([profile]);
@@ -261,7 +261,7 @@ describe("ProfilesScreen", () => {
     await userEvent.click(within(speedMenu).getByRole("menuitem", { name: "Speed" }));
 
     expect(await screen.findByRole("columnheader", { name: "Speed" })).toBeInTheDocument();
-    expect(await screen.findByText("request timed out")).toBeInTheDocument();
+    expect(await screen.findByText("Request timed out")).toBeInTheDocument();
     expect(screen.queryByText("2.0 KB/s")).not.toBeInTheDocument();
   });
 

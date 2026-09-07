@@ -5,6 +5,7 @@ use serde_json::Value;
 
 use crate::{
     group_children::{resolve_group_children, GroupChildSource},
+    validation::{ValidationCode, ValidationMessage},
     ConfigType, ProfileItem,
 };
 
@@ -27,8 +28,8 @@ pub struct GroupValidationResult {
     pub valid: bool,
     pub normalized_child_items: String,
     pub child_index_ids: Vec<String>,
-    pub errors: Vec<String>,
-    pub warnings: Vec<String>,
+    pub errors: Vec<ValidationMessage>,
+    pub warnings: Vec<ValidationMessage>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -119,7 +120,7 @@ pub fn validate_group_profile(
     if !profile.config_type().is_group_type() {
         result
             .errors
-            .push("profile is not a policy group or proxy chain".to_string());
+            .push(ValidationMessage::new(ValidationCode::NotAGroupProfile));
         result.valid = false;
         return result;
     }
@@ -136,15 +137,16 @@ pub fn validate_group_profile(
 
     let child_index_ids = effective_child_ids(profile, &source, &mut result, true);
     if child_index_ids.is_empty() {
-        result.errors.push(format!(
-            "{} has no valid child profiles",
-            group_kind_label(profile.config_type())
-        ));
+        result
+            .errors
+            .push(ValidationMessage::new(group_without_children_code(
+                profile.config_type(),
+            )));
     }
     if profile.config_type() == ConfigType::ProxyChain && child_index_ids.len() == 1 {
-        result.warnings.push(
-            "proxy chain has one hop; two or more hops are needed to chain traffic".to_string(),
-        );
+        result
+            .warnings
+            .push(ValidationMessage::new(ValidationCode::ProxyChainSingleHop));
     }
 
     let mut stack = Vec::new();
@@ -198,17 +200,23 @@ fn effective_child_ids(
         for index_id in &resolution.missing_child_ids {
             result
                 .errors
-                .push(format!("child profile was not found: {index_id}"));
+                .push(ValidationMessage::new(ValidationCode::GroupChildNotFound {
+                    profile_id: index_id.clone(),
+                }));
         }
         if let Some(pattern) = &resolution.invalid_filter {
-            result
-                .errors
-                .push(format!("invalid subscription filter regex: {pattern}"));
+            result.errors.push(ValidationMessage::new(
+                ValidationCode::InvalidSubscriptionFilter {
+                    pattern: pattern.clone(),
+                },
+            ));
         }
         for index_id in &resolution.duplicate_child_ids {
             push_unique_warning(
                 result,
-                format!("duplicate child profile ignored: {index_id}"),
+                ValidationMessage::new(ValidationCode::GroupDuplicateChildIgnored {
+                    profile_id: index_id.clone(),
+                }),
             );
         }
     }
@@ -245,7 +253,7 @@ impl GroupChildSource for MapChildSource<'_> {
     }
 }
 
-fn push_unique_warning(result: &mut GroupValidationResult, warning: String) {
+fn push_unique_warning(result: &mut GroupValidationResult, warning: ValidationMessage) {
     if !result.warnings.contains(&warning) {
         result.warnings.push(warning);
     }
@@ -264,7 +272,9 @@ fn detect_cycle(
             path.push(index_id.to_string());
             result
                 .errors
-                .push(format!("group cycle dependency: {}", path.join(" -> ")));
+                .push(ValidationMessage::new(ValidationCode::GroupCyclePath {
+                    path,
+                }));
         }
         return;
     }
@@ -287,11 +297,15 @@ fn detect_cycle(
     visiting.remove(index_id);
 }
 
-fn group_kind_label(config_type: ConfigType) -> &'static str {
+/// The "nothing usable in here" code for the kind of group being edited.
+///
+/// This used to interpolate an English kind label ("policy group") into an
+/// English sentence, which left the whole message untranslatable. The kind is
+/// part of the code instead, so each one is its own locale entry.
+const fn group_without_children_code(config_type: ConfigType) -> ValidationCode {
     match config_type {
-        ConfigType::PolicyGroup => "policy group",
-        ConfigType::ProxyChain => "proxy chain",
-        _ => "group",
+        ConfigType::ProxyChain => ValidationCode::ProxyChainWithoutValidChildren,
+        _ => ValidationCode::PolicyGroupWithoutValidChildren,
     }
 }
 
@@ -436,7 +450,7 @@ mod tests {
         assert!(validation
             .errors
             .iter()
-            .any(|error| error.contains("group cycle dependency")));
+            .any(|error| matches!(error.code, ValidationCode::GroupCyclePath { .. })));
     }
 
     #[test]
@@ -462,7 +476,7 @@ mod tests {
         assert!(validation
             .errors
             .iter()
-            .any(|error| error.contains("invalid subscription filter regex")));
+            .any(|error| matches!(error.code, ValidationCode::InvalidSubscriptionFilter { .. })));
         assert!(validation.child_index_ids.is_empty());
     }
 

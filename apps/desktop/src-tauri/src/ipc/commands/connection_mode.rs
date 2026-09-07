@@ -38,7 +38,7 @@ where
         if let Err(error) = emit_sysproxy_changed(&self.app, status) {
             report_post_commit_error(
                 &self.app,
-                "System proxy status refresh failed",
+                NoticeCode::SystemProxyStatusRefreshFailed,
                 &format!("{error:?}"),
                 AppNoticeLevel::Warning,
             );
@@ -49,7 +49,7 @@ where
         if let Err(error) = emit_tun_changed(&self.app, status) {
             report_post_commit_error(
                 &self.app,
-                "TUN status refresh failed",
+                NoticeCode::TunStatusRefreshFailed,
                 &format!("{error:?}"),
                 AppNoticeLevel::Warning,
             );
@@ -60,7 +60,7 @@ where
         if let Err(error) = crate::refresh_tray_menu(&self.app) {
             report_post_commit_error(
                 &self.app,
-                "Tray refresh failed",
+                NoticeCode::TrayRefreshFailed,
                 &error.to_string(),
                 AppNoticeLevel::Warning,
             );

@@ -6,13 +6,19 @@ import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
  * Bundle budgets are a ratchet, not a ceiling nobody can reach: each budget
  * sits roughly 1.3-1.5x the size the chunk had when it was set, so an
  * accidental dependency import is caught while ordinary feature work is not.
- * **Lower the budget when a chunk shrinks.** Sizes recorded 2026-09-07:
- * index 215.5 KiB, vendor-qr 456.8 KiB, vendor-data 241.0 KiB,
- * vendor-react 185.2 KiB, vendor-radix 154.8 KiB, server-table 72.5 KiB,
- * settings-screen 40.1 KiB; total emitted JS 1517 KiB.
+ * **Lower the budget when a chunk shrinks.** Sizes recorded 2026-09-08:
+ * index 54.5 KiB, locales 249.8 KiB, vendor-qr 456.8 KiB, vendor-data
+ * 241.0 KiB, vendor-react 185.2 KiB, vendor-radix 147.6 KiB, server-table
+ * 70.9 KiB, settings-screen 40.8 KiB; total emitted JS 1618 KiB.
+ *
+ * The entry budget dropped from 300 KiB when the eight locale JSON files moved
+ * into their own chunk (`locales`, see `vite.config.ts`): they were four fifths
+ * of the entry, so the old budget had stopped measuring application code at
+ * all. Translation growth is now ratcheted on its own line.
  */
 const budgets = [
-  { label: "application entry", maxKiB: 300, prefix: "index-" },
+  { label: "application entry", maxKiB: 90, prefix: "index-" },
+  { label: "locale resources", maxKiB: 330, prefix: "locales-" },
   { label: "profiles screen", maxKiB: 100, prefix: "server-table-" },
   { label: "settings screen", maxKiB: 70, prefix: "settings-screen-" },
   { label: "QR decoder", maxKiB: 500, prefix: "vendor-qr-" },

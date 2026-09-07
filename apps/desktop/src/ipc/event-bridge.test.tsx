@@ -112,7 +112,13 @@ describe("EventBridge", () => {
       bridgeMocks.listeners.appEvent[0]?.({
         payload: {
           kind: "notice",
-          payload: { level: "info", message: "Saved", title: "Preferences" },
+          // A notice is a code plus its parameters; the bridge resolves it
+          // against the locale files and keeps `detail` untranslated.
+          payload: {
+            code: { code: "trayRefreshFailed" },
+            detail: "the tray handle is gone",
+            level: "info",
+          },
         },
       });
     });
@@ -120,9 +126,9 @@ describe("EventBridge", () => {
     expect(invalidateQueries).toHaveBeenCalledExactlyOnceWith({ queryKey: ["ui-preferences"] });
     expect(bridgeMocks.requestTab).not.toHaveBeenCalled();
     expect(bridgeMocks.pushToast).toHaveBeenCalledWith({
-      description: "Saved",
+      description: "the tray handle is gone",
       severity: "info",
-      title: "Preferences",
+      title: "Tray refresh failed",
     });
   });
 

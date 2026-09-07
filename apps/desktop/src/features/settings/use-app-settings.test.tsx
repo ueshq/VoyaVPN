@@ -182,7 +182,7 @@ describe("useAppSettings", () => {
     ipcMocks.saveAppSettings.mockRejectedValueOnce(
       new ipcMocks.IpcCommandError({
         kind: {
-          issues: [{ field: "sources.geo", message: "invalid Geo source URL" }],
+          issues: [{ code: { code: "sourceUrlNotHttps" }, field: "sources.geo", scope: [] }],
           type: "validation",
         },
         message: "invalid Geo source URL: expected an absolute HTTPS URL",
@@ -195,8 +195,9 @@ describe("useAppSettings", () => {
     await user.click(screen.getByRole("button", { name: "Edit two sections" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
+    // The backend sends the code; the dialog renders the locale string.
     expect(await screen.findByTestId("field-error-sources.geo")).toHaveTextContent(
-      "invalid Geo source URL",
+      "The URL must use https://",
     );
   });
 
@@ -206,7 +207,7 @@ describe("useAppSettings", () => {
       .mockRejectedValueOnce(
         new ipcMocks.IpcCommandError({
           kind: {
-            issues: [{ field: "sources.geo", message: "invalid Geo source URL" }],
+            issues: [{ code: { code: "sourceUrlNotHttps" }, field: "sources.geo", scope: [] }],
             type: "validation",
           },
           message: "invalid Geo source URL",

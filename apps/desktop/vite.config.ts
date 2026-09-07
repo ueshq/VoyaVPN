@@ -47,6 +47,17 @@ export default defineConfig({
               test: /node_modules[\\/]lucide-react[\\/]/,
             },
             {
+              // The eight shipped locales are data, not application code, and
+              // they are ~40% of what the entry chunk used to weigh. Splitting
+              // them keeps the entry budget a guard on *code* growth — an
+              // accidental dependency import — instead of a cap that ordinary
+              // translation work walks into. Both chunks load at startup, and
+              // `frontend-bundle.mjs` budgets each one plus the total.
+              name: "locales",
+              priority: 30,
+              test: /packages[\\/]i18n[\\/]src[\\/]locales[\\/]/,
+            },
+            {
               name: "vendor-data",
               priority: 20,
               test: /node_modules[\\/](@hookform|@tanstack|i18next|react-hook-form|zod|zustand)[\\/]/,

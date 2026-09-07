@@ -287,7 +287,13 @@ fn singbox_protocol_support_table_agrees_with_node_validation() {
         let rejects_protocol = crate::validate_node(&node, CoreType::sing_box)
             .errors
             .iter()
-            .any(|error| error.contains("does not support protocol"));
+            .any(|error| {
+                matches!(
+                    error.code,
+                    crate::validation::ValidationCode::UnsupportedProtocol { .. }
+                        | crate::validation::ValidationCode::UnsupportedProtocolNetwork { .. }
+                )
+            });
         let expected_rejection =
             !config_type.is_complex_type() && !singbox_supports_config_type(config_type);
         assert_eq!(

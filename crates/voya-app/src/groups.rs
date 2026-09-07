@@ -1,9 +1,9 @@
 use thiserror::Error;
 use voya_core::{
     generate_singbox_config_value, group_preview_from_values, list_group_child_candidates,
-    validate_group_profile, AppConfig, CoreConfigContextBuilder, CoreGenPlatform,
-    GroupChildCandidate, GroupPreview, GroupValidationResult, ProfileItem, ProfileListItem,
-    RoutingItem, SingboxConfigError, SubItem,
+    validate_group_profile, validation::ValidationMessage, AppConfig, CoreConfigContextBuilder,
+    CoreGenPlatform, GroupChildCandidate, GroupPreview, GroupValidationResult, ProfileItem,
+    ProfileListItem, RoutingItem, SingboxConfigError, SubItem,
 };
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 
@@ -21,7 +21,7 @@ pub enum GroupManagerError {
     #[error("profile is not a policy group or proxy chain")]
     NotGroupProfile,
     #[error("group validation failed: {0:?}")]
-    Validation(Vec<String>),
+    Validation(Vec<ValidationMessage>),
     #[error(transparent)]
     SingboxConfig(#[from] SingboxConfigError),
 }
@@ -89,12 +89,13 @@ impl<'db> GroupManager<'db> {
         };
         let singbox_value = self.preview_value(config, profile, &source)?;
 
-        validation.warnings.extend(
-            singbox_value
-                .builder_warnings
-                .iter()
-                .map(|warning| format!("sing-box: {warning}")),
-        );
+        // The generator walks the same children the validator did, so its
+        // warnings are the same findings seen one layer down: they are adopted
+        // as-is rather than prefixed with a `"sing-box: "` label that would
+        // have made each one untranslatable again.
+        validation
+            .warnings
+            .extend(singbox_value.builder_warnings.iter().cloned());
 
         Ok(group_preview_from_values(
             validation,
@@ -187,7 +188,7 @@ fn ensure_group_profile(profile: &ProfileItem) -> Result<()> {
 #[derive(Debug, Clone)]
 struct PreviewValue {
     value: serde_json::Value,
-    builder_warnings: Vec<String>,
+    builder_warnings: Vec<ValidationMessage>,
 }
 
 #[derive(Debug, Clone, Copy)]

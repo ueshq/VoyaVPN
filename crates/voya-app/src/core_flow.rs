@@ -23,6 +23,7 @@
 
 use std::sync::Arc;
 
+use voya_contracts::{CoreFlowReason, LogCode, NoticeCode};
 use voya_core::AppConfig;
 use voya_platform::{coreinfo::TargetOs, sysproxy::SystemProxyStatus};
 
@@ -58,8 +59,16 @@ pub enum CoreFlowState {
 /// Every method returns `()`: by the time these are called the OS-level side
 /// effects have already happened, so a failed emit must be logged by the
 /// adapter and never propagated.
+/// Everything the flow tells the outside world, as codes rather than
+/// sentences.
+///
+/// `log` and `notice` used to take an English `&str` that the shell forwarded
+/// straight to the Logs panel and the toast store, which is why none of it was
+/// translatable. They take a code and an optional untranslated `detail` now;
+/// only the core process's own output stays raw, and it never comes through
+/// here.
 pub trait CoreFlowSink: Send + Sync {
-    fn log(&self, level: CoreFlowLevel, message: &str);
+    fn log(&self, level: CoreFlowLevel, code: LogCode, detail: Option<&str>);
     fn core_state(
         &self,
         state: CoreFlowState,
@@ -69,7 +78,7 @@ pub trait CoreFlowSink: Send + Sync {
     fn system_proxy_changed(&self, status: &SystemProxyStatus);
     fn tun_changed(&self, status: &TunStatus);
     fn statistics_zero(&self);
-    fn notice(&self, level: CoreFlowLevel, title: &str, message: &str);
+    fn notice(&self, level: CoreFlowLevel, code: NoticeCode, detail: &str);
 }
 
 pub struct CoreFlow<'flow> {
@@ -110,19 +119,19 @@ impl<'flow> CoreFlow<'flow> {
 
     /// Start the core for the active profile.
     pub async fn connect(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
-        self.announce_start(config, "Connecting active profile");
+        self.announce_start(config, LogCode::Connecting);
         let result = self.runtime.connect(config).await;
 
-        self.settle(config, result, "Core supervisor started", "connect")
+        self.settle(config, result, LogCode::Connected, CoreFlowReason::Connect)
             .await
     }
 
     /// Restart the core, whatever state it is in.
     pub async fn restart(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
-        self.announce_start(config, "Restarting active profile");
+        self.announce_start(config, LogCode::Restarting);
         let result = self.runtime.restart(config).await;
 
-        self.settle(config, result, "Core supervisor restarted", "restart")
+        self.settle(config, result, LogCode::Restarted, CoreFlowReason::Restart)
             .await
     }
 
@@ -130,21 +139,17 @@ impl<'flow> CoreFlow<'flow> {
     pub async fn restart_if_connected(
         &self,
         config: &AppConfig,
-        reason: &str,
+        reason: CoreFlowReason,
     ) -> Result<(), RuntimeError> {
         if self.runtime.status().await?.state != SupervisorConnectionState::Connected {
             return Ok(());
         }
 
-        self.announce_start(config, &format!("{reason}; restarting core"));
+        self.announce_start(config, LogCode::RestartingAfterChange { reason });
         match self.runtime.restart_if_connected(config).await {
             Ok(Some(snapshot)) => {
-                self.settle_connected(
-                    config,
-                    &snapshot,
-                    &format!("Core supervisor restarted after {reason}"),
-                )
-                .await;
+                self.settle_connected(config, &snapshot, LogCode::RestartedAfterChange { reason })
+                    .await;
                 Ok(())
             }
             // A disconnect won the runtime lock between the check above and the
@@ -154,7 +159,7 @@ impl<'flow> CoreFlow<'flow> {
                 Ok(())
             }
             Err(error) => {
-                self.sink.log(CoreFlowLevel::Error, &error.to_string());
+                self.report_failure(reason, &error);
                 self.reconcile(config, reason).await;
                 Err(error)
             }
@@ -164,21 +169,21 @@ impl<'flow> CoreFlow<'flow> {
     /// Stop the core and hand the machine's proxy settings back.
     pub async fn disconnect(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
         self.sink
-            .log(CoreFlowLevel::Info, "Disconnecting core supervisor");
+            .log(CoreFlowLevel::Info, LogCode::Disconnecting, None);
         self.sink
             .core_state(CoreFlowState::Disconnecting, None, None);
 
         match self.runtime.disconnect().await {
             Ok(snapshot) => {
                 self.sink
-                    .log(CoreFlowLevel::Info, "Core supervisor stopped");
+                    .log(CoreFlowLevel::Info, LogCode::Disconnected, None);
                 self.settle_disconnected(config, None, Some(&snapshot))
                     .await;
                 Ok(snapshot)
             }
             Err(error) => {
-                self.sink.log(CoreFlowLevel::Error, &error.to_string());
-                self.reconcile(config, "disconnect").await;
+                self.report_failure(CoreFlowReason::Disconnect, &error);
+                self.reconcile(config, CoreFlowReason::Disconnect).await;
                 Err(error)
             }
         }
@@ -191,7 +196,8 @@ impl<'flow> CoreFlow<'flow> {
             CoreExitOutcome::Restarted { attempt, snapshot } => {
                 self.sink.log(
                     CoreFlowLevel::Warn,
-                    &format!("{exit}; restarted the core (attempt {attempt})"),
+                    LogCode::CoreExitRestarted { attempt },
+                    Some(&exit),
                 );
                 // The pid changed, so the UI needs the new snapshot.
                 self.sink.core_state(
@@ -203,19 +209,21 @@ impl<'flow> CoreFlow<'flow> {
             CoreExitOutcome::RestartScheduled { attempt, delay } => {
                 self.sink.log(
                     CoreFlowLevel::Warn,
-                    &format!(
-                        "{exit}; retrying in {} ms (attempt {attempt})",
-                        delay.as_millis()
-                    ),
+                    LogCode::CoreExitRetryScheduled {
+                        attempt,
+                        delay_ms: u32::try_from(delay.as_millis()).unwrap_or(u32::MAX),
+                    },
+                    Some(&exit),
                 );
                 self.sink
                     .core_state(CoreFlowState::Connecting, event.active_profile_id, None);
             }
             CoreExitOutcome::GaveUp(reason) => {
-                let message = format!("{exit}: {reason}");
-                self.sink.log(CoreFlowLevel::Error, &message);
+                let detail = format!("{exit}: {reason}");
                 self.sink
-                    .notice(CoreFlowLevel::Error, "Core stopped", &message);
+                    .log(CoreFlowLevel::Error, LogCode::CoreExitGaveUp, Some(&detail));
+                self.sink
+                    .notice(CoreFlowLevel::Error, NoticeCode::CoreStopped, &detail);
                 self.settle_disconnected(config, event.active_profile_id, None)
                     .await;
             }
@@ -224,35 +232,49 @@ impl<'flow> CoreFlow<'flow> {
 
     /// React to a native TUN provider that reached a terminal state.
     pub async fn handle_native_tun_exit(&self, config: &AppConfig, event: NativeTunExitEvent) {
-        let message = format!("Native TUN provider exited: {}", event.message);
-        self.sink.log(CoreFlowLevel::Error, &message);
-        self.sink
-            .notice(CoreFlowLevel::Error, "Native TUN stopped", &message);
+        self.sink.log(
+            CoreFlowLevel::Error,
+            LogCode::NativeTunExited,
+            Some(&event.message),
+        );
+        self.sink.notice(
+            CoreFlowLevel::Error,
+            NoticeCode::NativeTunStopped,
+            &event.message,
+        );
         self.settle_disconnected(config, event.active_profile_id, None)
             .await;
     }
 
-    fn announce_start(&self, config: &AppConfig, message: &str) {
-        self.sink.log(CoreFlowLevel::Info, message);
+    fn announce_start(&self, config: &AppConfig, code: LogCode) {
+        self.sink.log(CoreFlowLevel::Info, code, None);
         self.sink
             .core_state(CoreFlowState::Connecting, active_profile_id(config), None);
+    }
+
+    /// A failed core operation, logged with the error as its detail.
+    fn report_failure(&self, reason: CoreFlowReason, error: &RuntimeError) {
+        self.sink.log(
+            CoreFlowLevel::Error,
+            LogCode::CoreOperationFailed { reason },
+            Some(&error.to_string()),
+        );
     }
 
     async fn settle(
         &self,
         config: &AppConfig,
         result: Result<SupervisorSnapshot, RuntimeError>,
-        success_message: &str,
-        reason: &str,
+        success_code: LogCode,
+        reason: CoreFlowReason,
     ) -> Result<SupervisorSnapshot, RuntimeError> {
         match result {
             Ok(snapshot) => {
-                self.settle_connected(config, &snapshot, success_message)
-                    .await;
+                self.settle_connected(config, &snapshot, success_code).await;
                 Ok(snapshot)
             }
             Err(error) => {
-                self.sink.log(CoreFlowLevel::Error, &error.to_string());
+                self.report_failure(reason, &error);
                 self.reconcile(config, reason).await;
                 Err(error)
             }
@@ -263,16 +285,16 @@ impl<'flow> CoreFlow<'flow> {
         &self,
         config: &AppConfig,
         snapshot: &SupervisorSnapshot,
-        message: &str,
+        code: LogCode,
     ) {
-        self.sink.log(CoreFlowLevel::Info, message);
+        self.sink.log(CoreFlowLevel::Info, code, None);
         self.sink
             .core_state(CoreFlowState::Connected, None, Some(snapshot));
         match self.apply_system_proxy(config) {
             Ok(status) => self.sink.system_proxy_changed(&status),
             Err(error) => self.sink.notice(
                 CoreFlowLevel::Warn,
-                "Core started; system proxy update failed",
+                NoticeCode::CoreStartedSystemProxyFailed,
                 &error.to_string(),
             ),
         }
@@ -293,7 +315,7 @@ impl<'flow> CoreFlow<'flow> {
             Ok(status) => self.sink.system_proxy_changed(&status),
             Err(error) => self.sink.notice(
                 CoreFlowLevel::Warn,
-                "System proxy restore failed",
+                NoticeCode::SystemProxyRestoreFailed,
                 &error.to_string(),
             ),
         }
@@ -302,14 +324,15 @@ impl<'flow> CoreFlow<'flow> {
     }
 
     /// Report the state the supervisor is really in after a failed operation.
-    async fn reconcile(&self, config: &AppConfig, reason: &str) {
+    async fn reconcile(&self, config: &AppConfig, reason: CoreFlowReason) {
         match self.runtime.status().await {
             Ok(snapshot) if snapshot.state == SupervisorConnectionState::Connected => {
                 // The failure happened before the supervisor was touched, so
                 // the previous core is still serving the OS proxy.
                 self.sink.log(
                     CoreFlowLevel::Warn,
-                    &format!("{reason} failed; the previous core is still running"),
+                    LogCode::PreviousCoreStillRunning { reason },
+                    None,
                 );
                 self.sink
                     .core_state(CoreFlowState::Connected, None, Some(&snapshot));
@@ -321,7 +344,8 @@ impl<'flow> CoreFlow<'flow> {
             Err(error) => {
                 self.sink.log(
                     CoreFlowLevel::Warn,
-                    &format!("Runtime status refresh after {reason} failure failed: {error}"),
+                    LogCode::RuntimeStatusRefreshFailed { reason },
+                    Some(&error.to_string()),
                 );
                 self.settle_disconnected(config, None, None).await;
             }

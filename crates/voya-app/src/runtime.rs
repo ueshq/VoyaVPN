@@ -7,9 +7,9 @@ use std::{
 use thiserror::Error;
 use tokio::sync::Mutex;
 use voya_core::{
-    generate_singbox_config_json, AppConfig, ContextBuildError, CoreConfigContext,
-    CoreConfigContextBuilder, CoreConfigContextBuilderAllResult, CoreGenPlatform, CoreType,
-    SingboxConfigError,
+    generate_singbox_config_json, validation::ValidationMessage, AppConfig, ContextBuildError,
+    CoreConfigContext, CoreConfigContextBuilder, CoreConfigContextBuilderAllResult,
+    CoreGenPlatform, CoreType, SingboxConfigError,
 };
 use voya_db::{Database, DbError};
 use voya_platform::{
@@ -187,7 +187,7 @@ impl<'runtime> RuntimeManager<'runtime> {
         for warning in &validation.warnings {
             tracing::warn!(
                 profile = %active_profile.index_id,
-                "core config generation warning: {warning}"
+                "core config generation warning: {warning:?}"
             );
         }
 
@@ -415,8 +415,8 @@ pub enum RuntimeError {
     ActiveProfileNotFound(String),
     #[error("runtime validation failed: {errors:?}; warnings: {warnings:?}")]
     Validation {
-        errors: Vec<String>,
-        warnings: Vec<String>,
+        errors: Vec<ValidationMessage>,
+        warnings: Vec<ValidationMessage>,
     },
     #[error("no core info entry for {0:?}")]
     MissingCoreInfo(CoreType),

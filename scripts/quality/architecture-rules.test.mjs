@@ -8,6 +8,7 @@ import {
   moduleFileCandidates,
   resolveTestModuleFiles,
   shellRules,
+  untranslatedMessageRule,
   voyaAppRules,
   voyaCoreRules,
 } from "./architecture-rules.mjs";
@@ -103,6 +104,24 @@ describe("Clash boundary rules", () => {
   it("rejects retired serde compatibility outside clash.rs", () => {
     expect(violates(clashBoundaryRules, '#[serde(alias = "HeaderType")]')).toContain("retired-serde-alias");
     expect(violates(clashBoundaryRules, '#[serde(rename_all = "PascalCase")]')).toContain("retired-pascal-case");
+  });
+});
+
+describe("untranslated message escape hatch", () => {
+  it.each([
+    'ValidationIssue::untranslated("pem", error.to_string())',
+    "let code = ValidationCode::Untranslated { message };",
+    "vec![ValidationIssue::untranslated(field, message)]",
+  ])("rejects %s outside contract_map/errors.rs", (source) => {
+    expect(violates([untranslatedMessageRule], source)).toContain("untranslated-message");
+  });
+
+  it.each([
+    "ValidationIssue::new(field, ValidationCode::InvalidPort)",
+    "let code = ValidationCode::DnsAddressEmpty;",
+    "// Untranslated text is only allowed in the error mapper.",
+  ])("accepts %s", (source) => {
+    expect(violates([untranslatedMessageRule], source)).toEqual([]);
   });
 });
 

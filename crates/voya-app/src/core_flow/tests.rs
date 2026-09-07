@@ -45,8 +45,16 @@ impl RecordingSink {
 }
 
 impl CoreFlowSink for RecordingSink {
-    fn log(&self, level: CoreFlowLevel, message: &str) {
-        self.push(format!("log:{level:?}:{message}"));
+    fn log(&self, level: CoreFlowLevel, code: LogCode, detail: Option<&str>) {
+        // Codes, not sentences: the recording spells the variant the way the
+        // wire does, so a reworded locale string can never fail these.
+        self.push(format!(
+            "log:{level:?}:{}{}",
+            code_tag(&code),
+            detail
+                .map(|detail| format!(":{detail}"))
+                .unwrap_or_default()
+        ));
     }
 
     fn core_state(
@@ -76,8 +84,27 @@ impl CoreFlowSink for RecordingSink {
         self.push("statistics:zero");
     }
 
-    fn notice(&self, level: CoreFlowLevel, title: &str, _message: &str) {
-        self.push(format!("notice:{level:?}:{title}"));
+    fn notice(&self, level: CoreFlowLevel, code: NoticeCode, _detail: &str) {
+        self.push(format!("notice:{level:?}:{}", code_tag(&code)));
+    }
+}
+
+/// The serde tag of a code, plus the parameters that make two uses of the same
+/// code distinguishable.
+fn code_tag(code: &impl serde::Serialize) -> String {
+    let value = serde_json::to_value(code).expect("serialize code");
+    let tag = value["code"].as_str().unwrap_or_default().to_string();
+    let params = value
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter(|(key, _)| key.as_str() != "code")
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect::<Vec<_>>();
+    if params.is_empty() {
+        tag
+    } else {
+        format!("{tag}({})", params.join(","))
     }
 }
 
@@ -248,9 +275,9 @@ async fn connect_reports_connected_then_the_system_proxy_then_tun() {
     assert_eq!(
         events,
         [
-            "log:Info:Connecting active profile".to_string(),
+            "log:Info:connecting".to_string(),
             "state:Connecting:profile=active:pid=None".to_string(),
-            "log:Info:Core supervisor started".to_string(),
+            "log:Info:connected".to_string(),
             format!("state:Connected:profile=active:pid={:?}", snapshot.main_pid),
             "sysproxy".to_string(),
             "tun".to_string(),
@@ -329,9 +356,9 @@ async fn disconnect_restores_the_system_proxy_and_zeroes_statistics() {
     assert_eq!(
         &events[sink_before..],
         [
-            "log:Info:Disconnecting core supervisor".to_string(),
+            "log:Info:disconnecting".to_string(),
             "state:Disconnecting:profile=:pid=None".to_string(),
-            "log:Info:Core supervisor stopped".to_string(),
+            "log:Info:disconnected".to_string(),
             "state:Disconnected:profile=:pid=None".to_string(),
             "sysproxy".to_string(),
             "tun".to_string(),
@@ -361,8 +388,8 @@ async fn giving_up_on_a_crashed_core_disconnects_and_restores_the_system_proxy()
     assert_eq!(
         harness.sink.events(),
         [
-            "log:Error:Core process 4242 exited with code 1: the core kept exiting after 3 automatic restarts".to_string(),
-            "notice:Error:Core stopped".to_string(),
+            "log:Error:coreExitGaveUp:Core process 4242 exited with code 1: the core kept exiting after 3 automatic restarts".to_string(),
+            "notice:Error:coreStopped".to_string(),
             "state:Disconnected:profile=active:pid=None".to_string(),
             "sysproxy".to_string(),
             "tun".to_string(),
@@ -403,8 +430,7 @@ async fn a_restarted_core_refreshes_the_snapshot_without_touching_the_system_pro
     assert_eq!(
         harness.sink.events(),
         [
-            "log:Warn:Core process 11 exited with code 2; restarted the core (attempt 1)"
-                .to_string(),
+            "log:Warn:coreExitRestarted(attempt=1):Core process 11 exited with code 2".to_string(),
             "state:Connected:profile=active:pid=Some(12)".to_string(),
         ]
     );
@@ -434,7 +460,8 @@ async fn a_scheduled_restart_is_reported_as_connecting() {
     assert_eq!(
         harness.sink.events(),
         [
-            "log:Warn:Core process 7 exited; retrying in 1500 ms (attempt 2)".to_string(),
+            "log:Warn:coreExitRetryScheduled(attempt=2,delayMs=1500):Core process 7 exited"
+                .to_string(),
             "state:Connecting:profile=active:pid=None".to_string(),
         ]
     );
@@ -447,7 +474,7 @@ async fn restart_if_connected_stays_silent_while_the_core_is_down() {
 
     harness
         .flow()
-        .restart_if_connected(&config, "Routing changed")
+        .restart_if_connected(&config, CoreFlowReason::RoutingChanged)
         .await
         .expect("no restart is needed");
 
@@ -467,7 +494,7 @@ async fn restart_if_connected_restarts_a_running_core() {
 
     harness
         .flow()
-        .restart_if_connected(&config, "Routing changed")
+        .restart_if_connected(&config, CoreFlowReason::RoutingChanged)
         .await
         .expect("restart succeeds");
 
@@ -475,9 +502,9 @@ async fn restart_if_connected_restarts_a_running_core() {
     assert_eq!(
         &events[sink_before..sink_before + 3],
         [
-            "log:Info:Routing changed; restarting core".to_string(),
+            "log:Info:restartingAfterChange(reason=\"routingChanged\")".to_string(),
             "state:Connecting:profile=active:pid=None".to_string(),
-            "log:Info:Core supervisor restarted after Routing changed".to_string(),
+            "log:Info:restartedAfterChange(reason=\"routingChanged\")".to_string(),
         ]
     );
     assert!(events.iter().filter(|event| *event == "sysproxy").count() >= 2);

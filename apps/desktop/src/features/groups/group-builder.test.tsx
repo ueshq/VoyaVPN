@@ -180,9 +180,21 @@ describe("GroupBuilder preview", () => {
         singboxRoutes: [],
         validation: {
           childProfileIds: ["leaf-a"],
-          errors: ["proxy chain cycle detected"],
+          errors: [
+            {
+              code: { code: "groupCyclePath", path: ["root", "leaf-a", "root"] },
+              field: "children",
+              scope: [],
+            },
+          ],
           valid: false,
-          warnings: ["leaf-c is unreachable"],
+          warnings: [
+            {
+              code: { code: "groupChildNotFound", profileId: "leaf-c" },
+              field: "children",
+              scope: [],
+            },
+          ],
         },
       }),
     );
@@ -191,9 +203,11 @@ describe("GroupBuilder preview", () => {
     expect(await screen.findByText("Leaf A")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Preview" }));
 
-    expect(await screen.findByText("proxy chain cycle detected")).toBeInTheDocument();
+    expect(
+      await screen.findByText("The group refers back to itself: root → leaf-a → root"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Validation warnings")).toBeInTheDocument();
-    expect(screen.getByText("leaf-c is unreachable")).toBeInTheDocument();
+    expect(screen.getByText("Member profile leaf-c was not found")).toBeInTheDocument();
     expect(screen.getByText("No generated routes")).toBeInTheDocument();
   });
 

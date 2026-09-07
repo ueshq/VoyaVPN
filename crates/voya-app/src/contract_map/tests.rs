@@ -16,6 +16,8 @@ use voya_core::{
     TlsMode as CoreTlsMode, TlsSettings as CoreTlsSettings,
 };
 
+use voya_contracts::{ProfileKind, SpeedTestOutcome};
+
 use super::*;
 use crate::{
     dns::DnsSettings,
@@ -743,7 +745,7 @@ fn profile_list_entry_keeps_metrics_and_traffic_in_their_own_fields() {
             delay: 111,
             speed: 222.0,
             sort: 333,
-            message: Some("metrics-message".to_string()),
+            message: Some("timedOut".to_string()),
             ip_info: Some("metrics-ip-info".to_string()),
         },
         server_stat: ServerStatItem {
@@ -760,7 +762,7 @@ fn profile_list_entry_keeps_metrics_and_traffic_in_their_own_fields() {
     assert_eq!(entry.metrics.delay_ms, 111);
     assert!((entry.metrics.speed_bytes_per_second - 222.0).abs() < f64::EPSILON);
     assert_eq!(entry.metrics.sort, 333);
-    assert_eq!(entry.metrics.message.as_deref(), Some("metrics-message"));
+    assert_eq!(entry.metrics.outcome, Some(SpeedTestOutcome::TimedOut));
     assert_eq!(entry.metrics.ip_info.as_deref(), Some("metrics-ip-info"));
     assert_eq!(entry.traffic.total_upload, 41);
     assert_eq!(entry.traffic.total_download, 42);

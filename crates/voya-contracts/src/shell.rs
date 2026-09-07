@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{CoreState, CoreType, SysProxyType};
+use crate::{CoreState, CoreType, SysProxyType, ValidationIssue};
 
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "lowercase")]
@@ -76,8 +76,9 @@ impl AppError {
     rename_all_fields = "camelCase"
 )]
 pub enum AppErrorKind {
-    /// Submitted values were rejected. `issues` name the offending fields with
-    /// the same `field`/`message` pairing the DNS pane already renders.
+    /// Submitted values were rejected. `issues` name the offending fields and
+    /// carry a [`ValidationCode`](crate::ValidationCode) the frontend
+    /// translates, which is the pairing the DNS pane already renders.
     Validation { issues: Vec<ValidationIssue> },
     /// A referenced row does not exist. The UI's remedy is to refresh the list
     /// it selected from, so the entity matters more than the id.
@@ -168,17 +169,6 @@ pub enum DatabaseErrorCode {
     /// The database file could not be read or written.
     Io,
     Other,
-}
-
-/// One rejected field.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct ValidationIssue {
-    /// Stable identifier of the offending field, not a display label: the DNS
-    /// pane keys its inputs by `direct`/`remote`/`bootstrap`/`hosts`, and the
-    /// settings surface by its contract path (`sources.geo`).
-    pub field: String,
-    pub message: String,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Type)]

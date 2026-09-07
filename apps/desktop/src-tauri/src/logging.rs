@@ -42,7 +42,7 @@ use voya_app::{
     redaction::redact_url_userinfo,
 };
 
-use crate::ipc::events::{next_log_line_id, LogLineEvent, TransientStreamEvent};
+use crate::ipc::events::{next_log_line_id, LogLineBody, LogLineEvent, TransientStreamEvent};
 
 const LOG_FILE_PREFIX: &str = "voyavpn";
 const LOG_FILE_SUFFIX: &str = "log";
@@ -140,7 +140,11 @@ where
         let _ = TransientStreamEvent::LogLine(LogLineEvent {
             id: next_log_line_id(),
             level,
-            line: visitor.into_line(metadata.target()),
+            // A `tracing` event: developer diagnostics with a module target,
+            // not an app-authored sentence, so it stays raw like core output.
+            body: LogLineBody::Diagnostic {
+                line: visitor.into_line(metadata.target()),
+            },
         })
         .emit(&self.app);
     }

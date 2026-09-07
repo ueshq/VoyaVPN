@@ -12,7 +12,7 @@ use super::{support::*, *};
 /// regardless of how a caller assembled its list.
 pub(crate) fn emit_invalidation<R, I>(
     app: &tauri::AppHandle<R>,
-    failure_title: &'static str,
+    failure_code: NoticeCode,
     reason: &str,
     scopes: I,
 ) where
@@ -33,7 +33,7 @@ pub(crate) fn emit_invalidation<R, I>(
     {
         report_post_commit_error(
             app,
-            failure_title,
+            failure_code,
             &error.to_string(),
             AppNoticeLevel::Warning,
         );
@@ -51,7 +51,7 @@ pub(super) fn emit_profile_invalidation<R>(
 {
     emit_invalidation(
         app,
-        "Profile refresh failed",
+        NoticeCode::ProfileRefreshFailed,
         reason,
         invalidation::profile_scopes(config_changed),
     );
@@ -67,7 +67,7 @@ pub(crate) fn emit_subscription_invalidation<R>(
 {
     emit_invalidation(
         app,
-        "Subscription refresh failed",
+        NoticeCode::SubscriptionRefreshFailed,
         reason,
         invalidation::subscription_scopes(profiles_changed, config_changed),
     );
@@ -82,7 +82,7 @@ pub(super) fn emit_routing_invalidation<R>(
 {
     emit_invalidation(
         app,
-        "Routing refresh failed",
+        NoticeCode::RoutingRefreshFailed,
         reason,
         invalidation::routing_scopes(config_changed),
     );
@@ -94,7 +94,7 @@ where
 {
     emit_invalidation(
         app,
-        "DNS refresh failed",
+        NoticeCode::DnsRefreshFailed,
         reason,
         invalidation::dns_scopes(),
     );
@@ -106,7 +106,7 @@ where
 {
     emit_invalidation(
         app,
-        "Configuration refresh failed",
+        NoticeCode::ConfigurationRefreshFailed,
         reason,
         invalidation::config_template_scopes(),
     );
@@ -123,7 +123,7 @@ pub(super) fn emit_proxy_runtime_invalidation<R>(
 {
     emit_invalidation(
         app,
-        "Proxy view refresh failed",
+        NoticeCode::ProxyViewRefreshFailed,
         reason,
         invalidation::proxy_runtime_scopes(config_changed),
     );
@@ -137,7 +137,7 @@ where
 {
     emit_invalidation(
         app,
-        "Connection mode refresh failed",
+        NoticeCode::ConnectionModeRefreshFailed,
         reason,
         invalidation::connection_mode_scopes(),
     );
@@ -169,53 +169,53 @@ where
 /// Every mutating command used to spell both strings out inline around an
 /// identical eight-line `if let Err(..) { report_post_commit_error(..) }`
 /// block; the label was the only thing that varied.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(super) struct ConfigChange {
-    /// Reason recorded by the core flow's log line.
-    reason: &'static str,
-    /// Notice title used when the follow-up restart fails.
-    restart_failed_title: &'static str,
+    /// Reason the core flow's log line names.
+    reason: CoreFlowReason,
+    /// Notice raised when the follow-up restart fails.
+    restart_failed_code: NoticeCode,
 }
 
 impl ConfigChange {
     /// Every routing mutation shares the same core-flow reason and only differs
     /// in which operation the failure notice names.
-    const fn routing(restart_failed_title: &'static str) -> Self {
+    const fn routing(restart_failed_code: NoticeCode) -> Self {
         Self {
-            reason: "Routing changed",
-            restart_failed_title,
+            reason: CoreFlowReason::RoutingChanged,
+            restart_failed_code,
         }
     }
 
-    pub(super) const ROUTING_SAVED: Self = Self::routing("Routing saved; core restart failed");
-    pub(super) const ROUTING_DELETED: Self = Self::routing("Routing deleted; core restart failed");
+    pub(super) const ROUTING_SAVED: Self = Self::routing(NoticeCode::RoutingSavedRestartFailed);
+    pub(super) const ROUTING_DELETED: Self = Self::routing(NoticeCode::RoutingDeletedRestartFailed);
     pub(super) const ROUTING_SELECTED: Self =
-        Self::routing("Routing selected; core restart failed");
+        Self::routing(NoticeCode::RoutingSelectedRestartFailed);
     pub(super) const ROUTING_RULE_SAVED: Self =
-        Self::routing("Routing rule saved; core restart failed");
+        Self::routing(NoticeCode::RoutingRuleSavedRestartFailed);
     pub(super) const ROUTING_RULES_DELETED: Self =
-        Self::routing("Routing rules deleted; core restart failed");
+        Self::routing(NoticeCode::RoutingRulesDeletedRestartFailed);
     pub(super) const ROUTING_RULE_MOVED: Self =
-        Self::routing("Routing rule moved; core restart failed");
+        Self::routing(NoticeCode::RoutingRuleMovedRestartFailed);
     pub(super) const DNS: Self = Self {
-        reason: "DNS changed",
-        restart_failed_title: "DNS saved; core restart failed",
+        reason: CoreFlowReason::DnsChanged,
+        restart_failed_code: NoticeCode::DnsSavedRestartFailed,
     };
     pub(super) const CONFIG_TEMPLATE: Self = Self {
-        reason: "Config template imported",
-        restart_failed_title: "Template imported; core restart failed",
+        reason: CoreFlowReason::ConfigTemplateImported,
+        restart_failed_code: NoticeCode::TemplateImportedRestartFailed,
     };
     pub(super) const TUN: Self = Self {
-        reason: "TUN changed",
-        restart_failed_title: "TUN saved; core restart failed",
+        reason: CoreFlowReason::TunChanged,
+        restart_failed_code: NoticeCode::TunSavedRestartFailed,
     };
     pub(super) const CONNECTION_MODE: Self = Self {
-        reason: "Connection mode changed",
-        restart_failed_title: "Connection mode saved; core restart failed",
+        reason: CoreFlowReason::ConnectionModeChanged,
+        restart_failed_code: NoticeCode::ConnectionModeSavedRestartFailed,
     };
     pub(super) const APP_SETTINGS: Self = Self {
-        reason: "Settings saved",
-        restart_failed_title: "Settings saved; runtime update failed",
+        reason: CoreFlowReason::SettingsSaved,
+        restart_failed_code: NoticeCode::SettingsSavedRuntimeUpdateFailed,
     };
 }
 
@@ -241,7 +241,7 @@ pub(super) async fn restart_after_config_change<R>(
     {
         report_post_commit_error(
             app,
-            change.restart_failed_title,
+            change.restart_failed_code,
             &format!("{error:?}"),
             AppNoticeLevel::Warning,
         );
@@ -272,7 +272,7 @@ where
         }
         Err(error) => report_post_commit_error(
             app,
-            "Settings saved; system proxy update failed",
+            NoticeCode::SettingsSavedSystemProxyUpdateFailed,
             &error.message,
             AppNoticeLevel::Warning,
         ),
@@ -286,7 +286,7 @@ where
 {
     emit_invalidation(
         app,
-        "Settings refresh failed",
+        NoticeCode::SettingsRefreshFailed,
         reason,
         invalidation::settings_bundle_scopes(),
     );

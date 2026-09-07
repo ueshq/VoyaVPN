@@ -97,7 +97,8 @@ describe("frontend coverage policy", () => {
 
 describe("frontend bundle budgets", () => {
   const assets = [
-    { name: "index-abc.js", bytes: 220 * 1024 },
+    { name: "index-abc.js", bytes: 60 * 1024 },
+    { name: "locales-abc.js", bytes: 250 * 1024 },
     { name: "server-table-abc.js", bytes: 73 * 1024 },
     { name: "settings-screen-abc.js", bytes: 41 * 1024 },
     { name: "vendor-qr-abc.js", bytes: 457 * 1024 },

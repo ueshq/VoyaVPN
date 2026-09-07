@@ -54,7 +54,6 @@ function snapshot(): ProxyGroupsSnapshot {
           {
             active: true,
             delay: 42,
-            delayLabel: "42 ms",
             name: "Tokyo",
             proxyType: "vmess",
             testable: true,
@@ -63,7 +62,6 @@ function snapshot(): ProxyGroupsSnapshot {
           {
             active: false,
             delay: null,
-            delayLabel: "",
             name: "Osaka",
             proxyType: "vmess",
             testable: true,

@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
+use crate::{SpeedTestOutcome, ValidationIssue};
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ProfileKind {
@@ -238,7 +240,9 @@ pub struct ProfileMetrics {
     pub delay_ms: i32,
     pub speed_bytes_per_second: f64,
     pub sort: i32,
-    pub message: Option<String>,
+    /// The last probe's outcome, decoded from the persisted `profile_ex`
+    /// column. `None` means the profile has never been tested.
+    pub outcome: Option<SpeedTestOutcome>,
     pub ip_info: Option<String>,
 }
 
@@ -309,8 +313,8 @@ pub struct GroupChildCandidate {
 pub struct GroupValidation {
     pub valid: bool,
     pub child_profile_ids: Vec<String>,
-    pub errors: Vec<String>,
-    pub warnings: Vec<String>,
+    pub errors: Vec<ValidationIssue>,
+    pub warnings: Vec<ValidationIssue>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]

@@ -26,6 +26,8 @@
 //!   exactly what the retired `authorization` substring match did.
 
 use voya_contracts::{AppError, AppErrorEntity, AppErrorKind, AppErrorSubsystem, ValidationIssue};
+
+use super::validation_issue_to_contract;
 use voya_core::CoreType;
 use voya_db::DbError;
 use voya_net::{certificates::CertificateError, ruleset::RulesetGeoError, DownloadError};
@@ -78,7 +80,7 @@ pub fn input_text_error(
     AppError::validation(
         subsystem,
         format!("invalid {field}: {error}"),
-        vec![issue(field, error.to_string())],
+        vec![ValidationIssue::untranslated(field, error.to_string())],
     )
 }
 
@@ -175,7 +177,7 @@ impl From<GroupManagerError> for AppError {
                 "group validation failed".to_string(),
                 errors
                     .into_iter()
-                    .map(|message| issue("childProfileIds", message))
+                    .map(|message| validation_issue_to_contract("childProfileIds", message))
                     .collect(),
             ),
             GroupManagerError::SingboxConfig(source) => internal(Sub::Group, &source),
@@ -283,9 +285,14 @@ impl From<UpdateManagerError> for AppError {
         match error {
             UpdateManagerError::Database(source) => database_error(&source, Sub::Update),
             UpdateManagerError::RulesetGeo(source) => ruleset_geo_error(&source),
-            UpdateManagerError::InvalidSourceUrl(source) => {
-                invalid(Sub::Update, source.field.field, &source)
-            }
+            UpdateManagerError::InvalidSourceUrl(source) => Self::validation(
+                Sub::Update,
+                source.to_string(),
+                vec![ValidationIssue::new(
+                    source.field.field,
+                    source.reason.clone(),
+                )],
+            ),
         }
     }
 }
@@ -368,7 +375,7 @@ impl From<RuntimeError> for AppError {
                 error.to_string(),
                 errors
                     .iter()
-                    .map(|message| issue("activeProfile", message.clone()))
+                    .map(|message| validation_issue_to_contract("activeProfile", message.clone()))
                     .collect(),
             ),
             RuntimeError::CreateConfigDir { .. }
@@ -432,7 +439,10 @@ fn sysproxy_kind(error: &SystemProxyManagerError) -> AppErrorKind {
         // Asking for PAC where the OS has no PAC support is a rejected request,
         // and the mode is a settings field.
         SystemProxyManagerError::PacUnavailable(_) => AppErrorKind::Validation {
-            issues: vec![issue("network.systemProxy.mode", error.to_string())],
+            issues: vec![ValidationIssue::untranslated(
+                "network.systemProxy.mode",
+                error.to_string(),
+            )],
         },
         SystemProxyManagerError::Path(_)
         | SystemProxyManagerError::SystemProxy(_)
@@ -528,8 +538,11 @@ impl From<ConfigMutationError> for AppError {
 
 impl From<AppSettingsValidationError> for AppError {
     fn from(error: AppSettingsValidationError) -> Self {
-        let field = error.field();
-        invalid(Sub::Config, field, &error)
+        Self::validation(
+            Sub::Config,
+            error.to_string(),
+            vec![ValidationIssue::new(error.field(), error.code())],
+        )
     }
 }
 
@@ -564,16 +577,19 @@ fn ruleset_geo_error(error: &RulesetGeoError) -> AppError {
     }
 }
 
-fn issue(field: &str, message: String) -> ValidationIssue {
-    ValidationIssue {
-        field: field.to_string(),
-        message,
-    }
-}
-
+/// A rejection with no [`voya_contracts::ValidationCode`] of its own.
+///
+/// The issue carries the failing manager's English `Display` text, which the
+/// frontend renders verbatim. Managers whose messages a user actually acts on
+/// (the core validators, DNS, settings) build their issues from codes instead;
+/// giving one of these a code is a purely additive change.
 fn invalid(subsystem: AppErrorSubsystem, field: &str, error: &impl std::fmt::Display) -> AppError {
     let message = error.to_string();
-    AppError::validation(subsystem, message.clone(), vec![issue(field, message)])
+    AppError::validation(
+        subsystem,
+        message.clone(),
+        vec![ValidationIssue::untranslated(field, message)],
+    )
 }
 
 fn not_found(

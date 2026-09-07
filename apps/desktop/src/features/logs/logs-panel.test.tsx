@@ -26,7 +26,7 @@ vi.mock("@/ipc", () => ({ useRuntimeEventStore: storeMock }));
 const RECEIVED_AT = new Date(2026, 5, 1, 8, 9, 10).getTime();
 
 function line(id: number, level: LogLevel, text: string, receivedAt = RECEIVED_AT): StoredLogLine {
-  return { id, level, line: text, receivedAt };
+  return { body: { line: text, source: "core" }, id, level, receivedAt };
 }
 
 beforeEach(() => {
@@ -107,6 +107,73 @@ describe("LogsPanel", () => {
 
     expect(screen.getByText("No matching log lines")).toBeInTheDocument();
     expect(screen.queryAllByTestId("log-line")).toHaveLength(0);
+  });
+
+  it("translates an app-authored line and passes core output through", () => {
+    storeMock.state.logLines = [
+      { body: { line: "inbound/mixed started", source: "core" }, id: 1, level: "info", receivedAt: RECEIVED_AT },
+      {
+        body: { code: { code: "connecting" }, detail: null, source: "app" },
+        id: 2,
+        level: "info",
+        receivedAt: RECEIVED_AT,
+      },
+      {
+        body: {
+          code: { code: "restartingAfterChange", reason: "routingChanged" },
+          detail: null,
+          source: "app",
+        },
+        id: 3,
+        level: "info",
+        receivedAt: RECEIVED_AT,
+      },
+      {
+        body: { code: { code: "coreExitGaveUp" }, detail: "exit code 1", source: "app" },
+        id: 4,
+        level: "error",
+        receivedAt: RECEIVED_AT,
+      },
+      {
+        body: { line: "voyavpn::runtime: spawn failed", source: "diagnostic" },
+        id: 5,
+        level: "warn",
+        receivedAt: RECEIVED_AT,
+      },
+    ];
+
+    render(<LogsPanel />);
+
+    // The core's own output and the app's `tracing` diagnostics stay verbatim.
+    expect(screen.getByText("inbound/mixed started")).toBeInTheDocument();
+    expect(screen.getByText("voyavpn::runtime: spawn failed")).toBeInTheDocument();
+    // App-authored lines resolve their code, interpolate their reason, and
+    // append the untranslated detail.
+    expect(screen.getByText("Connecting active profile")).toBeInTheDocument();
+    expect(screen.getByText("Routing change — restarting the core")).toBeInTheDocument();
+    expect(
+      screen.getByText("The core stopped and will not be restarted: exit code 1"),
+    ).toBeInTheDocument();
+  });
+
+  it("searches the translated text of an app-authored line", async () => {
+    const user = userEvent.setup();
+    storeMock.state.logLines = [
+      { body: { line: "inbound/mixed started", source: "core" }, id: 1, level: "info", receivedAt: RECEIVED_AT },
+      {
+        body: { code: { code: "speedtestCancellationRequested" }, detail: null, source: "app" },
+        id: 2,
+        level: "info",
+        receivedAt: RECEIVED_AT,
+      },
+    ];
+
+    render(<LogsPanel />);
+
+    await user.type(screen.getByRole("searchbox", { name: "Filter log lines" }), "cancellation");
+
+    expect(screen.getByText("Speedtest cancellation requested")).toBeInTheDocument();
+    expect(screen.queryByText("inbound/mixed started")).not.toBeInTheDocument();
   });
 
   it("clears logs through the store action", async () => {

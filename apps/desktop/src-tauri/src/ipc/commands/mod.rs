@@ -48,12 +48,12 @@ use voya_contracts::{
     AppError, AppErrorSubsystem, AppNotice, AppNoticeLevel, AppSettingsV1, AppUpdaterState,
     AppUpdaterStatus, AppearanceSettings, CertificateFetchRequest, CertificateFetchResult,
     ConfigTemplateImportOptions, ConfigTemplateImportResult, ConfigTemplateSelection,
-    CoreSeedInstallResult, CoreSeedInstallStatus, CoreType as ContractCoreType,
+    CoreFlowReason, CoreSeedInstallResult, CoreSeedInstallStatus, CoreType as ContractCoreType,
     DnsSettings as DnsSettingsContract, ExportProfilesFormat, ExportProfilesRequest,
     ExportProfilesResult, GroupChildCandidate as GroupChildContract,
     GroupPreview as GroupPreviewContract, ImportProfilesResult as ImportProfilesContract,
-    InvalidationScope, MoveAction as ContractMoveAction, Profile as ProfileContract,
-    ProfileDedupeResult as ProfileDedupeContract, ProfileListEntry,
+    InvalidationScope, LogCode, MoveAction as ContractMoveAction, NoticeCode,
+    Profile as ProfileContract, ProfileDedupeResult as ProfileDedupeContract, ProfileListEntry,
     ProfileSortKey as ProfileSortContract, ProxyConnectionsSnapshot, ProxyDelayTestResult,
     ProxyGroupsSnapshot, ProxyMonitorStatus, QrCodeImage, QrScanResult, ResourceUpdateFile,
     Routing as RoutingContract, RoutingRule as RoutingRuleContract, RuntimeStatusResponse,
@@ -71,7 +71,7 @@ use voya_platform::{
 };
 
 use super::events::{
-    next_log_line_id, AppEvent, CoreState, InvalidateEvent, LogLevel, LogLineEvent,
+    next_log_line_id, AppEvent, CoreState, InvalidateEvent, LogLevel, LogLineBody, LogLineEvent,
     QueryInvalidation, TransientStreamEvent,
 };
 use crate::AppState;
@@ -123,4 +123,4 @@ pub use updates::*;
 pub(crate) use app::register_show_window_shortcut_for_config;
 pub(crate) use core_flow::core_flow;
 pub(crate) use lifecycle::emit_subscription_invalidation;
-pub(crate) use support::emit_runtime_log;
+pub(crate) use support::{emit_app_log, emit_core_log};

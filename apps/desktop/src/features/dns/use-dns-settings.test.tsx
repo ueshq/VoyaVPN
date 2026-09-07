@@ -94,15 +94,20 @@ describe("useDnsSettings", () => {
     act(() => result.current.updateSimple({ direct: "1.0.0.1" }));
     ipcMocks.saveDnsSettings.mockRejectedValueOnce(
       new ipcMocks.IpcCommandError({
-        kind: { issues: [{ field: "direct", message: "invalid resolver" }], type: "validation" },
+        kind: {
+          issues: [{ code: { code: "dnsAddressEmpty" }, field: "direct", scope: [] }],
+          type: "validation",
+        },
         message: "DNS rejected",
         subsystem: "dns",
       }),
     );
 
     await act(() => result.current.handleSave());
-    expect(result.current.operationError).toBe("DNS rejected");
-    expect(result.current.fieldErrors).toEqual({ direct: "invalid resolver" });
+    expect(result.current.operationError).toBe("DNS settings validation failed");
+    expect(result.current.fieldErrors).toEqual({
+      direct: "The DNS address must not be empty",
+    });
 
     ipcMocks.saveDnsSettings.mockRejectedValueOnce(new Error("database unavailable"));
     await act(() => result.current.handleSave());

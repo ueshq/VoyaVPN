@@ -7,6 +7,7 @@
 mod certificates;
 mod data;
 mod events;
+mod messages;
 mod operations;
 mod profiles;
 mod proxy;
@@ -19,6 +20,7 @@ mod tun;
 pub use certificates::*;
 pub use data::*;
 pub use events::*;
+pub use messages::*;
 pub use operations::*;
 pub use profiles::*;
 pub use proxy::*;

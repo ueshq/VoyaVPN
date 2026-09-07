@@ -40,7 +40,7 @@ export function applyLiveUpdates(
         ...withStats.metrics,
         delayMs: speedtestResult.delay ?? withStats.metrics.delayMs,
         ipInfo: speedtestResult.ipInfo ?? withStats.metrics.ipInfo,
-        message: speedtestResult.message ?? withStats.metrics.message,
+        outcome: speedtestResult.outcome,
         speedBytesPerSecond: speedtestResult.speed ?? withStats.metrics.speedBytesPerSecond,
       },
     };

@@ -136,7 +136,7 @@ pub async fn proxy_set_traffic_mode<R: tauri::Runtime>(
         {
             report_post_commit_error(
                 &app,
-                "Proxy mode saved; runtime update failed",
+                NoticeCode::ProxyModeSavedRuntimeUpdateFailed,
                 &error.to_string(),
                 AppNoticeLevel::Warning,
             );

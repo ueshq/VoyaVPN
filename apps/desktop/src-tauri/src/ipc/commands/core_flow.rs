@@ -36,8 +36,8 @@ impl<R> CoreFlowSink for TauriCoreFlowSink<R>
 where
     R: tauri::Runtime + 'static,
 {
-    fn log(&self, level: CoreFlowLevel, message: &str) {
-        if let Err(error) = emit_runtime_log(&self.app, log_level(level), message) {
+    fn log(&self, level: CoreFlowLevel, code: LogCode, detail: Option<&str>) {
+        if let Err(error) = emit_app_log(&self.app, log_level(level), code, detail) {
             tracing::warn!(?error, "failed to emit core flow log line");
         }
     }
@@ -76,8 +76,8 @@ where
         }
     }
 
-    fn notice(&self, level: CoreFlowLevel, title: &str, message: &str) {
-        report_post_commit_error(&self.app, title, message, notice_level(level));
+    fn notice(&self, level: CoreFlowLevel, code: NoticeCode, detail: &str) {
+        report_post_commit_error(&self.app, code, detail, notice_level(level));
     }
 }
 

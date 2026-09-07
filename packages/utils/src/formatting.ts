@@ -37,12 +37,20 @@ export function formatBytesPerSecond(value: number) {
   return `${scaled >= 10 ? scaled.toFixed(0) : scaled.toFixed(1)} ${RATE_UNITS[unitIndex]}`;
 }
 
-export function formatDelay(delay: number | null | undefined, fallback?: string | null) {
+/**
+ * A measured latency, or nothing.
+ *
+ * There is no fallback parameter any more: its only caller passed the
+ * backend's pre-formatted `delayLabel`/status prose, which is the string the
+ * eight locales could not translate. A node with no measurement now renders its
+ * own translated outcome next to this.
+ */
+export function formatDelay(delay: number | null | undefined) {
   if (typeof delay === "number" && delay > 0) {
     return `${delay} ms`;
   }
 
-  return fallback || "";
+  return "";
 }
 
 export function formatSpeed(speed: number | null | undefined) {

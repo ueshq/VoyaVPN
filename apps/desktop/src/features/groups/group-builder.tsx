@@ -52,7 +52,9 @@ import type {
   GroupPreview,
   GroupPreviewRoute,
   LoadStrategy,
+  ValidationIssue,
 } from "@/ipc/bindings";
+import { validationText } from "@/ipc/messages";
 import { groupChildCandidatesQueryKey } from "@/ipc/query-keys";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
 import { getErrorMessage } from "@voya/utils/error";
@@ -292,7 +294,15 @@ export function GroupBuilder({
       </div>
 
       {previewError ? (
-        <ValidationMessage tone="error" messages={[previewError]} />
+        <ValidationMessage
+          tone="error"
+          messages={[
+            // A preview request that failed outright, not a validator finding:
+            // it carries the caught error's own text, so it travels as the
+            // contract's explicit "no code for this" variant.
+            { code: { code: "untranslated", message: previewError }, field: "preview", scope: [] },
+          ]}
+        />
       ) : null}
       {preview ? <GroupPreviewPanel preview={preview} /> : null}
 
@@ -544,7 +554,7 @@ function ValidationMessage({
   messages,
   tone,
 }: {
-  messages: string[];
+  messages: ValidationIssue[];
   tone: "error" | "warning";
 }) {
   const { t } = useI18n();
@@ -566,9 +576,13 @@ function ValidationMessage({
         {tone === "error" ? t("panes.groups.validationFailed") : t("panes.groups.validationWarnings")}
       </AlertTitle>
       <AlertDescription>
-        {messages.map((message) => (
-          <div key={message}>{message}</div>
-        ))}
+        {messages.map((message) => {
+          // The finding is a code plus its parameters; `validationText` adds
+          // the group/rule breadcrumb the validator walked to reach it.
+          const text = validationText(t, message);
+
+          return <div key={text}>{text}</div>;
+        })}
       </AlertDescription>
     </Alert>
   );

@@ -188,7 +188,10 @@ function forwardingCases(): Array<[WrapperName, unknown[], unknown[]]> {
  */
 function appErrors(): Array<{ error: AppError; label: AppErrorKind["type"] }> {
   const kinds: AppErrorKind[] = [
-    { issues: [{ field: "direct", message: "invalid resolver" }], type: "validation" },
+    {
+      issues: [{ code: { code: "dnsAddressEmpty" }, field: "direct", scope: [] }],
+      type: "validation",
+    },
     { entity: "profile", id: "p-1", type: "notFound" },
     { type: "elevationRequired" },
     {

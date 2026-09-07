@@ -27,7 +27,9 @@ describe("formatting", () => {
   it("formats delays with an optional fallback", () => {
     expect(formatDelay(42)).toBe("42 ms");
     expect(formatDelay(0)).toBe("");
-    expect(formatDelay(null, "Timeout")).toBe("Timeout");
+    expect(formatDelay(null)).toBe("");
+    expect(formatDelay(undefined)).toBe("");
+    expect(formatDelay(-1)).toBe("");
   });
 
   it("formats traffic while hiding empty values", () => {

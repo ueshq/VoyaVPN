@@ -7,7 +7,10 @@ import type {
   AppSettingsV1,
   AppearanceSettings,
 } from "@/ipc/bindings";
+import { validationText } from "@/ipc/messages";
 import { queryKeys } from "@/ipc/query-keys";
+import type { TranslationFunction } from "@voya/i18n";
+import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 
 import { applyUiPreferences } from "./ui-preferences";
@@ -34,6 +37,7 @@ export type AppSettingsController = {
 };
 
 export function useAppSettings(): AppSettingsController {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const settingsQuery = useQuery({
     queryFn: loadAppSettings,
@@ -113,7 +117,7 @@ export function useAppSettings(): AppSettingsController {
       return true;
     } catch (saveError) {
       setOperationError(getErrorMessage(saveError));
-      setFieldErrors(settingsFieldErrors(saveError));
+      setFieldErrors(settingsFieldErrors(t, saveError));
       try {
         const authoritative = await loadAppSettings();
         queryClient.setQueryData(queryKeys.appSettings, authoritative);
@@ -126,7 +130,7 @@ export function useAppSettings(): AppSettingsController {
     } finally {
       setSaving(false);
     }
-  }, [settings, queryClient]);
+  }, [settings, queryClient, t]);
 
   return {
     settings,
@@ -151,12 +155,14 @@ export function useAppSettings(): AppSettingsController {
  * the backend knew exactly which field it had rejected. It now returns the same
  * `validation` kind the DNS pane already consumes, keyed by contract path.
  */
-function settingsFieldErrors(error: unknown): Record<string, string> {
+function settingsFieldErrors(t: TranslationFunction, error: unknown): Record<string, string> {
   if (!(error instanceof IpcCommandError) || error.appError.kind.type !== "validation") {
     return {};
   }
 
-  return Object.fromEntries(error.appError.kind.issues.map((issue) => [issue.field, issue.message]));
+  return Object.fromEntries(
+    error.appError.kind.issues.map((issue) => [issue.field, validationText(t, issue)]),
+  );
 }
 
 /**

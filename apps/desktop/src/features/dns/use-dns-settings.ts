@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { IpcCommandError, loadDnsSettings, saveDnsSettings } from "@/ipc";
 import type { DnsSettings } from "@/ipc/bindings";
+import { validationText } from "@/ipc/messages";
 import { queryKeys } from "@/ipc/query-keys";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
@@ -65,10 +66,14 @@ export function useDnsSettings() {
         return message;
       }
       if (error instanceof IpcCommandError && error.appError.kind.type === "validation") {
-        const message = error.appError.message;
+        // `appError.message` is the backend's English diagnostic; the banner
+        // and every field message come from the locale files instead.
+        const message = t("validation.dnsSettings");
         setOperationError(message);
         setFieldErrors(
-          Object.fromEntries(error.appError.kind.issues.map((issue) => [issue.field, issue.message])),
+          Object.fromEntries(
+            error.appError.kind.issues.map((issue) => [issue.field, validationText(t, issue)]),
+          ),
         );
         return message;
       }

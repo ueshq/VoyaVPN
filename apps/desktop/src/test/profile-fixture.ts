@@ -20,7 +20,7 @@ export function makeProfileFixture(
     metrics: {
       delayMs: index % 2 === 0 ? 40 + index : 0,
       ipInfo: index % 2 === 0 ? "US" : null,
-      message: null,
+      outcome: null,
       sort: index * 10,
       speedBytesPerSecond: index % 2 === 0 ? 2048 : null,
     },

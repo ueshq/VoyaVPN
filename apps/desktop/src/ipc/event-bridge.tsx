@@ -8,8 +8,11 @@ import type {
   ShellTabTarget,
   TransientStreamEvent,
 } from "@/ipc/bindings";
+import { noticeText } from "@/ipc/messages";
 import { invalidationQueryKey } from "@/ipc/query-keys";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useI18n } from "@voya/i18n/use-i18n";
+import type { TranslationFunction } from "@voya/i18n";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
 import { getErrorMessage } from "@voya/utils/error";
 import { type ConnectionsView, type ShellTab, useShellStore } from "@/stores/shell-store";
@@ -25,6 +28,14 @@ export function EventBridge() {
   const queryClient = useQueryClient();
   const mountedRef = useMountedRef();
   const listenerGenerationRef = useRef(0);
+  // A notice arrives as a code, and the toast store holds finished text, so it
+  // is resolved here. The ref keeps `t` out of the effect's deps: re-running it
+  // on every language change would tear down and re-register every listener.
+  const { t } = useI18n();
+  const translateRef = useRef(t);
+  useEffect(() => {
+    translateRef.current = t;
+  }, [t]);
 
   useEffect(() => {
     if (!isTauriRuntime()) {
@@ -49,7 +60,7 @@ export function EventBridge() {
       ),
       registerEventListener("appEvent", () =>
         events.appEvent.listen((event) => {
-          routeAppEvent(event.payload);
+          routeAppEvent(event.payload, translateRef.current);
         }),
       ),
       registerEventListener("transientStreamEvent", () =>
@@ -137,13 +148,15 @@ function routeTransientStream(event: TransientStreamEvent) {
   useRuntimeEventStore.getState().pushTransientEvent(event);
 }
 
-function routeAppEvent(event: AppEvent) {
+function routeAppEvent(event: AppEvent, t: TranslationFunction) {
   switch (event.kind) {
     case "notice":
       useToastStore.getState().pushToast({
-        description: event.payload.message ?? undefined,
+        // `detail` is the untranslated diagnostic behind the notice; the title
+        // is resolved from the code against the current locale.
+        description: event.payload.detail ?? undefined,
         severity: event.payload.level,
-        title: event.payload.title,
+        title: noticeText(t, event.payload.code),
       });
       return;
     case "selectTab": {
