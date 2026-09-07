@@ -111,6 +111,20 @@ pub fn validate_optional_https_source_url(label: &'static str, value: Option<&st
     voya_net::validate_absolute_https_url(value).map_err(|error| invalid_source_url(label, error))
 }
 
+/// Geo databases, sing-box rule sets and routing templates all decide which
+/// traffic bypasses the proxy, and the downloaded bytes are consumed by the
+/// core without a signature check. A network attacker able to rewrite a plain
+/// HTTP response could therefore redirect or leak arbitrary traffic, so every
+/// asset source must be HTTPS.
+pub fn validate_asset_source_urls(sources: &ConfigSourceSettings) -> Result<()> {
+    validate_optional_https_source_url("Geo source URL", sources.geo_source_url.as_deref())?;
+    validate_optional_https_source_url("SRS source URL", sources.srs_source_url.as_deref())?;
+    validate_optional_https_source_url(
+        "routing template source URL",
+        sources.route_rules_template_source_url.as_deref(),
+    )
+}
+
 const fn invalid_source_url(
     label: &'static str,
     error: voya_net::UrlValidationError,
@@ -219,6 +233,44 @@ mod tests {
             Some("http://example.com/routing.json")
         )
         .is_err());
+    }
+
+    #[test]
+    fn asset_source_validation_requires_https_for_every_source() {
+        validate_asset_source_urls(&ConfigSourceSettings {
+            geo_source_url: Some("https://example.com/geo/{0}.dat".to_string()),
+            srs_source_url: Some("https://example.com/rules/{0}.srs".to_string()),
+            route_rules_template_source_url: Some("https://example.com/routing.json".to_string()),
+        })
+        .expect("HTTPS asset sources should be accepted");
+
+        for sources in [
+            ConfigSourceSettings {
+                geo_source_url: Some("http://example.com/geo/{0}.dat".to_string()),
+                ..ConfigSourceSettings::default()
+            },
+            ConfigSourceSettings {
+                srs_source_url: Some("http://example.com/rules/{0}.srs".to_string()),
+                ..ConfigSourceSettings::default()
+            },
+            ConfigSourceSettings {
+                route_rules_template_source_url: Some(
+                    "http://example.com/routing.json".to_string(),
+                ),
+                ..ConfigSourceSettings::default()
+            },
+        ] {
+            assert!(
+                matches!(
+                    validate_asset_source_urls(&sources),
+                    Err(UpdateManagerError::InvalidSourceUrl { .. })
+                ),
+                "plain HTTP asset sources must be rejected: {sources:?}"
+            );
+        }
+
+        validate_asset_source_urls(&ConfigSourceSettings::default())
+            .expect("unset asset sources fall back to the built-in defaults");
     }
 
     #[test]

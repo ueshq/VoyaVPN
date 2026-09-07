@@ -286,6 +286,11 @@ mod tests {
             "http://169.254.1.10/sub",
             "https://[::1]/sub",
             "http://[fe80::1]/sub",
+            "http://0.0.0.0/sub",
+            "http://[::]/sub",
+            "http://[::ffff:127.0.0.1]/sub",
+            "http://[::ffff:169.254.1.1]/sub",
+            "http://[::127.0.0.1]/sub",
         ] {
             let error = validate_subscription_url(url, SubscriptionUrlPolicy::DenyLocal)
                 .expect_err("local subscription URL should fail");
@@ -299,6 +304,11 @@ mod tests {
             .expect("public HTTPS subscription URL");
         validate_subscription_url("http://192.168.1.10/sub", SubscriptionUrlPolicy::DenyLocal)
             .expect("private non-loopback subscription URL remains allowed");
+        validate_subscription_url(
+            "http://[::ffff:1.1.1.1]/sub",
+            SubscriptionUrlPolicy::DenyLocal,
+        )
+        .expect("IPv4-mapped public subscription URL remains allowed");
     }
 
     #[tokio::test]

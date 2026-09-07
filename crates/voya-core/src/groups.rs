@@ -203,10 +203,22 @@ fn effective_child_ids(
         ..
     } = &profile.protocol
     {
-        let filter = filter
-            .as_deref()
-            .and_then(nonempty)
-            .and_then(|value| Regex::new(value).ok());
+        // An unparsable filter must select nothing: falling back to "no filter"
+        // would preview a filtered group as an all-nodes group.
+        let filter = match filter.as_deref().and_then(nonempty) {
+            Some(pattern) => match Regex::new(pattern) {
+                Ok(filter) => Some(filter),
+                Err(_) => {
+                    if report_missing {
+                        result
+                            .errors
+                            .push(format!("invalid subscription filter regex: {pattern}"));
+                    }
+                    return child_index_ids;
+                }
+            },
+            None => None,
+        };
 
         for child in map.values().filter(|candidate| {
             candidate.subscription_id.as_deref() == Some(subscription_id)
@@ -424,6 +436,33 @@ mod tests {
             .errors
             .iter()
             .any(|error| error.contains("group cycle dependency")));
+    }
+
+    #[test]
+    fn policy_group_invalid_subscription_filter_selects_nothing() {
+        let sub_leaf = ProfileItem {
+            subscription_id: Some("sub".to_string()),
+            ..vless_profile("sub-leaf", "Sub Leaf")
+        };
+        let mut group = policy_group("group", "Group", "");
+        if let ProfileProtocol::PolicyGroup {
+            source_subscription_id,
+            filter,
+            ..
+        } = &mut group.protocol
+        {
+            *source_subscription_id = Some("sub".to_string());
+            *filter = Some("^(HK|SG".to_string());
+        }
+
+        let validation = validate_group_profile(&group, &[sub_leaf, group.clone()]);
+
+        assert!(!validation.valid);
+        assert!(validation
+            .errors
+            .iter()
+            .any(|error| error.contains("invalid subscription filter regex")));
+        assert!(validation.child_index_ids.is_empty());
     }
 
     fn build_preview(

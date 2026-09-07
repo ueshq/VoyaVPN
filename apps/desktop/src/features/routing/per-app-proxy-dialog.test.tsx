@@ -12,6 +12,7 @@ const ipcMocks = vi.hoisted(() => ({
   deleteRoutingRules: vi.fn(),
   listProcessCandidates: vi.fn(),
   listRoutings: vi.fn(),
+  moveRoutingRule: vi.fn(),
   saveRoutingRule: vi.fn(),
 }));
 
@@ -49,6 +50,29 @@ function routing(rules: RoutingRule[] = [], isActive = true): Routing_Serialize 
   };
 }
 
+function makeRule(id: string, remarks: string, overrides: Partial<RoutingRule> = {}): RoutingRule {
+  return {
+    domain: null,
+    enabled: true,
+    id,
+    inboundTags: null,
+    ip: null,
+    kind: null,
+    network: null,
+    outbound: "proxy",
+    port: null,
+    process: null,
+    protocol: null,
+    remarks,
+    scope: "routing",
+    ...overrides,
+  };
+}
+
+function makePerAppRule(id: string, overrides: Partial<RoutingRule> = {}): RoutingRule {
+  return makeRule(id, "voya:per-app-proxy", { process: ["chrome.exe"], ...overrides });
+}
+
 function candidate(processName: string, displayName = processName): ProcessCandidate {
   return {
     displayName,
@@ -78,6 +102,7 @@ describe("PerAppProxyDialog", () => {
       candidate("steam"),
     ]);
     ipcMocks.listRoutings.mockResolvedValue([routing()]);
+    ipcMocks.moveRoutingRule.mockResolvedValue(routing());
     ipcMocks.saveRoutingRule.mockResolvedValue(routing());
   });
 
@@ -97,6 +122,10 @@ describe("PerAppProxyDialog", () => {
   it("saves an include rule with picked and manually added processes", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
+    // The backend appends the new rule after the catch-all it was saved into.
+    ipcMocks.saveRoutingRule.mockResolvedValue(
+      routing([makeRule("rule-final", "Final proxy"), makePerAppRule("rule-new")]),
+    );
     renderDialog(onOpenChange);
 
     await user.click(await screen.findByRole("button", { name: "Proxy these apps" }));
@@ -114,7 +143,23 @@ describe("PerAppProxyDialog", () => {
       remarks: "voya:per-app-proxy",
       scope: "routing",
     });
+    expect(ipcMocks.moveRoutingRule).toHaveBeenCalledWith("routing-1", "rule-new", "top");
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("leaves the managed rule alone when it is already the first rule", async () => {
+    const user = userEvent.setup();
+    ipcMocks.saveRoutingRule.mockResolvedValue(
+      routing([makePerAppRule("rule-new"), makeRule("rule-final", "Final proxy")]),
+    );
+    renderDialog();
+
+    await user.click(await screen.findByRole("button", { name: "Proxy these apps" }));
+    await user.click(await screen.findByRole("checkbox", { name: /Google Chrome/ }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(ipcMocks.saveRoutingRule).toHaveBeenCalledTimes(1));
+    expect(ipcMocks.moveRoutingRule).not.toHaveBeenCalled();
   });
 
   it("seeds from an existing managed rule and deletes it when switched off", async () => {

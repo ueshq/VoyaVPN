@@ -106,6 +106,7 @@ export function HomeScreen() {
           </CardHeader>
           <CardContent className="flex min-h-0 flex-1 flex-col px-4">
             <NodeList
+              busy={home.busy}
               isPending={home.profilesPending}
               onActivate={home.activateProfile}
               onSelect={home.selectProfile}

@@ -174,8 +174,12 @@ pub fn build_uninstall_spawn(os: TargetOs) -> Result<ProcessSpawn, PrivilegeErro
         .with_display_log(false))
 }
 
-/// Root-owned launcher script. Dispatches `run` / `kill` / `uninstall` verbs and
-/// confines `run` to absolute, non-symlink regular files under `bin_prefix`.
+/// Root-owned launcher script. Dispatches `run` / `kill` / `uninstall` verbs.
+///
+/// The `run` verb requires an absolute path with no `..` component, resolves the
+/// containing directory with `cd -P`/`pwd -P` (so symlinked directories cannot
+/// escape), and only then requires the resolved path to be a non-symlink regular
+/// file inside the resolved `bin_prefix`. The resolved path is what gets exec'd.
 pub fn launcher_script(os: TargetOs, bin_prefix: &Path) -> Result<String, PrivilegeError> {
     let kill_body = unix_sudo_kill_body(os).map_err(|_| PrivilegeError::UnsupportedOs)?;
     let prefix = quote_shell_arg(&bin_prefix.to_string_lossy());
@@ -203,12 +207,27 @@ case "$VERB" in
       /*) ;;
       *) echo "voya-elevate: core path must be absolute" >&2; exit 64 ;;
     esac
+    case "/$EXE/" in
+      */../*) echo "voya-elevate: core path must not contain '..'" >&2; exit 64 ;;
+    esac
+    EXE_DIR="${{EXE%/*}}"
+    [ -n "$EXE_DIR" ] || EXE_DIR="/"
+    EXE_NAME="${{EXE##*/}}"
+    REAL_DIR=$(cd -P -- "$EXE_DIR" 2>/dev/null && pwd -P) || {{
+      echo "voya-elevate: core directory could not be resolved" >&2
+      exit 64
+    }}
+    REAL_PREFIX=$(cd -P -- "$PREFIX" 2>/dev/null && pwd -P) || {{
+      echo "voya-elevate: allowed directory could not be resolved" >&2
+      exit 64
+    }}
+    EXE="$REAL_DIR/$EXE_NAME"
     if [ -L "$EXE" ] || [ ! -f "$EXE" ]; then
       echo "voya-elevate: core path is not a regular file" >&2
       exit 64
     fi
     case "$EXE" in
-      "$PREFIX"/*) ;;
+      "$REAL_PREFIX"/*) ;;
       *) echo "voya-elevate: core path is outside the allowed directory" >&2; exit 64 ;;
     esac
     exec "$EXE" "$@"
@@ -377,10 +396,85 @@ mod tests {
             script.contains("PREFIX='/Users/test/Library/Application Support/VoyaVPN/bin'"),
             "prefix should be shell-quoted: {script}"
         );
-        assert!(script.contains("\"$PREFIX\"/*) ;;"));
+        assert!(script.contains("\"$REAL_PREFIX\"/*) ;;"));
         assert!(script.contains("exec \"$EXE\" \"$@\""));
-        assert!(script.contains("tree_has_expected_process"));
+        assert!(script.contains("target_has_expected_process"));
         assert!(script.contains("rm -f \"$SUDOERS\""));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn privilege_launcher_run_rejects_traversal_and_symlinked_directory_escapes() {
+        use std::fs;
+
+        let root = unique_temp_root("privilege-launcher-run");
+        let prefix = root.join("app").join("bin");
+        let outside = root.join("outside");
+        fs::create_dir_all(&prefix).expect("create prefix");
+        fs::create_dir_all(&outside).expect("create outside directory");
+
+        let allowed = prefix.join("sing-box");
+        write_executable(&allowed, "#!/bin/sh\necho voya-allowed\n");
+        let forbidden = outside.join("evil");
+        write_executable(&forbidden, "#!/bin/sh\necho voya-escaped\n");
+        std::os::unix::fs::symlink(&outside, prefix.join("outside-link")).expect("symlink");
+
+        let launcher = root.join(LAUNCHER_FILE_NAME);
+        let script = launcher_script(TargetOs::Linux, &prefix).expect("launcher script");
+        fs::write(&launcher, script).expect("write launcher");
+
+        let allowed_run = run_launcher(&launcher, &allowed);
+        assert!(
+            allowed_run.status.success(),
+            "a genuine core under the prefix must still run: {}",
+            String::from_utf8_lossy(&allowed_run.stderr)
+        );
+        assert!(String::from_utf8_lossy(&allowed_run.stdout).contains("voya-allowed"));
+
+        for escape in [
+            prefix.join("..").join("..").join("outside").join("evil"),
+            prefix.join("outside-link").join("evil"),
+            forbidden.clone(),
+        ] {
+            let output = run_launcher(&launcher, &escape);
+            assert_eq!(
+                output.status.code(),
+                Some(64),
+                "{} must be rejected, stdout: {} stderr: {}",
+                escape.display(),
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(!String::from_utf8_lossy(&output.stdout).contains("voya-escaped"));
+        }
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    fn write_executable(path: &Path, contents: &str) {
+        use std::{fs, os::unix::fs::PermissionsExt};
+
+        fs::write(path, contents).expect("write script");
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).expect("chmod script");
+    }
+
+    #[cfg(unix)]
+    fn run_launcher(launcher: &Path, executable: &Path) -> std::process::Output {
+        std::process::Command::new("bash")
+            .arg(launcher)
+            .arg("run")
+            .arg(executable)
+            .output()
+            .expect("run launcher")
+    }
+
+    #[cfg(unix)]
+    fn unique_temp_root(name: &str) -> PathBuf {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |duration| duration.as_nanos());
+        std::env::temp_dir().join(format!("voyavpn-{name}-{}-{nonce}", std::process::id()))
     }
 
     #[test]

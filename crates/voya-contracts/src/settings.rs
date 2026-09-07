@@ -195,12 +195,21 @@ pub struct SystemProxySettings {
     pub custom_script_path: Option<String>,
 }
 
+/// Loopback and link-local destinations that never belong on a proxy. Mirrors
+/// `voya_core::DEFAULT_SYSTEM_PROXY_EXCEPTIONS`; the literal is duplicated
+/// because contracts must not depend on the domain crate.
+const DEFAULT_SYSTEM_PROXY_EXCEPTIONS: &str = "localhost,127.0.0.0/8,::1";
+
 impl Default for SystemProxySettings {
     fn default() -> Self {
+        // A fresh install has no persisted settings row, so these defaults are
+        // what the system proxy is actually configured with. They must stay in
+        // step with `voya_core::SystemProxyItem::default()`; the equivalence is
+        // guarded by a test in voya-app's settings mapping layer.
         Self {
             mode: "forcedClear".to_string(),
-            exceptions: String::new(),
-            bypass_local: false,
+            exceptions: DEFAULT_SYSTEM_PROXY_EXCEPTIONS.to_string(),
+            bypass_local: true,
             advanced_protocol: String::new(),
             custom_pac_path: None,
             custom_script_path: None,

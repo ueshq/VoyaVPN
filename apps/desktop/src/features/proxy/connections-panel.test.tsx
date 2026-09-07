@@ -3,8 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createAppQueryClient } from "@/components/app-shell/query-client";
 import type { ProxyConnectionItem, ProxyConnectionsSnapshot } from "@/ipc/bindings";
 import { useConnectionColumnsStore } from "@/stores/connection-columns-store";
+import { useToastStore } from "@/stores/toast-store";
 
 import { ConnectionsPanel } from "./connections-panel";
 
@@ -39,14 +41,14 @@ vi.mock("@/ipc", () => ({
 
 const queryClients = new Set<QueryClient>();
 
-function renderConnections() {
-  const queryClient = new QueryClient({
+function renderConnections(
+  queryClient: QueryClient = new QueryClient({
     defaultOptions: {
       mutations: { retry: false },
       queries: { gcTime: 0, retry: false },
     },
-  });
-
+  }),
+) {
   queryClients.add(queryClient);
 
   return render(
@@ -74,6 +76,7 @@ describe("ConnectionsPanel", () => {
       uploadTotal: 0,
     });
     ipcMocks.state.proxyConnections = null;
+    useToastStore.setState({ toasts: [] });
     // Column visibility persists to localStorage, so reset it between tests to
     // keep default-column expectations independent of prior toggles.
     useConnectionColumnsStore.getState().resetColumnVisibility();
@@ -154,6 +157,26 @@ describe("ConnectionsPanel", () => {
     expect(await screen.findByText("host-0000.example.test")).toBeInTheDocument();
     expect(screen.getAllByTestId("connection-row").length).toBeLessThan(60);
     expect(screen.queryByText("host-1999.example.test")).not.toBeInTheDocument();
+  });
+
+  it("surfaces a failed close instead of silently re-enabling the button", async () => {
+    ipcMocks.state.proxyConnections = makeSnapshot([makeConnection(0)]);
+    ipcMocks.proxyCloseConnection.mockRejectedValue(new Error("proxy runtime is not running"));
+
+    // The real app client carries the mutation-cache safety net that turns a
+    // rejected mutation into a toast.
+    renderConnections(createAppQueryClient());
+
+    expect(await screen.findByText("host-0.example.test")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Close all" }));
+
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
+        description: "proxy runtime is not running",
+        severity: "error",
+        title: "Failed to close the connection",
+      }),
+    );
   });
 
   it("preserves filtering over the active sort", async () => {

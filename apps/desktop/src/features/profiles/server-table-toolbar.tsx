@@ -25,7 +25,6 @@ import {
   MenubarSeparator,
   MenubarTrigger,
 } from "@voya/ui/components/menubar";
-import { dedupeProfiles } from "@/ipc";
 import { getErrorMessage } from "@voya/utils/error";
 
 import { COLUMN_LABEL_KEY_BY_ID } from "./server-table-columns";
@@ -45,8 +44,8 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
     operationMessage,
     profiles,
     profilesQuery,
+    requestDedupe,
     resetColumnVisibility,
-    runOperation,
     setDialogState,
     setFilterText,
     setImportOpen,
@@ -163,7 +162,7 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
               <Rss className="size-4" aria-hidden="true" />
               {t("panes.profiles.toolbar.subscriptions")}
             </MenubarItem>
-            <MenubarItem onSelect={() => void runOperation(() => dedupeProfiles(null, null))}>
+            <MenubarItem onSelect={() => requestDedupe()}>
               <Filter className="size-4" aria-hidden="true" />
               {t("panes.profiles.toolbar.dedupe")}
             </MenubarItem>

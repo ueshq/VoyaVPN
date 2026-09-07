@@ -303,7 +303,10 @@ async fn run_single_update(
         Ok(result) => {
             outcome.config_changed = before != *mutation.config();
             match mutation.commit().await {
-                Ok(_) => outcome.result = Some(result),
+                Ok(_) => {
+                    outcome.error = unusable_update_message(&result);
+                    outcome.result = Some(result);
+                }
                 Err(error) => outcome.error = Some(error.to_string()),
             }
         }
@@ -311,6 +314,24 @@ async fn run_single_update(
     }
 
     outcome
+}
+
+/// A committed update that imported nothing is not a success: the source
+/// answered with something unusable (an expired-plan page, a login redirect, a
+/// filter that matches no node). Reporting it as a failure feeds the backoff
+/// and lets the host warn the user instead of silently resetting the schedule.
+fn unusable_update_message(result: &SubscriptionUpdateResult) -> Option<String> {
+    if result.updated > 0 || result.skipped == 0 {
+        return None;
+    }
+
+    Some(
+        result
+            .messages
+            .last()
+            .cloned()
+            .unwrap_or_else(|| "subscription update imported nothing".to_string()),
+    )
 }
 
 fn unix_now_seconds() -> i64 {
@@ -423,6 +444,31 @@ mod tests {
         );
 
         assert!(due_subscription_ids(now, &subs, &Vec::new(), &attempts).is_empty());
+    }
+
+    #[test]
+    fn committed_updates_that_imported_nothing_count_as_failures() {
+        let imported = SubscriptionUpdateResult {
+            updated: 1,
+            skipped: 1,
+            messages: vec!["Other->no profiles were imported".to_string()],
+            ..SubscriptionUpdateResult::default()
+        };
+        assert_eq!(unusable_update_message(&imported), None);
+
+        let nothing_usable = SubscriptionUpdateResult {
+            updated: 0,
+            skipped: 1,
+            messages: vec!["Plan->no importable profiles were found".to_string()],
+            ..SubscriptionUpdateResult::default()
+        };
+        assert_eq!(
+            unusable_update_message(&nothing_usable).as_deref(),
+            Some("Plan->no importable profiles were found")
+        );
+
+        let nothing_attempted = SubscriptionUpdateResult::default();
+        assert_eq!(unusable_update_message(&nothing_attempted), None);
     }
 
     #[test]

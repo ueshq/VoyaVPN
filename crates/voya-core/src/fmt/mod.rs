@@ -24,6 +24,7 @@ const RAW_NETWORK_ALIAS: &str = "tcp";
 const RAW_HEADER_HTTP: &str = "http";
 const NONE: &str = "none";
 const STREAM_SECURITY_TLS: &str = "tls";
+const STREAM_SECURITY_REALITY: &str = "reality";
 const GRPC_GUN_MODE: &str = "gun";
 const GRPC_MULTI_MODE: &str = "multi";
 const HYSTERIA2_DEFAULT_SCHEME: &str = "hysteria2://";
@@ -33,7 +34,21 @@ const NAIVE_QUIC_SCHEME: &str = "naive+quic://";
 const VOYA_PROFILE_BUNDLE_PREFIX: &str = "voya://profiles/v1/";
 const MAX_BASE64_DECODE_INPUT: usize = 1024 * 1024;
 
-const NETWORKS: &[&str] = &["raw", "xhttp", "kcp", "grpc", "ws", "httpupgrade"];
+const HTTP2_NETWORK: &str = "h2";
+/// Xray still names the HTTP/2 transport `http` in share links.
+const HTTP2_NETWORK_ALIAS: &str = "http";
+const QUIC_NETWORK: &str = "quic";
+
+const NETWORKS: &[&str] = &[
+    "raw",
+    "xhttp",
+    "kcp",
+    "grpc",
+    "ws",
+    "httpupgrade",
+    HTTP2_NETWORK,
+    QUIC_NETWORK,
+];
 const XHTTP_MODES: &[&str] = &["auto", "packet-up", "stream-up", "stream-one"];
 
 mod anytls;

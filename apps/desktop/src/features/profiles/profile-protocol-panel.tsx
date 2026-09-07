@@ -11,23 +11,27 @@ import {
   type ProfileFormControl,
   type Register,
 } from "./profile-form-fields";
-import { passwordLabel, requiresUsername, optionalNumber } from "./profile-form-utils";
+import { passwordLabel, requiresUsername, optionalNumber, usernameLabel } from "./profile-form-utils";
 import type { ProfileFormValues } from "./profile-form-schema";
 
 type ProtocolPanelProps = {
   configType: ProfileProtocol;
   control: ProfileFormControl;
   getValues: UseFormGetValues<ProfileFormValues>;
+  passwordError?: string;
   register: Register;
   setValue: UseFormSetValue<ProfileFormValues>;
+  usernameError?: string;
 };
 
 export function ProtocolPanel({
   configType,
   control,
   getValues,
+  passwordError,
   register,
   setValue,
+  usernameError,
 }: ProtocolPanelProps) {
   const { t } = useI18n();
 
@@ -52,10 +56,12 @@ export function ProtocolPanel({
   }
 
   if (configType === CONFIG_TYPES.Custom) {
+    // `address` is the config source for custom profiles and is already edited
+    // in the Profile panel; registering a second input for it would leave two
+    // fields fighting over one react-hook-form ref.
     return (
       <Panel title={t("panes.profiles.panels.custom")}>
         <div className="grid gap-3 lg:grid-cols-2">
-          <TextField label={t("panes.profiles.fields.configSource")} {...register("address")} />
           <TextField label={t("panes.profiles.fields.filter")} {...register("protocolOptions.filter")} />
         </div>
       </Panel>
@@ -66,9 +72,13 @@ export function ProtocolPanel({
     <Panel title={t("panes.profiles.panels.protocol")}>
       <div className="grid gap-3 lg:grid-cols-3">
         {requiresUsername(configType) ? (
-          <TextField label={t("panes.profiles.fields.username")} {...register("username")} />
+          <TextField
+            error={usernameError}
+            label={usernameLabel(configType, t)}
+            {...register("username")}
+          />
         ) : null}
-        <TextField label={passwordLabel(configType, t)} {...register("password")} />
+        <TextField error={passwordError} label={passwordLabel(configType, t)} {...register("password")} />
         {configType === CONFIG_TYPES.VMess ? (
           <>
             <TextField label={t("panes.profiles.fields.vmessSecurity")} placeholder="auto" {...register("protocolOptions.vmessCipher")} />
@@ -93,15 +103,7 @@ export function ProtocolPanel({
           </>
         ) : null}
         {configType === CONFIG_TYPES.TUIC ? (
-          <>
-            <TextField label={t("panes.profiles.fields.congestionControl")} placeholder="bbr" {...register("protocolOptions.congestionControl")} />
-            <TextField
-              inputMode="numeric"
-              label={t("panes.profiles.fields.insecureConcurrency")}
-              type="number"
-              {...register("protocolOptions.insecureConcurrency", { setValueAs: optionalNumber })}
-            />
-          </>
+          <TextField label={t("panes.profiles.fields.congestionControl")} placeholder="bbr" {...register("protocolOptions.congestionControl")} />
         ) : null}
         {configType === CONFIG_TYPES.WireGuard ? (
           <>
@@ -119,7 +121,17 @@ export function ProtocolPanel({
           </>
         ) : null}
         {configType === CONFIG_TYPES.Naive ? (
-          <CheckboxField control={control} label={t("panes.profiles.fields.quic")} name="protocolOptions.naiveQuic" />
+          <>
+            <CheckboxField control={control} label={t("panes.profiles.fields.quic")} name="protocolOptions.naiveQuic" />
+            <TextField label={t("panes.profiles.fields.congestionControl")} placeholder="bbr" {...register("protocolOptions.congestionControl")} />
+            <TextField
+              inputMode="numeric"
+              label={t("panes.profiles.fields.insecureConcurrency")}
+              type="number"
+              {...register("protocolOptions.insecureConcurrency", { setValueAs: optionalNumber })}
+            />
+            <CheckboxField control={control} label={t("panes.profiles.fields.udpOverTcp")} name="protocolOptions.udpOverTcp" />
+          </>
         ) : null}
       </div>
     </Panel>

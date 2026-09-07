@@ -8,8 +8,9 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::{
-    AppConfig, ConfigType, CoreType, InboundProtocol, ProfileItem, ProfileProtocol,
-    ProfileTransport, RoutingItem, RulesItem, ServerEndpoint, SimpleDnsItem, SubItem, TlsMode,
+    singbox::support::singbox_supports_config_type, AppConfig, ConfigType, CoreType,
+    InboundProtocol, ProfileItem, ProfileProtocol, ProfileTransport, RoutingItem, RulesItem,
+    ServerEndpoint, SimpleDnsItem, SubItem, TlsMode,
 };
 
 pub const PROXY_TAG: &str = "proxy";
@@ -27,7 +28,11 @@ const SHADOWSOCKS_RAW: &str = "raw";
 const SINGBOX_UNSUPPORTED_TRANSPORTS: &[&str] = &[KCP, XHTTP];
 const SINGBOX_SHADOWSOCKS_ALLOWED_TRANSPORTS: &[&str] = &[SHADOWSOCKS_RAW, WS];
 const FLOWS: &[&str] = &["", "xtls-rprx-vision", "xtls-rprx-vision-udp443"];
-const SS_SECURITIES_IN_SINGBOX: &[&str] = &[
+/// Single source of truth for the Shadowsocks ciphers sing-box accepts.
+///
+/// `crate::singbox` reads the same list when it emits the `method` field so
+/// validation and generation cannot drift apart.
+pub(crate) const SS_SECURITIES_IN_SINGBOX: &[&str] = &[
     "aes-256-gcm",
     "aes-192-gcm",
     "aes-128-gcm",
@@ -432,10 +437,10 @@ where
         global_visited: &mut BTreeSet<String>,
         ancestors: &BTreeSet<String>,
     ) -> NodeValidatorResult {
-        let group_child_list = self.group_child_profile_items(&node.protocol);
         let mut child_index_ids = Vec::new();
         let mut child_index_seen = BTreeSet::new();
         let mut child_result = NodeValidatorResult::empty();
+        let group_child_list = self.group_child_profile_items(&node.protocol, &mut child_result);
 
         for child_node in group_child_list {
             if ancestors.contains(&child_node.index_id) {
@@ -526,9 +531,13 @@ where
         child_result
     }
 
-    fn group_child_profile_items(&self, protocol: &ProfileProtocol) -> Vec<ProfileItem> {
+    fn group_child_profile_items(
+        &self,
+        protocol: &ProfileProtocol,
+        result: &mut NodeValidatorResult,
+    ) -> Vec<ProfileItem> {
         let mut items = Vec::new();
-        items.extend(self.sub_child_profile_items(protocol));
+        items.extend(self.sub_child_profile_items(protocol, result));
         items.extend(self.selected_child_profile_items(protocol));
         items
     }
@@ -541,7 +550,11 @@ where
         self.env.get_profile_items_ordered_by_index_ids(child_ids)
     }
 
-    fn sub_child_profile_items(&self, protocol: &ProfileProtocol) -> Vec<ProfileItem> {
+    fn sub_child_profile_items(
+        &self,
+        protocol: &ProfileProtocol,
+        result: &mut NodeValidatorResult,
+    ) -> Vec<ProfileItem> {
         let ProfileProtocol::PolicyGroup {
             source_subscription_id: Some(subscription_id),
             filter,
@@ -550,10 +563,18 @@ where
         else {
             return Vec::new();
         };
-        let filter = filter
-            .as_deref()
-            .and_then(nonempty)
-            .and_then(|value| Regex::new(value).ok());
+        // An unparsable filter must select nothing: falling back to "no filter"
+        // would silently turn a filtered group into an all-nodes group.
+        let filter = match filter.as_deref().and_then(nonempty) {
+            Some(pattern) => match Regex::new(pattern) {
+                Ok(filter) => Some(filter),
+                Err(_) => {
+                    result.push_error(format!("invalid subscription filter regex: {pattern}"));
+                    return Vec::new();
+                }
+            },
+            None => None,
+        };
 
         self.env
             .get_profile_items_by_subscription_id(subscription_id)
@@ -599,8 +620,10 @@ where
             return;
         };
 
+        // A rule that names an outbound node must not fall back to the active
+        // node: routing.rs would silently retarget it to the main proxy.
         let Some(rule_outbound_node) = self.env.get_profile_by_remarks(outbound_tag) else {
-            validator_result.push_warning(format!(
+            validator_result.push_error(format!(
                 "routing rule {rule_name} outbound node not found: {outbound_tag}"
             ));
             return;
@@ -615,7 +638,7 @@ where
 
         if !rule_result.success() {
             validator_result
-                .warnings
+                .errors
                 .extend(rule_result.errors.iter().map(|error| {
                     format!("routing rule {rule_name} outbound {outbound_tag} error: {error}")
                 }));
@@ -828,6 +851,89 @@ mod tests {
     }
 
     #[test]
+    fn context_invalid_subscription_filter_matches_nothing_and_reports_error() {
+        let sub_leaf = ProfileItem {
+            subscription_id: Some("sub".to_string()),
+            ..vless_profile("sub-leaf", "Sub Leaf", "sub.example.com")
+        };
+        let group = ProfileItem {
+            index_id: "group".to_string(),
+            remarks: "Group".to_string(),
+            protocol: ProfileProtocol::PolicyGroup {
+                child_profile_ids: Vec::new(),
+                source_subscription_id: Some("sub".to_string()),
+                filter: Some("^(HK|SG".to_string()),
+                strategy: crate::MultipleLoad::LeastPing,
+            },
+            ..ProfileItem::default()
+        };
+        let env = MemoryEnv {
+            profiles: vec![sub_leaf, group.clone()],
+            ..MemoryEnv::default()
+        };
+
+        let result = CoreConfigContextBuilder::new(&env).build(&app_config("group"), &group);
+
+        assert!(!result.success());
+        assert!(result
+            .validator_result
+            .errors
+            .iter()
+            .any(|error| error.contains("invalid subscription filter regex")));
+        assert!(!result.context.all_proxies_map.contains_key("sub-leaf"));
+    }
+
+    #[test]
+    fn context_unresolvable_rule_outbound_is_a_validation_error() {
+        let active = vless_profile("active", "Active", "active.example.com");
+        let env = MemoryEnv {
+            profiles: vec![active.clone()],
+            routings: vec![routing_with_outbound_tag("RenamedNode")],
+            ..MemoryEnv::default()
+        };
+
+        let result = CoreConfigContextBuilder::new(&env).build(&app_config("active"), &active);
+
+        assert!(!result.success());
+        assert!(result
+            .validator_result
+            .errors
+            .iter()
+            .any(|error| error.contains("outbound node not found: RenamedNode")));
+        assert!(!result
+            .context
+            .all_proxies_map
+            .contains_key("remark:RenamedNode"));
+    }
+
+    #[test]
+    fn context_invalid_rule_outbound_node_is_a_validation_error() {
+        let active = vless_profile("active", "Active", "active.example.com");
+        let mut broken = vless_profile("broken", "BrokenNode", "broken.example.com");
+        if let ProfileProtocol::Vless { flow, .. } = &mut broken.protocol {
+            *flow = Some("bogus-flow".to_string());
+        }
+        let env = MemoryEnv {
+            profiles: vec![active.clone(), broken],
+            routings: vec![routing_with_outbound_tag("BrokenNode")],
+            ..MemoryEnv::default()
+        };
+
+        let result = CoreConfigContextBuilder::new(&env).build(&app_config("active"), &active);
+
+        assert!(!result.success());
+        assert!(result
+            .validator_result
+            .errors
+            .iter()
+            .any(|error| error.contains("outbound BrokenNode error")));
+        assert!(!result
+            .context
+            .all_proxies_map
+            .contains_key("remark:BrokenNode"));
+    }
+
+    #[test]
     fn context_protect_domains_include_address_and_ech_sni() {
         let mut active = vless_profile("active", "Active", "node.example.com");
         active.tls = Some(crate::TlsSettings {
@@ -938,6 +1044,19 @@ mod tests {
             .context;
         assert_eq!(pre_context.node.config_type(), ConfigType::SOCKS);
         assert_eq!(pre_context.node.port(), 18888);
+    }
+
+    fn routing_with_outbound_tag(outbound_tag: &str) -> RoutingItem {
+        RoutingItem {
+            id: "routing".to_string(),
+            rule_set: vec![RulesItem {
+                id: "rule-1".to_string(),
+                outbound_tag: Some(outbound_tag.to_string()),
+                remarks: Some("route through node".to_string()),
+                ..RulesItem::default()
+            }],
+            ..RoutingItem::default()
+        }
     }
 
     fn app_config(active_id: &str) -> AppConfig {

@@ -213,6 +213,47 @@ pub trait ProcessLogSink: Send + Sync {
     fn line(&self, role: ProcessRole, stream: ProcessOutputStream, line: String);
 }
 
+/// Severity of a single core log line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessLogLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+/// Number of leading whitespace-separated tokens searched for a level token.
+///
+/// sing-box prefixes its level with a timezone offset, a date and a time, so the
+/// level is always within the first few tokens; scanning the whole line would
+/// misclassify messages that merely mention a level name.
+const CORE_LOG_LEVEL_SCAN_TOKENS: usize = 8;
+
+/// Classify a core log line by the level token the core itself wrote.
+///
+/// The stream a line arrives on carries no severity: sing-box writes every level
+/// (TRACE..PANIC) to stderr unless `log.output` is configured, so deriving the
+/// level from `ProcessOutputStream` would mark every core line as a warning.
+/// Lines without a recognizable level token are treated as `Info`.
+#[must_use]
+pub fn classify_core_log_line(line: &str) -> ProcessLogLevel {
+    line.split_whitespace()
+        .take(CORE_LOG_LEVEL_SCAN_TOKENS)
+        .find_map(|token| {
+            let token = token.trim_matches(|character: char| !character.is_ascii_alphabetic());
+            match token.to_ascii_uppercase().as_str() {
+                "TRACE" => Some(ProcessLogLevel::Trace),
+                "DEBUG" => Some(ProcessLogLevel::Debug),
+                "INFO" => Some(ProcessLogLevel::Info),
+                "WARN" | "WARNING" => Some(ProcessLogLevel::Warn),
+                "ERROR" | "FATAL" | "PANIC" => Some(ProcessLogLevel::Error),
+                _ => None,
+            }
+        })
+        .unwrap_or(ProcessLogLevel::Info)
+}
+
 pub struct StdProcessRunner {
     children: Arc<Mutex<HashMap<u32, ChildControl>>>,
     exit_handler: Mutex<Option<Arc<dyn ProcessExitHandler>>>,
@@ -538,8 +579,24 @@ fn build_command(request: &ProcessSpawn) -> Command {
         command.current_dir(&request.working_dir);
     }
     command.envs(&request.environment);
+    apply_windows_creation_flags(&mut command);
     command
 }
+
+/// Keep console-subsystem children (the core, `reg`, helper tools) from opening
+/// a console window: Windows allocates one for every such child of a
+/// GUI-subsystem parent, regardless of the child's redirected stdio.
+#[cfg(windows)]
+fn apply_windows_creation_flags(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn apply_windows_creation_flags(_command: &mut Command) {}
 
 fn drain_child_pipe<T>(
     pipe: Option<T>,
@@ -559,17 +616,20 @@ fn drain_child_pipe<T>(
             if let Some(log_sink) = &log_sink {
                 log_sink.line(role, stream, line.clone());
             }
-            if stream == ProcessOutputStream::Stderr {
-                tracing::warn!(?role, "{line}");
-            } else {
-                tracing::info!(?role, "{line}");
+            match classify_core_log_line(&line) {
+                ProcessLogLevel::Trace | ProcessLogLevel::Debug => {
+                    tracing::debug!(?role, ?stream, "{line}");
+                }
+                ProcessLogLevel::Info => tracing::info!(?role, ?stream, "{line}"),
+                ProcessLogLevel::Warn => tracing::warn!(?role, ?stream, "{line}"),
+                ProcessLogLevel::Error => tracing::error!(?role, ?stream, "{line}"),
             }
         }
     });
 }
 
 mod scripts;
-use scripts::write_generated_scripts;
+pub use scripts::write_generated_scripts;
 
 mod job;
 pub use job::{NoopProcessJobFactory, PlatformProcessJobFactory, ProcessJob, ProcessJobFactory};
@@ -692,6 +752,43 @@ mod tests {
                 "/tmp/Voya VPN/config.json".to_string(),
                 "--disable-color".to_string(),
             ]
+        );
+    }
+
+    #[test]
+    fn process_core_log_level_comes_from_the_line_not_the_stream() {
+        assert_eq!(
+            classify_core_log_line("+0800 2026-09-07 10:11:12 INFO router: loaded rules"),
+            ProcessLogLevel::Info
+        );
+        assert_eq!(
+            classify_core_log_line("+0800 2026-09-07 10:11:12 DEBUG dns: cached answer"),
+            ProcessLogLevel::Debug
+        );
+        assert_eq!(
+            classify_core_log_line("2026-09-07 10:11:12 TRACE inbound: packet"),
+            ProcessLogLevel::Trace
+        );
+        assert_eq!(
+            classify_core_log_line("WARN outbound: connection reset"),
+            ProcessLogLevel::Warn
+        );
+        assert_eq!(
+            classify_core_log_line("+0800 2026-09-07 10:11:12 FATAL start service"),
+            ProcessLogLevel::Error
+        );
+        assert_eq!(
+            classify_core_log_line("ERROR[0001] listen tcp: address already in use"),
+            ProcessLogLevel::Error
+        );
+        assert_eq!(
+            classify_core_log_line("plain line without a level token"),
+            ProcessLogLevel::Info
+        );
+        assert_eq!(
+            classify_core_log_line("+0800 2026-09-07 10:11:12 INFO dial info.example.com WARN"),
+            ProcessLogLevel::Info,
+            "the first level token in the line wins"
         );
     }
 

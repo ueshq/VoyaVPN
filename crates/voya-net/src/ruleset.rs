@@ -332,17 +332,71 @@ impl StagingDir {
         &self.path
     }
 
+    /// Moves every staged asset onto its live path.
+    ///
+    /// Staging lives inside `target_dir`, so each publish is a same-directory `rename`: the live
+    /// file is never observed truncated. Any live file is first renamed aside into the staging
+    /// directory, which keeps the batch all-or-nothing — if one asset fails to publish, the
+    /// already published ones are rolled back to the files they replaced.
     fn commit<'a>(
         &self,
         target_dir: &Path,
         file_names: impl Iterator<Item = &'a str>,
     ) -> Result<()> {
+        let mut published: Vec<PublishedAsset> = Vec::new();
+
         for file_name in file_names {
             let staged = self.path.join(file_name);
             let target = target_dir.join(file_name);
-            fs::copy(&staged, &target).map_err(|source| asset_io(&target, source))?;
+            let replaced = match self.move_aside(file_name, &target) {
+                Ok(replaced) => replaced,
+                Err(error) => {
+                    rollback(&published);
+                    return Err(error);
+                }
+            };
+            if let Err(source) = fs::rename(&staged, &target) {
+                let error = asset_io(&target, source);
+                if let Some(replaced) = replaced {
+                    let _ = fs::rename(&replaced, &target);
+                }
+                rollback(&published);
+                return Err(error);
+            }
+            published.push(PublishedAsset { target, replaced });
         }
+
         Ok(())
+    }
+
+    /// Renames an existing live asset into the staging directory so it can be restored.
+    ///
+    /// Returns `None` when there was no live file to preserve.
+    fn move_aside(&self, file_name: &str, target: &Path) -> Result<Option<PathBuf>> {
+        let replaced = self.path.join(format!("{file_name}.voya-replaced"));
+        match fs::rename(target, &replaced) {
+            Ok(()) => Ok(Some(replaced)),
+            Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(source) => Err(asset_io(target, source)),
+        }
+    }
+}
+
+struct PublishedAsset {
+    target: PathBuf,
+    replaced: Option<PathBuf>,
+}
+
+fn rollback(published: &[PublishedAsset]) {
+    for asset in published.iter().rev() {
+        match &asset.replaced {
+            Some(replaced) => {
+                let _ = fs::rename(replaced, &asset.target);
+            }
+            None => {
+                let _ = fs::remove_file(&asset.target);
+            }
+        }
     }
 }
 
@@ -678,6 +732,78 @@ mod tests {
                 .file_name()
                 .to_string_lossy()
                 .starts_with(".voya-stage-")));
+
+        let _ = fs::remove_dir_all(target_root);
+    }
+
+    #[test]
+    fn failed_commit_restores_every_replaced_asset() {
+        let target_root = unique_temp_root("ruleset-commit-rollback");
+        fs::create_dir_all(&target_root).expect("target directory");
+        fs::write(target_root.join("geosite.dat"), b"old-geosite").expect("old geosite");
+        fs::write(target_root.join("geoip.dat"), b"old-geoip").expect("old geoip");
+
+        let staging = StagingDir::create(&target_root).expect("staging directory");
+        fs::write(staging.path().join("geosite.dat"), b"new-geosite").expect("staged geosite");
+        fs::write(staging.path().join("Country.mmdb"), b"new-country").expect("staged country");
+        // "geoip.dat" is deliberately absent from staging, so publishing it fails after the two
+        // earlier assets have already been moved onto their live paths.
+
+        let error = staging
+            .commit(
+                &target_root,
+                ["geosite.dat", "Country.mmdb", "geoip.dat"].into_iter(),
+            )
+            .expect_err("commit of a missing staged asset should fail");
+
+        assert!(
+            matches!(error, RulesetGeoError::AssetIo { .. }),
+            "{error:?}"
+        );
+        assert_eq!(
+            fs::read(target_root.join("geosite.dat")).expect("geosite"),
+            b"old-geosite"
+        );
+        assert_eq!(
+            fs::read(target_root.join("geoip.dat")).expect("geoip"),
+            b"old-geoip"
+        );
+        assert!(!target_root.join("Country.mmdb").exists());
+
+        drop(staging);
+        assert!(fs::read_dir(&target_root)
+            .expect("target directory")
+            .all(|entry| !entry
+                .expect("target entry")
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".voya-stage-")));
+
+        let _ = fs::remove_dir_all(target_root);
+    }
+
+    #[test]
+    fn commit_publishes_every_staged_asset() {
+        let target_root = unique_temp_root("ruleset-commit");
+        fs::create_dir_all(&target_root).expect("target directory");
+        fs::write(target_root.join("geosite.dat"), b"old-geosite").expect("old geosite");
+
+        let staging = StagingDir::create(&target_root).expect("staging directory");
+        fs::write(staging.path().join("geosite.dat"), b"new-geosite").expect("staged geosite");
+        fs::write(staging.path().join("geoip.dat"), b"new-geoip").expect("staged geoip");
+
+        staging
+            .commit(&target_root, ["geosite.dat", "geoip.dat"].into_iter())
+            .expect("commit");
+
+        assert_eq!(
+            fs::read(target_root.join("geosite.dat")).expect("geosite"),
+            b"new-geosite"
+        );
+        assert_eq!(
+            fs::read(target_root.join("geoip.dat")).expect("geoip"),
+            b"new-geoip"
+        );
 
         let _ = fs::remove_dir_all(target_root);
     }

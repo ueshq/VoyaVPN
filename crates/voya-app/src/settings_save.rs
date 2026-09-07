@@ -71,24 +71,20 @@ pub fn validate_app_settings(
             }
         })?;
     }
-    for (label, value) in [
-        ("Geo source URL", settings.sources.geo.as_deref()),
-        (
-            "SRS source URL",
-            settings.sources.singbox_ruleset.as_deref(),
-        ),
-        (
-            "subscription converter URL",
-            settings.sources.subscription_converter.as_deref(),
-        ),
-    ] {
-        updates::validate_optional_source_url(label, value)
-            .map_err(|error| AppSettingsValidationError::InvalidSource(error.to_string()))?;
-    }
-    updates::validate_optional_https_source_url(
-        "routing template source URL",
-        settings.sources.routing_template.as_deref(),
+    // The subscription converter is routinely a local helper (for example
+    // http://localhost:25500/sub), so plain HTTP stays allowed there. Geo,
+    // ruleset and routing-template sources decide which traffic bypasses the
+    // proxy, so they must be authenticated transports.
+    updates::validate_optional_source_url(
+        "subscription converter URL",
+        settings.sources.subscription_converter.as_deref(),
     )
+    .map_err(|error| AppSettingsValidationError::InvalidSource(error.to_string()))?;
+    updates::validate_asset_source_urls(&updates::ConfigSourceSettings {
+        geo_source_url: settings.sources.geo.clone(),
+        srs_source_url: settings.sources.singbox_ruleset.clone(),
+        route_rules_template_source_url: settings.sources.routing_template.clone(),
+    })
     .map_err(|error| AppSettingsValidationError::InvalidSource(error.to_string()))?;
     if !(576..=65_535).contains(&settings.network.tun.mtu) {
         return Err(AppSettingsValidationError::InvalidTunMtu);
@@ -102,17 +98,23 @@ pub fn validate_app_settings(
     Ok(())
 }
 
+/// Whether the saved configuration changed something the running core reads
+/// from its generated config. Only generation inputs belong here: fields the
+/// UI alone consumes (node sorting, appearance) must not interrupt traffic.
 #[must_use]
 pub fn saved_config_requires_runtime_restart(original: &AppConfig, updated: &AppConfig) -> bool {
     original.index_id != updated.index_id
-        || original.sub_index_id != updated.sub_index_id
         || original.core_basic_item != updated.core_basic_item
         || original.tun_mode_item != updated.tun_mode_item
         || original.grpc_item != updated.grpc_item
         || original.routing_basic_item != updated.routing_basic_item
         || original.mux4_sbox_item != updated.mux4_sbox_item
         || original.hysteria_item != updated.hysteria_item
-        || original.proxy_ui_item != updated.proxy_ui_item
+        // `traffic_mode` selects the generated outbound; `node_sorting` only
+        // orders the proxy-groups snapshot the UI renders.
+        || original.proxy_ui_item.traffic_mode != updated.proxy_ui_item.traffic_mode
+        // The SRS source is embedded in every remote `route.rule_set[].url`.
+        || original.const_item.srs_source_url != updated.const_item.srs_source_url
         || original.inbound != updated.inbound
         || original.simple_dns_item != updated.simple_dns_item
 }
@@ -283,7 +285,6 @@ pub fn app_config_from_settings(
 
     Ok(AppConfig {
         index_id: state.active_profile_id.clone().unwrap_or_default(),
-        sub_index_id: String::new(),
         core_basic_item: CoreBasicItem {
             log_enabled: settings.core.log_enabled,
             loglevel: settings.core.log_level.clone(),
@@ -325,7 +326,7 @@ pub fn app_config_from_settings(
                 .unwrap_or(true),
         },
         ui_item: UiItem {
-            current_theme: Some(theme_to_config(settings.appearance.theme).to_string()),
+            current_theme: theme_to_config(settings.appearance.theme).map(str::to_string),
             current_language: settings.appearance.language.clone(),
         },
         const_item: voya_core::ConstItem {
@@ -405,11 +406,13 @@ pub fn app_config_from_settings(
     })
 }
 
-const fn theme_to_config(theme: contracts::ThemeMode) -> &'static str {
+/// `None` is the stored shape of "follow the system theme", matching
+/// `UiItem::default()` so contract defaults map onto domain defaults exactly.
+const fn theme_to_config(theme: contracts::ThemeMode) -> Option<&'static str> {
     match theme {
-        contracts::ThemeMode::System => "FollowSystem",
-        contracts::ThemeMode::Light => "Light",
-        contracts::ThemeMode::Dark => "Dark",
+        contracts::ThemeMode::System => None,
+        contracts::ThemeMode::Light => Some("Light"),
+        contracts::ThemeMode::Dark => Some("Dark"),
     }
 }
 
@@ -728,5 +731,96 @@ mod tests {
         let mut network = original.clone();
         network.inbound[0].local_port += 1;
         assert!(saved_config_requires_runtime_restart(&original, &network));
+    }
+
+    #[test]
+    fn runtime_restart_policy_tracks_srs_source_but_not_node_sorting() {
+        let original = AppConfig::default();
+
+        let mut sorted = original.clone();
+        sorted.proxy_ui_item.node_sorting += 1;
+        assert!(
+            !saved_config_requires_runtime_restart(&original, &sorted),
+            "node sorting only orders the proxy-groups snapshot the UI renders"
+        );
+
+        let mut mode = original.clone();
+        mode.proxy_ui_item.traffic_mode = TrafficMode::Global;
+        assert!(saved_config_requires_runtime_restart(&original, &mode));
+
+        let mut srs = original.clone();
+        srs.const_item.srs_source_url = Some("https://example.test/rules/{0}.srs".to_string());
+        assert!(
+            saved_config_requires_runtime_restart(&original, &srs),
+            "the SRS source is embedded in every generated rule_set URL"
+        );
+    }
+
+    /// Round-trip through the contract the way `save_app_settings` does, so a
+    /// field that lives only in `AppConfig` cannot silently force a restart.
+    fn config_from_settings(settings: &contracts::AppSettingsV1, current: &AppConfig) -> AppConfig {
+        let state = AppStateRecord {
+            active_profile_id: (!current.index_id.is_empty()).then(|| current.index_id.clone()),
+            active_routing_id: (!current.routing_basic_item.routing_index_id.is_empty())
+                .then(|| current.routing_basic_item.routing_index_id.clone()),
+        };
+        app_config_from_settings(settings, &state).expect("settings should map back to a config")
+    }
+
+    #[test]
+    fn saving_unchanged_settings_never_requires_a_runtime_restart() {
+        let mut original = AppConfig {
+            index_id: "profile-a".to_string(),
+            ..AppConfig::default()
+        };
+        original.routing_basic_item.routing_index_id = "routing-a".to_string();
+        original.ui_item.current_language = "zh-Hans".to_string();
+        original.const_item.srs_source_url = Some("https://example.test/{0}.srs".to_string());
+        original.proxy_ui_item.node_sorting = 3;
+
+        let target = config_from_settings(&settings_from_app_config(&original), &original);
+
+        assert_eq!(target, original);
+        assert!(!saved_config_requires_runtime_restart(&original, &target));
+    }
+
+    #[test]
+    fn contract_defaults_match_domain_defaults() {
+        let mut mapped = app_config_from_settings(
+            &contracts::AppSettingsV1::default(),
+            &AppStateRecord::default(),
+        )
+        .expect("default settings should map to a config");
+        mapped.simple_dns_item = crate::dns::normalize_simple_dns(mapped.simple_dns_item);
+
+        assert_eq!(
+            mapped,
+            AppConfig::default(),
+            "a fresh install is configured from AppSettingsV1::default(), so it must \
+             produce exactly AppConfig::default()"
+        );
+    }
+
+    #[test]
+    fn settings_validation_requires_https_for_geo_and_ruleset_sources() {
+        let mut settings = contracts::AppSettingsV1::default();
+        settings.sources.subscription_converter = Some("http://localhost:25500/sub".to_string());
+        validate_app_settings(&settings).expect("a local converter may use plain HTTP");
+
+        settings.sources.geo = Some("http://example.test/{0}.dat".to_string());
+        assert!(matches!(
+            validate_app_settings(&settings),
+            Err(AppSettingsValidationError::InvalidSource(_))
+        ));
+
+        settings.sources.geo = Some("https://example.test/{0}.dat".to_string());
+        settings.sources.singbox_ruleset = Some("http://example.test/{0}.srs".to_string());
+        assert!(matches!(
+            validate_app_settings(&settings),
+            Err(AppSettingsValidationError::InvalidSource(_))
+        ));
+
+        settings.sources.singbox_ruleset = Some("https://example.test/{0}.srs".to_string());
+        validate_app_settings(&settings).expect("HTTPS asset sources should be accepted");
     }
 }

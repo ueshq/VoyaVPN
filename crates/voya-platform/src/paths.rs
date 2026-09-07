@@ -1,9 +1,11 @@
 use std::{
-    fs, io,
+    io,
     path::{Path, PathBuf},
 };
 
 use thiserror::Error;
+
+use crate::filesystem;
 
 pub const CONFIG_DIR_NAME: &str = "guiConfigs";
 pub const BIN_DIR_NAME: &str = "bin";
@@ -90,6 +92,7 @@ impl AppPaths {
         self.core_bin_dir(core_type_dir).join(file_name)
     }
 
+    /// Create every app directory, owner-only, if it does not exist yet.
     pub fn ensure_dirs(&self) -> Result<(), PathError> {
         for dir in [
             &self.app_dir,
@@ -126,8 +129,11 @@ pub enum PathError {
     CreateDir { path: PathBuf, source: io::Error },
 }
 
+/// Create one app directory owner-only: `binConfigs` and `guiConfigs` hold
+/// generated core configs and the database, which embed proxy credentials, and
+/// a Linux home directory is not necessarily private on its own.
 fn create_dir(path: &Path) -> Result<(), PathError> {
-    fs::create_dir_all(path).map_err(|source| PathError::CreateDir {
+    filesystem::create_private_dir_all(path).map_err(|source| PathError::CreateDir {
         path: path.to_path_buf(),
         source,
     })
@@ -135,7 +141,7 @@ fn create_dir(path: &Path) -> Result<(), PathError> {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
+    use std::{env, fs};
 
     use super::*;
 
@@ -178,6 +184,24 @@ mod tests {
         assert!(paths.bin_config_dir().is_dir());
         assert!(paths.log_dir().is_dir());
         assert!(paths.temp_dir().is_dir());
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            for dir in [paths.config_dir(), paths.bin_config_dir()] {
+                assert_eq!(
+                    fs::metadata(dir)
+                        .expect("directory metadata")
+                        .permissions()
+                        .mode()
+                        & 0o777,
+                    0o700,
+                    "{} must not be readable by other local users",
+                    dir.display()
+                );
+            }
+        }
 
         let _ = fs::remove_dir_all(root);
     }

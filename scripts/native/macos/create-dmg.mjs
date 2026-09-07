@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { capture, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
+import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
 import {
   incompatiblePacketTunnelBundle,
   packetTunnelLayout,
@@ -176,6 +176,51 @@ function createDmg(outputPath) {
   ], { cwd: repoRoot });
 }
 
+/**
+ * Developer ID disk images must carry their own signature: `pnpm build:mac`
+ * notarizes the DMG and then asserts `spctl --assess --context
+ * context:primary-signature`, which rejects an unsigned image even when the app
+ * inside it is signed, notarized, and stapled.
+ */
+export function dmgSigningPlan({ distribution, identity, requireCodesign = false, disableTimestamp = false }) {
+  if (distribution !== "developer-id") {
+    return { sign: false, reason: `${distribution} distribution does not ship a Developer ID signed disk image` };
+  }
+
+  const resolvedIdentity = String(identity ?? "").trim();
+  if (!resolvedIdentity) {
+    if (requireCodesign) {
+      throw new Error(
+        "VOYAVPN_CODESIGN_IDENTITY is required to sign the Developer ID DMG before notarization and Gatekeeper assessment.",
+      );
+    }
+    return { sign: false, reason: "VOYAVPN_CODESIGN_IDENTITY is not set, so Gatekeeper will reject the disk image" };
+  }
+
+  const args = ["--force", "--sign", resolvedIdentity];
+  if (!disableTimestamp) {
+    args.push("--timestamp");
+  }
+  return { sign: true, args };
+}
+
+function signDmg(outputPath) {
+  const plan = dmgSigningPlan({
+    distribution: macosDistribution,
+    identity: process.env.VOYAVPN_CODESIGN_IDENTITY,
+    requireCodesign: truthy(process.env.VOYAVPN_REQUIRE_CODESIGN),
+    disableTimestamp: truthy(process.env.VOYAVPN_DISABLE_CODESIGN_TIMESTAMP),
+  });
+  if (!plan.sign) {
+    console.warn(`! Skipping DMG signing: ${plan.reason}`);
+    return;
+  }
+
+  run("codesign", [...plan.args, outputPath], { cwd: repoRoot });
+  run("codesign", ["--verify", "--strict", "--verbose=2", outputPath], { cwd: repoRoot });
+  console.log(`macOS DMG signed for Developer ID distribution: ${outputPath}`);
+}
+
 function attachDmg(outputPath) {
   const mountPoint = resolve(repoRoot, "target", "native", "macos", "dmg-verify-mount");
   rmSync(mountPoint, { force: true, recursive: true });
@@ -230,6 +275,7 @@ function main() {
   const outputPath = dmgPath();
   createDmg(outputPath);
   try {
+    signDmg(outputPath);
     verifyDmgContents(outputPath);
   } catch (error) {
     rmSync(outputPath, { force: true });
@@ -238,9 +284,11 @@ function main() {
   console.log(`macOS DMG created: ${outputPath}`);
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+if (isCliEntrypoint(import.meta.url)) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }

@@ -13,6 +13,7 @@ TypeScript, Tailwind v4, and shadcn/ui foundations.
 - `packages/ui`: source-only shadcn/ui primitives, design tokens, CSS, fonts, and `cn()`.
 - `packages/i18n`: source-only i18next setup and Voya-maintained locale JSON.
 - `packages/utils`: source-only shared formatting, redaction, mounted-ref, and error helpers.
+- `crates/voya-contracts`: versioned camelCase IPC and persistence DTOs; the only crate that derives `specta::Type`.
 - `crates/voya-core`: pure domain logic and golden-tested sing-box config generation.
 - `crates/voya-db`: SQLite repositories and migrations.
 - `crates/voya-platform`: OS-specific paths, process, proxy, TUN, and hotkey adapters.

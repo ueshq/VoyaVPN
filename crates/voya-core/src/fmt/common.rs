@@ -29,13 +29,9 @@ pub(super) fn value_i32(object: &Map<String, Value>, key: &str) -> Option<i32> {
     })
 }
 
-pub(super) fn string_field(object: &Map<String, Value>, key: &str) -> String {
-    object
-        .get(key)
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string()
-}
+/// Cloudflare WARP `.conf` exports omit the port on some peers; 2408 is the
+/// WARP endpoint port and keeps those imports working.
+pub(super) const WIREGUARD_DEFAULT_ENDPOINT_PORT: i32 = 2408;
 
 pub(super) fn parse_wireguard_endpoint(endpoint: &str) -> Option<(String, i32)> {
     let endpoint = endpoint.trim();
@@ -53,21 +49,26 @@ pub(super) fn parse_wireguard_endpoint(endpoint: &str) -> Option<(String, i32)> 
             .strip_prefix(':')
             .and_then(|text| text.trim().parse::<i32>().ok())
             .filter(|port| (1..=65535).contains(port))
-            .unwrap_or(2408);
+            .unwrap_or(WIREGUARD_DEFAULT_ENDPOINT_PORT);
         return Some((address, port));
     }
 
     if let Some((address, port_text)) = endpoint.rsplit_once(':') {
-        if address.trim().is_empty() {
+        // An unbracketed endpoint carries exactly one `host:port` colon. More
+        // colons mean a bare IPv6 literal, which must not be split into a host
+        // and a port.
+        let address = address.trim();
+        if address.is_empty() || address.contains(':') {
             return None;
         }
-        if let Ok(port) = port_text.trim().parse::<i32>() {
-            if (1..=65535).contains(&port) {
-                return Some((address.trim().to_string(), port));
-            }
-        }
+        let port = port_text
+            .trim()
+            .parse::<i32>()
+            .ok()
+            .filter(|port| (1..=65535).contains(port))?;
+        return Some((address.to_string(), port));
     }
-    Some((endpoint.to_string(), 2408))
+    Some((endpoint.to_string(), WIREGUARD_DEFAULT_ENDPOINT_PORT))
 }
 
 pub(super) fn parse_positive_i32(value: &str) -> Option<i32> {

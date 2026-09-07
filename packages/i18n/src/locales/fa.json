@@ -15,6 +15,7 @@
     "reload": "Reload",
     "reloadCoreConfig": "Reload core configuration",
     "restart": "شروع دوباره",
+    "retry": "تلاش دوباره",
     "save": "Save",
     "settings": "تنظیمات",
     "testSelected": "آزمون انتخاب شده"
@@ -24,6 +25,9 @@
   },
   "confirm": {
     "cancel": "انصراف",
+    "dedupeProfilesConfirm": "حذف تکراری‌ها",
+    "dedupeProfilesDescription": "پروفایل‌های تکراری در همهٔ اشتراک‌ها برای همیشه حذف می‌شوند. این عمل قابل بازگشت نیست.",
+    "dedupeProfilesTitle": "پروفایل‌های تکراری حذف شوند؟",
     "deleteProfilesConfirm": "حذف",
     "deleteProfilesDescription": "{{count}} نمایه انتخاب‌شده برای همیشه حذف خواهد شد. این عمل قابل بازگشت نیست.",
     "deleteProfilesTitle": "نمایه‌ها حذف شوند؟"
@@ -51,7 +55,8 @@
       "remainingDays": "{{days}} روز باقی‌مانده",
       "remainingTraffic": "{{amount}} باقی‌مانده",
       "update": "به‌روزرسانی اشتراک",
-      "updateFailed": "به‌روزرسانی اشتراک ناموفق بود"
+      "updateFailed": "به‌روزرسانی اشتراک ناموفق بود",
+      "updated": "اشتراک به‌روزرسانی شد"
     },
     "unprotected": "محافظت‌نشده",
     "unprotectedHint": "برای هدایت امن ترافیک متصل شوید."
@@ -94,6 +99,7 @@
     },
     "geoSource": "منبع فایل های Geo",
     "hotkeyKey": "کلید میانبر",
+    "hotkeyKeyPlaceholder": "یک کلید را فشار دهید",
     "hotkeyShowWindow": "نمایش پنجره",
     "loading": "Loading",
     "routeTemplateSource": "منبع الگوی مسیریابی",
@@ -207,6 +213,9 @@
         "reset": "بازنشانی به پیش‌فرض",
         "toggle": "ستون‌ها"
       },
+      "dedupe": {
+        "removed": "{{removed}} پروفایل تکراری حذف شد؛ {{kept}} از {{total}} نگه داشته شد."
+      },
       "dialog": {
         "addTitle": "Add profile",
         "cancel": "Cancel",
@@ -229,6 +238,7 @@
         "shareBase64": "Share links (Base64)",
         "shareLinks": "Share links",
         "showQr": "Show QR",
+        "skippedUnsupported": "{{count}} پروفایل بدون لینک اشتراک نادیده گرفته شد.",
         "voyaBundle": "Voya profile bundle"
       },
       "fields": {
@@ -457,6 +467,7 @@
       "title": "Subscriptions",
       "untitled": "Untitled",
       "updateAll": "Update all",
+      "updateNothingImported": "چیزی وارد یا به‌روزرسانی نشد.",
       "updateResult": "{{updated}} updated, {{imported}} profiles imported",
       "updateSelected": "Update selected",
       "url": "URL",
@@ -468,6 +479,7 @@
     "autoBadge": "خودکار",
     "autoManagedHint": "این گروه به‌طور خودکار سریع‌ترین گره را بر اساس تأخیر اندازه‌گیری‌شده انتخاب می‌کند.",
     "chain": "زنجیره",
+    "closeConnectionFailed": "بستن اتصال ناموفق بود",
     "cumulativeDownload": "Cumulative download {{total}}",
     "cumulativeUpload": "Cumulative upload {{total}}",
     "delay": "تاخیر",
@@ -485,9 +497,13 @@
     "noActive": "پراکسی فعالی نیست",
     "node": "گره",
     "process": "فرایند",
+    "reloadConfigFailed": "بارگذاری دوبارهٔ پیکربندی هسته ناموفق بود",
+    "selectNodeFailed": "تغییر گره ناموفق بود",
     "source": "مبدا",
     "testAll": "آزمایش همه",
+    "testDelayFailed": "آزمایش تأخیر ناموفق بود",
     "trafficModeDirect": "مستقیم",
+    "trafficModeFailed": "تغییر حالت ترافیک ناموفق بود",
     "trafficModeGlobal": "سراسری",
     "trafficModeRule": "قانون",
     "type": "نوع",
@@ -584,10 +600,13 @@
     "loadingScreen": "Loading screen",
     "nativeTunnelMissing": "Native tunnel component is not installed.",
     "noPid": "بدون PID",
+    "operationFailed": "عملیات ناموفق بود",
     "proxyMonitorStartFailed": "Unable to start proxy monitor.",
     "proxyMonitorStopFailed": "Unable to stop proxy monitor.",
     "proxyRuntime": "Proxy runtime",
     "runtimeStatusFailed": "به‌روزرسانی وضعیت اجرا ناموفق بود",
+    "screenErrorDescription": "این صفحه به‌طور غیرمنتظره متوقف شد. دوباره تلاش کنید یا اگر تکرار شد، برنامه را دوباره بارگذاری کنید.",
+    "screenErrorTitle": "مشکلی پیش آمد",
     "sysProxyPacUnavailable": "پراکسی هوشمند در این پلتفرم پشتیبانی نمی‌شود.",
     "sysProxyStatusFailed": "خواندن وضعیت پراکسی سیستم ناموفق بود",
     "tunBackendMacos": "macOS PacketTunnel",

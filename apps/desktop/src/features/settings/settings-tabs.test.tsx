@@ -85,17 +85,40 @@ describe("semantic settings tabs", () => {
     await user.click(screen.getByRole("button", { name: "Shift" }));
 
     const hotkey = screen.getByLabelText("Hotkey key");
-    fireEvent.keyDown(hotkey, { key: "Alt", keyCode: 18, which: 18 });
-    fireEvent.keyDown(hotkey, { key: "A", keyCode: 65, which: 65 });
+    // A bare modifier is never recorded; the previously stored key stays.
+    fireEvent.keyDown(hotkey, { code: "AltLeft", key: "Alt" });
+    expect(hotkey).toHaveValue("V");
+    // fireEvent returns false when the handler called preventDefault.
+    expect(fireEvent.keyDown(hotkey, { code: "KeyA", key: "a" })).toBe(false);
     expect(hotkey).toHaveValue("A");
-    fireEvent.keyDown(hotkey, { key: "F1", keyCode: 112, which: 112 });
+    fireEvent.keyDown(hotkey, { code: "F1", key: "F1" });
     expect(hotkey).toHaveValue("F1");
-    fireEvent.keyDown(hotkey, { key: "Backspace", keyCode: 8, which: 8 });
+    fireEvent.keyDown(hotkey, { code: "Backspace", key: "Backspace" });
     expect(hotkey).toHaveValue("Backspace");
-    fireEvent.keyDown(hotkey, { key: "Unknown", keyCode: 200, which: 200 });
-    expect(hotkey).toHaveValue("Key 200");
+    fireEvent.keyDown(hotkey, { code: "MediaPlayPause", key: "MediaPlayPause" });
+    expect(hotkey).toHaveValue("Backspace");
     await user.click(screen.getByRole("button", { name: "Clear" }));
     expect(hotkey).toHaveValue("");
+  });
+
+  it("never traps the keyboard inside the hotkey capture field", async () => {
+    const user = userEvent.setup();
+    render(<TabHarness Component={GeneralTab} />);
+
+    const hotkey = screen.getByLabelText("Hotkey key");
+    fireEvent.keyDown(hotkey, { code: "KeyB", key: "b" });
+    expect(hotkey).toHaveValue("B");
+
+    // Tab and Escape stay available as focus navigation and cancel: neither is
+    // recorded, and neither is swallowed (fireEvent returns true).
+    expect(fireEvent.keyDown(hotkey, { code: "Tab", key: "Tab" })).toBe(true);
+    expect(fireEvent.keyDown(hotkey, { code: "Tab", key: "Tab", shiftKey: true })).toBe(true);
+    expect(fireEvent.keyDown(hotkey, { code: "Escape", key: "Escape" })).toBe(true);
+    expect(hotkey).toHaveValue("B");
+
+    hotkey.focus();
+    await user.tab();
+    expect(hotkey).not.toHaveFocus();
   });
 });
 

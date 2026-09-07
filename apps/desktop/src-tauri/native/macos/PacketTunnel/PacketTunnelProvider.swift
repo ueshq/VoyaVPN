@@ -157,16 +157,37 @@ public final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     private static func configureDiagnostics(_ runtimeConfig: PacketTunnelRuntimeConfig) {
-        if let statusPath = runtimeConfig.statusPath?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !statusPath.isEmpty
-        {
-            providerStatusURLOverride = URL(fileURLWithPath: statusPath)
+        providerStatusURLOverride = containedDiagnosticsURL(runtimeConfig.statusPath, kind: "status")
+        providerLogURLOverride = containedDiagnosticsURL(runtimeConfig.logPath, kind: "log")
+    }
+
+    /// Accept a host-supplied diagnostics path only when it resolves inside the
+    /// App Group container.
+    ///
+    /// The runtime config comes from a file any process running as the user can
+    /// write, while the provider itself can run as root in the system-extension
+    /// packaging, so an unchecked absolute path would let the caller pick which
+    /// file the provider creates and overwrites. Anything outside the container
+    /// falls back to the container default.
+    private static func containedDiagnosticsURL(_ rawPath: String?, kind: String) -> URL? {
+        guard let path = rawPath?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty else {
+            return nil
         }
-        if let logPath = runtimeConfig.logPath?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !logPath.isEmpty
-        {
-            providerLogURLOverride = URL(fileURLWithPath: logPath)
+        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) else {
+            return nil
         }
+
+        let candidate = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL
+        let container = containerURL.resolvingSymlinksInPath().standardizedFileURL
+        let containerPrefix = container.path.hasSuffix("/") ? container.path : container.path + "/"
+        guard candidate.path.hasPrefix(containerPrefix) else {
+            logger.error(
+                "ignoring PacketTunnel \(kind, privacy: .public) path outside the App Group container: \(path, privacy: .public)"
+            )
+            return nil
+        }
+
+        return candidate
     }
 
     private static func runtimePaths() throws -> PacketTunnelRuntimePaths {

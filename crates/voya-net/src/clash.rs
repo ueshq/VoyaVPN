@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, future::Future, pin::Pin};
+use std::{collections::BTreeMap, fmt, future::Future, pin::Pin};
 
 use futures_util::StreamExt;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
@@ -7,7 +7,16 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use thiserror::Error;
 use tokio::net::TcpStream;
-use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{
+    connect_async,
+    tungstenite::{
+        client::IntoClientRequest,
+        handshake::client::Request as HandshakeRequest,
+        http::{header::AUTHORIZATION, HeaderValue},
+        Message,
+    },
+    MaybeTlsStream, WebSocketStream,
+};
 
 const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b' ')
@@ -51,11 +60,22 @@ pub enum ClashError {
     WebSocketClosed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ClashApiEndpoint {
     pub host: String,
     pub port: u16,
     pub secret: Option<String>,
+}
+
+impl fmt::Debug for ClashApiEndpoint {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ClashApiEndpoint")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("secret", &redacted(self.secret.as_deref()))
+            .finish()
+    }
 }
 
 impl ClashApiEndpoint {
@@ -108,12 +128,32 @@ impl From<ClashHttpMethod> for Method {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct ClashHttpRequest {
     pub method: ClashHttpMethod,
     pub url: String,
     pub body: Option<Value>,
     pub bearer_token: Option<String>,
+}
+
+impl fmt::Debug for ClashHttpRequest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ClashHttpRequest")
+            .field("method", &self.method)
+            .field("url", &self.url)
+            .field("body", &self.body)
+            .field("bearer_token", &redacted(self.bearer_token.as_deref()))
+            .finish()
+    }
+}
+
+/// Keeps Clash API secrets out of `Debug` output and therefore out of tracing fields.
+fn redacted(secret: Option<&str>) -> &'static str {
+    match secret {
+        Some(secret) if !secret.is_empty() => "<redacted>",
+        _ => "None",
+    }
 }
 
 pub trait ClashHttpTransport: Clone + Send + Sync + 'static {
@@ -360,11 +400,35 @@ impl ClashWebSocketClient {
     }
 
     pub async fn connect(&self, resource: ClashWebSocketResource) -> Result<ClashWebSocketSession> {
-        let (stream, _) = connect_async(self.url(resource))
+        let (stream, _) = connect_async(self.upgrade_request(resource)?)
             .await
             .map_err(|error| ClashError::WebSocket(error.to_string()))?;
 
         Ok(ClashWebSocketSession { resource, stream })
+    }
+
+    /// Builds the upgrade request, authenticating it the same way the REST transport does.
+    ///
+    /// sing-box rejects `/traffic` and `/connections` upgrades with 401 when the Clash API is
+    /// configured with a secret and the request carries no bearer token.
+    fn upgrade_request(&self, resource: ClashWebSocketResource) -> Result<HandshakeRequest> {
+        let mut request = self
+            .url(resource)
+            .into_client_request()
+            .map_err(|error| ClashError::WebSocket(error.to_string()))?;
+        if let Some(secret) = self
+            .endpoint
+            .secret
+            .as_deref()
+            .filter(|secret| !secret.is_empty())
+        {
+            let mut value = HeaderValue::from_str(&format!("Bearer {secret}"))
+                .map_err(|error| ClashError::WebSocket(error.to_string()))?;
+            value.set_sensitive(true);
+            request.headers_mut().insert(AUTHORIZATION, value);
+        }
+
+        Ok(request)
     }
 }
 
@@ -955,6 +1019,115 @@ mod tests {
             client.url(ClashWebSocketResource::Connections),
             "ws://127.0.0.1:9090/connections"
         );
+    }
+
+    #[test]
+    fn clash_websocket_upgrade_request_carries_the_endpoint_secret() {
+        let client = ClashWebSocketClient::new(secret_endpoint(9090));
+
+        let request = client
+            .upgrade_request(ClashWebSocketResource::Traffic)
+            .expect("upgrade request");
+
+        assert_eq!(request.uri().to_string(), "ws://127.0.0.1:9090/traffic");
+        assert_eq!(
+            request
+                .headers()
+                .get(AUTHORIZATION)
+                .map(|value| value.to_str().expect("header is ASCII")),
+            Some("Bearer s3cret")
+        );
+    }
+
+    #[test]
+    fn clash_websocket_upgrade_request_omits_missing_or_empty_secret() {
+        for secret in [None, Some(String::new())] {
+            let client = ClashWebSocketClient::new(ClashApiEndpoint {
+                host: "127.0.0.1".to_string(),
+                port: 9090,
+                secret,
+            });
+
+            let request = client
+                .upgrade_request(ClashWebSocketResource::Connections)
+                .expect("upgrade request");
+
+            assert!(request.headers().get(AUTHORIZATION).is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn clash_websocket_connect_sends_the_authorization_header() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let port = listener.local_addr().expect("address").port();
+        let upgrade = tokio::spawn(async move {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return String::new();
+            };
+            let mut request = Vec::new();
+            let mut buffer = vec![0u8; 512];
+            while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                match socket.read(&mut buffer).await {
+                    Ok(0) | Err(_) => break,
+                    Ok(read) => request.extend_from_slice(&buffer[..read]),
+                }
+            }
+            String::from_utf8_lossy(&request).into_owned()
+        });
+
+        // `ClashWebSocketSession` is deliberately not `Debug` (it owns the live
+        // stream), so unwrap the error by hand instead of `expect_err`.
+        let error = match ClashWebSocketClient::new(secret_endpoint(port))
+            .connect(ClashWebSocketResource::Connections)
+            .await
+        {
+            Ok(_) => panic!("fixture closes without completing the handshake"),
+            Err(error) => error,
+        };
+        let request = upgrade.await.expect("upgrade task");
+
+        assert!(matches!(error, ClashError::WebSocket(_)), "{error:?}");
+        assert!(
+            request.starts_with("GET /connections HTTP/1.1\r\n"),
+            "{request}"
+        );
+        assert!(
+            request
+                .to_ascii_lowercase()
+                .contains("authorization: bearer s3cret\r\n"),
+            "{request}"
+        );
+    }
+
+    #[test]
+    fn clash_secrets_are_redacted_in_debug_output() {
+        let endpoint = secret_endpoint(9090);
+        let request = ClashHttpRequest {
+            method: ClashHttpMethod::Get,
+            url: endpoint.http_url("/proxies"),
+            body: None,
+            bearer_token: endpoint.secret.clone(),
+        };
+
+        let endpoint_debug = format!("{endpoint:?}");
+        let request_debug = format!("{request:?}");
+
+        assert!(!endpoint_debug.contains("s3cret"), "{endpoint_debug}");
+        assert!(endpoint_debug.contains("<redacted>"), "{endpoint_debug}");
+        assert!(!request_debug.contains("s3cret"), "{request_debug}");
+        assert!(request_debug.contains("<redacted>"), "{request_debug}");
+        assert!(
+            format!("{:?}", ClashApiEndpoint::loopback(9090)).contains("secret: \"None\""),
+            "an endpoint without a secret keeps reporting that it has none"
+        );
+    }
+
+    fn secret_endpoint(port: u16) -> ClashApiEndpoint {
+        ClashApiEndpoint {
+            host: "127.0.0.1".to_string(),
+            port,
+            secret: Some("s3cret".to_string()),
+        }
     }
 
     async fn spawn_clash_http_response(

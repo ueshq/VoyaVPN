@@ -15,6 +15,7 @@
     "reload": "Reload",
     "reloadCoreConfig": "重新加载内核配置",
     "restart": "重启",
+    "retry": "重试",
     "save": "Save",
     "settings": "设置",
     "testSelected": "测试所选"
@@ -24,6 +25,9 @@
   },
   "confirm": {
     "cancel": "取消",
+    "dedupeProfilesConfirm": "删除重复项",
+    "dedupeProfilesDescription": "所有订阅中的重复配置将被永久删除，此操作无法撤销。",
+    "dedupeProfilesTitle": "删除重复的配置？",
     "deleteProfilesConfirm": "删除",
     "deleteProfilesDescription": "已选择的 {{count}} 个配置将被永久删除。此操作无法撤销。",
     "deleteProfilesTitle": "删除配置？"
@@ -51,7 +55,8 @@
       "remainingDays": "剩余 {{days}} 天",
       "remainingTraffic": "剩余 {{amount}}",
       "update": "更新订阅",
-      "updateFailed": "订阅更新失败"
+      "updateFailed": "订阅更新失败",
+      "updated": "订阅已更新"
     },
     "unprotected": "未受保护",
     "unprotectedHint": "连接以安全转发流量。"
@@ -94,6 +99,7 @@
     },
     "geoSource": "Geo 文件来源",
     "hotkeyKey": "热键按键",
+    "hotkeyKeyPlaceholder": "按下按键",
     "hotkeyShowWindow": "显示窗口",
     "loading": "正在加载",
     "routeTemplateSource": "路由模板来源",
@@ -207,6 +213,9 @@
         "reset": "恢复默认",
         "toggle": "列"
       },
+      "dedupe": {
+        "removed": "已删除 {{removed}} 个重复配置；共 {{total}} 个，保留 {{kept}} 个。"
+      },
       "dialog": {
         "addTitle": "新增配置",
         "cancel": "取消",
@@ -229,6 +238,7 @@
         "shareBase64": "分享链接（Base64）",
         "shareLinks": "分享链接",
         "showQr": "显示二维码",
+        "skippedUnsupported": "已跳过 {{count}} 个不支持分享链接的配置。",
         "voyaBundle": "Voya 节点包"
       },
       "fields": {
@@ -457,6 +467,7 @@
       "title": "Subscriptions",
       "untitled": "Untitled",
       "updateAll": "Update all",
+      "updateNothingImported": "没有导入或更新任何内容。",
       "updateResult": "{{updated}} updated, {{imported}} profiles imported",
       "updateSelected": "Update selected",
       "url": "URL",
@@ -468,6 +479,7 @@
     "autoBadge": "自动",
     "autoManagedHint": "该分组根据实测延迟自动选择最快节点。",
     "chain": "链",
+    "closeConnectionFailed": "关闭连接失败",
     "cumulativeDownload": "累计下载 {{total}}",
     "cumulativeUpload": "累计上传 {{total}}",
     "delay": "延迟",
@@ -485,9 +497,13 @@
     "noActive": "无活动代理",
     "node": "节点",
     "process": "进程",
+    "reloadConfigFailed": "重载内核配置失败",
+    "selectNodeFailed": "切换节点失败",
     "source": "来源",
     "testAll": "全部测速",
+    "testDelayFailed": "延迟测试失败",
     "trafficModeDirect": "直连",
+    "trafficModeFailed": "切换流量模式失败",
     "trafficModeGlobal": "全局",
     "trafficModeRule": "规则",
     "type": "类型",
@@ -584,10 +600,13 @@
     "loadingScreen": "Loading screen",
     "nativeTunnelMissing": "Native tunnel component is not installed.",
     "noPid": "无 PID",
+    "operationFailed": "操作失败",
     "proxyMonitorStartFailed": "Unable to start proxy monitor.",
     "proxyMonitorStopFailed": "Unable to stop proxy monitor.",
     "proxyRuntime": "Proxy runtime",
     "runtimeStatusFailed": "刷新运行状态失败",
+    "screenErrorDescription": "此页面意外中断。请重试，若仍未恢复请重新加载应用。",
+    "screenErrorTitle": "出现问题",
     "sysProxyPacUnavailable": "当前平台不支持智能代理。",
     "sysProxyStatusFailed": "读取系统代理状态失败",
     "tunBackendMacos": "macOS PacketTunnel",

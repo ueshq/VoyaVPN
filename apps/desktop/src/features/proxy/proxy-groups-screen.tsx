@@ -63,7 +63,12 @@ export function ProxyGroupsScreen() {
   );
   const selectedNodes = selectedGroup?.nodes ?? [];
 
+  // Every mutation names its failure through `meta.errorTitle`; the app-wide
+  // mutation cache (see components/app-shell/query-client.ts) turns a rejection
+  // into a toast, so a failing Clash call can never re-enable the button in
+  // silence.
   const delayMutation = useMutation({
+    meta: { errorTitle: t("proxy.testDelayFailed") },
     mutationFn: proxyTestDelay,
     onSuccess: (results) => {
       setDelayResults((current) => ({
@@ -73,6 +78,7 @@ export function ProxyGroupsScreen() {
     },
   });
   const reloadMutation = useMutation({
+    meta: { errorTitle: t("proxy.reloadConfigFailed") },
     mutationFn: () => proxyReloadConfig(null),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["proxy-groups"] });
@@ -80,6 +86,7 @@ export function ProxyGroupsScreen() {
     },
   });
   const trafficModeMutation = useMutation({
+    meta: { errorTitle: t("proxy.trafficModeFailed") },
     mutationFn: proxySetTrafficMode,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["app-config"] });
@@ -87,6 +94,7 @@ export function ProxyGroupsScreen() {
     },
   });
   const selectMutation = useMutation({
+    meta: { errorTitle: t("proxy.selectNodeFailed") },
     mutationFn: ({ groupName, nodeName }: { groupName: string; nodeName: string }) =>
       proxySelectNode(groupName, nodeName),
     onSuccess: (nextSnapshot) => {
@@ -95,7 +103,7 @@ export function ProxyGroupsScreen() {
   });
 
   function runDelayTest(names: string[]) {
-    void delayMutation.mutateAsync(names);
+    delayMutation.mutate(names);
   }
 
   function runSelectedDelayTest() {
@@ -112,7 +120,7 @@ export function ProxyGroupsScreen() {
     if (!selectedGroup || node.active || selectedGroup.proxyType.toLowerCase() !== "selector") {
       return;
     }
-    void selectMutation.mutateAsync({ groupName: selectedGroup.name, nodeName: node.name });
+    selectMutation.mutate({ groupName: selectedGroup.name, nodeName: node.name });
   }
 
   return (
@@ -131,7 +139,7 @@ export function ProxyGroupsScreen() {
                   snapshot?.trafficMode === option.value && "bg-background text-foreground shadow-sm hover:bg-background",
                 )}
                 disabled={trafficModeMutation.isPending}
-                onClick={() => void trafficModeMutation.mutateAsync(option.value)}
+                onClick={() => trafficModeMutation.mutate(option.value)}
                 type="button"
                 variant="ghost"
               >
@@ -142,7 +150,7 @@ export function ProxyGroupsScreen() {
           <Button
             aria-label={t("actions.reloadCoreConfig")}
             disabled={reloadMutation.isPending}
-            onClick={() => void reloadMutation.mutateAsync()}
+            onClick={() => reloadMutation.mutate()}
             size="sm"
             type="button"
             variant="outline"

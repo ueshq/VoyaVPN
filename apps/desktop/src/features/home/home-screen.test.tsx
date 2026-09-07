@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -147,11 +147,14 @@ function renderHome() {
     defaultOptions: { queries: { gcTime: 0, retry: false } },
   });
 
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <HomeScreen />
-    </QueryClientProvider>,
-  );
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <HomeScreen />
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 const connectedCoreState: CoreStateEvent = {
@@ -332,6 +335,84 @@ describe("HomeScreen", () => {
     renderHome();
 
     await screen.findByRole("option", { name: /Osaka Edge/ });
+    await user.click(connectButton());
+
+    await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1));
+    expect(ipcMock.setActiveProfile).not.toHaveBeenCalled();
+  });
+
+  it("refuses node activation while a runtime action is still in flight", async () => {
+    runtimeMock.state.coreState = connectedCoreState;
+    ipcMock.listProfiles.mockResolvedValue([
+      makeActiveProfile({ id: "node-tokyo", remarks: "Tokyo Edge" }),
+      makeProfile(1, { id: "osaka", remarks: "Osaka Edge" }),
+    ]);
+    // Never settles: the disconnect stays pending for the whole test.
+    ipcMock.disconnectCore.mockReturnValue(new Promise(() => {}));
+
+    const user = userEvent.setup();
+    renderHome();
+
+    const osaka = await screen.findByRole("option", { name: /Osaka Edge/ });
+    await user.click(connectButton());
+    expect(connectButton()).toBeDisabled();
+
+    await user.dblClick(osaka);
+
+    expect(osaka).toHaveAttribute("aria-disabled", "true");
+    expect(ipcMock.setActiveProfile).not.toHaveBeenCalled();
+    expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
+    expect(ipcMock.restartCore).not.toHaveBeenCalled();
+  });
+
+  it("refuses node activation while the backend reports disconnecting", async () => {
+    runtimeMock.state.coreState = { ...connectedCoreState, state: "disconnecting" };
+    ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
+
+    const user = userEvent.setup();
+    renderHome();
+
+    const tokyo = await screen.findByRole("option", { name: /Tokyo Edge/ });
+    tokyo.focus();
+    await user.keyboard("{Enter}");
+
+    expect(tokyo).toHaveAttribute("aria-disabled", "true");
+    expect(ipcMock.setActiveProfile).not.toHaveBeenCalled();
+    expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
+  });
+
+  it("drops a selection whose node disappeared and connects the active one", async () => {
+    ipcMock.listProfiles.mockResolvedValue([
+      makeActiveProfile({ id: "osaka", remarks: "Osaka Edge" }),
+      makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" }),
+    ]);
+
+    const user = userEvent.setup();
+    const { queryClient } = renderHome();
+
+    await user.click(await screen.findByRole("option", { name: /Tokyo Edge/ }));
+    expect(screen.getByRole("option", { name: /Tokyo Edge/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    // The subscription update (or a delete on the Profiles screen) pruned the
+    // selected node while the Home screen stayed mounted.
+    ipcMock.listProfiles.mockResolvedValue([
+      makeActiveProfile({ id: "osaka", remarks: "Osaka Edge" }),
+    ]);
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByRole("option", { name: /Tokyo Edge/ })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("option", { name: /Osaka Edge/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
     await user.click(connectButton());
 
     await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1));

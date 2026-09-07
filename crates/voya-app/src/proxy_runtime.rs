@@ -1,15 +1,11 @@
 use std::{
     sync::{Arc, Mutex},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
+use futures_util::{stream, StreamExt};
 use thiserror::Error;
-use tokio::{
-    runtime::Handle,
-    sync::watch,
-    task::JoinHandle,
-    time::{self, MissedTickBehavior},
-};
+use tokio::{runtime::Handle, sync::watch, task::JoinHandle, time};
 pub use voya_contracts::{
     ProxyConnectionItem, ProxyConnectionsSnapshot, ProxyDelayTestResult, ProxyGroup,
     ProxyGroupsSnapshot, ProxyMonitorState, ProxyMonitorStatus, ProxyNode, ProxyTrafficEvent,
@@ -23,13 +19,17 @@ use voya_net::clash::{
     ClashWebSocketClient, ClashWebSocketEvent, ClashWebSocketResource, ReqwestClashHttpTransport,
 };
 
-use crate::statistics::singbox_state_port2;
+use crate::{
+    backoff::{sleep_or_shutdown, WebSocketReconnectBackoff},
+    statistics::singbox_state_port2,
+};
 
-const DELAY_TIMEOUT_MS: u32 = 10_000;
+/// Fallback per-node latency budget when the configured speed-test timeout is
+/// unusable; matches `SpeedTestItem::default().speed_test_timeout`.
+const DEFAULT_DELAY_TIMEOUT_MS: u32 = 10_000;
 const PROXY_WS_RECONNECT_INITIAL_DELAY: Duration = Duration::from_secs(1);
 const PROXY_WS_RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
 const PROXY_WS_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const WS_RECONNECT_JITTER_DIVISOR: u32 = 4;
 const ALLOW_SELECT_TYPES: &[&str] = &["selector", "urltest", "loadbalance", "fallback"];
 const NOT_ALLOW_TEST_TYPES: &[&str] = &[
     "selector",
@@ -161,25 +161,33 @@ where
             node_names
         };
 
-        let mut results = Vec::with_capacity(names.len());
-        for name in names {
-            let response = client
-                .delay_proxy(
-                    &name,
-                    DELAY_TIMEOUT_MS,
-                    &config.speed_test_item.speed_ping_test_url,
-                )
-                .await
-                .unwrap_or_else(|error| ClashDelayResponse {
-                    delay: None,
-                    message: Some(error.to_string()),
-                });
-            results.push(ProxyDelayTestResult {
-                name,
-                delay: response.delay,
-                message: response.message,
-            });
-        }
+        let timeout_ms = delay_timeout_ms(config);
+        let test_url = config.speed_test_item.speed_ping_test_url.as_str();
+        let concurrency = delay_test_concurrency(config, names.len());
+        let client = &client;
+
+        // Testing one node at a time costs a full timeout per unreachable
+        // node, so "test all" takes minutes on a large subscription. `buffered`
+        // overlaps the requests while still yielding results in the order the
+        // caller asked for them.
+        let results = stream::iter(names)
+            .map(|name| async move {
+                let response = client
+                    .delay_proxy(&name, timeout_ms, test_url)
+                    .await
+                    .unwrap_or_else(|error| ClashDelayResponse {
+                        delay: None,
+                        message: Some(error.to_string()),
+                    });
+                ProxyDelayTestResult {
+                    name,
+                    delay: response.delay,
+                    message: response.message,
+                }
+            })
+            .buffered(concurrency)
+            .collect::<Vec<_>>()
+            .await;
 
         Ok(results)
     }
@@ -370,81 +378,6 @@ async fn run_proxy_ws_monitor(
             break;
         }
     }
-}
-
-async fn sleep_or_shutdown(duration: Duration, shutdown: &mut watch::Receiver<bool>) -> bool {
-    let mut sleep = time::interval(duration);
-    sleep.set_missed_tick_behavior(MissedTickBehavior::Delay);
-    sleep.tick().await;
-
-    tokio::select! {
-        changed = shutdown.changed() => changed.is_err() || *shutdown.borrow(),
-        _ = sleep.tick() => false,
-    }
-}
-
-#[derive(Debug, Clone)]
-struct WebSocketReconnectBackoff {
-    attempt: u32,
-    initial: Duration,
-    max: Duration,
-}
-
-impl WebSocketReconnectBackoff {
-    const fn new(initial: Duration, max: Duration) -> Self {
-        Self {
-            attempt: 0,
-            initial,
-            max,
-        }
-    }
-
-    fn reset(&mut self) {
-        self.attempt = 0;
-    }
-
-    fn next_delay(&mut self) -> Duration {
-        let delay = websocket_reconnect_delay(
-            self.attempt,
-            self.initial,
-            self.max,
-            reconnect_jitter_seed(),
-        );
-        self.attempt = self.attempt.saturating_add(1);
-        delay
-    }
-}
-
-fn websocket_reconnect_delay(
-    attempt: u32,
-    initial: Duration,
-    max: Duration,
-    jitter_seed: u64,
-) -> Duration {
-    let multiplier = 1_u32.checked_shl(attempt.min(16)).unwrap_or(u32::MAX);
-    let scaled = initial.saturating_mul(multiplier);
-    let base = if scaled > max { max } else { scaled };
-
-    base.saturating_add(reconnect_jitter(base, jitter_seed))
-}
-
-fn reconnect_jitter(base: Duration, jitter_seed: u64) -> Duration {
-    let jitter_limit_nanos =
-        (base.as_nanos() / u128::from(WS_RECONNECT_JITTER_DIVISOR)).min(u128::from(u64::MAX));
-    if jitter_limit_nanos == 0 {
-        return Duration::ZERO;
-    }
-
-    let jitter_nanos = u128::from(jitter_seed) % (jitter_limit_nanos + 1);
-    Duration::from_nanos(u64::try_from(jitter_nanos).unwrap_or(u64::MAX))
-}
-
-fn reconnect_jitter_seed() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| {
-            u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX) ^ u64::from(std::process::id())
-        })
 }
 
 pub fn route_proxy_ws_event(sink: &dyn ProxyRuntimeEventSink, event: ClashWebSocketEvent) {
@@ -640,6 +573,27 @@ fn endpoint_label(address: Option<&str>, port: Option<&str>) -> String {
     }
 }
 
+/// Per-node latency budget in milliseconds, taken from the configured
+/// speed-test timeout so one setting governs every latency probe.
+fn delay_timeout_ms(config: &AppConfig) -> u32 {
+    u32::try_from(config.speed_test_item.speed_test_timeout)
+        .ok()
+        .filter(|seconds| *seconds > 0)
+        .and_then(|seconds| seconds.checked_mul(1_000))
+        .unwrap_or(DEFAULT_DELAY_TIMEOUT_MS)
+}
+
+/// How many latency probes may be in flight at once. Reuses the shared
+/// speed-test concurrency setting, mirroring the speedtest manager, and never
+/// returns zero because `buffered(0)` would stall the stream.
+fn delay_test_concurrency(config: &AppConfig, node_count: usize) -> usize {
+    let configured = usize::try_from(config.speed_test_item.mixed_concurrency_count)
+        .ok()
+        .filter(|value| *value > 0)
+        .unwrap_or(1);
+    configured.min(node_count.max(1))
+}
+
 fn is_selectable_type(proxy_type: &str) -> bool {
     let proxy_type = proxy_type.to_ascii_lowercase();
     ALLOW_SELECT_TYPES.contains(&proxy_type.as_str())
@@ -714,6 +668,44 @@ mod tests {
                     .get(&request.url)
                     .cloned()
                     .ok_or_else(|| ClashError::Request(format!("no response for {}", request.url)))
+            })
+        }
+    }
+
+    /// Records how many delay probes overlap so the bounded-concurrency
+    /// behaviour can be asserted without depending on wall-clock timing.
+    #[derive(Clone, Default)]
+    struct ConcurrencyProbeTransport {
+        state: Arc<Mutex<ConcurrencyProbe>>,
+    }
+
+    #[derive(Default)]
+    struct ConcurrencyProbe {
+        in_flight: usize,
+        max_in_flight: usize,
+        urls: Vec<String>,
+    }
+
+    impl ClashHttpTransport for ConcurrencyProbeTransport {
+        fn send_json<'transport>(
+            &'transport self,
+            request: ClashHttpRequest,
+        ) -> Pin<Box<dyn Future<Output = voya_net::clash::Result<Value>> + Send + 'transport>>
+        {
+            Box::pin(async move {
+                {
+                    let mut state = self.state.lock().expect("probe lock");
+                    state.in_flight += 1;
+                    state.max_in_flight = state.max_in_flight.max(state.in_flight);
+                    state.urls.push(request.url.clone());
+                }
+                // Yield so every probe the stream started is counted before
+                // the first one completes.
+                tokio::task::yield_now().await;
+                tokio::task::yield_now().await;
+                self.state.lock().expect("probe lock").in_flight -= 1;
+
+                Ok(json!({ "delay": 20 }))
             })
         }
     }
@@ -874,6 +866,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn proxy_runtime_tests_delay_with_bounded_concurrency_in_request_order() {
+        let transport = ConcurrencyProbeTransport::default();
+        let manager = ProxyRuntimeManager::with_transport(transport.clone());
+        let names = (0..8)
+            .map(|index| format!("node-{index}"))
+            .collect::<Vec<_>>();
+
+        let results = manager
+            .test_delay(&config(), names.clone())
+            .await
+            .expect("delay");
+
+        assert_eq!(
+            results
+                .iter()
+                .map(|result| result.name.clone())
+                .collect::<Vec<_>>(),
+            names,
+            "results must follow the requested order"
+        );
+        assert!(results.iter().all(|result| result.delay == Some(20)));
+
+        let probe = transport.state.lock().expect("probe lock");
+        assert_eq!(probe.urls.len(), names.len());
+        assert!(
+            probe.max_in_flight > 1,
+            "delay probes must overlap instead of running one at a time"
+        );
+        assert!(
+            probe.max_in_flight <= 5,
+            "concurrency must stay within the configured speed-test limit, saw {}",
+            probe.max_in_flight
+        );
+    }
+
+    #[test]
+    fn proxy_runtime_delay_budget_follows_the_speed_test_settings() {
+        let mut config = config();
+        assert_eq!(delay_timeout_ms(&config), 10_000);
+        assert_eq!(delay_test_concurrency(&config, 40), 5);
+        assert_eq!(
+            delay_test_concurrency(&config, 2),
+            2,
+            "never start more probes than there are nodes"
+        );
+
+        config.speed_test_item.speed_test_timeout = 3;
+        config.speed_test_item.mixed_concurrency_count = 0;
+        assert_eq!(delay_timeout_ms(&config), 3_000);
+        assert_eq!(
+            delay_test_concurrency(&config, 40),
+            1,
+            "buffered(0) would stall the stream"
+        );
+
+        config.speed_test_item.speed_test_timeout = -1;
+        assert_eq!(delay_timeout_ms(&config), DEFAULT_DELAY_TIMEOUT_MS);
+    }
+
+    #[tokio::test]
     async fn proxy_runtime_rejects_zero_state_port_without_request() {
         let transport = MockTransport::default();
         let manager = ProxyRuntimeManager::with_transport(transport.clone());
@@ -886,21 +938,6 @@ mod tests {
         assert!(matches!(error, ProxyRuntimeError::InvalidStatePort));
         assert!(transport.requests().is_empty());
         assert_eq!(proxy_runtime_endpoint(&config_with_local_port(-5)), None);
-    }
-
-    #[test]
-    fn proxy_websocket_reconnect_delay_backs_off_with_cap_and_jitter() {
-        let initial = Duration::from_secs(1);
-        let max = Duration::from_secs(8);
-
-        let first = websocket_reconnect_delay(0, initial, max, 0);
-        let second = websocket_reconnect_delay(1, initial, max, 0);
-        let capped = websocket_reconnect_delay(12, initial, max, u64::MAX);
-
-        assert_eq!(first, Duration::from_secs(1));
-        assert_eq!(second, Duration::from_secs(2));
-        assert!(capped >= max);
-        assert!(capped <= max + Duration::from_secs(2));
     }
 
     #[test]

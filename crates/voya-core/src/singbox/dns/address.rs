@@ -42,9 +42,10 @@ pub(crate) fn parse_dns_address(address: &str) -> Option<SingboxDnsServer> {
 
     let (domain, scheme, port, path) = parse_url_parts(&address_first)?;
     if scheme.eq_ignore_ascii_case("dhcp") {
+        // sing-box's DHCP server option is `interface`, not `server`.
         return Some(SingboxDnsServer {
             r#type: "dhcp".to_string(),
-            server: (!domain.is_empty() && domain != "auto").then_some(domain),
+            interface_name: (!domain.is_empty() && domain != "auto").then_some(domain),
             ..SingboxDnsServer::default()
         });
     }
@@ -87,7 +88,12 @@ fn parse_url_parts(input: &str) -> Option<(String, String, Option<u16>, String)>
                 Some(port) => Some(port),
                 None => None,
             };
-            return Some((host.to_string(), url.scheme().to_string(), port, path));
+            return Some((
+                strip_host_brackets(host),
+                url.scheme().to_string(),
+                port,
+                path,
+            ));
         }
     }
     if input.contains("://") {
@@ -125,7 +131,7 @@ fn parse_authority(authority: &str) -> Option<(String, Option<u16>)> {
         .map_or(authority, |(_, authority)| authority);
     if authority.starts_with('[') {
         if let Some(closing_bracket_index) = authority.rfind(']') {
-            let domain = authority[..=closing_bracket_index].to_string();
+            let domain = strip_host_brackets(&authority[..=closing_bracket_index]);
             let rest = authority
                 .get(closing_bracket_index + 1..)
                 .unwrap_or_default();
@@ -147,6 +153,12 @@ fn parse_authority(authority: &str) -> Option<(String, Option<u16>)> {
 
 fn parse_authority_port(port: &str) -> Option<u16> {
     port.parse::<u16>().ok().filter(|port| *port > 0)
+}
+
+/// sing-box parses `dns.servers[].server` with `netip.ParseAddr`, which rejects
+/// the bracketed IPv6 authority form that URL parsing hands back.
+fn strip_host_brackets(host: &str) -> String {
+    host.trim_matches(['[', ']']).to_string()
 }
 
 pub(crate) fn domain_strategy4_sbox(strategy: Option<&str>) -> Option<String> {

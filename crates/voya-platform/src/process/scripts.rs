@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn write_generated_scripts(scripts: &[GeneratedScript]) -> Result<(), ProcessError> {
+pub fn write_generated_scripts(scripts: &[GeneratedScript]) -> Result<(), ProcessError> {
     for script in scripts {
         let script_path = prepare_generated_script_path(script)?;
         write_generated_script_file(&script_path, &script.contents, script.executable)?;

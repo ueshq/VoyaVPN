@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 
 import {
   blockerScanFiles,
+  checkStableEnvironment,
   findProductionBlockersInText,
   validateStableUpdaterConfigMetadata,
 } from "./readiness.mjs";
@@ -116,6 +117,67 @@ mod tests {
     expect(matches).toEqual([
       "docs/release/runbook.md:1: example production URL: VOYAVPN_CDN_BASE_URL=https://stable.voyavpn.example",
     ]);
+  });
+});
+
+describe("release readiness stable environment inputs", () => {
+  const stableSecrets = {
+    VOYAVPN_CDN_BASE_URL: "https://cdn.voyavpn.dev/stable",
+    TAURI_SIGNING_PRIVATE_KEY: "signing-key",
+    TAURI_SIGNING_PRIVATE_KEY_PATH: "",
+    APPLE_CERTIFICATE: "certificate",
+    APPLE_CERTIFICATE_PASSWORD: "certificate-password",
+    APPLE_ID: "releases@voyavpn.dev",
+    APPLE_PASSWORD: "apple-password",
+    APPLE_TEAM_ID: "TEAM123",
+    WINDOWS_CERTIFICATE_BASE64: "windows-certificate",
+    WINDOWS_CERTIFICATE_PASSWORD: "windows-certificate-password",
+  };
+
+  function stubStableEnv(updatesBaseUrl) {
+    for (const [name, value] of Object.entries(stableSecrets)) {
+      vi.stubEnv(name, value);
+    }
+    vi.stubEnv("VOYAVPN_UPDATES_BASE_URL", updatesBaseUrl);
+  }
+
+  function recordingReporter() {
+    const results = { pass: [], fail: [], blocker: [] };
+    return {
+      results,
+      pass: (label, details) => results.pass.push({ label, details }),
+      fail: (label, details) => results.fail.push({ label, details }),
+      blocker: (label, details) => results.blocker.push({ label, details }),
+    };
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("fails a stable run that never supplied an updater base URL", async () => {
+    stubStableEnv("");
+    const reporter = recordingReporter();
+
+    await checkStableEnvironment(reporter, { mode: "stable", cdnBaseUrl: null, updatesBaseUrl: null });
+
+    expect(reporter.results.pass).toEqual([]);
+    expect(reporter.results.fail).toHaveLength(1);
+    expect(reporter.results.fail[0].details).toEqual(["missing: VOYAVPN_UPDATES_BASE_URL or --updates-base-url"]);
+  });
+
+  it("accepts a stable run whose updater base URL is passed on the command line", async () => {
+    stubStableEnv("");
+    const reporter = recordingReporter();
+
+    await checkStableEnvironment(reporter, {
+      mode: "stable",
+      cdnBaseUrl: null,
+      updatesBaseUrl: "https://updates.voyavpn.dev/stable",
+    });
+
+    expect(reporter.results.fail).toEqual([]);
+    expect(reporter.results.pass).toHaveLength(1);
   });
 });
 

@@ -80,19 +80,19 @@ describe("useRoutingScreen", () => {
   });
 
   it("creates a rule, selects the returned id, and keeps failed rule state recoverable", async () => {
+    // The routing already owns a rule, so selecting the created one cannot be
+    // confused with the fallback to the routing's first rule.
+    const afterCreate = {
+      ...routing("route-a", true),
+      rules: [rule("rule-route-a", "route-a"), rule("created-rule", "Created")],
+    };
     ipcMocks.listRoutings
       .mockResolvedValueOnce([routing("route-a", true), routing("route-b", false)])
-      .mockResolvedValue([
-        { ...routing("route-a", true), rules: [rule("created-rule", "Created")] },
-        routing("route-b", false),
-      ]);
+      .mockResolvedValue([afterCreate, routing("route-b", false)]);
     const { result } = renderController();
     await waitFor(() => expect(result.current.selectedRouting?.id).toBe("route-a"));
     const payload = rule("", "Created");
-    ipcMocks.saveRoutingRule.mockResolvedValueOnce({
-      ...routing("route-a", true),
-      rules: [rule("created-rule", "Created")],
-    });
+    ipcMocks.saveRoutingRule.mockResolvedValueOnce(afterCreate);
 
     act(() => result.current.setRuleDialog({ mode: "create" }));
     await act(() => result.current.handleSaveRule(payload));
@@ -105,6 +105,23 @@ describe("useRoutingScreen", () => {
     await act(() => result.current.handleSaveRule(payload));
     expect(result.current.operationError).toBe("rule save failed");
     expect(result.current.ruleDialog?.mode).toBe("edit");
+  });
+
+  it("keeps the edited rule selected when saving an existing rule", async () => {
+    const existing = {
+      ...routing("route-a", true),
+      rules: [rule("rule-route-a", "route-a"), rule("rule-second", "Second")],
+    };
+    ipcMocks.listRoutings.mockResolvedValue([existing, routing("route-b", false)]);
+    ipcMocks.saveRoutingRule.mockResolvedValue(existing);
+    const { result } = renderController();
+    await waitFor(() => expect(result.current.selectedRouting?.id).toBe("route-a"));
+
+    const payload = rule("rule-second", "Second");
+    act(() => result.current.setRuleDialog({ mode: "edit", rule: payload }));
+    await act(() => result.current.handleSaveRule(payload));
+
+    await waitFor(() => expect(result.current.selectedRule?.id).toBe("rule-second"));
   });
 
   it("does not mutate when no routing or rule is selected", async () => {

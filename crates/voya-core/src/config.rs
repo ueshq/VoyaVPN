@@ -17,7 +17,6 @@ pub const DEFAULT_BOOTSTRAP_DNS: &str = "119.29.29.29";
 #[derive(Debug, Clone, PartialEq)]
 pub struct AppConfig {
     pub index_id: String,
-    pub sub_index_id: String,
     pub core_basic_item: CoreBasicItem,
     pub tun_mode_item: TunModeItem,
     pub grpc_item: GrpcItem,
@@ -39,7 +38,6 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             index_id: String::new(),
-            sub_index_id: String::new(),
             core_basic_item: CoreBasicItem::default(),
             tun_mode_item: TunModeItem::default(),
             grpc_item: GrpcItem::default(),

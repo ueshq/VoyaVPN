@@ -125,6 +125,9 @@ pub(crate) fn generated_value_for_case(case: &GoldenCase) -> Value {
         "singbox.runtime.pre_socks" => singbox_pre_socks_snapshot(),
         "singbox.routing.per_rule_outbound" => singbox_per_rule_outbound_snapshot(),
         "singbox.runtime.logs_and_api" => singbox_logs_and_api_snapshot(),
+        "singbox.outbound.hysteria2_minimal" => singbox_hysteria2_minimal_outbound(),
+        "singbox.outbound.vmess_h2_tls" => singbox_vmess_h2_tls_outbound(),
+        "singbox.outbound.vless_quic_tls" => singbox_vless_quic_tls_outbound(),
         generated => panic!(
             "golden case `{}` references unknown generated selector `{generated}`",
             case.id
@@ -350,9 +353,86 @@ fn singbox_naive_quic_tls_outbound() -> Value {
     singbox_proxy_outbound(config, node)
 }
 
+fn singbox_hysteria2_minimal_outbound() -> Value {
+    proxy_outbound_of(singbox_hysteria2_minimal_context())
+}
+
+fn singbox_hysteria2_minimal_context() -> CoreConfigContext {
+    // A very common real-world link shape: IP host, self-signed certificate and
+    // no `sni`, so the parsed profile carries no TLS hints at all. sing-box
+    // rejects a hysteria2 outbound without a TLS block, so the generator has to
+    // supply one for the TLS-only protocols.
+    let node = ProfileItem {
+        index_id: "n-hy2".to_string(),
+        remarks: "hysteria2-minimal".to_string(),
+        protocol: ProfileProtocol::Hysteria2 {
+            server: endpoint("203.0.113.5", 443),
+            password: "hy2-pass".to_string(),
+            port_hops: None,
+            obfuscation_password: None,
+        },
+        tls: None,
+        ..ProfileItem::default()
+    };
+
+    singbox_context(AppConfig::default(), node)
+}
+
+fn singbox_vmess_h2_tls_outbound() -> Value {
+    proxy_outbound_of(singbox_vmess_h2_tls_context())
+}
+
+fn singbox_vmess_h2_tls_context() -> CoreConfigContext {
+    let node = ProfileItem {
+        index_id: "n-h2".to_string(),
+        remarks: "vmess-h2".to_string(),
+        protocol: ProfileProtocol::Vmess {
+            server: endpoint("h2.example", 443),
+            uuid: "00000000-0000-0000-0000-000000000031".to_string(),
+            cipher: Some("auto".to_string()),
+        },
+        transport: Some(ProfileTransport::Http2 {
+            host: Some("h2-one.example,h2-two.example".to_string()),
+            path: Some("/h2".to_string()),
+        }),
+        tls: Some(tls_settings("h2.example", &[], Vec::new())),
+        ..ProfileItem::default()
+    };
+
+    singbox_context(AppConfig::default(), node)
+}
+
+fn singbox_vless_quic_tls_outbound() -> Value {
+    proxy_outbound_of(singbox_vless_quic_tls_context())
+}
+
+fn singbox_vless_quic_tls_context() -> CoreConfigContext {
+    let node = ProfileItem {
+        index_id: "n-quic".to_string(),
+        remarks: "vless-quic".to_string(),
+        protocol: ProfileProtocol::Vless {
+            server: endpoint("quic.example", 443),
+            uuid: "00000000-0000-0000-0000-000000000032".to_string(),
+            flow: None,
+            encryption: Some("none".to_string()),
+        },
+        transport: Some(ProfileTransport::Quic {
+            host: None,
+            path: None,
+        }),
+        tls: Some(tls_settings("quic.example", &[], Vec::new())),
+        ..ProfileItem::default()
+    };
+
+    singbox_context(AppConfig::default(), node)
+}
+
 fn singbox_proxy_outbound(config: AppConfig, node: ProfileItem) -> Value {
-    let generated = generate_singbox_config(&singbox_context(config, node))
-        .expect("sing-box config should generate");
+    proxy_outbound_of(singbox_context(config, node))
+}
+
+fn proxy_outbound_of(context: CoreConfigContext) -> Value {
+    let generated = generate_singbox_config(&context).expect("sing-box config should generate");
     serde_json::to_value(
         generated
             .outbounds
@@ -803,6 +883,24 @@ fn acceptance_configs_for_case(case: &GoldenCase) -> Vec<Value> {
         "singbox.runtime.pre_socks" => singbox_pre_socks_configs(),
         "singbox.routing.per_rule_outbound" => vec![singbox_per_rule_outbound_config()],
         "singbox.runtime.logs_and_api" => vec![singbox_logs_and_api_config()],
+        "singbox.outbound.hysteria2_minimal" => {
+            vec![
+                generate_singbox_config_value(&singbox_hysteria2_minimal_context())
+                    .expect("Hysteria2 acceptance config should generate"),
+            ]
+        }
+        "singbox.outbound.vmess_h2_tls" => {
+            vec![
+                generate_singbox_config_value(&singbox_vmess_h2_tls_context())
+                    .expect("VMess h2 acceptance config should generate"),
+            ]
+        }
+        "singbox.outbound.vless_quic_tls" => {
+            vec![
+                generate_singbox_config_value(&singbox_vless_quic_tls_context())
+                    .expect("VLESS quic acceptance config should generate"),
+            ]
+        }
         _ => Vec::new(),
     }
 }

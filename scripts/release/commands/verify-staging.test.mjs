@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  assertUpdaterSignatureCoverage,
   probeCandidate,
   validateCoreManifest,
   validateReleaseIndex,
@@ -200,5 +201,81 @@ describe("release staging verification", () => {
     } finally {
       await close(server);
     }
+  });
+});
+
+describe("updater signature verification during download-and-hash", () => {
+  const target = "linux-x86_64";
+  const fixtureDir = resolve(repoRoot, updaterArtifacts, target);
+  const manifest = JSON.parse(readFileSync(resolve(fixtureDir, "artifact-manifest.json"), "utf8"));
+  const payloadArtifact = manifest.artifacts.find((artifact) => artifact.kind === "updater");
+  const payload = readFileSync(resolve(fixtureDir, payloadArtifact.path));
+  const signature = readFileSync(resolve(fixtureDir, `${payloadArtifact.path}.sig`), "utf8").trim();
+
+  function payloadServer(body) {
+    return createServer((_request, response) => {
+      response.writeHead(200, {
+        "cache-control": "public, max-age=300",
+        "content-length": String(body.length),
+        "content-type": "application/zip",
+      });
+      response.end(body);
+    });
+  }
+
+  function updaterCandidate(port) {
+    return {
+      label: `latest.json platforms.${target}`,
+      url: `http://127.0.0.1:${port}/${payloadArtifact.name}`,
+      bytes: null,
+      sha256: null,
+      updaterSignature: signature,
+      updaterTarget: target,
+    };
+  }
+
+  async function probeUpdaterPayload(body, options) {
+    const server = payloadServer(body);
+    const port = await listen(server);
+    try {
+      return await probeCandidate(updaterCandidate(port), {
+        downloadAndHash: true,
+        requireCacheHeaders: false,
+        timeoutMs: 5000,
+        ...options,
+      });
+    } finally {
+      await close(server);
+    }
+  }
+
+  it("downloads updater payloads that carry a signature instead of a sha256", async () => {
+    const result = await probeUpdaterPayload(payload, { updaterPublicKey });
+
+    expect(result.checked).toBe("download-and-hash");
+    expect(result.bytes).toBe(payload.length);
+    expect(result.updaterSignature).toMatchObject({ keyId: expect.any(String) });
+  });
+
+  it("fails when the CDN payload does not match the latest.json signature", async () => {
+    await expect(probeUpdaterPayload(Buffer.concat([payload, Buffer.from("tampered")]), { updaterPublicKey })).rejects.toThrow(
+      /signature verification failed/,
+    );
+  });
+
+  it("refuses to download updater payloads without an approved updater public key", async () => {
+    await expect(probeUpdaterPayload(payload, { updaterPublicKey: null })).rejects.toThrow(
+      /without an approved updater public key/,
+    );
+  });
+
+  it("requires one verified signature per updater platform before reporting a pass", () => {
+    const verified = { label: "latest.json platforms.linux-x86_64", updaterSignature: { keyId: "AA" } };
+    const probed = { label: "release-index artifacts[0]", checked: "download-and-hash" };
+
+    expect(assertUpdaterSignatureCoverage([verified, verified, probed], 2)).toBe(2);
+    expect(() => assertUpdaterSignatureCoverage([verified, probed], 2)).toThrow(
+      /verified 1 of 2 updater platform signatures/,
+    );
   });
 });

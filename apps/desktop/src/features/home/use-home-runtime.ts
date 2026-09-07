@@ -149,9 +149,23 @@ export function useHomeRuntime(t: Translation) {
   if (activeProfileId && activeProfileId !== seededFor) {
     setSeededFor(activeProfileId);
     setSelectedId(activeProfileId);
+  } else if (
+    profilesQuery.data
+    && selectedId
+    && !profilesQuery.data.some((item) => item.profile.id === selectedId)
+  ) {
+    // The selected node disappeared — deleted on the Profiles screen, or pruned
+    // by a subscription update. Fall back to the persisted active profile
+    // (`null` when there is none) so Connect never targets a dead id.
+    setSeededFor(activeProfileId);
+    setSelectedId(activeProfileId);
   }
 
   async function runRuntimeAction(action: RuntimeAction) {
+    if (busy) {
+      return;
+    }
+
     setPendingAction(action);
     try {
       const status = await runWithElevation(() =>
@@ -197,7 +211,10 @@ export function useHomeRuntime(t: Translation) {
   // already connected, otherwise connect. Drives double-click / Enter and the
   // connect button when its selection differs from the active profile.
   async function switchActiveAndApply(indexId: string) {
-    if (switchingId !== null) {
+    // `busy` covers the in-flight switch, a pending connect/disconnect/restart
+    // and the backend-reported connecting/disconnecting states (tray or
+    // auto-connect), so a double-click can never race another runtime command.
+    if (busy) {
       return;
     }
 

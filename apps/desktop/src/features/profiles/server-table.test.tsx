@@ -145,7 +145,7 @@ describe("ProfilesScreen", () => {
       speedtestResultsByProfileId: {},
       speedtestRunning: false,
     });
-    ipcMocks.dedupeProfiles.mockResolvedValue({ kept: 0, removedIndexIds: [], total: 0 });
+    ipcMocks.dedupeProfiles.mockResolvedValue({ kept: 0, removedProfileIds: [], total: 0 });
     ipcMocks.deleteSubscriptions.mockResolvedValue(1);
     ipcMocks.deleteProfiles.mockResolvedValue(1);
     ipcMocks.exportProfileShareLinks.mockImplementation(async (indexIds: string[]) => ({
@@ -776,6 +776,218 @@ describe("ProfilesScreen", () => {
         }),
       ),
     );
+  });
+
+  it("keeps the editor open with its edits when the backend rejects the save", async () => {
+    ipcMocks.listProfiles.mockResolvedValue([]);
+    ipcMocks.saveProfile.mockRejectedValue(new Error("profile address is already used"));
+
+    renderProfiles();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.change(await screen.findByLabelText("Remarks"), { target: { value: "Rejected node" } });
+    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "node.example.test" } });
+    fireEvent.change(screen.getByLabelText("UUID"), { target: { value: "uuid-rejected" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+
+    await waitFor(() => expect(ipcMocks.saveProfile).toHaveBeenCalled());
+    const dialog = await screen.findByRole("dialog", { name: "Add profile" });
+    expect(await within(dialog).findByText("profile address is already used")).toBeInTheDocument();
+    // The form remounts whenever the dialog toggles, so staying open is what
+    // preserves the values the user already typed.
+    expect(within(dialog).getByLabelText("Remarks")).toHaveValue("Rejected node");
+    expect(within(dialog).getByLabelText("UUID")).toHaveValue("uuid-rejected");
+  });
+
+  it("shows the required credential error instead of silently refusing to save", async () => {
+    ipcMocks.listProfiles.mockResolvedValue([]);
+
+    renderProfiles();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.change(await screen.findByLabelText("Remarks"), { target: { value: "Missing UUID" } });
+    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "node.example.test" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+
+    expect(await screen.findByText("password or ID is required")).toBeInTheDocument();
+    expect(screen.getByLabelText("UUID")).toHaveAttribute("aria-invalid", "true");
+    expect(ipcMocks.saveProfile).not.toHaveBeenCalled();
+  });
+
+  it("saves the TUIC uuid and password into the fields the contract names", async () => {
+    ipcMocks.listProfiles.mockResolvedValue([]);
+
+    renderProfiles();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await selectComboboxOption("Protocol", "TUIC");
+    expect(await screen.findByLabelText("Congestion control")).toBeInTheDocument();
+    // `insecureConcurrency` belongs to Naive, not TUIC; rendering it here would
+    // silently discard whatever the user typed.
+    expect(screen.queryByLabelText("Insecure concurrency")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Remarks"), { target: { value: "TUIC node" } });
+    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "tuic.example.test" } });
+    fireEvent.change(screen.getByLabelText("UUID"), { target: { value: "uuid-tuic" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "tuic-secret" } });
+    fireEvent.change(screen.getByLabelText("Congestion control"), { target: { value: "bbr" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+
+    await waitFor(() =>
+      expect(ipcMocks.saveProfile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          protocol: {
+            congestionControl: "bbr",
+            kind: "tuic",
+            password: "tuic-secret",
+            server: { address: "tuic.example.test", port: 443 },
+            uuid: "uuid-tuic",
+          },
+          remarks: "TUIC node",
+        }),
+      ),
+    );
+  });
+
+  it("edits every Naive contract field from the protocol panel", async () => {
+    const user = userEvent.setup();
+    ipcMocks.listProfiles.mockResolvedValue([]);
+
+    renderProfiles();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await selectComboboxOption("Protocol", "Naive");
+    expect(await screen.findByLabelText("Insecure concurrency")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Remarks"), { target: { value: "Naive node" } });
+    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "naive.example.test" } });
+    fireEvent.change(screen.getByLabelText("Username"), { target: { value: "naive-user" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "naive-secret" } });
+    fireEvent.change(screen.getByLabelText("Congestion control"), { target: { value: "bbr" } });
+    fireEvent.change(screen.getByLabelText("Insecure concurrency"), { target: { value: "4" } });
+    await user.click(screen.getByRole("checkbox", { name: "QUIC" }));
+    await user.click(screen.getByRole("checkbox", { name: "UDP over TCP" }));
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+
+    await waitFor(() =>
+      expect(ipcMocks.saveProfile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          protocol: {
+            congestionControl: "bbr",
+            insecureConcurrency: 4,
+            kind: "naive",
+            password: "naive-secret",
+            quic: true,
+            server: { address: "naive.example.test", port: 443 },
+            udpOverTcp: true,
+            username: "naive-user",
+          },
+          remarks: "Naive node",
+        }),
+      ),
+    );
+  });
+
+  it("keeps the host and path of a raw TCP transport through an editor round-trip", async () => {
+    ipcMocks.listProfiles.mockResolvedValue([
+      makeProfile(0, {
+        remarks: "Obfuscated node",
+        transport: { header: "http", host: "cdn.example.test", kind: "tcp", path: "/obfs" },
+      }),
+    ]);
+
+    renderProfiles();
+
+    expect(await screen.findByText("Obfuscated node")).toBeInTheDocument();
+    const menu = await openRowContextMenu();
+    await userEvent.click(within(menu).getByRole("menuitem", { name: "Edit" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Edit profile" });
+    expect(within(dialog).getByLabelText("Host")).toHaveValue("cdn.example.test");
+    expect(within(dialog).getByLabelText("Path")).toHaveValue("/obfs");
+    fireEvent.change(within(dialog).getByLabelText("Remarks"), { target: { value: "Renamed node" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /Save/ }));
+
+    await waitFor(() =>
+      expect(ipcMocks.saveProfile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          remarks: "Renamed node",
+          transport: { header: "http", host: "cdn.example.test", kind: "tcp", path: "/obfs" },
+        }),
+      ),
+    );
+  });
+
+  it("confirms before deduping and cancels without deleting duplicates", async () => {
+    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(3));
+
+    renderProfiles();
+
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Dedupe" }));
+
+    // Dedupe deletes rows across every subscription, so it is gated exactly the
+    // way per-row delete is instead of firing from a single menu click.
+    const confirm = await screen.findByRole("alertdialog");
+    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(ipcMocks.dedupeProfiles).not.toHaveBeenCalled();
+  });
+
+  it("reports how many duplicates the confirmed dedupe removed", async () => {
+    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(3));
+    ipcMocks.dedupeProfiles.mockResolvedValue({
+      kept: 2,
+      removedProfileIds: ["profile-2"],
+      total: 3,
+    });
+
+    renderProfiles();
+
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Dedupe" }));
+    fireEvent.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Remove duplicates" }),
+    );
+
+    await waitFor(() => expect(ipcMocks.dedupeProfiles).toHaveBeenCalledWith(null, null));
+    expect(
+      await screen.findByText("Removed 1 duplicate profile(s); kept 2 of 3."),
+    ).toBeInTheDocument();
+  });
+
+  it("bulk exports the shareable profiles instead of failing on a policy group", async () => {
+    ipcMocks.listProfiles.mockResolvedValue([
+      ...makeProfiles(2),
+      makeProfile(2, {
+        protocol: {
+          childProfileIds: [],
+          filter: null,
+          kind: "policyGroup",
+          sourceSubscriptionId: null,
+          strategy: "leastPing",
+        },
+        remarks: "Policy group",
+      }),
+    ]);
+
+    renderProfiles();
+
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("menuitem", { name: "Bulk export" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Show QR" }));
+
+    // The backend collects share links with `?`, so one policy group would
+    // otherwise fail the export for every node in the list.
+    await waitFor(() =>
+      expect(ipcMocks.exportProfileShareLinks).toHaveBeenCalledWith(["profile-0", "profile-1"]),
+    );
+    expect(
+      await screen.findByText("Skipped 1 profile(s) without a share link."),
+    ).toBeInTheDocument();
   });
 
   it("builds a policy group with child picker and generator preview", async () => {

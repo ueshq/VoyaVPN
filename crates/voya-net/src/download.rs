@@ -2,7 +2,7 @@ use reqwest::{Client, Proxy};
 use std::{
     collections::HashMap,
     future::Future,
-    net::IpAddr,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     pin::Pin,
     sync::{Arc, Mutex},
     time::Duration,
@@ -391,9 +391,15 @@ impl DownloadClient {
 pub(crate) fn build_http_client(
     proxy_url: Option<&str>,
 ) -> std::result::Result<Client, reqwest::Error> {
+    // Trust policy shared with `certificates::client_config`: the bundled webpki roots plus
+    // the roots the operating system trusts, so self-hosted servers behind a private CA the
+    // OS already trusts work in both paths. Both flags default to true; setting them keeps the
+    // policy explicit and fails the build if the reqwest root features are ever dropped.
     let mut builder = Client::builder()
         .timeout(HTTP_REQUEST_TIMEOUT)
         .connect_timeout(HTTP_CONNECT_TIMEOUT)
+        .tls_built_in_webpki_certs(true)
+        .tls_built_in_native_certs(true)
         .redirect(redirect_policy());
     builder = if let Some(proxy_url) = proxy_url {
         builder.proxy(Proxy::all(proxy_url)?)
@@ -456,15 +462,40 @@ pub(crate) fn is_denied_local_host(host: &str) -> bool {
 
 fn is_denied_local_ip(ip: IpAddr) -> bool {
     match ip {
-        IpAddr::V4(ip) => {
-            let octets = ip.octets();
-            ip.is_loopback() || (octets[0] == 169 && octets[1] == 254)
-        }
-        IpAddr::V6(ip) => {
-            let segments = ip.segments();
-            ip.is_loopback() || (segments[0] & 0xffc0) == 0xfe80
-        }
+        IpAddr::V4(ip) => is_denied_local_ipv4(ip),
+        IpAddr::V6(ip) => is_denied_local_ipv6(ip),
     }
+}
+
+fn is_denied_local_ipv4(ip: Ipv4Addr) -> bool {
+    let octets = ip.octets();
+    // 0.0.0.0 is delivered to the local host by connect() on Linux and macOS.
+    ip.is_unspecified() || ip.is_loopback() || (octets[0] == 169 && octets[1] == 254)
+}
+
+fn is_denied_local_ipv6(ip: Ipv6Addr) -> bool {
+    if ip.is_unspecified() || ip.is_loopback() {
+        return true;
+    }
+    // IPv4-mapped (::ffff:127.0.0.1) and IPv4-compatible (::127.0.0.1) forms are delivered to
+    // the embedded IPv4 address by dual-stack sockets, so they inherit the IPv4 policy.
+    if let Some(embedded) = ip.to_ipv4_mapped().or_else(|| ipv4_compatible(ip)) {
+        return is_denied_local_ipv4(embedded);
+    }
+
+    (ip.segments()[0] & 0xffc0) == 0xfe80
+}
+
+/// Extracts the IPv4 address embedded in a deprecated IPv4-compatible `::a.b.c.d` address.
+fn ipv4_compatible(ip: Ipv6Addr) -> Option<Ipv4Addr> {
+    let segments = ip.segments();
+    if segments[..6].iter().any(|segment| *segment != 0) {
+        return None;
+    }
+
+    Some(Ipv4Addr::from(
+        (u32::from(segments[6]) << 16) | u32::from(segments[7]),
+    ))
 }
 
 fn url_has_denied_local_host(url: &reqwest::Url) -> bool {
@@ -1044,6 +1075,56 @@ mod tests {
             matches!(error, RedirectPolicyError::LocalNetworkTarget { .. }),
             "{error:?}"
         );
+    }
+
+    #[test]
+    fn local_host_guard_rejects_unspecified_and_ipv4_mapped_forms() {
+        for host in [
+            "localhost",
+            "127.0.0.1",
+            "127.9.9.9",
+            "0.0.0.0",
+            "169.254.1.10",
+            "[::1]",
+            "[::]",
+            "[::ffff:127.0.0.1]",
+            "[::ffff:169.254.1.1]",
+            "[::127.0.0.1]",
+            "[fe80::1]",
+        ] {
+            assert!(is_denied_local_host(host), "{host} should be denied");
+        }
+
+        for host in [
+            "example.test",
+            "1.1.1.1",
+            "192.168.1.10",
+            "[::ffff:1.1.1.1]",
+            "[2606:4700::1111]",
+        ] {
+            assert!(!is_denied_local_host(host), "{host} should be allowed");
+        }
+    }
+
+    #[test]
+    fn redirect_policy_rejects_ipv4_mapped_loopback_target() {
+        let previous = [reqwest::Url::parse("https://example.test/sub").expect("previous URL")];
+        let next = reqwest::Url::parse("https://[::ffff:127.0.0.1]/sub").expect("next URL");
+
+        let error = validate_redirect_attempt(&previous, &next)
+            .expect_err("IPv4-mapped loopback redirect should fail");
+
+        assert!(
+            matches!(error, RedirectPolicyError::LocalNetworkTarget { .. }),
+            "{error:?}"
+        );
+    }
+
+    #[test]
+    fn download_clients_build_with_webpki_and_native_trust_roots() {
+        build_http_client(None).expect("direct client trusts webpki and native roots");
+        build_http_client(Some("socks5://127.0.0.1:1080"))
+            .expect("proxy client trusts webpki and native roots");
     }
 
     #[test]

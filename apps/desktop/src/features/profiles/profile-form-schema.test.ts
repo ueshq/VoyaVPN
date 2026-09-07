@@ -76,6 +76,27 @@ describe("profile form contract transformations", () => {
     }).remarks).toBe("Node");
   });
 
+  it("requires the TUIC uuid the form edits through the username field", () => {
+    const tuic = {
+      ...createDefaultProfile("tuic"),
+      address: "node.example.test",
+      password: "secret",
+      remarks: "TUIC",
+      username: "uuid-tuic",
+    };
+
+    // A blank uuid would generate a TUIC outbound without one, so it is
+    // rejected before the save reaches the backend.
+    expect(profileFormSchema.safeParse({ ...tuic, username: "" }).success).toBe(false);
+    expect(prepareProfileForSave(profileFormSchema.parse(tuic)).protocol).toEqual({
+      congestionControl: null,
+      kind: "tuic",
+      password: "secret",
+      server: { address: "node.example.test", port: 443 },
+      uuid: "uuid-tuic",
+    });
+  });
+
   it("normalizes partial group drafts and profile reference lists", () => {
     expect(prepareGroupDraftForPreview({
       configType: "policyGroup",
@@ -140,6 +161,7 @@ function protocols(): Array<{ kind: ProfileProtocol["kind"]; protocol: ProfilePr
 function transports(): ProfileTransport[] {
   return [
     tcpTransport(),
+    { header: "none", host: null, kind: "tcp", path: null },
     { header: "srtp", kind: "kcp", mtu: 1350, seed: "seed" },
     { host: "cdn.example.test", kind: "websocket", path: "/ws" },
     { host: "cdn.example.test", kind: "httpUpgrade", path: "/upgrade" },
@@ -154,8 +176,10 @@ function vmessProtocol(): ProfileProtocol {
   return { cipher: "auto", kind: "vmess", server: endpoint, uuid: "uuid-vmess" };
 }
 
+// HTTP-header obfuscation carries host/path on the raw TCP transport; the
+// fixture keeps them populated so an editor round-trip that drops them fails.
 function tcpTransport(): ProfileTransport {
-  return { header: "none", host: null, kind: "tcp", path: null };
+  return { header: "http", host: "cdn.example.test", kind: "tcp", path: "/tcp" };
 }
 
 function supportsTransport(protocol: ProfileProtocol) {

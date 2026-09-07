@@ -104,6 +104,10 @@ pub fn calculate_certificate_sha256(pem: &str) -> Result<Vec<String>> {
         .collect())
 }
 
+/// Builds the TLS client configuration for certificate fetches.
+///
+/// The root store is the trust policy shared with `download::build_http_client`: the bundled
+/// webpki roots plus the roots the operating system trusts. Keep both sides in step.
 fn client_config(allow_insecure: bool) -> ClientConfig {
     let mut root_store = RootCertStore::empty();
     let native = rustls_native_certs::load_native_certs();

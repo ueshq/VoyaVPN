@@ -130,6 +130,50 @@ describe("SubscriptionsDialog", () => {
     expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
   });
 
+  // A source whose download failed comes back as a *successful* command with
+  // `skipped` + `messages`, which used to render as a green "0 updated" status.
+  it("flags a failed source instead of reporting an empty success", async () => {
+    const user = userEvent.setup();
+    ipcMocks.listSubscriptions.mockResolvedValue([makeSubscription()]);
+    ipcMocks.updateSubscriptions.mockResolvedValue({
+      imported: 0,
+      messages: ["Fixture sub->request failed https://user:secret@example.test/sub?token=private"],
+      removedExisting: 0,
+      skipped: 1,
+      updated: 0,
+    });
+
+    renderDialog();
+    await screen.findByText("Fixture sub");
+    await user.click(screen.getByRole("button", { name: "Update all" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("request failed");
+    expect(alert).not.toHaveTextContent("secret");
+    expect(alert).not.toHaveTextContent("private");
+    expect(screen.queryByText("0 updated, 0 profiles imported")).not.toBeInTheDocument();
+  });
+
+  it("keeps per-source reasons visible next to a partial success", async () => {
+    const user = userEvent.setup();
+    ipcMocks.listSubscriptions.mockResolvedValue([makeSubscription()]);
+    ipcMocks.updateSubscriptions.mockResolvedValue({
+      imported: 4,
+      messages: ["Backup->no importable profiles were found"],
+      removedExisting: 0,
+      skipped: 1,
+      updated: 1,
+    });
+
+    renderDialog();
+    await screen.findByText("Fixture sub");
+    await user.click(screen.getByRole("button", { name: "Update all" }));
+
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("1 updated, 4 profiles imported");
+    expect(status).toHaveTextContent("no importable profiles were found");
+  });
+
   it("clears the editor, reports redacted failures, and closes explicitly", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();

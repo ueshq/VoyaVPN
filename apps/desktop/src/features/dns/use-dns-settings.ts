@@ -34,9 +34,10 @@ export function useDnsSettings() {
     await queryClient.invalidateQueries({ queryKey: ["dns"] });
   }
 
-  async function handleSave() {
+  /** Resolves to the failure message, or null once the draft is persisted. */
+  async function handleSave(): Promise<string | null> {
     if (!form) {
-      return;
+      return null;
     }
     setOperationError(null);
     setFieldErrors({});
@@ -47,20 +48,25 @@ export function useDnsSettings() {
       setDraft(null);
       await queryClient.invalidateQueries({ queryKey: ["dns"] });
       await queryClient.invalidateQueries({ queryKey: ["app-config"] });
+      return null;
     } catch (error) {
       if (error instanceof z.ZodError) {
-        setOperationError("DNS settings validation failed");
+        const message = "DNS settings validation failed";
+        setOperationError(message);
         setFieldErrors(zodIssuesToErrorMap(error));
-        return;
+        return message;
       }
       if (error instanceof IpcCommandError && error.appError.kind === "dns") {
-        setOperationError(error.appError.message.message);
+        const message = error.appError.message.message;
+        setOperationError(message);
         setFieldErrors(
           Object.fromEntries(error.appError.message.issues.map((issue) => [issue.field, issue.message])),
         );
-        return;
+        return message;
       }
-      setOperationError(getErrorMessage(error));
+      const message = getErrorMessage(error);
+      setOperationError(message);
+      return message;
     }
   }
 

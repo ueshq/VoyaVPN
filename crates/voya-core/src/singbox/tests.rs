@@ -66,6 +66,238 @@ fn singbox_outbound_vless_ws_tls_mux_matches_golden() {
 }
 
 #[test]
+fn singbox_outbound_vmess_h2_transport_matches_golden() {
+    let node = ProfileItem {
+        index_id: "n-vmess-h2".to_string(),
+        remarks: "vmess-h2".to_string(),
+        protocol: ProfileProtocol::Vmess {
+            server: endpoint("h2.example", 443),
+            uuid: "00000000-0000-0000-0000-000000000031".to_string(),
+            cipher: Some(DEFAULT_SECURITY.to_string()),
+        },
+        transport: Some(ProfileTransport::Http2 {
+            host: Some("h2-one.example,h2-two.example".to_string()),
+            path: Some("/h2".to_string()),
+        }),
+        tls: Some(tls_settings(TlsMode::Tls, Some("h2.example"))),
+        ..ProfileItem::default()
+    };
+
+    let value = generated_proxy_outbound_value(AppConfig::default(), node);
+    let expected: Value = serde_json::from_str(include_str!(
+        "../../../../tests/golden/singbox/outbounds/vmess_h2_tls.json"
+    ))
+    .expect("sing-box VMess h2 golden fixture should parse as JSON");
+    golden::assert_json_eq("singbox-outbound-vmess-h2-tls", &expected, &value);
+}
+
+#[test]
+fn singbox_outbound_vless_quic_transport_matches_golden() {
+    let node = ProfileItem {
+        index_id: "n-vless-quic".to_string(),
+        remarks: "vless-quic".to_string(),
+        protocol: ProfileProtocol::Vless {
+            server: endpoint("quic.example", 443),
+            uuid: "00000000-0000-0000-0000-000000000032".to_string(),
+            flow: None,
+            encryption: Some("none".to_string()),
+        },
+        transport: Some(ProfileTransport::Quic {
+            host: None,
+            path: None,
+        }),
+        tls: Some(tls_settings(TlsMode::Tls, Some("quic.example"))),
+        ..ProfileItem::default()
+    };
+
+    let value = generated_proxy_outbound_value(AppConfig::default(), node);
+    let expected: Value = serde_json::from_str(include_str!(
+        "../../../../tests/golden/singbox/outbounds/vless_quic_tls.json"
+    ))
+    .expect("sing-box VLESS quic golden fixture should parse as JSON");
+    golden::assert_json_eq("singbox-outbound-vless-quic-tls", &expected, &value);
+}
+
+#[test]
+fn singbox_h2_and_quic_transports_are_not_emitted_as_raw_tcp() {
+    for (transport, expected_type) in [
+        (
+            ProfileTransport::Http2 {
+                host: Some("h2.example".to_string()),
+                path: Some("/h2".to_string()),
+            },
+            "http",
+        ),
+        (
+            ProfileTransport::Quic {
+                host: None,
+                path: None,
+            },
+            "quic",
+        ),
+    ] {
+        let node = ProfileItem {
+            protocol: ProfileProtocol::Vmess {
+                server: endpoint("server.example", 443),
+                uuid: "00000000-0000-0000-0000-000000000034".to_string(),
+                cipher: Some(DEFAULT_SECURITY.to_string()),
+            },
+            transport: Some(transport),
+            tls: Some(tls_settings(TlsMode::Tls, Some("server.example"))),
+            ..ProfileItem::default()
+        };
+        // Validation lets these through, so the generator has to emit them.
+        assert!(crate::validate_node(&node, CoreType::sing_box).success());
+
+        let context = test_context(AppConfig::default(), node.clone());
+        let outbound = build_outbound(&context, &node);
+        assert_eq!(
+            outbound
+                .transport
+                .as_ref()
+                .and_then(|transport| transport.r#type.as_deref()),
+            Some(expected_type)
+        );
+    }
+}
+
+#[test]
+fn singbox_outbound_hysteria2_without_tls_settings_matches_golden() {
+    let node = ProfileItem {
+        index_id: "n-hy2-min".to_string(),
+        remarks: "hysteria2-minimal".to_string(),
+        protocol: ProfileProtocol::Hysteria2 {
+            server: endpoint("203.0.113.5", 443),
+            password: "hy2-pass".to_string(),
+            port_hops: None,
+            obfuscation_password: None,
+        },
+        transport: None,
+        tls: None,
+        ..ProfileItem::default()
+    };
+
+    let value = generated_proxy_outbound_value(AppConfig::default(), node);
+    let expected: Value = serde_json::from_str(include_str!(
+        "../../../../tests/golden/singbox/outbounds/hysteria2_minimal.json"
+    ))
+    .expect("sing-box Hysteria2 golden fixture should parse as JSON");
+    golden::assert_json_eq("singbox-outbound-hysteria2-minimal", &expected, &value);
+}
+
+#[test]
+fn singbox_tls_only_protocols_always_emit_a_tls_block() {
+    let cases = [
+        (
+            ConfigType::Hysteria2,
+            ProfileProtocol::Hysteria2 {
+                server: endpoint("server.example", 443),
+                password: "secret".to_string(),
+                port_hops: None,
+                obfuscation_password: None,
+            },
+        ),
+        (
+            ConfigType::TUIC,
+            ProfileProtocol::Tuic {
+                server: endpoint("server.example", 443),
+                uuid: "00000000-0000-0000-0000-000000000033".to_string(),
+                password: "secret".to_string(),
+                congestion_control: None,
+            },
+        ),
+        (
+            ConfigType::Anytls,
+            ProfileProtocol::Anytls {
+                server: endpoint("server.example", 443),
+                password: "secret".to_string(),
+            },
+        ),
+        (
+            ConfigType::Naive,
+            ProfileProtocol::Naive {
+                server: endpoint("server.example", 443),
+                username: "user".to_string(),
+                password: "secret".to_string(),
+                quic: false,
+                congestion_control: None,
+                insecure_concurrency: None,
+                udp_over_tcp: false,
+            },
+        ),
+    ];
+
+    for (config_type, protocol) in cases {
+        let node = ProfileItem {
+            remarks: format!("{config_type:?}"),
+            protocol,
+            transport: None,
+            tls: None,
+            ..ProfileItem::default()
+        };
+        assert_eq!(node.config_type(), config_type);
+
+        let context = test_context(AppConfig::default(), node.clone());
+        let tls = build_outbound(&context, &node).tls;
+        assert!(
+            tls.as_ref().is_some_and(|tls| tls.enabled),
+            "{config_type:?} outbound must carry an enabled TLS block"
+        );
+        assert_eq!(
+            tls.and_then(|tls| tls.server_name),
+            None,
+            "{config_type:?} outbound must leave SNI to the server address"
+        );
+    }
+
+    // Plaintext-capable protocols keep their existing "no TLS settings, no TLS
+    // block" behavior.
+    let socks = socks_node("socks", "socks");
+    let context = test_context(AppConfig::default(), socks.clone());
+    assert!(build_outbound(&context, &socks).tls.is_none());
+}
+
+#[test]
+fn singbox_protocol_support_table_agrees_with_node_validation() {
+    for config_type in [
+        ConfigType::VMess,
+        ConfigType::Custom,
+        ConfigType::Shadowsocks,
+        ConfigType::SOCKS,
+        ConfigType::VLESS,
+        ConfigType::Trojan,
+        ConfigType::Hysteria2,
+        ConfigType::TUIC,
+        ConfigType::WireGuard,
+        ConfigType::HTTP,
+        ConfigType::Anytls,
+        ConfigType::Naive,
+        ConfigType::PolicyGroup,
+        ConfigType::ProxyChain,
+    ] {
+        let node = ProfileItem {
+            remarks: format!("{config_type:?}"),
+            protocol: sample_protocol(config_type),
+            transport: Some(raw_transport()),
+            tls: None,
+            ..ProfileItem::default()
+        };
+        assert_eq!(node.config_type(), config_type);
+
+        let rejects_protocol = crate::validate_node(&node, CoreType::sing_box)
+            .errors
+            .iter()
+            .any(|error| error.contains("does not support protocol"));
+        let expected_rejection =
+            !config_type.is_complex_type() && !singbox_supports_config_type(config_type);
+        assert_eq!(
+            rejects_protocol, expected_rejection,
+            "validation and generation disagree about {config_type:?}"
+        );
+    }
+}
+
+#[test]
 fn singbox_tls_insecure_requires_application_gate() {
     let node = base_remote_node();
     let context = test_context(AppConfig::default(), node.clone());
@@ -254,6 +486,84 @@ fn singbox_invalid_ports_are_rejected_or_skipped() {
         error,
         SingboxConfigError::InvalidNodePort { port: 70000, .. }
     ));
+}
+
+#[test]
+fn singbox_dns_final_tracks_enabled_route_rules_only() {
+    let catch_all_direct = RulesItem {
+        outbound_tag: Some(DIRECT_TAG.to_string()),
+        port: Some("0-65535".to_string()),
+        rule_type: Some(RuleType::Routing),
+        ..RulesItem::default()
+    };
+    let final_dns_tag = |rule: RulesItem| {
+        let mut context = test_context(AppConfig::default(), base_remote_node());
+        context.routing_item = Some(RoutingItem {
+            rule_set: vec![rule],
+            ..RoutingItem::default()
+        });
+        let generated = generate_singbox_config(&context).expect("sing-box config should generate");
+        assert_eq!(generated.route.final_outbound.as_deref(), Some(PROXY_TAG));
+        generated
+            .dns
+            .and_then(|dns| dns.final_server)
+            .expect("sing-box DNS final server")
+    };
+
+    assert_eq!(
+        final_dns_tag(catch_all_direct.clone()),
+        SINGBOX_DIRECT_DNS_TAG
+    );
+    assert_eq!(
+        final_dns_tag(RulesItem {
+            enabled: false,
+            ..catch_all_direct.clone()
+        }),
+        SINGBOX_REMOTE_DNS_TAG
+    );
+    assert_eq!(
+        final_dns_tag(RulesItem {
+            rule_type: Some(RuleType::DNS),
+            ..catch_all_direct
+        }),
+        SINGBOX_REMOTE_DNS_TAG
+    );
+}
+
+#[test]
+fn singbox_dns_address_uses_dhcp_interface_and_unbracketed_ipv6() {
+    let dhcp = parse_dns_address("dhcp://en0").expect("dhcp DNS server");
+    assert_eq!(dhcp.r#type, "dhcp");
+    assert_eq!(dhcp.interface_name.as_deref(), Some("en0"));
+    assert_eq!(dhcp.server, None);
+    assert_eq!(
+        serde_json::to_value(&dhcp)
+            .expect("dhcp DNS server should serialize to JSON")
+            .get("interface")
+            .and_then(Value::as_str),
+        Some("en0")
+    );
+
+    let dhcp_auto = parse_dns_address("dhcp://auto").expect("dhcp auto DNS server");
+    assert_eq!(dhcp_auto.interface_name, None);
+    assert_eq!(dhcp_auto.server, None);
+
+    let dot = parse_dns_address("tls://[2606:4700:4700::1111]:853").expect("DoT DNS server");
+    assert_eq!(dot.server.as_deref(), Some("2606:4700:4700::1111"));
+    assert_eq!(dot.server_port, Some(853));
+
+    let doh =
+        parse_dns_address("https://[2001:4860:4860::8888]/dns-query").expect("DoH DNS server");
+    assert_eq!(doh.server.as_deref(), Some("2001:4860:4860::8888"));
+    assert_eq!(doh.path.as_deref(), Some("/dns-query"));
+
+    let plain = parse_dns_address("[2606:4700:4700::1111]:53").expect("plain IPv6 DNS server");
+    assert_eq!(plain.server.as_deref(), Some("2606:4700:4700::1111"));
+    assert_eq!(plain.server_port, Some(53));
+
+    let bare = parse_dns_address("2606:4700:4700::1111").expect("bare IPv6 DNS server");
+    assert_eq!(bare.server.as_deref(), Some("2606:4700:4700::1111"));
+    assert_eq!(bare.server_port, None);
 }
 
 #[test]
@@ -1034,6 +1344,104 @@ fn socks_node(index_id: &str, remarks: &str) -> ProfileItem {
         },
         transport: Some(raw_transport()),
         ..ProfileItem::default()
+    }
+}
+
+fn generated_proxy_outbound_value(app_config: AppConfig, node: ProfileItem) -> Value {
+    let generated = generate_singbox_config(&test_context(app_config, node))
+        .expect("sing-box config should generate");
+    let proxy = generated
+        .outbounds
+        .iter()
+        .find(|outbound| outbound.tag == PROXY_TAG)
+        .expect("proxy outbound");
+    let value = serde_json::to_value(proxy).expect("sing-box outbound should serialize to JSON");
+    assert_no_nulls(&value);
+    value
+}
+
+fn sample_protocol(config_type: ConfigType) -> ProfileProtocol {
+    let server = endpoint("server.example", 443);
+    match config_type {
+        ConfigType::VMess => ProfileProtocol::Vmess {
+            server,
+            uuid: "00000000-0000-0000-0000-000000000041".to_string(),
+            cipher: Some(DEFAULT_SECURITY.to_string()),
+        },
+        ConfigType::Custom => ProfileProtocol::Custom {
+            source: String::new(),
+            filter: None,
+        },
+        ConfigType::Shadowsocks => ProfileProtocol::Shadowsocks {
+            server,
+            password: "secret".to_string(),
+            method: "aes-128-gcm".to_string(),
+            udp_over_tcp: false,
+        },
+        ConfigType::SOCKS => ProfileProtocol::Socks {
+            server,
+            username: "user".to_string(),
+            password: "pass".to_string(),
+        },
+        ConfigType::VLESS => ProfileProtocol::Vless {
+            server,
+            uuid: "00000000-0000-0000-0000-000000000042".to_string(),
+            flow: None,
+            encryption: Some("none".to_string()),
+        },
+        ConfigType::Trojan => ProfileProtocol::Trojan {
+            server,
+            password: "secret".to_string(),
+        },
+        ConfigType::Hysteria2 => ProfileProtocol::Hysteria2 {
+            server,
+            password: "secret".to_string(),
+            port_hops: None,
+            obfuscation_password: None,
+        },
+        ConfigType::TUIC => ProfileProtocol::Tuic {
+            server,
+            uuid: "00000000-0000-0000-0000-000000000043".to_string(),
+            password: "secret".to_string(),
+            congestion_control: None,
+        },
+        ConfigType::WireGuard => ProfileProtocol::WireGuard {
+            server,
+            private_key: "private-key".to_string(),
+            peer_public_key: Some("public-key".to_string()),
+            preshared_key: None,
+            interface_address: None,
+            allowed_ips: None,
+            reserved: None,
+            mtu: None,
+        },
+        ConfigType::HTTP => ProfileProtocol::Http {
+            server,
+            username: "user".to_string(),
+            password: "pass".to_string(),
+        },
+        ConfigType::Anytls => ProfileProtocol::Anytls {
+            server,
+            password: "secret".to_string(),
+        },
+        ConfigType::Naive => ProfileProtocol::Naive {
+            server,
+            username: "user".to_string(),
+            password: "pass".to_string(),
+            quic: false,
+            congestion_control: None,
+            insecure_concurrency: None,
+            udp_over_tcp: false,
+        },
+        ConfigType::PolicyGroup => ProfileProtocol::PolicyGroup {
+            child_profile_ids: Vec::new(),
+            source_subscription_id: None,
+            filter: None,
+            strategy: MultipleLoad::LeastPing,
+        },
+        ConfigType::ProxyChain => ProfileProtocol::ProxyChain {
+            child_profile_ids: Vec::new(),
+        },
     }
 }
 

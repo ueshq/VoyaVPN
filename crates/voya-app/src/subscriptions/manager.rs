@@ -80,9 +80,13 @@ impl<'db> SubscriptionManager<'db> {
         Ok(self.database.subscriptions().list().await?)
     }
 
+    /// `_config` is unused: subscription selection is not part of the persisted
+    /// application configuration. The parameter stays so callers can keep
+    /// passing the mutation guard's config alongside the other subscription
+    /// mutations that do need it.
     pub async fn save_subscription(
         &self,
-        config: &mut AppConfig,
+        _config: &mut AppConfig,
         mut item: SubItem,
     ) -> Result<SubItem> {
         normalize_subscription(&mut item);
@@ -92,6 +96,9 @@ impl<'db> SubscriptionManager<'db> {
         if !item.url.is_empty() && !is_http_url(&item.url) {
             return Err(SubscriptionManagerError::InvalidSubscriptionUrl);
         }
+        // Compile the filter now so a bad regex is reported by the editor
+        // instead of failing every later update of this subscription.
+        compile_filter(item.filter.as_deref())?;
 
         if item.id.is_empty() {
             item.id = generate_subscription_id();
@@ -101,9 +108,6 @@ impl<'db> SubscriptionManager<'db> {
         }
 
         self.database.subscriptions().upsert(&item).await?;
-        if config.sub_index_id.is_empty() {
-            config.sub_index_id.clone_from(&item.id);
-        }
 
         Ok(item)
     }
@@ -177,12 +181,6 @@ impl<'db> SubscriptionManager<'db> {
                 .await?;
         }
 
-        let subs = self.database.subscriptions().list().await?;
-        if !config.sub_index_id.is_empty()
-            && !subs.iter().any(|item| item.id == config.sub_index_id)
-        {
-            config.sub_index_id = subs.last().map(|item| item.id.clone()).unwrap_or_default();
-        }
         ProfileManager::from_session(self.database)
             .ensure_active_profile(config)
             .await?;
@@ -427,16 +425,18 @@ impl<'db> SubscriptionManager<'db> {
                 ));
                 continue;
             }
-            persist_subscription_metadata(self.database, &prepared_import).await?;
-            match self
+            // The import runs first so the recorded `last_update_at` only
+            // advances for a subscription that actually produced profiles.
+            let import = self
                 .import_profiles_from_text(
                     config,
                     &prepared_import.content,
                     Some(&prepared_import.item.id),
                 )
-                .await
-            {
+                .await;
+            match import {
                 Ok(import) if import.imported > 0 => {
+                    persist_subscription_metadata(self.database, &prepared_import, true).await?;
                     result.updated = result.updated.saturating_add(1);
                     result.imported = result.imported.saturating_add(import.imported);
                     result.removed_existing = result
@@ -448,6 +448,7 @@ impl<'db> SubscriptionManager<'db> {
                     ));
                 }
                 Ok(_) => {
+                    persist_subscription_metadata(self.database, &prepared_import, false).await?;
                     result.skipped = result.skipped.saturating_add(1);
                     result.messages.push(format!(
                         "{}->no profiles were imported",
@@ -455,9 +456,20 @@ impl<'db> SubscriptionManager<'db> {
                     ));
                 }
                 Err(SubscriptionManagerError::NoImportableProfiles) => {
+                    persist_subscription_metadata(self.database, &prepared_import, false).await?;
                     result.skipped = result.skipped.saturating_add(1);
                     result.messages.push(format!(
                         "{}->no importable profiles were found",
+                        prepared_import.item.remarks
+                    ));
+                }
+                // A bad filter belongs to one subscription; failing the whole
+                // batch would roll back every sibling's successful import.
+                Err(SubscriptionManagerError::InvalidFilter(reason)) => {
+                    persist_subscription_metadata(self.database, &prepared_import, false).await?;
+                    result.skipped = result.skipped.saturating_add(1);
+                    result.messages.push(format!(
+                        "{}->subscription filter is invalid: {reason}",
                         prepared_import.item.remarks
                     ));
                 }
@@ -1249,6 +1261,140 @@ mod tests {
             .expect("subscription manager test operation should succeed");
         assert_eq!(filtered_profiles.len(), 1);
         assert_eq!(filtered_profiles[0].remarks, "JP old");
+
+        for id in ["empty", "junk", "filtered", "url-only"] {
+            assert!(
+                database
+                    .subscription_metadata()
+                    .get(id)
+                    .await
+                    .expect("metadata should load")
+                    .and_then(|metadata| metadata.last_update_at)
+                    .is_none(),
+                "a fetch that imported nothing must stay due for the scheduler: {id}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn saving_a_subscription_rejects_an_invalid_filter() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+
+        let error = manager
+            .save_subscription(
+                &mut config,
+                SubItem {
+                    id: "bad-filter".to_string(),
+                    remarks: "Bad filter".to_string(),
+                    url: "https://example.test/sub".to_string(),
+                    filter: Some("US(".to_string()),
+                    ..SubItem::default()
+                },
+            )
+            .await
+            .expect_err("an uncompilable filter should be rejected by the editor");
+
+        assert!(matches!(error, SubscriptionManagerError::InvalidFilter(_)));
+        assert!(database
+            .subscriptions()
+            .list()
+            .await
+            .expect("subscription manager test operation should succeed")
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn an_invalid_filter_skips_only_its_own_subscription() {
+        let seen_user_agents = Arc::new(Mutex::new(Vec::new()));
+        let base = spawn_http_fixture(
+            HashMap::from([
+                (
+                    "/good".to_string(),
+                    "vless://uuid@example.test:443#Good".to_string(),
+                ),
+                (
+                    "/bad".to_string(),
+                    "vless://uuid@example.test:443#Bad".to_string(),
+                ),
+            ]),
+            2,
+            Arc::clone(&seen_user_agents),
+        )
+        .await;
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+        manager
+            .save_subscription(
+                &mut config,
+                SubItem {
+                    id: "good".to_string(),
+                    remarks: "Good".to_string(),
+                    url: format!("{base}/good"),
+                    ..SubItem::default()
+                },
+            )
+            .await
+            .expect("subscription manager test operation should succeed");
+        // A row stored before filters were validated at save time.
+        database
+            .subscriptions()
+            .upsert(&SubItem {
+                id: "bad".to_string(),
+                remarks: "Bad".to_string(),
+                url: format!("{base}/bad"),
+                filter: Some("US(".to_string()),
+                sort: 2,
+                ..SubItem::default()
+            })
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        let result = manager
+            .update_subscriptions(&mut config, None, false, None)
+            .await
+            .expect("one broken filter must not abort the whole batch");
+
+        assert_eq!(result.updated, 1);
+        assert_eq!(result.skipped, 1);
+        assert!(
+            result
+                .messages
+                .iter()
+                .any(|message| message.contains("Bad->subscription filter is invalid")),
+            "{:?}",
+            result.messages
+        );
+        assert_eq!(
+            database
+                .profiles()
+                .list_by_subscription_id(Some("good"))
+                .await
+                .expect("subscription manager test operation should succeed")
+                .len(),
+            1,
+            "the healthy subscription keeps its imported profiles"
+        );
+        assert!(database
+            .subscription_metadata()
+            .get("good")
+            .await
+            .expect("metadata should load")
+            .and_then(|metadata| metadata.last_update_at)
+            .is_some());
+        assert!(database
+            .subscription_metadata()
+            .get("bad")
+            .await
+            .expect("metadata should load")
+            .and_then(|metadata| metadata.last_update_at)
+            .is_none());
     }
 
     #[tokio::test]

@@ -17,12 +17,16 @@ import { profileAddress, profilePort } from "@/features/profiles/profile-display
  * Always-visible node list for the Home screen. A controlled, IPC-free component:
  * single-click (or Space) selects a row locally (blue highlight via
  * {@link dataTableRowSelected}); double-click (or Enter) activates it — the parent
- * decides what "activate" does (switch + connect/restart). The green dot
- * (`bg-connected`) marks the node that is actually running (`runningId`), kept
- * distinct from the blue local selection. Rows reuse the former node-picker row
- * markup and the server-table formatting helpers; no new IPC is introduced.
+ * decides what "activate" does (switch + connect/restart). While a runtime
+ * action is in flight (`busy`) activation is refused, exactly like the primary
+ * connect button, so a switch can never race a pending connect/disconnect;
+ * local selection stays available. The green dot (`bg-connected`) marks the node
+ * that is actually running (`runningId`), kept distinct from the blue local
+ * selection. Rows reuse the former node-picker row markup and the server-table
+ * formatting helpers; no new IPC is introduced.
  */
 export function NodeList({
+  busy,
   isPending,
   onActivate,
   onSelect,
@@ -31,6 +35,7 @@ export function NodeList({
   selectedId,
   switchingId,
 }: {
+  busy: boolean;
   isPending: boolean;
   onActivate: (indexId: string) => void;
   onSelect: (indexId: string) => void;
@@ -88,6 +93,7 @@ export function NodeList({
               <li key={indexId} role="presentation">
                 <div
                   aria-busy={switching || undefined}
+                  aria-disabled={busy || undefined}
                   aria-selected={selected}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-start transition-colors",
@@ -96,11 +102,18 @@ export function NodeList({
                     switching && "pointer-events-none opacity-60",
                   )}
                   onClick={() => onSelect(indexId)}
-                  onDoubleClick={() => onActivate(indexId)}
+                  onDoubleClick={() => {
+                    if (busy) {
+                      return;
+                    }
+                    onActivate(indexId);
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault();
-                      onActivate(indexId);
+                      if (!busy) {
+                        onActivate(indexId);
+                      }
                     }
                     if (event.key === " ") {
                       event.preventDefault();

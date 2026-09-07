@@ -173,10 +173,13 @@ impl<'runtime> RuntimeManager<'runtime> {
         let launch = core_launch_plan(core_type, executable, &self.paths, config_file_name)
             .ok_or(RuntimeError::MissingCoreInfo(core_type))?;
 
+        // Only the process whose config carries the tun inbound needs root:
+        // with a pre-socks split the main core does all remote I/O and must
+        // stay unprivileged.
         Ok(CoreProcessSpec::new(core_type, launch)
             .with_config_path(self.paths.bin_config_file(config_file_name))
             .with_display_log(context.node.display_log)
-            .with_may_need_sudo(true))
+            .with_may_need_sudo(context.is_tun_enabled))
     }
 
     fn core_executable(
@@ -445,6 +448,62 @@ mod tests {
         assert!(!paths.bin_config_file(MAIN_CONFIG_FILE_NAME).exists());
         assert_eq!(runner.stops().as_slice(), [10]);
         config.index_id.clear();
+    }
+
+    #[tokio::test]
+    async fn runtime_elevates_only_the_process_that_owns_the_tun_inbound() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("runtime test operation should succeed");
+        let paths = temp_paths();
+        paths
+            .ensure_dirs()
+            .expect("runtime test operation should succeed");
+        write_fake_core_executable(&paths, CoreType::sing_box);
+        let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
+            Arc::new(RecordingRunner::default()),
+            Arc::new(voya_platform::privilege::ElevationState::new()),
+        ));
+        let manager = RuntimeManager::with_target_os(&database, paths, supervisor, TargetOs::Linux);
+        let profile = active_singbox_profile("active");
+        let config = AppConfig {
+            index_id: "active".to_string(),
+            tun_mode_item: voya_core::TunModeItem {
+                enable_tun: true,
+                ..voya_core::TunModeItem::default()
+            },
+            ..AppConfig::default()
+        };
+        let env = SnapshotCoreGenEnv::new(
+            &config,
+            CoreGenPlatform::Linux,
+            SnapshotCoreGenData {
+                profiles: vec![profile.clone()],
+                ..SnapshotCoreGenData::default()
+            },
+        );
+
+        let contexts = runtime_config_contexts(&env, &config, &profile, TargetOs::Linux);
+        let pre_context = &contexts
+            .pre_socks_result
+            .as_ref()
+            .expect("Linux TUN builds a pre-socks context")
+            .context;
+        assert!(!contexts.main_result.context.is_tun_enabled);
+        assert!(pre_context.is_tun_enabled);
+
+        let main_spec = manager
+            .process_spec(&contexts.main_result.context, MAIN_CONFIG_FILE_NAME)
+            .expect("runtime test operation should succeed");
+        let pre_spec = manager
+            .process_spec(pre_context, PRE_CONFIG_FILE_NAME)
+            .expect("runtime test operation should succeed");
+
+        assert!(
+            !main_spec.may_need_sudo,
+            "the non-TUN main core must not be launched as root"
+        );
+        assert!(pre_spec.may_need_sudo);
     }
 
     #[tokio::test]

@@ -133,12 +133,15 @@ pub(super) async fn prepare_subscription_snapshot(
 
 /// Records server-reported usage headers for a fetched subscription. The
 /// `subscription-userinfo` values replace the stored figures only when the
-/// header was present; `last_update_at` always reflects the fetch. A
-/// server-suggested update interval is adopted only while the user has not
-/// configured one.
+/// header was present. `last_update_at` moves only when `imported` says the
+/// fetch actually produced profiles, because the auto-update scheduler treats
+/// it as "this subscription is current" and would otherwise stop retrying a
+/// source that keeps returning junk. A server-suggested update interval is
+/// adopted only while the user has not configured one.
 pub(super) async fn persist_subscription_metadata(
     database: DatabaseSession<'_>,
     prepared: &PreparedSubscriptionImport,
+    imported: bool,
 ) -> Result<()> {
     let repository = database.subscription_metadata();
     let mut metadata =
@@ -158,7 +161,9 @@ pub(super) async fn persist_subscription_metadata(
     if let Some(title) = &prepared.profile_title {
         metadata.profile_title = Some(title.clone());
     }
-    metadata.last_update_at = Some(prepared.fetched_at_unix);
+    if imported {
+        metadata.last_update_at = Some(prepared.fetched_at_unix);
+    }
     repository.upsert(&metadata).await?;
 
     if prepared.item.auto_update_interval_minutes.is_none() {

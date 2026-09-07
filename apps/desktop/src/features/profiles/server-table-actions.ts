@@ -4,10 +4,36 @@ import {
   exportProfileShareLinks,
   exportProfileShareLinksBase64,
 } from "@/ipc";
-import type { ExportProfilesResult, ImportProfilesResult } from "@/ipc/bindings";
+import type { ExportProfilesResult, ImportProfilesResult, ProfileKind } from "@/ipc/bindings";
+import { CONFIG_TYPES } from "./profile-constants";
 import type { TranslateFn } from "./server-table-columns";
 
 export type ProfileExportKind = "clientConfig" | "shareBase64" | "shareLinks" | "voyaBundle";
+
+// `export_share_link` (crates/voya-core/src/fmt/entry.rs) only knows these node
+// protocols and returns `WrongConfigType` for anything else; the backend
+// collects the batch with `?`, so a single unsupported profile fails the whole
+// export.
+const SHARE_LINK_KINDS: readonly ProfileKind[] = [
+  CONFIG_TYPES.VMess,
+  CONFIG_TYPES.Shadowsocks,
+  CONFIG_TYPES.SOCKS,
+  CONFIG_TYPES.Trojan,
+  CONFIG_TYPES.VLESS,
+  CONFIG_TYPES.Hysteria2,
+  CONFIG_TYPES.TUIC,
+  CONFIG_TYPES.WireGuard,
+  CONFIG_TYPES.Anytls,
+  CONFIG_TYPES.Naive,
+];
+
+export function isShareLinkExport(kind: ProfileExportKind) {
+  return kind === "shareLinks" || kind === "shareBase64";
+}
+
+export function supportsShareLinkExport(kind: ProfileKind) {
+  return SHARE_LINK_KINDS.includes(kind);
+}
 
 export function profilesQueryKey(filter: string) {
   return ["profiles", { filter }] as const;

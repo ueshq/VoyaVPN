@@ -31,6 +31,47 @@ export function isCliEntrypoint(importMetaUrl) {
   return process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href === importMetaUrl : false;
 }
 
+// Only long flags: short flags such as `-p` mean "package" to cargo and
+// "keychain profile" to notarytool, and masking them would hide useful context.
+const secretFlagPattern = /^--(?:pass|passwd|password|api-key|apikey|token|secret|apple-id|keychain-password)$/i;
+
+/**
+ * Masks credential values so a failed command can be reported without leaking
+ * the secret into stderr, CI logs, or terminal scrollback.
+ */
+export function redactArgs(args) {
+  const redacted = [];
+  let maskNext = false;
+
+  for (const arg of args) {
+    const text = String(arg);
+    if (maskNext) {
+      redacted.push("***");
+      maskNext = false;
+      continue;
+    }
+
+    const separator = text.indexOf("=");
+    const flag = separator === -1 ? text : text.slice(0, separator);
+    if (!secretFlagPattern.test(flag)) {
+      redacted.push(text);
+      continue;
+    }
+    if (separator === -1) {
+      redacted.push(text);
+      maskNext = true;
+    } else {
+      redacted.push(`${flag}=***`);
+    }
+  }
+
+  return redacted;
+}
+
+export function describeCommand(program, args) {
+  return `${program} ${redactArgs(args).join(" ")}`.trim();
+}
+
 export function capture(program, args, options = {}) {
   return spawnSync(program, args, {
     ...options,
@@ -47,7 +88,7 @@ export function run(program, args, options = {}) {
     throw result.error;
   }
   if (result.status !== 0) {
-    throw new Error(`${program} ${args.join(" ")} failed with status ${result.status}`);
+    throw new Error(`${describeCommand(program, args)} failed with status ${result.status}`);
   }
   return result;
 }

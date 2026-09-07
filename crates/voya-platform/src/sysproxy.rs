@@ -35,6 +35,8 @@ function FindProxyForURL(url, host) {
 const LOCAL_EXCEPTIONS: &str = "<local>";
 const WINDOWS_INTERNET_SETTINGS_REG_PATH: &str =
     r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings";
+const PAC_ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(10);
+const PAC_ACCEPT_ERROR_BACKOFF: Duration = Duration::from_millis(50);
 const LINUX_PROXY_SCRIPT_NAME: &str = "proxy_set_linux.sh";
 const MACOS_PROXY_SCRIPT_NAME: &str = "proxy_set_osx.sh";
 
@@ -265,8 +267,12 @@ impl PacManager for LocalPacManager {
             .lock()
             .map_err(|_| SystemProxyError::LockPoisoned("pac manager"))?;
 
+        // A server whose accept loop has exited leaves the OS pointing at a
+        // closed port, so a finished thread must restart even on the same ports.
         let needs_restart = guard.as_ref().is_none_or(|running| {
-            running.http_port != config.http_port || running.pac_port != config.pac_port
+            running.http_port != config.http_port
+                || running.pac_port != config.pac_port
+                || !running.is_alive()
         });
         if !needs_restart {
             return Ok(());
@@ -320,13 +326,36 @@ impl RunningPacServer {
         let running = Arc::new(AtomicBool::new(true));
         let thread_running = Arc::clone(&running);
         let thread = thread::spawn(move || {
+            let mut reported_error = false;
             while thread_running.load(Ordering::Relaxed) {
                 match listener.accept() {
                     Ok((stream, _)) => write_pac_response(stream, &content),
                     Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                        thread::sleep(Duration::from_millis(10));
+                        thread::sleep(PAC_ACCEPT_POLL_INTERVAL);
                     }
-                    Err(_) => break,
+                    // A client that resets before it is accepted is routine
+                    // (WSAECONNRESET on Windows, ECONNABORTED on macOS).
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            io::ErrorKind::ConnectionReset
+                                | io::ErrorKind::ConnectionAborted
+                                | io::ErrorKind::Interrupted
+                        ) => {}
+                    Err(error) => {
+                        // Never drop the listener while the OS still points at
+                        // this PAC URL: every client would silently fall back to
+                        // DIRECT while the app reports PAC mode as active.
+                        if !reported_error {
+                            reported_error = true;
+                            tracing::warn!(
+                                ?error,
+                                port = pac_port,
+                                "PAC listener accept failed; retrying"
+                            );
+                        }
+                        thread::sleep(PAC_ACCEPT_ERROR_BACKOFF);
+                    }
                 }
             }
         });
@@ -337,6 +366,13 @@ impl RunningPacServer {
             running,
             thread: Some(thread),
         }
+    }
+
+    /// Whether the accept loop is still running.
+    fn is_alive(&self) -> bool {
+        self.thread
+            .as_ref()
+            .is_some_and(|thread| !thread.is_finished())
     }
 
     fn stop(&mut self) {
@@ -1042,6 +1078,116 @@ mod tests {
         assert!(generated
             .contents
             .contains("-setautoproxystate \"$service\" on"));
+    }
+
+    #[test]
+    fn sysproxy_pac_manager_respawns_a_server_whose_accept_loop_stopped() {
+        let root = unique_temp_root("pac-respawn");
+        fs::create_dir_all(&root).expect("create pac config directory");
+        let manager = LocalPacManager::default();
+        let config = PacStartConfig {
+            http_port: 10808,
+            pac_port: free_local_port(),
+            config_dir: root.clone(),
+            custom_pac_path: None,
+        };
+
+        manager.start(config.clone()).expect("start pac server");
+        assert!(fetch_pac(config.pac_port).contains("FindProxyForURL"));
+
+        {
+            let mut guard = manager.state.lock().expect("pac state");
+            let running = guard.as_mut().expect("running pac server");
+            running.running.store(false, Ordering::Relaxed);
+            if let Some(thread) = running.thread.take() {
+                let _ = thread.join();
+            }
+        }
+
+        manager.start(config.clone()).expect("restart pac server");
+
+        assert!(
+            fetch_pac(config.pac_port).contains("FindProxyForURL"),
+            "a stopped accept loop must be respawned instead of leaving the PAC url dead"
+        );
+
+        manager.stop();
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sysproxy_pac_server_keeps_serving_after_a_client_reset() {
+        let root = unique_temp_root("pac-reset");
+        fs::create_dir_all(&root).expect("create pac config directory");
+        let manager = LocalPacManager::default();
+        let config = PacStartConfig {
+            http_port: 10808,
+            pac_port: free_local_port(),
+            config_dir: root.clone(),
+            custom_pac_path: None,
+        };
+        manager.start(config.clone()).expect("start pac server");
+
+        reset_client_connection(config.pac_port);
+
+        assert!(
+            fetch_pac(config.pac_port).contains("FindProxyForURL"),
+            "an aborted connection must not take the PAC listener down"
+        );
+
+        manager.stop();
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    fn reset_client_connection(port: i32) {
+        use std::os::fd::AsRawFd;
+
+        let stream = TcpStream::connect((LOOPBACK, u16::try_from(port).expect("pac port")))
+            .expect("connect to pac server");
+        let linger = libc::linger {
+            l_onoff: 1,
+            l_linger: 0,
+        };
+        // SAFETY: `setsockopt` reads `size_of::<libc::linger>()` bytes from the
+        // pointer, which points at the live local `linger` value, and `stream`
+        // owns the descriptor for the whole call.
+        let result = unsafe {
+            libc::setsockopt(
+                stream.as_raw_fd(),
+                libc::SOL_SOCKET,
+                libc::SO_LINGER,
+                std::ptr::addr_of!(linger).cast(),
+                size_of::<libc::linger>() as libc::socklen_t,
+            )
+        };
+
+        assert_eq!(result, 0, "failed to arm SO_LINGER for the aborted client");
+        drop(stream);
+    }
+
+    fn fetch_pac(port: i32) -> String {
+        use std::io::Read;
+
+        let mut stream = TcpStream::connect((LOOPBACK, u16::try_from(port).expect("pac port")))
+            .expect("connect to pac server");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .expect("set read timeout");
+        stream
+            .write_all(b"GET /pac HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n")
+            .expect("send pac request");
+        let mut response = String::new();
+        let _ = stream.read_to_string(&mut response);
+        response
+    }
+
+    fn free_local_port() -> i32 {
+        let listener = TcpListener::bind((LOOPBACK, 0)).expect("bind an ephemeral port");
+        let port = listener.local_addr().expect("local address").port();
+        drop(listener);
+        i32::from(port)
     }
 
     fn unique_temp_root(name: &str) -> PathBuf {

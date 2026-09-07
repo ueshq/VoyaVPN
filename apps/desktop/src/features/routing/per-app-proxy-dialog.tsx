@@ -23,6 +23,7 @@ import {
   deleteRoutingRules,
   listProcessCandidates,
   listRoutings,
+  moveRoutingRule,
   saveRoutingRule,
 } from "@/ipc";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -145,7 +146,19 @@ export function PerAppProxyDialog({ onOpenChange, open }: PerAppProxyDialogProps
           await deleteRoutingRules(activeRouting.id, [existing.id]);
         }
       } else {
-        await saveRoutingRule(activeRouting.id, buildPerAppRule(mode, processes, existing));
+        const saved = await saveRoutingRule(
+          activeRouting.id,
+          buildPerAppRule(mode, processes, existing),
+        );
+        // The backend appends a new rule to the end of the rule set, which puts
+        // it behind the catch-all rule every built-in routing ends with — a
+        // process rule there can never match. Pin the managed rule to the top so
+        // the listed apps really do take precedence, as documented in
+        // per-app-proxy-rule.ts.
+        const savedRule = findPerAppRule(saved);
+        if (savedRule && saved.rules[0]?.id !== savedRule.id) {
+          await moveRoutingRule(saved.id, savedRule.id, "top");
+        }
       }
       await queryClient.invalidateQueries({ queryKey: ["routings"] });
       onOpenChange(false);

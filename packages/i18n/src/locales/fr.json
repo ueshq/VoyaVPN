@@ -15,6 +15,7 @@
     "reload": "Reload",
     "reloadCoreConfig": "Reload core configuration",
     "restart": "Restart",
+    "retry": "Réessayer",
     "save": "Save",
     "settings": "Settings",
     "testSelected": "Test selected"
@@ -24,6 +25,9 @@
   },
   "confirm": {
     "cancel": "Cancel",
+    "dedupeProfilesConfirm": "Supprimer les doublons",
+    "dedupeProfilesDescription": "Les profils en double de tous les abonnements seront définitivement supprimés. Cette action est irréversible.",
+    "dedupeProfilesTitle": "Supprimer les profils en double ?",
     "deleteProfilesConfirm": "Delete",
     "deleteProfilesDescription": "{{count}} selected profile(s) will be permanently deleted. This action cannot be undone.",
     "deleteProfilesTitle": "Delete profiles?"
@@ -51,7 +55,8 @@
       "remainingDays": "{{days}} jours restants",
       "remainingTraffic": "{{amount}} restants",
       "update": "Mettre à jour l'abonnement",
-      "updateFailed": "Échec de la mise à jour de l'abonnement"
+      "updateFailed": "Échec de la mise à jour de l'abonnement",
+      "updated": "Abonnement mis à jour"
     },
     "unprotected": "Non protégé",
     "unprotectedHint": "Connectez-vous pour acheminer votre trafic en toute sécurité."
@@ -94,6 +99,7 @@
     },
     "geoSource": "Geo files source",
     "hotkeyKey": "Hotkey key",
+    "hotkeyKeyPlaceholder": "Appuyez sur une touche",
     "hotkeyShowWindow": "Show window",
     "loading": "Loading",
     "routeTemplateSource": "Source du modèle de routage",
@@ -207,6 +213,9 @@
         "reset": "Réinitialiser",
         "toggle": "Colonnes"
       },
+      "dedupe": {
+        "removed": "{{removed}} profil(s) en double supprimé(s) ; {{kept}} conservé(s) sur {{total}}."
+      },
       "dialog": {
         "addTitle": "Add profile",
         "cancel": "Cancel",
@@ -229,6 +238,7 @@
         "shareBase64": "Share links (Base64)",
         "shareLinks": "Share links",
         "showQr": "Show QR",
+        "skippedUnsupported": "{{count}} profil(s) sans lien de partage ignoré(s).",
         "voyaBundle": "Voya profile bundle"
       },
       "fields": {
@@ -457,6 +467,7 @@
       "title": "Subscriptions",
       "untitled": "Untitled",
       "updateAll": "Update all",
+      "updateNothingImported": "Rien n’a été importé ni mis à jour.",
       "updateResult": "{{updated}} updated, {{imported}} profiles imported",
       "updateSelected": "Update selected",
       "url": "URL",
@@ -468,6 +479,7 @@
     "autoBadge": "Auto",
     "autoManagedHint": "Ce groupe choisit automatiquement le nœud le plus rapide selon la latence mesurée.",
     "chain": "Chain",
+    "closeConnectionFailed": "Échec de la fermeture de la connexion",
     "cumulativeDownload": "Cumulative download {{total}}",
     "cumulativeUpload": "Cumulative upload {{total}}",
     "delay": "Delay",
@@ -485,9 +497,13 @@
     "noActive": "No active proxy",
     "node": "Node",
     "process": "Process",
+    "reloadConfigFailed": "Échec du rechargement de la configuration du cœur",
+    "selectNodeFailed": "Échec du changement de nœud",
     "source": "Source",
     "testAll": "Tout tester",
+    "testDelayFailed": "Échec du test de latence",
     "trafficModeDirect": "Direct",
+    "trafficModeFailed": "Échec du changement de mode de trafic",
     "trafficModeGlobal": "Global",
     "trafficModeRule": "Rule",
     "type": "Type",
@@ -584,10 +600,13 @@
     "loadingScreen": "Loading screen",
     "nativeTunnelMissing": "Native tunnel component is not installed.",
     "noPid": "No PID",
+    "operationFailed": "Échec de l’opération",
     "proxyMonitorStartFailed": "Unable to start proxy monitor.",
     "proxyMonitorStopFailed": "Unable to stop proxy monitor.",
     "proxyRuntime": "Proxy runtime",
     "runtimeStatusFailed": "Impossible d’actualiser l’état d’exécution",
+    "screenErrorDescription": "Cet écran s’est interrompu. Réessayez ou rechargez l’application si le problème persiste.",
+    "screenErrorTitle": "Une erreur est survenue",
     "sysProxyPacUnavailable": "Le proxy intelligent n’est pas pris en charge sur cette plateforme.",
     "sysProxyStatusFailed": "Impossible de lire l’état du proxy système",
     "tunBackendMacos": "macOS PacketTunnel",

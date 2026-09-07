@@ -19,6 +19,7 @@ const ipcMocks = vi.hoisted(() => ({
   listRoutings: vi.fn(() => Promise.resolve([])),
   loadAppSettings: vi.fn(),
   loadDnsSettings: vi.fn(),
+  moveRoutingRule: vi.fn(),
   saveAppSettings: vi.fn(),
   saveDnsSettings: vi.fn(),
   saveRoutingRule: vi.fn(),
@@ -118,6 +119,73 @@ describe("unified settings surface", () => {
     expect(await screen.findByLabelText("Remote DNS")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: "DNS" })).toBeInTheDocument();
     expect(ipcMocks.loadDnsSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves a DNS pane draft through the surface's Save all action", async () => {
+    const user = userEvent.setup();
+    renderSurface();
+
+    await user.click(await screen.findByRole("tab", { name: "DNS" }));
+    await user.type(await screen.findByLabelText("Remote DNS"), "https://dns.google/dns-query");
+
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save all" }));
+
+    await waitFor(() => expect(ipcMocks.saveDnsSettings).toHaveBeenCalledTimes(1));
+    expect(ipcMocks.saveDnsSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ remote: "https://dns.google/dns-query" }),
+    );
+    expect(ipcMocks.saveAppSettings).not.toHaveBeenCalled();
+  });
+
+  it("guards navigation while only the DNS pane draft is dirty", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("tab", { name: "DNS" }));
+    await user.type(await screen.findByLabelText("Remote DNS"), "https://dns.google/dns-query");
+
+    act(() => useShellStore.getState().requestTab("home"));
+
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("Unsaved settings");
+    expect(useShellStore.getState().activeTab).toBe("settings");
+
+    await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Save all" }));
+
+    await waitFor(() => expect(ipcMocks.saveDnsSettings).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(useShellStore.getState().activeTab).toBe("home"));
+  });
+
+  it("keeps the settings tab active when saving the DNS pane draft fails", async () => {
+    const user = userEvent.setup();
+    ipcMocks.saveDnsSettings.mockRejectedValueOnce(new Error("dns save failed"));
+    renderScreen();
+
+    await user.click(await screen.findByRole("tab", { name: "DNS" }));
+    await user.type(await screen.findByLabelText("Remote DNS"), "https://dns.google/dns-query");
+
+    act(() => useShellStore.getState().requestTab("home"));
+    const dialog = within(await screen.findByRole("alertdialog"));
+    await user.click(dialog.getByRole("button", { name: "Save all" }));
+
+    await waitFor(() => expect(dialog.getByRole("alert")).toHaveTextContent("dns save failed"));
+    expect(useShellStore.getState().activeTab).toBe("settings");
+  });
+
+  it("discards the DNS pane draft and completes the blocked navigation", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("tab", { name: "DNS" }));
+    const remote = await screen.findByLabelText("Remote DNS");
+    await user.type(remote, "https://dns.google/dns-query");
+
+    act(() => useShellStore.getState().requestTab("home"));
+    const dialog = within(await screen.findByRole("alertdialog"));
+    await user.click(dialog.getByRole("button", { name: "Discard changes" }));
+
+    await waitFor(() => expect(useShellStore.getState().activeTab).toBe("home"));
+    expect(ipcMocks.saveDnsSettings).not.toHaveBeenCalled();
   });
 
   it("renders the in-shell settings screen and navigates away freely while clean", async () => {

@@ -4,6 +4,27 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
+const tauriBoundaryMessage = "ADR-0002: only apps/desktop/src/ipc may import Tauri APIs.";
+const tauriGlobalsMessage = "ADR-0002: only apps/desktop/src/ipc may touch the Tauri runtime globals.";
+
+// no-restricted-imports only inspects static import/export declarations, so
+// dynamic import() and require() of Tauri APIs need their own selectors.
+const tauriImportSelectors = [
+  { selector: "ImportExpression > Literal[value=/^@tauri-apps/]", message: tauriBoundaryMessage },
+  {
+    selector: "CallExpression[callee.name='require'] > Literal[value=/^@tauri-apps/]",
+    message: tauriBoundaryMessage,
+  },
+];
+
+// Reaching window.__TAURI_INTERNALS__ bypasses the typed wrappers just like a
+// direct import does. A `"__TAURI_INTERNALS__" in window` presence probe is
+// still allowed, and tests may install the globals to simulate the shell.
+const tauriGlobalSelectors = [
+  { selector: "MemberExpression[property.name=/^__TAURI/]", message: tauriGlobalsMessage },
+  { selector: "MemberExpression[computed=true] > Literal[value=/^__TAURI/]", message: tauriGlobalsMessage },
+];
+
 export default tseslint.config(
   { ignores: ["**/dist", "**/node_modules", "target", "apps/desktop/src-tauri/gen"] },
   js.configs.recommended,
@@ -49,7 +70,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["apps/desktop/src/**/*.{ts,tsx}", "packages/**/*.{ts,tsx}"],
+    files: ["apps/*/src/**/*.{ts,tsx}", "packages/**/*.{ts,tsx}"],
     ignores: ["apps/desktop/src/ipc/**"],
     rules: {
       "no-restricted-imports": [
@@ -58,11 +79,24 @@ export default tseslint.config(
           patterns: [
             {
               group: ["@tauri-apps/api", "@tauri-apps/api/*", "@tauri-apps/plugin-*"],
-              message: "ADR-0002: only apps/desktop/src/ipc may import Tauri APIs.",
+              message: tauriBoundaryMessage,
             },
           ],
         },
       ],
+      "no-restricted-syntax": ["error", ...tauriImportSelectors],
+    },
+  },
+  {
+    files: ["apps/*/src/**/*.{ts,tsx}", "packages/**/*.{ts,tsx}"],
+    ignores: [
+      "apps/desktop/src/ipc/**",
+      "**/*.{test,spec}.{ts,tsx}",
+      "**/test/**",
+      "**/*.test-fixture.ts",
+    ],
+    rules: {
+      "no-restricted-syntax": ["error", ...tauriImportSelectors, ...tauriGlobalSelectors],
     },
   },
 );

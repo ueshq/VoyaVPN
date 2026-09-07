@@ -1108,20 +1108,260 @@ async fn existing_legacy_database_is_rejected_without_modification() {
     let error = Database::connect(&path)
         .await
         .expect_err("legacy database must be rejected");
-    assert!(matches!(
-        error,
+    match &error {
         DbError::UnsupportedDatabaseSchema {
-            found: None,
-            expected: 1,
-            ..
+            found, expected, ..
+        } => {
+            assert_eq!(*found, None);
+            assert_eq!(*expected, latest_migration_version());
         }
-    ));
+        other => panic!("unexpected error: {other}"),
+    }
     assert!(error.to_string().contains("reset it manually with"));
     assert_eq!(
         fs::read(&path).expect("legacy database should remain readable"),
         before
     );
-    let _ = fs::remove_file(path);
+    remove_database_files(&path);
+}
+
+#[tokio::test]
+async fn file_backed_database_enables_wal_and_a_long_busy_timeout() {
+    let path = temp_path("pragmas.sqlite");
+    let database = Database::connect(&path)
+        .await
+        .expect("file backed database should open");
+
+    let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+        .fetch_one(database.pool())
+        .await
+        .expect("journal mode should be readable");
+    assert_eq!(journal_mode, "wal");
+    let synchronous: i64 = sqlx::query_scalar("PRAGMA synchronous")
+        .fetch_one(database.pool())
+        .await
+        .expect("synchronous setting should be readable");
+    assert_eq!(synchronous, 1);
+    let busy_timeout: i64 = sqlx::query_scalar("PRAGMA busy_timeout")
+        .fetch_one(database.pool())
+        .await
+        .expect("busy timeout should be readable");
+    assert_eq!(
+        busy_timeout,
+        i64::try_from(BUSY_TIMEOUT.as_millis()).unwrap_or_default()
+    );
+
+    database.close().await;
+    remove_database_files(&path);
+}
+
+#[tokio::test]
+async fn unit_of_work_takes_the_write_lock_when_it_opens() {
+    let path = temp_path("immediate-transaction.sqlite");
+    let database = Database::connect(&path)
+        .await
+        .expect("file backed database should open");
+    let contender = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            SqliteConnectOptions::new()
+                .filename(&path)
+                .foreign_keys(true)
+                .busy_timeout(Duration::from_millis(50)),
+        )
+        .await
+        .expect("second connection should open");
+
+    let unit_of_work = database.begin().await.expect("transaction should begin");
+    let contended = sqlx::query("UPDATE app_state SET active_routing_id = NULL WHERE id = 1")
+        .execute(&contender)
+        .await;
+    assert!(
+        contended.is_err(),
+        "a deferred BEGIN would let another connection take the write lock first"
+    );
+
+    unit_of_work
+        .commit()
+        .await
+        .expect("transaction should commit");
+    sqlx::query("UPDATE app_state SET active_routing_id = NULL WHERE id = 1")
+        .execute(&contender)
+        .await
+        .expect("committing the unit of work should release the write lock");
+
+    contender.close().await;
+    database.close().await;
+    remove_database_files(&path);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn unit_of_work_write_survives_a_concurrent_autocommit_writer() {
+    let path = temp_path("unit-of-work-contention.sqlite");
+    let database = Database::connect(&path)
+        .await
+        .expect("file backed database should open");
+    let profile = sample_profile();
+    database
+        .profiles()
+        .upsert(&profile)
+        .await
+        .expect("seed profile should be stored");
+
+    let unit_of_work = database.begin().await.expect("transaction should begin");
+    assert!(unit_of_work
+        .profiles()
+        .exists(&profile.index_id)
+        .await
+        .expect("staged read should succeed"));
+
+    let writer_database = database.clone();
+    let writer_index_id = profile.index_id.clone();
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel::<()>();
+    let writer = tokio::spawn(async move {
+        let _ = started_tx.send(());
+        writer_database
+            .server_stats()
+            .add_traffic(&writer_index_id, 20_260_907, 1_024, 2_048)
+            .await
+    });
+    started_rx.await.expect("writer task should start");
+    for _ in 0..16 {
+        tokio::task::yield_now().await;
+    }
+
+    let mut renamed = profile.clone();
+    renamed.remarks = "Renamed during a statistics flush".to_string();
+    unit_of_work
+        .profiles()
+        .upsert(&renamed)
+        .await
+        .expect("a read-then-write unit of work must not fail with `database is locked`");
+    unit_of_work
+        .commit()
+        .await
+        .expect("transaction should commit");
+
+    writer
+        .await
+        .expect("writer task should join")
+        .expect("an autocommit writer should queue on the busy handler instead of failing");
+    assert_eq!(
+        database
+            .profiles()
+            .get(&profile.index_id)
+            .await
+            .expect("profile lookup should succeed")
+            .map(|item| item.remarks),
+        Some(renamed.remarks)
+    );
+
+    database.close().await;
+    remove_database_files(&path);
+}
+
+#[tokio::test]
+async fn database_written_by_a_newer_build_is_rejected_with_a_reset_hint() {
+    let path = temp_path("newer-schema.sqlite");
+    let database = Database::connect(&path)
+        .await
+        .expect("file backed database should open");
+    database.close().await;
+
+    let future_version = latest_migration_version() + 1;
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(SqliteConnectOptions::new().filename(&path))
+        .await
+        .expect("fixture should open");
+    sqlx::query(
+        "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) VALUES (?, 'from a newer build', 1, X'00', 0)",
+    )
+    .bind(future_version)
+    .execute(&pool)
+    .await
+    .expect("future migration row should be recorded");
+    pool.close().await;
+
+    let error = Database::connect(&path)
+        .await
+        .expect_err("a database from a newer build must be rejected");
+    match &error {
+        DbError::UnsupportedDatabaseSchema {
+            found, expected, ..
+        } => {
+            assert_eq!(*found, Some(future_version));
+            assert_eq!(*expected, latest_migration_version());
+        }
+        other => panic!("unexpected error: {other}"),
+    }
+    assert!(error.to_string().contains("reset it manually with"));
+
+    remove_database_files(&path);
+}
+
+#[tokio::test]
+async fn interrupted_first_launch_is_healed_by_the_migrator() {
+    let path = temp_path("interrupted-first-launch.sqlite");
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            SqliteConnectOptions::new()
+                .filename(&path)
+                .create_if_missing(true),
+        )
+        .await
+        .expect("fixture should open");
+    sqlx::query(
+        r#"
+        CREATE TABLE _sqlx_migrations (
+            version BIGINT PRIMARY KEY,
+            description TEXT NOT NULL,
+            installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            success BOOLEAN NOT NULL,
+            checksum BLOB NOT NULL,
+            execution_time BIGINT NOT NULL
+        )
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("bookkeeping table should be created");
+    pool.close().await;
+
+    let database = Database::connect(&path)
+        .await
+        .expect("an interrupted first launch must be healed instead of rejected forever");
+    assert_eq!(
+        database
+            .settings()
+            .load()
+            .await
+            .expect("settings should load"),
+        AppSettingsV1::default()
+    );
+
+    database.close().await;
+    remove_database_files(&path);
+}
+
+#[tokio::test]
+async fn schema_gate_accepts_a_database_from_an_older_build() {
+    let path = temp_path("older-schema.sqlite");
+    let database = Database::connect(&path)
+        .await
+        .expect("file backed database should open");
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version > 1")
+        .execute(database.pool())
+        .await
+        .expect("bookkeeping rows should be removable");
+
+    validate_existing_schema(database.pool(), &path)
+        .await
+        .expect("a database from an older build must still be accepted");
+
+    database.close().await;
+    remove_database_files(&path);
 }
 
 fn sample_profile() -> ProfileItem {
@@ -1167,4 +1407,13 @@ fn temp_path(name: &str) -> PathBuf {
     fs::create_dir_all(&root).expect("database test directory should exist");
 
     root.join(format!("{}-{}-{name}", std::process::id(), nanos))
+}
+
+fn remove_database_files(path: &Path) {
+    let _ = fs::remove_file(path);
+    for suffix in ["-wal", "-shm"] {
+        let mut sidecar = path.as_os_str().to_os_string();
+        sidecar.push(suffix);
+        let _ = fs::remove_file(PathBuf::from(sidecar));
+    }
 }

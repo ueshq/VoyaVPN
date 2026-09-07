@@ -142,6 +142,7 @@ fn parse_vmess_base64(input: &str) -> Result<ProfileItem, ShareError> {
 
     let network = match value_string(object, "net").as_str() {
         "" | RAW_NETWORK_ALIAS => DEFAULT_NETWORK.to_string(),
+        HTTP2_NETWORK_ALIAS => HTTP2_NETWORK.to_string(),
         network => network.to_string(),
     };
     let vmess_type = value_string(object, "type");
@@ -172,6 +173,14 @@ fn parse_vmess_base64(input: &str) -> Result<ProfileItem, ShareError> {
             service_name: nonempty(path),
             mode: nonempty(vmess_type),
         },
+        HTTP2_NETWORK => ProfileTransport::Http2 {
+            host: nonempty(host),
+            path: nonempty(path),
+        },
+        QUIC_NETWORK => ProfileTransport::Quic {
+            host: nonempty(host),
+            path: nonempty(path),
+        },
         _ => ProfileTransport::Tcp {
             header: nonempty(vmess_type),
             host: nonempty(host),
@@ -181,21 +190,19 @@ fn parse_vmess_base64(input: &str) -> Result<ProfileItem, ShareError> {
     let tls_mode = value_string(object, "tls");
     let sni = nonempty(value_string(object, "sni"));
     let alpn = split_csv(&value_string(object, "alpn"));
-    if matches!(tls_mode.as_str(), STREAM_SECURITY_TLS | "reality")
-        || sni.is_some()
-        || !alpn.is_empty()
-    {
-        item.tls = Some(TlsSettings {
-            mode: if tls_mode == "reality" {
-                TlsMode::Reality
-            } else {
-                TlsMode::Tls
-            },
-            server_name: sni,
-            alpn,
-            ..default_tls_settings()
-        });
+    // `tls` alone decides whether the node is a TLS node: a stray `sni`/`alpn`
+    // on a plaintext node must not silently enable TLS.
+    item.tls = match tls_mode.as_str() {
+        STREAM_SECURITY_TLS => Some(TlsMode::Tls),
+        STREAM_SECURITY_REALITY => Some(TlsMode::Reality),
+        _ => None,
     }
+    .map(|mode| TlsSettings {
+        mode,
+        server_name: sni,
+        alpn,
+        ..default_tls_settings()
+    });
 
     ensure_address_port("vmess", &item)?;
     ensure_nonempty("vmess", "password", item.password())?;

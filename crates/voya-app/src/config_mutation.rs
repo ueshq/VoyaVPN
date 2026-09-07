@@ -210,7 +210,7 @@ mod tests {
             let release_first = Arc::clone(&release_first);
             tokio::spawn(async move {
                 let mut mutation = coordinator.begin().await.expect("mutation should begin");
-                mutation.config_mut().sub_index_id = "subscription-a".to_string();
+                mutation.config_mut().ui_item.current_theme = Some("Dark".to_string());
                 first_started.wait().await;
                 release_first.wait().await;
                 mutation.commit().await.expect("mutation should commit");
@@ -222,7 +222,10 @@ mod tests {
             let coordinator = Arc::clone(&coordinator);
             tokio::spawn(async move {
                 let mut mutation = coordinator.begin().await.expect("mutation should begin");
-                assert_eq!(mutation.config().sub_index_id, "subscription-a");
+                assert_eq!(
+                    mutation.config().ui_item.current_theme.as_deref(),
+                    Some("Dark")
+                );
                 mutation.config_mut().ui_item.current_language = "fr".to_string();
                 mutation.commit().await.expect("mutation should commit");
             })
@@ -232,7 +235,7 @@ mod tests {
         second.await.expect("second mutation task should finish");
 
         let final_config = coordinator.current_config();
-        assert_eq!(final_config.sub_index_id, "subscription-a");
+        assert_eq!(final_config.ui_item.current_theme.as_deref(), Some("Dark"));
         assert_eq!(final_config.ui_item.current_language, "fr");
     }
 
@@ -256,7 +259,7 @@ mod tests {
         let shared = Arc::new(RwLock::new(AppConfig::default()));
         let coordinator = ConfigMutationCoordinator::new(database.clone(), Arc::clone(&shared));
         let mut mutation = coordinator.begin().await.expect("mutation should begin");
-        mutation.config_mut().sub_index_id = "subscription-a".to_string();
+        mutation.config_mut().ui_item.current_theme = Some("Dark".to_string());
         mutation
             .unit_of_work()
             .subscriptions()
@@ -269,7 +272,7 @@ mod tests {
             .expect("business row should be staged");
 
         assert!(mutation.commit().await.is_err());
-        assert!(coordinator.current_config().sub_index_id.is_empty());
+        assert!(coordinator.current_config().ui_item.current_theme.is_none());
         assert!(database
             .subscriptions()
             .get("subscription-a")

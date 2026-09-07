@@ -11,7 +11,7 @@ impl ShareFmt for WireguardFmt {
     fn parse(&self, input: &str) -> Result<ProfileItem, ShareError> {
         let parsed = parse_uri(input, "wireguard")?;
         let mut item = profile_from_uri(ConfigType::WireGuard, &parsed);
-        let allowed_ips = parsed.query.decoded_or("allowedips", "");
+        let allowed_ips = parsed.query.value_or("allowedips", "");
         if let ProfileProtocol::WireGuard {
             private_key,
             peer_public_key,
@@ -24,16 +24,16 @@ impl ShareFmt for WireguardFmt {
         } = &mut item.protocol
         {
             *private_key = parsed.user_info;
-            *peer_public_key = nonempty(parsed.query.decoded_or("publickey", ""));
-            *preshared_key = nonempty(parsed.query.decoded_or("presharedkey", ""));
-            *reserved = nonempty(parsed.query.decoded_or("reserved", ""));
-            *interface_address = nonempty(parsed.query.decoded_or("address", ""));
+            *peer_public_key = nonempty(parsed.query.value_or("publickey", ""));
+            *preshared_key = nonempty(parsed.query.value_or("presharedkey", ""));
+            *reserved = nonempty(parsed.query.value_or("reserved", ""));
+            *interface_address = nonempty(parsed.query.value_or("address", ""));
             *item_allowed_ips = nonempty(if allowed_ips.is_empty() {
-                parsed.query.decoded_or("allowed_ips", "")
+                parsed.query.value_or("allowed_ips", "")
             } else {
                 allowed_ips
             });
-            *mtu = parse_positive_i32(&parsed.query.decoded_or("mtu", ""));
+            *mtu = parse_positive_i32(&parsed.query.value_or("mtu", ""));
         }
         ensure_address_port("wireguard", &item)?;
         ensure_nonempty("wireguard", "private key", item.password())?;
@@ -161,6 +161,11 @@ pub fn parse_wireguard_config(input: &str) -> Result<Vec<ProfileItem>, ShareErro
             },
             ..ProfileItem::default()
         };
+        // Peers are validated like every share link; a `.conf` with one broken
+        // Endpoint still imports its remaining peers.
+        if ensure_address_port("wireguard-config", &item).is_err() {
+            continue;
+        }
         result.push(item);
     }
 

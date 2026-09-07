@@ -251,6 +251,53 @@
       ],
       "core_acceptance": true,
       "volatile_fields": []
+    },
+    {
+      "id": "singbox-outbound-hysteria2-minimal",
+      "core": "sing-box",
+      "fixture": "singbox/outbounds/hysteria2_minimal.json",
+      "generated": "singbox.outbound.hysteria2_minimal",
+      "summary": "sing-box Hysteria2 outbound for a link with no sni/alpn: the generator must still emit an enabled TLS block, because sing-box rejects a TLS-only protocol without one.",
+      "hotspots": [
+        "security",
+        "serialization"
+      ],
+      "reference_paths": [
+        "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs"
+      ],
+      "core_acceptance": true
+    },
+    {
+      "id": "singbox-outbound-vmess-h2-tls",
+      "core": "sing-box",
+      "fixture": "singbox/outbounds/vmess_h2_tls.json",
+      "generated": "singbox.outbound.vmess_h2_tls",
+      "summary": "sing-box VMess over HTTP/2 with TLS: the h2 transport must emit transport.type=http with its host list and path, not a bare TCP dial.",
+      "hotspots": [
+        "transport",
+        "security",
+        "serialization"
+      ],
+      "reference_paths": [
+        "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs"
+      ],
+      "core_acceptance": true
+    },
+    {
+      "id": "singbox-outbound-vless-quic-tls",
+      "core": "sing-box",
+      "fixture": "singbox/outbounds/vless_quic_tls.json",
+      "generated": "singbox.outbound.vless_quic_tls",
+      "summary": "sing-box VLESS over QUIC with TLS: the quic transport must emit transport.type=quic rather than being downgraded to a plain TCP dial.",
+      "hotspots": [
+        "transport",
+        "security",
+        "serialization"
+      ],
+      "reference_paths": [
+        "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs"
+      ],
+      "core_acceptance": true
     }
   ]
 }

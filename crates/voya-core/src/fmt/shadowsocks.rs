@@ -91,15 +91,17 @@ pub fn parse_ss_sip008(input: &str) -> Result<Vec<ProfileItem>, ShareError> {
             protocol: "ss-sip008",
             reason: "server entry must be an object".to_string(),
         })?;
+        // SIP008 types `server_port` as a JSON number and allows numeric-looking
+        // passwords, so both are read through the number-tolerant helpers.
         let item = ProfileItem {
-            remarks: string_field(object, "remarks"),
+            remarks: value_string(object, "remarks"),
             protocol: ProfileProtocol::Shadowsocks {
                 server: ServerEndpoint {
-                    address: string_field(object, "server"),
-                    port: string_field(object, "server_port").parse().unwrap_or(0),
+                    address: value_string(object, "server"),
+                    port: value_i32(object, "server_port").unwrap_or(0),
                 },
-                password: string_field(object, "password"),
-                method: string_field(object, "method"),
+                password: value_string(object, "password"),
+                method: value_string(object, "method"),
                 udp_over_tcp: false,
             },
             ..ProfileItem::default()
@@ -120,7 +122,8 @@ fn parse_shadowsocks_sip002(input: &str) -> Result<ProfileItem, ShareError> {
                 reason: "invalid user info".to_string(),
             });
         };
-        (method.to_string(), url_decode(password))
+        // `parsed.user_info` is already percent-decoded by `parse_uri`.
+        (method.to_string(), password.to_string())
     } else {
         let decoded = base64_decode(&parsed.user_info, "ss")?;
         let Some((method, password)) = decoded.split_once(':') else {

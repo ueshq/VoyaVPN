@@ -11,7 +11,7 @@ impl ShareFmt for TuicFmt {
     fn parse(&self, input: &str) -> Result<ProfileItem, ShareError> {
         let parsed = parse_uri(input, "tuic")?;
         let mut item = profile_from_uri(ConfigType::TUIC, &parsed);
-        resolve_uri_query(&parsed.query, &mut item);
+        resolve_uri_query_tls_only(&parsed.query, &mut item);
         if let Some((username, password)) = parsed.user_info.split_once(':') {
             if let ProfileProtocol::Tuic {
                 uuid,

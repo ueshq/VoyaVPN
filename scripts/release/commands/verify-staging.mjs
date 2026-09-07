@@ -756,7 +756,9 @@ function assertNoRedirectResponse(response, label) {
 }
 
 async function probeCandidate(candidate, options) {
-  if (options.downloadAndHash && candidate.sha256) {
+  // Updater candidates carry a signature instead of a sha256, and their
+  // signature can only be verified against the downloaded CDN payload.
+  if (options.downloadAndHash && (candidate.sha256 || candidate.updaterSignature)) {
     return downloadAndHashCandidate(candidate, options);
   }
 
@@ -789,6 +791,10 @@ async function probeCandidate(candidate, options) {
 }
 
 async function downloadAndHashCandidate(candidate, options) {
+  if (candidate.updaterSignature && !options.updaterPublicKey) {
+    throw new Error(`${candidate.label} cannot verify its updater signature without an approved updater public key`);
+  }
+
   const response = await fetchWithTimeout(candidate.url, { method: "GET" }, options.timeoutMs);
   assertNoRedirectResponse(response, `${candidate.label} download`);
   if (!response.ok) {
@@ -840,6 +846,16 @@ async function downloadAndHashCandidate(candidate, options) {
   };
 }
 
+function assertUpdaterSignatureCoverage(probeResults, platformCount) {
+  const verifiedCount = probeResults.filter((result) => result?.updaterSignature).length;
+  if (verifiedCount < platformCount) {
+    throw new Error(
+      `latest.json download-and-hash verified ${verifiedCount} of ${platformCount} updater platform signatures`,
+    );
+  }
+  return verifiedCount;
+}
+
 async function probeCandidates(candidates, options) {
   const failures = [];
   const results = [];
@@ -862,11 +878,14 @@ async function main(argv = []) {
   }
   const allCandidates = [];
   const summaries = [];
+  let validatedInputs = 0;
+  let pendingUpdaterSignatures = null;
 
   if (options.releaseIndex) {
     const releaseIndex = await readJsonSource(options.releaseIndex, "release index", options);
     const summary = validateReleaseIndex(releaseIndex, options);
     allCandidates.push(...summary.candidates);
+    validatedInputs += 1;
     summaries.push(`release-index: ${summary.artifactCount} artifacts across ${summary.targets.length} stable targets`);
   }
 
@@ -881,17 +900,23 @@ async function main(argv = []) {
       throw new Error("latest.json signature verification requires --updater-artifacts or --download-and-hash");
     }
     allCandidates.push(...summary.candidates);
-    summaries.push(
-      signatureSummary
-        ? `latest.json: ${summary.platformCount} updater platforms; ${signatureSummary.verifiedCount} signatures verified`
-        : `latest.json: ${summary.platformCount} updater platforms; signatures verify during download-and-hash`,
-    );
+    validatedInputs += 1;
+    if (signatureSummary) {
+      summaries.push(
+        `latest.json: ${summary.platformCount} updater platforms; ${signatureSummary.verifiedCount} signatures verified`,
+      );
+    } else {
+      // Without local signed artifacts the signatures are only checked against
+      // the downloaded CDN payloads, so the summary is printed after probing.
+      pendingUpdaterSignatures = { platformCount: summary.platformCount };
+    }
   }
 
   if (options.coreManifest) {
     const coreManifest = await readJsonSource(options.coreManifest, "core manifest", options);
     const summary = validateCoreManifest(coreManifest, options);
     allCandidates.push(...summary.candidates);
+    validatedInputs += 1;
     summaries.push(
       summary.coreTypes.length > 0
         ? `core manifest: ${summary.assetCount} assets for ${summary.coreTypes.join(", ")}`
@@ -899,7 +924,7 @@ async function main(argv = []) {
     );
   }
 
-  if (summaries.length === 0) {
+  if (validatedInputs === 0) {
     throw new Error("At least one metadata input must be validated");
   }
 
@@ -913,6 +938,12 @@ async function main(argv = []) {
 
   if (options.probe) {
     const probeResults = await probeCandidates(allCandidates, options);
+    if (pendingUpdaterSignatures) {
+      const verifiedCount = assertUpdaterSignatureCoverage(probeResults, pendingUpdaterSignatures.platformCount);
+      console.log(
+        `[PASS] latest.json: ${pendingUpdaterSignatures.platformCount} updater platforms; ${verifiedCount} signatures verified during download-and-hash`,
+      );
+    }
     console.log(`[PASS] CDN ${options.downloadAndHash ? "download/hash" : "probe"} checked ${probeResults.length} URLs`);
   } else {
     console.log("[SKIP] CDN network probe not requested");
@@ -921,6 +952,7 @@ async function main(argv = []) {
 
 export {
   StagingValidationError,
+  assertUpdaterSignatureCoverage,
   forbiddenHostReason,
   main,
   normalizeBaseUrl,

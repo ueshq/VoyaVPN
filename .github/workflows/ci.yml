@@ -44,6 +44,19 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      # cargo install rebuilds these audit tools from source on every run; the
+      # cache turns the install steps into a no-op once the pinned version is
+      # present. Swatinem/rust-cache deliberately does not cache ~/.cargo/bin.
+      - name: Cache audit tool binaries
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin/cargo-deny
+            ~/.cargo/bin/cargo-audit
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+          key: ${{ runner.os }}-cargo-audit-tools-${{ env.RUST_TOOLCHAIN_VERSION }}-deny-${{ env.CARGO_DENY_VERSION }}-audit-${{ env.CARGO_AUDIT_VERSION }}
+
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked --version "$CARGO_DENY_VERSION"
 
@@ -82,6 +95,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-on-failure: true
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
@@ -94,6 +112,15 @@ jobs:
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Cache cargo-machete binary
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin/cargo-machete
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+          key: ${{ runner.os }}-cargo-machete-${{ env.RUST_TOOLCHAIN_VERSION }}-${{ env.CARGO_MACHETE_VERSION }}
 
       - name: Install cargo-machete
         run: cargo install cargo-machete --locked --version "$CARGO_MACHETE_VERSION"
@@ -167,6 +194,10 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
 
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-on-failure: true
+
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 11.5.0
@@ -178,6 +209,15 @@ jobs:
 
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Cache tauri-driver binary
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin/tauri-driver
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+          key: ${{ runner.os }}-tauri-driver-${{ env.RUST_TOOLCHAIN_VERSION }}-${{ env.TAURI_DRIVER_VERSION }}
 
       - name: Install tauri-driver
         run: cargo install tauri-driver --locked --version "$TAURI_DRIVER_VERSION"
@@ -207,13 +247,23 @@ jobs:
         with:
           toolchain: ${{ env.RUST_MSRV_VERSION }}
 
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-on-failure: true
+
       - name: Check workspace at MSRV
         run: cargo check --workspace --all-targets --locked
 
   platform-check:
-    name: Rust compile (${{ matrix.os }})
+    # Clippy, not cargo check: the strict workspace lints (unwrap_used,
+    # undocumented_unsafe_blocks) are the only gate that ever sees the
+    # #[cfg(windows)] / #[cfg(target_os = "macos")] code paths, which the Linux
+    # baseline job cannot lint. Rust tests stay Linux-only on purpose: no
+    # #[cfg(test)] module in the workspace is OS-gated, so running them here
+    # would only re-run the same suite at triple the wall-clock cost.
+    name: Rust lint (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 35
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -239,6 +289,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
+          components: clippy
 
-      - name: Check all Rust targets
-        run: cargo check --workspace --all-targets --locked
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-on-failure: true
+
+      - name: Lint all Rust targets
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings

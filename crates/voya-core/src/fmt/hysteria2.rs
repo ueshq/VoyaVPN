@@ -11,8 +11,8 @@ impl ShareFmt for Hysteria2Fmt {
     fn parse(&self, input: &str) -> Result<ProfileItem, ShareError> {
         let parsed = parse_uri_with_schemes(input, "hysteria2", &["hysteria2", "hy2"])?;
         let mut item = profile_from_uri(ConfigType::Hysteria2, &parsed);
-        resolve_uri_query(&parsed.query, &mut item);
-        let pin = nonempty(parsed.query.decoded_or("pinSHA256", ""));
+        resolve_uri_query_tls_only(&parsed.query, &mut item);
+        let pin = nonempty(parsed.query.value_or("pinSHA256", ""));
         if let Some(pin) = pin {
             item.tls
                 .get_or_insert_with(default_tls_settings)
@@ -27,8 +27,8 @@ impl ShareFmt for Hysteria2Fmt {
         } = &mut item.protocol
         {
             *password = parsed.user_info;
-            *port_hops = nonempty(parsed.query.decoded_or("mport", ""));
-            *obfuscation_password = nonempty(parsed.query.decoded_or("obfs-password", ""));
+            *port_hops = nonempty(parsed.query.value_or("mport", ""));
+            *obfuscation_password = nonempty(parsed.query.value_or("obfs-password", ""));
         }
         ensure_address_port("hysteria2", &item)?;
         ensure_nonempty("hysteria2", "password", item.password())?;

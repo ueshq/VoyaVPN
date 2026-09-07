@@ -14,7 +14,7 @@ impl ShareFmt for AnytlsFmt {
         if let ProfileProtocol::Anytls { password, .. } = &mut item.protocol {
             *password = parsed.user_info;
         }
-        resolve_uri_query(&parsed.query, &mut item);
+        resolve_uri_query_tls_only(&parsed.query, &mut item);
         ensure_address_port("anytls", &item)?;
         ensure_nonempty("anytls", "password", item.password())?;
         Ok(item)

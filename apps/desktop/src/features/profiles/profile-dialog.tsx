@@ -1,7 +1,8 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Save, Server } from "lucide-react";
+import { Save, Server, TriangleAlert } from "lucide-react";
 import { useForm, useWatch } from "react-hook-form";
 
+import { Alert, AlertDescription } from "@voya/ui/components/alert";
 import { Button } from "@voya/ui/components/button";
 import {
   Dialog,
@@ -39,9 +40,13 @@ type ProfileDialogProps = {
   onSubmit: (profile: ReturnType<typeof prepareProfileForSave>) => Promise<void>;
   open: boolean;
   profile?: ProfileListEntry | null;
+  // Backend rejection of the last save. The dialog stays open on failure so the
+  // in-progress edits survive, and the message is shown here instead of behind
+  // the modal.
+  saveError?: string | null;
 };
 
-export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile }: ProfileDialogProps) {
+export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile, saveError }: ProfileDialogProps) {
   const formKey = `${mode}:${profile?.profile.id ?? "new"}:${open ? "open" : "closed"}`;
 
   return (
@@ -52,6 +57,7 @@ export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile }: P
         onOpenChange={onOpenChange}
         onSubmit={onSubmit}
         profile={profile}
+        saveError={saveError}
       />
     </Dialog>
   );
@@ -62,6 +68,7 @@ function ProfileDialogForm({
   onOpenChange,
   onSubmit,
   profile,
+  saveError,
 }: Omit<ProfileDialogProps, "open">) {
   const { t } = useI18n();
   const form = useForm<ProfileFormValues, unknown, ParsedProfileFormValues>({
@@ -135,8 +142,10 @@ function ProfileDialogForm({
             configType={configType}
             control={form.control}
             getValues={getValues}
+            passwordError={errors.password?.message}
             register={register}
             setValue={setValue}
+            usernameError={errors.username?.message}
           />
           <TransportPanel control={form.control} register={register} />
           <SecurityPanel
@@ -148,6 +157,13 @@ function ProfileDialogForm({
           />
         </div>
       </form>
+
+      {saveError ? (
+        <Alert className="mx-6 mb-2 w-auto" variant="destructive">
+          <TriangleAlert aria-hidden="true" />
+          <AlertDescription>{saveError}</AlertDescription>
+        </Alert>
+      ) : null}
 
       <DialogFooter>
         <Button disabled={isSubmitting} onClick={() => onOpenChange(false)} type="button" variant="outline">

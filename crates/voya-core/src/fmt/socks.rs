@@ -17,7 +17,13 @@ impl ShareFmt for SocksFmt {
     fn export(&self, item: &ProfileItem) -> Result<String, ShareError> {
         ensure_type("socks", item, ConfigType::SOCKS)?;
         ensure_address_port("socks", item)?;
-        let user_info = base64_encode(&format!("{}:{}", item.username(), item.password()), true);
+        // Anonymous SOCKS proxies export without any userinfo at all; encoding
+        // an empty credential pair would emit a meaningless `Og` blob.
+        let user_info = if item.username().is_empty() && item.password().is_empty() {
+            String::new()
+        } else {
+            base64_encode(&format!("{}:{}", item.username(), item.password()), true)
+        };
         Ok(to_uri(
             ConfigType::SOCKS,
             item.address(),
@@ -38,12 +44,13 @@ fn parse_socks_new(input: &str) -> Result<ProfileItem, ShareError> {
         if let Some((username, password)) = parsed.user_info.split_once(':') {
             parsed_username = username.to_string();
             parsed_password = password.to_string();
+        } else if let Some((username, password)) = decode_socks_userinfo(&parsed.user_info) {
+            parsed_username = username;
+            parsed_password = password;
         } else {
-            let decoded = base64_decode(&parsed.user_info, "socks")?;
-            if let Some((username, password)) = decoded.split_once(':') {
-                parsed_username = username.to_string();
-                parsed_password = password.to_string();
-            }
+            // Not a base64 `user:pass` blob, so this is a plain username such as
+            // `socks://user@proxy.example:1080`.
+            parsed_username = parsed.user_info.clone();
         }
     }
     if let ProfileProtocol::Socks {
@@ -54,4 +61,10 @@ fn parse_socks_new(input: &str) -> Result<ProfileItem, ShareError> {
         *password = parsed_password;
     }
     Ok(item)
+}
+
+fn decode_socks_userinfo(user_info: &str) -> Option<(String, String)> {
+    let decoded = base64_decode(user_info, "socks").ok()?;
+    let (username, password) = decoded.split_once(':')?;
+    Some((username.to_string(), password.to_string()))
 }

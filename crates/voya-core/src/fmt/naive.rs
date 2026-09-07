@@ -12,7 +12,7 @@ impl ShareFmt for NaiveFmt {
         let parsed =
             parse_uri_with_schemes(input, "naive", &["naive", "naive+https", "naive+quic"])?;
         let mut item = profile_from_uri(ConfigType::Naive, &parsed);
-        resolve_uri_query(&parsed.query, &mut item);
+        resolve_uri_query_tls_only(&parsed.query, &mut item);
         if let ProfileProtocol::Naive {
             username,
             password,

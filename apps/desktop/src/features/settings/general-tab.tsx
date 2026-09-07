@@ -146,6 +146,7 @@ export function GeneralTab({ controller }: { controller: AppSettingsController }
               aria-label={t("options.hotkeyKey")}
               className="h-8 w-28 px-2 text-sm"
               data-hotkey-capture=""
+              placeholder={t("options.hotkeyKeyPlaceholder")}
               onKeyDown={(event) => {
                 const keyCode = keyCodeFromEvent(event);
                 if (keyCode !== null) {
@@ -183,13 +184,77 @@ export function GeneralTab({ controller }: { controller: AppSettingsController }
   );
 }
 
+/**
+ * Reads a shortcut key from a capture keystroke. Only keys the backend can turn
+ * into an accelerator are swallowed; everything else — Tab, Escape, the bare
+ * modifiers, unsupported keys — passes through so the field never traps the
+ * keyboard (WCAG 2.1.2) and Escape keeps closing the surface.
+ */
 function keyCodeFromEvent(event: KeyboardEvent<HTMLInputElement>): number | null {
-  if (["Alt", "Control", "Meta", "Shift"].includes(event.key)) {
+  const keyCode = HOTKEY_KEY_CODES.get(event.code);
+  if (keyCode === undefined) {
     return null;
   }
   event.preventDefault();
-  return event.keyCode || event.which || null;
+  return keyCode;
 }
+
+/**
+ * `KeyboardEvent.code` → the legacy key code persisted in
+ * `shortcuts.showWindowShortcut`. Mirrors `key_code_to_accelerator_key` in
+ * voya-platform so every captured key is one the backend accepts, minus `Tab`
+ * (9) and `Escape` (27), which stay reserved for focus movement and cancel.
+ */
+function buildHotkeyKeyCodes(): ReadonlyMap<string, number> {
+  const codes = new Map<string, number>(
+    Object.entries({
+      ArrowDown: 40,
+      ArrowLeft: 37,
+      ArrowRight: 39,
+      ArrowUp: 38,
+      Backquote: 192,
+      Backslash: 220,
+      Backspace: 8,
+      BracketLeft: 219,
+      BracketRight: 221,
+      CapsLock: 20,
+      Comma: 188,
+      Delete: 46,
+      End: 35,
+      Enter: 13,
+      Equal: 187,
+      Home: 36,
+      Insert: 45,
+      Minus: 189,
+      NumpadAdd: 107,
+      NumpadDecimal: 110,
+      NumpadDivide: 111,
+      NumpadMultiply: 106,
+      NumpadSubtract: 109,
+      PageDown: 34,
+      PageUp: 33,
+      Pause: 19,
+      Period: 190,
+      Quote: 222,
+      Semicolon: 186,
+      Slash: 191,
+      Space: 32,
+    }),
+  );
+  for (let digit = 0; digit <= 9; digit += 1) {
+    codes.set(`Digit${digit}`, 48 + digit);
+    codes.set(`Numpad${digit}`, 96 + digit);
+  }
+  for (let letter = 0; letter < 26; letter += 1) {
+    codes.set(`Key${String.fromCharCode(65 + letter)}`, 65 + letter);
+  }
+  for (let index = 1; index <= 24; index += 1) {
+    codes.set(`F${index}`, 111 + index);
+  }
+  return codes;
+}
+
+const HOTKEY_KEY_CODES = buildHotkeyKeyCodes();
 
 function keyCodeLabel(keyCode: number | null): string {
   if (!keyCode) return "";

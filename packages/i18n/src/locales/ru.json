@@ -15,6 +15,7 @@
     "reload": "Reload",
     "reloadCoreConfig": "Reload core configuration",
     "restart": "Restart",
+    "retry": "Повторить",
     "save": "Save",
     "settings": "Settings",
     "testSelected": "Test selected"
@@ -24,6 +25,9 @@
   },
   "confirm": {
     "cancel": "Cancel",
+    "dedupeProfilesConfirm": "Удалить дубликаты",
+    "dedupeProfilesDescription": "Дубликаты профилей во всех подписках будут удалены безвозвратно. Это действие нельзя отменить.",
+    "dedupeProfilesTitle": "Удалить дубликаты профилей?",
     "deleteProfilesConfirm": "Delete",
     "deleteProfilesDescription": "{{count}} selected profile(s) will be permanently deleted. This action cannot be undone.",
     "deleteProfilesTitle": "Delete profiles?"
@@ -51,7 +55,8 @@
       "remainingDays": "Осталось дней: {{days}}",
       "remainingTraffic": "Осталось {{amount}}",
       "update": "Обновить подписку",
-      "updateFailed": "Не удалось обновить подписку"
+      "updateFailed": "Не удалось обновить подписку",
+      "updated": "Подписка обновлена"
     },
     "unprotected": "Не защищено",
     "unprotectedHint": "Подключитесь для безопасной маршрутизации трафика."
@@ -94,6 +99,7 @@
     },
     "geoSource": "Geo files source",
     "hotkeyKey": "Hotkey key",
+    "hotkeyKeyPlaceholder": "Нажмите клавишу",
     "hotkeyShowWindow": "Show window",
     "loading": "Loading",
     "routeTemplateSource": "Источник шаблона маршрутизации",
@@ -207,6 +213,9 @@
         "reset": "Сбросить по умолчанию",
         "toggle": "Столбцы"
       },
+      "dedupe": {
+        "removed": "Удалено дубликатов: {{removed}}; сохранено {{kept}} из {{total}}."
+      },
       "dialog": {
         "addTitle": "Add profile",
         "cancel": "Cancel",
@@ -229,6 +238,7 @@
         "shareBase64": "Share links (Base64)",
         "shareLinks": "Share links",
         "showQr": "Show QR",
+        "skippedUnsupported": "Пропущено профилей без ссылки для обмена: {{count}}.",
         "voyaBundle": "Voya profile bundle"
       },
       "fields": {
@@ -457,6 +467,7 @@
       "title": "Subscriptions",
       "untitled": "Untitled",
       "updateAll": "Update all",
+      "updateNothingImported": "Ничего не импортировано и не обновлено.",
       "updateResult": "{{updated}} updated, {{imported}} profiles imported",
       "updateSelected": "Update selected",
       "url": "URL",
@@ -468,6 +479,7 @@
     "autoBadge": "Авто",
     "autoManagedHint": "Эта группа автоматически выбирает самый быстрый узел по измеренной задержке.",
     "chain": "Chain",
+    "closeConnectionFailed": "Не удалось закрыть соединение",
     "cumulativeDownload": "Cumulative download {{total}}",
     "cumulativeUpload": "Cumulative upload {{total}}",
     "delay": "Delay",
@@ -485,9 +497,13 @@
     "noActive": "No active proxy",
     "node": "Node",
     "process": "Process",
+    "reloadConfigFailed": "Не удалось перезагрузить конфигурацию ядра",
+    "selectNodeFailed": "Не удалось переключить узел",
     "source": "Source",
     "testAll": "Проверить все",
+    "testDelayFailed": "Не удалось измерить задержку",
     "trafficModeDirect": "Direct",
+    "trafficModeFailed": "Не удалось изменить режим трафика",
     "trafficModeGlobal": "Global",
     "trafficModeRule": "Rule",
     "type": "Type",
@@ -584,10 +600,13 @@
     "loadingScreen": "Loading screen",
     "nativeTunnelMissing": "Native tunnel component is not installed.",
     "noPid": "No PID",
+    "operationFailed": "Не удалось выполнить операцию",
     "proxyMonitorStartFailed": "Unable to start proxy monitor.",
     "proxyMonitorStopFailed": "Unable to stop proxy monitor.",
     "proxyRuntime": "Proxy runtime",
     "runtimeStatusFailed": "Не удалось обновить состояние выполнения",
+    "screenErrorDescription": "Этот экран неожиданно завершил работу. Повторите попытку или перезагрузите приложение, если это повторится.",
+    "screenErrorTitle": "Что-то пошло не так",
     "sysProxyPacUnavailable": "Умный прокси не поддерживается на этой платформе.",
     "sysProxyStatusFailed": "Не удалось получить состояние системного прокси",
     "tunBackendMacos": "macOS PacketTunnel",

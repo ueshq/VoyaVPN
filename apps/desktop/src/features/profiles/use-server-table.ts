@@ -5,6 +5,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 
 import {
   cancelSpeedtest,
+  dedupeProfiles,
   deleteProfiles,
   importProfilesFromText,
   listProfiles,
@@ -31,8 +32,10 @@ import {
   exportFileFilter,
   exportFileName,
   formatImportOperationMessage,
+  isShareLinkExport,
   profilesQueryKey,
   runProfileExport,
+  supportsShareLinkExport,
   type ProfileExportKind,
 } from "./server-table-actions";
 import {
@@ -49,13 +52,15 @@ type DialogState =
   | null;
 
 export function useServerTable() {
-  const [dialogState, setDialogState] = useState<DialogState>(null);
+  const [dialogState, setDialogStateInternal] = useState<DialogState>(null);
   const [filterText, setFilterText] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [importingFromClipboard, setImportingFromClipboard] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
   const [operationMessage, setOperationMessage] = useState<string | null>(null);
+  const [pendingDedupe, setPendingDedupe] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [shareQrContent, setShareQrContent] = useState<string | null>(null);
   const [sortState, setSortState] = useState<{ ascending: boolean; key: ProfileSortKey } | null>(null);
@@ -124,15 +129,30 @@ export function useServerTable() {
           key: row.id,
           start: index * 38,
         }));
-  async function runOperation(operation: () => Promise<unknown>) {
+  // Reports whether the operation succeeded so callers that own a dialog can
+  // keep it open (with the user's edits) when the backend rejects the request.
+  // `onError` redirects the message to that dialog instead of the toolbar
+  // banner, which a modal would cover.
+  async function runOperation(
+    operation: () => Promise<unknown>,
+    onError: (message: string) => void = setOperationError,
+  ) {
     setOperationError(null);
     setOperationMessage(null);
     try {
       await operation();
       await queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      return true;
     } catch (error) {
-      setOperationError(getErrorMessage(error));
+      onError(getErrorMessage(error));
+      return false;
     }
+  }
+
+  // Opening or closing the editor drops the previous rejection message.
+  function setDialogState(next: DialogState) {
+    setSaveError(null);
+    setDialogStateInternal(next);
   }
 
   // Destructive: route deletions through a confirmation gate instead of firing
@@ -140,6 +160,32 @@ export function useServerTable() {
   function requestDelete(indexIds: string[]) {
     if (indexIds.length > 0) {
       setPendingDelete(indexIds);
+    }
+  }
+
+  // Destructive: dedupe deletes every duplicate across all subscriptions, so it
+  // goes through the same confirmation gate as delete instead of firing from a
+  // single menu click.
+  function requestDedupe() {
+    setPendingDedupe(true);
+  }
+
+  async function confirmDedupe() {
+    setPendingDedupe(false);
+    setOperationError(null);
+    setOperationMessage(null);
+    try {
+      const result = await dedupeProfiles(null, null);
+      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      setOperationMessage(
+        t("panes.profiles.dedupe.removed", {
+          kept: result.kept,
+          removed: result.removedProfileIds.length,
+          total: result.total,
+        }),
+      );
+    } catch (error) {
+      setOperationError(getErrorMessage(error));
     }
   }
 
@@ -168,8 +214,12 @@ export function useServerTable() {
     const save = profile.protocol.kind === CONFIG_TYPES.PolicyGroup || profile.protocol.kind === CONFIG_TYPES.ProxyChain
       ? saveGroupProfile
       : saveProfile;
-    await runOperation(() => save(profile));
-    setDialogState(null);
+    setSaveError(null);
+    // The editor remounts its form whenever `open` toggles, so closing it on a
+    // rejected save would discard every in-progress edit.
+    if (await runOperation(() => save(profile), setSaveError)) {
+      setDialogStateInternal(null);
+    }
   }
 
   async function handleImportFromClipboard() {
@@ -263,12 +313,22 @@ export function useServerTable() {
     setOperationMessage(null);
     try {
       const allProfiles = await listProfiles(null, null);
-      const indexIds = allProfiles.map((item) => item.profile.id);
+      // Share-link exporters reject group/chain/custom/HTTP profiles, and the
+      // backend fails the whole batch on the first rejection, so those profiles
+      // are dropped here instead of breaking the export for everyone else.
+      const exportable = isShareLinkExport(kind)
+        ? allProfiles.filter((item) => supportsShareLinkExport(item.profile.protocol.kind))
+        : allProfiles;
+      const skipped = allProfiles.length - exportable.length;
+      const indexIds = exportable.map((item) => item.profile.id);
       if (indexIds.length === 0) {
         setOperationError(t("panes.profiles.export.noProfiles"));
         return;
       }
       await performExport(kind, indexIds, showQr, saveFile);
+      if (skipped > 0) {
+        setOperationMessage(t("panes.profiles.export.skippedUnsupported", { count: skipped }));
+      }
     } catch (error) {
       setOperationError(getErrorMessage(error));
     }
@@ -293,6 +353,7 @@ export function useServerTable() {
   }
 
   return {
+    confirmDedupe,
     confirmDelete,
     dialogState,
     filterText,
@@ -311,21 +372,25 @@ export function useServerTable() {
     importingFromClipboard,
     operationError,
     operationMessage,
+    pendingDedupe,
     pendingDelete,
     profiles,
     profilesQuery,
     queryClient,
     renderedRows,
+    requestDedupe,
     requestDelete,
     resetColumnVisibility,
     rows,
     rowVirtualizer,
     runOperation,
+    saveError,
     selectOnly,
     selectedId,
     setDialogState,
     setFilterText,
     setImportOpen,
+    setPendingDedupe,
     setPendingDelete,
     setShareQrContent,
     setSubscriptionsOpen,

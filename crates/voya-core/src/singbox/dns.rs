@@ -360,11 +360,16 @@ fn dns_rule_has_matcher(rule: &SingboxRule) -> bool {
 }
 
 fn final_dns_uses_direct(context: &CoreConfigContext) -> bool {
-    let Some(last_rule) = context
-        .routing_item
-        .as_ref()
-        .and_then(|routing| routing.rule_set.last())
-    else {
+    // Mirror the route generator's filter (routing.rs): a disabled or DNS-only
+    // trailing rule never becomes `route.final`, so it must not flip `dns.final`
+    // to the plaintext direct resolver either.
+    let Some(last_rule) = context.routing_item.as_ref().and_then(|routing| {
+        routing
+            .rule_set
+            .iter()
+            .rev()
+            .find(|item| item.enabled && item.rule_type != Some(RuleType::DNS))
+    }) else {
         return false;
     };
     if last_rule.outbound_tag.as_deref() != Some(DIRECT_TAG) {

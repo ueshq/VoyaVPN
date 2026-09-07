@@ -279,8 +279,41 @@ fn load_pac_text(config: &PacStartConfig) -> Result<String, SystemProxyError> {
 }
 
 pub(super) fn write_pac_response(mut stream: TcpStream, content: &[u8]) {
+    drain_pac_request(&mut stream);
     let _ = stream.write_all(content);
     let _ = stream.flush();
+}
+
+/// Read the request head before replying.
+///
+/// Closing a socket that still has unread data queued makes the kernel send an
+/// RST, which can discard the response the client has not read yet.
+fn drain_pac_request(stream: &mut TcpStream) {
+    use std::io::Read;
+
+    const MAX_REQUEST_BYTES: usize = 8 * 1024;
+    const REQUEST_READ_TIMEOUT: Duration = Duration::from_millis(100);
+
+    if stream.set_read_timeout(Some(REQUEST_READ_TIMEOUT)).is_err() {
+        return;
+    }
+
+    let mut request = Vec::new();
+    let mut chunk = [0_u8; 1024];
+    while request.len() < MAX_REQUEST_BYTES {
+        match stream.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(read) => {
+                request.extend_from_slice(&chunk[..read]);
+                if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+
+    let _ = stream.set_read_timeout(None);
 }
 
 pub(super) fn to_u16_port(port: i32) -> Result<u16, SystemProxyError> {
@@ -292,11 +325,12 @@ mode="$1"
 host="$2"
 port="$3"
 ignore_hosts="$4"
+failed=0
 
 array_from_csv() {
   if [ -z "$1" ]; then
     printf "[]"
-    return
+    return 0
   fi
   old_ifs="$IFS"
   IFS=","
@@ -314,18 +348,35 @@ array_from_csv() {
   printf "[%s]" "$result"
 }
 
+# Record failures instead of letting the last command decide the exit status:
+# without this the script reports whatever the final desktop helper returned.
+run_step() {
+  if "$@"; then
+    return 0
+  fi
+  echo "voya-sysproxy: command failed: $*" >&2
+  failed=1
+  return 0
+}
+
 set_gnome() {
   if ! command -v gsettings >/dev/null 2>&1; then
-    return
+    return 0
   fi
-  gsettings set org.gnome.system.proxy mode "$mode"
+  # A desktop can ship gsettings without the GNOME proxy schemas; treat that as
+  # "not a GNOME desktop" rather than as a failure we could not have avoided.
+  if ! gsettings get org.gnome.system.proxy mode >/dev/null 2>&1; then
+    return 0
+  fi
+  run_step gsettings set org.gnome.system.proxy mode "$mode"
   if [ "$mode" = "manual" ]; then
     for proto in http https ftp socks; do
-      gsettings set "org.gnome.system.proxy.$proto" host "$host"
-      gsettings set "org.gnome.system.proxy.$proto" port "$port"
+      run_step gsettings set "org.gnome.system.proxy.$proto" host "$host"
+      run_step gsettings set "org.gnome.system.proxy.$proto" port "$port"
     done
-    gsettings set org.gnome.system.proxy ignore-hosts "$(array_from_csv "$ignore_hosts")"
+    run_step gsettings set org.gnome.system.proxy ignore-hosts "$(array_from_csv "$ignore_hosts")"
   fi
+  return 0
 }
 
 set_kde() {
@@ -334,19 +385,20 @@ set_kde() {
   elif command -v kwriteconfig5 >/dev/null 2>&1; then
     kwriteconfig=kwriteconfig5
   else
-    return
+    return 0
   fi
   if [ "$mode" = "manual" ]; then
-    "$kwriteconfig" --file kioslaverc --group "Proxy Settings" --key ProxyType 1
-    "$kwriteconfig" --file kioslaverc --group "Proxy Settings" --key httpProxy "http://$host:$port"
-    "$kwriteconfig" --file kioslaverc --group "Proxy Settings" --key httpsProxy "http://$host:$port"
-    "$kwriteconfig" --file kioslaverc --group "Proxy Settings" --key ftpProxy "http://$host:$port"
-    "$kwriteconfig" --file kioslaverc --group "Proxy Settings" --key socksProxy "http://$host:$port"
-    "$kwriteconfig" --file kioslaverc --group "Proxy Settings" --key NoProxyFor "$ignore_hosts"
+    run_step "$kwriteconfig" --file kioslaverc --group "Proxy Settings" --key ProxyType 1
+    run_step "$kwriteconfig" --file kioslaverc --group "Proxy Settings" --key httpProxy "http://$host:$port"
+    run_step "$kwriteconfig" --file kioslaverc --group "Proxy Settings" --key httpsProxy "http://$host:$port"
+    run_step "$kwriteconfig" --file kioslaverc --group "Proxy Settings" --key ftpProxy "http://$host:$port"
+    run_step "$kwriteconfig" --file kioslaverc --group "Proxy Settings" --key socksProxy "http://$host:$port"
+    run_step "$kwriteconfig" --file kioslaverc --group "Proxy Settings" --key NoProxyFor "$ignore_hosts"
   else
-    "$kwriteconfig" --file kioslaverc --group "Proxy Settings" --key ProxyType 0
+    run_step "$kwriteconfig" --file kioslaverc --group "Proxy Settings" --key ProxyType 0
   fi
   dbus-send --type=signal /KIO/Scheduler org.kde.KIO.Scheduler.reparseSlaveConfiguration string:"" >/dev/null 2>&1 || true
+  return 0
 }
 
 if [ "$mode" != "manual" ] && [ "$mode" != "none" ]; then
@@ -356,6 +408,7 @@ fi
 
 set_gnome
 set_kde
+exit "$failed"
 "#;
 
 const MACOS_PROXY_SCRIPT: &str = r#"#!/bin/sh
@@ -365,31 +418,299 @@ port="$3"
 pac_url="$2"
 if [ "$mode" = "set" ]; then
   shift 3 2>/dev/null || true
+  if [ "$#" -eq 0 ]; then
+    # networksetup needs an explicit "Empty" to clear the bypass list; calling
+    # it with no domain leaves the previous list in place.
+    set -- Empty
+  fi
 fi
 
-services="$(networksetup -listallnetworkservices | grep -v '^\*')"
-printf "%s\n" "$services" | while IFS= read -r service; do
-  [ -z "$service" ] && continue
-  if [ "$mode" = "set" ]; then
-    networksetup -setwebproxy "$service" "$host" "$port"
-    networksetup -setsecurewebproxy "$service" "$host" "$port"
-    networksetup -setsocksfirewallproxy "$service" "$host" "$port"
-    networksetup -setproxybypassdomains "$service" "$@"
-    networksetup -setautoproxystate "$service" off
-  elif [ "$mode" = "pac" ]; then
-    networksetup -setwebproxystate "$service" off
-    networksetup -setsecurewebproxystate "$service" off
-    networksetup -setsocksfirewallproxystate "$service" off
-    networksetup -setautoproxyurl "$service" "$pac_url"
-    networksetup -setautoproxystate "$service" on
-  elif [ "$mode" = "clear" ]; then
-    networksetup -setwebproxystate "$service" off
-    networksetup -setsecurewebproxystate "$service" off
-    networksetup -setsocksfirewallproxystate "$service" off
-    networksetup -setautoproxystate "$service" off
-  else
+case "$mode" in
+  set|pac|clear) ;;
+  *)
     echo "Usage: $0 set <host> <port> [bypass...] | pac <url> | clear" >&2
     exit 1
+    ;;
+esac
+
+failed=0
+
+# Every networksetup call runs through this so a failure on one service or one
+# setting is reported: a pipeline's status is only that of its last command.
+run_step() {
+  if "$@"; then
+    return 0
   fi
-done
+  echo "voya-sysproxy: command failed: $*" >&2
+  failed=1
+  return 0
+}
+
+# The first output line is a human-readable header ("An asterisk (*) denotes
+# ..."), and a leading "*" marks a disabled service.
+services="$(networksetup -listallnetworkservices | tail -n +2 | grep -v '^\*')"
+
+# Read from a here-document, not a pipe: a piped loop runs in a subshell and
+# would discard every recorded failure.
+while IFS= read -r service; do
+  [ -z "$service" ] && continue
+  if [ "$mode" = "set" ]; then
+    run_step networksetup -setwebproxy "$service" "$host" "$port"
+    run_step networksetup -setsecurewebproxy "$service" "$host" "$port"
+    run_step networksetup -setsocksfirewallproxy "$service" "$host" "$port"
+    run_step networksetup -setproxybypassdomains "$service" "$@"
+    run_step networksetup -setautoproxystate "$service" off
+  elif [ "$mode" = "pac" ]; then
+    run_step networksetup -setwebproxystate "$service" off
+    run_step networksetup -setsecurewebproxystate "$service" off
+    run_step networksetup -setsocksfirewallproxystate "$service" off
+    run_step networksetup -setautoproxyurl "$service" "$pac_url"
+    run_step networksetup -setautoproxystate "$service" on
+  else
+    run_step networksetup -setwebproxystate "$service" off
+    run_step networksetup -setsecurewebproxystate "$service" off
+    run_step networksetup -setsocksfirewallproxystate "$service" off
+    run_step networksetup -setautoproxystate "$service" off
+  fi
+done <<SERVICES
+$services
+SERVICES
+
+exit "$failed"
 "#;
+
+#[cfg(test)]
+mod tests {
+    #[cfg(unix)]
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        process::{Command, Output},
+    };
+
+    #[cfg(unix)]
+    use super::{LINUX_PROXY_SCRIPT, MACOS_PROXY_SCRIPT};
+
+    /// Absolute path so the tests keep working with `PATH` reduced to stubs.
+    #[cfg(unix)]
+    const SHELL: &str = "/bin/sh";
+
+    #[cfg(unix)]
+    #[test]
+    fn sysproxy_managed_scripts_are_valid_posix_shell() {
+        let root = temp_root("shell-syntax");
+        for (name, contents) in [
+            ("proxy_set_linux.sh", LINUX_PROXY_SCRIPT),
+            ("proxy_set_osx.sh", MACOS_PROXY_SCRIPT),
+        ] {
+            let script = root.join(name);
+            write_script(&script, contents);
+            let output = Command::new(SHELL)
+                .arg("-n")
+                .arg(&script)
+                .output()
+                .expect("run sh -n");
+
+            assert!(
+                output.status.success(),
+                "{name} is not valid POSIX shell: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sysproxy_linux_script_succeeds_on_a_gnome_only_desktop() {
+        let root = temp_root("linux-gnome-only");
+        let stub_dir = root.join("bin");
+        fs::create_dir_all(&stub_dir).expect("create stub directory");
+        link_system_tool(&stub_dir, "sed");
+        let log = root.join("gsettings.log");
+        write_script(
+            &stub_dir.join("gsettings"),
+            &format!(
+                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\nexit 0\n",
+                log.display()
+            ),
+        );
+        let script = root.join("proxy_set_linux.sh");
+        write_script(&script, LINUX_PROXY_SCRIPT);
+
+        for arguments in [
+            vec!["manual", "127.0.0.1", "10808", "localhost,127.0.0.0/8"],
+            vec!["none"],
+        ] {
+            let output = run_with_stubs(&script, &stub_dir, &arguments);
+
+            assert!(
+                output.status.success(),
+                "{arguments:?} must succeed without any KDE tool installed, stderr: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+
+        let calls = fs::read_to_string(&log).expect("read gsettings calls");
+        assert!(calls.contains("set org.gnome.system.proxy mode manual"));
+        assert!(calls.contains("set org.gnome.system.proxy mode none"));
+        assert!(calls.contains("ignore-hosts ['localhost','127.0.0.0/8']"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sysproxy_linux_script_reports_a_failed_gsettings_call() {
+        let root = temp_root("linux-gsettings-failure");
+        let stub_dir = root.join("bin");
+        fs::create_dir_all(&stub_dir).expect("create stub directory");
+        link_system_tool(&stub_dir, "sed");
+        write_script(
+            &stub_dir.join("gsettings"),
+            "#!/bin/sh\nif [ \"$1\" = \"get\" ]; then exit 0; fi\nif [ \"$2\" = \"org.gnome.system.proxy.socks\" ]; then exit 1; fi\nexit 0\n",
+        );
+        let script = root.join("proxy_set_linux.sh");
+        write_script(&script, LINUX_PROXY_SCRIPT);
+
+        let output = run_with_stubs(
+            &script,
+            &stub_dir,
+            &["manual", "127.0.0.1", "10808", "localhost"],
+        );
+
+        assert_eq!(output.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&output.stderr).contains("command failed"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sysproxy_macos_script_reports_per_service_failures_and_skips_the_listing_header() {
+        let root = temp_root("macos-partial-failure");
+        let stub_dir = root.join("bin");
+        fs::create_dir_all(&stub_dir).expect("create stub directory");
+        link_system_tool(&stub_dir, "tail");
+        link_system_tool(&stub_dir, "grep");
+        let log = root.join("networksetup.log");
+        write_networksetup_stub(&stub_dir, &log, true);
+        let script = root.join("proxy_set_osx.sh");
+        write_script(&script, MACOS_PROXY_SCRIPT);
+
+        let output = run_with_stubs(
+            &script,
+            &stub_dir,
+            &["set", "127.0.0.1", "10808", "localhost"],
+        );
+
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "a failing service must not be reported as success"
+        );
+        let calls = fs::read_to_string(&log).expect("read networksetup calls");
+        assert!(
+            !calls.contains("An asterisk"),
+            "the listing header must not be treated as a service: {calls}"
+        );
+        assert!(
+            !calls.contains("Disabled Service"),
+            "disabled services must stay untouched: {calls}"
+        );
+        assert!(calls.contains("-setautoproxystate Thunderbolt Bridge off"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sysproxy_macos_script_clears_the_bypass_list_with_empty() {
+        let root = temp_root("macos-empty-bypass");
+        let stub_dir = root.join("bin");
+        fs::create_dir_all(&stub_dir).expect("create stub directory");
+        link_system_tool(&stub_dir, "tail");
+        link_system_tool(&stub_dir, "grep");
+        let log = root.join("networksetup.log");
+        write_networksetup_stub(&stub_dir, &log, false);
+        let script = root.join("proxy_set_osx.sh");
+        write_script(&script, MACOS_PROXY_SCRIPT);
+
+        let output = run_with_stubs(&script, &stub_dir, &["set", "127.0.0.1", "10808"]);
+
+        assert!(
+            output.status.success(),
+            "stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let calls = fs::read_to_string(&log).expect("read networksetup calls");
+        assert!(
+            calls.contains("-setproxybypassdomains Wi-Fi Empty"),
+            "an empty exception list must clear the bypass domains: {calls}"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    fn write_networksetup_stub(stub_dir: &Path, log: &Path, fail_first_service: bool) {
+        let failure = if fail_first_service {
+            "if [ \"$1\" = \"-setwebproxy\" ] && [ \"$2\" = \"Wi-Fi\" ]; then\n  echo 'networksetup: failed' >&2\n  exit 1\nfi\n"
+        } else {
+            ""
+        };
+        write_script(
+            &stub_dir.join("networksetup"),
+            &format!(
+                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{log}'\nif [ \"$1\" = \"-listallnetworkservices\" ]; then\n  printf '%s\\n' 'An asterisk (*) denotes that a network service is disabled.' 'Wi-Fi' '*Disabled Service' 'Thunderbolt Bridge'\n  exit 0\nfi\n{failure}exit 0\n",
+                log = log.display()
+            ),
+        );
+    }
+
+    #[cfg(unix)]
+    fn run_with_stubs(script: &Path, stub_dir: &Path, arguments: &[&str]) -> Output {
+        Command::new(SHELL)
+            .arg(script)
+            .args(arguments)
+            .env("PATH", stub_dir)
+            .output()
+            .expect("run managed script")
+    }
+
+    /// Symlink a real system tool into the stub directory so the script can run
+    /// with `PATH` restricted to stubs.
+    #[cfg(unix)]
+    fn link_system_tool(stub_dir: &Path, name: &str) {
+        for directory in ["/usr/bin", "/bin", "/usr/local/bin"] {
+            let candidate = Path::new(directory).join(name);
+            if candidate.exists() {
+                std::os::unix::fs::symlink(candidate, stub_dir.join(name)).expect("link tool");
+                return;
+            }
+        }
+        panic!("{name} is required to run the managed system proxy scripts");
+    }
+
+    #[cfg(unix)]
+    fn write_script(path: &Path, contents: &str) {
+        use std::os::unix::fs::PermissionsExt;
+
+        fs::write(path, contents).expect("write script");
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).expect("chmod script");
+    }
+
+    #[cfg(unix)]
+    fn temp_root(name: &str) -> PathBuf {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |duration| duration.as_nanos());
+        let root = std::env::temp_dir().join(format!(
+            "voyavpn-sysproxy-script-{name}-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("create temp root");
+        root
+    }
+}

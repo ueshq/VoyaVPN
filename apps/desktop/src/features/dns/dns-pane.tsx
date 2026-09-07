@@ -5,6 +5,7 @@ import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { cn } from "@voya/ui/lib/utils";
 import { useI18n } from "@voya/i18n/use-i18n";
+import { useRegisterSettingsDirtySource } from "@/features/settings/settings-dirty-sources";
 
 import { SimpleDnsForm } from "./simple-dns-form";
 import { useDnsSettings } from "./use-dns-settings";
@@ -14,6 +15,10 @@ import { useDnsSettings } from "./use-dns-settings";
  * Reload/Save lifecycle (dedicated commands with server-side validation)
  * instead of joining the surface's save-all draft, mirroring the Updates tab
  * precedent. The hosting `TabsContent` provides scroll and padding.
+ *
+ * Its draft is registered with the surface so "Save all", "Discard" and the
+ * navigation leave guard cover it too — leaving the Settings tab unmounts this
+ * pane, which would otherwise drop the edits without asking.
  */
 export function DnsPane() {
   const { t } = useI18n();
@@ -28,6 +33,8 @@ export function DnsPane() {
     operationError,
     updateSimple,
   } = useDnsSettings();
+
+  useRegisterSettingsDirtySource({ dirty: isDirty, discard: handleReload, save: handleSave });
 
   return (
     <section aria-label={t("panes.dns.title")} className="mx-auto grid w-full max-w-3xl gap-4">

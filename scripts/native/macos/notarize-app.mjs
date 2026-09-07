@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
-import { capture, repoRootFromScript, run } from "../../lib/common.mjs";
+import { capture, describeCommand, repoRootFromScript, run } from "../../lib/common.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const appBundle = resolve(process.env.VOYAVPN_MACOS_APP_BUNDLE || resolve(repoRoot, "target", "native", "macos", "VoyaVPN.app"));
@@ -15,7 +15,11 @@ function captureText(program, args, options = {}) {
     throw result.error;
   }
   if (result.status !== 0) {
-    throw new Error(`${program} ${args.join(" ")} failed with status ${result.status}: ${result.stderr || result.stdout}`);
+    // notarytool takes the app-specific password on argv, so the command line
+    // must never be echoed verbatim into an error message or CI log.
+    throw new Error(
+      `${describeCommand(program, args)} failed with status ${result.status}: ${result.stderr || result.stdout}`,
+    );
   }
   return result.stdout;
 }
@@ -44,6 +48,9 @@ function notaryCredentials() {
   const teamId = process.env.VOYAVPN_NOTARY_TEAM_ID;
   const password = process.env.VOYAVPN_NOTARY_PASSWORD;
   if (appleId && teamId && password) {
+    console.warn(
+      "! Using VOYAVPN_NOTARY_APPLE_ID/TEAM_ID/PASSWORD: the app-specific password is visible to local process listings while notarytool runs. Prefer VOYAVPN_NOTARY_KEYCHAIN_PROFILE.",
+    );
     return ["--apple-id", appleId, "--team-id", teamId, "--password", password];
   }
 

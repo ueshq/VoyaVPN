@@ -11,6 +11,11 @@ import { UpdatesPanel } from "@/features/updates";
 import { CoreTab } from "./core-tab";
 import { GeneralTab } from "./general-tab";
 import { NetworkTab } from "./network-tab";
+import {
+  discardSettingsDirtySources,
+  saveSettingsDirtySources,
+  useSettingsDirtySources,
+} from "./settings-dirty-sources";
 import { SettingsTabBar, SettingsTabTrigger } from "./settings-tabs";
 import { SourcesTab } from "./sources-tab";
 import { TestsTab } from "./tests-tab";
@@ -61,12 +66,30 @@ function SettingsSurfaceView({
   const { direction, t } = useI18n();
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [visited, setVisited] = useState<ReadonlySet<SettingsTab>>(() => new Set([initialTab]));
+  // Panes with their own draft (the DNS tab) report through the registry, so a
+  // single footer speaks for every unsaved edit on the surface.
+  const paneDirty = useSettingsDirtySources();
+  const [paneError, setPaneError] = useState<string | null>(null);
+  const dirty = controller.dirty || paneDirty;
+  const footerError = controller.error ?? paneError;
 
   function handleTabChange(value: string) {
     if (!tabValues.has(value as SettingsTab)) return;
     const next = value as SettingsTab;
     setTab(next);
     setVisited((current) => (current.has(next) ? current : new Set(current).add(next)));
+  }
+
+  async function saveAll() {
+    setPaneError(null);
+    if (controller.dirty && !(await controller.save())) return;
+    setPaneError(await saveSettingsDirtySources());
+  }
+
+  async function discardAll() {
+    setPaneError(null);
+    if (controller.dirty) await controller.discard();
+    await discardSettingsDirtySources();
   }
 
   return (
@@ -87,16 +110,18 @@ function SettingsSurfaceView({
       </Tabs>
 
       <footer className="flex shrink-0 flex-wrap items-center gap-3 border-t bg-background px-8 py-3">
-        <Button disabled={!controller.dirty || controller.working} onClick={() => void controller.save()} type="button">
+        <Button disabled={!dirty || controller.working} onClick={() => void saveAll()} type="button">
           {t("settings.saveAll")}
         </Button>
-        <Button disabled={!controller.dirty || controller.working} onClick={() => void controller.discard()} type="button" variant="outline">
+        <Button disabled={!dirty || controller.working} onClick={() => void discardAll()} type="button" variant="outline">
           {t("settings.discardChanges")}
         </Button>
         <span className="text-xs text-muted-foreground">
-          {controller.dirty ? t("settings.unsavedChanges") : controller.saved ? t("options.saved") : null}
+          {dirty ? t("settings.unsavedChanges") : controller.saved ? t("options.saved") : null}
         </span>
-        {controller.error ? <span className="text-xs text-destructive" role="alert">{controller.error}</span> : null}
+        {footerError ? (
+          <span className="text-xs text-destructive" role="alert">{footerError}</span>
+        ) : null}
       </footer>
     </div>
   );

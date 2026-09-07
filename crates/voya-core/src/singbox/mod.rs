@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::{
+    context::SS_SECURITIES_IN_SINGBOX,
     protocol_common::{
         first_list_value, inbound_port, inbound_protocol_tag, nonempty_str, parse_pem_chain,
         parse_wireguard_reserved, protocol_name, raw_http_user_agent, split_list, trimmed,
@@ -17,8 +18,8 @@ use crate::{
     },
     AppConfig, ConfigType, CoreConfigContext, InItem, InboundProtocol, MultipleLoad, ProfileItem,
     ProfileProtocol, ProfileTransport, RuleType, RulesItem, SpeedtestConfigEntry, TlsMode,
-    BLOCK_TAG, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS, DEFAULT_REMOTE_DNS, DIRECT_TAG, LOOPBACK,
-    PROXY_TAG,
+    TlsSettings, BLOCK_TAG, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS, DEFAULT_REMOTE_DNS,
+    DIRECT_TAG, LOOPBACK, PROXY_TAG,
 };
 
 const RAW_HEADER_HTTP: &str = "http";
@@ -90,27 +91,6 @@ const SINGBOX_UTLS_FINGERPRINTS: &[&str] = &[
     "randomized",
 ];
 
-const SS_SECURITIES_IN_SINGBOX: &[&str] = &[
-    "aes-256-gcm",
-    "aes-192-gcm",
-    "aes-128-gcm",
-    "chacha20-ietf-poly1305",
-    "xchacha20-ietf-poly1305",
-    "none",
-    "2022-blake3-aes-128-gcm",
-    "2022-blake3-aes-256-gcm",
-    "2022-blake3-chacha20-poly1305",
-    "aes-128-ctr",
-    "aes-192-ctr",
-    "aes-256-ctr",
-    "aes-128-cfb",
-    "aes-192-cfb",
-    "aes-256-cfb",
-    "rc4-md5",
-    "chacha20-ietf",
-    "xchacha20",
-];
-
 mod dns;
 mod entry;
 mod experimental;
@@ -118,7 +98,7 @@ mod inbounds;
 mod outbounds;
 mod routing;
 mod schema;
-mod support;
+pub(crate) mod support;
 
 pub use entry::*;
 pub use schema::*;

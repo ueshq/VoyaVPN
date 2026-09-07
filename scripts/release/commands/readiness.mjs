@@ -584,7 +584,7 @@ async function checkTauriConfig(reporter, options, updatesBaseUrl) {
   }
 }
 
-async function checkStableEnvironment(reporter, options, cdnBaseUrl, updatesBaseUrl) {
+export async function checkStableEnvironment(reporter, options) {
   if (isDryRun(options)) {
     reporter.pass("stable-only secrets", ["dry-run mode does not require signing, notarization, or publication secrets"]);
     return;
@@ -595,7 +595,9 @@ async function checkStableEnvironment(reporter, options, cdnBaseUrl, updatesBase
   if (!options.cdnBaseUrl && !process.env.VOYAVPN_CDN_BASE_URL) {
     missing.push("VOYAVPN_CDN_BASE_URL or --cdn-base-url");
   }
-  if (!options.updatesBaseUrl && !process.env.VOYAVPN_UPDATES_BASE_URL && updatesBaseUrl !== cdnBaseUrl) {
+  // The updater base URL silently falls back to the CDN base URL, so stable
+  // mode must require it explicitly instead of comparing the two values.
+  if (!options.updatesBaseUrl && !process.env.VOYAVPN_UPDATES_BASE_URL) {
     missing.push("VOYAVPN_UPDATES_BASE_URL or --updates-base-url");
   }
   if (!process.env.TAURI_SIGNING_PRIVATE_KEY && !process.env.TAURI_SIGNING_PRIVATE_KEY_PATH) {
@@ -1098,7 +1100,7 @@ async function main(argv = []) {
 
   await checkRequiredDocs(reporter);
   await checkNotices(reporter);
-  await checkStableEnvironment(reporter, options, cdnBaseUrl, updatesBaseUrl);
+  await checkStableEnvironment(reporter, options);
   await checkTauriConfig(reporter, options, updatesBaseUrl);
   await scanProductionBlockers(reporter);
 

@@ -34,6 +34,10 @@ import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { cn } from "@voya/ui/lib/utils";
 
 import { SubscriptionMetaLine } from "./subscription-card";
+import {
+  isSubscriptionUpdateFailure,
+  subscriptionUpdateMessages,
+} from "./subscription-update-result";
 import { metadataBySubscriptionId } from "./subscription-usage";
 
 type SubscriptionsDialogProps = {
@@ -146,11 +150,24 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
   async function handleUpdate(id: string | null) {
     await run(async () => {
       const result = await updateSubscriptions(id, true, null);
+      // Per-source download failures never reject: the backend returns them as
+      // `skipped` + `messages`, so they have to be read off the payload and
+      // shown, or "0 updated, 0 profiles imported" reads as a success.
+      const messages = subscriptionUpdateMessages(result);
+      if (isSubscriptionUpdateFailure(result)) {
+        // `run` clears the error before invoking this operation, so setting it
+        // here surfaces the destructive alert instead of the status line.
+        setError(messages || t("panes.subscriptions.updateNothingImported"));
 
-      return t("panes.subscriptions.updateResult", {
-        imported: result.imported ?? 0,
-        updated: result.updated ?? 0,
+        return null;
+      }
+
+      const summary = t("panes.subscriptions.updateResult", {
+        imported: result.imported,
+        updated: result.updated,
       });
+
+      return messages ? `${summary}\n${messages}` : summary;
     });
   }
 
@@ -314,12 +331,12 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
 
               {message ? (
                 <Alert role="status">
-                  <AlertDescription>{message}</AlertDescription>
+                  <AlertDescription className="whitespace-pre-line">{message}</AlertDescription>
                 </Alert>
               ) : null}
               {error ? (
                 <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
+                  <AlertDescription className="whitespace-pre-line">{error}</AlertDescription>
                 </Alert>
               ) : null}
             </CardContent>

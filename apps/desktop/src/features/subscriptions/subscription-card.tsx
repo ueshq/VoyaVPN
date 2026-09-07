@@ -13,6 +13,10 @@ import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { cn } from "@voya/ui/lib/utils";
 
 import {
+  isSubscriptionUpdateFailure,
+  subscriptionUpdateMessages,
+} from "./subscription-update-result";
+import {
   isExpired,
   isTrafficExhausted,
   metadataBySubscriptionId,
@@ -91,12 +95,33 @@ export function SubscriptionCard({ activeSubscriptionId, onAddSubscription }: Su
     }
     setUpdating(true);
     try {
-      await updateSubscriptions(subscription.id, true, null);
+      const result = await updateSubscriptions(subscription.id, true, null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["subscriptions"] }),
         queryClient.invalidateQueries({ queryKey: ["subscription-metadata"] }),
         queryClient.invalidateQueries({ queryKey: ["profiles"] }),
       ]);
+      // A dead URL or an expired token comes back as a *successful* command
+      // carrying `skipped` + `messages`, so success has to be read from the
+      // payload rather than from the absence of a rejection.
+      if (isSubscriptionUpdateFailure(result)) {
+        pushToast({
+          description:
+            subscriptionUpdateMessages(result) || t("panes.subscriptions.updateNothingImported"),
+          severity: "error",
+          title: t("home.subscriptionCard.updateFailed"),
+        });
+
+        return;
+      }
+      pushToast({
+        description: t("panes.subscriptions.updateResult", {
+          imported: result.imported,
+          updated: result.updated,
+        }),
+        severity: "info",
+        title: t("home.subscriptionCard.updated"),
+      });
     } catch (error) {
       pushToast({
         description: redactOperationalError(error),

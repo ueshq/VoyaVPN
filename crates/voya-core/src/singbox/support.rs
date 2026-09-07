@@ -75,7 +75,11 @@ fn singbox_can_build_leaf(node: &ProfileItem) -> bool {
             || wireguard_public_key(&node.protocol).is_some())
 }
 
-pub(super) fn singbox_supports_config_type(config_type: ConfigType) -> bool {
+/// Single source of truth for the sing-box protocol support table.
+///
+/// `crate::context::validation` gates node validation on the same predicate so
+/// validation and generation cannot drift apart.
+pub(crate) fn singbox_supports_config_type(config_type: ConfigType) -> bool {
     matches!(
         config_type,
         ConfigType::VMess

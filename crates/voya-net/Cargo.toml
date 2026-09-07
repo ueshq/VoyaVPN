@@ -13,7 +13,9 @@ test-utils = []
 base64 = "0.22"
 futures-util = "0.3"
 percent-encoding = "2.3"
-reqwest = { version = "0.12", default-features = false, features = ["charset", "http2", "json", "rustls-tls", "socks"] }
+# `rustls-tls-native-roots` keeps the download stack on the same trust policy as
+# `certificates::client_config`: bundled webpki roots plus the OS trust store.
+reqwest = { version = "0.12", default-features = false, features = ["charset", "http2", "json", "rustls-tls", "rustls-tls-native-roots", "socks"] }
 rustls = "0.23"
 rustls-native-certs = "0.8"
 serde.workspace = true

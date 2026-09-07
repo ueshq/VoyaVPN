@@ -85,6 +85,14 @@ const authProfileSchema = commonProfileSchema.extend({
   username: optionalText,
 });
 
+// TUIC authenticates with a UUID *and* a password. The form carries the
+// contract's `uuid` in `username`, and neither the backend nor sing-box rejects
+// an empty uuid (it is simply omitted from the generated outbound), so the
+// requirement has to be enforced here.
+const tuicProfileSchema = serverProfileSchema.extend({
+  username: z.string().trim().min(1, "UUID is required"),
+});
+
 export const profileFormSchema = z.discriminatedUnion("configType", [
   serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.VMess) }),
   commonProfileSchema.extend({
@@ -97,7 +105,7 @@ export const profileFormSchema = z.discriminatedUnion("configType", [
   serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.VLESS) }),
   serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.Trojan) }),
   serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.Hysteria2) }),
-  serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.TUIC) }),
+  tuicProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.TUIC) }),
   serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.WireGuard) }),
   authProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.HTTP) }),
   serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.Anytls) }),
@@ -288,7 +296,7 @@ function protocolToFormOptions(protocol: ProfileProtocol) {
 function transportToFormOptions(transport: ProfileTransport | null) {
   if (!transport) return {};
   switch (transport.kind) {
-    case "tcp": return { header: transport.header };
+    case "tcp": return { header: transport.header, host: transport.host, path: transport.path };
     case "kcp": return { header: transport.header, kcpSeed: transport.seed, kcpMtu: transport.mtu };
     case "websocket": case "httpUpgrade": case "http2": case "quic": return { host: transport.host, path: transport.path };
     case "xhttp": return { host: transport.host, path: transport.path, xhttpMode: transport.mode, xhttpExtra: transport.extra };

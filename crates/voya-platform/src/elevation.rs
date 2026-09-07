@@ -103,6 +103,16 @@ fi
 
 PID="$1"
 shift
+case "$PID" in
+  ''|*[!0-9]*)
+    echo "refusing to sudo kill: target pid must be a positive integer" >&2
+    exit 64
+    ;;
+esac
+if [ "$PID" -le 1 ]; then
+  echo "refusing to sudo kill pid $PID: reserved process id" >&2
+  exit 64
+fi
 if ! kill -0 "$PID" 2>/dev/null; then
   exit 0
 fi
@@ -140,7 +150,11 @@ process_matches_expected() {{
   return 1
 }}
 
-tree_has_expected_process() {{
+# The launcher `exec`s the core, so the authorized shape is exactly
+# `sudo -> core`: the target itself or one of its direct children must carry an
+# expected core name. Recursing further would accept any ancestor of a core
+# process (a shell, a session leader, or pid 1) as a kill target.
+target_has_expected_process() {{
   local parent="$1"
   shift
   local child
@@ -148,7 +162,7 @@ tree_has_expected_process() {{
     return 0
   fi
   for child in $(child_pids "$parent"); do
-    if tree_has_expected_process "$child" "$@"; then
+    if process_matches_expected "$child" "$@"; then
       return 0
     fi
   done
@@ -186,8 +200,8 @@ wait_for_exit() {{
   return 1
 }}
 
-if ! tree_has_expected_process "$PID" "$@"; then
-  echo "refusing to sudo kill pid $PID: target process tree does not contain an expected core" >&2
+if ! target_has_expected_process "$PID" "$@"; then
+  echo "refusing to sudo kill pid $PID: target is not an expected core or its parent" >&2
   exit 65
 fi
 
@@ -335,7 +349,7 @@ mod tests {
         let macos = unix_sudo_kill_body(TargetOs::Macos).expect("macos body");
 
         assert!(!linux.starts_with("#!"));
-        assert!(linux.contains("tree_has_expected_process"));
+        assert!(linux.contains("target_has_expected_process"));
         assert!(linux.contains("refusing to sudo kill pid $PID"));
         assert!(linux.contains("ps -o pid= --ppid"));
         assert!(macos.contains("ps -axo pid=,ppid="));
@@ -399,6 +413,82 @@ sleep() {{ :; }}
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_unix_sudo_kill_body_rejects_non_numeric_and_reserved_pids() {
+        for pid in ["", "abc", "12x", "-1", "0", "1"] {
+            let output = run_macos_kill_body("", &[pid, "sing-box"]);
+
+            assert_eq!(
+                output.status.code(),
+                Some(64),
+                "pid {pid:?} must be rejected, stderr: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_unix_sudo_kill_body_refuses_trees_whose_core_is_not_a_direct_child() {
+        let stubs = r#"
+kill() {
+  if [ "${1:-}" = "-0" ]; then
+    case "${2:-}" in
+      4242421|4242422|4242423) return 0 ;;
+    esac
+    return 1
+  fi
+  echo "KILLED ${1:-} ${2:-}"
+  return 0
+}
+
+ps() {
+  if [ "${1:-}" = "-axo" ]; then
+    printf '%s\n' '  4242421       1' '  4242422  4242421' '  4242423  4242422'
+    return 0
+  fi
+  if [ "${1:-}" = "-p" ]; then
+    case "${2:-}" in
+      4242421) printf '%s\n' '/bin/bash' ;;
+      4242422) printf '%s\n' '/bin/bash' ;;
+      4242423) printf '%s\n' '/opt/voya/sing-box' ;;
+      *) return 1 ;;
+    esac
+    return 0
+  fi
+  return 1
+}
+"#;
+
+        let output = run_macos_kill_body(stubs, &["4242421", "sing-box"]);
+
+        assert_eq!(
+            output.status.code(),
+            Some(65),
+            "stdout: {} stderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stderr).contains("refusing to sudo kill pid"));
+        assert!(
+            !String::from_utf8_lossy(&output.stdout).contains("KILLED"),
+            "a refused target must not be signalled"
+        );
+    }
+
+    #[cfg(unix)]
+    fn run_macos_kill_body(stubs: &str, arguments: &[&str]) -> std::process::Output {
+        let body = unix_sudo_kill_body(TargetOs::Macos).expect("macos body");
+        let script = format!("{stubs}\nsleep() {{ :; }}\n{body}");
+        let mut command = std::process::Command::new("bash");
+        command.arg("-c").arg(script).arg("voya-test");
+        for argument in arguments {
+            command.arg(argument);
+        }
+        command.output().expect("run kill body")
     }
 
     #[test]

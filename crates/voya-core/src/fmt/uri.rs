@@ -45,12 +45,11 @@ impl Query {
             .map(|(_, value)| value.as_str())
     }
 
+    /// Returns the stored value for `wanted`, which [`Query::parse`] already
+    /// percent-decoded once. Decoding again here would corrupt every value that
+    /// legitimately contains a `%XX` sequence.
     pub(super) fn value_or(&self, wanted: &str, default_value: &str) -> String {
         self.value(wanted).unwrap_or(default_value).to_string()
-    }
-
-    pub(super) fn decoded_or(&self, wanted: &str, default_value: &str) -> String {
-        url_decode(self.value(wanted).unwrap_or(default_value))
     }
 }
 
@@ -165,7 +164,14 @@ pub(super) fn to_uri_without_scheme_preencoded_userinfo(
     } else {
         format!("#{}", url_encode(remark))
     };
-    format!("{user_info}@{}:{port}{query}{remark}", ipv6_host(address))
+    // Only anonymous SOCKS links reach here without credentials; they must not
+    // carry a dangling `@`.
+    let user_info = if user_info.is_empty() {
+        String::new()
+    } else {
+        format!("{user_info}@")
+    };
+    format!("{user_info}{}:{port}{query}{remark}", ipv6_host(address))
 }
 
 pub(super) fn to_uri_query(
@@ -250,10 +256,12 @@ pub(super) fn to_uri_query(
                 query.push(("mtu".to_string(), mtu.to_string()));
             }
         }
-        "ws" | "httpupgrade" => {
+        "ws" | "httpupgrade" | HTTP2_NETWORK | QUIC_NETWORK => {
             let (host, path) = match item.transport.as_ref() {
                 Some(ProfileTransport::Websocket { host, path })
-                | Some(ProfileTransport::HttpUpgrade { host, path }) => (host, path),
+                | Some(ProfileTransport::HttpUpgrade { host, path })
+                | Some(ProfileTransport::Http2 { host, path })
+                | Some(ProfileTransport::Quic { host, path }) => (host, path),
                 _ => return,
             };
             push_encoded_opt(query, "host", host);
@@ -320,105 +328,103 @@ pub(super) fn to_uri_query_lite(item: &ProfileItem, query: &mut QueryPairs) {
     }
 }
 
+/// Resolves the shared TLS and transport query parameters of a share link.
+///
+/// TLS is derived from `security=` alone: a stray `sni`/`alpn` on a plaintext
+/// link must not silently enable TLS.
 pub(super) fn resolve_uri_query(query: &Query, item: &mut ProfileItem) {
-    let security = query.value_or("security", "");
-    let sni = nonempty(query.value_or("sni", ""));
-    let alpn = split_csv(&query.decoded_or("alpn", ""));
-    let public_key = nonempty(query.decoded_or("pbk", ""));
-    let short_id = nonempty(query.decoded_or("sid", ""));
-    let spider_x = nonempty(query.decoded_or("spx", ""));
-    let mldsa65_verify = nonempty(query.decoded_or("pqv", ""));
-    let ech_config = split_csv(&query.decoded_or("ech", ""));
-    let certificate_sha256 = split_csv(&query.decoded_or("pcs", ""));
-    let finalmask = query.decoded_or("fm", "");
-    let final_mask = (!finalmask.is_empty()).then(|| pretty_json_or_self(&finalmask));
-    let has_tls_fields = sni.is_some()
-        || !alpn.is_empty()
-        || public_key.is_some()
-        || short_id.is_some()
-        || spider_x.is_some()
-        || mldsa65_verify.is_some()
-        || !ech_config.is_empty()
-        || !certificate_sha256.is_empty()
-        || final_mask.is_some();
-    item.tls = match security.as_str() {
-        STREAM_SECURITY_TLS | "reality" => Some(TlsSettings {
-            mode: if security == "reality" {
-                TlsMode::Reality
-            } else {
-                TlsMode::Tls
-            },
-            server_name: sni,
-            alpn,
-            reality_public_key: public_key,
-            reality_short_id: short_id,
-            reality_spider_x: spider_x,
-            mldsa65_verify,
-            certificate_pem: None,
-            certificate_sha256,
-            ech_config,
-            final_mask,
-        }),
-        _ if has_tls_fields => Some(TlsSettings {
-            mode: TlsMode::Tls,
-            server_name: sni,
-            alpn,
-            reality_public_key: public_key,
-            reality_short_id: short_id,
-            reality_spider_x: spider_x,
-            mldsa65_verify,
-            certificate_pem: None,
-            certificate_sha256,
-            ech_config,
-            final_mask,
-        }),
-        _ => None,
-    };
+    resolve_query_into(query, item, false);
+}
 
+/// Same as [`resolve_uri_query`], for protocols that are TLS-only by
+/// definition (Hysteria2/TUIC/AnyTLS/Naive).
+///
+/// Links for those protocols routinely omit `security=` and every TLS-adjacent
+/// parameter (`hysteria2://pass@203.0.113.5:443/?insecure=1`), so TLS stays
+/// enabled unless the link explicitly asks for REALITY.
+pub(super) fn resolve_uri_query_tls_only(query: &Query, item: &mut ProfileItem) {
+    resolve_query_into(query, item, true);
+}
+
+fn resolve_query_into(query: &Query, item: &mut ProfileItem, tls_only_protocol: bool) {
+    item.tls = resolve_query_tls(query, tls_only_protocol);
+    item.transport = Some(resolve_query_transport(query));
+}
+
+fn resolve_query_tls(query: &Query, tls_only_protocol: bool) -> Option<TlsSettings> {
+    let mode = match query.value_or("security", "").as_str() {
+        STREAM_SECURITY_TLS => TlsMode::Tls,
+        STREAM_SECURITY_REALITY => TlsMode::Reality,
+        _ if tls_only_protocol => TlsMode::Tls,
+        _ => return None,
+    };
+    let final_mask = query.value_or("fm", "");
+    Some(TlsSettings {
+        mode,
+        server_name: nonempty(query.value_or("sni", "")),
+        alpn: split_csv(&query.value_or("alpn", "")),
+        reality_public_key: nonempty(query.value_or("pbk", "")),
+        reality_short_id: nonempty(query.value_or("sid", "")),
+        reality_spider_x: nonempty(query.value_or("spx", "")),
+        mldsa65_verify: nonempty(query.value_or("pqv", "")),
+        certificate_pem: None,
+        certificate_sha256: split_csv(&query.value_or("pcs", "")),
+        ech_config: split_csv(&query.value_or("ech", "")),
+        final_mask: (!final_mask.is_empty()).then(|| pretty_json_or_self(&final_mask)),
+    })
+}
+
+fn resolve_query_transport(query: &Query) -> ProfileTransport {
     let mut network = query.value_or("type", DEFAULT_NETWORK);
     if network == RAW_NETWORK_ALIAS {
         network = DEFAULT_NETWORK.to_string();
     }
+    if network == HTTP2_NETWORK_ALIAS {
+        network = HTTP2_NETWORK.to_string();
+    }
     if !NETWORKS.contains(&network.as_str()) {
         network = DEFAULT_NETWORK.to_string();
     }
-    item.transport = Some(match network.as_str() {
-        "raw" => ProfileTransport::Tcp {
-            header: nonempty(query.value_or("headerType", NONE)),
-            host: nonempty(query.decoded_or("host", "")),
-            path: nonempty(query.decoded_or("path", "")),
-        },
+    match network.as_str() {
         "kcp" => ProfileTransport::Kcp {
             header: nonempty(query.value_or("headerType", NONE)),
-            seed: nonempty(query.decoded_or("seed", "")),
+            seed: nonempty(query.value_or("seed", "")),
             mtu: parse_positive_i32(&query.value_or("mtu", "")),
         },
         "ws" => ProfileTransport::Websocket {
-            host: nonempty(query.decoded_or("host", "")),
-            path: nonempty(query.decoded_or("path", "/")),
+            host: nonempty(query.value_or("host", "")),
+            path: nonempty(query.value_or("path", "/")),
         },
         "httpupgrade" => ProfileTransport::HttpUpgrade {
-            host: nonempty(query.decoded_or("host", "")),
-            path: nonempty(query.decoded_or("path", "/")),
+            host: nonempty(query.value_or("host", "")),
+            path: nonempty(query.value_or("path", "/")),
+        },
+        HTTP2_NETWORK => ProfileTransport::Http2 {
+            host: nonempty(query.value_or("host", "")),
+            path: nonempty(query.value_or("path", "/")),
+        },
+        QUIC_NETWORK => ProfileTransport::Quic {
+            host: nonempty(query.value_or("host", "")),
+            path: nonempty(query.value_or("path", "")),
         },
         "xhttp" => {
-            let xhttp_extra = query.decoded_or("extra", "");
+            let xhttp_extra = query.value_or("extra", "");
             ProfileTransport::Xhttp {
-                host: nonempty(query.decoded_or("host", "")),
-                path: nonempty(query.decoded_or("path", "/")),
-                mode: nonempty(query.decoded_or("mode", "")),
+                host: nonempty(query.value_or("host", "")),
+                path: nonempty(query.value_or("path", "/")),
+                mode: nonempty(query.value_or("mode", "")),
                 extra: (!xhttp_extra.is_empty()).then(|| pretty_json_or_self(&xhttp_extra)),
             }
         }
         "grpc" => ProfileTransport::Grpc {
-            authority: nonempty(query.decoded_or("authority", "")),
-            service_name: nonempty(query.decoded_or("serviceName", "")),
-            mode: nonempty(query.decoded_or("mode", GRPC_GUN_MODE)),
+            authority: nonempty(query.value_or("authority", "")),
+            service_name: nonempty(query.value_or("serviceName", "")),
+            mode: nonempty(query.value_or("mode", GRPC_GUN_MODE)),
         },
         _ => ProfileTransport::Tcp {
-            header: None,
-            host: None,
-            path: None,
+            header: nonempty(query.value_or("headerType", NONE)),
+            host: nonempty(query.value_or("host", "")),
+            path: nonempty(query.value_or("path", "")),
         },
-    });
+    }
 }

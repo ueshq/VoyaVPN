@@ -95,6 +95,25 @@ describe("useDnsSettings", () => {
     expect(result.current.operationError).toBe("database unavailable");
   });
 
+  it("reports the save outcome so the settings surface can react to it", async () => {
+    const { result } = renderController();
+    await waitFor(() => expect(result.current.form).not.toBeNull());
+
+    act(() => result.current.updateSimple({ direct: "1.1.1.1" }));
+    let outcome: string | null = "not saved yet";
+    await act(async () => {
+      outcome = await result.current.handleSave();
+    });
+    expect(outcome).toBeNull();
+
+    act(() => result.current.updateSimple({ direct: "9.9.9.9" }));
+    ipcMocks.saveDnsSettings.mockRejectedValueOnce(new Error("database unavailable"));
+    await act(async () => {
+      outcome = await result.current.handleSave();
+    });
+    expect(outcome).toBe("database unavailable");
+  });
+
   it("is safe before the DNS query has produced a form", async () => {
     ipcMocks.loadDnsSettings.mockReturnValue(new Promise(() => {}));
     const { result } = renderController();

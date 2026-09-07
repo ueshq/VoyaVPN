@@ -18,15 +18,19 @@ import type { ServerTableController } from "./use-server-table";
 
 export function ServerTableDialogs({ controller }: { controller: ServerTableController }) {
   const {
+    confirmDedupe,
     confirmDelete,
     dialogState,
     handleDialogImport,
     handleSave,
     importOpen,
+    pendingDedupe,
     pendingDelete,
     queryClient,
+    saveError,
     setDialogState,
     setImportOpen,
+    setPendingDedupe,
     setPendingDelete,
     setShareQrContent,
     setSubscriptionsOpen,
@@ -43,6 +47,7 @@ export function ServerTableDialogs({ controller }: { controller: ServerTableCont
         onSubmit={handleSave}
         open={Boolean(dialogState)}
         profile={dialogState?.mode === "edit" ? dialogState.profile : null}
+        saveError={saveError}
       />
       <ImportProfilesDialog
         onImported={handleDialogImport}
@@ -59,6 +64,25 @@ export function ServerTableDialogs({ controller }: { controller: ServerTableCont
         onOpenChange={(open) => !open && setShareQrContent(null)}
         open={shareQrContent !== null}
       />
+      <AlertDialog open={pendingDedupe} onOpenChange={(open) => !open && setPendingDedupe(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("confirm.dedupeProfilesTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("confirm.dedupeProfilesDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: "destructive" })}
+              onClick={() => void confirmDedupe()}
+            >
+              {t("confirm.dedupeProfilesConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => !open && setPendingDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

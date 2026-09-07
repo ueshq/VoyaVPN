@@ -41,8 +41,13 @@ test("guards unsaved settings when leaving the settings tab", async ({ page }) =
 
   const hotkeyCapture = settings.getByRole("textbox", { name: "Hotkey key" }).first();
   await hotkeyCapture.focus();
+  // Escape and Tab stay reserved for cancel/focus movement, so capturing them is
+  // deliberately refused: the seeded accelerator key must survive untouched.
   await page.keyboard.press("Escape");
-  await expect(hotkeyCapture).toHaveValue("Esc");
+  await expect(hotkeyCapture).toHaveValue("V");
+
+  await page.keyboard.press("a");
+  await expect(hotkeyCapture).toHaveValue("A");
 
   await hotkeyCapture.blur();
   await page.getByRole("tab", { name: "Home" }).click();

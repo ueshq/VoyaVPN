@@ -24,11 +24,9 @@ export function addressLabel(configType: ProfileProtocol, t: TranslationFunction
 }
 
 export function passwordLabel(configType: ProfileProtocol, t: TranslationFunction) {
-  if (
-    configType === CONFIG_TYPES.VMess ||
-    configType === CONFIG_TYPES.VLESS ||
-    configType === CONFIG_TYPES.TUIC
-  ) {
+  // TUIC is deliberately absent: it carries a UUID *and* a password, and the
+  // UUID is edited through the username input (see `usernameLabel`).
+  if (configType === CONFIG_TYPES.VMess || configType === CONFIG_TYPES.VLESS) {
     return t("panes.profiles.fields.uuid");
   }
   if (configType === CONFIG_TYPES.WireGuard) {
@@ -38,6 +36,19 @@ export function passwordLabel(configType: ProfileProtocol, t: TranslationFunctio
   return t("panes.profiles.fields.password");
 }
 
+export function usernameLabel(configType: ProfileProtocol, t: TranslationFunction) {
+  // The form's `username` field carries the TUIC contract's `uuid`, so it is
+  // labelled UUID for that protocol.
+  if (configType === CONFIG_TYPES.TUIC) {
+    return t("panes.profiles.fields.uuid");
+  }
+
+  return t("panes.profiles.fields.username");
+}
+
 export function requiresUsername(configType: ProfileProtocol) {
-  return configType === CONFIG_TYPES.SOCKS || configType === CONFIG_TYPES.HTTP || configType === CONFIG_TYPES.Naive;
+  return configType === CONFIG_TYPES.SOCKS
+    || configType === CONFIG_TYPES.HTTP
+    || configType === CONFIG_TYPES.Naive
+    || configType === CONFIG_TYPES.TUIC;
 }

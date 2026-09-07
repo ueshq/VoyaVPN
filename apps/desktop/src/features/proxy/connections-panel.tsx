@@ -223,6 +223,10 @@ export function ConnectionsPanel() {
   const effectiveSelectedId = selectedConnection?.id ?? null;
 
   const closeMutation = useMutation({
+    // `meta.errorTitle` names the failure for the app-wide mutation cache (see
+    // components/app-shell/query-client.ts), which toasts every rejection —
+    // closing a connection must never fail silently.
+    meta: { errorTitle: t("proxy.closeConnectionFailed") },
     mutationFn: proxyCloseConnection,
     onSuccess: syncConnectionsSnapshot,
   });
@@ -268,11 +272,11 @@ export function ConnectionsPanel() {
     if (!effectiveSelectedId) {
       return;
     }
-    void closeMutation.mutateAsync(effectiveSelectedId);
+    closeMutation.mutate(effectiveSelectedId);
   }
 
   function closeAll() {
-    void closeMutation.mutateAsync(null);
+    closeMutation.mutate(null);
   }
 
   function syncConnectionsSnapshot(nextSnapshot: ProxyConnectionsSnapshot) {

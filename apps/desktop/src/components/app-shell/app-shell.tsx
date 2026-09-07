@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, type MutableRefObject } from "react";
 
 import { AppSidebar, SHELL_PANEL_ID } from "@/components/app-shell/app-sidebar";
+import { AppErrorBoundary } from "@/components/app-shell/error-boundary";
 import { ModalHost } from "@/components/app-shell/modal-host";
 import { TitleBar } from "@/components/app-shell/title-bar";
 import { Toaster } from "@/components/app-shell/toaster";
@@ -96,7 +97,12 @@ export function AppShell() {
           role="tabpanel"
           tabIndex={0}
         >
-          <Suspense fallback={<ScreenFallback />}>{renderActiveScreen(activeTab)}</Suspense>
+          {/* Keyed on the active tab so a crashed screen recovers by navigating
+              away, and so the sidebar/footer survive a screen render error or a
+              rejected lazy chunk instead of the whole root unmounting. */}
+          <AppErrorBoundary resetKey={activeTab}>
+            <Suspense fallback={<ScreenFallback />}>{renderActiveScreen(activeTab)}</Suspense>
+          </AppErrorBoundary>
         </div>
       </div>
 

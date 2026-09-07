@@ -1,0 +1,13 @@
+{
+  "type": "hysteria2",
+  "tag": "proxy",
+  "server": "203.0.113.5",
+  "server_port": 443,
+  "up_mbps": 100,
+  "down_mbps": 100,
+  "password": "hy2-pass",
+  "tls": {
+    "enabled": true,
+    "insecure": false
+  }
+}

@@ -104,23 +104,6 @@ fn get_network(item: &ProfileItem) -> String {
     }
 }
 
-fn singbox_supports_config_type(config_type: ConfigType) -> bool {
-    matches!(
-        config_type,
-        ConfigType::VMess
-            | ConfigType::VLESS
-            | ConfigType::Shadowsocks
-            | ConfigType::Trojan
-            | ConfigType::Hysteria2
-            | ConfigType::TUIC
-            | ConfigType::Anytls
-            | ConfigType::Naive
-            | ConfigType::WireGuard
-            | ConfigType::SOCKS
-            | ConfigType::HTTP
-    )
-}
-
 fn singbox_transport_supported_protocol(config_type: ConfigType) -> bool {
     matches!(
         config_type,

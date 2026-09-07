@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Subscription, SubscriptionMetadata } from "@/ipc/bindings";
+import type { Subscription, SubscriptionMetadata, SubscriptionUpdateResult } from "@/ipc/bindings";
+import { useToastStore } from "@/stores/toast-store";
 
 import { SubscriptionCard } from "./subscription-card";
 
@@ -74,6 +75,7 @@ describe("SubscriptionCard", () => {
   beforeEach(() => {
     Object.values(ipcMocks).forEach((mock) => mock.mockReset());
     ipcMocks.listSubscriptionMetadata.mockResolvedValue([]);
+    useToastStore.setState({ toasts: [] });
   });
 
   it("offers an add action when no subscription exists", async () => {
@@ -132,7 +134,7 @@ describe("SubscriptionCard", () => {
 
   it("runs a one-tap update against the shown subscription", async () => {
     ipcMocks.listSubscriptions.mockResolvedValue([subscription()]);
-    ipcMocks.updateSubscriptions.mockResolvedValue({ imported: 3, updated: 1 });
+    ipcMocks.updateSubscriptions.mockResolvedValue(updateResult({ imported: 3, updated: 1 }));
 
     renderCard();
 
@@ -142,8 +144,74 @@ describe("SubscriptionCard", () => {
     await waitFor(() => {
       expect(ipcMocks.updateSubscriptions).toHaveBeenCalledWith("sub-1", true, null);
     });
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
+        description: "1 updated, 3 profiles imported",
+        severity: "info",
+        title: "Subscription updated",
+      }),
+    );
+  });
+
+  // The backend answers a dead URL / expired token with a *successful* command
+  // carrying `skipped` + `messages`, so the card has to read the payload.
+  it("reports a skipped source as a failure with redacted reasons", async () => {
+    ipcMocks.listSubscriptions.mockResolvedValue([subscription()]);
+    ipcMocks.updateSubscriptions.mockResolvedValue(
+      updateResult({
+        messages: ["My Airport->request failed https://user:secret@example.test/sub?token=private"],
+        skipped: 1,
+      }),
+    );
+
+    renderCard();
+
+    await user(async (events) => {
+      await events.click(await screen.findByRole("button", { name: "Update subscription" }));
+    });
+
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
+        severity: "error",
+        title: "Subscription update failed",
+      }),
+    );
+    const description = useToastStore.getState().toasts.at(-1)?.description ?? "";
+    expect(description).toContain("request failed");
+    expect(description).not.toContain("secret");
+    expect(description).not.toContain("private");
+  });
+
+  it("falls back to a localized reason when the backend reported none", async () => {
+    ipcMocks.listSubscriptions.mockResolvedValue([subscription()]);
+    ipcMocks.updateSubscriptions.mockResolvedValue(updateResult({ skipped: 1 }));
+
+    renderCard();
+
+    await user(async (events) => {
+      await events.click(await screen.findByRole("button", { name: "Update subscription" }));
+    });
+
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
+        description: "Nothing was imported or updated.",
+        severity: "error",
+        title: "Subscription update failed",
+      }),
+    );
   });
 });
+
+function updateResult(overrides: Partial<SubscriptionUpdateResult> = {}): SubscriptionUpdateResult {
+  return {
+    imported: 0,
+    messages: [],
+    removedExisting: 0,
+    skipped: 0,
+    updated: 0,
+    ...overrides,
+  };
+}
 
 async function user(interact: (events: ReturnType<typeof userEvent.setup>) => Promise<void>) {
   await interact(userEvent.setup());

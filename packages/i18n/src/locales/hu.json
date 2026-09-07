@@ -15,6 +15,7 @@
     "reload": "Reload",
     "reloadCoreConfig": "Reload core configuration",
     "restart": "Restart",
+    "retry": "Újrapróbálkozás",
     "save": "Save",
     "settings": "Settings",
     "testSelected": "Test selected"
@@ -24,6 +25,9 @@
   },
   "confirm": {
     "cancel": "Cancel",
+    "dedupeProfilesConfirm": "Ismétlődések törlése",
+    "dedupeProfilesDescription": "Az összes előfizetésben található ismétlődő profil véglegesen törlődik. A művelet nem vonható vissza.",
+    "dedupeProfilesTitle": "Törli az ismétlődő profilokat?",
     "deleteProfilesConfirm": "Delete",
     "deleteProfilesDescription": "{{count}} selected profile(s) will be permanently deleted. This action cannot be undone.",
     "deleteProfilesTitle": "Delete profiles?"
@@ -51,7 +55,8 @@
       "remainingDays": "{{days}} nap van hátra",
       "remainingTraffic": "{{amount}} maradt",
       "update": "Előfizetés frissítése",
-      "updateFailed": "Az előfizetés frissítése sikertelen"
+      "updateFailed": "Az előfizetés frissítése sikertelen",
+      "updated": "Az előfizetés frissítve"
     },
     "unprotected": "Nem védett",
     "unprotectedHint": "Csatlakozzon a forgalom biztonságos irányításához."
@@ -94,6 +99,7 @@
     },
     "geoSource": "Geo files source",
     "hotkeyKey": "Hotkey key",
+    "hotkeyKeyPlaceholder": "Nyomjon meg egy billentyűt",
     "hotkeyShowWindow": "Show window",
     "loading": "Loading",
     "routeTemplateSource": "Útválasztási sablon forrása",
@@ -207,6 +213,9 @@
         "reset": "Alapértékek visszaállítása",
         "toggle": "Oszlopok"
       },
+      "dedupe": {
+        "removed": "{{removed}} ismétlődő profil törölve; {{total}} profilból {{kept}} megtartva."
+      },
       "dialog": {
         "addTitle": "Add profile",
         "cancel": "Cancel",
@@ -229,6 +238,7 @@
         "shareBase64": "Share links (Base64)",
         "shareLinks": "Share links",
         "showQr": "Show QR",
+        "skippedUnsupported": "{{count}} megosztási hivatkozás nélküli profil kihagyva.",
         "voyaBundle": "Voya profile bundle"
       },
       "fields": {
@@ -457,6 +467,7 @@
       "title": "Subscriptions",
       "untitled": "Untitled",
       "updateAll": "Update all",
+      "updateNothingImported": "Semmi sem lett importálva vagy frissítve.",
       "updateResult": "{{updated}} updated, {{imported}} profiles imported",
       "updateSelected": "Update selected",
       "url": "URL",
@@ -468,6 +479,7 @@
     "autoBadge": "Auto",
     "autoManagedHint": "Ez a csoport a mért késleltetés alapján automatikusan a leggyorsabb csomópontot választja.",
     "chain": "Chain",
+    "closeConnectionFailed": "A kapcsolat lezárása sikertelen",
     "cumulativeDownload": "Cumulative download {{total}}",
     "cumulativeUpload": "Cumulative upload {{total}}",
     "delay": "Delay",
@@ -485,9 +497,13 @@
     "noActive": "No active proxy",
     "node": "Node",
     "process": "Process",
+    "reloadConfigFailed": "A mag konfigurációjának újratöltése sikertelen",
+    "selectNodeFailed": "A csomópont váltása sikertelen",
     "source": "Source",
     "testAll": "Összes tesztelése",
+    "testDelayFailed": "A késleltetés mérése sikertelen",
     "trafficModeDirect": "Direct",
+    "trafficModeFailed": "A forgalmi mód váltása sikertelen",
     "trafficModeGlobal": "Global",
     "trafficModeRule": "Rule",
     "type": "Type",
@@ -584,10 +600,13 @@
     "loadingScreen": "Loading screen",
     "nativeTunnelMissing": "Native tunnel component is not installed.",
     "noPid": "No PID",
+    "operationFailed": "A művelet sikertelen",
     "proxyMonitorStartFailed": "Unable to start proxy monitor.",
     "proxyMonitorStopFailed": "Unable to stop proxy monitor.",
     "proxyRuntime": "Proxy runtime",
     "runtimeStatusFailed": "Nem sikerült frissíteni a futási állapotot",
+    "screenErrorDescription": "Ez a képernyő váratlanul leállt. Próbálja újra, vagy töltse be újra az alkalmazást, ha a hiba megismétlődik.",
+    "screenErrorTitle": "Valami hiba történt",
     "sysProxyPacUnavailable": "Az intelligens proxy ezen a platformon nem támogatott.",
     "sysProxyStatusFailed": "Nem sikerült beolvasni a rendszerproxy állapotát",
     "tunBackendMacos": "macOS PacketTunnel",

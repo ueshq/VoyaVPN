@@ -16,7 +16,10 @@ use voya_net::clash::{
     ClashWebSocketResource,
 };
 
-use crate::supervisor::{CoreSupervisor, SupervisorSnapshot};
+use crate::{
+    backoff::{sleep_or_shutdown, WebSocketReconnectBackoff},
+    supervisor::{CoreSupervisor, SupervisorSnapshot},
+};
 
 const STATISTICS_CHANNEL_SIZE: usize = 64;
 const COALESCE_INTERVAL: Duration = Duration::from_secs(1);
@@ -24,7 +27,6 @@ const SINGBOX_RECONNECT_INITIAL_DELAY: Duration = Duration::from_secs(1);
 const SINGBOX_RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
 const SINGBOX_INITIAL_DELAY: Duration = Duration::from_secs(5);
 const SINGBOX_WS_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const WS_RECONNECT_JITTER_DIVISOR: u32 = 4;
 
 pub type Result<T> = std::result::Result<T, StatisticsError>;
 
@@ -216,14 +218,20 @@ impl Drop for StatisticsManager {
     }
 }
 
+/// Turns one coalesced sample into the snapshot the UI renders. A sample with
+/// no traffic still produces a (zero) snapshot so the speed display can fall
+/// back to 0 B/s; only samples carrying traffic are written to the database.
 pub async fn apply_statistics_sample(
     database: &Database,
     config: &StatisticsConfigSnapshot,
     sample: ServerSpeedSample,
     date_now: i64,
 ) -> Result<Option<StatisticsSnapshot>> {
-    if !config.enabled() || !sample.has_traffic() {
+    if !config.enabled() {
         return Ok(None);
+    }
+    if !sample.has_traffic() {
+        return Ok(Some(snapshot_from_sample(config, sample, None)));
     }
 
     let server_stat = if let Some(active_profile_id) = &config.active_profile_id {
@@ -291,6 +299,7 @@ async fn run_statistics_aggregator(
 
     let mut interval = time::interval(COALESCE_INTERVAL);
     let mut pending = ServerSpeedSample::default();
+    let mut emitted_traffic = false;
 
     loop {
         tokio::select! {
@@ -311,8 +320,13 @@ async fn run_statistics_aggregator(
                 pending = ServerSpeedSample::default();
                 let config = config_source.snapshot();
                 match apply_statistics_sample(&database, &config, sample, current_day_marker()).await {
-                    Ok(Some(snapshot)) => event_sink.emit_statistics(snapshot),
-                    Ok(None) => {}
+                    Ok(Some(snapshot)) => {
+                        if should_emit_statistics(sample.has_traffic(), emitted_traffic) {
+                            emitted_traffic = sample.has_traffic();
+                            event_sink.emit_statistics(snapshot);
+                        }
+                    }
+                    Ok(None) => emitted_traffic = false,
                     Err(error) => tracing::warn!(?error, "failed to apply statistics sample"),
                 }
             }
@@ -439,14 +453,11 @@ async fn singbox_process_identity(supervisor: &CoreSupervisor) -> Option<CorePro
         .and_then(|snapshot| core_process_identity(snapshot, core_type_matches_singbox))
 }
 
-async fn sleep_or_shutdown(duration: Duration, shutdown: &mut watch::Receiver<bool>) -> bool {
-    let sleep = time::sleep(duration);
-    tokio::pin!(sleep);
-
-    tokio::select! {
-        changed = shutdown.changed() => changed.is_err() || *shutdown.borrow(),
-        _ = &mut sleep => false,
-    }
+/// Emits while traffic flows and once more when it stops, so the speed display
+/// returns to 0 B/s instead of freezing on the last non-zero rate, without
+/// pushing an event every second while the core sits idle.
+const fn should_emit_statistics(has_traffic: bool, emitted_traffic: bool) -> bool {
+    has_traffic || emitted_traffic
 }
 
 fn snapshot_from_sample(
@@ -507,70 +518,6 @@ fn core_type_matches_singbox(core_type: CoreType) -> bool {
 
 fn available_state_port(port: u16) -> Option<u16> {
     (port != 0).then_some(port)
-}
-
-#[derive(Debug, Clone)]
-struct WebSocketReconnectBackoff {
-    attempt: u32,
-    initial: Duration,
-    max: Duration,
-}
-
-impl WebSocketReconnectBackoff {
-    const fn new(initial: Duration, max: Duration) -> Self {
-        Self {
-            attempt: 0,
-            initial,
-            max,
-        }
-    }
-
-    fn reset(&mut self) {
-        self.attempt = 0;
-    }
-
-    fn next_delay(&mut self) -> Duration {
-        let delay = websocket_reconnect_delay(
-            self.attempt,
-            self.initial,
-            self.max,
-            reconnect_jitter_seed(),
-        );
-        self.attempt = self.attempt.saturating_add(1);
-        delay
-    }
-}
-
-fn websocket_reconnect_delay(
-    attempt: u32,
-    initial: Duration,
-    max: Duration,
-    jitter_seed: u64,
-) -> Duration {
-    let multiplier = 1_u32.checked_shl(attempt.min(16)).unwrap_or(u32::MAX);
-    let scaled = initial.saturating_mul(multiplier);
-    let base = if scaled > max { max } else { scaled };
-
-    base.saturating_add(reconnect_jitter(base, jitter_seed))
-}
-
-fn reconnect_jitter(base: Duration, jitter_seed: u64) -> Duration {
-    let jitter_limit_nanos =
-        (base.as_nanos() / u128::from(WS_RECONNECT_JITTER_DIVISOR)).min(u128::from(u64::MAX));
-    if jitter_limit_nanos == 0 {
-        return Duration::ZERO;
-    }
-
-    let jitter_nanos = u128::from(jitter_seed) % (jitter_limit_nanos + 1);
-    Duration::from_nanos(u64::try_from(jitter_nanos).unwrap_or(u64::MAX))
-}
-
-fn reconnect_jitter_seed() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| {
-            u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX) ^ u64::from(std::process::id())
-        })
 }
 
 fn inbound_port(app_config: &AppConfig, protocol: InboundProtocol) -> i32 {
@@ -689,21 +636,6 @@ mod tests {
         assert_eq!(available_state_port(1), Some(1));
     }
 
-    #[test]
-    fn statistics_ws_reconnect_delay_backs_off_with_cap_and_jitter() {
-        let initial = Duration::from_secs(1);
-        let max = Duration::from_secs(8);
-
-        let first = websocket_reconnect_delay(0, initial, max, 0);
-        let second = websocket_reconnect_delay(1, initial, max, 0);
-        let capped = websocket_reconnect_delay(12, initial, max, u64::MAX);
-
-        assert_eq!(first, Duration::from_secs(1));
-        assert_eq!(second, Duration::from_secs(2));
-        assert!(capped >= max);
-        assert!(capped <= max + Duration::from_secs(2));
-    }
-
     #[tokio::test]
     async fn statistics_apply_sample_keys_persistence_to_active_server_and_sums_display() {
         let database = Database::connect_in_memory()
@@ -774,6 +706,59 @@ mod tests {
             .await
             .expect("statistics test operation should succeed")
             .is_none());
+    }
+
+    #[tokio::test]
+    async fn statistics_apply_sample_reports_idle_ticks_without_touching_the_database() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("statistics test operation should succeed");
+        database
+            .profiles()
+            .upsert(&sample_profile("active"))
+            .await
+            .expect("statistics test operation should succeed");
+        let config = StatisticsConfigSnapshot {
+            enable_statistics: true,
+            display_real_time_speed: true,
+            active_profile_id: Some("active".to_string()),
+            state_port: 10812,
+            state_port2: 10813,
+        };
+
+        let idle = ServerSpeedSample::default();
+        let snapshot = apply_statistics_sample(&database, &config, idle, 10)
+            .await
+            .expect("statistics test operation should succeed")
+            .expect("an idle tick still reports a zero snapshot");
+
+        assert_eq!(snapshot.upload_bytes_per_second, 0.0);
+        assert_eq!(snapshot.download_bytes_per_second, 0.0);
+        assert_eq!(snapshot.proxy_download_bytes_per_second, 0.0);
+        assert!(snapshot.server_stat.is_none());
+        assert!(
+            database
+                .server_stats()
+                .get("active")
+                .await
+                .expect("statistics test operation should succeed")
+                .is_none(),
+            "an idle sample must not write traffic rows"
+        );
+    }
+
+    #[test]
+    fn statistics_emit_once_more_after_traffic_stops() {
+        assert!(should_emit_statistics(true, false));
+        assert!(should_emit_statistics(true, true));
+        assert!(
+            should_emit_statistics(false, true),
+            "the first idle tick must reset the displayed speed to zero"
+        );
+        assert!(
+            !should_emit_statistics(false, false),
+            "a quiet core must not push an event every second"
+        );
     }
 
     #[tokio::test]

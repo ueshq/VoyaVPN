@@ -451,9 +451,272 @@ fn share_full_custom_import_helpers_classify_configs_without_file_writes() {
     assert!(parse_full_custom_config(html, None).is_err());
 }
 
+#[test]
+fn fmt_ss_sip008_accepts_numeric_ports_in_documents_and_bare_arrays() {
+    let document = r#"{
+        "version": 1,
+        "servers": [
+            {
+                "id": "27b8a625-4f4b-4428-9f0f-8a2317db7c79",
+                "remarks": "sip008 node",
+                "server": "192.168.100.1",
+                "server_port": 8388,
+                "password": "example",
+                "method": "aes-256-gcm"
+            }
+        ]
+    }"#;
+    let servers = parse_ss_sip008(document).expect("parse SIP008 document");
+    assert_eq!(servers.len(), 1);
+    assert_eq!(servers[0].remarks, "sip008 node");
+    assert_eq!(servers[0].address(), "192.168.100.1");
+    assert_eq!(servers[0].port(), 8388);
+    assert_eq!(servers[0].password(), "example");
+
+    let bare_array = r#"[
+        {
+            "server": "node.example",
+            "server_port": "8389",
+            "password": 12345,
+            "method": "chacha20-ietf-poly1305"
+        }
+    ]"#;
+    let servers = parse_ss_sip008(bare_array).expect("parse SIP008 bare array");
+    assert_eq!(servers.len(), 1);
+    assert_eq!(servers[0].address(), "node.example");
+    assert_eq!(servers[0].port(), 8389);
+    assert_eq!(servers[0].password(), "12345");
+}
+
+#[test]
+fn fmt_tls_only_protocols_stay_tls_without_query_hints() {
+    for link in [
+        "hysteria2://pass@203.0.113.5:443/?insecure=1#node",
+        "hy2://pass@hy2.example:443#node",
+        "tuic://00000000-0000-0000-0000-000000000031:pass@tuic.example:443?congestion_control=bbr",
+        "anytls://pass@anytls.example:443",
+        "naive+https://user:pass@naive.example:443",
+    ] {
+        let parsed = parse_share_link(link).expect("parse TLS-only share link");
+        let Some(tls) = parsed.tls.as_ref() else {
+            panic!("{link} should keep TLS enabled");
+        };
+        assert_eq!(tls.mode, TlsMode::Tls, "{link}");
+        assert_eq!(parsed.stream_security(), STREAM_SECURITY_TLS, "{link}");
+    }
+}
+
+#[test]
+fn fmt_plaintext_links_are_not_upgraded_to_tls_by_stray_sni() {
+    let vless = parse_share_link(
+        "vless://00000000-0000-0000-0000-000000000032@example.com:80?encryption=none&security=none&type=ws&host=cdn.example&path=/&sni=cdn.example#plain",
+    )
+    .expect("parse plaintext vless");
+    assert!(vless.tls.is_none());
+    assert_eq!(vless.stream_security(), "");
+
+    let vmess_json = r#"{
+        "v": "2",
+        "ps": "plain vmess",
+        "add": "example.com",
+        "port": "80",
+        "id": "00000000-0000-0000-0000-000000000033",
+        "net": "ws",
+        "host": "cdn.example",
+        "path": "/",
+        "tls": "",
+        "sni": "cdn.example",
+        "alpn": "h2"
+    }"#;
+    let vmess = parse_share_link(&format!("vmess://{}", base64_encode(vmess_json, false)))
+        .expect("parse plaintext vmess");
+    assert!(vmess.tls.is_none());
+    assert_eq!(vmess.stream_security(), "");
+}
+
+#[test]
+fn fmt_query_values_are_percent_decoded_exactly_once() {
+    let hysteria2 = parse_share_link(
+        "hysteria2://pass@hy2.example:443?obfs=salamander&obfs-password=100%25AB#obfs",
+    )
+    .expect("parse hysteria2 obfs link");
+    let ProfileProtocol::Hysteria2 {
+        obfuscation_password,
+        ..
+    } = &hysteria2.protocol
+    else {
+        panic!("expected Hysteria2 protocol");
+    };
+    assert_eq!(obfuscation_password.as_deref(), Some("100%AB"));
+
+    let exported = export_share_link(&hysteria2).expect("export hysteria2 obfs link");
+    let reparsed = parse_share_link(&exported).expect("reparse hysteria2 obfs link");
+    assert_eq!(reparsed.protocol, hysteria2.protocol);
+
+    let websocket = parse_share_link(
+        "vless://00000000-0000-0000-0000-000000000034@example.com:443?encryption=none&security=tls&type=ws&path=%2Fp%2520q",
+    )
+    .expect("parse vless ws link");
+    let Some(ProfileTransport::Websocket { path, .. }) = websocket.transport else {
+        panic!("expected websocket transport");
+    };
+    assert_eq!(path.as_deref(), Some("/p%20q"));
+}
+
+#[test]
+fn fmt_shadowsocks_plain_user_info_password_is_decoded_once() {
+    let parsed = parse_share_link("ss://aes-256-gcm:p%2541ss@ss.example:8388#plain")
+        .expect("parse plain ss");
+    assert_eq!(parsed.password(), "p%41ss");
+    let ProfileProtocol::Shadowsocks { method, .. } = &parsed.protocol else {
+        panic!("expected Shadowsocks protocol");
+    };
+    assert_eq!(method, "aes-256-gcm");
+}
+
+#[test]
+fn fmt_http2_and_quic_transports_survive_import_and_export() {
+    for (link, host, path) in [
+        (
+            "vless://00000000-0000-0000-0000-000000000035@example.com:443?encryption=none&security=tls&type=http&host=h2.example&path=%2Fh2",
+            "h2.example",
+            "/h2",
+        ),
+        (
+            "vless://00000000-0000-0000-0000-000000000035@example.com:443?encryption=none&security=tls&type=h2&host=h2.example&path=%2Fh2",
+            "h2.example",
+            "/h2",
+        ),
+    ] {
+        let parsed = parse_share_link(link).expect("parse HTTP/2 share link");
+        assert_eq!(parsed.network(), HTTP2_NETWORK, "{link}");
+        assert_eq!(
+            parsed.transport,
+            Some(ProfileTransport::Http2 {
+                host: Some(host.to_string()),
+                path: Some(path.to_string()),
+            }),
+            "{link}"
+        );
+
+        let exported = export_share_link(&parsed).expect("export HTTP/2 share link");
+        assert!(exported.contains("type=h2"), "{exported}");
+        let reparsed = parse_share_link(&exported).expect("reparse HTTP/2 share link");
+        assert_eq!(reparsed.transport, parsed.transport);
+    }
+
+    let quic = parse_share_link(
+        "vless://00000000-0000-0000-0000-000000000036@example.com:443?encryption=none&security=tls&type=quic&host=none&path=quic-key",
+    )
+    .expect("parse QUIC share link");
+    assert_eq!(quic.network(), QUIC_NETWORK);
+    assert_eq!(
+        quic.transport,
+        Some(ProfileTransport::Quic {
+            host: Some(NONE.to_string()),
+            path: Some("quic-key".to_string()),
+        })
+    );
+    let exported = export_share_link(&quic).expect("export QUIC share link");
+    assert!(exported.contains("type=quic"), "{exported}");
+    assert_eq!(
+        parse_share_link(&exported)
+            .expect("reparse QUIC share link")
+            .transport,
+        quic.transport
+    );
+
+    let vmess_json = r#"{
+        "v": "2",
+        "ps": "h2 vmess",
+        "add": "example.com",
+        "port": "443",
+        "id": "00000000-0000-0000-0000-000000000037",
+        "net": "h2",
+        "host": "h2.example",
+        "path": "/h2",
+        "tls": "tls"
+    }"#;
+    let vmess = parse_share_link(&format!("vmess://{}", base64_encode(vmess_json, false)))
+        .expect("parse HTTP/2 vmess");
+    assert_eq!(
+        vmess.transport,
+        Some(ProfileTransport::Http2 {
+            host: Some("h2.example".to_string()),
+            path: Some("/h2".to_string()),
+        })
+    );
+    let reparsed = parse_share_link(&export_share_link(&vmess).expect("export HTTP/2 vmess"))
+        .expect("reparse HTTP/2 vmess");
+    assert_eq!(reparsed.transport, vmess.transport);
+}
+
+#[test]
+fn fmt_wireguard_config_skips_peers_with_unusable_endpoints() {
+    let config = r#"
+        [Interface]
+        PrivateKey = interface-private-key
+
+        [Peer]
+        PublicKey = unbracketed-ipv6
+        Endpoint = 2001:db8::1
+
+        [Peer]
+        PublicKey = invalid-host
+        Endpoint = bad=host:51820
+
+        [Peer]
+        PublicKey = port-less
+        Endpoint = warp.example
+
+        [Peer]
+        PublicKey = valid
+        Endpoint = ok.example:51820
+    "#;
+
+    let resolved = parse_wireguard_config(config).expect("wireguard config");
+    assert_eq!(resolved.len(), 2);
+    assert_eq!(resolved[0].address(), "warp.example");
+    assert_eq!(resolved[0].port(), WIREGUARD_DEFAULT_ENDPOINT_PORT);
+    assert_eq!(resolved[1].address(), "ok.example");
+    assert_eq!(resolved[1].port(), 51820);
+
+    let all_invalid = r#"
+        [Interface]
+        PrivateKey = interface-private-key
+
+        [Peer]
+        Endpoint = 2001:db8::1
+    "#;
+    assert!(parse_wireguard_config(all_invalid).is_err());
+}
+
+#[test]
+fn fmt_socks_accepts_plain_user_names_and_anonymous_links() {
+    let parsed =
+        parse_share_link("socks://user@proxy.example:1080#plain").expect("parse plain socks");
+    assert_eq!(parsed.username(), "user");
+    assert_eq!(parsed.password(), "");
+
+    let anonymous = ProfileItem {
+        remarks: "anon".to_string(),
+        protocol: ProfileProtocol::Socks {
+            server: endpoint("127.0.0.1", 1080),
+            username: String::new(),
+            password: String::new(),
+        },
+        ..ProfileItem::default()
+    };
+    let link = export_share_link(&anonymous).expect("export anonymous socks");
+    assert_eq!(link, "socks://127.0.0.1:1080#anon");
+    let reparsed = parse_share_link(&link).expect("reparse anonymous socks");
+    assert_eq!(reparsed.username(), "");
+    assert_eq!(reparsed.password(), "");
+}
+
 proptest! {
     #[test]
-    fn share_url_component_property_round_trips(value in "[A-Za-z0-9 _./:@,=+\\-]{0,80}") {
+    fn share_url_component_property_round_trips(value in "[A-Za-z0-9 _./:@,=+%\\-]{0,80}") {
         prop_assert_eq!(url_decode(&url_encode(&value)), value);
     }
 

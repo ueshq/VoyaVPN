@@ -15,6 +15,7 @@
     "reload": "Reload",
     "reloadCoreConfig": "Reload core configuration",
     "restart": "Restart",
+    "retry": "Erneut versuchen",
     "save": "Save",
     "settings": "Settings",
     "testSelected": "Test selected"
@@ -24,6 +25,9 @@
   },
   "confirm": {
     "cancel": "Cancel",
+    "dedupeProfilesConfirm": "Duplikate entfernen",
+    "dedupeProfilesDescription": "Doppelte Profile aus allen Abonnements werden endgültig gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.",
+    "dedupeProfilesTitle": "Doppelte Profile entfernen?",
     "deleteProfilesConfirm": "Delete",
     "deleteProfilesDescription": "{{count}} selected profile(s) will be permanently deleted. This action cannot be undone.",
     "deleteProfilesTitle": "Delete profiles?"
@@ -51,7 +55,8 @@
       "remainingDays": "{{days}} Tage übrig",
       "remainingTraffic": "{{amount}} übrig",
       "update": "Abonnement aktualisieren",
-      "updateFailed": "Aktualisierung des Abonnements fehlgeschlagen"
+      "updateFailed": "Aktualisierung des Abonnements fehlgeschlagen",
+      "updated": "Abonnement aktualisiert"
     },
     "unprotected": "Nicht geschützt",
     "unprotectedHint": "Verbinden Sie sich, um Ihren Datenverkehr sicher zu leiten."
@@ -94,6 +99,7 @@
     },
     "geoSource": "Geo files source",
     "hotkeyKey": "Hotkey key",
+    "hotkeyKeyPlaceholder": "Taste drücken",
     "hotkeyShowWindow": "Show window",
     "loading": "Loading",
     "routeTemplateSource": "Quelle der Routingvorlage",
@@ -207,6 +213,9 @@
         "reset": "Auf Standard zurücksetzen",
         "toggle": "Spalten"
       },
+      "dedupe": {
+        "removed": "{{removed}} doppelte Profil(e) entfernt; {{kept}} von {{total}} behalten."
+      },
       "dialog": {
         "addTitle": "Add profile",
         "cancel": "Cancel",
@@ -229,6 +238,7 @@
         "shareBase64": "Share links (Base64)",
         "shareLinks": "Share links",
         "showQr": "Show QR",
+        "skippedUnsupported": "{{count}} Profil(e) ohne Freigabelink übersprungen.",
         "voyaBundle": "Voya profile bundle"
       },
       "fields": {
@@ -457,6 +467,7 @@
       "title": "Subscriptions",
       "untitled": "Untitled",
       "updateAll": "Update all",
+      "updateNothingImported": "Es wurde nichts importiert oder aktualisiert.",
       "updateResult": "{{updated}} updated, {{imported}} profiles imported",
       "updateSelected": "Update selected",
       "url": "URL",
@@ -468,6 +479,7 @@
     "autoBadge": "Auto",
     "autoManagedHint": "Diese Gruppe wählt automatisch den schnellsten Knoten nach gemessener Latenz.",
     "chain": "Chain",
+    "closeConnectionFailed": "Verbindung konnte nicht geschlossen werden",
     "cumulativeDownload": "Cumulative download {{total}}",
     "cumulativeUpload": "Cumulative upload {{total}}",
     "delay": "Delay",
@@ -485,9 +497,13 @@
     "noActive": "No active proxy",
     "node": "Node",
     "process": "Process",
+    "reloadConfigFailed": "Kernkonfiguration konnte nicht neu geladen werden",
+    "selectNodeFailed": "Knoten konnte nicht gewechselt werden",
     "source": "Source",
     "testAll": "Alle testen",
+    "testDelayFailed": "Latenztest fehlgeschlagen",
     "trafficModeDirect": "Direct",
+    "trafficModeFailed": "Datenverkehrsmodus konnte nicht geändert werden",
     "trafficModeGlobal": "Global",
     "trafficModeRule": "Rule",
     "type": "Type",
@@ -584,10 +600,13 @@
     "loadingScreen": "Loading screen",
     "nativeTunnelMissing": "Native tunnel component is not installed.",
     "noPid": "No PID",
+    "operationFailed": "Vorgang fehlgeschlagen",
     "proxyMonitorStartFailed": "Unable to start proxy monitor.",
     "proxyMonitorStopFailed": "Unable to stop proxy monitor.",
     "proxyRuntime": "Proxy runtime",
     "runtimeStatusFailed": "Laufzeitstatus konnte nicht aktualisiert werden",
+    "screenErrorDescription": "Dieser Bildschirm wurde unerwartet beendet. Versuchen Sie es erneut oder laden Sie die App neu, falls das Problem bestehen bleibt.",
+    "screenErrorTitle": "Etwas ist schiefgelaufen",
     "sysProxyPacUnavailable": "Der intelligente Proxy wird auf dieser Plattform nicht unterstützt.",
     "sysProxyStatusFailed": "Systemproxystatus konnte nicht gelesen werden",
     "tunBackendMacos": "macOS PacketTunnel",
