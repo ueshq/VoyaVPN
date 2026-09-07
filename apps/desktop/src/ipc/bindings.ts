@@ -22,14 +22,21 @@ export const commands = {
 	restartCore: () => typedError<RuntimeStatusResponse, AppError>(__TAURI_INVOKE("restart_core")),
 	runtimeStatus: () => typedError<RuntimeStatusResponse, AppError>(__TAURI_INVOKE("runtime_status")),
 	systemProxyStatus: () => typedError<SystemProxyStatusResponse, AppError>(__TAURI_INVOKE("system_proxy_status")),
+	/**
+	 *  Changes only the system proxy flavor. Same transaction as
+	 *  `set_connection_mode`: the mode is persisted always, the machine is only
+	 *  touched while a core is running.
+	 */
 	setSystemProxyMode: (mode: SysProxyType) => typedError<SystemProxyStatusResponse, AppError>(__TAURI_INVOKE("set_system_proxy_mode", { mode })),
 	connectionModeStatus: () => typedError<ConnectionModeStatus, AppError>(__TAURI_INVOKE("connection_mode_status")),
 	/**
-	 *  Switches the app between the three Hiddify-style connection modes by
-	 *  mutating the persisted system proxy + TUN primitives in one transaction.
-	 *  Entering VPN runs the full TUN preflight; only a TUN flag change restarts
-	 *  a connected core, while proxy-only/system-proxy switches re-apply the OS
-	 *  proxy live.
+	 *  Switches the app between the three Hiddify-style connection modes.
+	 * 
+	 *  The transaction itself is `voya_app::connection_mode`: the mode is always
+	 *  persisted, but the machine's proxy settings are only rewritten while the
+	 *  supervisor reports `Connected` — a mode pointed at a port nothing is
+	 *  listening on would black-hole every request. Only a TUN flag change needs a
+	 *  running core to be restarted.
 	 */
 	setConnectionMode: (mode: ConnectionMode, pacEnabled: boolean | null) => typedError<ConnectionModeStatus, AppError>(__TAURI_INVOKE("set_connection_mode", { mode, pacEnabled })),
 	tunStatus: () => typedError<TunStatus, AppError>(__TAURI_INVOKE("tun_status")),

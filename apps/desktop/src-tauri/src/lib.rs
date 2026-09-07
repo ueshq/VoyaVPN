@@ -171,23 +171,21 @@ pub fn run() {
                 SystemProxyService::new(Arc::new(StdProcessRunner::new()), platform_pac_manager()),
                 runtime_paths.clone(),
             );
-            let skip_persisted_proxy_apply = match system_proxy_manager
-                .restore_dirty_proxy_if_needed(&config)
-            {
-                Ok(restored) => {
-                    if restored {
-                        tracing::warn!("restored system proxy from previous dirty shutdown marker");
-                    }
-                    restored
+            // Startup only *undoes* a proxy a crashed run left behind. The
+            // persisted mode is deliberately not applied: nothing is listening
+            // on the local port until the user connects, and `connect` applies
+            // the mode itself once the core is up. Applying it here pointed the
+            // machine at a dead port on every launch.
+            match system_proxy_manager.restore_dirty_proxy_if_needed(&config) {
+                Ok(true) => {
+                    tracing::warn!("restored system proxy from previous dirty shutdown marker");
                 }
-                Err(error) => {
-                    tracing::warn!(
-                        ?error,
-                        "failed to restore system proxy from dirty shutdown marker"
-                    );
-                    true
-                }
-            };
+                Ok(false) => {}
+                Err(error) => tracing::warn!(
+                    ?error,
+                    "failed to restore system proxy from dirty shutdown marker"
+                ),
+            }
             let shared_config = Arc::new(RwLock::new(config.clone()));
             let config_mutations = Arc::new(services.config_mutations(Arc::clone(&shared_config)));
             tauri::async_runtime::block_on(services.initialize_profile_metrics())?;
@@ -251,13 +249,6 @@ pub fn run() {
                 }),
             );
             drop(runtime_guard);
-            if !skip_persisted_proxy_apply {
-                if let Err(error) = system_proxy_manager.apply_config(&config, false) {
-                    tracing::warn!(?error, "failed to apply persisted system proxy mode");
-                }
-            } else {
-                tracing::warn!("skipped persisted system proxy apply after dirty marker recovery");
-            }
             if let Err(error) =
                 ipc::commands::register_show_window_shortcut_for_config(app.handle(), &config)
             {

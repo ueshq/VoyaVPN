@@ -9,9 +9,7 @@ use voya_app::certificates::{
     calculate_certificate_sha256 as calculate_certificate_sha256_impl,
     fetch_certificate as fetch_certificate_impl, CertificateError,
 };
-use voya_app::config_mutation::{
-    commit_with_compensation, ConfigMutationError, ConfigMutationGuard,
-};
+use voya_app::config_mutation::{ConfigMutationError, ConfigMutationGuard};
 use voya_app::contract_map::{
     dns_from_contract, dns_to_contract, group_child_to_contract, group_preview_to_contract,
     import_profiles_to_contract, move_action_from_contract, profile_dedupe_to_contract,
@@ -91,6 +89,7 @@ const MISSING_CORE_SEARCH_DIR_LABEL: &str = "application core directory";
 
 mod app;
 mod connection;
+mod connection_mode;
 mod core_flow;
 mod dns;
 mod groups;

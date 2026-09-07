@@ -121,6 +121,20 @@ pub(super) fn ipc_text_error(
     make_error(format!("invalid {field}: {reason}"))
 }
 
+/// The supervisor state the OS-facing transactions gate on.
+///
+/// System proxy and TUN follow the *connected core*, never the persisted mode:
+/// applying a proxy nobody is listening behind black-holes every request.
+pub(super) async fn supervisor_connection_state(
+    state: &AppState,
+) -> Result<SupervisorConnectionState, AppError> {
+    runtime_manager(state)
+        .status()
+        .await
+        .map(|snapshot| snapshot.state)
+        .map_err(runtime_error)
+}
+
 pub(super) fn runtime_manager(state: &AppState) -> RuntimeManager<'_> {
     let manager = state.services().runtime(state.supervisor());
 

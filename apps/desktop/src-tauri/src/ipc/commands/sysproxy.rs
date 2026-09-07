@@ -1,4 +1,4 @@
-use super::{lifecycle::*, support::*, *};
+use super::{connection_mode::*, support::*, *};
 
 // `async` because reading the OS proxy state shells out (`networksetup` on
 // macOS, `gsettings` on Linux) once per network service.
@@ -20,6 +20,9 @@ pub async fn system_proxy_status(
     .map_err(sysproxy_error)
 }
 
+/// Changes only the system proxy flavor. Same transaction as
+/// `set_connection_mode`: the mode is persisted always, the machine is only
+/// touched while a core is running.
 #[tauri::command]
 #[specta::specta]
 pub async fn set_system_proxy_mode<R: tauri::Runtime>(
@@ -27,20 +30,15 @@ pub async fn set_system_proxy_mode<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     mode: ContractSysProxyType,
 ) -> Result<SystemProxyStatusResponse, AppError> {
-    let mut mutation = begin_config_mutation(&state).await?;
-    let original = mutation.config().clone();
-    let target_os = TargetOs::current();
-    if mode == ContractSysProxyType::Pac
-        && !matches!(target_os, TargetOs::Windows | TargetOs::Macos)
-    {
-        return Err(sysproxy_error(SystemProxyManagerError::PacUnavailable(
-            target_os,
-        )));
-    }
+    let connected = supervisor_connection_state(&state).await?;
 
-    mutation.config_mut().system_proxy_item.sys_proxy_type =
-        voya_app::contract_map::sysproxy_type_from_contract(mode);
-    let status = commit_system_proxy_mutation(&app, &state, mutation, &original).await?;
-
-    Ok(system_proxy_status_response(status))
+    connection_mode_manager(&app, &state)
+        .set_system_proxy_mode(
+            state.config_mutations(),
+            voya_app::contract_map::sysproxy_type_from_contract(mode),
+            connected,
+        )
+        .await
+        .map(system_proxy_status_response)
+        .map_err(connection_mode_error)
 }
