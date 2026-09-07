@@ -68,18 +68,20 @@ export const runtimeModules = [
   { path: "apps/desktop/src/stores/toast-store.ts", lines: 70, branches: 80 },
   { path: "apps/desktop/src/stores/connection-columns-store.ts", lines: 45, branches: 10 },
   { path: "apps/desktop/src/stores/profile-columns-store.ts", lines: 45, branches: 10 },
+  // Promoted out of `untestedModules` once the typed-contract passes gave them
+  // real tests. Measured at promotion: modal-host 92/80, routing-rules-panel
+  // 100/100, routing-dialogs 100/100, modal-store 86/100.
+  { path: "apps/desktop/src/components/app-shell/modal-host.tsx", lines: 82, branches: 70 },
+  { path: "apps/desktop/src/features/routing/routing-rules-panel.tsx", lines: 90, branches: 90 },
+  { path: "apps/desktop/src/features/routing/routing-dialogs.tsx", lines: 90, branches: 90 },
+  { path: "apps/desktop/src/stores/modal-store.ts", lines: 75, branches: 90 },
 ];
 
 /**
  * Modules with no meaningful tests. Reported so the gap stays visible; promote
  * one into `runtimeModules` (with a floor) as soon as it gets tests.
  */
-export const untestedModules = [
-  { path: "apps/desktop/src/components/app-shell/modal-host.tsx", promoteAbove: 40 },
-  { path: "apps/desktop/src/features/routing/routing-rules-panel.tsx", promoteAbove: 40 },
-  { path: "apps/desktop/src/features/routing/routing-dialogs.tsx", promoteAbove: 40 },
-  { path: "apps/desktop/src/stores/modal-store.ts", promoteAbove: 40 },
-];
+export const untestedModules = [];
 
 const METRICS = ["lines", "functions", "branches", "statements"];
 

@@ -5,7 +5,7 @@
 
 use std::{
     collections::BTreeMap,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -119,7 +119,10 @@ fn failure_backoff_seconds(consecutive_failures: u32) -> i64 {
 
 pub struct SubscriptionAutoUpdateScheduler {
     shutdown: watch::Sender<bool>,
-    handle: JoinHandle<()>,
+    /// Taken by [`Self::shutdown`], so the `Drop` below does not then abort a
+    /// task that already stopped on its own. Behind a lock because the shell
+    /// holds the scheduler by shared reference.
+    handle: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl SubscriptionAutoUpdateScheduler {
@@ -141,7 +144,10 @@ impl SubscriptionAutoUpdateScheduler {
             shutdown_rx,
         ));
 
-        Self { shutdown, handle }
+        Self {
+            shutdown,
+            handle: Mutex::new(Some(handle)),
+        }
     }
 
     /// Requests shutdown without waiting for the loop to stop.
@@ -151,15 +157,40 @@ impl SubscriptionAutoUpdateScheduler {
     /// than committing a configuration into a runtime that is being torn down.
     /// A commit already in progress still runs to completion — SQLite keeps it
     /// atomic — and dropping the scheduler aborts the task outright.
+    ///
+    /// Prefer [`Self::shutdown`] on the exit path: Tauri ends the process with
+    /// `std::process::exit`, so nothing here is ever dropped, and a commit that
+    /// is mid-flight when the process goes loses the update it just downloaded.
     pub fn close(&self) {
         let _ = self.shutdown.send(true);
+    }
+
+    /// Requests shutdown and waits for the loop to actually stop.
+    ///
+    /// Unlike [`Self::close`] this is safe to call immediately before the
+    /// process exits: it returns once the scheduler has left its loop, so an
+    /// update it had already committed is not raced by the exit.
+    pub async fn shutdown(&self) {
+        let _ = self.shutdown.send(true);
+        // The guard is dropped before the await: holding a std lock across one
+        // would be a deadlock waiting to happen.
+        let handle = self.handle.lock().ok().and_then(|mut slot| slot.take());
+        if let Some(handle) = handle {
+            // A `JoinError` means the loop panicked or was aborted; either way
+            // it is no longer running, which is all this call promises.
+            let _ = handle.await;
+        }
     }
 }
 
 impl Drop for SubscriptionAutoUpdateScheduler {
     fn drop(&mut self) {
         let _ = self.shutdown.send(true);
-        self.handle.abort();
+        if let Ok(slot) = self.handle.lock() {
+            if let Some(handle) = slot.as_ref() {
+                handle.abort();
+            }
+        }
     }
 }
 
@@ -715,5 +746,50 @@ mod tests {
         assert_eq!(failure_backoff_seconds(3), 1200);
         assert_eq!(failure_backoff_seconds(7), 19_200);
         assert_eq!(failure_backoff_seconds(100), 19_200);
+    }
+
+    /// The exit path calls `shutdown()` immediately before Tauri ends the
+    /// process, so it has to actually wait. `close()` only signals, which is
+    /// why the two are separate.
+    #[tokio::test]
+    async fn shutdown_waits_for_the_loop_to_leave_while_close_only_signals() {
+        let url = spawn_subscription_fixture("vless://uuid@example.test:443#Node").await;
+        let database = scheduler_database(url).await;
+        let coordinator = ConfigMutationCoordinator::new(
+            database.clone(),
+            Arc::new(RwLock::new(AppConfig::default())),
+        );
+        let scheduler = SubscriptionAutoUpdateScheduler::spawn(
+            database,
+            Arc::new(coordinator),
+            scheduler_supervisor(),
+            TargetOs::Linux,
+            Arc::new(RecordingSink::default()),
+        );
+
+        // `close()` returns before the task has necessarily stopped, so the
+        // handle is still there to be awaited.
+        scheduler.close();
+        assert!(
+            scheduler
+                .handle
+                .lock()
+                .expect("auto-update test operation should succeed")
+                .is_some(),
+            "close() must not consume the join handle"
+        );
+
+        scheduler.shutdown().await;
+
+        assert!(
+            scheduler
+                .handle
+                .lock()
+                .expect("auto-update test operation should succeed")
+                .is_none(),
+            "shutdown() must have joined the loop"
+        );
+        // Idempotent: the exit path is latched, but a double call must not hang.
+        scheduler.shutdown().await;
     }
 }

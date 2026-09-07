@@ -639,15 +639,14 @@ fn shutdown_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     if !SHUTDOWN_LATCH.begin() {
         return;
     }
-    // Signalled before the runtime is torn down so the scheduler stops taking
-    // on new subscriptions, abandons an in-flight download, and discards a
-    // fetch that already finished rather than publishing it into a runtime that
-    // is going away. `close()` only signals — the scheduler exposes no
-    // awaitable shutdown — so a commit that had already begun races the rest of
-    // this teardown and is cut off by the process exit. SQLite keeps that write
-    // atomic, so the cost is an update that has to be redone next launch.
+    // Stopped before the runtime is torn down so the scheduler stops taking on
+    // new subscriptions, abandons an in-flight download, and discards a fetch
+    // that already finished rather than publishing it into a runtime that is
+    // going away. This waits for the loop to actually leave: Tauri ends the
+    // process with `std::process::exit`, so a commit that had already begun
+    // would otherwise be raced by the exit and redone next launch.
     if let Some(state) = app.try_state::<AppState>() {
-        state.subscription_auto_update().close();
+        tauri::async_runtime::block_on(state.subscription_auto_update().shutdown());
         // Tauri exits the process directly, so nothing here is ever dropped:
         // a speedtest still in flight would leave its temporary sing-box probe
         // cores running with open outbound tunnels after the app is gone.

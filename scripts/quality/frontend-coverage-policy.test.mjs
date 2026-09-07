@@ -28,8 +28,8 @@ function healthySummary(overrides = {}) {
   return entries;
 }
 
-function evaluate(entries, total = metrics(90, 85, 90, 90)) {
-  return evaluateCoverage({ total, lookup: (path) => entries.get(path) });
+function evaluate(entries, total = metrics(90, 85, 90, 90), policy = {}) {
+  return evaluateCoverage({ total, lookup: (path) => entries.get(path), policy });
 }
 
 describe("frontend coverage policy", () => {
@@ -75,12 +75,25 @@ describe("frontend coverage policy", () => {
   });
 
   it("warns about untested modules and asks for a promotion once they get tests", () => {
-    const [first] = untestedModules;
-    const { failures, warnings } = evaluate(healthySummary({ [first.path]: metrics(72) }));
+    // Synthetic entries, so the test keeps working now that the shipped list is
+    // empty — which is what the next assertion demands.
+    const tested = { path: "apps/desktop/src/features/demo/tested.tsx", promoteAbove: 40 };
+    const untouched = { path: "apps/desktop/src/features/demo/untouched.tsx", promoteAbove: 40 };
+    const entries = healthySummary({ [tested.path]: metrics(72), [untouched.path]: metrics(0) });
+
+    const { failures, warnings } = evaluate(entries, metrics(90, 85, 90, 90), {
+      untested: [tested, untouched],
+    });
 
     expect(failures).toEqual([]);
     expect(warnings[0]).toContain("move it into runtimeModules");
     expect(warnings[1]).toContain("still untested");
+  });
+
+  it("ships no untested modules", () => {
+    // Every entry here is a module the gate cannot protect. The list reaching
+    // empty is the goal; a new entry should be a deliberate, visible act.
+    expect(untestedModules).toEqual([]);
   });
 
   it("keeps the runtime tier disjoint from the critical tier", () => {
