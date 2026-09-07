@@ -26,7 +26,6 @@ export function ServerTableDialogs({ controller }: { controller: ServerTableCont
     importOpen,
     pendingDedupe,
     pendingDelete,
-    queryClient,
     saveError,
     setDialogState,
     setImportOpen,
@@ -54,11 +53,7 @@ export function ServerTableDialogs({ controller }: { controller: ServerTableCont
         onOpenChange={setImportOpen}
         open={importOpen}
       />
-      <SubscriptionsDialog
-        onChanged={() => void queryClient.invalidateQueries({ queryKey: ["profiles"] })}
-        onOpenChange={setSubscriptionsOpen}
-        open={subscriptionsOpen}
-      />
+      <SubscriptionsDialog onOpenChange={setSubscriptionsOpen} open={subscriptionsOpen} />
       <ShareQrDialog
         content={shareQrContent ?? ""}
         onOpenChange={(open) => !open && setShareQrContent(null)}

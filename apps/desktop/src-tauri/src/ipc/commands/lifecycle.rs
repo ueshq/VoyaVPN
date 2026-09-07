@@ -1,32 +1,30 @@
 use super::{support::*, *};
 
-pub(super) fn emit_profile_invalidation<R, I>(
+/// Broadcasts one invalidation bundle and reports a failed emit as a notice.
+///
+/// The seven `emit_*_invalidation` wrappers below were eight copies of this
+/// body (the eighth was hand-rolled in `lib.rs`) that differed only in the
+/// notice title and the key list. Emitting is best-effort by design: the change
+/// is already committed when this runs, so a dead event channel becomes a
+/// warning notice and never changes the command's result.
+///
+/// `scopes` is deduplicated and ordered so the payload is deterministic
+/// regardless of how a caller assembled its list.
+pub(crate) fn emit_invalidation<R, I>(
     app: &tauri::AppHandle<R>,
+    failure_title: &'static str,
     reason: &str,
-    affected_index_ids: I,
-    active_changed: bool,
-) -> Result<(), AppError>
-where
+    scopes: I,
+) where
     R: tauri::Runtime,
-    I: IntoIterator<Item = String>,
+    I: IntoIterator<Item = InvalidationScope>,
 {
-    let mut keys = BTreeSet::new();
-    keys.insert(vec!["profiles".to_string()]);
-    keys.insert(vec!["profile-ex".to_string()]);
-    if active_changed {
-        keys.insert(vec!["active-profile".to_string()]);
-    }
-    for index_id in affected_index_ids {
-        if !index_id.is_empty() {
-            keys.insert(vec!["profile".to_string(), index_id]);
-        }
-    }
-
+    let scopes: BTreeSet<InvalidationScope> = scopes.into_iter().collect();
     if let Err(error) = (InvalidateEvent {
-        keys: keys
+        keys: scopes
             .into_iter()
-            .map(|query_key| QueryInvalidation {
-                query_key,
+            .map(|scope| QueryInvalidation {
+                scope,
                 reason: reason.to_string(),
             })
             .collect(),
@@ -35,193 +33,114 @@ where
     {
         report_post_commit_error(
             app,
-            "Profile refresh failed",
+            failure_title,
             &error.to_string(),
             AppNoticeLevel::Warning,
         );
     }
-    Ok(())
 }
 
-pub(super) fn emit_subscription_invalidation<R>(
+/// Profile-list mutations. `config_changed` reports that the commit also
+/// rewrote the persisted `AppConfig` (see `voya_app::invalidation`).
+pub(super) fn emit_profile_invalidation<R>(
+    app: &tauri::AppHandle<R>,
+    reason: &str,
+    config_changed: bool,
+) where
+    R: tauri::Runtime,
+{
+    emit_invalidation(
+        app,
+        "Profile refresh failed",
+        reason,
+        invalidation::profile_scopes(config_changed),
+    );
+}
+
+pub(crate) fn emit_subscription_invalidation<R>(
     app: &tauri::AppHandle<R>,
     reason: &str,
     profiles_changed: bool,
     config_changed: bool,
-) -> Result<(), AppError>
-where
+) where
     R: tauri::Runtime,
 {
-    let mut keys = BTreeSet::new();
-    keys.insert(vec!["subscriptions".to_string()]);
-    keys.insert(vec!["subscription-metadata".to_string()]);
-    if profiles_changed {
-        keys.insert(vec!["profiles".to_string()]);
-        keys.insert(vec!["profile-ex".to_string()]);
-    }
-    if config_changed {
-        keys.insert(vec!["active-profile".to_string()]);
-    }
-
-    if let Err(error) = (InvalidateEvent {
-        keys: keys
-            .into_iter()
-            .map(|query_key| QueryInvalidation {
-                query_key,
-                reason: reason.to_string(),
-            })
-            .collect(),
-    })
-    .emit(app)
-    {
-        report_post_commit_error(
-            app,
-            "Subscription refresh failed",
-            &error.to_string(),
-            AppNoticeLevel::Warning,
-        );
-    }
-    Ok(())
+    emit_invalidation(
+        app,
+        "Subscription refresh failed",
+        reason,
+        invalidation::subscription_scopes(profiles_changed, config_changed),
+    );
 }
 
-pub(super) fn emit_routing_invalidation<R, I>(
+pub(super) fn emit_routing_invalidation<R>(
     app: &tauri::AppHandle<R>,
     reason: &str,
-    affected_ids: I,
-    active_changed: bool,
-) -> Result<(), AppError>
-where
+    config_changed: bool,
+) where
     R: tauri::Runtime,
-    I: IntoIterator<Item = String>,
 {
-    let mut keys = BTreeSet::new();
-    keys.insert(vec!["routings".to_string()]);
-    if active_changed {
-        keys.insert(vec!["active-routing".to_string()]);
-    }
-    for id in affected_ids {
-        if !id.is_empty() {
-            keys.insert(vec!["routing".to_string(), id]);
-        }
-    }
-
-    if let Err(error) = (InvalidateEvent {
-        keys: keys
-            .into_iter()
-            .map(|query_key| QueryInvalidation {
-                query_key,
-                reason: reason.to_string(),
-            })
-            .collect(),
-    })
-    .emit(app)
-    {
-        report_post_commit_error(
-            app,
-            "Routing refresh failed",
-            &error.to_string(),
-            AppNoticeLevel::Warning,
-        );
-    }
-    Ok(())
+    emit_invalidation(
+        app,
+        "Routing refresh failed",
+        reason,
+        invalidation::routing_scopes(config_changed),
+    );
 }
 
-pub(super) fn emit_dns_invalidation<R>(
-    app: &tauri::AppHandle<R>,
-    reason: &str,
-) -> Result<(), AppError>
+pub(super) fn emit_dns_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str)
 where
     R: tauri::Runtime,
 {
-    if let Err(error) = (InvalidateEvent {
-        keys: [
-            vec!["dns".to_string()],
-            vec!["app-config".to_string()],
-            vec!["active-dns".to_string()],
-        ]
-        .into_iter()
-        .map(|query_key| QueryInvalidation {
-            query_key,
-            reason: reason.to_string(),
-        })
-        .collect(),
-    })
-    .emit(app)
-    {
-        report_post_commit_error(
-            app,
-            "DNS refresh failed",
-            &error.to_string(),
-            AppNoticeLevel::Warning,
-        );
-    }
-    Ok(())
+    emit_invalidation(
+        app,
+        "DNS refresh failed",
+        reason,
+        invalidation::dns_scopes(),
+    );
 }
 
-pub(super) fn emit_preset_invalidation<R>(
-    app: &tauri::AppHandle<R>,
-    reason: &str,
-) -> Result<(), AppError>
+pub(super) fn emit_preset_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str)
 where
     R: tauri::Runtime,
 {
-    if let Err(error) = (InvalidateEvent {
-        keys: [
-            vec!["dns".to_string()],
-            vec!["app-config".to_string()],
-            vec!["active-dns".to_string()],
-            vec!["routings".to_string()],
-            vec!["active-routing".to_string()],
-        ]
-        .into_iter()
-        .map(|query_key| QueryInvalidation {
-            query_key,
-            reason: reason.to_string(),
-        })
-        .collect(),
-    })
-    .emit(app)
-    {
-        report_post_commit_error(
-            app,
-            "Configuration refresh failed",
-            &error.to_string(),
-            AppNoticeLevel::Warning,
-        );
-    }
-    Ok(())
+    emit_invalidation(
+        app,
+        "Configuration refresh failed",
+        reason,
+        invalidation::config_template_scopes(),
+    );
 }
 
+/// Proxy-runtime commands. `config_changed` is true only for the traffic-mode
+/// command, which also persists a settings field.
 pub(super) fn emit_proxy_runtime_invalidation<R>(
     app: &tauri::AppHandle<R>,
     reason: &str,
-) -> Result<(), AppError>
+    config_changed: bool,
+) where
+    R: tauri::Runtime,
+{
+    emit_invalidation(
+        app,
+        "Proxy view refresh failed",
+        reason,
+        invalidation::proxy_runtime_scopes(config_changed),
+    );
+}
+
+/// The TUN / system-proxy mode commands, which persist settings fields the
+/// bundle mirrors without going through `save_app_settings`.
+pub(super) fn emit_connection_mode_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str)
 where
     R: tauri::Runtime,
 {
-    if let Err(error) = (InvalidateEvent {
-        keys: [
-            vec!["proxy-groups".to_string()],
-            vec!["proxy-connections".to_string()],
-            vec!["app-config".to_string()],
-        ]
-        .into_iter()
-        .map(|query_key| QueryInvalidation {
-            query_key,
-            reason: reason.to_string(),
-        })
-        .collect(),
-    })
-    .emit(app)
-    {
-        report_post_commit_error(
-            app,
-            "Proxy view refresh failed",
-            &error.to_string(),
-            AppNoticeLevel::Warning,
-        );
-    }
-    Ok(())
+    emit_invalidation(
+        app,
+        "Connection mode refresh failed",
+        reason,
+        invalidation::connection_mode_scopes(),
+    );
 }
 
 pub(super) fn emit_proxy_monitor_status<R>(app: &tauri::AppHandle<R>, status: &ProxyMonitorStatus)
@@ -367,32 +286,16 @@ where
     Ok(())
 }
 
-pub(super) fn emit_settings_bundle_invalidation<R>(
-    app: &tauri::AppHandle<R>,
-    reason: &str,
-) -> Result<(), AppError>
+pub(super) fn emit_settings_bundle_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str)
 where
     R: tauri::Runtime,
 {
-    if let Err(error) = (InvalidateEvent {
-        keys: ["app-config", "ui-preferences", "config-sources"]
-            .into_iter()
-            .map(|key| QueryInvalidation {
-                query_key: vec![key.to_string()],
-                reason: reason.to_string(),
-            })
-            .collect(),
-    })
-    .emit(app)
-    {
-        report_post_commit_error(
-            app,
-            "Settings refresh failed",
-            &error.to_string(),
-            AppNoticeLevel::Warning,
-        );
-    }
-    Ok(())
+    emit_invalidation(
+        app,
+        "Settings refresh failed",
+        reason,
+        invalidation::settings_bundle_scopes(),
+    );
 }
 
 pub(super) fn emit_sysproxy_changed<R>(

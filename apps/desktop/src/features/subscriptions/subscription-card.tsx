@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { LoaderCircle, Plus, RefreshCw, Rss } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@voya/ui/components/button";
 import { Card, CardContent } from "@voya/ui/components/card";
 import { listSubscriptionMetadata, listSubscriptions, updateSubscriptions } from "@/ipc";
 import type { Subscription, SubscriptionMetadata } from "@/ipc/bindings";
+import { queryKeys } from "@/ipc/query-keys";
 import { useToastStore } from "@/stores/toast-store";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { formatBytes } from "@voya/utils/formatting";
@@ -40,15 +41,14 @@ type SubscriptionCardProps = {
 export function SubscriptionCard({ activeSubscriptionId, onAddSubscription }: SubscriptionCardProps) {
   const { language, t } = useI18n();
   const pushToast = useToastStore((state) => state.pushToast);
-  const queryClient = useQueryClient();
   const [updating, setUpdating] = useState(false);
   const subscriptionsQuery = useQuery({
     queryFn: listSubscriptions,
-    queryKey: ["subscriptions"],
+    queryKey: queryKeys.subscriptions,
   });
   const metadataQuery = useQuery({
     queryFn: listSubscriptionMetadata,
-    queryKey: ["subscription-metadata"],
+    queryKey: queryKeys.subscriptionMetadata,
   });
 
   const subscriptionsData = subscriptionsQuery.data;
@@ -95,12 +95,9 @@ export function SubscriptionCard({ activeSubscriptionId, onAddSubscription }: Su
     }
     setUpdating(true);
     try {
+      // `update_subscriptions` emits subscriptions + subscriptionMetadata +
+      // profiles for us.
       const result = await updateSubscriptions(subscription.id, true, null);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["subscriptions"] }),
-        queryClient.invalidateQueries({ queryKey: ["subscription-metadata"] }),
-        queryClient.invalidateQueries({ queryKey: ["profiles"] }),
-      ]);
       // A dead URL or an expired token comes back as a *successful* command
       // carrying `skipped` + `messages`, so success has to be read from the
       // payload rather than from the absence of a rejection.

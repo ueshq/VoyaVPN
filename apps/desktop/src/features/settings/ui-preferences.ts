@@ -9,14 +9,13 @@ import {
   type Locale,
 } from "@voya/i18n";
 import { loadUiPreferences } from "@/ipc";
+import { queryKeys } from "@/ipc/query-keys";
 import type { AppearanceSettings } from "@/ipc/bindings";
 import {
   isThemeMode,
   type ThemeMode,
   usePreferencesStore,
 } from "@/stores/preferences-store";
-
-export const UI_PREFERENCES_QUERY_KEY = ["ui-preferences"] as const;
 
 type NormalizedUiPreferences = AppearanceSettings & {
   language: Locale;
@@ -26,7 +25,7 @@ type NormalizedUiPreferences = AppearanceSettings & {
 export function useUiPreferencesQuery() {
   return useQuery({
     queryFn: loadUiPreferences,
-    queryKey: UI_PREFERENCES_QUERY_KEY,
+    queryKey: queryKeys.uiPreferences,
     select: normalizeUiPreferences,
   });
 }

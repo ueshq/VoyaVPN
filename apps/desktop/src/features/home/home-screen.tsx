@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle, ShieldCheck, ShieldOff } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@voya/ui/components/card";
@@ -27,7 +26,6 @@ import { useHomeRuntime } from "./use-home-runtime";
 export function HomeScreen() {
   const { t } = useI18n();
   const home = useHomeRuntime(t);
-  const queryClient = useQueryClient();
   const [subscriptionsOpen, setSubscriptionsOpen] = useState(false);
 
   const headline = home.connected
@@ -120,13 +118,7 @@ export function HomeScreen() {
         </Card>
       </div>
 
-      <SubscriptionsDialog
-        onChanged={() => {
-          void queryClient.invalidateQueries({ queryKey: ["profiles"] });
-        }}
-        onOpenChange={setSubscriptionsOpen}
-        open={subscriptionsOpen}
-      />
+      <SubscriptionsDialog onOpenChange={setSubscriptionsOpen} open={subscriptionsOpen} />
     </section>
   );
 }

@@ -65,7 +65,7 @@ pub async fn proxy_select_node<R: tauri::Runtime>(
         .await
         .map_err(proxy_runtime_error)?;
 
-    emit_proxy_runtime_invalidation(&app, "proxy-node-selected")?;
+    emit_proxy_runtime_invalidation(&app, "proxy-node-selected", false);
 
     Ok(snapshot)
 }
@@ -104,7 +104,7 @@ pub async fn proxy_close_connection<R: tauri::Runtime>(
         .await
         .map_err(proxy_runtime_error)?;
 
-    emit_proxy_runtime_invalidation(&app, "proxy-connection-closed")?;
+    emit_proxy_runtime_invalidation(&app, "proxy-connection-closed", false);
 
     Ok(snapshot)
 }
@@ -144,7 +144,7 @@ pub async fn proxy_set_traffic_mode<R: tauri::Runtime>(
         }
     }
 
-    emit_proxy_runtime_invalidation(&app, "proxy-traffic-mode-changed")?;
+    emit_proxy_runtime_invalidation(&app, "proxy-traffic-mode-changed", changed);
 
     Ok(voya_contracts::TrafficModeResponse {
         mode: match config.proxy_ui_item.traffic_mode {
@@ -176,7 +176,7 @@ pub async fn proxy_reload_config<R: tauri::Runtime>(
         .reload_config(&clash_api, path.as_deref())
         .await
         .map_err(proxy_runtime_error)?;
-    emit_proxy_runtime_invalidation(&app, "proxy-config-reloaded")?;
+    emit_proxy_runtime_invalidation(&app, "proxy-config-reloaded", false);
 
     Ok(())
 }

@@ -38,7 +38,7 @@ pub async fn save_profile<R: tauri::Runtime>(
     profile: ProfileContract,
 ) -> Result<ProfileListEntry, AppError> {
     let mut mutation = begin_config_mutation(&state).await?;
-    let original_active = mutation.config().index_id.clone();
+    let original = mutation.config().clone();
     let result = {
         let (unit_of_work, config) = mutation.split();
         ProfileManager::new_in(unit_of_work)
@@ -46,14 +46,9 @@ pub async fn save_profile<R: tauri::Runtime>(
             .await
             .map_err(profile_error)?
     };
-    let active_changed = original_active != mutation.config().index_id;
+    let config_changed = original != *mutation.config();
     commit_config_mutation(mutation).await?;
-    emit_profile_invalidation(
-        &app,
-        "profile-saved",
-        [result.profile.index_id.clone()],
-        active_changed,
-    )?;
+    emit_profile_invalidation(&app, "profile-saved", config_changed);
 
     Ok(profile_list_to_contract(result))
 }
@@ -72,7 +67,7 @@ pub async fn delete_profiles<R: tauri::Runtime>(
         AppError::Profile,
     )?;
     let mut mutation = begin_config_mutation(&state).await?;
-    let original_active = mutation.config().index_id.clone();
+    let original = mutation.config().clone();
     let deleted = {
         let (unit_of_work, config) = mutation.split();
         ProfileManager::new_in(unit_of_work)
@@ -80,9 +75,9 @@ pub async fn delete_profiles<R: tauri::Runtime>(
             .await
             .map_err(profile_error)?
     };
-    let active_changed = original_active != mutation.config().index_id;
+    let config_changed = original != *mutation.config();
     commit_config_mutation(mutation).await?;
-    emit_profile_invalidation(&app, "profiles-deleted", index_ids, active_changed)?;
+    emit_profile_invalidation(&app, "profiles-deleted", config_changed);
 
     Ok(u32::try_from(deleted).unwrap_or(u32::MAX))
 }
@@ -101,7 +96,7 @@ pub async fn copy_profiles<R: tauri::Runtime>(
         AppError::Profile,
     )?;
     let mut mutation = begin_config_mutation(&state).await?;
-    let original_active = mutation.config().index_id.clone();
+    let original = mutation.config().clone();
     let copied = {
         let (unit_of_work, config) = mutation.split();
         ProfileManager::new_in(unit_of_work)
@@ -109,17 +104,9 @@ pub async fn copy_profiles<R: tauri::Runtime>(
             .await
             .map_err(profile_error)?
     };
-    let active_changed = original_active != mutation.config().index_id;
+    let config_changed = original != *mutation.config();
     commit_config_mutation(mutation).await?;
-    emit_profile_invalidation(
-        &app,
-        "profiles-copied",
-        copied
-            .iter()
-            .map(|item| item.profile.index_id.clone())
-            .collect::<Vec<_>>(),
-        active_changed,
-    )?;
+    emit_profile_invalidation(&app, "profiles-copied", config_changed);
 
     Ok(copied.into_iter().map(profile_list_to_contract).collect())
 }
@@ -182,7 +169,9 @@ pub async fn set_active_profile<R: tauri::Runtime>(
             .map_err(profile_error)?
     };
     commit_config_mutation(mutation).await?;
-    emit_profile_invalidation(&app, "active-profile-changed", [index_id], true)?;
+    // The active-profile pointer lives in the persisted config, so the settings
+    // bundle projected from it is refreshed too.
+    emit_profile_invalidation(&app, "active-profile-changed", true);
 
     Ok(profile_list_to_contract(active))
 }
@@ -223,7 +212,7 @@ pub async fn move_profile<R: tauri::Runtime>(
         .map_err(profile_error)?;
     commit_config_mutation(mutation).await?;
 
-    emit_profile_invalidation(&app, "profile-moved", [index_id], false)?;
+    emit_profile_invalidation(&app, "profile-moved", false);
 
     Ok(profiles.into_iter().map(profile_list_to_contract).collect())
 }
@@ -256,15 +245,7 @@ pub async fn sort_profiles<R: tauri::Runtime>(
         .map_err(profile_error)?;
     commit_config_mutation(mutation).await?;
 
-    emit_profile_invalidation(
-        &app,
-        "profiles-sorted",
-        profiles
-            .iter()
-            .map(|item| item.profile.index_id.clone())
-            .collect::<Vec<_>>(),
-        false,
-    )?;
+    emit_profile_invalidation(&app, "profiles-sorted", false);
 
     Ok(profiles.into_iter().map(profile_list_to_contract).collect())
 }
@@ -284,7 +265,7 @@ pub async fn dedupe_profiles<R: tauri::Runtime>(
         AppError::Profile,
     )?;
     let mut mutation = begin_config_mutation(&state).await?;
-    let original_active = mutation.config().index_id.clone();
+    let original = mutation.config().clone();
     let result = {
         let (unit_of_work, config) = mutation.split();
         ProfileManager::new_in(unit_of_work)
@@ -296,14 +277,9 @@ pub async fn dedupe_profiles<R: tauri::Runtime>(
             .await
             .map_err(profile_error)?
     };
-    let active_changed = original_active != mutation.config().index_id;
+    let config_changed = original != *mutation.config();
     commit_config_mutation(mutation).await?;
-    emit_profile_invalidation(
-        &app,
-        "profiles-deduped",
-        result.removed_index_ids.clone(),
-        active_changed,
-    )?;
+    emit_profile_invalidation(&app, "profiles-deduped", config_changed);
 
     Ok(profile_dedupe_to_contract(result))
 }

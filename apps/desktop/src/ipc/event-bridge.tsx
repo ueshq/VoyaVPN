@@ -8,6 +8,7 @@ import type {
   ShellTabTarget,
   TransientStreamEvent,
 } from "@/ipc/bindings";
+import { invalidationQueryKey } from "@/ipc/query-keys";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
 import { getErrorMessage } from "@voya/utils/error";
@@ -123,7 +124,12 @@ function reportEventBridgeError(context: string, error: unknown) {
 
 function routeInvalidation(event: InvalidateEvent, queryClient: ReturnType<typeof useQueryClient>) {
   event.keys.forEach((item) => {
-    void queryClient.invalidateQueries({ queryKey: item.queryKey });
+    // `null` only for a scope this build cannot map, which `check:bindings`
+    // makes impossible; skipping beats throwing inside the event callback.
+    const queryKey = invalidationQueryKey(item.scope);
+    if (queryKey) {
+      void queryClient.invalidateQueries({ queryKey });
+    }
   });
 }
 

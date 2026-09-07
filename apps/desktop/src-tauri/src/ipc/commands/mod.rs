@@ -25,6 +25,7 @@ use voya_app::hotkeys::{
     HotkeyManager, HotkeyManagerError, HotkeyRegistrar, HotkeyStatus, ShowWindowShortcutBinding,
 };
 use voya_app::input_safety::{self, InputSafetyError};
+use voya_app::invalidation;
 use voya_app::presets::{PresetManager, PresetManagerError};
 use voya_app::profiles::{ProfileManager, ProfileManagerError};
 use voya_app::proxy_runtime::ProxyRuntimeError;
@@ -51,8 +52,8 @@ use voya_contracts::{
     DnsSettings as DnsSettingsContract, ExportProfilesFormat, ExportProfilesRequest,
     ExportProfilesResult, GroupChildCandidate as GroupChildContract,
     GroupPreview as GroupPreviewContract, ImportProfilesResult as ImportProfilesContract,
-    MissingCoreError, MoveAction as ContractMoveAction, Profile as ProfileContract,
-    ProfileDedupeResult as ProfileDedupeContract, ProfileListEntry,
+    InvalidationScope, MissingCoreError, MoveAction as ContractMoveAction,
+    Profile as ProfileContract, ProfileDedupeResult as ProfileDedupeContract, ProfileListEntry,
     ProfileSortKey as ProfileSortContract, ProxyConnectionsSnapshot, ProxyDelayTestResult,
     ProxyGroupsSnapshot, ProxyMonitorStatus, QrCodeImage, QrScanResult, ResourceUpdateFile,
     Routing as RoutingContract, RoutingRule as RoutingRuleContract, RuntimeConnectionState,
@@ -122,4 +123,5 @@ pub use updates::*;
 
 pub(crate) use app::register_show_window_shortcut_for_config;
 pub(crate) use core_flow::core_flow;
+pub(crate) use lifecycle::emit_subscription_invalidation;
 pub(crate) use support::emit_runtime_log;

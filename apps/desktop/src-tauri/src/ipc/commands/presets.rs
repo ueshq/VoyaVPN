@@ -50,7 +50,7 @@ pub async fn import_config_template<R: tauri::Runtime>(
             .map_err(preset_error)?
     };
     let config = commit_config_mutation(mutation).await?;
-    emit_preset_invalidation(&app, "config-template-imported")?;
+    emit_preset_invalidation(&app, "config-template-imported");
     restart_after_config_change(&app, &state, &config, ConfigChange::CONFIG_TEMPLATE).await;
 
     Ok(result)

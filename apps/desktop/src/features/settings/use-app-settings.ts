@@ -7,10 +7,10 @@ import type {
   AppSettingsV1,
   AppearanceSettings,
 } from "@/ipc/bindings";
-import { APP_SETTINGS_QUERY_KEY, DNS_QUERY_KEY } from "@/lib/query-keys";
+import { queryKeys } from "@/ipc/query-keys";
 import { getErrorMessage } from "@voya/utils/error";
 
-import { applyUiPreferences, UI_PREFERENCES_QUERY_KEY } from "./ui-preferences";
+import { applyUiPreferences } from "./ui-preferences";
 
 export type AppSettingsController = {
   settings: AppSettingsV1 | null;
@@ -31,7 +31,7 @@ export function useAppSettings(): AppSettingsController {
   const queryClient = useQueryClient();
   const settingsQuery = useQuery({
     queryFn: loadAppSettings,
-    queryKey: APP_SETTINGS_QUERY_KEY,
+    queryKey: queryKeys.appSettings,
   });
   const [draft, setDraft] = useState<AppSettingsV1 | null>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
@@ -95,17 +95,17 @@ export function useAppSettings(): AppSettingsController {
     setSaved(false);
     try {
       const authoritative = await saveAppSettings(withFreshestDns(settings, queryClient));
-      queryClient.setQueryData(APP_SETTINGS_QUERY_KEY, authoritative);
+      queryClient.setQueryData(queryKeys.appSettings, authoritative);
       setDraft(null);
       setSaved(true);
       await applyUiPreferences(authoritative.appearance);
-      queryClient.setQueryData(UI_PREFERENCES_QUERY_KEY, authoritative.appearance);
+      queryClient.setQueryData(queryKeys.uiPreferences, authoritative.appearance);
       return true;
     } catch (saveError) {
       setOperationError(getErrorMessage(saveError));
       try {
         const authoritative = await loadAppSettings();
-        queryClient.setQueryData(APP_SETTINGS_QUERY_KEY, authoritative);
+        queryClient.setQueryData(queryKeys.appSettings, authoritative);
         setDraft(null);
         await applyUiPreferences(authoritative.appearance);
       } catch {
@@ -145,7 +145,7 @@ function withFreshestDns(settings: AppSettingsV1, queryClient: QueryClient): App
   // it is the authoritative DNS block whenever the pane has been used at all.
   // `DnsSettings` (its DTO) and `AppDnsSettings` (the bundle's block) are the
   // same shape; the backend maps one onto the other.
-  const dns = queryClient.getQueryData<AppDnsSettings>(DNS_QUERY_KEY);
+  const dns = queryClient.getQueryData<AppDnsSettings>(queryKeys.dns);
 
   return dns ? { ...settings, dns } : settings;
 }

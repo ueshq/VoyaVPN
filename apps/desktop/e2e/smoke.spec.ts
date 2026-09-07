@@ -400,7 +400,7 @@ test("routes the three IPC event channels into the shell", async ({ page }) => {
 
   await page.evaluate(() => {
     window.__VOYA_SMOKE__.emit("invalidate-event", {
-      keys: [{ queryKey: ["profiles"], reason: "smoke" }],
+      keys: [{ reason: "smoke", scope: { kind: "profiles" } }],
     });
   });
 

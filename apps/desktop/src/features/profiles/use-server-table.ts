@@ -26,6 +26,7 @@ import type {
   SpeedTestResult,
   SpeedTestTarget,
 } from "@/ipc/bindings";
+import { profilesQueryKey } from "@/ipc/query-keys";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import { useProfileColumnsStore } from "@/stores/profile-columns-store";
@@ -35,7 +36,6 @@ import {
   exportFileName,
   formatImportSummary,
   isShareLinkExport,
-  profilesQueryKey,
   runProfileExport,
   supportsShareLinkExport,
   type ProfileExportKind,
@@ -159,8 +159,8 @@ export function useServerTable() {
     setOperationError(null);
     setOperationMessage(null);
     try {
+      // Every command routed through here emits its own profiles invalidation.
       await operation();
-      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
       return true;
     } catch (error) {
       onError(getErrorMessage(error));
@@ -195,7 +195,6 @@ export function useServerTable() {
     setOperationMessage(null);
     try {
       const result = await dedupeProfiles(null, null);
-      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
       setOperationMessage(
         t("panes.profiles.dedupe.removed", {
           kept: result.kept,
@@ -273,12 +272,12 @@ export function useServerTable() {
     if (importedIndexIds.length > 0) {
       setFilterText("");
       setSelectedId(importedIndexIds[0] ?? null);
+      // Optimistic: jump straight to the unfiltered list the caller was just
+      // switched to. `import_profiles_from_text` still emits profiles +
+      // subscriptions + subscriptionMetadata for every other cache.
       const refreshedProfiles = await listProfiles(null, null);
       queryClient.setQueryData(profilesQueryKey(""), refreshedProfiles);
-    } else {
-      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
     }
-    await queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
   }
 
   async function performExport(
@@ -395,7 +394,6 @@ export function useServerTable() {
     pendingDelete,
     profiles,
     profilesQuery,
-    queryClient,
     renderedRows,
     requestDedupe,
     requestDelete,

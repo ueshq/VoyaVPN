@@ -479,27 +479,14 @@ impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
             tracing::warn!(?emit_error, "failed to emit auto-update log");
         }
 
-        let mut keys = vec![
-            vec!["subscriptions".to_string()],
-            vec!["subscription-metadata".to_string()],
-            vec!["profiles".to_string()],
-            vec!["profile-ex".to_string()],
-        ];
-        if outcome.config_changed {
-            keys.push(vec!["active-profile".to_string()]);
-        }
-        let event = ipc::events::InvalidateEvent {
-            keys: keys
-                .into_iter()
-                .map(|query_key| ipc::events::QueryInvalidation {
-                    query_key,
-                    reason: "subscription-auto-updated".to_string(),
-                })
-                .collect(),
-        };
-        if let Err(emit_error) = event.emit(&self.app) {
-            tracing::warn!(?emit_error, "failed to emit auto-update invalidation");
-        }
+        // Same helper the `update_subscriptions` command uses, so the
+        // background path can never drift from the key set the command emits.
+        ipc::commands::emit_subscription_invalidation(
+            &self.app,
+            "subscription-auto-updated",
+            true,
+            outcome.config_changed,
+        );
     }
 }
 

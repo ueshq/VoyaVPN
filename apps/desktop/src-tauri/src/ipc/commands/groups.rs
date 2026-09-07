@@ -53,7 +53,7 @@ pub async fn save_group_profile<R: tauri::Runtime>(
     profile: ProfileContract,
 ) -> Result<ProfileListEntry, AppError> {
     let mut mutation = begin_config_mutation(&state).await?;
-    let original_active = mutation.config().index_id.clone();
+    let original = mutation.config().clone();
     let result = {
         let (unit_of_work, config) = mutation.split();
         GroupManager::new_in(unit_of_work)
@@ -61,14 +61,9 @@ pub async fn save_group_profile<R: tauri::Runtime>(
             .await
             .map_err(group_error)?
     };
-    let active_changed = original_active != mutation.config().index_id;
+    let config_changed = original != *mutation.config();
     commit_config_mutation(mutation).await?;
-    emit_profile_invalidation(
-        &app,
-        "group-profile-saved",
-        [result.profile.index_id.clone()],
-        active_changed,
-    )?;
+    emit_profile_invalidation(&app, "group-profile-saved", config_changed);
 
     Ok(profile_list_to_contract(result))
 }

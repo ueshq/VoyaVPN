@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { useI18n } from "@voya/i18n/use-i18n";
 import {
@@ -16,6 +16,7 @@ import {
   useRuntimeEventStore,
 } from "@/ipc";
 import type { ConnectionMode, TunChanged, TunStatus } from "@/ipc/bindings";
+import { profilesQueryKey } from "@/ipc/query-keys";
 import { getErrorMessage } from "@voya/utils/error";
 import { useModalStore } from "@/stores/modal-store";
 import { useToastStore } from "@/stores/toast-store";
@@ -52,7 +53,6 @@ export function useHomeRuntime(t: Translation) {
   const setTun = useRuntimeEventStore((state) => state.setTun);
   const openModal = useModalStore((state) => state.openModal);
   const pushToast = useToastStore((state) => state.pushToast);
-  const queryClient = useQueryClient();
   const [pendingAction, setPendingAction] = useState<RuntimeAction | null>(null);
   const [modePending, setModePending] = useState<ConnectionMode | null>(null);
   const [pacPending, setPacPending] = useState(false);
@@ -68,7 +68,7 @@ export function useHomeRuntime(t: Translation) {
   // node's name here costs no extra fetch and stays in sync after a switch.
   const profilesQuery = useQuery({
     queryFn: () => listProfiles(null, null),
-    queryKey: ["profiles", { filter: "" }],
+    queryKey: profilesQueryKey(""),
   });
 
   // Home owns the connection-mode controls, so it seeds their live OS state
@@ -243,9 +243,9 @@ export function useHomeRuntime(t: Translation) {
         await refreshRuntimeState();
       }
     } finally {
-      // The active profile changed in the DB regardless of connect success, so
-      // refresh the cache that drives the active-node highlight.
-      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      // `set_active_profile` emits the profiles invalidation that drives the
+      // active-node highlight, whether or not the connect that follows it
+      // succeeds.
       setSwitchingId(null);
     }
   }

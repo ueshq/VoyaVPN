@@ -35,10 +35,6 @@ export function supportsShareLinkExport(kind: ProfileKind) {
   return SHARE_LINK_KINDS.includes(kind);
 }
 
-export function profilesQueryKey(filter: string) {
-  return ["profiles", { filter }] as const;
-}
-
 export function runProfileExport(kind: ProfileExportKind, indexIds: string[]): Promise<ExportProfilesResult> {
   switch (kind) {
     case "clientConfig":

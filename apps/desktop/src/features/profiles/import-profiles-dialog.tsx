@@ -28,6 +28,7 @@ import { getErrorMessage } from "@voya/utils/error";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { importProfilesFromText, listSubscriptions, scanScreenQr } from "@/ipc";
 import type { ImportProfilesResult } from "@/ipc/bindings";
+import { queryKeys } from "@/ipc/query-keys";
 
 import { qrScanErrorCode } from "./qr-errors";
 import { formatImportSummary } from "./server-table-actions";
@@ -58,7 +59,7 @@ export function ImportProfilesDialog({ onImported, onOpenChange, open }: ImportP
   const subscriptionsQuery = useQuery({
     enabled: open,
     queryFn: listSubscriptions,
-    queryKey: ["subscriptions"],
+    queryKey: queryKeys.subscriptions,
   });
   const subscriptions = useMemo(() => subscriptionsQuery.data ?? [], [subscriptionsQuery.data]);
   const canImport = text.trim().length > 0;

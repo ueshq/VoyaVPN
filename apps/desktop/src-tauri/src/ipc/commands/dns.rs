@@ -31,7 +31,7 @@ pub async fn save_dns_settings<R: tauri::Runtime>(
         .map_err(dns_error)?;
     mutation.config_mut().simple_dns_item = saved.simple_dns_item.clone();
     let config = commit_config_mutation(mutation).await?;
-    emit_dns_invalidation(&app, "dns-settings-saved")?;
+    emit_dns_invalidation(&app, "dns-settings-saved");
     restart_after_config_change(&app, &state, &config, ConfigChange::DNS).await;
 
     Ok(dns_to_contract(saved))

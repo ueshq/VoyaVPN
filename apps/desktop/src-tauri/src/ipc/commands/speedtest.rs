@@ -30,12 +30,7 @@ pub async fn run_speedtest<R: tauri::Runtime>(
         .await
         .map_err(speedtest_error)?;
 
-    let changed_ids = result
-        .results
-        .iter()
-        .map(|item| item.index_id.clone())
-        .collect::<Vec<_>>();
-    emit_profile_invalidation(&app, "speedtest-updated", changed_ids, false)?;
+    emit_profile_invalidation(&app, "speedtest-updated", false);
 
     Ok(result)
 }

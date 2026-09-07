@@ -53,6 +53,7 @@ import type {
   GroupPreviewRoute,
   LoadStrategy,
 } from "@/ipc/bindings";
+import { groupChildCandidatesQueryKey } from "@/ipc/query-keys";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
 import { getErrorMessage } from "@voya/utils/error";
 import { cn } from "@voya/ui/lib/utils";
@@ -107,7 +108,7 @@ export function GroupBuilder({
   const selectedIds = useMemo(() => splitIds(childItems), [childItems]);
   const candidatesQuery = useQuery({
     queryFn: () => listGroupChildCandidates(currentIndexId, null),
-    queryKey: ["group-child-candidates", currentIndexId],
+    queryKey: groupChildCandidatesQueryKey(currentIndexId),
   });
   const candidates = useMemo(() => candidatesQuery.data ?? [], [candidatesQuery.data]);
   const candidatesById = useMemo(

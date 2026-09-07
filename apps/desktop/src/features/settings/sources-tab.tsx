@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 
 import { Alert, AlertDescription } from "@voya/ui/components/alert";
@@ -42,7 +41,6 @@ const templateOptions: Array<{
 ];
 
 export function SourcesTab({ controller }: { controller: AppSettingsController }) {
-  const queryClient = useQueryClient();
   const { t } = useI18n();
   const pushToast = useToastStore((state) => state.pushToast);
   const [importError, setImportError] = useState<string | null>(null);
@@ -90,13 +88,11 @@ export function SourcesTab({ controller }: { controller: AppSettingsController }
     setImportWorking(true);
     setImportError(null);
     try {
+      // `import_config_template` emits dns + routings + appSettings; the
+      // reload is still needed because this tab edits a settings draft that
+      // an invalidation alone would not re-seed.
       const result = await importConfigTemplate(selection);
       await controller.reload();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["app-config"] }),
-        queryClient.invalidateQueries({ queryKey: ["dns"] }),
-        queryClient.invalidateQueries({ queryKey: ["routings"] }),
-      ]);
       const descriptions = [t("options.configTemplate.appliedDescription")];
       if (result.reusedExistingRouting) descriptions.push(t("options.configTemplate.reusedDescription"));
       pushToast({

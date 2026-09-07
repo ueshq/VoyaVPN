@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import {
   deleteRoutingRules,
@@ -11,6 +11,7 @@ import {
   setActiveRouting,
 } from "@/ipc";
 import type { MoveAction, RoutingRule, Routing_Serialize } from "@/ipc/bindings";
+import { queryKeys } from "@/ipc/query-keys";
 import { getErrorMessage } from "@voya/utils/error";
 
 import { type RoutingFormPayload, type RoutingRulePayload } from "./routing-form-schema";
@@ -34,7 +35,6 @@ type RuleDialogState =
 type PendingRoutingDelete = "routing" | "rule" | null;
 
 export function useRoutingScreen() {
-  const queryClient = useQueryClient();
   const [operationError, setOperationError] = useState<string | null>(null);
   const [routingDialog, setRoutingDialog] = useState<RoutingDialogState>(null);
   const [ruleDialog, setRuleDialog] = useState<RuleDialogState>(null);
@@ -43,7 +43,7 @@ export function useRoutingScreen() {
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const routingsQuery = useQuery({
     queryFn: listRoutings,
-    queryKey: ["routings"],
+    queryKey: queryKeys.routings,
   });
   const routings = useMemo(() => routingsQuery.data ?? [], [routingsQuery.data]);
   const selectedRouting = useMemo(
@@ -61,8 +61,8 @@ export function useRoutingScreen() {
   async function runOperation(operation: () => Promise<unknown>) {
     setOperationError(null);
     try {
+      // Every routing command emits the `routings` invalidation itself.
       await operation();
-      await queryClient.invalidateQueries({ queryKey: ["routings"] });
       return true;
     } catch (error) {
       setOperationError(getErrorMessage(error));

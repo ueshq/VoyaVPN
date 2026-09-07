@@ -19,7 +19,7 @@ vi.mock("@/ipc", () => ipcMocks);
 
 const queryClients = new Set<QueryClient>();
 
-function renderDialog(overrides: { onChanged?: () => void; onOpenChange?: (open: boolean) => void } = {}) {
+function renderDialog(overrides: { onOpenChange?: (open: boolean) => void } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { gcTime: 0, retry: false } },
   });
@@ -28,11 +28,7 @@ function renderDialog(overrides: { onChanged?: () => void; onOpenChange?: (open:
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <SubscriptionsDialog
-        onChanged={overrides.onChanged ?? vi.fn()}
-        onOpenChange={overrides.onOpenChange ?? vi.fn()}
-        open
-      />
+      <SubscriptionsDialog onOpenChange={overrides.onOpenChange ?? vi.fn()} open />
     </QueryClientProvider>,
   );
 }
@@ -81,11 +77,10 @@ describe("SubscriptionsDialog", () => {
   it("edits and saves a selected subscription through the semantic contract", async () => {
     const user = userEvent.setup();
     const source = makeSubscription();
-    const onChanged = vi.fn();
     ipcMocks.listSubscriptions.mockResolvedValue([source]);
     ipcMocks.saveSubscription.mockImplementation(async (subscription: Subscription) => subscription);
 
-    renderDialog({ onChanged });
+    renderDialog();
     await user.click(await screen.findByRole("button", { name: /Fixture sub/ }));
     await user.clear(screen.getByLabelText("Remarks"));
     await user.type(screen.getByLabelText("Remarks"), "Production");
@@ -106,7 +101,6 @@ describe("SubscriptionsDialog", () => {
       userAgent: "Voya/1",
     })));
     expect(await screen.findByText("Subscription saved")).toBeInTheDocument();
-    expect(onChanged).toHaveBeenCalled();
   });
 
   it("updates one source, updates all sources, and deletes the selection", async () => {

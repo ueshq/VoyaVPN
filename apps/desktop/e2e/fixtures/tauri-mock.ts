@@ -154,7 +154,64 @@ export async function installTauriSmokeMock(page: Page) {
       };
     }
 
+    const profileScopes = ["profiles", "groupChildCandidates"];
+    const subscriptionScopes = ["subscriptions", "subscriptionMetadata"];
+    const routingScopes = ["routings"];
+    const proxyRuntimeScopes = ["proxyGroups", "proxyConnections"];
+    const connectionModeScopes = ["connectionMode", "appSettings"];
+
+    // Mirrors `voya_app::invalidation`: the real shell emits an InvalidateEvent
+    // for every committed mutation, so the mock has to as well — the frontend
+    // no longer invalidates for itself.
+    const invalidationScopes: Record<string, string[]> = {
+      copy_profiles: profileScopes,
+      dedupe_profiles: profileScopes,
+      delete_profiles: profileScopes,
+      delete_routing_rules: routingScopes,
+      delete_routings: routingScopes,
+      delete_subscriptions: [...subscriptionScopes, ...profileScopes],
+      import_config_template: ["dns", "routings", "appSettings"],
+      import_profiles_from_text: [...subscriptionScopes, ...profileScopes],
+      move_profile: profileScopes,
+      move_routing_rule: routingScopes,
+      proxy_close_connection: proxyRuntimeScopes,
+      proxy_reload_config: proxyRuntimeScopes,
+      proxy_select_node: proxyRuntimeScopes,
+      proxy_set_traffic_mode: [...proxyRuntimeScopes, "appSettings"],
+      run_speedtest: profileScopes,
+      save_app_settings: ["appSettings", "uiPreferences", "dns", "connectionMode"],
+      save_dns_settings: ["dns", "appSettings"],
+      save_group_profile: profileScopes,
+      save_profile: profileScopes,
+      save_routing: routingScopes,
+      save_routing_rule: routingScopes,
+      save_subscription: subscriptionScopes,
+      set_active_profile: [...profileScopes, "appSettings"],
+      set_active_routing: [...routingScopes, "appSettings"],
+      set_connection_mode: connectionModeScopes,
+      set_system_proxy_mode: connectionModeScopes,
+      set_tun_enabled: connectionModeScopes,
+      sort_profiles: profileScopes,
+      update_subscriptions: [...subscriptionScopes, ...profileScopes],
+    };
+
     function invoke(command: string, args: CommandArgs = {}) {
+      const result = dispatch(command, args);
+      const scopes = invalidationScopes[command];
+      if (!scopes) {
+        return result;
+      }
+
+      // Emitted once the command has "committed", exactly like the shell.
+      return Promise.resolve(result).then((value) => {
+        emitEvent("invalidate-event", {
+          keys: scopes.map((kind) => ({ reason: command, scope: { kind } })),
+        });
+        return value;
+      });
+    }
+
+    function dispatch(command: string, args: CommandArgs = {}) {
       state.calls.push({ command, args });
 
       switch (command) {
@@ -585,16 +642,15 @@ export async function installTauriSmokeMock(page: Page) {
         return undefined;
       },
     };
-    window.__VOYA_SMOKE__ = {
-      emit(event: string, payload: unknown) {
-        listeners
-          .filter((listener) => listener.eventName === event)
-          .forEach((listener) => {
-            callbacks.get(listener.handlerId)?.({ event, id: listener.handlerId, payload });
-          });
-      },
-      state,
-    };
+    window.__VOYA_SMOKE__ = { emit: emitEvent, state };
+
+    function emitEvent(event: string, payload: unknown) {
+      listeners
+        .filter((listener) => listener.eventName === event)
+        .forEach((listener) => {
+          callbacks.get(listener.handlerId)?.({ event, id: listener.handlerId, payload });
+        });
+    }
 
     function upsertProfile(input: Record<string, unknown>) {
       const profile = normalizeProfile(input);

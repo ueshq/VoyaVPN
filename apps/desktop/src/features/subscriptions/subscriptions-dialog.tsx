@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type * as React from "react";
 import { LoaderCircle, Plus, RefreshCw, Rss, Save, Trash2 } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { Alert, AlertDescription } from "@voya/ui/components/alert";
 import {
@@ -40,6 +40,7 @@ import {
   updateSubscriptions,
 } from "@/ipc";
 import type { Subscription } from "@/ipc/bindings";
+import { queryKeys } from "@/ipc/query-keys";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { cn } from "@voya/ui/lib/utils";
@@ -52,7 +53,6 @@ import {
 import { metadataBySubscriptionId } from "./subscription-usage";
 
 type SubscriptionsDialogProps = {
-  onChanged: () => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
 };
@@ -96,7 +96,7 @@ function intervalMinutesFromHours(hours: string): number | null {
   return Math.max(1, Math.round(parsed * 60));
 }
 
-export function SubscriptionsDialog({ onChanged, onOpenChange, open }: SubscriptionsDialogProps) {
+export function SubscriptionsDialog({ onOpenChange, open }: SubscriptionsDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<Subscription>(() => createBlankSubscription());
   const [intervalHours, setIntervalHours] = useState("");
@@ -105,27 +105,20 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
   const [pendingDelete, setPendingDelete] = useState(false);
   const [selectedId, setSelectedId] = useState("");
   const { language, t } = useI18n();
-  const queryClient = useQueryClient();
   const subscriptionsQuery = useQuery({
     enabled: open,
     queryFn: listSubscriptions,
-    queryKey: ["subscriptions"],
+    queryKey: queryKeys.subscriptions,
   });
   const metadataQuery = useQuery({
     enabled: open,
     queryFn: listSubscriptionMetadata,
-    queryKey: ["subscription-metadata"],
+    queryKey: queryKeys.subscriptionMetadata,
   });
   const subscriptions = subscriptionsQuery.data ?? [];
   const metadataById = metadataBySubscriptionId(metadataQuery.data ?? []);
   const busy = pending !== null;
   const selectedSubscription = subscriptions.find((item) => item.id === selectedId) ?? null;
-
-  async function refreshSubscriptions() {
-    await queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
-    await queryClient.invalidateQueries({ queryKey: ["subscription-metadata"] });
-    onChanged();
-  }
 
   async function run(action: SubscriptionAction, operation: () => Promise<string | null>) {
     if (pending) {
@@ -139,7 +132,6 @@ export function SubscriptionsDialog({ onChanged, onOpenChange, open }: Subscript
       if (nextMessage) {
         setMessage(nextMessage);
       }
-      await refreshSubscriptions();
     } catch (error) {
       setError(redactOperationalError(error));
     } finally {

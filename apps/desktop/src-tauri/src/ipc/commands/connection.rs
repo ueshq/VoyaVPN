@@ -39,6 +39,10 @@ pub async fn set_connection_mode<R: tauri::Runtime>(
         .await
         .map_err(connection_mode_error)?;
 
+    // The mode is persisted in the same fields the settings bundle mirrors
+    // (`network.tun.enabled`, `network.systemProxy.mode`), so both caches move.
+    emit_connection_mode_invalidation(&app, "connection-mode-changed");
+
     if outcome.tun_flag_changed {
         restart_after_config_change(&app, &state, &outcome.config, ConfigChange::CONNECTION_MODE)
             .await;

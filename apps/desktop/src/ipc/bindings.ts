@@ -418,6 +418,45 @@ export type InvalidateEvent = {
 	keys: QueryInvalidation[],
 };
 
+/**
+ *  One frontend query cache, named on the wire.
+ * 
+ *  Replaces the free-string key list the shell used to build by hand. The
+ *  variants are generated into `apps/desktop/src/ipc/bindings.ts`, and
+ *  `apps/desktop/src/ipc/query-keys.ts` maps each one onto the `queryKey`
+ *  array its `useQuery` really uses, so a variant added here fails the frontend
+ *  typecheck until the map is extended. Only caches an emitter can actually
+ *  invalidate belong here; a query whose data no command mutates
+ *  (`process-candidates`, `profile-share-qr`) deliberately has no variant.
+ * 
+ *  Internally tagged rather than a bare string so a future scope that has to
+ *  name one row (`{ kind: "profile", id }`) is an additive change instead of a
+ *  rewrite of the wire shape.
+ */
+export type InvalidationScope = 
+/**  `["profiles"]` — the profile list, every filter slice of it. */
+{ kind: "profiles" } | 
+/**  `["group-child-candidates"]` — the policy-group / chain child picker. */
+{ kind: "groupChildCandidates" } | 
+/**  `["subscriptions"]` */
+{ kind: "subscriptions" } | 
+/**  `["subscription-metadata"]` */
+{ kind: "subscriptionMetadata" } | 
+/**  `["routings"]` */
+{ kind: "routings" } | 
+/**  `["dns"]` */
+{ kind: "dns" } | 
+/**  `["app-settings"]` — the whole settings bundle projected from `AppConfig`. */
+{ kind: "appSettings" } | 
+/**  `["ui-preferences"]` — the appearance slice the shell reads on its own. */
+{ kind: "uiPreferences" } | 
+/**  `["connection-mode"]` — TUN / system-proxy mode and its availability. */
+{ kind: "connectionMode" } | 
+/**  `["proxy-groups"]` */
+{ kind: "proxyGroups" } | 
+/**  `["proxy-connections"]` */
+{ kind: "proxyConnections" };
+
 export type LoadStrategy = "leastPing" | "fallback" | "random" | "roundRobin" | "leastLoad";
 
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
@@ -594,8 +633,15 @@ export type QrScanResult = {
 
 export type QrScanStatus = "found" | "notFound" | "unavailable";
 
+/**
+ *  One invalidated cache plus the change that invalidated it.
+ * 
+ *  `reason` stays a free string on purpose: it is diagnostic (it names the
+ *  command, and shows up in logs), never part of the contract the frontend
+ *  switches on.
+ */
 export type QueryInvalidation = {
-	queryKey: string[],
+	scope: InvalidationScope,
 	reason: string,
 };
 

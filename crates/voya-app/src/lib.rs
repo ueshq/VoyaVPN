@@ -17,6 +17,7 @@ pub mod exports;
 pub mod groups;
 pub mod hotkeys;
 pub mod input_safety;
+pub mod invalidation;
 pub mod logging;
 pub mod presets;
 pub mod profiles;

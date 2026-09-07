@@ -54,15 +54,20 @@ describe("useDnsSettings", () => {
     expect(ipcMocks.saveDnsSettings).toHaveBeenCalledWith(
       expect.objectContaining({ direct: "1.1.1.1", fakeIp: true }),
     );
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["dns"] });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["app-config"] });
-    // Settings "Save all" posts the whole bundle including `dns`; without this
-    // invalidation its cached snapshot would silently revert what was saved here.
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["app-settings"] });
+    // A successful save invalidates nothing: `save_dns_settings` emits `dns` +
+    // `app-settings`, and re-invalidating here would double-refetch both. The
+    // pane only writes the authoritative answer into its own cache.
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(client.getQueryData(["dns"])).toEqual(
+      expect.objectContaining({ direct: "1.1.1.1", fakeIp: true }),
+    );
     await waitFor(() => expect(result.current.isDirty).toBe(false));
 
     act(() => result.current.updateSimple({ remote: "8.8.8.8" }));
     await act(() => result.current.handleReload());
+    // Reload is user-initiated with no command behind it, so it is the one
+    // place the pane still invalidates for itself.
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["dns"] });
     expect(result.current.fieldErrors).toEqual({});
     expect(result.current.operationError).toBeNull();
   });

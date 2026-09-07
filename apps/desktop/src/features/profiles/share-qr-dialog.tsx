@@ -17,6 +17,7 @@ import { Label } from "@voya/ui/components/label";
 import { Textarea } from "@voya/ui/components/textarea";
 import { getErrorMessage } from "@voya/utils/error";
 import { generateQrCode } from "@/ipc";
+import { profileShareQrQueryKey } from "@/ipc/query-keys";
 
 type ShareQrDialogProps = {
   content: string;
@@ -30,7 +31,7 @@ export function ShareQrDialog({ content, onOpenChange, open }: ShareQrDialogProp
     enabled: open && content.trim().length > 0,
     gcTime: 0,
     queryFn: () => generateQrCode(content),
-    queryKey: ["profile-share-qr", content],
+    queryKey: profileShareQrQueryKey(content),
     refetchOnWindowFocus: false,
     retry: false,
     staleTime: Infinity,

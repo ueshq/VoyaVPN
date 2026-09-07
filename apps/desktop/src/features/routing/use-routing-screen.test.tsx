@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RoutingRule, Routing_Serialize } from "@/ipc/bindings";
+import { queryKeys } from "@/ipc/query-keys";
 
 import { useRoutingScreen } from "./use-routing-screen";
 
@@ -111,7 +112,7 @@ describe("useRoutingScreen", () => {
     ipcMocks.listRoutings
       .mockResolvedValueOnce([routing("route-a", true), routing("route-b", false)])
       .mockResolvedValue([afterCreate, routing("route-b", false)]);
-    const { result } = renderController();
+    const { client, result } = renderController();
     await waitFor(() => expect(result.current.selectedRouting?.id).toBe("route-a"));
     const payload = rule("", "Created");
     ipcMocks.saveRoutingRule.mockResolvedValueOnce(afterCreate);
@@ -119,6 +120,9 @@ describe("useRoutingScreen", () => {
     act(() => result.current.setRuleDialog({ mode: "create" }));
     await act(() => result.current.handleSaveRule(payload));
     expect(ipcMocks.saveRoutingRule).toHaveBeenCalledWith("route-a", payload);
+    // Stands in for the backend's `routing-rule-saved` invalidation, which the
+    // event bridge routes in the app but not in a bare hook test.
+    await act(() => client.invalidateQueries({ queryKey: queryKeys.routings }));
     await waitFor(() => expect(result.current.selectedRule?.id).toBe("created-rule"));
     expect(result.current.ruleDialog).toBeNull();
 
@@ -174,7 +178,7 @@ function renderController() {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
-  return renderHook(() => useRoutingScreen(), { wrapper });
+  return { client, ...renderHook(() => useRoutingScreen(), { wrapper }) };
 }
 
 function routing(id: string, isActive: boolean): Routing_Serialize {

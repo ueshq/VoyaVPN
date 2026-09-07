@@ -48,12 +48,7 @@ pub async fn save_app_settings<R: tauri::Runtime>(
     apply_settings_runtime_action(&app, &state, &outcome).await;
 
     if outcome.changed {
-        if let Err(error) = emit_settings_bundle_invalidation(&app, "app-settings-saved") {
-            tracing::error!(
-                ?error,
-                "failed to broadcast committed settings invalidation"
-            );
-        }
+        emit_settings_bundle_invalidation(&app, "app-settings-saved");
     }
 
     Ok(outcome.settings)

@@ -29,6 +29,7 @@ import type {
   ProxyNode,
   TrafficMode,
 } from "@/ipc/bindings";
+import { queryKeys } from "@/ipc/query-keys";
 import { formatDelay } from "@voya/utils/formatting";
 import { getErrorMessage } from "@voya/utils/error";
 import { cn } from "@voya/ui/lib/utils";
@@ -56,7 +57,7 @@ export function ProxyGroupsScreen() {
 
   const groupsQuery = useQuery({
     queryFn: proxyListGroups,
-    queryKey: ["proxy-groups"],
+    queryKey: queryKeys.proxyGroups,
   });
   const snapshot = groupsQuery.data;
   // Auto (urltest/fallback) groups pin first, Hiddify-style, and win the
@@ -85,25 +86,20 @@ export function ProxyGroupsScreen() {
   const reloadMutation = useMutation({
     meta: { errorTitle: t("proxy.reloadConfigFailed") },
     mutationFn: () => proxyReloadConfig(null),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["proxy-groups"] });
-      await queryClient.invalidateQueries({ queryKey: ["proxy-connections"] });
-    },
+    // `proxy_reload_config` emits proxyGroups + proxyConnections itself.
   });
   const trafficModeMutation = useMutation({
     meta: { errorTitle: t("proxy.trafficModeFailed") },
     mutationFn: proxySetTrafficMode,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["app-config"] });
-      await queryClient.invalidateQueries({ queryKey: ["proxy-groups"] });
-    },
+    // `proxy_set_traffic_mode` emits proxyGroups + proxyConnections and, when
+    // the persisted mode really changed, appSettings.
   });
   const selectMutation = useMutation({
     meta: { errorTitle: t("proxy.selectNodeFailed") },
     mutationFn: ({ groupName, nodeName }: { groupName: string; nodeName: string }) =>
       proxySelectNode(groupName, nodeName),
     onSuccess: (nextSnapshot) => {
-      queryClient.setQueryData(["proxy-groups"], nextSnapshot);
+      queryClient.setQueryData(queryKeys.proxyGroups, nextSnapshot);
     },
   });
 

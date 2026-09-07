@@ -100,7 +100,14 @@ describe("EventBridge", () => {
 
     act(() => {
       bridgeMocks.listeners.invalidateEvent[0]?.({
-        payload: { keys: [{ queryKey: ["ui-preferences"] }] },
+        payload: {
+          keys: [
+            { reason: "app-settings-saved", scope: { kind: "uiPreferences" } },
+            // A scope this build cannot map is skipped, not thrown on: the
+            // bridge runs inside a Tauri event callback.
+            { reason: "app-settings-saved", scope: { kind: "somethingNewer" } },
+          ],
+        },
       });
       bridgeMocks.listeners.appEvent[0]?.({
         payload: {
@@ -110,7 +117,7 @@ describe("EventBridge", () => {
       });
     });
 
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["ui-preferences"] });
+    expect(invalidateQueries).toHaveBeenCalledExactlyOnceWith({ queryKey: ["ui-preferences"] });
     expect(bridgeMocks.requestTab).not.toHaveBeenCalled();
     expect(bridgeMocks.pushToast).toHaveBeenCalledWith({
       description: "Saved",

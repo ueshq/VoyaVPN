@@ -1,4 +1,4 @@
-use super::{connection_mode::*, support::*, *};
+use super::{connection_mode::*, lifecycle::*, support::*, *};
 
 // `async` because reading the OS proxy state shells out (`networksetup` on
 // macOS, `gsettings` on Linux) once per network service.
@@ -32,13 +32,16 @@ pub async fn set_system_proxy_mode<R: tauri::Runtime>(
 ) -> Result<SystemProxyStatusResponse, AppError> {
     let connected = supervisor_connection_state(&state).await?;
 
-    connection_mode_manager(&app, &state)
+    let status = connection_mode_manager(&app, &state)
         .set_system_proxy_mode(
             state.config_mutations(),
             voya_app::contract_map::sysproxy_type_from_contract(mode),
             connected,
         )
         .await
-        .map(system_proxy_status_response)
-        .map_err(connection_mode_error)
+        .map_err(connection_mode_error)?;
+    // `sys_proxy_type` is committed, and the settings bundle mirrors it.
+    emit_connection_mode_invalidation(&app, "system-proxy-mode-changed");
+
+    Ok(system_proxy_status_response(status))
 }

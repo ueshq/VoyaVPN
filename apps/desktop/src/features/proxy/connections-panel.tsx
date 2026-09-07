@@ -35,6 +35,7 @@ import {
   useRuntimeEventStore,
 } from "@/ipc";
 import type { ProxyConnectionItem, ProxyConnectionsSnapshot } from "@/ipc/bindings";
+import { queryKeys } from "@/ipc/query-keys";
 import { formatBytes } from "@voya/utils/formatting";
 import { getErrorMessage } from "@voya/utils/error";
 import { cn } from "@voya/ui/lib/utils";
@@ -172,7 +173,6 @@ const emptySnapshot: ProxyConnectionsSnapshot = {
   downloadTotal: 0,
   uploadTotal: 0,
 };
-const proxyConnectionsQueryKey = ["proxy-connections"] as const;
 
 export function ConnectionsPanel() {
   const queryClient = useQueryClient();
@@ -191,9 +191,9 @@ export function ConnectionsPanel() {
 
   const connectionsQuery = useQuery({
     enabled: queryEnabled,
-    placeholderData: () => queryClient.getQueryData<ProxyConnectionsSnapshot>(proxyConnectionsQueryKey),
+    placeholderData: () => queryClient.getQueryData<ProxyConnectionsSnapshot>(queryKeys.proxyConnections),
     queryFn: proxyListConnections,
-    queryKey: proxyConnectionsQueryKey,
+    queryKey: queryKeys.proxyConnections,
     staleTime: 3_000,
   });
   const snapshot = storeSnapshot ?? connectionsQuery.data ?? emptySnapshot;
@@ -282,7 +282,7 @@ export function ConnectionsPanel() {
 
   function syncConnectionsSnapshot(nextSnapshot: ProxyConnectionsSnapshot) {
     setProxyConnections(nextSnapshot);
-    queryClient.setQueryData(proxyConnectionsQueryKey, nextSnapshot);
+    queryClient.setQueryData(queryKeys.proxyConnections, nextSnapshot);
   }
 
   async function refreshConnections() {

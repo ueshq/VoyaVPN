@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PreferencesBridge } from "@/components/preferences-bridge";
 import { changeLocale } from "@voya/i18n";
-import { UI_PREFERENCES_QUERY_KEY } from "@/features/settings/ui-preferences";
+import { queryKeys } from "@/ipc/query-keys";
 import { usePreferencesStore } from "@/stores/preferences-store";
 
 const preferencesMocks = vi.hoisted(() => ({
@@ -55,7 +55,7 @@ describe("PreferencesBridge", () => {
     expect(usePreferencesStore.getState().themeMode).toBe("dark");
 
     preferencesMocks.loadUiPreferences.mockResolvedValueOnce({ language: "en", theme: "light" });
-    await queryClient.invalidateQueries({ queryKey: UI_PREFERENCES_QUERY_KEY });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.uiPreferences });
 
     await waitFor(() => {
       expect(document.documentElement).not.toHaveClass("dark");

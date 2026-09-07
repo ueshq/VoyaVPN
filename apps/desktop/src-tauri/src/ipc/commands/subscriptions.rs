@@ -41,15 +41,16 @@ pub async fn save_subscription<R: tauri::Runtime>(
     item: SubscriptionContract,
 ) -> Result<SubscriptionContract, AppError> {
     let mutation = begin_config_mutation(&state).await?;
-    // Saving a subscription only writes the subscription row; it never touches
-    // the persisted app config, so no `active-profile` invalidation is needed.
+    // Saving a subscription only writes the subscription row: it imports no
+    // profiles and never touches the persisted app config, so neither the
+    // profile list nor the settings bundle needs refreshing.
     let saved = mutation
         .subscriptions()
         .save_subscription(subscription_from_contract(item))
         .await
         .map_err(subscription_error)?;
     commit_config_mutation(mutation).await?;
-    emit_subscription_invalidation(&app, "subscription-saved", false, false)?;
+    emit_subscription_invalidation(&app, "subscription-saved", false, false);
 
     Ok(subscription_to_contract(saved))
 }
@@ -78,7 +79,7 @@ pub async fn delete_subscriptions<R: tauri::Runtime>(
     };
     let config_changed = original != *mutation.config();
     commit_config_mutation(mutation).await?;
-    emit_subscription_invalidation(&app, "subscriptions-deleted", true, config_changed)?;
+    emit_subscription_invalidation(&app, "subscriptions-deleted", true, config_changed);
 
     Ok(deleted)
 }
@@ -108,7 +109,7 @@ pub async fn import_profiles_from_text<R: tauri::Runtime>(
     };
     let config_changed = original != *mutation.config();
     commit_config_mutation(mutation).await?;
-    emit_subscription_invalidation(&app, "profiles-imported", true, config_changed)?;
+    emit_subscription_invalidation(&app, "profiles-imported", true, config_changed);
 
     Ok(import_profiles_to_contract(result))
 }
@@ -161,7 +162,7 @@ pub async fn update_subscriptions<R: tauri::Runtime>(
     };
     let config_changed = original != *mutation.config();
     commit_config_mutation(mutation).await?;
-    emit_subscription_invalidation(&app, "subscriptions-updated", true, config_changed)?;
+    emit_subscription_invalidation(&app, "subscriptions-updated", true, config_changed);
 
     Ok(subscription_update_to_contract(result))
 }

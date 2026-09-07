@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { AppWindow, Info, Plus, X } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { Alert, AlertDescription } from "@voya/ui/components/alert";
 import { Badge } from "@voya/ui/components/badge";
@@ -26,6 +26,7 @@ import {
   moveRoutingRule,
   saveRoutingRule,
 } from "@/ipc";
+import { queryKeys } from "@/ipc/query-keys";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { cn } from "@voya/ui/lib/utils";
@@ -53,7 +54,6 @@ const MODE_OPTIONS: PerAppProxyMode[] = ["off", "include", "exclude"];
  */
 export function PerAppProxyDialog({ onOpenChange, open }: PerAppProxyDialogProps) {
   const { t } = useI18n();
-  const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [manualEntry, setManualEntry] = useState("");
   const [mode, setMode] = useState<PerAppProxyMode>("off");
@@ -66,18 +66,18 @@ export function PerAppProxyDialog({ onOpenChange, open }: PerAppProxyDialogProps
   const routingsQuery = useQuery({
     enabled: open,
     queryFn: listRoutings,
-    queryKey: ["routings"],
+    queryKey: queryKeys.routings,
   });
   const candidatesQuery = useQuery({
     enabled: open,
     queryFn: listProcessCandidates,
-    queryKey: ["process-candidates"],
+    queryKey: queryKeys.processCandidates,
     staleTime: 30_000,
   });
   const modeStatusQuery = useQuery({
     enabled: open,
     queryFn: connectionModeStatus,
-    queryKey: ["connection-mode"],
+    queryKey: queryKeys.connectionMode,
   });
 
   const activeRouting = routingsQuery.data?.find((routing) => routing.isActive) ?? null;
@@ -160,7 +160,7 @@ export function PerAppProxyDialog({ onOpenChange, open }: PerAppProxyDialogProps
           await moveRoutingRule(saved.id, savedRule.id, "top");
         }
       }
-      await queryClient.invalidateQueries({ queryKey: ["routings"] });
+      // The routing-rule commands emit the `routings` invalidation.
       onOpenChange(false);
     } catch (saveError) {
       setError(redactOperationalError(saveError));
