@@ -5,30 +5,33 @@
   "target": "darwin-aarch64",
   "generatedAt": "2026-06-01T00:00:00.000Z",
   "sourceBundleDir": "tests/fixtures/release/signed-updater/darwin-aarch64",
+  "updaterPayloadSource": "macos/VoyaVPN.app.tar.gz",
   "artifacts": [
     {
-      "name": "voyavpn-0.1.0-stable-darwin-aarch64-updater.zip",
-      "path": "voyavpn-0.1.0-stable-darwin-aarch64-updater.zip",
+      "name": "voyavpn-0.1.0-stable-darwin-aarch64-updater.tar.gz",
+      "path": "voyavpn-0.1.0-stable-darwin-aarch64-updater.tar.gz",
       "kind": "updater",
       "target": "darwin-aarch64",
       "channel": "stable",
       "version": "0.1.0",
       "bytes": 50,
       "sha256": "75bbc0d0fca82b4025d13813923b963f620bd02c7288a72e1e9747e92d4877df",
-      "originalName": "VoyaVPN_0.1.0_darwin_aarch64.updater.zip",
-      "originalRelativePath": "updater/VoyaVPN_0.1.0_darwin_aarch64.updater.zip"
+      "originalName": "VoyaVPN.app.tar.gz",
+      "originalRelativePath": "macos/VoyaVPN.app.tar.gz",
+      "updaterPayload": true
     },
     {
-      "name": "voyavpn-0.1.0-stable-darwin-aarch64-updater.zip.sig",
-      "path": "voyavpn-0.1.0-stable-darwin-aarch64-updater.zip.sig",
+      "name": "voyavpn-0.1.0-stable-darwin-aarch64-updater.tar.gz.sig",
+      "path": "voyavpn-0.1.0-stable-darwin-aarch64-updater.tar.gz.sig",
       "kind": "signature",
       "target": "darwin-aarch64",
       "channel": "stable",
       "version": "0.1.0",
       "bytes": 444,
       "sha256": "862ab66b9630177e8fdc56d032fbb6b7c451830198bd47c818e42b68bc6dbccf",
-      "originalName": "VoyaVPN_0.1.0_darwin_aarch64.updater.zip.sig",
-      "originalRelativePath": "updater/VoyaVPN_0.1.0_darwin_aarch64.updater.zip.sig"
+      "originalName": "VoyaVPN.app.tar.gz.sig",
+      "originalRelativePath": "macos/VoyaVPN.app.tar.gz.sig",
+      "updaterSignature": true
     }
   ]
 }

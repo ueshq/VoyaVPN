@@ -1,8 +1,9 @@
-import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 
 import { truthy } from "../lib/common.mjs";
+import { approvedUpdaterPublicKeyFromEnv } from "../release/updater-signatures.mjs";
+import { normalizeReleaseUrl, sha256Text } from "../release/validation.mjs";
 
 function falsey(value) {
   return /^(0|false|no|off)$/i.test(String(value ?? "").trim());
@@ -18,72 +19,20 @@ function firstEnv(env, ...names) {
   return null;
 }
 
-function placeholderText(value) {
-  return (
-    !value ||
-    /placeholder|replace_before_release|replace-before-release|changeme|\btodo\b|\btbd\b|voyavpn\.example/i.test(
-      String(value),
-    )
-  );
-}
-
-function forbiddenStableHost(hostname) {
-  const host = hostname.toLowerCase();
-  return (
-    host === "example.com" ||
-    host.endsWith(".example.com") ||
-    host.endsWith(".example") ||
-    host.includes("example") ||
-    host === "github.com" ||
-    host.endsWith(".github.com") ||
-    host === "githubusercontent.com" ||
-    host.endsWith(".githubusercontent.com") ||
-    host === "github.io" ||
-    host.endsWith(".github.io") ||
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host === "::1" ||
-    host.endsWith(".test") ||
-    host.includes("placeholder")
-  );
-}
-
 function stableUpdaterBaseUrl(env) {
   const value = firstEnv(env, "VOYAVPN_UPDATES_BASE_URL");
   if (!value) {
     throw new Error("VOYAVPN_UPDATES_BASE_URL is required for stable Tauri updater builds.");
   }
 
-  let parsed;
-  try {
-    parsed = new URL(value);
-  } catch {
-    throw new Error(`VOYAVPN_UPDATES_BASE_URL is not a valid URL: ${value}`);
-  }
-  if (parsed.protocol !== "https:") {
-    throw new Error(`VOYAVPN_UPDATES_BASE_URL must use https for stable builds: ${value}`);
-  }
-  if (forbiddenStableHost(parsed.hostname)) {
-    throw new Error(
-      `VOYAVPN_UPDATES_BASE_URL must not use example, GitHub, placeholder, localhost, or .test hosts: ${value}`,
-    );
-  }
-
-  parsed.hash = "";
-  parsed.search = "";
-  return parsed.toString().replace(/\/+$/g, "");
+  return normalizeReleaseUrl(value, { label: "VOYAVPN_UPDATES_BASE_URL" });
 }
 
+// One resolver for the approved updater public key, shared with readiness and
+// the updater metadata command, so all three accept the variable names the
+// release docs promise and reject a VOYAVPN/TAURI mismatch identically.
 function stableUpdaterPublicKey(env) {
-  const value = firstEnv(env, "VOYAVPN_UPDATER_PUBLIC_KEY", "TAURI_UPDATER_PUBLIC_KEY");
-  if (placeholderText(value) || value.length < 32) {
-    throw new Error("VOYAVPN_UPDATER_PUBLIC_KEY must be the approved non-placeholder Tauri updater public key.");
-  }
-  return value;
-}
-
-function sha256Text(value) {
-  return createHash("sha256").update(value).digest("hex");
+  return approvedUpdaterPublicKeyFromEnv(env);
 }
 
 export function requestedStableUpdaterConfig(env = process.env) {

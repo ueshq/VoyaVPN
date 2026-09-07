@@ -50,6 +50,7 @@ jobs:
   preflight:
     name: Release Preflight
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -82,14 +83,17 @@ jobs:
       - name: Validate non-dry-run updater signing secret
         if: ${{ inputs.dry_run == false }}
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PATH }}
+          HAS_TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          HAS_TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PATH != '' }}
         run: |
-          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ] && [ -z "${TAURI_SIGNING_PRIVATE_KEY_PATH:-}" ]; then
+          if [ "$HAS_TAURI_SIGNING_PRIVATE_KEY" != "true" ] && [ "$HAS_TAURI_SIGNING_PRIVATE_KEY_PATH" != "true" ]; then
             echo "::error title=Missing secret::TAURI_SIGNING_PRIVATE_KEY or TAURI_SIGNING_PRIVATE_KEY_PATH is required when dry_run is false."
             exit 1
           fi
 
+      # This step only checks that signing material exists, so it receives
+      # presence booleans instead of the secrets themselves: nothing here can
+      # leak a certificate or password it never held.
       - name: Validate stable release prerequisites
         if: ${{ inputs.channel == 'stable' && inputs.dry_run == false }}
         env:
@@ -97,16 +101,15 @@ jobs:
           VOYAVPN_UPDATES_BASE_URL: ${{ vars.VOYAVPN_UPDATES_BASE_URL }}
           VOYAVPN_UPDATER_PUBLIC_KEY: ${{ vars.VOYAVPN_UPDATER_PUBLIC_KEY }}
           VOYAVPN_CORE_ASSETS_JSON: ${{ vars.VOYAVPN_CORE_ASSETS_JSON }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PATH }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          HAS_TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          HAS_TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PATH != '' }}
+          HAS_APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE != '' }}
+          HAS_APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD != '' }}
+          HAS_APPLE_ID: ${{ secrets.APPLE_ID != '' }}
+          HAS_APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD != '' }}
+          HAS_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID != '' }}
+          HAS_WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 != '' }}
+          HAS_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
         run: |
           node <<'NODE'
           const placeholder = /placeholder|replace_before_release|replace-before-release|changeme|\btodo\b|\btbd\b|voyavpn\.example/i;
@@ -122,16 +125,19 @@ jobs:
             return value;
           }
 
-          function requireOneOf(...names) {
-            const present = names.some((name) => (process.env[name]?.trim() ?? "").length > 0);
-            if (!present) {
-              throw new Error(`${names.join(" or ")} is required for stable releases.`);
+          function isPresent(name) {
+            return (process.env[`HAS_${name}`]?.trim() ?? "").toLowerCase() === "true";
+          }
+
+          function requirePresent(name) {
+            if (!isPresent(name)) {
+              throw new Error(`${name} is required for stable releases.`);
             }
-            for (const name of names) {
-              const value = process.env[name]?.trim() ?? "";
-              if (value && placeholder.test(value)) {
-                throw new Error(`${name} must not be a placeholder.`);
-              }
+          }
+
+          function requireOneOfPresent(...names) {
+            if (!names.some(isPresent)) {
+              throw new Error(`${names.join(" or ")} is required for stable releases.`);
             }
           }
 
@@ -184,7 +190,7 @@ jobs:
           if (!Array.isArray(coreAssets.assets) || coreAssets.assets.length === 0) {
             throw new Error("VOYAVPN_CORE_ASSETS_JSON must contain a non-empty assets array.");
           }
-          requireOneOf("TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PATH");
+          requireOneOfPresent("TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PATH");
           [
             "APPLE_CERTIFICATE",
             "APPLE_CERTIFICATE_PASSWORD",
@@ -193,7 +199,7 @@ jobs:
             "APPLE_TEAM_ID",
             "WINDOWS_CERTIFICATE_BASE64",
             "WINDOWS_CERTIFICATE_PASSWORD",
-          ].forEach(requireValue);
+          ].forEach(requirePresent);
           NODE
 
           pnpm release -- updater-config
@@ -204,6 +210,7 @@ jobs:
       - preflight
       - quality-gate
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -277,16 +284,20 @@ jobs:
           VOYAVPN_UPDATER_PUBLIC_KEY: ${{ vars.VOYAVPN_UPDATER_PUBLIC_KEY }}
           RELEASE_PROFILE: ${{ inputs.build_profile }}
           TAURI_TARGET: ${{ matrix.rust_target }}
+          # The updater signing key is needed on every runner; Apple signing and
+          # notarization material only on macOS. WINDOWS_CERTIFICATE_* is not
+          # passed at all: nothing on the `pnpm tauri:build` path reads it (only
+          # scripts/native/windows/build-app.mjs does, which this workflow never
+          # invokes), so exporting it here would hand a code-signing certificate
+          # to six runners that cannot use it.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PATH }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
         run: |
           build_args=(--target "$TAURI_TARGET")
           if [ "$RELEASE_PROFILE" = "debug" ]; then
@@ -324,6 +335,7 @@ jobs:
     name: CDN Staging Metadata
     needs: package
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -369,6 +381,7 @@ jobs:
     if: ${{ inputs.updater_metadata == true }}
     needs: package
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -425,6 +438,7 @@ jobs:
     name: Core Staging Metadata
     needs: package
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -481,6 +495,7 @@ jobs:
       - updater-metadata
       - core-staging-metadata
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -551,16 +566,18 @@ jobs:
           VOYAVPN_CDN_BASE_URL: ${{ vars.VOYAVPN_CDN_BASE_URL }}
           VOYAVPN_UPDATES_BASE_URL: ${{ vars.VOYAVPN_UPDATES_BASE_URL }}
           VOYAVPN_UPDATER_PUBLIC_KEY: ${{ vars.VOYAVPN_UPDATER_PUBLIC_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PATH }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          # Readiness only asserts that signing inputs exist, and it parses
+          # downloaded release metadata while it does so; it gets presence
+          # booleans rather than the signing material itself.
+          HAS_TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          HAS_TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PATH != '' }}
+          HAS_APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE != '' }}
+          HAS_APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD != '' }}
+          HAS_APPLE_ID: ${{ secrets.APPLE_ID != '' }}
+          HAS_APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD != '' }}
+          HAS_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID != '' }}
+          HAS_WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 != '' }}
+          HAS_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
         run: |
           pnpm release -- readiness \
             --mode stable \

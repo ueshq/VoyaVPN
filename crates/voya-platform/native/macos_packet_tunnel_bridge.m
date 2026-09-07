@@ -273,6 +273,26 @@ static char *VoyaCopySessionTerminalError(NETunnelProviderSession *session, NSSt
     return VoyaCopyCString([@"error:" stringByAppendingString:fallback]);
 }
 
+/// Waits for the session to leave the disconnecting state so a restart does not
+/// hand `startTunnelWithOptions:` a session macOS is still tearing down. Best
+/// effort: a timeout is reported by the caller's next status query rather than
+/// turning a disconnect into a failure.
+static void VoyaWaitForDisconnected(NEVPNConnection *connection, NSTimeInterval timeoutSeconds) {
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeoutSeconds];
+
+    while ([[NSDate date] compare:deadline] == NSOrderedAscending) {
+        if (connection.status == NEVPNStatusDisconnected || connection.status == NEVPNStatusInvalid) {
+            return;
+        }
+        if ([NSThread isMainThread]) {
+            NSDate *limit = [NSDate dateWithTimeIntervalSinceNow:0.1];
+            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:limit];
+        } else {
+            [NSThread sleepForTimeInterval:0.1];
+        }
+    }
+}
+
 static char *VoyaWaitForConnected(NETunnelProviderSession *session, int64_t timeoutMs) {
     int64_t effectiveTimeoutMs = timeoutMs > 0 ? timeoutMs : 20000;
     NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:(NSTimeInterval)effectiveTimeoutMs / 1000.0];
@@ -485,6 +505,7 @@ char *voya_macos_packet_tunnel_stop(void) {
         }
         if (manager != nil) {
             [manager.connection stopVPNTunnel];
+            VoyaWaitForDisconnected(manager.connection, 10.0);
         }
         return VoyaCopyCString(@"ok");
     }

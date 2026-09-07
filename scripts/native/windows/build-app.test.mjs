@@ -126,6 +126,7 @@ describe("Windows local app build", () => {
     };
     const appPath = installedWindowsAppPath(sourceEnv);
     const servicePath = "C:\\Program Files\\VoyaVPN\\voyavpn-tunnel-service.exe";
+    const singBoxPath = "C:\\Program Files\\VoyaVPN\\sing_box\\sing-box.exe";
     const nsis = "C:\\repo\\target\\release\\bundle\\nsis\\VoyaVPN_0.1.0_x64-setup.exe";
     const msi = "C:\\repo\\target\\release\\bundle\\msi\\VoyaVPN_0.1.0_x64_en-US.msi";
     const runCommand = vi.fn();
@@ -141,7 +142,7 @@ describe("Windows local app build", () => {
       repoRoot: "C:\\repo",
       version: "0.1.0",
       runCommand,
-      fileExists: (path) => path === appPath || path === servicePath,
+      fileExists: (path) => path === appPath || path === servicePath || path === singBoxPath,
       ensureGuiStopped,
       readExistingInstalls: () => [],
       discoverArtifacts: () => ({ msi, nsis }),
@@ -150,7 +151,7 @@ describe("Windows local app build", () => {
       logger,
     });
 
-    expect(result).toEqual({ appPath, servicePath, msi, nsis });
+    expect(result).toEqual({ appPath, servicePath, singBoxPath, msi, nsis });
     expect(ensureGuiStopped).toHaveBeenCalledOnce();
     expect(runCommand.mock.calls.map(([program, args]) => [program, args])).toEqual([
       ["pnpm", ["tauri:build", "--no-sign", "--bundles", "nsis", "msi"]],

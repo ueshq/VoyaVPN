@@ -251,18 +251,6 @@ where
     .map_err(|error| AppError::EventEmit(error.to_string()))
 }
 
-pub(crate) async fn emit_current_tun_status<R>(
-    app: &tauri::AppHandle<R>,
-    state: &AppState,
-) -> Result<(), AppError>
-where
-    R: tauri::Runtime,
-{
-    let config = current_config(state)?;
-    let status = tun_status_off_thread(state, config).await?;
-    emit_tun_changed(app, &status)
-}
-
 /// Applies the mutation's system proxy state, commits it with a compensating
 /// re-apply of `original`, then refreshes the sysproxy event and the tray.
 ///
@@ -329,6 +317,11 @@ where
     restart_if_connected_after_config_change(app, state, config, "Routing changed").await
 }
 
+/// Restarts the core after a configuration change, if it is running.
+///
+/// The whole sequence — the connecting/connected events, the system proxy, the
+/// TUN status, and the recovery when the restart fails — lives in
+/// `voya_app::core_flow`, shared with connect/disconnect and the crash paths.
 pub(super) async fn restart_if_connected_after_config_change<R>(
     app: &tauri::AppHandle<R>,
     state: &AppState,
@@ -338,81 +331,10 @@ pub(super) async fn restart_if_connected_after_config_change<R>(
 where
     R: tauri::Runtime,
 {
-    let status = runtime_manager(state)
-        .status()
+    core_flow(app, state)
+        .restart_if_connected(config, reason)
         .await
-        .map_err(runtime_error)?;
-    if status.state != SupervisorConnectionState::Connected {
-        return Ok(());
-    }
-
-    if let Err(error) = emit_runtime_log(app, LogLevel::Info, &format!("{reason}; restarting core"))
-    {
-        tracing::warn!(?error, "failed to emit core restart log");
-    }
-    if let Err(error) = emit_core_state(
-        app,
-        CoreState::Connecting,
-        Some(config.index_id.clone()).filter(|value| !value.is_empty()),
-        None,
-    ) {
-        tracing::warn!(?error, "failed to emit connecting state");
-    }
-
-    match runtime_manager(state).restart(config).await {
-        Ok(snapshot) => {
-            if let Err(error) = emit_runtime_log(
-                app,
-                LogLevel::Info,
-                &format!("Core supervisor restarted after {reason}"),
-            ) {
-                tracing::warn!(?error, "failed to emit core restart success log");
-            }
-            if let Err(error) = emit_core_state(app, CoreState::Connected, None, Some(&snapshot)) {
-                tracing::warn!(?error, "failed to emit connected state");
-            }
-            match apply_system_proxy(app, state, config, false) {
-                Ok(status) => {
-                    if let Err(error) = emit_sysproxy_changed(app, &status) {
-                        tracing::warn!(?error, "failed to emit system proxy state");
-                    }
-                }
-                Err(error) => report_post_commit_error(
-                    app,
-                    "Core restarted; system proxy update failed",
-                    &error.to_string(),
-                    AppNoticeLevel::Warning,
-                ),
-            }
-            if let Err(error) = emit_current_tun_status(app, state).await {
-                tracing::warn!(?error, "failed to emit current TUN status");
-            }
-            Ok(())
-        }
-        Err(error) => {
-            let message = error.to_string();
-            if let Err(emit_error) = emit_runtime_log(app, LogLevel::Error, &message) {
-                tracing::warn!(?emit_error, "failed to emit core restart error log");
-            }
-            if let Err(emit_error) = emit_core_state(app, CoreState::Disconnected, None, None) {
-                tracing::warn!(?emit_error, "failed to emit disconnected state");
-            }
-            if let Err(restore_error) = restore_system_proxy_after_native_tun_failure(
-                app,
-                state,
-                config,
-                "config-change restart failure",
-            ) {
-                report_post_commit_error(
-                    app,
-                    "Core restart and system proxy recovery failed",
-                    &format!("{restore_error:?}"),
-                    AppNoticeLevel::Error,
-                );
-            }
-            Err(runtime_error(error))
-        }
-    }
+        .map_err(runtime_error)
 }
 
 pub(super) async fn apply_system_proxy_if_connected_after_config_change<R>(

@@ -1,12 +1,20 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile, stat } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { readFile, stat } from "node:fs/promises";
+import { basename, dirname, relative, resolve } from "node:path";
+import { parseArgs } from "../../lib/args.mjs";
 import { repoRootFromScript } from "../../lib/common.mjs";
 import {
+  findSignatureArtifact,
+  forbiddenHostReason,
   isPositiveByteSize,
   isSha256Hex,
   isUrlDerivedFromBase,
   missingExpectedValues,
+  normalizeReleaseUrl,
+  placeholderText,
+  safeArtifactPath,
+  selectUpdaterPayload,
+  walkArtifactManifests,
 } from "../validation.mjs";
 import {
   resolveApprovedUpdaterPublicKey,
@@ -39,8 +47,27 @@ class StagingValidationError extends Error {
   }
 }
 
-function parseArgs(argv) {
-  const options = {
+const argSpec = {
+  "--release-index": { key: "releaseIndex" },
+  "--updater-metadata|--latest": { key: "updaterMetadata" },
+  "--updater-artifacts": { key: "updaterArtifacts" },
+  "--core-manifest|--core-assets": { key: "coreManifest" },
+  "--cdn-base-url": { key: "cdnBaseUrl" },
+  "--updates-base-url": { key: "updatesBaseUrl" },
+  "--expected-version|--version": { key: "expectedVersion" },
+  "--timeout-ms": { key: "timeoutMs", parse: (value) => Number.parseInt(value, 10) },
+  "--allow-test-hosts": { key: "allowTestHosts", value: true },
+  "--probe": { key: "probe", value: true },
+  "--download-and-hash": { key: "downloadAndHash", value: true, also: { probe: true } },
+  "--require-cache-headers": { key: "requireCacheHeaders", value: true, also: { probe: true } },
+  "--skip-release-index": { key: "releaseIndex", value: null },
+  "--skip-updater-metadata": { key: "updaterMetadata", value: null },
+  "--skip-updater-artifacts": { key: "updaterArtifacts", value: null },
+  "--skip-core-manifest": { key: "coreManifest", value: null },
+};
+
+function parseOptions(argv) {
+  const options = parseArgs(argv, argSpec, {
     releaseIndex: "dist/release/release-index.json",
     updaterMetadata: "dist/release/latest.json",
     updaterArtifacts: process.env.VOYAVPN_SIGNED_UPDATER_DIR ?? "dist/release/signed-updater",
@@ -53,80 +80,7 @@ function parseArgs(argv) {
     downloadAndHash: false,
     requireCacheHeaders: false,
     timeoutMs: 15_000,
-  };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const next = () => {
-      const value = argv[index + 1];
-      if (!value || value.startsWith("--")) {
-        throw new Error(`${arg} requires a value`);
-      }
-      index += 1;
-      return value;
-    };
-
-    switch (arg) {
-      case "--release-index":
-        options.releaseIndex = next();
-        break;
-      case "--updater-metadata":
-      case "--latest":
-        options.updaterMetadata = next();
-        break;
-      case "--updater-artifacts":
-        options.updaterArtifacts = next();
-        break;
-      case "--core-manifest":
-      case "--core-assets":
-        options.coreManifest = next();
-        break;
-      case "--cdn-base-url":
-        options.cdnBaseUrl = next();
-        break;
-      case "--updates-base-url":
-        options.updatesBaseUrl = next();
-        break;
-      case "--expected-version":
-      case "--version":
-        options.expectedVersion = next();
-        break;
-      case "--timeout-ms":
-        options.timeoutMs = Number.parseInt(next(), 10);
-        break;
-      case "--allow-test-hosts":
-        options.allowTestHosts = true;
-        break;
-      case "--probe":
-        options.probe = true;
-        break;
-      case "--download-and-hash":
-        options.downloadAndHash = true;
-        options.probe = true;
-        break;
-      case "--require-cache-headers":
-        options.requireCacheHeaders = true;
-        options.probe = true;
-        break;
-      case "--skip-release-index":
-        options.releaseIndex = null;
-        break;
-      case "--skip-updater-metadata":
-        options.updaterMetadata = null;
-        break;
-      case "--skip-updater-artifacts":
-        options.updaterArtifacts = null;
-        break;
-      case "--skip-core-manifest":
-        options.coreManifest = null;
-        break;
-      case "--help":
-        options.help = true;
-        break;
-      default:
-        throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
+  });
 
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0) {
     throw new Error("--timeout-ms must be a positive integer");
@@ -202,61 +156,13 @@ async function readJsonSource(source, label, options) {
   }
 }
 
-function forbiddenHostReason(hostname, options = {}) {
-  const host = hostname.toLowerCase();
-  if (options.allowTestHosts && (host === "localhost" || host === "127.0.0.1" || host === "::1" || host.endsWith(".test"))) {
-    return null;
-  }
-  if (host === "example.com" || host.endsWith(".example.com") || host.endsWith(".example") || host.includes("example")) {
-    return "example host";
-  }
-  if (
-    host === "github.com" ||
-    host.endsWith(".github.com") ||
-    host === "githubusercontent.com" ||
-    host.endsWith(".githubusercontent.com") ||
-    host === "github.io" ||
-    host.endsWith(".github.io")
-  ) {
-    return "GitHub host";
-  }
-  if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host.endsWith(".test")) {
-    return "local or test host";
-  }
-  if (host.includes("placeholder")) {
-    return "placeholder host";
-  }
-  return null;
-}
-
 function normalizeBaseUrl(value, label, options = {}) {
   const text = String(value ?? "").trim();
   if (!text) {
     return null;
   }
 
-  let parsed;
-  try {
-    parsed = new URL(text);
-  } catch {
-    throw new Error(`${label} is not a valid URL: ${text}`);
-  }
-
-  if (parsed.protocol !== "https:") {
-    throw new Error(`${label} must use https: ${text}`);
-  }
-  if (parsed.username || parsed.password) {
-    throw new Error(`${label} must not include credentials: ${text}`);
-  }
-
-  const reason = forbiddenHostReason(parsed.hostname, options);
-  if (reason) {
-    throw new Error(`${label} must not use ${reason}: ${text}`);
-  }
-
-  parsed.hash = "";
-  parsed.search = "";
-  return parsed.toString().replace(/\/+$/g, "");
+  return normalizeReleaseUrl(text, { allowTestHosts: Boolean(options.allowTestHosts), label });
 }
 
 function assertAllowedUrl(urlText, label, expectedBaseUrl, options, failures) {
@@ -336,65 +242,9 @@ function releaseTargetForArtifact(artifact) {
   return releaseTargetFor(artifact.target, artifact.arch);
 }
 
-async function walkManifests(root) {
-  let entries;
-  try {
-    entries = await readdir(root, { withFileTypes: true });
-  } catch (error) {
-    if (error && error.code === "ENOENT") {
-      return [];
-    }
-    throw error;
-  }
-
-  const manifests = [];
-  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) {
-      manifests.push(...(await walkManifests(path)));
-    } else if (entry.isFile() && entry.name === "artifact-manifest.json") {
-      manifests.push(path);
-    }
-  }
-  return manifests.sort((left, right) => left.localeCompare(right));
-}
-
-function artifactPath(artifact, context) {
-  const value = artifact?.path ?? artifact?.name;
-  if (!value || typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${context} is missing path or name`);
-  }
-
-  const normalized = value.trim().replaceAll("\\", "/");
-  if (normalized.startsWith("/") || normalized.split("/").some((segment) => segment === "..")) {
-    throw new Error(`${context} has an unsafe artifact path: ${value}`);
-  }
-
-  return normalized;
-}
-
-function isUpdaterPayload(artifact) {
-  return artifact.kind === "updater" && !String(artifact.name ?? "").toLowerCase().endsWith(".sig");
-}
-
-function findSignatureArtifact(payload, artifacts) {
-  return artifacts.find((artifact) => {
-    if (artifact.kind !== "signature") {
-      return false;
-    }
-
-    return (
-      artifact.originalRelativePath === `${payload.originalRelativePath}.sig` ||
-      artifact.originalName === `${payload.originalName}.sig` ||
-      artifact.path === `${payload.path}.sig` ||
-      artifact.name === `${payload.name}.sig`
-    );
-  });
-}
-
 async function loadUpdaterArtifactTargets(root) {
   const targets = new Map();
-  for (const manifestPath of await walkManifests(root)) {
+  for (const manifestPath of await walkArtifactManifests(root)) {
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     const target = String(manifest.target ?? "").trim();
     if (!target) {
@@ -473,9 +323,7 @@ async function verifyUpdaterMetadataSignatures(latest, rawOptions = {}) {
     }
 
     const expectedPayloadName = updaterFileNameFromUrl(platform.url);
-    const payload =
-      targetArtifacts.artifacts.find((artifact) => isUpdaterPayload(artifact) && artifact.name === expectedPayloadName) ??
-      targetArtifacts.artifacts.find(isUpdaterPayload);
+    const payload = selectUpdaterPayload(targetArtifacts.artifacts);
     if (!payload) {
       failures.push(`${label} has no local updater payload artifact`);
       continue;
@@ -492,8 +340,8 @@ async function verifyUpdaterMetadataSignatures(latest, rawOptions = {}) {
     }
 
     try {
-      const payloadPath = resolve(targetArtifacts.manifestDir, artifactPath(payload, `${label} payload`));
-      const signaturePath = resolve(targetArtifacts.manifestDir, artifactPath(signatureArtifact, `${label} signature`));
+      const payloadPath = resolve(targetArtifacts.manifestDir, safeArtifactPath(payload, `${label} payload`));
+      const signaturePath = resolve(targetArtifacts.manifestDir, safeArtifactPath(signatureArtifact, `${label} signature`));
       await assertFile(payloadPath, `${label} payload`);
       await assertFile(signaturePath, `${label} signature`);
       const signature = (await readFile(signaturePath, "utf8")).trim();
@@ -545,9 +393,14 @@ function validationOptions(options) {
 function validateReleaseIndex(index, rawOptions = {}) {
   const options = validationOptions(rawOptions);
   const failures = [];
-  const baseUrl = normalizeBaseUrl(options.cdnBaseUrl ?? index?.baseUrl, "CDN base URL", options);
+  // The approved base URL must come from the operator (--cdn-base-url or
+  // VOYAVPN_CDN_BASE_URL). Falling back to index.baseUrl let the document under
+  // test declare the base its own URLs were then checked against.
+  const baseUrl = normalizeBaseUrl(options.cdnBaseUrl, "CDN base URL", options);
   if (!baseUrl) {
-    failures.push("CDN base URL is required for release-index validation");
+    failures.push("CDN base URL is required for release-index validation (--cdn-base-url or VOYAVPN_CDN_BASE_URL)");
+  } else if (index?.baseUrl && normalizeBaseUrl(index.baseUrl, "release-index baseUrl", options) !== baseUrl) {
+    failures.push(`release-index baseUrl must be the approved ${baseUrl}, got ${String(index.baseUrl)}`);
   }
 
   if (!index || typeof index !== "object") {
@@ -599,12 +452,6 @@ function validateReleaseIndex(index, rawOptions = {}) {
   };
 }
 
-function placeholderSignature(signature) {
-  return /placeholder|replace_before_release|replace-before-release|changeme|\btodo\b|\btbd\b|voyavpn\.example/i.test(
-    String(signature ?? ""),
-  );
-}
-
 function validateUpdaterMetadata(latest, rawOptions = {}) {
   const options = validationOptions(rawOptions);
   const failures = [];
@@ -635,7 +482,7 @@ function validateUpdaterMetadata(latest, rawOptions = {}) {
       continue;
     }
     const signature = requiredString(platform.signature, `${label} signature`, failures);
-    if (signature && placeholderSignature(signature)) {
+    if (signature && placeholderText(signature)) {
       failures.push(`${label} signature must be a real non-placeholder Tauri updater signature`);
     }
     const parsed = assertAllowedUrl(platform.url, `${label} url`, baseUrl, options, failures);
@@ -655,9 +502,11 @@ function validateUpdaterMetadata(latest, rawOptions = {}) {
 function validateCoreManifest(manifest, rawOptions = {}) {
   const options = validationOptions(rawOptions);
   const failures = [];
-  const baseUrl = normalizeBaseUrl(options.cdnBaseUrl ?? manifest?.baseUrl, "CDN base URL", options);
+  const baseUrl = normalizeBaseUrl(options.cdnBaseUrl, "CDN base URL", options);
   if (!baseUrl) {
-    failures.push("CDN base URL is required for core manifest validation");
+    failures.push("CDN base URL is required for core manifest validation (--cdn-base-url or VOYAVPN_CDN_BASE_URL)");
+  } else if (manifest?.baseUrl && normalizeBaseUrl(manifest.baseUrl, "core manifest baseUrl", options) !== baseUrl) {
+    failures.push(`core manifest baseUrl must be the approved ${baseUrl}, got ${String(manifest.baseUrl)}`);
   }
 
   if (!manifest || typeof manifest !== "object") {
@@ -871,7 +720,7 @@ async function probeCandidates(candidates, options) {
 }
 
 async function main(argv = []) {
-  const options = parseArgs(argv);
+  const options = parseOptions(argv);
   if (options.help) {
     printHelp();
     return;

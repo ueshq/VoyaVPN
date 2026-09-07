@@ -269,8 +269,31 @@ pub fn windows_value_name(app_name: &str, executable: &Path) -> String {
 pub fn linux_desktop_entry(app_name: &str, executable: &Path) -> String {
     format!(
         "[Desktop Entry]\nType=Application\nExec={}\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nName[en_US]={app_name}\nName={app_name}\nComment[en_US]={app_name}\nComment={app_name}\n",
-        executable.display()
+        desktop_entry_exec_argument(executable)
     )
+}
+
+/// Quotes one `Exec=` argument per the Desktop Entry specification. The value
+/// is always double-quoted, because a path such as `/home/u/My Apps/VoyaVPN`
+/// would otherwise launch `/home/u/My`. Inside the quotes `"`, `` ` ``, `$`
+/// and `\` are backslash-escaped, `%` is doubled so it is not read as a field
+/// code, and every escaping backslash is doubled again because `Exec` is first
+/// unescaped as a desktop-file string.
+fn desktop_entry_exec_argument(executable: &Path) -> String {
+    let mut quoted = String::from("\"");
+    for character in executable.to_string_lossy().chars() {
+        match character {
+            '\\' => quoted.push_str(r"\\\\"),
+            '"' | '`' | '$' => {
+                quoted.push_str(r"\\");
+                quoted.push(character);
+            }
+            '%' => quoted.push_str("%%"),
+            _ => quoted.push(character),
+        }
+    }
+    quoted.push('"');
+    quoted
 }
 
 #[must_use]
@@ -581,7 +604,8 @@ mod autostart_tests {
         assert!(matches!(
             &plan.actions[..],
             [AutostartAction::WriteFile { path, contents }]
-            if path.ends_with("VoyaVPN.desktop") && contents.contains("Exec=/opt/VoyaVPN/voyavpn")
+            if path.ends_with("VoyaVPN.desktop")
+                && contents.contains("Exec=\"/opt/VoyaVPN/voyavpn\"")
         ));
     }
 
@@ -692,6 +716,29 @@ mod autostart_tests {
                 && value_name.starts_with("VoyaVPN_")
                 && value == "\"C:\\Program Files\\VoyaVPN\\voyavpn.exe\""
         ));
+    }
+
+    #[test]
+    fn autostart_linux_desktop_entry_quotes_paths_with_reserved_characters() {
+        let entry = linux_desktop_entry(
+            AUTOSTART_APP_NAME,
+            Path::new("/home/alice/My Apps/VoyaVPN 100% $edge.AppImage"),
+        );
+
+        assert!(
+            entry.contains("Exec=\"/home/alice/My Apps/VoyaVPN 100%% \\\\$edge.AppImage\""),
+            "unexpected Exec line: {entry}"
+        );
+    }
+
+    #[test]
+    fn autostart_linux_desktop_entry_escapes_quotes_backticks_and_backslashes() {
+        let entry = linux_desktop_entry(AUTOSTART_APP_NAME, Path::new("/opt/a\"b`c\\d/voyavpn"));
+
+        assert!(
+            entry.contains("Exec=\"/opt/a\\\\\"b\\\\`c\\\\\\\\d/voyavpn\""),
+            "unexpected Exec line: {entry}"
+        );
     }
 
     #[test]

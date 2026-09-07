@@ -138,13 +138,19 @@ Required variable and secret names:
 - `WINDOWS_CERTIFICATE_PASSWORD`
 - `VOYAVPN_RELEASE_ARTIFACTS_DIR`, `VOYAVPN_SIGNED_UPDATER_DIR`, and `VOYAVPN_CORE_ASSETS_FILE` when the prepared shell does not use the default stable artifact paths
 
-Prepared release shell sequence:
+Prepared release shell sequence (`updater-config` first: stable readiness scans
+the overlay it generates, and stops with that instruction when it is missing):
 
 ```sh
 export VOYAVPN_RELEASE_CHANNEL=stable
 pnpm release -- updater-config
 pnpm release -- readiness --mode stable
 ```
+
+In CI the signing secrets themselves are not exported to the preflight and final
+readiness steps: those steps only check that inputs exist, so they receive
+`HAS_<NAME>` presence booleans instead, and Apple signing material is exported
+only to the macOS package runners.
 
 Expected unprepared-shell failures include missing `VOYAVPN_CDN_BASE_URL`, missing `VOYAVPN_UPDATES_BASE_URL`, missing `VOYAVPN_UPDATER_PUBLIC_KEY`, missing `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH`, missing platform signing inputs, missing real stable artifacts, stable checks pointed at fixtures, placeholder updater signatures, or forbidden production URLs. These failures are not repository blockers when they occur in a local shell that has not been provisioned with external production inputs.
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { prepareTauriInvocation } from "./cli.mjs";
+import { parseRustTargetTriple, prepareTauriInvocation } from "./cli.mjs";
 
 describe("Tauri CLI", () => {
   it("defaults to dev and adds the generated core overlay", async () => {
@@ -56,6 +56,36 @@ describe("Tauri CLI", () => {
       "--bundles",
       "app",
     ]);
+  });
+
+  it("stages the seed for the requested cross-compilation target", async () => {
+    const ensureSeed = vi.fn();
+    await prepareTauriInvocation(["build", "--target", "aarch64-apple-darwin", "--bundles", "app"], {
+      repoRoot: "/repo",
+      sourceEnv: {},
+      ensureSeed,
+      writeCoreOverlay: () => null,
+    });
+
+    expect(ensureSeed).toHaveBeenCalledWith({ arch: "arm64", platform: "darwin", repoRoot: "/repo" });
+
+    const inlineEnsureSeed = vi.fn();
+    await prepareTauriInvocation(["build", "--target=x86_64-pc-windows-msvc"], {
+      repoRoot: "/repo",
+      sourceEnv: {},
+      ensureSeed: inlineEnsureSeed,
+      writeCoreOverlay: () => null,
+    });
+
+    expect(inlineEnsureSeed).toHaveBeenCalledWith({ arch: "x64", platform: "win32", repoRoot: "/repo" });
+  });
+
+  it("maps Rust target triples to core seed platforms", () => {
+    expect(parseRustTargetTriple("x86_64-unknown-linux-gnu")).toEqual({ arch: "x64", platform: "linux" });
+    expect(parseRustTargetTriple("aarch64-unknown-linux-musl")).toEqual({ arch: "arm64", platform: "linux" });
+    expect(parseRustTargetTriple("universal-apple-darwin")).toEqual({ platform: "darwin" });
+    expect(parseRustTargetTriple("x86_64-unknown-freebsd")).toBeNull();
+    expect(parseRustTargetTriple(undefined)).toBeNull();
   });
 
   it("passes non-build commands through without build preparation", async () => {

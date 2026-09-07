@@ -1,4 +1,4 @@
-use super::{lifecycle::*, *};
+use super::*;
 
 pub(super) fn current_config(state: &AppState) -> Result<AppConfig, AppError> {
     Ok(state.config_mutations().current_config())
@@ -274,47 +274,6 @@ pub(super) fn runtime_proxy_url(
     app_runtime_proxy_url(prefer_proxy, proxy_url, config, TargetOs::current())
 }
 
-pub(crate) fn restore_system_proxy<R>(
-    _app: &tauri::AppHandle<R>,
-    state: &AppState,
-) -> Result<SystemProxyStatus, AppError>
-where
-    R: tauri::Runtime,
-{
-    let config = current_config(state)?;
-
-    state
-        .system_proxy_manager()
-        .restore(&config)
-        .map_err(sysproxy_error)
-}
-
-pub(crate) fn restore_system_proxy_after_native_tun_failure<R>(
-    app: &tauri::AppHandle<R>,
-    state: &AppState,
-    config: &AppConfig,
-    reason: &str,
-) -> Result<(), AppError>
-where
-    R: tauri::Runtime,
-{
-    if !should_disable_native_tun_system_proxy(config, TargetOs::current()) {
-        return Ok(());
-    }
-
-    match restore_system_proxy(app, state) {
-        Ok(status) => emit_sysproxy_changed(app, &status),
-        Err(error) => {
-            emit_runtime_log(
-                app,
-                LogLevel::Warn,
-                &format!("System proxy restore after native TUN {reason} failed: {error:?}"),
-            )?;
-            Ok(())
-        }
-    }
-}
-
 pub(super) fn runtime_status_response(snapshot: SupervisorSnapshot) -> RuntimeStatusResponse {
     RuntimeStatusResponse {
         state: match snapshot.state {
@@ -327,13 +286,6 @@ pub(super) fn runtime_status_response(snapshot: SupervisorSnapshot) -> RuntimeSt
         running_core_type: snapshot
             .running_core_type
             .map(voya_app::contract_map::core_type_to_contract),
-    }
-}
-
-pub(super) fn core_state_from_snapshot(snapshot: &SupervisorSnapshot) -> CoreState {
-    match snapshot.state {
-        SupervisorConnectionState::Disconnected => CoreState::Disconnected,
-        SupervisorConnectionState::Connected => CoreState::Connected,
     }
 }
 

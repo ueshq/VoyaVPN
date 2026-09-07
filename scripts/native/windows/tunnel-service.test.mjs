@@ -2,11 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   installTunnelService,
+  managedSingBoxPath,
   managedTunnelServicePath,
+  tunnelRuntimeStagingPath,
   tunnelServiceErrorExitCode,
   tunnelServiceSourcePath,
   uninstallTunnelService,
   WINDOWS_TUN_SERVICE_NAME,
+  WINDOWS_TUN_SERVICE_SDDL,
 } from "./tunnel-service.mjs";
 
 const missingService = { status: 1, stdout: "[SC] OpenService FAILED 1060", stderr: "" };
@@ -14,14 +17,18 @@ const runningService = { status: 0, stdout: "STATE              : 4  RUNNING", s
 const stoppingService = { status: 0, stdout: "STATE              : 3  STOP_PENDING", stderr: "" };
 const stoppedService = { status: 0, stdout: "STATE              : 1  STOPPED", stderr: "" };
 
+const env = { ProgramFiles: "C:\\Program Files", ProgramData: "C:\\ProgramData" };
+
 function installFixture(queryResults) {
   const repoRoot = "/repo";
   const sourcePath = tunnelServiceSourcePath(repoRoot);
-  const destinationPath = "C:\\Program Files\\VoyaVPN\\voyavpn-tunnel-service.exe";
-  const files = new Set([sourcePath]);
+  const singBoxSourcePath = "/repo/seed/sing-box.exe";
+  const destinationPath = managedTunnelServicePath(env);
+  const singBoxDestinationPath = managedSingBoxPath(env);
+  const files = new Set([sourcePath, singBoxSourcePath]);
   const runCommand = vi.fn();
   const copyFile = vi.fn((source, destination) => {
-    expect(source).toBe(sourcePath);
+    expect([sourcePath, singBoxSourcePath]).toContain(source);
     files.add(destination);
   });
   const captureCommand = vi.fn((_program, args) => {
@@ -36,22 +43,27 @@ function installFixture(queryResults) {
     }
     throw new Error(`unexpected sc command: ${args.join(" ")}`);
   });
+  const makeDirectory = vi.fn();
 
   return {
     options: {
       platform: "win32",
-      env: { ProgramFiles: "C:\\Program Files" },
+      env,
       repoRoot,
       captureCommand,
       runCommand,
       fileExists: (path) => files.has(path),
       fileStat: () => ({ isFile: () => true }),
-      makeDirectory: vi.fn(),
+      makeDirectory,
       copyFile,
       hashFile: () => "same-hash",
       wait: vi.fn(),
+      singBoxSourcePath,
     },
     destinationPath,
+    singBoxDestinationPath,
+    singBoxSourcePath,
+    makeDirectory,
     runCommand,
   };
 }
@@ -123,8 +135,10 @@ describe("Windows tunnel service helper", () => {
     );
   });
 
-  it("uninstalls idempotently and removes only the managed executable", () => {
-    const destinationPath = "C:\\Program Files\\VoyaVPN\\voyavpn-tunnel-service.exe";
+  it("uninstalls idempotently and removes only the managed executables", () => {
+    const destinationPath = managedTunnelServicePath(env);
+    const singBoxDestinationPath = managedSingBoxPath(env);
+    const staged = new Set([destinationPath, singBoxDestinationPath]);
     const removeFile = vi.fn();
     const runCommand = vi.fn();
     const captureCommand = vi.fn()
@@ -133,11 +147,11 @@ describe("Windows tunnel service helper", () => {
 
     const result = uninstallTunnelService({
       platform: "win32",
-      env: { ProgramFiles: "C:\\Program Files" },
+      env,
       repoRoot: "/repo",
       captureCommand,
       runCommand,
-      fileExists: (path) => path === destinationPath,
+      fileExists: (path) => staged.has(path),
       removeFile,
       wait: vi.fn(),
     });
@@ -149,6 +163,7 @@ describe("Windows tunnel service helper", () => {
       { cwd: "/repo", shell: false },
     );
     expect(removeFile).toHaveBeenCalledWith(destinationPath, { force: true });
+    expect(removeFile).toHaveBeenCalledWith(singBoxDestinationPath, { force: true });
   });
 
   it("reports a service stop timeout before replacing the executable", () => {
@@ -175,11 +190,72 @@ describe("Windows tunnel service helper", () => {
       "Timed out after 20000ms waiting for VoyaVPNTunnelService to stop.",
     ))).toBe(20);
     expect(tunnelServiceErrorExitCode(new Error(
-      "Windows tunnel service copy verification failed.",
+      "the Windows tunnel service copy verification failed.",
+    ))).toBe(21);
+    expect(tunnelServiceErrorExitCode(new Error(
+      "The sing-box core seed is missing: /repo/seed/sing-box.exe.",
     ))).toBe(21);
     expect(tunnelServiceErrorExitCode(new Error(
       "sc.exe config VoyaVPNTunnelService failed.",
     ))).toBe(22);
+  });
+
+  it("stages the sing-box core beside the service so the caller cannot pick the binary", () => {
+    const fixture = installFixture([missingService, stoppedService]);
+
+    const result = installTunnelService(fixture.options);
+
+    expect(result.singBoxDestinationPath).toBe(
+      "C:\\Program Files\\VoyaVPN\\sing_box\\sing-box.exe",
+    );
+    expect(fixture.options.copyFile).toHaveBeenCalledWith(
+      fixture.singBoxSourcePath,
+      fixture.singBoxDestinationPath,
+    );
+  });
+
+  it("refuses to install without a staged sing-box seed", () => {
+    const fixture = installFixture([missingService, stoppedService]);
+    fixture.options.fileExists = (path) => path === tunnelServiceSourcePath("/repo");
+
+    expect(() => installTunnelService(fixture.options)).toThrow(/sing-box core seed is missing/);
+    expect(fixture.options.copyFile).not.toHaveBeenCalled();
+  });
+
+  it("locks the runtime staging root to SYSTEM and Administrators", () => {
+    const fixture = installFixture([missingService, stoppedService]);
+
+    const result = installTunnelService(fixture.options);
+
+    expect(result.runtimeStagingDir).toBe(tunnelRuntimeStagingPath(env));
+    expect(fixture.makeDirectory).toHaveBeenCalledWith(result.runtimeStagingDir, {
+      recursive: true,
+    });
+    expect(fixture.runCommand).toHaveBeenCalledWith(
+      "icacls.exe",
+      [
+        result.runtimeStagingDir,
+        "/inheritance:r",
+        "/grant",
+        "*S-1-5-18:(OI)(CI)F",
+        "/grant",
+        "*S-1-5-32-544:(OI)(CI)F",
+      ],
+      { cwd: "/repo", shell: false },
+    );
+  });
+
+  it("grants interactive users start and stop through an explicit service DACL", () => {
+    const fixture = installFixture([missingService, stoppedService]);
+
+    installTunnelService(fixture.options);
+
+    expect(fixture.runCommand).toHaveBeenCalledWith(
+      "sc.exe",
+      ["sdset", WINDOWS_TUN_SERVICE_NAME, WINDOWS_TUN_SERVICE_SDDL],
+      { cwd: "/repo", shell: false },
+    );
+    expect(WINDOWS_TUN_SERVICE_SDDL).toContain("(A;;CCLCSWRPWPLOCRRC;;;IU)");
   });
 
   it("rejects service installation outside Windows before changing anything", () => {

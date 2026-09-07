@@ -219,12 +219,33 @@ fn current_effective_uid() -> u32 {
     unsafe { libc::geteuid() }
 }
 
+/// Windows has no mode bits to lock down, but the reparse-point and
+/// non-regular-file checks still matter: these scripts are later executed, so a
+/// pre-planted link at the target path must not redirect the write.
 #[cfg(not(unix))]
 fn write_generated_script_file(
     path: &Path,
     contents: &str,
     _executable: bool,
 ) -> Result<(), ProcessError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(ProcessError::InsecureGeneratedScriptPath {
+                path: path.to_path_buf(),
+                reason: "generated script path is a symbolic link",
+            });
+        }
+        Ok(metadata) if !metadata.file_type().is_file() => {
+            return Err(ProcessError::InsecureGeneratedScriptPath {
+                path: path.to_path_buf(),
+                reason: "generated script path is not a regular file",
+            });
+        }
+        Ok(_) => {}
+        Err(source) if source.kind() == io::ErrorKind::NotFound => {}
+        Err(source) => return Err(generated_script_io_error(path, source)),
+    }
+
     fs::write(path, contents).map_err(|source| generated_script_io_error(path, source))
 }
 

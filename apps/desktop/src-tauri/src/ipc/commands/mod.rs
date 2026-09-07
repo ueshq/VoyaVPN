@@ -44,8 +44,7 @@ use voya_app::subscriptions::{SubscriptionManager, SubscriptionManagerError};
 use voya_app::supervisor::{SupervisorConnectionState, SupervisorSnapshot};
 use voya_app::sysproxy::{
     runtime_proxy_url as app_runtime_proxy_url,
-    runtime_system_proxy_config as app_runtime_system_proxy_config,
-    should_disable_native_tun_system_proxy, SystemProxyManagerError,
+    runtime_system_proxy_config as app_runtime_system_proxy_config, SystemProxyManagerError,
 };
 use voya_app::tun::{TunManager, TunManagerError};
 use voya_app::updates::{UpdateManager, UpdateManagerError};
@@ -92,6 +91,7 @@ const MISSING_CORE_SEARCH_DIR_LABEL: &str = "application core directory";
 
 mod app;
 mod connection;
+mod core_flow;
 mod dns;
 mod groups;
 mod lifecycle;
@@ -125,8 +125,5 @@ pub use tun::*;
 pub use updates::*;
 
 pub(crate) use app::register_show_window_shortcut_for_config;
-pub(crate) use lifecycle::emit_current_tun_status;
-pub(crate) use support::{
-    emit_core_state, emit_runtime_log, emit_statistics_zero,
-    restore_system_proxy_after_native_tun_failure,
-};
+pub(crate) use core_flow::core_flow;
+pub(crate) use support::emit_runtime_log;

@@ -38,6 +38,31 @@ describe("release index", () => {
     expect(evidence.checksumCount).toBe(6);
   });
 
+  it("treats --version as an expectation instead of overriding the manifests", async () => {
+    const outputDir = await mkdtemp(join(tmpdir(), "voyavpn-release-index-version-"));
+    temporaryDirectories.push(outputDir);
+    const output = join(outputDir, "release-index.json");
+
+    const run = (version) =>
+      main([
+        "--input",
+        resolve(repoRoot, "tests/fixtures/release/artifacts"),
+        "--out",
+        output,
+        "--base-url",
+        "https://cdn.voyavpn.dev/stable",
+        "--channel",
+        "stable",
+        "--version",
+        version,
+      ]);
+
+    await expect(run("0.2.0")).rejects.toThrow(/version 0\.1\.0 does not match expected 0\.2\.0/);
+
+    await run("0.1.0");
+    expect(JSON.parse(await readFile(output, "utf8")).version).toBe("0.1.0");
+  });
+
   it("fails closed for an example stable host", async () => {
     await expect(main([
       "--input",

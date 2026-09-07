@@ -15,6 +15,7 @@ import {
   repoRootFromScript,
   run,
 } from "../../lib/common.mjs";
+import { singBoxExecutableName, singBoxSeedDir } from "../../core/sing-box-installer.mjs";
 
 export const WINDOWS_TUN_SERVICE_NAME = "VoyaVPNTunnelService";
 export const WINDOWS_TUN_SERVICE_DISPLAY_NAME = "VoyaVPN Tunnel Service";
@@ -24,8 +25,26 @@ export const WINDOWS_TUN_EXIT_STOP_TIMEOUT = 20;
 export const WINDOWS_TUN_EXIT_COPY_FAILED = 21;
 export const WINDOWS_TUN_EXIT_REGISTRATION_FAILED = 22;
 
+/**
+ * Service DACL applied with `sc sdset`. The desktop client is a per-user,
+ * non-elevated process (`voya_platform::tun` runs `sc.exe start` without
+ * elevation), so Interactive Users need SERVICE_START (RP) and SERVICE_STOP
+ * (WP) on top of the query rights the SCM grants them by default. Everything
+ * else keeps the SCM defaults: full control for SYSTEM and Administrators,
+ * query-only for service logon accounts. Granting stop to interactive users is
+ * a deliberate trade: any local process can drop the tunnel, but no caller can
+ * choose what the service executes — the core path and the accepted config
+ * roots are pinned inside the service binary.
+ */
+export const WINDOWS_TUN_SERVICE_SDDL =
+  "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)"
+  + "(A;;CCLCSWRPWPLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)";
+
 const defaultRepoRoot = repoRootFromScript(import.meta.url);
 const serviceExecutableName = "voyavpn-tunnel-service.exe";
+const productDirName = "VoyaVPN";
+const singBoxCoreDirName = "sing_box";
+const runtimeStagingDirName = "runtime";
 const sleeper = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
 
 function environmentValue(env, ...names) {
@@ -142,12 +161,38 @@ export function tunnelServiceSourcePath(repoRoot = defaultRepoRoot) {
   return resolve(repoRoot, "target", "release", serviceExecutableName);
 }
 
-export function managedTunnelServicePath(env = process.env) {
+function managedProductDir(env) {
   const programFiles = environmentValue(env, "ProgramW6432", "ProgramFiles");
   if (!programFiles) {
     throw new Error("ProgramFiles is required to install the Windows tunnel service.");
   }
-  return win32.join(programFiles, "VoyaVPN", serviceExecutableName);
+  return win32.join(programFiles, productDirName);
+}
+
+export function managedTunnelServicePath(env = process.env) {
+  return win32.join(managedProductDir(env), serviceExecutableName);
+}
+
+/**
+ * The service resolves its sing-box from `<service dir>\sing_box`, never from
+ * the caller-supplied config path, so the core must be staged into the same
+ * administrator-owned directory as the service binary.
+ */
+export function managedSingBoxPath(env = process.env) {
+  return win32.join(managedProductDir(env), singBoxCoreDirName, "sing-box.exe");
+}
+
+/** SYSTEM-owned staging root the service copies accepted configs into. */
+export function tunnelRuntimeStagingPath(env = process.env) {
+  const programData = environmentValue(env, "ProgramData");
+  if (!programData) {
+    throw new Error("ProgramData is required to prepare the VoyaVPN tunnel runtime directory.");
+  }
+  return win32.join(programData, productDirName, runtimeStagingDirName);
+}
+
+export function singBoxSeedExecutablePath(repoRoot = defaultRepoRoot) {
+  return resolve(singBoxSeedDir(repoRoot), singBoxExecutableName("win32"));
 }
 
 export function buildTunnelService({ repoRoot = defaultRepoRoot, runCommand = run } = {}) {
@@ -156,6 +201,48 @@ export function buildTunnelService({ repoRoot = defaultRepoRoot, runCommand = ru
     shell: false,
   });
   return tunnelServiceSourcePath(repoRoot);
+}
+
+function stageProtectedFile({
+  sourcePath,
+  destinationPath,
+  label,
+  copyFile,
+  fileExists,
+  hashFile,
+  makeDirectory,
+}) {
+  try {
+    makeDirectory(win32.dirname(destinationPath), { recursive: true });
+    copyFile(sourcePath, destinationPath);
+  } catch (error) {
+    throw new Error(
+      `Unable to copy ${label} into the protected location ${destinationPath}. Approve the UAC prompt or run this helper from an elevated terminal.`,
+      { cause: error },
+    );
+  }
+  if (!fileExists(destinationPath) || hashFile(sourcePath) !== hashFile(destinationPath)) {
+    throw new Error(`${label} copy verification failed: ${destinationPath}`);
+  }
+}
+
+/**
+ * Removes inherited access from the runtime staging root so only SYSTEM and
+ * Administrators can write the configs the service hands to sing-box.
+ */
+function lockRuntimeStagingDirectory(runCommand, runtimeDir, cwd) {
+  runCommand(
+    "icacls.exe",
+    [
+      runtimeDir,
+      "/inheritance:r",
+      "/grant",
+      "*S-1-5-18:(OI)(CI)F",
+      "/grant",
+      "*S-1-5-32-544:(OI)(CI)F",
+    ],
+    { cwd, shell: false },
+  );
 }
 
 export function installTunnelService({
@@ -171,6 +258,7 @@ export function installTunnelService({
   hashFile = defaultHashFile,
   wait = defaultWait,
   ensureBuilt = buildTunnelService,
+  singBoxSourcePath = singBoxSeedExecutablePath(repoRoot),
   timeoutMs = 20_000,
   pollIntervalMs = 250,
 } = {}) {
@@ -179,11 +267,18 @@ export function installTunnelService({
 
   const sourcePath = tunnelServiceSourcePath(repoRoot);
   const destinationPath = managedTunnelServicePath(env);
+  const singBoxDestinationPath = managedSingBoxPath(env);
+  const runtimeStagingDir = tunnelRuntimeStagingPath(env);
   if (!fileExists(sourcePath)) {
     ensureBuilt({ repoRoot, runCommand });
   }
   if (!fileExists(sourcePath) || !fileStat(sourcePath).isFile()) {
     throw new Error(`Windows tunnel service build output is missing: ${sourcePath}`);
+  }
+  if (!fileExists(singBoxSourcePath) || !fileStat(singBoxSourcePath).isFile()) {
+    throw new Error(
+      `The sing-box core seed is missing: ${singBoxSourcePath}. Run pnpm core:sing-box:install and retry.`,
+    );
   }
 
   const serviceExisted = stopService({
@@ -194,18 +289,29 @@ export function installTunnelService({
     pollIntervalMs,
   });
 
-  try {
-    makeDirectory(win32.dirname(destinationPath), { recursive: true });
-    copyFile(sourcePath, destinationPath);
-  } catch (error) {
-    throw new Error(
-      `Unable to copy the Windows tunnel service into the protected location ${destinationPath}. Approve the UAC prompt or run this helper from an elevated terminal.`,
-      { cause: error },
-    );
-  }
-  if (!fileExists(destinationPath) || hashFile(sourcePath) !== hashFile(destinationPath)) {
-    throw new Error(`Windows tunnel service copy verification failed: ${destinationPath}`);
-  }
+  stageProtectedFile({
+    sourcePath,
+    destinationPath,
+    label: "the Windows tunnel service",
+    copyFile,
+    fileExists,
+    hashFile,
+    makeDirectory,
+  });
+  // The service only ever launches this copy, so the core has to live beside
+  // the service binary instead of in the user-writable app-data tree.
+  stageProtectedFile({
+    sourcePath: singBoxSourcePath,
+    destinationPath: singBoxDestinationPath,
+    label: "the sing-box core",
+    copyFile,
+    fileExists,
+    hashFile,
+    makeDirectory,
+  });
+
+  makeDirectory(runtimeStagingDir, { recursive: true });
+  lockRuntimeStagingDirectory(runCommand, runtimeStagingDir, repoRoot);
 
   const quotedDestination = `"${destinationPath}"`;
   const configureArgs = [
@@ -224,6 +330,7 @@ export function installTunnelService({
     ["description", WINDOWS_TUN_SERVICE_NAME, WINDOWS_TUN_SERVICE_DESCRIPTION],
     repoRoot,
   );
+  runSc(runCommand, ["sdset", WINDOWS_TUN_SERVICE_NAME, WINDOWS_TUN_SERVICE_SDDL], repoRoot);
 
   const config = captureSc(captureCommand, ["qc", WINDOWS_TUN_SERVICE_NAME], repoRoot);
   if (config.status !== 0) {
@@ -240,7 +347,14 @@ export function installTunnelService({
     throw new Error(`${WINDOWS_TUN_SERVICE_NAME} must be installed in the stopped state.`);
   }
 
-  return { destinationPath, serviceExisted, sourcePath };
+  return {
+    destinationPath,
+    serviceExisted,
+    sourcePath,
+    singBoxDestinationPath,
+    singBoxSourcePath,
+    runtimeStagingDir,
+  };
 }
 
 export function uninstallTunnelService({
@@ -258,6 +372,7 @@ export function uninstallTunnelService({
   requireWindows(platform);
   validateTiming(timeoutMs, pollIntervalMs);
   const destinationPath = managedTunnelServicePath(env);
+  const singBoxDestinationPath = managedSingBoxPath(env);
   const existed = stopService({
     captureCommand,
     wait,
@@ -284,10 +399,14 @@ export function uninstallTunnelService({
     }
   }
 
-  if (fileExists(destinationPath)) {
-    removeFile(destinationPath, { force: true });
+  // Remove only the files this helper staged; the containing directory may
+  // hold other VoyaVPN artifacts.
+  for (const managed of [destinationPath, singBoxDestinationPath]) {
+    if (fileExists(managed)) {
+      removeFile(managed, { force: true });
+    }
   }
-  return { destinationPath, serviceExisted: existed };
+  return { destinationPath, singBoxDestinationPath, serviceExisted: existed };
 }
 
 export function queryTunnelService({
@@ -310,10 +429,10 @@ export function tunnelServiceErrorExitCode(error) {
   if (/Timed out.*waiting for VoyaVPNTunnelService to stop/i.test(message)) {
     return WINDOWS_TUN_EXIT_STOP_TIMEOUT;
   }
-  if (/copy the Windows tunnel service|copy verification failed/i.test(message)) {
+  if (/Unable to copy the |copy verification failed|sing-box core seed is missing/i.test(message)) {
     return WINDOWS_TUN_EXIT_COPY_FAILED;
   }
-  if (/sc\.exe|registered with an unexpected binary path|installed in the stopped state/i.test(message)) {
+  if (/sc\.exe|icacls\.exe|registered with an unexpected binary path|installed in the stopped state/i.test(message)) {
     return WINDOWS_TUN_EXIT_REGISTRATION_FAILED;
   }
   return 1;

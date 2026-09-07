@@ -7,6 +7,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -20,6 +21,37 @@ export { isCliEntrypoint, repoRootFromScript, truthy } from "../lib/common.mjs";
 export const DEFAULT_SING_BOX_VERSION = "v1.13.14";
 const SING_BOX_REPO = "SagerNet/sing-box";
 const SING_BOX_CORE_DIR = "sing_box";
+const SING_BOX_SEED_MANIFEST = "sing-box.seed.json";
+
+const SING_BOX_VERSION_PATTERN = /^v\d+\.\d+\.\d+(-[\w.]+)?$/;
+export const ALLOW_UNPINNED_SING_BOX_ENV = "VOYAVPN_ALLOW_UNPINNED_SING_BOX";
+export const ALLOW_SEED_BACKFILL_ENV = "VOYAVPN_ALLOW_SING_BOX_SEED_BACKFILL";
+
+/**
+ * SHA-256 of the upstream *release archive* the installer downloads (the same
+ * bytes `download()` hashes), keyed by version and by the `<os>-<cpu>` pair that
+ * appears in the asset name.
+ *
+ * Source of truth: the GitHub release asset digests
+ * (`GET /repos/SagerNet/sing-box/releases/tags/<version>` -> `assets[].digest`),
+ * cross-checked for darwin-arm64 against the archive that produced the seed
+ * manifest committed alongside this table. Bump this table in the same commit as
+ * DEFAULT_SING_BOX_VERSION; the procedure is documented in
+ * docs/release/sing-box-seed-pinning.md.
+ *
+ * A {version, platform, arch} combination that is absent here is refused unless
+ * VOYAVPN_ALLOW_UNPINNED_SING_BOX=1 is set for a local experiment.
+ */
+const SING_BOX_ARCHIVE_SHA256 = {
+  "v1.13.14": {
+    "darwin-amd64": "5245d645e847f90bb708da74bc020ae078c28489690756419685c04f56b4e3bb",
+    "darwin-arm64": "73e8967b0fc08e17bce4263ca56ebc394822401a16497a1c4e02316c888202ab",
+    "linux-amd64": "f48703461a15476951ac4967cdad339d986f4b8096b4eb3ff0829a500502d697",
+    "linux-arm64": "4742df6a4314e8ecc41736849fca6d73b8f9e91b6e8b06ee794ff17ba180579e",
+    "windows-amd64": "f580782c6dd10f7691c66cea1d7c421813c5fbf7e305d1ee7ce0c3a40d196341",
+    "windows-arm64": "b22b597063ccb0e2e4fff53f677fe896e882ec5560d74d8db4fca5a0fed0a7b6",
+  },
+};
 
 const SING_BOX_OS = {
   darwin: "darwin",
@@ -53,6 +85,205 @@ export function singBoxAssetName({
 
 export function singBoxExecutableName(platform = process.platform) {
   return platform === "win32" ? "sing-box.exe" : "sing-box";
+}
+
+function singBoxPinKey({ arch = process.arch, platform = process.platform } = {}) {
+  const os = SING_BOX_OS[platform];
+  const cpu = SING_BOX_ARCH[arch];
+  return os && cpu ? `${os}-${cpu}` : null;
+}
+
+export function assertSingBoxVersion(version) {
+  const value = String(version ?? "").trim();
+  if (!SING_BOX_VERSION_PATTERN.test(value)) {
+    throw new Error(
+      `SING_BOX_VERSION must look like v1.2.3 or v1.2.3-beta.1 (got ${JSON.stringify(String(version ?? ""))}).`,
+    );
+  }
+  return value;
+}
+
+export function expectedSingBoxArchiveSha256({
+  arch = process.arch,
+  platform = process.platform,
+  version = DEFAULT_SING_BOX_VERSION,
+} = {}) {
+  const key = singBoxPinKey({ arch, platform });
+  if (!key) {
+    return null;
+  }
+  return SING_BOX_ARCHIVE_SHA256[String(version)]?.[key] ?? null;
+}
+
+function unpinnedSingBoxMessage(version, platform, arch) {
+  return (
+    `sing-box ${version} has no pinned SHA-256 for ${platform}:${arch}. ` +
+    "Add the upstream release archive digest to SING_BOX_ARCHIVE_SHA256 in " +
+    "scripts/core/sing-box-installer.mjs (see docs/release/sing-box-seed-pinning.md), " +
+    `or set ${ALLOW_UNPINNED_SING_BOX_ENV}=1 to stage an unverified core for a local experiment.`
+  );
+}
+
+/**
+ * Resolves how a {version, platform, arch} triple is allowed to be staged:
+ * verified against the checked-in table, explicitly unpinned via the escape
+ * hatch, or refused.
+ */
+export function singBoxPinStatus({
+  arch = process.arch,
+  env = process.env,
+  platform = process.platform,
+  version = DEFAULT_SING_BOX_VERSION,
+} = {}) {
+  const expected = expectedSingBoxArchiveSha256({ arch, platform, version });
+  if (expected) {
+    return { expected, pinned: true, unpinnedAllowed: false };
+  }
+
+  return {
+    expected: null,
+    pinned: false,
+    reason: unpinnedSingBoxMessage(version, platform, arch),
+    unpinnedAllowed: truthy(env[ALLOW_UNPINNED_SING_BOX_ENV]),
+  };
+}
+
+function assertSingBoxPinAvailable(status) {
+  if (!status.pinned && !status.unpinnedAllowed) {
+    throw new Error(status.reason);
+  }
+  return status;
+}
+
+/**
+ * Compares a freshly downloaded archive against the pinned digest. Callers must
+ * run this before extracting or executing anything from the archive.
+ */
+export function assertPinnedSingBoxArchive({
+  actualSha256,
+  arch = process.arch,
+  assetName,
+  env = process.env,
+  platform = process.platform,
+  version = DEFAULT_SING_BOX_VERSION,
+}) {
+  const status = assertSingBoxPinAvailable(singBoxPinStatus({ arch, env, platform, version }));
+  if (status.pinned && actualSha256 !== status.expected) {
+    throw new Error(
+      `sing-box archive ${assetName} failed SHA-256 pinning: expected ${status.expected}, got ${actualSha256}`,
+    );
+  }
+
+  return { pinned: status.pinned, sha256: actualSha256 };
+}
+
+function sha256OfFile(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+export function readSingBoxSeedManifest(seedDir) {
+  const manifestPath = join(seedDir, SING_BOX_SEED_MANIFEST);
+  if (!existsSync(manifestPath)) {
+    return null;
+  }
+
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    return manifest && typeof manifest === "object" ? manifest : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Decides whether the checked-out seed may be bundled as-is. Name-only checks
+ * let a stale version, a foreign architecture, or a locally replaced binary ship
+ * inside a package, so the seed is trusted only when its manifest matches the
+ * expected asset and the pinned digest, and the staged executable still hashes
+ * to what the manifest recorded.
+ */
+export function verifyStagedSingBoxSeed({
+  arch = process.arch,
+  env = process.env,
+  platform = process.platform,
+  repoRoot,
+  version = DEFAULT_SING_BOX_VERSION,
+} = {}) {
+  const seedDir = singBoxSeedDir(repoRoot);
+  const executableName = singBoxExecutableName(platform);
+  if (!hasExpectedSingBoxExecutable(seedDir, platform)) {
+    return { code: "missing", ok: false, reason: `no ${executableName} is staged in ${seedDir}`, staged: false };
+  }
+
+  const assetName = singBoxAssetName({ arch, platform, version });
+  if (!assetName) {
+    return {
+      code: "unsupported-target",
+      ok: false,
+      reason: `no sing-box asset is configured for ${platform}:${arch}`,
+      staged: true,
+    };
+  }
+
+  // A seed staged before this table existed, or by hand, cannot be verified.
+  // Re-staging is the default answer, but the escape hatch keeps an offline
+  // developer working: the result is reported as unpinned, which readiness
+  // turns into a stable blocker.
+  const unverifiedAllowed = truthy(env[ALLOW_UNPINNED_SING_BOX_ENV]);
+  const unverified = (code, reason) =>
+    unverifiedAllowed
+      ? { code, manifest: { assetName }, ok: true, pinned: false, reason, staged: true }
+      : { code, ok: false, reason, staged: true };
+
+  const manifest = readSingBoxSeedManifest(seedDir);
+  if (!manifest) {
+    return unverified("manifest-missing", `${SING_BOX_SEED_MANIFEST} is missing or unreadable`);
+  }
+  if (manifest.version !== version) {
+    return {
+      code: "version-mismatch",
+      ok: false,
+      reason: `staged seed is ${manifest.version ?? "(unknown)"}, expected ${version}`,
+      staged: true,
+    };
+  }
+  if (manifest.assetName !== assetName) {
+    return {
+      code: "asset-mismatch",
+      ok: false,
+      reason: `staged seed is ${manifest.assetName ?? "(unknown)"}, expected ${assetName}`,
+      staged: true,
+    };
+  }
+
+  const status = singBoxPinStatus({ arch, env, platform, version });
+  if (status.pinned && manifest.sha256 !== status.expected) {
+    return {
+      code: "archive-digest-mismatch",
+      ok: false,
+      reason: `staged seed archive digest ${manifest.sha256 ?? "(none)"} does not match the pinned ${status.expected}`,
+      staged: true,
+    };
+  }
+  if (!status.pinned && !status.unpinnedAllowed) {
+    return { code: "unpinned", ok: false, reason: status.reason, staged: true };
+  }
+
+  const executable = join(seedDir, executableName);
+  if (!/^[a-f0-9]{64}$/i.test(String(manifest.executableSha256 ?? ""))) {
+    return unverified("manifest-legacy", `${SING_BOX_SEED_MANIFEST} predates executable digest pinning`);
+  }
+  const actual = sha256OfFile(executable);
+  if (actual.toLowerCase() !== String(manifest.executableSha256).toLowerCase()) {
+    return {
+      code: "executable-digest-mismatch",
+      ok: false,
+      reason: `staged ${executableName} digest ${actual} does not match ${SING_BOX_SEED_MANIFEST}`,
+      staged: true,
+    };
+  }
+
+  return { code: "verified", manifest, ok: true, pinned: status.pinned, reason: null, staged: true };
 }
 
 function isSingBoxPayloadFile(name) {
@@ -209,10 +440,18 @@ async function download(url, destFile, { fetchImpl = fetch } = {}) {
 
 function extractArchive(archiveFile, destDir, { platform = process.platform, spawn = spawnSync } = {}) {
   mkdirSync(destDir, { recursive: true });
+  // -LiteralPath with single-quoted, escaped operands: PowerShell treats a
+  // double-quoted -Path as a wildcard pattern and expands `$(...)`.
+  const powershellLiteral = (value) => `'${String(value).replaceAll("'", "''")}'`;
   const command =
     platform === "win32"
       ? {
-          args: ["-NoProfile", "-Command", `Expand-Archive -Path "${archiveFile}" -DestinationPath "${destDir}" -Force`],
+          args: [
+            "-NoProfile",
+            "-Command",
+            `Expand-Archive -LiteralPath ${powershellLiteral(archiveFile)} ` +
+              `-DestinationPath ${powershellLiteral(destDir)} -Force`,
+          ],
           file: "powershell",
         }
       : { args: ["-xzf", archiveFile, "-C", destDir], file: "tar" };
@@ -258,8 +497,9 @@ function stageExtractedSingBoxPayload(extractDir, destinationSeedDir, { platform
   return kept;
 }
 
-async function fetchAndStageSingBoxSeed({
+export async function fetchAndStageSingBoxSeed({
   arch = process.arch,
+  env = process.env,
   fetchImpl = fetch,
   logger = console,
   platform = process.platform,
@@ -267,39 +507,67 @@ async function fetchAndStageSingBoxSeed({
   spawn = spawnSync,
   version = process.env.SING_BOX_VERSION ?? DEFAULT_SING_BOX_VERSION,
 } = {}) {
-  const assetName = singBoxAssetName({ arch, platform, version });
+  const resolvedVersion = assertSingBoxVersion(version);
+  const assetName = singBoxAssetName({ arch, platform, version: resolvedVersion });
   if (!assetName) {
     throw new Error(`no sing-box asset is configured for ${platform}:${arch}`);
   }
 
-  const url = `https://github.com/${SING_BOX_REPO}/releases/download/${version}/${assetName}`;
-  logger.log(`- sing-box: ${SING_BOX_REPO} ${version} (${assetName})`);
+  // Refuse an unpinned target before touching the network so an unsupported
+  // {version, platform, arch} never downloads or executes anything.
+  const pin = assertSingBoxPinAvailable(singBoxPinStatus({ arch, env, platform, version: resolvedVersion }));
+
+  const url = `https://github.com/${SING_BOX_REPO}/releases/download/${resolvedVersion}/${assetName}`;
+  logger.log(`- sing-box: ${SING_BOX_REPO} ${resolvedVersion} (${assetName})`);
+  if (!pin.pinned) {
+    logger.warn?.(`  ! ${ALLOW_UNPINNED_SING_BOX_ENV}=1: staging ${assetName} without an expected SHA-256`);
+  }
 
   const tempDir = mkdtempSync(join(tmpdir(), "voyavpn-sing-box-core-"));
   try {
     const archiveFile = join(tempDir, assetName);
     const buffer = await download(url, archiveFile, { fetchImpl });
     const sha256 = createHash("sha256").update(buffer).digest("hex");
+    const verification = assertPinnedSingBoxArchive({
+      actualSha256: sha256,
+      arch,
+      assetName,
+      env,
+      platform,
+      version: resolvedVersion,
+    });
 
     const extractDir = join(tempDir, "extract");
     extractArchive(archiveFile, extractDir, { platform, spawn });
 
     const destinationSeedDir = singBoxSeedDir(repoRoot);
     const kept = stageExtractedSingBoxPayload(extractDir, destinationSeedDir, { platform });
+    const executableSha256 = sha256OfFile(join(destinationSeedDir, singBoxExecutableName(platform)));
     const manifest = {
       assetName,
       bytes: buffer.length,
+      executableSha256,
       fetchedAt: new Date().toISOString(),
       kept,
+      pinned: verification.pinned,
       sha256,
       upstreamUrl: url,
-      version,
+      version: resolvedVersion,
     };
-    writeFileSync(join(destinationSeedDir, "sing-box.seed.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+    writeFileSync(join(destinationSeedDir, SING_BOX_SEED_MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);
     logger.log(`  ✓ staged ${kept.join(", ")} -> ${relative(repoRoot, destinationSeedDir)}/`);
-    logger.log(`  ✓ SHA256 ${sha256}`);
+    logger.log(`  ✓ SHA256 ${sha256}${verification.pinned ? " (matches pinned digest)" : " (unpinned)"}`);
 
-    return { assetName, kept, seedDir: destinationSeedDir, sha256, url, version };
+    return {
+      assetName,
+      executableSha256,
+      kept,
+      pinned: verification.pinned,
+      seedDir: destinationSeedDir,
+      sha256,
+      url,
+      version: resolvedVersion,
+    };
   } finally {
     rmSync(tempDir, { force: true, recursive: true });
   }
@@ -327,12 +595,16 @@ export async function installSingBoxCore({
     return { reason: skip.reason, status: "skipped" };
   }
 
+  const resolvedVersion = assertSingBoxVersion(version);
   const resolvedAppConfigDir = appConfigDir ?? defaultAppConfigDir({ env, platform });
   const appExecutable = singBoxAppExecutable(resolvedAppConfigDir, platform);
   const effectiveForceFetch = forceFetch ?? truthy(env.VOYAVPN_FORCE_SING_BOX_FETCH);
 
   if (!forceInstall && !effectiveForceFetch && probeExecutable(appExecutable)) {
-    if (!hasExpectedSingBoxExecutable(singBoxSeedDir(repoRoot), platform)) {
+    // The app-data binary is owned by the running app and can be replaced or
+    // updated behind our back, so it is never promoted into the repo seed that
+    // `tauri build` bundles unless a developer opts in explicitly.
+    if (truthy(env[ALLOW_SEED_BACKFILL_ENV]) && !hasExpectedSingBoxExecutable(singBoxSeedDir(repoRoot), platform)) {
       copySingBoxAppDataToSeed({
         appConfigDir: resolvedAppConfigDir,
         logger,
@@ -344,8 +616,12 @@ export async function installSingBoxCore({
     return { executable: appExecutable, status: "already-installed" };
   }
 
-  if (effectiveForceFetch || !hasExpectedSingBoxExecutable(singBoxSeedDir(repoRoot), platform)) {
-    await stageSeed({ arch, fetchImpl, logger, platform, repoRoot, spawn, version });
+  const seedVerification = verifyStagedSingBoxSeed({ arch, env, platform, repoRoot, version: resolvedVersion });
+  if (effectiveForceFetch || !seedVerification.ok) {
+    if (!effectiveForceFetch && seedVerification.staged) {
+      logger.log(`- re-staging sing-box seed: ${seedVerification.reason}`);
+    }
+    await stageSeed({ arch, env, fetchImpl, logger, platform, repoRoot, spawn, version: resolvedVersion });
   }
 
   const copy = copySingBoxSeedToAppData({
@@ -378,11 +654,17 @@ export async function ensureSingBoxSeedForBuild({
   stageSeed = fetchAndStageSingBoxSeed,
   version = env.SING_BOX_VERSION ?? DEFAULT_SING_BOX_VERSION,
 } = {}) {
-  if (hasExpectedSingBoxExecutable(singBoxSeedDir(repoRoot), platform)) {
-    return { seedDir: singBoxSeedDir(repoRoot), status: "already-staged" };
+  const resolvedVersion = assertSingBoxVersion(version);
+  const verification = verifyStagedSingBoxSeed({ arch, env, platform, repoRoot, version: resolvedVersion });
+  if (verification.ok) {
+    return { seedDir: singBoxSeedDir(repoRoot), status: "already-staged", verified: verification.pinned };
   }
 
-  const result = await stageSeed({ arch, logger, platform, repoRoot, spawn, version });
+  if (verification.staged) {
+    logger.log(`- re-staging sing-box seed: ${verification.reason}`);
+  }
+
+  const result = await stageSeed({ arch, env, logger, platform, repoRoot, spawn, version: resolvedVersion });
   return { ...result, status: "staged" };
 }
 

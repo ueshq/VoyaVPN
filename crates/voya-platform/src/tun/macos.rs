@@ -1,5 +1,23 @@
 use super::*;
 
+use std::{
+    sync::{Mutex, OnceLock},
+    time::{Duration, Instant},
+};
+
+mod bridge;
+use bridge::{
+    macos_packet_tunnel_bridge_container_path, macos_packet_tunnel_bridge_last_error,
+    macos_packet_tunnel_bridge_status,
+};
+#[cfg(target_os = "macos")]
+use bridge::{macos_packet_tunnel_bridge_start, macos_packet_tunnel_bridge_stop};
+
+/// `systemextensionsctl list` is a process spawn and the supervisor health
+/// watcher asks for TUN status every few seconds; activation only changes when
+/// the user approves or removes the extension, so a short cache is enough.
+const SYSTEM_EXTENSION_STATE_TTL: Duration = Duration::from_secs(30);
+
 pub(super) fn macos_packet_tunnel_status() -> NativeTunStatus {
     if let Err(status) = require_bundled_component(
         macos_packet_tunnel_component_path(),
@@ -75,6 +93,12 @@ fn macos_packet_tunnel_terminal_message(provider_state: NativeTunProviderState) 
     None
 }
 
+/// Status must stay cheap: it runs on every `tun_status` IPC, on every TUN
+/// enable, and on every tick of the supervisor health watcher. Only the bridge
+/// last-error and the provider's own status file are consulted here — both are
+/// local reads. Registration evidence, the host log tail and `codesign` output
+/// belong to `diagnostics()` behind the `tun_provider_diagnostics` IPC, which
+/// the UI calls on demand when it has to explain a Stopped or Error state.
 fn macos_packet_tunnel_status_message(
     base: Option<String>,
     provider_state: NativeTunProviderState,
@@ -86,20 +110,22 @@ fn macos_packet_tunnel_status_message(
         NativeTunProviderState::Stopped | NativeTunProviderState::Error
     ) {
         push_unique_message(&mut messages, macos_packet_tunnel_last_error());
-        let diagnostics = macos_packet_tunnel_diagnostics();
-        if let Some(status) = diagnostics.status {
+        if let Some(status) = macos_packet_tunnel_status_file() {
             push_unique_message(&mut messages, status.last_error);
-            if let Some(provider_path) = status.provider_bundle_path {
-                push_unique_message(
-                    &mut messages,
-                    Some(format!("provider bundle: {provider_path}")),
-                );
-            }
         }
-        push_unique_message(&mut messages, diagnostics.message);
     }
 
     messages.join("; ")
+}
+
+/// Reads the provider-written status JSON from the App Group container. This is
+/// a container-path lookup plus one small file read, so it is safe on the
+/// status path, unlike the process spawns in `macos_packet_tunnel_diagnostics`.
+fn macos_packet_tunnel_status_file() -> Option<NativeTunProviderStatusFile> {
+    let status_path =
+        macos_packet_tunnel_container_path()?.join(MACOS_PROVIDER_STATUS_RELATIVE_PATH);
+    let status_text = fs::read_to_string(status_path).ok()?;
+    parse_provider_status_json(&status_text).ok()
 }
 
 fn push_unique_message(messages: &mut Vec<String>, message: Option<String>) {
@@ -341,18 +367,34 @@ fn macos_packet_tunnel_component_path() -> Option<PathBuf> {
     macos_packet_tunnel_appex_path()
 }
 
+/// The app bundle cannot change while the process runs, so the packaging shape
+/// is resolved once instead of on every status query.
 fn macos_packet_tunnel_packaging_mode() -> Option<&'static str> {
-    if macos_packet_tunnel_sysex_path().is_some_and(|path| path.exists()) {
-        return Some("systemExtension");
-    }
-    if macos_packet_tunnel_appex_path().is_some_and(|path| path.exists()) {
-        return Some("appExtension");
-    }
-    None
+    static PACKAGING_MODE: OnceLock<Option<&'static str>> = OnceLock::new();
+
+    *PACKAGING_MODE.get_or_init(|| {
+        if macos_packet_tunnel_sysex_path().is_some_and(|path| path.exists()) {
+            return Some("systemExtension");
+        }
+        if macos_packet_tunnel_appex_path().is_some_and(|path| path.exists()) {
+            return Some("appExtension");
+        }
+        None
+    })
+}
+
+/// `codesign -d --entitlements` is a process spawn against a bundle that cannot
+/// change while the process runs, so its verdict is cached for the process.
+fn macos_packet_tunnel_packaging_error() -> Option<String> {
+    static PACKAGING_ERROR: OnceLock<Option<String>> = OnceLock::new();
+
+    PACKAGING_ERROR
+        .get_or_init(probe_macos_packet_tunnel_packaging_error)
+        .clone()
 }
 
 #[cfg(target_os = "macos")]
-fn macos_packet_tunnel_packaging_error() -> Option<String> {
+fn probe_macos_packet_tunnel_packaging_error() -> Option<String> {
     if macos_packet_tunnel_packaging_mode() != Some("appExtension") {
         return None;
     }
@@ -373,7 +415,7 @@ fn macos_packet_tunnel_packaging_error() -> Option<String> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn macos_packet_tunnel_packaging_error() -> Option<String> {
+fn probe_macos_packet_tunnel_packaging_error() -> Option<String> {
     None
 }
 
@@ -447,9 +489,25 @@ fn macos_system_extension_state() -> Option<String> {
 }
 
 fn macos_system_extension_is_activated() -> bool {
-    macos_system_extension_state()
-        .as_deref()
-        .is_some_and(|state| state.contains("activated") && state.contains("enabled"))
+    static ACTIVATED: OnceLock<Mutex<Option<(Instant, bool)>>> = OnceLock::new();
+
+    let probe = || {
+        macos_system_extension_state()
+            .as_deref()
+            .is_some_and(|state| state.contains("activated") && state.contains("enabled"))
+    };
+    let Ok(mut cached) = ACTIVATED.get_or_init(|| Mutex::new(None)).lock() else {
+        return probe();
+    };
+    if let Some((checked_at, activated)) = *cached {
+        if checked_at.elapsed() < SYSTEM_EXTENSION_STATE_TTL {
+            return activated;
+        }
+    }
+
+    let activated = probe();
+    *cached = Some((Instant::now(), activated));
+    activated
 }
 
 fn macos_system_extension_registration_lines() -> Vec<String> {
@@ -495,14 +553,26 @@ pub(super) fn platform_provider_registration_paths(
 pub(super) fn start_macos_packet_tunnel(
     request: &NativeTunStartRequest,
 ) -> Result<(), NativeTunError> {
-    let status = macos_packet_tunnel_status();
-    if !status.component_ready {
-        return Err(NativeTunError::ComponentMissing {
-            backend: TunBackend::MacosPacketTunnel,
-            message: status
+    // Starting only needs the component to be present and correctly packaged.
+    // The full status probe would repeat a provider round trip whose result is
+    // discarded, and the bridge activates the system extension itself.
+    let component_missing = |message: String| NativeTunError::ComponentMissing {
+        backend: TunBackend::MacosPacketTunnel,
+        message,
+    };
+    require_bundled_component(
+        macos_packet_tunnel_component_path(),
+        "PacketTunnel extension is not bundled in this build",
+    )
+    .map_err(|status| {
+        component_missing(
+            status
                 .message
                 .unwrap_or_else(|| "PacketTunnel extension is missing".to_string()),
-        });
+        )
+    })?;
+    if let Some(message) = macos_packet_tunnel_packaging_error() {
+        return Err(component_missing(message));
     }
 
     ensure_macos_provider_path_matches(&PlatformProviderRegistrationResolver)?;
@@ -615,163 +685,4 @@ fn stop_macos_packet_tunnel_with_bridge() -> Result<(), NativeTunError> {
 #[cfg(not(target_os = "macos"))]
 fn stop_macos_packet_tunnel_with_bridge() -> Result<(), NativeTunError> {
     Ok(())
-}
-
-#[cfg(target_os = "macos")]
-mod macos_packet_tunnel_bridge {
-    use std::ffi::{CStr, CString};
-
-    use libc::c_char;
-
-    use super::{NativeTunError, TunBackend};
-
-    unsafe extern "C" {
-        fn voya_macos_packet_tunnel_status() -> *mut c_char;
-        fn voya_macos_packet_tunnel_start(
-            config_path: *const c_char,
-            profile_id: *const c_char,
-            timeout_ms: i64,
-        ) -> *mut c_char;
-        fn voya_macos_packet_tunnel_stop() -> *mut c_char;
-        fn voya_macos_packet_tunnel_last_error() -> *mut c_char;
-        fn voya_macos_packet_tunnel_container_path() -> *mut c_char;
-        fn voya_macos_packet_tunnel_free(value: *mut c_char);
-    }
-
-    pub fn status() -> Result<String, NativeTunError> {
-        bridge_string("query macOS PacketTunnel status", || {
-            // SAFETY: the Objective-C bridge takes no arguments and returns an
-            // owned C string that `bridge_string` validates and releases.
-            unsafe { voya_macos_packet_tunnel_status() }
-        })
-    }
-
-    pub fn start(
-        config_path: &str,
-        profile_id: Option<&str>,
-        timeout_ms: i64,
-    ) -> Result<String, NativeTunError> {
-        let config_path = c_string(config_path, "main config path")?;
-        let profile_id = match profile_id {
-            Some(profile_id) => Some(c_string(profile_id, "active profile id")?),
-            None => None,
-        };
-        bridge_string("start macOS PacketTunnel", || {
-            // SAFETY: both C strings remain alive for the duration of the call;
-            // the optional profile pointer is either valid or null.
-            unsafe {
-                voya_macos_packet_tunnel_start(
-                    config_path.as_ptr(),
-                    profile_id
-                        .as_ref()
-                        .map_or(std::ptr::null(), |profile_id| profile_id.as_ptr()),
-                    timeout_ms,
-                )
-            }
-        })
-    }
-
-    pub fn stop() -> Result<String, NativeTunError> {
-        bridge_string("stop macOS PacketTunnel", || {
-            // SAFETY: the bridge takes no arguments and returns an owned C
-            // string that `bridge_string` validates and releases.
-            unsafe { voya_macos_packet_tunnel_stop() }
-        })
-    }
-
-    pub fn last_error() -> Result<String, NativeTunError> {
-        bridge_string("query macOS PacketTunnel last error", || {
-            // SAFETY: the bridge takes no arguments and returns an owned C
-            // string that `bridge_string` validates and releases.
-            unsafe { voya_macos_packet_tunnel_last_error() }
-        })
-    }
-
-    pub fn container_path() -> Result<String, NativeTunError> {
-        bridge_string("query macOS PacketTunnel container path", || {
-            // SAFETY: the bridge takes no arguments and returns an owned C
-            // string that `bridge_string` validates and releases.
-            unsafe { voya_macos_packet_tunnel_container_path() }
-        })
-    }
-
-    fn c_string(value: &str, label: &'static str) -> Result<CString, NativeTunError> {
-        CString::new(value).map_err(|_| NativeTunError::InvalidRequest {
-            backend: TunBackend::MacosPacketTunnel,
-            message: format!("{label} contains an interior NUL byte"),
-        })
-    }
-
-    fn bridge_string(
-        action: &'static str,
-        invoke: impl FnOnce() -> *mut c_char,
-    ) -> Result<String, NativeTunError> {
-        let value = invoke();
-        if value.is_null() {
-            return Err(NativeTunError::CommandFailed {
-                action,
-                status_code: None,
-                output: "macOS PacketTunnel bridge returned a null response".to_string(),
-            });
-        }
-
-        // SAFETY: the null check above and the bridge contract guarantee that
-        // `value` points to a NUL-terminated string until it is freed below.
-        let output = unsafe { CStr::from_ptr(value) }
-            .to_string_lossy()
-            .into_owned();
-        // SAFETY: `value` was allocated by the bridge and is released exactly
-        // once after its contents have been copied into a Rust String.
-        unsafe {
-            voya_macos_packet_tunnel_free(value);
-        }
-        Ok(output)
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn macos_packet_tunnel_bridge_status() -> Result<String, NativeTunError> {
-    macos_packet_tunnel_bridge::status()
-}
-
-#[cfg(not(target_os = "macos"))]
-fn macos_packet_tunnel_bridge_status() -> Result<String, NativeTunError> {
-    Err(NativeTunError::ComponentMissing {
-        backend: TunBackend::MacosPacketTunnel,
-        message: "PacketTunnel bridge is not available on this platform".to_string(),
-    })
-}
-
-#[cfg(target_os = "macos")]
-fn macos_packet_tunnel_bridge_start(
-    config_path: &str,
-    profile_id: Option<&str>,
-    timeout_ms: i64,
-) -> Result<String, NativeTunError> {
-    macos_packet_tunnel_bridge::start(config_path, profile_id, timeout_ms)
-}
-
-#[cfg(target_os = "macos")]
-fn macos_packet_tunnel_bridge_stop() -> Result<String, NativeTunError> {
-    macos_packet_tunnel_bridge::stop()
-}
-
-#[cfg(target_os = "macos")]
-fn macos_packet_tunnel_bridge_last_error() -> Result<String, NativeTunError> {
-    macos_packet_tunnel_bridge::last_error()
-}
-
-#[cfg(not(target_os = "macos"))]
-fn macos_packet_tunnel_bridge_last_error() -> Result<String, NativeTunError> {
-    Ok(String::new())
-}
-
-#[cfg(target_os = "macos")]
-fn macos_packet_tunnel_bridge_container_path() -> Result<String, NativeTunError> {
-    macos_packet_tunnel_bridge::container_path()
-}
-
-#[cfg(not(target_os = "macos"))]
-fn macos_packet_tunnel_bridge_container_path() -> Result<String, NativeTunError> {
-    Ok(String::new())
 }

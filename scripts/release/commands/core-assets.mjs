@@ -1,8 +1,20 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
+import { parseArgs } from "../../lib/args.mjs";
 import { repoRootFromScript } from "../../lib/common.mjs";
 import { stableCoreTypes, stableTargets } from "../matrix.mjs";
-import { defaultEvidencePath, sourceInputEvidence, uniqueSorted } from "../validation.mjs";
+import {
+  defaultEvidencePath,
+  isForbiddenStableHost,
+  isStableChannel,
+  joinUrl,
+  normalizeReleaseUrl,
+  requiredBytes,
+  requiredNonPlaceholderString,
+  requiredSha256 as sharedRequiredSha256,
+  sourceInputEvidence,
+  uniqueSorted,
+} from "../validation.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const stableChannel = "stable";
@@ -19,56 +31,24 @@ const stableCoreTargetMatrix = stableTargets.map(({ os, arch, releaseTarget }) =
 }));
 const archiveFormats = new Set(["zip", "tar.gz", "gz"]);
 
-function parseArgs(argv) {
-  const options = {
+const argSpec = {
+  "--fixture": { key: "fixture" },
+  "--output|--out": { key: "output" },
+  "--evidence-out": { key: "evidenceOutput" },
+  "--base-url": { key: "baseUrl" },
+  "--channel": { key: "channel" },
+  "--product": { key: "product" },
+};
+
+function parseOptions(argv) {
+  return parseArgs(argv, argSpec, {
     fixture: null,
     output: "dist/release/core-assets.json",
     evidenceOutput: null,
     baseUrl: null,
     channel: stableChannel,
     product: "VoyaVPN",
-  };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const next = () => {
-      const value = argv[index + 1];
-      if (!value || value.startsWith("--")) {
-        throw new Error(`${arg} requires a value`);
-      }
-      index += 1;
-      return value;
-    };
-
-    switch (arg) {
-      case "--fixture":
-        options.fixture = next();
-        break;
-      case "--output":
-      case "--out":
-        options.output = next();
-        break;
-      case "--evidence-out":
-        options.evidenceOutput = next();
-        break;
-      case "--base-url":
-        options.baseUrl = next();
-        break;
-      case "--channel":
-        options.channel = next();
-        break;
-      case "--product":
-        options.product = next();
-        break;
-      case "--help":
-        options.help = true;
-        break;
-      default:
-        throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
-
-  return options;
+  });
 }
 
 function printHelp() {
@@ -95,25 +75,6 @@ Stable validation rejects unsupported core asset entries, example or GitHub CDN
 base URLs, and GitHub download URLs outside upstreamUrl.`);
 }
 
-function isStable(channel) {
-  return channel.trim().toLowerCase() === stableChannel;
-}
-
-function isForbiddenStableHost(hostname) {
-  const host = hostname.toLowerCase();
-  return (
-    host === "example.com" ||
-    host.endsWith(".example.com") ||
-    host.endsWith(".example") ||
-    host.includes("example") ||
-    host === "github.com" ||
-    host.endsWith(".github.com") ||
-    host.includes("githubusercontent.com") ||
-    host === "github.io" ||
-    host.endsWith(".github.io")
-  );
-}
-
 function isGithubHost(hostname) {
   const host = hostname.toLowerCase();
   return host === "github.com" || host.endsWith(".github.com") || host.includes("githubusercontent.com");
@@ -123,69 +84,28 @@ function normalizeBaseUrl(baseUrl, channel) {
   const value = (baseUrl ?? "").trim();
   if (!value) {
     throw new Error(
-      isStable(channel)
+      isStableChannel(channel)
         ? "Stable core asset manifest generation requires --base-url or VOYAVPN_CDN_BASE_URL"
         : "Core asset manifest generation requires --base-url or VOYAVPN_CDN_BASE_URL",
     );
   }
 
-  let parsed;
-  try {
-    parsed = new URL(value);
-  } catch {
-    throw new Error(`Invalid CDN base URL: ${value}`);
-  }
-
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new Error(`CDN base URL must use http or https: ${value}`);
-  }
-
-  parsed.hash = "";
-  parsed.search = "";
-
-  if (isStable(channel) && isForbiddenStableHost(parsed.hostname)) {
-    throw new Error(`Stable CDN base URL must not use example or GitHub hosts: ${value}`);
-  }
-
-  return parsed.toString().replace(/\/+$/g, "");
-}
-
-function joinUrl(baseUrl, artifactPath) {
-  const segments = String(artifactPath)
-    .split("/")
-    .filter((segment) => segment.length > 0)
-    .map((segment) => encodeURIComponent(segment));
-
-  return [baseUrl, ...segments].join("/");
+  // The dry-run lane generates "stable" metadata against the placeholder `.test`
+  // CDN, so local/test hosts stay allowed here.
+  return normalizeReleaseUrl(value, {
+    allowHttp: true,
+    allowTestHosts: true,
+    checkHost: isStableChannel(channel),
+    label: isStableChannel(channel) ? "Stable CDN base URL" : "CDN base URL",
+  });
 }
 
 function requiredString(value, field, context) {
-  if (!value || typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${context} is missing ${field}`);
-  }
-  const trimmed = value.trim();
-  if (/placeholder/i.test(trimmed)) {
-    throw new Error(`${context} contains placeholder ${field}`);
-  }
-  return trimmed;
+  return requiredNonPlaceholderString(value, field, context);
 }
 
 function requiredSha256(value, context) {
-  const hash = requiredString(value, "sha256", context).toLowerCase();
-  if (!/^[a-f0-9]{64}$/.test(hash)) {
-    throw new Error(`${context} has invalid sha256: ${value}`);
-  }
-  if (/^([a-f0-9])\1{63}$/.test(hash)) {
-    throw new Error(`${context} has placeholder-like sha256: ${value}`);
-  }
-  return hash;
-}
-
-function requiredBytes(value, context) {
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`${context} has invalid bytes: ${value}`);
-  }
-  return value;
+  return sharedRequiredSha256(value, context, { rejectRepeatedDigits: true });
 }
 
 function normalizeCoreType(value, context) {
@@ -296,7 +216,7 @@ function rejectProductionDownloadUrl(value, context) {
   if (isGithubHost(parsed.hostname)) {
     throw new Error(`${context} uses a GitHub production download URL; move it to upstreamUrl instead`);
   }
-  if (isForbiddenStableHost(parsed.hostname)) {
+  if (isForbiddenStableHost(parsed.hostname, { allowTestHosts: true })) {
     throw new Error(`${context} uses a forbidden production download URL: ${value}`);
   }
 }
@@ -330,7 +250,7 @@ function normalizeEntry(entry, index, baseUrl, channel) {
     path,
   };
 
-  if (isStable(channel) && !asset.url.startsWith(`${baseUrl}/`)) {
+  if (isStableChannel(channel) && !asset.url.startsWith(`${baseUrl}/`)) {
     throw new Error(`${context} URL is not derived from CDN base URL: ${asset.url}`);
   }
 
@@ -400,7 +320,7 @@ function assertConsistentCoreFields(assets) {
 function assertStableManifest(manifest, baseUrl) {
   for (const asset of manifest.assets) {
     const url = new URL(asset.url);
-    if (isGithubHost(url.hostname) || isForbiddenStableHost(url.hostname)) {
+    if (isGithubHost(url.hostname) || isForbiddenStableHost(url.hostname, { allowTestHosts: true })) {
       throw new Error(`Stable core asset URL must be an own-CDN URL: ${asset.url}`);
     }
     if (!asset.url.startsWith(`${baseUrl}/`)) {
@@ -495,7 +415,7 @@ function buildCoreTargetEvidence(assets) {
 }
 
 async function main(argv = []) {
-  const options = parseArgs(argv);
+  const options = parseOptions(argv);
   if (options.help) {
     printHelp();
     return;
@@ -517,7 +437,7 @@ async function main(argv = []) {
   const assets = fixture.assets.map((entry, index) => normalizeEntry(entry, index, baseUrl, options.channel)).sort(assetSort);
 
   assertConsistentCoreFields(assets);
-  if (isStable(options.channel)) {
+  if (isStableChannel(options.channel)) {
     assertStableCompleteness(assets);
   }
 
@@ -531,7 +451,7 @@ async function main(argv = []) {
     assets,
   };
 
-  if (isStable(options.channel)) {
+  if (isStableChannel(options.channel)) {
     assertStableManifest(manifest, baseUrl);
   }
 
@@ -560,7 +480,7 @@ async function main(argv = []) {
     validations: {
       urlsDerivedFromBaseUrl: true,
       githubUrlsOnlyInUpstreamReferences: true,
-      firstStableMatrixComplete: isStable(options.channel),
+      firstStableMatrixComplete: isStableChannel(options.channel),
       requiredAssetFieldsPresent: true,
     },
     targets: targetEvidence,

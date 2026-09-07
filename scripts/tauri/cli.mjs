@@ -11,6 +11,57 @@ import {
   writeStableUpdaterOverlay,
 } from "./stable-updater-config.mjs";
 
+const rustTargetPlatforms = {
+  "apple-darwin": "darwin",
+  "pc-windows-gnu": "win32",
+  "pc-windows-msvc": "win32",
+  "unknown-linux-gnu": "linux",
+  "unknown-linux-musl": "linux",
+};
+
+const rustTargetArchs = {
+  aarch64: "arm64",
+  arm64: "arm64",
+  i686: "ia32",
+  x86_64: "x64",
+};
+
+/**
+ * Maps a Rust target triple to the {platform, arch} pair the core seed
+ * installer keys on, so a cross-target `tauri build` does not bundle the host
+ * architecture's sing-box binary. `universal-apple-darwin` resolves the
+ * platform only: its architecture is ambiguous and stays the host default.
+ */
+export function parseRustTargetTriple(triple) {
+  const value = String(triple ?? "").trim();
+  const match = /^([^-]+)-(.+)$/.exec(value);
+  if (!match) {
+    return null;
+  }
+
+  const platform = rustTargetPlatforms[match[2]];
+  if (!platform) {
+    return null;
+  }
+
+  const arch = rustTargetArchs[match[1]] ?? null;
+  return arch ? { arch, platform } : { platform };
+}
+
+function seedTargetFromArgs(args) {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--target") {
+      return parseRustTargetTriple(args[index + 1]) ?? {};
+    }
+    if (arg.startsWith("--target=")) {
+      return parseRustTargetTriple(arg.slice("--target=".length)) ?? {};
+    }
+  }
+
+  return {};
+}
+
 export async function prepareTauriInvocation(
   rawArgs,
   {
@@ -28,7 +79,7 @@ export async function prepareTauriInvocation(
   const env = operation === "build" ? normalizeCiEnv(sourceEnv) : { ...sourceEnv };
 
   if (operation === "build") {
-    await ensureSeed({ repoRoot });
+    await ensureSeed({ repoRoot, ...seedTargetFromArgs(tauriArgs) });
   }
 
   if (operation === "dev" || operation === "build") {

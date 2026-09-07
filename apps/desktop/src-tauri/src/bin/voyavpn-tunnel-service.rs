@@ -7,11 +7,17 @@ use std::{
 #[cfg(windows)]
 use std::{sync::mpsc, thread, time::Duration};
 
+#[path = "voyavpn-tunnel-service/layout.rs"]
+mod layout;
+
+use layout::{
+    canonicalize_existing_or_parent, describe_paths, ensure_config_files_are_contained,
+    is_inside_any, read_config_within_limit, ServiceLayout,
+};
+
 #[cfg(windows)]
 const SERVICE_NAME: &str = "VoyaVPNTunnelService";
-const SING_BOX_CORE_DIR: &str = "sing_box";
-const BIN_CONFIG_DIR: &str = "binConfigs";
-const BIN_DIR: &str = "bin";
+const STAGED_CONFIG_NAME: &str = "config.json";
 const SING_BOX_EXES: &[&str] = if cfg!(windows) {
     &["sing-box.exe", "sing-box-client.exe"]
 } else {
@@ -34,7 +40,7 @@ fn entry() -> Result<(), ServiceError> {
         }
         Some("check") => {
             let config = parse_run_config(&args[2..])?;
-            let plan = RuntimePlan::from_config_path(&config)?;
+            let plan = RuntimePlan::from_config_path(&config, ServiceLayout::from_environment()?)?;
             plan.validate()?;
             Ok(())
         }
@@ -55,6 +61,10 @@ fn print_help() {
     println!("  voyavpn-tunnel-service run --config <config.json>");
     println!("  voyavpn-tunnel-service check --config <config.json>");
     println!("  voyavpn-tunnel-service   # run under the Windows Service Control Manager");
+    println!();
+    println!("The service only runs the sing-box executable installed next to itself");
+    println!("(<service dir>\\sing_box) and only accepts configs from the VoyaVPN");
+    println!("app-data or %ProgramData%\\VoyaVPN\\runtime directories.");
 }
 
 fn parse_run_config(args: &[std::ffi::OsString]) -> Result<PathBuf, ServiceError> {
@@ -123,7 +133,7 @@ fn run_service(args: Vec<std::ffi::OsString>) -> Result<(), ServiceError> {
             })?;
 
         set_service_status(&status_handle, ServiceState::StartPending)?;
-        let plan = RuntimePlan::from_config_path(&config_path)?;
+        let plan = RuntimePlan::from_config_path(&config_path, ServiceLayout::from_environment()?)?;
         plan.validate()?;
         let mut child = plan.spawn()?;
         set_service_status(&status_handle, ServiceState::Running)?;
@@ -197,25 +207,21 @@ fn run_service(_args: Vec<std::ffi::OsString>) -> Result<(), ServiceError> {
 
 #[cfg(windows)]
 fn service_config_from_args(arguments: &[std::ffi::OsString]) -> Result<PathBuf, ServiceError> {
-    for value in arguments {
-        let path = PathBuf::from(value);
-        if path
-            .parent()
-            .and_then(Path::file_name)
-            .and_then(|name| name.to_str())
-            == Some(BIN_CONFIG_DIR)
-        {
-            return Ok(path);
-        }
-    }
-
-    Err(ServiceError::InvalidArgs(
-        "service start requires <main-config-path>".to_string(),
-    ))
+    // `arguments[0]` is the service name supplied by the SCM. The desktop app
+    // passes the runtime config path as the single start argument; it is only a
+    // selector, because `ServiceLayout` decides which roots are acceptable.
+    arguments
+        .iter()
+        .skip(1)
+        .find(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .ok_or_else(|| {
+            ServiceError::InvalidArgs("service start requires <main-config-path>".to_string())
+        })
 }
 
 fn run_foreground(config_path: PathBuf) -> Result<(), ServiceError> {
-    let plan = RuntimePlan::from_config_path(&config_path)?;
+    let plan = RuntimePlan::from_config_path(&config_path, ServiceLayout::from_environment()?)?;
     plan.validate()?;
     let mut child = plan.spawn()?;
     wait_for_child(&mut child)
@@ -223,58 +229,96 @@ fn run_foreground(config_path: PathBuf) -> Result<(), ServiceError> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RuntimePlan {
-    app_dir: PathBuf,
-    config_path: PathBuf,
+    layout: ServiceLayout,
+    source_config_path: PathBuf,
+    staged_config_path: PathBuf,
     sing_box_path: PathBuf,
 }
 
 impl RuntimePlan {
-    fn from_config_path(config_path: &Path) -> Result<Self, ServiceError> {
-        let config_path = absolute_path(config_path)?;
-        let app_dir = app_dir_from_config_path(&config_path)?;
-        let sing_box_path = find_sing_box(&app_dir)?;
+    fn from_config_path(config_path: &Path, layout: ServiceLayout) -> Result<Self, ServiceError> {
+        let source_config_path = absolute_path(config_path)?;
+        let sing_box_path = find_sing_box(&layout.core_dir);
+        let staged_config_path = layout.staging_dir.join(STAGED_CONFIG_NAME);
 
         Ok(Self {
-            app_dir,
-            config_path,
+            layout,
+            source_config_path,
+            staged_config_path,
             sing_box_path,
         })
     }
 
     fn validate(&self) -> Result<(), ServiceError> {
-        if !self.config_path.is_absolute() {
-            return Err(ServiceError::InvalidConfigPath {
-                path: self.config_path.clone(),
-                reason: "config path must be absolute".to_string(),
-            });
-        }
-        if !self.config_path.is_file() {
-            return Err(ServiceError::InvalidConfigPath {
-                path: self.config_path.clone(),
-                reason: "config file does not exist".to_string(),
-            });
-        }
-        let bin_config_dir = self.app_dir.join(BIN_CONFIG_DIR);
-        if !is_path_inside(&self.config_path, &bin_config_dir)? {
-            return Err(ServiceError::InvalidConfigPath {
-                path: self.config_path.clone(),
-                reason: format!("config must live under {}", bin_config_dir.display()),
-            });
-        }
         if !self.sing_box_path.is_file() {
             return Err(ServiceError::MissingSingBox(self.sing_box_path.clone()));
         }
+        self.stage()?;
         self.check_config()?;
 
         Ok(())
+    }
+
+    /// Validates the caller-supplied config and copies it into the
+    /// service-owned staging directory. After this the executable, the working
+    /// directory and the config the core reads all live in administrator-owned
+    /// locations, independent of the argument the caller passed.
+    fn stage(&self) -> Result<(), ServiceError> {
+        if !self.source_config_path.is_absolute() {
+            return Err(self.invalid_config("config path must be absolute"));
+        }
+        if !self.source_config_path.is_file() {
+            return Err(self.invalid_config("config file does not exist"));
+        }
+
+        fs::create_dir_all(&self.layout.staging_dir).map_err(|source| ServiceError::Staging {
+            path: self.layout.staging_dir.clone(),
+            source,
+        })?;
+
+        let canonical = canonicalize_existing_or_parent(&self.source_config_path)?;
+        if !is_inside_any(&canonical, &self.layout.config_dirs) {
+            return Err(self.invalid_config(&format!(
+                "config must live in one of {}",
+                describe_paths(&self.layout.config_dirs)
+            )));
+        }
+
+        let contents = read_config_within_limit(&self.source_config_path)?;
+        let config = serde_json::from_str::<serde_json::Value>(&contents).map_err(|source| {
+            ServiceError::InvalidConfigJson {
+                path: self.source_config_path.clone(),
+                source,
+            }
+        })?;
+        ensure_config_files_are_contained(&config, &self.layout)?;
+
+        // The staging directory is administrator-owned, but removing any stale
+        // entry keeps a pre-planted link from redirecting the copy.
+        let _ = fs::remove_file(&self.staged_config_path);
+        fs::write(&self.staged_config_path, contents.as_bytes()).map_err(|source| {
+            ServiceError::Staging {
+                path: self.staged_config_path.clone(),
+                source,
+            }
+        })?;
+
+        Ok(())
+    }
+
+    fn invalid_config(&self, reason: &str) -> ServiceError {
+        ServiceError::InvalidConfigPath {
+            path: self.source_config_path.clone(),
+            reason: reason.to_string(),
+        }
     }
 
     fn check_config(&self) -> Result<(), ServiceError> {
         let output = Command::new(&self.sing_box_path)
             .arg("check")
             .arg("-c")
-            .arg(&self.config_path)
-            .current_dir(self.config_path.parent().unwrap_or(&self.app_dir))
+            .arg(&self.staged_config_path)
+            .current_dir(&self.layout.staging_dir)
             .output()
             .map_err(|source| ServiceError::CheckSingBox {
                 executable: self.sing_box_path.clone(),
@@ -294,9 +338,9 @@ impl RuntimePlan {
         Command::new(&self.sing_box_path)
             .arg("run")
             .arg("-c")
-            .arg(&self.config_path)
+            .arg(&self.staged_config_path)
             .arg("--disable-color")
-            .current_dir(self.config_path.parent().unwrap_or(&self.app_dir))
+            .current_dir(&self.layout.staging_dir)
             .spawn()
             .map_err(|source| ServiceError::SpawnSingBox {
                 executable: self.sing_box_path.clone(),
@@ -314,38 +358,18 @@ fn absolute_path(path: &Path) -> Result<PathBuf, ServiceError> {
         .map_err(ServiceError::CurrentDir)
 }
 
-fn app_dir_from_config_path(config_path: &Path) -> Result<PathBuf, ServiceError> {
-    let bin_config_dir = config_path
-        .parent()
-        .ok_or_else(|| ServiceError::InvalidConfigPath {
-            path: config_path.to_path_buf(),
-            reason: "config path has no parent directory".to_string(),
-        })?;
-    if bin_config_dir.file_name().and_then(|name| name.to_str()) != Some(BIN_CONFIG_DIR) {
-        return Err(ServiceError::InvalidConfigPath {
-            path: config_path.to_path_buf(),
-            reason: format!("config parent directory must be {BIN_CONFIG_DIR}"),
-        });
-    }
-    bin_config_dir
-        .parent()
-        .map(Path::to_path_buf)
-        .ok_or_else(|| ServiceError::InvalidConfigPath {
-            path: config_path.to_path_buf(),
-            reason: "config path is not inside an app directory".to_string(),
-        })
-}
-
-fn find_sing_box(app_dir: &Path) -> Result<PathBuf, ServiceError> {
-    let core_dir = app_dir.join(BIN_DIR).join(SING_BOX_CORE_DIR);
+/// Resolves the sing-box the service is allowed to launch. The directory comes
+/// from `ServiceLayout`, which derives it from the service executable's own
+/// installed location, so no caller argument can influence it.
+fn find_sing_box(core_dir: &Path) -> PathBuf {
     for executable in SING_BOX_EXES {
         let candidate = core_dir.join(executable);
         if candidate.is_file() {
-            return Ok(candidate);
+            return candidate;
         }
     }
 
-    Ok(core_dir.join(SING_BOX_EXES[0]))
+    core_dir.join(SING_BOX_EXES[0])
 }
 
 fn command_output_text(stdout: &[u8], stderr: &[u8]) -> String {
@@ -357,34 +381,6 @@ fn command_output_text(stdout: &[u8], stderr: &[u8]) -> String {
         stderr.into_owned()
     } else {
         format!("{stdout}\n{stderr}")
-    }
-}
-
-fn is_path_inside(path: &Path, base: &Path) -> Result<bool, ServiceError> {
-    let path = canonicalize_existing_or_parent(path)?;
-    let base = canonicalize_existing_or_parent(base)?;
-    Ok(path.starts_with(base))
-}
-
-fn canonicalize_existing_or_parent(path: &Path) -> Result<PathBuf, ServiceError> {
-    match fs::canonicalize(path) {
-        Ok(canonical) => Ok(canonical),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            let Some(parent) = path.parent() else {
-                return Err(ServiceError::Canonicalize {
-                    path: path.to_path_buf(),
-                    source: error,
-                });
-            };
-            fs::canonicalize(parent).map_err(|source| ServiceError::Canonicalize {
-                path: parent.to_path_buf(),
-                source,
-            })
-        }
-        Err(source) => Err(ServiceError::Canonicalize {
-            path: path.to_path_buf(),
-            source,
-        }),
     }
 }
 
@@ -430,6 +426,24 @@ enum ServiceError {
         path: PathBuf,
         reason: String,
     },
+    InvalidConfigJson {
+        path: PathBuf,
+        source: serde_json::Error,
+    },
+    InvalidConfigOption {
+        field: &'static str,
+        value: String,
+        reason: String,
+    },
+    ConfigTooLarge {
+        path: PathBuf,
+        limit: u64,
+    },
+    Staging {
+        path: PathBuf,
+        source: io::Error,
+    },
+    ServiceLocation(io::Error),
     MissingSingBox(PathBuf),
     CheckSingBox {
         executable: PathBuf,
@@ -450,7 +464,6 @@ enum ServiceError {
         source: io::Error,
     },
     CurrentDir(io::Error),
-    #[cfg(not(windows))]
     Unsupported(String),
     #[cfg(windows)]
     WindowsService(windows_service::Error),
@@ -465,6 +478,43 @@ impl std::fmt::Display for ServiceError {
                     formatter,
                     "invalid config path {}: {reason}",
                     path.display()
+                )
+            }
+            Self::InvalidConfigJson { path, source } => {
+                write!(
+                    formatter,
+                    "config {} is not valid JSON: {source}",
+                    path.display()
+                )
+            }
+            Self::InvalidConfigOption {
+                field,
+                value,
+                reason,
+            } => {
+                write!(
+                    formatter,
+                    "config option {field} = {value} is rejected: {reason}"
+                )
+            }
+            Self::ConfigTooLarge { path, limit } => {
+                write!(
+                    formatter,
+                    "config {} is larger than the {limit} byte service limit",
+                    path.display()
+                )
+            }
+            Self::Staging { path, source } => {
+                write!(
+                    formatter,
+                    "failed to stage the runtime config at {}: {source}",
+                    path.display()
+                )
+            }
+            Self::ServiceLocation(source) => {
+                write!(
+                    formatter,
+                    "failed to resolve the service installation directory: {source}"
                 )
             }
             Self::MissingSingBox(path) => {
@@ -509,7 +559,6 @@ impl std::fmt::Display for ServiceError {
             Self::CurrentDir(source) => {
                 write!(formatter, "failed to resolve current directory: {source}")
             }
-            #[cfg(not(windows))]
             Self::Unsupported(message) => write!(formatter, "{message}"),
             #[cfg(windows)]
             Self::WindowsService(source) => write!(formatter, "Windows service error: {source}"),
@@ -528,37 +577,259 @@ impl From<windows_service::Error> for ServiceError {
 
 #[cfg(test)]
 mod tests {
+    use super::layout::{
+        APP_IDENTIFIER, BIN_CONFIG_DIR, MAX_CONFIG_BYTES, PRODUCT_DIR_NAME, RUNTIME_STAGING_DIR,
+        SING_BOX_CORE_DIR,
+    };
     use super::*;
 
-    #[test]
-    fn app_dir_is_resolved_from_bin_config_path() {
-        let app_dir = env::temp_dir().join("VoyaVPN");
-        let config = app_dir.join(BIN_CONFIG_DIR).join("config.json");
-
-        assert_eq!(app_dir_from_config_path(&config).expect("app dir"), app_dir);
+    struct Fixture {
+        root: PathBuf,
+        layout: ServiceLayout,
     }
 
-    #[test]
-    fn app_dir_rejects_config_outside_bin_config_dir() {
-        let config = env::temp_dir().join("VoyaVPN").join("config.json");
-        let error = app_dir_from_config_path(&config).expect_err("invalid config path");
+    impl Fixture {
+        fn new(name: &str) -> Self {
+            let root = env::temp_dir().join(format!(
+                "voyavpn-tunnel-service-{name}-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |elapsed| elapsed.as_nanos())
+            ));
+            let staging_dir = root
+                .join("ProgramData")
+                .join(PRODUCT_DIR_NAME)
+                .join(RUNTIME_STAGING_DIR);
+            let app_data_root = root.join("Users").join("tester").join(APP_IDENTIFIER);
+            let core_dir = root
+                .join("ProgramFiles")
+                .join(PRODUCT_DIR_NAME)
+                .join(SING_BOX_CORE_DIR);
+            fs::create_dir_all(&staging_dir).expect("create staging directory");
+            fs::create_dir_all(app_data_root.join(BIN_CONFIG_DIR)).expect("create app data dir");
+            fs::create_dir_all(&core_dir).expect("create core directory");
 
-        assert!(matches!(
-            error,
-            ServiceError::InvalidConfigPath { reason, .. }
-                if reason.contains(BIN_CONFIG_DIR)
-        ));
+            let layout = ServiceLayout {
+                core_dir,
+                staging_dir: staging_dir.clone(),
+                config_dirs: vec![staging_dir, app_data_root.join(BIN_CONFIG_DIR)],
+                reference_roots: vec![root.join("ProgramData"), app_data_root],
+            };
+            Self { root, layout }
+        }
+
+        fn app_config(&self, contents: &str) -> PathBuf {
+            let path = self
+                .root
+                .join("Users")
+                .join("tester")
+                .join(APP_IDENTIFIER)
+                .join(BIN_CONFIG_DIR)
+                .join("config.json");
+            fs::write(&path, contents).expect("write app config");
+            path
+        }
+
+        fn foreign_config(&self, contents: &str) -> PathBuf {
+            let directory = self.root.join("evil").join(BIN_CONFIG_DIR);
+            fs::create_dir_all(&directory).expect("create foreign config directory");
+            let path = directory.join("config.json");
+            fs::write(&path, contents).expect("write foreign config");
+            path
+        }
+
+        fn plan(&self, config_path: &Path) -> RuntimePlan {
+            RuntimePlan::from_config_path(config_path, self.layout.clone()).expect("runtime plan")
+        }
     }
 
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    const MINIMAL_CONFIG: &str = r#"{"inbounds":[],"outbounds":[]}"#;
+
     #[test]
-    fn sing_box_path_uses_app_data_core_directory() {
-        let app_dir = Path::new("/tmp/VoyaVPN");
+    fn staging_accepts_a_config_from_the_app_data_root() {
+        let fixture = Fixture::new("accepts-app-data");
+        let config = fixture.app_config(MINIMAL_CONFIG);
+        let plan = fixture.plan(&config);
+
+        plan.stage().expect("stage app-data config");
+
         assert_eq!(
-            find_sing_box(app_dir).expect("path"),
-            app_dir
-                .join(BIN_DIR)
-                .join(SING_BOX_CORE_DIR)
-                .join(SING_BOX_EXES[0])
+            fs::read_to_string(&plan.staged_config_path).expect("read staged config"),
+            MINIMAL_CONFIG
         );
+        assert!(plan
+            .staged_config_path
+            .starts_with(&fixture.layout.staging_dir));
+    }
+
+    #[test]
+    fn staging_rejects_a_config_outside_every_allowed_root() {
+        let fixture = Fixture::new("rejects-foreign-root");
+        let config = fixture.foreign_config(MINIMAL_CONFIG);
+        let plan = fixture.plan(&config);
+
+        let error = plan.stage().expect_err("foreign config must be rejected");
+
+        assert!(
+            matches!(&error, ServiceError::InvalidConfigPath { reason, .. }
+                if reason.contains("config must live in one of")),
+            "unexpected error: {error}"
+        );
+        assert!(!plan.staged_config_path.exists());
+    }
+
+    #[test]
+    fn sing_box_path_never_derives_from_the_caller_config_path() {
+        let fixture = Fixture::new("pinned-core");
+        let config = fixture.foreign_config(MINIMAL_CONFIG);
+        let plan = fixture.plan(&config);
+
+        assert!(plan.sing_box_path.starts_with(&fixture.layout.core_dir));
+        assert_eq!(
+            plan.sing_box_path,
+            fixture.layout.core_dir.join(SING_BOX_EXES[0])
+        );
+        let config_parent = config.parent().expect("config parent");
+        assert!(!plan.sing_box_path.starts_with(config_parent));
+        assert!(!plan
+            .sing_box_path
+            .starts_with(config_parent.parent().expect("app dir")));
+    }
+
+    #[test]
+    fn staging_rejects_a_log_output_outside_the_runtime_root() {
+        let fixture = Fixture::new("rejects-log-output");
+        let escape = fixture.root.join("outside.log");
+        let config = fixture.app_config(&format!(
+            r#"{{"log":{{"output":"{}"}}}}"#,
+            escape.display().to_string().replace('\\', "\\\\")
+        ));
+
+        let error = fixture
+            .plan(&config)
+            .stage()
+            .expect_err("escaping log output must be rejected");
+
+        assert!(
+            matches!(&error, ServiceError::InvalidConfigOption { field, .. } if *field == "log.output"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn staging_rejects_a_relative_cache_path_that_escapes_the_runtime_root() {
+        let fixture = Fixture::new("rejects-relative-escape");
+        let config = fixture
+            .app_config(r#"{"experimental":{"cache_file":{"enabled":true,"path":"../cache.db"}}}"#);
+
+        let error = fixture
+            .plan(&config)
+            .stage()
+            .expect_err("relative escape must be rejected");
+
+        assert!(
+            matches!(&error, ServiceError::InvalidConfigOption { field, .. }
+                if *field == "experimental.cache_file.path"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn staging_accepts_the_generated_cache_and_local_ruleset_paths() {
+        let fixture = Fixture::new("accepts-generated-paths");
+        let ruleset_dir = fixture
+            .root
+            .join("Users")
+            .join("tester")
+            .join(APP_IDENTIFIER)
+            .join("bin")
+            .join("srss");
+        fs::create_dir_all(&ruleset_dir).expect("create ruleset directory");
+        let ruleset = ruleset_dir.join("geosite-cn.srs");
+        fs::write(&ruleset, "srs").expect("write ruleset");
+        let config = fixture.app_config(&format!(
+            r#"{{"experimental":{{"cache_file":{{"enabled":true,"path":"cache.db"}}}},"route":{{"rule_set":[{{"tag":"geosite-cn","type":"local","format":"binary","path":"{}"}}]}}}}"#,
+            ruleset.display().to_string().replace('\\', "\\\\")
+        ));
+
+        fixture
+            .plan(&config)
+            .stage()
+            .expect("generated config paths must be accepted");
+    }
+
+    #[test]
+    fn staging_rejects_a_local_ruleset_outside_the_reference_roots() {
+        let fixture = Fixture::new("rejects-foreign-ruleset");
+        let ruleset = fixture.root.join("geosite-cn.srs");
+        fs::write(&ruleset, "srs").expect("write ruleset");
+        let config = fixture.app_config(&format!(
+            r#"{{"route":{{"rule_set":[{{"tag":"geosite-cn","type":"local","format":"binary","path":"{}"}}]}}}}"#,
+            ruleset.display().to_string().replace('\\', "\\\\")
+        ));
+
+        let error = fixture
+            .plan(&config)
+            .stage()
+            .expect_err("foreign ruleset must be rejected");
+
+        assert!(
+            matches!(&error, ServiceError::InvalidConfigOption { field, .. }
+                if *field == "route.rule_set.path"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn staging_rejects_an_oversized_config() {
+        let fixture = Fixture::new("rejects-oversized");
+        let mut padding = String::from("{\"comment\":\"");
+        padding.push_str(&"a".repeat(usize::try_from(MAX_CONFIG_BYTES).unwrap_or(usize::MAX) + 8));
+        padding.push_str("\"}");
+        let config = fixture.app_config(&padding);
+
+        let error = fixture
+            .plan(&config)
+            .stage()
+            .expect_err("oversized config must be rejected");
+
+        assert!(
+            matches!(error, ServiceError::ConfigTooLarge { .. }),
+            "oversized config must be reported as too large"
+        );
+    }
+
+    #[test]
+    fn staging_rejects_a_config_that_is_not_json() {
+        let fixture = Fixture::new("rejects-non-json");
+        let config = fixture.app_config("not json");
+
+        let error = fixture
+            .plan(&config)
+            .stage()
+            .expect_err("non-JSON config must be rejected");
+
+        assert!(matches!(error, ServiceError::InvalidConfigJson { .. }));
+    }
+
+    #[test]
+    fn validate_reports_a_missing_managed_core_before_touching_the_config() {
+        let fixture = Fixture::new("missing-core");
+        let config = fixture.foreign_config(MINIMAL_CONFIG);
+
+        let error = fixture
+            .plan(&config)
+            .validate()
+            .expect_err("missing core must be reported");
+
+        assert!(matches!(error, ServiceError::MissingSingBox(path)
+            if path == fixture.layout.core_dir.join(SING_BOX_EXES[0])));
     }
 }

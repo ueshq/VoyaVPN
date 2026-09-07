@@ -1,10 +1,19 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
+import { parseArgs } from "../../lib/args.mjs";
 import { repoRootFromScript } from "../../lib/common.mjs";
 import { resolveApprovedUpdaterPublicKey, verifyTauriUpdaterSignatureFile } from "../updater-signatures.mjs";
 import { stableTargets } from "../matrix.mjs";
 import {
   defaultEvidencePath,
+  findSignatureArtifact,
+  joinUrl,
+  normalizeReleaseUrl,
+  requiredBytes,
+  requiredSha256,
+  requiredString,
+  safeArtifactPath,
+  selectUpdaterPayload,
   sha256File,
   sourceInputEvidence,
   uniqueSorted,
@@ -18,8 +27,21 @@ const stableUpdaterTargets = stableTargets
   .sort((left, right) => left.localeCompare(right));
 const stableUpdaterTargetSet = new Set(stableUpdaterTargets);
 
-function parseArgs(argv) {
-  const options = {
+const argSpec = {
+  "--input": { key: "input" },
+  "--output|--out": { key: "output" },
+  "--evidence-out": { key: "evidenceOutput" },
+  "--version": { key: "version" },
+  "--channel": { key: "channel" },
+  "--base-url": { key: "baseUrl" },
+  "--notes": { key: "notes" },
+  "--pub-date": { key: "pubDate" },
+  "--target": { key: "targets", list: true },
+  "--placeholder-signatures": { key: "placeholderSignatures", value: true },
+};
+
+function parseOptions(argv) {
+  return parseArgs(argv, argSpec, {
     input: "dist/release",
     output: "dist/release/latest.json",
     evidenceOutput: null,
@@ -30,60 +52,7 @@ function parseArgs(argv) {
     pubDate: null,
     placeholderSignatures: false,
     targets: [],
-  };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const next = () => {
-      const value = argv[index + 1];
-      if (!value || value.startsWith("--")) {
-        throw new Error(`${arg} requires a value`);
-      }
-      index += 1;
-      return value;
-    };
-
-    switch (arg) {
-      case "--input":
-        options.input = next();
-        break;
-      case "--output":
-      case "--out":
-        options.output = next();
-        break;
-      case "--evidence-out":
-        options.evidenceOutput = next();
-        break;
-      case "--version":
-        options.version = next();
-        break;
-      case "--channel":
-        options.channel = next();
-        break;
-      case "--base-url":
-        options.baseUrl = next();
-        break;
-      case "--notes":
-        options.notes = next();
-        break;
-      case "--pub-date":
-        options.pubDate = next();
-        break;
-      case "--placeholder-signatures":
-        options.placeholderSignatures = true;
-        break;
-      case "--target":
-        options.targets.push(...next().split(",").map((target) => target.trim()).filter(Boolean));
-        break;
-      case "--help":
-        options.help = true;
-        break;
-      default:
-        throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
-
-  return options;
+  });
 }
 
 function printHelp() {
@@ -113,22 +82,6 @@ function isStable(channel) {
   return channel.trim().toLowerCase() === stableChannel;
 }
 
-function isForbiddenStableHost(hostname) {
-  const host = hostname.toLowerCase();
-  return (
-    host === "example.com" ||
-    host.endsWith(".example.com") ||
-    host.endsWith(".example") ||
-    host.includes("example") ||
-    host === "github.com" ||
-    host.endsWith(".github.com") ||
-    host === "githubusercontent.com" ||
-    host.endsWith(".githubusercontent.com") ||
-    host === "github.io" ||
-    host.endsWith(".github.io")
-  );
-}
-
 function normalizeBaseUrl(baseUrl, channel) {
   const value = (baseUrl ?? "").trim();
   if (!value) {
@@ -139,26 +92,17 @@ function normalizeBaseUrl(baseUrl, channel) {
     );
   }
 
-  let parsed;
-  try {
-    parsed = new URL(value);
-  } catch {
-    throw new Error(`Invalid updater base URL: ${value}`);
-  }
+  // The dry-run lane points at the placeholder `.test` updater CDN, so
+  // local/test hosts stay allowed; the whole-URL placeholder check below is what
+  // keeps a stable run off a placeholder path.
+  const normalized = normalizeReleaseUrl(value, {
+    allowHttp: !isStable(channel),
+    allowTestHosts: true,
+    checkHost: isStable(channel),
+    label: isStable(channel) ? "Stable updater base URL" : "Updater base URL",
+  });
 
-  if (isStable(channel) && parsed.protocol !== "https:") {
-    throw new Error(`Stable updater base URL must use https: ${value}`);
-  }
-  if (!isStable(channel) && parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new Error(`Updater base URL must use http or https: ${value}`);
-  }
-
-  parsed.hash = "";
-  parsed.search = "";
-
-  const normalized = parsed.toString().replace(/\/+$/g, "");
-  const stableUrlText = normalized.toLowerCase();
-  if (isStable(channel) && (isForbiddenStableHost(parsed.hostname) || stableUrlText.includes("placeholder"))) {
+  if (isStable(channel) && normalized.toLowerCase().includes("placeholder")) {
     throw new Error(`Stable updater base URL must not use example, GitHub, or placeholder hosts: ${value}`);
   }
 
@@ -178,12 +122,6 @@ function resolveBaseUrl(options) {
   return normalizeBaseUrl(`https://cdn.voyavpn.test/${options.channel}/updater`, options.channel);
 }
 
-function joinUrl(baseUrl, ...parts) {
-  const cleanBase = baseUrl.replace(/\/+$/g, "");
-  const cleanParts = parts.map((part) => encodeURIComponent(part).replaceAll("%2F", "/"));
-  return [cleanBase, ...cleanParts].join("/");
-}
-
 function describeStableTarget(target) {
   const details = stableTargets.find((entry) => entry.updater === target);
 
@@ -196,58 +134,6 @@ function describeStableTarget(target) {
 
 function placeholderToken(target) {
   return `VOYAVPN_UPDATER_SIGNATURE_PLACEHOLDER_${target.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
-}
-
-function isUpdaterPayload(artifact) {
-  return artifact.kind === "updater" && !artifact.name.toLowerCase().endsWith(".sig");
-}
-
-function findSignatureArtifact(payload, artifacts) {
-  return artifacts.find((artifact) => {
-    if (artifact.kind !== "signature") {
-      return false;
-    }
-
-    return (
-      artifact.originalRelativePath === `${payload.originalRelativePath}.sig` ||
-      artifact.originalName === `${payload.originalName}.sig`
-    );
-  });
-}
-
-function artifactPath(artifact, context) {
-  const value = artifact.path ?? artifact.name;
-  if (!value || typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${context} is missing path or name`);
-  }
-
-  const normalized = value.trim().replaceAll("\\", "/");
-  if (normalized.startsWith("/") || normalized.split("/").some((segment) => segment === "..")) {
-    throw new Error(`${context} has an unsafe artifact path: ${value}`);
-  }
-
-  return normalized;
-}
-
-function requiredString(value, field, context) {
-  if (!value || typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${context} is missing ${field}`);
-  }
-  return value.trim();
-}
-
-function requiredSha256(value, context) {
-  if (!value || typeof value !== "string" || !/^[a-fA-F0-9]{64}$/.test(value)) {
-    throw new Error(`${context} is missing a valid sha256`);
-  }
-  return value.toLowerCase();
-}
-
-function requiredBytes(value, context) {
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`${context} is missing valid bytes`);
-  }
-  return value;
 }
 
 function isPlaceholderSignature(signature) {
@@ -270,7 +156,7 @@ function assertStableSignature(signature, target) {
 }
 
 async function verifyArtifactFile(manifestDir, artifact, context, requireManifestMetadata) {
-  const path = artifactPath(artifact, context);
+  const path = safeArtifactPath(artifact, context);
   const fullPath = resolve(manifestDir, path);
   let fileStat;
   try {
@@ -310,7 +196,7 @@ async function verifyArtifactFile(manifestDir, artifact, context, requireManifes
 function assertStableArtifactMetadata(artifact, target, version, channel, context) {
   requiredString(artifact.name, "name", context);
   requiredString(artifact.originalName, "originalName", context);
-  artifactPath(artifact, context);
+  safeArtifactPath(artifact, context);
 
   if (requiredString(artifact.target, "target", context) !== target) {
     throw new Error(`${context} target does not match manifest target ${target}`);
@@ -412,12 +298,12 @@ async function loadManifests(inputDir) {
 }
 
 async function readSignature(manifestDir, signatureArtifact) {
-  const signaturePath = resolve(manifestDir, artifactPath(signatureArtifact, "signature artifact"));
+  const signaturePath = resolve(manifestDir, safeArtifactPath(signatureArtifact, "signature artifact"));
   return (await readFile(signaturePath, "utf8")).trim();
 }
 
 async function main(argv = []) {
-  const options = parseArgs(argv);
+  const options = parseOptions(argv);
   if (options.help) {
     printHelp();
     return;
@@ -474,7 +360,7 @@ async function main(argv = []) {
 
   for (const target of [...targets.keys()].sort()) {
     const targetArtifacts = targets.get(target);
-    const payload = targetArtifacts.artifacts.find(isUpdaterPayload);
+    const payload = selectUpdaterPayload(targetArtifacts.artifacts);
     const signatureArtifact = payload ? findSignatureArtifact(payload, targetArtifacts.artifacts) : null;
 
     if (payload && signatureArtifact) {

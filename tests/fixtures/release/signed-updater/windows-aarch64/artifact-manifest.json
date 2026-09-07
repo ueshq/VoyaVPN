@@ -5,30 +5,33 @@
   "target": "windows-aarch64",
   "generatedAt": "2026-06-01T00:00:00.000Z",
   "sourceBundleDir": "tests/fixtures/release/signed-updater/windows-aarch64",
+  "updaterPayloadSource": "nsis/VoyaVPN_0.1.0_arm64-setup.exe",
   "artifacts": [
     {
-      "name": "voyavpn-0.1.0-stable-windows-aarch64-updater.zip",
-      "path": "voyavpn-0.1.0-stable-windows-aarch64-updater.zip",
-      "kind": "updater",
+      "name": "voyavpn-0.1.0-stable-windows-aarch64-nsis.exe",
+      "path": "voyavpn-0.1.0-stable-windows-aarch64-nsis.exe",
+      "kind": "nsis",
       "target": "windows-aarch64",
       "channel": "stable",
       "version": "0.1.0",
       "bytes": 51,
       "sha256": "760aa548eeac157a756cb69223b9070917df9f88365ef11387944a5be9f7b9fa",
-      "originalName": "VoyaVPN_0.1.0_windows_aarch64.updater.zip",
-      "originalRelativePath": "updater/VoyaVPN_0.1.0_windows_aarch64.updater.zip"
+      "originalName": "VoyaVPN_0.1.0_arm64-setup.exe",
+      "originalRelativePath": "nsis/VoyaVPN_0.1.0_arm64-setup.exe",
+      "updaterPayload": true
     },
     {
-      "name": "voyavpn-0.1.0-stable-windows-aarch64-updater.zip.sig",
-      "path": "voyavpn-0.1.0-stable-windows-aarch64-updater.zip.sig",
+      "name": "voyavpn-0.1.0-stable-windows-aarch64-nsis.exe.sig",
+      "path": "voyavpn-0.1.0-stable-windows-aarch64-nsis.exe.sig",
       "kind": "signature",
       "target": "windows-aarch64",
       "channel": "stable",
       "version": "0.1.0",
       "bytes": 444,
       "sha256": "e16310fdb215f58eb80e31ffad55b368e0f56ff3cbb89bbab17bcbe64d41145c",
-      "originalName": "VoyaVPN_0.1.0_windows_aarch64.updater.zip.sig",
-      "originalRelativePath": "updater/VoyaVPN_0.1.0_windows_aarch64.updater.zip.sig"
+      "originalName": "VoyaVPN_0.1.0_arm64-setup.exe.sig",
+      "originalRelativePath": "nsis/VoyaVPN_0.1.0_arm64-setup.exe.sig",
+      "updaterSignature": true
     }
   ]
 }

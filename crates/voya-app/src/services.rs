@@ -40,6 +40,10 @@ pub enum AppServicesError {
 pub struct AppServices {
     database: Database,
     runtime_paths: AppPaths,
+    /// Shared by every `RuntimeManager` this facade hands out, so concurrent
+    /// commands cannot interleave the runtime config write/delete around the
+    /// supervisor's Start and Stop.
+    runtime_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl AppServices {
@@ -47,6 +51,7 @@ impl AppServices {
         Ok(Self {
             database: Database::connect(database_path).await?,
             runtime_paths,
+            runtime_lock: Arc::new(tokio::sync::Mutex::new(())),
         })
     }
 
@@ -130,6 +135,7 @@ impl AppServices {
     #[must_use]
     pub fn runtime(&self, supervisor: CoreSupervisor) -> RuntimeManager<'_> {
         RuntimeManager::new(&self.database, self.runtime_paths.clone(), supervisor)
+            .with_operation_lock(Arc::clone(&self.runtime_lock))
     }
 
     #[must_use]

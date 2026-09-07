@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto";
 import { copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
+import { parseArgs } from "../../lib/args.mjs";
 import { repoRootFromScript } from "../../lib/common.mjs";
-import { sha256File } from "../validation.mjs";
+import { isStableChannel, placeholderText, sha256File, sha256Text } from "../validation.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 
@@ -25,8 +25,19 @@ const artifactSuffixes = [
   ".zip",
 ];
 
-function parseArgs(argv) {
-  const options = {
+const argSpec = {
+  "--input": { key: "input" },
+  "--output": { key: "output" },
+  "--target": { key: "target" },
+  "--channel": { key: "channel" },
+  "--version": { key: "version" },
+  "--product": { key: "product" },
+  "--stable-updater-config": { key: "stableUpdaterConfig" },
+  "--allow-empty": { key: "allowEmpty", value: true },
+};
+
+function parseOptions(argv) {
+  return parseArgs(argv, argSpec, {
     input: null,
     output: "dist/release",
     target: null,
@@ -35,53 +46,7 @@ function parseArgs(argv) {
     product: "VoyaVPN",
     allowEmpty: false,
     stableUpdaterConfig: null,
-  };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const next = () => {
-      const value = argv[index + 1];
-      if (!value || value.startsWith("--")) {
-        throw new Error(`${arg} requires a value`);
-      }
-      index += 1;
-      return value;
-    };
-
-    switch (arg) {
-      case "--input":
-        options.input = next();
-        break;
-      case "--output":
-        options.output = next();
-        break;
-      case "--target":
-        options.target = next();
-        break;
-      case "--channel":
-        options.channel = next();
-        break;
-      case "--version":
-        options.version = next();
-        break;
-      case "--product":
-        options.product = next();
-        break;
-      case "--stable-updater-config":
-        options.stableUpdaterConfig = next();
-        break;
-      case "--allow-empty":
-        options.allowEmpty = true;
-        break;
-      case "--help":
-        options.help = true;
-        break;
-      default:
-        throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
-
-  return options;
+  });
 }
 
 function printHelp() {
@@ -95,7 +60,11 @@ Options:
   --stable-updater-config <file>
                     Stable updater overlay used by the package build.
                     Default for stable: target/release-config/tauri.updater.stable.generated.json
-  --allow-empty      Write empty manifests instead of failing when no bundle artifacts exist`);
+  --allow-empty      Write empty manifests instead of failing when no bundle artifacts exist
+
+The designated Tauri 2 updater payload (Windows NSIS -setup.exe, Linux .AppImage,
+macOS .app.tar.gz with a sibling .sig) is marked \`updaterPayload: true\` in the
+manifest; a stable collection fails when the bundle has none.`);
 }
 
 async function readPackageVersion() {
@@ -135,19 +104,6 @@ function artifactSuffix(filename) {
   return artifactSuffixes.find((suffix) => lowerName.endsWith(suffix.toLowerCase())) ?? null;
 }
 
-function isStableChannel(channel) {
-  return channel.trim().toLowerCase() === "stable";
-}
-
-function placeholderText(value) {
-  return (
-    !value ||
-    /placeholder|replace_before_release|replace-before-release|changeme|\btodo\b|\btbd\b|voyavpn\.example/i.test(
-      String(value),
-    )
-  );
-}
-
 function slugify(value) {
   return value
     .trim()
@@ -156,7 +112,7 @@ function slugify(value) {
     .replace(/^-+|-+$/g, "");
 }
 
-function classifyArtifact(filePath, inputDir, suffix) {
+export function classifyArtifact(filePath, inputDir, suffix) {
   const relativePath = relative(inputDir, filePath).replaceAll("\\", "/").toLowerCase();
   const isSignature = suffix.toLowerCase().endsWith(".sig");
   const payloadSuffix = isSignature ? suffix.slice(0, -4) : suffix;
@@ -165,7 +121,10 @@ function classifyArtifact(filePath, inputDir, suffix) {
     return "signature";
   }
 
-  if (payloadSuffix === ".tar.gz" || payloadSuffix === ".zip" || relativePath.includes("/updater/")) {
+  // Bundler directory names are matched as path segments: `nsis/...` at the
+  // root of the bundle dir has no leading slash, so `includes("/nsis/")` missed
+  // every real bundle tree.
+  if (payloadSuffix === ".tar.gz" || payloadSuffix === ".zip" || /(^|\/)updater\//.test(relativePath)) {
     return "updater";
   }
 
@@ -175,7 +134,7 @@ function classifyArtifact(filePath, inputDir, suffix) {
     case ".msi":
       return "msi";
     case ".exe":
-      return relativePath.includes("/nsis/") ? "nsis" : "setup";
+      return /(^|\/)nsis\//.test(relativePath) ? "nsis" : "setup";
     case ".deb":
       return "deb";
     case ".rpm":
@@ -185,6 +144,67 @@ function classifyArtifact(filePath, inputDir, suffix) {
     default:
       return "artifact";
   }
+}
+
+/**
+ * The bundle path patterns that identify the in-place updater payload per OS,
+ * most specific first.
+ *
+ * With Tauri 2's `createUpdaterArtifacts: true` the updater payload is the
+ * installer itself, signed in place next to a sibling `.sig`; only macOS emits a
+ * separate `.app.tar.gz`. Several artifacts of one target can therefore be
+ * signed (Windows NSIS *and* MSI, Linux AppImage *and* .deb/.rpm), so the
+ * designated installer type is chosen deliberately here instead of by suffix:
+ * NSIS on Windows (the only installer type the overlay's
+ * `plugins.updater.windows.installMode` configures) and AppImage on Linux. The
+ * trailing `updater/` rule keeps a legacy `v1Compatible`-shaped tree resolvable.
+ */
+const updaterPayloadPatterns = {
+  darwin: [/\.app\.tar\.gz$/i, /\.tar\.gz$/i, /(^|\/)updater\//i],
+  linux: [/\.appimage$/i, /\.appimage\.tar\.gz$/i, /(^|\/)updater\//i],
+  windows: [/-setup\.exe$/i, /\.nsis\.zip$/i, /(^|\/)updater\//i],
+};
+
+export function updaterPayloadPlatform(target) {
+  const value = String(target ?? "").trim().toLowerCase();
+  if (value.startsWith("darwin") || value.startsWith("macos")) {
+    return "darwin";
+  }
+  if (value.startsWith("windows") || value.startsWith("win")) {
+    return "windows";
+  }
+  if (value.startsWith("linux")) {
+    return "linux";
+  }
+  return null;
+}
+
+/**
+ * Returns the bundle-relative path of the updater payload for `target`, or null
+ * when the bundle has no signed payload (an unsigned or dry-run build).
+ */
+export function selectUpdaterPayloadPath(relativePaths, target) {
+  const platform = updaterPayloadPlatform(target);
+  if (!platform) {
+    return null;
+  }
+
+  const signed = new Set(
+    relativePaths
+      .filter((path) => path.toLowerCase().endsWith(".sig"))
+      .map((path) => path.slice(0, -4).toLowerCase()),
+  );
+
+  for (const pattern of updaterPayloadPatterns[platform]) {
+    const match = relativePaths.find(
+      (path) => !path.toLowerCase().endsWith(".sig") && pattern.test(path) && signed.has(path.toLowerCase()),
+    );
+    if (match) {
+      return match;
+    }
+  }
+
+  return null;
 }
 
 function nextUniqueName(state, requestedName, suffix) {
@@ -197,10 +217,6 @@ function nextUniqueName(state, requestedName, suffix) {
   }
 
   return `${requestedName.slice(0, -suffix.length)}-${count + 1}${suffix}`;
-}
-
-function sha256Text(value) {
-  return createHash("sha256").update(value).digest("hex");
 }
 
 async function stableUpdaterConfigEvidence(options, outputDir) {
@@ -258,7 +274,7 @@ async function stableUpdaterConfigEvidence(options, outputDir) {
 }
 
 async function main(argv = []) {
-  const options = parseArgs(argv);
+  const options = parseOptions(argv);
   if (options.help) {
     printHelp();
     return;
@@ -291,11 +307,50 @@ async function main(argv = []) {
 
   const names = new Map();
   const artifacts = [];
+  const relativePaths = sourceFiles.map(({ file }) => relative(inputDir, file).replaceAll("\\", "/"));
+  const updaterPayloadPath = selectUpdaterPayloadPath(relativePaths, options.target);
+
+  if (!updaterPayloadPath && sourceFiles.length > 0 && isStableChannel(options.channel)) {
+    throw new Error(
+      `No signed updater payload found for ${options.target} under ${relative(repoRoot, inputDir)}. ` +
+        "Stable bundles must contain the designated installer (Windows NSIS -setup.exe, Linux .AppImage, " +
+        "macOS .app.tar.gz) next to its .sig.",
+    );
+  }
+
+  // Detached signatures are named after the artifact they sign, so a published
+  // `<payload>.sig` stays discoverable next to its payload even when a target
+  // ships several signed installers.
+  const normalizedNames = new Map();
+  for (const { file, suffix } of sourceFiles) {
+    const originalRelativePath = relative(inputDir, file).replaceAll("\\", "/");
+    if (suffix.toLowerCase().endsWith(".sig")) {
+      continue;
+    }
+    const kind = classifyArtifact(file, inputDir, suffix);
+    normalizedNames.set(
+      originalRelativePath,
+      nextUniqueName(names, `${productSlug}-${version}-${channelSlug}-${targetSlug}-${kind}${suffix}`, suffix),
+    );
+  }
+  for (const { file, suffix } of sourceFiles) {
+    const originalRelativePath = relative(inputDir, file).replaceAll("\\", "/");
+    if (!suffix.toLowerCase().endsWith(".sig")) {
+      continue;
+    }
+    const signedName = normalizedNames.get(originalRelativePath.slice(0, -4));
+    normalizedNames.set(
+      originalRelativePath,
+      signedName
+        ? `${signedName}.sig`
+        : nextUniqueName(names, `${productSlug}-${version}-${channelSlug}-${targetSlug}-signature${suffix}`, suffix),
+    );
+  }
 
   for (const { file, suffix } of sourceFiles) {
     const kind = classifyArtifact(file, inputDir, suffix);
-    const requestedName = `${productSlug}-${version}-${channelSlug}-${targetSlug}-${kind}${suffix}`;
-    const name = nextUniqueName(names, requestedName, suffix);
+    const originalRelativePath = relative(inputDir, file).replaceAll("\\", "/");
+    const name = normalizedNames.get(originalRelativePath);
     const destination = join(outputDir, name);
 
     await copyFile(file, destination);
@@ -312,7 +367,14 @@ async function main(argv = []) {
       bytes: fileStat.size,
       sha256: hash,
       originalName: basename(file),
-      originalRelativePath: relative(inputDir, file).replaceAll("\\", "/"),
+      originalRelativePath,
+      // The updater payload and its detached signature are marked explicitly:
+      // with Tauri 2 in-place updater artifacts, "which file does the updater
+      // serve" cannot be derived from the suffix alone.
+      ...(updaterPayloadPath && originalRelativePath === updaterPayloadPath ? { updaterPayload: true } : {}),
+      ...(updaterPayloadPath && originalRelativePath === `${updaterPayloadPath}.sig`
+        ? { updaterSignature: true }
+        : {}),
     });
   }
 
@@ -323,6 +385,7 @@ async function main(argv = []) {
     target: options.target,
     generatedAt: new Date().toISOString(),
     sourceBundleDir: relative(repoRoot, inputDir).replaceAll("\\", "/"),
+    ...(updaterPayloadPath ? { updaterPayloadSource: updaterPayloadPath } : {}),
     ...(stableUpdaterConfig ? { stableUpdaterConfig } : {}),
     artifacts,
   };

@@ -1,10 +1,11 @@
-import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, relative, resolve } from "node:path";
 import { promisify } from "node:util";
+import { parseArgs } from "../../lib/args.mjs";
 import { repoRootFromScript } from "../../lib/common.mjs";
 import { stableTargets } from "../matrix.mjs";
+import { sha256File, walkArtifactManifests } from "../validation.mjs";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = repoRootFromScript(import.meta.url);
@@ -26,8 +27,24 @@ const gateRows = [
   ["Monitoring and rollback trigger watch", "Release owner"],
 ];
 
-function parseArgs(argv) {
-  const options = {
+const argSpec = {
+  "--out|--output": { key: "output" },
+  "--version": { key: "version" },
+  "--channel": { key: "channel" },
+  "--workflow-url": { key: "workflowUrl" },
+  "--evidence-tracker": { key: "evidenceTracker" },
+  "--previous-stable": { key: "previousStable" },
+  "--validate|--record": { key: "validate" },
+  "--artifact-manifest|--artifact-manifests|--release-artifacts|--updater-artifacts": {
+    key: "artifactManifests",
+    list: true,
+  },
+  "--release-index": { key: "releaseIndex" },
+  "--stdout": { key: "stdout", value: true },
+};
+
+function parseOptions(argv) {
+  return parseArgs(argv, argSpec, {
     output: "dist/release/stable-release-record.md",
     version: null,
     channel: "stable",
@@ -38,64 +55,7 @@ function parseArgs(argv) {
     validate: null,
     artifactManifests: [],
     releaseIndex: null,
-  };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const next = () => {
-      const value = argv[index + 1];
-      if (!value || value.startsWith("--")) {
-        throw new Error(`${arg} requires a value`);
-      }
-      index += 1;
-      return value;
-    };
-
-    switch (arg) {
-      case "--out":
-      case "--output":
-        options.output = next();
-        break;
-      case "--version":
-        options.version = next();
-        break;
-      case "--channel":
-        options.channel = next();
-        break;
-      case "--workflow-url":
-        options.workflowUrl = next();
-        break;
-      case "--evidence-tracker":
-        options.evidenceTracker = next();
-        break;
-      case "--previous-stable":
-        options.previousStable = next();
-        break;
-      case "--stdout":
-        options.stdout = true;
-        break;
-      case "--validate":
-      case "--record":
-        options.validate = next();
-        break;
-      case "--artifact-manifest":
-      case "--artifact-manifests":
-      case "--release-artifacts":
-      case "--updater-artifacts":
-        options.artifactManifests.push(next());
-        break;
-      case "--release-index":
-        options.releaseIndex = next();
-        break;
-      case "--help":
-        options.help = true;
-        break;
-      default:
-        throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
-
-  return options;
+  });
 }
 
 function printHelp() {
@@ -145,14 +105,6 @@ function checkbox(label) {
 
 function isStableTarget(target) {
   return recordReleaseTargets.includes(target);
-}
-
-function sha256Bytes(bytes) {
-  return createHash("sha256").update(bytes).digest("hex");
-}
-
-async function sha256File(path) {
-  return sha256Bytes(await readFile(path));
 }
 
 function splitMarkdownRow(line) {
@@ -319,40 +271,6 @@ function validateRequiredRecordFields(markdown, tables) {
   requireTableCells(failures, tables, "Promotion Log", "Step", ["Step", "Operator", "Timestamp", "Result", "Evidence"]);
 
   return failures;
-}
-
-async function walkArtifactManifests(root) {
-  let rootStat;
-  try {
-    rootStat = await stat(root);
-  } catch (error) {
-    if (error && error.code === "ENOENT") {
-      return [];
-    }
-    throw error;
-  }
-
-  if (rootStat.isFile()) {
-    return basename(root) === "artifact-manifest.json" ? [root] : [];
-  }
-
-  const entries = await readdir(root, { withFileTypes: true });
-  const manifests = [];
-
-  for (const entry of entries) {
-    if (entry.isSymbolicLink()) {
-      continue;
-    }
-
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) {
-      manifests.push(...(await walkArtifactManifests(path)));
-    } else if (entry.isFile() && entry.name === "artifact-manifest.json") {
-      manifests.push(path);
-    }
-  }
-
-  return manifests.sort((left, right) => left.localeCompare(right));
 }
 
 function addArtifactIndexEntry(index, key, entry) {
@@ -690,7 +608,7 @@ ${gateChecklistRows()}
 }
 
 async function main(argv = []) {
-  const options = parseArgs(argv);
+  const options = parseOptions(argv);
   if (options.help) {
     printHelp();
     return;

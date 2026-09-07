@@ -8,6 +8,7 @@ import {
   run,
 } from "../../lib/common.mjs";
 import {
+  managedSingBoxPath,
   managedTunnelServicePath,
   WINDOWS_TUN_EXIT_COPY_FAILED,
   WINDOWS_TUN_EXIT_REGISTRATION_FAILED,
@@ -308,7 +309,7 @@ export function elevateTunnelServiceInstall({
     const messages = new Map([
       [1223, () => "Windows service installation was cancelled at the UAC prompt."],
       [WINDOWS_TUN_EXIT_STOP_TIMEOUT, () => "Timed out waiting for VoyaVPNTunnelService to stop. Disable TUN and retry."],
-      [WINDOWS_TUN_EXIT_COPY_FAILED, () => `Unable to replace the protected tunnel service binary at ${managedTunnelServicePath(env)}. Check Program Files permissions and antivirus logs.`],
+      [WINDOWS_TUN_EXIT_COPY_FAILED, () => `Unable to stage the protected tunnel service binary at ${managedTunnelServicePath(env)} or the sing-box core at ${managedSingBoxPath(env)}. Run pnpm core:sing-box:install, then check Program Files permissions and antivirus logs.`],
       [WINDOWS_TUN_EXIT_REGISTRATION_FAILED, () => "VoyaVPNTunnelService registration or verification failed. Inspect sc.exe query and sc.exe qc output, then retry."],
     ]);
     const message = messages.get(result.status);
@@ -398,6 +399,12 @@ export function buildWindowsLocal({
   if (!fileExists(servicePath)) {
     throw new Error(`The elevated installer completed but the tunnel service binary is missing: ${servicePath}`);
   }
+  // The service refuses to launch a core outside its own directory, so a
+  // missing managed core means TUN would fail at connect time instead of here.
+  const singBoxPath = managedSingBoxPath(env);
+  if (!fileExists(singBoxPath)) {
+    throw new Error(`The elevated installer completed but the managed sing-box core is missing: ${singBoxPath}`);
+  }
   runCommand("sc.exe", ["query", WINDOWS_TUN_SERVICE_NAME], {
     cwd: repoRoot,
     env,
@@ -408,6 +415,7 @@ export function buildWindowsLocal({
   logger.log("Local Windows TUN test app is ready:");
   logger.log(`  Client: ${appPath}`);
   logger.log(`  Service: ${servicePath}`);
+  logger.log(`  Service core: ${singBoxPath}`);
   logger.log(`  NSIS: ${artifacts.nsis}`);
   logger.log(`  MSI: ${artifacts.msi}`);
   logger.log("");
@@ -417,7 +425,7 @@ export function buildWindowsLocal({
   logger.log("This build is unsigned and intended only for local testing. Do not distribute it.");
   logger.log("Do not use pnpm dev for Windows TUN testing; it does not ensure the service is installed.");
 
-  return { appPath, servicePath, ...artifacts };
+  return { appPath, servicePath, singBoxPath, ...artifacts };
 }
 
 export function main() {

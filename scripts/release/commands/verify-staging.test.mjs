@@ -13,6 +13,7 @@ import {
   verifyUpdaterMetadataSignatures,
 } from "./verify-staging.mjs";
 import { stableTargets } from "../matrix.mjs";
+import { selectUpdaterPayload } from "../validation.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const cdnBaseUrl = "https://cdn.voyavpn.dev/stable";
@@ -57,7 +58,7 @@ function validUpdaterMetadata() {
       releaseTargets.map(([releaseTarget]) => {
         const manifestPath = resolve(repoRoot, updaterArtifacts, releaseTarget, "artifact-manifest.json");
         const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-        const payload = manifest.artifacts.find((artifact) => artifact.kind === "updater");
+        const payload = selectUpdaterPayload(manifest.artifacts);
         const signature = readFileSync(resolve(dirname(manifestPath), `${payload.path}.sig`), "utf8").trim();
         return [
           releaseTarget,
@@ -110,7 +111,7 @@ function close(server) {
 
 describe("release staging verification", () => {
   it("accepts complete stable metadata on approved CDN hosts", async () => {
-    expect(() => validateReleaseIndex(validReleaseIndex(), { expectedVersion: version })).not.toThrow();
+    expect(() => validateReleaseIndex(validReleaseIndex(), { cdnBaseUrl, expectedVersion: version })).not.toThrow();
     const latest = validUpdaterMetadata();
     expect(() =>
       validateUpdaterMetadata(latest, {
@@ -124,14 +125,28 @@ describe("release staging verification", () => {
         env: { VOYAVPN_UPDATER_PUBLIC_KEY: updaterPublicKey },
       }),
     ).resolves.toMatchObject({ verifiedCount: releaseTargets.length });
-    expect(() => validateCoreManifest(validCoreManifest(), { expectedVersion: version })).not.toThrow();
+    expect(() => validateCoreManifest(validCoreManifest(), { cdnBaseUrl, expectedVersion: version })).not.toThrow();
+  });
+
+  it("refuses to let the metadata under test declare its own approved CDN base", () => {
+    const index = validReleaseIndex();
+
+    expect(() => validateReleaseIndex(index, { expectedVersion: version })).toThrow(
+      /CDN base URL is required for release-index validation/,
+    );
+    expect(() => validateCoreManifest(validCoreManifest(), {})).toThrow(
+      /CDN base URL is required for core manifest validation/,
+    );
+
+    index.baseUrl = "https://cdn.voyavpn.dev/other-stable";
+    expect(() => validateReleaseIndex(index, { cdnBaseUrl })).toThrow(/baseUrl must be the approved/);
   });
 
   it("rejects GitHub-hosted release-index artifact URLs", () => {
     const index = validReleaseIndex();
     index.artifacts[0].url = "https://github.com/voyavpn/voyavpn/releases/download/v0.1.0/VoyaVPN.dmg";
 
-    expect(() => validateReleaseIndex(index)).toThrow(/GitHub host/);
+    expect(() => validateReleaseIndex(index, { cdnBaseUrl })).toThrow(/GitHub host/);
   });
 
   it("rejects placeholder updater signatures and incomplete platform matrices", () => {
@@ -169,7 +184,7 @@ describe("release staging verification", () => {
       upstreamUrl: "https://source.example.invalid/legacy-core/releases/v1",
     });
 
-    expect(() => validateCoreManifest(manifest)).toThrow(/not supported/);
+    expect(() => validateCoreManifest(manifest, { cdnBaseUrl })).toThrow(/not supported/);
   });
 
   it("rejects redirect responses during CDN probes", async () => {
@@ -208,7 +223,7 @@ describe("updater signature verification during download-and-hash", () => {
   const target = "linux-x86_64";
   const fixtureDir = resolve(repoRoot, updaterArtifacts, target);
   const manifest = JSON.parse(readFileSync(resolve(fixtureDir, "artifact-manifest.json"), "utf8"));
-  const payloadArtifact = manifest.artifacts.find((artifact) => artifact.kind === "updater");
+  const payloadArtifact = selectUpdaterPayload(manifest.artifacts);
   const payload = readFileSync(resolve(fixtureDir, payloadArtifact.path));
   const signature = readFileSync(resolve(fixtureDir, `${payloadArtifact.path}.sig`), "utf8").trim();
 

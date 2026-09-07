@@ -64,4 +64,87 @@ describe("release updater metadata", () => {
       await rm(workDir, { force: true, recursive: true });
     }
   });
+
+  it("emits placeholder metadata for the dry-run channel and refuses it for stable", async () => {
+    const workDir = await mkdtemp(join(tmpdir(), "voyavpn-updater-placeholder-"));
+    const latestPath = join(workDir, "latest.json");
+    const run = (args) =>
+      execFileAsync(process.execPath, ["scripts/release/cli.mjs", "updater", ...args], { cwd: repoRoot });
+
+    try {
+      await run([
+        "--input",
+        workDir,
+        "--out",
+        latestPath,
+        "--channel",
+        "beta",
+        "--base-url",
+        "https://cdn.voyavpn.test/beta/updater",
+        "--target",
+        "darwin-x86_64,windows-x86_64",
+        "--placeholder-signatures",
+      ]);
+
+      const latest = await readJson(latestPath);
+      const evidence = await readJson(join(workDir, "latest.evidence.json"));
+      expect(Object.keys(latest.platforms).sort()).toEqual(["darwin-x86_64", "windows-x86_64"]);
+      expect(latest.platforms["darwin-x86_64"].signature).toBe(
+        "VOYAVPN_UPDATER_SIGNATURE_PLACEHOLDER_DARWIN_X86_64",
+      );
+      expect(latest.platforms["darwin-x86_64"].url).toBe(
+        "https://cdn.voyavpn.test/beta/updater/0.1.0/voyavpn-0.1.0-beta-darwin-x86_64-updater.zip",
+      );
+      expect(Object.values(evidence.platforms).every((entry) => entry.source === "placeholder")).toBe(true);
+
+      await expect(
+        run([
+          "--input",
+          workDir,
+          "--out",
+          latestPath,
+          "--channel",
+          "stable",
+          "--base-url",
+          updatesBaseUrl,
+          "--target",
+          "darwin-x86_64",
+          "--placeholder-signatures",
+        ]),
+      ).rejects.toThrow(/cannot use --placeholder-signatures/);
+    } finally {
+      await rm(workDir, { force: true, recursive: true });
+    }
+  });
+
+  it("resolves the legacy kind:updater payload when a manifest predates updaterPayload", async () => {
+    const workDir = await mkdtemp(join(tmpdir(), "voyavpn-updater-legacy-"));
+    const latestPath = join(workDir, "latest.json");
+
+    try {
+      await execFileAsync(
+        process.execPath,
+        [
+          "scripts/release/cli.mjs",
+          "updater",
+          "--input",
+          "tests/fixtures/release/placeholder-updater",
+          "--out",
+          latestPath,
+          "--channel",
+          "beta",
+          "--base-url",
+          "https://cdn.voyavpn.test/beta/updater",
+        ],
+        { cwd: repoRoot },
+      );
+
+      const latest = await readJson(latestPath);
+      expect(latest.platforms["windows-x86_64"].url).toBe(
+        "https://cdn.voyavpn.test/beta/updater/voyavpn-0.1.0-stable-windows-x86-64-updater.zip",
+      );
+    } finally {
+      await rm(workDir, { force: true, recursive: true });
+    }
+  });
 });

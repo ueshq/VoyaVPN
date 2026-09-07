@@ -50,7 +50,13 @@ pub fn cancel_speedtest<R: tauri::Runtime>(
         .cancel()
         .map_err(speedtest_error)?;
     if cancelled {
-        emit_runtime_log(&app, LogLevel::Info, "Speedtest cancellation requested")?;
+        // The cancellation already happened; a failed log emit must not turn a
+        // successful command into an error.
+        if let Err(error) =
+            emit_runtime_log(&app, LogLevel::Info, "Speedtest cancellation requested")
+        {
+            tracing::warn!(?error, "failed to emit speedtest cancellation log");
+        }
     }
 
     speedtest_manager(&state).status().map_err(speedtest_error)

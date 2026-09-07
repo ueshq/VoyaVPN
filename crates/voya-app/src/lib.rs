@@ -9,6 +9,7 @@ pub mod certificates;
 pub mod config_mutation;
 pub mod connection_mode;
 pub mod contract_map;
+pub mod core_flow;
 mod coregen;
 pub mod dns;
 pub mod elevation;

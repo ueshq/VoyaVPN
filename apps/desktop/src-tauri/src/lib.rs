@@ -29,7 +29,9 @@ use voya_app::{
     subscriptions::{
         AutoUpdateOutcome, SubscriptionAutoUpdateScheduler, SubscriptionAutoUpdateSink,
     },
-    supervisor::{CoreSupervisor, NativeTunExitEvent, SupervisorDeps, SupervisorEventSink},
+    supervisor::{
+        CoreExitEvent, CoreSupervisor, NativeTunExitEvent, SupervisorDeps, SupervisorEventSink,
+    },
     sysproxy::SystemProxyManager,
 };
 use voya_platform::{
@@ -422,50 +424,42 @@ impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
     }
 }
 
+// Both callbacks arrive on the supervisor actor's own thread, so the recovery
+// runs on a spawned task: it re-enters the runtime and the OS proxy, and the
+// actor must stay free to process the commands that recovery may issue.
 impl SupervisorEventSink for TauriSupervisorEventSink {
     fn native_tun_exited(&self, event: NativeTunExitEvent) {
         let app = self.app.clone();
         tauri::async_runtime::spawn(async move {
-            let state = app.state::<AppState>();
-            let config = match state.config().read() {
-                Ok(guard) => guard.clone(),
-                Err(_) => AppConfig::default(),
+            let Some(state) = app.try_state::<AppState>() else {
+                return;
             };
-            let message = format!("Native TUN provider exited: {}", event.message);
-            if let Err(error) =
-                ipc::commands::emit_runtime_log(&app, ipc::events::LogLevel::Error, &message)
-            {
-                tracing::warn!(?error, "failed to emit native TUN exit log");
-            }
-            if let Err(error) = ipc::commands::emit_core_state(
-                &app,
-                ipc::events::CoreState::Disconnected,
-                event.active_profile_id.clone(),
-                None,
-            ) {
-                tracing::warn!(?error, "failed to emit native TUN disconnected state");
-            }
-            if let Err(error) = ipc::commands::restore_system_proxy_after_native_tun_failure(
-                &app,
-                &state,
-                &config,
-                "provider exit",
-            ) {
-                tracing::warn!(
-                    ?error,
-                    "failed to restore system proxy after native TUN provider exit"
-                );
-            }
-            if let Err(error) = ipc::commands::emit_current_tun_status(&app, &state).await {
-                tracing::warn!(?error, "failed to emit native TUN status after exit");
-            }
-            if let Err(error) = ipc::commands::emit_statistics_zero(&app) {
-                tracing::warn!(
-                    ?error,
-                    "failed to emit zero statistics after native TUN exit"
-                );
-            }
+            let config = current_config_for_recovery(&state);
+            let flow = ipc::commands::core_flow(&app, &state);
+            flow.handle_native_tun_exit(&config, event).await;
         });
+    }
+
+    fn core_exited(&self, event: CoreExitEvent) {
+        let app = self.app.clone();
+        tauri::async_runtime::spawn(async move {
+            let Some(state) = app.try_state::<AppState>() else {
+                return;
+            };
+            let config = current_config_for_recovery(&state);
+            let flow = ipc::commands::core_flow(&app, &state);
+            flow.handle_core_exit(&config, event).await;
+        });
+    }
+}
+
+/// The recovery paths must run even when the config lock is poisoned: the
+/// defaults still restore the system proxy to "no proxy", which is the state a
+/// dead core needs.
+fn current_config_for_recovery(state: &AppState) -> AppConfig {
+    match state.config().read() {
+        Ok(guard) => guard.clone(),
+        Err(_) => AppConfig::default(),
     }
 }
 

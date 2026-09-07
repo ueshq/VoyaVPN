@@ -7,16 +7,16 @@
   "sourceBundleDir": "tests/fixtures/release/bundles/linux-aarch64",
   "artifacts": [
     {
-      "name": "voyavpn-0.1.0-stable-linux-aarch64-appimage.AppImage",
-      "path": "voyavpn-0.1.0-stable-linux-aarch64-appimage.AppImage",
-      "kind": "appimage",
+      "name": "voyavpn-0.1.0-stable-linux-aarch64-deb.deb",
+      "path": "voyavpn-0.1.0-stable-linux-aarch64-deb.deb",
+      "kind": "deb",
       "target": "linux-aarch64",
       "channel": "stable",
       "version": "0.1.0",
       "bytes": 90177536,
       "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
-      "originalName": "voyavpn_0.1.0_arm64.AppImage",
-      "originalRelativePath": "appimage/voyavpn_0.1.0_arm64.AppImage"
+      "originalName": "voyavpn_0.1.0_arm64.deb",
+      "originalRelativePath": "deb/voyavpn_0.1.0_arm64.deb"
     }
   ]
 }

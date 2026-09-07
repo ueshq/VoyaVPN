@@ -39,19 +39,39 @@ function assertNonPlaceholderPublicKey(value, label) {
   return text;
 }
 
-function resolveApprovedUpdaterPublicKey(env = process.env) {
-  const approved = assertNonPlaceholderPublicKey(env.VOYAVPN_UPDATER_PUBLIC_KEY, "VOYAVPN_UPDATER_PUBLIC_KEY");
-  const configured = env.TAURI_UPDATER_PUBLIC_KEY
-    ? assertNonPlaceholderPublicKey(env.TAURI_UPDATER_PUBLIC_KEY, "TAURI_UPDATER_PUBLIC_KEY")
-    : approved;
+/**
+ * The single updater public key resolver. The overlay generator, readiness and
+ * the updater metadata command all resolve the key through here so the accepted
+ * variable names match what the release docs promise: either
+ * VOYAVPN_UPDATER_PUBLIC_KEY or TAURI_UPDATER_PUBLIC_KEY, and when both are set
+ * they must be the same key.
+ */
+function approvedUpdaterPublicKeyFromEnv(env = process.env) {
+  const primary = String(env.VOYAVPN_UPDATER_PUBLIC_KEY ?? "").trim();
+  const secondary = String(env.TAURI_UPDATER_PUBLIC_KEY ?? "").trim();
 
-  if (configured !== approved) {
+  if (!primary && !secondary) {
     throw new UpdaterSignatureError(
-      "Configured updater public key must exactly match approved VOYAVPN_UPDATER_PUBLIC_KEY",
+      "VOYAVPN_UPDATER_PUBLIC_KEY or TAURI_UPDATER_PUBLIC_KEY must be the approved non-placeholder Tauri updater public key",
     );
   }
 
-  decodeTauriUpdaterPublicKey(approved, "VOYAVPN_UPDATER_PUBLIC_KEY");
+  const approved = primary
+    ? assertNonPlaceholderPublicKey(primary, "VOYAVPN_UPDATER_PUBLIC_KEY")
+    : assertNonPlaceholderPublicKey(secondary, "TAURI_UPDATER_PUBLIC_KEY");
+
+  if (primary && secondary && assertNonPlaceholderPublicKey(secondary, "TAURI_UPDATER_PUBLIC_KEY") !== approved) {
+    throw new UpdaterSignatureError(
+      "TAURI_UPDATER_PUBLIC_KEY must exactly match the approved VOYAVPN_UPDATER_PUBLIC_KEY",
+    );
+  }
+
+  return approved;
+}
+
+function resolveApprovedUpdaterPublicKey(env = process.env) {
+  const approved = approvedUpdaterPublicKeyFromEnv(env);
+  decodeTauriUpdaterPublicKey(approved, "approved updater public key");
   return approved;
 }
 
@@ -204,6 +224,7 @@ async function verifyTauriUpdaterSignatureFile(payloadPath, signatureBase64, pub
 }
 
 export {
+  approvedUpdaterPublicKeyFromEnv,
   resolveApprovedUpdaterPublicKey,
   verifyTauriUpdaterSignature,
   verifyTauriUpdaterSignatureFile,

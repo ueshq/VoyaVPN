@@ -1,9 +1,16 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
+import { parseArgs } from "../../lib/args.mjs";
 import { repoRootFromScript } from "../../lib/common.mjs";
 import { stableTargets as stableTargetMatrix } from "../matrix.mjs";
 import {
   defaultEvidencePath,
+  isStableChannel,
+  joinUrl,
+  normalizeReleaseUrl,
+  requiredBytes,
+  requiredSha256,
+  requiredString,
   sourceInputEvidence,
   uniqueSorted,
   walkArtifactManifests,
@@ -20,8 +27,18 @@ const releaseTargetEntries = stableTargetMatrix.map(({ releaseTarget, os, arch }
 }));
 const stableReleaseTargetSet = new Set(releaseTargetEntries.map((target) => target.releaseTarget));
 
-function parseArgs(argv) {
-  const options = {
+const argSpec = {
+  "--input": { key: "input" },
+  "--output|--out": { key: "output" },
+  "--evidence-out": { key: "evidenceOutput" },
+  "--base-url": { key: "baseUrl" },
+  "--channel": { key: "channel" },
+  "--version": { key: "version" },
+  "--product": { key: "product" },
+};
+
+function parseOptions(argv) {
+  return parseArgs(argv, argSpec, {
     input: null,
     output: "dist/release/release-index.json",
     evidenceOutput: null,
@@ -29,51 +46,7 @@ function parseArgs(argv) {
     channel: stableChannel,
     version: null,
     product: "VoyaVPN",
-  };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const next = () => {
-      const value = argv[index + 1];
-      if (!value || value.startsWith("--")) {
-        throw new Error(`${arg} requires a value`);
-      }
-      index += 1;
-      return value;
-    };
-
-    switch (arg) {
-      case "--input":
-        options.input = next();
-        break;
-      case "--output":
-      case "--out":
-        options.output = next();
-        break;
-      case "--evidence-out":
-        options.evidenceOutput = next();
-        break;
-      case "--base-url":
-        options.baseUrl = next();
-        break;
-      case "--channel":
-        options.channel = next();
-        break;
-      case "--version":
-        options.version = next();
-        break;
-      case "--product":
-        options.product = next();
-        break;
-      case "--help":
-        options.help = true;
-        break;
-      default:
-        throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
-
-  return options;
+  });
 }
 
 function printHelp() {
@@ -98,64 +71,25 @@ Required stable artifact fields:
 Stable validation fails when the CDN base URL is missing, empty, an example host, or a GitHub URL.`);
 }
 
-function isStable(channel) {
-  return channel.trim().toLowerCase() === stableChannel;
-}
-
-function isForbiddenStableHost(hostname) {
-  const host = hostname.toLowerCase();
-  return (
-    host === "example.com" ||
-    host.endsWith(".example.com") ||
-    host.endsWith(".example") ||
-    host.includes("example") ||
-    host === "github.com" ||
-    host.endsWith(".github.com") ||
-    host === "githubusercontent.com" ||
-    host.endsWith(".githubusercontent.com") ||
-    host === "github.io" ||
-    host.endsWith(".github.io")
-  );
-}
-
 function normalizeBaseUrl(baseUrl, channel) {
   const value = (baseUrl ?? "").trim();
   if (!value) {
     throw new Error(
-      isStable(channel)
+      isStableChannel(channel)
         ? "Stable release index generation requires --base-url or VOYAVPN_CDN_BASE_URL"
         : "Release index generation requires --base-url or VOYAVPN_CDN_BASE_URL",
     );
   }
 
-  let parsed;
-  try {
-    parsed = new URL(value);
-  } catch {
-    throw new Error(`Invalid CDN base URL: ${value}`);
-  }
-
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new Error(`CDN base URL must use http or https: ${value}`);
-  }
-
-  parsed.hash = "";
-  parsed.search = "";
-
-  if (isStable(channel) && isForbiddenStableHost(parsed.hostname)) {
-    throw new Error(`Stable CDN base URL must not use example or GitHub hosts: ${value}`);
-  }
-
-  return parsed.toString().replace(/\/+$/g, "");
-}
-
-function joinUrl(baseUrl, artifactPath) {
-  const segments = String(artifactPath)
-    .split("/")
-    .filter((segment) => segment.length > 0)
-    .map((segment) => encodeURIComponent(segment));
-
-  return [baseUrl, ...segments].join("/");
+  // The dry-run lane generates "stable" metadata against the placeholder `.test`
+  // CDN, so local/test hosts stay allowed; verify-staging and readiness are the
+  // gates that reject them for a real stable run.
+  return normalizeReleaseUrl(value, {
+    allowHttp: true,
+    allowTestHosts: true,
+    checkHost: isStableChannel(channel),
+    label: isStableChannel(channel) ? "Stable CDN base URL" : "CDN base URL",
+  });
 }
 
 function validateArtifactPath(artifactPath, context) {
@@ -237,26 +171,16 @@ function stableReleaseTargetRank(releaseTarget) {
   return index === -1 ? releaseTargetEntries.length : index;
 }
 
-function requiredString(value, field, context) {
-  if (!value || typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${context} is missing ${field}`);
+/**
+ * `--version` is documented as the *expected* app version, the same contract
+ * updater/verify-staging use. Overriding the manifest value instead would let a
+ * typo publish a release index that advertises a version nothing was built for.
+ */
+function expectedVersion(manifestVersion, requestedVersion, context) {
+  if (requestedVersion && manifestVersion !== requestedVersion.trim()) {
+    throw new Error(`${context} version ${manifestVersion} does not match expected ${requestedVersion.trim()}`);
   }
-  return value.trim();
-}
-
-function requiredSha256(value, context) {
-  const hash = requiredString(value, "sha256", context).toLowerCase();
-  if (!/^[a-f0-9]{64}$/.test(hash)) {
-    throw new Error(`${context} has invalid sha256: ${value}`);
-  }
-  return hash;
-}
-
-function requiredBytes(value, context) {
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`${context} has invalid bytes: ${value}`);
-  }
-  return value;
+  return manifestVersion;
 }
 
 function stableFieldCheck(entry, context) {
@@ -296,7 +220,11 @@ async function loadArtifactEntries(inputDir, options, baseUrl) {
 
       const entry = {
         channel: requiredString(artifact.channel ?? manifest.channel ?? options.channel, "channel", context),
-        version: requiredString(options.version ?? artifact.version ?? manifest.version, "version", context),
+        version: expectedVersion(
+          requiredString(artifact.version ?? manifest.version, "version", context),
+          options.version,
+          context,
+        ),
         target: normalizeTarget(explicitTarget) ?? explicitTarget ?? inferTarget(sourceTarget, artifact.originalName, artifact.name),
         arch: normalizeArch(explicitArch) ?? explicitArch ?? inferArch(sourceTarget, artifact.originalName, artifact.name),
         kind: requiredString(artifact.kind, "kind", context),
@@ -326,7 +254,7 @@ async function loadArtifactEntries(inputDir, options, baseUrl) {
         entry.originalRelativePath = artifact.originalRelativePath;
       }
 
-      if (isStable(options.channel)) {
+      if (isStableChannel(options.channel)) {
         stableFieldCheck(entry, context);
       }
 
@@ -417,7 +345,7 @@ function assertStableIndex(index, baseUrl) {
 }
 
 async function main(argv = []) {
-  const options = parseArgs(argv);
+  const options = parseOptions(argv);
   if (options.help) {
     printHelp();
     return;
@@ -455,7 +383,7 @@ async function main(argv = []) {
     artifacts,
   };
 
-  if (isStable(channel)) {
+  if (isStableChannel(channel)) {
     assertStableIndex(index, baseUrl);
   }
 
@@ -481,8 +409,8 @@ async function main(argv = []) {
     sourceArtifactNames: uniqueSorted(artifacts.map((artifact) => artifact.originalName)),
     validations: {
       urlsDerivedFromBaseUrl: true,
-      stableRejectsExampleAndGithubBaseUrls: isStable(channel),
-      stableFirstTargetMatrixComplete: isStable(channel),
+      stableRejectsExampleAndGithubBaseUrls: isStableChannel(channel),
+      stableFirstTargetMatrixComplete: isStableChannel(channel),
       requiredArtifactFieldsPresent: true,
     },
     targets: targetEvidence,

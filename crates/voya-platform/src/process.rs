@@ -918,6 +918,76 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn process_generated_script_rejects_hard_linked_targets() {
+        let root = unique_temp_root("generated-script-hardlink");
+        let directory = root.join("guiTemps").join("sudo");
+        fs::create_dir_all(&directory).expect("create script directory");
+        let outside = root.join("outside.sh");
+        fs::write(&outside, "outside").expect("write outside target");
+        let script_path = directory.join("run_as_sudo.sh");
+        fs::hard_link(&outside, &script_path).expect("create hard link");
+
+        let error = write_generated_scripts(&[GeneratedScript::new(
+            directory,
+            script_path,
+            "#!/bin/sh\n",
+            true,
+        )])
+        .expect_err("hard linked path should fail");
+
+        assert!(
+            matches!(
+                &error,
+                ProcessError::InsecureGeneratedScriptPath { reason, .. }
+                    if reason.contains("hard links")
+            ),
+            "unexpected error: {error}"
+        );
+        assert_eq!(
+            fs::read_to_string(&outside).expect("read outside target"),
+            "outside"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_generated_script_rejects_non_regular_targets() {
+        use std::{ffi::CString, os::unix::ffi::OsStrExt};
+
+        let root = unique_temp_root("generated-script-fifo");
+        let directory = root.join("guiTemps").join("sysproxy");
+        fs::create_dir_all(&directory).expect("create script directory");
+        let script_path = directory.join("proxy_set_linux.sh");
+        let raw_path = CString::new(script_path.as_os_str().as_bytes()).expect("fifo path");
+        // SAFETY: `raw_path` stays alive for the call and `mkfifo` only reads
+        // the NUL-terminated path it is given.
+        let created = unsafe { libc::mkfifo(raw_path.as_ptr(), 0o600) };
+        assert_eq!(created, 0, "mkfifo should create the test target");
+
+        let error = write_generated_scripts(&[GeneratedScript::new(
+            directory,
+            script_path,
+            "#!/bin/sh\n",
+            true,
+        )])
+        .expect_err("non-regular path should fail");
+
+        assert!(
+            matches!(
+                &error,
+                ProcessError::InsecureGeneratedScriptPath { reason, .. }
+                    if reason.contains("not a regular file")
+            ),
+            "unexpected error: {error}"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
     #[test]
     fn process_runner_trait_supports_fake_process_runner() {
         let runner = RecordingRunner::default();

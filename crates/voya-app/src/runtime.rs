@@ -1,9 +1,11 @@
 use std::{
     io,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use thiserror::Error;
+use tokio::sync::Mutex;
 use voya_core::{
     generate_singbox_config_json, AppConfig, ContextBuildError, CoreConfigContext,
     CoreConfigContextBuilder, CoreConfigContextBuilderAllResult, CoreGenPlatform, CoreType,
@@ -23,7 +25,8 @@ use voya_platform::{
 
 use crate::coregen::{SnapshotCoreGenData, SnapshotCoreGenEnv};
 use crate::supervisor::{
-    CoreProcessSpec, CoreSupervisor, SupervisorError, SupervisorSnapshot, SupervisorStartRequest,
+    CoreProcessSpec, CoreSupervisor, SupervisorConnectionState, SupervisorError,
+    SupervisorSnapshot, SupervisorStartRequest,
 };
 use crate::updates::local_singbox_ruleset_paths;
 
@@ -53,6 +56,14 @@ pub struct RuntimeManager<'runtime> {
     paths: AppPaths,
     core_seed_resource_dir: Option<PathBuf>,
     supervisor: CoreSupervisor,
+    /// Serializes connect/restart/disconnect.
+    ///
+    /// The supervisor actor already serializes process lifecycle, but the
+    /// runtime config files live outside it: `connect` writes `config.json`
+    /// before sending Start, and `disconnect` deletes it after Stop returns.
+    /// Without this lock a disconnect could delete the config a queued connect
+    /// is about to launch the core against.
+    operation_lock: Arc<Mutex<()>>,
     target_os: TargetOs,
 }
 
@@ -74,6 +85,7 @@ impl<'runtime> RuntimeManager<'runtime> {
             paths,
             core_seed_resource_dir: None,
             supervisor,
+            operation_lock: Arc::new(Mutex::new(())),
             target_os,
         }
     }
@@ -87,7 +99,59 @@ impl<'runtime> RuntimeManager<'runtime> {
         self
     }
 
+    /// Share one runtime-operation lock across every manager built from the
+    /// same services handle. Managers are cheap and constructed per command, so
+    /// the lock has to be handed in rather than owned per instance.
+    #[must_use]
+    pub fn with_operation_lock(mut self, operation_lock: Arc<Mutex<()>>) -> Self {
+        self.operation_lock = operation_lock;
+        self
+    }
+
     pub async fn connect(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
+        let _guard = self.operation_lock.lock().await;
+        self.start_core(config).await
+    }
+
+    pub async fn restart(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
+        let _guard = self.operation_lock.lock().await;
+        self.start_core(config).await
+    }
+
+    /// Restart only while the supervisor is connected.
+    ///
+    /// The status check runs under the runtime lock, so a disconnect that
+    /// lands between a caller's own check and this call cannot be silently
+    /// undone by the restart. `None` means the core was already down.
+    pub async fn restart_if_connected(
+        &self,
+        config: &AppConfig,
+    ) -> Result<Option<SupervisorSnapshot>, RuntimeError> {
+        let _guard = self.operation_lock.lock().await;
+        let status = self.supervisor.status().await?;
+        if status.state != SupervisorConnectionState::Connected {
+            return Ok(None);
+        }
+
+        self.start_core(config).await.map(Some)
+    }
+
+    pub async fn disconnect(&self) -> Result<SupervisorSnapshot, RuntimeError> {
+        let _guard = self.operation_lock.lock().await;
+        let snapshot = self.supervisor.stop().await?;
+        cleanup_runtime_state(&self.paths)?;
+
+        Ok(snapshot)
+    }
+
+    pub async fn status(&self) -> Result<SupervisorSnapshot, RuntimeError> {
+        // Deliberately unlocked: status is polled while a connect holds the
+        // lock, and the failure-recovery paths query it to find out what the
+        // supervisor really did.
+        self.supervisor.status().await.map_err(Into::into)
+    }
+
+    async fn start_core(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
         self.paths.ensure_dirs()?;
 
         let active_profile_id = config.index_id.trim();
@@ -145,21 +209,6 @@ impl<'runtime> RuntimeManager<'runtime> {
                 Err(error.into())
             }
         }
-    }
-
-    pub async fn restart(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
-        self.connect(config).await
-    }
-
-    pub async fn disconnect(&self) -> Result<SupervisorSnapshot, RuntimeError> {
-        let snapshot = self.supervisor.stop().await?;
-        cleanup_runtime_state(&self.paths)?;
-
-        Ok(snapshot)
-    }
-
-    pub async fn status(&self) -> Result<SupervisorSnapshot, RuntimeError> {
-        self.supervisor.status().await.map_err(Into::into)
     }
 
     fn process_spec(
@@ -443,10 +492,7 @@ mod tests {
             .await
             .expect("runtime test operation should succeed");
 
-        assert_eq!(
-            disconnected.state,
-            crate::supervisor::SupervisorConnectionState::Disconnected
-        );
+        assert_eq!(disconnected.state, SupervisorConnectionState::Disconnected);
         assert!(!paths.bin_config_file(MAIN_CONFIG_FILE_NAME).exists());
         assert_eq!(runner.stops().as_slice(), [10]);
         config.index_id.clear();
@@ -548,10 +594,7 @@ mod tests {
             .await
             .expect("runtime test operation should succeed");
 
-        assert_eq!(
-            connected.state,
-            crate::supervisor::SupervisorConnectionState::Connected
-        );
+        assert_eq!(connected.state, SupervisorConnectionState::Connected);
         assert_eq!(connected.main_pid, None);
         assert!(runner.spawns().is_empty());
         assert!(!paths.bin_config_file(PRE_CONFIG_FILE_NAME).exists());

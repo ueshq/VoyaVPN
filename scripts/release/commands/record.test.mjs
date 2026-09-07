@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { stableTargets } from "../matrix.mjs";
+import { selectUpdaterPayload } from "../validation.mjs";
 import { buildReleaseRecord, validateReleaseRecordText } from "./record.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
@@ -65,7 +66,7 @@ async function buildFixtureRecord(workDir) {
 
   const artifactRows = recordTargets.map((target, index) => {
     const packageArtifact = packageManifests[index].artifacts[0];
-    const updaterPayload = updaterManifests[index].artifacts.find((artifact) => artifact.kind === "updater");
+    const updaterPayload = selectUpdaterPayload(updaterManifests[index].artifacts);
     const signature = updaterManifests[index].artifacts.find((artifact) => artifact.kind === "signature");
     return {
       Target: target,

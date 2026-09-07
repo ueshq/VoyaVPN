@@ -143,6 +143,29 @@ Stable packaging uses the generated overlay from `scripts/tauri/cli.mjs`:
 - `plugins.updater.endpoints`: `<VOYAVPN_UPDATES_BASE_URL>/latest.json`.
 - Windows updater install mode: `passive`.
 
+### Which File The Updater Serves
+
+`bundle.createUpdaterArtifacts` is the plain `true`, not `"v1Compatible"`, so
+Tauri 2 signs the installers **in place** rather than emitting zipped v1
+payloads. Only macOS produces a separate archive. The updater payload per target
+is therefore:
+
+| Target | Updater payload | Sibling signature |
+| --- | --- | --- |
+| `darwin-x86_64`, `darwin-aarch64` | `bundle/macos/VoyaVPN.app.tar.gz` | `VoyaVPN.app.tar.gz.sig` |
+| `windows-x86_64`, `windows-aarch64` | `bundle/nsis/*-setup.exe` | `*-setup.exe.sig` |
+| `linux-x86_64`, `linux-aarch64` | `bundle/appimage/*.AppImage` | `*.AppImage.sig` |
+
+Windows also signs the MSI and Linux also signs `.deb`/`.rpm`, so the payload is
+not inferable from "has a signature": `pnpm release -- artifacts` picks the
+designated installer above, records it as `updaterPayload: true` in
+`artifact-manifest.json` (with `updaterSignature: true` on its `.sig` and
+`updaterPayloadSource` on the manifest), and fails a stable collection when the
+bundle contains no signed payload for its target. `pnpm release -- updater` and
+`pnpm release -- verify-staging` select the payload from that flag, falling back
+to the legacy `kind: "updater"` rule for manifests written before it existed.
+Normalized signature artifacts are named `<payload>.sig`.
+
 The overlay generation command is exact and should be run from a prepared shell where release-time environment names have already been supplied by the approved secret system or signing machine:
 
 ```sh
@@ -165,7 +188,8 @@ Before a real stable release:
 4. Set the prepared stable environment names described in [runbook.md](runbook.md), including `VOYAVPN_CDN_BASE_URL`, `VOYAVPN_UPDATES_BASE_URL`, `VOYAVPN_UPDATER_PUBLIC_KEY`, updater signing, platform signing, and real artifact input names.
 5. Generate and inspect the overlay before packaging with the command above.
 
-6. Run the stable readiness check against the generated overlay:
+6. Run the stable readiness check against the generated overlay (stable mode
+   defaults `--tauri-config` to that overlay):
 
    ```sh
    pnpm release -- readiness --mode stable
@@ -177,10 +201,11 @@ Before a real stable release:
 
 ## Core And Sidecar Policy
 
-Debug packages and credential-free release dry runs do not bundle proxy core binaries unless the sing-box seed has been explicitly staged for a local release rehearsal:
+Every `pnpm tauri:build` bundles the sing-box seed, including `--debug` builds and credential-free dry runs: the wrapper stages the seed before invoking Tauri and injects a `bundle.resources` overlay for it. Treat any locally built package as a GPL redistribution:
 
 - `bundle.externalBin` is an empty list.
-- The bundled release resources are `docs/release/THIRD_PARTY_NOTICES.md` and the generated sing-box seed overlay when present.
+- The bundled release resources are `docs/release/THIRD_PARTY_NOTICES.md` and the generated sing-box seed overlay.
+- The seed archive is verified against the SHA-256 pinned in `scripts/core/sing-box-installer.mjs` before extraction, and the already-staged seed is re-verified against `sing-box.seed.json` before it is bundled. See [sing-box-seed-pinning.md](sing-box-seed-pinning.md) for the bump procedure and the `VOYAVPN_ALLOW_UNPINNED_SING_BOX` escape hatch.
 - Runtime core lookup uses the app data `bin/` tree. sing-box is copied there from the bundled seed.
 - GPL and AGPL cores must remain user-supplied or separately approved unless there is explicit legal approval for a distribution path.
 
@@ -356,7 +381,7 @@ runtime configuration and enables TUN.
 
 ## First-Run Core Acquisition Flow
 
-First run should not assume any core executable is present in debug or dry-run packages. Stable packages copy the approved sing-box seed into app data when present. Missing sing-box seed assets do not fall back to an online sing-box download; rebuild or reinstall the package so the seed is present.
+First run copies the bundled sing-box seed into app data. There is no download-on-first-run path in the app: a package that was built without a staged seed simply has no core. Missing sing-box seed assets do not fall back to an online sing-box download; rebuild or reinstall the package so the seed is present.
 
 1. App startup creates the app config, `bin/`, `binConfigs/`, log, and temp directories.
 2. The profile table may show profiles before cores exist, but connect should surface a typed missing-core error instead of failing silently.

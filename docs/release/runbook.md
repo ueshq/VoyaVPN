@@ -44,8 +44,11 @@ pnpm release -- readiness --mode dry-run --cdn-base-url https://cdn.voyavpn.test
 Stable mode is intended for a prepared release environment:
 
 ```sh
+pnpm release -- updater-config
 pnpm release -- readiness --mode stable
 ```
+
+Stable mode scans the generated overlay `target/release-config/tauri.updater.stable.generated.json` by default, so `pnpm release -- updater-config` must run first (or the overlay must be passed with `--tauri-config <file>`, which is what the release workflow does with the copy packaged next to the artifacts). Readiness stops with that instruction when the overlay is missing, because the committed `apps/desktop/src-tauri/tauri.conf.json` is deliberately credential-free and could never satisfy the stable updater checks.
 
 Stable mode requires `VOYAVPN_CDN_BASE_URL` or `--cdn-base-url`, signed updater artifacts, real Tauri updater signing input through `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH`, platform signing env names for macOS and Windows, a non-placeholder updater public key in the generated overlay, updater artifacts enabled, and no forbidden example, dry-run updater, or GitHub release/download URLs in production surfaces.
 
@@ -121,6 +124,8 @@ pnpm release -- verify-staging --release-index <release-index.json> --updater-me
 pnpm release -- verify-staging --release-index <release-index.json> --updater-metadata <latest.json> --core-manifest <core-assets.json> --probe
 pnpm release -- verify-staging --release-index <release-index.json> --updater-metadata <latest.json> --core-manifest <core-assets.json> --download-and-hash
 ```
+
+The approved CDN base must be supplied externally through `VOYAVPN_CDN_BASE_URL` (or `--cdn-base-url`) and `VOYAVPN_UPDATES_BASE_URL` (or `--updates-base-url`): the verifier refuses to take the base URL from the very document it is checking, and additionally requires the `baseUrl` recorded in `release-index.json` and `core-assets.json` to equal the approved value.
 
 The staging verifier checks stable target completeness, approved HTTPS CDN hosts, no GitHub/example/local/test production artifact URLs, updater signature presence, core asset matrix completeness, byte sizes, and SHA-256 shape. `--probe` validates URL reachability without full downloads; `--download-and-hash` downloads referenced assets and verifies checksums. It does not upload, purge, mutate pointers, sign, notarize, or approve publication.
 

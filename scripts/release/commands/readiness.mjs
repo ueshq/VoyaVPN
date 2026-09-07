@@ -1,21 +1,33 @@
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
-import { mkdtemp, readdir, readFile, stat } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
+import {
+  ALLOW_UNPINNED_SING_BOX_ENV,
+  DEFAULT_SING_BOX_VERSION,
+  verifyStagedSingBoxSeed,
+} from "../../core/sing-box-installer.mjs";
+import { parseArgs } from "../../lib/args.mjs";
 import { repoRootFromScript } from "../../lib/common.mjs";
 import {
   isPositiveByteSize,
   isSha256Hex,
   isUrlDerivedFromBase,
   missingExpectedValues,
+  normalizeReleaseUrl,
+  placeholderText,
+  sha256File,
+  sha256Text,
+  walkArtifactManifests,
 } from "../validation.mjs";
 import { stableCoreTypes, stableTargets } from "../matrix.mjs";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = repoRootFromScript(import.meta.url);
 const defaultTauriConfig = "apps/desktop/src-tauri/tauri.conf.json";
+const generatedStableUpdaterConfig = "target/release-config/tauri.updater.stable.generated.json";
 const requiredDocs = [
   "docs/release/packaging.md",
   "docs/release/ci-secrets.md",
@@ -57,8 +69,22 @@ const sourceEvidenceContextRegex =
 const guardOrDefensiveContextRegex =
   /\b(?:forbidden|rejects?|allowed only|must not|should not|contains|includes|placeholder\.test|throw new Error|expect_err|assert|no `?voyavpn\.example|no .*github|validation fails|fails when)\b/i;
 
-function parseArgs(argv) {
-  const options = {
+const argSpec = {
+  "--mode": { key: "mode" },
+  "--cdn-base-url|--base-url": { key: "cdnBaseUrl" },
+  "--updates-base-url": { key: "updatesBaseUrl" },
+  "--work-dir": { key: "workDir" },
+  "--release-artifacts": { key: "releaseArtifacts" },
+  "--updater-artifacts": { key: "updaterArtifacts" },
+  "--core-assets": { key: "coreAssets" },
+  "--release-index": { key: "releaseIndex" },
+  "--updater-metadata": { key: "updaterMetadata" },
+  "--core-manifest": { key: "coreManifest" },
+  "--tauri-config": { key: "tauriConfig" },
+};
+
+function parseOptions(argv) {
+  const options = parseArgs(argv, argSpec, {
     mode: "dry-run",
     cdnBaseUrl: null,
     updatesBaseUrl: null,
@@ -69,68 +95,40 @@ function parseArgs(argv) {
     releaseIndex: null,
     updaterMetadata: null,
     coreManifest: null,
-    tauriConfig: defaultTauriConfig,
-  };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const next = () => {
-      const value = argv[index + 1];
-      if (!value || value.startsWith("--")) {
-        throw new Error(`${arg} requires a value`);
-      }
-      index += 1;
-      return value;
-    };
-
-    switch (arg) {
-      case "--mode":
-        options.mode = next();
-        break;
-      case "--cdn-base-url":
-      case "--base-url":
-        options.cdnBaseUrl = next();
-        break;
-      case "--updates-base-url":
-        options.updatesBaseUrl = next();
-        break;
-      case "--work-dir":
-        options.workDir = next();
-        break;
-      case "--release-artifacts":
-        options.releaseArtifacts = next();
-        break;
-      case "--updater-artifacts":
-        options.updaterArtifacts = next();
-        break;
-      case "--core-assets":
-        options.coreAssets = next();
-        break;
-      case "--release-index":
-        options.releaseIndex = next();
-        break;
-      case "--updater-metadata":
-        options.updaterMetadata = next();
-        break;
-      case "--core-manifest":
-        options.coreManifest = next();
-        break;
-      case "--tauri-config":
-        options.tauriConfig = next();
-        break;
-      case "--help":
-        options.help = true;
-        break;
-      default:
-        throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
+    tauriConfig: null,
+  });
 
   if (options.mode !== "dry-run" && options.mode !== "stable") {
     throw new Error("--mode must be dry-run or stable");
   }
 
   return options;
+}
+
+/**
+ * Resolves which Tauri config the run scans.
+ *
+ * The committed base config is deliberately credential-free, so a stable run
+ * that scanned it could only ever report an empty pubkey, empty endpoints and
+ * disabled updater artifacts. Stable therefore defaults to the generated stable
+ * overlay and says how to produce it when it is missing, which is what the
+ * runbook has always claimed the bare command does.
+ */
+export function resolveTauriConfig(options, { configExists = (path) => existsSync(resolveRepoPath(path)) } = {}) {
+  if (options.tauriConfig) {
+    return options.tauriConfig;
+  }
+  if (isDryRun(options)) {
+    return defaultTauriConfig;
+  }
+  if (configExists(generatedStableUpdaterConfig)) {
+    return generatedStableUpdaterConfig;
+  }
+
+  throw new Error(
+    `Stable readiness needs the generated stable updater overlay (${generatedStableUpdaterConfig}). ` +
+      "Run `pnpm release -- updater-config` first, or pass --tauri-config <overlay>.",
+  );
 }
 
 function printHelp() {
@@ -210,112 +208,23 @@ async function createWorkDir(options) {
   return mkdtemp(join(tmpdir(), "voyavpn-readiness-"));
 }
 
-function isForbiddenStableHost(hostname, mode) {
-  const host = hostname.toLowerCase();
-  const forbidden =
-    host === "example.com" ||
-    host.endsWith(".example.com") ||
-    host.endsWith(".example") ||
-    host.includes("example") ||
-    host === "github.com" ||
-    host.endsWith(".github.com") ||
-    host === "githubusercontent.com" ||
-    host.endsWith(".githubusercontent.com") ||
-    host === "github.io" ||
-    host.endsWith(".github.io") ||
-    host.includes("placeholder");
-
-  if (forbidden) {
-    return true;
-  }
-
-  return (
-    mode === "stable" &&
-    (host === "localhost" || host === "127.0.0.1" || host === "::1" || host.endsWith(".test"))
-  );
-}
-
 function normalizeUrl(value, label, mode, { defaultDryRunUrl = null, requireHttps = false } = {}) {
   const resolvedValue = (value ?? (mode === "dry-run" ? defaultDryRunUrl : null) ?? "").trim();
   if (!resolvedValue) {
     throw new Error(`${label} is required`);
   }
 
-  let parsed;
-  try {
-    parsed = new URL(resolvedValue);
-  } catch {
-    throw new Error(`${label} is not a valid URL: ${resolvedValue}`);
-  }
-
-  if (requireHttps && parsed.protocol !== "https:") {
-    throw new Error(`${label} must use https: ${resolvedValue}`);
-  }
-  if (!requireHttps && parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new Error(`${label} must use http or https: ${resolvedValue}`);
-  }
-  if (isForbiddenStableHost(parsed.hostname, mode)) {
-    throw new Error(`${label} must not use example, GitHub, placeholder, localhost, or .test hosts: ${resolvedValue}`);
-  }
-
-  parsed.hash = "";
-  parsed.search = "";
-  return parsed.toString().replace(/\/+$/g, "");
-}
-
-function placeholderText(value) {
-  return (
-    !value ||
-    /placeholder|replace_before_release|replace-before-release|changeme|\btodo\b|\btbd\b|voyavpn\.example/i.test(
-      String(value),
-    )
-  );
+  // Dry-run readiness runs against the local `.test` placeholder CDN, so
+  // local/test hosts are rejected only in stable mode.
+  return normalizeReleaseUrl(resolvedValue, {
+    allowHttp: !requireHttps,
+    allowTestHosts: mode !== "stable",
+    label,
+  });
 }
 
 function readJson(path) {
   return readFile(path, "utf8").then((text) => JSON.parse(text));
-}
-
-function sha256Text(value) {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-async function sha256File(path) {
-  return sha256Text(await readFile(path));
-}
-
-async function walkArtifactManifests(root) {
-  let rootStat;
-  try {
-    rootStat = await stat(root);
-  } catch (error) {
-    if (error && error.code === "ENOENT") {
-      return [];
-    }
-    throw error;
-  }
-
-  if (rootStat.isFile()) {
-    return basename(root) === "artifact-manifest.json" ? [root] : [];
-  }
-
-  const entries = await readdir(root, { withFileTypes: true });
-  const manifests = [];
-
-  for (const entry of entries) {
-    if (entry.isSymbolicLink()) {
-      continue;
-    }
-
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) {
-      manifests.push(...(await walkArtifactManifests(path)));
-    } else if (entry.isFile() && entry.name === "artifact-manifest.json") {
-      manifests.push(path);
-    }
-  }
-
-  return manifests.sort((left, right) => left.localeCompare(right));
 }
 
 function isPlainObject(value) {
@@ -495,6 +404,52 @@ async function checkNotices(reporter) {
   reporter.pass("third-party notices coverage", ["notices mention app, core scope, and core license families"]);
 }
 
+/**
+ * Re-verifies the seed that `pnpm tauri:build` would bundle. The seed directory
+ * is gitignored, so a stale, foreign-architecture, or locally replaced binary is
+ * invisible to every other gate; this reads its manifest back and compares it to
+ * the digest pinned in scripts/core/sing-box-installer.mjs.
+ */
+export async function checkCoreSeedPinning(reporter, { verifySeed = verifyStagedSingBoxSeed } = {}) {
+  const verification = verifySeed({ repoRoot, version: DEFAULT_SING_BOX_VERSION });
+
+  if (!verification.staged) {
+    reporter.pass("bundled sing-box seed", [
+      `no seed staged for ${process.platform}:${process.arch}; nothing would be bundled`,
+    ]);
+    return;
+  }
+
+  if (!verification.ok) {
+    // A digest that disagrees means the staged bytes are not the pinned bytes,
+    // which is an integrity failure in any mode. Every other reason means the
+    // seed is merely stale or unverifiable and the next build re-stages it.
+    const tampered =
+      verification.code === "archive-digest-mismatch" || verification.code === "executable-digest-mismatch";
+    const details = [
+      `${DEFAULT_SING_BOX_VERSION} seed cannot be trusted: ${verification.reason}`,
+      "run `pnpm core:sing-box:install --force-fetch` to re-stage a verified seed",
+    ];
+    if (tampered) {
+      reporter.fail("bundled sing-box seed", details);
+    } else {
+      reporter.blocker("bundled sing-box seed", details);
+    }
+    return;
+  }
+
+  if (!verification.pinned) {
+    reporter.blocker("bundled sing-box seed", [
+      `${verification.manifest.assetName} was staged with ${ALLOW_UNPINNED_SING_BOX_ENV}; its content is unverified`,
+    ]);
+    return;
+  }
+
+  reporter.pass("bundled sing-box seed", [
+    `${verification.manifest.assetName} matches the pinned SHA-256 ${verification.manifest.sha256}`,
+  ]);
+}
+
 async function checkTauriConfig(reporter, options, updatesBaseUrl) {
   const { config, label, isDefaultConfig } = await loadTauriConfig(options);
   const updater = config.plugins?.updater;
@@ -584,6 +539,25 @@ async function checkTauriConfig(reporter, options, updatesBaseUrl) {
   }
 }
 
+const signingInputNames = [
+  "APPLE_CERTIFICATE",
+  "APPLE_CERTIFICATE_PASSWORD",
+  "APPLE_ID",
+  "APPLE_PASSWORD",
+  "APPLE_TEAM_ID",
+  "WINDOWS_CERTIFICATE_BASE64",
+  "WINDOWS_CERTIFICATE_PASSWORD",
+];
+
+/**
+ * This check only needs to know that a signing input exists, so a caller that
+ * would rather not hand the secret itself to this process (the release workflow)
+ * can pass `HAS_<NAME>=true` instead of the value.
+ */
+export function hasSigningInput(name, env = process.env) {
+  return Boolean(env[name]) || String(env[`HAS_${name}`] ?? "").trim().toLowerCase() === "true";
+}
+
 export async function checkStableEnvironment(reporter, options) {
   if (isDryRun(options)) {
     reporter.pass("stable-only secrets", ["dry-run mode does not require signing, notarization, or publication secrets"]);
@@ -600,18 +574,12 @@ export async function checkStableEnvironment(reporter, options) {
   if (!options.updatesBaseUrl && !process.env.VOYAVPN_UPDATES_BASE_URL) {
     missing.push("VOYAVPN_UPDATES_BASE_URL or --updates-base-url");
   }
-  if (!process.env.TAURI_SIGNING_PRIVATE_KEY && !process.env.TAURI_SIGNING_PRIVATE_KEY_PATH) {
+  if (!hasSigningInput("TAURI_SIGNING_PRIVATE_KEY") && !hasSigningInput("TAURI_SIGNING_PRIVATE_KEY_PATH")) {
     missing.push("TAURI_SIGNING_PRIVATE_KEY or TAURI_SIGNING_PRIVATE_KEY_PATH");
   }
 
-  for (const name of ["APPLE_CERTIFICATE", "APPLE_CERTIFICATE_PASSWORD", "APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID"]) {
-    if (!process.env[name]) {
-      missing.push(name);
-    }
-  }
-
-  for (const name of ["WINDOWS_CERTIFICATE_BASE64", "WINDOWS_CERTIFICATE_PASSWORD"]) {
-    if (!process.env[name]) {
+  for (const name of signingInputNames) {
+    if (!hasSigningInput(name)) {
       missing.push(name);
     }
   }
@@ -1073,11 +1041,12 @@ async function checkGeneratedManifests(reporter, options, cdnBaseUrl, updatesBas
 }
 
 async function main(argv = []) {
-  const options = parseArgs(argv);
+  const options = parseOptions(argv);
   if (options.help) {
     printHelp();
     return;
   }
+  options.tauriConfig = resolveTauriConfig(options);
   const cdnBaseUrl = normalizeUrl(
     options.cdnBaseUrl ?? process.env.VOYAVPN_CDN_BASE_URL,
     "CDN base URL (VOYAVPN_CDN_BASE_URL or --cdn-base-url)",
@@ -1100,6 +1069,7 @@ async function main(argv = []) {
 
   await checkRequiredDocs(reporter);
   await checkNotices(reporter);
+  await checkCoreSeedPinning(reporter);
   await checkStableEnvironment(reporter, options);
   await checkTauriConfig(reporter, options, updatesBaseUrl);
   await scanProductionBlockers(reporter);

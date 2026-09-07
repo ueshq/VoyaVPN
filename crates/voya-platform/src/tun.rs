@@ -446,115 +446,12 @@ use macos::{
     platform_provider_registration_paths, start_macos_packet_tunnel, stop_macos_packet_tunnel,
 };
 
+// `self::` keeps this resolving to the module below even if the `windows`
+// crate is ever added as a dependency.
+mod windows;
 #[cfg(windows)]
-fn windows_service_status() -> NativeTunStatus {
-    let output = match Command::new(r"C:\Windows\System32\sc.exe")
-        .args(["query", WINDOWS_TUN_SERVICE_NAME])
-        .output()
-    {
-        Ok(output) => output,
-        Err(error) => {
-            return NativeTunStatus {
-                backend: TunBackend::WindowsService,
-                provider_state: NativeTunProviderState::Error,
-                component_ready: false,
-                message: Some(format!("failed to query Windows service: {error}")),
-            };
-        }
-    };
-
-    let text = command_output_text(&output.stdout, &output.stderr);
-    if !output.status.success() {
-        return NativeTunStatus::missing_component(
-            TunBackend::WindowsService,
-            if text.trim().is_empty() {
-                format!("Windows service {WINDOWS_TUN_SERVICE_NAME} is not installed")
-            } else {
-                text
-            },
-        );
-    }
-
-    let provider_state = if text.contains("RUNNING") {
-        NativeTunProviderState::Running
-    } else if text.contains("START_PENDING") || text.contains("STOP_PENDING") {
-        NativeTunProviderState::Starting
-    } else {
-        NativeTunProviderState::Stopped
-    };
-
-    NativeTunStatus {
-        backend: TunBackend::WindowsService,
-        provider_state,
-        component_ready: true,
-        message: None,
-    }
-}
-
-#[cfg(not(windows))]
-fn windows_service_status() -> NativeTunStatus {
-    NativeTunStatus::missing_component(
-        TunBackend::WindowsService,
-        format!("Windows service {WINDOWS_TUN_SERVICE_NAME} is not installed in this build"),
-    )
-}
-
-#[cfg(windows)]
-fn start_windows_tun_service(request: &NativeTunStartRequest) -> Result<(), NativeTunError> {
-    let output = Command::new(r"C:\Windows\System32\sc.exe")
-        .arg("start")
-        .arg(WINDOWS_TUN_SERVICE_NAME)
-        .arg(request.main_config_path.to_string_lossy().as_ref())
-        .output()
-        .map_err(|source| NativeTunError::Command {
-            action: "start Windows tunnel service",
-            source,
-        })?;
-
-    windows_service_command_result("start Windows tunnel service", output)
-}
-
-#[cfg(not(windows))]
-fn start_windows_tun_service(_request: &NativeTunStartRequest) -> Result<(), NativeTunError> {
-    Err(NativeTunError::ComponentMissing {
-        backend: TunBackend::WindowsService,
-        message: format!("Windows service {WINDOWS_TUN_SERVICE_NAME} is not available"),
-    })
-}
-
-#[cfg(windows)]
-fn stop_windows_tun_service() -> Result<(), NativeTunError> {
-    let output = Command::new(r"C:\Windows\System32\sc.exe")
-        .args(["stop", WINDOWS_TUN_SERVICE_NAME])
-        .output()
-        .map_err(|source| NativeTunError::Command {
-            action: "stop Windows tunnel service",
-            source,
-        })?;
-
-    windows_service_command_result("stop Windows tunnel service", output)
-}
-
-#[cfg(not(windows))]
-fn stop_windows_tun_service() -> Result<(), NativeTunError> {
-    Ok(())
-}
-
-#[cfg(windows)]
-fn windows_service_command_result(
-    action: &'static str,
-    output: std::process::Output,
-) -> Result<(), NativeTunError> {
-    if output.status.success() {
-        return Ok(());
-    }
-
-    Err(NativeTunError::CommandFailed {
-        action,
-        status_code: output.status.code(),
-        output: command_output_text(&output.stdout, &output.stderr),
-    })
-}
+use self::windows::windows_command;
+use self::windows::{start_windows_tun_service, stop_windows_tun_service, windows_service_status};
 
 pub trait TunCleaner: Send + Sync {
     fn cleanup_before_start(&self) -> Result<(), TunCleanupError>;
@@ -581,7 +478,7 @@ impl TunCleaner for PlatformTunCleaner {
 #[cfg(windows)]
 fn platform_cleanup_before_start() -> Result<(), TunCleanupError> {
     for device in WINDOWS_TUN_DEVICES {
-        let output = Command::new(r"C:\Windows\System32\pnputil.exe")
+        let output = windows_command(r"C:\Windows\System32\pnputil.exe")
             .args([
                 "/remove-device",
                 &format!(r"SWD\Wintun\{{{}}}", device.guid),

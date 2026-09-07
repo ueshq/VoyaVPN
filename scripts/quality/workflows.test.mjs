@@ -108,6 +108,59 @@ describe("GitHub Actions workflows", () => {
     );
   });
 
+  it("bounds every job with an explicit timeout", () => {
+    const unbounded = [];
+    for (const file of workflowFiles()) {
+      for (const [job, body] of workflowJobs(readWorkflow(file))) {
+        // A job that only calls a reusable workflow inherits that workflow's
+        // per-job timeouts and cannot declare one of its own.
+        const callsReusableWorkflow = body.some((line) => /^ {4}uses:/.test(line));
+        if (callsReusableWorkflow || body.some((line) => /^ {4}timeout-minutes:\s*\d+/.test(line))) {
+          continue;
+        }
+        unbounded.push(`${file}:${job}`);
+      }
+    }
+
+    expect(unbounded).toEqual([]);
+  });
+
+  it("scopes release signing secrets to the runner that can use them", () => {
+    const release = readWorkflow("release.yml");
+    const buildStep = release.slice(
+      release.indexOf("      - name: Build Tauri package"),
+      release.indexOf("      - name: Normalize artifacts and write checksums"),
+    );
+
+    expect(buildStep).not.toBe("");
+    // Apple material never reaches the Windows and Linux package runners.
+    for (const secret of ["APPLE_CERTIFICATE", "APPLE_CERTIFICATE_PASSWORD", "APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID"]) {
+      expect(buildStep, secret).toContain(`${secret}: \${{ runner.os == 'macOS' && secrets.${secret} || '' }}`);
+    }
+    // Nothing on the pnpm tauri:build path consumes the Windows certificate.
+    expect(buildStep).not.toContain("WINDOWS_CERTIFICATE_BASE64");
+    expect(buildStep).not.toContain("WINDOWS_CERTIFICATE_PASSWORD");
+  });
+
+  it("gives presence-check-only steps booleans instead of the secrets themselves", () => {
+    const release = readWorkflow("release.yml");
+    const presenceSteps = [
+      release.slice(
+        release.indexOf("      - name: Validate stable release prerequisites"),
+        release.indexOf("  package:"),
+      ),
+      release.slice(release.indexOf("      - name: Validate final stable readiness")),
+    ];
+
+    for (const step of presenceSteps) {
+      expect(step).not.toBe("");
+      for (const secret of ["APPLE_CERTIFICATE", "APPLE_ID", "APPLE_PASSWORD", "WINDOWS_CERTIFICATE_BASE64"]) {
+        expect(step, secret).toContain(`HAS_${secret}: \${{ secrets.${secret} != '' }}`);
+        expect(step, secret).not.toMatch(new RegExp(`^\\s+${secret}: `, "m"));
+      }
+    }
+  });
+
   it("pins every third-party action to a full commit SHA", () => {
     const unpinned = [];
     for (const file of workflowFiles()) {

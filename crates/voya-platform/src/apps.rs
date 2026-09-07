@@ -3,7 +3,10 @@
 //! file name, so `process_name` always carries the exact basename (including
 //! `.exe` on Windows).
 
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcessCandidateSource {
@@ -66,7 +69,7 @@ fn candidate_from_executable_path(
     path: &str,
     source: ProcessCandidateSource,
 ) -> Option<ProcessCandidate> {
-    let process_name = std::path::Path::new(path)
+    let process_name = Path::new(path)
         .file_name()
         .and_then(|name| name.to_str())
         .map(str::to_string)?;
@@ -144,12 +147,7 @@ mod macos {
                 if bundle.extension().and_then(|extension| extension.to_str()) != Some("app") {
                     return None;
                 }
-                let executables_dir = bundle.join("Contents").join("MacOS");
-                let executable = std::fs::read_dir(&executables_dir)
-                    .ok()?
-                    .flatten()
-                    .map(|executable| executable.path())
-                    .find(|path| path.is_file())?;
+                let executable = super::macos_bundle_executable(&bundle, plutil_bundle_executable)?;
                 let process_name = executable.file_name()?.to_str()?.to_string();
 
                 Some(ProcessCandidate {
@@ -160,6 +158,22 @@ mod macos {
                 })
             })
             .collect()
+    }
+
+    /// Authoritative `CFBundleExecutable` lookup for binary `Info.plist` files,
+    /// which the cheap XML scan cannot read.
+    fn plutil_bundle_executable(info_plist: &std::path::Path) -> Option<String> {
+        let output = Command::new("/usr/bin/plutil")
+            .args(["-extract", "CFBundleExecutable", "raw", "-o", "-"])
+            .arg(info_plist)
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+
+        let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        (!value.is_empty()).then_some(value)
     }
 }
 
@@ -262,6 +276,68 @@ mod windows {
     }
 }
 
+/// Resolves the main executable of a macOS app bundle.
+///
+/// `Contents/MacOS` routinely holds helper binaries and CLIs (`IINA.app` ships
+/// `iina-cli` and `youtube-dl`, `Bitwarden.app` ships `desktop_proxy`), and
+/// `read_dir` order is unspecified, so taking the first regular file produces a
+/// `process_name` sing-box never matches. The bundle's own `CFBundleExecutable`
+/// is the only reliable answer. It is read from an XML `Info.plist` directly,
+/// then guessed from the bundle stem (the common shape, and free), and only
+/// then delegated to `read_declared_executable`, which costs a process spawn.
+/// A bundle that resolves to none of those is skipped rather than guessed.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn macos_bundle_executable(
+    bundle: &Path,
+    read_declared_executable: impl Fn(&Path) -> Option<String>,
+) -> Option<PathBuf> {
+    let executables_dir = bundle.join("Contents").join("MacOS");
+    let info_plist = bundle.join("Contents").join("Info.plist");
+
+    let plist_text = std::fs::read_to_string(&info_plist).ok();
+    let declared = plist_text
+        .as_deref()
+        .and_then(parse_xml_plist_bundle_executable);
+    if let Some(executable) =
+        declared.and_then(|name| bundle_executable_file(&executables_dir, &name))
+    {
+        return Some(executable);
+    }
+
+    if let Some(executable) = bundle
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .and_then(|stem| bundle_executable_file(&executables_dir, stem))
+    {
+        return Some(executable);
+    }
+
+    read_declared_executable(&info_plist)
+        .and_then(|name| bundle_executable_file(&executables_dir, &name))
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn bundle_executable_file(executables_dir: &Path, name: &str) -> Option<PathBuf> {
+    if name.is_empty() || name.contains('/') {
+        return None;
+    }
+    let candidate = executables_dir.join(name);
+    candidate.is_file().then_some(candidate)
+}
+
+/// Reads `CFBundleExecutable` out of an XML `Info.plist` without a plist
+/// parser. Binary plists (`bplist00`) yield `None` so the caller falls back.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn parse_xml_plist_bundle_executable(plist: &str) -> Option<String> {
+    const KEY: &str = "<key>CFBundleExecutable</key>";
+
+    let rest = plist.get(plist.find(KEY)? + KEY.len()..)?.trim_start();
+    let value = rest.strip_prefix("<string>")?;
+    let end = value.find("</string>")?;
+    let value = value.get(..end)?.trim();
+    (!value.is_empty()).then(|| value.to_string())
+}
+
 /// Extracts the image name from one `tasklist /fo csv /nh` output line, e.g.
 /// `"chrome.exe","1234","Console","1","150,000 K"` -> `chrome.exe`.
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -356,6 +432,112 @@ mod tests {
         assert_eq!(
             candidate.executable_path.as_deref(),
             Some("/Applications/Safari.app/Contents/MacOS/Safari")
+        );
+    }
+
+    fn bundle_fixture(name: &str, plist: &[u8], executables: &[&str]) -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "voyavpn-apps-{name}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |elapsed| elapsed.as_nanos())
+        ));
+        let bundle = root.join("IINA.app");
+        let executables_dir = bundle.join("Contents").join("MacOS");
+        std::fs::create_dir_all(&executables_dir).expect("create bundle fixture");
+        std::fs::write(bundle.join("Contents").join("Info.plist"), plist).expect("write plist");
+        for executable in executables {
+            std::fs::write(executables_dir.join(executable), "#!/bin/sh\n").expect("write binary");
+        }
+        bundle
+    }
+
+    fn xml_plist(executable: &str) -> Vec<u8> {
+        format!(
+            "<?xml version=\"1.0\"?>\n<plist version=\"1.0\"><dict>\n\t<key>CFBundleName</key>\n\t<string>IINA</string>\n\t<key>CFBundleExecutable</key>\n\t<string>{executable}</string>\n</dict></plist>\n"
+        )
+        .into_bytes()
+    }
+
+    #[test]
+    fn bundle_executable_prefers_the_declared_cf_bundle_executable() {
+        let bundle = bundle_fixture(
+            "declared",
+            &xml_plist("IINA"),
+            &["iina-cli", "IINA", "youtube-dl"],
+        );
+
+        let executable = macos_bundle_executable(&bundle, |_: &Path| None)
+            .expect("declared executable resolves");
+
+        assert_eq!(
+            executable.file_name().and_then(|name| name.to_str()),
+            Some("IINA")
+        );
+
+        let _ = std::fs::remove_dir_all(bundle.parent().expect("fixture root"));
+    }
+
+    #[test]
+    fn bundle_executable_falls_back_to_the_bundle_stem_for_binary_plists() {
+        let bundle = bundle_fixture("binary-plist", b"bplist00\x00\x01", &["helper", "IINA"]);
+
+        let executable = macos_bundle_executable(&bundle, |_: &Path| None)
+            .expect("bundle stem executable resolves");
+
+        assert_eq!(
+            executable.file_name().and_then(|name| name.to_str()),
+            Some("IINA")
+        );
+
+        let _ = std::fs::remove_dir_all(bundle.parent().expect("fixture root"));
+    }
+
+    #[test]
+    fn bundle_executable_asks_the_plist_reader_when_nothing_else_matches() {
+        let bundle = bundle_fixture("plutil", b"bplist00\x00\x01", &["cli", "wechatdevtools"]);
+
+        let executable =
+            macos_bundle_executable(&bundle, |_: &Path| Some("wechatdevtools".to_string()))
+                .expect("declared executable resolves");
+
+        assert_eq!(
+            executable.file_name().and_then(|name| name.to_str()),
+            Some("wechatdevtools")
+        );
+
+        let _ = std::fs::remove_dir_all(bundle.parent().expect("fixture root"));
+    }
+
+    #[test]
+    fn bundle_executable_skips_a_bundle_it_cannot_resolve() {
+        let bundle = bundle_fixture("unresolved", b"bplist00\x00\x01", &["cli", "helper"]);
+
+        assert!(macos_bundle_executable(&bundle, |_: &Path| None).is_none());
+        assert!(
+            macos_bundle_executable(&bundle, |_: &Path| Some("../../etc/passwd".to_string()))
+                .is_none()
+        );
+
+        let _ = std::fs::remove_dir_all(bundle.parent().expect("fixture root"));
+    }
+
+    #[test]
+    fn xml_plist_executable_is_only_read_from_the_key_that_declares_it() {
+        assert_eq!(
+            parse_xml_plist_bundle_executable(
+                "<key>CFBundleExecutable</key>\n\t<string>Safari</string>"
+            ),
+            Some("Safari".to_string())
+        );
+        assert_eq!(
+            parse_xml_plist_bundle_executable("<key>CFBundleName</key><string>Safari</string>"),
+            None
+        );
+        assert_eq!(
+            parse_xml_plist_bundle_executable("<key>CFBundleExecutable</key><array/>"),
+            None
         );
     }
 

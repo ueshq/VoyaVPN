@@ -96,6 +96,11 @@ pub struct NativeTunExitEvent {
 
 pub trait SupervisorEventSink: Send + Sync {
     fn native_tun_exited(&self, event: NativeTunExitEvent);
+
+    /// A tracked core process exited and the supervisor has decided what to do
+    /// about it. The default ignores the event so sinks that only care about
+    /// the native TUN backend keep compiling.
+    fn core_exited(&self, _event: CoreExitEvent) {}
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -127,6 +132,8 @@ pub struct SupervisorDeps {
     pub native_tun_controller: Arc<dyn NativeTunController>,
     pub native_tun_health_interval: Duration,
     pub event_sink: Arc<dyn SupervisorEventSink>,
+    pub clock: Arc<dyn SupervisorClock>,
+    pub crash_restart_policy: CrashRestartPolicy,
     pub target_os: TargetOs,
 }
 
@@ -141,22 +148,18 @@ impl SupervisorDeps {
             native_tun_controller: Arc::new(NoopNativeTunController),
             native_tun_health_interval: Duration::from_secs(3),
             event_sink: Arc::new(NoopSupervisorEventSink),
+            clock: Arc::new(SystemSupervisorClock),
+            crash_restart_policy: CrashRestartPolicy::default(),
             target_os: TargetOs::current(),
         }
     }
 
     #[must_use]
     pub fn platform() -> Self {
-        Self {
-            runner: Arc::new(StdProcessRunner::new()),
-            elevation: Arc::new(ElevationState::new()),
-            job_factory: Arc::new(PlatformProcessJobFactory),
-            tun_cleaner: Arc::new(PlatformTunCleaner),
-            native_tun_controller: Arc::new(PlatformNativeTunController),
-            native_tun_health_interval: Duration::from_secs(3),
-            event_sink: Arc::new(NoopSupervisorEventSink),
-            target_os: TargetOs::current(),
-        }
+        Self::platform_with_runner(
+            Arc::new(StdProcessRunner::new()),
+            Arc::new(ElevationState::new()),
+        )
     }
 
     #[must_use]
@@ -172,8 +175,22 @@ impl SupervisorDeps {
             native_tun_controller: Arc::new(PlatformNativeTunController),
             native_tun_health_interval: Duration::from_secs(3),
             event_sink: Arc::new(NoopSupervisorEventSink),
+            clock: Arc::new(SystemSupervisorClock),
+            crash_restart_policy: CrashRestartPolicy::default(),
             target_os: TargetOs::current(),
         }
+    }
+
+    #[must_use]
+    pub fn with_clock(mut self, clock: Arc<dyn SupervisorClock>) -> Self {
+        self.clock = clock;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_crash_restart_policy(mut self, policy: CrashRestartPolicy) -> Self {
+        self.crash_restart_policy = policy;
+        self
     }
 
     #[must_use]
@@ -342,6 +359,19 @@ enum SupervisorCommand {
         generation: u64,
         message: String,
     },
+    DelayedRestart(Box<DelayedRestart>),
+}
+
+/// A crash restart waiting on its backoff timer.
+///
+/// `generation` is compared against the actor's current restart generation, so
+/// a user Start/Stop/Restart issued while the timer runs cancels it.
+struct DelayedRestart {
+    generation: u64,
+    attempt: u32,
+    process_id: u32,
+    exit_code: Option<i32>,
+    request: SupervisorStartRequest,
 }
 
 struct SupervisorActor {
@@ -349,9 +379,19 @@ struct SupervisorActor {
     tx: mpsc::WeakSender<SupervisorCommand>,
     running: RunningCore,
     native_tun_generation: u64,
+    restart_generation: u64,
+    crash: CrashTracker,
 }
 
 mod actor;
+mod crash;
+
+pub use crash::{
+    CoreExitEvent, CoreExitGiveUp, CoreExitOutcome, CrashRestartPolicy, SupervisorClock,
+    SystemSupervisorClock,
+};
+
+pub(crate) use crash::CrashTracker;
 
 fn process_uses_unix_sudo(
     deps: &SupervisorDeps,
@@ -564,13 +604,14 @@ impl From<voya_platform::elevation::ElevationError> for SupervisorError {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use std::fs;
     use std::{
         collections::BTreeMap,
         io,
         sync::{Mutex, MutexGuard},
+        time::{Duration, Instant},
     };
-    #[cfg(unix)]
-    use std::{fs, time::Duration};
 
     use voya_platform::{
         process::{ProcessOutput, ProcessRunner},
@@ -617,8 +658,14 @@ mod tests {
         }
 
         fn with_fail_spawn_role(self, role: ProcessRole) -> Self {
-            *self.fail_spawn_role.lock().expect("fail spawn role") = Some(role);
+            self.fail_spawn_role_from_now(role);
             self
+        }
+
+        /// Start failing spawns for `role` mid-test, so a respawn can fail
+        /// after the first start succeeded.
+        fn fail_spawn_role_from_now(&self, role: ProcessRole) {
+            *self.fail_spawn_role.lock().expect("fail spawn role") = Some(role);
         }
 
         fn with_oneshot_output(self, output: ProcessOutput) -> Self {
@@ -773,17 +820,54 @@ mod tests {
     #[derive(Clone, Default)]
     struct RecordingSupervisorEventSink {
         events: Arc<Mutex<Vec<NativeTunExitEvent>>>,
+        exits: Arc<Mutex<Vec<CoreExitEvent>>>,
     }
 
     impl RecordingSupervisorEventSink {
         fn events(&self) -> Vec<NativeTunExitEvent> {
             self.events.lock().expect("supervisor events").clone()
         }
+
+        fn exits(&self) -> Vec<CoreExitEvent> {
+            self.exits.lock().expect("core exit events").clone()
+        }
+
+        fn outcomes(&self) -> Vec<CoreExitOutcome> {
+            self.exits()
+                .into_iter()
+                .map(|event| event.outcome)
+                .collect()
+        }
     }
 
     impl SupervisorEventSink for RecordingSupervisorEventSink {
         fn native_tun_exited(&self, event: NativeTunExitEvent) {
             self.events.lock().expect("supervisor events").push(event);
+        }
+
+        fn core_exited(&self, event: CoreExitEvent) {
+            self.exits.lock().expect("core exit events").push(event);
+        }
+    }
+
+    /// Advanceable clock so the crash window can be exercised without sleeping.
+    #[derive(Clone)]
+    struct FakeClock(Arc<Mutex<Instant>>);
+
+    impl FakeClock {
+        fn new() -> Self {
+            Self(Arc::new(Mutex::new(Instant::now())))
+        }
+
+        fn advance(&self, delta: Duration) {
+            let mut now = self.0.lock().expect("fake clock");
+            *now += delta;
+        }
+    }
+
+    impl SupervisorClock for FakeClock {
+        fn now(&self) -> Instant {
+            *self.0.lock().expect("fake clock")
         }
     }
 
@@ -1399,6 +1483,371 @@ sleep 30
         assert_eq!(
             supervisor.status().await.expect("status").state,
             SupervisorConnectionState::Disconnected
+        );
+    }
+
+    fn crash_test_request() -> SupervisorStartRequest {
+        SupervisorStartRequest {
+            active_profile_id: Some("active".to_string()),
+            main: CoreProcessSpec::new(
+                CoreType::sing_box,
+                launch("/tmp/sing-box", "run -c config.json --disable-color"),
+            )
+            .with_may_need_sudo(false),
+            pre: None,
+            tun_enabled: false,
+            sudo_script_dir: "/tmp/voya/scripts".into(),
+            restart_on_crash: true,
+        }
+    }
+
+    /// Crash restarts are immediate but bounded: without the budget a core that
+    /// exits on every spawn (a bound listen port, a missing rule-set file) was
+    /// respawned as fast as the reaper could report it, forever, while the
+    /// snapshot kept saying Connected.
+    #[tokio::test]
+    async fn supervisor_gives_up_after_the_crash_budget_is_spent() {
+        let events = SharedEvents::default();
+        let sink = RecordingSupervisorEventSink::default();
+        let deps = SupervisorDeps::new(
+            Arc::new(FakeRunner::new(events.clone())),
+            Arc::new(ElevationState::new()),
+        )
+        .with_target_os(TargetOs::Linux)
+        .with_event_sink(Arc::new(sink.clone()))
+        .with_crash_restart_policy(CrashRestartPolicy {
+            max_restarts: 2,
+            healthy_uptime: Duration::from_secs(30),
+            initial_delay: Duration::ZERO,
+            max_delay: Duration::ZERO,
+        });
+        let supervisor = CoreSupervisor::spawn(deps);
+
+        let snapshot = supervisor.start(crash_test_request()).await.expect("start");
+        let mut pid = snapshot.main_pid.expect("main pid");
+        for _ in 0..2 {
+            pid = supervisor
+                .process_exited(pid, Some(1))
+                .await
+                .expect("restart after crash")
+                .main_pid
+                .expect("restarted pid");
+        }
+
+        let final_snapshot = supervisor
+            .process_exited(pid, Some(1))
+            .await
+            .expect("give up is not an error");
+
+        assert_eq!(
+            final_snapshot.state,
+            SupervisorConnectionState::Disconnected
+        );
+        assert_eq!(
+            supervisor.status().await.expect("status").state,
+            SupervisorConnectionState::Disconnected
+        );
+        assert_eq!(
+            events.lock().as_slice(),
+            [
+                "spawn:Main:pid=100:stdin=false",
+                "stop:Main:pid=100",
+                "spawn:Main:pid=101:stdin=false",
+                "stop:Main:pid=101",
+                "spawn:Main:pid=102:stdin=false",
+                "stop:Main:pid=102",
+            ]
+        );
+        let outcomes = sink.outcomes();
+        assert_eq!(outcomes.len(), 3);
+        assert!(matches!(
+            outcomes[0],
+            CoreExitOutcome::Restarted { attempt: 1, .. }
+        ));
+        assert!(matches!(
+            outcomes[1],
+            CoreExitOutcome::Restarted { attempt: 2, .. }
+        ));
+        assert_eq!(
+            outcomes[2],
+            CoreExitOutcome::GaveUp(CoreExitGiveUp::CrashLoop { restarts: 2 })
+        );
+    }
+
+    #[tokio::test]
+    async fn supervisor_treats_a_clean_exit_as_intentional() {
+        let events = SharedEvents::default();
+        let sink = RecordingSupervisorEventSink::default();
+        let deps = SupervisorDeps::new(
+            Arc::new(FakeRunner::new(events.clone())),
+            Arc::new(ElevationState::new()),
+        )
+        .with_target_os(TargetOs::Linux)
+        .with_event_sink(Arc::new(sink.clone()));
+        let supervisor = CoreSupervisor::spawn(deps);
+
+        let snapshot = supervisor.start(crash_test_request()).await.expect("start");
+        supervisor
+            .process_exited(snapshot.main_pid.expect("main pid"), Some(0))
+            .await
+            .expect("clean exit");
+
+        assert_eq!(
+            supervisor.status().await.expect("status").state,
+            SupervisorConnectionState::Disconnected
+        );
+        assert_eq!(
+            events.lock().as_slice(),
+            ["spawn:Main:pid=100:stdin=false", "stop:Main:pid=100"]
+        );
+        assert_eq!(
+            sink.outcomes(),
+            [CoreExitOutcome::GaveUp(CoreExitGiveUp::IntentionalExit)]
+        );
+    }
+
+    #[tokio::test]
+    async fn supervisor_reports_a_failed_respawn_instead_of_staying_silent() {
+        let events = SharedEvents::default();
+        let sink = RecordingSupervisorEventSink::default();
+        let runner = Arc::new(FakeRunner::new(events.clone()));
+        let deps = SupervisorDeps::new(
+            Arc::clone(&runner) as Arc<dyn ProcessRunner>,
+            Arc::new(ElevationState::new()),
+        )
+        .with_target_os(TargetOs::Linux)
+        .with_event_sink(Arc::new(sink.clone()));
+        let supervisor = CoreSupervisor::spawn(deps);
+
+        let snapshot = supervisor.start(crash_test_request()).await.expect("start");
+        runner.fail_spawn_role_from_now(ProcessRole::Main);
+
+        let error = supervisor
+            .process_exited(snapshot.main_pid.expect("main pid"), Some(1))
+            .await
+            .expect_err("the respawn fails");
+
+        assert!(matches!(
+            error,
+            SupervisorError::Process(ProcessError::Spawn { .. })
+        ));
+        assert_eq!(
+            supervisor.status().await.expect("status").state,
+            SupervisorConnectionState::Disconnected
+        );
+        let outcomes = sink.outcomes();
+        assert_eq!(outcomes.len(), 1);
+        assert!(matches!(
+            outcomes[0],
+            CoreExitOutcome::GaveUp(CoreExitGiveUp::RestartFailed(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn supervisor_crash_after_a_healthy_run_opens_a_fresh_streak() {
+        let events = SharedEvents::default();
+        let sink = RecordingSupervisorEventSink::default();
+        let clock = FakeClock::new();
+        let deps = SupervisorDeps::new(
+            Arc::new(FakeRunner::new(events.clone())),
+            Arc::new(ElevationState::new()),
+        )
+        .with_target_os(TargetOs::Linux)
+        .with_event_sink(Arc::new(sink.clone()))
+        .with_clock(Arc::new(clock.clone()))
+        .with_crash_restart_policy(CrashRestartPolicy {
+            max_restarts: 1,
+            healthy_uptime: Duration::from_secs(30),
+            initial_delay: Duration::ZERO,
+            max_delay: Duration::ZERO,
+        });
+        let supervisor = CoreSupervisor::spawn(deps);
+
+        let snapshot = supervisor.start(crash_test_request()).await.expect("start");
+        let restarted = supervisor
+            .process_exited(snapshot.main_pid.expect("main pid"), Some(1))
+            .await
+            .expect("first crash restarts");
+
+        // The replacement stays up long enough to count as healthy, so the next
+        // crash is a new problem rather than the tail of a restart storm.
+        clock.advance(Duration::from_secs(120));
+        let second = supervisor
+            .process_exited(restarted.main_pid.expect("restarted pid"), Some(1))
+            .await
+            .expect("a crash after a healthy run restarts again");
+
+        assert_eq!(second.state, SupervisorConnectionState::Connected);
+        assert_eq!(
+            sink.outcomes()
+                .iter()
+                .filter(|outcome| matches!(outcome, CoreExitOutcome::Restarted { attempt: 1, .. }))
+                .count(),
+            2
+        );
+    }
+
+    #[tokio::test]
+    async fn supervisor_backs_off_before_the_second_restart_of_a_streak() {
+        let events = SharedEvents::default();
+        let sink = RecordingSupervisorEventSink::default();
+        let deps = SupervisorDeps::new(
+            Arc::new(FakeRunner::new(events.clone())),
+            Arc::new(ElevationState::new()),
+        )
+        .with_target_os(TargetOs::Linux)
+        .with_event_sink(Arc::new(sink.clone()))
+        .with_crash_restart_policy(CrashRestartPolicy {
+            max_restarts: 3,
+            healthy_uptime: Duration::from_secs(30),
+            initial_delay: Duration::from_millis(20),
+            max_delay: Duration::from_millis(20),
+        });
+        let supervisor = CoreSupervisor::spawn(deps);
+
+        let snapshot = supervisor.start(crash_test_request()).await.expect("start");
+        let restarted = supervisor
+            .process_exited(snapshot.main_pid.expect("main pid"), Some(1))
+            .await
+            .expect("first crash restarts immediately");
+
+        let scheduled = supervisor
+            .process_exited(restarted.main_pid.expect("restarted pid"), Some(1))
+            .await
+            .expect("second crash is deferred");
+        assert_eq!(scheduled.state, SupervisorConnectionState::Disconnected);
+        assert!(matches!(
+            sink.outcomes().last(),
+            Some(CoreExitOutcome::RestartScheduled { attempt: 2, .. })
+        ));
+
+        for _ in 0..50 {
+            if supervisor.status().await.expect("status").state
+                == SupervisorConnectionState::Connected
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        assert_eq!(
+            supervisor.status().await.expect("status").state,
+            SupervisorConnectionState::Connected
+        );
+        assert!(matches!(
+            sink.outcomes().last(),
+            Some(CoreExitOutcome::Restarted { attempt: 2, .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn supervisor_stop_cancels_a_pending_crash_restart() {
+        let events = SharedEvents::default();
+        let sink = RecordingSupervisorEventSink::default();
+        let deps = SupervisorDeps::new(
+            Arc::new(FakeRunner::new(events.clone())),
+            Arc::new(ElevationState::new()),
+        )
+        .with_target_os(TargetOs::Linux)
+        .with_event_sink(Arc::new(sink.clone()))
+        .with_crash_restart_policy(CrashRestartPolicy {
+            max_restarts: 3,
+            healthy_uptime: Duration::from_secs(30),
+            initial_delay: Duration::from_millis(80),
+            max_delay: Duration::from_millis(80),
+        });
+        let supervisor = CoreSupervisor::spawn(deps);
+
+        let snapshot = supervisor.start(crash_test_request()).await.expect("start");
+        let restarted = supervisor
+            .process_exited(snapshot.main_pid.expect("main pid"), Some(1))
+            .await
+            .expect("first crash restarts immediately");
+        supervisor
+            .process_exited(restarted.main_pid.expect("restarted pid"), Some(1))
+            .await
+            .expect("second crash is deferred");
+
+        supervisor.stop().await.expect("user disconnect");
+        tokio::time::sleep(Duration::from_millis(250)).await;
+
+        assert_eq!(
+            supervisor.status().await.expect("status").state,
+            SupervisorConnectionState::Disconnected
+        );
+        assert_eq!(
+            events
+                .lock()
+                .iter()
+                .filter(|event| event.starts_with("spawn:Main"))
+                .count(),
+            2,
+            "a user disconnect must cancel the restart waiting on its timer"
+        );
+    }
+
+    /// A start whose preconditions cannot be met must not take the healthy core
+    /// down with it: everything that does not depend on the old core being gone
+    /// is resolved before `stop`.
+    #[tokio::test]
+    async fn supervisor_start_precondition_failure_keeps_the_running_core() {
+        let events = SharedEvents::default();
+        let elevation = Arc::new(ElevationState::new());
+        elevation.set_granted(true);
+        let supervisor = supervisor_with(&events, TargetOs::Linux, Arc::clone(&elevation));
+        let request = SupervisorStartRequest {
+            active_profile_id: Some("active".to_string()),
+            main: CoreProcessSpec::new(
+                CoreType::sing_box,
+                launch("/tmp/sing-box", "run -c config.json --disable-color"),
+            ),
+            pre: None,
+            tun_enabled: true,
+            sudo_script_dir: "/tmp/voya/scripts".into(),
+            restart_on_crash: false,
+        };
+
+        supervisor.start(request.clone()).await.expect("start");
+        elevation.set_granted(false);
+
+        let error = supervisor
+            .start(request)
+            .await
+            .expect_err("the elevation grant is gone");
+
+        assert!(matches!(
+            error,
+            SupervisorError::ElevationNotGranted(CoreType::sing_box)
+        ));
+        let snapshot = supervisor.status().await.expect("status");
+        assert_eq!(snapshot.state, SupervisorConnectionState::Connected);
+        assert_eq!(snapshot.main_pid, Some(100));
+        assert_eq!(events.lock().as_slice(), ["spawn:Main:pid=100:stdin=false"]);
+    }
+
+    #[tokio::test]
+    async fn supervisor_start_failure_after_stop_reports_disconnected() {
+        let events = SharedEvents::default();
+        let runner = Arc::new(FakeRunner::new(events.clone()));
+        let deps = SupervisorDeps::new(
+            Arc::clone(&runner) as Arc<dyn ProcessRunner>,
+            Arc::new(ElevationState::new()),
+        )
+        .with_target_os(TargetOs::Linux);
+        let supervisor = CoreSupervisor::spawn(deps);
+
+        supervisor.start(crash_test_request()).await.expect("start");
+        runner.fail_spawn_role_from_now(ProcessRole::Main);
+
+        supervisor
+            .start(crash_test_request())
+            .await
+            .expect_err("the replacement cannot spawn");
+
+        assert_eq!(
+            supervisor.status().await.expect("status").state,
+            SupervisorConnectionState::Disconnected,
+            "the old core was stopped, so the shell must be told the core is down"
         );
     }
 }
