@@ -35,7 +35,7 @@ export const commands = {
 	 *  `set_connection_mode`: the mode is persisted always, the machine is only
 	 *  touched while a core is running.
 	 */
-	setSystemProxyMode: (mode: SysProxyType) => typedError<SystemProxyStatusResponse, AppError>(__TAURI_INVOKE("set_system_proxy_mode", { mode })),
+	setSystemProxyMode: (mode: SystemProxyType) => typedError<SystemProxyStatusResponse, AppError>(__TAURI_INVOKE("set_system_proxy_mode", { mode })),
 	connectionModeStatus: () => typedError<ConnectionModeStatus, AppError>(__TAURI_INVOKE("connection_mode_status")),
 	/**
 	 *  Switches the app between the three Hiddify-style connection modes.
@@ -96,7 +96,7 @@ export const commands = {
 	proxyReloadConfig: (path: string | null) => typedError<null, AppError>(__TAURI_INVOKE("proxy_reload_config", { path })),
 	proxyStartMonitor: () => typedError<ProxyMonitorStatus, AppError>(__TAURI_INVOKE("proxy_start_monitor")),
 	proxyStopMonitor: () => typedError<ProxyMonitorStatus, AppError>(__TAURI_INVOKE("proxy_stop_monitor")),
-	runSpeedtest: (request: SpeedTestRequest) => typedError<SpeedtestRunResult, AppError>(__TAURI_INVOKE("run_speedtest", { request })),
+	runSpeedtest: (request: SpeedtestRequest) => typedError<SpeedtestRunResult, AppError>(__TAURI_INVOKE("run_speedtest", { request })),
 	cancelSpeedtest: () => typedError<SpeedtestStatus, AppError>(__TAURI_INVOKE("cancel_speedtest")),
 	speedtestStatus: () => typedError<SpeedtestStatus, AppError>(__TAURI_INVOKE("speedtest_status")),
 	appUpdateStatus: () => typedError<AppUpdaterStatus, AppError>(__TAURI_INVOKE("app_update_status")),
@@ -136,7 +136,6 @@ export const events = {
 
 /* Types */
 export type AppDnsSettings = {
-	useSystemHosts: boolean | null,
 	addCommonHosts: boolean | null,
 	fakeIp: boolean | null,
 	globalFakeIp: boolean | null,
@@ -146,8 +145,6 @@ export type AppDnsSettings = {
 	bootstrap: string | null,
 	directStrategy: string | null,
 	proxyStrategy: string | null,
-	serveStale: boolean | null,
-	parallelQuery: boolean | null,
 	hosts: string | null,
 	directExpectedIps: string | null,
 };
@@ -257,7 +254,7 @@ export type AppSettingsV1 = {
 	routing: RoutingSettings,
 	dns: AppDnsSettings,
 	sources: SourceSettings,
-	speedTest: SpeedTestSettings,
+	speedTest: SpeedtestSettings,
 	multiplexing: MultiplexingSettings,
 	grpc: GrpcSettings,
 	hysteria: HysteriaSettings,
@@ -412,7 +409,6 @@ export type DatabaseErrorCode =
 "io" | "other";
 
 export type DnsSettings = {
-	useSystemHosts: boolean | null,
 	addCommonHosts: boolean | null,
 	fakeIp: boolean | null,
 	globalFakeIp: boolean | null,
@@ -422,8 +418,6 @@ export type DnsSettings = {
 	bootstrap: string | null,
 	directStrategy: string | null,
 	proxyStrategy: string | null,
-	serveStale: boolean | null,
-	parallelQuery: boolean | null,
 	hosts: string | null,
 	directExpectedIps: string | null,
 };
@@ -690,7 +684,7 @@ export type ProfileMetrics = {
 	 *  The last probe's outcome, decoded from the persisted `profile_ex`
 	 *  column. `None` means the profile has never been tested.
 	 */
-	outcome: SpeedTestOutcome | null,
+	outcome: SpeedtestOutcome | null,
 	ipInfo: string | null,
 };
 
@@ -741,7 +735,7 @@ export type ProxyConnectionsSnapshot = {
 export type ProxyDelayTestResult = {
 	name: string,
 	delay: number | null,
-	outcome: SpeedTestOutcome,
+	outcome: SpeedtestOutcome,
 };
 
 export type ProxyGroup = {
@@ -790,11 +784,6 @@ export type ProxySettings = {
 	 */
 	trafficMode: TrafficMode,
 	nodeSorting: number,
-};
-
-export type ProxyTrafficEvent = {
-	up: number | null,
-	down: number | null,
 };
 
 export type QrCodeImage = {
@@ -937,7 +926,7 @@ export type SourceSettings = {
 	routingTemplate: string | null,
 };
 
-export type SpeedTestKind = "tcpConnect" | "latency" | "udp" | "download" | "mixed";
+export type SpeedtestKind = "tcpConnect" | "latency" | "udp" | "download" | "mixed";
 
 /**
  *  How a probe ended, as a code rather than a sentence.
@@ -945,9 +934,9 @@ export type SpeedTestKind = "tcpConnect" | "latency" | "udp" | "download" | "mix
  *  This is **persisted**: it is what `profile_ex.message` holds, so the prose
  *  that used to live there ("Speedtesting", "request timed out", "Skipped")
  *  froze the user's language at the moment the test ran. Rows written by
- *  earlier builds still decode — see [`SpeedTestOutcome::from_stored`].
+ *  earlier builds still decode — see [`SpeedtestOutcome::from_stored`].
  */
-export type SpeedTestOutcome = 
+export type SpeedtestOutcome = 
 /**  Selected and queued behind another probe. */
 "waiting" | 
 /**  The probe is running right now. */
@@ -970,9 +959,9 @@ export type SpeedTestOutcome =
  */
 "unknown";
 
-export type SpeedTestRequest = {
-	kind: SpeedTestKind,
-	target: SpeedTestTarget,
+export type SpeedtestRequest = {
+	kind: SpeedtestKind,
+	target: SpeedtestTarget,
 };
 
 /**
@@ -984,17 +973,25 @@ export type SpeedTestRequest = {
  *  a config-write failure printed the app-data directory into a column the
  *  profile table renders.
  */
-export type SpeedTestResult = {
-	action: SpeedTestKind,
+export type SpeedtestResult = {
+	action: SpeedtestKind,
 	indexId: string,
 	delay: number | null,
 	speed: number | null,
-	outcome: SpeedTestOutcome,
+	outcome: SpeedtestOutcome,
 	detail: string | null,
 	ipInfo: string | null,
 };
 
-export type SpeedTestSettings = {
+export type SpeedtestRunResult = {
+	action: SpeedtestKind,
+	cancelled: boolean,
+	selectedCount: number,
+	completedCount: number,
+	results: SpeedtestResult[],
+};
+
+export type SpeedtestSettings = {
 	timeoutSeconds: number,
 	downloadUrl: string,
 	latencyUrl: string,
@@ -1002,22 +999,14 @@ export type SpeedTestSettings = {
 	ipLookupUrl: string,
 	udpTarget: string,
 	pageSize: number | null,
-	delayIntervalMs: number | null,
-};
-
-export type SpeedTestTarget = { scope: "all" } | { scope: "profiles"; profileIds: string[] };
-
-export type SpeedtestRunResult = {
-	action: SpeedTestKind,
-	cancelled: boolean,
-	selectedCount: number,
-	completedCount: number,
-	results: SpeedTestResult[],
+	delayIntervalSeconds: number | null,
 };
 
 export type SpeedtestStatus = {
 	running: boolean,
 };
+
+export type SpeedtestTarget = { scope: "all" } | { scope: "profiles"; profileIds: string[] };
 
 export type StatisticsSnapshot = {
 	activeProfileId: string | null,
@@ -1066,8 +1055,6 @@ export type SubscriptionUpdateResult = {
 	messages: string[],
 };
 
-export type SysProxyType = "forcedClear" | "forcedChange" | "unchanged" | "pac";
-
 export type SystemProxySettings = {
 	/**
 	 *  The persisted OS-proxy mode. Typed rather than a `String`: the enum's
@@ -1075,7 +1062,7 @@ export type SystemProxySettings = {
 	 *  always stored (`forcedClear`, `forcedChange`, `unchanged`, `pac`), so the
 	 *  stored payload is unchanged and `voya-db` pins that with a value test.
 	 */
-	mode: SysProxyType,
+	mode: SystemProxyType,
 	exceptions: string,
 	bypassLocal: boolean,
 	advancedProtocol: string,
@@ -1088,16 +1075,18 @@ export type SystemProxySettings = {
  * 
  *  `TransientStreamEvent::SysProxyChanged` carries this struct; the narrower
  *  `SysProxyChanged` it replaced duplicated four of these fields and re-declared
- *  `SysProxyType` under a second name.
+ *  `SystemProxyType` under a second name.
  */
 export type SystemProxyStatusResponse = {
-	requestedMode: SysProxyType,
-	effectiveMode: SysProxyType,
+	requestedMode: SystemProxyType,
+	effectiveMode: SystemProxyType,
 	pacAvailable: boolean,
 	proxy: string | null,
 	exceptions: string,
 	pacUrl: string | null,
 };
+
+export type SystemProxyType = "forcedClear" | "forcedChange" | "unchanged" | "pac";
 
 export type ThemeMode = "system" | "light" | "dark";
 
@@ -1133,7 +1122,7 @@ export type TrafficModeResponse = {
  *  They used to be narrower parallel DTOs, which cost a converter in the shell
  *  and another on the frontend for each one.
  */
-export type TransientStreamEvent = { kind: "logLine"; payload: LogLineEvent } | { kind: "coreState"; payload: RuntimeStatusResponse } | { kind: "statistics"; payload: StatisticsSnapshot } | { kind: "sysProxyChanged"; payload: SystemProxyStatusResponse } | { kind: "tunChanged"; payload: TunStatus } | { kind: "proxyMonitorStatus"; payload: ProxyMonitorStatus } | { kind: "proxyTraffic"; payload: ProxyTrafficEvent } | { kind: "proxyConnections"; payload: ProxyConnectionsSnapshot } | { kind: "speedtestResult"; payload: SpeedTestResult };
+export type TransientStreamEvent = { kind: "logLine"; payload: LogLineEvent } | { kind: "coreState"; payload: RuntimeStatusResponse } | { kind: "statistics"; payload: StatisticsSnapshot } | { kind: "sysProxyChanged"; payload: SystemProxyStatusResponse } | { kind: "tunChanged"; payload: TunStatus } | { kind: "proxyMonitorStatus"; payload: ProxyMonitorStatus } | { kind: "proxyConnections"; payload: ProxyConnectionsSnapshot } | { kind: "speedtestResult"; payload: SpeedtestResult };
 
 export type TunBackend = "process" | "macosPacketTunnel" | "windowsService" | "unsupported";
 

@@ -15,7 +15,6 @@ import {
 import type {
   ProxyConnectionItem,
   ProxyConnectionsSnapshot,
-  ProxyTrafficEvent,
   SpeedtestStatus,
 } from "@/ipc/bindings";
 import type { RuntimeEventState, RuntimeProxyMonitorStatus } from "@/ipc/runtime-event-store";
@@ -77,7 +76,6 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
       clearLogs: vi.fn(),
       proxyConnections: null,
       proxyMonitorStatus: initialMonitorStatus,
-      proxyTraffic: null,
       coreState: null,
       lastTransientEvent: null,
       logLines: [],
@@ -106,9 +104,6 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
       }),
       setProxyMonitorStopped: vi.fn((message: string | null = null) => {
         state.proxyMonitorStatus = makeMonitorStatus("stopped", false, true, message);
-      }),
-      setProxyTraffic: vi.fn((event: ProxyTrafficEvent) => {
-        state.proxyTraffic = event;
       }),
       setCoreState: vi.fn(),
       setSpeedtestRunning: vi.fn((speedtestRunning: boolean) => {
@@ -197,11 +192,8 @@ vi.mock("@/ipc", () => ({
       fakeIp: null,
       globalFakeIp: null,
       hosts: null,
-      parallelQuery: null,
       proxyStrategy: null,
       remote: null,
-      serveStale: null,
-      useSystemHosts: null,
     }),
   ),
   listProcessCandidates: vi.fn(() => Promise.resolve([])),
@@ -589,7 +581,6 @@ describe("App", () => {
   it("shows stale monitor status in Proxies without replacing toolbar controls", async () => {
     const user = userEvent.setup();
     runtimeStoreMock.getState().setProxyMonitorStopped();
-    runtimeStoreMock.getState().setProxyTraffic({ down: 2048, up: 512 });
 
     renderApp();
 

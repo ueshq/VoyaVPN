@@ -3,7 +3,7 @@ import type {
   LogCode,
   LogLineBody,
   NoticeCode,
-  SpeedTestOutcome,
+  SpeedtestOutcome,
   ValidationCode,
   ValidationIssue,
   ValidationScope,
@@ -144,7 +144,7 @@ export const VALIDATION_SCOPE_KEYS: Record<ValidationScope["kind"], TranslationK
   routingRuleOutbound: "validation.scope.routingRuleOutbound",
 };
 
-export const SPEEDTEST_OUTCOME_KEYS: Record<SpeedTestOutcome, TranslationKey> = {
+export const SPEEDTEST_OUTCOME_KEYS: Record<SpeedtestOutcome, TranslationKey> = {
   cancelled: "speedtest.outcome.cancelled",
   completed: "speedtest.outcome.completed",
   coreUnavailable: "speedtest.outcome.coreUnavailable",
@@ -208,6 +208,6 @@ export function validationText(t: TranslationFunction, issue: ValidationIssue) {
   return `${breadcrumb}: ${message}`;
 }
 
-export function speedtestOutcomeText(t: TranslationFunction, outcome: SpeedTestOutcome) {
+export function speedtestOutcomeText(t: TranslationFunction, outcome: SpeedtestOutcome) {
   return t(SPEEDTEST_OUTCOME_KEYS[outcome]);
 }

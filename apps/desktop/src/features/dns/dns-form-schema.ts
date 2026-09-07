@@ -9,7 +9,6 @@ import { DNS_STRATEGIES } from "./dns-constants";
 const nullableText = z.string().nullable();
 
 export const dnsSettingsSchema: z.ZodType<DnsSettings> = z.object({
-  useSystemHosts: z.boolean().nullable(),
   addCommonHosts: z.boolean().nullable(),
   fakeIp: z.boolean().nullable(),
   globalFakeIp: z.boolean().nullable(),
@@ -19,8 +18,6 @@ export const dnsSettingsSchema: z.ZodType<DnsSettings> = z.object({
   bootstrap: nullableText,
   directStrategy: z.enum(DNS_STRATEGIES).nullable(),
   proxyStrategy: z.enum(DNS_STRATEGIES).nullable(),
-  serveStale: z.boolean().nullable(),
-  parallelQuery: z.boolean().nullable(),
   hosts: nullableText.superRefine(validateHosts),
   directExpectedIps: nullableText.superRefine(validateExpectedIps),
 });

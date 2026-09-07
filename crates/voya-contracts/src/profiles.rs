@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{SpeedTestOutcome, ValidationIssue};
+use crate::{SpeedtestOutcome, ValidationIssue};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -242,7 +242,7 @@ pub struct ProfileMetrics {
     pub sort: i32,
     /// The last probe's outcome, decoded from the persisted `profile_ex`
     /// column. `None` means the profile has never been tested.
-    pub outcome: Option<SpeedTestOutcome>,
+    pub outcome: Option<SpeedtestOutcome>,
     pub ip_info: Option<String>,
 }
 

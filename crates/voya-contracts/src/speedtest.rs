@@ -3,7 +3,7 @@ use specta::Type;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
-pub enum SpeedTestKind {
+pub enum SpeedtestKind {
     TcpConnect,
     Latency,
     Udp,
@@ -18,16 +18,16 @@ pub enum SpeedTestKind {
     rename_all_fields = "camelCase",
     deny_unknown_fields
 )]
-pub enum SpeedTestTarget {
+pub enum SpeedtestTarget {
     All,
     Profiles { profile_ids: Vec<String> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SpeedTestRequest {
-    pub kind: SpeedTestKind,
-    pub target: SpeedTestTarget,
+pub struct SpeedtestRequest {
+    pub kind: SpeedtestKind,
+    pub target: SpeedtestTarget,
 }
 
 /// How a probe ended, as a code rather than a sentence.
@@ -35,10 +35,10 @@ pub struct SpeedTestRequest {
 /// This is **persisted**: it is what `profile_ex.message` holds, so the prose
 /// that used to live there ("Speedtesting", "request timed out", "Skipped")
 /// froze the user's language at the moment the test ran. Rows written by
-/// earlier builds still decode — see [`SpeedTestOutcome::from_stored`].
+/// earlier builds still decode — see [`SpeedtestOutcome::from_stored`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
-pub enum SpeedTestOutcome {
+pub enum SpeedtestOutcome {
     /// Selected and queued behind another probe.
     Waiting,
     /// The probe is running right now.
@@ -66,7 +66,7 @@ pub enum SpeedTestOutcome {
     Unknown,
 }
 
-impl SpeedTestOutcome {
+impl SpeedtestOutcome {
     /// The exact text written into `profile_ex.message`.
     ///
     /// The serde tag, spelled once here so the persisted vocabulary and the
@@ -104,7 +104,7 @@ impl SpeedTestOutcome {
     /// 3. A bare number, which is what the pre-code builds stored for a
     ///    successful latency or download probe (`delay.to_string()`).
     ///
-    /// Anything else becomes [`SpeedTestOutcome::Unknown`] rather than failing
+    /// Anything else becomes [`SpeedtestOutcome::Unknown`] rather than failing
     /// the read: one unrecognisable cell must never hide the profile row.
     #[must_use]
     pub fn from_stored(value: &str) -> Option<Self> {
@@ -144,16 +144,16 @@ impl SpeedTestOutcome {
 }
 
 /// The prose earlier builds persisted, mapped onto the codes that replaced it.
-fn legacy_outcome(lowercase: &str) -> Option<SpeedTestOutcome> {
+fn legacy_outcome(lowercase: &str) -> Option<SpeedtestOutcome> {
     match lowercase {
-        "speedtesting" => Some(SpeedTestOutcome::Testing),
-        "speedtesting wait" => Some(SpeedTestOutcome::Waiting),
-        "request timed out" => Some(SpeedTestOutcome::TimedOut),
-        "proxy connection failed" => Some(SpeedTestOutcome::ProxyConnectFailed),
-        "proxy connection refused" => Some(SpeedTestOutcome::ProxyConnectionRefused),
-        "proxy connection closed" => Some(SpeedTestOutcome::ProxyConnectionClosed),
-        "udp test failed" => Some(SpeedTestOutcome::UdpTestFailed),
-        "skipped" => Some(SpeedTestOutcome::Skipped),
+        "speedtesting" => Some(SpeedtestOutcome::Testing),
+        "speedtesting wait" => Some(SpeedtestOutcome::Waiting),
+        "request timed out" => Some(SpeedtestOutcome::TimedOut),
+        "proxy connection failed" => Some(SpeedtestOutcome::ProxyConnectFailed),
+        "proxy connection refused" => Some(SpeedtestOutcome::ProxyConnectionRefused),
+        "proxy connection closed" => Some(SpeedtestOutcome::ProxyConnectionClosed),
+        "udp test failed" => Some(SpeedtestOutcome::UdpTestFailed),
+        "skipped" => Some(SpeedtestOutcome::Skipped),
         _ => None,
     }
 }
@@ -167,12 +167,12 @@ fn legacy_outcome(lowercase: &str) -> Option<SpeedTestOutcome> {
 /// profile table renders.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SpeedTestResult {
-    pub action: SpeedTestKind,
+pub struct SpeedtestResult {
+    pub action: SpeedtestKind,
     pub index_id: String,
     pub delay: Option<i32>,
     pub speed: Option<f64>,
-    pub outcome: SpeedTestOutcome,
+    pub outcome: SpeedtestOutcome,
     pub detail: Option<String>,
     pub ip_info: Option<String>,
 }
@@ -180,11 +180,11 @@ pub struct SpeedTestResult {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SpeedtestRunResult {
-    pub action: SpeedTestKind,
+    pub action: SpeedtestKind,
     pub cancelled: bool,
     pub selected_count: u32,
     pub completed_count: u32,
-    pub results: Vec<SpeedTestResult>,
+    pub results: Vec<SpeedtestResult>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
@@ -199,9 +199,9 @@ mod tests {
 
     #[test]
     fn request_contract_uses_explicit_kind_and_target() {
-        let request = SpeedTestRequest {
-            kind: SpeedTestKind::Latency,
-            target: SpeedTestTarget::Profiles {
+        let request = SpeedtestRequest {
+            kind: SpeedtestKind::Latency,
+            target: SpeedtestTarget::Profiles {
                 profile_ids: vec!["node-1".to_string()],
             },
         };
@@ -215,24 +215,24 @@ mod tests {
     #[test]
     fn stored_outcomes_round_trip_through_their_persisted_spelling() {
         for outcome in [
-            SpeedTestOutcome::Waiting,
-            SpeedTestOutcome::Testing,
-            SpeedTestOutcome::Completed,
-            SpeedTestOutcome::TimedOut,
-            SpeedTestOutcome::ProxyConnectFailed,
-            SpeedTestOutcome::ProxyConnectionRefused,
-            SpeedTestOutcome::ProxyConnectionClosed,
-            SpeedTestOutcome::UdpTestFailed,
-            SpeedTestOutcome::Cancelled,
-            SpeedTestOutcome::Skipped,
-            SpeedTestOutcome::InvalidProfile,
-            SpeedTestOutcome::CoreUnavailable,
-            SpeedTestOutcome::NoAvailablePort,
-            SpeedTestOutcome::Failed,
-            SpeedTestOutcome::Unknown,
+            SpeedtestOutcome::Waiting,
+            SpeedtestOutcome::Testing,
+            SpeedtestOutcome::Completed,
+            SpeedtestOutcome::TimedOut,
+            SpeedtestOutcome::ProxyConnectFailed,
+            SpeedtestOutcome::ProxyConnectionRefused,
+            SpeedtestOutcome::ProxyConnectionClosed,
+            SpeedtestOutcome::UdpTestFailed,
+            SpeedtestOutcome::Cancelled,
+            SpeedtestOutcome::Skipped,
+            SpeedtestOutcome::InvalidProfile,
+            SpeedtestOutcome::CoreUnavailable,
+            SpeedtestOutcome::NoAvailablePort,
+            SpeedtestOutcome::Failed,
+            SpeedtestOutcome::Unknown,
         ] {
             assert_eq!(
-                SpeedTestOutcome::from_stored(outcome.as_stored()),
+                SpeedtestOutcome::from_stored(outcome.as_stored()),
                 Some(outcome),
                 "{outcome:?} did not survive its stored spelling"
             );
@@ -249,57 +249,57 @@ mod tests {
     fn rows_written_by_earlier_builds_still_decode() {
         // Exactly what `clear_previous_results`, `speedtest_error_message` and
         // `run_realping` used to write into `profile_ex.message` / `ip_info`.
-        let legacy: &[(&str, SpeedTestOutcome)] = &[
-            ("Speedtesting", SpeedTestOutcome::Testing),
-            ("Speedtesting wait", SpeedTestOutcome::Waiting),
-            ("request timed out", SpeedTestOutcome::TimedOut),
+        let legacy: &[(&str, SpeedtestOutcome)] = &[
+            ("Speedtesting", SpeedtestOutcome::Testing),
+            ("Speedtesting wait", SpeedtestOutcome::Waiting),
+            ("request timed out", SpeedtestOutcome::TimedOut),
             (
                 "proxy connection failed",
-                SpeedTestOutcome::ProxyConnectFailed,
+                SpeedtestOutcome::ProxyConnectFailed,
             ),
             (
                 "proxy connection refused",
-                SpeedTestOutcome::ProxyConnectionRefused,
+                SpeedtestOutcome::ProxyConnectionRefused,
             ),
             (
                 "proxy connection closed",
-                SpeedTestOutcome::ProxyConnectionClosed,
+                SpeedtestOutcome::ProxyConnectionClosed,
             ),
-            ("UDP test failed", SpeedTestOutcome::UdpTestFailed),
-            ("cancelled", SpeedTestOutcome::Cancelled),
-            ("Skipped", SpeedTestOutcome::Skipped),
+            ("UDP test failed", SpeedtestOutcome::UdpTestFailed),
+            ("cancelled", SpeedtestOutcome::Cancelled),
+            ("Skipped", SpeedtestOutcome::Skipped),
             // A successful latency probe stored the millisecond count, and a
             // download probe the byte rate.
-            ("42", SpeedTestOutcome::Completed),
-            ("2048", SpeedTestOutcome::Completed),
-            ("-1", SpeedTestOutcome::Completed),
+            ("42", SpeedtestOutcome::Completed),
+            ("2048", SpeedtestOutcome::Completed),
+            ("-1", SpeedtestOutcome::Completed),
             // Anything else must degrade, never fail the row.
             (
                 "failed to write speedtest config /Users/someone/Library/config.json: denied",
-                SpeedTestOutcome::Unknown,
+                SpeedtestOutcome::Unknown,
             ),
         ];
 
         for (stored, expected) in legacy {
             assert_eq!(
-                SpeedTestOutcome::from_stored(stored),
+                SpeedtestOutcome::from_stored(stored),
                 Some(*expected),
                 "legacy value `{stored}` decoded wrongly"
             );
         }
 
-        assert_eq!(SpeedTestOutcome::from_stored(""), None);
-        assert_eq!(SpeedTestOutcome::from_stored("   "), None);
+        assert_eq!(SpeedtestOutcome::from_stored(""), None);
+        assert_eq!(SpeedtestOutcome::from_stored("   "), None);
     }
 
     #[test]
     fn speed_test_contract_rejects_retired_numeric_and_pascal_case_values() {
-        assert!(serde_json::from_value::<SpeedTestKind>(serde_json::json!(1)).is_err());
-        assert!(serde_json::from_value::<SpeedTestKind>(serde_json::json!("TcpConnect")).is_err());
+        assert!(serde_json::from_value::<SpeedtestKind>(serde_json::json!(1)).is_err());
+        assert!(serde_json::from_value::<SpeedtestKind>(serde_json::json!("TcpConnect")).is_err());
         assert_eq!(
-            serde_json::from_value::<SpeedTestKind>(serde_json::json!("tcpConnect"))
+            serde_json::from_value::<SpeedtestKind>(serde_json::json!("tcpConnect"))
                 .expect("camelCase string enum should be accepted"),
-            SpeedTestKind::TcpConnect
+            SpeedtestKind::TcpConnect
         );
     }
 }

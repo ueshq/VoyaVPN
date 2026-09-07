@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{CoreState, CoreType, SysProxyType, ValidationIssue};
+use crate::{CoreState, CoreType, SystemProxyType, ValidationIssue};
 
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "lowercase")]
@@ -228,12 +228,12 @@ pub struct AppUpdaterStatus {
 ///
 /// `TransientStreamEvent::SysProxyChanged` carries this struct; the narrower
 /// `SysProxyChanged` it replaced duplicated four of these fields and re-declared
-/// `SysProxyType` under a second name.
+/// `SystemProxyType` under a second name.
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemProxyStatusResponse {
-    pub requested_mode: SysProxyType,
-    pub effective_mode: SysProxyType,
+    pub requested_mode: SystemProxyType,
+    pub effective_mode: SystemProxyType,
     pub pac_available: bool,
     pub proxy: Option<String>,
     pub exceptions: String,

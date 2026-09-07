@@ -5,7 +5,7 @@ use std::{
 };
 
 use sqlx::Row;
-use voya_contracts::{AppSettingsV1, SysProxyType, TrafficMode, CURRENT_SCHEMA_VERSION};
+use voya_contracts::{AppSettingsV1, SystemProxyType, TrafficMode, CURRENT_SCHEMA_VERSION};
 use voya_core::{
     MultipleLoad, ProfileExItem, ProfileItem, ProfileProtocol, ProfileTransport, RoutingItem,
     RuleType, RulesItem, ServerEndpoint, ServerStatItem, SubItem, SubMetadataItem, TlsMode,
@@ -32,20 +32,28 @@ const PINNED_BLOB_SHAPES: &str = include_str!("../../fixtures/profile_blobs_v1.j
 /// `setup()` turns into a launch failure.
 const PINNED_SETTINGS_PAYLOAD: &str = include_str!("../../fixtures/app_settings_v1.json");
 
+/// The same payload as an *older* build wrote it, before three DNS settings
+/// sing-box cannot express were removed and `speedTest.delayIntervalMs` was
+/// renamed to say the seconds it always held.
+///
+/// This is the row a user upgrading from that build still has on disk.
+const RETIRED_KEYS_SETTINGS_PAYLOAD: &str =
+    include_str!("../../fixtures/app_settings_v1_retired_keys.json");
+
 /// Every value `network.systemProxy.mode` can hold, with the string the
 /// `String`-typed version of that field stored.
 ///
-/// The field is now a `SysProxyType`. That is only safe because the enum's
+/// The field is now a `SystemProxyType`. That is only safe because the enum's
 /// `rename_all = "camelCase"` emits precisely these literals, and nothing else
 /// in the suite can catch a drift: `json_shape` compares paths, and both the
 /// old and the new form are a JSON string at the same path. So the values are
 /// pinned here, and `typed_settings_enums_keep_their_persisted_strings` fails
 /// the moment a variant renames.
-const PINNED_SYSTEM_PROXY_MODES: [(SysProxyType, &str); 4] = [
-    (SysProxyType::ForcedClear, "forcedClear"),
-    (SysProxyType::ForcedChange, "forcedChange"),
-    (SysProxyType::Unchanged, "unchanged"),
-    (SysProxyType::Pac, "pac"),
+const PINNED_SYSTEM_PROXY_MODES: [(SystemProxyType, &str); 4] = [
+    (SystemProxyType::ForcedClear, "forcedClear"),
+    (SystemProxyType::ForcedChange, "forcedChange"),
+    (SystemProxyType::Unchanged, "unchanged"),
+    (SystemProxyType::Pac, "pac"),
 ];
 
 /// The same pinning for `proxy.trafficMode`, now a `TrafficMode`.
@@ -1931,6 +1939,82 @@ async fn persisted_settings_payload_from_an_earlier_build_still_loads() {
         "the settings layout changed: give every added field `#[serde(default)]`, never remove \
          or rename one, then refresh crates/voya-db/fixtures/app_settings_v1.json"
     );
+}
+
+/// A settings row written before the retired-key cleanup still loads, with the
+/// renamed value intact.
+///
+/// `AppSettingsV1` denies unknown fields, so this row would otherwise fail to
+/// deserialize and take `setup()` down with it on the first launch after an
+/// upgrade. `SettingsRepository::load` normalizes the stored JSON first; this
+/// pins that it drops exactly the retired keys, carries `delayIntervalMs` over
+/// to `delayIntervalSeconds`, and leaves every other field alone.
+#[tokio::test]
+async fn settings_payload_with_retired_keys_still_loads() {
+    let stored: serde_json::Value = serde_json::from_str(RETIRED_KEYS_SETTINGS_PAYLOAD)
+        .expect("the retired-key payload should be JSON");
+    for key in ["useSystemHosts", "serveStale", "parallelQuery"] {
+        assert!(
+            stored["dns"].get(key).is_some(),
+            "the fixture stops proving anything once `{key}` is gone from it"
+        );
+    }
+    assert_eq!(
+        stored["speedTest"]["delayIntervalMs"],
+        serde_json::json!(24)
+    );
+
+    let database = Database::connect_in_memory()
+        .await
+        .expect("database test operation should succeed");
+    sqlx::query("INSERT INTO app_settings (id, schema_version, payload) VALUES (1, ?, ?)")
+        .bind(i64::from(CURRENT_SCHEMA_VERSION))
+        .bind(RETIRED_KEYS_SETTINGS_PAYLOAD)
+        .execute(database.pool())
+        .await
+        .expect("the retired-key payload should be storable");
+
+    let loaded = database.settings().load().await.expect(
+        "a settings row written before the retired keys were removed must keep loading, or the          first launch after an upgrade fails in `setup()`",
+    );
+
+    // The renamed key kept its value; the unit was always seconds.
+    assert_eq!(loaded.speed_test.delay_interval_seconds, Some(24));
+    // Neighbouring fields survived the normalization untouched.
+    assert_eq!(loaded.speed_test.page_size, Some(23));
+    assert_eq!(loaded.dns.add_common_hosts, Some(true));
+    assert_eq!(loaded.dns.direct.as_deref(), Some("119.29.29.29"));
+
+    // And what this build writes back no longer mentions them.
+    let rewritten = serde_json::to_value(&loaded).expect("settings should serialize");
+    for key in ["useSystemHosts", "serveStale", "parallelQuery"] {
+        assert!(rewritten["dns"].get(key).is_none(), "`{key}` came back");
+    }
+    assert!(rewritten["speedTest"].get("delayIntervalMs").is_none());
+}
+
+/// Normalizing retired keys must not turn `AppSettingsV1` into a lenient
+/// deserializer: a key that was never part of the contract is still a hard
+/// error, so a corrupt or hand-edited row is reported rather than half-read.
+#[tokio::test]
+async fn settings_payload_with_an_unknown_key_is_still_rejected() {
+    let database = Database::connect_in_memory()
+        .await
+        .expect("database test operation should succeed");
+    let mut payload: serde_json::Value =
+        serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("the pinned payload should be JSON");
+    payload["dns"]["neverAContractKey"] = serde_json::json!(true);
+    sqlx::query("INSERT INTO app_settings (id, schema_version, payload) VALUES (1, ?, ?)")
+        .bind(i64::from(CURRENT_SCHEMA_VERSION))
+        .bind(payload.to_string())
+        .execute(database.pool())
+        .await
+        .expect("the tampered payload should be storable");
+
+    assert!(matches!(
+        database.settings().load().await,
+        Err(DbError::Json { .. })
+    ));
 }
 
 /// Two settings fields stopped being `String` and became the `specta` enums

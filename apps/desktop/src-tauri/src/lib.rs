@@ -18,7 +18,7 @@ use voya_app::{
     logging::process_log_level_to_contract,
     proxy_runtime::{
         ProxyConnectionsSnapshot, ProxyMonitorController, ProxyRuntimeEventSink,
-        ProxyRuntimeManager, ProxyTrafficEvent,
+        ProxyRuntimeManager,
     },
     redaction::{redact_url_userinfo, redact_urls},
     services::{AppConfig, AppServices},
@@ -582,14 +582,6 @@ impl StatisticsEventSink for TauriStatisticsEventSink {
 }
 
 impl ProxyRuntimeEventSink for TauriProxyRuntimeEventSink {
-    fn emit_traffic(&self, event: ProxyTrafficEvent) {
-        let event = ipc::events::TransientStreamEvent::ProxyTraffic(event);
-
-        if let Err(error) = event.emit(&self.app) {
-            tracing::warn!(?error, "failed to emit proxy traffic event");
-        }
-    }
-
     fn emit_connections(&self, event: ProxyConnectionsSnapshot) {
         let event = ipc::events::TransientStreamEvent::ProxyConnections(event);
 

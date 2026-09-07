@@ -29,11 +29,6 @@ export function SimpleDnsForm({
       <CardContent className="grid gap-4 p-0">
         <div className="grid gap-2">
           <CheckboxField
-            checked={Boolean(settings.useSystemHosts)}
-            label={t("panes.dns.systemHosts")}
-            onChange={(value) => updateSimple({ useSystemHosts: value })}
-          />
-          <CheckboxField
             checked={Boolean(settings.addCommonHosts)}
             label={t("panes.dns.commonHosts")}
             onChange={(value) => updateSimple({ addCommonHosts: value })}
@@ -42,16 +37,6 @@ export function SimpleDnsForm({
             checked={Boolean(settings.blockBindingQuery)}
             label={t("panes.dns.blockBindingQuery")}
             onChange={(value) => updateSimple({ blockBindingQuery: value })}
-          />
-          <CheckboxField
-            checked={Boolean(settings.serveStale)}
-            label={t("panes.dns.serveStale")}
-            onChange={(value) => updateSimple({ serveStale: value })}
-          />
-          <CheckboxField
-            checked={Boolean(settings.parallelQuery)}
-            label={t("panes.dns.parallelQuery")}
-            onChange={(value) => updateSimple({ parallelQuery: value })}
           />
           <CheckboxField
             checked={Boolean(settings.fakeIp)}

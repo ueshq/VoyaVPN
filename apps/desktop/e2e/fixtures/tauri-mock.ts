@@ -28,13 +28,13 @@ import type {
   Routing_Serialize,
   RoutingRule,
   RuntimeStatusResponse,
-  SpeedTestKind,
+  SpeedtestKind,
   SpeedtestRunResult,
   SpeedtestStatus,
   Subscription,
   SubscriptionMetadata,
   SubscriptionUpdateResult,
-  SysProxyType,
+  SystemProxyType,
   SystemProxyStatusResponse,
   TrafficMode,
   TrafficModeResponse,
@@ -299,8 +299,8 @@ export async function installTauriSmokeMock(page: Page) {
         case "set_system_proxy_mode":
           state.sysProxy = {
             ...state.sysProxy,
-            effectiveMode: String(args.mode ?? "forcedClear") as SysProxyType,
-            requestedMode: String(args.mode ?? "forcedClear") as SysProxyType,
+            effectiveMode: String(args.mode ?? "forcedClear") as SystemProxyType,
+            requestedMode: String(args.mode ?? "forcedClear") as SystemProxyType,
           };
           return Promise.resolve(clone(state.sysProxy));
         case "tun_status":
@@ -453,7 +453,7 @@ export async function installTauriSmokeMock(page: Page) {
           );
         case "run_speedtest":
           return Promise.resolve({
-            action: readRecord(args, "request").kind as SpeedTestKind,
+            action: readRecord(args, "request").kind as SpeedtestKind,
             cancelled: false,
             completedCount: 0,
             results: [],
@@ -880,11 +880,8 @@ export async function installTauriSmokeMock(page: Page) {
           fakeIp: null,
           globalFakeIp: null,
           hosts: null,
-          parallelQuery: null,
           proxyStrategy: null,
           remote: null,
-          serveStale: null,
-          useSystemHosts: null,
         },
         sources: {
           geo: null as string | null,
@@ -893,7 +890,7 @@ export async function installTauriSmokeMock(page: Page) {
           subscriptionConverter: null as string | null,
         },
         speedTest: {
-          delayIntervalMs: null as number | null,
+          delayIntervalSeconds: null as number | null,
           downloadUrl: "https://cachefly.cachefly.net/50mb.test",
           ipLookupUrl: "",
           latencyUrl: "https://www.google.com/generate_204",
@@ -943,12 +940,9 @@ export async function installTauriSmokeMock(page: Page) {
         fakeIp: false,
         globalFakeIp: false,
         hosts: "",
-        parallelQuery: false,
         proxyStrategy: "UseIP",
         remote: "https://1.1.1.1/dns-query",
-        serveStale: false,
         directStrategy: "AsIs",
-        useSystemHosts: true,
       };
     }
 

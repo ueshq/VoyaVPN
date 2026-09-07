@@ -212,13 +212,10 @@
       "globalFakeIp": "Global FakeIP",
       "hosts": "Hosts",
       "loading": "Loading DNS settings",
-      "parallelQuery": "Parallel query",
       "proxyStrategy": "Proxy strategy",
       "remoteDns": "Remote DNS",
-      "serveStale": "Serve stale",
       "simpleTitle": "Simple DNS",
       "standard": "Standard",
-      "systemHosts": "System hosts",
       "title": "DNS"
     },
     "groups": {

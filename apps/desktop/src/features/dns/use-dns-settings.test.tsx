@@ -166,10 +166,7 @@ function dnsSettings(): DnsSettings {
     fakeIp: null,
     globalFakeIp: null,
     hosts: null,
-    parallelQuery: null,
     proxyStrategy: null,
     remote: null,
-    serveStale: null,
-    useSystemHosts: null,
   };
 }

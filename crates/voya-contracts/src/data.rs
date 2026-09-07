@@ -198,7 +198,6 @@ pub enum MoveAction {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DnsSettings {
-    pub use_system_hosts: Option<bool>,
     pub add_common_hosts: Option<bool>,
     pub fake_ip: Option<bool>,
     pub global_fake_ip: Option<bool>,
@@ -208,8 +207,6 @@ pub struct DnsSettings {
     pub bootstrap: Option<String>,
     pub direct_strategy: Option<String>,
     pub proxy_strategy: Option<String>,
-    pub serve_stale: Option<bool>,
-    pub parallel_query: Option<bool>,
     pub hosts: Option<String>,
     pub direct_expected_ips: Option<String>,
 }

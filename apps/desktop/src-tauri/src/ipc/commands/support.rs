@@ -407,7 +407,7 @@ where
 
 pub(super) fn emit_speedtest_result<R>(
     app: &tauri::AppHandle<R>,
-    result: &SpeedTestResult,
+    result: &SpeedtestResult,
 ) -> Result<(), AppError>
 where
     R: tauri::Runtime,

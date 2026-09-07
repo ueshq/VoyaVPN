@@ -22,9 +22,9 @@ import type {
   ProfileListEntry,
   ProfileSortKey,
   ServerStatItem,
-  SpeedTestKind,
-  SpeedTestResult,
-  SpeedTestTarget,
+  SpeedtestKind,
+  SpeedtestResult,
+  SpeedtestTarget,
 } from "@/ipc/bindings";
 import { profilesQueryKey } from "@/ipc/query-keys";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -57,7 +57,7 @@ import { applyLiveUpdates } from "./server-table-live-updates";
 const TRAFFIC_COLUMN_IDS = ["todayUp", "todayDown", "totalUp", "totalDown"];
 const METRIC_COLUMN_IDS = ["delay", "speed", "ipInfo"];
 const EMPTY_SERVER_STATS: Record<string, ServerStatItem> = {};
-const EMPTY_SPEEDTEST_RESULTS: Record<string, SpeedTestResult> = {};
+const EMPTY_SPEEDTEST_RESULTS: Record<string, SpeedtestResult> = {};
 
 type DialogState =
   | { mode: "create"; profile?: null }
@@ -352,7 +352,7 @@ export function useServerTable() {
     }
   }
 
-  async function handleSpeedtest(kind: SpeedTestKind, target: SpeedTestTarget) {
+  async function handleSpeedtest(kind: SpeedtestKind, target: SpeedtestTarget) {
     setColumnVisibility((current) => ({ ...current, delay: true, speed: true }));
     setSpeedtestRunning(true);
     try {

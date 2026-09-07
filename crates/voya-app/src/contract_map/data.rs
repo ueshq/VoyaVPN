@@ -169,7 +169,6 @@ pub fn rule_from_contract(item: RoutingRuleContract) -> RulesItem {
 pub fn dns_to_contract(settings: DnsSettings) -> DnsContract {
     let item = settings.simple_dns_item;
     DnsContract {
-        use_system_hosts: item.use_system_hosts,
         add_common_hosts: item.add_common_hosts,
         fake_ip: item.fake_ip,
         global_fake_ip: item.global_fake_ip,
@@ -179,8 +178,6 @@ pub fn dns_to_contract(settings: DnsSettings) -> DnsContract {
         bootstrap: item.bootstrap_dns,
         direct_strategy: item.strategy4_freedom,
         proxy_strategy: item.strategy4_proxy,
-        serve_stale: item.serve_stale,
-        parallel_query: item.parallel_query,
         hosts: item.hosts,
         direct_expected_ips: item.direct_expected_ips,
     }
@@ -190,7 +187,6 @@ pub fn dns_to_contract(settings: DnsSettings) -> DnsContract {
 pub fn dns_from_contract(settings: DnsContract) -> DnsSettings {
     DnsSettings {
         simple_dns_item: SimpleDnsItem {
-            use_system_hosts: settings.use_system_hosts,
             add_common_hosts: settings.add_common_hosts,
             fake_ip: settings.fake_ip,
             global_fake_ip: settings.global_fake_ip,
@@ -200,8 +196,6 @@ pub fn dns_from_contract(settings: DnsContract) -> DnsSettings {
             bootstrap_dns: settings.bootstrap,
             strategy4_freedom: settings.direct_strategy,
             strategy4_proxy: settings.proxy_strategy,
-            serve_stale: settings.serve_stale,
-            parallel_query: settings.parallel_query,
             hosts: settings.hosts,
             direct_expected_ips: settings.direct_expected_ips,
         },

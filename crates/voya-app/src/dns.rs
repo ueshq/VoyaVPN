@@ -53,7 +53,6 @@ impl<'db> DnsManager<'db> {
 #[must_use]
 pub fn normalize_simple_dns(mut item: SimpleDnsItem) -> SimpleDnsItem {
     let defaults = SimpleDnsItem::default();
-    item.use_system_hosts = item.use_system_hosts.or(defaults.use_system_hosts);
     item.add_common_hosts = item.add_common_hosts.or(defaults.add_common_hosts);
     item.fake_ip = item.fake_ip.or(defaults.fake_ip);
     item.global_fake_ip = item.global_fake_ip.or(defaults.global_fake_ip);
@@ -66,8 +65,6 @@ pub fn normalize_simple_dns(mut item: SimpleDnsItem) -> SimpleDnsItem {
         .or_else(|| Some(DEFAULT_BOOTSTRAP_DNS.to_string()));
     item.strategy4_freedom = clean_optional_string(item.strategy4_freedom);
     item.strategy4_proxy = clean_optional_string(item.strategy4_proxy);
-    item.serve_stale = item.serve_stale.or(defaults.serve_stale);
-    item.parallel_query = item.parallel_query.or(defaults.parallel_query);
     item.hosts = clean_optional_string(item.hosts);
     item.direct_expected_ips = clean_optional_string(item.direct_expected_ips);
     item

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{SysProxyType, TrafficMode, CURRENT_SCHEMA_VERSION};
+use crate::{SystemProxyType, TrafficMode, CURRENT_SCHEMA_VERSION};
 
 // LOAD-BEARING FOR PERSISTENCE, not just for IPC.
 //
@@ -14,10 +14,13 @@ use crate::{SysProxyType, TrafficMode, CURRENT_SCHEMA_VERSION};
 // `load()` fails for existing installs, `AppServices::load_config` propagates
 // it out of `setup()`, and the app cannot launch.
 //
-// So: add fields with `#[serde(default)]`, never remove or rename one, and
-// bump `CURRENT_SCHEMA_VERSION` with a migration when the layout really has to
-// change. voya-db pins the current layout against a checked-in fixture
-// (`crates/voya-db/fixtures/app_settings_v1.json`).
+// So: add fields with `#[serde(default)]`. When one really has to go or be
+// renamed, list the key earlier builds stored in voya-db's `RETIRED_DNS_KEYS` /
+// `RENAMED_SPEEDTEST_KEYS`, which `SettingsRepository::load` applies to the
+// stored JSON before serde sees it. voya-db pins both the current layout and a
+// row from before the last such removal against checked-in fixtures
+// (`crates/voya-db/fixtures/app_settings_v1.json` and
+// `app_settings_v1_retired_keys.json`).
 //
 // Deliberately a plain comment, not a doc comment: specta copies doc comments
 // into `bindings.ts`, and this note is for Rust authors only.
@@ -32,7 +35,10 @@ pub struct AppSettingsV1 {
     pub routing: RoutingSettings,
     pub dns: AppDnsSettings,
     pub sources: SourceSettings,
-    pub speed_test: SpeedTestSettings,
+    // Serialized as `speedTest`. The type follows the `Speedtest` spelling the
+    // commands and events use, but the field name is a persisted JSON key and
+    // stays as it is.
+    pub speed_test: SpeedtestSettings,
     pub multiplexing: MultiplexingSettings,
     pub grpc: GrpcSettings,
     pub hysteria: HysteriaSettings,
@@ -51,7 +57,7 @@ impl Default for AppSettingsV1 {
             routing: RoutingSettings::default(),
             dns: AppDnsSettings::default(),
             sources: SourceSettings::default(),
-            speed_test: SpeedTestSettings::default(),
+            speed_test: SpeedtestSettings::default(),
             multiplexing: MultiplexingSettings::default(),
             grpc: GrpcSettings::default(),
             hysteria: HysteriaSettings::default(),
@@ -209,7 +215,7 @@ pub struct SystemProxySettings {
     /// `rename_all = "camelCase"` emits exactly the four values this field has
     /// always stored (`forcedClear`, `forcedChange`, `unchanged`, `pac`), so the
     /// stored payload is unchanged and `voya-db` pins that with a value test.
-    pub mode: SysProxyType,
+    pub mode: SystemProxyType,
     pub exceptions: String,
     pub bypass_local: bool,
     pub advanced_protocol: String,
@@ -229,7 +235,7 @@ impl Default for SystemProxySettings {
         // step with `voya_core::SystemProxyItem::default()`; the equivalence is
         // guarded by a test in voya-app's settings mapping layer.
         Self {
-            mode: SysProxyType::ForcedClear,
+            mode: SystemProxyType::ForcedClear,
             exceptions: DEFAULT_SYSTEM_PROXY_EXCEPTIONS.to_string(),
             bypass_local: true,
             advanced_protocol: String::new(),
@@ -258,7 +264,6 @@ impl Default for RoutingSettings {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AppDnsSettings {
-    pub use_system_hosts: Option<bool>,
     pub add_common_hosts: Option<bool>,
     pub fake_ip: Option<bool>,
     pub global_fake_ip: Option<bool>,
@@ -268,8 +273,6 @@ pub struct AppDnsSettings {
     pub bootstrap: Option<String>,
     pub direct_strategy: Option<String>,
     pub proxy_strategy: Option<String>,
-    pub serve_stale: Option<bool>,
-    pub parallel_query: Option<bool>,
     pub hosts: Option<String>,
     pub direct_expected_ips: Option<String>,
 }
@@ -285,7 +288,7 @@ pub struct SourceSettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SpeedTestSettings {
+pub struct SpeedtestSettings {
     pub timeout_seconds: i32,
     pub download_url: String,
     pub latency_url: String,
@@ -293,10 +296,10 @@ pub struct SpeedTestSettings {
     pub ip_lookup_url: String,
     pub udp_target: String,
     pub page_size: Option<i32>,
-    pub delay_interval_ms: Option<i32>,
+    pub delay_interval_seconds: Option<i32>,
 }
 
-impl Default for SpeedTestSettings {
+impl Default for SpeedtestSettings {
     fn default() -> Self {
         Self {
             timeout_seconds: 10,
@@ -306,7 +309,7 @@ impl Default for SpeedTestSettings {
             ip_lookup_url: String::new(),
             udp_target: "ntp:pool.ntp.org".to_string(),
             page_size: None,
-            delay_interval_ms: None,
+            delay_interval_seconds: None,
         }
     }
 }

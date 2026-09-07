@@ -58,15 +58,18 @@
     "singboxDomainStrategy": ""
   },
   "dns": {
-    "addCommonHosts": null,
+    "useSystemHosts": true,
+    "addCommonHosts": true,
     "fakeIp": null,
     "globalFakeIp": null,
     "blockBindingQuery": null,
-    "direct": null,
+    "direct": "119.29.29.29",
     "remote": null,
     "bootstrap": null,
     "directStrategy": null,
     "proxyStrategy": null,
+    "serveStale": true,
+    "parallelQuery": false,
     "hosts": null,
     "directExpectedIps": null
   },
@@ -83,8 +86,8 @@
     "mixedConcurrency": 5,
     "ipLookupUrl": "",
     "udpTarget": "ntp:pool.ntp.org",
-    "pageSize": null,
-    "delayIntervalSeconds": null
+    "pageSize": 23,
+    "delayIntervalMs": 24
   },
   "multiplexing": {
     "protocol": "h2mux",

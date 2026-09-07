@@ -28,7 +28,7 @@ export function TestsTab({ controller }: { controller: AppSettingsController }) 
         <TextField id="rt-speedtest-ipapi-url" label={t("settings.tests.ipApiUrl")} onChange={(ipLookupUrl) => patchTests({ ipLookupUrl })} value={settings.speedTest.ipLookupUrl} />
         <TextField id="rt-speedtest-udp-target" label={t("settings.tests.udpTarget")} onChange={(udpTarget) => patchTests({ udpTarget })} value={settings.speedTest.udpTarget} />
         <NumberField id="rt-speedtest-page-size" label={t("settings.fields.speedTestPageSize")} onChange={(pageSize) => patchTests({ pageSize })} value={settings.speedTest.pageSize} />
-        <NumberField id="rt-speedtest-delay-interval" label={t("settings.fields.speedTestDelayInterval")} onChange={(delayIntervalMs) => patchTests({ delayIntervalMs })} value={settings.speedTest.delayIntervalMs} />
+        <NumberField id="rt-speedtest-delay-interval" label={t("settings.fields.speedTestDelayInterval")} onChange={(delayIntervalSeconds) => patchTests({ delayIntervalSeconds })} value={settings.speedTest.delayIntervalSeconds} />
       </SettingsGroup>
     </div>
   );

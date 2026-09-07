@@ -16,7 +16,7 @@ use voya_core::{
     TlsMode as CoreTlsMode, TlsSettings as CoreTlsSettings,
 };
 
-use voya_contracts::{ProfileKind, SpeedTestOutcome};
+use voya_contracts::{ProfileKind, SpeedtestOutcome};
 
 use super::*;
 use crate::{
@@ -117,7 +117,6 @@ fn subscription_mapping_round_trips_every_distinct_field() {
 fn dns_mapping_round_trips_every_distinct_field() {
     let settings = DnsSettings {
         simple_dns_item: SimpleDnsItem {
-            use_system_hosts: Some(true),
             add_common_hosts: Some(false),
             fake_ip: Some(true),
             global_fake_ip: Some(false),
@@ -127,8 +126,6 @@ fn dns_mapping_round_trips_every_distinct_field() {
             bootstrap_dns: Some("bootstrap-dns".to_string()),
             strategy4_freedom: Some("direct-strategy".to_string()),
             strategy4_proxy: Some("proxy-strategy".to_string()),
-            serve_stale: Some(true),
-            parallel_query: Some(false),
             hosts: Some("hosts-value".to_string()),
             direct_expected_ips: Some("direct-expected-ips".to_string()),
         },
@@ -762,7 +759,7 @@ fn profile_list_entry_keeps_metrics_and_traffic_in_their_own_fields() {
     assert_eq!(entry.metrics.delay_ms, 111);
     assert!((entry.metrics.speed_bytes_per_second - 222.0).abs() < f64::EPSILON);
     assert_eq!(entry.metrics.sort, 333);
-    assert_eq!(entry.metrics.outcome, Some(SpeedTestOutcome::TimedOut));
+    assert_eq!(entry.metrics.outcome, Some(SpeedtestOutcome::TimedOut));
     assert_eq!(entry.metrics.ip_info.as_deref(), Some("metrics-ip-info"));
     assert_eq!(entry.traffic.total_upload, 41);
     assert_eq!(entry.traffic.total_download, 42);

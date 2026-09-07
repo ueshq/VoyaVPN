@@ -28,7 +28,7 @@ pub async fn system_proxy_status(
 pub async fn set_system_proxy_mode<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
-    mode: ContractSysProxyType,
+    mode: SystemProxyType,
 ) -> Result<SystemProxyStatusResponse, AppError> {
     let connected = supervisor_connection_state(&state).await?;
 

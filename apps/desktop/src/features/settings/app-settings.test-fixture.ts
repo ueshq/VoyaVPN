@@ -65,11 +65,8 @@ export function makeAppSettings({
       fakeIp: null,
       globalFakeIp: null,
       hosts: null,
-      parallelQuery: null,
       proxyStrategy: null,
       remote: null,
-      serveStale: null,
-      useSystemHosts: null,
     },
     sources: {
       geo: null,
@@ -78,7 +75,7 @@ export function makeAppSettings({
       subscriptionConverter,
     },
     speedTest: {
-      delayIntervalMs: 1,
+      delayIntervalSeconds: 1,
       downloadUrl: "https://speed.example.test",
       ipLookupUrl: "https://ip.example.test",
       latencyUrl: "https://ping.example.test",

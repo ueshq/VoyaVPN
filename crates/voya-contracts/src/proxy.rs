@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::SpeedTestOutcome;
+use crate::SpeedtestOutcome;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -61,16 +61,7 @@ pub struct ProxyNode {
 pub struct ProxyDelayTestResult {
     pub name: String,
     pub delay: Option<i32>,
-    pub outcome: SpeedTestOutcome,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ProxyTrafficEvent {
-    #[specta(type = f64)]
-    pub up: u64,
-    #[specta(type = f64)]
-    pub down: u64,
+    pub outcome: SpeedtestOutcome,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]

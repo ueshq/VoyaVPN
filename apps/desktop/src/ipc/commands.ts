@@ -31,7 +31,7 @@ import type {
   CoreSeedInstallResult,
   CoreType,
   ResourceUpdateFile,
-  SpeedTestRequest,
+  SpeedtestRequest,
   SpeedtestRunResult,
   SpeedtestStatus,
   Subscription,
@@ -344,7 +344,7 @@ export async function proxyStopMonitor(): Promise<ProxyMonitorStatus> {
   return unwrapCommandResult(await commands.proxyStopMonitor());
 }
 
-export async function runSpeedtest(request: SpeedTestRequest): Promise<SpeedtestRunResult> {
+export async function runSpeedtest(request: SpeedtestRequest): Promise<SpeedtestRunResult> {
   return unwrapCommandResult(await commands.runSpeedtest(request));
 }
 

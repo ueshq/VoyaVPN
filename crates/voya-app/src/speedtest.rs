@@ -16,8 +16,8 @@ use futures_util::{
 };
 use thiserror::Error;
 use tokio::time;
-use voya_contracts::SpeedTestKind;
-pub use voya_contracts::{SpeedTestOutcome, SpeedTestResult, SpeedtestRunResult, SpeedtestStatus};
+use voya_contracts::SpeedtestKind;
+pub use voya_contracts::{SpeedtestOutcome, SpeedtestResult, SpeedtestRunResult, SpeedtestStatus};
 use voya_core::{
     generate_singbox_speedtest_config_json, AppConfig, ConfigType, CoreConfigContextBuilder,
     CoreType, InboundProtocol, ProfileItem, SpeedTestItem, SpeedtestConfigEntry,
@@ -124,12 +124,12 @@ struct PreparedSpeedtestBatch {
 #[derive(Debug, Clone)]
 struct SpeedtestItemFailure {
     index_id: String,
-    outcome: SpeedTestOutcome,
+    outcome: SpeedtestOutcome,
     detail: Option<String>,
 }
 
 impl SpeedtestItemFailure {
-    fn new(index_id: String, outcome: SpeedTestOutcome) -> Self {
+    fn new(index_id: String, outcome: SpeedtestOutcome) -> Self {
         Self {
             index_id,
             outcome,
@@ -369,7 +369,7 @@ fn group_prepared_items(
     groups
 }
 
-fn unique_result_count(results: &[SpeedTestResult]) -> usize {
+fn unique_result_count(results: &[SpeedtestResult]) -> usize {
     let mut seen = HashSet::new();
     results
         .iter()
@@ -387,15 +387,14 @@ fn speedtest_page_size(config: &AppConfig, selected_count: usize) -> usize {
     configured.min(selected_count.max(1))
 }
 
-/// Pause between batch pages, in **seconds**. The contract field feeding
-/// `speed_test_delay_interval` is still spelled `delay_interval_ms`, but both
-/// the UI label and this conversion treat it as seconds; the name is a
-/// misnomer, not a unit conversion, and `speedtest_delay_interval_is_seconds`
+/// Pause between batch pages, in **seconds**. The contract field
+/// (`SpeedtestSettings::delay_interval_seconds`), the domain field and this
+/// conversion all agree on the unit; `speedtest_delay_interval_is_seconds`
 /// pins that.
 fn speedtest_delay_interval(config: &AppConfig) -> Duration {
     config
         .speed_test_item
-        .speed_test_delay_interval
+        .speed_test_delay_interval_seconds
         .and_then(|value| u64::try_from(value).ok())
         .filter(|value| *value > 0)
         .map(Duration::from_secs)
@@ -411,11 +410,11 @@ fn mixed_concurrency_count(config: &AppConfig, selected_count: usize) -> usize {
 }
 
 fn dedicated_concurrency_count(
-    action: SpeedTestKind,
+    action: SpeedtestKind,
     config: &AppConfig,
     selected_count: usize,
 ) -> usize {
-    if action == SpeedTestKind::Mixed {
+    if action == SpeedtestKind::Mixed {
         mixed_concurrency_count(config, selected_count)
     } else {
         1
@@ -428,15 +427,15 @@ fn dedicated_concurrency_count(
 /// the error's own `Display` in front of the user and into `profile_ex` — and
 /// for `WriteConfig`/`CreateConfigDir`/`RemoveConfig` that text embeds the
 /// app-data path, which embeds the OS user name.
-fn speedtest_outcome(error: &SpeedtestError) -> SpeedTestOutcome {
+fn speedtest_outcome(error: &SpeedtestError) -> SpeedtestOutcome {
     match error {
-        SpeedtestError::Cancelled => SpeedTestOutcome::Cancelled,
-        SpeedtestError::Udp(_) => SpeedTestOutcome::UdpTestFailed,
+        SpeedtestError::Cancelled => SpeedtestOutcome::Cancelled,
+        SpeedtestError::Udp(_) => SpeedtestOutcome::UdpTestFailed,
         SpeedtestError::Network(source) => network_probe_outcome(source),
         SpeedtestError::Io(source) => io_outcome(source.kind()),
         // The profile itself could not be turned into a config.
         SpeedtestError::Validation { .. } | SpeedtestError::SingboxConfig(_) => {
-            SpeedTestOutcome::InvalidProfile
+            SpeedtestOutcome::InvalidProfile
         }
         // The test core could not be found, written out, or launched.
         SpeedtestError::CoreInfo(_)
@@ -445,46 +444,46 @@ fn speedtest_outcome(error: &SpeedtestError) -> SpeedTestOutcome {
         | SpeedtestError::Process(_)
         | SpeedtestError::CreateConfigDir { .. }
         | SpeedtestError::WriteConfig { .. }
-        | SpeedtestError::RemoveConfig { .. } => SpeedTestOutcome::CoreUnavailable,
+        | SpeedtestError::RemoveConfig { .. } => SpeedtestOutcome::CoreUnavailable,
         SpeedtestError::NoAvailablePort(_) | SpeedtestError::InvalidSocksPort(_) => {
-            SpeedTestOutcome::NoAvailablePort
+            SpeedtestOutcome::NoAvailablePort
         }
         SpeedtestError::Database(_)
         | SpeedtestError::Profile(_)
         | SpeedtestError::JobLockPoisoned
-        | SpeedtestError::BackgroundTask(_) => SpeedTestOutcome::Failed,
+        | SpeedtestError::BackgroundTask(_) => SpeedtestOutcome::Failed,
     }
 }
 
-fn network_probe_outcome(error: &NetworkProbeError) -> SpeedTestOutcome {
+fn network_probe_outcome(error: &NetworkProbeError) -> SpeedtestOutcome {
     match error {
-        NetworkProbeError::Timeout => SpeedTestOutcome::TimedOut,
-        NetworkProbeError::Http(source) if source.is_timeout() => SpeedTestOutcome::TimedOut,
+        NetworkProbeError::Timeout => SpeedtestOutcome::TimedOut,
+        NetworkProbeError::Http(source) if source.is_timeout() => SpeedtestOutcome::TimedOut,
         NetworkProbeError::Http(source) if source.is_connect() => {
-            SpeedTestOutcome::ProxyConnectFailed
+            SpeedtestOutcome::ProxyConnectFailed
         }
-        _ => SpeedTestOutcome::Failed,
+        _ => SpeedtestOutcome::Failed,
     }
 }
 
-const fn io_outcome(kind: io::ErrorKind) -> SpeedTestOutcome {
+const fn io_outcome(kind: io::ErrorKind) -> SpeedtestOutcome {
     match kind {
-        io::ErrorKind::TimedOut => SpeedTestOutcome::TimedOut,
-        io::ErrorKind::ConnectionRefused => SpeedTestOutcome::ProxyConnectionRefused,
+        io::ErrorKind::TimedOut => SpeedtestOutcome::TimedOut,
+        io::ErrorKind::ConnectionRefused => SpeedtestOutcome::ProxyConnectionRefused,
         io::ErrorKind::ConnectionReset | io::ErrorKind::ConnectionAborted => {
-            SpeedTestOutcome::ProxyConnectionClosed
+            SpeedtestOutcome::ProxyConnectionClosed
         }
-        _ => SpeedTestOutcome::ProxyConnectFailed,
+        _ => SpeedtestOutcome::ProxyConnectFailed,
     }
 }
 
 /// A finished measurement is `Completed`; the probes report `-1` when they
 /// gave up without raising, and that is a plain failure.
-const fn measured_outcome(delay: i32) -> SpeedTestOutcome {
+const fn measured_outcome(delay: i32) -> SpeedtestOutcome {
     if delay < 0 {
-        SpeedTestOutcome::Failed
+        SpeedtestOutcome::Failed
     } else {
-        SpeedTestOutcome::Completed
+        SpeedtestOutcome::Completed
     }
 }
 
@@ -512,35 +511,35 @@ fn speedtest_detail(error: &SpeedtestError) -> Option<String> {
 /// is not yet durable.
 async fn clear_previous_results<F>(
     database: &Database,
-    action: SpeedTestKind,
+    action: SpeedtestKind,
     selected: &[ServerTestItem],
     on_result: &F,
 ) -> Result<()>
 where
-    F: Fn(SpeedTestResult) + Send + Sync,
+    F: Fn(SpeedtestResult) + Send + Sync,
 {
     let unit_of_work = database.begin().await?;
     {
         let profile_ex = ProfileExManager::new_in(&unit_of_work);
         for item in selected {
             match action {
-                SpeedTestKind::TcpConnect | SpeedTestKind::Latency | SpeedTestKind::Udp => {
+                SpeedtestKind::TcpConnect | SpeedtestKind::Latency | SpeedtestKind::Udp => {
                     profile_ex.set_test_delay(&item.index_id, 0).await?;
                     profile_ex
-                        .set_test_message(&item.index_id, SpeedTestOutcome::Testing.as_stored())
+                        .set_test_message(&item.index_id, SpeedtestOutcome::Testing.as_stored())
                         .await?;
                 }
-                SpeedTestKind::Download => {
+                SpeedtestKind::Download => {
                     profile_ex.set_test_speed(&item.index_id, 0.0).await?;
                     profile_ex
-                        .set_test_message(&item.index_id, SpeedTestOutcome::Waiting.as_stored())
+                        .set_test_message(&item.index_id, SpeedtestOutcome::Waiting.as_stored())
                         .await?;
                 }
-                SpeedTestKind::Mixed => {
+                SpeedtestKind::Mixed => {
                     profile_ex.set_test_delay(&item.index_id, 0).await?;
                     profile_ex.set_test_speed(&item.index_id, 0.0).await?;
                     profile_ex
-                        .set_test_message(&item.index_id, SpeedTestOutcome::Waiting.as_stored())
+                        .set_test_message(&item.index_id, SpeedtestOutcome::Waiting.as_stored())
                         .await?;
                 }
             }
@@ -555,34 +554,34 @@ where
     Ok(())
 }
 
-fn make_pending_result(action: SpeedTestKind, index_id: String) -> SpeedTestResult {
+fn make_pending_result(action: SpeedtestKind, index_id: String) -> SpeedtestResult {
     match action {
-        SpeedTestKind::TcpConnect | SpeedTestKind::Latency | SpeedTestKind::Udp => {
-            SpeedTestResult {
+        SpeedtestKind::TcpConnect | SpeedtestKind::Latency | SpeedtestKind::Udp => {
+            SpeedtestResult {
                 action,
                 index_id,
                 delay: Some(0),
                 speed: None,
-                outcome: SpeedTestOutcome::Testing,
+                outcome: SpeedtestOutcome::Testing,
                 detail: None,
                 ip_info: None,
             }
         }
-        SpeedTestKind::Download => SpeedTestResult {
+        SpeedtestKind::Download => SpeedtestResult {
             action,
             index_id,
             delay: None,
             speed: Some(0.0),
-            outcome: SpeedTestOutcome::Waiting,
+            outcome: SpeedtestOutcome::Waiting,
             detail: None,
             ip_info: None,
         },
-        SpeedTestKind::Mixed => SpeedTestResult {
+        SpeedtestKind::Mixed => SpeedtestResult {
             action,
             index_id,
             delay: Some(0),
             speed: Some(0.0),
-            outcome: SpeedTestOutcome::Waiting,
+            outcome: SpeedtestOutcome::Waiting,
             detail: None,
             ip_info: None,
         },
@@ -593,13 +592,13 @@ fn make_pending_result(action: SpeedTestKind, index_id: String) -> SpeedTestResu
 /// `Testing`/`Waiting` marker `clear_previous_results` wrote, so a failed or
 /// cancelled run cannot leave rows stuck in that state across restarts.
 fn make_failure_result(
-    action: SpeedTestKind,
+    action: SpeedtestKind,
     index_id: String,
-    outcome: SpeedTestOutcome,
+    outcome: SpeedtestOutcome,
     detail: Option<String>,
-) -> SpeedTestResult {
-    let speed = matches!(action, SpeedTestKind::Download | SpeedTestKind::Mixed).then_some(0.0);
-    SpeedTestResult {
+) -> SpeedtestResult {
+    let speed = matches!(action, SpeedtestKind::Download | SpeedtestKind::Mixed).then_some(0.0);
+    SpeedtestResult {
         action,
         index_id,
         delay: Some(-1),
@@ -610,7 +609,7 @@ fn make_failure_result(
     }
 }
 
-async fn persist_speedtest_result(database: &Database, result: &SpeedTestResult) -> Result<()> {
+async fn persist_speedtest_result(database: &Database, result: &SpeedtestResult) -> Result<()> {
     let profile_ex = ProfileExManager::new(database);
     if let Some(delay) = result.delay {
         profile_ex.set_test_delay(&result.index_id, delay).await?;
@@ -870,7 +869,7 @@ mod tests {
             .run(
                 &database,
                 &config,
-                SpeedTestKind::Mixed,
+                SpeedtestKind::Mixed,
                 vec!["a".to_string()],
             )
             .await
@@ -913,7 +912,7 @@ mod tests {
             .run(
                 &database,
                 &AppConfig::default(),
-                SpeedTestKind::Latency,
+                SpeedtestKind::Latency,
                 Vec::new(),
             )
             .await
@@ -948,7 +947,7 @@ mod tests {
             .run(
                 &database,
                 &AppConfig::default(),
-                SpeedTestKind::Download,
+                SpeedtestKind::Download,
                 vec!["a".to_string()],
             )
             .await
@@ -980,7 +979,7 @@ mod tests {
             .run(
                 &database,
                 &AppConfig::default(),
-                SpeedTestKind::Latency,
+                SpeedtestKind::Latency,
                 Vec::new(),
             )
             .await
@@ -1015,7 +1014,7 @@ mod tests {
             .run(
                 &database,
                 &AppConfig::default(),
-                SpeedTestKind::Udp,
+                SpeedtestKind::Udp,
                 Vec::new(),
             )
             .await
@@ -1054,7 +1053,7 @@ mod tests {
         config.speed_test_item.mixed_concurrency_count = 2;
 
         manager
-            .run(&database, &config, SpeedTestKind::Download, Vec::new())
+            .run(&database, &config, SpeedtestKind::Download, Vec::new())
             .await
             .expect("speedtest test operation should succeed");
 
@@ -1084,7 +1083,7 @@ mod tests {
         config.speed_test_item.mixed_concurrency_count = 2;
 
         manager
-            .run(&database, &config, SpeedTestKind::Mixed, Vec::new())
+            .run(&database, &config, SpeedtestKind::Mixed, Vec::new())
             .await
             .expect("speedtest test operation should succeed");
 
@@ -1116,7 +1115,7 @@ mod tests {
         );
 
         manager
-            .run(&database, &config, SpeedTestKind::Mixed, Vec::new())
+            .run(&database, &config, SpeedtestKind::Mixed, Vec::new())
             .await
             .expect("speedtest test operation should succeed");
 
@@ -1151,7 +1150,7 @@ mod tests {
 
         let handle = tokio::spawn(async move {
             task_manager
-                .run(&database, &config, SpeedTestKind::Mixed, Vec::new())
+                .run(&database, &config, SpeedtestKind::Mixed, Vec::new())
                 .await
                 .expect("speedtest test operation should succeed")
         });
@@ -1210,7 +1209,7 @@ mod tests {
             .run(
                 &database,
                 &AppConfig::default(),
-                SpeedTestKind::Latency,
+                SpeedtestKind::Latency,
                 Vec::new(),
             )
             .await
@@ -1227,7 +1226,7 @@ mod tests {
             assert_eq!(profile_ex.delay, -1);
             assert_ne!(
                 profile_ex.message.as_deref(),
-                Some(SpeedTestOutcome::Testing.as_stored()),
+                Some(SpeedtestOutcome::Testing.as_stored()),
                 "{index_id} must not stay pending after a failed run"
             );
         }
@@ -1252,7 +1251,7 @@ mod tests {
             .run(
                 &database,
                 &AppConfig::default(),
-                SpeedTestKind::Mixed,
+                SpeedtestKind::Mixed,
                 Vec::new(),
             )
             .await
@@ -1284,7 +1283,7 @@ mod tests {
             .run(
                 &database,
                 &AppConfig::default(),
-                SpeedTestKind::Latency,
+                SpeedtestKind::Latency,
                 Vec::new(),
             )
             .await
@@ -1305,7 +1304,7 @@ mod tests {
         assert_eq!(bad.delay, -1);
         assert_eq!(
             bad.message.as_deref(),
-            Some(SpeedTestOutcome::InvalidProfile.as_stored()),
+            Some(SpeedtestOutcome::InvalidProfile.as_stored()),
             "the validator rejection is reported as the profile's outcome"
         );
     }
@@ -1323,11 +1322,11 @@ mod tests {
             SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
         let mut config = AppConfig::default();
         config.speed_test_item.speed_test_page_size = Some(1);
-        config.speed_test_item.speed_test_delay_interval = Some(1);
+        config.speed_test_item.speed_test_delay_interval_seconds = Some(1);
 
         let started = Instant::now();
         manager
-            .run(&database, &config, SpeedTestKind::Latency, Vec::new())
+            .run(&database, &config, SpeedtestKind::Latency, Vec::new())
             .await
             .expect("speedtest test operation should succeed");
         let elapsed = started.elapsed();
@@ -1372,7 +1371,7 @@ mod tests {
                 .run(
                     &first_database,
                     &first_config,
-                    SpeedTestKind::Mixed,
+                    SpeedtestKind::Mixed,
                     Vec::new(),
                 )
                 .await
@@ -1397,7 +1396,7 @@ mod tests {
         );
 
         let second = manager
-            .run(&database, &config, SpeedTestKind::Mixed, Vec::new())
+            .run(&database, &config, SpeedtestKind::Mixed, Vec::new())
             .await
             .expect("the superseding run completes");
         let first = first
@@ -1444,14 +1443,14 @@ mod tests {
         let mut config = AppConfig::default();
         assert_eq!(speedtest_delay_interval(&config), SPEEDTEST_DELAY_INTERVAL);
 
-        config.speed_test_item.speed_test_delay_interval = Some(3);
+        config.speed_test_item.speed_test_delay_interval_seconds = Some(3);
         assert_eq!(
             speedtest_delay_interval(&config),
             Duration::from_secs(3),
-            "the contract field is named delay_interval_ms but carries seconds"
+            "the delay interval is configured in seconds"
         );
 
-        config.speed_test_item.speed_test_delay_interval = Some(0);
+        config.speed_test_item.speed_test_delay_interval_seconds = Some(0);
         assert_eq!(speedtest_delay_interval(&config), SPEEDTEST_DELAY_INTERVAL);
     }
 

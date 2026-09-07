@@ -8,9 +8,7 @@ pub use voya_contracts::{
     RuntimeStatusResponse, ShellTabTarget, StatisticsSnapshot, SystemProxyStatusResponse,
     TunStatus,
 };
-use voya_contracts::{
-    ProxyConnectionsSnapshot, ProxyMonitorStatus, ProxyTrafficEvent, SpeedTestResult,
-};
+use voya_contracts::{ProxyConnectionsSnapshot, ProxyMonitorStatus, SpeedtestResult};
 
 static NEXT_LOG_LINE_ID: AtomicU32 = AtomicU32::new(1);
 
@@ -39,9 +37,8 @@ pub enum TransientStreamEvent {
     SysProxyChanged(SystemProxyStatusResponse),
     TunChanged(TunStatus),
     ProxyMonitorStatus(ProxyMonitorStatus),
-    ProxyTraffic(ProxyTrafficEvent),
     ProxyConnections(ProxyConnectionsSnapshot),
-    SpeedtestResult(SpeedTestResult),
+    SpeedtestResult(SpeedtestResult),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Type, Event)]

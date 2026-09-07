@@ -313,7 +313,6 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
             singbox_domain_strategy: config.routing_basic_item.domain_strategy4_singbox.clone(),
         },
         dns: contracts::AppDnsSettings {
-            use_system_hosts: config.simple_dns_item.use_system_hosts,
             add_common_hosts: config.simple_dns_item.add_common_hosts,
             fake_ip: config.simple_dns_item.fake_ip,
             global_fake_ip: config.simple_dns_item.global_fake_ip,
@@ -323,8 +322,6 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
             bootstrap: config.simple_dns_item.bootstrap_dns.clone(),
             direct_strategy: config.simple_dns_item.strategy4_freedom.clone(),
             proxy_strategy: config.simple_dns_item.strategy4_proxy.clone(),
-            serve_stale: config.simple_dns_item.serve_stale,
-            parallel_query: config.simple_dns_item.parallel_query,
             hosts: config.simple_dns_item.hosts.clone(),
             direct_expected_ips: config.simple_dns_item.direct_expected_ips.clone(),
         },
@@ -334,7 +331,7 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
             singbox_ruleset: config.const_item.srs_source_url.clone(),
             routing_template: config.const_item.route_rules_template_source_url.clone(),
         },
-        speed_test: contracts::SpeedTestSettings {
+        speed_test: contracts::SpeedtestSettings {
             timeout_seconds: config.speed_test_item.speed_test_timeout,
             download_url: config.speed_test_item.speed_test_url.clone(),
             latency_url: config.speed_test_item.speed_ping_test_url.clone(),
@@ -342,7 +339,7 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
             ip_lookup_url: config.speed_test_item.ipapi_url.clone(),
             udp_target: config.speed_test_item.udp_test_target.clone(),
             page_size: config.speed_test_item.speed_test_page_size,
-            delay_interval_ms: config.speed_test_item.speed_test_delay_interval,
+            delay_interval_seconds: config.speed_test_item.speed_test_delay_interval_seconds,
         },
         multiplexing: contracts::MultiplexingSettings {
             protocol: config.mux4_sbox_item.protocol.clone(),
@@ -460,7 +457,7 @@ pub fn app_config_from_settings(
             ipapi_url: settings.speed_test.ip_lookup_url.clone(),
             udp_test_target: settings.speed_test.udp_target.clone(),
             speed_test_page_size: settings.speed_test.page_size,
-            speed_test_delay_interval: settings.speed_test.delay_interval_ms,
+            speed_test_delay_interval_seconds: settings.speed_test.delay_interval_seconds,
         },
         mux4_sbox_item: Mux4SboxItem {
             protocol: settings.multiplexing.protocol.clone(),
@@ -505,7 +502,6 @@ pub fn app_config_from_settings(
             .collect(),
         show_window_shortcut,
         simple_dns_item: SimpleDnsItem {
-            use_system_hosts: settings.dns.use_system_hosts,
             add_common_hosts: settings.dns.add_common_hosts,
             fake_ip: settings.dns.fake_ip,
             global_fake_ip: settings.dns.global_fake_ip,
@@ -515,8 +511,6 @@ pub fn app_config_from_settings(
             bootstrap_dns: settings.dns.bootstrap.clone(),
             strategy4_freedom: settings.dns.direct_strategy.clone(),
             strategy4_proxy: settings.dns.proxy_strategy.clone(),
-            serve_stale: settings.dns.serve_stale,
-            parallel_query: settings.dns.parallel_query,
             hosts: settings.dns.hosts.clone(),
             direct_expected_ips: settings.dns.direct_expected_ips.clone(),
         },
@@ -720,7 +714,7 @@ mod tests {
                 ipapi_url: "https://speed.test/ip".to_string(),
                 udp_test_target: "udp.test:5353".to_string(),
                 speed_test_page_size: Some(23),
-                speed_test_delay_interval: Some(24),
+                speed_test_delay_interval_seconds: Some(24),
             },
             mux4_sbox_item: Mux4SboxItem {
                 protocol: "h2mux".to_string(),
@@ -761,7 +755,6 @@ mod tests {
                 key_code: Some(71),
             }),
             simple_dns_item: SimpleDnsItem {
-                use_system_hosts: Some(true),
                 add_common_hosts: Some(false),
                 fake_ip: Some(true),
                 global_fake_ip: Some(false),
@@ -771,8 +764,6 @@ mod tests {
                 bootstrap_dns: Some("bootstrap-dns-value".to_string()),
                 strategy4_freedom: Some("direct-strategy-value".to_string()),
                 strategy4_proxy: Some("proxy-strategy-value".to_string()),
-                serve_stale: Some(true),
-                parallel_query: Some(false),
                 hosts: Some("hosts-value".to_string()),
                 direct_expected_ips: Some("direct-expected-ips-value".to_string()),
             },

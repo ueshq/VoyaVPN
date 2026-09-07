@@ -5,11 +5,10 @@ import type {
   ProxyConnectionsSnapshot,
   ProxyMonitorState,
   ProxyMonitorStatus,
-  ProxyTrafficEvent,
   LogLineEvent,
   RuntimeStatusResponse,
   ServerStatItem,
-  SpeedTestResult,
+  SpeedtestResult,
   SpeedtestStatus,
   StatisticsSnapshot,
   SystemProxyStatusResponse,
@@ -48,14 +47,13 @@ export type RuntimeEventState = {
   clearLogs: () => void;
   proxyConnections: ProxyConnectionsSnapshot | null;
   proxyMonitorStatus: RuntimeProxyMonitorStatus;
-  proxyTraffic: ProxyTrafficEvent | null;
   coreState: RuntimeStatusResponse | null;
   lastTransientEvent: TransientStreamEvent | null;
   logLines: StoredLogLine[];
   pushTransientEvent: (event: TransientStreamEvent) => void;
   refreshSpeedtestStatus: () => Promise<void>;
   serverStatsByProfileId: Record<string, ServerStatItem>;
-  speedtestResultsByProfileId: Record<string, SpeedTestResult>;
+  speedtestResultsByProfileId: Record<string, SpeedtestResult>;
   speedtestRunning: boolean;
   setProxyConnections: (snapshot: ProxyConnectionsSnapshot) => void;
   setProxyMonitorFailed: (message?: string | null) => void;
@@ -63,7 +61,6 @@ export type RuntimeEventState = {
   setProxyMonitorStarting: (message?: string | null) => void;
   setProxyMonitorStatus: (status: ProxyMonitorStatus) => void;
   setProxyMonitorStopped: (message?: string | null) => void;
-  setProxyTraffic: (event: ProxyTrafficEvent) => void;
   setCoreState: (event: RuntimeStatusResponse) => void;
   setSpeedtestRunning: (running: boolean) => void;
   setSpeedtestStatus: (status: SpeedtestStatus) => void;
@@ -128,7 +125,6 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
   },
   proxyConnections: null,
   proxyMonitorStatus: initialProxyMonitorStatus,
-  proxyTraffic: null,
   coreState: null,
   lastTransientEvent: null,
   logLines: [],
@@ -220,12 +216,6 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
             proxyMonitorStatus: toRuntimeProxyMonitorStatus(event.payload),
             lastTransientEvent: event,
           };
-        case "proxyTraffic":
-          return {
-            proxyMonitorStatus: markProxyDataFresh(state.proxyMonitorStatus),
-            proxyTraffic: event.payload,
-            lastTransientEvent: event,
-          };
         case "speedtestResult":
           return {
             lastTransientEvent: event,
@@ -259,7 +249,6 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
     set({ proxyMonitorStatus: toRuntimeProxyMonitorStatus(proxyMonitorStatus) }),
   setProxyMonitorStopped: (message = null) =>
     set({ proxyMonitorStatus: makeProxyMonitorStatus("stopped", false, true, message) }),
-  setProxyTraffic: (proxyTraffic) => set({ proxyTraffic }),
   setCoreState: (coreState) => set({ coreState }),
   setSpeedtestRunning: (speedtestRunning) => set({ speedtestRunning }),
   setSpeedtestStatus: (status) => set({ speedtestRunning: status.running }),

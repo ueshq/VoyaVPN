@@ -57,10 +57,10 @@ use voya_contracts::{
     ProfileSortKey as ProfileSortContract, ProxyConnectionsSnapshot, ProxyDelayTestResult,
     ProxyGroupsSnapshot, ProxyMonitorStatus, QrCodeImage, QrScanResult, ResourceUpdateFile,
     Routing as RoutingContract, RoutingRule as RoutingRuleContract, RuntimeStatusResponse,
-    SpeedTestResult, SpeedtestRunResult, SpeedtestStatus, Subscription as SubscriptionContract,
+    SpeedtestResult, SpeedtestRunResult, SpeedtestStatus, Subscription as SubscriptionContract,
     SubscriptionMetadata as SubscriptionMetadataContract,
-    SubscriptionUpdateResult as SubscriptionUpdateContract, SysProxyType as ContractSysProxyType,
-    SystemProxyStatusResponse, TunProviderDiagnostics, TunStatus,
+    SubscriptionUpdateResult as SubscriptionUpdateContract, SystemProxyStatusResponse,
+    SystemProxyType, TunProviderDiagnostics, TunStatus,
 };
 use voya_platform::{
     coreinfo::{

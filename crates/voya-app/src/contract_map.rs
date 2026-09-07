@@ -17,7 +17,7 @@ use voya_contracts::{
     GroupChildCandidate as GroupChildContract, GroupPreview as GroupPreviewContract,
     GroupPreviewRoute as GroupPreviewRouteContract, GroupValidation as GroupValidationContract,
     MoveAction, ProfileDedupeResult as ProfileDedupeContract, ProfileListEntry, ProfileMetrics,
-    ProfileSortKey, ProfileTraffic, SpeedTestOutcome,
+    ProfileSortKey, ProfileTraffic, SpeedtestOutcome,
 };
 use voya_core::{
     GroupChildCandidate, GroupPreview, MoveAction as CoreMoveAction, ProfileDedupeResult,
@@ -39,24 +39,24 @@ pub const fn core_type_from_contract(_: voya_contracts::CoreType) -> voya_core::
 #[must_use]
 pub const fn sysproxy_type_to_contract(
     value: voya_core::SysProxyType,
-) -> voya_contracts::SysProxyType {
+) -> voya_contracts::SystemProxyType {
     match value {
-        voya_core::SysProxyType::ForcedClear => voya_contracts::SysProxyType::ForcedClear,
-        voya_core::SysProxyType::ForcedChange => voya_contracts::SysProxyType::ForcedChange,
-        voya_core::SysProxyType::Unchanged => voya_contracts::SysProxyType::Unchanged,
-        voya_core::SysProxyType::Pac => voya_contracts::SysProxyType::Pac,
+        voya_core::SysProxyType::ForcedClear => voya_contracts::SystemProxyType::ForcedClear,
+        voya_core::SysProxyType::ForcedChange => voya_contracts::SystemProxyType::ForcedChange,
+        voya_core::SysProxyType::Unchanged => voya_contracts::SystemProxyType::Unchanged,
+        voya_core::SysProxyType::Pac => voya_contracts::SystemProxyType::Pac,
     }
 }
 
 #[must_use]
 pub const fn sysproxy_type_from_contract(
-    value: voya_contracts::SysProxyType,
+    value: voya_contracts::SystemProxyType,
 ) -> voya_core::SysProxyType {
     match value {
-        voya_contracts::SysProxyType::ForcedClear => voya_core::SysProxyType::ForcedClear,
-        voya_contracts::SysProxyType::ForcedChange => voya_core::SysProxyType::ForcedChange,
-        voya_contracts::SysProxyType::Unchanged => voya_core::SysProxyType::Unchanged,
-        voya_contracts::SysProxyType::Pac => voya_core::SysProxyType::Pac,
+        voya_contracts::SystemProxyType::ForcedClear => voya_core::SysProxyType::ForcedClear,
+        voya_contracts::SystemProxyType::ForcedChange => voya_core::SysProxyType::ForcedChange,
+        voya_contracts::SystemProxyType::Unchanged => voya_core::SysProxyType::Unchanged,
+        voya_contracts::SystemProxyType::Pac => voya_core::SysProxyType::Pac,
     }
 }
 
@@ -207,7 +207,7 @@ pub fn profile_list_to_contract(item: ProfileListItem) -> ProfileListEntry {
                 .profile_ex
                 .message
                 .as_deref()
-                .and_then(SpeedTestOutcome::from_stored),
+                .and_then(SpeedtestOutcome::from_stored),
             ip_info: item.profile_ex.ip_info,
         },
         traffic: ProfileTraffic {

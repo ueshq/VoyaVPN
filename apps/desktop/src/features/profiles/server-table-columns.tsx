@@ -2,7 +2,7 @@ import type * as React from "react";
 
 import { Badge } from "@voya/ui/components/badge";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
-import type { ProfileListEntry, ProfileSortKey, SpeedTestOutcome } from "@/ipc/bindings";
+import type { ProfileListEntry, ProfileSortKey, SpeedtestOutcome } from "@/ipc/bindings";
 import { speedtestOutcomeText } from "@/ipc/messages";
 import { formatDelay, formatSpeed, formatTraffic } from "@voya/utils/formatting";
 
@@ -188,7 +188,7 @@ function columnMinWidthRem(width: string) {
 function formatSpeedOrOutcome(
   t: TranslateFn,
   speed: number | null,
-  outcome: SpeedTestOutcome | null,
+  outcome: SpeedtestOutcome | null,
 ) {
   if (outcome && outcome !== "completed") {
     return speedtestOutcomeText(t, outcome);

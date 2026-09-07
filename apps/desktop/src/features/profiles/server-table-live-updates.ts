@@ -1,13 +1,13 @@
 import type {
   ProfileListEntry,
   ServerStatItem,
-  SpeedTestResult,
+  SpeedtestResult,
 } from "@/ipc/bindings";
 
 export function applyLiveUpdates(
   profiles: ProfileListEntry[],
   liveStats: Record<string, ServerStatItem> = {},
-  speedtestResults: Record<string, SpeedTestResult> = {},
+  speedtestResults: Record<string, SpeedtestResult> = {},
 ) {
   if (Object.keys(liveStats).length === 0 && Object.keys(speedtestResults).length === 0) {
     return profiles;

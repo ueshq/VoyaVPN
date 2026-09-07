@@ -6,18 +6,18 @@ use std::{
 use futures_util::{stream, StreamExt};
 use thiserror::Error;
 use tokio::{runtime::Handle, sync::watch, task::JoinHandle, time};
-use voya_contracts::SpeedTestOutcome;
+use voya_contracts::SpeedtestOutcome;
 pub use voya_contracts::{
     ProxyConnectionItem, ProxyConnectionsSnapshot, ProxyDelayTestResult, ProxyGroup,
-    ProxyGroupsSnapshot, ProxyMonitorState, ProxyMonitorStatus, ProxyNode, ProxyTrafficEvent,
+    ProxyGroupsSnapshot, ProxyMonitorState, ProxyMonitorStatus, ProxyNode,
 };
 use voya_core::{AppConfig, TrafficMode};
 use voya_net::clash::{
     ClashApiEndpoint, ClashConnection as NetClashConnection,
     ClashConnectionMetadata as NetClashConnectionMetadata, ClashConnections as NetClashConnections,
     ClashDelayResponse, ClashError, ClashHttpTransport, ClashProvidersResponse,
-    ClashProxiesResponse, ClashProxy, ClashRestClient, ClashTraffic as NetClashTraffic,
-    ClashWebSocketClient, ClashWebSocketEvent, ClashWebSocketResource, ReqwestClashHttpTransport,
+    ClashProxiesResponse, ClashProxy, ClashRestClient, ClashWebSocketClient, ClashWebSocketEvent,
+    ClashWebSocketResource, ReqwestClashHttpTransport,
 };
 
 use crate::{
@@ -68,7 +68,6 @@ pub enum ProxyRuntimeError {
 }
 
 pub trait ProxyRuntimeEventSink: Send + Sync {
-    fn emit_traffic(&self, event: ProxyTrafficEvent);
     fn emit_connections(&self, event: ProxyConnectionsSnapshot);
 }
 
@@ -382,7 +381,11 @@ async fn run_proxy_ws_monitor(
 
 pub fn route_proxy_ws_event(sink: &dyn ProxyRuntimeEventSink, event: ClashWebSocketEvent) {
     match event {
-        ClashWebSocketEvent::Traffic(event) => sink.emit_traffic(proxy_traffic_event(event)),
+        // The monitor subscribes to /connections only — the statistics service
+        // owns the /traffic stream against the same port — so a traffic frame
+        // is unreachable here, and the proxy screens read their byte totals off
+        // the connections snapshot anyway. Dropped rather than forwarded.
+        ClashWebSocketEvent::Traffic(_) => {}
         ClashWebSocketEvent::Connections(event) => {
             sink.emit_connections(connections_snapshot(event))
         }
@@ -504,16 +507,16 @@ fn proxy_node(name: &str, proxy: &ClashProxy, active: bool) -> ProxyNode {
 /// numbers. A delay of `0` or less means the node did not answer.
 fn delay_outcome(
     response: std::result::Result<&ClashDelayResponse, &ClashError>,
-) -> SpeedTestOutcome {
+) -> SpeedtestOutcome {
     match response {
         Ok(response) if response.delay.is_some_and(|delay| delay > 0) => {
-            SpeedTestOutcome::Completed
+            SpeedtestOutcome::Completed
         }
-        Ok(_) => SpeedTestOutcome::TimedOut,
+        Ok(_) => SpeedtestOutcome::TimedOut,
         Err(ClashError::Request(message)) if message.to_ascii_lowercase().contains("timed out") => {
-            SpeedTestOutcome::TimedOut
+            SpeedtestOutcome::TimedOut
         }
-        Err(_) => SpeedTestOutcome::Failed,
+        Err(_) => SpeedtestOutcome::Failed,
     }
 }
 
@@ -564,13 +567,6 @@ fn connection_item(connection: NetClashConnection) -> ProxyConnectionItem {
         rule_payload: connection.rule_payload,
         process: metadata.process,
         process_path: metadata.process_path,
-    }
-}
-
-fn proxy_traffic_event(event: NetClashTraffic) -> ProxyTrafficEvent {
-    ProxyTrafficEvent {
-        up: event.up,
-        down: event.down,
     }
 }
 
@@ -643,7 +639,7 @@ mod tests {
 
     use serde_json::{json, Value};
     use voya_core::{SpeedTestItem, DEFAULT_LOCAL_PORT};
-    use voya_net::clash::{ClashHttpMethod, ClashHttpRequest};
+    use voya_net::clash::{ClashHttpMethod, ClashHttpRequest, ClashTraffic as NetClashTraffic};
 
     use super::*;
     use crate::supervisor::ClashApiSecret;
@@ -652,7 +648,6 @@ mod tests {
     struct NoopProxyRuntimeEventSink;
 
     impl ProxyRuntimeEventSink for NoopProxyRuntimeEventSink {
-        fn emit_traffic(&self, _event: ProxyTrafficEvent) {}
         fn emit_connections(&self, _event: ProxyConnectionsSnapshot) {}
     }
 
@@ -742,15 +737,10 @@ mod tests {
 
     #[derive(Default)]
     struct CaptureSink {
-        traffic: Mutex<Vec<ProxyTrafficEvent>>,
         connections: Mutex<Vec<ProxyConnectionsSnapshot>>,
     }
 
     impl ProxyRuntimeEventSink for CaptureSink {
-        fn emit_traffic(&self, event: ProxyTrafficEvent) {
-            self.traffic.lock().expect("traffic lock").push(event);
-        }
-
         fn emit_connections(&self, event: ProxyConnectionsSnapshot) {
             self.connections
                 .lock()
@@ -890,7 +880,7 @@ mod tests {
             vec![ProxyDelayTestResult {
                 name: "A".to_string(),
                 delay: Some(37),
-                outcome: SpeedTestOutcome::Completed,
+                outcome: SpeedtestOutcome::Completed,
             }]
         );
     }
@@ -1001,11 +991,12 @@ mod tests {
             }),
         );
 
-        assert_eq!(
-            sink.traffic.lock().expect("traffic lock").as_slice(),
-            &[ProxyTrafficEvent { up: 10, down: 20 }]
-        );
         let connections = sink.connections.lock().expect("connections lock");
+        assert_eq!(
+            connections.len(),
+            1,
+            "a traffic frame has no sink to reach and must be dropped, not routed"
+        );
         assert_eq!(connections[0].connections[0].host, "example.com:443");
     }
 

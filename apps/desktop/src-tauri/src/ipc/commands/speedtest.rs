@@ -5,11 +5,11 @@ use super::{lifecycle::*, support::*, *};
 pub async fn run_speedtest<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
-    request: voya_contracts::SpeedTestRequest,
+    request: voya_contracts::SpeedtestRequest,
 ) -> Result<SpeedtestRunResult, AppError> {
     let index_ids = match request.target {
-        voya_contracts::SpeedTestTarget::All => Vec::new(),
-        voya_contracts::SpeedTestTarget::Profiles { profile_ids } => profile_ids,
+        voya_contracts::SpeedtestTarget::All => Vec::new(),
+        voya_contracts::SpeedtestTarget::Profiles { profile_ids } => profile_ids,
     };
     validate_ipc_text_list(
         &index_ids,

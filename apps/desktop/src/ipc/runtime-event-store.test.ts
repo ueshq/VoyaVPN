@@ -7,7 +7,7 @@ const ipcCommandMocks = vi.hoisted(() => ({
 vi.mock("@/ipc/commands", () => ipcCommandMocks);
 
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import type { ProxyConnectionsSnapshot, SpeedTestResult, StatisticsSnapshot } from "@/ipc/bindings";
+import type { ProxyConnectionsSnapshot, SpeedtestResult, StatisticsSnapshot } from "@/ipc/bindings";
 
 const initialMonitorStatus = {
   message: null,
@@ -27,7 +27,6 @@ describe("runtime event store", () => {
     useRuntimeEventStore.setState({
       proxyConnections: null,
       proxyMonitorStatus: initialMonitorStatus,
-      proxyTraffic: null,
       lastTransientEvent: null,
       logLines: [],
       serverStatsByProfileId: {},
@@ -40,16 +39,6 @@ describe("runtime event store", () => {
 
   afterEach(() => {
     vi.useRealTimers();
-  });
-
-  it("stores proxy traffic websocket events", () => {
-    useRuntimeEventStore.getState().pushTransientEvent({
-      kind: "proxyTraffic",
-      payload: { down: 2048, up: 1024 },
-    });
-
-    expect(useRuntimeEventStore.getState().proxyTraffic).toEqual({ down: 2048, up: 1024 });
-    expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("proxyTraffic");
   });
 
   it("hydrates speedtest running state from the backend status command", async () => {
@@ -72,7 +61,7 @@ describe("runtime event store", () => {
   });
 
   it("stores speedtest result events without ending the running state", () => {
-    const result: SpeedTestResult = {
+    const result: SpeedtestResult = {
       action: "latency",
       delay: 42,
       indexId: "profile-a",
@@ -133,44 +122,28 @@ describe("runtime event store", () => {
     });
   });
 
-  it("only clears stale state when fresh proxy traffic arrives", () => {
-    useRuntimeEventStore.getState().setProxyMonitorFailed("stream failed");
-
-    useRuntimeEventStore.getState().pushTransientEvent({
-      kind: "proxyTraffic",
-      payload: { down: 2048, up: 1024 },
-    });
-
-    expect(useRuntimeEventStore.getState().proxyTraffic).toEqual({ down: 2048, up: 1024 });
-    expect(useRuntimeEventStore.getState().proxyMonitorStatus).toEqual({
-      message: "stream failed",
-      running: false,
-      stale: false,
-      state: "failed",
-    });
-    expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("proxyTraffic");
-  });
-
-  it("does not promote stopped monitor status when late proxy traffic arrives", () => {
+  it("does not promote stopped monitor status when late proxy connections arrive", async () => {
+    vi.useFakeTimers();
     useRuntimeEventStore.getState().setProxyMonitorStopped("monitor stopped");
 
     useRuntimeEventStore.getState().pushTransientEvent({
-      kind: "proxyTraffic",
-      payload: { down: 2048, up: 1024 },
+      kind: "proxyConnections",
+      payload: makeConnectionsSnapshot("connection-1", "example.com:443", 200, 100),
     });
+    await vi.advanceTimersByTimeAsync(20);
 
-    expect(useRuntimeEventStore.getState().proxyTraffic).toEqual({ down: 2048, up: 1024 });
+    // Data arriving clears staleness only. The monitor stays stopped until a
+    // lifecycle event says otherwise.
     expect(useRuntimeEventStore.getState().proxyMonitorStatus).toEqual({
       message: "monitor stopped",
       running: false,
       stale: false,
       state: "stopped",
     });
-    expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("proxyTraffic");
+    expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("proxyConnections");
   });
 
   it("marks stopped monitor status stale while preserving proxy snapshots", () => {
-    useRuntimeEventStore.getState().setProxyTraffic({ down: 2048, up: 1024 });
     useRuntimeEventStore.getState().setProxyConnections(cachedConnections);
 
     useRuntimeEventStore.getState().pushTransientEvent({
@@ -178,7 +151,6 @@ describe("runtime event store", () => {
       payload: { state: "stopped", running: false, stale: true, message: null },
     });
 
-    expect(useRuntimeEventStore.getState().proxyTraffic).toEqual({ down: 2048, up: 1024 });
     expect(useRuntimeEventStore.getState().proxyConnections).toEqual({
       connections: [],
       downloadTotal: 200,
@@ -194,7 +166,6 @@ describe("runtime event store", () => {
   });
 
   it("marks failed monitor status stale with a message while preserving proxy snapshots", () => {
-    useRuntimeEventStore.getState().setProxyTraffic({ down: 2048, up: 1024 });
     useRuntimeEventStore.getState().setProxyConnections(cachedConnections);
 
     useRuntimeEventStore.getState().pushTransientEvent({
@@ -202,7 +173,6 @@ describe("runtime event store", () => {
       payload: { state: "failed", running: false, stale: true, message: "monitor failed" },
     });
 
-    expect(useRuntimeEventStore.getState().proxyTraffic).toEqual({ down: 2048, up: 1024 });
     expect(useRuntimeEventStore.getState().proxyConnections).toEqual(cachedConnections);
     expect(useRuntimeEventStore.getState().proxyMonitorStatus).toEqual({
       message: "monitor failed",

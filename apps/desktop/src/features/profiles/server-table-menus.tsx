@@ -42,7 +42,7 @@ import {
   MenubarTrigger,
 } from "@voya/ui/components/menubar";
 import { moveProfile } from "@/ipc";
-import type { ProfileListEntry, SpeedTestKind, SpeedTestTarget } from "@/ipc/bindings";
+import type { ProfileListEntry, SpeedtestKind, SpeedtestTarget } from "@/ipc/bindings";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
@@ -90,8 +90,8 @@ const EXPORT_MENU_ENTRIES: readonly ExportMenuEntry[] = [
 ];
 
 // `latency` is the real-delay probe; there is no separate cheap "fast" kind in
-// `SpeedTestKind`, so the menu offers each probe exactly once.
-const SPEED_MENU_ENTRIES: ReadonlyArray<{ action: SpeedTestKind; icon: LucideIcon; labelKey: TranslationKey }> = [
+// `SpeedtestKind`, so the menu offers each probe exactly once.
+const SPEED_MENU_ENTRIES: ReadonlyArray<{ action: SpeedtestKind; icon: LucideIcon; labelKey: TranslationKey }> = [
   { action: SPEED_ACTIONS.TcpConnect, icon: Activity, labelKey: "panes.profiles.speedtest.tcp" },
   { action: SPEED_ACTIONS.Latency, icon: Clock, labelKey: "panes.profiles.speedtest.real" },
   { action: SPEED_ACTIONS.Udp, icon: Radio, labelKey: "panes.profiles.speedtest.udp" },
@@ -114,7 +114,7 @@ export function SpeedtestSplitButton({
   disabled: boolean;
   label: string;
   onCancel: () => Promise<void>;
-  onRun: (kind: SpeedTestKind) => Promise<void>;
+  onRun: (kind: SpeedtestKind) => Promise<void>;
   running: boolean;
 }) {
   const { t } = useI18n();
@@ -192,8 +192,8 @@ export function ProfileRowContextMenu({
     t,
   } = controller;
   const indexId = item.profile.id;
-  const target: SpeedTestTarget = { scope: "profiles", profileIds: [indexId] };
-  const runTargetSpeedtest = (kind: SpeedTestKind) => handleSpeedtest(kind, target);
+  const target: SpeedtestTarget = { scope: "profiles", profileIds: [indexId] };
+  const runTargetSpeedtest = (kind: SpeedtestKind) => handleSpeedtest(kind, target);
 
   return (
     // A row action can open a modal dialog. Keeping the short-lived context
@@ -331,7 +331,7 @@ function SpeedMenuItems({
   running,
   t,
 }: {
-  onRun: (kind: SpeedTestKind) => Promise<void>;
+  onRun: (kind: SpeedtestKind) => Promise<void>;
   primitives?: MenuPrimitives;
   running: boolean;
   t: TranslateFn;

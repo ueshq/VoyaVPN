@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { changeLocale, i18next, type Locale, type TranslationFunction } from "@voya/i18n";
 
-import type { LogCode, NoticeCode, SpeedTestOutcome, ValidationCode } from "@/ipc/bindings";
+import type { LogCode, NoticeCode, SpeedtestOutcome, ValidationCode } from "@/ipc/bindings";
 import {
   CORE_FLOW_REASON_KEYS,
   LOG_KEYS,
@@ -206,7 +206,7 @@ describe("backend message codes", () => {
   });
 
   it("renders every speedtest outcome, and translates it outside English", () => {
-    for (const outcome of Object.keys(SPEEDTEST_OUTCOME_KEYS) as SpeedTestOutcome[]) {
+    for (const outcome of Object.keys(SPEEDTEST_OUTCOME_KEYS) as SpeedtestOutcome[]) {
       expect(speedtestOutcomeText(en, outcome).trim(), outcome).not.toBe("");
       expect(speedtestOutcomeText(zh, outcome).trim(), outcome).not.toBe("");
     }

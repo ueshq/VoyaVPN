@@ -52,11 +52,8 @@ describe("unified settings surface", () => {
       fakeIp: null,
       globalFakeIp: null,
       hosts: null,
-      parallelQuery: null,
       proxyStrategy: null,
       remote: null,
-      serveStale: null,
-      useSystemHosts: null,
     });
     ipcMocks.saveAppSettings.mockImplementation(async (settings) => settings);
     ipcMocks.saveDnsSettings.mockImplementation(async (settings) => settings);

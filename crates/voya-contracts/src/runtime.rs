@@ -27,7 +27,7 @@ pub enum CoreState {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
-pub enum SysProxyType {
+pub enum SystemProxyType {
     #[default]
     ForcedClear,
     ForcedChange,

@@ -46,7 +46,7 @@ impl SpeedtestManager {
         &self,
         database: &Database,
         config: &AppConfig,
-        action: SpeedTestKind,
+        action: SpeedtestKind,
         index_ids: Vec<String>,
     ) -> Result<SpeedtestRunResult> {
         self.run_with_callback(database, config, action, index_ids, |_| {})
@@ -57,12 +57,12 @@ impl SpeedtestManager {
         &self,
         database: &Database,
         config: &AppConfig,
-        action: SpeedTestKind,
+        action: SpeedtestKind,
         index_ids: Vec<String>,
         on_result: F,
     ) -> Result<SpeedtestRunResult>
     where
-        F: Fn(SpeedTestResult) + Send + Sync,
+        F: Fn(SpeedtestResult) + Send + Sync,
     {
         let cancel = self.begin_job()?;
         let result = self
@@ -84,13 +84,13 @@ impl SpeedtestManager {
         &self,
         database: &Database,
         config: &AppConfig,
-        action: SpeedTestKind,
+        action: SpeedtestKind,
         index_ids: Vec<String>,
         cancel: CancellationFlag,
         on_result: F,
     ) -> Result<SpeedtestRunResult>
     where
-        F: Fn(SpeedTestResult) + Send + Sync,
+        F: Fn(SpeedtestResult) + Send + Sync,
     {
         let selected = select_test_items(database, config, &index_ids).await?;
         clear_previous_results(database, action, &selected, &on_result).await?;
@@ -99,7 +99,7 @@ impl SpeedtestManager {
         let mut completed_count = 0_u32;
 
         match action {
-            SpeedTestKind::TcpConnect => {
+            SpeedtestKind::TcpConnect => {
                 for item in &selected {
                     if is_cancelled(&cancel) {
                         break;
@@ -120,7 +120,7 @@ impl SpeedtestManager {
                     results.extend(item_results);
                 }
             }
-            SpeedTestKind::Latency | SpeedTestKind::Udp => {
+            SpeedtestKind::Latency | SpeedtestKind::Udp => {
                 let item_results = self
                     .run_batch_items(
                         database,
@@ -136,7 +136,7 @@ impl SpeedtestManager {
                 );
                 results.extend(item_results);
             }
-            SpeedTestKind::Download | SpeedTestKind::Mixed => {
+            SpeedtestKind::Download | SpeedtestKind::Mixed => {
                 let item_results = self
                     .run_concurrent_dedicated_items(
                         database,
@@ -212,34 +212,34 @@ impl SpeedtestManager {
         &self,
         database: &Database,
         config: &AppConfig,
-        action: SpeedTestKind,
+        action: SpeedtestKind,
         item: ServerTestItem,
         cancel: CancellationFlag,
         on_result: &F,
-    ) -> Result<Vec<SpeedTestResult>>
+    ) -> Result<Vec<SpeedtestResult>>
     where
-        F: Fn(SpeedTestResult) + Send + Sync,
+        F: Fn(SpeedtestResult) + Send + Sync,
     {
         let mut results = Vec::new();
         match action {
-            SpeedTestKind::TcpConnect => {
+            SpeedtestKind::TcpConnect => {
                 let result = self.run_tcping(database, action, item, cancel).await?;
                 on_result(result.clone());
                 results.push(result);
             }
-            SpeedTestKind::Latency => {
+            SpeedtestKind::Latency => {
                 let result = self
                     .run_realping(database, config, action, item, cancel)
                     .await?;
                 on_result(result.clone());
                 results.push(result);
             }
-            SpeedTestKind::Udp => {
+            SpeedtestKind::Udp => {
                 let result = self.run_udp(database, config, action, item, cancel).await?;
                 on_result(result.clone());
                 results.push(result);
             }
-            SpeedTestKind::Download => {
+            SpeedtestKind::Download => {
                 let realping = self
                     .run_realping(database, config, action, item.clone(), Arc::clone(&cancel))
                     .await?;
@@ -255,7 +255,7 @@ impl SpeedtestManager {
                     results.push(speed);
                 }
             }
-            SpeedTestKind::Mixed => {
+            SpeedtestKind::Mixed => {
                 let realping = self
                     .run_realping(database, config, action, item.clone(), Arc::clone(&cancel))
                     .await?;
@@ -280,13 +280,13 @@ impl SpeedtestManager {
         &self,
         database: &Database,
         config: &AppConfig,
-        action: SpeedTestKind,
+        action: SpeedtestKind,
         items: &[ServerTestItem],
         cancel: CancellationFlag,
         on_result: &F,
-    ) -> Result<Vec<SpeedTestResult>>
+    ) -> Result<Vec<SpeedtestResult>>
     where
-        F: Fn(SpeedTestResult) + Send + Sync,
+        F: Fn(SpeedtestResult) + Send + Sync,
     {
         let batch = self
             .prepare_speedtest_items(database, config, items)
@@ -362,13 +362,13 @@ impl SpeedtestManager {
         &self,
         database: &Database,
         config: &AppConfig,
-        action: SpeedTestKind,
+        action: SpeedtestKind,
         prepared: PreparedSpeedtestItem,
         cancel: CancellationFlag,
         on_result: &F,
-    ) -> Result<Vec<SpeedTestResult>>
+    ) -> Result<Vec<SpeedtestResult>>
     where
-        F: Fn(SpeedTestResult) + Send + Sync,
+        F: Fn(SpeedtestResult) + Send + Sync,
     {
         let core_type = prepared.entry.context.run_core_type;
         let index_id = prepared.item.index_id.clone();
@@ -399,13 +399,13 @@ impl SpeedtestManager {
         &self,
         database: &Database,
         config: &AppConfig,
-        action: SpeedTestKind,
+        action: SpeedtestKind,
         items: &[ServerTestItem],
         cancel: CancellationFlag,
         on_result: &F,
-    ) -> Result<Vec<SpeedTestResult>>
+    ) -> Result<Vec<SpeedtestResult>>
     where
-        F: Fn(SpeedTestResult) + Send + Sync,
+        F: Fn(SpeedtestResult) + Send + Sync,
     {
         if is_cancelled(&cancel) {
             return Ok(Vec::new());
@@ -499,7 +499,7 @@ impl SpeedtestManager {
                 // profiles that are still testable.
                 batch.failures.push(SpeedtestItemFailure::new(
                     item.index_id,
-                    SpeedTestOutcome::InvalidProfile,
+                    SpeedtestOutcome::InvalidProfile,
                 ));
                 continue;
             }
@@ -520,13 +520,13 @@ impl SpeedtestManager {
     async fn run_tcping(
         &self,
         database: &Database,
-        action: SpeedTestKind,
+        action: SpeedtestKind,
         item: ServerTestItem,
         cancel: CancellationFlag,
-    ) -> Result<SpeedTestResult> {
+    ) -> Result<SpeedtestResult> {
         let index_id = item.index_id.clone();
         let delay = self.probe.tcping(item, cancel).await.unwrap_or(-1);
-        let result = SpeedTestResult {
+        let result = SpeedtestResult {
             action,
             index_id,
             delay: Some(delay),
@@ -544,17 +544,17 @@ impl SpeedtestManager {
         &self,
         database: &Database,
         config: &AppConfig,
-        action: SpeedTestKind,
+        action: SpeedtestKind,
         item: ServerTestItem,
         cancel: CancellationFlag,
-    ) -> Result<SpeedTestResult> {
+    ) -> Result<SpeedtestResult> {
         let index_id = item.index_id.clone();
         let result = match self
             .probe
             .realping(item.socks_port, config.speed_test_item.clone(), cancel)
             .await
         {
-            Ok(realping) => SpeedTestResult {
+            Ok(realping) => SpeedtestResult {
                 action,
                 index_id,
                 delay: Some(realping.delay),
@@ -565,7 +565,7 @@ impl SpeedtestManager {
             },
             Err(error) => {
                 tracing::warn!(index_id = %index_id, ?error, "speedtest realping failed");
-                SpeedTestResult {
+                SpeedtestResult {
                     action,
                     index_id,
                     delay: Some(-1),
@@ -588,28 +588,28 @@ impl SpeedtestManager {
         &self,
         database: &Database,
         config: &AppConfig,
-        action: SpeedTestKind,
+        action: SpeedtestKind,
         item: ServerTestItem,
         cancel: CancellationFlag,
-    ) -> Result<SpeedTestResult> {
+    ) -> Result<SpeedtestResult> {
         let index_id = item.index_id.clone();
         let result = match self
             .probe
             .download_speed(item.socks_port, config.speed_test_item.clone(), cancel)
             .await
         {
-            Ok(speed) => SpeedTestResult {
+            Ok(speed) => SpeedtestResult {
                 action,
                 index_id,
                 delay: None,
                 speed: Some(speed),
-                outcome: SpeedTestOutcome::Completed,
+                outcome: SpeedtestOutcome::Completed,
                 detail: None,
                 ip_info: None,
             },
             Err(error) => {
                 tracing::warn!(index_id = %index_id, ?error, "speedtest download failed");
-                SpeedTestResult {
+                SpeedtestResult {
                     action,
                     index_id,
                     delay: None,
@@ -629,17 +629,17 @@ impl SpeedtestManager {
         &self,
         database: &Database,
         config: &AppConfig,
-        action: SpeedTestKind,
+        action: SpeedtestKind,
         item: ServerTestItem,
         cancel: CancellationFlag,
-    ) -> Result<SpeedTestResult> {
+    ) -> Result<SpeedtestResult> {
         let index_id = item.index_id.clone();
         let delay = self
             .probe
             .udp_test(item.socks_port, config.speed_test_item.clone(), cancel)
             .await
             .unwrap_or(-1);
-        let result = SpeedTestResult {
+        let result = SpeedtestResult {
             action,
             index_id,
             delay: Some(delay),
@@ -687,12 +687,12 @@ impl SpeedtestManager {
 /// failure instead of an aborted run.
 async fn record_item_failures<F>(
     database: &Database,
-    action: SpeedTestKind,
+    action: SpeedtestKind,
     failures: Vec<SpeedtestItemFailure>,
     on_result: &F,
-) -> Result<Vec<SpeedTestResult>>
+) -> Result<Vec<SpeedtestResult>>
 where
-    F: Fn(SpeedTestResult) + Send + Sync,
+    F: Fn(SpeedtestResult) + Send + Sync,
 {
     let mut results = Vec::with_capacity(failures.len());
     for failure in failures {
@@ -710,23 +710,23 @@ where
 /// cancel or an early stop would otherwise leave those rows pending forever.
 async fn finalize_pending_results<F>(
     database: &Database,
-    action: SpeedTestKind,
+    action: SpeedtestKind,
     selected: &[ServerTestItem],
-    results: &[SpeedTestResult],
+    results: &[SpeedtestResult],
     cancelled: bool,
     on_result: &F,
-) -> Result<Vec<SpeedTestResult>>
+) -> Result<Vec<SpeedtestResult>>
 where
-    F: Fn(SpeedTestResult) + Send + Sync,
+    F: Fn(SpeedtestResult) + Send + Sync,
 {
     let tested = results
         .iter()
         .map(|result| result.index_id.as_str())
         .collect::<HashSet<_>>();
     let outcome = if cancelled {
-        SpeedTestOutcome::Cancelled
+        SpeedtestOutcome::Cancelled
     } else {
-        SpeedTestOutcome::Skipped
+        SpeedtestOutcome::Skipped
     };
     let untested = selected
         .iter()
@@ -752,7 +752,7 @@ const PERSIST_RETRY_INITIAL_DELAY: Duration = Duration::from_millis(20);
 /// worse outcome than waiting a few tens of milliseconds for one row.
 async fn persist_speedtest_result_with_retry(
     database: &Database,
-    result: &SpeedTestResult,
+    result: &SpeedtestResult,
 ) -> Result<()> {
     let mut delay = PERSIST_RETRY_INITIAL_DELAY;
     for attempt in 1..PERSIST_RETRY_MAX_ATTEMPTS {
@@ -838,12 +838,12 @@ mod tests {
 
         persist_speedtest_result_with_retry(
             &database,
-            &SpeedTestResult {
-                action: SpeedTestKind::TcpConnect,
+            &SpeedtestResult {
+                action: SpeedtestKind::TcpConnect,
                 index_id: "active".to_string(),
                 delay: Some(42),
                 speed: None,
-                outcome: SpeedTestOutcome::Completed,
+                outcome: SpeedtestOutcome::Completed,
                 detail: None,
                 ip_info: None,
             },

@@ -16,11 +16,13 @@ use crate::{
 /// `setup()` and turns into a launch failure.
 ///
 /// Any change to `AppSettingsV1` must therefore either stay backwards
-/// compatible (add fields with `#[serde(default)]`, never remove or rename) or
-/// bump `CURRENT_SCHEMA_VERSION` with a migration. The
-/// `persisted_settings_payload_from_an_earlier_build_still_loads` test pins the
-/// current layout against a checked-in fixture so an accidental break is caught
-/// here rather than on a user's machine.
+/// compatible (add fields with `#[serde(default)]`) or carry the removed or
+/// renamed key in [`RETIRED_DNS_KEYS`] / [`RENAMED_SPEEDTEST_KEYS`], which
+/// [`normalize_retired_keys`] applies to the stored JSON before serde sees it.
+/// The `persisted_settings_payload_from_an_earlier_build_still_loads` and
+/// `settings_payload_with_retired_keys_still_loads` tests pin both halves
+/// against checked-in fixtures, so an accidental break is caught here rather
+/// than on a user's machine.
 #[derive(Debug, Clone, Copy)]
 pub struct SettingsRepository<'executor> {
     executor: RepositoryExecutor<'executor>,
@@ -48,11 +50,7 @@ impl<'executor> SettingsRepository<'executor> {
                 manual_reset_command: settings_reset_command(),
             });
         }
-        let settings =
-            serde_json::from_str::<AppSettingsV1>(&payload).map_err(|source| DbError::Json {
-                path: "app_settings.payload".into(),
-                source,
-            })?;
+        let settings = deserialize_payload(&payload)?;
         if settings.schema_version != CURRENT_SCHEMA_VERSION {
             return Err(DbError::UnsupportedDatabaseSchema {
                 path: "app_settings.payload".into(),
@@ -88,6 +86,65 @@ impl<'executor> SettingsRepository<'executor> {
                 let mut transaction = transaction.lock().await;
                 save_settings_on(&mut **transaction, &payload).await?;
                 save_state_on(&mut **transaction, state).await
+            }
+        }
+    }
+}
+
+/// Keys `AppSettingsV1::dns` used to have and no longer does.
+///
+/// sing-box 1.13 cannot express any of them (`hosts` falls back to
+/// `/etc/hosts` even for an explicit empty list, and `option/dns.go` has no
+/// stale-serving or parallel-query knob), so the three settings were dropped
+/// rather than wired.
+const RETIRED_DNS_KEYS: [&str; 3] = ["useSystemHosts", "serveStale", "parallelQuery"];
+
+/// Keys `AppSettingsV1::speed_test` renamed, as `(stored, current)`.
+///
+/// `delayIntervalMs` always held seconds; only the name was wrong.
+const RENAMED_SPEEDTEST_KEYS: [(&str, &str); 1] = [("delayIntervalMs", "delayIntervalSeconds")];
+
+/// Reads a stored payload into the current contract.
+///
+/// `AppSettingsV1` and every struct nested in it deny unknown fields, so a row
+/// written before a field was removed or renamed would fail to deserialize and
+/// take `setup()` down with it. Normalizing the stored JSON first — dropping
+/// the retired keys, moving the renamed ones onto their current name and their
+/// stored value — keeps those rows loading while leaving `deny_unknown_fields`
+/// strict about keys that were never part of the contract. The first save after
+/// an upgrade rewrites the row in the current shape.
+fn deserialize_payload(payload: &str) -> Result<AppSettingsV1> {
+    let mut value = serde_json::from_str::<serde_json::Value>(payload).map_err(payload_error)?;
+    normalize_retired_keys(&mut value);
+    serde_json::from_value(value).map_err(payload_error)
+}
+
+fn payload_error(source: serde_json::Error) -> DbError {
+    DbError::Json {
+        path: "app_settings.payload".into(),
+        source,
+    }
+}
+
+fn normalize_retired_keys(value: &mut serde_json::Value) {
+    if let Some(dns) = value
+        .get_mut("dns")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        for key in RETIRED_DNS_KEYS {
+            dns.remove(key);
+        }
+    }
+
+    if let Some(speedtest) = value
+        .get_mut("speedTest")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        for (stored, current) in RENAMED_SPEEDTEST_KEYS {
+            if let Some(stored_value) = speedtest.remove(stored) {
+                // A payload already carrying the current key wins: only a row
+                // that predates the rename should be filled in from the old one.
+                speedtest.entry(current).or_insert(stored_value);
             }
         }
     }
