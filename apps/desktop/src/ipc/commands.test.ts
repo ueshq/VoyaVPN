@@ -16,7 +16,7 @@ const commandMocks = vi.hoisted(() => {
 
 vi.mock("@/ipc/bindings", () => ({ commands: commandMocks }));
 
-import type { AppError } from "@/ipc/bindings";
+import type { AppError, AppErrorKind } from "@/ipc/bindings";
 import * as ipc from "@/ipc/commands";
 
 const wrapperNames = [
@@ -123,11 +123,11 @@ describe("typed IPC command facade", () => {
     },
   );
 
-  it.each(appErrors())("preserves and formats the $kind backend error", async ({ error, message }) => {
+  it.each(appErrors())("preserves and formats the $label backend error", async ({ error }) => {
     commandMocks.loadUiPreferences.mockResolvedValueOnce({ error, status: "error" });
 
     const rejection = ipc.loadUiPreferences();
-    await expect(rejection).rejects.toThrow(message);
+    await expect(rejection).rejects.toThrow(error.message);
     await expect(rejection).rejects.toMatchObject({
       appError: error,
       name: "IpcCommandError",
@@ -179,53 +179,33 @@ function forwardingCases(): Array<[WrapperName, unknown[], unknown[]]> {
   ];
 }
 
-function appErrors(): Array<{ error: AppError; kind: AppError["kind"]; message: string }> {
-  const stringKinds = [
-    "eventEmit",
-    "autostart",
-    "configSave",
-    "certificate",
-    "proxyRuntime",
-    "database",
-    "group",
-    "hotkey",
-    "preset",
-    "profile",
-    "qr",
-    "export",
-    "runtime",
-    "routing",
-    "speedtest",
-    "sudo",
-    "subscription",
-    "sysProxy",
-    "state",
-    "tun",
-    "update",
-  ] as const;
-  const errors: Array<{ error: AppError; kind: AppError["kind"]; message: string }> = stringKinds.map((kind) => ({
-    error: { kind, message: `${kind} failed` } as AppError,
-    kind,
-    message: `${kind} failed`,
-  }));
-  errors.push({
-    error: { kind: "dns", message: { issues: [], message: "dns failed" } },
-    kind: "dns",
-    message: "dns failed",
-  });
-  errors.push({
-    error: {
-      kind: "missingCore",
-      message: {
-        candidates: [],
-        coreType: "singBox",
-        downloadUrl: "https://example.test/core",
-        message: "core missing",
-        searchDir: "/cores",
-      },
+/**
+ * One case per `AppErrorKind`, so the message accessor is exercised for the
+ * structured kinds as well as the bare ones.
+ *
+ * The kinds are what the frontend branches on; `message` is only ever shown,
+ * which is why `formatAppError` is no longer a switch.
+ */
+function appErrors(): Array<{ error: AppError; label: AppErrorKind["type"] }> {
+  const kinds: AppErrorKind[] = [
+    { issues: [{ field: "direct", message: "invalid resolver" }], type: "validation" },
+    { entity: "profile", id: "p-1", type: "notFound" },
+    { type: "elevationRequired" },
+    {
+      candidates: ["sing-box"],
+      coreType: "singBox",
+      downloadUrl: "https://example.test/core",
+      searchDir: "application core directory",
+      type: "missingCore",
     },
-    kind: "missingCore",
-    message: "core missing",
-  });
-  return errors;
+    { type: "network" },
+    { type: "io" },
+    { code: "schemaUnsupported", resetCommand: "rm voyavpn.sqlite", type: "database" },
+    { type: "internal" },
+  ];
+
+  return kinds.map((kind) => ({
+    error: { kind, message: `${kind.type} failed`, subsystem: "profile" },
+    label: kind.type,
+  }));
 }

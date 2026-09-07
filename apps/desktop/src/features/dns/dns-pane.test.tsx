@@ -71,14 +71,15 @@ describe("DnsPane", () => {
     const user = userEvent.setup();
     ipcMocks.saveDnsSettings.mockRejectedValueOnce(
       new ipcMocks.IpcCommandError({
-        kind: "dns",
-        message: {
+        kind: {
           issues: [
             { field: "direct", message: "Direct resolver is invalid" },
             { field: "bootstrap", message: "Bootstrap resolver is invalid" },
           ],
-          message: "DNS rejected",
+          type: "validation",
         },
+        message: "DNS rejected",
+        subsystem: "dns",
       }),
     );
     renderPane();

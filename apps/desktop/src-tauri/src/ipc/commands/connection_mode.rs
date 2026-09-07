@@ -4,11 +4,11 @@
 //! connected-gated OS proxy apply and its rollback — lives in voya-app so it can
 //! be unit-tested (the shell lib harness is disabled on purpose). All this
 //! module does is turn the transaction's outputs into `TransientStreamEvent`s
-//! and a tray refresh, and map its errors onto `AppError`.
+//! and a tray refresh.
 
 use std::sync::Arc;
 
-use voya_app::connection_mode::{ConnectionModeError, ConnectionModeManager, ConnectionModeSink};
+use voya_app::connection_mode::{ConnectionModeManager, ConnectionModeSink};
 
 use super::{lifecycle::*, support::*, *};
 
@@ -65,14 +65,5 @@ where
                 AppNoticeLevel::Warning,
             );
         }
-    }
-}
-
-pub(super) fn connection_mode_error(error: ConnectionModeError) -> AppError {
-    match error {
-        ConnectionModeError::Tun(error) => tun_error(error),
-        ConnectionModeError::SystemProxy(error) => sysproxy_error(error),
-        ConnectionModeError::Commit(error) => config_mutation_error(error),
-        error => AppError::SysProxy(error.to_string()),
     }
 }

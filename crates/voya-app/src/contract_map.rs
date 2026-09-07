@@ -4,8 +4,10 @@
 //! and IPC serialization concerns from leaking into `voya-core`.
 
 mod data;
+pub mod errors;
 
 pub use data::*;
+pub use errors::{certificate_error, core_info_error, database_error, input_text_error};
 
 use voya_contracts::{
     GroupChildCandidate as GroupChildContract, GroupPreview as GroupPreviewContract,
@@ -72,6 +74,56 @@ pub fn process_candidate_to_contract(
                 voya_contracts::ProcessCandidateSource::InstalledApplication
             }
         },
+    }
+}
+
+/// The supervisor's own snapshot, as the runtime status command returns it.
+///
+/// Pure, and read by three commands plus the tray, so it lives here rather than
+/// in the shell where nothing can assert the state mapping.
+#[must_use]
+pub fn runtime_status_response(
+    snapshot: crate::supervisor::SupervisorSnapshot,
+) -> voya_contracts::RuntimeStatusResponse {
+    voya_contracts::RuntimeStatusResponse {
+        state: match snapshot.state {
+            crate::supervisor::SupervisorConnectionState::Disconnected => {
+                voya_contracts::RuntimeConnectionState::Disconnected
+            }
+            crate::supervisor::SupervisorConnectionState::Connected => {
+                voya_contracts::RuntimeConnectionState::Connected
+            }
+        },
+        active_profile_id: snapshot.active_profile_id,
+        main_pid: snapshot.main_pid,
+        pre_pid: snapshot.pre_pid,
+        running_core_type: snapshot.running_core_type.map(core_type_to_contract),
+    }
+}
+
+/// The outcome of copying a packaged core seed into app data.
+#[must_use]
+pub fn core_seed_install_result(
+    outcome: voya_platform::coreinfo::CoreSeedCopyOutcome,
+) -> voya_contracts::CoreSeedInstallResult {
+    voya_contracts::CoreSeedInstallResult {
+        core_type: core_type_to_contract(outcome.core_type),
+        status: match outcome.status {
+            voya_platform::coreinfo::CoreSeedCopyStatus::Copied => {
+                voya_contracts::CoreSeedInstallStatus::Installed
+            }
+            voya_platform::coreinfo::CoreSeedCopyStatus::AlreadyInstalled => {
+                voya_contracts::CoreSeedInstallStatus::AlreadyInstalled
+            }
+            voya_platform::coreinfo::CoreSeedCopyStatus::SeedMissing => {
+                voya_contracts::CoreSeedInstallStatus::SeedMissing
+            }
+        },
+        installed_files: outcome
+            .copied_files
+            .iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect(),
     }
 }
 

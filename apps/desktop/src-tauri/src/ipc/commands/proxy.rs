@@ -12,7 +12,7 @@ pub async fn proxy_list_groups(
         .proxy_runtime()
         .groups(&config, &clash_api)
         .await
-        .map_err(proxy_runtime_error)
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -25,7 +25,7 @@ pub async fn proxy_test_delay(
         &node_names,
         "proxy node name",
         IPC_NAME_MAX_CHARS,
-        AppError::ProxyRuntime,
+        AppErrorSubsystem::ProxyRuntime,
     )?;
     let config = current_config(&state)?;
     let clash_api = current_clash_api_access(&state).await;
@@ -34,7 +34,7 @@ pub async fn proxy_test_delay(
         .proxy_runtime()
         .test_delay(&config, &clash_api, node_names)
         .await
-        .map_err(proxy_runtime_error)
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -49,13 +49,13 @@ pub async fn proxy_select_node<R: tauri::Runtime>(
         &group_name,
         "proxy group name",
         IPC_NAME_MAX_CHARS,
-        AppError::ProxyRuntime,
+        AppErrorSubsystem::ProxyRuntime,
     )?;
     validate_required_ipc_text(
         &node_name,
         "proxy node name",
         IPC_NAME_MAX_CHARS,
-        AppError::ProxyRuntime,
+        AppErrorSubsystem::ProxyRuntime,
     )?;
     let config = current_config(&state)?;
     let clash_api = current_clash_api_access(&state).await;
@@ -63,7 +63,7 @@ pub async fn proxy_select_node<R: tauri::Runtime>(
         .proxy_runtime()
         .select_node(&config, &clash_api, &group_name, &node_name)
         .await
-        .map_err(proxy_runtime_error)?;
+        .map_err(AppError::from)?;
 
     emit_proxy_runtime_invalidation(&app, "proxy-node-selected", false);
 
@@ -81,7 +81,7 @@ pub async fn proxy_list_connections(
         .proxy_runtime()
         .connections(&clash_api)
         .await
-        .map_err(proxy_runtime_error)
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -95,14 +95,14 @@ pub async fn proxy_close_connection<R: tauri::Runtime>(
         connection_id.as_deref(),
         "proxy connection id",
         IPC_ID_MAX_CHARS,
-        AppError::ProxyRuntime,
+        AppErrorSubsystem::ProxyRuntime,
     )?;
     let clash_api = current_clash_api_access(&state).await;
     let snapshot = state
         .proxy_runtime()
         .close_connection(&clash_api, connection_id.as_deref())
         .await
-        .map_err(proxy_runtime_error)?;
+        .map_err(AppError::from)?;
 
     emit_proxy_runtime_invalidation(&app, "proxy-connection-closed", false);
 
@@ -122,12 +122,16 @@ pub async fn proxy_set_traffic_mode<R: tauri::Runtime>(
         voya_contracts::TrafficMode::Direct => TrafficMode::Direct,
         voya_contracts::TrafficMode::Unchanged => TrafficMode::Unchanged,
     };
-    let mut mutation = begin_config_mutation(&state).await?;
-    let changed = mutation.config().proxy_ui_item.traffic_mode != mode;
-    if changed {
-        mutation.config_mut().proxy_ui_item.traffic_mode = mode;
-    }
-    let config = commit_config_mutation(mutation).await?;
+    let committed = mutate_config(&state, async |_unit_of_work, config| {
+        let changed = config.proxy_ui_item.traffic_mode != mode;
+        if changed {
+            config.proxy_ui_item.traffic_mode = mode;
+        }
+        Ok::<_, AppError>(changed)
+    })
+    .await?;
+    let changed = committed.value;
+    let config = committed.config;
     if changed && mode != TrafficMode::Unchanged {
         let clash_api = current_clash_api_access(&state).await;
         if let Err(error) = state
@@ -167,7 +171,7 @@ pub async fn proxy_reload_config<R: tauri::Runtime>(
         path.as_deref(),
         "proxy runtime config path",
         IPC_PATH_MAX_CHARS,
-        AppError::ProxyRuntime,
+        AppErrorSubsystem::ProxyRuntime,
     )?;
     let clash_api = current_clash_api_access(&state).await;
 
@@ -175,7 +179,7 @@ pub async fn proxy_reload_config<R: tauri::Runtime>(
         .proxy_runtime()
         .reload_config(&clash_api, path.as_deref())
         .await
-        .map_err(proxy_runtime_error)?;
+        .map_err(AppError::from)?;
     emit_proxy_runtime_invalidation(&app, "proxy-config-reloaded", false);
 
     Ok(())
@@ -200,7 +204,7 @@ pub async fn proxy_start_monitor(
         Err(error) => {
             let message = error.to_string();
             emit_proxy_monitor_status(&app, &ProxyMonitorStatus::failed(message));
-            Err(proxy_runtime_error(error))
+            Err(AppError::from(error))
         }
     }
 }
@@ -219,7 +223,7 @@ pub fn proxy_stop_monitor(
         Err(error) => {
             let message = error.to_string();
             emit_proxy_monitor_status(&app, &ProxyMonitorStatus::failed(message));
-            Err(proxy_runtime_error(error))
+            Err(AppError::from(error))
         }
     }
 }

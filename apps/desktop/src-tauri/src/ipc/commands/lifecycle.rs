@@ -167,7 +167,7 @@ where
         last_provider_error: status.last_provider_error.clone(),
     })
     .emit(app)
-    .map_err(|error| AppError::EventEmit(error.to_string()))
+    .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
 }
 
 /// Names one committed configuration change for the restart that follows it.
@@ -243,7 +243,7 @@ pub(super) async fn restart_after_config_change<R>(
     if let Err(error) = core_flow(app, state)
         .restart_if_connected(config, change.reason)
         .await
-        .map_err(runtime_error)
+        .map_err(AppError::from)
     {
         report_post_commit_error(
             app,
@@ -265,7 +265,7 @@ where
     let status = runtime_manager(state)
         .status()
         .await
-        .map_err(runtime_error)?;
+        .map_err(AppError::from)?;
     if status.state != SupervisorConnectionState::Connected {
         return Ok(());
     }
@@ -279,7 +279,7 @@ where
         Err(error) => report_post_commit_error(
             app,
             "Settings saved; system proxy update failed",
-            &error.to_string(),
+            &error.message,
             AppNoticeLevel::Warning,
         ),
     }
@@ -312,7 +312,7 @@ where
         proxy: status.proxy.clone(),
     })
     .emit(app)
-    .map_err(|error| AppError::EventEmit(error.to_string()))
+    .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
 }
 
 pub(super) fn sysproxy_mode(mode: SysProxyType) -> crate::ipc::events::SysProxyMode {

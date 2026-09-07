@@ -11,7 +11,7 @@ pub async fn list_routings(
         .list_routings()
         .await
         .map(|items| items.into_iter().map(routing_to_contract).collect())
-        .map_err(routing_error)
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -21,21 +21,16 @@ pub async fn save_routing<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     item: RoutingContract,
 ) -> Result<RoutingContract, AppError> {
-    let mut mutation = begin_config_mutation(&state).await?;
-    let original = mutation.config().clone();
-    let saved = {
-        let (unit_of_work, config) = mutation.split();
-        RoutingManager::new_in(unit_of_work)
+    let saved = mutate_config(&state, async |unit_of_work, config| {
+        Ok(RoutingManager::new_in(unit_of_work)
             .save_routing(config, routing_from_contract(item))
-            .await
-            .map_err(routing_error)?
-    };
-    let changed = original != *mutation.config();
-    let config = commit_config_mutation(mutation).await?;
-    emit_routing_invalidation(&app, "routing-saved", changed);
-    restart_after_config_change(&app, &state, &config, ConfigChange::ROUTING_SAVED).await;
+            .await?)
+    })
+    .await?;
+    emit_routing_invalidation(&app, "routing-saved", saved.config_changed);
+    restart_after_config_change(&app, &state, &saved.config, ConfigChange::ROUTING_SAVED).await;
 
-    Ok(routing_to_contract(saved))
+    Ok(routing_to_contract(saved.value))
 }
 
 #[tauri::command]
@@ -45,22 +40,22 @@ pub async fn delete_routings<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     ids: Vec<String>,
 ) -> Result<u32, AppError> {
-    validate_ipc_text_list(&ids, "routing id", IPC_ID_MAX_CHARS, AppError::Routing)?;
-    let mut mutation = begin_config_mutation(&state).await?;
-    let original = mutation.config().clone();
-    let deleted = {
-        let (unit_of_work, config) = mutation.split();
-        RoutingManager::new_in(unit_of_work)
+    validate_ipc_text_list(
+        &ids,
+        "routing id",
+        IPC_ID_MAX_CHARS,
+        AppErrorSubsystem::Routing,
+    )?;
+    let deleted = mutate_config(&state, async |unit_of_work, config| {
+        Ok(RoutingManager::new_in(unit_of_work)
             .delete_routings(config, &ids)
-            .await
-            .map_err(routing_error)?
-    };
-    let changed = original != *mutation.config();
-    let config = commit_config_mutation(mutation).await?;
-    emit_routing_invalidation(&app, "routings-deleted", changed);
-    restart_after_config_change(&app, &state, &config, ConfigChange::ROUTING_DELETED).await;
+            .await?)
+    })
+    .await?;
+    emit_routing_invalidation(&app, "routings-deleted", deleted.config_changed);
+    restart_after_config_change(&app, &state, &deleted.config, ConfigChange::ROUTING_DELETED).await;
 
-    Ok(deleted)
+    Ok(deleted.value)
 }
 
 #[tauri::command]
@@ -70,20 +65,22 @@ pub async fn set_active_routing<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     id: String,
 ) -> Result<RoutingContract, AppError> {
-    validate_required_ipc_text(&id, "routing id", IPC_ID_MAX_CHARS, AppError::Routing)?;
-    let mut mutation = begin_config_mutation(&state).await?;
-    let active = {
-        let (unit_of_work, config) = mutation.split();
-        RoutingManager::new_in(unit_of_work)
+    validate_required_ipc_text(
+        &id,
+        "routing id",
+        IPC_ID_MAX_CHARS,
+        AppErrorSubsystem::Routing,
+    )?;
+    let active = mutate_config(&state, async |unit_of_work, config| {
+        Ok(RoutingManager::new_in(unit_of_work)
             .set_active_routing(config, &id)
-            .await
-            .map_err(routing_error)?
-    };
-    let config = commit_config_mutation(mutation).await?;
+            .await?)
+    })
+    .await?;
     emit_routing_invalidation(&app, "active-routing-changed", true);
-    restart_after_config_change(&app, &state, &config, ConfigChange::ROUTING_SELECTED).await;
+    restart_after_config_change(&app, &state, &active.config, ConfigChange::ROUTING_SELECTED).await;
 
-    Ok(routing_to_contract(active))
+    Ok(routing_to_contract(active.value))
 }
 
 #[tauri::command]
@@ -98,20 +95,25 @@ pub async fn save_routing_rule<R: tauri::Runtime>(
         &routing_id,
         "routing id",
         IPC_ID_MAX_CHARS,
-        AppError::Routing,
+        AppErrorSubsystem::Routing,
     )?;
-    let mutation = begin_config_mutation(&state).await?;
-    let saved = mutation
-        .routings()
-        .save_rule(&routing_id, rule_from_contract(rule))
-        .await
-        .map_err(routing_error)?;
-    let config = commit_config_mutation(mutation).await?;
+    let saved = mutate_config(&state, async |unit_of_work, _config| {
+        Ok(RoutingManager::new_in(unit_of_work)
+            .save_rule(&routing_id, rule_from_contract(rule))
+            .await?)
+    })
+    .await?;
 
     emit_routing_invalidation(&app, "routing-rule-saved", false);
-    restart_after_config_change(&app, &state, &config, ConfigChange::ROUTING_RULE_SAVED).await;
+    restart_after_config_change(
+        &app,
+        &state,
+        &saved.config,
+        ConfigChange::ROUTING_RULE_SAVED,
+    )
+    .await;
 
-    Ok(routing_to_contract(saved))
+    Ok(routing_to_contract(saved.value))
 }
 
 #[tauri::command]
@@ -126,26 +128,31 @@ pub async fn delete_routing_rules<R: tauri::Runtime>(
         &routing_id,
         "routing id",
         IPC_ID_MAX_CHARS,
-        AppError::Routing,
+        AppErrorSubsystem::Routing,
     )?;
     validate_ipc_text_list(
         &rule_ids,
         "routing rule id",
         IPC_ID_MAX_CHARS,
-        AppError::Routing,
+        AppErrorSubsystem::Routing,
     )?;
-    let mutation = begin_config_mutation(&state).await?;
-    let saved = mutation
-        .routings()
-        .delete_rules(&routing_id, &rule_ids)
-        .await
-        .map_err(routing_error)?;
-    let config = commit_config_mutation(mutation).await?;
+    let saved = mutate_config(&state, async |unit_of_work, _config| {
+        Ok(RoutingManager::new_in(unit_of_work)
+            .delete_rules(&routing_id, &rule_ids)
+            .await?)
+    })
+    .await?;
 
     emit_routing_invalidation(&app, "routing-rules-deleted", false);
-    restart_after_config_change(&app, &state, &config, ConfigChange::ROUTING_RULES_DELETED).await;
+    restart_after_config_change(
+        &app,
+        &state,
+        &saved.config,
+        ConfigChange::ROUTING_RULES_DELETED,
+    )
+    .await;
 
-    Ok(routing_to_contract(saved))
+    Ok(routing_to_contract(saved.value))
 }
 
 #[tauri::command]
@@ -162,29 +169,34 @@ pub async fn move_routing_rule<R: tauri::Runtime>(
         &routing_id,
         "routing id",
         IPC_ID_MAX_CHARS,
-        AppError::Routing,
+        AppErrorSubsystem::Routing,
     )?;
     validate_required_ipc_text(
         &rule_id,
         "routing rule id",
         IPC_ID_MAX_CHARS,
-        AppError::Routing,
+        AppErrorSubsystem::Routing,
     )?;
-    let mutation = begin_config_mutation(&state).await?;
-    let saved = mutation
-        .routings()
-        .move_rule(
-            &routing_id,
-            &rule_id,
-            move_action_from_contract(action),
-            position,
-        )
-        .await
-        .map_err(routing_error)?;
-    let config = commit_config_mutation(mutation).await?;
+    let saved = mutate_config(&state, async |unit_of_work, _config| {
+        Ok(RoutingManager::new_in(unit_of_work)
+            .move_rule(
+                &routing_id,
+                &rule_id,
+                move_action_from_contract(action),
+                position,
+            )
+            .await?)
+    })
+    .await?;
 
     emit_routing_invalidation(&app, "routing-rule-moved", false);
-    restart_after_config_change(&app, &state, &config, ConfigChange::ROUTING_RULE_MOVED).await;
+    restart_after_config_change(
+        &app,
+        &state,
+        &saved.config,
+        ConfigChange::ROUTING_RULE_MOVED,
+    )
+    .await;
 
-    Ok(routing_to_contract(saved))
+    Ok(routing_to_contract(saved.value))
 }

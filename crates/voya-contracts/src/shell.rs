@@ -16,56 +16,169 @@ pub struct WindowChromeConfig {
     pub title_bar_layout: TitleBarLayout,
 }
 
-#[derive(Debug, Clone, Serialize, Type)]
-#[serde(tag = "kind", content = "message", rename_all = "camelCase")]
-pub enum AppError {
-    EventEmit(String),
-    Autostart(String),
-    ConfigSave(String),
-    Certificate(String),
-    ProxyRuntime(String),
-    Database(String),
-    Dns(DnsCommandError),
-    Group(String),
-    Hotkey(String),
-    Preset(String),
-    Profile(String),
-    Qr(String),
-    Export(String),
-    MissingCore(MissingCoreError),
-    Runtime(String),
-    Routing(String),
-    Speedtest(String),
-    Sudo(String),
-    Subscription(String),
-    SysProxy(String),
-    State(String),
-    Tun(String),
-    Update(String),
+/// One failed IPC command.
+///
+/// The three parts answer three different questions and nothing else may be
+/// inferred from any of them:
+///
+/// - `kind` is **what the frontend branches on**. Every discrimination the UI
+///   performs has to be expressible here; the previous 23-arm union carried a
+///   string in 21 of its arms, which is why elevation retry was triggered by
+///   substring-matching the word "authorization" in `message`.
+/// - `subsystem` says which part of the app failed. It is for grouping, logging
+///   and copy ("Profiles: …"), never for control flow — the same `kind` means
+///   the same thing whichever subsystem raised it.
+/// - `message` is an English diagnostic. Show it, log it, that is all. It is
+///   never parsed, and rewording it must never change behavior.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AppError {
+    pub kind: AppErrorKind,
+    pub subsystem: AppErrorSubsystem,
+    pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize, Type)]
+impl AppError {
+    #[must_use]
+    pub fn new(subsystem: AppErrorSubsystem, kind: AppErrorKind, message: String) -> Self {
+        Self {
+            kind,
+            subsystem,
+            message,
+        }
+    }
+
+    /// A failure with no actionable structure behind it.
+    #[must_use]
+    pub fn internal(subsystem: AppErrorSubsystem, message: String) -> Self {
+        Self::new(subsystem, AppErrorKind::Internal, message)
+    }
+
+    /// Rejected input, addressed to the fields that caused it.
+    #[must_use]
+    pub fn validation(
+        subsystem: AppErrorSubsystem,
+        message: String,
+        issues: Vec<ValidationIssue>,
+    ) -> Self {
+        Self::new(subsystem, AppErrorKind::Validation { issues }, message)
+    }
+}
+
+/// What went wrong, in the terms the frontend acts on.
+///
+/// Serialized internally tagged, so a failure reads `{ type: "elevationRequired" }`
+/// and TypeScript narrows the payload from the tag alone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum AppErrorKind {
+    /// Submitted values were rejected. `issues` name the offending fields with
+    /// the same `field`/`message` pairing the DNS pane already renders.
+    Validation { issues: Vec<ValidationIssue> },
+    /// A referenced row does not exist. The UI's remedy is to refresh the list
+    /// it selected from, so the entity matters more than the id.
+    NotFound {
+        entity: AppErrorEntity,
+        id: Option<String>,
+    },
+    /// The action needs one-time system authorization. This is the *only*
+    /// signal that may open a privilege prompt: TUN and the elevated
+    /// supervisor spawn both raise it, and no message text can substitute.
+    ElevationRequired,
+    /// The core executable is not installed where the app looks for it.
+    MissingCore {
+        core_type: CoreType,
+        search_dir: String,
+        candidates: Vec<String>,
+        download_url: String,
+    },
+    /// A download, subscription fetch or Clash API call failed. Retryable.
+    Network,
+    /// A filesystem or child-process operation failed.
+    Io,
+    /// Persistence failed. `code` separates the cases that have different
+    /// remedies, and `reset_command` carries the manual recovery line when the
+    /// database itself reported one.
+    Database {
+        code: DatabaseErrorCode,
+        reset_command: Option<String>,
+    },
+    /// Anything with no better classification: a poisoned lock, a join error,
+    /// an invariant the app itself broke.
+    Internal,
+}
+
+/// Which part of the app produced a failure. Diagnostic grouping only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
-pub struct DnsValidationIssue {
+pub enum AppErrorSubsystem {
+    /// The shell itself: window chrome, event emission, background tasks.
+    App,
+    Autostart,
+    Certificate,
+    /// Reading or writing the persisted application configuration.
+    Config,
+    Dns,
+    Export,
+    Group,
+    Hotkey,
+    Preset,
+    Profile,
+    ProxyRuntime,
+    Qr,
+    Routing,
+    /// Core lifecycle: config generation, supervisor, connect/disconnect.
+    Runtime,
+    Speedtest,
+    Subscription,
+    SysProxy,
+    Tun,
+    Update,
+}
+
+/// The kind of row a [`AppErrorKind::NotFound`] refers to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum AppErrorEntity {
+    Profile,
+    Routing,
+    RoutingRule,
+    Subscription,
+    ProxyGroup,
+    ProxyNode,
+    /// The core-info table has no entry for the requested core type.
+    CoreInfo,
+}
+
+/// Why a persistence call failed, at the granularity the UI can act on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum DatabaseErrorCode {
+    /// The stored schema is not the one this build expects; the database has to
+    /// be migrated or reset before anything else will work.
+    SchemaUnsupported,
+    /// A stored payload could not be decoded — one bad row, or a damaged file.
+    Corrupt,
+    /// Another writer holds the database. Retrying is the remedy.
+    Locked,
+    /// The database file could not be read or written.
+    Io,
+    Other,
+}
+
+/// One rejected field.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidationIssue {
+    /// Stable identifier of the offending field, not a display label: the DNS
+    /// pane keys its inputs by `direct`/`remote`/`bootstrap`/`hosts`, and the
+    /// settings surface by its contract path (`sources.geo`).
     pub field: String,
     pub message: String,
-}
-
-#[derive(Debug, Clone, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct DnsCommandError {
-    pub message: String,
-    pub issues: Vec<DnsValidationIssue>,
-}
-
-#[derive(Debug, Clone, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct MissingCoreError {
-    pub message: String,
-    pub core_type: CoreType,
-    pub search_dir: String,
-    pub candidates: Vec<String>,
-    pub download_url: String,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Type)]

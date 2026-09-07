@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use sqlx::migrate::MigrateError;
 use thiserror::Error;
+use voya_contracts::DatabaseErrorCode;
 
 pub mod blob {
     use serde::{de::DeserializeOwned, Serialize};
@@ -130,5 +131,173 @@ impl DbError {
     #[must_use]
     pub fn is_row_payload(&self) -> bool {
         matches!(self, Self::Blob(_) | Self::InvalidEnum { .. })
+    }
+
+    /// Classifies the failure for the IPC contract.
+    ///
+    /// The codes exist because the remedies differ: a schema mismatch needs the
+    /// reset command, a decode failure names one unusable row, contention just
+    /// needs retrying. Every caller shares this one classification — the shell
+    /// used to flatten every persistence failure to `to_string()` at eight
+    /// separate call sites, so the same `DbError` reached the frontend as a
+    /// different variant depending on which command hit it.
+    ///
+    /// It lives here rather than in `voya-app` because sqlx is a `voya-db`
+    /// dependency: the driver's result code is the only reliable way to tell a
+    /// locked database from any other statement failure.
+    #[must_use]
+    pub fn code(&self) -> DatabaseErrorCode {
+        match self {
+            Self::UnsupportedDatabaseSchema { .. } | Self::Migrate(_) => {
+                DatabaseErrorCode::SchemaUnsupported
+            }
+            Self::Blob(_) | Self::InvalidEnum { .. } | Self::Json { .. } => {
+                DatabaseErrorCode::Corrupt
+            }
+            Self::Io { .. } => DatabaseErrorCode::Io,
+            Self::Sqlx(error) => sqlx_code(error),
+        }
+    }
+
+    /// The manual recovery command the database reported, when it reported one.
+    ///
+    /// Only the schema check knows how to word it, because only it knows which
+    /// file and which version are involved.
+    #[must_use]
+    pub fn reset_command(&self) -> Option<&str> {
+        match self {
+            Self::UnsupportedDatabaseSchema {
+                manual_reset_command,
+                ..
+            } => Some(manual_reset_command.as_str()),
+            _ => None,
+        }
+    }
+}
+
+// SQLite primary result codes. Named here rather than pulled from
+// `libsqlite3-sys` so classification costs no extra dependency.
+const SQLITE_BUSY: i32 = 5;
+const SQLITE_LOCKED: i32 = 6;
+const SQLITE_READONLY: i32 = 8;
+const SQLITE_IOERR: i32 = 10;
+const SQLITE_CORRUPT: i32 = 11;
+const SQLITE_FULL: i32 = 13;
+const SQLITE_CANTOPEN: i32 = 14;
+const SQLITE_NOTADB: i32 = 26;
+
+fn sqlx_code(error: &sqlx::Error) -> DatabaseErrorCode {
+    match error {
+        // Every pooled connection is held by someone else: contention by
+        // definition, and retrying is exactly the remedy.
+        sqlx::Error::PoolTimedOut => DatabaseErrorCode::Locked,
+        sqlx::Error::Io(_) => DatabaseErrorCode::Io,
+        sqlx::Error::Database(error) => sqlite_result_code(error.code().as_deref()),
+        _ => DatabaseErrorCode::Other,
+    }
+}
+
+/// Classifies a SQLite result code string as sqlx reports it.
+///
+/// sqlx hands back the *extended* code (`SQLITE_BUSY_TIMEOUT` is 773), whose low
+/// byte is the primary code (`SQLITE_BUSY`, 5). Masking is what keeps the
+/// classification stable as SQLite adds extended variants.
+fn sqlite_result_code(code: Option<&str>) -> DatabaseErrorCode {
+    let Some(primary) = code
+        .and_then(|code| code.parse::<i32>().ok())
+        .map(|code| code & 0xff)
+    else {
+        return DatabaseErrorCode::Other;
+    };
+
+    match primary {
+        SQLITE_BUSY | SQLITE_LOCKED => DatabaseErrorCode::Locked,
+        SQLITE_READONLY | SQLITE_IOERR | SQLITE_FULL | SQLITE_CANTOPEN => DatabaseErrorCode::Io,
+        SQLITE_CORRUPT | SQLITE_NOTADB => DatabaseErrorCode::Corrupt,
+        _ => DatabaseErrorCode::Other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn schema_and_migration_failures_ask_for_a_reset() {
+        let schema = DbError::UnsupportedDatabaseSchema {
+            path: PathBuf::from("/tmp/voyavpn.sqlite"),
+            found: Some(9),
+            expected: 1,
+            manual_reset_command: "rm /tmp/voyavpn.sqlite".to_string(),
+        };
+
+        assert_eq!(schema.code(), DatabaseErrorCode::SchemaUnsupported);
+        assert_eq!(schema.reset_command(), Some("rm /tmp/voyavpn.sqlite"));
+    }
+
+    #[test]
+    fn row_payload_failures_report_corruption_and_no_reset_command() {
+        let invalid_enum = DbError::InvalidEnum {
+            enum_name: "ProfileProtocol",
+            value: "unknown".to_string(),
+        };
+
+        assert!(invalid_enum.is_row_payload());
+        assert_eq!(invalid_enum.code(), DatabaseErrorCode::Corrupt);
+        assert_eq!(invalid_enum.reset_command(), None);
+    }
+
+    #[test]
+    fn filesystem_failures_report_io() {
+        let io = DbError::Io {
+            path: PathBuf::from("/tmp/voyavpn.sqlite"),
+            source: std::io::Error::other("disk went away"),
+        };
+
+        assert_eq!(io.code(), DatabaseErrorCode::Io);
+    }
+
+    /// sqlx reports the *extended* result code, so the low byte is what decides
+    /// the classification: `SQLITE_BUSY_TIMEOUT` (773) has to read as busy just
+    /// like plain `SQLITE_BUSY` (5).
+    #[test]
+    fn sqlite_result_codes_are_classified_by_their_primary_byte() {
+        let cases = [
+            (Some("5"), DatabaseErrorCode::Locked),
+            (Some("6"), DatabaseErrorCode::Locked),
+            (Some("261"), DatabaseErrorCode::Locked),
+            (Some("773"), DatabaseErrorCode::Locked),
+            (Some("262"), DatabaseErrorCode::Locked),
+            (Some("10"), DatabaseErrorCode::Io),
+            (Some("266"), DatabaseErrorCode::Io),
+            (Some("13"), DatabaseErrorCode::Io),
+            (Some("14"), DatabaseErrorCode::Io),
+            (Some("8"), DatabaseErrorCode::Io),
+            (Some("11"), DatabaseErrorCode::Corrupt),
+            (Some("26"), DatabaseErrorCode::Corrupt),
+            (Some("1"), DatabaseErrorCode::Other),
+            (Some("not a number"), DatabaseErrorCode::Other),
+            (None, DatabaseErrorCode::Other),
+        ];
+
+        for (code, expected) in cases {
+            assert_eq!(sqlite_result_code(code), expected, "{code:?}");
+        }
+    }
+
+    #[test]
+    fn a_pool_timeout_reads_as_contention() {
+        assert_eq!(
+            DbError::Sqlx(sqlx::Error::PoolTimedOut).code(),
+            DatabaseErrorCode::Locked
+        );
+    }
+
+    #[test]
+    fn an_unclassified_driver_failure_falls_back_to_other() {
+        assert_eq!(
+            DbError::Sqlx(sqlx::Error::RowNotFound).code(),
+            DatabaseErrorCode::Other
+        );
     }
 }

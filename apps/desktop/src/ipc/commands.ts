@@ -388,53 +388,14 @@ function unwrapCommandResult<T>(result: CommandResult<T>): T {
   return result.data;
 }
 
+/**
+ * Every `AppError` carries its own diagnostic text, so formatting is a field
+ * read rather than a switch.
+ *
+ * This used to be a 23-arm switch in which 21 arms returned `error.message`
+ * unchanged and the other two reached one level deeper. Anything a caller wants
+ * to *decide* now lives in `error.appError.kind`, which is typed.
+ */
 function formatAppError(error: AppError): string {
-  switch (error.kind) {
-    case "eventEmit":
-      return error.message;
-    case "autostart":
-      return error.message;
-    case "configSave":
-      return error.message;
-    case "certificate":
-      return error.message;
-    case "proxyRuntime":
-      return error.message;
-    case "database":
-      return error.message;
-    case "dns":
-      return error.message.message;
-    case "group":
-      return error.message;
-    case "hotkey":
-      return error.message;
-    case "preset":
-      return error.message;
-    case "profile":
-      return error.message;
-    case "qr":
-      return error.message;
-    case "export":
-      return error.message;
-    case "missingCore":
-      return error.message.message;
-    case "runtime":
-      return error.message;
-    case "routing":
-      return error.message;
-    case "speedtest":
-      return error.message;
-    case "sudo":
-      return error.message;
-    case "subscription":
-      return error.message;
-    case "sysProxy":
-      return error.message;
-    case "state":
-      return error.message;
-    case "tun":
-      return error.message;
-    case "update":
-      return error.message;
-  }
+  return error.message;
 }

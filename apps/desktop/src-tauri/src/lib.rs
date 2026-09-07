@@ -294,8 +294,7 @@ fn initialize(
             app: app.handle().clone(),
         }),
     );
-    let subscription_auto_update = SubscriptionAutoUpdateScheduler::spawn(
-        services.database().clone(),
+    let subscription_auto_update = services.spawn_subscription_auto_update(
         Arc::clone(&config_mutations),
         supervisor.clone(),
         TargetOs::current(),

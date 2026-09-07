@@ -47,7 +47,7 @@ export function SourcesTab({ controller }: { controller: AppSettingsController }
   const [importOpen, setImportOpen] = useState(false);
   const [importWorking, setImportWorking] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateType | null>(null);
-  const { settings, dirty, update, working } = controller;
+  const { settings, dirty, fieldErrors, update, working } = controller;
 
   if (!settings) {
     return <p className="text-xs text-muted-foreground">{working ? t("options.loading") : controller.error}</p>;
@@ -112,11 +112,12 @@ export function SourcesTab({ controller }: { controller: AppSettingsController }
   return (
     <div className="grid gap-4">
       <SettingsGroup>
-        <SourceField disabled={working} id="ruleset-geo-source-url" label={t("options.geoSource")} onChange={(geoSourceUrl) => patchSources({ geoSourceUrl })} value={form.geoSourceUrl} />
-        <SourceField disabled={working} id="ruleset-srs-source-url" label={t("options.srsSource")} onChange={(srsSourceUrl) => patchSources({ srsSourceUrl })} value={form.srsSourceUrl} />
-        <SourceField disabled={working} id="routing-template-source-url" label={t("options.routeTemplateSource")} onChange={(routeRulesTemplateSourceUrl) => patchSources({ routeRulesTemplateSourceUrl })} value={form.routeRulesTemplateSourceUrl} />
+        <SourceField disabled={working} error={fieldErrors["sources.geo"]} id="ruleset-geo-source-url" label={t("options.geoSource")} onChange={(geoSourceUrl) => patchSources({ geoSourceUrl })} value={form.geoSourceUrl} />
+        <SourceField disabled={working} error={fieldErrors["sources.singboxRuleset"]} id="ruleset-srs-source-url" label={t("options.srsSource")} onChange={(srsSourceUrl) => patchSources({ srsSourceUrl })} value={form.srsSourceUrl} />
+        <SourceField disabled={working} error={fieldErrors["sources.routingTemplate"]} id="routing-template-source-url" label={t("options.routeTemplateSource")} onChange={(routeRulesTemplateSourceUrl) => patchSources({ routeRulesTemplateSourceUrl })} value={form.routeRulesTemplateSourceUrl} />
         <SourceField
           disabled={working}
+          error={fieldErrors["sources.subscriptionConverter"]}
           id="subscription-convert-url"
           label={t("settings.sources.subscriptionConverter")}
           onChange={(subConvertUrl) =>
@@ -201,10 +202,27 @@ export function SourcesTab({ controller }: { controller: AppSettingsController }
   );
 }
 
-function SourceField({ disabled, id, label, onChange, value }: { disabled: boolean; id: string; label: string; onChange: (value: string) => void; value: string }) {
+/**
+ * `error` is a backend rejection for this exact field, delivered as a typed
+ * `validation` issue keyed by its `AppSettingsV1` path. Before that it was
+ * folded into the footer banner with no way to tell which input was at fault.
+ */
+function SourceField({ disabled, error, id, label, onChange, value }: { disabled: boolean; error?: string; id: string; label: string; onChange: (value: string) => void; value: string }) {
+  const errorId = `${id}-error`;
   return (
     <SettingsRow htmlFor={id} label={label}>
-      <Input className="h-8 w-full max-w-md" disabled={disabled} id={id} onChange={(event) => onChange(event.currentTarget.value)} value={value} />
+      <div className="grid w-full max-w-md gap-1">
+        <Input
+          aria-describedby={error ? errorId : undefined}
+          aria-invalid={error ? true : undefined}
+          className="h-8 w-full"
+          disabled={disabled}
+          id={id}
+          onChange={(event) => onChange(event.currentTarget.value)}
+          value={value}
+        />
+        {error ? <p className="text-xs text-destructive" id={errorId}>{error}</p> : null}
+      </div>
     </SettingsRow>
   );
 }

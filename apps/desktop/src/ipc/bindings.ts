@@ -152,7 +152,82 @@ export type AppDnsSettings = {
 	directExpectedIps: string | null,
 };
 
-export type AppError = { kind: "eventEmit"; message: string } | { kind: "autostart"; message: string } | { kind: "configSave"; message: string } | { kind: "certificate"; message: string } | { kind: "proxyRuntime"; message: string } | { kind: "database"; message: string } | { kind: "dns"; message: DnsCommandError } | { kind: "group"; message: string } | { kind: "hotkey"; message: string } | { kind: "preset"; message: string } | { kind: "profile"; message: string } | { kind: "qr"; message: string } | { kind: "export"; message: string } | { kind: "missingCore"; message: MissingCoreError } | { kind: "runtime"; message: string } | { kind: "routing"; message: string } | { kind: "speedtest"; message: string } | { kind: "sudo"; message: string } | { kind: "subscription"; message: string } | { kind: "sysProxy"; message: string } | { kind: "state"; message: string } | { kind: "tun"; message: string } | { kind: "update"; message: string };
+/**
+ *  One failed IPC command.
+ * 
+ *  The three parts answer three different questions and nothing else may be
+ *  inferred from any of them:
+ * 
+ *  - `kind` is **what the frontend branches on**. Every discrimination the UI
+ *    performs has to be expressible here; the previous 23-arm union carried a
+ *    string in 21 of its arms, which is why elevation retry was triggered by
+ *    substring-matching the word "authorization" in `message`.
+ *  - `subsystem` says which part of the app failed. It is for grouping, logging
+ *    and copy ("Profiles: …"), never for control flow — the same `kind` means
+ *    the same thing whichever subsystem raised it.
+ *  - `message` is an English diagnostic. Show it, log it, that is all. It is
+ *    never parsed, and rewording it must never change behavior.
+ */
+export type AppError = {
+	kind: AppErrorKind,
+	subsystem: AppErrorSubsystem,
+	message: string,
+};
+
+/**  The kind of row a [`AppErrorKind::NotFound`] refers to. */
+export type AppErrorEntity = "profile" | "routing" | "routingRule" | "subscription" | "proxyGroup" | "proxyNode" | 
+/**  The core-info table has no entry for the requested core type. */
+"coreInfo";
+
+/**
+ *  What went wrong, in the terms the frontend acts on.
+ * 
+ *  Serialized internally tagged, so a failure reads `{ type: "elevationRequired" }`
+ *  and TypeScript narrows the payload from the tag alone.
+ */
+export type AppErrorKind = 
+/**
+ *  Submitted values were rejected. `issues` name the offending fields with
+ *  the same `field`/`message` pairing the DNS pane already renders.
+ */
+{ type: "validation"; issues: ValidationIssue[] } | 
+/**
+ *  A referenced row does not exist. The UI's remedy is to refresh the list
+ *  it selected from, so the entity matters more than the id.
+ */
+{ type: "notFound"; entity: AppErrorEntity; id: string | null } | 
+/**
+ *  The action needs one-time system authorization. This is the *only*
+ *  signal that may open a privilege prompt: TUN and the elevated
+ *  supervisor spawn both raise it, and no message text can substitute.
+ */
+{ type: "elevationRequired" } | 
+/**  The core executable is not installed where the app looks for it. */
+{ type: "missingCore"; coreType: CoreType; searchDir: string; candidates: string[]; downloadUrl: string } | 
+/**  A download, subscription fetch or Clash API call failed. Retryable. */
+{ type: "network" } | 
+/**  A filesystem or child-process operation failed. */
+{ type: "io" } | 
+/**
+ *  Persistence failed. `code` separates the cases that have different
+ *  remedies, and `reset_command` carries the manual recovery line when the
+ *  database itself reported one.
+ */
+{ type: "database"; code: DatabaseErrorCode; resetCommand: string | null } | 
+/**
+ *  Anything with no better classification: a poisoned lock, a join error,
+ *  an invariant the app itself broke.
+ */
+{ type: "internal" };
+
+/**  Which part of the app produced a failure. Diagnostic grouping only. */
+export type AppErrorSubsystem = 
+/**  The shell itself: window chrome, event emission, background tasks. */
+"app" | "autostart" | "certificate" | 
+/**  Reading or writing the persisted application configuration. */
+"config" | "dns" | "export" | "group" | "hotkey" | "preset" | "profile" | "proxyRuntime" | "qr" | "routing" | 
+/**  Core lifecycle: config generation, supervisor, connect/disconnect. */
+"runtime" | "speedtest" | "subscription" | "sysProxy" | "tun" | "update";
 
 export type AppEvent = { kind: "notice"; payload: AppNotice } | { kind: "selectTab"; payload: ShellTabTarget };
 
@@ -302,10 +377,19 @@ export type CoreStateEvent = {
 
 export type CoreType = "singBox";
 
-export type DnsCommandError = {
-	message: string,
-	issues: DnsValidationIssue[],
-};
+/**  Why a persistence call failed, at the granularity the UI can act on. */
+export type DatabaseErrorCode = 
+/**
+ *  The stored schema is not the one this build expects; the database has to
+ *  be migrated or reset before anything else will work.
+ */
+"schemaUnsupported" | 
+/**  A stored payload could not be decoded — one bad row, or a damaged file. */
+"corrupt" | 
+/**  Another writer holds the database. Retrying is the remedy. */
+"locked" | 
+/**  The database file could not be read or written. */
+"io" | "other";
 
 export type DnsSettings = {
 	useSystemHosts: boolean | null,
@@ -322,11 +406,6 @@ export type DnsSettings = {
 	parallelQuery: boolean | null,
 	hosts: string | null,
 	directExpectedIps: string | null,
-};
-
-export type DnsValidationIssue = {
-	field: string,
-	message: string,
 };
 
 export type ExportProfilesFormat = "shareLinks" | "shareLinksBase64" | "voyaBundle" | "clientConfig";
@@ -465,14 +544,6 @@ export type LogLineEvent = {
 	id: number,
 	level: LogLevel,
 	line: string,
-};
-
-export type MissingCoreError = {
-	message: string,
-	coreType: CoreType,
-	searchDir: string,
-	candidates: string[],
-	downloadUrl: string,
 };
 
 export type MoveAction = "top" | "up" | "down" | "bottom" | "position";
@@ -962,6 +1033,17 @@ export type TunStatus = {
 	expectedProviderPath: string | null,
 	restoreOnDisconnect: boolean,
 	preflight: TunPreflight,
+};
+
+/**  One rejected field. */
+export type ValidationIssue = {
+	/**
+	 *  Stable identifier of the offending field, not a display label: the DNS
+	 *  pane keys its inputs by `direct`/`remote`/`bootstrap`/`hosts`, and the
+	 *  settings surface by its contract path (`sources.geo`).
+	 */
+	field: string,
+	message: string,
 };
 
 export type WindowChromeConfig = {

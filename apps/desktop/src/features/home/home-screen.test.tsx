@@ -57,8 +57,8 @@ const ipcMock = vi.hoisted(() => {
   class MockIpcCommandError extends Error {
     readonly appError: AppError;
 
-    constructor(appError: AppError, message = "ipc failed") {
-      super(message);
+    constructor(appError: AppError) {
+      super(appError.message);
       this.appError = appError;
       this.name = "IpcCommandError";
     }
@@ -497,14 +497,15 @@ describe("HomeScreen", () => {
     ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
     ipcMock.connectActiveProfile.mockRejectedValue(
       new ipcMock.IpcCommandError({
-        kind: "missingCore",
-        message: {
+        kind: {
           candidates: [],
           coreType: "singBox",
           downloadUrl: "https://example.test/core",
-          message: "sing-box is not installed",
           searchDir: "/cores",
+          type: "missingCore",
         },
+        message: "sing-box is not installed",
+        subsystem: "runtime",
       }),
     );
 
@@ -524,7 +525,13 @@ describe("HomeScreen", () => {
   it("requests system authorization once and retries a connect that needed it", async () => {
     ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
     ipcMock.connectActiveProfile
-      .mockRejectedValueOnce(new ipcMock.IpcCommandError({ kind: "sudo", message: "needs root" }))
+      .mockRejectedValueOnce(
+        new ipcMock.IpcCommandError({
+          kind: { type: "elevationRequired" },
+          message: "system authorization is required before enabling TUN on Unix",
+          subsystem: "tun",
+        }),
+      )
       .mockResolvedValue(connectedStatus);
     ipcMock.tunRequestElevation.mockResolvedValue({ ...tunStatusResponse, elevationGranted: true });
 
@@ -542,7 +549,11 @@ describe("HomeScreen", () => {
   it("keeps the original failure when the authorization dialog is declined", async () => {
     ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
     ipcMock.connectActiveProfile.mockRejectedValue(
-      new ipcMock.IpcCommandError({ kind: "sudo", message: "needs root" }, "sudo helper refused"),
+      new ipcMock.IpcCommandError({
+        kind: { type: "elevationRequired" },
+        message: "sudo helper refused",
+        subsystem: "tun",
+      }),
     );
     ipcMock.tunRequestElevation.mockResolvedValue({ ...tunStatusResponse, elevationGranted: false });
 

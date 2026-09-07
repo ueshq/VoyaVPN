@@ -17,7 +17,7 @@ pub async fn system_proxy_status(
             .map(system_proxy_status_response)
     })
     .await?
-    .map_err(sysproxy_error)
+    .map_err(AppError::from)
 }
 
 /// Changes only the system proxy flavor. Same transaction as
@@ -39,7 +39,7 @@ pub async fn set_system_proxy_mode<R: tauri::Runtime>(
             connected,
         )
         .await
-        .map_err(connection_mode_error)?;
+        .map_err(AppError::from)?;
     // `sys_proxy_type` is committed, and the settings bundle mirrors it.
     emit_connection_mode_invalidation(&app, "system-proxy-mode-changed");
 

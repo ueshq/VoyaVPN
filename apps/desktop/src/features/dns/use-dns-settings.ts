@@ -64,11 +64,11 @@ export function useDnsSettings() {
         setFieldErrors(translateFieldErrors(t, zodIssuesToErrorMap(error)));
         return message;
       }
-      if (error instanceof IpcCommandError && error.appError.kind === "dns") {
-        const message = error.appError.message.message;
+      if (error instanceof IpcCommandError && error.appError.kind.type === "validation") {
+        const message = error.appError.message;
         setOperationError(message);
         setFieldErrors(
-          Object.fromEntries(error.appError.message.issues.map((issue) => [issue.field, issue.message])),
+          Object.fromEntries(error.appError.kind.issues.map((issue) => [issue.field, issue.message])),
         );
         return message;
       }

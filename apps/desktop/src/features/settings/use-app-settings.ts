@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
-import { loadAppSettings, saveAppSettings } from "@/ipc";
+import { IpcCommandError, loadAppSettings, saveAppSettings } from "@/ipc";
 import type {
   AppDnsSettings,
   AppSettingsV1,
@@ -17,6 +17,12 @@ export type AppSettingsController = {
   dirty: boolean;
   discard: () => Promise<void>;
   error: string | null;
+  /**
+   * Backend rejections keyed by their `AppSettingsV1` path (`sources.geo`,
+   * `network.tun.mtu`), the way the DNS pane keys its own field errors. Empty
+   * unless the last save was rejected.
+   */
+  fieldErrors: Record<string, string>;
   reload: () => Promise<void>;
   save: () => Promise<boolean>;
   saved: boolean;
@@ -35,6 +41,7 @@ export function useAppSettings(): AppSettingsController {
   });
   const [draft, setDraft] = useState<AppSettingsV1 | null>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const original = settingsQuery.data ?? null;
@@ -42,6 +49,7 @@ export function useAppSettings(): AppSettingsController {
 
   const load = useCallback(async () => {
     setOperationError(null);
+    setFieldErrors({});
     setDraft(null);
     setSaved(false);
     const result = await settingsQuery.refetch();
@@ -81,6 +89,7 @@ export function useAppSettings(): AppSettingsController {
     setDraft(null);
     setSaved(false);
     setOperationError(null);
+    setFieldErrors({});
     await applyUiPreferences(original.appearance).catch((rollbackError: unknown) => {
       setOperationError(getErrorMessage(rollbackError));
     });
@@ -92,6 +101,7 @@ export function useAppSettings(): AppSettingsController {
     }
     setSaving(true);
     setOperationError(null);
+    setFieldErrors({});
     setSaved(false);
     try {
       const authoritative = await saveAppSettings(withFreshestDns(settings, queryClient));
@@ -103,6 +113,7 @@ export function useAppSettings(): AppSettingsController {
       return true;
     } catch (saveError) {
       setOperationError(getErrorMessage(saveError));
+      setFieldErrors(settingsFieldErrors(saveError));
       try {
         const authoritative = await loadAppSettings();
         queryClient.setQueryData(queryKeys.appSettings, authoritative);
@@ -122,6 +133,7 @@ export function useAppSettings(): AppSettingsController {
     dirty,
     discard,
     error: operationError ?? (settingsQuery.error ? getErrorMessage(settingsQuery.error) : null),
+    fieldErrors,
     reload: load,
     save,
     saved,
@@ -129,6 +141,22 @@ export function useAppSettings(): AppSettingsController {
     update,
     working: saving || settingsQuery.isPending || settingsQuery.isFetching,
   };
+}
+
+/**
+ * A rejected save, addressed to the inputs that caused it.
+ *
+ * `save_app_settings` used to collapse `AppSettingsValidationError` into one
+ * untyped string, so the Settings surface could only show a banner even though
+ * the backend knew exactly which field it had rejected. It now returns the same
+ * `validation` kind the DNS pane already consumes, keyed by contract path.
+ */
+function settingsFieldErrors(error: unknown): Record<string, string> {
+  if (!(error instanceof IpcCommandError) || error.appError.kind.type !== "validation") {
+    return {};
+  }
+
+  return Object.fromEntries(error.appError.kind.issues.map((issue) => [issue.field, issue.message]));
 }
 
 /**

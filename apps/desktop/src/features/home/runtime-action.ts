@@ -43,13 +43,18 @@ export function statusToTunChanged(status: TunStatus): TunChanged {
   };
 }
 
-/** A connect/restart failed because TUN needs one-time system authorization. */
+/**
+ * A connect/restart failed because the machine needs one-time system
+ * authorization first.
+ *
+ * The backend says so with a kind, never with a sentence. This used to also
+ * accept any message containing "authorization", which matched the two texts it
+ * was aimed at *and* `native authorization was cancelled` — so declining the
+ * dialog re-opened it and re-ran the action — and would have matched any future
+ * message that happened to use the word.
+ */
 function isElevationRequiredError(error: unknown) {
-  if (!(error instanceof IpcCommandError)) {
-    return false;
-  }
-
-  return error.appError.kind === "sudo" || error.message.toLowerCase().includes("authorization");
+  return error instanceof IpcCommandError && error.appError.kind.type === "elevationRequired";
 }
 
 /**
@@ -73,11 +78,9 @@ export async function runWithElevation<T>(action: () => Promise<T>): Promise<T> 
 }
 
 export function missingCorePayload(error: unknown): MissingCorePayload | null {
-  if (!(error instanceof IpcCommandError) || error.appError.kind !== "missingCore") {
+  if (!(error instanceof IpcCommandError) || error.appError.kind.type !== "missingCore") {
     return null;
   }
 
-  const missingCore = error.appError.message;
-
-  return { coreType: missingCore.coreType, message: missingCore.message };
+  return { coreType: error.appError.kind.coreType, message: error.appError.message };
 }

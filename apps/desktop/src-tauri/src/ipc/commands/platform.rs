@@ -14,5 +14,10 @@ pub async fn list_process_candidates() -> Result<Vec<voya_contracts::ProcessCand
                 .map(voya_app::contract_map::process_candidate_to_contract)
                 .collect()
         })
-        .map_err(|error| AppError::State(format!("process enumeration task failed: {error}")))
+        .map_err(|error| {
+            AppError::internal(
+                AppErrorSubsystem::App,
+                format!("process enumeration task failed: {error}"),
+            )
+        })
 }

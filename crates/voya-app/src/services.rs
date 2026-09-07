@@ -9,7 +9,7 @@ use thiserror::Error;
 use voya_contracts::{AppSettingsV1, SpeedTestKind};
 pub use voya_core::{AppConfig, CoreType, SysProxyType, TrafficMode, DEFAULT_LOCAL_PORT};
 use voya_db::{Database, DbError};
-use voya_platform::{paths::AppPaths, process::ProcessRunner};
+use voya_platform::{coreinfo::TargetOs, paths::AppPaths, process::ProcessRunner};
 
 use crate::{
     config_mutation::{ConfigMutationCoordinator, SharedAppConfig},
@@ -26,7 +26,9 @@ use crate::{
     },
     speedtest::{SpeedTestResult, SpeedtestManager, SpeedtestRunResult},
     statistics::{StatisticsConfigSource, StatisticsEventSink, StatisticsManager},
-    subscriptions::SubscriptionManager,
+    subscriptions::{
+        SubscriptionAutoUpdateScheduler, SubscriptionAutoUpdateSink, SubscriptionManager,
+    },
     supervisor::CoreSupervisor,
     updates::UpdateManager,
 };
@@ -71,11 +73,6 @@ impl AppServices {
     #[must_use]
     pub fn config_mutations(&self, config: SharedAppConfig) -> ConfigMutationCoordinator {
         ConfigMutationCoordinator::new(self.database.clone(), config)
-    }
-
-    #[must_use]
-    pub fn database(&self) -> &Database {
-        &self.database
     }
 
     pub fn config_from_settings(
@@ -144,6 +141,30 @@ impl AppServices {
         event_sink: Arc<dyn StatisticsEventSink>,
     ) -> StatisticsManager {
         StatisticsManager::spawn(self.database.clone(), supervisor, config_source, event_sink)
+    }
+
+    /// Starts the background subscription auto-update loop.
+    ///
+    /// Exists so the shell does not have to. `AppServices::database()` was the
+    /// one accessor that handed a `voya_db::Database` out of this facade, and
+    /// `setup()` used it for exactly this call — the header of this file
+    /// forbids that, and `check:architecture` cannot see it because the handle
+    /// arrives through a voya-app method rather than a `voya_db::` path.
+    #[must_use]
+    pub fn spawn_subscription_auto_update(
+        &self,
+        coordinator: Arc<ConfigMutationCoordinator>,
+        supervisor: CoreSupervisor,
+        target_os: TargetOs,
+        sink: Arc<dyn SubscriptionAutoUpdateSink>,
+    ) -> SubscriptionAutoUpdateScheduler {
+        SubscriptionAutoUpdateScheduler::spawn(
+            self.database.clone(),
+            coordinator,
+            supervisor,
+            target_os,
+            sink,
+        )
     }
 
     pub async fn run_speedtest<F>(

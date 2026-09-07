@@ -7,7 +7,9 @@ use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 
 use crate::{
     routing::{manager::PreparedRoutingTemplate, RoutingManager, RoutingManagerError},
-    updates::{apply_source_settings, validate_asset_source_urls, ConfigSourceSettings},
+    updates::{
+        apply_source_settings, validate_asset_source_urls, ConfigSourceSettings, UpdateManagerError,
+    },
 };
 
 pub type Result<T> = std::result::Result<T, PresetManagerError>;
@@ -19,7 +21,7 @@ pub enum PresetManagerError {
     #[error(transparent)]
     Routing(#[from] RoutingManagerError),
     #[error(transparent)]
-    Source(#[from] crate::updates::UpdateManagerError),
+    Source(#[from] UpdateManagerError),
     #[error("custom configuration template requires a routing template source URL")]
     MissingRoutingTemplateSource,
 }
@@ -108,7 +110,7 @@ impl<'db> PresetManager<'db> {
             ConfigTemplateSelection::Custom { sources } => {
                 let mut normalized_config = AppConfig::default();
                 let sources = apply_source_settings(&mut normalized_config, sources);
-                validate_asset_source_urls(&sources)?;
+                validate_asset_source_urls(&sources).map_err(UpdateManagerError::from)?;
                 let source_url = sources
                     .route_rules_template_source_url
                     .as_deref()

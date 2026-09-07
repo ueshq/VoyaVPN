@@ -3,15 +3,30 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AppDnsSettings, AppearanceSettings } from "@/ipc/bindings";
+import type { AppDnsSettings, AppError, AppearanceSettings } from "@/ipc/bindings";
 
 import { makeAppSettings } from "./app-settings.test-fixture";
 import { useAppSettings } from "./use-app-settings";
 
-const ipcMocks = vi.hoisted(() => ({
-  loadAppSettings: vi.fn(),
-  saveAppSettings: vi.fn(),
-}));
+const ipcMocks = vi.hoisted(() => {
+  // The controller reads `appError.kind` off a rejected save to build its field
+  // errors, so the stand-in has to be the real shape rather than a bare Error.
+  class MockIpcCommandError extends Error {
+    readonly appError: AppError;
+
+    constructor(appError: AppError) {
+      super(appError.message);
+      this.appError = appError;
+      this.name = "IpcCommandError";
+    }
+  }
+
+  return {
+    IpcCommandError: MockIpcCommandError,
+    loadAppSettings: vi.fn(),
+    saveAppSettings: vi.fn(),
+  };
+});
 const preferenceMocks = vi.hoisted(() => ({
   applyUiPreferences: vi.fn((preferences: AppearanceSettings, options?: { persist?: boolean }) => {
     void preferences;
@@ -159,6 +174,74 @@ describe("useAppSettings", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("save rejected");
   });
 
+  // `save_app_settings` used to flatten `AppSettingsValidationError` into one
+  // untyped string, so a rejected source URL could only be shown as a banner
+  // with no way to tell which of the four inputs was at fault.
+  it("addresses a rejected save to the settings field the backend named", async () => {
+    const user = userEvent.setup();
+    ipcMocks.saveAppSettings.mockRejectedValueOnce(
+      new ipcMocks.IpcCommandError({
+        kind: {
+          issues: [{ field: "sources.geo", message: "invalid Geo source URL" }],
+          type: "validation",
+        },
+        message: "invalid Geo source URL: expected an absolute HTTPS URL",
+        subsystem: "config",
+      }),
+    );
+    renderProbe();
+    await screen.findByText("clean");
+
+    await user.click(screen.getByRole("button", { name: "Edit two sections" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByTestId("field-error-sources.geo")).toHaveTextContent(
+      "invalid Geo source URL",
+    );
+  });
+
+  it("clears the field errors from a rejected save once the next one starts", async () => {
+    const user = userEvent.setup();
+    ipcMocks.saveAppSettings
+      .mockRejectedValueOnce(
+        new ipcMocks.IpcCommandError({
+          kind: {
+            issues: [{ field: "sources.geo", message: "invalid Geo source URL" }],
+            type: "validation",
+          },
+          message: "invalid Geo source URL",
+          subsystem: "config",
+        }),
+      )
+      .mockImplementation(async (settings) => settings);
+    renderProbe();
+    await screen.findByText("clean");
+
+    await user.click(screen.getByRole("button", { name: "Edit two sections" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByTestId("field-error-sources.geo");
+
+    await user.click(screen.getByRole("button", { name: "Edit two sections" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(screen.queryByTestId("field-error-sources.geo")).not.toBeInTheDocument(),
+    );
+  });
+
+  // A failure with no per-field structure behind it must not invent one.
+  it("leaves the field errors empty for an untyped save failure", async () => {
+    const user = userEvent.setup();
+    ipcMocks.saveAppSettings.mockRejectedValueOnce(new Error("database unavailable"));
+    renderProbe();
+    await screen.findByText("clean");
+
+    await user.click(screen.getByRole("button", { name: "Edit two sections" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("database unavailable");
+    expect(screen.queryByTestId("field-error-sources.geo")).not.toBeInTheDocument();
+  });
+
   it("returns safely when save and discard run before the initial snapshot", async () => {
     const user = userEvent.setup();
     ipcMocks.loadAppSettings.mockReturnValue(new Promise(() => {}));
@@ -179,6 +262,11 @@ function Probe() {
       <div data-testid="theme">{controller.settings.appearance.theme}</div>
       <div data-testid="converter">{controller.settings.sources.subscriptionConverter ?? "none"}</div>
       {controller.error ? <div role="alert">{controller.error}</div> : null}
+      {Object.entries(controller.fieldErrors).map(([field, message]) => (
+        <div data-testid={`field-error-${field}`} key={field}>
+          {message}
+        </div>
+      ))}
       <button
         onClick={() =>
           controller.update((settings) => ({

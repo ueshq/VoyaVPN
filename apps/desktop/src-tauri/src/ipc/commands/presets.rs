@@ -13,7 +13,7 @@ pub async fn import_config_template<R: tauri::Runtime>(
         proxy_url.as_deref(),
         "proxy URL",
         IPC_PROXY_URL_MAX_CHARS,
-        AppError::Preset,
+        AppErrorSubsystem::Preset,
     )?;
     if let ConfigTemplateSelection::Custom { sources } = &selection {
         for (label, value) in [
@@ -24,7 +24,12 @@ pub async fn import_config_template<R: tauri::Runtime>(
                 sources.route_rules_template_source_url.as_deref(),
             ),
         ] {
-            validate_optional_ipc_text(value, label, IPC_PROXY_URL_MAX_CHARS, AppError::Preset)?;
+            validate_optional_ipc_text(
+                value,
+                label,
+                IPC_PROXY_URL_MAX_CHARS,
+                AppErrorSubsystem::Preset,
+            )?;
         }
     }
     let snapshot = current_config(&state)?;
@@ -40,18 +45,21 @@ pub async fn import_config_template<R: tauri::Runtime>(
             },
         )
         .await
-        .map_err(preset_error)?;
-    let mut mutation = begin_config_mutation(&state).await?;
-    let result = {
-        let (unit_of_work, config) = mutation.split();
-        PresetManager::new_in(unit_of_work)
+        .map_err(AppError::from)?;
+    let imported = mutate_config(&state, async |unit_of_work, config| {
+        Ok(PresetManager::new_in(unit_of_work)
             .apply_prepared_config_template_import(config, prepared)
-            .await
-            .map_err(preset_error)?
-    };
-    let config = commit_config_mutation(mutation).await?;
+            .await?)
+    })
+    .await?;
     emit_preset_invalidation(&app, "config-template-imported");
-    restart_after_config_change(&app, &state, &config, ConfigChange::CONFIG_TEMPLATE).await;
+    restart_after_config_change(
+        &app,
+        &state,
+        &imported.config,
+        ConfigChange::CONFIG_TEMPLATE,
+    )
+    .await;
 
-    Ok(result)
+    Ok(imported.value)
 }

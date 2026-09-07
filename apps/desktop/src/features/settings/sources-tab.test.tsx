@@ -33,6 +33,30 @@ describe("SourcesTab", () => {
     expect(screen.getByText("load failed")).toBeInTheDocument();
   });
 
+  // Each source URL is validated separately by the backend, and the rejection
+  // names its `AppSettingsV1` path, so it has to land on that input rather than
+  // in the shared footer banner.
+  it("marks the source input a backend rejection names", () => {
+    renderTab(
+      <SourcesHarness
+        fieldErrors={{
+          "sources.geo": "invalid Geo source URL: expected an absolute HTTPS URL",
+          "sources.subscriptionConverter": "invalid subscription converter URL",
+        }}
+      />,
+    );
+
+    const geo = screen.getByLabelText("Geo files source");
+    const geoError = screen.getByText("invalid Geo source URL: expected an absolute HTTPS URL");
+    expect(geo).toHaveAttribute("aria-invalid", "true");
+    expect(geo).toHaveAttribute("aria-describedby", geoError.id);
+    expect(screen.getByText("invalid subscription converter URL")).toBeInTheDocument();
+
+    // The two sources the backend did not reject stay unmarked.
+    expect(screen.getByLabelText("sing-box ruleset source")).not.toHaveAttribute("aria-invalid");
+    expect(screen.getByLabelText("Routing template source")).not.toHaveAttribute("aria-invalid");
+  });
+
   it("updates the canonical source settings and blocks actions for a dirty draft", async () => {
     const user = userEvent.setup();
     renderTab(<SourcesHarness dirty />);
@@ -103,10 +127,12 @@ describe("SourcesTab", () => {
 
 function SourcesHarness({
   dirty = false,
+  fieldErrors = {},
   reload = vi.fn().mockResolvedValue(undefined),
   settings: initialSettings = makeAppSettings(),
 }: {
   dirty?: boolean;
+  fieldErrors?: Record<string, string>;
   reload?: () => Promise<void>;
   settings?: AppSettingsV1;
 }) {
@@ -115,6 +141,7 @@ function SourcesHarness({
     dirty,
     discard: async () => undefined,
     error: null,
+    fieldErrors,
     reload,
     save: async () => true,
     saved: false,
@@ -131,6 +158,7 @@ function controllerWithoutSettings(working: boolean, error: string | null): AppS
     dirty: false,
     discard: async () => undefined,
     error,
+    fieldErrors: {},
     reload: async () => undefined,
     save: async () => false,
     saved: false,

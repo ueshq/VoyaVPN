@@ -94,8 +94,9 @@ describe("useDnsSettings", () => {
     act(() => result.current.updateSimple({ direct: "1.0.0.1" }));
     ipcMocks.saveDnsSettings.mockRejectedValueOnce(
       new ipcMocks.IpcCommandError({
-        kind: "dns",
-        message: { issues: [{ field: "direct", message: "invalid resolver" }], message: "DNS rejected" },
+        kind: { issues: [{ field: "direct", message: "invalid resolver" }], type: "validation" },
+        message: "DNS rejected",
+        subsystem: "dns",
       }),
     );
 

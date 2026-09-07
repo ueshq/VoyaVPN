@@ -15,7 +15,7 @@ pub async fn connect_active_profile<R: tauri::Runtime>(
     flow.connect(&config)
         .await
         .map(runtime_status_response)
-        .map_err(runtime_error)
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -30,7 +30,7 @@ pub async fn disconnect_core<R: tauri::Runtime>(
     flow.disconnect(&config)
         .await
         .map(runtime_status_response)
-        .map_err(runtime_error)
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -45,7 +45,7 @@ pub async fn restart_core<R: tauri::Runtime>(
     flow.restart(&config)
         .await
         .map(runtime_status_response)
-        .map_err(runtime_error)
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -57,5 +57,5 @@ pub async fn runtime_status(
         .status()
         .await
         .map(runtime_status_response)
-        .map_err(runtime_error)
+        .map_err(AppError::from)
 }

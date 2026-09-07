@@ -3,7 +3,11 @@ use std::sync::{Arc, RwLock};
 use thiserror::Error;
 use tokio::sync::{Mutex, MutexGuard};
 use voya_core::AppConfig;
-use voya_db::{AppStateRecord, Database, DbError, UnitOfWork};
+/// Re-exported so shells can name the handle [`ConfigMutationGuard::split`]
+/// already hands them without reaching into `voya-db` themselves — the facade
+/// is the only persistence boundary a shell is allowed to see.
+pub use voya_db::UnitOfWork;
+use voya_db::{AppStateRecord, Database, DbError};
 
 use crate::{
     dns::DnsManager, groups::GroupManager, presets::PresetManager, profiles::ProfileManager,
@@ -70,6 +74,40 @@ impl ConfigMutationCoordinator {
         read_config(&self.config)
     }
 
+    /// Runs one operation inside a configuration mutation and commits it.
+    ///
+    /// Thirteen commands spelled this sequence out by hand — begin, clone the
+    /// configuration to compare against, `split()`, call one manager, derive
+    /// `config_changed`, commit — and only the manager call and the cache
+    /// invalidation that follows the commit ever differed. The invalidation
+    /// needs an `AppHandle` and stays in the shell; everything above it is here,
+    /// where the ordering (compare *before* commit, commit *after* the
+    /// operation) can be asserted.
+    ///
+    /// `config_changed` deliberately over-approximates in the safe direction:
+    /// it compares the whole `AppConfig`, so a command that rewrote it is never
+    /// missed, at the cost of an occasional extra refetch.
+    pub async fn mutate<T, E, F>(&self, operation: F) -> Result<CommittedMutation<T>, E>
+    where
+        F: AsyncFnOnce(&UnitOfWork, &mut AppConfig) -> Result<T, E>,
+        E: From<ConfigMutationError>,
+    {
+        let mut mutation = self.begin().await?;
+        let original = mutation.config().clone();
+        let value = {
+            let (unit_of_work, config) = mutation.split();
+            operation(unit_of_work, config).await?
+        };
+        let config_changed = original != *mutation.config();
+        let config = mutation.commit().await?;
+
+        Ok(CommittedMutation {
+            value,
+            config,
+            config_changed,
+        })
+    }
+
     pub async fn begin(&self) -> Result<ConfigMutationGuard<'_>, ConfigMutationError> {
         let mutation_lock = self.mutation_lock.lock().await;
         let working_config = read_config(&self.config);
@@ -82,6 +120,19 @@ impl ConfigMutationCoordinator {
             working_config,
         })
     }
+}
+
+/// What one committed configuration mutation produced.
+#[derive(Debug)]
+pub struct CommittedMutation<T> {
+    /// Whatever the operation returned.
+    pub value: T,
+    /// The configuration as committed.
+    pub config: AppConfig,
+    /// Whether the commit rewrote the persisted configuration, and therefore
+    /// whether the settings bundle projected from it is stale. See
+    /// `crate::invalidation`.
+    pub config_changed: bool,
 }
 
 #[derive(Debug)]
@@ -273,6 +324,102 @@ mod tests {
 
         assert!(mutation.commit().await.is_err());
         assert!(coordinator.current_config().ui_item.current_theme.is_none());
+        assert!(database
+            .subscriptions()
+            .get("subscription-a")
+            .await
+            .expect("subscription lookup should succeed")
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn mutate_commits_and_reports_that_the_config_changed() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("coordinator database should connect");
+        let shared = Arc::new(RwLock::new(AppConfig::default()));
+        let coordinator = ConfigMutationCoordinator::new(database, Arc::clone(&shared));
+
+        let committed = coordinator
+            .mutate(async |_unit_of_work, config| {
+                config.ui_item.current_language = "fr".to_string();
+                Ok::<_, ConfigMutationError>("saved")
+            })
+            .await
+            .expect("mutation should commit");
+
+        assert_eq!(committed.value, "saved");
+        assert!(committed.config_changed);
+        assert_eq!(committed.config.ui_item.current_language, "fr");
+        // Committed means published: the next reader sees it without a refetch.
+        assert_eq!(coordinator.current_config().ui_item.current_language, "fr");
+    }
+
+    /// `config_changed` drives the settings-bundle invalidation, so a mutation
+    /// that only wrote business rows must report `false` — otherwise every
+    /// profile save refetches a bundle nothing touched.
+    #[tokio::test]
+    async fn mutate_reports_no_config_change_when_only_rows_were_written() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("coordinator database should connect");
+        let shared = Arc::new(RwLock::new(AppConfig::default()));
+        let coordinator = ConfigMutationCoordinator::new(database.clone(), Arc::clone(&shared));
+
+        let committed = coordinator
+            .mutate(async |unit_of_work, _config| {
+                unit_of_work
+                    .subscriptions()
+                    .upsert(&voya_core::SubItem {
+                        id: "subscription-a".to_string(),
+                        remarks: "Subscription".to_string(),
+                        ..voya_core::SubItem::default()
+                    })
+                    .await?;
+                Ok::<_, ConfigMutationError>(())
+            })
+            .await
+            .expect("mutation should commit");
+
+        assert!(!committed.config_changed);
+        assert!(database
+            .subscriptions()
+            .get("subscription-a")
+            .await
+            .expect("subscription lookup should succeed")
+            .is_some());
+    }
+
+    /// A failed operation must not reach `commit()`: the guard is dropped, so
+    /// the transaction rolls back and the in-memory config is left alone.
+    #[tokio::test]
+    async fn mutate_rolls_back_when_the_operation_fails() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("coordinator database should connect");
+        let shared = Arc::new(RwLock::new(AppConfig::default()));
+        let coordinator = ConfigMutationCoordinator::new(database.clone(), Arc::clone(&shared));
+
+        let failure = coordinator
+            .mutate(async |unit_of_work, config| {
+                config.ui_item.current_language = "fr".to_string();
+                unit_of_work
+                    .subscriptions()
+                    .upsert(&voya_core::SubItem {
+                        id: "subscription-a".to_string(),
+                        remarks: "Subscription".to_string(),
+                        ..voya_core::SubItem::default()
+                    })
+                    .await?;
+                Err::<(), _>(ConfigMutationError::Database(DbError::InvalidEnum {
+                    enum_name: "ProfileProtocol",
+                    value: "unknown".to_string(),
+                }))
+            })
+            .await;
+
+        assert!(failure.is_err());
+        assert_eq!(coordinator.current_config().ui_item.current_language, "en");
         assert!(database
             .subscriptions()
             .get("subscription-a")

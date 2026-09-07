@@ -1,5 +1,5 @@
 use thiserror::Error;
-pub use voya_contracts::DnsValidationIssue;
+pub use voya_contracts::ValidationIssue;
 use voya_core::{SimpleDnsItem, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS, DEFAULT_REMOTE_DNS};
 use voya_db::{Database, DatabaseSession, UnitOfWork};
 
@@ -13,7 +13,7 @@ pub struct DnsSettings {
 #[derive(Debug, Error)]
 pub enum DnsManagerError {
     #[error("DNS settings validation failed")]
-    Validation(Vec<DnsValidationIssue>),
+    Validation(Vec<ValidationIssue>),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -108,7 +108,7 @@ pub fn validate_settings(settings: &DnsSettings) -> Result<()> {
 /// typed value, and the running core queries a different server. The check is
 /// deliberately conservative — it only reports what the generator is certain to
 /// reject — so it can never refuse an address that would have worked.
-fn validate_dns_address(value: Option<&str>, field: &str, issues: &mut Vec<DnsValidationIssue>) {
+fn validate_dns_address(value: Option<&str>, field: &str, issues: &mut Vec<ValidationIssue>) {
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return;
     };
@@ -160,7 +160,7 @@ fn dns_address_port(address: &str) -> Option<&str> {
     (!host.contains(':')).then_some(port)
 }
 
-fn validate_hosts(value: Option<&str>, field: &str, issues: &mut Vec<DnsValidationIssue>) {
+fn validate_hosts(value: Option<&str>, field: &str, issues: &mut Vec<ValidationIssue>) {
     let Some(value) = value else {
         return;
     };
@@ -181,7 +181,7 @@ fn validate_hosts(value: Option<&str>, field: &str, issues: &mut Vec<DnsValidati
     }
 }
 
-fn validate_expected_ips(value: Option<&str>, field: &str, issues: &mut Vec<DnsValidationIssue>) {
+fn validate_expected_ips(value: Option<&str>, field: &str, issues: &mut Vec<ValidationIssue>) {
     let Some(value) = value else {
         return;
     };
@@ -203,8 +203,8 @@ fn clean_optional_string(value: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-fn issue(field: &str, message: impl Into<String>) -> DnsValidationIssue {
-    DnsValidationIssue {
+fn issue(field: &str, message: impl Into<String>) -> ValidationIssue {
+    ValidationIssue {
         field: field.to_string(),
         message: message.into(),
     }

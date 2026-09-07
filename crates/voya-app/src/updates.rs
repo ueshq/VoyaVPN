@@ -18,11 +18,8 @@ pub enum UpdateManagerError {
     Database(#[from] DbError),
     #[error(transparent)]
     RulesetGeo(#[from] RulesetGeoError),
-    #[error("invalid {label}: {reason}")]
-    InvalidSourceUrl {
-        label: &'static str,
-        reason: &'static str,
-    },
+    #[error(transparent)]
+    InvalidSourceUrl(#[from] InvalidSourceUrl),
 }
 
 #[derive(Debug, Clone)]
@@ -97,18 +94,66 @@ pub fn apply_source_settings(
     source_settings(config)
 }
 
-pub fn validate_optional_source_url(label: &'static str, value: Option<&str>) -> Result<()> {
-    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(());
-    };
-    voya_net::validate_absolute_http_url(value).map_err(|error| invalid_source_url(label, error))
+/// One configurable asset source URL, named for both audiences.
+///
+/// The rejection has to reach a form input, not just a sentence: `field` is the
+/// `AppSettingsV1` path the settings surface keys its inputs by, `label` is the
+/// human wording the diagnostic message keeps using.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SourceUrlField {
+    pub field: &'static str,
+    pub label: &'static str,
 }
 
-pub fn validate_optional_https_source_url(label: &'static str, value: Option<&str>) -> Result<()> {
+impl SourceUrlField {
+    pub const GEO: Self = Self {
+        field: "sources.geo",
+        label: "Geo source URL",
+    };
+    pub const SINGBOX_RULESET: Self = Self {
+        field: "sources.singboxRuleset",
+        label: "SRS source URL",
+    };
+    pub const ROUTING_TEMPLATE: Self = Self {
+        field: "sources.routingTemplate",
+        label: "routing template source URL",
+    };
+    pub const SUBSCRIPTION_CONVERTER: Self = Self {
+        field: "sources.subscriptionConverter",
+        label: "subscription converter URL",
+    };
+}
+
+/// A source URL the user typed that cannot be used.
+///
+/// Separate from [`UpdateManagerError`] so the settings validator can carry it
+/// verbatim — it is `Copy` and comparable, which the settings error is required
+/// to stay.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[error("invalid {}: {reason}", .field.label)]
+pub struct InvalidSourceUrl {
+    pub field: SourceUrlField,
+    pub reason: &'static str,
+}
+
+pub fn validate_optional_source_url(
+    field: SourceUrlField,
+    value: Option<&str>,
+) -> std::result::Result<(), InvalidSourceUrl> {
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(());
     };
-    voya_net::validate_absolute_https_url(value).map_err(|error| invalid_source_url(label, error))
+    voya_net::validate_absolute_http_url(value).map_err(|error| invalid_source_url(field, error))
+}
+
+pub fn validate_optional_https_source_url(
+    field: SourceUrlField,
+    value: Option<&str>,
+) -> std::result::Result<(), InvalidSourceUrl> {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(());
+    };
+    voya_net::validate_absolute_https_url(value).map_err(|error| invalid_source_url(field, error))
 }
 
 /// Geo databases, sing-box rule sets and routing templates all decide which
@@ -116,21 +161,26 @@ pub fn validate_optional_https_source_url(label: &'static str, value: Option<&st
 /// core without a signature check. A network attacker able to rewrite a plain
 /// HTTP response could therefore redirect or leak arbitrary traffic, so every
 /// asset source must be HTTPS.
-pub fn validate_asset_source_urls(sources: &ConfigSourceSettings) -> Result<()> {
-    validate_optional_https_source_url("Geo source URL", sources.geo_source_url.as_deref())?;
-    validate_optional_https_source_url("SRS source URL", sources.srs_source_url.as_deref())?;
+pub fn validate_asset_source_urls(
+    sources: &ConfigSourceSettings,
+) -> std::result::Result<(), InvalidSourceUrl> {
+    validate_optional_https_source_url(SourceUrlField::GEO, sources.geo_source_url.as_deref())?;
     validate_optional_https_source_url(
-        "routing template source URL",
+        SourceUrlField::SINGBOX_RULESET,
+        sources.srs_source_url.as_deref(),
+    )?;
+    validate_optional_https_source_url(
+        SourceUrlField::ROUTING_TEMPLATE,
         sources.route_rules_template_source_url.as_deref(),
     )
 }
 
 const fn invalid_source_url(
-    label: &'static str,
+    field: SourceUrlField,
     error: voya_net::UrlValidationError,
-) -> UpdateManagerError {
-    UpdateManagerError::InvalidSourceUrl {
-        label,
+) -> InvalidSourceUrl {
+    InvalidSourceUrl {
+        field,
         reason: match error {
             voya_net::UrlValidationError::InvalidHttpUrl => {
                 "expected an absolute HTTP or HTTPS URL"
@@ -205,31 +255,32 @@ mod tests {
 
     #[test]
     fn source_url_validation_accepts_templates_and_rejects_unsafe_shapes() {
-        validate_optional_source_url("Geo source URL", Some("https://example.com/geo/{0}.dat"))
+        validate_optional_source_url(SourceUrlField::GEO, Some("https://example.com/geo/{0}.dat"))
             .expect("template URL should be valid");
         validate_optional_source_url(
-            "subscription converter URL",
+            SourceUrlField::SUBSCRIPTION_CONVERTER,
             Some("http://localhost:25500/sub"),
         )
         .expect("local converter URL should be valid");
 
-        assert!(validate_optional_source_url("source URL", Some("../rules.json")).is_err());
+        assert!(validate_optional_source_url(SourceUrlField::GEO, Some("../rules.json")).is_err());
         assert!(
-            validate_optional_source_url("source URL", Some("ftp://example.com/rules")).is_err()
+            validate_optional_source_url(SourceUrlField::GEO, Some("ftp://example.com/rules"))
+                .is_err()
         );
         assert!(validate_optional_source_url(
-            "source URL",
+            SourceUrlField::GEO,
             Some("https://user:secret@example.com/rules")
         )
         .is_err());
 
         validate_optional_https_source_url(
-            "routing template source URL",
+            SourceUrlField::ROUTING_TEMPLATE,
             Some("https://example.com/routing.json"),
         )
         .expect("HTTPS routing source should be valid");
         assert!(validate_optional_https_source_url(
-            "routing template source URL",
+            SourceUrlField::ROUTING_TEMPLATE,
             Some("http://example.com/routing.json")
         )
         .is_err());
@@ -261,10 +312,7 @@ mod tests {
             },
         ] {
             assert!(
-                matches!(
-                    validate_asset_source_urls(&sources),
-                    Err(UpdateManagerError::InvalidSourceUrl { .. })
-                ),
+                validate_asset_source_urls(&sources).is_err(),
                 "plain HTTP asset sources must be rejected: {sources:?}"
             );
         }

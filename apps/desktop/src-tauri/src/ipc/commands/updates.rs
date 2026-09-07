@@ -34,7 +34,7 @@ pub async fn update_geo_assets(
     update_manager(&state)
         .update_geo_assets(&config, proxy_url)
         .await
-        .map_err(update_error)
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -48,7 +48,7 @@ pub async fn update_srs_assets(
     update_manager(&state)
         .update_srs_assets(&config, proxy_url)
         .await
-        .map_err(update_error)
+        .map_err(AppError::from)
 }
 
 /// Re-install a core binary from the packaged seed (`{resource_dir}/core-seeds/<core>/`)

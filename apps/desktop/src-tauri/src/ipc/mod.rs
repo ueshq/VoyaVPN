@@ -100,7 +100,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_contracts::RoutingRuleScope>()
         .typ::<voya_contracts::MoveAction>()
         .typ::<voya_contracts::DnsSettings>()
-        .typ::<voya_contracts::DnsValidationIssue>()
+        .typ::<voya_contracts::ValidationIssue>()
         .typ::<voya_contracts::ConfigTemplateSelection>()
         .typ::<voya_contracts::ConfigTemplateImportResult>()
         .typ::<voya_contracts::ProxyGroupsSnapshot>()

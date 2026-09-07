@@ -15,23 +15,45 @@ pub enum SettingsContractError {
     InvalidValue { field: &'static str, value: String },
 }
 
+/// Why a submitted settings bundle was rejected.
+///
+/// Every variant names the `AppSettingsV1` path it is about, so the settings
+/// surface can mark the offending input the way the DNS pane already does
+/// instead of showing one banner for the whole form. `label` stays alongside
+/// `field` because the two audiences differ: the message keeps reading
+/// "invalid Geo source URL", the form keys off `sources.geo`.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AppSettingsValidationError {
     #[error("unsupported settings schema version {found}; expected {expected}")]
     UnsupportedSchema { found: u32, expected: u32 },
-    #[error("invalid {field}: {reason}")]
+    #[error("invalid {label}: {reason}")]
     InvalidText {
         field: &'static str,
+        label: &'static str,
         reason: &'static str,
     },
-    #[error("{0}")]
-    InvalidSource(String),
+    #[error(transparent)]
+    InvalidSource(#[from] updates::InvalidSourceUrl),
     #[error("TUN MTU must be between 576 and 65535")]
     InvalidTunMtu,
     #[error("Hysteria bandwidth values cannot be negative")]
-    NegativeHysteriaBandwidth,
+    NegativeHysteriaBandwidth { field: &'static str },
     #[error("Hysteria hop interval must be at least 5 seconds")]
     InvalidHysteriaHopInterval,
+}
+
+impl AppSettingsValidationError {
+    /// The `AppSettingsV1` path the rejection is about.
+    #[must_use]
+    pub const fn field(&self) -> &'static str {
+        match self {
+            Self::UnsupportedSchema { .. } => "schemaVersion",
+            Self::InvalidText { field, .. } | Self::NegativeHysteriaBandwidth { field } => field,
+            Self::InvalidSource(error) => error.field.field,
+            Self::InvalidTunMtu => "network.tun.mtu",
+            Self::InvalidHysteriaHopInterval => "hysteria.hopIntervalSeconds",
+        }
+    }
 }
 
 pub fn validate_app_settings(
@@ -45,28 +67,33 @@ pub fn validate_app_settings(
     }
     input_safety::validate_required_text(settings.appearance.language.trim(), 256).map_err(
         |error| AppSettingsValidationError::InvalidText {
-            field: "UI language",
+            field: "appearance.language",
+            label: "UI language",
             reason: input_safety_reason(error),
         },
     )?;
-    for (label, value) in [
-        ("Geo source URL", settings.sources.geo.as_deref()),
+    for (source, value) in [
         (
-            "SRS source URL",
+            updates::SourceUrlField::GEO,
+            settings.sources.geo.as_deref(),
+        ),
+        (
+            updates::SourceUrlField::SINGBOX_RULESET,
             settings.sources.singbox_ruleset.as_deref(),
         ),
         (
-            "routing template source URL",
+            updates::SourceUrlField::ROUTING_TEMPLATE,
             settings.sources.routing_template.as_deref(),
         ),
         (
-            "subscription converter URL",
+            updates::SourceUrlField::SUBSCRIPTION_CONVERTER,
             settings.sources.subscription_converter.as_deref(),
         ),
     ] {
         input_safety::validate_optional_text(value, 2048).map_err(|error| {
             AppSettingsValidationError::InvalidText {
-                field: label,
+                field: source.field,
+                label: source.label,
                 reason: input_safety_reason(error),
             }
         })?;
@@ -76,16 +103,14 @@ pub fn validate_app_settings(
     // ruleset and routing-template sources decide which traffic bypasses the
     // proxy, so they must be authenticated transports.
     updates::validate_optional_source_url(
-        "subscription converter URL",
+        updates::SourceUrlField::SUBSCRIPTION_CONVERTER,
         settings.sources.subscription_converter.as_deref(),
-    )
-    .map_err(|error| AppSettingsValidationError::InvalidSource(error.to_string()))?;
+    )?;
     updates::validate_asset_source_urls(&updates::ConfigSourceSettings {
         geo_source_url: settings.sources.geo.clone(),
         srs_source_url: settings.sources.singbox_ruleset.clone(),
         route_rules_template_source_url: settings.sources.routing_template.clone(),
-    })
-    .map_err(|error| AppSettingsValidationError::InvalidSource(error.to_string()))?;
+    })?;
     // Validated on the save path only: the mapping in `app_config_from_settings`
     // also runs when a stored configuration is loaded, so rejecting there would
     // block startup on a value that is already persisted. It has to be rejected
@@ -94,15 +119,23 @@ pub fn validate_app_settings(
     // never named.
     voya_udptest::validate_udp_test_target(&settings.speed_test.udp_target).map_err(|_| {
         AppSettingsValidationError::InvalidText {
-            field: "UDP test target",
+            field: "speedTest.udpTarget",
+            label: "UDP test target",
             reason: "value must be host:port, optionally prefixed with a test kind",
         }
     })?;
     if !(576..=65_535).contains(&settings.network.tun.mtu) {
         return Err(AppSettingsValidationError::InvalidTunMtu);
     }
-    if settings.hysteria.upload_mbps < 0 || settings.hysteria.download_mbps < 0 {
-        return Err(AppSettingsValidationError::NegativeHysteriaBandwidth);
+    if settings.hysteria.upload_mbps < 0 {
+        return Err(AppSettingsValidationError::NegativeHysteriaBandwidth {
+            field: "hysteria.uploadMbps",
+        });
+    }
+    if settings.hysteria.download_mbps < 0 {
+        return Err(AppSettingsValidationError::NegativeHysteriaBandwidth {
+            field: "hysteria.downloadMbps",
+        });
     }
     if settings.hysteria.hop_interval_seconds < 5 {
         return Err(AppSettingsValidationError::InvalidHysteriaHopInterval);
@@ -934,7 +967,8 @@ mod tests {
             assert_eq!(
                 validate_app_settings(&settings),
                 Err(AppSettingsValidationError::InvalidText {
-                    field: "UDP test target",
+                    field: "speedTest.udpTarget",
+                    label: "UDP test target",
                     reason: "value must be host:port, optionally prefixed with a test kind",
                 }),
                 "{target} should be rejected"
@@ -1055,5 +1089,63 @@ mod tests {
 
         settings.sources.singbox_ruleset = Some("https://example.test/{0}.srs".to_string());
         validate_app_settings(&settings).expect("HTTPS asset sources should be accepted");
+    }
+
+    /// The settings surface marks the input a rejection is about, so every
+    /// rejection has to name an `AppSettingsV1` path — not the human label the
+    /// message uses, which no form can key off.
+    #[test]
+    fn every_settings_rejection_names_the_contract_path_it_is_about() {
+        let cases: [(contracts::AppSettingsV1, &str); 7] = [
+            (
+                contracts::AppSettingsV1 {
+                    schema_version: contracts::CURRENT_SCHEMA_VERSION + 1,
+                    ..contracts::AppSettingsV1::default()
+                },
+                "schemaVersion",
+            ),
+            (
+                settings_with(|settings| settings.appearance.language = "  ".to_string()),
+                "appearance.language",
+            ),
+            (
+                settings_with(|settings| {
+                    settings.sources.geo = Some("http://example.test/{0}.dat".to_string());
+                }),
+                "sources.geo",
+            ),
+            (
+                settings_with(|settings| {
+                    settings.sources.subscription_converter = Some("::".to_string());
+                }),
+                "sources.subscriptionConverter",
+            ),
+            (
+                settings_with(|settings| settings.network.tun.mtu = 1),
+                "network.tun.mtu",
+            ),
+            (
+                settings_with(|settings| settings.hysteria.download_mbps = -1),
+                "hysteria.downloadMbps",
+            ),
+            (
+                settings_with(|settings| settings.hysteria.hop_interval_seconds = 1),
+                "hysteria.hopIntervalSeconds",
+            ),
+        ];
+
+        for (settings, field) in cases {
+            let error =
+                validate_app_settings(&settings).expect_err("the case should be rejected: {field}");
+            assert_eq!(error.field(), field, "{error}");
+        }
+    }
+
+    fn settings_with(
+        patch: impl FnOnce(&mut contracts::AppSettingsV1),
+    ) -> contracts::AppSettingsV1 {
+        let mut settings = contracts::AppSettingsV1::default();
+        patch(&mut settings);
+        settings
     }
 }

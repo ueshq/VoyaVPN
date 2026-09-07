@@ -15,7 +15,7 @@ pub async fn run_speedtest<R: tauri::Runtime>(
         &index_ids,
         "profile index id",
         IPC_ID_MAX_CHARS,
-        AppError::Speedtest,
+        AppErrorSubsystem::Speedtest,
     )?;
     let config = current_config(&state)?;
     let manager = speedtest_manager(&state);
@@ -28,7 +28,7 @@ pub async fn run_speedtest<R: tauri::Runtime>(
             }
         })
         .await
-        .map_err(speedtest_error)?;
+        .map_err(AppError::from)?;
 
     emit_profile_invalidation(&app, "speedtest-updated", false);
 
@@ -41,9 +41,7 @@ pub fn cancel_speedtest<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
 ) -> Result<SpeedtestStatus, AppError> {
-    let cancelled = speedtest_manager(&state)
-        .cancel()
-        .map_err(speedtest_error)?;
+    let cancelled = speedtest_manager(&state).cancel().map_err(AppError::from)?;
     if cancelled {
         // The cancellation already happened; a failed log emit must not turn a
         // successful command into an error.
@@ -54,11 +52,11 @@ pub fn cancel_speedtest<R: tauri::Runtime>(
         }
     }
 
-    speedtest_manager(&state).status().map_err(speedtest_error)
+    speedtest_manager(&state).status().map_err(AppError::from)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn speedtest_status(state: tauri::State<'_, AppState>) -> Result<SpeedtestStatus, AppError> {
-    speedtest_manager(&state).status().map_err(speedtest_error)
+    speedtest_manager(&state).status().map_err(AppError::from)
 }

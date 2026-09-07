@@ -43,7 +43,7 @@ pub async fn save_app_settings<R: tauri::Runtime>(
         &settings,
     )
     .await
-    .map_err(settings_save_error)?;
+    .map_err(AppError::from)?;
 
     apply_settings_runtime_action(&app, &state, &outcome).await;
 
@@ -85,17 +85,6 @@ async fn apply_settings_runtime_action<R: tauri::Runtime>(
     }
 }
 
-fn settings_save_error(error: SettingsSaveError<AppError>) -> AppError {
-    match error {
-        SettingsSaveError::Validation(error) => AppError::State(error.to_string()),
-        SettingsSaveError::Contract(error) => AppError::State(error.to_string()),
-        // The adapter's own typed error, so the frontend still sees
-        // `autostart`/`hotkey` rather than a flattened string.
-        SettingsSaveError::SideEffect { source, .. } => source,
-        SettingsSaveError::Commit(error) => config_mutation_error(error),
-    }
-}
-
 #[derive(Clone)]
 struct TauriSettingsSideEffects {
     autostart: AutostartManager,
@@ -111,14 +100,14 @@ impl SettingsSideEffectAdapter for TauriSettingsSideEffects {
         self.autostart
             .set_enabled(&mut config, enabled)
             .map(|_| ())
-            .map_err(autostart_error)
+            .map_err(AppError::from)
     }
 
     fn apply_hotkeys(&self, config: &AppConfig) -> Result<(), Self::Error> {
         self.hotkeys
             .register_from_config(config)
             .map(|_| ())
-            .map_err(hotkey_error)
+            .map_err(AppError::from)
     }
 }
 
@@ -129,10 +118,10 @@ pub fn generate_qr_code(content: String) -> Result<QrCodeImage, AppError> {
         &content,
         "QR content",
         IPC_QR_CONTENT_MAX_CHARS,
-        AppError::Qr,
+        AppErrorSubsystem::Qr,
     )?;
 
-    QrCodeManager.generate_svg(&content).map_err(qr_error)
+    QrCodeManager.generate_svg(&content).map_err(AppError::from)
 }
 
 // `async` because capturing every display is a multi-hundred-millisecond
@@ -152,20 +141,20 @@ pub async fn fetch_certificate(
         &request.address,
         "certificate address",
         IPC_NAME_MAX_CHARS,
-        AppError::Certificate,
+        AppErrorSubsystem::Certificate,
     )?;
     if let Some(server_name) = request.server_name.as_deref() {
         validate_ipc_text(
             server_name,
             "certificate server name",
             IPC_NAME_MAX_CHARS,
-            AppError::Certificate,
+            AppErrorSubsystem::Certificate,
         )?;
     }
 
     fetch_certificate_impl(request)
         .await
-        .map_err(certificate_error)
+        .map_err(|error| certificate_error(&error))
 }
 
 #[tauri::command]
@@ -175,10 +164,10 @@ pub fn calculate_certificate_sha256(pem: String) -> Result<Vec<String>, AppError
         &pem,
         "certificate PEM",
         IPC_QR_CONTENT_MAX_CHARS * 8,
-        AppError::Certificate,
+        AppErrorSubsystem::Certificate,
     )?;
 
-    calculate_certificate_sha256_impl(&pem).map_err(certificate_error)
+    calculate_certificate_sha256_impl(&pem).map_err(|error| certificate_error(&error))
 }
 
 pub(crate) fn register_show_window_shortcut_for_config<R: tauri::Runtime>(
@@ -189,5 +178,5 @@ pub(crate) fn register_show_window_shortcut_for_config<R: tauri::Runtime>(
 
     HotkeyManager::new(registrar)
         .register_from_config(config)
-        .map_err(hotkey_error)
+        .map_err(AppError::from)
 }

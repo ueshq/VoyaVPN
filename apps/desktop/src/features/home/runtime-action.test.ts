@@ -1,16 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AppError } from "@/ipc/bindings";
+import type { AppError, AppErrorKind } from "@/ipc/bindings";
 
 const ipcMocks = vi.hoisted(() => {
   // A faithful stand-in for the real error: `runWithElevation` and
   // `missingCorePayload` both branch on `appError.kind`, so a bare
-  // `class extends Error {}` would make every branch below unreachable.
+  // `class extends Error {}` would make every branch below unreachable. The
+  // real class also takes its `Error.message` straight from `appError.message`,
+  // which is what makes "the message no longer decides anything" testable.
   class MockIpcCommandError extends Error {
     readonly appError: AppError;
 
-    constructor(appError: AppError, message = "ipc failed") {
-      super(message);
+    constructor(appError: AppError) {
+      super(appError.message);
       this.appError = appError;
       this.name = "IpcCommandError";
     }
@@ -23,16 +25,22 @@ vi.mock("@/ipc", () => ipcMocks);
 
 import { missingCorePayload, runWithElevation } from "./runtime-action";
 
-const missingCoreError = new ipcMocks.IpcCommandError({
-  kind: "missingCore",
-  message: {
-    candidates: [],
-    coreType: "singBox",
-    downloadUrl: "https://example.test/core",
-    message: "sing-box is not installed",
-    searchDir: "/cores",
-  },
-});
+function appError(kind: AppErrorKind, message = "ipc failed"): AppError {
+  return { kind, message, subsystem: "runtime" };
+}
+
+const missingCoreError = new ipcMocks.IpcCommandError(
+  appError(
+    {
+      candidates: [],
+      coreType: "singBox",
+      downloadUrl: "https://example.test/core",
+      searchDir: "/cores",
+      type: "missingCore",
+    },
+    "sing-box is not installed",
+  ),
+);
 
 function elevationStatus(elevationGranted: boolean) {
   return { elevationGranted };
@@ -68,7 +76,12 @@ describe("runWithElevation", () => {
   });
 
   it("requests authorization once and retries the action when it is granted", async () => {
-    const failure = new ipcMocks.IpcCommandError({ kind: "sudo", message: "needs root" });
+    const failure = new ipcMocks.IpcCommandError(
+      appError(
+        { type: "elevationRequired" },
+        "system authorization is required before enabling TUN on Unix",
+      ),
+    );
     const action = vi.fn().mockRejectedValueOnce(failure).mockResolvedValue("connected");
     ipcMocks.tunRequestElevation.mockResolvedValue(elevationStatus(true));
 
@@ -77,20 +90,38 @@ describe("runWithElevation", () => {
     expect(action).toHaveBeenCalledTimes(2);
   });
 
-  it("treats a message mentioning authorization as an elevation failure", async () => {
+  // The falsification that matters: the retry used to fire on any message
+  // containing "authorization". Rewording — or translating — the backend text
+  // must not change what happens.
+  it("retries on the typed kind alone, whatever the message says", async () => {
     const failure = new ipcMocks.IpcCommandError(
-      { kind: "tun", message: "tun failed" },
-      "System Authorization was refused",
+      appError({ type: "elevationRequired" }, "系统需要一次性授权"),
     );
     const action = vi.fn().mockRejectedValueOnce(failure).mockResolvedValue("connected");
     ipcMocks.tunRequestElevation.mockResolvedValue(elevationStatus(true));
 
     await expect(runWithElevation(action)).resolves.toBe("connected");
+    expect(ipcMocks.tunRequestElevation).toHaveBeenCalledTimes(1);
     expect(action).toHaveBeenCalledTimes(2);
   });
 
+  // The other half of the same falsification. `native authorization was
+  // cancelled` is what the elevation dialog reports when the user declines, and
+  // the old substring match read it as "ask again", re-opening the dialog and
+  // re-running the connect.
+  it("does not prompt for a failure that merely mentions authorization", async () => {
+    const failure = new ipcMocks.IpcCommandError(
+      appError({ type: "internal" }, "native authorization was cancelled"),
+    );
+    const action = vi.fn().mockRejectedValue(failure);
+
+    await expect(runWithElevation(action)).rejects.toBe(failure);
+    expect(ipcMocks.tunRequestElevation).not.toHaveBeenCalled();
+    expect(action).toHaveBeenCalledTimes(1);
+  });
+
   it("rethrows the original failure when the authorization dialog is cancelled", async () => {
-    const failure = new ipcMocks.IpcCommandError({ kind: "sudo", message: "needs root" });
+    const failure = new ipcMocks.IpcCommandError(appError({ type: "elevationRequired" }));
     const action = vi.fn().mockRejectedValue(failure);
     ipcMocks.tunRequestElevation.mockResolvedValue(elevationStatus(false));
 
@@ -101,7 +132,7 @@ describe("runWithElevation", () => {
   });
 
   it("propagates a retry that fails again", async () => {
-    const first = new ipcMocks.IpcCommandError({ kind: "sudo", message: "needs root" });
+    const first = new ipcMocks.IpcCommandError(appError({ type: "elevationRequired" }));
     const second = new Error("still refused");
     const action = vi.fn().mockRejectedValueOnce(first).mockRejectedValueOnce(second);
     ipcMocks.tunRequestElevation.mockResolvedValue(elevationStatus(true));
@@ -123,7 +154,7 @@ describe("missingCorePayload", () => {
     expect(missingCorePayload(new Error("core missing"))).toBeNull();
     expect(missingCorePayload("core missing")).toBeNull();
     expect(
-      missingCorePayload(new ipcMocks.IpcCommandError({ kind: "runtime", message: "boom" })),
+      missingCorePayload(new ipcMocks.IpcCommandError(appError({ type: "internal" }, "boom"))),
     ).toBeNull();
   });
 });
