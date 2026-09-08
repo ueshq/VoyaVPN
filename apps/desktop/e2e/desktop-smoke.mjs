@@ -71,9 +71,10 @@ try {
 
   const profiles = await invoke("list_profiles", { filter: null, subscriptionId: null });
   assert.equal(profiles.ok, true, profiles.error);
-  assert.equal(profiles.value.length, 1);
-  assert.equal(profiles.value[0].profile.remarks, "Desktop Smoke");
-  assert.equal(profiles.value[0].profile.protocol.kind, "vless");
+  assert.equal(profiles.value.entries.length, 1);
+  assert.equal(profiles.value.undecodableProfiles, 0);
+  assert.equal(profiles.value.entries[0].profile.remarks, "Desktop Smoke");
+  assert.equal(profiles.value.entries[0].profile.protocol.kind, "vless");
 
   process.stdout.write("Native desktop smoke passed: startup, IPC, settings, import, failure path.\n");
 } finally {

@@ -473,6 +473,7 @@
         "rows": "{{rows}} rows",
         "subscriptions": "Subscriptions"
       },
+      "undecodable": "{{count}} gespeicherte Profil(e) konnten von dieser Version nicht gelesen werden und sind ausgeblendet. Sie stammen sehr wahrscheinlich aus einer neueren Version; ein Update von VoyaVPN sollte sie wieder anzeigen.",
       "untitled": "Untitled",
       "validation": {
         "addressRequired": "Adresse ist erforderlich",

@@ -5,7 +5,7 @@ import { afterEach, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
 
-import type { ImportProfilesResult, Profile } from "@/ipc/bindings";
+import type { ImportProfilesResult, Profile, ProfileListEntry } from "@/ipc/bindings";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useProfileColumnsStore } from "@/stores/profile-columns-store";
 import { makeProfileFixture } from "@/test/profile-fixture";
@@ -48,6 +48,21 @@ vi.mock("@/ipc", async () => {
     useRuntimeEventStore: runtimeStore.useRuntimeEventStore,
   };
 });
+
+// `listProfiles` answers with the rows plus the number of stored profiles this
+// build could not decode. Tests that only care about the rows go through these
+// helpers, so the shape lives in one place instead of every mock.
+function listing(entries: ProfileListEntry[], undecodableProfiles = 0) {
+  return { entries, undecodableProfiles };
+}
+
+function mockProfileList(entries: ProfileListEntry[], undecodableProfiles = 0) {
+  ipcMocks.listProfiles.mockResolvedValue(listing(entries, undecodableProfiles));
+}
+
+function mockProfileListOnce(entries: ProfileListEntry[], undecodableProfiles = 0) {
+  ipcMocks.listProfiles.mockResolvedValueOnce(listing(entries, undecodableProfiles));
+}
 
 const queryClients = new Set<QueryClient>();
 const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
@@ -203,7 +218,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("keeps a 5k row profile list virtualized", async () => {
-    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(5000));
+    mockProfileList(makeProfiles(5000));
 
     renderProfiles();
 
@@ -250,7 +265,7 @@ describe("ProfilesScreen", () => {
       outcome: "timedOut",
       speedBytesPerSecond: 2048,
     };
-    ipcMocks.listProfiles.mockResolvedValue([profile]);
+    mockProfileList([profile]);
 
     renderProfiles();
 
@@ -267,7 +282,7 @@ describe("ProfilesScreen", () => {
 
   it("removes multi-select and copy while keeping row actions and sorting", async () => {
     const profiles = makeProfiles(3);
-    ipcMocks.listProfiles.mockResolvedValue(profiles);
+    mockProfileList(profiles);
 
     renderProfiles();
 
@@ -297,7 +312,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("opens the targeted profile editor from the row context menu", async () => {
-    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(2));
+    mockProfileList(makeProfiles(2));
 
     renderProfiles();
 
@@ -311,7 +326,7 @@ describe("ProfilesScreen", () => {
 
   it("re-enables speedtest buttons when the speedtest IPC rejects", async () => {
     let rejectSpeedtest: (reason?: unknown) => void = () => {};
-    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(1));
+    mockProfileList(makeProfiles(1));
     ipcMocks.runSpeedtest.mockReturnValue(
       new Promise((_resolve, reject) => {
         rejectSpeedtest = reject;
@@ -337,7 +352,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("runs a row speedtest only for the context-menu target", async () => {
-    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(2));
+    mockProfileList(makeProfiles(2));
 
     renderProfiles();
 
@@ -353,7 +368,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("runs alternate batch speedtests against all profiles", async () => {
-    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(2));
+    mockProfileList(makeProfiles(2));
 
     renderProfiles();
 
@@ -368,7 +383,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("reflects an already running speedtest from the runtime store", async () => {
-    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(1));
+    mockProfileList(makeProfiles(1));
     useRuntimeEventStore.setState({ speedtestRunning: true });
 
     renderProfiles();
@@ -385,7 +400,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("confirms before deleting and cancels without calling the delete IPC", async () => {
-    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(3));
+    mockProfileList(makeProfiles(3));
 
     renderProfiles();
 
@@ -402,7 +417,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("shows a localized empty state when no profiles exist", async () => {
-    ipcMocks.listProfiles.mockResolvedValue([]);
+    mockProfileList([]);
 
     renderProfiles();
 
@@ -414,7 +429,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("ships high-signal columns and collapses niche ones by default", async () => {
-    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(3));
+    mockProfileList(makeProfiles(3));
 
     renderProfiles();
 
@@ -436,7 +451,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("reveals niche traffic columns through the column menu", async () => {
-    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(3));
+    mockProfileList(makeProfiles(3));
 
     renderProfiles();
 
@@ -454,7 +469,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("keeps the statistics stream out of the table until a traffic column is visible", async () => {
-    ipcMocks.listProfiles.mockResolvedValue([makeProfile(0)]);
+    mockProfileList([makeProfile(0)]);
 
     renderProfiles();
 
@@ -489,7 +504,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("restores default columns from the column menu reset action", async () => {
-    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(3));
+    mockProfileList(makeProfiles(3));
 
     renderProfiles();
 
@@ -503,6 +518,31 @@ describe("ProfilesScreen", () => {
     expect(screen.queryByRole("columnheader", { name: "IP info" })).not.toBeInTheDocument();
   });
 
+  it("states how many stored profiles this build could not read", async () => {
+    // Persistence hides rows it cannot decode so that one of them cannot take
+    // the whole list down. Without this band the user only sees a list that is
+    // mysteriously short, which is indistinguishable from data loss.
+    mockProfileList(makeProfiles(2), 3);
+
+    renderProfiles();
+
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "3 stored profile(s) could not be read by this version and are hidden. They were most likely written by a newer build; updating VoyaVPN should show them again.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing about unreadable profiles when every stored profile decoded", async () => {
+    mockProfileList(makeProfiles(2));
+
+    renderProfiles();
+
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+    expect(screen.queryByText(/could not be read by this version/)).not.toBeInTheDocument();
+  });
+
   it("shows profile query errors instead of silently presenting an empty table", async () => {
     ipcMocks.listProfiles.mockRejectedValue(new Error("profile list failed"));
 
@@ -512,7 +552,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("keeps import and subscription management without a duplicate update-all action", async () => {
-    ipcMocks.listProfiles.mockResolvedValue([]);
+    mockProfileList([]);
 
     renderProfiles();
 
@@ -544,9 +584,8 @@ describe("ProfilesScreen", () => {
       id: "profile-imported-second",
       remarks: "Second imported node",
     });
-    ipcMocks.listProfiles
-      .mockResolvedValueOnce([])
-      .mockResolvedValue([importedProfile, secondImportedProfile]);
+    mockProfileListOnce([]);
+    mockProfileList([importedProfile, secondImportedProfile]);
     ipcMocks.importProfilesFromText.mockResolvedValue(
       makeImportResult({
         imported: 2,
@@ -576,9 +615,8 @@ describe("ProfilesScreen", () => {
       id: "profile-scanned",
       remarks: "Scanned node",
     });
-    ipcMocks.listProfiles
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([importedProfile]);
+    mockProfileListOnce([]);
+    mockProfileListOnce([importedProfile]);
     ipcMocks.scanScreenQr.mockResolvedValue({
       message: null,
       source: "native",
@@ -615,7 +653,7 @@ describe("ProfilesScreen", () => {
     });
     let imported = false;
     ipcMocks.listProfiles.mockImplementation(async (_subscription_id: string | null, filter: string | null) =>
-      imported && !filter ? [importedProfile] : [],
+      listing(imported && !filter ? [importedProfile] : []),
     );
     ipcMocks.importProfilesFromText.mockImplementation(async () => {
       imported = true;
@@ -651,7 +689,7 @@ describe("ProfilesScreen", () => {
 
   it("does not import when clipboard text is empty", async () => {
     const readText = mockClipboardReadText(" \n ");
-    ipcMocks.listProfiles.mockResolvedValue([]);
+    mockProfileList([]);
 
     renderProfiles();
 
@@ -665,7 +703,7 @@ describe("ProfilesScreen", () => {
 
   it("does not import when clipboard text read is unavailable", async () => {
     mockClipboardUnavailable();
-    ipcMocks.listProfiles.mockResolvedValue([]);
+    mockProfileList([]);
 
     renderProfiles();
 
@@ -679,7 +717,7 @@ describe("ProfilesScreen", () => {
   it("batch exports every profile even when the list is filtered", async () => {
     const profiles = makeProfiles(2);
     ipcMocks.listProfiles.mockImplementation(async (_subscriptionId: string | null, filter: string | null) =>
-      filter ? [profiles[1]!] : profiles,
+      listing(filter ? [profiles[1]!] : profiles),
     );
 
     renderProfiles();
@@ -706,7 +744,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("keeps the QR dialog closed when the context-menu profile cannot export a share link", async () => {
-    ipcMocks.listProfiles.mockResolvedValue([
+    mockProfileList([
       makeProfile(0, {
         protocol: {
           childProfileIds: [],
@@ -735,7 +773,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("shows QR generation errors without hiding the exported content", async () => {
-    ipcMocks.listProfiles.mockResolvedValue([makeProfile(0)]);
+    mockProfileList([makeProfile(0)]);
     ipcMocks.generateQrCode.mockRejectedValue(new Error("QR content is too large"));
 
     renderProfiles();
@@ -753,7 +791,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("moves the context-menu row through the keyboard-accessible move submenu", async () => {
-    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(3));
+    mockProfileList(makeProfiles(3));
 
     renderProfiles();
 
@@ -771,7 +809,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("submits every protocol through the zod-backed profile dialog path", async () => {
-    ipcMocks.listProfiles.mockResolvedValue([]);
+    mockProfileList([]);
 
     renderProfiles();
 
@@ -813,7 +851,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("keeps the editor open with its edits when the backend rejects the save", async () => {
-    ipcMocks.listProfiles.mockResolvedValue([]);
+    mockProfileList([]);
     ipcMocks.saveProfile.mockRejectedValue(new Error("profile address is already used"));
 
     renderProfiles();
@@ -834,7 +872,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("shows the required credential error instead of silently refusing to save", async () => {
-    ipcMocks.listProfiles.mockResolvedValue([]);
+    mockProfileList([]);
 
     renderProfiles();
 
@@ -849,7 +887,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("saves the TUIC uuid and password into the fields the contract names", async () => {
-    ipcMocks.listProfiles.mockResolvedValue([]);
+    mockProfileList([]);
 
     renderProfiles();
 
@@ -885,7 +923,7 @@ describe("ProfilesScreen", () => {
 
   it("edits every Naive contract field from the protocol panel", async () => {
     const user = userEvent.setup();
-    ipcMocks.listProfiles.mockResolvedValue([]);
+    mockProfileList([]);
 
     renderProfiles();
 
@@ -923,7 +961,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("keeps the host and path of a raw TCP transport through an editor round-trip", async () => {
-    ipcMocks.listProfiles.mockResolvedValue([
+    mockProfileList([
       makeProfile(0, {
         remarks: "Obfuscated node",
         transport: { header: "http", host: "cdn.example.test", kind: "tcp", path: "/obfs" },
@@ -953,7 +991,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("gives every editor field a real id in a locale whose labels have no ASCII letters", async () => {
-    ipcMocks.listProfiles.mockResolvedValue([]);
+    mockProfileList([]);
 
     // Ids used to be slugified from the translated label, so "备注" collapsed to
     // the empty string and every input in the dialog shared `id=""`.
@@ -973,7 +1011,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("renders required-field errors through the locale system", async () => {
-    ipcMocks.listProfiles.mockResolvedValue([]);
+    mockProfileList([]);
 
     await withLocale("zh-Hans", async () => {
       renderProfiles();
@@ -991,7 +1029,7 @@ describe("ProfilesScreen", () => {
 
   it("localizes the import summary banner", async () => {
     mockClipboardReadText("vless://uuid@example.test:443#US");
-    ipcMocks.listProfiles.mockResolvedValue([]);
+    mockProfileList([]);
     ipcMocks.importProfilesFromText.mockResolvedValue(
       makeImportResult({ failed: 2, imported: 3, skipped: 1 }),
     );
@@ -1009,7 +1047,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("offers each speedtest probe exactly once in the row menu", async () => {
-    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(1));
+    mockProfileList(makeProfiles(1));
 
     renderProfiles();
 
@@ -1030,7 +1068,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("renders the shared export entries through the context-menu primitives", async () => {
-    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(1));
+    mockProfileList(makeProfiles(1));
 
     renderProfiles();
 
@@ -1052,7 +1090,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("confirms before deduping and cancels without deleting duplicates", async () => {
-    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(3));
+    mockProfileList(makeProfiles(3));
 
     renderProfiles();
 
@@ -1070,7 +1108,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("reports how many duplicates the confirmed dedupe removed", async () => {
-    ipcMocks.listProfiles.mockResolvedValue(makeProfiles(3));
+    mockProfileList(makeProfiles(3));
     ipcMocks.dedupeProfiles.mockResolvedValue({
       kept: 2,
       removedProfileIds: ["profile-2"],
@@ -1093,7 +1131,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("bulk exports the shareable profiles instead of failing on a policy group", async () => {
-    ipcMocks.listProfiles.mockResolvedValue([
+    mockProfileList([
       ...makeProfiles(2),
       makeProfile(2, {
         protocol: {
@@ -1126,7 +1164,7 @@ describe("ProfilesScreen", () => {
   it("builds a policy group with child picker and generator preview", async () => {
     const user = userEvent.setup();
 
-    ipcMocks.listProfiles.mockResolvedValue([]);
+    mockProfileList([]);
     ipcMocks.listGroupChildCandidates.mockResolvedValue([
       {
         address: "a.example.test",

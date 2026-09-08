@@ -16,13 +16,16 @@ pub use profiles::{profile_from_contract, profile_to_contract};
 use voya_contracts::{
     GroupChildCandidate as GroupChildContract, GroupPreview as GroupPreviewContract,
     GroupPreviewRoute as GroupPreviewRouteContract, GroupValidation as GroupValidationContract,
-    MoveAction, ProfileDedupeResult as ProfileDedupeContract, ProfileListEntry, ProfileMetrics,
-    ProfileSortKey, ProfileTraffic, SpeedtestOutcome,
+    MoveAction, ProfileDedupeResult as ProfileDedupeContract, ProfileListEntry,
+    ProfileListing as ProfileListingContract, ProfileMetrics, ProfileSortKey, ProfileTraffic,
+    SpeedtestOutcome,
 };
 use voya_core::{
     GroupChildCandidate, GroupPreview, MoveAction as CoreMoveAction, ProfileDedupeResult,
     ProfileListItem, ProfileSortKey as CoreProfileSortKey,
 };
+
+use crate::profiles::ProfileListing;
 
 pub(crate) use profiles::profile_kind;
 
@@ -218,6 +221,23 @@ pub fn profile_list_to_contract(item: ProfileListItem) -> ProfileListEntry {
             date: item.server_stat.date_now,
         },
         is_active: item.is_active,
+    }
+}
+
+/// The listing plus the count of rows the storage layer had to skip.
+///
+/// `usize` saturates into the contract's `u32`: a count that large is already
+/// nonsense to show, and clamping it keeps the listing renderable instead of
+/// failing the command over a number the user only reads as "a lot".
+#[must_use]
+pub fn profile_listing_to_contract(listing: ProfileListing) -> ProfileListingContract {
+    ProfileListingContract {
+        entries: listing
+            .items
+            .into_iter()
+            .map(profile_list_to_contract)
+            .collect(),
+        undecodable_profiles: u32::try_from(listing.undecodable_profiles).unwrap_or(u32::MAX),
     }
 }
 

@@ -246,7 +246,12 @@ impl<'db> SubscriptionManager<'db> {
         }
 
         let profile_manager = ProfileManager::from_session(self.database);
-        let mut existing_profiles = self.database.profiles().list_with_profile_ex(None).await?;
+        let mut existing_profiles = self
+            .database
+            .profiles()
+            .list_with_profile_ex(None)
+            .await?
+            .items;
         let mut imported_index_ids = Vec::new();
         let mut updated_index_ids = Vec::new();
         let mut duplicate_index_ids_to_remove = Vec::new();
@@ -1679,7 +1684,8 @@ mod tests {
         let visible_profiles = ProfileManager::new(&database)
             .list_profiles(&config, None, None)
             .await
-            .expect("subscription manager test operation should succeed");
+            .expect("subscription manager test operation should succeed")
+            .items;
         assert_eq!(visible_profiles.len(), 7);
         assert!(visible_profiles
             .iter()
@@ -2015,7 +2021,8 @@ mod tests {
             .profiles()
             .list_with_profile_ex(None)
             .await
-            .expect("subscription manager test operation should succeed");
+            .expect("subscription manager test operation should succeed")
+            .items;
         assert_eq!(profiles.len(), 1);
         assert_eq!(profiles[0].0.index_id, "active");
         assert_eq!(profiles[0].0.remarks, "Imported");

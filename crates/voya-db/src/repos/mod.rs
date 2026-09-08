@@ -7,7 +7,7 @@ mod state;
 mod subscription;
 mod subscription_metadata;
 
-pub use profile::ProfileRepository;
+pub use profile::{ProfileListing, ProfileRepository};
 pub use profile_ex::ProfileExRepository;
 pub use routing::RoutingRepository;
 pub use server_stat::ServerStatRepository;

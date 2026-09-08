@@ -331,7 +331,13 @@ export async function installTauriSmokeMock(page: Page) {
           return Promise.resolve(connectionModeStatus());
         }
         case "list_profiles":
-          return Promise.resolve(filterProfiles(state.profiles, args.filter));
+          // The real command answers with the rows plus the number of stored
+          // profiles the build could not decode; the fixture never seeds an
+          // unreadable row, so the count is always zero here.
+          return Promise.resolve({
+            entries: filterProfiles(state.profiles, args.filter),
+            undecodableProfiles: 0,
+          });
         case "save_profile": {
           const row = upsertProfile(readRecord(args, "profile"));
           return Promise.resolve(clone(row));

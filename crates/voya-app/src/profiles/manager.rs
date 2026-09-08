@@ -13,7 +13,7 @@ use voya_core::{
 };
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 
-use super::{ProfileExManager, DEFAULT_PROFILE_SORT_STEP};
+use super::{ProfileExManager, ProfileListing, DEFAULT_PROFILE_SORT_STEP};
 
 static PROFILE_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -57,13 +57,20 @@ impl<'db> ProfileManager<'db> {
         ProfileExManager::from_session(self.database)
     }
 
+    /// The listing behind every profile view, with the undecodable-row count
+    /// the storage layer reported.
+    ///
+    /// The count is deliberately *not* narrowed by `filter`: a row that could
+    /// not be decoded has no remarks or address to match a filter against, so
+    /// hiding the count while a filter is typed would make the statement blink
+    /// out exactly when the list gets shorter.
     pub async fn list_profiles(
         &self,
         config: &AppConfig,
         subscription_id: Option<&str>,
         filter: Option<&str>,
-    ) -> Result<Vec<ProfileListItem>> {
-        let items = self
+    ) -> Result<ProfileListing> {
+        let listing = self
             .database
             .profiles()
             .list_with_profile_ex(subscription_id)
@@ -71,22 +78,26 @@ impl<'db> ProfileManager<'db> {
         let stats = self.server_stats_by_index_id().await?;
         let filter = filter.map(str::trim).filter(|value| !value.is_empty());
 
-        Ok(items
-            .into_iter()
-            .filter(|(profile, _)| {
-                filter.is_none_or(|filter| {
-                    contains_case_insensitive(&profile.remarks, filter)
-                        || contains_case_insensitive(profile.address(), filter)
+        Ok(ProfileListing {
+            items: listing
+                .items
+                .into_iter()
+                .filter(|(profile, _)| {
+                    filter.is_none_or(|filter| {
+                        contains_case_insensitive(&profile.remarks, filter)
+                            || contains_case_insensitive(profile.address(), filter)
+                    })
                 })
-            })
-            .map(|(profile, profile_ex)| {
-                let server_stat = stats
-                    .get(&profile.index_id)
-                    .cloned()
-                    .unwrap_or_else(|| empty_server_stat(&profile.index_id));
-                to_list_item(profile, profile_ex, server_stat, &config.index_id)
-            })
-            .collect())
+                .map(|(profile, profile_ex)| {
+                    let server_stat = stats
+                        .get(&profile.index_id)
+                        .cloned()
+                        .unwrap_or_else(|| empty_server_stat(&profile.index_id));
+                    to_list_item(profile, profile_ex, server_stat, &config.index_id)
+                })
+                .collect(),
+            undecodable_profiles: listing.undecodable_rows,
+        })
     }
 
     pub async fn save_profile(
@@ -234,7 +245,8 @@ impl<'db> ProfileManager<'db> {
             .database
             .profiles()
             .list_with_profile_ex(subscription_id)
-            .await?;
+            .await?
+            .items;
         let Some(index) = items
             .iter()
             .position(|(profile, _)| profile.index_id == index_id)
@@ -275,7 +287,10 @@ impl<'db> ProfileManager<'db> {
             self.profile_ex().set_sort(index_id, sort).await?;
         }
 
-        self.list_profiles(config, subscription_id, None).await
+        Ok(self
+            .list_profiles(config, subscription_id, None)
+            .await?
+            .items)
     }
 
     pub async fn sort_profiles(
@@ -289,11 +304,15 @@ impl<'db> ProfileManager<'db> {
             .database
             .profiles()
             .list_with_profile_ex(subscription_id)
-            .await?;
+            .await?
+            .items;
         sort_profile_pairs(&mut items, sort_key, ascending);
         self.renumber_sort(&items).await?;
 
-        self.list_profiles(config, subscription_id, None).await
+        Ok(self
+            .list_profiles(config, subscription_id, None)
+            .await?
+            .items)
     }
 
     /// Rewrites the gap-based sort keys so the list reads `10, 20, 30, …`.
@@ -762,7 +781,8 @@ mod tests {
         let listed = manager
             .list_profiles(&config, None, None)
             .await
-            .expect("profile manager test operation should succeed");
+            .expect("profile manager test operation should succeed")
+            .items;
         assert_eq!(listed.len(), 2);
         assert!(listed[0].is_active);
         assert_eq!(listed[1].profile.remarks, "B");
@@ -823,7 +843,8 @@ mod tests {
         let moved = manager
             .list_profiles(&config, None, None)
             .await
-            .expect("profile manager test operation should succeed");
+            .expect("profile manager test operation should succeed")
+            .items;
         assert_eq!(moved[0].profile.remarks, "C");
 
         database
@@ -853,7 +874,8 @@ mod tests {
         let sorted = manager
             .list_profiles(&config, None, None)
             .await
-            .expect("profile manager test operation should succeed");
+            .expect("profile manager test operation should succeed")
+            .items;
         assert_eq!(sorted[0].profile.remarks, "C");
     }
 

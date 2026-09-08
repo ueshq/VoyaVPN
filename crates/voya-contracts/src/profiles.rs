@@ -270,6 +270,24 @@ pub struct ProfileListEntry {
     pub is_active: bool,
 }
 
+/// A profile listing plus what is missing from it.
+///
+/// `undecodableProfiles` counts stored profiles this build could not read —
+/// most often ones written by a newer build. Persistence skips those rows
+/// rather than failing the whole listing, so one unreadable server cannot take
+/// away the user's ability to see, connect to or delete the others.
+///
+/// The count travels *with* the rows instead of arriving as a notice on the
+/// side: the listing is re-fetched on every profile query, so an event would
+/// repeat without end, while a field on the response lets the screen state the
+/// shortfall once, quietly, beside the list it belongs to.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProfileListing {
+    pub entries: Vec<ProfileListEntry>,
+    pub undecodable_profiles: u32,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ProfileSortKey {

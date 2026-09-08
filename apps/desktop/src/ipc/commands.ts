@@ -19,6 +19,7 @@ import type {
   ProfileDedupeResult,
   Profile,
   ProfileListEntry,
+  ProfileListing,
   ProfileSortKey,
   QrCodeImage,
   QrScanResult,
@@ -133,7 +134,7 @@ export async function saveDnsSettings(settings: DnsSettings): Promise<DnsSetting
 export async function listProfiles(
   subscriptionId: string | null = null,
   filter: string | null = null,
-): Promise<ProfileListEntry[]> {
+): Promise<ProfileListing> {
   return unwrapCommandResult(await commands.listProfiles(subscriptionId, filter));
 }
 

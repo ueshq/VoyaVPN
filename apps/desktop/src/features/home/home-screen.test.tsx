@@ -158,6 +158,12 @@ vi.mock("@/ipc", () => ({
   useRuntimeEventStore: runtimeMock.useRuntimeEventStore,
 }));
 
+// `listProfiles` answers with the rows plus the number of stored profiles this
+// build could not decode; Home only reads the rows.
+function mockProfileList(entries: ProfileListEntry[], undecodableProfiles = 0) {
+  ipcMock.listProfiles.mockResolvedValue({ entries, undecodableProfiles });
+}
+
 function renderHome() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { gcTime: 0, retry: false } },
@@ -188,7 +194,7 @@ describe("HomeScreen", () => {
     ipcMock.disconnectCore.mockResolvedValue(disconnectedStatus);
     ipcMock.restartCore.mockResolvedValue(connectedStatus);
     ipcMock.runtimeStatus.mockResolvedValue(disconnectedStatus);
-    ipcMock.listProfiles.mockResolvedValue([]);
+    mockProfileList([]);
     ipcMock.listSubscriptionMetadata.mockResolvedValue([]);
     ipcMock.listSubscriptions.mockResolvedValue([]);
     ipcMock.setActiveProfile.mockResolvedValue(makeProfile(0));
@@ -218,7 +224,7 @@ describe("HomeScreen", () => {
 
   it("lights up the protected state with node info and marks the running node", async () => {
     runtimeMock.state.coreState = connectedStatus;
-    ipcMock.listProfiles.mockResolvedValue([
+    mockProfileList([
       makeActiveProfile({ id: "node-tokyo", remarks: "Tokyo Edge" }),
     ]);
 
@@ -240,7 +246,7 @@ describe("HomeScreen", () => {
   });
 
   it("selects a node locally on single click without touching the backend", async () => {
-    ipcMock.listProfiles.mockResolvedValue([
+    mockProfileList([
       makeActiveProfile({ id: "osaka", remarks: "Osaka Edge" }),
       makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" }),
     ]);
@@ -258,7 +264,7 @@ describe("HomeScreen", () => {
   });
 
   it("switches and connects on double click while disconnected", async () => {
-    ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
+    mockProfileList([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
 
     const user = userEvent.setup();
     renderHome();
@@ -278,7 +284,7 @@ describe("HomeScreen", () => {
       runningCoreType: "singBox",
       state: "connected",
     };
-    ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
+    mockProfileList([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
 
     const user = userEvent.setup();
     renderHome();
@@ -291,7 +297,7 @@ describe("HomeScreen", () => {
   });
 
   it("activates the focused node on Enter", async () => {
-    ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
+    mockProfileList([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
 
     const user = userEvent.setup();
     renderHome();
@@ -305,7 +311,7 @@ describe("HomeScreen", () => {
   });
 
   it("keeps one tab stop and moves the active node with the arrow keys", async () => {
-    ipcMock.listProfiles.mockResolvedValue([
+    mockProfileList([
       makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" }),
       makeProfile(2, { id: "osaka", remarks: "Osaka Edge" }),
       makeProfile(3, { id: "seoul", remarks: "Seoul Edge" }),
@@ -352,7 +358,7 @@ describe("HomeScreen", () => {
   });
 
   it("connects to the locally selected node, switching the active profile first", async () => {
-    ipcMock.listProfiles.mockResolvedValue([
+    mockProfileList([
       makeActiveProfile({ id: "osaka", remarks: "Osaka Edge" }),
       makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" }),
     ]);
@@ -372,7 +378,7 @@ describe("HomeScreen", () => {
   });
 
   it("connects directly when the selection already matches the active node", async () => {
-    ipcMock.listProfiles.mockResolvedValue([
+    mockProfileList([
       makeActiveProfile({ id: "osaka", remarks: "Osaka Edge" }),
     ]);
 
@@ -388,7 +394,7 @@ describe("HomeScreen", () => {
 
   it("refuses node activation while a runtime action is still in flight", async () => {
     runtimeMock.state.coreState = connectedStatus;
-    ipcMock.listProfiles.mockResolvedValue([
+    mockProfileList([
       makeActiveProfile({ id: "node-tokyo", remarks: "Tokyo Edge" }),
       makeProfile(1, { id: "osaka", remarks: "Osaka Edge" }),
     ]);
@@ -412,7 +418,7 @@ describe("HomeScreen", () => {
 
   it("refuses node activation while the backend reports disconnecting", async () => {
     runtimeMock.state.coreState = { ...connectedStatus, state: "disconnecting" };
-    ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
+    mockProfileList([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
 
     const user = userEvent.setup();
     renderHome();
@@ -427,7 +433,7 @@ describe("HomeScreen", () => {
   });
 
   it("drops a selection whose node disappeared and connects the active one", async () => {
-    ipcMock.listProfiles.mockResolvedValue([
+    mockProfileList([
       makeActiveProfile({ id: "osaka", remarks: "Osaka Edge" }),
       makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" }),
     ]);
@@ -443,7 +449,7 @@ describe("HomeScreen", () => {
 
     // The subscription update (or a delete on the Profiles screen) pruned the
     // selected node while the Home screen stayed mounted.
-    ipcMock.listProfiles.mockResolvedValue([
+    mockProfileList([
       makeActiveProfile({ id: "osaka", remarks: "Osaka Edge" }),
     ]);
     await act(async () => {
@@ -465,7 +471,7 @@ describe("HomeScreen", () => {
   });
 
   it("filters the node list by remarks", async () => {
-    ipcMock.listProfiles.mockResolvedValue([
+    mockProfileList([
       makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" }),
       makeProfile(2, { id: "osaka", remarks: "Osaka Edge" }),
     ]);
@@ -483,7 +489,7 @@ describe("HomeScreen", () => {
   // The core is fetched on first run, so a connect against a machine without it
   // is the onboarding path rather than an error to toast away.
   it("opens the missing-core recovery modal instead of a toast", async () => {
-    ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
+    mockProfileList([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
     ipcMock.connectActiveProfile.mockRejectedValue(
       new ipcMock.IpcCommandError({
         kind: {
@@ -512,7 +518,7 @@ describe("HomeScreen", () => {
   });
 
   it("requests system authorization once and retries a connect that needed it", async () => {
-    ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
+    mockProfileList([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
     ipcMock.connectActiveProfile
       .mockRejectedValueOnce(
         new ipcMock.IpcCommandError({
@@ -536,7 +542,7 @@ describe("HomeScreen", () => {
   });
 
   it("keeps the original failure when the authorization dialog is declined", async () => {
-    ipcMock.listProfiles.mockResolvedValue([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
+    mockProfileList([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
     ipcMock.connectActiveProfile.mockRejectedValue(
       new ipcMock.IpcCommandError({
         kind: { type: "elevationRequired" },

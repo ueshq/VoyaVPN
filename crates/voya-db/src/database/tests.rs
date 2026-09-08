@@ -401,7 +401,8 @@ async fn profile_repository_orders_by_profile_ex_sort() {
         .profiles()
         .list_with_profile_ex(None)
         .await
-        .expect("database test operation should succeed");
+        .expect("database test operation should succeed")
+        .items;
     assert_eq!(ordered[0].0.index_id, "second");
     assert_eq!(ordered[0].1.sort, 10);
 }
@@ -1568,6 +1569,7 @@ async fn profile_listings_skip_rows_this_build_cannot_decode() {
             .list_with_profile_ex(None)
             .await
             .expect("one undecodable row must not fail the whole listing")
+            .items
             .into_iter()
             .map(|(profile, _)| profile)
             .collect::<Vec<_>>(),
@@ -1582,6 +1584,18 @@ async fn profile_listings_skip_rows_this_build_cannot_decode() {
         );
     }
 
+    // The skip is reported, not only logged: the count travels with the rows so
+    // the profiles screen can say why the list is short.
+    assert_eq!(
+        database
+            .profiles()
+            .list_with_profile_ex(None)
+            .await
+            .expect("one undecodable row must not fail the whole listing")
+            .undecodable_rows,
+        3,
+        "the three rows this build cannot decode are counted, the defaulted one is not"
+    );
     // Single-row lookups stay strict, and each failure keeps its own reason.
     assert!(matches!(
         database.profiles().get("from-a-newer-build").await,
@@ -1617,6 +1631,24 @@ async fn profile_listings_skip_rows_this_build_cannot_decode() {
         .delete("from-a-newer-build")
         .await
         .expect("an undecodable row must still be deletable"));
+
+    // Once the unreadable rows are gone the listing has nothing to explain, so
+    // the screens fall silent again.
+    database
+        .profiles()
+        .delete_many(&["mislabelled".to_string(), "unknown-config-type".to_string()])
+        .await
+        .expect("the remaining undecodable rows should be deletable");
+    let repaired = database
+        .profiles()
+        .list_with_profile_ex(None)
+        .await
+        .expect("a listing without undecodable rows should succeed");
+    assert_eq!(repaired.items.len(), 2);
+    assert_eq!(
+        repaired.undecodable_rows, 0,
+        "a healthy listing reports nothing to explain"
+    );
 }
 
 #[tokio::test]
@@ -2324,7 +2356,8 @@ async fn profile_listings_filter_by_subscription_and_join_missing_extensions() {
         .profiles()
         .list_with_profile_ex(None)
         .await
-        .expect("the joined listing should succeed");
+        .expect("the joined listing should succeed")
+        .items;
     let subscribed_ex = &joined
         .iter()
         .find(|(profile, _)| profile.index_id == "subscribed")

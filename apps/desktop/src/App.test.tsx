@@ -198,7 +198,7 @@ vi.mock("@/ipc", () => ({
   ),
   listProcessCandidates: vi.fn(() => Promise.resolve([])),
   listRoutings: vi.fn(() => Promise.resolve([])),
-  listProfiles: vi.fn(() => Promise.resolve([])),
+  listProfiles: vi.fn(() => Promise.resolve({ entries: [], undecodableProfiles: 0 })),
   listSubscriptionMetadata: vi.fn(() => Promise.resolve([])),
   listSubscriptions: vi.fn(() => Promise.resolve([])),
   loadAppSettings: vi.fn(() => new Promise(() => undefined)),

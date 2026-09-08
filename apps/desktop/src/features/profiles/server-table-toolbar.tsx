@@ -3,6 +3,7 @@ import {
   Columns3,
   FilePlus2,
   Filter,
+  FileWarning,
   RotateCcw,
   Rss,
   Search,
@@ -52,6 +53,7 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
     setSubscriptionsOpen,
     speedtestRunning,
     t,
+    undecodableProfiles,
   } = controller;
   const batchActionsDisabled = profilesQuery.isLoading || (!filterText.trim() && profiles.length === 0);
 
@@ -174,6 +176,25 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
       {profilesQuery.isError ? <InlinePageError>{getErrorMessage(profilesQuery.error)}</InlinePageError> : null}
       {operationMessage ? (
         <div className="border-b bg-connected/10 px-4 py-2 text-sm text-connected">{operationMessage}</div>
+      ) : null}
+      {/*
+        Stored profiles this build could not decode are skipped by persistence so
+        that one of them cannot hide every other server. This band is the only
+        place the user hears about it: a toast would fire on every refetch of the
+        list, so the shortfall is stated calmly next to the rows instead, and it
+        stays until the profiles become readable again.
+      */}
+      {undecodableProfiles > 0 ? (
+        <div
+          className="flex items-start gap-2 border-b bg-muted/40 px-4 py-2 text-sm text-muted-foreground"
+          data-slot="profiles-undecodable-notice"
+          role="status"
+        >
+          <FileWarning aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          <span>
+            {t("panes.profiles.undecodable", { count: undecodableProfiles.toLocaleString() })}
+          </span>
+        </div>
       ) : null}
     </>
   );

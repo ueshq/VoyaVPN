@@ -52,7 +52,7 @@ export const commands = {
 	setTunEnabled: (enabled: boolean) => typedError<TunStatus, AppError>(__TAURI_INVOKE("set_tun_enabled", { enabled })),
 	loadDnsSettings: () => typedError<DnsSettings, AppError>(__TAURI_INVOKE("load_dns_settings")),
 	saveDnsSettings: (settings: DnsSettings) => typedError<DnsSettings, AppError>(__TAURI_INVOKE("save_dns_settings", { settings })),
-	listProfiles: (subscriptionId: string | null, filter: string | null) => typedError<ProfileListEntry[], AppError>(__TAURI_INVOKE("list_profiles", { subscriptionId, filter })),
+	listProfiles: (subscriptionId: string | null, filter: string | null) => typedError<ProfileListing, AppError>(__TAURI_INVOKE("list_profiles", { subscriptionId, filter })),
 	saveProfile: (profile: Profile) => typedError<ProfileListEntry, AppError>(__TAURI_INVOKE("save_profile", { profile })),
 	deleteProfiles: (indexIds: string[]) => typedError<number, AppError>(__TAURI_INVOKE("delete_profiles", { indexIds })),
 	copyProfiles: (indexIds: string[]) => typedError<ProfileListEntry[], AppError>(__TAURI_INVOKE("copy_profiles", { indexIds })),
@@ -674,6 +674,24 @@ export type ProfileListEntry = {
 	metrics: ProfileMetrics,
 	traffic: ProfileTraffic,
 	isActive: boolean,
+};
+
+/**
+ *  A profile listing plus what is missing from it.
+ * 
+ *  `undecodableProfiles` counts stored profiles this build could not read —
+ *  most often ones written by a newer build. Persistence skips those rows
+ *  rather than failing the whole listing, so one unreadable server cannot take
+ *  away the user's ability to see, connect to or delete the others.
+ * 
+ *  The count travels *with* the rows instead of arriving as a notice on the
+ *  side: the listing is re-fetched on every profile query, so an event would
+ *  repeat without end, while a field on the response lets the screen state the
+ *  shortfall once, quietly, beside the list it belongs to.
+ */
+export type ProfileListing = {
+	entries: ProfileListEntry[],
+	undecodableProfiles: number,
 };
 
 export type ProfileMetrics = {

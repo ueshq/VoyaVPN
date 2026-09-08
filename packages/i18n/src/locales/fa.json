@@ -473,6 +473,7 @@
         "rows": "{{rows}} rows",
         "subscriptions": "Subscriptions"
       },
+      "undecodable": "{{count}} نمایه ذخیره‌شده با این نسخه خوانده نشد و پنهان شده است. به احتمال زیاد با نسخه‌ای جدیدتر نوشته شده‌اند؛ به‌روزرسانی VoyaVPN باید دوباره آن‌ها را نمایش دهد.",
       "untitled": "Untitled",
       "validation": {
         "addressRequired": "نشانی الزامی است",

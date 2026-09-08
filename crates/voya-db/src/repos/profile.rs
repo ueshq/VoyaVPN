@@ -27,6 +27,18 @@ const PROFILE_LIST_QUERY: &str = r#"
     ORDER BY COALESCE(e.sort, 0), p.index_id
 "#;
 
+/// A profile listing together with the rows this build had to skip.
+///
+/// The count travels with the rows it is missing from rather than only reaching
+/// a log file: the profiles screen states it, so a short list is explained
+/// instead of looking like data loss. See [`decode_profile_rows`] for why the
+/// rows are skipped at all.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ProfileListing {
+    pub items: Vec<(ProfileItem, ProfileExItem)>,
+    pub undecodable_rows: usize,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ProfileRepository<'executor> {
     executor: RepositoryExecutor<'executor>,
@@ -118,6 +130,7 @@ impl<'executor> ProfileRepository<'executor> {
         Ok(self
             .list_with_profile_ex(subscription_id)
             .await?
+            .items
             .into_iter()
             .map(|(profile, _)| profile)
             .collect())
@@ -126,7 +139,7 @@ impl<'executor> ProfileRepository<'executor> {
     pub async fn list_with_profile_ex(
         &self,
         subscription_id: Option<&str>,
-    ) -> Result<Vec<(ProfileItem, ProfileExItem)>> {
+    ) -> Result<ProfileListing> {
         let subscription_id = subscription_id.filter(|value| !value.is_empty());
         let rows = run_query!(
             self.executor,
@@ -191,7 +204,10 @@ impl<'executor> ProfileRepository<'executor> {
 /// or even delete a server, and the only recovery would be deleting the database
 /// file. Bad rows are therefore logged and skipped, while genuine database
 /// faults (a missing column, a closed pool) still propagate.
-fn decode_profile_rows(rows: &[SqliteRow]) -> Result<Vec<(ProfileItem, ProfileExItem)>> {
+///
+/// The skip count is returned with the rows so the screens can say it out loud;
+/// a log line the user has no reason to open is not an explanation.
+fn decode_profile_rows(rows: &[SqliteRow]) -> Result<ProfileListing> {
     let mut decoded = Vec::with_capacity(rows.len());
     let mut skipped_rows = 0usize;
 
@@ -217,7 +233,10 @@ fn decode_profile_rows(rows: &[SqliteRow]) -> Result<Vec<(ProfileItem, ProfileEx
         );
     }
 
-    Ok(decoded)
+    Ok(ProfileListing {
+        items: decoded,
+        undecodable_rows: skipped_rows,
+    })
 }
 
 fn row_to_profile(row: &SqliteRow) -> Result<ProfileItem> {

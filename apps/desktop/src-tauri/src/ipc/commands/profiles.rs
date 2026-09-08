@@ -6,7 +6,7 @@ pub async fn list_profiles(
     state: tauri::State<'_, AppState>,
     subscription_id: Option<String>,
     filter: Option<String>,
-) -> Result<Vec<ProfileListEntry>, AppError> {
+) -> Result<ProfileListing, AppError> {
     validate_present_ipc_text(
         subscription_id.as_deref(),
         "subscription id",
@@ -26,7 +26,7 @@ pub async fn list_profiles(
         .profiles()
         .list_profiles(&config, subscription_id.as_deref(), filter.as_deref())
         .await
-        .map(|items| items.into_iter().map(profile_list_to_contract).collect())
+        .map(profile_listing_to_contract)
         .map_err(AppError::from)
 }
 

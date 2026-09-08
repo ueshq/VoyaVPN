@@ -473,6 +473,7 @@
         "rows": "{{rows}} 筆",
         "subscriptions": "訂閱"
       },
+      "undecodable": "有 {{count}} 個已儲存的設定檔無法由目前版本讀取，已被隱藏。它們很可能由較新的版本寫入；升級 VoyaVPN 後應可重新顯示。",
       "untitled": "未命名",
       "validation": {
         "addressRequired": "請填寫位址",

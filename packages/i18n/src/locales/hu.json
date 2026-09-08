@@ -473,6 +473,7 @@
         "rows": "{{rows}} rows",
         "subscriptions": "Subscriptions"
       },
+      "undecodable": "{{count}} mentett profilt nem tudott beolvasni ez a verzió, ezért rejtve vannak. Nagy valószínűséggel egy újabb build írta őket; a VoyaVPN frissítése után újra megjelenhetnek.",
       "untitled": "Untitled",
       "validation": {
         "addressRequired": "a cím kötelező",

@@ -99,9 +99,19 @@ export function useServerTable() {
     queryKey: profilesQueryKey(filter),
   });
   const profiles = useMemo(
-    () => applyLiveUpdates(profilesQuery.data ?? [], serverStatsByProfileId, speedtestResultsByProfileId),
+    () =>
+      applyLiveUpdates(
+        profilesQuery.data?.entries ?? [],
+        serverStatsByProfileId,
+        speedtestResultsByProfileId,
+      ),
     [profilesQuery.data, serverStatsByProfileId, speedtestResultsByProfileId],
   );
+  // Stored servers this build could not read. The backend skips those rows so
+  // one of them cannot hide every other server, and reports how many it
+  // skipped; the toolbar states it, because a list that is quietly short is
+  // indistinguishable from data loss.
+  const undecodableProfiles = profilesQuery.data?.undecodableProfiles ?? 0;
 
   const tableColumns = useMemo<ColumnDef<ProfileListEntry>[]>(
     () =>
@@ -330,7 +340,7 @@ export function useServerTable() {
     setOperationError(null);
     setOperationMessage(null);
     try {
-      const allProfiles = await listProfiles(null, null);
+      const allProfiles = (await listProfiles(null, null)).entries;
       // Share-link exporters reject group/chain/custom/HTTP profiles, and the
       // backend fails the whole batch on the first rejection, so those profiles
       // are dropped here instead of breaking the export for everyone else.
@@ -416,6 +426,7 @@ export function useServerTable() {
     speedtestRunning,
     subscriptionsOpen,
     t,
+    undecodableProfiles,
     viewportRef,
     visibleColumns,
   };

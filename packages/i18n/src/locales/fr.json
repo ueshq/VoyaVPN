@@ -473,6 +473,7 @@
         "rows": "{{rows}} rows",
         "subscriptions": "Subscriptions"
       },
+      "undecodable": "{{count}} profil(s) enregistré(s) n'ont pas pu être lus par cette version et sont masqués. Ils ont très probablement été écrits par une version plus récente ; mettre VoyaVPN à jour devrait les réafficher.",
       "untitled": "Untitled",
       "validation": {
         "addressRequired": "l'adresse est obligatoire",

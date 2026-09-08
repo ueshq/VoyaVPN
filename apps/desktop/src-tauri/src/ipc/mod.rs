@@ -85,6 +85,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_contracts::ProfileTransport>()
         .typ::<voya_contracts::TlsSettings>()
         .typ::<voya_contracts::ProfileListEntry>()
+        .typ::<voya_contracts::ProfileListing>()
         .typ::<voya_contracts::ProfileSortKey>()
         .typ::<voya_contracts::ProfileDedupeResult>()
         .typ::<voya_contracts::GroupChildCandidate>()

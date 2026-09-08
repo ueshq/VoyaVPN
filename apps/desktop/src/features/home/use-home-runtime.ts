@@ -115,7 +115,7 @@ export function useHomeRuntime(t: Translation) {
   // transaction, so letting them overlap races two `set_connection_mode` calls.
   const modeBusy = busy || modePending !== null || pacPending;
 
-  const activeProfile = profilesQuery.data?.find((item) => item.isActive) ?? null;
+  const activeProfile = profilesQuery.data?.entries.find((item) => item.isActive) ?? null;
   const activeProfileId = activeProfile?.profile.id ?? null;
   // The green "live" dot follows the node that is actually running, which differs
   // from the persisted-active node only while disconnected.
@@ -126,7 +126,7 @@ export function useHomeRuntime(t: Translation) {
   const tunProviderSummary = tun ? tunProviderLabel(tun, t) : null;
 
   const runningEntry = runningId
-    ? (profilesQuery.data?.find((item) => item.profile.id === runningId) ?? null)
+    ? (profilesQuery.data?.entries.find((item) => item.profile.id === runningId) ?? null)
     : null;
   const activeNodeEntry = runningEntry ?? (connected ? activeProfile : null);
   const activeNode: ActiveNodeInfo | null = activeNodeEntry
@@ -149,7 +149,7 @@ export function useHomeRuntime(t: Translation) {
   } else if (
     profilesQuery.data
     && selectedId
-    && !profilesQuery.data.some((item) => item.profile.id === selectedId)
+    && !profilesQuery.data.entries.some((item) => item.profile.id === selectedId)
   ) {
     // The selected node disappeared — deleted on the Profiles screen, or pruned
     // by a subscription update. Fall back to the persisted active profile
@@ -404,7 +404,7 @@ export function useHomeRuntime(t: Translation) {
     pacActive,
     pacAvailable,
     pacPending,
-    profiles: profilesQuery.data ?? [],
+    profiles: profilesQuery.data?.entries ?? [],
     profilesPending: profilesQuery.isPending,
     restart,
     runningId,

@@ -473,6 +473,7 @@
         "rows": "{{rows}} rows",
         "subscriptions": "Subscriptions"
       },
+      "undecodable": "Профилей, сохранённых в базе и не прочитанных этой версией: {{count}}. Они скрыты, но не удалены — скорее всего, их записала более новая сборка; после обновления VoyaVPN они должны появиться снова.",
       "untitled": "Untitled",
       "validation": {
         "addressRequired": "укажите адрес",

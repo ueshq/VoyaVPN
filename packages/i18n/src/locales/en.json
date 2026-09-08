@@ -473,6 +473,7 @@
         "rows": "{{rows}} rows",
         "subscriptions": "Subscriptions"
       },
+      "undecodable": "{{count}} stored profile(s) could not be read by this version and are hidden. They were most likely written by a newer build; updating VoyaVPN should show them again.",
       "untitled": "Untitled",
       "validation": {
         "addressRequired": "address is required",

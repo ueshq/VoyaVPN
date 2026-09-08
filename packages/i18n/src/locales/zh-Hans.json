@@ -473,6 +473,7 @@
         "rows": "{{rows}} 条",
         "subscriptions": "订阅"
       },
+      "undecodable": "有 {{count}} 个已保存的配置无法被当前版本读取，已被隐藏。它们很可能由更新的版本写入；升级 VoyaVPN 后应能重新显示。",
       "untitled": "未命名",
       "validation": {
         "addressRequired": "请填写地址",
