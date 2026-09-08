@@ -1,6 +1,9 @@
+import { resolve } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  buildTunnelService,
   installTunnelService,
   managedSingBoxPath,
   managedTunnelServicePath,
@@ -17,11 +20,15 @@ const runningService = { status: 0, stdout: "STATE              : 4  RUNNING", s
 const stoppingService = { status: 0, stdout: "STATE              : 3  STOP_PENDING", stderr: "" };
 const stoppedService = { status: 0, stdout: "STATE              : 1  STOPPED", stderr: "" };
 
-const env = { ProgramFiles: "C:\\Program Files", ProgramData: "C:\\ProgramData" };
+const env = {
+  CARGO_BUILD_TARGET: "x86_64-pc-windows-msvc",
+  ProgramFiles: "C:\\Program Files",
+  ProgramData: "C:\\ProgramData",
+};
 
 function installFixture(queryResults) {
   const repoRoot = "/repo";
-  const sourcePath = tunnelServiceSourcePath(repoRoot);
+  const sourcePath = tunnelServiceSourcePath(repoRoot, env);
   const singBoxSourcePath = "/repo/seed/sing-box.exe";
   const destinationPath = managedTunnelServicePath(env);
   const singBoxDestinationPath = managedSingBoxPath(env);
@@ -46,6 +53,7 @@ function installFixture(queryResults) {
   const makeDirectory = vi.fn();
 
   return {
+    files,
     options: {
       platform: "win32",
       env,
@@ -69,6 +77,41 @@ function installFixture(queryResults) {
 }
 
 describe("Windows tunnel service helper", () => {
+  it("builds and resolves the service under the Cargo target directory", () => {
+    const env = { CARGO_BUILD_TARGET: "x86_64-pc-windows-msvc" };
+    const runCommand = vi.fn();
+
+    expect(buildTunnelService({
+      env,
+      repoRoot: "C:\\repo",
+      runCommand,
+    })).toBe(
+      resolve("C:\\repo", "target", "x86_64-pc-windows-msvc", "release", "voyavpn-tunnel-service.exe"),
+    );
+    expect(runCommand).toHaveBeenCalledWith(
+      "cargo",
+      ["build", "-p", "voyavpn", "--bin", "voyavpn-tunnel-service", "--release"],
+      { cwd: "C:\\repo", env, shell: false },
+    );
+  });
+
+  it("passes the target environment to the fallback service build", () => {
+    const fixture = installFixture([missingService, stoppedService]);
+    fixture.files.delete(tunnelServiceSourcePath("/repo", fixture.options.env));
+    const ensureBuilt = vi.fn(({ env }) => {
+      expect(env).toBe(fixture.options.env);
+      fixture.files.add(tunnelServiceSourcePath("/repo", env));
+    });
+
+    installTunnelService({ ...fixture.options, ensureBuilt });
+
+    expect(ensureBuilt).toHaveBeenCalledWith({
+      env: fixture.options.env,
+      repoRoot: "/repo",
+      runCommand: fixture.options.runCommand,
+    });
+  });
+
   it("uses the native Program Files directory for the managed service binary", () => {
     expect(managedTunnelServicePath({ ProgramW6432: "D:\\Program Files" })).toBe(
       "D:\\Program Files\\VoyaVPN\\voyavpn-tunnel-service.exe",
@@ -216,7 +259,7 @@ describe("Windows tunnel service helper", () => {
 
   it("refuses to install without a staged sing-box seed", () => {
     const fixture = installFixture([missingService, stoppedService]);
-    fixture.options.fileExists = (path) => path === tunnelServiceSourcePath("/repo");
+    fixture.files.delete(fixture.singBoxSourcePath);
 
     expect(() => installTunnelService(fixture.options)).toThrow(/sing-box core seed is missing/);
     expect(fixture.options.copyFile).not.toHaveBeenCalled();

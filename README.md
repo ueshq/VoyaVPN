@@ -84,8 +84,10 @@ protected TUN service for local testing (the service step opens one UAC prompt):
 pnpm build:windows:local
 ```
 
-This generates both NSIS and MSI artifacts, installs the current-user NSIS
-copy, and leaves the demand-start service stopped until TUN is enabled. See
+This generates and installs a current-user NSIS artifact, then leaves the
+demand-start service stopped until TUN is enabled. The command always targets
+the machine's native MSVC Rust triple, regardless of the user's default Rust
+toolchain. See
 [`docs/release/windows-local-tun-testing.md`](docs/release/windows-local-tun-testing.md).
 
 Build release-profile Tauri packages in a prepared signing environment:

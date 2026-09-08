@@ -1,6 +1,9 @@
+import { resolve } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  assertRustTargetInstalled,
   assertSafeExistingInstalls,
   assertWindowsGuiStopped,
   buildWindowsInstallers,
@@ -27,6 +30,58 @@ describe("Windows local app build", () => {
     expect(() => nativeWindowsTarget("ia32")).toThrow(/supports only/);
   });
 
+  it("checks that the selected MSVC target library is installed", () => {
+    const targetLibDirectory = "C:\\Rust\\msvc\\lib";
+    const captureCommand = vi.fn(() => ({
+      status: 0,
+      stdout: `${targetLibDirectory}\n`,
+      stderr: "",
+    }));
+
+    expect(assertRustTargetInstalled({
+      env: {},
+      rustTarget: "x86_64-pc-windows-msvc",
+      captureCommand,
+      fileExists: (path) => path === targetLibDirectory,
+    })).toBe(targetLibDirectory);
+    expect(captureCommand).toHaveBeenCalledWith(
+      "rustc",
+      ["--print", "target-libdir", "--target", "x86_64-pc-windows-msvc"],
+      expect.objectContaining({ env: {} }),
+    );
+  });
+
+  it("fails before building when the selected MSVC target is missing", () => {
+    expect(() => assertRustTargetInstalled({
+      env: {},
+      rustTarget: "x86_64-pc-windows-msvc",
+      captureCommand: () => ({
+        status: 0,
+        stdout: "C:\\Rust\\missing\\lib\n",
+        stderr: "",
+      }),
+      fileExists: () => false,
+    })).toThrow(/rustup toolchain install 1\.96\.0-x86_64-pc-windows-msvc.*Visual Studio 2022 Build Tools/);
+
+    const runCommand = vi.fn();
+    const ensureGuiStopped = vi.fn();
+    expect(() => buildWindowsLocal({
+      platform: "win32",
+      arch: "x64",
+      sourceEnv: { LOCALAPPDATA: "C:\\Users\\dev\\AppData\\Local" },
+      repoRoot: "C:\\repo",
+      version: "0.1.0",
+      runCommand,
+      ensureRustTarget: () => {
+        throw new Error("Rust MSVC target is missing");
+      },
+      ensureGuiStopped,
+      resolvePackageManager: () => ({ prefixArgs: [], program: "pnpm" }),
+    })).toThrow(/Rust MSVC target is missing/);
+    expect(runCommand).not.toHaveBeenCalled();
+    expect(ensureGuiStopped).not.toHaveBeenCalled();
+  });
+
   it("removes stable updater and signing inputs from the local build environment", () => {
     const env = localWindowsBuildEnv({
       LOCALAPPDATA: "C:\\Users\\dev\\AppData\\Local",
@@ -36,6 +91,7 @@ describe("Windows local app build", () => {
       voyavpn_tauri_updater_config: "stable",
       TAURI_SIGNING_PRIVATE_KEY: "secret",
       WINDOWS_CERTIFICATE_BASE64: "certificate",
+      cargo_build_target: "x86_64-pc-windows-gnu",
       KEEP_ME: "yes",
     });
 
@@ -101,20 +157,27 @@ describe("Windows local app build", () => {
     })).toEqual([{ scope: "HKCU", installLocation: "C:\\VoyaVPN" }]);
   });
 
-  it("selects only current-version native-architecture NSIS and MSI artifacts", () => {
+  it("selects only the current-version native-architecture NSIS artifact", () => {
+    const readDirectory = vi.fn(() => [
+      "VoyaVPN_0.1.0_x64-setup.exe",
+      "VoyaVPN_0.1.0_arm64-setup.exe",
+    ]);
     const artifacts = discoverWindowsArtifacts({
       repoRoot: "C:\\repo",
       version: "0.1.0",
       artifactArch: "x64",
+      rustTarget: "x86_64-pc-windows-msvc",
       fileExists: () => true,
-      readDirectory: (directory) => /[\\/]nsis$/.test(directory)
-        ? ["VoyaVPN_0.1.0_x64-setup.exe", "VoyaVPN_0.1.0_arm64-setup.exe"]
-        : ["VoyaVPN_0.1.0_x64_en-US.msi", "VoyaVPN_0.2.0_x64_en-US.msi"],
+      readDirectory,
       fileStat: () => ({ isFile: () => true }),
     });
 
-    expect(artifacts.nsis).toMatch(/VoyaVPN_0\.1\.0_x64-setup\.exe$/);
-    expect(artifacts.msi).toMatch(/VoyaVPN_0\.1\.0_x64_en-US\.msi$/);
+    expect(artifacts).toEqual({
+      nsis: expect.stringMatching(/VoyaVPN_0\.1\.0_x64-setup\.exe$/),
+    });
+    expect(readDirectory).toHaveBeenCalledWith(
+      resolve("C:\\repo", "target", "x86_64-pc-windows-msvc", "release", "bundle", "nsis"),
+    );
   });
 
   it("builds, silently installs, elevates only the service step, and verifies outputs", () => {
@@ -122,16 +185,18 @@ describe("Windows local app build", () => {
       LOCALAPPDATA: "C:\\Users\\dev\\AppData\\Local",
       ProgramFiles: "C:\\Program Files",
       VOYAVPN_RELEASE_CHANNEL: "stable",
+      CARGO_BUILD_TARGET: "x86_64-pc-windows-gnu",
       KEEP_ME: "yes",
     };
     const appPath = installedWindowsAppPath(sourceEnv);
     const servicePath = "C:\\Program Files\\VoyaVPN\\voyavpn-tunnel-service.exe";
     const singBoxPath = "C:\\Program Files\\VoyaVPN\\sing_box\\sing-box.exe";
-    const nsis = "C:\\repo\\target\\release\\bundle\\nsis\\VoyaVPN_0.1.0_x64-setup.exe";
-    const msi = "C:\\repo\\target\\release\\bundle\\msi\\VoyaVPN_0.1.0_x64_en-US.msi";
+    const nsis = "C:\\repo\\target\\x86_64-pc-windows-msvc\\release\\bundle\\nsis\\VoyaVPN_0.1.0_x64-setup.exe";
     const runCommand = vi.fn();
     const ensureGuiStopped = vi.fn();
+    const ensureRustTarget = vi.fn();
     const elevateServiceInstall = vi.fn();
+    const discoverArtifacts = vi.fn(() => ({ nsis }));
     const packageManager = { prefixArgs: [], program: "pnpm" };
     const logger = { log: vi.fn() };
 
@@ -143,18 +208,26 @@ describe("Windows local app build", () => {
       version: "0.1.0",
       runCommand,
       fileExists: (path) => path === appPath || path === servicePath || path === singBoxPath,
+      ensureRustTarget,
       ensureGuiStopped,
       readExistingInstalls: () => [],
-      discoverArtifacts: () => ({ msi, nsis }),
+      discoverArtifacts,
       elevateServiceInstall,
       resolvePackageManager: () => packageManager,
       logger,
     });
 
-    expect(result).toEqual({ appPath, servicePath, singBoxPath, msi, nsis });
+    expect(result).toEqual({ appPath, servicePath, singBoxPath, nsis });
     expect(ensureGuiStopped).toHaveBeenCalledOnce();
     expect(runCommand.mock.calls.map(([program, args]) => [program, args])).toEqual([
-      ["pnpm", ["tauri:build", "--no-sign", "--bundles", "nsis", "msi"]],
+      ["pnpm", [
+        "tauri:build",
+        "--no-sign",
+        "--target",
+        "x86_64-pc-windows-msvc",
+        "--bundles",
+        "nsis",
+      ]],
       ["pnpm", ["native:windows:tunnel:build"]],
       [nsis, ["/S"]],
       ["sc.exe", ["query", "VoyaVPNTunnelService"]],
@@ -162,6 +235,14 @@ describe("Windows local app build", () => {
     const buildEnvironment = runCommand.mock.calls[0][2].env;
     expect(buildEnvironment.KEEP_ME).toBe("yes");
     expect(buildEnvironment.VOYAVPN_RELEASE_CHANNEL).toBeUndefined();
+    expect(buildEnvironment.CARGO_BUILD_TARGET).toBe("x86_64-pc-windows-msvc");
+    expect(ensureRustTarget).toHaveBeenCalledWith({
+      env: buildEnvironment,
+      rustTarget: "x86_64-pc-windows-msvc",
+    });
+    expect(discoverArtifacts).toHaveBeenCalledWith(expect.objectContaining({
+      rustTarget: "x86_64-pc-windows-msvc",
+    }));
     expect(elevateServiceInstall).toHaveBeenCalledOnce();
   });
 
@@ -181,6 +262,7 @@ describe("Windows local app build", () => {
     let powershellScript = "";
     expect(() => elevateTunnelServiceInstall({
       env: {},
+      rustTarget: "x86_64-pc-windows-msvc",
       repoRoot: "C:\\repo",
       nodeExecutable: "C:\\Program Files\\nodejs\\node.exe",
       captureCommand: (_program, args) => {
@@ -189,6 +271,7 @@ describe("Windows local app build", () => {
       },
     })).toThrow(/cancelled at the UAC prompt/);
     expect(powershellScript).toMatch(/-WindowStyle Hidden/);
+    expect(powershellScript).toMatch(/InnerException\.NativeErrorCode/);
   });
 
   it("maps elevated service failure codes to actionable errors", () => {
@@ -204,14 +287,15 @@ describe("Windows local app build", () => {
     })).toThrow(/registration or verification failed/);
   });
 
-  it("adds an actionable VBScript hint when Windows bundling fails", () => {
+  it("reports NSIS bundling failures with local-lane context", () => {
     expect(() => buildWindowsInstallers({
       env: {},
+      rustTarget: "x86_64-pc-windows-msvc",
       repoRoot: "C:\\repo",
       packageManager: { prefixArgs: [], program: "pnpm" },
       runCommand: () => {
         throw new Error("light.exe failed");
       },
-    })).toThrow(/VBScript optional feature/);
+    })).toThrow(/Windows NSIS build failed/);
   });
 });

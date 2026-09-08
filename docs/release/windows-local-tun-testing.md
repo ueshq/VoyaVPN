@@ -1,9 +1,9 @@
 # Windows Local TUN Testing
 
 `pnpm build:windows:local` produces an unsigned release-profile Windows client
-for local TUN testing. It builds both NSIS and MSI packages for the machine's
-native x64 or arm64 architecture, silently installs the current-user NSIS
-package, and uses one UAC prompt to install the native tunnel service.
+for local TUN testing. It builds an NSIS package for the machine's native x64
+or arm64 architecture, silently installs it for the current user, and uses one
+UAC prompt to install the native tunnel service.
 
 The command is a local-only lane. It disables app and updater signing, does not
 generate stable updater artifacts, does not publish anything, and does not
@@ -13,26 +13,28 @@ launch VoyaVPN automatically.
 
 - Windows 10 or Windows 11 on x64 or arm64.
 - Node.js 22 with the repository-pinned pnpm 11.5.0.
-- Rust 1.96.0 with the native MSVC target.
+- Rust 1.96.0 with the native MSVC-hosted toolchain selected for this
+  repository. For Windows x64:
+
+  ```powershell
+  rustup toolchain install 1.96.0-x86_64-pc-windows-msvc
+  rustup override set 1.96.0-x86_64-pc-windows-msvc
+  ```
+
+  On Windows arm64, use `1.96.0-aarch64-pc-windows-msvc` instead.
 - Visual Studio 2022 Build Tools with **Desktop development with C++**, MSVC
   v143, and a Windows 10/11 SDK.
 - WebView2 Runtime. Windows 11 normally includes it; the NSIS installer uses the
-  configured download bootstrapper when it is missing.
+  configured download bootstrapper when it is missing. The MSVC build links the
+  native WebView2 loader statically, so `WebView2Loader.dll` is not an installed
+  sidecar and must not be copied into the package manually.
 - Internet access when the sing-box seed or WebView2 bootstrapper must be
   downloaded.
 
-MSI creation requires the Windows **VBScript** optional feature. It is enabled
-by default on most Windows installations. If Tauri reports that `light.exe`
-failed, open **Settings → Apps/System → Optional features → View features**,
-install VBScript, restart Windows, and retry. Alternatively, run this from an
-elevated Command Prompt, then restart Windows:
-
-```cmd
-DISM /Online /Add-Capability /CapabilityName:VBSCRIPT~~~~
-```
-
-See Microsoft's [VBScript deprecation timeline](https://techcommunity.microsoft.com/blog/windows-itpro-blog/vbscript-deprecation-timelines-and-next-steps/4148301)
-for why VBScript is becoming a Feature on Demand.
+The local lane deliberately does not build MSI. WiX 3 runs MSI ICE validation
+through the deprecated Windows VBScript engine, which is unavailable on some
+new Windows installations. MSI remains a release-lane artifact and must be
+built and tested on the prepared Windows release host.
 
 Install the repository dependencies from a normal PowerShell first:
 
@@ -56,7 +58,7 @@ The command performs these steps:
 1. Rejects unsupported architectures and a running `voyavpn.exe`.
 2. Allows an existing current-user NSIS install only at
    `%LOCALAPPDATA%\VoyaVPN`; it refuses to replace MSI or other installations.
-3. Runs an unsigned release build for both `nsis` and `msi`.
+3. Runs an unsigned release build for `nsis`.
 4. Builds `voyavpn-tunnel-service.exe` separately.
 5. Silently installs the NSIS package for the current user.
 6. Opens one UAC prompt, stops an old `VoyaVPNTunnelService` when necessary,
@@ -70,12 +72,12 @@ Expected paths are:
 ```text
 %LOCALAPPDATA%\VoyaVPN\voyavpn.exe
 %ProgramFiles%\VoyaVPN\voyavpn-tunnel-service.exe
-target\release\bundle\nsis\VoyaVPN_<version>_<arch>-setup.exe
-target\release\bundle\msi\VoyaVPN_<version>_<arch>_en-US.msi
+target\<rust-target>\release\bundle\nsis\VoyaVPN_<version>_<arch>-setup.exe
 ```
 
 The command prints the resolved paths and a `Start-Process` command when it
-finishes. Launch the installed copy rather than `target\release\voyavpn.exe`.
+finishes. Launch the installed copy rather than
+`target\<rust-target>\release\voyavpn.exe`.
 
 ## Verify The Tunnel
 
@@ -110,8 +112,6 @@ and replaces the protected service binary without starting the service.
 - **Service stop timed out** — disable TUN, inspect
   `sc.exe query VoyaVPNTunnelService`, then retry. The script will not overwrite
   a running service executable.
-- **`light.exe` failed while building MSI** — enable the VBScript optional
-  feature described in Prerequisites.
 - **Missing sing-box seed** — run `pnpm core:sing-box:install` and rebuild.
 
 ## Teardown

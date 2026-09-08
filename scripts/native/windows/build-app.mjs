@@ -21,6 +21,7 @@ const productName = "VoyaVPN";
 const mainExecutableName = "voyavpn.exe";
 
 const localBuildEnvNames = [
+  "CARGO_BUILD_TARGET",
   "VOYAVPN_RELEASE_CHANNEL",
   "RELEASE_CHANNEL",
   "CHANNEL",
@@ -124,6 +125,40 @@ export function nativeWindowsTarget(arch = process.arch) {
     return { artifactArch: "arm64", rustTarget: "aarch64-pc-windows-msvc" };
   }
   throw new Error(`pnpm build:windows:local supports only native Windows x64 and arm64, not ${arch}.`);
+}
+
+function rustMsvcPrerequisiteMessage(rustTarget) {
+  const toolchain = `1.96.0-${rustTarget}`;
+  return [
+    `Rust MSVC target ${rustTarget} is not installed for the active toolchain.`,
+    `Install the matching toolchain with \`rustup toolchain install ${toolchain}\``,
+    `and select it for this repository with \`rustup override set ${toolchain}\`.`,
+    "Visual Studio 2022 Build Tools must also include Desktop development with C++, MSVC v143, and a Windows 10/11 SDK.",
+  ].join(" ");
+}
+
+export function assertRustTargetInstalled({
+  env = process.env,
+  rustTarget = nativeWindowsTarget().rustTarget,
+  captureCommand = capture,
+  fileExists = existsSync,
+} = {}) {
+  let result;
+  try {
+    result = captureChecked(
+      captureCommand,
+      "rustc",
+      ["--print", "target-libdir", "--target", rustTarget],
+      { env, encoding: "utf8", windowsHide: true },
+    );
+  } catch (error) {
+    throw new Error(rustMsvcPrerequisiteMessage(rustTarget), { cause: error });
+  }
+  const targetLibDirectory = String(result.stdout ?? "").trim();
+  if (!targetLibDirectory || !fileExists(targetLibDirectory)) {
+    throw new Error(rustMsvcPrerequisiteMessage(rustTarget));
+  }
+  return targetLibDirectory;
 }
 
 export function localWindowsBuildEnv(sourceEnv = process.env) {
@@ -254,20 +289,17 @@ export function discoverWindowsArtifacts({
   repoRoot = defaultRepoRoot,
   version = currentVersion(repoRoot),
   artifactArch = nativeWindowsTarget().artifactArch,
+  rustTarget = nativeWindowsTarget().rustTarget,
   fileExists = existsSync,
   readDirectory = readdirSync,
   fileStat = statSync,
 } = {}) {
-  const bundleRoot = resolve(repoRoot, "target", "release", "bundle");
+  const bundleRoot = resolve(repoRoot, "target", rustTarget, "release", "bundle");
   const nsis = selectArtifact(
     artifactFiles(resolve(bundleRoot, "nsis"), fileExists, readDirectory, fileStat),
     { version, artifactArch, extension: ".exe", label: "NSIS" },
   );
-  const msi = selectArtifact(
-    artifactFiles(resolve(bundleRoot, "msi"), fileExists, readDirectory, fileStat),
-    { version, artifactArch, extension: ".msi", label: "MSI" },
-  );
-  return { msi, nsis };
+  return { nsis };
 }
 
 export function elevateTunnelServiceInstall({
@@ -290,7 +322,11 @@ export function elevateTunnelServiceInstall({
     "  exit $child.ExitCode",
     "} catch {",
     "  [Console]::Error.WriteLine($_.Exception.Message)",
-    "  if ($_.Exception.NativeErrorCode -eq 1223) { exit 1223 }",
+    "  $nativeCode = $_.Exception.NativeErrorCode",
+    "  if (-not $nativeCode -and $_.Exception.InnerException) {",
+    "    $nativeCode = $_.Exception.InnerException.NativeErrorCode",
+    "  }",
+    "  if ($nativeCode -eq 1223) { exit 1223 }",
     "  exit 1",
     "}",
   ].join("\n");
@@ -322,6 +358,7 @@ export function elevateTunnelServiceInstall({
 
 export function buildWindowsInstallers({
   env,
+  rustTarget,
   repoRoot = defaultRepoRoot,
   runCommand = run,
   packageManager = windowsPnpmInvocation({ env }),
@@ -329,7 +366,15 @@ export function buildWindowsInstallers({
   try {
     return runCommand(
       packageManager.program,
-      [...packageManager.prefixArgs, "tauri:build", "--no-sign", "--bundles", "nsis", "msi"],
+      [
+        ...packageManager.prefixArgs,
+        "tauri:build",
+        "--no-sign",
+        "--target",
+        rustTarget,
+        "--bundles",
+        "nsis",
+      ],
       {
         cwd: repoRoot,
         env,
@@ -338,7 +383,7 @@ export function buildWindowsInstallers({
     );
   } catch (error) {
     throw new Error(
-      "Windows NSIS/MSI build failed. If Tauri stopped at light.exe (commonly LGHT0217 or Windows Installer error 2738), enable the Windows VBScript optional feature and retry.",
+      "Windows NSIS build failed. Inspect the Tauri bundler output above for the underlying error.",
       { cause: error },
     );
   }
@@ -356,6 +401,7 @@ export function buildWindowsLocal({
   readExistingInstalls = readExistingWindowsInstalls,
   discoverArtifacts = discoverWindowsArtifacts,
   elevateServiceInstall = elevateTunnelServiceInstall,
+  ensureRustTarget = assertRustTargetInstalled,
   resolvePackageManager = windowsPnpmInvocation,
   logger = console,
 } = {}) {
@@ -363,15 +409,25 @@ export function buildWindowsLocal({
     throw new Error("pnpm build:windows:local must run on Windows.");
   }
   const target = nativeWindowsTarget(arch);
-  const env = localWindowsBuildEnv(sourceEnv);
+  const env = {
+    ...localWindowsBuildEnv(sourceEnv),
+    CARGO_BUILD_TARGET: target.rustTarget,
+  };
   const appPath = installedWindowsAppPath(env);
   const packageManager = resolvePackageManager({ env });
 
+  ensureRustTarget({ env, rustTarget: target.rustTarget });
   ensureGuiStopped({ env });
   assertSafeExistingInstalls(readExistingInstalls({ env }), appPath);
 
-  logger.log(`Building unsigned local Windows ${target.artifactArch} installers and TUN service...`);
-  buildWindowsInstallers({ env, repoRoot, runCommand, packageManager });
+  logger.log(`Building unsigned local Windows ${target.artifactArch} NSIS installer and TUN service...`);
+  buildWindowsInstallers({
+    env,
+    rustTarget: target.rustTarget,
+    repoRoot,
+    runCommand,
+    packageManager,
+  });
   runCommand(packageManager.program, [...packageManager.prefixArgs, "native:windows:tunnel:build"], {
     cwd: repoRoot,
     env,
@@ -382,6 +438,7 @@ export function buildWindowsLocal({
     repoRoot,
     version,
     artifactArch: target.artifactArch,
+    rustTarget: target.rustTarget,
   });
   logger.log(`Installing ${artifacts.nsis} for the current user...`);
   runCommand(artifacts.nsis, ["/S"], {
@@ -417,7 +474,6 @@ export function buildWindowsLocal({
   logger.log(`  Service: ${servicePath}`);
   logger.log(`  Service core: ${singBoxPath}`);
   logger.log(`  NSIS: ${artifacts.nsis}`);
-  logger.log(`  MSI: ${artifacts.msi}`);
   logger.log("");
   logger.log("Open it with:");
   logger.log(`  Start-Process ${powershellQuoted(appPath)}`);

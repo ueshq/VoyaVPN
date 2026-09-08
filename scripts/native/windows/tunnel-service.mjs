@@ -157,8 +157,11 @@ export function requireWindows(platform = process.platform) {
   }
 }
 
-export function tunnelServiceSourcePath(repoRoot = defaultRepoRoot) {
-  return resolve(repoRoot, "target", "release", serviceExecutableName);
+export function tunnelServiceSourcePath(repoRoot = defaultRepoRoot, env = process.env) {
+  const rustTarget = environmentValue(env, "CARGO_BUILD_TARGET");
+  return rustTarget
+    ? resolve(repoRoot, "target", rustTarget, "release", serviceExecutableName)
+    : resolve(repoRoot, "target", "release", serviceExecutableName);
 }
 
 function managedProductDir(env) {
@@ -195,12 +198,17 @@ export function singBoxSeedExecutablePath(repoRoot = defaultRepoRoot) {
   return resolve(singBoxSeedDir(repoRoot), singBoxExecutableName("win32"));
 }
 
-export function buildTunnelService({ repoRoot = defaultRepoRoot, runCommand = run } = {}) {
+export function buildTunnelService({
+  env = process.env,
+  repoRoot = defaultRepoRoot,
+  runCommand = run,
+} = {}) {
   runCommand("cargo", ["build", "-p", "voyavpn", "--bin", "voyavpn-tunnel-service", "--release"], {
     cwd: repoRoot,
+    env,
     shell: false,
   });
-  return tunnelServiceSourcePath(repoRoot);
+  return tunnelServiceSourcePath(repoRoot, env);
 }
 
 function stageProtectedFile({
@@ -265,12 +273,12 @@ export function installTunnelService({
   requireWindows(platform);
   validateTiming(timeoutMs, pollIntervalMs);
 
-  const sourcePath = tunnelServiceSourcePath(repoRoot);
+  const sourcePath = tunnelServiceSourcePath(repoRoot, env);
   const destinationPath = managedTunnelServicePath(env);
   const singBoxDestinationPath = managedSingBoxPath(env);
   const runtimeStagingDir = tunnelRuntimeStagingPath(env);
   if (!fileExists(sourcePath)) {
-    ensureBuilt({ repoRoot, runCommand });
+    ensureBuilt({ env, repoRoot, runCommand });
   }
   if (!fileExists(sourcePath) || !fileStat(sourcePath).isFile()) {
     throw new Error(`Windows tunnel service build output is missing: ${sourcePath}`);

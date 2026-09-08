@@ -349,9 +349,10 @@ The script also supports `VOYAVPN_NOTARY_APPLE_ID`,
 from the release secret system and must not be committed.
 
 For an unsigned, release-profile local Windows package with a working TUN
-service, run this command from a normal PowerShell. It generates NSIS and MSI,
-silently installs the current-user NSIS copy, and requests elevation only once
-to update the service:
+service, run this command from a normal PowerShell. It generates and silently
+installs the current-user NSIS copy, then requests elevation only once to update
+the service. The local lane explicitly targets the machine's native Windows
+MSVC Rust triple and writes bundles below `target/<rust-target>/release/bundle`:
 
 ```powershell
 pnpm build:windows:local
