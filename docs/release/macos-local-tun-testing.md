@@ -111,9 +111,16 @@ open -n /Applications/VoyaVPN.app
 
 ## Troubleshooting and teardown
 
-- **App is killed instantly at launch** — the signature, profile, and device no
-  longer match (AMFI). Re-run `pnpm native:macos:preflight`; the rejection
-  table names the failing profile and reason.
+- **App is killed instantly at launch** — check the VoyaVPN report in
+  `~/Library/Logs/DiagnosticReports/`. An AMFI/code-signing rejection points to
+  a signature, profile, or device mismatch; re-run
+  `pnpm native:macos:preflight` for the failing profile and reason.
+- **Startup crashes with `SIGABRT` / Rust panic** — run
+  `RUST_BACKTRACE=1 /Applications/VoyaVPN.app/Contents/MacOS/voyavpn` in a
+  terminal to capture the original panic. `EventRegistry not found in Tauri
+  state` identifies an older build that forwarded startup warnings to the log
+  panel before mounting typed events. Rebuild with `pnpm build:mac:local`.
+  The macOS “reopen windows” alert is a consequence of the crash, not its cause.
 - **TUN fails with `ProviderPathMismatch`** — another copy of the appex is
   elected. Quit VoyaVPN and run
   `pnpm native:macos:ne:doctor --fix` (defaults to `/Applications/VoyaVPN.app`).

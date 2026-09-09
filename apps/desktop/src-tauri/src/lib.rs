@@ -175,7 +175,11 @@ pub fn run() {
             }
         })
         .setup(move |app| {
-            if let Err(error) = initialize(app, &specta_builder) {
+            // Startup logging and background tasks emit typed events. Mount
+            // their registry first: even a recoverable startup warning would
+            // otherwise panic in the log-panel layer before setup completes.
+            specta_builder.mount_events(app);
+            if let Err(error) = initialize(app) {
                 // Nothing can be shown from here: every dialog API round-trips
                 // through the main thread's event loop, which only starts after
                 // `setup` returns, so a blocking dialog would hang the launch.
@@ -205,10 +209,7 @@ pub fn run() {
 /// Windows, a bundle on macOS) that made the process vanish with no
 /// explanation, including for `reject_incompatible_config`, which is a
 /// deliberate, user-actionable refusal.
-fn initialize(
-    app: &mut tauri::App,
-    specta_builder: &tauri_specta::Builder<tauri::Wry>,
-) -> Result<(), Box<dyn Error>> {
+fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     let app_config_dir = app.path().app_config_dir()?;
     reject_incompatible_config(&app_config_dir.join("guiNConfig.json"), 1)?;
     let runtime_paths = AppPaths::new(&app_config_dir);
@@ -321,7 +322,6 @@ fn initialize(
         provider_registration_cache: Arc::new(ProviderRegistrationCache::new()),
     });
 
-    specta_builder.mount_events(app);
     setup_tray(app)?;
     // Registering global hotkeys mutates machine state, so it runs last:
     // an accelerator claimed for a launch that then failed would stay
