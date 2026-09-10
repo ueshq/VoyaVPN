@@ -75,7 +75,7 @@ export function ConnectionDetails({
             {t("activity.connectionDetails")}
           </DialogTitle>
           <DialogDescription>
-            {t(ended ? "activity.ended" : stale ? "activity.previousData" : "activity.liveConnections")}
+            {ended ? t("activity.ended") : stale ? t("activity.previousData") : t("activity.liveConnections")}
           </DialogDescription>
         </DialogHeader>
         <dl className="min-h-0 select-text space-y-4 overflow-y-auto px-6 py-5 text-sm">

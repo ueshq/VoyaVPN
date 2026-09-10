@@ -27,7 +27,7 @@ Boundary ownership:
 - `voya-platform::elevation`: Unix `sudo -S` flow and Windows elevation integration.
 - `voya-platform::tun`: TUN setup/teardown helpers and platform-specific preflight.
 - `voya-platform::sysproxy` and `voya-platform::pac`: forced clear/change, unchanged, and Windows/macOS PAC behavior.
-- `voya-platform::autostart` and `voya-platform::hotkeys`: login startup and global shortcut adapters.
+- `voya-platform::autostart`: login startup adapters.
 - `src-tauri`: tray, app window lifecycle, capabilities, plugins, sidecar packaging, and user-facing Tauri integration.
 
 Runtime orchestration lives in `voya-app`, but platform side effects are performed through traits/adapters supplied by `voya-platform`.

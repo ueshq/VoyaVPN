@@ -223,7 +223,7 @@ export type AppErrorSubsystem =
 /**  The shell itself: window chrome, event emission, background tasks. */
 "app" | "autostart" | "certificate" | 
 /**  Reading or writing the persisted application configuration. */
-"config" | "dns" | "export" | "group" | "hotkey" | "profile" | "proxyRuntime" | "qr" | "routing" | 
+"config" | "dns" | "export" | "group" | "profile" | "proxyRuntime" | "qr" | "routing" | 
 /**  Core lifecycle: config generation, supervisor, connect/disconnect. */
 "runtime" | "speedtest" | "subscription" | "sysProxy" | "tun" | "update";
 
@@ -258,7 +258,6 @@ export type AppSettingsV1 = {
 	grpc: GrpcSettings,
 	hysteria: HysteriaSettings,
 	proxy: ProxySettings,
-	shortcuts: ShortcutSettings,
 };
 
 export type AppUpdaterState = "ready" | "unconfigured" | "unsupported" | "error";
@@ -905,17 +904,6 @@ export type ServerStatItem = {
 };
 
 export type ShellTabTarget = "profiles" | "proxyGroups" | "proxyConnections" | "logs";
-
-export type ShortcutChord = {
-	alt: boolean,
-	control: boolean,
-	shift: boolean,
-	keyCode: number,
-};
-
-export type ShortcutSettings = {
-	showWindowShortcut: ShortcutChord | null,
-};
 
 /**
  *  How a probe ended, as a code rather than a sentence.

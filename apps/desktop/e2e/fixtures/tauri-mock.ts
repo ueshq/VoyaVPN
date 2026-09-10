@@ -862,9 +862,6 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
         },
         hysteria: { downloadMbps: 100, hopIntervalSeconds: 30, uploadMbps: 100 },
         proxy: { nodeSorting: 0, trafficMode: "rule" },
-        shortcuts: {
-          showWindowShortcut: { alt: true, control: true, keyCode: 86, shift: false },
-        },
       };
     }
 

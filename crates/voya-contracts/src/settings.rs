@@ -41,7 +41,6 @@ pub struct AppSettingsV1 {
     pub grpc: GrpcSettings,
     pub hysteria: HysteriaSettings,
     pub proxy: ProxySettings,
-    pub shortcuts: ShortcutSettings,
 }
 
 impl Default for AppSettingsV1 {
@@ -59,7 +58,6 @@ impl Default for AppSettingsV1 {
             grpc: GrpcSettings::default(),
             hysteria: HysteriaSettings::default(),
             proxy: ProxySettings::default(),
-            shortcuts: ShortcutSettings::default(),
         }
     }
 }
@@ -370,21 +368,6 @@ impl Default for ProxySettings {
             node_sorting: 0,
         }
     }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ShortcutSettings {
-    pub show_window_shortcut: Option<ShortcutChord>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ShortcutChord {
-    pub alt: bool,
-    pub control: bool,
-    pub shift: bool,
-    pub key_code: i32,
 }
 
 #[cfg(test)]

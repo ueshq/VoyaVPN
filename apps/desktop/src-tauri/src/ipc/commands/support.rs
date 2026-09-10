@@ -172,63 +172,6 @@ pub(super) fn update_manager(state: &AppState) -> UpdateManager<'_> {
     state.services().updates()
 }
 
-pub(super) struct TauriHotkeyRegistrar<R: tauri::Runtime> {
-    pub(super) app: tauri::AppHandle<R>,
-}
-
-impl<R> HotkeyRegistrar for TauriHotkeyRegistrar<R>
-where
-    R: tauri::Runtime + 'static,
-{
-    fn unregister_all(&self) -> Result<(), HotkeyManagerError> {
-        self.app
-            .global_shortcut()
-            .unregister_all()
-            .map_err(|error| HotkeyManagerError::Register(error.to_string()))
-    }
-
-    fn register(&self, bindings: &[ShowWindowShortcutBinding]) -> Result<(), HotkeyManagerError> {
-        for binding in bindings {
-            voya_platform::hotkeys::validate_hotkey_accelerator(&binding.accelerator)?;
-            self.app
-                .global_shortcut()
-                .on_shortcut(
-                    binding.accelerator.as_str(),
-                    move |app, _shortcut, event| {
-                        if event.state == ShortcutState::Pressed {
-                            toggle_main_window(app);
-                        }
-                    },
-                )
-                .map_err(|error| HotkeyManagerError::Register(error.to_string()))?;
-        }
-
-        Ok(())
-    }
-}
-
-pub(super) fn toggle_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    let Some(window) = app.get_webview_window("main") else {
-        return;
-    };
-
-    match window.is_visible() {
-        Ok(true) => {
-            if let Err(error) = window.hide() {
-                tracing::warn!(?error, "failed to hide main window from global hotkey");
-            }
-        }
-        Ok(false) | Err(_) => {
-            if let Err(error) = window.show() {
-                tracing::warn!(?error, "failed to show main window from global hotkey");
-            }
-            if let Err(error) = window.set_focus() {
-                tracing::warn!(?error, "failed to focus main window from global hotkey");
-            }
-        }
-    }
-}
-
 /// Runs blocking OS work off the caller's thread.
 ///
 /// A non-`async` `#[tauri::command]` is dispatched inline on the webview's main

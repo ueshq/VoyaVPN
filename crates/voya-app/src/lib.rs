@@ -15,7 +15,6 @@ pub mod dns;
 pub mod elevation;
 pub mod exports;
 pub mod groups;
-pub mod hotkeys;
 pub mod input_safety;
 pub mod invalidation;
 pub mod logging;

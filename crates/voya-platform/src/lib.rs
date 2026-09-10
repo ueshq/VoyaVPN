@@ -1,14 +1,13 @@
 //! Platform integration boundary.
 //!
-//! OS-specific paths, process control, system proxy, TUN, autostart, elevation,
-//! and hotkey adapters are isolated here.
+//! OS-specific paths, process control, system proxy, TUN, autostart, and
+//! elevation adapters are isolated here.
 
 pub mod apps;
 pub mod autostart;
 pub mod coreinfo;
 pub mod elevation;
 pub mod filesystem;
-pub mod hotkeys;
 pub mod paths;
 pub mod privilege;
 pub mod process;

@@ -1,7 +1,5 @@
 use std::collections::BTreeSet;
 
-use tauri::Manager;
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_updater::UpdaterExt;
 use tauri_specta::Event;
 use voya_app::autostart::AutostartManager;
@@ -22,9 +20,6 @@ use voya_app::contract_map::{
 };
 use voya_app::dns::DnsManager;
 use voya_app::groups::GroupManager;
-use voya_app::hotkeys::{
-    HotkeyManager, HotkeyManagerError, HotkeyRegistrar, HotkeyStatus, ShowWindowShortcutBinding,
-};
 use voya_app::input_safety;
 use voya_app::invalidation;
 use voya_app::profiles::ProfileManager;
@@ -112,7 +107,6 @@ pub use sysproxy::*;
 pub use tun::*;
 pub use updates::*;
 
-pub(crate) use app::register_show_window_shortcut_for_config;
 pub(crate) use core_flow::core_flow;
 pub(crate) use lifecycle::emit_subscription_invalidation;
 pub(crate) use support::{emit_app_log, emit_core_log};

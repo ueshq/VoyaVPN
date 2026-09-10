@@ -1,9 +1,9 @@
 //! The one transaction behind the `save_app_settings` command.
 //!
 //! Saving settings is not a single write: it maps the contract onto an
-//! `AppConfig`, applies OS-level side effects (the autostart entry and the
-//! global hotkeys) *before* the database commit so a rejected registration
-//! cannot be persisted, rolls those side effects back when a later step fails,
+//! `AppConfig`, applies the OS autostart entry *before* the database commit so a
+//! rejected registration cannot be persisted, rolls that change back when a
+//! later step fails,
 //! and finally decides whether the running core has to be restarted or the
 //! system proxy re-applied.
 //!
@@ -94,9 +94,9 @@ where
         original.system_proxy_item != target.system_proxy_item,
     );
 
-    // Autostart and hotkeys are applied before the commit so a registration the
-    // OS refuses never becomes the stored truth; both are rolled back below if
-    // anything after them fails.
+    // Autostart is applied before the commit so a registration the OS refuses
+    // never becomes the stored truth; it is rolled back below if anything after
+    // it fails.
     let applied = match apply_settings_side_effects(side_effects, &original, &target) {
         Ok(applied) => applied,
         Err(failure) => {

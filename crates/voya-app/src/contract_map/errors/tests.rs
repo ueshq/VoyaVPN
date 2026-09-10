@@ -652,11 +652,14 @@ fn settings_failures_reach_the_field_and_keep_a_typed_side_effect() {
     // A rejected side effect keeps the adapter's own already-typed error rather
     // than being relabelled as a settings problem.
     let side_effect: AppError = SettingsSaveError::SideEffect {
-        stage: crate::settings_save::SettingsSideEffectStage::Hotkeys,
-        source: AppError::internal(AppErrorSubsystem::Hotkey, "chord rejected".to_string()),
+        stage: crate::settings_save::SettingsSideEffectStage::Autostart,
+        source: AppError::internal(
+            AppErrorSubsystem::Autostart,
+            "autostart refused".to_string(),
+        ),
     }
     .into();
-    assert_eq!(side_effect.subsystem, AppErrorSubsystem::Hotkey);
+    assert_eq!(side_effect.subsystem, AppErrorSubsystem::Autostart);
 }
 
 // ---------------------------------------------------------------------------
@@ -846,12 +849,6 @@ mod guards {
             AutostartManagerError::Autostart(_)
             | AutostartManagerError::CurrentExe(_)
             | AutostartManagerError::HomeDir => (),
-        }
-    }
-
-    const fn hotkey(error: &HotkeyManagerError) {
-        match error {
-            HotkeyManagerError::Platform(_) | HotkeyManagerError::Register(_) => (),
         }
     }
 

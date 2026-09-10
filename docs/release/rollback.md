@@ -23,7 +23,7 @@ Rollback is required when any of these occur after staging or publication:
 - Manual CDN release index points at the wrong app package, wrong OS/arch, wrong checksum, wrong signature, or non-CDN production URL.
 - Core manifest, geo manifest, or SRS manifest points at a corrupted, unapproved, wrong-architecture, unsupported, or checksum-mismatched asset.
 - Signed package fails Gatekeeper, Authenticode, package-manager trust, install, launch, or uninstall checks.
-- App launch corrupts user data, OS proxy state, routes, TUN devices, autostart, or hotkey state.
+- App launch corrupts user data, OS proxy state, routes, TUN devices, or autostart state.
 - Core acquisition bundles GPL or AGPL binaries in default installers without recorded approval.
 - Crash, connectivity, update, or core apply failures affect enough stable users to violate the release owner threshold.
 - Any signing key, updater private key, package repository token, or publication credential may be exposed.
@@ -132,5 +132,5 @@ Rollback notes: quarantine is not a substitute for pointer rollback. Users must 
 | Update channel safe state | Release engineer | Stable updater CDN pointer | Older clients do not see the bad version; fixed or previous version metadata validates. | Keep updater disabled if no safe state can be confirmed. |
 | Download page safe state | Release owner | Stable manual CDN release index and download page data | Bad artifacts are absent or clearly withdrawn; checksums match remaining assets. | Remove stale cache links and issue corrected notes. |
 | Core manifest safe state | Release engineer | Stable empty core, geo, and SRS manifest pointers | Clients resolve previous or fixed manifests, checksums match, and core smoke passes for affected OS/arch targets. | Keep core manifest assets empty if no approved manifest can be confirmed. |
-| OS state remediation | Platform owner | Affected user machines or smoke machines | Reproduction machine can restore proxy, routes, TUN devices, autostart, hotkeys, and running processes. | Publish manual remediation steps if automatic cleanup cannot be relied on. |
+| OS state remediation | Platform owner | Affected user machines or smoke machines | Reproduction machine can restore proxy, routes, TUN devices, autostart, and running processes. | Publish manual remediation steps if automatic cleanup cannot be relied on. |
 | Incident closeout | Release owner | Issue tracker and release notes | Root cause, affected artifacts, rollback actions, fixed version, and remaining risk are recorded. | Keep the release blocked until closeout has an owner and follow-up issue. |

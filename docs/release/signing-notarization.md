@@ -191,7 +191,7 @@ System: `.deb`, `.rpm`, `.AppImage`, checksum host, and optional package reposit
 | Build Linux artifacts | Linux release owner | Linux release runner and Tauri bundle output | `.deb`, `.rpm`, and `.AppImage` are produced from the frozen commit and version. | Delete build output and rebuild from the frozen commit. |
 | Verify package metadata | Linux release owner | Debian, RPM, and AppImage inspection tools | Package name, version, license, desktop entry, icon, dependencies, and executable bits match [packaging.md](packaging.md). | Do not publish bad packages. Rebuild with corrected metadata. |
 | Sign checksums or repository metadata | Linux release owner | Checksum host or package repository signing system | `SHA256SUMS` matches uploaded assets; optional repository metadata signatures validate. | Remove the bad packages or repository metadata and republish the previous known-good index. |
-| Linux smoke | Linux platform owner | Clean Debian-like, RPM-like, and AppImage-capable distributions as supported | Install, launch, first-run core acquisition, proxy shell restore, sudo TUN cleanup, autostart, hotkeys, and uninstall pass. | Pull or hold Linux packages and rerun smoke after rebuilding. |
+| Linux smoke | Linux platform owner | Clean Debian-like, RPM-like, and AppImage-capable distributions as supported | Install, launch, first-run core acquisition, proxy shell restore, sudo TUN cleanup, autostart, and uninstall pass. | Pull or hold Linux packages and rerun smoke after rebuilding. |
 
 ## Publication Guardrails
 

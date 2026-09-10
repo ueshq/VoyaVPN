@@ -32,10 +32,9 @@ use voya_platform::coreinfo::CoreInfoError;
 use crate::{
     autostart::AutostartManagerError, config_mutation::ConfigMutationError,
     connection_mode::ConnectionModeError, dns::DnsManagerError, elevation::ElevationError,
-    exports::ExportManagerError, groups::GroupManagerError, hotkeys::HotkeyManagerError,
-    input_safety::InputSafetyError, profiles::ProfileManagerError,
-    proxy_runtime::ProxyRuntimeError, qr::QrCodeError, routing::RoutingManagerError,
-    runtime::RuntimeError, settings_flow::SettingsSaveError,
+    exports::ExportManagerError, groups::GroupManagerError, input_safety::InputSafetyError,
+    profiles::ProfileManagerError, proxy_runtime::ProxyRuntimeError, qr::QrCodeError,
+    routing::RoutingManagerError, runtime::RuntimeError, settings_flow::SettingsSaveError,
     settings_save::AppSettingsValidationError, speedtest::SpeedtestError,
     subscriptions::SubscriptionManagerError, supervisor::SupervisorError,
     sysproxy::SystemProxyManagerError, tun::TunManagerError, updates::UpdateManagerError,
@@ -463,17 +462,6 @@ impl From<AutostartManagerError> for AppError {
     }
 }
 
-impl From<HotkeyManagerError> for AppError {
-    fn from(error: HotkeyManagerError) -> Self {
-        match error {
-            // Accelerators come from the settings form, so a rejected chord is
-            // a field error, not an internal fault.
-            HotkeyManagerError::Platform(_) => invalid(Sub::Hotkey, "shortcuts", &error),
-            HotkeyManagerError::Register(_) => internal(Sub::Hotkey, &error),
-        }
-    }
-}
-
 impl From<QrCodeError> for AppError {
     fn from(error: QrCodeError) -> Self {
         match error {
@@ -517,8 +505,7 @@ impl From<SettingsSaveError<AppError>> for AppError {
     fn from(error: SettingsSaveError<AppError>) -> Self {
         match error {
             SettingsSaveError::Validation(source) => Self::from(source),
-            // The adapter's own already-typed failure, so an autostart or
-            // hotkey rejection keeps its subsystem instead of being relabelled.
+            // The adapter's already-typed failure keeps its subsystem.
             SettingsSaveError::SideEffect { source, .. } => source,
             SettingsSaveError::Commit(source) => Self::from(source),
         }

@@ -132,9 +132,10 @@ fn payload_error(source: serde_json::Error) -> DbError {
 }
 
 fn normalize_retired_keys(value: &mut serde_json::Value) {
-    // Source overrides were retired; resource downloads now use built-in defaults.
+    // Retired top-level settings are discarded only at the persistence boundary.
     if let Some(settings) = value.as_object_mut() {
         settings.remove("sources");
+        settings.remove("shortcuts");
     }
 
     if let Some(dns) = value

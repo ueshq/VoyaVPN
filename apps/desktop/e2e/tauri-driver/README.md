@@ -1,6 +1,6 @@
 # Tauri Driver Smoke Notes
 
-This batch adds browser-level Playwright coverage in `e2e/smoke.spec.ts`. It runs against Vite with a browser-side Tauri IPC mock, so it is safe for non-interactive local and CI runs and does not mutate OS proxy, TUN, autostart, or hotkey state.
+This batch adds browser-level Playwright coverage in `e2e/smoke.spec.ts`. It runs against Vite with a browser-side Tauri IPC mock, so it is safe for non-interactive local and CI runs and does not mutate OS proxy, TUN, or autostart state.
 
 `tauri-driver` is intentionally not wired as a required automated gate yet. The current app flows under test either need fake backend state or touch OS surfaces that must be verified on real Windows, macOS, and Linux machines. Running `tauri-driver` locally is still useful after a platform build is available:
 

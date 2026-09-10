@@ -6,8 +6,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 export function changedFields(before: unknown, after: unknown, path = ""): SettingsChange[] {
   if (JSON.stringify(before) === JSON.stringify(after)) return [];
-  // A shortcut is registered as one chord, never as intermediate modifier/key writes.
-  if (isObject(before) && isObject(after) && path !== "shortcuts.showWindowShortcut") {
+  if (isObject(before) && isObject(after)) {
     return Object.keys(after).flatMap((key) => changedFields(before[key], after[key], path ? `${path}.${key}` : key));
   }
   return [{ path, value: after }];

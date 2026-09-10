@@ -10,7 +10,6 @@ use super::*;
 struct RecordingSideEffects {
     calls: Arc<Mutex<Vec<String>>>,
     fail_autostart: bool,
-    fail_hotkeys: bool,
 }
 
 impl RecordingSideEffects {
@@ -30,14 +29,6 @@ impl SettingsSideEffectAdapter for RecordingSideEffects {
         self.push(format!("autostart:{}", config.gui_item.auto_run));
         if self.fail_autostart {
             return Err("autostart refused".to_string());
-        }
-        Ok(())
-    }
-
-    fn apply_hotkeys(&self, config: &AppConfig) -> Result<(), Self::Error> {
-        self.push(format!("hotkeys:{}", config.show_window_shortcut.is_some()));
-        if self.fail_hotkeys {
-            return Err("hotkey registration refused".to_string());
         }
         Ok(())
     }
@@ -71,15 +62,6 @@ fn baseline() -> AppSettingsV1 {
     settings_from_app_config(&AppConfig::default())
 }
 
-fn shortcut() -> voya_contracts::ShortcutChord {
-    voya_contracts::ShortcutChord {
-        alt: true,
-        control: true,
-        shift: false,
-        key_code: 65,
-    }
-}
-
 #[tokio::test]
 async fn a_ui_only_change_commits_without_touching_the_runtime() {
     let harness = Harness::new().await;
@@ -95,7 +77,7 @@ async fn a_ui_only_change_commits_without_touching_the_runtime() {
     assert!(outcome.changed);
     assert_eq!(outcome.settings.appearance.language, "zh-Hans");
     assert_eq!(harness.stored().ui_item.current_language, "zh-Hans");
-    // Neither the autostart entry nor the hotkeys moved, so neither was touched.
+    // The autostart entry did not change, so it was not touched.
     assert!(side_effects.calls().is_empty());
 }
 
@@ -167,47 +149,34 @@ async fn an_unsupported_schema_is_rejected_before_anything_runs() {
     assert!(!harness.stored().gui_item.auto_run);
 }
 
-/// A refused hotkey registration must undo the autostart entry that was already
-/// written and leave the stored configuration untouched — the machine and the
-/// database have to agree afterwards.
+/// A refused autostart change must attempt to restore the OS entry and leave
+/// the stored configuration untouched.
 #[tokio::test]
 async fn a_refused_side_effect_rolls_back_and_persists_nothing() {
     let harness = Harness::new().await;
     let side_effects = RecordingSideEffects {
-        fail_hotkeys: true,
+        fail_autostart: true,
         ..RecordingSideEffects::default()
     };
     let mut settings = baseline();
     settings.behavior.autostart = true;
-    settings.shortcuts.show_window_shortcut = Some(shortcut());
 
     let error = save_app_settings(&harness.coordinator, &side_effects, &settings)
         .await
-        .expect_err("hotkey registration refused");
+        .expect_err("autostart refused");
 
     assert!(matches!(
         error,
         SettingsSaveError::SideEffect {
-            stage: SettingsSideEffectStage::Hotkeys,
+            stage: SettingsSideEffectStage::Autostart,
             ..
         }
     ));
-    // `apply_settings_side_effects` marks a stage as touched *before* attempting
-    // it, so a refused hotkey registration is itself compensated: registering can
-    // partially succeed (some accelerators bound, then one refused), and leaving
-    // those bound would disagree with the configuration that was never stored.
     assert_eq!(
         side_effects.calls().as_slice(),
-        [
-            "autostart:true".to_string(),
-            "hotkeys:true".to_string(),
-            "hotkeys:false".to_string(),
-            "autostart:false".to_string(),
-        ]
+        ["autostart:true".to_string(), "autostart:false".to_string()]
     );
-    let stored = harness.stored();
-    assert!(!stored.gui_item.auto_run);
-    assert!(stored.show_window_shortcut.is_none());
+    assert!(!harness.stored().gui_item.auto_run);
 }
 
 /// The side effects run before the commit, so a failed commit has to undo them;

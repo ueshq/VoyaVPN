@@ -96,8 +96,5 @@
   "proxy": {
     "trafficMode": "rule",
     "nodeSorting": 0
-  },
-  "shortcuts": {
-    "showWindowShortcut": null
   }
 }

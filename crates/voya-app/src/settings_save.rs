@@ -1,9 +1,8 @@
 use thiserror::Error;
 use voya_contracts as contracts;
 use voya_core::{
-    AppConfig, CoreBasicItem, GrpcItem, GuiItem, HysteriaItem, InItem, KeyEventItem, Mux4SboxItem,
-    ProxyUiItem, RoutingBasicItem, SimpleDnsItem, SpeedTestItem, SystemProxyItem, TunModeItem,
-    UiItem,
+    AppConfig, CoreBasicItem, GrpcItem, GuiItem, HysteriaItem, InItem, Mux4SboxItem, ProxyUiItem,
+    RoutingBasicItem, SimpleDnsItem, SpeedTestItem, SystemProxyItem, TunModeItem, UiItem,
 };
 use voya_db::AppStateRecord;
 
@@ -172,15 +171,6 @@ fn input_safety_text(code: &contracts::ValidationCode) -> &'static str {
 
 #[must_use]
 pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 {
-    let show_window_shortcut = config.show_window_shortcut.as_ref().and_then(|item| {
-        item.key_code.map(|key_code| contracts::ShortcutChord {
-            alt: item.alt,
-            control: item.control,
-            shift: item.shift,
-            key_code,
-        })
-    });
-
     contracts::AppSettingsV1 {
         schema_version: contracts::CURRENT_SCHEMA_VERSION,
         appearance: contracts::AppearanceSettings {
@@ -291,9 +281,6 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
             traffic_mode: traffic_mode_to_contract(config.proxy_ui_item.traffic_mode),
             node_sorting: config.proxy_ui_item.node_sorting,
         },
-        shortcuts: contracts::ShortcutSettings {
-            show_window_shortcut,
-        },
     }
 }
 
@@ -319,17 +306,6 @@ pub fn app_config_from_settings(
     settings: &contracts::AppSettingsV1,
     state: &AppStateRecord,
 ) -> AppConfig {
-    let show_window_shortcut = settings
-        .shortcuts
-        .show_window_shortcut
-        .as_ref()
-        .map(|shortcut| KeyEventItem {
-            alt: shortcut.alt,
-            control: shortcut.control,
-            shift: shortcut.shift,
-            key_code: Some(shortcut.key_code),
-        });
-
     AppConfig {
         index_id: state.active_profile_id.clone().unwrap_or_default(),
         core_basic_item: CoreBasicItem {
@@ -425,7 +401,6 @@ pub fn app_config_from_settings(
                 second_local_port_enabled: item.secondary_port_enabled,
             })
             .collect(),
-        show_window_shortcut,
         simple_dns_item: SimpleDnsItem {
             add_common_hosts: settings.dns.add_common_hosts,
             fake_ip: settings.dns.fake_ip,
@@ -490,13 +465,11 @@ pub const fn settings_runtime_action(
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct AppliedSettingsSideEffects {
     autostart_touched: bool,
-    hotkeys_touched: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsSideEffectStage {
     Autostart,
-    Hotkeys,
 }
 
 #[derive(Debug)]
@@ -510,7 +483,6 @@ pub trait SettingsSideEffectAdapter {
     type Error;
 
     fn apply_autostart(&self, config: &AppConfig) -> Result<(), Self::Error>;
-    fn apply_hotkeys(&self, config: &AppConfig) -> Result<(), Self::Error>;
 }
 
 pub fn apply_settings_side_effects<A>(
@@ -532,16 +504,6 @@ where
             });
         }
     }
-    if original.show_window_shortcut != target.show_window_shortcut {
-        applied.hotkeys_touched = true;
-        if let Err(source) = adapter.apply_hotkeys(target) {
-            return Err(SettingsSideEffectFailure {
-                stage: SettingsSideEffectStage::Hotkeys,
-                source,
-                compensation_errors: compensate_settings_side_effects(adapter, original, applied),
-            });
-        }
-    }
     Ok(applied)
 }
 
@@ -554,11 +516,6 @@ where
     A: SettingsSideEffectAdapter,
 {
     let mut errors = Vec::new();
-    if applied.hotkeys_touched {
-        if let Err(error) = adapter.apply_hotkeys(original) {
-            errors.push(error);
-        }
-    }
     if applied.autostart_touched {
         if let Err(error) = adapter.apply_autostart(original) {
             errors.push(error);
@@ -665,12 +622,6 @@ mod tests {
                 pass: "inbound-pass".to_string(),
                 second_local_port_enabled: true,
             }],
-            show_window_shortcut: Some(KeyEventItem {
-                alt: true,
-                control: false,
-                shift: true,
-                key_code: Some(71),
-            }),
             simple_dns_item: SimpleDnsItem {
                 add_common_hosts: Some(false),
                 fake_ip: Some(true),
@@ -737,13 +688,10 @@ mod tests {
         assert_eq!(restored.ui_item, AppConfig::default().ui_item);
     }
 
-    use voya_core::KeyEventItem;
-
     #[derive(Default)]
     struct FakeSideEffects {
         calls: Mutex<Vec<String>>,
         fail_autostart_for: Mutex<Option<bool>>,
-        fail_hotkeys_for_key: Mutex<Option<i32>>,
     }
 
     impl SettingsSideEffectAdapter for FakeSideEffects {
@@ -760,63 +708,18 @@ mod tests {
             }
             Ok(())
         }
-
-        fn apply_hotkeys(&self, config: &AppConfig) -> Result<(), Self::Error> {
-            let key = config
-                .show_window_shortcut
-                .as_ref()
-                .and_then(|item| item.key_code)
-                .unwrap_or_default();
-            self.calls
-                .lock()
-                .expect("calls lock")
-                .push(format!("hotkeys:{key}"));
-            if *self.fail_hotkeys_for_key.lock().expect("hotkey lock") == Some(key) {
-                return Err(format!("hotkeys failed for {key}"));
-            }
-            Ok(())
-        }
     }
 
-    fn config(autostart: bool, key_code: i32) -> AppConfig {
+    fn config(autostart: bool) -> AppConfig {
         let mut config = AppConfig::default();
         config.gui_item.auto_run = autostart;
-        config.show_window_shortcut = Some(KeyEventItem {
-            control: true,
-            key_code: Some(key_code),
-            ..KeyEventItem::default()
-        });
         config
     }
 
     #[test]
-    fn failed_hotkey_application_restores_every_touched_side_effect() {
-        let original = config(false, 65);
-        let target = config(true, 66);
-        let effects = FakeSideEffects::default();
-        *effects.fail_hotkeys_for_key.lock().expect("hotkey lock") = Some(66);
-
-        let failure = apply_settings_side_effects(&effects, &original, &target)
-            .expect_err("hotkey application should fail");
-
-        assert_eq!(failure.stage, SettingsSideEffectStage::Hotkeys);
-        assert_eq!(failure.source, "hotkeys failed for 66");
-        assert!(failure.compensation_errors.is_empty());
-        assert_eq!(
-            *effects.calls.lock().expect("calls lock"),
-            [
-                "autostart:true",
-                "hotkeys:66",
-                "hotkeys:65",
-                "autostart:false"
-            ]
-        );
-    }
-
-    #[test]
     fn failed_autostart_application_attempts_authoritative_restore() {
-        let original = config(false, 65);
-        let target = config(true, 65);
+        let original = config(false);
+        let target = config(true);
         let effects = FakeSideEffects::default();
         *effects.fail_autostart_for.lock().expect("autostart lock") = Some(true);
 

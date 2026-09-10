@@ -163,7 +163,6 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(specta_builder.invoke_handler())
@@ -333,14 +332,6 @@ fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     });
 
     setup_tray(app)?;
-    // Registering global hotkeys mutates machine state, so it runs last:
-    // an accelerator claimed for a launch that then failed would stay
-    // claimed for the rest of the session.
-    if let Err(error) =
-        ipc::commands::register_show_window_shortcut_for_config(app.handle(), &config)
-    {
-        tracing::warn!(?error, "failed to register persisted global hotkeys");
-    }
     Ok(())
 }
 

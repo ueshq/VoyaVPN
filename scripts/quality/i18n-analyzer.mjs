@@ -197,9 +197,7 @@ export function inspectI18nSource({ path, source, knownKeys = new Set() }) {
  * A stale entry is reported by `i18n.mjs`, never failed, so the owning feature
  * can delete it whenever the locale key lands.
  *
- * Empty on purpose: keep it that way. The last entry covered `keyCodeLabel`'s
- * `Key ${keyCode}` fallback in general-tab.tsx, which now resolves
- * `options.keyName.*` like every other named keycap.
+ * Empty on purpose: keep it that way.
  */
 export const KNOWN_HARDCODED_TEXT = [];
 

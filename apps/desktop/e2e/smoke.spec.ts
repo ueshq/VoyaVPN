@@ -94,7 +94,7 @@ test("loads the app shell and opens in-shell settings", async ({ page }) => {
   expect(calls.filter((call) => call.command.startsWith("plugin:window|"))).toEqual([]);
 });
 
-test("automatically saves shortcuts and freely leaves settings", async ({ page }) => {
+test("automatically saves autostart and freely leaves settings", async ({ page }) => {
   await page.getByRole("tab", { name: "Settings" }).click();
 
   const settings = page.getByRole("region", { name: "Settings" });
@@ -102,22 +102,15 @@ test("automatically saves shortcuts and freely leaves settings", async ({ page }
   await expect(settings.getByRole("tab", { name: "General" })).toHaveAttribute("aria-selected", "true");
   await expect(settings.getByText("Autostart", { exact: true })).toBeVisible();
 
-  await expect(settings.getByText("Show window", { exact: true })).toBeVisible();
+  const autostart = settings.getByRole("checkbox", { name: "Autostart" });
+  await expect(autostart).not.toBeChecked();
+  await autostart.check();
+  await expect(autostart).toBeChecked();
 
-  const hotkeyCapture = settings.getByRole("textbox", { name: "Hotkey key" }).first();
-  await hotkeyCapture.focus();
-  // Escape and Tab stay reserved for cancel/focus movement, so capturing them is
-  // deliberately refused: the seeded accelerator key must survive untouched.
-  await page.keyboard.press("Escape");
-  await expect(hotkeyCapture).toHaveValue("V");
-
-  await page.keyboard.press("a");
-  await expect(hotkeyCapture).toHaveValue("A");
-
-  await hotkeyCapture.blur();
   await page.getByRole("tab", { name: "Home" }).click();
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
-  await expect.poll(async () => (await smokeCalls(page)).some((call) => call.command === "save_app_settings")).toBe(true);
+  await expect.poll(async () => (await smokeCalls(page)).filter((call) => call.command === "save_app_settings").at(-1)?.args)
+    .toMatchObject({ settings: { behavior: { autostart: true } } });
   await expect(page.getByRole("region", { name: "Connection home" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Settings" })).toHaveCount(0);
 });

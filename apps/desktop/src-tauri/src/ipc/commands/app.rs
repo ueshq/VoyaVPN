@@ -34,9 +34,6 @@ pub async fn save_app_settings<R: tauri::Runtime>(
     let settings_language_before = current_config(&state).ui_item.current_language.clone();
     let side_effects = TauriSettingsSideEffects {
         autostart: AutostartManager::new(),
-        hotkeys: HotkeyManager::new(std::sync::Arc::new(TauriHotkeyRegistrar {
-            app: app.clone(),
-        })),
     };
     let outcome = voya_app::settings_flow::save_app_settings(
         state.config_mutations(),
@@ -103,7 +100,6 @@ async fn apply_settings_runtime_action<R: tauri::Runtime>(
 #[derive(Clone)]
 struct TauriSettingsSideEffects {
     autostart: AutostartManager,
-    hotkeys: HotkeyManager,
 }
 
 impl SettingsSideEffectAdapter for TauriSettingsSideEffects {
@@ -114,13 +110,6 @@ impl SettingsSideEffectAdapter for TauriSettingsSideEffects {
         let enabled = config.gui_item.auto_run;
         self.autostart
             .set_enabled(&mut config, enabled)
-            .map(|_| ())
-            .map_err(AppError::from)
-    }
-
-    fn apply_hotkeys(&self, config: &AppConfig) -> Result<(), Self::Error> {
-        self.hotkeys
-            .register_from_config(config)
             .map(|_| ())
             .map_err(AppError::from)
     }
@@ -183,15 +172,4 @@ pub fn calculate_certificate_sha256(pem: String) -> Result<Vec<String>, AppError
     )?;
 
     calculate_certificate_sha256_impl(&pem).map_err(|error| certificate_error(&error))
-}
-
-pub(crate) fn register_show_window_shortcut_for_config<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    config: &AppConfig,
-) -> Result<HotkeyStatus, AppError> {
-    let registrar = std::sync::Arc::new(TauriHotkeyRegistrar { app: app.clone() });
-
-    HotkeyManager::new(registrar)
-        .register_from_config(config)
-        .map_err(AppError::from)
 }

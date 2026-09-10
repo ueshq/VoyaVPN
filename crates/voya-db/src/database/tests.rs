@@ -2026,6 +2026,8 @@ async fn settings_payload_with_retired_keys_still_loads() {
     assert!(rewritten["speedTest"].get("delayIntervalMs").is_none());
     assert!(stored.get("sources").is_some());
     assert!(rewritten.get("sources").is_none());
+    assert!(stored.get("shortcuts").is_some());
+    assert!(rewritten.get("shortcuts").is_none());
     for key in ["downloadUrl", "udpTarget", "mixedConcurrency"] {
         assert!(stored["speedTest"].get(key).is_some());
         assert!(rewritten["speedTest"].get(key).is_none());
@@ -2039,6 +2041,55 @@ async fn settings_payload_with_retired_keys_still_loads() {
         database.settings().load().await.expect("reload settings"),
         loaded
     );
+}
+
+#[tokio::test]
+async fn retiring_shortcuts_preserves_other_settings_and_cleans_saved_payload() {
+    for shortcut in [
+        serde_json::Value::Null,
+        serde_json::json!({
+            "alt": true,
+            "control": true,
+            "shift": false,
+            "keyCode": 86,
+        }),
+    ] {
+        let database = Database::connect_in_memory().await.expect("open database");
+        let mut expected: AppSettingsV1 =
+            serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("read current settings fixture");
+        expected.appearance.language = "zh-Hans".to_string();
+        expected.behavior.autostart = true;
+        expected.network.tun.mtu = 1400;
+        let expected_payload = serde_json::to_value(&expected).expect("serialize settings");
+        let mut old_payload = expected_payload.clone();
+        old_payload["shortcuts"] = serde_json::json!({ "showWindowShortcut": shortcut });
+        sqlx::query("INSERT INTO app_settings (id, schema_version, payload) VALUES (1, ?, ?)")
+            .bind(i64::from(CURRENT_SCHEMA_VERSION))
+            .bind(old_payload.to_string())
+            .execute(database.pool())
+            .await
+            .expect("store settings with retired shortcut");
+
+        let loaded = database.settings().load().await.expect("load old settings");
+        assert_eq!(loaded, expected);
+        database
+            .settings()
+            .save(&loaded)
+            .await
+            .expect("save settings");
+
+        let saved: String = sqlx::query_scalar("SELECT payload FROM app_settings WHERE id = 1")
+            .fetch_one(database.pool())
+            .await
+            .expect("read saved payload");
+        let saved: serde_json::Value = serde_json::from_str(&saved).expect("parse saved payload");
+        assert!(saved.get("shortcuts").is_none());
+        assert_eq!(saved, expected_payload);
+        assert_eq!(
+            database.settings().load().await.expect("reload settings"),
+            expected
+        );
+    }
 }
 
 #[tokio::test]

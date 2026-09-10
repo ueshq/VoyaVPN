@@ -27,7 +27,6 @@ pub struct AppConfig {
     pub proxy_ui_item: ProxyUiItem,
     pub system_proxy_item: SystemProxyItem,
     pub inbound: Vec<InItem>,
-    pub show_window_shortcut: Option<KeyEventItem>,
     pub simple_dns_item: SimpleDnsItem,
 }
 
@@ -47,7 +46,6 @@ impl Default for AppConfig {
             proxy_ui_item: ProxyUiItem::default(),
             system_proxy_item: SystemProxyItem::default(),
             inbound: vec![InItem::default()],
-            show_window_shortcut: None,
             simple_dns_item: SimpleDnsItem::default(),
         }
     }
@@ -274,14 +272,6 @@ impl Default for SystemProxyItem {
             custom_system_proxy_script_path: None,
         }
     }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct KeyEventItem {
-    pub alt: bool,
-    pub control: bool,
-    pub shift: bool,
-    pub key_code: Option<i32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

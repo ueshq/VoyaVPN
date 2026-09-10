@@ -127,7 +127,6 @@ pub enum AppErrorSubsystem {
     Dns,
     Export,
     Group,
-    Hotkey,
     Profile,
     ProxyRuntime,
     Qr,
