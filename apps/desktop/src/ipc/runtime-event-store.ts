@@ -16,6 +16,7 @@ import type {
   TunStatus,
 } from "@/ipc/bindings";
 import { speedtestStatus } from "@/ipc/commands";
+import { markRuntimeUpdate } from "./runtime-state-version";
 
 export type RuntimeProxyMonitorState = "starting" | ProxyMonitorState;
 
@@ -186,6 +187,7 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
     set((state) => {
       switch (event.kind) {
         case "coreState":
+          markRuntimeUpdate("coreState");
           return { coreState: event.payload, lastTransientEvent: event };
         case "statistics": {
           const payload = parseStatisticsSnapshot(event.payload);
@@ -208,8 +210,10 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
           };
         }
         case "sysProxyChanged":
+          markRuntimeUpdate("sysProxy");
           return { lastTransientEvent: event, sysProxy: event.payload };
         case "tunChanged":
+          markRuntimeUpdate("tun");
           return { lastTransientEvent: event, tun: event.payload };
         case "proxyMonitorStatus":
           return {
@@ -249,11 +253,20 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
     set({ proxyMonitorStatus: toRuntimeProxyMonitorStatus(proxyMonitorStatus) }),
   setProxyMonitorStopped: (message = null) =>
     set({ proxyMonitorStatus: makeProxyMonitorStatus("stopped", false, true, message) }),
-  setCoreState: (coreState) => set({ coreState }),
+  setCoreState: (coreState) => {
+    markRuntimeUpdate("coreState");
+    set({ coreState });
+  },
   setSpeedtestRunning: (speedtestRunning) => set({ speedtestRunning }),
   setSpeedtestStatus: (status) => set({ speedtestRunning: status.running }),
-  setSysProxy: (sysProxy) => set({ sysProxy }),
-  setTun: (tun) => set({ tun }),
+  setSysProxy: (sysProxy) => {
+    markRuntimeUpdate("sysProxy");
+    set({ sysProxy });
+  },
+  setTun: (tun) => {
+    markRuntimeUpdate("tun");
+    set({ tun });
+  },
   serverStatsByProfileId: {},
   speedtestResultsByProfileId: {},
   speedtestRunning: false,

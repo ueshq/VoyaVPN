@@ -11,6 +11,9 @@ function sysProxy(
   requestedMode: SystemProxyStatusResponse["requestedMode"],
 ): SystemProxyStatusResponse {
   return {
+    management: "automatic",
+    observation: "unknown",
+    manualCleanupRequired: false,
     requestedMode,
     effectiveMode: requestedMode,
     pacAvailable: true,

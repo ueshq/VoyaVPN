@@ -1,13 +1,13 @@
+import { SettingsCheckbox, NumberField, SelectField, TextField, SettingsCheckboxGroup, SettingsGroup, SettingsRow } from "./settings-form";
 import { useState } from "react";
 import { AppWindow } from "lucide-react";
 
 import { Button } from "@voya/ui/components/button";
 import { Separator } from "@voya/ui/components/separator";
 import { useI18n } from "@voya/i18n/use-i18n";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { PerAppProxyDialog } from "@/features/routing/per-app-proxy-dialog";
 
-import { CheckboxField, NumberField, SelectField, TextField } from "./runtime-fields";
-import { SettingsCheckboxGroup, SettingsGroup, SettingsRow } from "./settings-form";
 import { TunDiagnosticsButton } from "./tun-diagnostics-button";
 import type { AppSettingsController } from "./use-app-settings";
 
@@ -26,6 +26,7 @@ export function NetworkTab({ controller }: { controller: AppSettingsController }
   const { t } = useI18n();
   const { settings, error, update, working } = controller;
   const [perAppOpen, setPerAppOpen] = useState(false);
+  const proxyManagement = useRuntimeEventStore((state) => state.sysProxy?.management);
 
   if (!settings) {
     return <p className="text-xs text-muted-foreground">{working ? t("options.loading") : error}</p>;
@@ -52,9 +53,9 @@ export function NetworkTab({ controller }: { controller: AppSettingsController }
     <div className="grid gap-4">
       <SettingsGroup>
         <SettingsCheckboxGroup id="rt-tun-group" label={t("settings.network.tunMode")}>
-          <CheckboxField checked={settings.network.tun.autoRoute} label={t("settings.network.tunAutoRoute")} onChange={(autoRoute) => patchTun({ autoRoute })} />
-          <CheckboxField checked={settings.network.tun.strictRoute} label={t("settings.network.tunStrictRoute")} onChange={(strictRoute) => patchTun({ strictRoute })} />
-          <CheckboxField checked={settings.network.tun.ipv6Enabled} label={t("settings.network.enableIpv6Address")} onChange={(ipv6Enabled) => patchTun({ ipv6Enabled })} />
+          <SettingsCheckbox checked={settings.network.tun.autoRoute} label={t("settings.network.tunAutoRoute")} onCheckedChange={(autoRoute) => patchTun({ autoRoute: autoRoute === true })} />
+          <SettingsCheckbox checked={settings.network.tun.strictRoute} label={t("settings.network.tunStrictRoute")} onCheckedChange={(strictRoute) => patchTun({ strictRoute: strictRoute === true })} />
+          <SettingsCheckbox checked={settings.network.tun.ipv6Enabled} label={t("settings.network.enableIpv6Address")} onCheckedChange={(ipv6Enabled) => patchTun({ ipv6Enabled: ipv6Enabled === true })} />
         </SettingsCheckboxGroup>
         <SelectField
           id="rt-tun-stack"
@@ -78,12 +79,12 @@ export function NetworkTab({ controller }: { controller: AppSettingsController }
 
       <SettingsGroup>
         <SettingsRow>
-          <CheckboxField checked={settings.network.systemProxy.bypassLocal} label={t("settings.network.bypassLocalAddress")} onChange={(bypassLocal) => patchSystemProxy({ bypassLocal })} />
+          <SettingsCheckbox checked={settings.network.systemProxy.bypassLocal} label={t("settings.network.bypassLocalAddress")} onCheckedChange={(bypassLocal) => patchSystemProxy({ bypassLocal: bypassLocal === true })} />
         </SettingsRow>
         <TextField id="rt-sysproxy-exceptions" label={t("settings.network.systemProxyExceptions")} onChange={(exceptions) => patchSystemProxy({ exceptions })} value={settings.network.systemProxy.exceptions} />
         <TextField id="rt-sysproxy-advanced-protocol" label={t("settings.network.systemProxyProtocol")} onChange={(advancedProtocol) => patchSystemProxy({ advancedProtocol })} value={settings.network.systemProxy.advancedProtocol} />
         <TextField id="rt-sysproxy-pac-path" label={t("settings.network.customPacPath")} onChange={(value) => patchSystemProxy({ customPacPath: nullableText(value) })} value={settings.network.systemProxy.customPacPath ?? ""} />
-        <TextField id="rt-sysproxy-script-path" label={t("settings.network.customScriptPath")} onChange={(value) => patchSystemProxy({ customScriptPath: nullableText(value) })} value={settings.network.systemProxy.customScriptPath ?? ""} />
+        {proxyManagement === "automatic" ? <TextField id="rt-sysproxy-script-path" label={t("settings.network.customScriptPath")} onChange={(value) => patchSystemProxy({ customScriptPath: nullableText(value) })} value={settings.network.systemProxy.customScriptPath ?? ""} /> : null}
       </SettingsGroup>
 
       <Separator />

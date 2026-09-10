@@ -30,6 +30,10 @@ export const commands = {
 	restartCore: () => typedError<RuntimeStatusResponse, AppError>(__TAURI_INVOKE("restart_core")),
 	runtimeStatus: () => typedError<RuntimeStatusResponse, AppError>(__TAURI_INVOKE("runtime_status")),
 	systemProxyStatus: () => typedError<SystemProxyStatusResponse, AppError>(__TAURI_INVOKE("system_proxy_status")),
+	/**  Explicit recheck may retire a legacy dirty marker once local proxies are gone. */
+	recheckSystemProxy: () => typedError<SystemProxyStatusResponse, AppError>(__TAURI_INVOKE("recheck_system_proxy")),
+	/**  Fixed destination; renderer input cannot turn this into an arbitrary opener. */
+	openNetworkSettings: () => typedError<null, AppError>(__TAURI_INVOKE("open_network_settings")),
 	/**
 	 *  Changes only the system proxy flavor. Same transaction as
 	 *  `set_connection_mode`: the mode is persisted always, the machine is only
@@ -331,9 +335,9 @@ export type ConfigTemplateSelection = { type: "default" } | { type: "custom"; so
  *  persisted primitives (system proxy type + TUN flag), never stored itself.
  */
 export type ConnectionMode = 
-/**  Local inbounds only; the OS proxy is cleared and TUN stays off. */
+/**  Local inbounds only; automatic proxies are cleared and TUN stays off. */
 "proxyOnly" | 
-/**  OS system proxy points at the local inbound (optionally via PAC). */
+/**  Local inbound for system proxy use (optionally PAC); macOS setup is manual. */
 "systemProxy" | 
 /**  TUN mode; all traffic is routed through the virtual interface. */
 "vpn";
@@ -388,9 +392,9 @@ export type CoreSettings = {
  *  `coreState` stream carries the very same struct, so there is nothing to
  *  translate between a response and an event. `Connecting`/`Disconnecting` are
  *  transitions only the event stream ever reports — a status read observes a
- *  settled supervisor and answers `Connected` or `Disconnected`.
+ *  settled supervisor and answers `Connected`, `Disconnected`, or `CleanupPending`.
  */
-export type CoreState = "disconnected" | "connecting" | "connected" | "disconnecting";
+export type CoreState = "cleanupPending" | "disconnected" | "connecting" | "connected" | "disconnecting";
 
 export type CoreType = "singBox";
 
@@ -904,6 +908,11 @@ export type Routing_Serialize = {
  */
 export type RuntimeStatusResponse = {
 	state: CoreState,
+	/**
+	 *  The confirmed running tunnel, independent of the saved connection mode.
+	 *  Absent during transitions, pending cleanup, and local-proxy operation.
+	 */
+	activeTunBackend: TunBackend | null,
 	activeProfileId: string | null,
 	mainPid: number | null,
 	prePid: number | null,
@@ -1073,6 +1082,10 @@ export type SubscriptionUpdateResult = {
 	messages: string[],
 };
 
+export type SystemProxyManagement = "automatic" | "manual" | "unsupported";
+
+export type SystemProxyObservation = "unknown" | "clear" | "localProxy" | "otherProxy";
+
 export type SystemProxySettings = {
 	/**
 	 *  The persisted OS-proxy mode. Typed rather than a `String`: the enum's
@@ -1096,7 +1109,12 @@ export type SystemProxySettings = {
  *  `SystemProxyType` under a second name.
  */
 export type SystemProxyStatusResponse = {
+	management: SystemProxyManagement,
+	/**  Read-only OS observation. Unknown must never be presented as restored. */
+	observation: SystemProxyObservation,
+	manualCleanupRequired: boolean,
 	requestedMode: SystemProxyType,
+	/**  The app's applied policy; always Unchanged on manual platforms. */
 	effectiveMode: SystemProxyType,
 	pacAvailable: boolean,
 	proxy: string | null,

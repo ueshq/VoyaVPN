@@ -782,6 +782,20 @@ pub fn split_command_line(input: &str) -> Result<Vec<String>, ProcessError> {
     Ok(args)
 }
 
+/// Combine process diagnostics, preserving both streams when present.
+#[must_use]
+pub fn command_output_text(stdout: &[u8], stderr: &[u8]) -> String {
+    let stdout = String::from_utf8_lossy(stdout);
+    let stderr = String::from_utf8_lossy(stderr);
+    if stderr.trim().is_empty() {
+        stdout.into_owned()
+    } else if stdout.trim().is_empty() {
+        stderr.into_owned()
+    } else {
+        format!("{stdout}\n{stderr}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -791,6 +805,13 @@ mod tests {
     use crate::test_support::RecordingRunner;
 
     use super::*;
+
+    #[test]
+    fn command_output_combines_stdout_and_stderr_without_losing_context() {
+        assert_eq!(command_output_text(b"stdout", b""), "stdout");
+        assert_eq!(command_output_text(b"", b"stderr"), "stderr");
+        assert_eq!(command_output_text(b"stdout", b"stderr"), "stdout\nstderr");
+    }
 
     #[test]
     fn process_split_command_line_preserves_quoted_config_paths() {

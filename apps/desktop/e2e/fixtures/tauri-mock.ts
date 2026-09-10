@@ -96,6 +96,7 @@ export async function installTauriSmokeMock(page: Page) {
         activeProfileId: null,
         mainPid: null,
         prePid: null,
+        activeTunBackend: null,
         runningCoreType: null,
         state: "disconnected",
       },
@@ -106,6 +107,9 @@ export async function installTauriSmokeMock(page: Page) {
       },
       settings: makeAppSettings(),
       sysProxy: {
+        management: "automatic",
+        observation: "unknown",
+        manualCleanupRequired: false,
         effectiveMode: "forcedClear",
         exceptions: "",
         pacAvailable: false,
@@ -152,6 +156,15 @@ export async function installTauriSmokeMock(page: Page) {
         processRulesEffective: mode === "vpn",
         vpnAvailable: true,
       };
+    }
+
+    function settleManualProxy() {
+      if (state.sysProxy.management !== "manual") return;
+      const serving = state.runtime.state === "connected" && !state.tun.enabled;
+      state.sysProxy.effectiveMode = "unchanged";
+      state.sysProxy.proxy = serving ? "127.0.0.1:10808" : null;
+      state.sysProxy.pacUrl = serving && state.sysProxy.requestedMode === "pac"
+        ? (state.sysProxy.pacUrl ?? "http://127.0.0.1:10811/pac?t=smoke") : null;
     }
 
     const profileScopes = ["profiles", "groupChildCandidates"];
@@ -273,9 +286,11 @@ export async function installTauriSmokeMock(page: Page) {
             activeProfileId: active ? String(active.profile.id) : null,
             mainPid: 4242,
             prePid: null,
+            activeTunBackend: null,
             runningCoreType: "singBox",
             state: "connected",
           };
+          settleManualProxy();
           return Promise.resolve(clone(state.runtime));
         }
         case "disconnect_core":
@@ -283,9 +298,11 @@ export async function installTauriSmokeMock(page: Page) {
             activeProfileId: null,
             mainPid: null,
             prePid: null,
+            activeTunBackend: null,
             runningCoreType: null,
             state: "disconnected",
           };
+          settleManualProxy();
           return Promise.resolve(clone(state.runtime));
         case "restart_core":
           state.runtime = {
@@ -296,12 +313,20 @@ export async function installTauriSmokeMock(page: Page) {
           return Promise.resolve(clone(state.runtime));
         case "system_proxy_status":
           return Promise.resolve(clone(state.sysProxy));
+        case "open_network_settings":
+          return Promise.resolve(null);
+        case "recheck_system_proxy":
+          if (["clear", "otherProxy"].includes(state.sysProxy.observation)) {
+            state.sysProxy.manualCleanupRequired = false;
+          }
+          return Promise.resolve(clone(state.sysProxy));
         case "set_system_proxy_mode":
           state.sysProxy = {
             ...state.sysProxy,
             effectiveMode: String(args.mode ?? "forcedClear") as SystemProxyType,
             requestedMode: String(args.mode ?? "forcedClear") as SystemProxyType,
           };
+          settleManualProxy();
           return Promise.resolve(clone(state.sysProxy));
         case "tun_status":
           return Promise.resolve(clone(state.tun));
@@ -315,7 +340,7 @@ export async function installTauriSmokeMock(page: Page) {
           return Promise.resolve(connectionModeStatus());
         case "set_connection_mode": {
           const mode = String(args.mode ?? "proxyOnly");
-          const pacEnabled = args.pacEnabled === true;
+          const pacEnabled = args.pacEnabled == null ? state.sysProxy.requestedMode === "pac" : args.pacEnabled === true;
           if (mode === "vpn") {
             state.tun = { ...state.tun, enabled: true };
           } else {
@@ -328,6 +353,7 @@ export async function installTauriSmokeMock(page: Page) {
               requestedMode,
             };
           }
+          settleManualProxy();
           return Promise.resolve(connectionModeStatus());
         }
         case "list_profiles":

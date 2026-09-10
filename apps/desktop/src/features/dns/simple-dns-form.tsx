@@ -4,7 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@voya/ui/components/ca
 import type { DnsSettings } from "@/ipc/bindings";
 import { useI18n } from "@voya/i18n/use-i18n";
 
-import { CheckboxField, SelectField, TextAreaField, TextField } from "./dns-form-fields";
+import { CheckboxField, SelectField, TextAreaField, TextField } from "@voya/ui/components/form-fields";
+
+import { DNS_STRATEGIES } from "./dns-constants";
 
 export function SimpleDnsForm({
   errors,
@@ -17,6 +19,7 @@ export function SimpleDnsForm({
   updateSimple: (patch: Partial<DnsSettings>) => void;
 }) {
   const { t } = useI18n();
+  const strategies = DNS_STRATEGIES.map((value) => ({ value, label: value || t("panes.routing.defaultValue") }));
 
   return (
     <Card className="gap-3 rounded-xl bg-surface-raised p-3 shadow-raised">
@@ -72,11 +75,13 @@ export function SimpleDnsForm({
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
           <SelectField
+            options={strategies}
             label={t("panes.dns.directStrategy")}
             onChange={(value) => updateSimple({ directStrategy: value || null })}
             value={settings.directStrategy ?? ""}
           />
           <SelectField
+            options={strategies}
             label={t("panes.dns.proxyStrategy")}
             onChange={(value) => updateSimple({ proxyStrategy: value || null })}
             value={settings.proxyStrategy ?? ""}

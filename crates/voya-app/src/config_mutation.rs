@@ -7,11 +7,15 @@ use voya_core::AppConfig;
 /// already hands them without reaching into `voya-db` themselves — the facade
 /// is the only persistence boundary a shell is allowed to see.
 pub use voya_db::UnitOfWork;
-use voya_db::{AppStateRecord, Database, DbError};
+use voya_db::{Database, DbError};
 
 use crate::{
-    dns::DnsManager, groups::GroupManager, presets::PresetManager, profiles::ProfileManager,
-    routing::RoutingManager, settings_save::settings_from_app_config,
+    dns::DnsManager,
+    groups::GroupManager,
+    presets::PresetManager,
+    profiles::ProfileManager,
+    routing::RoutingManager,
+    settings_save::{settings_from_app_config, state_from_app_config},
     subscriptions::SubscriptionManager,
 };
 
@@ -196,21 +200,7 @@ impl ConfigMutationGuard<'_> {
 
     pub async fn commit(self) -> Result<AppConfig, ConfigMutationError> {
         let settings = settings_from_app_config(&self.working_config);
-        let state = AppStateRecord {
-            active_profile_id: (!self.working_config.index_id.is_empty())
-                .then(|| self.working_config.index_id.clone()),
-            active_routing_id: (!self
-                .working_config
-                .routing_basic_item
-                .routing_index_id
-                .is_empty())
-            .then(|| {
-                self.working_config
-                    .routing_basic_item
-                    .routing_index_id
-                    .clone()
-            }),
-        };
+        let state = state_from_app_config(&self.working_config);
         self.unit_of_work
             .settings()
             .save_with_state(&settings, &state)
@@ -277,7 +267,7 @@ mod tests {
                     mutation.config().ui_item.current_theme.as_deref(),
                     Some("Dark")
                 );
-                mutation.config_mut().ui_item.current_language = "fr".to_string();
+                mutation.config_mut().ui_item.current_language = "zh-Hant".to_string();
                 mutation.commit().await.expect("mutation should commit");
             })
         };
@@ -287,7 +277,7 @@ mod tests {
 
         let final_config = coordinator.current_config();
         assert_eq!(final_config.ui_item.current_theme.as_deref(), Some("Dark"));
-        assert_eq!(final_config.ui_item.current_language, "fr");
+        assert_eq!(final_config.ui_item.current_language, "zh-Hant");
     }
 
     #[tokio::test]
@@ -342,7 +332,7 @@ mod tests {
 
         let committed = coordinator
             .mutate(async |_unit_of_work, config| {
-                config.ui_item.current_language = "fr".to_string();
+                config.ui_item.current_language = "zh-Hant".to_string();
                 Ok::<_, ConfigMutationError>("saved")
             })
             .await
@@ -350,9 +340,12 @@ mod tests {
 
         assert_eq!(committed.value, "saved");
         assert!(committed.config_changed);
-        assert_eq!(committed.config.ui_item.current_language, "fr");
+        assert_eq!(committed.config.ui_item.current_language, "zh-Hant");
         // Committed means published: the next reader sees it without a refetch.
-        assert_eq!(coordinator.current_config().ui_item.current_language, "fr");
+        assert_eq!(
+            coordinator.current_config().ui_item.current_language,
+            "zh-Hant"
+        );
     }
 
     /// `config_changed` drives the settings-bundle invalidation, so a mutation
@@ -402,7 +395,7 @@ mod tests {
 
         let failure = coordinator
             .mutate(async |unit_of_work, config| {
-                config.ui_item.current_language = "fr".to_string();
+                config.ui_item.current_language = "zh-Hant".to_string();
                 unit_of_work
                     .subscriptions()
                     .upsert(&voya_core::SubItem {

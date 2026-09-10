@@ -19,7 +19,7 @@ pub async fn list_profiles(
         IPC_FILTER_MAX_CHARS,
         AppErrorSubsystem::Profile,
     )?;
-    let config = current_config(&state)?;
+    let config = current_config(&state);
 
     state
         .services()

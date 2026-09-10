@@ -125,7 +125,7 @@ describe("useAppSettings", () => {
     );
   });
 
-  it("reloads the authoritative snapshot after a failed save", async () => {
+  it("refreshes the baseline after a failed save while retaining edits until discard", async () => {
     const user = userEvent.setup();
     const authoritative = makeAppSettings({ subscriptionConverter: "https://authoritative.example.test" });
     ipcMocks.loadAppSettings
@@ -139,9 +139,11 @@ describe("useAppSettings", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("save failed");
-    await waitFor(() =>
-      expect(screen.getByTestId("converter")).toHaveTextContent("https://authoritative.example.test"),
-    );
+    await waitFor(() => expect(ipcMocks.loadAppSettings).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("converter")).toHaveTextContent("https://convert.example.test");
+    expect(screen.getByTestId("state")).toHaveTextContent("dirty");
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getByTestId("converter")).toHaveTextContent("https://authoritative.example.test");
     expect(screen.getByTestId("state")).toHaveTextContent("clean");
   });
 

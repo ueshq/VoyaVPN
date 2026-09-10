@@ -38,7 +38,8 @@ const WINDOWS_INTERNET_SETTINGS_REG_PATH: &str =
 const PAC_ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const PAC_ACCEPT_ERROR_BACKOFF: Duration = Duration::from_millis(50);
 const LINUX_PROXY_SCRIPT_NAME: &str = "proxy_set_linux.sh";
-const MACOS_PROXY_SCRIPT_NAME: &str = "proxy_set_osx.sh";
+mod manual;
+pub use manual::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SystemProxyRequest {
@@ -54,6 +55,9 @@ pub struct SystemProxyRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SystemProxyStatus {
+    pub management: SystemProxyManagement,
+    pub observation: SystemProxyObservation,
+    pub manual_cleanup_required: bool,
     pub requested_type: SysProxyType,
     pub effective_type: SysProxyType,
     pub target_os: TargetOs,
@@ -70,6 +74,9 @@ impl SystemProxyStatus {
         exceptions: String,
     ) -> Self {
         Self {
+            management: system_proxy_management(request.target_os),
+            observation: SystemProxyObservation::Unknown,
+            manual_cleanup_required: false,
             requested_type: request.item.sys_proxy_type,
             effective_type,
             target_os: request.target_os,
@@ -112,18 +119,6 @@ pub enum SystemProxyAction {
     LinuxClear {
         script: ScriptInvocation,
     },
-    MacosSet {
-        script: ScriptInvocation,
-        host: String,
-        port: i32,
-        exceptions: String,
-    },
-    MacosClear {
-        script: ScriptInvocation,
-    },
-    MacosSetPac {
-        script: ScriptInvocation,
-    },
     UnsupportedPac,
 }
 
@@ -142,6 +137,8 @@ pub struct SystemProxyPlan {
 
 #[derive(Clone)]
 pub struct SystemProxyService {
+    observer: Arc<dyn SystemProxyObserver>,
+    manual_runtime: Arc<Mutex<ManualRuntime>>,
     runner: Arc<dyn ProcessRunner>,
     pac_manager: Arc<dyn PacManager>,
 }
@@ -152,6 +149,8 @@ impl SystemProxyService {
         Self {
             runner,
             pac_manager,
+            observer: Arc::new(PlatformSystemProxyObserver),
+            manual_runtime: Arc::default(),
         }
     }
 
@@ -159,6 +158,9 @@ impl SystemProxyService {
         &self,
         request: &SystemProxyRequest,
     ) -> Result<SystemProxyStatus, SystemProxyError> {
+        if system_proxy_management(request.target_os) == SystemProxyManagement::Manual {
+            return self.apply_manual(request);
+        }
         let plan = plan_system_proxy(request)?;
 
         if plan.status.effective_type != SysProxyType::Pac {
@@ -189,19 +191,8 @@ impl SystemProxyService {
                     },
                 )?;
             }
-            SystemProxyAction::MacosSetPac { script } => {
-                self.pac_manager.start(PacStartConfig {
-                    http_port: request.socks_port,
-                    pac_port: request.pac_port,
-                    config_dir: request.config_dir.clone(),
-                    custom_pac_path: request.item.custom_system_proxy_pac_path.clone(),
-                })?;
-                run_script(&*self.runner, script)?;
-            }
             SystemProxyAction::LinuxSet { script, .. }
-            | SystemProxyAction::LinuxClear { script }
-            | SystemProxyAction::MacosSet { script, .. }
-            | SystemProxyAction::MacosClear { script } => {
+            | SystemProxyAction::LinuxClear { script } => {
                 run_script(&*self.runner, script)?;
             }
         }
@@ -210,6 +201,7 @@ impl SystemProxyService {
     }
 
     pub fn stop_pac(&self) {
+        self.clear_manual_runtime();
         self.pac_manager.stop();
     }
 }
@@ -230,6 +222,7 @@ pub trait PacManager: Send + Sync {
     fn start(&self, config: PacStartConfig) -> Result<(), SystemProxyError>;
     fn stop(&self);
     fn is_supported(&self) -> bool;
+    fn is_running(&self) -> bool;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -251,6 +244,9 @@ impl PacManager for UnsupportedPacManager {
     fn stop(&self) {}
 
     fn is_supported(&self) -> bool {
+        false
+    }
+    fn is_running(&self) -> bool {
         false
     }
 }
@@ -310,6 +306,11 @@ impl PacManager for LocalPacManager {
 
     fn is_supported(&self) -> bool {
         cfg!(any(windows, target_os = "macos"))
+    }
+    fn is_running(&self) -> bool {
+        self.state
+            .lock()
+            .is_ok_and(|state| state.as_ref().is_some_and(RunningPacServer::is_alive))
     }
 }
 
@@ -412,6 +413,13 @@ pub fn plan_system_proxy(
         effective_type,
         normalized_exceptions.clone(),
     );
+    if status.management == SystemProxyManagement::Manual {
+        status.effective_type = SysProxyType::Unchanged;
+        return Ok(SystemProxyPlan {
+            action: SystemProxyAction::Noop,
+            status,
+        });
+    }
     let action = match (effective_type, request.target_os) {
         (SysProxyType::ForcedChange, TargetOs::Windows) => {
             let settings = build_windows_proxy_settings_with_exceptions(
@@ -436,28 +444,13 @@ pub fn plan_system_proxy(
                 exceptions,
             }
         }
-        (SysProxyType::ForcedChange, TargetOs::Macos) => {
-            let exceptions = normalized_exceptions.clone();
-            SystemProxyAction::MacosSet {
-                script: macos_script_invocation(
-                    request,
-                    "set",
-                    Some((LOOPBACK, request.socks_port, &exceptions)),
-                ),
-                host: LOOPBACK.to_string(),
-                port: request.socks_port,
-                exceptions,
-            }
-        }
+        (_, TargetOs::Macos) => SystemProxyAction::Noop,
         (SysProxyType::ForcedChange, TargetOs::Other) => {
             return Err(SystemProxyError::UnsupportedPlatform(TargetOs::Other));
         }
         (SysProxyType::ForcedClear, TargetOs::Windows) => SystemProxyAction::WindowsClear,
         (SysProxyType::ForcedClear, TargetOs::Linux) => SystemProxyAction::LinuxClear {
             script: linux_script_invocation(request, "none", None),
-        },
-        (SysProxyType::ForcedClear, TargetOs::Macos) => SystemProxyAction::MacosClear {
-            script: macos_script_invocation(request, "clear", None),
         },
         (SysProxyType::ForcedClear, TargetOs::Other) => {
             return Err(SystemProxyError::UnsupportedPlatform(TargetOs::Other));
@@ -469,15 +462,6 @@ pub fn plan_system_proxy(
             status.pac_url = Some(pac_url.clone());
             status.exceptions.clear();
             SystemProxyAction::WindowsSetPac { pac_url }
-        }
-        (SysProxyType::Pac, TargetOs::Macos) => {
-            let pac_url = pac_url(request);
-            status.proxy = Some(pac_url.clone());
-            status.pac_url = Some(pac_url.clone());
-            status.exceptions.clear();
-            SystemProxyAction::MacosSetPac {
-                script: macos_pac_script_invocation(request, &pac_url),
-            }
         }
         (SysProxyType::Pac, TargetOs::Other) => {
             return Err(SystemProxyError::UnsupportedPlatform(TargetOs::Other));
@@ -707,6 +691,10 @@ mod backend;
 use backend::*;
 #[derive(Debug, Error)]
 pub enum SystemProxyError {
+    #[error("manual proxy runtime state is unavailable")]
+    ManualState,
+    #[error("could not open macOS Network settings")]
+    OpenNetworkSettings,
     #[error("invalid system proxy port {0}")]
     InvalidPort(i32),
     #[error("system proxy is not supported on {0:?}")]
@@ -762,6 +750,9 @@ mod tests {
         }
 
         fn is_supported(&self) -> bool {
+            true
+        }
+        fn is_running(&self) -> bool {
             true
         }
     }
@@ -920,24 +911,11 @@ mod tests {
             SystemProxyAction::UnsupportedPac
         ));
 
-        let macos_pac = plan_system_proxy(&request(TargetOs::Macos, SysProxyType::Pac))
-            .expect("macos pac plan");
-        assert_eq!(macos_pac.status.effective_type, SysProxyType::Pac);
-        assert_eq!(
-            macos_pac.status.pac_url.as_deref(),
-            Some("http://127.0.0.1:10811/pac?t=123")
-        );
-        assert_eq!(
-            macos_pac.status.proxy.as_deref(),
-            Some("http://127.0.0.1:10811/pac?t=123")
-        );
-        let SystemProxyAction::MacosSetPac { script } = macos_pac.action else {
-            panic!("expected macos pac set");
-        };
-        assert_eq!(
-            script.arguments,
-            ["pac", "http://127.0.0.1:10811/pac?t=123"]
-        );
+        let macos_pac =
+            plan_system_proxy(&request(TargetOs::Macos, SysProxyType::Pac)).expect("manual plan");
+        assert_eq!(macos_pac.status.effective_type, SysProxyType::Unchanged);
+        assert_eq!(macos_pac.status.pac_url, None);
+        assert!(matches!(macos_pac.action, SystemProxyAction::Noop));
 
         let runner = Arc::new(RecordingRunner::default());
         let pac = Arc::new(FakePacManager::default());
@@ -955,7 +933,7 @@ mod tests {
     }
 
     #[test]
-    fn sysproxy_linux_and_macos_script_arguments_match_reference_shape() {
+    fn sysproxy_linux_script_arguments_match_reference_shape() {
         let linux = plan_system_proxy(&request(TargetOs::Linux, SysProxyType::ForcedChange))
             .expect("linux plan");
         let SystemProxyAction::LinuxSet { script, .. } = linux.action else {
@@ -964,16 +942,6 @@ mod tests {
         assert_eq!(
             script.arguments,
             ["manual", LOOPBACK, "10808", DEFAULT_SYSTEM_PROXY_EXCEPTIONS]
-        );
-
-        let macos = plan_system_proxy(&request(TargetOs::Macos, SysProxyType::ForcedChange))
-            .expect("macos plan");
-        let SystemProxyAction::MacosSet { script, .. } = macos.action else {
-            panic!("expected macos set");
-        };
-        assert_eq!(
-            script.arguments,
-            ["set", LOOPBACK, "10808", "localhost", "127.0.0.0/8", "::1"]
         );
     }
 
@@ -1043,41 +1011,6 @@ mod tests {
             .oneshots()
             .iter()
             .any(|spawn| spawn.arguments.iter().any(|arg| arg == "AutoConfigURL")));
-    }
-
-    #[test]
-    fn sysproxy_service_starts_macos_pac_and_runs_autoproxy_script() {
-        let runner = Arc::new(RecordingRunner::default());
-        let pac = Arc::new(FakePacManager::default());
-        let service = SystemProxyService::new(runner.clone(), pac.clone());
-
-        let status = service
-            .apply(&request(TargetOs::Macos, SysProxyType::Pac))
-            .expect("pac");
-
-        assert_eq!(status.effective_type, SysProxyType::Pac);
-        assert_eq!(
-            status.pac_url.as_deref(),
-            Some("http://127.0.0.1:10811/pac?t=123")
-        );
-        assert_eq!(pac.starts.lock().expect("starts").len(), 1);
-        let oneshots = runner.oneshots();
-        assert_eq!(oneshots.len(), 1);
-        assert_eq!(
-            oneshots[0].arguments,
-            ["pac", "http://127.0.0.1:10811/pac?t=123"]
-        );
-        let generated = oneshots[0]
-            .generated_scripts
-            .first()
-            .expect("managed macos script");
-        assert!(generated.contents.contains("-setautoproxyurl"));
-        assert!(generated
-            .contents
-            .contains("-setautoproxystate \"$service\" off"));
-        assert!(generated
-            .contents
-            .contains("-setautoproxystate \"$service\" on"));
     }
 
     #[test]

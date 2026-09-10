@@ -36,7 +36,7 @@ Security and lifecycle rules:
 
 - Sudo passwords are collected only for TUN/elevated operations, stored in memory only, and zeroized on stop/shutdown.
 - Linux and macOS use the same `sudo -S` shape; OS-specific differences belong inside `voya-platform`.
-- System proxy and TUN changes must restore on disconnect, app exit, crash restart, and forced disable.
+- System proxy and TUN changes must restore on disconnect, app exit, crash restart, and forced disable. [ADR 0007](0007-macos-manual-system-proxy.md) amends system proxy restoration on macOS to manual configuration and read-only inspection; automatic restoration remains for Windows/Linux.
 - GPL or AGPL core binaries are redistributed only through an approved packaging path with recorded attribution evidence. See the 2026-09 amendment below for the shape that path actually takes.
 
 Persistence remains a fresh VoyaVPN schema. There is no platform-specific legacy migration code and no obsolete v2rayN columns.

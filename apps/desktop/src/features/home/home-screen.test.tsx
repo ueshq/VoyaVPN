@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { changeLocale } from "@voya/i18n";
 import type {
   AppError,
   ConnectionModeStatus,
@@ -85,6 +86,7 @@ const disconnectedStatus: RuntimeStatusResponse = {
   activeProfileId: null,
   mainPid: null,
   prePid: null,
+  activeTunBackend: null,
   runningCoreType: null,
   state: "disconnected",
 };
@@ -93,11 +95,15 @@ const connectedStatus: RuntimeStatusResponse = {
   activeProfileId: "node-tokyo",
   mainPid: 4242,
   prePid: null,
+  activeTunBackend: null,
   runningCoreType: "singBox",
   state: "connected",
 };
 
 const sysProxyStatus: SystemProxyStatusResponse = {
+  management: "automatic",
+  observation: "unknown",
+  manualCleanupRequired: false,
   effectiveMode: "forcedClear",
   exceptions: "",
   pacAvailable: false,
@@ -136,6 +142,11 @@ const tunStatusResponse: TunStatus = {
   requiresElevation: false,
   resolvedProviderPath: null,
   restoreOnDisconnect: true,
+};
+
+const missingTunnelMessages = {
+  en: "The running copy of VoyaVPN is missing its VPN extension. Quit and open the fully installed app from Applications. If the extension is still missing, reinstall VoyaVPN.",
+  "zh-Hans": "当前运行的 VoyaVPN 缺少 VPN 扩展。请退出后从“应用程序”打开完整安装版；若仍提示缺失，请重新安装。",
 };
 
 vi.mock("@/ipc", () => ({
@@ -184,7 +195,8 @@ function connectButton() {
 }
 
 describe("HomeScreen", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await changeLocale("en", { persist: false });
     vi.clearAllMocks();
     runtimeMock.state.coreState = null;
     runtimeMock.state.statistics = null;
@@ -206,8 +218,9 @@ describe("HomeScreen", () => {
     useModalStore.setState({ stack: [] });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     cleanup();
+    await changeLocale("en", { persist: false });
   });
 
   it("renders the calm unprotected hero with an empty node list by default", async () => {
@@ -223,6 +236,7 @@ describe("HomeScreen", () => {
   });
 
   it("lights up the protected state with node info and marks the running node", async () => {
+    runtimeMock.state.sysProxy = sysProxyStatus;
     runtimeMock.state.coreState = connectedStatus;
     mockProfileList([
       makeActiveProfile({ id: "node-tokyo", remarks: "Tokyo Edge" }),
@@ -233,6 +247,7 @@ describe("HomeScreen", () => {
     expect(screen.getByText("Protected")).toBeInTheDocument();
     expect(screen.getByTestId("home-status-card")).toHaveTextContent("PID 4242");
     expect(connectButton()).toHaveAttribute("aria-pressed", "true");
+    expect(connectButton()).toHaveAccessibleName("Disconnect");
     expect(screen.getByRole("button", { name: "Restart" })).toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "Current node: Tokyo Edge" }),
@@ -263,6 +278,54 @@ describe("HomeScreen", () => {
     expect(ipcMock.restartCore).not.toHaveBeenCalled();
   });
 
+  it("labels a running manual proxy as locally ready and preserves unknown configuration", () => {
+    runtimeMock.state.coreState = connectedStatus;
+    runtimeMock.state.sysProxy = {
+      ...sysProxyStatus, management: "manual", observation: "unknown",
+      requestedMode: "forcedChange", effectiveMode: "unchanged", proxy: "127.0.0.1:10808",
+    };
+    renderHome();
+    expect(screen.getByText("Local proxy ready")).toBeInTheDocument();
+    expect(screen.queryByText("Protected")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "System proxy (manual)" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("unknown");
+    expect(useToastStore.getState().toasts).toHaveLength(0);
+  });
+
+  it("keeps connected status neutral while proxy capabilities are unavailable", () => {
+    runtimeMock.state.coreState = connectedStatus;
+    const view = renderHome();
+    expect(screen.getByText("Protection status unknown")).toBeInTheDocument();
+    expect(screen.queryByText("Protected")).not.toBeInTheDocument();
+    expect(ipcMock.systemProxyStatus).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it.each([null, "macosPacketTunnel"] as const)("uses the running tunnel instead of the saved VPN choice (%s)", (activeTunBackend) => {
+    runtimeMock.state.coreState = { ...connectedStatus, activeTunBackend };
+    runtimeMock.state.sysProxy = { ...sysProxyStatus, management: "manual" };
+    runtimeMock.state.tun = { ...tunStatusResponse, enabled: true, backend: "macosPacketTunnel" };
+    renderHome();
+    expect(screen.getByText(activeTunBackend ? "Protected" : "Local proxy ready")).toBeInTheDocument();
+    if (!activeTunBackend) expect(screen.queryByText("Protected")).not.toBeInTheDocument();
+  });
+
+  it("offers a retry when native tunnel cleanup is pending and refreshes TUN after failure", async () => {
+    const pending = { ...connectedStatus, state: "cleanupPending" as const };
+    runtimeMock.state.coreState = pending;
+    ipcMock.runtimeStatus.mockResolvedValue(pending);
+    ipcMock.disconnectCore.mockRejectedValue(new Error("stop timed out"));
+    const user = userEvent.setup();
+    renderHome();
+    expect(connectButton()).toHaveAccessibleName("Retry disconnect");
+    await user.click(connectButton());
+    await waitFor(() => expect(ipcMock.disconnectCore).toHaveBeenCalledOnce());
+    await waitFor(() => expect(runtimeMock.state.setCoreState).toHaveBeenCalledWith(pending));
+    expect(ipcMock.tunStatus).toHaveBeenCalled();
+    expect(connectButton()).toBeEnabled();
+    expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
+  });
+
   it("switches and connects on double click while disconnected", async () => {
     mockProfileList([makeProfile(1, { id: "tokyo", remarks: "Tokyo Edge" })]);
 
@@ -281,6 +344,7 @@ describe("HomeScreen", () => {
       activeProfileId: "node-old",
       mainPid: 1,
       prePid: null,
+      activeTunBackend: null,
       runningCoreType: "singBox",
       state: "connected",
     };
@@ -582,6 +646,7 @@ describe("HomeScreen", () => {
       activeProfileId: "node-tokyo",
       mainPid: 4242,
       prePid: null,
+      activeTunBackend: null,
       runningCoreType: "singBox",
       state: "connected",
     });
@@ -755,26 +820,116 @@ describe("HomeScreen", () => {
     await waitFor(() => expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("vpn", null));
   });
 
-  it("blocks VPN mode when the platform component is missing", async () => {
+  it.each([
+    { locale: "en", lastProviderError: "PacketTunnel extension is not bundled in this build" },
+    { locale: "zh-Hans", lastProviderError: "A different backend diagnostic" },
+    { locale: "en", lastProviderError: null },
+  ] as const)("explains how to restore the missing macOS extension in $locale ($lastProviderError)", async ({ locale, lastProviderError }) => {
+    await changeLocale(locale, { persist: false });
     const user = userEvent.setup();
     ipcMock.tunStatus.mockResolvedValue({
       ...tunStatusResponse,
       backend: "macosPacketTunnel",
-      lastProviderError: "PacketTunnel extension is not bundled in this build",
+      lastProviderError,
       nativeComponentReady: false,
       providerState: "missingComponent",
+      requiresElevation: true,
+      elevationGranted: false,
     });
 
     renderHome();
 
     await user.click(screen.getByRole("button", { name: "VPN" }));
 
-    await waitFor(() => expect(ipcMock.tunStatus).toHaveBeenCalled());
+    await waitFor(() => expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
+      description: missingTunnelMessages[locale],
+      severity: "error",
+      title: locale === "en" ? "Failed to enable TUN" : "启用 TUN 失败",
+    }));
     expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
-    expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
-      description: "PacketTunnel extension is not bundled in this build",
-      title: "Failed to enable TUN",
+    expect(ipcMock.tunRequestElevation).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "VPN" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it.each(["en", "zh-Hans"] as const)("shows the same recovery advice in the persisted VPN status in %s", async (locale) => {
+    await changeLocale(locale, { persist: false });
+    const status: TunStatus = {
+      ...tunStatusResponse,
+      backend: "macosPacketTunnel",
+      enabled: true,
+      nativeComponentReady: false,
+      providerState: "missingComponent",
+      lastProviderError: "PacketTunnel extension is not bundled in this build",
+    };
+    runtimeMock.state.tun = status;
+    ipcMock.tunStatus.mockResolvedValue(status);
+
+    renderHome();
+
+    const summary = await screen.findByText((text) => text.endsWith(missingTunnelMessages[locale]));
+    expect(summary).toHaveTextContent(locale === "en" ? "Missing component" : "缺少组件");
+    expect(summary).not.toHaveTextContent("PacketTunnel extension is not bundled in this build");
+    expect(status.lastProviderError).toBe("PacketTunnel extension is not bundled in this build");
+  });
+
+  it("allows VPN mode when the macOS extension is present", async () => {
+    const user = userEvent.setup();
+    ipcMock.tunStatus.mockResolvedValue({
+      ...tunStatusResponse,
+      backend: "macosPacketTunnel",
+      providerState: "stopped",
     });
+
+    renderHome();
+    await user.click(screen.getByRole("button", { name: "VPN" }));
+
+    await waitFor(() => expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("vpn", null));
+    expect(ipcMock.tunRequestElevation).not.toHaveBeenCalled();
+    expect(useToastStore.getState().toasts).toEqual([]);
+  });
+
+  it.each([
+    { backend: "macosPacketTunnel", providerState: "error", message: "PacketTunnel signature is invalid" },
+    { backend: "windowsService", providerState: "missingComponent", message: "PacketTunnel extension is not bundled in this build" },
+  ] as const)("preserves other $backend diagnostics in notifications and status", async ({ backend, providerState, message }) => {
+    const user = userEvent.setup();
+    const status: TunStatus = {
+      ...tunStatusResponse,
+      backend,
+      providerState,
+      nativeComponentReady: false,
+      lastProviderError: message,
+    };
+    ipcMock.tunStatus.mockResolvedValue(status);
+    const { queryClient, rerender } = renderHome();
+
+    await user.click(screen.getByRole("button", { name: "VPN" }));
+    await waitFor(() => expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
+      description: message,
+    }));
+    expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
+
+    runtimeMock.state.tun = { ...status, enabled: true };
+    rerender(<QueryClientProvider client={queryClient}><HomeScreen /></QueryClientProvider>);
+    expect(await screen.findByText((text) => text.endsWith(message))).toBeInTheDocument();
+  });
+
+  it("localizes the generic missing-component fallback", async () => {
+    await changeLocale("zh-Hans", { persist: false });
+    const user = userEvent.setup();
+    ipcMock.tunStatus.mockResolvedValue({
+      ...tunStatusResponse,
+      backend: "windowsService",
+      providerState: "missingComponent",
+      nativeComponentReady: false,
+    });
+
+    renderHome();
+    await user.click(screen.getByRole("button", { name: "VPN" }));
+    await waitFor(() => expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
+      description: "尚未安装原生隧道组件。",
+    }));
+    expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
   });
 
   it("blocks VPN mode when PlugInKit elected a stale provider path", async () => {

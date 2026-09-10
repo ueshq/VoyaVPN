@@ -24,6 +24,15 @@ development builds keep the `.appex` shape and use `packet-tunnel-provider`.
 
 ## Symptoms
 
+- **"PacketTunnel extension is not bundled in this build"** (or the localized
+  missing VPN extension message) means the running copy has no PacketTunnel
+  provider. Quit VoyaVPN and open `/Applications/VoyaVPN.app`. Local builds
+  intentionally remove the extension from leftover `target/` app copies after
+  installation to prevent them from winning PlugInKit election. `pnpm dev` also
+  runs without a bundled provider and cannot be used for macOS VPN testing.
+  If the installed copy is incomplete, reinstall a complete VPN-capable package;
+  developers can rebuild and install it with `pnpm build:mac:local`. Verify the
+  installed copy with `pnpm native:macos:ne:doctor --app /Applications/VoyaVPN.app`.
 - Enabling TUN disconnects browsers and apps.
 - Disabling TUN and using system proxy works.
 - The UI may report connected while traffic does not pass.

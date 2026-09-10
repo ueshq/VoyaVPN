@@ -99,6 +99,7 @@ const fn notice_level(level: CoreFlowLevel) -> AppNoticeLevel {
 
 const fn core_state_event_kind(state: CoreFlowState) -> CoreState {
     match state {
+        CoreFlowState::CleanupPending => CoreState::CleanupPending,
         CoreFlowState::Connecting => CoreState::Connecting,
         CoreFlowState::Connected => CoreState::Connected,
         CoreFlowState::Disconnecting => CoreState::Disconnecting,

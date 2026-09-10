@@ -10,7 +10,8 @@
 //!   proxy" (or launching with it persisted) black-holed every request until
 //!   the user pressed Connect, because nothing was listening on that port. The
 //!   rule this module enforces instead is the one the rest of the app already
-//!   follows: **the OS proxy follows the connected core**. The mode is always
+//!   follows on automatic platforms: **the OS proxy follows the connected core**.
+//!   On macOS only the local PAC listener follows the core; OS proxies are manual. The mode is always
 //!   persisted; the OS is only touched while the supervisor reports
 //!   `Connected`, and otherwise the caller gets the *planned* status so the UI
 //!   and the tray still show what was chosen.
@@ -38,7 +39,7 @@ use voya_platform::{
 use crate::{
     config_mutation::{ConfigMutationCoordinator, ConfigMutationError},
     supervisor::SupervisorConnectionState,
-    sysproxy::{runtime_system_proxy_config, SystemProxyManager, SystemProxyManagerError},
+    sysproxy::{SystemProxyManager, SystemProxyManagerError},
     tun::{TunManager, TunManagerError, TunStatus},
 };
 
@@ -329,17 +330,17 @@ impl ConnectionModeManager {
         mutation.commit().await.map(|_| ())
     }
 
-    /// The OS proxy scripts fork `networksetup`/`gsettings`/`reg` once per
+    /// Automatic proxy scripts fork `gsettings`/`reg` once per
     /// network service, so they never run on the caller's async worker.
     async fn apply(
         &self,
         config: &AppConfig,
     ) -> Result<Result<SystemProxyStatus, SystemProxyManagerError>, ConnectionModeError> {
-        let runtime = runtime_system_proxy_config(config, false, self.target_os);
+        let config = config.clone();
         let manager = self.system_proxy.clone();
 
         run_blocking("system proxy apply", move || {
-            manager.apply_config(&runtime.config, runtime.force_disable)
+            manager.apply_runtime_config(&config)
         })
         .await
     }
@@ -348,11 +349,11 @@ impl ConnectionModeManager {
         &self,
         config: &AppConfig,
     ) -> Result<SystemProxyStatus, ConnectionModeError> {
-        let runtime = runtime_system_proxy_config(config, false, self.target_os);
+        let config = config.clone();
         let manager = self.system_proxy.clone();
 
         run_blocking("system proxy status", move || {
-            manager.status_with_force_disable(&runtime.config, runtime.force_disable)
+            manager.runtime_status(&config)
         })
         .await?
         .map_err(Into::into)

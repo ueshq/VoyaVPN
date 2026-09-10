@@ -31,7 +31,7 @@ const selectedOptionClass =
   "border border-primary bg-accent-blue-light text-brand hover:bg-accent-blue-light hover:text-brand";
 
 export function GeneralTab({ controller }: { controller: AppSettingsController }) {
-  const { localeOptions, t } = useI18n();
+  const { language, localeOptions, t } = useI18n();
   const { settings, setAppearance, update, working } = controller;
 
   if (!settings) {
@@ -42,6 +42,9 @@ export function GeneralTab({ controller }: { controller: AppSettingsController }
     );
   }
 
+  const selectedLanguage = localeOptions.some((locale) => locale.code === settings.appearance.language)
+    ? settings.appearance.language
+    : language;
   const hotkey = settings.shortcuts.showWindowShortcut ?? {
     alt: false,
     control: false,
@@ -80,7 +83,7 @@ export function GeneralTab({ controller }: { controller: AppSettingsController }
         <SettingsRow align="start" label={t("modal.language")}>
           <div className="flex flex-wrap gap-2">
             {localeOptions.map((locale) => {
-              const selected = settings.appearance.language === locale.code;
+              const selected = selectedLanguage === locale.code;
               return (
                 <Button
                   key={locale.code}

@@ -160,6 +160,7 @@ pub struct SupervisorStartRequest {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SupervisorConnectionState {
+    CleanupPending,
     Disconnected,
     Connected,
 }
@@ -167,6 +168,7 @@ pub enum SupervisorConnectionState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SupervisorSnapshot {
     pub state: SupervisorConnectionState,
+    pub active_tun_backend: Option<TunBackend>,
     pub active_profile_id: Option<String>,
     pub main_pid: Option<u32>,
     pub pre_pid: Option<u32>,
@@ -205,6 +207,7 @@ impl SupervisorSnapshot {
     pub const fn disconnected() -> Self {
         Self {
             state: SupervisorConnectionState::Disconnected,
+            active_tun_backend: None,
             active_profile_id: None,
             main_pid: None,
             pre_pid: None,
@@ -599,6 +602,7 @@ struct RunningCore {
 }
 
 struct RunningNativeTun {
+    cleanup_pending: bool,
     backend: TunBackend,
     generation: u64,
 }
@@ -643,17 +647,28 @@ impl RunningCore {
     }
 
     fn snapshot(&self) -> SupervisorSnapshot {
-        let connected = self.main.is_some() || self.native_tun.is_some();
+        let cleanup_pending = self
+            .native_tun
+            .as_ref()
+            .is_some_and(|tun| tun.cleanup_pending);
+        let connected = !cleanup_pending && (self.main.is_some() || self.native_tun.is_some());
         // Port and token both describe a *live* Clash API, so a stale request
         // must not leak either of them once the core is gone.
         let live_request = connected.then_some(self.last_request.as_ref()).flatten();
         SupervisorSnapshot {
-            state: if connected {
+            state: if cleanup_pending {
+                SupervisorConnectionState::CleanupPending
+            } else if connected {
                 SupervisorConnectionState::Connected
             } else {
                 SupervisorConnectionState::Disconnected
             },
             active_profile_id: self.active_profile_id.clone(),
+            active_tun_backend: live_request.filter(|request| request.tun_enabled).map(|_| {
+                self.native_tun
+                    .as_ref()
+                    .map_or(TunBackend::Process, |tun| tun.backend)
+            }),
             main_pid: self.main.as_ref().map(ProcessHandle::id),
             pre_pid: self.pre.as_ref().map(ProcessHandle::id),
             running_core_type: self.running_core_type,
@@ -946,6 +961,90 @@ mod tests {
             self.events.push(format!("native:stop:{backend:?}"));
             self.set_provider_state(NativeTunProviderState::Stopped, None);
             Ok(())
+        }
+    }
+
+    struct FailedStartController {
+        cleanup_fails: std::sync::atomic::AtomicBool,
+        accepted: bool,
+    }
+    impl NativeTunController for FailedStartController {
+        fn status(&self, backend: TunBackend) -> voya_platform::tun::NativeTunStatus {
+            voya_platform::tun::NativeTunStatus {
+                backend,
+                provider_state: NativeTunProviderState::Running,
+                component_ready: true,
+                message: None,
+            }
+        }
+        fn start(&self, _request: NativeTunStartRequest) -> Result<(), NativeTunError> {
+            if self.accepted {
+                Err(NativeTunError::StartCleanupFailed {
+                    start_error: "original start error".into(),
+                    cleanup_error: "stop timed out".into(),
+                })
+            } else {
+                Err(NativeTunError::Bridge {
+                    action: "start",
+                    message: "request rejected".into(),
+                })
+            }
+        }
+        fn stop(&self, _backend: TunBackend) -> Result<(), NativeTunError> {
+            if self
+                .cleanup_fails
+                .load(std::sync::atomic::Ordering::Relaxed)
+            {
+                Err(NativeTunError::Bridge {
+                    action: "stop",
+                    message: "stop timed out".into(),
+                })
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_native_start_keeps_cleanup_record_until_stop_succeeds() {
+        for accepted in [true, false] {
+            let controller = Arc::new(FailedStartController {
+                cleanup_fails: std::sync::atomic::AtomicBool::new(true),
+                accepted,
+            });
+            let deps = SupervisorDeps::new(
+                Arc::new(FakeRunner::new(SharedEvents::default())),
+                Arc::new(ElevationState::new()),
+            )
+            .with_target_os(TargetOs::Macos)
+            .with_native_tun_controller(controller.clone());
+            let supervisor = CoreSupervisor::spawn(deps);
+            let error = supervisor
+                .start(native_tun_test_request())
+                .await
+                .expect_err("failed start");
+            let status = supervisor.status().await.expect("status");
+            assert_eq!(status.active_tun_backend, None);
+            if accepted {
+                assert!(error.to_string().contains("original start error"));
+                assert!(error.to_string().contains("stop timed out"));
+                assert_eq!(status.state, SupervisorConnectionState::CleanupPending);
+                assert!(status.clash_api_port.is_none());
+                assert!(supervisor.stop().await.is_err());
+                assert_eq!(
+                    supervisor.status().await.expect("pending status").state,
+                    SupervisorConnectionState::CleanupPending
+                );
+            } else {
+                assert_eq!(status.state, SupervisorConnectionState::Disconnected);
+            }
+            controller
+                .cleanup_fails
+                .store(false, std::sync::atomic::Ordering::Relaxed);
+            assert_eq!(
+                supervisor.stop().await.expect("retry stop").state,
+                SupervisorConnectionState::Disconnected
+            );
         }
     }
 
@@ -1480,6 +1579,10 @@ sleep 30
             .expect("native tun start");
 
         assert_eq!(snapshot.state, SupervisorConnectionState::Connected);
+        assert_eq!(
+            snapshot.active_tun_backend,
+            Some(TunBackend::WindowsService)
+        );
         assert_eq!(snapshot.main_pid, None);
         assert_eq!(snapshot.pre_pid, None);
 
@@ -2251,6 +2354,56 @@ sleep 30
             ClashApiAccess::default(),
             "a stale token must not outlive the core that accepted it"
         );
+    }
+
+    #[tokio::test]
+    async fn active_tun_backend_tracks_the_running_request_and_clears_after_stop() {
+        for (target, expected) in [
+            (TargetOs::Macos, TunBackend::MacosPacketTunnel),
+            (TargetOs::Windows, TunBackend::WindowsService),
+            (TargetOs::Linux, TunBackend::Process),
+        ] {
+            let events = SharedEvents::default();
+            let elevation = Arc::new(ElevationState::new());
+            elevation.set_granted(true);
+            let deps = SupervisorDeps::new(Arc::new(FakeRunner::new(events.clone())), elevation)
+                .with_target_os(target)
+                .with_native_tun_controller(Arc::new(RecordingNativeTunController { events }));
+            let supervisor = CoreSupervisor::spawn(deps);
+            assert_eq!(
+                supervisor
+                    .status()
+                    .await
+                    .expect("initial")
+                    .active_tun_backend,
+                None
+            );
+            let local = supervisor
+                .start(SupervisorStartRequest {
+                    tun_enabled: false,
+                    ..native_tun_test_request()
+                })
+                .await
+                .expect("local proxy");
+            assert_eq!(local.active_tun_backend, None);
+            if target == TargetOs::Macos {
+                let mut invalid = native_tun_test_request();
+                invalid.main.config_path = None;
+                assert!(supervisor.restart(invalid).await.is_err());
+                let retained = supervisor.status().await.expect("retained local proxy");
+                assert_eq!(retained.state, SupervisorConnectionState::Connected);
+                assert_eq!(retained.active_tun_backend, None);
+            }
+            let tunnel = supervisor
+                .restart(native_tun_test_request())
+                .await
+                .expect("tunnel");
+            assert_eq!(tunnel.active_tun_backend, Some(expected));
+            assert_eq!(
+                supervisor.stop().await.expect("stop").active_tun_backend,
+                None
+            );
+        }
     }
 
     fn native_tun_test_request() -> SupervisorStartRequest {

@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 
-import { changeLocale, i18next, type Locale, type TranslationFunction } from "@voya/i18n";
+import { changeLocale, i18next, localeOptions, type Locale, type TranslationFunction } from "@voya/i18n";
 
 import type { LogCode, NoticeCode, SpeedtestOutcome, ValidationCode } from "@/ipc/bindings";
 import {
@@ -31,14 +31,12 @@ function translator(locale: Locale): TranslationFunction {
 const en = translator("en");
 const zh = translator("zh-Hans");
 
-const LOCALES: Locale[] = ["en", "zh-Hans", "zh-Hant", "fr", "fa", "hu", "ru", "de"];
-
 afterAll(async () => {
   await changeLocale("en");
 });
 
 describe("backend message codes", () => {
-  it("resolves every registry entry to real text in all eight locales", () => {
+  it("resolves every registry entry to real text in all shipped locales", () => {
     const keys = [
       ...Object.values(NOTICE_KEYS),
       ...Object.values(LOG_KEYS),
@@ -49,7 +47,7 @@ describe("backend message codes", () => {
     ];
 
     expect(keys.length).toBeGreaterThan(100);
-    for (const locale of LOCALES) {
+    for (const { code: locale } of localeOptions) {
       const t = translator(locale);
       for (const key of keys) {
         const text = t(key);

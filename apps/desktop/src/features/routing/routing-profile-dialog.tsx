@@ -17,7 +17,7 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { translateFieldErrors, zodIssuesToErrorMap, type FieldErrorMap } from "@/lib/zod-errors";
 
 import { SINGBOX_DOMAIN_STRATEGIES } from "./routing-constants";
-import { CheckboxField, SelectField, TextField } from "./routing-form-fields";
+import { CheckboxField, SelectField, TextField } from "@voya/ui/components/form-fields";
 import {
   routingProfileFieldsSchema,
   type RoutingFormPayload,
@@ -112,7 +112,7 @@ export function RoutingProfileDialog({
           <CheckboxField
             checked={form.enabled}
             label={t("panes.routing.enabled")}
-            onCheckedChange={(checked) => setForm((current) => ({ ...current, enabled: checked }))}
+            onChange={(checked) => setForm((current) => ({ ...current, enabled: checked }))}
           />
           {formError ? (
             <Alert variant="destructive">

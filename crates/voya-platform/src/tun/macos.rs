@@ -168,6 +168,26 @@ fn parse_bridge_start_output(output: &str) -> Result<(), NativeTunError> {
         });
     }
 
+    if let Some(json) = output.strip_prefix("startFailed:") {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(json) {
+            if let Some(start_error) = value.get("error").and_then(serde_json::Value::as_str) {
+                return Err(
+                    match value
+                        .get("cleanupError")
+                        .and_then(serde_json::Value::as_str)
+                    {
+                        Some(cleanup_error) => NativeTunError::StartCleanupFailed {
+                            start_error: start_error.to_string(),
+                            cleanup_error: cleanup_error.to_string(),
+                        },
+                        None => NativeTunError::StartFailed {
+                            message: start_error.to_string(),
+                        },
+                    },
+                );
+            }
+        }
+    }
     Err(bridge_command_failed("start macOS PacketTunnel", output))
 }
 
@@ -182,10 +202,9 @@ fn parse_bridge_stop_output(output: &str) -> Result<(), NativeTunError> {
 }
 
 fn bridge_command_failed(action: &'static str, output: &str) -> NativeTunError {
-    NativeTunError::CommandFailed {
+    NativeTunError::Bridge {
         action,
-        status_code: None,
-        output: strip_bridge_error_prefix(output).to_string(),
+        message: strip_bridge_error_prefix(output).to_string(),
     }
 }
 
@@ -279,7 +298,18 @@ pub(super) fn macos_packet_tunnel_diagnostics() -> NativeTunDiagnostics {
     diagnostics.packaging_mode = macos_packet_tunnel_packaging_mode().map(str::to_string);
     diagnostics.expected_provider_path = macos_packet_tunnel_component_path();
     diagnostics.system_extension_state = macos_system_extension_state();
-    diagnostics.registration_paths = macos_packet_tunnel_registration_evidence();
+    let registration = platform_provider_registration_paths(MACOS_PACKET_TUNNEL_BUNDLE_ID);
+    if matches!(registration, Err(NativeTunError::RegistrationUnavailable)) {
+        diagnostics.message = Some("PacketTunnel registration cannot be queried inside the app sandbox; use the external NetworkExtension doctor.".to_string());
+    }
+    diagnostics.registration_paths = registration
+        .unwrap_or_default()
+        .into_iter()
+        .map(|path| path.display().to_string())
+        .collect();
+    diagnostics
+        .registration_paths
+        .extend(macos_system_extension_registration_lines());
     diagnostics.host_log_tail = macos_packet_tunnel_host_log_tail();
 
     if let Some(message) = macos_packet_tunnel_packaging_error() {
@@ -322,15 +352,6 @@ pub(super) fn macos_packet_tunnel_diagnostics() -> NativeTunDiagnostics {
     }
 
     diagnostics
-}
-
-fn macos_packet_tunnel_registration_evidence() -> Vec<String> {
-    let mut evidence = Vec::new();
-    if let Ok(paths) = platform_provider_registration_paths(MACOS_PACKET_TUNNEL_BUNDLE_ID) {
-        evidence.extend(paths.into_iter().map(|path| path.display().to_string()));
-    }
-    evidence.extend(macos_system_extension_registration_lines());
-    evidence
 }
 
 #[cfg(target_os = "macos")]
@@ -618,6 +639,9 @@ pub(super) fn platform_provider_registration_paths(
         })?;
 
     if !output.status.success() {
+        if String::from_utf8_lossy(&output.stderr).contains("unauthorized discovery flag") {
+            return Err(NativeTunError::RegistrationUnavailable);
+        }
         return Err(NativeTunError::CommandFailed {
             action: "query macOS PacketTunnel provider registration",
             status_code: output.status.code(),
@@ -668,6 +692,7 @@ pub fn ensure_macos_provider_path_matches(
 
     let resolved = match resolver.resolved_provider_paths(MACOS_PACKET_TUNNEL_BUNDLE_ID) {
         Ok(resolved) => resolved,
+        Err(NativeTunError::RegistrationUnavailable) => return Ok(()),
         Err(error) => {
             tracing::warn!(
                 ?error,
@@ -1031,11 +1056,10 @@ mod tests {
         assert!(
             matches!(
                 &failure,
-                NativeTunError::CommandFailed {
+                NativeTunError::Bridge {
                     action: "start macOS PacketTunnel",
-                    status_code: None,
-                    output,
-                } if output == "VoyaVPN PacketTunnel manager is unavailable."
+                    message,
+                } if message == "VoyaVPN PacketTunnel manager is unavailable."
             ),
             "unexpected error: {failure}"
         );
@@ -1045,10 +1069,28 @@ mod tests {
         assert!(
             matches!(
                 &unexpected,
-                NativeTunError::CommandFailed { output, .. } if output == "running"
+                NativeTunError::Bridge { message, .. } if message == "running"
             ),
             "unexpected error: {unexpected}"
         );
+    }
+
+    #[test]
+    fn bridge_start_failure_preserves_original_and_cleanup_errors() {
+        let clean = parse_bridge_start_output(
+            r#"startFailed:{"error":"start timed out","cleanupError":null}"#,
+        )
+        .expect_err("failure");
+        assert!(matches!(clean, NativeTunError::StartFailed { .. }));
+        let pending = parse_bridge_start_output(
+            r#"startFailed:{"error":"start timed out","cleanupError":"stop timed out"}"#,
+        )
+        .expect_err("pending cleanup");
+        assert!(
+            matches!(&pending, NativeTunError::StartCleanupFailed { start_error, cleanup_error } if start_error == "start timed out" && cleanup_error == "stop timed out")
+        );
+        assert!(!pending.to_string().contains("status None"));
+        assert!(parse_bridge_start_output("startFailed:garbage").is_err());
     }
 
     #[test]
@@ -1059,11 +1101,11 @@ mod tests {
         assert!(
             matches!(
                 &failure,
-                NativeTunError::CommandFailed {
+                NativeTunError::Bridge {
                     action: "stop macOS PacketTunnel",
-                    output,
+                    message,
                     ..
-                } if output == "no manager"
+                } if message == "no manager"
             ),
             "unexpected error: {failure}"
         );

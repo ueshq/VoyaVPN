@@ -5,20 +5,21 @@ import { cn } from "@voya/ui/lib/utils";
 import type { Translation } from "./use-home-runtime";
 
 /**
- * Hiddify-style central connect control. The accessible name stays a constant
- * "Connect"; state travels via `aria-pressed`/`aria-busy`. Single-accent
- * discipline: idle stays neutral, affirmative green (`--connected` /
- * `--connected-glow`) marks only the achieved protected state, and the
+ * Central runtime control. Its accessible name describes the available action,
+ * including retry after failed cleanup. Idle stays neutral; green marks the
+ * running core, while the separate status heading describes protection. The
  * connecting ring inherits the global `prefers-reduced-motion` guard.
  */
 export function ConnectButton({
   busy,
+  cleanupPending = false,
   connected,
   inProgress,
   onPrimaryAction,
   t,
 }: {
   busy: boolean;
+  cleanupPending?: boolean;
   connected: boolean;
   inProgress: boolean;
   onPrimaryAction: () => void;
@@ -27,7 +28,7 @@ export function ConnectButton({
   return (
     <button
       aria-busy={busy || undefined}
-      aria-label={t("actions.connect")}
+      aria-label={cleanupPending ? t("home.retryDisconnect") : connected ? t("actions.disconnect") : t("actions.connect")}
       aria-pressed={connected}
       className={cn(
         "relative grid size-36 place-items-center rounded-full border-2 outline-none transition-colors",

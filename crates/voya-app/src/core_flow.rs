@@ -10,14 +10,14 @@
 //!
 //! The rules this module enforces, once, for every entry point:
 //!
-//! * On success the core state, the system proxy and the TUN status are all
-//!   reported, in that order.
+//! * Before reporting a successful connection, publish the settled proxy
+//!   snapshot, even if applying the proxy failed. Then report TUN status.
 //! * On failure the supervisor is asked what actually happened. If the previous
 //!   core survived (the failure happened before the supervisor was touched) the
 //!   UI is told `Connected` and the OS proxy is left alone. Otherwise the UI is
-//!   told `Disconnected` and the OS proxy is restored **unconditionally** — a
-//!   dead core with the proxy still pointing at its port blackholes every
-//!   connection, on every backend, not just native TUN.
+//!   told `Disconnected` and automatic proxies are restored. macOS stops only
+//!   its local PAC service and reports the settings requiring manual cleanup.
+//!   A native tunnel whose cleanup failed remains `CleanupPending`.
 //! * Emission is best effort. The sink returns nothing, so a webview that is
 //!   tearing down can never rewrite a `MissingCore` error into an emit error.
 
@@ -25,7 +25,7 @@ use std::sync::Arc;
 
 use voya_contracts::{CoreFlowReason, LogCode, NoticeCode};
 use voya_core::AppConfig;
-use voya_platform::{coreinfo::TargetOs, sysproxy::SystemProxyStatus};
+use voya_platform::sysproxy::SystemProxyStatus;
 
 use crate::{
     runtime::{RuntimeError, RuntimeManager},
@@ -33,7 +33,7 @@ use crate::{
         CoreExitEvent, CoreExitOutcome, NativeTunExitEvent, SupervisorConnectionState,
         SupervisorSnapshot,
     },
-    sysproxy::{runtime_system_proxy_config, SystemProxyManager, SystemProxyManagerError},
+    sysproxy::SystemProxyManager,
     tun::{TunManager, TunStatus},
 };
 
@@ -48,20 +48,26 @@ pub enum CoreFlowLevel {
 /// Connection state the flow reports to the UI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoreFlowState {
+    CleanupPending,
     Connecting,
     Connected,
     Disconnecting,
     Disconnected,
 }
 
-/// Everything the flow tells the outside world.
+#[derive(Clone, Copy)]
+enum ProxyAction {
+    Apply,
+    Restore,
+    StopPac,
+    Observe,
+}
+
+/// Everything the flow tells the outside world, as codes rather than sentences.
 ///
 /// Every method returns `()`: by the time these are called the OS-level side
 /// effects have already happened, so a failed emit must be logged by the
 /// adapter and never propagated.
-/// Everything the flow tells the outside world, as codes rather than
-/// sentences.
-///
 /// `log` and `notice` used to take an English `&str` that the shell forwarded
 /// straight to the Logs panel and the toast store, which is why none of it was
 /// translatable. They take a code and an optional untranslated `detail` now;
@@ -86,7 +92,6 @@ pub struct CoreFlow<'flow> {
     system_proxy: SystemProxyManager,
     tun: TunManager,
     sink: Arc<dyn CoreFlowSink>,
-    target_os: TargetOs,
 }
 
 impl<'flow> CoreFlow<'flow> {
@@ -97,23 +102,11 @@ impl<'flow> CoreFlow<'flow> {
         tun: TunManager,
         sink: Arc<dyn CoreFlowSink>,
     ) -> Self {
-        Self::with_target_os(runtime, system_proxy, tun, sink, TargetOs::current())
-    }
-
-    #[must_use]
-    pub fn with_target_os(
-        runtime: RuntimeManager<'flow>,
-        system_proxy: SystemProxyManager,
-        tun: TunManager,
-        sink: Arc<dyn CoreFlowSink>,
-        target_os: TargetOs,
-    ) -> Self {
         Self {
             runtime,
             system_proxy,
             tun,
             sink,
-            target_os,
         }
     }
 
@@ -166,7 +159,7 @@ impl<'flow> CoreFlow<'flow> {
         }
     }
 
-    /// Stop the core and hand the machine's proxy settings back.
+    /// Stop the core and restore automatic proxies / report manual cleanup.
     pub async fn disconnect(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
         self.sink
             .log(CoreFlowLevel::Info, LogCode::Disconnecting, None);
@@ -200,6 +193,12 @@ impl<'flow> CoreFlow<'flow> {
                     Some(&exit),
                 );
                 // The pid changed, so the UI needs the new snapshot.
+                self.settle_system_proxy(
+                    config,
+                    ProxyAction::Apply,
+                    NoticeCode::CoreStartedSystemProxyFailed,
+                )
+                .await;
                 self.sink.core_state(
                     CoreFlowState::Connected,
                     event.active_profile_id,
@@ -242,8 +241,7 @@ impl<'flow> CoreFlow<'flow> {
             NoticeCode::NativeTunStopped,
             &event.message,
         );
-        self.settle_disconnected(config, event.active_profile_id, None)
-            .await;
+        self.reconcile(config, CoreFlowReason::Disconnect).await;
     }
 
     fn announce_start(&self, config: &AppConfig, code: LogCode) {
@@ -288,16 +286,14 @@ impl<'flow> CoreFlow<'flow> {
         code: LogCode,
     ) {
         self.sink.log(CoreFlowLevel::Info, code, None);
+        self.settle_system_proxy(
+            config,
+            ProxyAction::Apply,
+            NoticeCode::CoreStartedSystemProxyFailed,
+        )
+        .await;
         self.sink
             .core_state(CoreFlowState::Connected, None, Some(snapshot));
-        match self.apply_system_proxy(config) {
-            Ok(status) => self.sink.system_proxy_changed(&status),
-            Err(error) => self.sink.notice(
-                CoreFlowLevel::Warn,
-                NoticeCode::CoreStartedSystemProxyFailed,
-                &error.to_string(),
-            ),
-        }
         self.report_tun_status(config).await;
     }
 
@@ -307,18 +303,16 @@ impl<'flow> CoreFlow<'flow> {
         active_profile_id: Option<String>,
         snapshot: Option<&SupervisorSnapshot>,
     ) {
+        // Always retire app-owned proxy/PAC state. On macOS restore only stops
+        // the PAC service and observes the OS; it never changes OS settings.
+        self.settle_system_proxy(
+            config,
+            ProxyAction::Restore,
+            NoticeCode::SystemProxyRestoreFailed,
+        )
+        .await;
         self.sink
             .core_state(CoreFlowState::Disconnected, active_profile_id, snapshot);
-        // Unconditional: a dead core with the OS proxy still applied is a
-        // blackhole on every backend, and `restore` is idempotent.
-        match self.system_proxy.restore(config) {
-            Ok(status) => self.sink.system_proxy_changed(&status),
-            Err(error) => self.sink.notice(
-                CoreFlowLevel::Warn,
-                NoticeCode::SystemProxyRestoreFailed,
-                &error.to_string(),
-            ),
-        }
         self.report_tun_status(config).await;
         self.sink.statistics_zero();
     }
@@ -326,6 +320,18 @@ impl<'flow> CoreFlow<'flow> {
     /// Report the state the supervisor is really in after a failed operation.
     async fn reconcile(&self, config: &AppConfig, reason: CoreFlowReason) {
         match self.runtime.status().await {
+            Ok(snapshot) if snapshot.state == SupervisorConnectionState::CleanupPending => {
+                self.settle_system_proxy(
+                    config,
+                    ProxyAction::StopPac,
+                    NoticeCode::SystemProxyRestoreFailed,
+                )
+                .await;
+                self.sink
+                    .core_state(CoreFlowState::CleanupPending, None, Some(&snapshot));
+                self.report_tun_status(config).await;
+                self.sink.statistics_zero();
+            }
             Ok(snapshot) if snapshot.state == SupervisorConnectionState::Connected => {
                 // The failure happened before the supervisor was touched, so
                 // the previous core is still serving the OS proxy.
@@ -334,6 +340,12 @@ impl<'flow> CoreFlow<'flow> {
                     LogCode::PreviousCoreStillRunning { reason },
                     None,
                 );
+                self.settle_system_proxy(
+                    config,
+                    ProxyAction::Observe,
+                    NoticeCode::SystemProxyStatusRefreshFailed,
+                )
+                .await;
                 self.sink
                     .core_state(CoreFlowState::Connected, None, Some(&snapshot));
             }
@@ -352,13 +364,81 @@ impl<'flow> CoreFlow<'flow> {
         }
     }
 
-    fn apply_system_proxy(
+    /// Re-apply proxy settings after a committed save only while serving traffic.
+    /// A proxy failure is a notice: the configuration has already been saved.
+    pub async fn reapply_system_proxy_if_connected(
         &self,
         config: &AppConfig,
-    ) -> Result<SystemProxyStatus, SystemProxyManagerError> {
-        let runtime = runtime_system_proxy_config(config, false, self.target_os);
-        self.system_proxy
-            .apply_config(&runtime.config, runtime.force_disable)
+    ) -> Result<(), RuntimeError> {
+        if self.runtime.status().await?.state != SupervisorConnectionState::Connected {
+            return Ok(());
+        }
+        self.settle_system_proxy(
+            config,
+            ProxyAction::Apply,
+            NoticeCode::SettingsSavedSystemProxyUpdateFailed,
+        )
+        .await;
+        Ok(())
+    }
+
+    /// Every proxy side effect publishes its settled state, including failure.
+    /// Keep scripts, SystemConfiguration reads and PAC thread joins off Tokio.
+    async fn settle_system_proxy(
+        &self,
+        config: &AppConfig,
+        action: ProxyAction,
+        failure_code: NoticeCode,
+    ) {
+        let manager = self.system_proxy.clone();
+        let config_copy = config.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let result = match action {
+                ProxyAction::Apply => manager.apply_runtime_config(&config_copy),
+                ProxyAction::Restore => manager.restore(&config_copy),
+                ProxyAction::Observe => manager.runtime_status(&config_copy),
+                ProxyAction::StopPac => {
+                    manager.stop_pac();
+                    manager.runtime_status(&config_copy).map(|mut status| {
+                        status.pac_url = None;
+                        status
+                    })
+                }
+            };
+            match result {
+                Ok(status) => (status, None),
+                Err(error) => {
+                    let changed = !matches!(action, ProxyAction::Observe);
+                    if changed {
+                        manager.stop_pac();
+                    }
+                    // Manual status observes the OS and the now-retired PAC.
+                    // Automatic status is only a plan, so it cannot prove that
+                    // a failed apply/restore changed the machine.
+                    let fallback = manager.unavailable_status(&config_copy);
+                    let status = if changed
+                        && fallback.management
+                            == voya_platform::sysproxy::SystemProxyManagement::Manual
+                    {
+                        manager.runtime_status(&config_copy).unwrap_or(fallback)
+                    } else {
+                        fallback
+                    };
+                    (status, Some(error.to_string()))
+                }
+            }
+        })
+        .await;
+        let (status, error) = result.unwrap_or_else(|error| {
+            (
+                self.system_proxy.unavailable_status(config),
+                Some(error.to_string()),
+            )
+        });
+        self.sink.system_proxy_changed(&status);
+        if let Some(error) = error {
+            self.sink.notice(CoreFlowLevel::Warn, failure_code, &error);
+        }
     }
 
     /// The TUN probe forks `pluginkit`/`sc.exe`/`systemextensionsctl`, so it

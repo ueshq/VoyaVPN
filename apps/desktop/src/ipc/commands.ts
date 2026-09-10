@@ -400,3 +400,11 @@ function unwrapCommandResult<T>(result: CommandResult<T>): T {
 function formatAppError(error: AppError): string {
   return error.message;
 }
+
+export async function recheckSystemProxy(): Promise<SystemProxyStatusResponse> {
+  return unwrapCommandResult(await commands.recheckSystemProxy());
+}
+
+export async function openNetworkSettings(): Promise<void> {
+  unwrapCommandResult(await commands.openNetworkSettings());
+}

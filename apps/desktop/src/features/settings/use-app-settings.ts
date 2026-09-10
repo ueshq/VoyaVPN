@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { IpcCommandError, loadAppSettings, saveAppSettings } from "@/ipc";
@@ -7,13 +7,13 @@ import type {
   AppSettingsV1,
   AppearanceSettings,
 } from "@/ipc/bindings";
-import { validationText } from "@/ipc/messages";
+import { validationFieldErrors } from "@/ipc/messages";
 import { queryKeys } from "@/ipc/query-keys";
-import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 
 import { applyUiPreferences } from "./ui-preferences";
+import { isSettingsWorking } from "./settings-dirty-sources";
 
 export type AppSettingsController = {
   settings: AppSettingsV1 | null;
@@ -48,10 +48,12 @@ export function useAppSettings(): AppSettingsController {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const original = settingsQuery.data ?? null;
   const settings = draft ?? original;
 
   const load = useCallback(async () => {
+    if (savingRef.current) return;
     setOperationError(null);
     setFieldErrors({});
     setDraft(null);
@@ -66,6 +68,7 @@ export function useAppSettings(): AppSettingsController {
 
   const update = useCallback(
     (updater: (current: AppSettingsV1) => AppSettingsV1) => {
+      if (savingRef.current || isSettingsWorking()) return;
       setSaved(false);
       setDraft((current) => {
         const next = current ?? settingsQuery.data;
@@ -77,6 +80,7 @@ export function useAppSettings(): AppSettingsController {
 
   const setAppearance = useCallback(
     (preferences: AppearanceSettings) => {
+      if (savingRef.current || isSettingsWorking()) return;
       update((current) => ({ ...current, appearance: preferences }));
       // Preview only: the appearance is not persisted until Save-all succeeds.
       void applyUiPreferences(preferences, { persist: false }).catch((previewError: unknown) => {
@@ -87,7 +91,7 @@ export function useAppSettings(): AppSettingsController {
   );
 
   const discard = useCallback(async () => {
-    if (!original) {
+    if (!original || savingRef.current) {
       return;
     }
     setDraft(null);
@@ -100,9 +104,10 @@ export function useAppSettings(): AppSettingsController {
   }, [original]);
 
   const save = useCallback(async () => {
-    if (!settings) {
+    if (!settings || savingRef.current) {
       return false;
     }
+    savingRef.current = true;
     setSaving(true);
     setOperationError(null);
     setFieldErrors({});
@@ -117,17 +122,20 @@ export function useAppSettings(): AppSettingsController {
       return true;
     } catch (saveError) {
       setOperationError(getErrorMessage(saveError));
-      setFieldErrors(settingsFieldErrors(t, saveError));
+      setFieldErrors(saveError instanceof IpcCommandError && saveError.appError.kind.type === "validation"
+        ? validationFieldErrors(t, saveError.appError.kind.issues)
+        : {});
       try {
         const authoritative = await loadAppSettings();
         queryClient.setQueryData(queryKeys.appSettings, authoritative);
-        setDraft(null);
-        await applyUiPreferences(authoritative.appearance);
+        // Reconcile the baseline without discarding rejected edits or their
+        // appearance preview. The user can correct and retry the same draft.
       } catch {
         // Keep the original save error; a later Reload can retry the snapshot.
       }
       return false;
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }, [settings, queryClient, t]);
@@ -145,24 +153,6 @@ export function useAppSettings(): AppSettingsController {
     update,
     working: saving || settingsQuery.isPending || settingsQuery.isFetching,
   };
-}
-
-/**
- * A rejected save, addressed to the inputs that caused it.
- *
- * `save_app_settings` used to collapse `AppSettingsValidationError` into one
- * untyped string, so the Settings surface could only show a banner even though
- * the backend knew exactly which field it had rejected. It now returns the same
- * `validation` kind the DNS pane already consumes, keyed by contract path.
- */
-function settingsFieldErrors(t: TranslationFunction, error: unknown): Record<string, string> {
-  if (!(error instanceof IpcCommandError) || error.appError.kind.type !== "validation") {
-    return {};
-  }
-
-  return Object.fromEntries(
-    error.appError.kind.issues.map((issue) => [issue.field, validationText(t, issue)]),
-  );
 }
 
 /**

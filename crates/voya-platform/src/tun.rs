@@ -22,18 +22,8 @@ const MACOS_PROVIDER_STATUS_RELATIVE_PATH: &str =
 const MACOS_PROVIDER_LOG_RELATIVE_PATH: &str = "Library/Application Support/VoyaVPN/provider.log";
 const PROVIDER_LOG_TAIL_LINES: usize = 200;
 
-#[cfg(any(target_os = "macos", windows, test))]
-fn command_output_text(stdout: &[u8], stderr: &[u8]) -> String {
-    let stdout = String::from_utf8_lossy(stdout);
-    let stderr = String::from_utf8_lossy(stderr);
-    if stderr.trim().is_empty() {
-        stdout.into_owned()
-    } else if stdout.trim().is_empty() {
-        stderr.into_owned()
-    } else {
-        format!("{stdout}\n{stderr}")
-    }
-}
+#[cfg(any(target_os = "macos", windows))]
+use crate::process::command_output_text;
 
 pub const WINDOWS_TUN_DEVICES: &[WindowsTunDevice] = &[WindowsTunDevice {
     name: "wintunsingbox_tun",
@@ -582,6 +572,20 @@ pub enum NativeTunError {
         action: &'static str,
         source: io::Error,
     },
+    #[error("{action} failed: {message}")]
+    Bridge {
+        action: &'static str,
+        message: String,
+    },
+    #[error("macOS PacketTunnel start failed: {message}")]
+    StartFailed { message: String },
+    #[error("macOS PacketTunnel start failed: {start_error}; cleanup failed: {cleanup_error}")]
+    StartCleanupFailed {
+        start_error: String,
+        cleanup_error: String,
+    },
+    #[error("macOS PacketTunnel registration cannot be queried inside the app sandbox")]
+    RegistrationUnavailable,
     #[error("{action} failed with status {status_code:?}: {output}")]
     CommandFailed {
         action: &'static str,
@@ -699,13 +703,6 @@ mod tests {
             parse_macos_provider_state("unexpected"),
             NativeTunProviderState::Error
         );
-    }
-
-    #[test]
-    fn command_output_combines_stdout_and_stderr_without_losing_context() {
-        assert_eq!(command_output_text(b"stdout", b""), "stdout");
-        assert_eq!(command_output_text(b"", b"stderr"), "stderr");
-        assert_eq!(command_output_text(b"stdout", b"stderr"), "stdout\nstderr");
     }
 
     #[test]

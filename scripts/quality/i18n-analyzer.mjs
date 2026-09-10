@@ -209,9 +209,7 @@ export function isKnownHardcodedText(relativePath, text, allowlist = KNOWN_HARDC
 
 export function isUserVisibleText(value) {
   const text = normalizeText(value);
-  // \p{L} rather than Latin+CJK only: Russian, Persian, Hungarian and French
-  // are shipped locales, so hardcoded Cyrillic or Persian text must be caught
-  // by the same rule that catches hardcoded English.
+  // Detect letters in any script so all hardcoded UI text uses the same rule.
   if (text.length === 0 || !/\p{L}/u.test(text)) {
     return false;
   }

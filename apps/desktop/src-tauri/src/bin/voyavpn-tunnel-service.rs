@@ -1,3 +1,5 @@
+use voya_platform::process::command_output_text;
+
 use std::{
     env, fs, io,
     path::{Path, PathBuf},
@@ -424,18 +426,6 @@ fn find_sing_box(core_dir: &Path) -> PathBuf {
     }
 
     core_dir.join(SING_BOX_EXES[0])
-}
-
-fn command_output_text(stdout: &[u8], stderr: &[u8]) -> String {
-    let stdout = String::from_utf8_lossy(stdout);
-    let stderr = String::from_utf8_lossy(stderr);
-    if stderr.trim().is_empty() {
-        stdout.into_owned()
-    } else if stdout.trim().is_empty() {
-        stderr.into_owned()
-    } else {
-        format!("{stdout}\n{stderr}")
-    }
 }
 
 fn wait_for_child(child: &mut Child) -> Result<(), ServiceError> {

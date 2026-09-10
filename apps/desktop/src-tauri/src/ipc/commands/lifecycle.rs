@@ -248,38 +248,6 @@ pub(super) async fn restart_after_config_change<R>(
     }
 }
 
-pub(super) async fn apply_system_proxy_if_connected_after_config_change<R>(
-    app: &tauri::AppHandle<R>,
-    state: &AppState,
-    config: &AppConfig,
-) -> Result<(), AppError>
-where
-    R: tauri::Runtime,
-{
-    let status = runtime_manager(state)
-        .status()
-        .await
-        .map_err(AppError::from)?;
-    if status.state != SupervisorConnectionState::Connected {
-        return Ok(());
-    }
-
-    match apply_system_proxy(app, state, config, false) {
-        Ok(status) => {
-            if let Err(error) = emit_sysproxy_changed(app, &status) {
-                tracing::warn!(?error, "failed to emit system proxy state");
-            }
-        }
-        Err(error) => report_post_commit_error(
-            app,
-            NoticeCode::SettingsSavedSystemProxyUpdateFailed,
-            &error.message,
-            AppNoticeLevel::Warning,
-        ),
-    }
-    Ok(())
-}
-
 pub(super) fn emit_settings_bundle_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str)
 where
     R: tauri::Runtime,

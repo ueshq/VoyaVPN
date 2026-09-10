@@ -38,10 +38,7 @@ use voya_app::settings_save::{SettingsRuntimeAction, SettingsSideEffectAdapter};
 use voya_app::speedtest::SpeedtestManager;
 use voya_app::subscriptions::SubscriptionManager;
 use voya_app::supervisor::{SupervisorConnectionState, SupervisorSnapshot};
-use voya_app::sysproxy::{
-    runtime_proxy_url as app_runtime_proxy_url,
-    runtime_system_proxy_config as app_runtime_system_proxy_config,
-};
+use voya_app::sysproxy::runtime_proxy_url as app_runtime_proxy_url;
 use voya_app::tun::TunManager;
 use voya_app::updates::UpdateManager;
 use voya_contracts::{

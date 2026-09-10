@@ -11,6 +11,9 @@ import { resolve, win32 } from "node:path";
 
 import {
   capture,
+  environmentValue,
+  commandFailure,
+  validateTiming,
   isCliEntrypoint,
   repoRootFromScript,
   run,
@@ -47,23 +50,6 @@ const singBoxCoreDirName = "sing_box";
 const runtimeStagingDirName = "runtime";
 const sleeper = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
 
-function environmentValue(env, ...names) {
-  const wanted = new Set(names.map((name) => name.toLowerCase()));
-  for (const [name, value] of Object.entries(env ?? {})) {
-    if (wanted.has(name.toLowerCase()) && String(value ?? "").trim()) {
-      return String(value).trim();
-    }
-  }
-  return "";
-}
-
-function commandFailure(program, args, result) {
-  const detail = String(result.stderr || result.stdout || "").trim();
-  return new Error(
-    `${program} ${args.join(" ")} failed with status ${result.status ?? "unknown"}${detail ? `: ${detail}` : ""}`,
-  );
-}
-
 function defaultWait(milliseconds) {
   Atomics.wait(sleeper, 0, 0, milliseconds);
 }
@@ -82,15 +68,6 @@ function stoppedService(result) {
 
 function stoppingService(result) {
   return result.status === 0 && /\bSTOP_PENDING\b/i.test(String(result.stdout || result.stderr || ""));
-}
-
-function validateTiming(timeoutMs, pollIntervalMs) {
-  if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
-    throw new Error("timeoutMs must be a non-negative finite number.");
-  }
-  if (!Number.isFinite(pollIntervalMs) || pollIntervalMs <= 0) {
-    throw new Error("pollIntervalMs must be a positive finite number.");
-  }
 }
 
 function captureSc(captureCommand, args, cwd) {

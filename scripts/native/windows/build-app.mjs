@@ -3,6 +3,8 @@ import { resolve, win32 } from "node:path";
 
 import {
   capture,
+  environmentValue,
+  commandFailure,
   isCliEntrypoint,
   repoRootFromScript,
   run,
@@ -35,23 +37,6 @@ const localBuildEnvNames = [
   "WINDOWS_CERTIFICATE_BASE64",
   "WINDOWS_CERTIFICATE_PASSWORD",
 ];
-
-function environmentValue(env, ...names) {
-  const wanted = new Set(names.map((name) => name.toLowerCase()));
-  for (const [name, value] of Object.entries(env ?? {})) {
-    if (wanted.has(name.toLowerCase()) && String(value ?? "").trim()) {
-      return String(value).trim();
-    }
-  }
-  return "";
-}
-
-function commandFailure(program, args, result) {
-  const detail = String(result.stderr || result.stdout || "").trim();
-  return new Error(
-    `${program} ${args.join(" ")} failed with status ${result.status ?? "unknown"}${detail ? `: ${detail}` : ""}`,
-  );
-}
 
 function captureChecked(captureCommand, program, args, options) {
   const result = captureCommand(program, args, options);

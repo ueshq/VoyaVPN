@@ -32,7 +32,7 @@ pub async fn import_config_template<R: tauri::Runtime>(
             )?;
         }
     }
-    let snapshot = current_config(&state)?;
+    let snapshot = current_config(&state);
     let proxy_url = runtime_proxy_url(prefer_proxy, proxy_url, &snapshot);
     let prepared = state
         .services()

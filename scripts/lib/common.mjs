@@ -92,3 +92,29 @@ export function run(program, args, options = {}) {
   }
   return result;
 }
+
+export function environmentValue(env, ...names) {
+  const wanted = new Set(names.map((name) => name.toLowerCase()));
+  for (const [name, value] of Object.entries(env ?? {})) {
+    if (wanted.has(name.toLowerCase()) && String(value ?? "").trim()) {
+      return String(value).trim();
+    }
+  }
+  return "";
+}
+
+export function commandFailure(program, args, result) {
+  const detail = String(result.stderr || result.stdout || "").trim();
+  return new Error(
+    `${describeCommand(program, args)} failed with status ${result.status ?? "unknown"}${detail ? `: ${detail}` : ""}`,
+  );
+}
+
+export function validateTiming(timeoutMs, pollIntervalMs) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
+    throw new Error("timeoutMs must be a non-negative finite number.");
+  }
+  if (!Number.isFinite(pollIntervalMs) || pollIntervalMs <= 0) {
+    throw new Error("pollIntervalMs must be a positive finite number.");
+  }
+}

@@ -17,7 +17,7 @@ pub async fn run_speedtest<R: tauri::Runtime>(
         IPC_ID_MAX_CHARS,
         AppErrorSubsystem::Speedtest,
     )?;
-    let config = current_config(&state)?;
+    let config = current_config(&state);
     let manager = speedtest_manager(&state);
     let emit_app = app.clone();
     let result = state

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createAppQueryClient } from "@/components/app-shell/query-client";
 import type { ProxyConnectionItem, ProxyConnectionsSnapshot } from "@/ipc/bindings";
-import { useConnectionColumnsStore } from "@/stores/connection-columns-store";
+import { useConnectionColumnsStore } from "@/stores/column-visibility-store";
 import { useToastStore } from "@/stores/toast-store";
 
 import { ConnectionsPanel } from "./connections-panel";

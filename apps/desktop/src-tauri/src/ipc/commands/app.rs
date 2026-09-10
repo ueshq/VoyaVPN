@@ -5,7 +5,7 @@ use super::{lifecycle::*, support::*, *};
 pub fn load_ui_preferences(
     state: tauri::State<'_, AppState>,
 ) -> Result<AppearanceSettings, AppError> {
-    let config = current_config(&state)?;
+    let config = current_config(&state);
 
     Ok(voya_app::settings_save::settings_from_app_config(&config).appearance)
 }
@@ -14,7 +14,7 @@ pub fn load_ui_preferences(
 #[specta::specta]
 pub fn load_app_settings(state: tauri::State<'_, AppState>) -> Result<AppSettingsV1, AppError> {
     Ok(voya_app::settings_save::settings_from_app_config(
-        &current_config(&state)?,
+        &current_config(&state),
     ))
 }
 
@@ -31,7 +31,7 @@ pub async fn save_app_settings<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     settings: AppSettingsV1,
 ) -> Result<AppSettingsV1, AppError> {
-    let settings_language_before = current_config(&state)?.ui_item.current_language.clone();
+    let settings_language_before = current_config(&state).ui_item.current_language.clone();
     let side_effects = TauriSettingsSideEffects {
         autostart: AutostartManager::new(),
         hotkeys: HotkeyManager::new(std::sync::Arc::new(TauriHotkeyRegistrar {
@@ -84,14 +84,14 @@ async fn apply_settings_runtime_action<R: tauri::Runtime>(
                 .await;
         }
         SettingsRuntimeAction::ReapplySystemProxy => {
-            if let Err(error) =
-                apply_system_proxy_if_connected_after_config_change(app, state, &outcome.config)
-                    .await
+            if let Err(error) = core_flow(app, state)
+                .reapply_system_proxy_if_connected(&outcome.config)
+                .await
             {
                 report_post_commit_error(
                     app,
                     NoticeCode::SettingsSavedRuntimeUpdateFailed,
-                    &format!("{error:?}"),
+                    &format!("{:?}", AppError::from(error)),
                     AppNoticeLevel::Warning,
                 );
             }

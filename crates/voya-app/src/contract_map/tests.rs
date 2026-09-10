@@ -653,6 +653,7 @@ fn the_status_response_and_the_status_event_agree_on_every_field() {
     let snapshot = SupervisorSnapshot {
         state: SupervisorConnectionState::Connected,
         active_profile_id: Some("running-node".to_string()),
+        active_tun_backend: Some(voya_platform::tun::TunBackend::MacosPacketTunnel),
         main_pid: Some(4242),
         pre_pid: Some(4243),
         running_core_type: Some(voya_core::CoreType::sing_box),
@@ -675,6 +676,11 @@ fn the_status_response_and_the_status_event_agree_on_every_field() {
     assert_eq!(event.main_pid, response.main_pid);
     assert_eq!(event.pre_pid, response.pre_pid);
     assert_eq!(event.running_core_type, response.running_core_type);
+    assert_eq!(event.active_tun_backend, response.active_tun_backend);
+    assert_eq!(
+        event.active_tun_backend,
+        Some(voya_contracts::TunBackend::MacosPacketTunnel)
+    );
     // The snapshot wins over the id the flow was invoked with.
     assert_eq!(event.active_profile_id.as_deref(), Some("running-node"));
 
@@ -696,6 +702,7 @@ fn the_status_response_and_the_status_event_agree_on_every_field() {
     assert_eq!(connecting.main_pid, None);
     assert_eq!(connecting.pre_pid, None);
     assert_eq!(connecting.running_core_type, None);
+    assert_eq!(connecting.active_tun_backend, None);
 
     let disconnected = runtime_status_response(SupervisorSnapshot::disconnected());
     assert!(matches!(

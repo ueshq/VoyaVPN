@@ -138,3 +138,11 @@ open -n /Applications/VoyaVPN.app
 - **Teardown** — disable TUN, quit the app, remove the VPN configuration from
   System Settings → VPN if desired, delete `/Applications/VoyaVPN.app`, and run
   `pnpm native:macos:ne:doctor --fix` to clear the registration.
+
+## VPN and manual proxy release acceptance
+
+All macOS channels keep App Sandbox. System proxy setup and restoration are
+manual, including local development; VPN remains managed by NetworkExtension.
+Follow the [VPN/manual-proxy acceptance matrix](macos-vpn-manual-proxy-acceptance.md)
+for ten real reconnects, failure cleanup and proxy restoration. Automated
+waiter tests do not alter the current VPN or system proxy.

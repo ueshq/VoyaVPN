@@ -13,7 +13,7 @@ import { LogsPanel } from "@/features/logs/logs-panel";
  * `selectTab` events. Inactive panels unmount (one heavy virtualizer at a time).
  */
 export function ConnectionsScreen() {
-  const { direction, t } = useI18n();
+  const { t } = useI18n();
   const view = useShellStore((state) => state.connectionsView);
   const setView = useShellStore((state) => state.setConnectionsView);
 
@@ -21,7 +21,6 @@ export function ConnectionsScreen() {
     <PageSection aria-label={t("tabs.connections")}>
       <Tabs
         className="flex min-h-0 flex-1 flex-col gap-0"
-        dir={direction}
         onValueChange={(value) => {
           if (value === "connections" || value === "logs") {
             setView(value);

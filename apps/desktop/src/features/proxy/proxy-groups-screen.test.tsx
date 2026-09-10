@@ -165,6 +165,7 @@ describe("ProxyGroupsScreen", () => {
       activeProfileId: null,
       mainPid: null,
       prePid: null,
+      activeTunBackend: null,
       runningCoreType: null,
       state: "disconnected",
     };

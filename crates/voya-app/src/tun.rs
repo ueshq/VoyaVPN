@@ -286,6 +286,12 @@ impl TunManager {
             .resolved_provider_paths(MACOS_PACKET_TUNNEL_BUNDLE_ID)
         {
             Ok(paths) => paths,
+            Err(voya_platform::tun::NativeTunError::RegistrationUnavailable) => {
+                return ProviderRegistrationStatus {
+                    expected_provider_path: expected_label,
+                    ..ProviderRegistrationStatus::default()
+                };
+            }
             Err(error) => {
                 tracing::warn!(
                     ?error,
@@ -337,7 +343,7 @@ struct ProviderRegistrationStatus {
     expected_provider_path: Option<String>,
 }
 
-const fn tun_backend(backend: PlatformTunBackend) -> TunBackend {
+pub(crate) const fn tun_backend(backend: PlatformTunBackend) -> TunBackend {
     match backend {
         PlatformTunBackend::Process => TunBackend::Process,
         PlatformTunBackend::MacosPacketTunnel => TunBackend::MacosPacketTunnel,

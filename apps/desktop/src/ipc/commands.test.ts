@@ -32,6 +32,7 @@ const wrapperNames = [
   "restartCore",
   "runtimeStatus",
   "systemProxyStatus",
+  "recheckSystemProxy",
   "connectionModeStatus",
   "setConnectionMode",
   "tunStatus",
@@ -93,6 +94,16 @@ describe("typed IPC command facade", () => {
     for (const name of wrapperNames) {
       commandMocks[name].mockReset();
     }
+  });
+
+  it("opens only the fixed network settings destination and propagates failures", async () => {
+    commandMocks.openNetworkSettings.mockResolvedValueOnce({ data: null, status: "ok" });
+    await expect(ipc.openNetworkSettings()).resolves.toBeUndefined();
+    expect(commandMocks.openNetworkSettings).toHaveBeenCalledWith();
+    commandMocks.openNetworkSettings.mockResolvedValueOnce({ status: "error", error: {
+      kind: { type: "internal" }, message: "Settings unavailable", subsystem: "sysproxy",
+    } });
+    await expect(ipc.openNetworkSettings()).rejects.toThrow("Settings unavailable");
   });
 
   it("unwraps every generated command through the public facade", async () => {

@@ -110,7 +110,7 @@ pub fn process_candidate_to_contract(
 ///
 /// Pure, and read by three commands plus the tray, so it lives here rather than
 /// in the shell where nothing can assert the state mapping. A settled
-/// supervisor only ever reports the two terminal states; the transitions come
+/// supervisor reports settled states, including pending cleanup; transitions come
 /// from [`runtime_status_event`].
 #[must_use]
 pub fn runtime_status_response(
@@ -118,6 +118,9 @@ pub fn runtime_status_response(
 ) -> voya_contracts::RuntimeStatusResponse {
     voya_contracts::RuntimeStatusResponse {
         state: match snapshot.state {
+            crate::supervisor::SupervisorConnectionState::CleanupPending => {
+                voya_contracts::CoreState::CleanupPending
+            }
             crate::supervisor::SupervisorConnectionState::Disconnected => {
                 voya_contracts::CoreState::Disconnected
             }
@@ -126,6 +129,7 @@ pub fn runtime_status_response(
             }
         },
         active_profile_id: snapshot.active_profile_id,
+        active_tun_backend: snapshot.active_tun_backend.map(crate::tun::tun_backend),
         main_pid: snapshot.main_pid,
         pre_pid: snapshot.pre_pid,
         running_core_type: snapshot.running_core_type.map(core_type_to_contract),
@@ -147,6 +151,10 @@ pub fn runtime_status_event(
 ) -> voya_contracts::RuntimeStatusResponse {
     voya_contracts::RuntimeStatusResponse {
         state,
+        active_tun_backend: snapshot
+            .filter(|_| state == voya_contracts::CoreState::Connected)
+            .and_then(|snapshot| snapshot.active_tun_backend)
+            .map(crate::tun::tun_backend),
         active_profile_id: snapshot
             .and_then(|snapshot| snapshot.active_profile_id.clone())
             .or(active_profile_id),

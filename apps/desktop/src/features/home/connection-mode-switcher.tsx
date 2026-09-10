@@ -14,6 +14,7 @@ import type { Translation } from "./use-home-runtime";
  */
 export function ConnectionModeSwitcher({
   connectionMode,
+  manualProxy,
   modeBusy,
   modePending,
   onModeChange,
@@ -25,6 +26,7 @@ export function ConnectionModeSwitcher({
   tunProviderSummary,
 }: {
   connectionMode: ConnectionMode;
+  manualProxy: boolean;
   modeBusy: boolean;
   modePending: ConnectionMode | null;
   onModeChange: (mode: ConnectionMode) => void;
@@ -63,7 +65,7 @@ export function ConnectionModeSwitcher({
               type="button"
               variant="ghost"
             >
-              {connectionModeLabel(mode, t)}
+              {mode === "systemProxy" && manualProxy ? t("home.modeSystemProxyManual") : connectionModeLabel(mode, t)}
             </Button>
           );
         })}
@@ -93,7 +95,7 @@ export function ConnectionModeSwitcher({
         </div>
       ) : null}
       {connectionMode === "vpn" && tunProviderSummary ? (
-        <p className="max-w-md truncate text-center text-xs text-subtlest">{tunProviderSummary}</p>
+        <p className="max-w-md text-center text-xs text-subtlest">{tunProviderSummary}</p>
       ) : null}
     </div>
   );

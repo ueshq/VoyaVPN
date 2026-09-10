@@ -7,7 +7,7 @@ import { changeLocale } from "@voya/i18n";
 
 import type { ImportProfilesResult, Profile, ProfileListEntry } from "@/ipc/bindings";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { useProfileColumnsStore } from "@/stores/profile-columns-store";
+import { useProfileColumnsStore } from "@/stores/column-visibility-store";
 import { makeProfileFixture } from "@/test/profile-fixture";
 
 import { MOVE_ACTIONS, SPEED_ACTIONS } from "./profile-constants";

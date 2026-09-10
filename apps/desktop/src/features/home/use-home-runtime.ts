@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -7,15 +7,15 @@ import {
   disconnectCore,
   listProfiles,
   restartCore,
-  runtimeStatus,
   setActiveProfile,
   setConnectionMode,
-  systemProxyStatus,
   tunRequestElevation,
   tunStatus,
   useRuntimeEventStore,
 } from "@/ipc";
 import type { ConnectionMode, TunStatus } from "@/ipc/bindings";
+import { refreshRuntimeStatus, runtimeStatusErrorKeys } from "@/ipc/runtime-status";
+import { beginRuntimeRead } from "@/ipc/runtime-state-version";
 import { profilesQueryKey } from "@/ipc/query-keys";
 import { getErrorMessage } from "@voya/utils/error";
 import { useModalStore } from "@/stores/modal-store";
@@ -42,9 +42,7 @@ export function useHomeRuntime(t: Translation) {
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const setCoreState = useRuntimeEventStore((state) => state.setCoreState);
   const sysProxy = useRuntimeEventStore((state) => state.sysProxy);
-  const setSysProxy = useRuntimeEventStore((state) => state.setSysProxy);
   const tun = useRuntimeEventStore((state) => state.tun);
-  const setTun = useRuntimeEventStore((state) => state.setTun);
   const openModal = useModalStore((state) => state.openModal);
   const pushToast = useToastStore((state) => state.pushToast);
   const [pendingAction, setPendingAction] = useState<RuntimeAction | null>(null);
@@ -64,48 +62,6 @@ export function useHomeRuntime(t: Translation) {
     queryFn: () => listProfiles(null, null),
     queryKey: profilesQueryKey(""),
   });
-
-  // Home owns the connection-mode controls, so it seeds their live OS state
-  // into the store on mount. Transient `sysProxyChanged` / `tunChanged` events
-  // keep it fresh afterwards.
-  useEffect(() => {
-    let cancelled = false;
-
-    void systemProxyStatus()
-      .then((status) => {
-        if (!cancelled) {
-          setSysProxy(status);
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          pushToast({
-            description: getErrorMessage(error),
-            severity: "error",
-            title: t("status.sysProxyStatusFailed"),
-          });
-        }
-      });
-    void tunStatus()
-      .then((status) => {
-        if (!cancelled) {
-          setTun(status);
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          pushToast({
-            description: getErrorMessage(error),
-            severity: "error",
-            title: t("status.tunStatusFailed"),
-          });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [pushToast, setSysProxy, setTun, t]);
 
   const state = coreState?.state ?? "disconnected";
   const connected = state === "connected";
@@ -164,6 +120,7 @@ export function useHomeRuntime(t: Translation) {
     }
 
     setPendingAction(action);
+    const isLatest = beginRuntimeRead("coreState");
     try {
       const status = await runWithElevation(() =>
         action === "connect"
@@ -173,7 +130,7 @@ export function useHomeRuntime(t: Translation) {
             : restartCore(),
       );
 
-      setCoreState(status);
+      if (isLatest()) setCoreState(status);
     } catch (error) {
       const missingCore = missingCorePayload(error);
       if (missingCore) {
@@ -185,21 +142,19 @@ export function useHomeRuntime(t: Translation) {
           title: runtimeActionLabel(action, t),
         });
       }
-      await refreshRuntimeState();
     } finally {
+      await refreshStatus();
       setPendingAction(null);
     }
   }
 
-  async function refreshRuntimeState() {
-    try {
-      const status = await runtimeStatus();
-      setCoreState(status);
-    } catch (error) {
+  async function refreshStatus(channels?: Parameters<typeof refreshRuntimeStatus>[0]) {
+    const failures = await refreshRuntimeStatus(channels);
+    for (const { channel, error } of failures) {
       pushToast({
         description: getErrorMessage(error),
         severity: "error",
-        title: t("status.runtimeStatusFailed"),
+        title: t(runtimeStatusErrorKeys[channel]),
       });
     }
   }
@@ -220,10 +175,11 @@ export function useHomeRuntime(t: Translation) {
     const wasConnected = connected;
     try {
       await setActiveProfile(indexId);
+      const isLatest = beginRuntimeRead("coreState");
       const status = await runWithElevation(() =>
         wasConnected ? restartCore() : connectActiveProfile(),
       );
-      setCoreState(status);
+      if (isLatest()) setCoreState(status);
     } catch (error) {
       const missingCore = missingCorePayload(error);
       if (missingCore) {
@@ -234,9 +190,9 @@ export function useHomeRuntime(t: Translation) {
           severity: "error",
           title: t(wasConnected ? "actions.restart" : "actions.connect"),
         });
-        await refreshRuntimeState();
       }
     } finally {
+      await refreshStatus();
       // `set_active_profile` emits the profiles invalidation that drives the
       // active-node highlight, whether or not the connect that follows it
       // succeeds.
@@ -245,7 +201,7 @@ export function useHomeRuntime(t: Translation) {
   }
 
   function handlePrimaryAction() {
-    if (connected) {
+    if (connected || state === "cleanupPending") {
       void runRuntimeAction("disconnect");
 
       return;
@@ -269,7 +225,7 @@ export function useHomeRuntime(t: Translation) {
     const current = await tunStatus();
     if (current.backend !== "process" && !current.nativeComponentReady) {
       pushToast({
-        description: current.lastProviderError ?? t("status.nativeTunnelMissing"),
+        description: tunProviderErrorDescription(current, t) ?? t("status.nativeTunnelMissing"),
         severity: "error",
         title: t("status.tunEnableFailed"),
       });
@@ -294,32 +250,6 @@ export function useHomeRuntime(t: Translation) {
     return true;
   }
 
-  /**
-   * Re-seed the switcher from authoritative status. The backend already emitted
-   * `sysProxyChanged`/`tunChanged` post-commit, so a failure here means the mode
-   * change still succeeded — it must never be reported as a mode-change failure.
-   */
-  async function refreshConnectionModeStatus() {
-    try {
-      setSysProxy(await systemProxyStatus());
-    } catch (error) {
-      pushToast({
-        description: getErrorMessage(error),
-        severity: "error",
-        title: t("status.sysProxyStatusFailed"),
-      });
-    }
-    try {
-      setTun(await tunStatus());
-    } catch (error) {
-      pushToast({
-        description: getErrorMessage(error),
-        severity: "error",
-        title: t("status.tunStatusFailed"),
-      });
-    }
-  }
-
   async function runConnectionMode(mode: ConnectionMode, pacEnabled: boolean | null = null) {
     // `modeBusy` also covers a pending connect/disconnect/restart: flipping TUN
     // while the core is still starting persists the flag but cannot restart the
@@ -342,10 +272,9 @@ export function useHomeRuntime(t: Translation) {
       });
       return;
     } finally {
+      await refreshStatus();
       setModePending(null);
     }
-
-    await refreshConnectionModeStatus();
   }
 
   async function runPacToggle() {
@@ -356,7 +285,6 @@ export function useHomeRuntime(t: Translation) {
     try {
       const nextPac = !pacActive;
       await setConnectionMode("systemProxy", nextPac);
-      setSysProxy(await systemProxyStatus());
     } catch (error) {
       pushToast({
         description: getErrorMessage(error),
@@ -364,6 +292,7 @@ export function useHomeRuntime(t: Translation) {
         title: t("status.connectionModeChangeFailed"),
       });
     } finally {
+      await refreshStatus();
       setPacPending(false);
     }
   }
@@ -389,6 +318,7 @@ export function useHomeRuntime(t: Translation) {
   }
 
   return {
+    activeTunBackend: coreState?.activeTunBackend ?? null,
     activateProfile,
     activeNode,
     activeSubscriptionId: activeProfile?.profile.subscriptionId ?? null,
@@ -396,6 +326,7 @@ export function useHomeRuntime(t: Translation) {
     changeConnectionMode,
     connected,
     connectionMode,
+    sysProxy,
     handlePrimaryAction,
     inProgress,
     mainPid: coreState?.mainPid ?? null,
@@ -431,11 +362,20 @@ function runtimeActionLabel(action: RuntimeAction, t: Translation) {
 function tunProviderLabel(tun: TunStatus, t: Translation) {
   const backend = tunBackendLabel(tun.backend, t);
   const providerState = tunProviderStateLabel(tun.providerState, t);
-  if (tun.lastProviderError) {
-    return `${backend}: ${providerState}: ${tun.lastProviderError}`;
+  const description = tunProviderErrorDescription(tun, t);
+  if (description) {
+    return `${backend}: ${providerState}: ${description}`;
   }
 
   return `${backend}: ${providerState}`;
+}
+
+function tunProviderErrorDescription(tun: TunStatus, t: Translation) {
+  if (tun.backend === "macosPacketTunnel" && tun.providerState === "missingComponent") {
+    return t("status.macosTunnelMissing");
+  }
+
+  return tun.lastProviderError;
 }
 
 function tunProviderPathMismatchDescription(status: TunStatus, t: Translation) {

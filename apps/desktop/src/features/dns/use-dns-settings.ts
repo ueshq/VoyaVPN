@@ -1,16 +1,17 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 
 import { IpcCommandError, loadDnsSettings, saveDnsSettings } from "@/ipc";
 import type { DnsSettings } from "@/ipc/bindings";
-import { validationText } from "@/ipc/messages";
+import { validationFieldErrors } from "@/ipc/messages";
 import { queryKeys } from "@/ipc/query-keys";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import { translateFieldErrors, zodIssuesToErrorMap } from "@/lib/zod-errors";
 
 import { dnsSettingsSchema } from "./dns-form-schema";
+import { isSettingsWorking } from "@/features/settings/settings-dirty-sources";
 
 export function useDnsSettings() {
   const queryClient = useQueryClient();
@@ -20,6 +21,7 @@ export function useDnsSettings() {
     queryKey: queryKeys.dns,
   });
   const [draft, setDraft] = useState<DnsSettings | null>(null);
+  const savingRef = useRef<Promise<string | null> | null>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const form = draft ?? dnsQuery.data ?? null;
@@ -33,6 +35,7 @@ export function useDnsSettings() {
   }, [dnsQuery.data, draft, form]);
 
   async function handleReload() {
+    if (savingRef.current) return;
     setOperationError(null);
     setFieldErrors({});
     setDraft(null);
@@ -42,7 +45,14 @@ export function useDnsSettings() {
   }
 
   /** Resolves to the failure message, or null once the draft is persisted. */
-  async function handleSave(): Promise<string | null> {
+  function handleSave(): Promise<string | null> {
+    if (savingRef.current) return savingRef.current;
+    const operation = saveDraft().finally(() => { savingRef.current = null; });
+    savingRef.current = operation;
+    return operation;
+  }
+
+  async function saveDraft(): Promise<string | null> {
     if (!form) {
       return null;
     }
@@ -71,9 +81,7 @@ export function useDnsSettings() {
         const message = t("validation.dnsSettings");
         setOperationError(message);
         setFieldErrors(
-          Object.fromEntries(
-            error.appError.kind.issues.map((issue) => [issue.field, validationText(t, issue)]),
-          ),
+          validationFieldErrors(t, error.appError.kind.issues),
         );
         return message;
       }
@@ -84,6 +92,7 @@ export function useDnsSettings() {
   }
 
   function updateSimple(patch: Partial<DnsSettings>) {
+    if (savingRef.current || isSettingsWorking()) return;
     setDraft((current) =>
       current
         ? {

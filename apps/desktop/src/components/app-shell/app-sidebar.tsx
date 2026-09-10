@@ -29,6 +29,7 @@ const navItems: NavItem[] = [
 ];
 
 const CORE_STATE_TRANSLATION_KEYS = {
+  cleanupPending: "home.cleanupPending",
   connected: "status.connected",
   connecting: "status.connecting",
   disconnected: "status.disconnected",

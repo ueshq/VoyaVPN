@@ -4,7 +4,6 @@
 @source "../";
 
 @custom-variant dark (&:is(.dark *));
-@custom-variant rtl (&:where([dir="rtl"], [dir="rtl"] *));
 
 /* Color values vendored from @primer/primitives@11.9.0 (GitHub Primer functional
    tokens, light + dark themes) — see docs/design/primer-token-mapping.md.

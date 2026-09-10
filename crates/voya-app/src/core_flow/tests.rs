@@ -32,7 +32,7 @@ use crate::supervisor::{
 static TEMP_PATH_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Default)]
-struct RecordingSink(Arc<Mutex<Vec<String>>>);
+struct RecordingSink(Arc<Mutex<Vec<String>>>, Arc<Mutex<Vec<SystemProxyStatus>>>);
 
 impl RecordingSink {
     fn events(&self) -> Vec<String> {
@@ -72,7 +72,8 @@ impl CoreFlowSink for RecordingSink {
         ));
     }
 
-    fn system_proxy_changed(&self, _status: &SystemProxyStatus) {
+    fn system_proxy_changed(&self, status: &SystemProxyStatus) {
+        self.1.lock().expect("proxy statuses").push(status.clone());
         self.push("sysproxy");
     }
 
@@ -120,6 +121,9 @@ impl PacManager for SilentPac {
 
     fn is_supported(&self) -> bool {
         false
+    }
+    fn is_running(&self) -> bool {
+        true
     }
 }
 
@@ -182,18 +186,26 @@ impl Harness {
     }
 
     fn flow(&self) -> CoreFlow<'_> {
+        self.flow_with_proxy_runner(RecordingRunner::default())
+    }
+
+    fn flow_with_proxy_runner(&self, runner: RecordingRunner) -> CoreFlow<'_> {
         let system_proxy = SystemProxyManager::with_target_os(
-            SystemProxyService::new(Arc::new(RecordingRunner::default()), Arc::new(SilentPac)),
+            SystemProxyService::new(Arc::new(runner), Arc::new(SilentPac)),
             self.paths.clone(),
             TargetOs::Linux,
         );
+        self.flow_with_proxy_manager(system_proxy)
+    }
+
+    fn flow_with_proxy_manager(&self, system_proxy: SystemProxyManager) -> CoreFlow<'_> {
         let tun = TunManager::with_target_os_and_native_tun(
             Arc::new(ElevationState::new()),
             TargetOs::Linux,
             Arc::new(StoppedNativeTun),
         );
 
-        CoreFlow::with_target_os(
+        CoreFlow::new(
             RuntimeManager::with_target_os(
                 &self.database,
                 self.paths.clone(),
@@ -203,7 +215,6 @@ impl Harness {
             system_proxy,
             tun,
             Arc::new(self.sink.clone()),
-            TargetOs::Linux,
         )
     }
 }
@@ -260,7 +271,63 @@ fn singbox_profile(index_id: &str) -> ProfileItem {
 }
 
 #[tokio::test]
-async fn connect_reports_connected_then_the_system_proxy_then_tun() {
+async fn saved_proxy_settings_are_not_applied_while_disconnected() {
+    let harness = Harness::new().await;
+    harness
+        .flow()
+        .reapply_system_proxy_if_connected(&active_config())
+        .await
+        .expect("disconnected no-op");
+    assert!(harness.sink.events().is_empty());
+}
+
+#[tokio::test]
+async fn saved_proxy_settings_publish_only_the_proxy_status_while_connected() {
+    let harness = Harness::new().await;
+    let config = active_config();
+    harness.flow().connect(&config).await.expect("connect");
+    let before = harness.sink.events().len();
+    harness
+        .flow()
+        .reapply_system_proxy_if_connected(&config)
+        .await
+        .expect("reapply proxy");
+    assert_eq!(&harness.sink.events()[before..], ["sysproxy"]);
+}
+
+#[tokio::test]
+async fn saved_proxy_application_failure_is_a_notice_and_keeps_the_core_connected() {
+    let harness = Harness::new().await;
+    let mut config = active_config();
+    harness.flow().connect(&config).await.expect("connect");
+    let before = harness.sink.events().len();
+    config.system_proxy_item.sys_proxy_type = voya_core::SysProxyType::ForcedChange;
+    harness
+        .flow_with_proxy_runner(RecordingRunner::default().with_oneshot_output(
+            voya_platform::process::ProcessOutput {
+                status_code: Some(1),
+                stdout: String::new(),
+                stderr: "proxy rejected".to_string(),
+            },
+        ))
+        .reapply_system_proxy_if_connected(&config)
+        .await
+        .expect("saved settings remain successful");
+    assert_eq!(
+        &harness.sink.events()[before..],
+        [
+            "sysproxy",
+            "notice:Warn:settingsSavedSystemProxyUpdateFailed"
+        ]
+    );
+    assert_eq!(
+        harness.supervisor.status().await.expect("status").state,
+        SupervisorConnectionState::Connected
+    );
+}
+
+#[tokio::test]
+async fn connect_publishes_the_system_proxy_before_connected_then_tun() {
     let harness = Harness::new().await;
     let config = active_config();
 
@@ -278,8 +345,8 @@ async fn connect_reports_connected_then_the_system_proxy_then_tun() {
             "log:Info:connecting".to_string(),
             "state:Connecting:profile=active:pid=None".to_string(),
             "log:Info:connected".to_string(),
-            format!("state:Connected:profile=active:pid={:?}", snapshot.main_pid),
             "sysproxy".to_string(),
+            format!("state:Connected:profile=active:pid={:?}", snapshot.main_pid),
             "tun".to_string(),
         ]
     );
@@ -330,8 +397,8 @@ async fn a_failure_before_the_supervisor_leaves_the_previous_core_connected() {
         "a surviving core must never be reported as disconnected: {tail:?}"
     );
     assert!(
-        !tail.iter().any(|event| event == "sysproxy"),
-        "a surviving core must keep its system proxy: {tail:?}"
+        tail.iter().any(|event| event == "sysproxy"),
+        "a surviving core must publish its unchanged system proxy: {tail:?}"
     );
 }
 
@@ -359,8 +426,8 @@ async fn disconnect_restores_the_system_proxy_and_zeroes_statistics() {
             "log:Info:disconnecting".to_string(),
             "state:Disconnecting:profile=:pid=None".to_string(),
             "log:Info:disconnected".to_string(),
-            "state:Disconnected:profile=:pid=None".to_string(),
             "sysproxy".to_string(),
+            "state:Disconnected:profile=:pid=None".to_string(),
             "tun".to_string(),
             "statistics:zero".to_string(),
         ]
@@ -390,8 +457,8 @@ async fn giving_up_on_a_crashed_core_disconnects_and_restores_the_system_proxy()
         [
             "log:Error:coreExitGaveUp:Core process 4242 exited with code 1: the core kept exiting after 3 automatic restarts".to_string(),
             "notice:Error:coreStopped".to_string(),
-            "state:Disconnected:profile=active:pid=None".to_string(),
             "sysproxy".to_string(),
+            "state:Disconnected:profile=active:pid=None".to_string(),
             "tun".to_string(),
             "statistics:zero".to_string(),
         ]
@@ -399,7 +466,7 @@ async fn giving_up_on_a_crashed_core_disconnects_and_restores_the_system_proxy()
 }
 
 #[tokio::test]
-async fn a_restarted_core_refreshes_the_snapshot_without_touching_the_system_proxy() {
+async fn a_restarted_core_refreshes_proxy_state_before_the_snapshot() {
     let harness = Harness::new().await;
     let config = active_config();
 
@@ -415,6 +482,7 @@ async fn a_restarted_core_refreshes_the_snapshot_without_touching_the_system_pro
                     attempt: 1,
                     snapshot: SupervisorSnapshot {
                         state: SupervisorConnectionState::Connected,
+                        active_tun_backend: None,
                         active_profile_id: Some("active".to_string()),
                         main_pid: Some(12),
                         pre_pid: None,
@@ -431,6 +499,7 @@ async fn a_restarted_core_refreshes_the_snapshot_without_touching_the_system_pro
         harness.sink.events(),
         [
             "log:Warn:coreExitRestarted(attempt=1):Core process 11 exited with code 2".to_string(),
+            "sysproxy".to_string(),
             "state:Connected:profile=active:pid=Some(12)".to_string(),
         ]
     );
@@ -508,4 +577,243 @@ async fn restart_if_connected_restarts_a_running_core() {
         ]
     );
     assert!(events.iter().filter(|event| *event == "sysproxy").count() >= 2);
+}
+
+#[derive(Default)]
+struct FaultPac {
+    fail: std::sync::atomic::AtomicBool,
+    running: std::sync::atomic::AtomicBool,
+}
+
+impl PacManager for FaultPac {
+    fn start(&self, _config: PacStartConfig) -> Result<(), SystemProxyError> {
+        if self.fail.load(Ordering::SeqCst) {
+            return Err(SystemProxyError::InvalidPort(0));
+        }
+        self.running.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+    fn stop(&self) {
+        self.running.store(false, Ordering::SeqCst);
+    }
+    fn is_supported(&self) -> bool {
+        true
+    }
+    fn is_running(&self) -> bool {
+        self.running.load(Ordering::SeqCst)
+    }
+}
+
+struct ClearObserver;
+impl voya_platform::sysproxy::SystemProxyObserver for ClearObserver {
+    fn observe(&self) -> voya_platform::sysproxy::SystemProxyObservation {
+        voya_platform::sysproxy::SystemProxyObservation::Clear
+    }
+}
+
+fn manual_manager(harness: &Harness, pac: Arc<FaultPac>) -> SystemProxyManager {
+    SystemProxyManager::with_target_os(
+        SystemProxyService::new(Arc::new(RecordingRunner::default()), pac)
+            .with_observer(Arc::new(ClearObserver)),
+        harness.paths.clone(),
+        TargetOs::Macos,
+    )
+}
+
+#[tokio::test]
+async fn manual_pac_failure_retires_a_previously_published_url_on_every_start_path() {
+    for action in ["connect", "restart", "save", "background"] {
+        let harness = Harness::new().await;
+        let pac = Arc::new(FaultPac::default());
+        let manager = manual_manager(&harness, pac.clone());
+        let flow = harness.flow_with_proxy_manager(manager.clone());
+        let mut config = active_config();
+        config.system_proxy_item.sys_proxy_type = voya_core::SysProxyType::Pac;
+        flow.connect(&config).await.expect("initial connection");
+        assert!(harness
+            .sink
+            .1
+            .lock()
+            .expect("statuses")
+            .last()
+            .expect("published")
+            .pac_url
+            .is_some());
+        pac.fail.store(true, Ordering::SeqCst);
+        let before = harness.sink.events().len();
+        match action {
+            "connect" => {
+                flow.connect(&config).await.expect("core still connects");
+            }
+            "restart" => {
+                flow.restart(&config).await.expect("core still restarts");
+            }
+            "save" => {
+                flow.reapply_system_proxy_if_connected(&config)
+                    .await
+                    .expect("settings remain saved");
+            }
+            _ => {
+                flow.handle_core_exit(
+                    &config,
+                    CoreExitEvent {
+                        active_profile_id: Some("active".into()),
+                        process_id: 1,
+                        exit_code: Some(1),
+                        outcome: CoreExitOutcome::Restarted {
+                            attempt: 1,
+                            snapshot: harness.supervisor.status().await.expect("status"),
+                        },
+                    },
+                )
+                .await;
+            }
+        }
+        {
+            let statuses = harness.sink.1.lock().expect("statuses");
+            let last = statuses.last().expect("failure status");
+            assert!(last.pac_url.is_none(), "{action}");
+            assert!(!pac.is_running(), "{action}");
+            assert_eq!(
+                last.observation,
+                voya_platform::sysproxy::SystemProxyObservation::Clear
+            );
+        }
+        let events = harness.sink.events();
+        assert_eq!(
+            events[before..]
+                .iter()
+                .filter(|event| *event == "sysproxy")
+                .count(),
+            1
+        );
+        assert!(events[before..]
+            .iter()
+            .any(|event| event.starts_with("notice:Warn:")));
+        assert_eq!(
+            harness
+                .supervisor
+                .status()
+                .await
+                .expect("still serving")
+                .state,
+            SupervisorConnectionState::Connected
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_rejected_restart_observes_the_surviving_pac_without_reapplying_it() {
+    let harness = Harness::new().await;
+    let pac = Arc::new(FaultPac::default());
+    let flow = harness.flow_with_proxy_manager(manual_manager(&harness, pac.clone()));
+    let mut config = active_config();
+    config.system_proxy_item.sys_proxy_type = voya_core::SysProxyType::Pac;
+    flow.connect(&config).await.expect("initial connection");
+    let original_url = harness
+        .sink
+        .1
+        .lock()
+        .expect("statuses")
+        .last()
+        .expect("initial")
+        .pac_url
+        .clone();
+    assert!(original_url.is_some());
+    pac.fail.store(true, Ordering::SeqCst);
+    config.index_id = "deleted-profile".into();
+    let before = harness.sink.events().len();
+    assert!(matches!(
+        flow.restart(&config).await,
+        Err(RuntimeError::ActiveProfileNotFound(_))
+    ));
+    assert!(pac.is_running());
+    assert_eq!(
+        harness
+            .sink
+            .1
+            .lock()
+            .expect("statuses")
+            .last()
+            .expect("refreshed")
+            .pac_url,
+        original_url
+    );
+    let events = harness.sink.events();
+    let tail = &events[before..];
+    assert!(
+        tail.iter()
+            .position(|event| event == "sysproxy")
+            .expect("proxy snapshot")
+            < tail
+                .iter()
+                .position(|event| event.starts_with("state:Connected"))
+                .expect("connected")
+    );
+    assert!(!tail.iter().any(|event| event.starts_with("notice:")));
+}
+
+struct CleanupFailure;
+impl NativeTunController for CleanupFailure {
+    fn status(&self, backend: TunBackend) -> NativeTunStatus {
+        NativeTunStatus {
+            backend,
+            component_ready: true,
+            provider_state: NativeTunProviderState::Running,
+            message: None,
+        }
+    }
+    fn start(&self, _request: NativeTunStartRequest) -> Result<(), NativeTunError> {
+        Err(NativeTunError::StartCleanupFailed {
+            start_error: "start failed".into(),
+            cleanup_error: "stop failed".into(),
+        })
+    }
+    fn stop(&self, _backend: TunBackend) -> Result<(), NativeTunError> {
+        Err(NativeTunError::Bridge {
+            action: "stop",
+            message: "stop failed".into(),
+        })
+    }
+}
+
+#[tokio::test]
+async fn pending_native_cleanup_publishes_retired_pac_before_the_pending_state() {
+    let mut harness = Harness::new().await;
+    harness.supervisor = CoreSupervisor::spawn(
+        SupervisorDeps::new(
+            Arc::new(RecordingRunner::default()),
+            Arc::new(ElevationState::new()),
+        )
+        .with_target_os(TargetOs::Macos)
+        .with_native_tun_controller(Arc::new(CleanupFailure)),
+    );
+    let pac = Arc::new(FaultPac::default());
+    let manager = manual_manager(&harness, pac.clone());
+    let mut config = active_config();
+    config.system_proxy_item.sys_proxy_type = voya_core::SysProxyType::Pac;
+    manager.apply_runtime_config(&config).expect("old PAC");
+    config.tun_mode_item.enable_tun = true;
+    let error = harness
+        .flow_with_proxy_manager(manager)
+        .connect(&config)
+        .await
+        .expect_err("pending cleanup");
+    assert!(error.to_string().contains("start failed"));
+    assert!(error.to_string().contains("stop failed"));
+    let statuses = harness.sink.1.lock().expect("statuses");
+    let last = statuses.last().expect("retired state");
+    assert!(last.pac_url.is_none() && last.proxy.is_none());
+    assert!(!pac.is_running());
+    drop(statuses);
+    let events = harness.sink.events();
+    let proxy = events
+        .iter()
+        .position(|event| event == "sysproxy")
+        .expect("proxy event");
+    let pending = events
+        .iter()
+        .position(|event| event.starts_with("state:CleanupPending"))
+        .expect("pending event");
+    assert!(proxy < pending);
 }

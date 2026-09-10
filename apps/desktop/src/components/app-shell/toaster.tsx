@@ -10,12 +10,12 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { useToastStore } from "@/stores/toast-store";
 
 export function Toaster() {
-  const { direction, t } = useI18n();
+  const { t } = useI18n();
   const dismissToast = useToastStore((state) => state.dismissToast);
   const toasts = useToastStore((state) => state.toasts);
 
   return (
-    <ToastProvider duration={3500} swipeDirection={direction === "rtl" ? "left" : "right"}>
+    <ToastProvider duration={3500} swipeDirection="right">
       {toasts.map((toast) => (
         <Toast
           key={toast.id}

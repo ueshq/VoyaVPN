@@ -217,6 +217,7 @@ vi.mock("@/ipc", () => ({
       activeProfileId: null,
       mainPid: null,
       prePid: null,
+      activeTunBackend: null,
       runningCoreType: null,
       state: "disconnected",
     }),
@@ -257,6 +258,9 @@ vi.mock("@/ipc", () => ({
   tunRequestElevation: vi.fn(),
   systemProxyStatus: vi.fn(() =>
     Promise.resolve({
+      management: "automatic",
+      observation: "unknown",
+      manualCleanupRequired: false,
       effectiveMode: "forcedClear",
       exceptions: "",
       pacAvailable: false,
@@ -377,12 +381,14 @@ describe("App", () => {
     expect(screen.getByTestId("sidebar-footer")).toHaveTextContent("Disconnected");
   });
 
-  it("applies the backend RTL locale to the main surface", async () => {
+  it("falls back to a supported locale when the backend stores a removed language", async () => {
+    await changeLocale("zh-Hans", { persist: false });
     vi.mocked(loadUiPreferences).mockResolvedValue({ language: "fa", theme: "system" });
     renderApp();
 
-    await waitFor(() => expect(document.documentElement).toHaveAttribute("dir", "rtl"));
-    expect(screen.getByRole("tab", { name: /نمایه/ })).toBeInTheDocument();
+    await waitFor(() => expect(document.documentElement).toHaveAttribute("lang", "en"));
+    expect(document.documentElement).toHaveAttribute("dir", "ltr");
+    expect(screen.getByRole("tab", { name: "Profiles" })).toBeInTheDocument();
   });
 
   it("hydrates the theme through the dedicated preferences query", async () => {

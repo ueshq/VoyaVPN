@@ -11,6 +11,7 @@ import { cn } from "@voya/ui/lib/utils";
 import { ConnectButton } from "./connect-button";
 import { ConnectedInfo } from "./connected-info";
 import { ConnectionModeSwitcher } from "./connection-mode-switcher";
+import { ManualProxyPanel } from "./manual-proxy-panel";
 import { NodeList } from "./node-list";
 import { useHomeRuntime } from "./use-home-runtime";
 
@@ -19,7 +20,8 @@ import { useHomeRuntime } from "./use-home-runtime";
  * card with the central connect button + connected info + unified connection
  * mode switcher, and the node list below. Single-accent discipline: interactive
  * chrome stays brand blue; affirmative green (`--connected` / `--connected-glow`)
- * is reserved for the achieved protected state. It only uses the runtime
+ * marks an active runtime; the heading distinguishes local readiness from VPN
+ * protection. It only uses the runtime
  * actions and {@link useHomeRuntime}; decorative motion inherits the global
  * `prefers-reduced-motion` guard in globals.css.
  */
@@ -28,18 +30,32 @@ export function HomeScreen() {
   const home = useHomeRuntime(t);
   const [subscriptionsOpen, setSubscriptionsOpen] = useState(false);
 
-  const headline = home.connected
-    ? t("home.protected")
-    : home.state === "connecting"
-      ? t("status.connecting")
-      : home.state === "disconnecting"
-        ? t("status.disconnecting")
-        : t("home.unprotected");
-  const hint = home.connected
-    ? t("home.protectedHint")
-    : home.state === "disconnected"
-      ? t("home.unprotectedHint")
-      : "";
+  const manualProxy = home.sysProxy?.management === "manual";
+  const localReady = home.connected && manualProxy && home.activeTunBackend === null;
+  const protectedConnection = home.connected && (
+    home.sysProxy?.management === "automatic"
+    || (manualProxy && home.activeTunBackend === "macosPacketTunnel")
+  );
+  const headline = home.state === "cleanupPending"
+    ? t("home.cleanupPending")
+    : localReady
+      ? t("home.localProxyReady")
+      : protectedConnection
+        ? t("home.protected")
+        : home.connected
+          ? t("home.protectionUnknown")
+          : home.state === "connecting"
+            ? t("status.connecting")
+            : home.state === "disconnecting"
+              ? t("status.disconnecting")
+              : t("home.unprotected");
+  const hint = localReady
+    ? t("home.manualProxyHint")
+    : protectedConnection
+      ? t("home.protectedHint")
+      : home.state === "disconnected"
+        ? t("home.unprotectedHint")
+        : "";
   const pidLabel = home.mainPid ? `PID ${home.mainPid}` : t("status.noPid");
 
   return (
@@ -61,7 +77,7 @@ export function HomeScreen() {
         <Card className="mt-4 shrink-0 gap-0 py-0">
           <CardHeader className="border-b px-4 py-4" data-testid="home-status-card">
             <ConnectionStatus
-              connected={home.connected}
+              connected={protectedConnection}
               headline={headline}
               hint={hint}
               inProgress={home.inProgress}
@@ -75,6 +91,7 @@ export function HomeScreen() {
               inProgress={home.inProgress}
               onPrimaryAction={home.handlePrimaryAction}
               t={t}
+              cleanupPending={home.state === "cleanupPending"}
             />
             {home.connected ? (
               <ConnectedInfo
@@ -86,6 +103,7 @@ export function HomeScreen() {
             ) : null}
             <ConnectionModeSwitcher
               connectionMode={home.connectionMode}
+              manualProxy={manualProxy}
               modeBusy={home.modeBusy}
               modePending={home.modePending}
               onModeChange={home.changeConnectionMode}
@@ -96,10 +114,13 @@ export function HomeScreen() {
               t={t}
               tunProviderSummary={home.tunProviderSummary}
             />
+            {manualProxy && home.sysProxy ? (
+              <ManualProxyPanel status={home.sysProxy} connected={home.connected} mode={home.connectionMode} />
+            ) : null}
           </CardContent>
         </Card>
 
-        <Card className="mt-4 flex min-h-0 flex-1 flex-col gap-3 py-4">
+        <Card className="mt-4 flex min-h-64 flex-1 flex-col gap-3 py-4">
           <CardHeader className="px-4">
             <CardTitle className="text-sm font-semibold">{t("home.nodes")}</CardTitle>
           </CardHeader>

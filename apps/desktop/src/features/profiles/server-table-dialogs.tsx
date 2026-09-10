@@ -9,7 +9,7 @@ import {
   AlertDialogTitle,
 } from "@voya/ui/components/alert-dialog";
 import { buttonVariants } from "@voya/ui/components/button-variants";
-import { SubscriptionsDialog } from "@/features/subscriptions";
+import { SubscriptionsDialog } from "@/features/subscriptions/subscriptions-dialog";
 
 import { ImportProfilesDialog } from "./import-profiles-dialog";
 import { ProfileDialog } from "./profile-dialog";

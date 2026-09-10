@@ -231,7 +231,11 @@ impl SupervisorActor {
         backend: TunBackend,
         native_request: NativeTunStartRequest,
     ) -> Result<SupervisorSnapshot, SupervisorError> {
-        self.deps.native_tun_controller.start(native_request)?;
+        let result = self.deps.native_tun_controller.start(native_request);
+        let cleanup_pending = matches!(&result, Err(NativeTunError::StartCleanupFailed { .. }));
+        if result.is_err() && !cleanup_pending {
+            return result.map(|()| self.running.snapshot()).map_err(Into::into);
+        }
         self.native_tun_generation = self.native_tun_generation.wrapping_add(1);
         let generation = self.native_tun_generation;
 
@@ -244,6 +248,7 @@ impl SupervisorActor {
             main: None,
             pre: None,
             native_tun: Some(RunningNativeTun {
+                cleanup_pending,
                 backend,
                 generation,
             }),
@@ -253,7 +258,7 @@ impl SupervisorActor {
             running_core_type: Some(running_core_type),
         };
         self.spawn_native_tun_health_watcher(generation, backend);
-
+        result?;
         Ok(self.running.snapshot())
     }
 
@@ -264,6 +269,9 @@ impl SupervisorActor {
             Ok(()) => Ok(SupervisorSnapshot::disconnected()),
             Err(error) => {
                 self.running = running;
+                if let Some(native_tun) = self.running.native_tun.as_mut() {
+                    native_tun.cleanup_pending = true;
+                }
                 Err(error)
             }
         }
@@ -498,8 +506,10 @@ impl SupervisorActor {
     fn native_tun_exited(&mut self, generation: u64, message: String) {
         // Copy the backend out before the `&mut self` calls below: the borrow of
         // `self.running.native_tun` must end first.
-        let backend = match &self.running.native_tun {
-            Some(native_tun) if native_tun.generation == generation => native_tun.backend,
+        let (backend, cleanup_pending) = match &self.running.native_tun {
+            Some(native_tun) if native_tun.generation == generation => {
+                (native_tun.backend, native_tun.cleanup_pending)
+            }
             _ => return,
         };
 
@@ -512,6 +522,16 @@ impl SupervisorActor {
                 ?error,
                 "failed to stop native TUN after provider terminal state"
             );
+            self.running = running;
+            if let Some(native_tun) = self.running.native_tun.as_mut() {
+                native_tun.cleanup_pending = true;
+            }
+            self.spawn_native_tun_health_watcher(generation, backend);
+            if cleanup_pending {
+                // Ownership and retry continue, but the same unresolved failure
+                // must not produce a new user notice on every health poll.
+                return;
+            }
         }
         self.deps.event_sink.native_tun_exited(NativeTunExitEvent {
             active_profile_id,

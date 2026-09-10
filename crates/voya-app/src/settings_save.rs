@@ -372,13 +372,15 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
 /// they are carried over from the configuration being replaced.
 #[must_use]
 pub fn config_from_settings(settings: &contracts::AppSettingsV1, current: &AppConfig) -> AppConfig {
-    let state = AppStateRecord {
-        active_profile_id: (!current.index_id.is_empty()).then(|| current.index_id.clone()),
-        active_routing_id: (!current.routing_basic_item.routing_index_id.is_empty())
-            .then(|| current.routing_basic_item.routing_index_id.clone()),
-    };
+    app_config_from_settings(settings, &state_from_app_config(current))
+}
 
-    app_config_from_settings(settings, &state)
+pub(crate) fn state_from_app_config(config: &AppConfig) -> AppStateRecord {
+    AppStateRecord {
+        active_profile_id: (!config.index_id.is_empty()).then(|| config.index_id.clone()),
+        active_routing_id: (!config.routing_basic_item.routing_index_id.is_empty())
+            .then(|| config.routing_basic_item.routing_index_id.clone()),
+    }
 }
 
 #[must_use]
@@ -1030,17 +1032,6 @@ mod tests {
             saved_config_requires_runtime_restart(&original, &srs),
             "the SRS source is embedded in every generated rule_set URL"
         );
-    }
-
-    /// Round-trip through the contract the way `save_app_settings` does, so a
-    /// field that lives only in `AppConfig` cannot silently force a restart.
-    fn config_from_settings(settings: &contracts::AppSettingsV1, current: &AppConfig) -> AppConfig {
-        let state = AppStateRecord {
-            active_profile_id: (!current.index_id.is_empty()).then(|| current.index_id.clone()),
-            active_routing_id: (!current.routing_basic_item.routing_index_id.is_empty())
-                .then(|| current.routing_basic_item.routing_index_id.clone()),
-        };
-        app_config_from_settings(settings, &state)
     }
 
     #[test]

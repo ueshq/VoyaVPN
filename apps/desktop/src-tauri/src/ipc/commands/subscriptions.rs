@@ -124,7 +124,7 @@ pub async fn update_subscriptions<R: tauri::Runtime>(
         IPC_PROXY_URL_MAX_CHARS,
         AppErrorSubsystem::Subscription,
     )?;
-    let snapshot = current_config(&state)?;
+    let snapshot = current_config(&state);
     let proxy_url = runtime_proxy_url(prefer_proxy, proxy_url, &snapshot);
     let prepared = state
         .services()

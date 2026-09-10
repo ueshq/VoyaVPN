@@ -39,7 +39,7 @@ import { queryKeys } from "@/ipc/query-keys";
 import { formatBytes } from "@voya/utils/formatting";
 import { getErrorMessage } from "@voya/utils/error";
 import { cn } from "@voya/ui/lib/utils";
-import { useConnectionColumnsStore } from "@/stores/connection-columns-store";
+import { useConnectionColumnsStore } from "@/stores/column-visibility-store";
 import { ProxyMonitorStatusBadge } from "@/features/proxy/proxy-monitor-status-badge";
 
 type ConnectionColumn = {

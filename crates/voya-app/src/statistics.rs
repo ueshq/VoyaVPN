@@ -763,6 +763,7 @@ mod tests {
     #[test]
     fn statistics_core_process_identity_tracks_pid_changes() {
         let first = SupervisorSnapshot {
+            active_tun_backend: None,
             state: SupervisorConnectionState::Connected,
             active_profile_id: Some("profile-a".to_string()),
             main_pid: Some(100),

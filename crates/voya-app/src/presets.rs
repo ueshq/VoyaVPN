@@ -6,7 +6,7 @@ use voya_core::{AppConfig, SimpleDnsDefaults, SimpleDnsItem};
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 
 use crate::{
-    routing::{manager::PreparedRoutingTemplate, RoutingManager, RoutingManagerError},
+    routing::{PreparedRoutingTemplate, RoutingManager, RoutingManagerError},
     updates::{
         apply_source_settings, validate_asset_source_urls, ConfigSourceSettings, UpdateManagerError,
     },

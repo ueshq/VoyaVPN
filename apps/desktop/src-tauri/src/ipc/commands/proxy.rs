@@ -5,7 +5,7 @@ use super::{lifecycle::*, support::*, *};
 pub async fn proxy_list_groups(
     state: tauri::State<'_, AppState>,
 ) -> Result<ProxyGroupsSnapshot, AppError> {
-    let config = current_config(&state)?;
+    let config = current_config(&state);
     let clash_api = current_clash_api_access(&state).await;
 
     state
@@ -27,7 +27,7 @@ pub async fn proxy_test_delay(
         IPC_NAME_MAX_CHARS,
         AppErrorSubsystem::ProxyRuntime,
     )?;
-    let config = current_config(&state)?;
+    let config = current_config(&state);
     let clash_api = current_clash_api_access(&state).await;
 
     state
@@ -57,7 +57,7 @@ pub async fn proxy_select_node<R: tauri::Runtime>(
         IPC_NAME_MAX_CHARS,
         AppErrorSubsystem::ProxyRuntime,
     )?;
-    let config = current_config(&state)?;
+    let config = current_config(&state);
     let clash_api = current_clash_api_access(&state).await;
     let snapshot = state
         .proxy_runtime()

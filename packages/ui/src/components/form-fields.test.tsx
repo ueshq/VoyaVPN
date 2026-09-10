@@ -1,0 +1,62 @@
+import { useState } from "react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { CheckboxField, SelectField, TextAreaField, TextField } from "./form-fields";
+
+afterEach(cleanup);
+
+describe("form fields", () => {
+  it("associates translated labels and errors with distinct inputs", () => {
+    const onChange = vi.fn();
+    render(<>
+      <TextField label="地址" value="" onChange={onChange} error="地址不能为空" />
+      <TextAreaField label="域名" value="" onChange={onChange} error="域名无效" />
+    </>);
+    const address = screen.getByLabelText("地址");
+    const domains = screen.getByLabelText("域名");
+    expect(address.id).not.toBe(domains.id);
+    expect(address).toHaveAccessibleDescription("地址不能为空");
+    expect(domains).toHaveAccessibleDescription("域名无效");
+    expect(address).toHaveAttribute("aria-invalid", "true");
+    fireEvent.change(domains, { target: { value: "example.com\nexample.org" } });
+    expect(onChange).toHaveBeenCalledWith("example.com\nexample.org");
+  });
+
+  it("round-trips the empty select value without exposing the sentinel", async () => {
+    const onChange = vi.fn();
+    function Form() {
+      const [value, setValue] = useState("");
+      return <SelectField label="策略" value={value} onChange={(next) => { onChange(next); setValue(next); }} options={[
+        { label: "默认", value: "" },
+        { label: "IPv4", value: "UseIPv4" },
+      ]} />;
+    }
+    render(<Form />);
+    const select = screen.getByRole("combobox", { name: "策略" });
+    expect(select).toHaveTextContent("默认");
+    fireEvent.keyDown(select, { key: "Enter" });
+    fireEvent.keyDown(await screen.findByRole("option", { name: "IPv4" }), { key: "Enter" });
+    expect(onChange).toHaveBeenLastCalledWith("UseIPv4");
+    fireEvent.keyDown(select, { key: "Enter" });
+    fireEvent.keyDown(await screen.findByRole("option", { name: "默认" }), { key: "Enter" });
+    expect(onChange).toHaveBeenLastCalledWith("");
+  });
+
+  it("honors explicit ids and disabled controls", () => {
+    const onChange = vi.fn();
+    render(<>
+      <TextField id="address" label="地址" value="saved" onChange={onChange} disabled />
+      <SelectField label="策略" value="" onChange={onChange} options={[{ label: "默认", value: "" }]} disabled />
+      <CheckboxField label="全局映射" checked={false} onChange={onChange} disabled />
+      <CheckboxField label="启用" checked={false} onChange={onChange} />
+    </>);
+    expect(screen.getByLabelText("地址")).toHaveAttribute("id", "address");
+    expect(screen.getByLabelText("地址")).toBeDisabled();
+    expect(screen.getByRole("combobox")).toBeDisabled();
+    fireEvent.click(screen.getByLabelText("全局映射"));
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByLabelText("启用"));
+    expect(onChange).toHaveBeenCalledWith(true);
+  });
+});

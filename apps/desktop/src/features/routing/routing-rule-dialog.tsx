@@ -16,7 +16,7 @@ import type { RoutingRule, RoutingRuleScope } from "@/ipc/bindings";
 import { translateFieldErrors, zodIssuesToErrorMap, type FieldErrorMap } from "@/lib/zod-errors";
 
 import { RULE_TYPES } from "./routing-constants";
-import { CheckboxField, SelectField, TextAreaField, TextField } from "./routing-form-fields";
+import { CheckboxField, SelectField, TextAreaField, TextField } from "@voya/ui/components/form-fields";
 import {
   routingRuleSchema,
   type RoutingRulePayload,
@@ -148,7 +148,7 @@ export function RoutingRuleDialog({
           <CheckboxField
             checked={form.enabled}
             label={t("panes.routing.enabled")}
-            onCheckedChange={(checked) => setForm((current) => ({ ...current, enabled: checked }))}
+            onChange={(checked) => setForm((current) => ({ ...current, enabled: checked }))}
           />
         </form>
 

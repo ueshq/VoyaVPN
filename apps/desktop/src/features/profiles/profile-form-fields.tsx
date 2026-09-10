@@ -44,7 +44,7 @@ type TextFieldProps = React.InputHTMLAttributes<HTMLInputElement> & {
 export function TextField({ className, error, id, label, ...props }: TextFieldProps) {
   // Ids are generated, never derived from the label: a translated label such as
   // "备注" contains no ASCII word characters, so a slugified id collapsed to the
-  // empty string and broke every label/input association in CJK, ru and fa.
+  // empty string and broke label/input associations for non-Latin labels.
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const errorId = `${inputId}-error`;

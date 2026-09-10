@@ -17,6 +17,7 @@
     "typecheck": "pnpm -r run typecheck",
     "test": "vitest",
     "lint": "eslint .",
+    "check:native:macos:bridge": "node scripts/native/macos/test-bridge.mjs",
     "check:frontend:smoke:mock": "pnpm --filter @voya/desktop exec playwright test",
     "check:desktop:smoke": "pnpm tauri:build --debug --no-bundle && node apps/desktop/e2e/desktop-smoke.mjs",
     "generate:bindings": "node scripts/quality/bindings.mjs",

@@ -5,6 +5,7 @@
 #import <stdint.h>
 #import <stdlib.h>
 #import <string.h>
+#import "macos_tunnel_wait.h"
 
 static NSString *const VoyaAppGroupIdentifier = @"group.app.voyavpn.desktop";
 static NSString *const VoyaProviderBundleIdentifier = @"app.voyavpn.desktop.PacketTunnel";
@@ -282,62 +283,58 @@ static NSString *VoyaFetchLastDisconnectError(NETunnelProviderSession *session) 
     return @"";
 }
 
-static char *VoyaCopySessionTerminalError(NETunnelProviderSession *session, NSString *fallback) {
-    NSString *lastError = VoyaFetchLastDisconnectError(session);
-    if (lastError.length > 0) {
-        return VoyaCopyCString([@"error:" stringByAppendingString:lastError]);
-    }
-    return VoyaCopyCString([@"error:" stringByAppendingString:fallback]);
+// Observe only this session. Notifications wake the waiter; bounded polling
+// also handles daemon updates that arrive without a notification.
+static VoyaTunnelWaitResult VoyaWaitForSession(NEVPNConnection *connection, BOOL starting, NSTimeInterval timeout) {
+    dispatch_semaphore_t changed = dispatch_semaphore_create(0);
+    id observer = [[NSNotificationCenter defaultCenter]
+        addObserverForName:NEVPNStatusDidChangeNotification object:connection queue:nil
+        usingBlock:^(NSNotification *notification) {
+            (void)notification;
+            dispatch_semaphore_signal(changed);
+        }];
+    VoyaTunnelWaitResult result = VoyaAwaitTunnel(starting, timeout,
+        ^NEVPNStatus { return connection.status; },
+        ^NSTimeInterval { return NSProcessInfo.processInfo.systemUptime; },
+        ^{
+            if (!starting && connection.status != NEVPNStatusDisconnected && connection.status != NEVPNStatusInvalid) {
+                [connection stopVPNTunnel];
+            }
+            if ([NSThread isMainThread]) {
+                [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                    beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.2]];
+            } else {
+                dispatch_semaphore_wait(changed, dispatch_time(DISPATCH_TIME_NOW, 200 * NSEC_PER_MSEC));
+            }
+        });
+    [[NSNotificationCenter defaultCenter] removeObserver:observer];
+    return result;
 }
 
-/// Waits for the session to leave the disconnecting state so a restart does not
-/// hand `startTunnelWithOptions:` a session macOS is still tearing down. Best
-/// effort: a timeout is reported by the caller's next status query rather than
-/// turning a disconnect into a failure.
-static void VoyaWaitForDisconnected(NEVPNConnection *connection, NSTimeInterval timeoutSeconds) {
-    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeoutSeconds];
-
-    while ([[NSDate date] compare:deadline] == NSOrderedAscending) {
-        if (connection.status == NEVPNStatusDisconnected || connection.status == NEVPNStatusInvalid) {
-            return;
-        }
-        if ([NSThread isMainThread]) {
-            NSDate *limit = [NSDate dateWithTimeIntervalSinceNow:0.1];
-            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:limit];
-        } else {
-            [NSThread sleepForTimeInterval:0.1];
-        }
-    }
+static BOOL VoyaWaitForDisconnected(NEVPNConnection *connection, NSTimeInterval timeoutSeconds) {
+    return VoyaWaitForSession(connection, NO, timeoutSeconds) == VoyaTunnelDisconnected;
 }
 
 static char *VoyaWaitForConnected(NETunnelProviderSession *session, int64_t timeoutMs) {
-    int64_t effectiveTimeoutMs = timeoutMs > 0 ? timeoutMs : 20000;
-    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:(NSTimeInterval)effectiveTimeoutMs / 1000.0];
+    VoyaTunnelWaitResult result = VoyaWaitForSession(session, YES,
+        (NSTimeInterval)(timeoutMs > 0 ? timeoutMs : 20000) / 1000.0);
+    if (result == VoyaTunnelReady) return VoyaCopyCString(@"ok");
 
-    while ([[NSDate date] compare:deadline] == NSOrderedAscending) {
-        switch (session.status) {
-            case NEVPNStatusConnected:
-                return VoyaCopyCString(@"ok");
-            case NEVPNStatusDisconnected:
-                return VoyaCopySessionTerminalError(session, @"VoyaVPN PacketTunnel disconnected before it became ready.");
-            case NEVPNStatusInvalid:
-                return VoyaCopySessionTerminalError(session, @"VoyaVPN PacketTunnel became invalid before it became ready.");
-            case NEVPNStatusConnecting:
-            case NEVPNStatusReasserting:
-            case NEVPNStatusDisconnecting:
-                break;
-        }
-
-        if ([NSThread isMainThread]) {
-            NSDate *limit = [NSDate dateWithTimeIntervalSinceNow:0.2];
-            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:limit];
-        } else {
-            [NSThread sleepForTimeInterval:0.2];
-        }
-    }
-
+    NSString *fallback = result == VoyaTunnelTimedOut
+        ? @"Timed out waiting for VoyaVPN PacketTunnel to connect."
+        : result == VoyaTunnelInvalid
+            ? @"VoyaVPN PacketTunnel became invalid before it became ready."
+            : @"VoyaVPN PacketTunnel disconnected before it became ready.";
+    NSString *lastError = VoyaFetchLastDisconnectError(session);
     [session stopVPNTunnel];
-    return VoyaCopyCString(@"error:Timed out waiting for VoyaVPN PacketTunnel to connect.");
+    BOOL stopped = VoyaWaitForDisconnected(session, 10.0);
+    NSDictionary *failure = @{
+        @"error": lastError.length > 0 ? lastError : fallback,
+        @"cleanupError": stopped ? [NSNull null] : @"Timed out stopping VoyaVPN PacketTunnel; retry disconnect."
+    };
+    NSData *data = [NSJSONSerialization dataWithJSONObject:failure options:0 error:nil];
+    NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    return VoyaCopyCString([@"startFailed:" stringByAppendingString:json]);
 }
 
 static NSURL *VoyaAppGroupURL(NSString *relativePath, NSError **outError) {
@@ -522,7 +519,9 @@ char *voya_macos_packet_tunnel_stop(void) {
         }
         if (manager != nil) {
             [manager.connection stopVPNTunnel];
-            VoyaWaitForDisconnected(manager.connection, 10.0);
+            if (!VoyaWaitForDisconnected(manager.connection, 10.0)) {
+                return VoyaCopyCString(@"error:Timed out stopping VoyaVPN PacketTunnel; retry disconnect.");
+            }
         }
         return VoyaCopyCString(@"ok");
     }

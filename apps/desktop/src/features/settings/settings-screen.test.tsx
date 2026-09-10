@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale } from "@voya/i18n";
 import { useShellStore } from "@/stores/shell-store";
 import { makeAppSettings } from "./app-settings.test-fixture";
-import { SettingsSurface } from "./settings-dialog";
 import { SettingsScreen } from "./settings-screen";
 
 const ipcMocks = vi.hoisted(() => ({
@@ -72,7 +71,7 @@ describe("unified settings surface", () => {
 
   it("keeps one draft across tabs and exposes no Hotkeys tab", async () => {
     const user = userEvent.setup();
-    renderSurface();
+    renderScreen();
 
     expect(await screen.findByRole("tab", { name: "General", selected: true })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Hotkeys" })).not.toBeInTheDocument();
@@ -91,7 +90,7 @@ describe("unified settings surface", () => {
 
   it("persists all edits through the single Save all action", async () => {
     const user = userEvent.setup();
-    renderSurface();
+    renderScreen();
     await user.click(await screen.findByRole("tab", { name: "Core" }));
     const userAgent = await screen.findByDisplayValue("agent-before-edit");
     await user.clear(userAgent);
@@ -107,9 +106,81 @@ describe("unified settings surface", () => {
     );
   });
 
+  it.each(["app", "dns"])("serializes %s saves across pane, footer and leave dialog and preserves a rejected draft", async (kind) => {
+    const user = userEvent.setup();
+    let reject!: (error: Error) => void;
+    const pending = new Promise<never>((_resolve, fail) => { reject = fail; });
+    const save = kind === "app" ? ipcMocks.saveAppSettings : ipcMocks.saveDnsSettings;
+    save.mockReturnValueOnce(pending);
+    renderScreen();
+    await user.click(await screen.findByRole("tab", { name: kind === "app" ? "Core" : "DNS" }));
+    const input = kind === "app"
+      ? await screen.findByDisplayValue("agent-before-edit")
+      : await screen.findByLabelText("Remote DNS");
+    const draft = kind === "app" ? "draft-agent" : "https://dns.google/dns-query";
+    await user.clear(input);
+    await user.type(input, draft);
+    await user.dblClick(screen.getByRole("button", { name: kind === "app" ? "Save all" : "Save" }));
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(input).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save all" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Discard changes" })).toBeDisabled();
+    fireEvent.change(input, { target: { value: "must-not-replace-draft" } });
+    act(() => useShellStore.getState().requestTab("home"));
+    const dialog = within(await screen.findByRole("alertdialog"));
+    expect(dialog.getByRole("button", { name: "Save all" })).toBeDisabled();
+    expect(dialog.getByRole("button", { name: "Discard changes" })).toBeDisabled();
+    await act(async () => { reject(new Error("save unavailable")); });
+    expect(useShellStore.getState().activeTab).toBe("settings");
+    await waitFor(() => expect(dialog.getByRole("button", { name: "Cancel" })).toBeEnabled());
+    await user.click(dialog.getByRole("button", { name: "Cancel" }));
+    expect(input).toHaveValue(draft);
+    expect(input).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Save all" }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save.mock.calls[1]?.[0]).toEqual(expect.objectContaining(kind === "app"
+      ? { core: expect.objectContaining({ defaultUserAgent: draft }) }
+      : { remote: draft }));
+  });
+
+  it.each([false, true])("saves app settings before DNS through either entry point (navigation=%s)", async (navigation) => {
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(await screen.findByRole("button", { name: "Light" }));
+    await user.click(screen.getByRole("tab", { name: "DNS" }));
+    await user.type(await screen.findByLabelText("Remote DNS"), "https://dns.google/dns-query");
+    await user.click(screen.getByRole("tab", { name: "General" }));
+
+    if (navigation) act(() => useShellStore.getState().requestTab("home"));
+    const scope = navigation ? within(await screen.findByRole("alertdialog")) : screen;
+    await user.click(scope.getByRole("button", { name: "Save all" }));
+
+    await waitFor(() => expect(ipcMocks.saveDnsSettings).toHaveBeenCalledTimes(1));
+    expect(ipcMocks.saveAppSettings).toHaveBeenCalledTimes(1);
+    expect(ipcMocks.saveAppSettings.mock.invocationCallOrder[0]).toBeLessThan(ipcMocks.saveDnsSettings.mock.invocationCallOrder[0]!);
+    expect(ipcMocks.saveDnsSettings).toHaveBeenCalledWith(expect.objectContaining({ remote: "https://dns.google/dns-query" }));
+    if (navigation) await waitFor(() => expect(useShellStore.getState().activeTab).toBe("home"));
+  });
+
+  it("stops save-all before DNS when the app settings save fails", async () => {
+    const user = userEvent.setup();
+    ipcMocks.saveAppSettings.mockRejectedValueOnce(new Error("app save failed"));
+    renderScreen();
+    await user.click(await screen.findByRole("button", { name: "Light" }));
+    await user.click(screen.getByRole("tab", { name: "DNS" }));
+    await user.type(await screen.findByLabelText("Remote DNS"), "https://dns.google/dns-query");
+    act(() => useShellStore.getState().requestTab("home"));
+    const dialog = within(await screen.findByRole("alertdialog"));
+    await user.click(dialog.getByRole("button", { name: "Save all" }));
+
+    await waitFor(() => expect(dialog.getByRole("alert")).toHaveTextContent("app save failed"));
+    expect(ipcMocks.saveDnsSettings).not.toHaveBeenCalled();
+    expect(useShellStore.getState().activeTab).toBe("settings");
+  });
+
   it("hosts the DNS pane as a settings tab with its own save action", async () => {
     const user = userEvent.setup();
-    renderSurface();
+    renderScreen();
 
     await user.click(await screen.findByRole("tab", { name: "DNS" }));
 
@@ -120,7 +191,7 @@ describe("unified settings surface", () => {
 
   it("saves a DNS pane draft through the surface's Save all action", async () => {
     const user = userEvent.setup();
-    renderSurface();
+    renderScreen();
 
     await user.click(await screen.findByRole("tab", { name: "DNS" }));
     await user.type(await screen.findByLabelText("Remote DNS"), "https://dns.google/dns-query");
@@ -252,10 +323,6 @@ describe("unified settings surface", () => {
     expect(screen.getByRole("alertdialog")).toBeVisible();
   });
 });
-
-function renderSurface() {
-  return renderWithQuery(<SettingsSurface />);
-}
 
 function renderScreen() {
   return renderWithQuery(<SettingsScreen />);

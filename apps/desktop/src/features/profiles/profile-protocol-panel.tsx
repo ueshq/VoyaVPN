@@ -1,7 +1,7 @@
 import type { UseFormGetValues, UseFormSetValue } from "react-hook-form";
 
 import { useI18n } from "@voya/i18n/use-i18n";
-import { GroupBuilder } from "@/features/groups";
+import { GroupBuilder } from "@/features/groups/group-builder";
 
 import { CONFIG_TYPES, type ProfileProtocol } from "./profile-constants";
 import {

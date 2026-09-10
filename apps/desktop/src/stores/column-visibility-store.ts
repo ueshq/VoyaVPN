@@ -16,7 +16,7 @@ type ColumnVisibilityState = {
  * identical across tables, so they live here once instead of being copied per
  * table. Only the storage key and the default map differ.
  */
-export function createColumnVisibilityStore(storageKey: string, defaults: VisibilityState) {
+function createColumnVisibilityStore(storageKey: string, defaults: VisibilityState) {
   return create<ColumnVisibilityState>()(
     persist(
       (set) => ({
@@ -62,3 +62,56 @@ function readPersistedVisibility(persistedState: unknown): VisibilityState {
 
   return result;
 }
+
+/**
+ * Default proxy connections-table column visibility. Only the high-signal
+ * columns ship visible — host / upload / download / process — while the niche
+ * columns (network, source, destination, proxy chain) start collapsed behind
+ * the "Columns" menu to cut the forced horizontal scroll. The structural marker
+ * track is rendered outside this map so it stays permanently visible.
+ */
+const DEFAULT_CONNECTION_COLUMN_VISIBILITY: VisibilityState = {
+  host: true,
+  network: false,
+  source: false,
+  destination: false,
+  upload: true,
+  download: true,
+  chain: false,
+  process: true,
+};
+
+export const useConnectionColumnsStore = createColumnVisibilityStore(
+  "voyavpn.connectionColumns",
+  DEFAULT_CONNECTION_COLUMN_VISIBILITY,
+);
+
+/**
+ * Default profiles-table column visibility. Only the high-signal columns ship
+ * visible — protocol / remarks / address / delay / group — while niche columns
+ * (port, transport, security, speed, per-server traffic, IP info) start
+ * collapsed behind the "Columns" menu to cut the forced horizontal scroll. The
+ * structural `state` (#) column is intentionally omitted here so it stays
+ * permanently visible (TanStack treats a missing id as visible).
+ */
+const DEFAULT_PROFILE_COLUMN_VISIBILITY: VisibilityState = {
+  configType: true,
+  remarks: true,
+  address: true,
+  port: false,
+  network: false,
+  security: false,
+  delay: true,
+  speed: false,
+  todayUp: false,
+  todayDown: false,
+  totalUp: false,
+  totalDown: false,
+  ipInfo: false,
+  subscriptionId: true,
+};
+
+export const useProfileColumnsStore = createColumnVisibilityStore(
+  "voyavpn.profileColumns",
+  DEFAULT_PROFILE_COLUMN_VISIBILITY,
+);

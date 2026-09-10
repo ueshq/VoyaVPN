@@ -29,7 +29,7 @@ import type {
 import { profilesQueryKey } from "@/ipc/query-keys";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
-import { useProfileColumnsStore } from "@/stores/profile-columns-store";
+import { useProfileColumnsStore } from "@/stores/column-visibility-store";
 
 import {
   exportFileFilter,

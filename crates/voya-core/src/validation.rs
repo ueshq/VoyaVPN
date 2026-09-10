@@ -4,7 +4,7 @@
 //! builder in [`crate::groups`] all report problems that end up on screen: the
 //! group builder renders them directly, and `connect` carries them out through
 //! `RuntimeError::Validation`. They used to be `String`s built with `format!`,
-//! which meant a Persian or Hungarian user read them in English and
+//! which meant users of non-English locales read them in English and
 //! `pnpm check:i18n` — which only sees frontend source — could not tell.
 //!
 //! These types are deliberately voya-core's own rather than the contract ones:

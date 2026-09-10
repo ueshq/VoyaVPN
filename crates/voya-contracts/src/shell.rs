@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{CoreState, CoreType, SystemProxyType, ValidationIssue};
+use crate::{CoreState, CoreType, SystemProxyType, TunBackend, ValidationIssue};
 
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "lowercase")]
@@ -201,6 +201,9 @@ pub struct CoreSeedInstallResult {
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeStatusResponse {
     pub state: CoreState,
+    /// The confirmed running tunnel, independent of the saved connection mode.
+    /// Absent during transitions, pending cleanup, and local-proxy operation.
+    pub active_tun_backend: Option<TunBackend>,
     pub active_profile_id: Option<String>,
     pub main_pid: Option<u32>,
     pub pre_pid: Option<u32>,
@@ -232,10 +235,32 @@ pub struct AppUpdaterStatus {
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemProxyStatusResponse {
+    pub management: SystemProxyManagement,
+    /// Read-only OS observation. Unknown must never be presented as restored.
+    pub observation: SystemProxyObservation,
+    pub manual_cleanup_required: bool,
     pub requested_mode: SystemProxyType,
+    /// The app's applied policy; always Unchanged on manual platforms.
     pub effective_mode: SystemProxyType,
     pub pac_available: bool,
     pub proxy: Option<String>,
     pub exceptions: String,
     pub pac_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum SystemProxyManagement {
+    Automatic,
+    Manual,
+    Unsupported,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum SystemProxyObservation {
+    Unknown,
+    Clear,
+    LocalProxy,
+    OtherProxy,
 }

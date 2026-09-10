@@ -1,9 +1,9 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import ts from "typescript";
 
-import { changeLocale, getLocaleDirection, i18next, localeOptions, type Locale } from "./index";
+import { changeLocale, getInitialLocale, i18next, localeOptions, type Locale } from "./index";
 
 type LocaleTree = {
   [key: string]: LocaleTree | string;
@@ -13,19 +13,27 @@ const desktopSourceRoot = resolve(findRepoRoot(process.cwd()), "apps/desktop/src
 const sourceModules = readSourceModules(desktopSourceRoot);
 
 describe("i18n locales", () => {
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    window.localStorage.removeItem("voyavpn.locale");
+    await changeLocale("en", { persist: false });
+  });
+
   it("registers the full product locale set", () => {
     expect(localeOptions.map((locale) => locale.code)).toEqual([
       "en",
       "zh-Hans",
       "zh-Hant",
-      "fr",
-      "fa",
-      "hu",
-      "ru",
-      "de",
     ]);
-    expect(getLocaleDirection("fa")).toBe("rtl");
-    expect(localeOptions.filter((locale) => locale.direction === "rtl").map((locale) => locale.code)).toEqual(["fa"]);
+  });
+
+  it.each(["de", "fa", "fr", "hu", "ru"])("ignores removed %s preferences and browser languages", (locale) => {
+    window.localStorage.setItem("voyavpn.locale", locale);
+    const languages = vi.spyOn(navigator, "languages", "get").mockReturnValue([locale]);
+    expect(getInitialLocale()).toBe("en");
+
+    languages.mockReturnValue([locale, "zh-TW"]);
+    expect(getInitialLocale()).toBe("zh-Hant");
   });
 
   it("keeps every locale aligned to the English key set", () => {
@@ -107,13 +115,13 @@ describe("i18n locales", () => {
     }
   });
 
-  it("applies RTL and LTR document metadata when language changes", async () => {
-    await changeLocale("fa");
-    expect(document.documentElement.lang).toBe("fa");
-    expect(document.documentElement.dir).toBe("rtl");
+  it("applies document metadata when language changes", async () => {
+    await changeLocale("zh-Hans");
+    expect(document.documentElement.lang).toBe("zh-Hans");
+    expect(document.documentElement.dir).toBe("ltr");
 
-    await changeLocale("de");
-    expect(document.documentElement.lang).toBe("de");
+    await changeLocale("zh-Hant");
+    expect(document.documentElement.lang).toBe("zh-Hant");
     expect(document.documentElement.dir).toBe("ltr");
   });
 });

@@ -15,10 +15,11 @@ pub enum CoreType {
 /// `coreState` stream carries the very same struct, so there is nothing to
 /// translate between a response and an event. `Connecting`/`Disconnecting` are
 /// transitions only the event stream ever reports — a status read observes a
-/// settled supervisor and answers `Connected` or `Disconnected`.
+/// settled supervisor and answers `Connected`, `Disconnected`, or `CleanupPending`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum CoreState {
+    CleanupPending,
     Disconnected,
     Connecting,
     Connected,
@@ -40,9 +41,9 @@ pub enum SystemProxyType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ConnectionMode {
-    /// Local inbounds only; the OS proxy is cleared and TUN stays off.
+    /// Local inbounds only; automatic proxies are cleared and TUN stays off.
     ProxyOnly,
-    /// OS system proxy points at the local inbound (optionally via PAC).
+    /// Local inbound for system proxy use (optionally PAC); macOS setup is manual.
     SystemProxy,
     /// TUN mode; all traffic is routed through the virtual interface.
     Vpn,

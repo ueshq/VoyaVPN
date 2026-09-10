@@ -42,61 +42,6 @@ pub(super) fn linux_script_invocation(
     }
 }
 
-pub(super) fn macos_script_invocation(
-    request: &SystemProxyRequest,
-    mode: &str,
-    manual: Option<(&str, i32, &str)>,
-) -> ScriptInvocation {
-    let (executable, generated_script) = macos_script_target(request);
-    let mut arguments = vec![mode.to_string()];
-    if let Some((host, port, exceptions)) = manual {
-        arguments.push(host.to_string());
-        arguments.push(port.to_string());
-        arguments.extend(
-            exceptions
-                .split(',')
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(ToString::to_string),
-        );
-    }
-
-    ScriptInvocation {
-        executable,
-        arguments,
-        generated_script,
-    }
-}
-
-pub(super) fn macos_pac_script_invocation(
-    request: &SystemProxyRequest,
-    pac_url: &str,
-) -> ScriptInvocation {
-    let (executable, generated_script) = macos_script_target(request);
-    ScriptInvocation {
-        executable,
-        arguments: vec!["pac".to_string(), pac_url.to_string()],
-        generated_script,
-    }
-}
-
-fn macos_script_target(request: &SystemProxyRequest) -> (PathBuf, Option<GeneratedScript>) {
-    if let Some(custom_script) = custom_script_path(&request.item) {
-        (custom_script, None)
-    } else {
-        let executable = request.script_dir.join(MACOS_PROXY_SCRIPT_NAME);
-        (
-            executable.clone(),
-            Some(GeneratedScript::new(
-                request.script_dir.clone(),
-                executable,
-                MACOS_PROXY_SCRIPT,
-                true,
-            )),
-        )
-    }
-}
-
 pub(super) fn run_script(
     runner: &dyn ProcessRunner,
     script: &ScriptInvocation,
@@ -411,74 +356,6 @@ set_kde
 exit "$failed"
 "#;
 
-const MACOS_PROXY_SCRIPT: &str = r#"#!/bin/sh
-mode="$1"
-host="$2"
-port="$3"
-pac_url="$2"
-if [ "$mode" = "set" ]; then
-  shift 3 2>/dev/null || true
-  if [ "$#" -eq 0 ]; then
-    # networksetup needs an explicit "Empty" to clear the bypass list; calling
-    # it with no domain leaves the previous list in place.
-    set -- Empty
-  fi
-fi
-
-case "$mode" in
-  set|pac|clear) ;;
-  *)
-    echo "Usage: $0 set <host> <port> [bypass...] | pac <url> | clear" >&2
-    exit 1
-    ;;
-esac
-
-failed=0
-
-# Every networksetup call runs through this so a failure on one service or one
-# setting is reported: a pipeline's status is only that of its last command.
-run_step() {
-  if "$@"; then
-    return 0
-  fi
-  echo "voya-sysproxy: command failed: $*" >&2
-  failed=1
-  return 0
-}
-
-# The first output line is a human-readable header ("An asterisk (*) denotes
-# ..."), and a leading "*" marks a disabled service.
-services="$(networksetup -listallnetworkservices | tail -n +2 | grep -v '^\*')"
-
-# Read from a here-document, not a pipe: a piped loop runs in a subshell and
-# would discard every recorded failure.
-while IFS= read -r service; do
-  [ -z "$service" ] && continue
-  if [ "$mode" = "set" ]; then
-    run_step networksetup -setwebproxy "$service" "$host" "$port"
-    run_step networksetup -setsecurewebproxy "$service" "$host" "$port"
-    run_step networksetup -setsocksfirewallproxy "$service" "$host" "$port"
-    run_step networksetup -setproxybypassdomains "$service" "$@"
-    run_step networksetup -setautoproxystate "$service" off
-  elif [ "$mode" = "pac" ]; then
-    run_step networksetup -setwebproxystate "$service" off
-    run_step networksetup -setsecurewebproxystate "$service" off
-    run_step networksetup -setsocksfirewallproxystate "$service" off
-    run_step networksetup -setautoproxyurl "$service" "$pac_url"
-    run_step networksetup -setautoproxystate "$service" on
-  else
-    run_step networksetup -setwebproxystate "$service" off
-    run_step networksetup -setsecurewebproxystate "$service" off
-    run_step networksetup -setsocksfirewallproxystate "$service" off
-    run_step networksetup -setautoproxystate "$service" off
-  fi
-done <<SERVICES
-$services
-SERVICES
-
-exit "$failed"
-"#;
-
 #[cfg(test)]
 mod tests {
     #[cfg(unix)]
@@ -489,7 +366,7 @@ mod tests {
     };
 
     #[cfg(unix)]
-    use super::{LINUX_PROXY_SCRIPT, MACOS_PROXY_SCRIPT};
+    use super::LINUX_PROXY_SCRIPT;
 
     /// Absolute path so the tests keep working with `PATH` reduced to stubs.
     #[cfg(unix)]
@@ -499,10 +376,8 @@ mod tests {
     #[test]
     fn sysproxy_managed_scripts_are_valid_posix_shell() {
         let root = temp_root("shell-syntax");
-        for (name, contents) in [
-            ("proxy_set_linux.sh", LINUX_PROXY_SCRIPT),
-            ("proxy_set_osx.sh", MACOS_PROXY_SCRIPT),
-        ] {
+        {
+            let (name, contents) = ("proxy_set_linux.sh", LINUX_PROXY_SCRIPT);
             let script = root.join(name);
             write_script(&script, contents);
             let output = Command::new(SHELL)
@@ -584,89 +459,6 @@ mod tests {
         assert!(String::from_utf8_lossy(&output.stderr).contains("command failed"));
 
         let _ = fs::remove_dir_all(root);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn sysproxy_macos_script_reports_per_service_failures_and_skips_the_listing_header() {
-        let root = temp_root("macos-partial-failure");
-        let stub_dir = root.join("bin");
-        fs::create_dir_all(&stub_dir).expect("create stub directory");
-        link_system_tool(&stub_dir, "tail");
-        link_system_tool(&stub_dir, "grep");
-        let log = root.join("networksetup.log");
-        write_networksetup_stub(&stub_dir, &log, true);
-        let script = root.join("proxy_set_osx.sh");
-        write_script(&script, MACOS_PROXY_SCRIPT);
-
-        let output = run_with_stubs(
-            &script,
-            &stub_dir,
-            &["set", "127.0.0.1", "10808", "localhost"],
-        );
-
-        assert_eq!(
-            output.status.code(),
-            Some(1),
-            "a failing service must not be reported as success"
-        );
-        let calls = fs::read_to_string(&log).expect("read networksetup calls");
-        assert!(
-            !calls.contains("An asterisk"),
-            "the listing header must not be treated as a service: {calls}"
-        );
-        assert!(
-            !calls.contains("Disabled Service"),
-            "disabled services must stay untouched: {calls}"
-        );
-        assert!(calls.contains("-setautoproxystate Thunderbolt Bridge off"));
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn sysproxy_macos_script_clears_the_bypass_list_with_empty() {
-        let root = temp_root("macos-empty-bypass");
-        let stub_dir = root.join("bin");
-        fs::create_dir_all(&stub_dir).expect("create stub directory");
-        link_system_tool(&stub_dir, "tail");
-        link_system_tool(&stub_dir, "grep");
-        let log = root.join("networksetup.log");
-        write_networksetup_stub(&stub_dir, &log, false);
-        let script = root.join("proxy_set_osx.sh");
-        write_script(&script, MACOS_PROXY_SCRIPT);
-
-        let output = run_with_stubs(&script, &stub_dir, &["set", "127.0.0.1", "10808"]);
-
-        assert!(
-            output.status.success(),
-            "stderr: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        let calls = fs::read_to_string(&log).expect("read networksetup calls");
-        assert!(
-            calls.contains("-setproxybypassdomains Wi-Fi Empty"),
-            "an empty exception list must clear the bypass domains: {calls}"
-        );
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[cfg(unix)]
-    fn write_networksetup_stub(stub_dir: &Path, log: &Path, fail_first_service: bool) {
-        let failure = if fail_first_service {
-            "if [ \"$1\" = \"-setwebproxy\" ] && [ \"$2\" = \"Wi-Fi\" ]; then\n  echo 'networksetup: failed' >&2\n  exit 1\nfi\n"
-        } else {
-            ""
-        };
-        write_script(
-            &stub_dir.join("networksetup"),
-            &format!(
-                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{log}'\nif [ \"$1\" = \"-listallnetworkservices\" ]; then\n  printf '%s\\n' 'An asterisk (*) denotes that a network service is disabled.' 'Wi-Fi' '*Disabled Service' 'Thunderbolt Bridge'\n  exit 0\nfi\n{failure}exit 0\n",
-                log = log.display()
-            ),
-        );
     }
 
     #[cfg(unix)]

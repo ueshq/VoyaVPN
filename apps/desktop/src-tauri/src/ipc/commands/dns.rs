@@ -5,7 +5,7 @@ use super::{lifecycle::*, support::*, *};
 pub async fn load_dns_settings(
     state: tauri::State<'_, AppState>,
 ) -> Result<DnsSettingsContract, AppError> {
-    let config = current_config(&state)?;
+    let config = current_config(&state);
 
     state
         .services()

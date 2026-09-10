@@ -1,6 +1,6 @@
 //! Machine codes for the text a user reads.
 //!
-//! The app ships eight locales and gates their alignment in CI, but that gate
+//! The app gates locale alignment in CI, but that gate
 //! only sees `apps/desktop/src` and `packages/ui/src`. Any sentence built in
 //! Rust therefore reached the screen in English whatever the interface
 //! language was — notice titles, validator messages, tray labels, speedtest

@@ -891,7 +891,7 @@ async fn unit_of_work_commits_business_rows_settings_and_state_together() {
         .expect("database test operation should succeed");
     let profile = sample_profile();
     let mut settings = AppSettingsV1::default();
-    settings.appearance.language = "fr".to_string();
+    settings.appearance.language = "zh-Hant".to_string();
     let state = AppStateRecord {
         active_profile_id: Some(profile.index_id.clone()),
         active_routing_id: None,
@@ -943,7 +943,7 @@ async fn dropped_unit_of_work_rolls_back_all_staged_rows() {
         .expect("database test operation should succeed");
     let profile = sample_profile();
     let mut settings = AppSettingsV1::default();
-    settings.appearance.language = "de".to_string();
+    settings.appearance.language = "zh-Hant".to_string();
     let state = AppStateRecord {
         active_profile_id: Some(profile.index_id.clone()),
         active_routing_id: None,
@@ -1003,7 +1003,7 @@ async fn unit_of_work_failure_rolls_back_business_rows_and_config() {
     .expect("failure trigger should be created");
     let profile = sample_profile();
     let mut settings = AppSettingsV1::default();
-    settings.appearance.language = "ru".to_string();
+    settings.appearance.language = "zh-Hant".to_string();
     let unit_of_work = database.begin().await.expect("transaction should begin");
     unit_of_work
         .profiles()
@@ -1104,7 +1104,7 @@ async fn unit_of_work_commit_failure_rolls_back_rows_settings_and_state() {
         .expect("deferred foreign key violation should be staged");
     }
     let mut settings = AppSettingsV1::default();
-    settings.appearance.language = "hu".to_string();
+    settings.appearance.language = "zh-Hant".to_string();
     unit_of_work
         .settings()
         .save_with_state(&settings, &AppStateRecord::default())

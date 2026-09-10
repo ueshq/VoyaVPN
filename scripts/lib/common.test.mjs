@@ -3,7 +3,28 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describeCommand, redactArgs, run } from "./common.mjs";
+import { commandFailure, describeCommand, environmentValue, redactArgs, run, validateTiming } from "./common.mjs";
+
+describe("shared native tool helpers", () => {
+  it("reports status and stderr while redacting command arguments", () => {
+    expect(commandFailure("tool", ["--token", "secret"], { status: 7, stdout: "out", stderr: "err" }).message)
+      .toBe("tool --token *** failed with status 7: err");
+    expect(commandFailure("tool", [], { status: null, stdout: " out " }).message)
+      .toBe("tool failed with status unknown: out");
+  });
+
+  it("reads Windows environment names without changing the first non-empty match", () => {
+    expect(environmentValue({ programfiles: "  ", PROGRAMW6432: " C:\\Apps " }, "ProgramFiles", "ProgramW6432")).toBe("C:\\Apps");
+    expect(environmentValue({ windir: "first", SystemRoot: "second" }, "SystemRoot", "windir")).toBe("first");
+    expect(environmentValue(undefined, "SystemRoot")).toBe("");
+  });
+
+  it("allows an immediate deadline and rejects invalid polling intervals", () => {
+    expect(() => validateTiming(0, 1)).not.toThrow();
+    for (const timeout of [-1, Infinity, NaN]) expect(() => validateTiming(timeout, 1)).toThrow("timeoutMs");
+    for (const interval of [0, -1, Infinity, NaN]) expect(() => validateTiming(1, interval)).toThrow("pollIntervalMs");
+  });
+});
 
 describe("command argument redaction", () => {
   it("masks credential values that follow a secret flag", () => {

@@ -1,8 +1,7 @@
+import { SettingsCheckbox, NumberField, SelectField, TextField, SettingsCheckboxGroup, SettingsGroup, SettingsRow } from "./settings-form";
 import { Separator } from "@voya/ui/components/separator";
 import { useI18n } from "@voya/i18n/use-i18n";
 
-import { CheckboxField, NumberField, SelectField, TextField } from "./runtime-fields";
-import { SettingsCheckboxGroup, SettingsGroup, SettingsRow } from "./settings-form";
 import type { AppSettingsController } from "./use-app-settings";
 
 export function CoreTab({ controller }: { controller: AppSettingsController }) {
@@ -33,11 +32,11 @@ export function CoreTab({ controller }: { controller: AppSettingsController }) {
     <div className="grid gap-4">
       <SettingsGroup>
         <SettingsCheckboxGroup id="rt-core-basics" label={t("settings.core.title")}>
-          <CheckboxField checked={settings.core.logEnabled} label={t("settings.core.logEnabled")} onChange={(logEnabled) => patchCore({ logEnabled })} />
-          <CheckboxField checked={settings.core.defaultAllowInsecure} label={t("settings.core.allowInsecure")} onChange={(defaultAllowInsecure) => patchCore({ defaultAllowInsecure })} />
-          <CheckboxField checked={settings.core.muxEnabled} label={t("settings.core.muxEnabled")} onChange={(muxEnabled) => patchCore({ muxEnabled })} />
-          <CheckboxField checked={settings.core.fragmentEnabled} label={t("settings.core.fragmentEnabled")} onChange={(fragmentEnabled) => patchCore({ fragmentEnabled })} />
-          <CheckboxField checked={settings.core.cacheFileEnabled} label={t("settings.core.cacheFileEnabled")} onChange={(cacheFileEnabled) => patchCore({ cacheFileEnabled })} />
+          <SettingsCheckbox checked={settings.core.logEnabled} label={t("settings.core.logEnabled")} onCheckedChange={(logEnabled) => patchCore({ logEnabled: logEnabled === true })} />
+          <SettingsCheckbox checked={settings.core.defaultAllowInsecure} label={t("settings.core.allowInsecure")} onCheckedChange={(defaultAllowInsecure) => patchCore({ defaultAllowInsecure: defaultAllowInsecure === true })} />
+          <SettingsCheckbox checked={settings.core.muxEnabled} label={t("settings.core.muxEnabled")} onCheckedChange={(muxEnabled) => patchCore({ muxEnabled: muxEnabled === true })} />
+          <SettingsCheckbox checked={settings.core.fragmentEnabled} label={t("settings.core.fragmentEnabled")} onCheckedChange={(fragmentEnabled) => patchCore({ fragmentEnabled: fragmentEnabled === true })} />
+          <SettingsCheckbox checked={settings.core.cacheFileEnabled} label={t("settings.core.cacheFileEnabled")} onCheckedChange={(cacheFileEnabled) => patchCore({ cacheFileEnabled: cacheFileEnabled === true })} />
         </SettingsCheckboxGroup>
         <SelectField id="rt-loglevel" label={t("settings.core.logLevel")} onChange={(logLevel) => patchCore({ logLevel })} options={["none", "trace", "debug", "info", "warn", "warning", "error"]} value={settings.core.logLevel} />
         <TextField id="rt-fingerprint" label={t("settings.core.fingerprint")} onChange={(defaultFingerprint) => patchCore({ defaultFingerprint })} value={settings.core.defaultFingerprint} />
@@ -52,7 +51,7 @@ export function CoreTab({ controller }: { controller: AppSettingsController }) {
         <TextField id="rt-mux-sbox-protocol" label={t("settings.core.muxProtocol")} onChange={(protocol) => patchMux({ protocol })} value={settings.multiplexing.protocol} />
         <NumberField id="rt-mux-sbox-max-connections" label={t("settings.fields.muxMaxConnections")} onChange={(maxConnections) => patchMux({ maxConnections: maxConnections ?? 0 })} value={settings.multiplexing.maxConnections} />
         <SettingsRow>
-          <CheckboxField checked={settings.multiplexing.padding ?? false} label={t("settings.fields.muxPadding")} onChange={(padding) => patchMux({ padding })} />
+          <SettingsCheckbox checked={settings.multiplexing.padding ?? false} label={t("settings.fields.muxPadding")} onCheckedChange={(padding) => patchMux({ padding: padding === true })} />
         </SettingsRow>
       </SettingsGroup>
 

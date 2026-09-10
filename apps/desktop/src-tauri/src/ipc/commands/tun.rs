@@ -9,7 +9,7 @@ use super::{lifecycle::*, support::*, *};
 pub async fn tun_request_elevation(
     state: tauri::State<'_, AppState>,
 ) -> Result<TunStatus, AppError> {
-    let config = current_config(&state)?;
+    let config = current_config(&state);
     let current = tun_status_off_thread(&state, config.clone()).await?;
     if !current.requires_elevation {
         return Ok(current);
@@ -26,7 +26,7 @@ pub async fn tun_request_elevation(
 #[tauri::command]
 #[specta::specta]
 pub async fn tun_status(state: tauri::State<'_, AppState>) -> Result<TunStatus, AppError> {
-    let config = current_config(&state)?;
+    let config = current_config(&state);
 
     tun_status_off_thread(&state, config).await
 }

@@ -25,6 +25,29 @@ type SourceRef = { current: SettingsDirtySource };
 const sources = new Map<string, SourceRef>();
 const listeners = new Set<() => void>();
 let anyDirty = false;
+let working = false;
+
+export function isSettingsWorking(): boolean {
+  return working;
+}
+
+export function useSettingsWorking(): boolean {
+  return useSyncExternalStore(subscribe, isSettingsWorking, isSettingsWorking);
+}
+
+/** Shared by footer, leave dialog, and pane-local actions. Set synchronously
+ * before awaiting so even two clicks in the same render cannot race. */
+export async function runSettingsOperation<T>(operation: () => Promise<T>): Promise<T | undefined> {
+  if (working) return undefined;
+  working = true;
+  publish();
+  try {
+    return await operation();
+  } finally {
+    working = false;
+    publish();
+  }
+}
 
 function publish() {
   anyDirty = [...sources.values()].some((source) => source.current.dirty);

@@ -72,7 +72,6 @@ function renderActiveScreen(tab: ShellTab) {
 }
 
 export function AppShell() {
-  const { direction } = useI18n();
   const activeTab = useShellStore((state) => state.activeTab);
   const { titleBarLayout } = useWindowChrome();
 
@@ -82,7 +81,7 @@ export function AppShell() {
   useAcrylicWindow(titleBarLayout === "windows");
 
   return (
-    <main className="bg-background text-foreground" dir={direction}>
+    <main className="bg-background text-foreground">
       <div className="grid h-screen min-h-[34rem] grid-cols-[auto_1fr] grid-rows-[auto_1fr] overflow-hidden">
         {/* Titlebar row: the Windows build draws its own borderless title bar
             (it spans both columns); every other platform keeps its native frame

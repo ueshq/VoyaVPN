@@ -9,7 +9,7 @@ pub async fn connect_active_profile<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
 ) -> Result<RuntimeStatusResponse, AppError> {
-    let config = current_config(&state)?;
+    let config = current_config(&state);
     let flow = core_flow(&app, &state);
 
     flow.connect(&config)
@@ -24,7 +24,7 @@ pub async fn disconnect_core<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
 ) -> Result<RuntimeStatusResponse, AppError> {
-    let config = current_config(&state)?;
+    let config = current_config(&state);
     let flow = core_flow(&app, &state);
 
     flow.disconnect(&config)
@@ -39,7 +39,7 @@ pub async fn restart_core<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
 ) -> Result<RuntimeStatusResponse, AppError> {
-    let config = current_config(&state)?;
+    let config = current_config(&state);
     let flow = core_flow(&app, &state);
 
     flow.restart(&config)

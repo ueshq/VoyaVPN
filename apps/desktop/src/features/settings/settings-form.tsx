@@ -4,9 +4,17 @@ import { Checkbox } from "@voya/ui/components/checkbox";
 import { Label } from "@voya/ui/components/label";
 import { cn } from "@voya/ui/lib/utils";
 
+import { Input } from "@voya/ui/components/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@voya/ui/components/select";
+
 // macOS-preferences row grammar: a fixed label column keeps every control's
-// leading edge aligned across rows and groups; logical properties only, so the
-// column order mirrors automatically under RTL locales (fa).
+// leading edge aligned across rows and groups.
 const rowGrid = "grid grid-cols-[11rem_minmax(0,1fr)] gap-x-4";
 
 export function SettingsGroup({ children, className }: { children: ReactNode; className?: string }) {
@@ -88,5 +96,94 @@ export function SettingsCheckbox({
         {description ? <span className="text-xs text-muted-foreground">{description}</span> : null}
       </span>
     </label>
+  );
+}
+
+export function TextField({
+  description,
+  id,
+  label,
+  onChange,
+  value,
+}: {
+  description?: ReactNode;
+  id: string;
+  label: ReactNode;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <SettingsRow description={description} htmlFor={id} label={label}>
+      <Input
+        className="h-8 w-full max-w-md"
+        id={id}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        value={value}
+      />
+    </SettingsRow>
+  );
+}
+
+export function NumberField({
+  description,
+  id,
+  label,
+  onChange,
+  value,
+}: {
+  description?: ReactNode;
+  id: string;
+  label: ReactNode;
+  onChange: (value: number | null) => void;
+  value: number | null;
+}) {
+  return (
+    <SettingsRow description={description} htmlFor={id} label={label}>
+      <Input
+        className="h-8 w-40"
+        id={id}
+        onChange={(event) => {
+          const text = event.currentTarget.value.trim();
+          onChange(text ? Number(text) : null);
+        }}
+        type="number"
+        value={value ?? ""}
+      />
+    </SettingsRow>
+  );
+}
+
+export function SelectField({
+  description,
+  id,
+  label,
+  onChange,
+  optionLabel = (value) => value,
+  options,
+  value,
+}: {
+  description?: ReactNode;
+  id: string;
+  label: ReactNode;
+  onChange: (value: string) => void;
+  optionLabel?: (value: string) => string;
+  options: string[];
+  value: string;
+}) {
+  return (
+    <SettingsRow description={description} htmlFor={id} label={label}>
+      <Select onValueChange={onChange} value={value}>
+        <SelectTrigger className="h-8 w-fit min-w-44" id={id}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option} value={option}>
+              {optionLabel(option)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </SettingsRow>
   );
 }

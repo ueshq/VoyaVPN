@@ -34,7 +34,7 @@ pub async fn preview_group_profile(
     state: tauri::State<'_, AppState>,
     profile: ProfileContract,
 ) -> Result<GroupPreviewContract, AppError> {
-    let config = current_config(&state)?;
+    let config = current_config(&state);
 
     state
         .services()

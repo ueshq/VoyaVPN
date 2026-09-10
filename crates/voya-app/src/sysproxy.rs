@@ -10,7 +10,10 @@ use voya_platform::{
     coreinfo::TargetOs,
     filesystem,
     paths::{AppPaths, PathError},
-    sysproxy::{SystemProxyError, SystemProxyRequest, SystemProxyService, SystemProxyStatus},
+    sysproxy::{
+        system_proxy_management, SystemProxyError, SystemProxyManagement, SystemProxyObservation,
+        SystemProxyRequest, SystemProxyService, SystemProxyStatus,
+    },
     tun::{tun_backend, TunBackend},
 };
 
@@ -44,6 +47,24 @@ impl SystemProxyManager {
         }
     }
 
+    /// Apply the connected core's effective proxy policy for this platform.
+    pub fn apply_runtime_config(
+        &self,
+        config: &AppConfig,
+    ) -> Result<SystemProxyStatus, SystemProxyManagerError> {
+        let runtime = runtime_system_proxy_config(config, false, self.target_os);
+        self.apply_config(&runtime.config, runtime.force_disable)
+    }
+
+    /// Inspect the effective runtime policy without changing the OS proxy.
+    pub fn runtime_status(
+        &self,
+        config: &AppConfig,
+    ) -> Result<SystemProxyStatus, SystemProxyManagerError> {
+        let runtime = runtime_system_proxy_config(config, false, self.target_os);
+        self.status_with_force_disable(&runtime.config, runtime.force_disable)
+    }
+
     pub fn status(&self, config: &AppConfig) -> Result<SystemProxyStatus, SystemProxyManagerError> {
         self.status_with_force_disable(config, false)
     }
@@ -54,9 +75,9 @@ impl SystemProxyManager {
         force_disable: bool,
     ) -> Result<SystemProxyStatus, SystemProxyManagerError> {
         let request = self.request(config, force_disable)?;
-        voya_platform::sysproxy::plan_system_proxy(&request)
-            .map(|plan| plan.status)
-            .map_err(Into::into)
+        let mut status = self.service.status(&request)?;
+        self.decorate_manual_status(&mut status)?;
+        Ok(status)
     }
 
     pub fn apply_config(
@@ -70,8 +91,11 @@ impl SystemProxyManager {
             self.write_dirty_marker()?;
         }
 
-        let status = self.service.apply(&request)?;
-        if status.effective_type == SysProxyType::ForcedClear {
+        let mut status = self.service.apply(&request)?;
+        self.decorate_manual_status(&mut status)?;
+        if status.management == SystemProxyManagement::Automatic
+            && status.effective_type == SysProxyType::ForcedClear
+        {
             self.clear_dirty_marker()?;
         }
 
@@ -89,22 +113,78 @@ impl SystemProxyManager {
         &self,
         config: &AppConfig,
     ) -> Result<bool, SystemProxyManagerError> {
+        if system_proxy_management(self.target_os) == SystemProxyManagement::Manual {
+            return Ok(false);
+        }
         if !self.dirty_marker_exists()? {
             return Ok(false);
         }
 
         let mut request = self.request(config, false)?;
         request.item.sys_proxy_type = SysProxyType::ForcedClear;
-        let status = self.service.apply(&request)?;
-        if status.effective_type == SysProxyType::ForcedClear {
+        let mut status = self.service.apply(&request)?;
+        self.decorate_manual_status(&mut status)?;
+        if status.management == SystemProxyManagement::Automatic
+            && status.effective_type == SysProxyType::ForcedClear
+        {
             self.clear_dirty_marker()?;
         }
 
         Ok(true)
     }
 
+    fn decorate_manual_status(
+        &self,
+        status: &mut SystemProxyStatus,
+    ) -> Result<(), SystemProxyManagerError> {
+        if status.management == SystemProxyManagement::Manual {
+            status.manual_cleanup_required = self.dirty_marker_exists()?
+                || status.observation == SystemProxyObservation::LocalProxy;
+        }
+        Ok(())
+    }
+
+    pub fn recheck_manual_proxy(
+        &self,
+        config: &AppConfig,
+    ) -> Result<SystemProxyStatus, SystemProxyManagerError> {
+        let mut status = self.status(config)?;
+        if status.management == SystemProxyManagement::Manual
+            && matches!(
+                status.observation,
+                SystemProxyObservation::Clear | SystemProxyObservation::OtherProxy
+            )
+        {
+            self.clear_dirty_marker()?;
+            status.manual_cleanup_required = false;
+        }
+        Ok(status)
+    }
+
+    pub fn open_network_settings(&self) -> Result<(), SystemProxyManagerError> {
+        voya_platform::sysproxy::open_network_settings().map_err(Into::into)
+    }
+
     pub fn stop_pac(&self) {
         self.service.stop_pac();
+    }
+
+    /// A failed operation/read cannot advertise an endpoint or claim the OS
+    /// proxy was restored. This fallback itself performs no fallible I/O.
+    pub fn unavailable_status(&self, config: &AppConfig) -> SystemProxyStatus {
+        let management = system_proxy_management(self.target_os);
+        SystemProxyStatus {
+            management,
+            observation: SystemProxyObservation::Unknown,
+            manual_cleanup_required: management == SystemProxyManagement::Manual,
+            requested_type: config.system_proxy_item.sys_proxy_type,
+            effective_type: SysProxyType::Unchanged,
+            target_os: self.target_os,
+            pac_available: voya_platform::sysproxy::pac_available(self.target_os),
+            proxy: None,
+            exceptions: String::new(),
+            pac_url: None,
+        }
     }
 
     fn request(
@@ -252,7 +332,9 @@ fn current_tick_string() -> String {
 }
 
 fn request_sets_local_proxy(request: &SystemProxyRequest) -> bool {
-    if request.force_disable {
+    if request.force_disable
+        || system_proxy_management(request.target_os) != SystemProxyManagement::Automatic
+    {
         return false;
     }
 
@@ -280,6 +362,61 @@ mod tests {
 
     use super::*;
 
+    struct TestObserver(SystemProxyObservation);
+    impl voya_platform::sysproxy::SystemProxyObserver for TestObserver {
+        fn observe(&self) -> SystemProxyObservation {
+            self.0
+        }
+    }
+
+    #[test]
+    fn manual_recovery_never_executes_or_clears_an_unverified_marker() {
+        for observation in [
+            SystemProxyObservation::Unknown,
+            SystemProxyObservation::LocalProxy,
+            SystemProxyObservation::Clear,
+            SystemProxyObservation::OtherProxy,
+        ] {
+            let app_dir = unique_app_dir("manual-recheck");
+            let runner = Arc::new(RecordingRunner::default());
+            let service =
+                SystemProxyService::new(runner.clone(), Arc::new(RecordingPac::default()))
+                    .with_observer(Arc::new(TestObserver(observation)));
+            let manager = SystemProxyManager::with_target_os(
+                service,
+                AppPaths::new(app_dir.clone()),
+                TargetOs::Macos,
+            );
+            let config = AppConfig::default();
+            manager.write_dirty_marker().expect("legacy marker");
+            assert!(!manager
+                .restore_dirty_proxy_if_needed(&config)
+                .expect("startup"));
+            assert!(
+                manager
+                    .restore(&config)
+                    .expect("disconnect")
+                    .manual_cleanup_required
+            );
+            assert!(
+                manager
+                    .status(&config)
+                    .expect("read")
+                    .manual_cleanup_required
+            );
+            assert!(manager.dirty_marker_path().exists());
+            let status = manager.recheck_manual_proxy(&config).expect("recheck");
+            let pending = matches!(
+                observation,
+                SystemProxyObservation::Unknown | SystemProxyObservation::LocalProxy
+            );
+            assert_eq!(status.manual_cleanup_required, pending);
+            assert_eq!(manager.dirty_marker_path().exists(), pending);
+            assert!(runner.oneshots().is_empty());
+            let _ = fs::remove_dir_all(app_dir);
+        }
+    }
+
     #[derive(Default)]
     struct RecordingPac {
         starts: Mutex<u32>,
@@ -299,6 +436,9 @@ mod tests {
         fn is_supported(&self) -> bool {
             true
         }
+        fn is_running(&self) -> bool {
+            true
+        }
     }
 
     fn manager(
@@ -315,7 +455,8 @@ mod tests {
         pac: Arc<RecordingPac>,
         app_dir: PathBuf,
     ) -> SystemProxyManager {
-        let service = SystemProxyService::new(runner, pac);
+        let service = SystemProxyService::new(runner, pac)
+            .with_observer(Arc::new(TestObserver(SystemProxyObservation::Unknown)));
         SystemProxyManager::with_target_os(service, AppPaths::new(app_dir), target_os)
     }
 
@@ -328,7 +469,7 @@ mod tests {
     }
 
     #[test]
-    fn sysproxy_manager_accepts_macos_pac_and_sets_dirty_marker() {
+    fn sysproxy_manager_accepts_macos_pac_without_writing_dirty_marker() {
         let app_dir = unique_app_dir("macos-pac-dirty");
         let runner = Arc::new(RecordingRunner::default());
         let pac = Arc::new(RecordingPac::default());
@@ -340,8 +481,8 @@ mod tests {
         let status = manager.apply_config(&config, false).expect("macos pac");
 
         assert_eq!(status.requested_type, SysProxyType::Pac);
-        assert_eq!(status.effective_type, SysProxyType::Pac);
-        assert!(manager.dirty_marker_path().is_file());
+        assert_eq!(status.effective_type, SysProxyType::Unchanged);
+        assert!(!manager.dirty_marker_path().is_file());
         assert_eq!(*pac.starts.lock().expect("starts"), 1);
         let _ = fs::remove_dir_all(app_dir);
     }

@@ -9,7 +9,7 @@ const productionSourceDirs = [
   resolve(repoRoot, "apps/desktop/src"),
   resolve(repoRoot, "packages/ui/src"),
 ];
-const localeCodes = ["en", "zh-Hans", "zh-Hant", "fr", "fa", "hu", "ru", "de"];
+const localeCodes = ["en", "zh-Hans", "zh-Hant"];
 
 const resources = Object.fromEntries(localeCodes.map((code) => [code, readLocale(code)]));
 const englishKeys = flattenResourceKeys(resources.en).sort();

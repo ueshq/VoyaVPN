@@ -1,3 +1,4 @@
+import { commandFailure, validateTiming } from "../../lib/common.mjs";
 import { spawnSync } from "node:child_process";
 import { appBundleIdentifier as defaultProviderId } from "./tunnel-layout.mjs";
 
@@ -11,13 +12,6 @@ const sleeper = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMEN
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function commandFailure(program, args, result) {
-  const detail = String(result.stderr || result.stdout || "").trim();
-  return new Error(
-    `${program} ${args.join(" ")} failed with status ${result.status ?? "unknown"}${detail ? `: ${detail}` : ""}`,
-  );
 }
 
 /**
@@ -72,15 +66,6 @@ function defaultWait(milliseconds) {
 
 function isDisconnected(connection) {
   return connection.state.trim().toLowerCase() === "disconnected";
-}
-
-function validateTiming(timeoutMs, pollIntervalMs) {
-  if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
-    throw new Error("timeoutMs must be a non-negative finite number.");
-  }
-  if (!Number.isFinite(pollIntervalMs) || pollIntervalMs <= 0) {
-    throw new Error("pollIntervalMs must be a positive finite number.");
-  }
 }
 
 /**

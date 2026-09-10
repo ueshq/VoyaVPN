@@ -5,7 +5,7 @@ import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { cn } from "@voya/ui/lib/utils";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { useRegisterSettingsDirtySource } from "@/features/settings/settings-dirty-sources";
+import { runSettingsOperation, useRegisterSettingsDirtySource, useSettingsWorking } from "@/features/settings/settings-dirty-sources";
 
 import { SimpleDnsForm } from "./simple-dns-form";
 import { useDnsSettings } from "./use-dns-settings";
@@ -22,6 +22,7 @@ import { useDnsSettings } from "./use-dns-settings";
  */
 export function DnsPane() {
   const { t } = useI18n();
+  const working = useSettingsWorking();
   const {
     dnsQuery,
     fieldErrors,
@@ -48,11 +49,11 @@ export function DnsPane() {
           </Badge>
         ) : null}
         <div className="ms-auto flex items-center gap-2">
-          <Button disabled={dnsQuery.isFetching} onClick={() => void handleReload()} size="sm" type="button" variant="outline">
+          <Button disabled={working || dnsQuery.isFetching} onClick={() => void runSettingsOperation(handleReload)} size="sm" type="button" variant="outline">
             <RefreshCw className={cn("size-4", dnsQuery.isFetching && "animate-spin")} aria-hidden="true" />
             {t("actions.reload")}
           </Button>
-          <Button disabled={!form || !isDirty} onClick={() => void handleSave()} size="sm" type="button">
+          <Button disabled={working || !form || !isDirty} onClick={() => void runSettingsOperation(handleSave)} size="sm" type="button">
             <Save className="size-4" aria-hidden="true" />
             {t("actions.save")}
           </Button>
@@ -67,7 +68,9 @@ export function DnsPane() {
       ) : null}
 
       {form ? (
-        <SimpleDnsForm errors={fieldErrors} settings={form} updateSimple={updateSimple} />
+        <fieldset className="min-w-0" disabled={working}>
+          <SimpleDnsForm errors={fieldErrors} settings={form} updateSimple={updateSimple} />
+        </fieldset>
       ) : (
         <div className="text-sm text-muted-foreground">{t("panes.dns.loading")}</div>
       )}

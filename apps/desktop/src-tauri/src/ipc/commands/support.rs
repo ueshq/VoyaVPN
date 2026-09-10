@@ -2,8 +2,8 @@ use voya_app::supervisor::ClashApiAccess;
 
 use super::*;
 
-pub(super) fn current_config(state: &AppState) -> Result<AppConfig, AppError> {
-    Ok(state.config_mutations().current_config())
+pub(super) fn current_config(state: &AppState) -> AppConfig {
+    state.config_mutations().current_config()
 }
 
 /// How to reach the Clash API of the core that is actually running, if any.
@@ -52,7 +52,7 @@ pub(super) async fn export_profiles_result(
         IPC_ID_MAX_CHARS,
         AppErrorSubsystem::Export,
     )?;
-    let config = current_config(state)?;
+    let config = current_config(state);
 
     state
         .services()
@@ -284,23 +284,6 @@ pub(super) async fn plan_tun_enabled_off_thread(
     .map_err(AppError::from)
 }
 
-pub(super) fn apply_system_proxy<R>(
-    _app: &tauri::AppHandle<R>,
-    state: &AppState,
-    config: &AppConfig,
-    force_disable: bool,
-) -> Result<SystemProxyStatus, AppError>
-where
-    R: tauri::Runtime,
-{
-    let runtime_config =
-        app_runtime_system_proxy_config(config, force_disable, TargetOs::current());
-    state
-        .system_proxy_manager()
-        .apply_config(&runtime_config.config, runtime_config.force_disable)
-        .map_err(AppError::from)
-}
-
 pub(super) fn runtime_proxy_url(
     prefer_proxy: bool,
     proxy_url: Option<String>,
@@ -311,6 +294,32 @@ pub(super) fn runtime_proxy_url(
 
 pub(super) fn system_proxy_status_response(status: SystemProxyStatus) -> SystemProxyStatusResponse {
     SystemProxyStatusResponse {
+        management: match status.management {
+            voya_platform::sysproxy::SystemProxyManagement::Automatic => {
+                voya_contracts::SystemProxyManagement::Automatic
+            }
+            voya_platform::sysproxy::SystemProxyManagement::Manual => {
+                voya_contracts::SystemProxyManagement::Manual
+            }
+            voya_platform::sysproxy::SystemProxyManagement::Unsupported => {
+                voya_contracts::SystemProxyManagement::Unsupported
+            }
+        },
+        observation: match status.observation {
+            voya_platform::sysproxy::SystemProxyObservation::Unknown => {
+                voya_contracts::SystemProxyObservation::Unknown
+            }
+            voya_platform::sysproxy::SystemProxyObservation::Clear => {
+                voya_contracts::SystemProxyObservation::Clear
+            }
+            voya_platform::sysproxy::SystemProxyObservation::LocalProxy => {
+                voya_contracts::SystemProxyObservation::LocalProxy
+            }
+            voya_platform::sysproxy::SystemProxyObservation::OtherProxy => {
+                voya_contracts::SystemProxyObservation::OtherProxy
+            }
+        },
+        manual_cleanup_required: status.manual_cleanup_required,
         requested_mode: voya_app::contract_map::sysproxy_type_to_contract(status.requested_type),
         effective_mode: voya_app::contract_map::sysproxy_type_to_contract(status.effective_type),
         pac_available: status.pac_available,

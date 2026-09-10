@@ -39,7 +39,7 @@ describe("PreferencesBridge", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    preferencesMocks.loadUiPreferences.mockResolvedValueOnce({ language: "fa", theme: "dark" });
+    preferencesMocks.loadUiPreferences.mockResolvedValueOnce({ language: "zh-Hant", theme: "dark" });
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -49,8 +49,8 @@ describe("PreferencesBridge", () => {
 
     await waitFor(() => {
       expect(document.documentElement).toHaveClass("dark");
-      expect(document.documentElement).toHaveAttribute("lang", "fa");
-      expect(document.documentElement).toHaveAttribute("dir", "rtl");
+      expect(document.documentElement).toHaveAttribute("lang", "zh-Hant");
+      expect(document.documentElement).toHaveAttribute("dir", "ltr");
     });
     expect(usePreferencesStore.getState().themeMode).toBe("dark");
 

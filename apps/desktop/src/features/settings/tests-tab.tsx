@@ -1,7 +1,6 @@
+import { NumberField, TextField, SettingsGroup } from "./settings-form";
 import { useI18n } from "@voya/i18n/use-i18n";
 
-import { NumberField, TextField } from "./runtime-fields";
-import { SettingsGroup } from "./settings-form";
 import type { AppSettingsController } from "./use-app-settings";
 
 export function TestsTab({ controller }: { controller: AppSettingsController }) {

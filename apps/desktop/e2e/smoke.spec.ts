@@ -45,6 +45,7 @@ async function connectFakeCore(page: Page) {
             activeProfileId: null,
             mainPid: 4242,
             prePid: null,
+            activeTunBackend: null,
             runningCoreType: "singBox",
             state: "connected",
           },
@@ -414,4 +415,44 @@ test("routes the three IPC event channels into the shell", async ({ page }) => {
   await expect
     .poll(async () => (await smokeCalls(page)).filter((call) => call.command === "list_profiles").length)
     .toBeGreaterThan(before);
+});
+
+test("keeps macOS proxy setup manual through PAC, disconnect and verified cleanup", async ({ page }) => {
+  await expect(page.getByTestId("home-connect-button")).toBeVisible();
+  await page.evaluate(() => {
+    const state = window.__VOYA_SMOKE__.state as { sysProxy: import("../src/ipc/bindings").SystemProxyStatusResponse };
+    state.sysProxy = {
+      ...state.sysProxy, management: "manual", observation: "unknown", manualCleanupRequired: true,
+      pacAvailable: true, effectiveMode: "unchanged", exceptions: "localhost,127.0.0.0/8",
+    };
+    window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "sysProxyChanged", payload: state.sysProxy });
+  });
+  await page.getByRole("button", { name: "System proxy (manual)", exact: true }).click();
+  await page.getByTestId("home-connect-button").click();
+  await expect(page.getByTestId("home-status-card")).toContainText("Local proxy ready");
+  await expect(page.getByText("Protected", { exact: true })).toHaveCount(0);
+  const panel = page.getByTestId("manual-proxy-panel");
+  await expect(panel).toContainText("127.0.0.1:10808");
+  await expect(panel).toContainText("unknown");
+  await page.getByRole("switch", { name: "Smart mode (PAC)" }).click();
+  await expect(panel).toContainText("http://127.0.0.1:10811/pac?t=smoke");
+  await panel.getByRole("button", { name: "Check again" }).click();
+  await expect(panel).toContainText("unknown");
+  await panel.getByRole("button", { name: "Open Network settings" }).click();
+  expect((await smokeCalls(page)).filter((call) => call.command === "open_network_settings")).toEqual([
+    { command: "open_network_settings", args: {} },
+  ]);
+  await page.getByTestId("home-connect-button").click();
+  await expect(panel.getByRole("button", { name: "Copy address" })).toHaveCount(0);
+  await expect(panel).toContainText("cannot restore it automatically");
+  await page.evaluate(() => {
+    const state = window.__VOYA_SMOKE__.state as { sysProxy: { observation: string } };
+    state.sysProxy.observation = "clear";
+  });
+  await panel.getByRole("button", { name: "Check again" }).click();
+  await expect(panel).toContainText("No enabled system proxy was found.");
+  expect(await page.evaluate(() => {
+    const state = window.__VOYA_SMOKE__.state as { sysProxy: { manualCleanupRequired: boolean } };
+    return state.sysProxy.manualCleanupRequired;
+  })).toBe(false);
 });

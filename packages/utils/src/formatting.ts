@@ -42,7 +42,7 @@ export function formatBytesPerSecond(value: number) {
  *
  * There is no fallback parameter any more: its only caller passed the
  * backend's pre-formatted `delayLabel`/status prose, which is the string the
- * eight locales could not translate. A node with no measurement now renders its
+ * locale resources could not translate. A node with no measurement now renders its
  * own translated outcome next to this.
  */
 export function formatDelay(delay: number | null | undefined) {

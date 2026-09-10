@@ -300,3 +300,7 @@ jobs:
 
       - name: Lint all Rust targets
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Test macOS tunnel waiter without network changes
+        if: ${{ runner.os == 'macOS' }}
+        run: node scripts/native/macos/test-bridge.mjs

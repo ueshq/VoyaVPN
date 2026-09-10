@@ -1,7 +1,6 @@
-import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, truthy } from "../../lib/common.mjs";
+import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
 import {
   appBundleIdentifier,
   incompatiblePacketTunnelBundle,
@@ -13,6 +12,7 @@ import {
 } from "./tunnel-layout.mjs";
 import {
   assertProfileCapabilities,
+  plistBuddy,
   decodeProvisioningProfile as decodeProfileWithDir,
 } from "./provisioning.mjs";
 
@@ -40,20 +40,6 @@ function requirePath(path, label) {
     throw new Error(`${label} is missing: ${path}`);
   }
   console.log(`✓ ${label}: ${path}`);
-}
-
-function plistBuddy(plistPath, keyPath, optional = false) {
-  const result = spawnSync("/usr/libexec/PlistBuddy", ["-c", `Print ${keyPath}`, plistPath], {
-    cwd: repoRoot,
-    encoding: "utf8",
-  });
-  if (result.status !== 0) {
-    if (optional) {
-      return "";
-    }
-    throw new Error(`Unable to read ${keyPath} from ${plistPath}: ${result.stderr || result.stdout}`);
-  }
-  return result.stdout.trim();
 }
 
 function decodeProvisioningProfile(profilePath) {
@@ -228,6 +214,7 @@ function verifyLaunchServicesMetadata() {
 
 function main() {
   requireDarwin("macOS native tunnel verification must run on macOS.");
+  run(process.execPath, [resolve(repoRoot, "scripts/native/macos/test-bridge.mjs")], { cwd: repoRoot });
   initializeTunnelLayout();
   requirePath(appBundle, "macOS app bundle");
   verifyLaunchServicesMetadata();

@@ -1,19 +1,17 @@
 use super::{connection_mode::*, lifecycle::*, support::*, *};
 
-// `async` because reading the OS proxy state shells out (`networksetup` on
-// macOS, `gsettings` on Linux) once per network service.
+// Keep SystemConfiguration reads off the async worker; macOS never runs scripts.
 #[tauri::command]
 #[specta::specta]
 pub async fn system_proxy_status(
     state: tauri::State<'_, AppState>,
 ) -> Result<SystemProxyStatusResponse, AppError> {
-    let config = current_config(&state)?;
-    let runtime_config = app_runtime_system_proxy_config(&config, false, TargetOs::current());
+    let config = current_config(&state);
     let manager = state.system_proxy_manager();
 
     run_blocking("system proxy status", move || {
         manager
-            .status_with_force_disable(&runtime_config.config, runtime_config.force_disable)
+            .runtime_status(&config)
             .map(system_proxy_status_response)
     })
     .await?
@@ -44,4 +42,34 @@ pub async fn set_system_proxy_mode<R: tauri::Runtime>(
     emit_connection_mode_invalidation(&app, "system-proxy-mode-changed");
 
     Ok(system_proxy_status_response(status))
+}
+
+/// Explicit recheck may retire a legacy dirty marker once local proxies are gone.
+#[tauri::command]
+#[specta::specta]
+pub async fn recheck_system_proxy<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+) -> Result<SystemProxyStatusResponse, AppError> {
+    let config = current_config(&state);
+    let manager = state.system_proxy_manager();
+    let status = run_blocking("recheck system proxy", move || {
+        manager.recheck_manual_proxy(&config)
+    })
+    .await?
+    .map_err(AppError::from)?;
+    emit_sysproxy_changed(&app, &status)?;
+    Ok(system_proxy_status_response(status))
+}
+
+/// Fixed destination; renderer input cannot turn this into an arbitrary opener.
+#[tauri::command]
+#[specta::specta]
+pub async fn open_network_settings(state: tauri::State<'_, AppState>) -> Result<(), AppError> {
+    let manager = state.system_proxy_manager();
+    run_blocking("open network settings", move || {
+        manager.open_network_settings()
+    })
+    .await?
+    .map_err(AppError::from)
 }

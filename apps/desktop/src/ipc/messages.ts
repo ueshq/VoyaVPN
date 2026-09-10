@@ -208,6 +208,13 @@ export function validationText(t: TranslationFunction, issue: ValidationIssue) {
   return `${breadcrumb}: ${message}`;
 }
 
+export function validationFieldErrors(
+  t: TranslationFunction,
+  issues: readonly ValidationIssue[],
+): Record<string, string> {
+  return Object.fromEntries(issues.map((issue) => [issue.field, validationText(t, issue)]));
+}
+
 export function speedtestOutcomeText(t: TranslationFunction, outcome: SpeedtestOutcome) {
   return t(SPEEDTEST_OUTCOME_KEYS[outcome]);
 }

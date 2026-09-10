@@ -19,6 +19,8 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::restart_core::<tauri::Wry>,
         commands::runtime_status,
         commands::system_proxy_status,
+        commands::recheck_system_proxy::<tauri::Wry>,
+        commands::open_network_settings,
         commands::set_system_proxy_mode::<tauri::Wry>,
         commands::connection_mode_status,
         commands::set_connection_mode::<tauri::Wry>,

@@ -494,6 +494,9 @@ impl PacManager for SilentPac {
     fn is_supported(&self) -> bool {
         false
     }
+    fn is_running(&self) -> bool {
+        true
+    }
 }
 
 struct StoppedNativeTun;

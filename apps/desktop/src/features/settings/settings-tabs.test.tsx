@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { AppSettingsV1, AppearanceSettings } from "@/ipc/bindings";
 
 import { makeAppSettings } from "./app-settings.test-fixture";
@@ -15,6 +16,16 @@ import type { AppSettingsController } from "./use-app-settings";
 type SettingsTab = (props: { controller: AppSettingsController }) => React.ReactNode;
 
 describe("semantic settings tabs", () => {
+  beforeEach(() => {
+    useRuntimeEventStore.getState().setSysProxy({ management: "automatic", observation: "unknown", manualCleanupRequired: false,
+      requestedMode: "forcedClear", effectiveMode: "forcedClear", pacAvailable: true, proxy: null, pacUrl: null, exceptions: "" });
+  });
+  it("hides custom scripts when system proxy management is manual", () => {
+    const status = useRuntimeEventStore.getState().sysProxy!;
+    useRuntimeEventStore.getState().setSysProxy({ ...status, management: "manual" });
+    const { container } = render(<TabHarness Component={NetworkTab} />);
+    expect(container.querySelector("#rt-sysproxy-script-path")).not.toBeInTheDocument();
+  });
   it.each([
     [CoreTab, "Loading"],
     [NetworkTab, "Loading"],
@@ -71,6 +82,16 @@ describe("semantic settings tabs", () => {
 
     expect(screen.getByLabelText("Speed Test URL")).toHaveValue("https://new.example.test");
     expect(container.querySelector("#rt-speedtest-timeout")).toHaveValue(25);
+  });
+
+  it("selects the active UI language when the stored language was removed", () => {
+    const settings = makeAppSettings();
+    settings.appearance.language = "fa";
+    render(<GeneralTab controller={{ ...emptyController(false, null), settings }} />);
+
+    expect(screen.getByRole("button", { name: "EN" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "简" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "繁" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("updates appearance, behavior, and the single shortcut contract", async () => {

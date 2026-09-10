@@ -79,7 +79,29 @@
       "updated": "Subscription updated"
     },
     "unprotected": "Not protected",
-    "unprotectedHint": "Connect to route your traffic securely."
+    "unprotectedHint": "Connect to route your traffic securely.",
+    "modeSystemProxyManual": "System proxy (manual)",
+    "protectionUnknown": "Protection status unknown",
+    "localProxyReady": "Local proxy ready",
+    "manualProxyHint": "Configure your system proxy manually to use the local listener.",
+    "cleanupPending": "Tunnel cleanup pending",
+    "retryDisconnect": "Retry disconnect",
+    "manualProxy": {
+      "instructions": "System Settings → Network → your network service → Details → Proxies. Configure HTTP, HTTPS and SOCKS, or use the PAC address below.",
+      "endpoint": "HTTP / HTTPS / SOCKS: {{address}}",
+      "pac": "PAC: {{address}}",
+      "bypass": "Bypass: {{exceptions}}",
+      "inactive": "Connect the local proxy to see its address. VPN mode does not require manual proxy setup.",
+      "openSettings": "Open Network settings",
+      "recheck": "Check again",
+      "unknown": "System proxy state is unknown. Nothing has been confirmed cleared or restored.",
+      "clear": "No enabled system proxy was found.",
+      "localProxy": "A local system proxy is configured; traffic forwarding has not been verified.",
+      "otherProxy": "A different system proxy is configured.",
+      "cleanup": "Before switching modes, disconnecting or quitting, manually turn off any system proxy you configured for VoyaVPN. The app cannot restore it automatically.",
+      "copy": "Copy address",
+      "copied": "Address copied"
+    }
   },
   "logCodes": {
     "connected": "Core supervisor started",
@@ -730,6 +752,7 @@
     "disconnecting": "Disconnecting",
     "download": "Down {{speed}}",
     "loadingScreen": "Loading screen",
+    "macosTunnelMissing": "The running copy of VoyaVPN is missing its VPN extension. Quit and open the fully installed app from Applications. If the extension is still missing, reinstall VoyaVPN.",
     "nativeTunnelMissing": "Native tunnel component is not installed.",
     "noPid": "No PID",
     "operationFailed": "Operation failed",
