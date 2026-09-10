@@ -8,8 +8,6 @@ import type { Page } from "@playwright/test";
 import type {
   AppSettingsV1,
   AppUpdaterStatus,
-  ConfigSourceSettings,
-  ConfigTemplateImportResult,
   ConnectionModeStatus,
   DnsSettings,
   ExportProfilesResult,
@@ -65,7 +63,6 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       unhandled: string[];
       routings: Routing[];
       runtime: RuntimeStatusResponse;
-      sources: ConfigSourceSettings;
       settings: AppSettingsV1;
       sysProxy: SystemProxyStatusResponse;
       tun: TunStatus;
@@ -98,11 +95,6 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
         activeTunBackend: null,
         runningCoreType: null,
         state: "disconnected",
-      },
-      sources: {
-        geoSourceUrl: null as string | null,
-        routeRulesTemplateSourceUrl: null as string | null,
-        srsSourceUrl: null as string | null,
       },
       settings: makeAppSettings(),
       sysProxy: {
@@ -141,6 +133,8 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       },
     };
 
+    state.settings.dns = clone(state.dns);
+
     function connectionModeStatus(): ConnectionModeStatus {
       const mode = state.tun.enabled ? "vpn" : "systemProxy";
 
@@ -177,7 +171,6 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       delete_routing_rules: routingScopes,
       delete_routings: routingScopes,
       delete_subscriptions: [...subscriptionScopes, ...profileScopes],
-      import_config_template: ["dns", "routings", "appSettings"],
       import_profiles_from_text: [...subscriptionScopes, ...profileScopes],
       move_profile: profileScopes,
       move_routing_rule: routingScopes,
@@ -279,6 +272,7 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           return Promise.resolve(clone(state.settings));
         case "save_app_settings":
           state.settings = cloneRecord(args.settings) as typeof state.settings;
+          state.dns = clone(state.settings.dns);
           return Promise.resolve(clone(state.settings));
         case "runtime_status":
           return Promise.resolve(clone(state.runtime));
@@ -526,53 +520,11 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           const routing = state.routings.find((item) => item.id === args.routingId) ?? state.routings[0];
           return Promise.resolve(clone(routing));
         }
-        case "import_config_template": {
-          const selection = readRecord(args, "selection");
-          const selectionType = String(selection.type ?? "default");
-          const customSources = readRecord(selection, "sources");
-          state.sources =
-            selectionType === "custom"
-              ? {
-                  geoSourceUrl: (customSources.geoSourceUrl as string | null) ?? null,
-                  routeRulesTemplateSourceUrl:
-                    (customSources.routeRulesTemplateSourceUrl as string | null) ?? null,
-                  srsSourceUrl: (customSources.srsSourceUrl as string | null) ?? null,
-                }
-              : selectionType === "default"
-                ? { geoSourceUrl: null, routeRulesTemplateSourceUrl: null, srsSourceUrl: null }
-                : {
-                    geoSourceUrl: `https://rules.example.test/${selectionType}/geo/{0}.dat`,
-                    routeRulesTemplateSourceUrl: `https://rules.example.test/${selectionType}/template.json`,
-                    srsSourceUrl: `https://rules.example.test/${selectionType}/{1}.srs`,
-                  };
-          state.settings.sources = {
-            ...state.settings.sources,
-            geo: state.sources.geoSourceUrl,
-            routingTemplate: state.sources.routeRulesTemplateSourceUrl,
-            singboxRuleset: state.sources.srsSourceUrl,
-          };
-          state.routings = state.routings.map((routing, index) => ({
-            ...routing,
-            isActive: index === 0,
-          }));
-          // `ConfigTemplateImportResult` is {sources, routingIds, activeRoutingId,
-          // reusedExistingRouting}; the old inbounds/systemProxy/tun shape does
-          // not exist in the contract and left sources-tab reading `undefined`.
-          return Promise.resolve({
-            activeRoutingId: state.routings.find((routing) => routing.isActive)?.id ?? null,
-            reusedExistingRouting: true,
-            routingIds: state.routings.map((routing) => routing.id),
-            sources: {
-              geoSourceUrl: state.sources.geoSourceUrl,
-              routeRulesTemplateSourceUrl: state.sources.routeRulesTemplateSourceUrl,
-              srsSourceUrl: state.sources.srsSourceUrl,
-            },
-          } satisfies ConfigTemplateImportResult);
-        }
         case "load_dns_settings":
           return Promise.resolve(clone(state.dns));
         case "save_dns_settings":
           state.dns = mergeDeep(state.dns, readRecord(args, "settings"));
+          state.settings.dns = clone(state.dns);
           return Promise.resolve(clone(state.dns));
         case "proxy_list_groups":
           return Promise.resolve(clone(state.proxy));
@@ -910,12 +862,6 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           hosts: null,
           proxyStrategy: null,
           remote: null,
-        },
-        sources: {
-          geo: null as string | null,
-          routingTemplate: null as string | null,
-          singboxRuleset: null as string | null,
-          subscriptionConverter: null as string | null,
         },
         speedTest: {
           delayIntervalSeconds: null as number | null,

@@ -70,12 +70,6 @@
     "hosts": null,
     "directExpectedIps": null
   },
-  "sources": {
-    "subscriptionConverter": null,
-    "geo": null,
-    "singboxRuleset": null,
-    "routingTemplate": null
-  },
   "speedTest": {
     "timeoutSeconds": 10,
     "latencyUrl": "https://www.google.com/generate_204",

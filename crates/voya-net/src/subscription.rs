@@ -506,6 +506,30 @@ mod tests {
     }
 
     #[test]
+    fn default_converter_is_used_only_for_subscriptions_with_a_target() {
+        let source = "https://source.example/sub?id=one&token=two";
+        for target in [None, Some(""), Some("  ")] {
+            assert_eq!(
+                build_subscription_url(source, target, None).expect("plain URL"),
+                source
+            );
+        }
+        let rewritten =
+            build_subscription_url(source, Some("clash"), None).expect("conversion URL");
+        let parsed = reqwest::Url::parse(&rewritten).expect("converted URL");
+        assert_eq!(parsed.scheme(), "https");
+        assert_eq!(parsed.host_str(), Some("sub.xeton.dev"));
+        assert_eq!(parsed.path(), "/sub");
+        let query = parsed.query_pairs().collect::<HashMap<_, _>>();
+        assert_eq!(query.get("url").map(AsRef::as_ref), Some(source));
+        assert_eq!(query.get("target").map(AsRef::as_ref), Some("clash"));
+        assert_eq!(
+            query.get("config").map(AsRef::as_ref),
+            Some(DEFAULT_SUB_CONVERT_CONFIG)
+        );
+    }
+
+    #[test]
     fn conversion_url_without_placeholder_uses_query_parameters() {
         let rewritten = build_subscription_url(
             "https://source.example/sub?id=one",

@@ -48,7 +48,6 @@ pub(super) struct PreparedSubscriptionImport {
 }
 
 pub(super) async fn prepare_subscription_snapshot(
-    config: &AppConfig,
     subscriptions: Vec<SubItem>,
     subscription_id: Option<&str>,
     prefer_proxy: bool,
@@ -82,7 +81,7 @@ pub(super) async fn prepare_subscription_snapshot(
             more_url: item.more_url.clone(),
             user_agent: item.user_agent.clone(),
             convert_target: item.convert_target.clone(),
-            sub_convert_url: config.const_item.sub_convert_url.clone(),
+            sub_convert_url: None,
         };
         let options = SubscriptionFetchOptions {
             prefer_proxy,

@@ -1,3 +1,4 @@
+import { SettingsGroup } from "@/features/settings/settings-form";
 import { Database, Download, LoaderCircle, PackageCheck, RefreshCw } from "lucide-react";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
@@ -48,11 +49,10 @@ function AppUpdatePanel({ controller }: { controller: CheckUpdateDialogControlle
       : t("updates.waiting");
 
   return (
-    <div className="grid gap-3 rounded-md border p-3">
+    <SettingsGroup title={t("updates.appUpdater")}>
       <div className="flex flex-wrap items-start gap-3">
         <div className="grid gap-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium">{t("updates.appUpdater")}</span>
             <Badge variant={appUpdaterStatus?.state === "ready" ? "secondary" : "outline"}>
               {appUpdaterStatus
                 ? t(APP_UPDATER_STATE_TRANSLATION_KEYS[appUpdaterStatus.state])
@@ -126,16 +126,18 @@ function AppUpdatePanel({ controller }: { controller: CheckUpdateDialogControlle
         </p>
       ) : null}
 
-    </div>
+    </SettingsGroup>
   );
 }
 
 function ResourceUpdatePanel({ controller }: { controller: CheckUpdateDialogController }) {
   return (
-    <div className="grid divide-y rounded-md border">
+    <SettingsGroup title={controller.t("settings.sections.resources")}>
+      <div className="grid divide-y">
       <ResourceRow controller={controller} kind="geo" />
       <ResourceRow controller={controller} kind="srs" />
-    </div>
+      </div>
+    </SettingsGroup>
   );
 }
 

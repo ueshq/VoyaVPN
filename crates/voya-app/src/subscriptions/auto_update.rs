@@ -328,7 +328,6 @@ async fn run_single_update(
             return outcome;
         }
         fetched = manager.prepare_subscription_update(
-            &config_snapshot,
             Some(&item.id),
             connected,
             proxy_url.as_deref(),

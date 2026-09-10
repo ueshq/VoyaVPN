@@ -29,7 +29,6 @@ import type { TranslationFunction, TranslationKey } from "@voya/i18n";
  * second parameter list to keep in step.
  */
 export const NOTICE_KEYS: Record<NoticeCode["code"], TranslationKey> = {
-  configurationRefreshFailed: "notices.configurationRefreshFailed",
   connectionModeRefreshFailed: "notices.connectionModeRefreshFailed",
   connectionModeSavedRestartFailed: "notices.connectionModeSavedRestartFailed",
   coreStartedSystemProxyFailed: "notices.coreStartedSystemProxyFailed",
@@ -54,7 +53,6 @@ export const NOTICE_KEYS: Record<NoticeCode["code"], TranslationKey> = {
   subscriptionRefreshFailed: "notices.subscriptionRefreshFailed",
   systemProxyRestoreFailed: "notices.systemProxyRestoreFailed",
   systemProxyStatusRefreshFailed: "notices.systemProxyStatusRefreshFailed",
-  templateImportedRestartFailed: "notices.templateImportedRestartFailed",
   trayRefreshFailed: "notices.trayRefreshFailed",
   tunSavedRestartFailed: "notices.tunSavedRestartFailed",
   tunStatusRefreshFailed: "notices.tunStatusRefreshFailed",
@@ -84,7 +82,6 @@ export const LOG_KEYS: Record<LogCode["code"], TranslationKey> = {
 
 /** The operation a log sentence is about, interpolated into it as `reason`. */
 export const CORE_FLOW_REASON_KEYS: Record<CoreFlowReason, TranslationKey> = {
-  configTemplateImported: "coreFlowReason.configTemplateImported",
   connect: "coreFlowReason.connect",
   connectionModeChanged: "coreFlowReason.connectionModeChanged",
   disconnect: "coreFlowReason.disconnect",
@@ -121,9 +118,6 @@ export const VALIDATION_KEYS: Record<ValidationCode["code"], TranslationKey> = {
   proxyChainWithoutValidChildren: "validation.proxyChainWithoutValidChildren",
   routingRuleOutboundNotFound: "validation.routingRuleOutboundNotFound",
   routingRuleWithoutOutbound: "validation.routingRuleWithoutOutbound",
-  sourceUrlHasCredentials: "validation.urlCredentials",
-  sourceUrlNotHttp: "validation.urlInvalid",
-  sourceUrlNotHttps: "validation.urlHttps",
   textControlCharacters: "validation.textControlCharacters",
   textRequired: "validation.textRequired",
   textTooLong: "validation.textTooLong",

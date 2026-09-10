@@ -10,6 +10,8 @@ import {
 } from "@voya/i18n";
 import { loadUiPreferences } from "@/ipc";
 import { queryKeys } from "@/ipc/query-keys";
+import { getErrorMessage } from "@voya/utils/error";
+import { useToastStore } from "@/stores/toast-store";
 import type { AppearanceSettings } from "@/ipc/bindings";
 import {
   isThemeMode,
@@ -21,6 +23,23 @@ type NormalizedUiPreferences = AppearanceSettings & {
   language: Locale;
   theme: ThemeMode;
 };
+
+let preview: { owner: symbol; preferences: AppearanceSettings } | null = null;
+
+export function previewUiPreferences(owner: symbol, preferences: AppearanceSettings) {
+  preview = { owner, preferences };
+  void applyUiPreferences(preferences, { persist: false }).catch(reportUiPreferencesError);
+}
+
+export function reportUiPreferencesError(error: unknown) {
+  useToastStore.getState().pushToast({ title: i18next.t("status.operationFailed"), description: getErrorMessage(error), severity: "error" });
+}
+
+export function endUiPreferencesPreview(owner: symbol) {
+  if (preview?.owner !== owner) return;
+  preview = null;
+  usePreferencesStore.getState().setThemePreview(null);
+}
 
 export function useUiPreferencesQuery() {
   return useQuery({
@@ -42,8 +61,8 @@ function normalizeUiPreferences(preferences: AppearanceSettings): NormalizedUiPr
  *
  * `persist: false` is the Settings preview mode: the theme lands in the store's
  * transient `themePreview` slot and the locale switches without touching the
- * stored preference, so an unsaved edit can never become the persisted one and
- * a discard needs no localStorage rollback.
+ * stored preference. Only the backend acknowledgement persists it; leaving
+ * clears any failed preview.
  */
 export async function applyUiPreferences(
   preferences: AppearanceSettings,
@@ -61,10 +80,11 @@ export async function applyUiPreferences(
   const currentLanguage = i18next.resolvedLanguage ?? i18next.language;
   if (currentLanguage === normalized.language) {
     applyDocumentLocale(normalized.language);
-    return;
+  } else {
+    await changeLocale(normalized.language, { persist });
   }
-
-  await changeLocale(normalized.language, { persist });
+  // A cache refresh or an older save must not replace the user's newer preview.
+  if (persist && preview) await applyUiPreferences(preview.preferences, { persist: false });
 }
 
 function isLocale(value: string): value is Locale {

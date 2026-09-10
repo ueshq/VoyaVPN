@@ -1,9 +1,8 @@
-import type { KeyboardEvent } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
 
 import { Button } from "@voya/ui/components/button";
 import { Input } from "@voya/ui/components/input";
-import { Separator } from "@voya/ui/components/separator";
 import { cn } from "@voya/ui/lib/utils";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
@@ -11,11 +10,10 @@ import type { ThemeMode } from "@/stores/preferences-store";
 
 import {
   SettingsCheckbox,
-  SettingsCheckboxGroup,
   SettingsGroup,
   SettingsRow,
 } from "./settings-form";
-import type { AppSettingsController } from "./use-app-settings";
+import type { AppSettingsFormController } from "./use-app-settings";
 
 const themeOptions: Array<{
   icon: typeof Monitor;
@@ -30,31 +28,23 @@ const themeOptions: Array<{
 const selectedOptionClass =
   "border border-primary bg-accent-blue-light text-brand hover:bg-accent-blue-light hover:text-brand";
 
-export function GeneralTab({ controller }: { controller: AppSettingsController }) {
+export function GeneralTab({ controller }: { controller: AppSettingsFormController }) {
   const { language, localeOptions, t } = useI18n();
   const { settings, setAppearance, update, working } = controller;
-
-  if (!settings) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        {working ? t("options.loading") : controller.error}
-      </p>
-    );
-  }
+  const [emptyChord, setEmptyChord] = useState({ alt: false, control: false, shift: false, keyCode: 0 });
 
   const selectedLanguage = localeOptions.some((locale) => locale.code === settings.appearance.language)
     ? settings.appearance.language
     : language;
-  const hotkey = settings.shortcuts.showWindowShortcut ?? {
-    alt: false,
-    control: false,
-    shift: false,
-    keyCode: 0,
-  };
+  const hotkey = settings.shortcuts.showWindowShortcut ?? emptyChord;
+  function setHotkey(next: typeof hotkey) {
+    if (!next.keyCode) { setEmptyChord(next); return; }
+    update((current) => ({ ...current, shortcuts: { showWindowShortcut: next } }));
+  }
 
   return (
     <div className="grid gap-4">
-      <SettingsGroup>
+      <SettingsGroup title={t("settings.sections.appearance")}>
         <SettingsRow label={t("modal.theme")}>
           <div className="flex flex-wrap gap-2">
             {themeOptions.map((option) => {
@@ -80,7 +70,7 @@ export function GeneralTab({ controller }: { controller: AppSettingsController }
           </div>
         </SettingsRow>
 
-        <SettingsRow align="start" label={t("modal.language")}>
+        <SettingsRow label={t("modal.language")}>
           <div className="flex flex-wrap gap-2">
             {localeOptions.map((locale) => {
               const selected = selectedLanguage === locale.code;
@@ -104,11 +94,9 @@ export function GeneralTab({ controller }: { controller: AppSettingsController }
         </SettingsRow>
       </SettingsGroup>
 
-      <Separator />
-
-      <SettingsGroup>
-        <SettingsCheckboxGroup id="settings-startup-group" label={t("settings.startup")}>
+      <SettingsGroup title={t("settings.startup")}>
           <SettingsCheckbox
+            field="behavior.autostart"
             checked={settings.behavior.autostart}
             disabled={working}
             label={t("options.autostart")}
@@ -119,26 +107,17 @@ export function GeneralTab({ controller }: { controller: AppSettingsController }
               }))
             }
           />
-        </SettingsCheckboxGroup>
+      </SettingsGroup>
 
-        <SettingsRow label={t("options.hotkeyShowWindow")}>
+      <SettingsGroup title={t("settings.sections.shortcuts")}>
+        <SettingsRow htmlFor="settings-hotkey" label={t("options.hotkeyShowWindow")} error={controller.fieldErrors["shortcuts.showWindowShortcut"]}>
           <div className="flex flex-wrap items-center gap-2">
             {(["control", "alt", "shift"] as const).map((modifier) => (
               <Button
                 key={modifier}
                 aria-pressed={hotkey[modifier]}
                 className="h-8 px-2 text-xs"
-                onClick={() =>
-                  update((current) => ({
-                    ...current,
-                    shortcuts: {
-                      showWindowShortcut: {
-                        ...(current.shortcuts.showWindowShortcut ?? hotkey),
-                        [modifier]: !(current.shortcuts.showWindowShortcut ?? hotkey)[modifier],
-                      },
-                    },
-                  }))
-                }
+                onClick={() => setHotkey({ ...hotkey, [modifier]: !hotkey[modifier] })}
                 type="button"
                 variant={hotkey[modifier] ? "secondary" : "outline"}
               >
@@ -146,6 +125,9 @@ export function GeneralTab({ controller }: { controller: AppSettingsController }
               </Button>
             ))}
             <Input
+              id="settings-hotkey"
+              aria-invalid={Boolean(controller.fieldErrors["shortcuts.showWindowShortcut"]) || undefined}
+              aria-describedby={controller.fieldErrors["shortcuts.showWindowShortcut"] ? "settings-hotkey-error" : undefined}
               aria-label={t("options.hotkeyKey")}
               className="h-8 w-28 px-2 text-sm"
               data-hotkey-capture=""
@@ -153,15 +135,7 @@ export function GeneralTab({ controller }: { controller: AppSettingsController }
               onKeyDown={(event) => {
                 const keyCode = keyCodeFromEvent(event);
                 if (keyCode !== null) {
-                  update((current) => ({
-                    ...current,
-                    shortcuts: {
-                      showWindowShortcut: {
-                        ...(current.shortcuts.showWindowShortcut ?? hotkey),
-                        keyCode,
-                      },
-                    },
-                  }));
+                  setHotkey({ ...hotkey, keyCode });
                 }
               }}
               readOnly
@@ -169,12 +143,10 @@ export function GeneralTab({ controller }: { controller: AppSettingsController }
             />
             <Button
               className="h-7 px-2 text-xs"
-              onClick={() =>
-                update((current) => ({
-                  ...current,
-                  shortcuts: { showWindowShortcut: null },
-                }))
-              }
+              onClick={() => {
+                setEmptyChord({ alt: false, control: false, shift: false, keyCode: 0 });
+                update((current) => ({ ...current, shortcuts: { showWindowShortcut: null } }));
+              }}
               type="button"
               variant="ghost"
             >

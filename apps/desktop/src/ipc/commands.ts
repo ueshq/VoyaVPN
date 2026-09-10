@@ -14,8 +14,6 @@ import type {
   GroupPreview,
   ImportProfilesResult,
   MoveAction,
-  ConfigTemplateImportResult,
-  ConfigTemplateSelection,
   Profile,
   ProfileListEntry,
   ProfileListing,
@@ -275,16 +273,6 @@ export async function moveRoutingRule(
   position: number | null = null,
 ): Promise<Routing_Serialize> {
   return unwrapCommandResult(await commands.moveRoutingRule(routingId, ruleId, action, position));
-}
-
-export async function importConfigTemplate(
-  selection: ConfigTemplateSelection,
-  preferProxy = true,
-  proxyUrl: string | null = null,
-): Promise<ConfigTemplateImportResult> {
-  return unwrapCommandResult(
-    await commands.importConfigTemplate(selection, preferProxy, proxyUrl),
-  );
 }
 
 export async function proxyListGroups(): Promise<ProxyGroupsSnapshot> {

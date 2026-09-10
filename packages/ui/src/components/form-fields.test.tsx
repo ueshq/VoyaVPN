@@ -60,3 +60,46 @@ describe("form fields", () => {
     expect(onChange).toHaveBeenCalledWith(true);
   });
 });
+
+describe("commit-on-blur fields", () => {
+  it("defers input, ignores IME Enter, commits once after composition, and preserves ordinary fields", () => {
+    const onChange = vi.fn();
+    render(<TextField commitOnBlur label="Name" value="" onChange={onChange} />);
+    const input = screen.getByLabelText("Name");
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "中文" } });
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.compositionEnd(input);
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("中文");
+  });
+
+  it("commits multiline text only on blur and flushes focused input on unmount", () => {
+    const onChange = vi.fn();
+    const { unmount } = render(<TextAreaField commitOnBlur label="Hosts" value="" onChange={onChange} />);
+    const input = screen.getByLabelText("Hosts");
+    fireEvent.change(input, { target: { value: "example.com 127.0.0.1" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onChange).not.toHaveBeenCalled();
+    unmount();
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("example.com 127.0.0.1");
+  });
+});
+
+it("waits for composition to finish after blur and never submits an unfinished composition on unmount", () => {
+  const onChange = vi.fn();
+  const { unmount } = render(<TextField commitOnBlur label="IME" value="" onChange={onChange} />);
+  const input = screen.getByLabelText("IME");
+  fireEvent.compositionStart(input);
+  fireEvent.change(input, { target: { value: "中文" } });
+  fireEvent.blur(input);
+  expect(onChange).not.toHaveBeenCalled();
+  fireEvent.compositionEnd(input);
+  expect(onChange).toHaveBeenCalledExactlyOnceWith("中文");
+  fireEvent.compositionStart(input);
+  fireEvent.change(input, { target: { value: "未完成" } });
+  unmount();
+  expect(onChange).toHaveBeenCalledTimes(1);
+});

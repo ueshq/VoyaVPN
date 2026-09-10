@@ -37,7 +37,7 @@ const CORE_STATE_TRANSLATION_KEYS = {
 export function AppSidebar({ titleBarLayout }: { titleBarLayout: TitleBarLayout }) {
   const { t } = useI18n();
   const activeTab = useShellStore((state) => state.activeTab);
-  const requestTab = useShellStore((state) => state.requestTab);
+  const setActiveTab = useShellStore((state) => state.setActiveTab);
   const collapsed = useShellStore((state) => state.sidebarCollapsed);
   const toggleSidebar = useShellStore((state) => state.toggleSidebar);
 
@@ -97,7 +97,7 @@ export function AppSidebar({ titleBarLayout }: { titleBarLayout: TitleBarLayout 
             icon={item.icon}
             id={`shell-tab-${item.value}`}
             label={t(item.titleKey)}
-            onSelect={() => requestTab(item.value)}
+            onSelect={() => setActiveTab(item.value)}
             panelId={SHELL_PANEL_ID}
           />
         ))}

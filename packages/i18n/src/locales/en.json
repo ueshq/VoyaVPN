@@ -39,7 +39,6 @@
     "deleteSubscriptionTitle": "Delete subscription?"
   },
   "coreFlowReason": {
-    "configTemplateImported": "Config template import",
     "connect": "Connection",
     "connectionModeChanged": "Connection mode change",
     "disconnect": "Disconnection",
@@ -162,7 +161,6 @@
     "theme": "Theme"
   },
   "notices": {
-    "configurationRefreshFailed": "Configuration refresh failed",
     "connectionModeRefreshFailed": "Connection mode refresh failed",
     "connectionModeSavedRestartFailed": "Connection mode saved; core restart failed",
     "coreStartedSystemProxyFailed": "Core started; system proxy update failed",
@@ -187,31 +185,12 @@
     "subscriptionRefreshFailed": "Subscription refresh failed",
     "systemProxyRestoreFailed": "System proxy restore failed",
     "systemProxyStatusRefreshFailed": "System proxy status refresh failed",
-    "templateImportedRestartFailed": "Template imported; core restart failed",
     "trayRefreshFailed": "Tray refresh failed",
     "tunSavedRestartFailed": "TUN saved; core restart failed",
     "tunStatusRefreshFailed": "TUN status refresh failed"
   },
   "options": {
     "autostart": "Autostart",
-    "configTemplate": {
-      "advancedHint": "This imports structured sources, Simple DNS, and routing presets.",
-      "applied": "Configuration template imported",
-      "appliedDescription": "Sources, DNS, and routing settings were updated, and the imported route was activated.",
-      "apply": "Import",
-      "applying": "Importing…",
-      "custom": "Custom",
-      "customDescription": "Use the source URLs currently entered in this card. Import errors will not fall back to built-in routing.",
-      "customSourcesRequired": "A routing template source URL is required for a custom import.",
-      "default": "Default",
-      "defaultDescription": "Clear regional sources, restore built-in DNS, and import the built-in routing template.",
-      "import": "Import configuration template",
-      "invalidSourceUrl": "Each custom source must be a valid HTTPS URL without credentials.",
-      "reusedDescription": "The matching routing template already existed and was reused and activated.",
-      "selectPrompt": "Select a template",
-      "title": "Import configuration template"
-    },
-    "geoSource": "Geo files source",
     "hotkeyKey": "Hotkey key",
     "hotkeyKeyPlaceholder": "Press a key",
     "hotkeyShowWindow": "Show window",
@@ -234,12 +213,9 @@
       "up": "Up"
     },
     "loading": "Loading",
-    "routeTemplateSource": "Routing template source",
     "runtimeCore": "Core",
     "runtimeNetwork": "Network",
-    "saved": "Saved",
-    "sources": "Sources",
-    "srsSource": "sing-box ruleset source"
+    "saved": "Saved"
   },
   "panes": {
     "dns": {
@@ -256,7 +232,6 @@
       "loading": "Loading DNS settings",
       "proxyStrategy": "Proxy strategy",
       "remoteDns": "Remote DNS",
-      "simpleTitle": "Simple DNS",
       "standard": "Standard",
       "title": "DNS"
     },
@@ -670,8 +645,6 @@
     "screenUnavailable": "Screen QR scanning is unavailable on this platform or permission state."
   },
   "settings": {
-    "closeUnsavedDescription": "Save all changes, discard them, or keep editing.",
-    "closeUnsavedTitle": "Unsaved settings",
     "core": {
       "allowInsecure": "Allow Insecure",
       "bindInterface": "Bind Interface",
@@ -685,10 +658,8 @@
       "muxEnabled": "Turn on Mux Multiplexing",
       "muxProtocol": "sing-box Mux Protocol",
       "sendThrough": "Local outbound address (SendThrough)",
-      "title": "Core: basic settings",
       "userAgent": "User-Agent"
     },
-    "discardChanges": "Discard changes",
     "fields": {
       "hysteriaDownMbps": "Hysteria max download bandwidth (Mbps)",
       "hysteriaUpMbps": "Hysteria max upload bandwidth (Mbps)",
@@ -707,16 +678,10 @@
       "systemProxyExceptions": "Exception",
       "systemProxyProtocol": "Advanced proxy settings, protocol selection (optional)",
       "tunAutoRoute": "Auto Route",
-      "tunMode": "Tun Mode settings",
       "tunStack": "Stack",
       "tunStrictRoute": "Strict Route"
     },
     "perAppProxy": "Per-app proxy",
-    "saveAll": "Save all",
-    "saveBeforeActions": "Save or discard pending changes before running this action.",
-    "sources": {
-      "subscriptionConverter": "Subscription conversion URL"
-    },
     "startup": "Startup",
     "tabGeneral": "General",
     "tabTests": "Tests",
@@ -727,7 +692,28 @@
       "timeout": "Speed Test Single Timeout Value",
       "proxyDelayConcurrency": "Proxy group latency test concurrency"
     },
-    "unsavedChanges": "Unsaved changes"
+    "categories": "Settings categories",
+    "autosave": {
+      "automatic": "Changes save automatically",
+      "saving": "Saving…",
+      "failed": "Could not save changes",
+      "retry": "Retry"
+    },
+    "sections": {
+      "appearance": "Appearance",
+      "shortcuts": "Keyboard shortcut",
+      "coreBasics": "Core and logging",
+      "outbound": "Outbound settings",
+      "multiplexing": "Multiplexing",
+      "tun": "TUN",
+      "systemProxy": "System proxy",
+      "testExecution": "Test execution",
+      "testAddresses": "Test addresses",
+      "dnsBehavior": "DNS behavior",
+      "dnsServers": "DNS servers and strategies",
+      "dnsHosts": "Hosts and expected IPs",
+      "resources": "Rule resources"
+    }
   },
   "speedtest": {
     "outcome": {
@@ -811,7 +797,7 @@
       "unsupported": "Unsupported"
     },
     "checkApp": "Check app",
-    "geoDescription": "Download Geo assets now using the configured source and runtime proxy policy.",
+    "geoDescription": "Update Geo resources now using the built-in sources and runtime proxy policy.",
     "geoTitle": "Geo assets",
     "installApp": "Install app",
     "noAppUpdate": "App is up to date",
@@ -820,7 +806,7 @@
     "resourceUpdated": "Updated {{count}} files",
     "restartApp": "Restart app",
     "restartRequired": "Restart VoyaVPN to finish applying the update.",
-    "srsDescription": "Download SRS rulesets now using the configured source and runtime proxy policy.",
+    "srsDescription": "Update SRS rulesets now using the built-in source and runtime proxy policy.",
     "srsTitle": "SRS assets",
     "title": "Check Updates",
     "updateNow": "Update now",

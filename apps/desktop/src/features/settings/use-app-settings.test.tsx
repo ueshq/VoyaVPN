@@ -1,336 +1,159 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { AppDnsSettings, AppError, AppearanceSettings } from "@/ipc/bindings";
-
-import { makeAppSettings } from "./app-settings.test-fixture";
+import { changeLocale } from "@voya/i18n";
+import { queryKeys } from "@/ipc/query-keys";
+import type { AppSettingsV1 } from "@/ipc/bindings";
+import { usePreferencesStore } from "@/stores/preferences-store";
+import { useToastStore } from "@/stores/toast-store";
+import { useDnsSettings } from "@/features/dns/use-dns-settings";
+import { deferred, resetSettingsBackend, serverSettings, settingsIpc } from "./settings-backend.test-fixture";
+import { settingsSaveQueue } from "./settings-save-queue";
 import { useAppSettings } from "./use-app-settings";
 
-const ipcMocks = vi.hoisted(() => {
-  // The controller reads `appError.kind` off a rejected save to build its field
-  // errors, so the stand-in has to be the real shape rather than a bare Error.
-  class MockIpcCommandError extends Error {
-    readonly appError: AppError;
+vi.mock("@/ipc", async () => (await import("./settings-backend.test-fixture")).settingsIpc);
 
-    constructor(appError: AppError) {
-      super(appError.message);
-      this.appError = appError;
-      this.name = "IpcCommandError";
-    }
-  }
+beforeEach(async () => { resetSettingsBackend(); await changeLocale("en"); useToastStore.setState({ toasts: [] }); });
+afterEach(cleanup);
+function mount() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const hook = renderHook(() => ({ app: useAppSettings(), dns: useDnsSettings() }), {
+    wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+  });
+  return { ...hook, client, settle: () => act(() => settingsSaveQueue(client).settled()) };
+}
 
-  return {
-    IpcCommandError: MockIpcCommandError,
-    loadAppSettings: vi.fn(),
-    saveAppSettings: vi.fn(),
-  };
-});
-const preferenceMocks = vi.hoisted(() => ({
-  applyUiPreferences: vi.fn((preferences: AppearanceSettings, options?: { persist?: boolean }) => {
-    void preferences;
-    void options;
-    return Promise.resolve();
-  }),
-}));
-
-vi.mock("@/ipc", () => ipcMocks);
-vi.mock("@/features/settings/ui-preferences", () => ({
-  applyUiPreferences: preferenceMocks.applyUiPreferences,
-  UI_PREFERENCES_QUERY_KEY: ["ui-preferences"],
-}));
-
-describe("useAppSettings", () => {
-  beforeEach(() => {
-    cleanup();
-    vi.clearAllMocks();
-    window.localStorage.clear();
-    ipcMocks.loadAppSettings.mockResolvedValue(makeAppSettings());
-    ipcMocks.saveAppSettings.mockImplementation(async (settings) => settings);
+describe("automatic app settings", () => {
+  it("persists field edits against the newest snapshot and skips unchanged values", async () => {
+    const { result, settle, client } = mount();
+    await waitFor(() => expect(result.current.app.settings).not.toBeNull());
+    act(() => result.current.app.update((s) => ({ ...s, core: { ...s.core, logLevel: "debug" } })));
+    await settle();
+    expect(serverSettings().core.logLevel).toBe("debug");
+    expect(client.getQueryData(queryKeys.appSettings)).toEqual(serverSettings());
+    act(() => result.current.app.update((s) => ({ ...s })));
+    await settle();
+    expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1);
+    expect(result.current.app.saved).toBe(true);
   });
 
-  afterEach(cleanup);
-
-  it("saves cross-section edits as one authoritative bundle", async () => {
-    const user = userEvent.setup();
-    renderProbe();
-    await screen.findByText("clean");
-
-    await user.click(screen.getByRole("button", { name: "Edit two sections" }));
-    expect(screen.getByTestId("state")).toHaveTextContent("dirty");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() => expect(ipcMocks.saveAppSettings).toHaveBeenCalledTimes(1));
-    expect(ipcMocks.saveAppSettings).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sources: expect.objectContaining({ subscriptionConverter: "https://convert.example.test" }),
-        core: expect.objectContaining({ logLevel: "debug" }),
-      }),
-    );
-    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("clean"));
+  it("serializes DNS and app edits without reverting either domain", async () => {
+    const { result, settle } = mount();
+    await waitFor(() => expect(result.current.dns.form).not.toBeNull());
+    await waitFor(() => expect(result.current.app.settings).not.toBeNull());
+    act(() => {
+      result.current.dns.updateSimple({ remote: "1.1.1.1" });
+      result.current.app.update((s) => ({ ...s, core: { ...s.core, logLevel: "debug" } }));
+      result.current.dns.updateSimple({ fakeIp: true });
+    });
+    await settle();
+    expect(serverSettings()).toMatchObject({ core: { logLevel: "debug" }, dns: { remote: "1.1.1.1", fakeIp: true } });
   });
 
-  it("previews an appearance without persisting it and restores the original on discard", async () => {
-    const user = userEvent.setup();
-    renderProbe();
-    await screen.findByText("clean");
-
-    await user.click(screen.getByRole("button", { name: "Preview dark" }));
-    // `persist: false` is what keeps an unsaved edit out of localStorage; the
-    // controller must never fall back to snapshotting the storage keys itself.
-    await waitFor(() =>
-      expect(preferenceMocks.applyUiPreferences).toHaveBeenCalledWith(
-        { language: "en", theme: "dark" },
-        { persist: false },
-      ),
-    );
-    await user.click(screen.getByRole("button", { name: "Discard" }));
-
-    await waitFor(() =>
-      expect(preferenceMocks.applyUiPreferences).toHaveBeenLastCalledWith({ language: "en", theme: "system" }),
-    );
-    expect(screen.getByTestId("theme")).toHaveTextContent("system");
-    expect(screen.getByTestId("state")).toHaveTextContent("clean");
+  it.each(["success", "failure"])("keeps newer input after an older %s and coalesces waiting edits", async (outcome) => {
+    const { result, settle } = mount();
+    await waitFor(() => expect(result.current.app.settings).not.toBeNull());
+    const pending = deferred<AppSettingsV1>();
+    settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
+    const update = (logLevel: string) => act(() => result.current.app.update((s) => ({ ...s, core: { ...s.core, logLevel } })));
+    update("debug");
+    await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1));
+    update("trace"); update("error");
+    expect(result.current.app.settings?.core.logLevel).toBe("error");
+    expect(result.current.app.working).toBe(false);
+    await act(async () => {
+      if (outcome === "success") pending.resolve(settingsIpc.saveAppSettings.mock.calls[0][0]);
+      else pending.reject(new Error("old write failed"));
+    });
+    await settle();
+    expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(2);
+    expect(serverSettings().core.logLevel).toBe("error");
   });
 
-  it("posts the freshest DNS block even when the draft was seeded before the DNS pane saved", async () => {
-    const user = userEvent.setup();
-    const { client } = renderProbe();
-    await screen.findByText("clean");
-
-    // Seed the whole-bundle draft first (dns = the snapshot loaded on open)…
-    await user.click(screen.getByRole("button", { name: "Edit two sections" }));
-    // …then let the DNS pane write its own section through its own command.
-    client.setQueryData(["dns"], freshDns());
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() => expect(ipcMocks.saveAppSettings).toHaveBeenCalledTimes(1));
-    expect(ipcMocks.saveAppSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ dns: freshDns() }),
-    );
+  it("isolates rejected fields, translates errors, and retries the retained edit", async () => {
+    const { result, settle } = mount();
+    await waitFor(() => expect(result.current.app.settings).not.toBeNull());
+    settingsIpc.saveAppSettings.mockRejectedValueOnce(new settingsIpc.IpcCommandError({
+      kind: { type: "validation", issues: [{ field: "network.tun.mtu", scope: [], code: { code: "tunMtuOutOfRange", min: 576, max: 65535 } }] },
+      message: "MTU rejected", subsystem: "config",
+    }));
+    act(() => result.current.app.update((s) => ({ ...s, network: { ...s.network, tun: { ...s.network.tun, mtu: 1 } } })));
+    await settle();
+    expect(result.current.app.fieldErrors["network.tun.mtu"]).toContain("576");
+    act(() => result.current.app.update((s) => ({ ...s, behavior: { ...s.behavior, autostart: true } })));
+    await settle();
+    expect(serverSettings().network.tun.mtu).toBe(9000);
+    expect(result.current.app.settings?.network.tun.mtu).toBe(1);
+    act(() => result.current.app.retry());
+    await settle();
+    expect(result.current.app.error).toBeNull();
+    expect(result.current.app.fieldErrors).toEqual({});
   });
 
-  it("keeps the draft's own DNS block when the DNS pane was never opened", async () => {
-    const user = userEvent.setup();
-    renderProbe();
-    await screen.findByText("clean");
-
-    await user.click(screen.getByRole("button", { name: "Edit two sections" }));
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() => expect(ipcMocks.saveAppSettings).toHaveBeenCalledTimes(1));
-    expect(ipcMocks.saveAppSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ dns: makeAppSettings().dns }),
-    );
+  it("reports detached failures without resurrecting drafts on re-entry", async () => {
+    const { result, unmount, settle, client } = mount();
+    await waitFor(() => expect(result.current.app.settings).not.toBeNull());
+    const pending = deferred<AppSettingsV1>();
+    settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
+    act(() => result.current.app.update((s) => ({ ...s, core: { ...s.core, logLevel: "trace" } })));
+    await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1));
+    unmount();
+    pending.reject(new Error("save unavailable"));
+    await settle();
+    expect(useToastStore.getState().toasts.at(-1)?.description).toBe("save unavailable");
+    const next = renderHook(useAppSettings, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+    await waitFor(() => expect(next.result.current.working).toBe(false));
+    expect(next.result.current.settings?.core.logLevel).toBe("warning");
+    expect(next.result.current.error).toBeNull();
   });
 
-  it("refreshes the baseline after a failed save while retaining edits until discard", async () => {
-    const user = userEvent.setup();
-    const authoritative = makeAppSettings({ subscriptionConverter: "https://authoritative.example.test" });
-    ipcMocks.loadAppSettings
-      .mockResolvedValueOnce(makeAppSettings())
-      .mockResolvedValueOnce(authoritative);
-    ipcMocks.saveAppSettings.mockRejectedValue(new Error("save failed"));
-    renderProbe();
-    await screen.findByText("clean");
-
-    await user.click(screen.getByRole("button", { name: "Edit two sections" }));
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("save failed");
-    await waitFor(() => expect(ipcMocks.loadAppSettings).toHaveBeenCalledTimes(2));
-    expect(screen.getByTestId("converter")).toHaveTextContent("https://convert.example.test");
-    expect(screen.getByTestId("state")).toHaveTextContent("dirty");
-    await user.click(screen.getByRole("button", { name: "Discard" }));
-    expect(screen.getByTestId("converter")).toHaveTextContent("https://authoritative.example.test");
-    expect(screen.getByTestId("state")).toHaveTextContent("clean");
+  it("previews appearance, persists after acknowledgement, and restores failed previews on leave", async () => {
+    const { result, settle, unmount } = mount();
+    await waitFor(() => expect(result.current.app.settings).not.toBeNull());
+    const pending = deferred<AppSettingsV1>();
+    settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
+    act(() => result.current.app.setAppearance({ language: "en", theme: "dark" }));
+    expect(usePreferencesStore.getState().themePreview).toBe("dark");
+    await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalled());
+    pending.reject(new Error("appearance failed"));
+    await settle();
+    expect(usePreferencesStore.getState().themePreview).toBe("dark");
+    unmount();
+    expect(usePreferencesStore.getState().themePreview).toBeNull();
+    expect(usePreferencesStore.getState().themeMode).toBe("system");
   });
 
-  it("reports reload and appearance-preview failures", async () => {
-    const user = userEvent.setup();
-    ipcMocks.loadAppSettings
-      .mockResolvedValueOnce(makeAppSettings())
-      .mockRejectedValueOnce(new Error("reload failed"));
-    preferenceMocks.applyUiPreferences.mockRejectedValueOnce(new Error("preview failed"));
-    renderProbe();
-    await screen.findByText("clean");
-
-    await user.click(screen.getByRole("button", { name: "Preview dark" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("preview failed");
-    await user.click(screen.getByRole("button", { name: "Reload" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("reload failed");
+  it("keeps the latest preview while an older appearance save completes", async () => {
+    const { result, settle } = mount();
+    await waitFor(() => expect(result.current.app.settings).not.toBeNull());
+    const first = deferred<AppSettingsV1>();
+    const second = deferred<AppSettingsV1>();
+    settingsIpc.saveAppSettings.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    act(() => result.current.app.setAppearance({ language: "en", theme: "dark" }));
+    await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1));
+    act(() => result.current.app.setAppearance({ language: "en", theme: "light" }));
+    await act(async () => { first.resolve(settingsIpc.saveAppSettings.mock.calls[0][0]); });
+    await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(2));
+    expect(usePreferencesStore.getState().themePreview).toBe("light");
+    expect(result.current.app.settings?.appearance.theme).toBe("light");
+    await act(async () => { second.resolve(settingsIpc.saveAppSettings.mock.calls[1][0]); });
+    await settle();
+    expect(usePreferencesStore.getState().themeMode).toBe("light");
+    expect(usePreferencesStore.getState().themePreview).toBeNull();
   });
 
-  it("keeps the original save error when recovery loading also fails", async () => {
-    const user = userEvent.setup();
-    ipcMocks.loadAppSettings
-      .mockResolvedValueOnce(makeAppSettings())
-      .mockRejectedValueOnce(new Error("recovery unavailable"));
-    ipcMocks.saveAppSettings.mockRejectedValueOnce(new Error("save rejected"));
-    renderProbe();
-    await screen.findByText("clean");
-
-    await user.click(screen.getByRole("button", { name: "Edit two sections" }));
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("save rejected");
-  });
-
-  // `save_app_settings` used to flatten `AppSettingsValidationError` into one
-  // untyped string, so a rejected source URL could only be shown as a banner
-  // with no way to tell which of the four inputs was at fault.
-  it("addresses a rejected save to the settings field the backend named", async () => {
-    const user = userEvent.setup();
-    ipcMocks.saveAppSettings.mockRejectedValueOnce(
-      new ipcMocks.IpcCommandError({
-        kind: {
-          issues: [{ code: { code: "sourceUrlNotHttps" }, field: "sources.geo", scope: [] }],
-          type: "validation",
-        },
-        message: "invalid Geo source URL: expected an absolute HTTPS URL",
-        subsystem: "config",
-      }),
-    );
-    renderProbe();
-    await screen.findByText("clean");
-
-    await user.click(screen.getByRole("button", { name: "Edit two sections" }));
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    // The backend sends the code; the dialog renders the locale string.
-    expect(await screen.findByTestId("field-error-sources.geo")).toHaveTextContent(
-      "The URL must use https://",
-    );
-  });
-
-  it("clears the field errors from a rejected save once the next one starts", async () => {
-    const user = userEvent.setup();
-    ipcMocks.saveAppSettings
-      .mockRejectedValueOnce(
-        new ipcMocks.IpcCommandError({
-          kind: {
-            issues: [{ code: { code: "sourceUrlNotHttps" }, field: "sources.geo", scope: [] }],
-            type: "validation",
-          },
-          message: "invalid Geo source URL",
-          subsystem: "config",
-        }),
-      )
-      .mockImplementation(async (settings) => settings);
-    renderProbe();
-    await screen.findByText("clean");
-
-    await user.click(screen.getByRole("button", { name: "Edit two sections" }));
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    await screen.findByTestId("field-error-sources.geo");
-
-    await user.click(screen.getByRole("button", { name: "Edit two sections" }));
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(screen.queryByTestId("field-error-sources.geo")).not.toBeInTheDocument(),
-    );
-  });
-
-  // A failure with no per-field structure behind it must not invent one.
-  it("leaves the field errors empty for an untyped save failure", async () => {
-    const user = userEvent.setup();
-    ipcMocks.saveAppSettings.mockRejectedValueOnce(new Error("database unavailable"));
-    renderProbe();
-    await screen.findByText("clean");
-
-    await user.click(screen.getByRole("button", { name: "Edit two sections" }));
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("database unavailable");
-    expect(screen.queryByTestId("field-error-sources.geo")).not.toBeInTheDocument();
-  });
-
-  it("returns safely when save and discard run before the initial snapshot", async () => {
-    const user = userEvent.setup();
-    ipcMocks.loadAppSettings.mockReturnValue(new Promise(() => {}));
-    renderBareProbe();
-
-    await user.click(screen.getByRole("button", { name: "Early save" }));
-    await user.click(screen.getByRole("button", { name: "Early discard" }));
-    expect(ipcMocks.saveAppSettings).not.toHaveBeenCalled();
+  it("recovers initial query errors and ignores edits before loading", async () => {
+    settingsIpc.loadAppSettings.mockRejectedValueOnce(new Error("load failed"));
+    const { result, settle } = mount();
+    act(() => result.current.app.update((s) => s));
+    await waitFor(() => expect(result.current.app.error).toBe("load failed"));
+    act(() => result.current.app.retry());
+    await waitFor(() => expect(result.current.app.settings).not.toBeNull());
+    // A value already saved externally is a no-op at dispatch.
+    settingsIpc.loadAppSettings.mockResolvedValueOnce({ ...serverSettings(), core: { ...serverSettings().core, logLevel: "error" } });
+    act(() => result.current.app.update((s) => ({ ...s, core: { ...s.core, logLevel: "error" } })));
+    await settle();
+    expect(settingsIpc.saveAppSettings).not.toHaveBeenCalled();
   });
 });
-
-function Probe() {
-  const controller = useAppSettings();
-  if (!controller.settings) return <div>loading</div>;
-  return (
-    <div>
-      <div data-testid="state">{controller.dirty ? "dirty" : "clean"}</div>
-      <div data-testid="theme">{controller.settings.appearance.theme}</div>
-      <div data-testid="converter">{controller.settings.sources.subscriptionConverter ?? "none"}</div>
-      {controller.error ? <div role="alert">{controller.error}</div> : null}
-      {Object.entries(controller.fieldErrors).map(([field, message]) => (
-        <div data-testid={`field-error-${field}`} key={field}>
-          {message}
-        </div>
-      ))}
-      <button
-        onClick={() =>
-          controller.update((settings) => ({
-            ...settings,
-            sources: {
-              ...settings.sources,
-              subscriptionConverter: "https://convert.example.test",
-            },
-            core: { ...settings.core, logLevel: "debug" },
-          }))
-        }
-        type="button"
-      >
-        Edit two sections
-      </button>
-      <button
-        onClick={() =>
-          controller.setAppearance({ ...controller.settings!.appearance, theme: "dark" })
-        }
-        type="button"
-      >
-        Preview dark
-      </button>
-      <button onClick={() => void controller.discard()} type="button">Discard</button>
-      <button onClick={() => void controller.save()} type="button">Save</button>
-      <button onClick={() => void controller.reload()} type="button">Reload</button>
-    </div>
-  );
-}
-
-function BareProbe() {
-  const controller = useAppSettings();
-  return (
-    <div>
-      <button onClick={() => void controller.save()} type="button">Early save</button>
-      <button onClick={() => void controller.discard()} type="button">Early discard</button>
-    </div>
-  );
-}
-
-function renderBareProbe() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <BareProbe />
-    </QueryClientProvider>,
-  );
-}
-
-function renderProbe() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return {
-    client,
-    ...render(
-      <QueryClientProvider client={client}>
-        <Probe />
-      </QueryClientProvider>,
-    ),
-  };
-}
-
-function freshDns(): AppDnsSettings {
-  return { ...makeAppSettings().dns, remote: "https://dns.example.test/dns-query" };
-}

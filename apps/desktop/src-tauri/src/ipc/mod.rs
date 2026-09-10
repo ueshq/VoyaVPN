@@ -55,7 +55,6 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::save_routing_rule::<tauri::Wry>,
         commands::delete_routing_rules::<tauri::Wry>,
         commands::move_routing_rule::<tauri::Wry>,
-        commands::import_config_template::<tauri::Wry>,
         commands::list_process_candidates,
         commands::proxy_list_groups,
         commands::proxy_test_delay,
@@ -100,8 +99,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_contracts::MoveAction>()
         .typ::<voya_contracts::DnsSettings>()
         .typ::<voya_contracts::ValidationIssue>()
-        .typ::<voya_contracts::ConfigTemplateSelection>()
-        .typ::<voya_contracts::ConfigTemplateImportResult>()
         .typ::<voya_contracts::ProxyGroupsSnapshot>()
         .typ::<voya_contracts::ProxyGroup>()
         .typ::<voya_contracts::ProxyNode>()
@@ -114,7 +111,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_contracts::SpeedtestRunResult>()
         .typ::<voya_contracts::SpeedtestStatus>()
         .typ::<voya_contracts::ResourceUpdateFile>()
-        .typ::<voya_contracts::ConfigSourceSettings>()
         .typ::<voya_contracts::AppSettingsV1>()
         .typ::<voya_contracts::AppearanceSettings>()
         .typ::<voya_contracts::AutostartStatus>()

@@ -82,7 +82,6 @@ export const commands = {
 	saveRoutingRule: (routingId: string, rule: RoutingRule) => typedError<Routing_Serialize, AppError>(__TAURI_INVOKE("save_routing_rule", { routingId, rule })),
 	deleteRoutingRules: (routingId: string, ruleIds: string[]) => typedError<Routing_Serialize, AppError>(__TAURI_INVOKE("delete_routing_rules", { routingId, ruleIds })),
 	moveRoutingRule: (routingId: string, ruleId: string, action: MoveAction, position: number | null) => typedError<Routing_Serialize, AppError>(__TAURI_INVOKE("move_routing_rule", { routingId, ruleId, action, position })),
-	importConfigTemplate: (selection: ConfigTemplateSelection, preferProxy: boolean, proxyUrl: string | null) => typedError<ConfigTemplateImportResult, AppError>(__TAURI_INVOKE("import_config_template", { selection, preferProxy, proxyUrl })),
 	/**
 	 *  Enumerates running processes (and installed applications where the OS
 	 *  makes that cheap) for the per-app proxy picker. Blocking OS enumeration
@@ -224,7 +223,7 @@ export type AppErrorSubsystem =
 /**  The shell itself: window chrome, event emission, background tasks. */
 "app" | "autostart" | "certificate" | 
 /**  Reading or writing the persisted application configuration. */
-"config" | "dns" | "export" | "group" | "hotkey" | "preset" | "profile" | "proxyRuntime" | "qr" | "routing" | 
+"config" | "dns" | "export" | "group" | "hotkey" | "profile" | "proxyRuntime" | "qr" | "routing" | 
 /**  Core lifecycle: config generation, supervisor, connect/disconnect. */
 "runtime" | "speedtest" | "subscription" | "sysProxy" | "tun" | "update";
 
@@ -254,7 +253,6 @@ export type AppSettingsV1 = {
 	network: NetworkSettings,
 	routing: RoutingSettings,
 	dns: AppDnsSettings,
-	sources: SourceSettings,
 	speedTest: SpeedtestSettings,
 	multiplexing: MultiplexingSettings,
 	grpc: GrpcSettings,
@@ -312,21 +310,6 @@ export type CertificateFetchResult = {
 	warning: string | null,
 };
 
-export type ConfigSourceSettings = {
-	geoSourceUrl: string | null,
-	srsSourceUrl: string | null,
-	routeRulesTemplateSourceUrl: string | null,
-};
-
-export type ConfigTemplateImportResult = {
-	sources: ConfigSourceSettings,
-	routingIds: string[],
-	activeRoutingId: string | null,
-	reusedExistingRouting: boolean,
-};
-
-export type ConfigTemplateSelection = { type: "default" } | { type: "custom"; sources: ConfigSourceSettings };
-
 /**
  *  Top-level connection mode. A derived view over the two
  *  persisted primitives (system proxy type + TUN flag), never stored itself.
@@ -356,7 +339,7 @@ export type ConnectionModeStatus = {
  *  changed") into its log sentences; the fragment is a code now so the whole
  *  sentence can be assembled in the reader's language.
  */
-export type CoreFlowReason = "connect" | "restart" | "disconnect" | "routingChanged" | "dnsChanged" | "configTemplateImported" | "tunChanged" | "connectionModeChanged" | "settingsSaved";
+export type CoreFlowReason = "connect" | "restart" | "disconnect" | "routingChanged" | "dnsChanged" | "tunChanged" | "connectionModeChanged" | "settingsSaved";
 
 export type CoreSeedInstallResult = {
 	coreType: CoreType,
@@ -635,7 +618,7 @@ export type NetworkSettings = {
  *  parts: a notice is a whole sentence in every locale, and languages do not
  *  agree on how to build one out of a subject and a verb.
  */
-export type NoticeCode = { code: "profileRefreshFailed" } | { code: "subscriptionRefreshFailed" } | { code: "routingRefreshFailed" } | { code: "dnsRefreshFailed" } | { code: "configurationRefreshFailed" } | { code: "proxyViewRefreshFailed" } | { code: "connectionModeRefreshFailed" } | { code: "settingsRefreshFailed" } | { code: "routingSavedRestartFailed" } | { code: "routingDeletedRestartFailed" } | { code: "routingSelectedRestartFailed" } | { code: "routingRuleSavedRestartFailed" } | { code: "routingRulesDeletedRestartFailed" } | { code: "routingRuleMovedRestartFailed" } | { code: "dnsSavedRestartFailed" } | { code: "templateImportedRestartFailed" } | { code: "tunSavedRestartFailed" } | { code: "connectionModeSavedRestartFailed" } | { code: "settingsSavedRuntimeUpdateFailed" } | { code: "proxyModeSavedRuntimeUpdateFailed" } | { code: "settingsSavedSystemProxyUpdateFailed" } | { code: "systemProxyStatusRefreshFailed" } | { code: "tunStatusRefreshFailed" } | { code: "trayRefreshFailed" } | { code: "coreStopped" } | { code: "nativeTunStopped" } | { code: "coreStartedSystemProxyFailed" } | { code: "systemProxyRestoreFailed" } | { code: "subscriptionAutoUpdateFailed"; remarks: string };
+export type NoticeCode = { code: "profileRefreshFailed" } | { code: "subscriptionRefreshFailed" } | { code: "routingRefreshFailed" } | { code: "dnsRefreshFailed" } | { code: "proxyViewRefreshFailed" } | { code: "connectionModeRefreshFailed" } | { code: "settingsRefreshFailed" } | { code: "routingSavedRestartFailed" } | { code: "routingDeletedRestartFailed" } | { code: "routingSelectedRestartFailed" } | { code: "routingRuleSavedRestartFailed" } | { code: "routingRulesDeletedRestartFailed" } | { code: "routingRuleMovedRestartFailed" } | { code: "dnsSavedRestartFailed" } | { code: "tunSavedRestartFailed" } | { code: "connectionModeSavedRestartFailed" } | { code: "settingsSavedRuntimeUpdateFailed" } | { code: "proxyModeSavedRuntimeUpdateFailed" } | { code: "settingsSavedSystemProxyUpdateFailed" } | { code: "systemProxyStatusRefreshFailed" } | { code: "tunStatusRefreshFailed" } | { code: "trayRefreshFailed" } | { code: "coreStopped" } | { code: "nativeTunStopped" } | { code: "coreStartedSystemProxyFailed" } | { code: "systemProxyRestoreFailed" } | { code: "subscriptionAutoUpdateFailed"; remarks: string };
 
 /**
  *  A running process or installed application offered by the per-app proxy
@@ -934,13 +917,6 @@ export type ShortcutSettings = {
 	showWindowShortcut: ShortcutChord | null,
 };
 
-export type SourceSettings = {
-	subscriptionConverter: string | null,
-	geo: string | null,
-	singboxRuleset: string | null,
-	routingTemplate: string | null,
-};
-
 /**
  *  How a probe ended, as a code rather than a sentence.
  * 
@@ -1213,7 +1189,7 @@ export type TunStatus = {
  */
 export type ValidationCode = { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "invalidFinalMask" } | { code: "unsupportedNetwork"; network: string } | { code: "unsupportedProtocol"; protocol: string } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "notAGroupProfile" } | { code: "groupCycle"; group: string; child: string } | 
 /**  The cycle found by the group builder, which knows the whole path. */
-{ code: "groupCyclePath"; path: string[] } | { code: "groupWithoutValidChild"; group: string } | { code: "policyGroupWithoutValidChildren" } | { code: "proxyChainWithoutValidChildren" } | { code: "proxyChainSingleHop" } | { code: "groupChildNotFound"; profileId: string } | { code: "groupDuplicateChildIgnored"; profileId: string } | { code: "invalidSubscriptionFilter"; pattern: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "sourceUrlNotHttp" } | { code: "sourceUrlNotHttps" } | { code: "sourceUrlHasCredentials" } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | 
+{ code: "groupCyclePath"; path: string[] } | { code: "groupWithoutValidChild"; group: string } | { code: "policyGroupWithoutValidChildren" } | { code: "proxyChainWithoutValidChildren" } | { code: "proxyChainSingleHop" } | { code: "groupChildNotFound"; profileId: string } | { code: "groupDuplicateChildIgnored"; profileId: string } | { code: "invalidSubscriptionFilter"; pattern: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | 
 /**
  *  A rejection this contract has no code for. The English `message` is the
  *  failing manager's own diagnostic and is rendered verbatim.
@@ -1225,7 +1201,7 @@ export type ValidationCode = { code: "invalidAddress" } | { code: "invalidPort" 
  * 
  *  `field` is a stable identifier, not a display label: the DNS pane keys its
  *  inputs by `direct`/`remote`/`bootstrap`/`hosts`, the settings surface by its
- *  contract path (`sources.geo`), and the group builder by `children`.
+ *  contract path (`network.tun.mtu`), and the group builder by `children`.
  */
 export type ValidationIssue = {
 	field: string,

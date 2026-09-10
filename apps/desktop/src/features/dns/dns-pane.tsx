@@ -1,79 +1,19 @@
-import { RefreshCw, Save, TriangleAlert } from "lucide-react";
-
-import { Alert, AlertDescription } from "@voya/ui/components/alert";
 import { Badge } from "@voya/ui/components/badge";
-import { Button } from "@voya/ui/components/button";
-import { cn } from "@voya/ui/lib/utils";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { runSettingsOperation, useRegisterSettingsDirtySource, useSettingsWorking } from "@/features/settings/settings-dirty-sources";
 
 import { SimpleDnsForm } from "./simple-dns-form";
-import { useDnsSettings } from "./use-dns-settings";
+import type { useDnsSettings } from "./use-dns-settings";
 
-/**
- * DNS settings pane embedded in the Settings surface. It keeps its own
- * Reload/Save lifecycle (dedicated commands with server-side validation)
- * instead of joining the surface's save-all draft, mirroring the Updates tab
- * precedent. The hosting `TabsContent` provides scroll and padding.
- *
- * Its draft is registered with the surface so "Save all", "Discard" and the
- * navigation leave guard cover it too — leaving the Settings tab unmounts this
- * pane, which would otherwise drop the edits without asking.
- */
-export function DnsPane() {
+export function DnsPane({ controller }: { controller: ReturnType<typeof useDnsSettings> }) {
   const { t } = useI18n();
-  const working = useSettingsWorking();
-  const {
-    dnsQuery,
-    fieldErrors,
-    form,
-    handleReload,
-    handleSave,
-    isDirty,
-    issueCount,
-    operationError,
-    updateSimple,
-  } = useDnsSettings();
-
-  useRegisterSettingsDirtySource({ dirty: isDirty, discard: handleReload, save: handleSave });
-
+  const { fieldErrors, form, issueCount, updateSimple } = controller;
   return (
-    <section aria-label={t("panes.dns.title")} className="mx-auto grid w-full max-w-3xl gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-semibold">{t("panes.dns.title")}</h2>
+    <section aria-label={t("panes.dns.title")} className="grid gap-4">
+      <div className="flex items-center gap-2">
         <Badge variant="outline">{form?.fakeIp ? t("panes.dns.fakeIp") : t("panes.dns.standard")}</Badge>
-        {issueCount ? (
-          <Badge variant="destructive">
-            <TriangleAlert className="size-3.5" aria-hidden="true" />
-            {t("panes.dns.errorCount", { count: issueCount })}
-          </Badge>
-        ) : null}
-        <div className="ms-auto flex items-center gap-2">
-          <Button disabled={working || dnsQuery.isFetching} onClick={() => void runSettingsOperation(handleReload)} size="sm" type="button" variant="outline">
-            <RefreshCw className={cn("size-4", dnsQuery.isFetching && "animate-spin")} aria-hidden="true" />
-            {t("actions.reload")}
-          </Button>
-          <Button disabled={working || !form || !isDirty} onClick={() => void runSettingsOperation(handleSave)} size="sm" type="button">
-            <Save className="size-4" aria-hidden="true" />
-            {t("actions.save")}
-          </Button>
-        </div>
+        {issueCount ? <Badge variant="destructive">{t("panes.dns.errorCount", { count: issueCount })}</Badge> : null}
       </div>
-
-      {operationError ? (
-        <Alert className="py-2" variant="destructive">
-          <TriangleAlert aria-hidden="true" />
-          <AlertDescription>{operationError}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {form ? (
-        <fieldset className="min-w-0" disabled={working}>
-          <SimpleDnsForm errors={fieldErrors} settings={form} updateSimple={updateSimple} />
-        </fieldset>
-      ) : (
-        <div className="text-sm text-muted-foreground">{t("panes.dns.loading")}</div>
-      )}
+      {form ? <SimpleDnsForm errors={fieldErrors} settings={form} updateSimple={updateSimple} /> : <p className="text-sm text-muted-foreground">{t("panes.dns.loading")}</p>}
     </section>
   );
 }

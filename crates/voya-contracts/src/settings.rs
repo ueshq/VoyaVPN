@@ -15,9 +15,8 @@ use crate::{SystemProxyType, TrafficMode, CURRENT_SCHEMA_VERSION};
 // it out of `setup()`, and the app cannot launch.
 //
 // So: add fields with `#[serde(default)]`. When one really has to go or be
-// renamed, list the key earlier builds stored in voya-db's `RETIRED_DNS_KEYS` /
-// `RENAMED_SPEEDTEST_KEYS`, which `SettingsRepository::load` applies to the
-// stored JSON before serde sees it. voya-db pins both the current layout and a
+// renamed, handle the stored key in voya-db's `normalize_retired_keys`, which
+// `SettingsRepository::load` applies before serde sees the stored JSON. voya-db pins both the current layout and a
 // row from before the last such removal against checked-in fixtures
 // (`crates/voya-db/fixtures/app_settings_v1.json` and
 // `app_settings_v1_retired_keys.json`).
@@ -34,7 +33,6 @@ pub struct AppSettingsV1 {
     pub network: NetworkSettings,
     pub routing: RoutingSettings,
     pub dns: AppDnsSettings,
-    pub sources: SourceSettings,
     // Serialized as `speedTest`. The type follows the `Speedtest` spelling the
     // commands and events use, but the field name is a persisted JSON key and
     // stays as it is.
@@ -56,7 +54,6 @@ impl Default for AppSettingsV1 {
             network: NetworkSettings::default(),
             routing: RoutingSettings::default(),
             dns: AppDnsSettings::default(),
-            sources: SourceSettings::default(),
             speed_test: SpeedtestSettings::default(),
             multiplexing: MultiplexingSettings::default(),
             grpc: GrpcSettings::default(),
@@ -275,15 +272,6 @@ pub struct AppDnsSettings {
     pub proxy_strategy: Option<String>,
     pub hosts: Option<String>,
     pub direct_expected_ips: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SourceSettings {
-    pub subscription_converter: Option<String>,
-    pub geo: Option<String>,
-    pub singbox_ruleset: Option<String>,
-    pub routing_template: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]

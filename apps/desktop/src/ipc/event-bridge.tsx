@@ -169,12 +169,11 @@ function routeAppEvent(event: AppEvent, t: TranslationFunction) {
       return;
     case "selectTab": {
       const target = toShellTarget(event.payload);
-      // Set the sub-view before navigating so a blocked navigation (settings
-      // leave guard) still lands on the right sub-tab once it resolves.
+      // Seed the sub-view before mounting the destination screen.
       if (target.view) {
         useShellStore.getState().setConnectionsView(target.view);
       }
-      useShellStore.getState().requestTab(target.tab);
+      useShellStore.getState().setActiveTab(target.tab);
       return;
     }
   }

@@ -66,7 +66,6 @@ const wrapperNames = [
   "saveRoutingRule",
   "deleteRoutingRules",
   "moveRoutingRule",
-  "importConfigTemplate",
   "proxyListGroups",
   "proxyTestDelay",
   "proxySelectNode",
@@ -149,7 +148,6 @@ type WrapperName = (typeof wrapperNames)[number];
 /** `[wrapper, call arguments, arguments the generated binding must receive]`. */
 function forwardingCases(): Array<[WrapperName, unknown[], unknown[]]> {
   const rule = { id: "rule-1", remarks: "Managed" };
-  const templateSelection = { geo: true };
 
   return [
     // Defaulted parameters have to survive an argument-less call.
@@ -163,7 +161,6 @@ function forwardingCases(): Array<[WrapperName, unknown[], unknown[]]> {
     ["updateSubscriptions", [], [null, true, null]],
     ["updateSubscriptions", ["sub-1", false, "http://proxy.test"], ["sub-1", false, "http://proxy.test"]],
     ["importProfilesFromText", ["vmess://link"], ["vmess://link", null]],
-    ["importConfigTemplate", [templateSelection], [templateSelection, true, null]],
     ["setConnectionMode", ["vpn"], ["vpn", null]],
     // Same-typed positional parameters: a transposition here is invisible to tsc.
     ["moveProfile", ["sub-1", "index-1", "up"], ["sub-1", "index-1", "up", null]],

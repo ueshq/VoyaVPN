@@ -12,7 +12,7 @@ use crate::{
         sysproxy_type_from_contract, sysproxy_type_to_contract, traffic_mode_from_contract,
         traffic_mode_to_contract,
     },
-    input_safety, updates,
+    input_safety,
 };
 
 /// Why a submitted settings bundle was rejected.
@@ -21,7 +21,7 @@ use crate::{
 /// surface can mark the offending input the way the DNS pane already does
 /// instead of showing one banner for the whole form. `label` stays alongside
 /// `field` because the two audiences differ: the message keeps reading
-/// "invalid Geo source URL", the form keys off `sources.geo`.
+/// "invalid UI language", the form keys off `appearance.language`.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AppSettingsValidationError {
     #[error("unsupported settings schema version {found}; expected {expected}")]
@@ -32,8 +32,6 @@ pub enum AppSettingsValidationError {
         label: &'static str,
         reason: contracts::ValidationCode,
     },
-    #[error(transparent)]
-    InvalidSource(#[from] updates::InvalidSourceUrl),
     #[error("TUN MTU must be between 576 and 65535")]
     InvalidTunMtu,
     #[error("Hysteria bandwidth values cannot be negative")]
@@ -49,7 +47,6 @@ impl AppSettingsValidationError {
         match self {
             Self::UnsupportedSchema { .. } => "schemaVersion",
             Self::InvalidText { field, .. } | Self::NegativeHysteriaBandwidth { field } => field,
-            Self::InvalidSource(error) => error.field.field,
             Self::InvalidTunMtu => "network.tun.mtu",
             Self::InvalidHysteriaHopInterval => "hysteria.hopIntervalSeconds",
         }
@@ -70,7 +67,6 @@ impl AppSettingsValidationError {
                 }
             }
             Self::InvalidText { reason, .. } => reason.clone(),
-            Self::InvalidSource(error) => error.reason.clone(),
             Self::InvalidTunMtu => contracts::ValidationCode::TunMtuOutOfRange {
                 min: TUN_MTU_RANGE.0,
                 max: TUN_MTU_RANGE.1,
@@ -108,45 +104,6 @@ pub fn validate_app_settings(
             reason: input_safety_reason(error),
         },
     )?;
-    for (source, value) in [
-        (
-            updates::SourceUrlField::GEO,
-            settings.sources.geo.as_deref(),
-        ),
-        (
-            updates::SourceUrlField::SINGBOX_RULESET,
-            settings.sources.singbox_ruleset.as_deref(),
-        ),
-        (
-            updates::SourceUrlField::ROUTING_TEMPLATE,
-            settings.sources.routing_template.as_deref(),
-        ),
-        (
-            updates::SourceUrlField::SUBSCRIPTION_CONVERTER,
-            settings.sources.subscription_converter.as_deref(),
-        ),
-    ] {
-        input_safety::validate_optional_text(value, 2048).map_err(|error| {
-            AppSettingsValidationError::InvalidText {
-                field: source.field,
-                label: source.label,
-                reason: input_safety_reason(error),
-            }
-        })?;
-    }
-    // The subscription converter is routinely a local helper (for example
-    // http://localhost:25500/sub), so plain HTTP stays allowed there. Geo,
-    // ruleset and routing-template sources decide which traffic bypasses the
-    // proxy, so they must be authenticated transports.
-    updates::validate_optional_source_url(
-        updates::SourceUrlField::SUBSCRIPTION_CONVERTER,
-        settings.sources.subscription_converter.as_deref(),
-    )?;
-    updates::validate_asset_source_urls(&updates::ConfigSourceSettings {
-        geo_source_url: settings.sources.geo.clone(),
-        srs_source_url: settings.sources.singbox_ruleset.clone(),
-        route_rules_template_source_url: settings.sources.routing_template.clone(),
-    })?;
     if !(i32::try_from(TUN_MTU_RANGE.0).unwrap_or(i32::MAX)
         ..=i32::try_from(TUN_MTU_RANGE.1).unwrap_or(i32::MAX))
         .contains(&settings.network.tun.mtu)
@@ -186,8 +143,6 @@ pub fn saved_config_requires_runtime_restart(original: &AppConfig, updated: &App
         // `traffic_mode` selects the generated outbound; `node_sorting` only
         // orders the proxy-groups snapshot the UI renders.
         || original.proxy_ui_item.traffic_mode != updated.proxy_ui_item.traffic_mode
-        // The SRS source is embedded in every remote `route.rule_set[].url`.
-        || original.const_item.srs_source_url != updated.const_item.srs_source_url
         || original.inbound != updated.inbound
         || original.simple_dns_item != updated.simple_dns_item
 }
@@ -309,12 +264,6 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
             hosts: config.simple_dns_item.hosts.clone(),
             direct_expected_ips: config.simple_dns_item.direct_expected_ips.clone(),
         },
-        sources: contracts::SourceSettings {
-            subscription_converter: config.const_item.sub_convert_url.clone(),
-            geo: config.const_item.geo_source_url.clone(),
-            singbox_ruleset: config.const_item.srs_source_url.clone(),
-            routing_template: config.const_item.route_rules_template_source_url.clone(),
-        },
         speed_test: contracts::SpeedtestSettings {
             timeout_seconds: config.speed_test_item.speed_test_timeout,
             latency_url: config.speed_test_item.speed_ping_test_url.clone(),
@@ -426,12 +375,6 @@ pub fn app_config_from_settings(
         ui_item: UiItem {
             current_theme: theme_to_config(settings.appearance.theme).map(str::to_string),
             current_language: settings.appearance.language.clone(),
-        },
-        const_item: voya_core::ConstItem {
-            sub_convert_url: settings.sources.subscription_converter.clone(),
-            geo_source_url: settings.sources.geo.clone(),
-            srs_source_url: settings.sources.singbox_ruleset.clone(),
-            route_rules_template_source_url: settings.sources.routing_template.clone(),
         },
         speed_test_item: SpeedTestItem {
             speed_test_timeout: settings.speed_test.timeout_seconds,
@@ -682,12 +625,6 @@ mod tests {
                 current_theme: Some("Dark".to_string()),
                 current_language: "zh-Hans".to_string(),
             },
-            const_item: voya_core::ConstItem {
-                sub_convert_url: Some("https://convert.test/sub".to_string()),
-                geo_source_url: Some("https://geo.test/{0}.dat".to_string()),
-                srs_source_url: Some("https://srs.test/{0}.srs".to_string()),
-                route_rules_template_source_url: Some("https://template.test/routing".to_string()),
-            },
             speed_test_item: SpeedTestItem {
                 speed_test_timeout: 21,
                 speed_ping_test_url: "https://speed.test/latency".to_string(),
@@ -911,7 +848,7 @@ mod tests {
     }
 
     #[test]
-    fn settings_validation_rejects_versions_urls_and_runtime_limits() {
+    fn settings_validation_rejects_versions_and_runtime_limits() {
         let mut settings = contracts::AppSettingsV1 {
             schema_version: 2,
             ..contracts::AppSettingsV1::default()
@@ -922,20 +859,6 @@ mod tests {
         ));
 
         settings.schema_version = contracts::CURRENT_SCHEMA_VERSION;
-        settings.sources.geo = Some("ftp://example.test/{0}.dat".to_string());
-        assert!(matches!(
-            validate_app_settings(&settings),
-            Err(AppSettingsValidationError::InvalidSource(_))
-        ));
-
-        settings.sources.geo = None;
-        settings.sources.routing_template = Some("http://example.test/routing.json".to_string());
-        assert!(matches!(
-            validate_app_settings(&settings),
-            Err(AppSettingsValidationError::InvalidSource(_))
-        ));
-
-        settings.sources.routing_template = None;
         settings.network.tun.mtu = 575;
         assert_eq!(
             validate_app_settings(&settings),
@@ -959,7 +882,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_restart_policy_tracks_srs_source_but_not_node_sorting() {
+    fn runtime_restart_policy_tracks_traffic_mode_but_not_node_sorting() {
         let original = AppConfig::default();
 
         let mut sorted = original.clone();
@@ -972,13 +895,6 @@ mod tests {
         let mut mode = original.clone();
         mode.proxy_ui_item.traffic_mode = TrafficMode::Global;
         assert!(saved_config_requires_runtime_restart(&original, &mode));
-
-        let mut srs = original.clone();
-        srs.const_item.srs_source_url = Some("https://example.test/rules/{0}.srs".to_string());
-        assert!(
-            saved_config_requires_runtime_restart(&original, &srs),
-            "the SRS source is embedded in every generated rule_set URL"
-        );
     }
 
     #[test]
@@ -989,7 +905,6 @@ mod tests {
         };
         original.routing_basic_item.routing_index_id = "routing-a".to_string();
         original.ui_item.current_language = "zh-Hans".to_string();
-        original.const_item.srs_source_url = Some("https://example.test/{0}.srs".to_string());
         original.proxy_ui_item.node_sorting = 3;
 
         let target = config_from_settings(&settings_from_app_config(&original), &original);
@@ -1014,35 +929,12 @@ mod tests {
         );
     }
 
-    #[test]
-    fn settings_validation_requires_https_for_geo_and_ruleset_sources() {
-        let mut settings = contracts::AppSettingsV1::default();
-        settings.sources.subscription_converter = Some("http://localhost:25500/sub".to_string());
-        validate_app_settings(&settings).expect("a local converter may use plain HTTP");
-
-        settings.sources.geo = Some("http://example.test/{0}.dat".to_string());
-        assert!(matches!(
-            validate_app_settings(&settings),
-            Err(AppSettingsValidationError::InvalidSource(_))
-        ));
-
-        settings.sources.geo = Some("https://example.test/{0}.dat".to_string());
-        settings.sources.singbox_ruleset = Some("http://example.test/{0}.srs".to_string());
-        assert!(matches!(
-            validate_app_settings(&settings),
-            Err(AppSettingsValidationError::InvalidSource(_))
-        ));
-
-        settings.sources.singbox_ruleset = Some("https://example.test/{0}.srs".to_string());
-        validate_app_settings(&settings).expect("HTTPS asset sources should be accepted");
-    }
-
     /// The settings surface marks the input a rejection is about, so every
     /// rejection has to name an `AppSettingsV1` path — not the human label the
     /// message uses, which no form can key off.
     #[test]
     fn every_settings_rejection_names_the_contract_path_it_is_about() {
-        let cases: [(contracts::AppSettingsV1, &str); 7] = [
+        let cases: [(contracts::AppSettingsV1, &str); 5] = [
             (
                 contracts::AppSettingsV1 {
                     schema_version: contracts::CURRENT_SCHEMA_VERSION + 1,
@@ -1053,18 +945,6 @@ mod tests {
             (
                 settings_with(|settings| settings.appearance.language = "  ".to_string()),
                 "appearance.language",
-            ),
-            (
-                settings_with(|settings| {
-                    settings.sources.geo = Some("http://example.test/{0}.dat".to_string());
-                }),
-                "sources.geo",
-            ),
-            (
-                settings_with(|settings| {
-                    settings.sources.subscription_converter = Some("::".to_string());
-                }),
-                "sources.subscriptionConverter",
             ),
             (
                 settings_with(|settings| settings.network.tun.mtu = 1),

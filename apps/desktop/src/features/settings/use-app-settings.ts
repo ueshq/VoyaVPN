@@ -1,179 +1,73 @@
-import { useCallback, useRef, useState } from "react";
-import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { IpcCommandError, loadAppSettings, saveAppSettings } from "@/ipc";
-import type {
-  AppDnsSettings,
-  AppSettingsV1,
-  AppearanceSettings,
-} from "@/ipc/bindings";
-import { validationFieldErrors } from "@/ipc/messages";
+import { loadAppSettings, saveAppSettings } from "@/ipc";
+import type { AppSettingsV1, AppearanceSettings } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
-import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 
-import { applyUiPreferences } from "./ui-preferences";
-import { isSettingsWorking } from "./settings-dirty-sources";
+import { applyChanges, changedFields } from "./settings-draft";
+import { useSettingsDraft } from "./use-settings-draft";
+import { applyUiPreferences, endUiPreferencesPreview, previewUiPreferences, reportUiPreferencesError } from "./ui-preferences";
 
-export type AppSettingsController = {
-  settings: AppSettingsV1 | null;
-  dirty: boolean;
-  discard: () => Promise<void>;
-  error: string | null;
-  /**
-   * Backend rejections keyed by their `AppSettingsV1` path (`sources.geo`,
-   * `network.tun.mtu`), the way the DNS pane keys its own field errors. Empty
-   * unless the last save was rejected.
-   */
-  fieldErrors: Record<string, string>;
-  reload: () => Promise<void>;
-  save: () => Promise<boolean>;
-  saved: boolean;
-  setAppearance: (preferences: AppearanceSettings) => void;
-  update: (
-    updater: (current: AppSettingsV1) => AppSettingsV1,
-  ) => void;
-  working: boolean;
-};
-
-export function useAppSettings(): AppSettingsController {
-  const { t } = useI18n();
-  const queryClient = useQueryClient();
-  const settingsQuery = useQuery({
-    queryFn: loadAppSettings,
+export function useAppSettings() {
+  const client = useQueryClient();
+  const [previewOwner] = useState(() => Symbol("settings appearance"));
+  const query = useQuery({ queryFn: loadAppSettings, queryKey: queryKeys.appSettings, refetchOnMount: "always" });
+  const draft = useSettingsDraft<AppSettingsV1>({
+    data: query.data,
     queryKey: queryKeys.appSettings,
+    write: async (change) => {
+      // Construct the complete IPC DTO at dispatch, after earlier app/DNS writes.
+      // Failed or still-being-edited fields are never included in this snapshot.
+      const baseline = await loadAppSettings();
+      const next = applyChanges(baseline, [change]);
+      const saved = changedFields(baseline, next).length ? await saveAppSettings(next) : baseline;
+      await Promise.all([
+        client.cancelQueries({ queryKey: queryKeys.appSettings }),
+        client.cancelQueries({ queryKey: queryKeys.dns }),
+        client.cancelQueries({ queryKey: queryKeys.uiPreferences }),
+      ]);
+      client.setQueryData(queryKeys.appSettings, saved);
+      client.setQueryData(queryKeys.dns, saved.dns);
+      client.setQueryData(queryKeys.uiPreferences, saved.appearance);
+      await applyUiPreferences(saved.appearance).catch(reportUiPreferencesError);
+      return saved;
+    },
   });
-  const [draft, setDraft] = useState<AppSettingsV1 | null>(null);
-  const [operationError, setOperationError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const savingRef = useRef(false);
-  const original = settingsQuery.data ?? null;
-  const settings = draft ?? original;
 
-  const load = useCallback(async () => {
-    if (savingRef.current) return;
-    setOperationError(null);
-    setFieldErrors({});
-    setDraft(null);
-    setSaved(false);
-    const result = await settingsQuery.refetch();
-    if (result.error) {
-      setOperationError(getErrorMessage(result.error));
+  const appearance = draft.value?.appearance;
+  const authoritative = query.data?.appearance;
+  useEffect(() => {
+    if (appearance && authoritative && changedFields(authoritative, appearance).length === 0) {
+      endUiPreferencesPreview(previewOwner);
     }
-  }, [settingsQuery]);
+  }, [appearance, authoritative, previewOwner]);
 
-  const dirty = Boolean(draft && original && !settingsEqual(draft, original));
+  useEffect(() => () => {
+    endUiPreferencesPreview(previewOwner);
+    const saved = client.getQueryData<AppSettingsV1>(queryKeys.appSettings);
+    if (saved) void applyUiPreferences(saved.appearance).catch(reportUiPreferencesError);
+  }, [client, previewOwner]);
 
-  const update = useCallback(
-    (updater: (current: AppSettingsV1) => AppSettingsV1) => {
-      if (savingRef.current || isSettingsWorking()) return;
-      setSaved(false);
-      setDraft((current) => {
-        const next = current ?? settingsQuery.data;
-        return next ? updater(next) : current;
-      });
-    },
-    [settingsQuery.data],
-  );
-
-  const setAppearance = useCallback(
-    (preferences: AppearanceSettings) => {
-      if (savingRef.current || isSettingsWorking()) return;
-      update((current) => ({ ...current, appearance: preferences }));
-      // Preview only: the appearance is not persisted until Save-all succeeds.
-      void applyUiPreferences(preferences, { persist: false }).catch((previewError: unknown) => {
-        setOperationError(getErrorMessage(previewError));
-      });
-    },
-    [update],
-  );
-
-  const discard = useCallback(async () => {
-    if (!original || savingRef.current) {
-      return;
-    }
-    setDraft(null);
-    setSaved(false);
-    setOperationError(null);
-    setFieldErrors({});
-    await applyUiPreferences(original.appearance).catch((rollbackError: unknown) => {
-      setOperationError(getErrorMessage(rollbackError));
-    });
-  }, [original]);
-
-  const save = useCallback(async () => {
-    if (!settings || savingRef.current) {
-      return false;
-    }
-    savingRef.current = true;
-    setSaving(true);
-    setOperationError(null);
-    setFieldErrors({});
-    setSaved(false);
-    try {
-      const authoritative = await saveAppSettings(withFreshestDns(settings, queryClient));
-      queryClient.setQueryData(queryKeys.appSettings, authoritative);
-      setDraft(null);
-      setSaved(true);
-      await applyUiPreferences(authoritative.appearance);
-      queryClient.setQueryData(queryKeys.uiPreferences, authoritative.appearance);
-      return true;
-    } catch (saveError) {
-      setOperationError(getErrorMessage(saveError));
-      setFieldErrors(saveError instanceof IpcCommandError && saveError.appError.kind.type === "validation"
-        ? validationFieldErrors(t, saveError.appError.kind.issues)
-        : {});
-      try {
-        const authoritative = await loadAppSettings();
-        queryClient.setQueryData(queryKeys.appSettings, authoritative);
-        // Reconcile the baseline without discarding rejected edits or their
-        // appearance preview. The user can correct and retry the same draft.
-      } catch {
-        // Keep the original save error; a later Reload can retry the snapshot.
-      }
-      return false;
-    } finally {
-      savingRef.current = false;
-      setSaving(false);
-    }
-  }, [settings, queryClient, t]);
+  function setAppearance(preferences: AppearanceSettings) {
+    previewUiPreferences(previewOwner, preferences);
+    draft.update((current) => ({ ...current, appearance: preferences }));
+  }
 
   return {
-    settings,
-    dirty,
-    discard,
-    error: operationError ?? (settingsQuery.error ? getErrorMessage(settingsQuery.error) : null),
-    fieldErrors,
-    reload: load,
-    save,
-    saved,
+    settings: draft.value,
+    error: draft.error ?? (query.error ? getErrorMessage(query.error) : null),
+    fieldErrors: draft.fieldErrors,
+    retry: () => { draft.retry(); if (query.isError) void query.refetch(); },
+    saved: draft.saved,
+    saving: draft.saving,
     setAppearance,
-    update,
-    working: saving || settingsQuery.isPending || settingsQuery.isFetching,
+    update: draft.update,
+    working: query.isPending,
   };
 }
 
-/**
- * No Settings tab edits `settings.dns`: the DNS pane writes the same backend
- * field through its own command pair. This controller seeds its draft once from
- * the cached bundle (`update()` uses `current ?? settingsQuery.data`), so a DNS
- * save made after that seeding would be silently reverted by Save-all — and,
- * because the backend compares `simple_dns_item` to decide on a restart, the
- * core would be restarted with the reverted resolvers. Always post the freshest
- * DNS block instead of the draft's snapshot of it.
- */
-function withFreshestDns(settings: AppSettingsV1, queryClient: QueryClient): AppSettingsV1 {
-  // The DNS pane writes this cache synchronously when its own save succeeds, so
-  // it is the authoritative DNS block whenever the pane has been used at all.
-  // `DnsSettings` (its DTO) and `AppDnsSettings` (the bundle's block) are the
-  // same shape; the backend maps one onto the other.
-  const dns = queryClient.getQueryData<AppDnsSettings>(queryKeys.dns);
+export type AppSettingsController = ReturnType<typeof useAppSettings>;
 
-  return dns ? { ...settings, dns } : settings;
-}
-
-function settingsEqual(left: AppSettingsV1, right: AppSettingsV1) {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
+export type AppSettingsFormController = AppSettingsController & { settings: AppSettingsV1 };

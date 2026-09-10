@@ -9,7 +9,7 @@ import {
 
 export function PreferencesBridge() {
   const preferencesQuery = useUiPreferencesQuery();
-  // A Settings preview overrides the stored mode until it is saved or discarded.
+  // A Settings preview lasts until acknowledgement or leaving the page.
   const themeMode = usePreferencesStore((state) => state.themePreview ?? state.themeMode);
 
   useEffect(() => {

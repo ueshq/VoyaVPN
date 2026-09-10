@@ -14,10 +14,6 @@
 //!   call sites, so the same failure reached the frontend as `Database` through
 //!   `save_profile` but as `Runtime`/`Speedtest` through the runtime and
 //!   speedtest commands.
-//! - **Nested errors delegate.** `PresetManagerError::Routing` hands the whole
-//!   `RoutingManagerError` to its own conversion instead of picking out the one
-//!   sub-case it happened to care about, which is why a nested `Download` used
-//!   to lose its classification.
 //! - **Elevation is a kind, never a sentence.** `TunManagerError::ElevationRequired`
 //!   and `SupervisorError::ElevationNotGranted` are the only two sources of
 //!   [`AppErrorKind::ElevationRequired`], and the only two failures allowed to
@@ -37,7 +33,7 @@ use crate::{
     autostart::AutostartManagerError, config_mutation::ConfigMutationError,
     connection_mode::ConnectionModeError, dns::DnsManagerError, elevation::ElevationError,
     exports::ExportManagerError, groups::GroupManagerError, hotkeys::HotkeyManagerError,
-    input_safety::InputSafetyError, presets::PresetManagerError, profiles::ProfileManagerError,
+    input_safety::InputSafetyError, profiles::ProfileManagerError,
     proxy_runtime::ProxyRuntimeError, qr::QrCodeError, routing::RoutingManagerError,
     runtime::RuntimeError, settings_flow::SettingsSaveError,
     settings_save::AppSettingsValidationError, speedtest::SpeedtestError,
@@ -225,7 +221,6 @@ impl From<RoutingManagerError> for AppError {
     fn from(error: RoutingManagerError) -> Self {
         match error {
             RoutingManagerError::Database(source) => database_error(&source, Sub::Routing),
-            RoutingManagerError::Download(source) => download_error(&source, Sub::Routing),
             RoutingManagerError::RoutingNotFound(ref id) => not_found(
                 Sub::Routing,
                 AppErrorEntity::Routing,
@@ -239,26 +234,7 @@ impl From<RoutingManagerError> for AppError {
                 &error,
             ),
             RoutingManagerError::MissingRoutingId => invalid(Sub::Routing, "routingId", &error),
-            RoutingManagerError::InvalidTemplate(_) => invalid(Sub::Routing, "template", &error),
-            RoutingManagerError::InvalidRules(_) => invalid(Sub::Routing, "ruleSet", &error),
             RoutingManagerError::InvalidMove { .. } => invalid(Sub::Routing, "position", &error),
-        }
-    }
-}
-
-impl From<PresetManagerError> for AppError {
-    fn from(error: PresetManagerError) -> Self {
-        match error {
-            PresetManagerError::Database(source) => database_error(&source, Sub::Preset),
-            // Delegating the whole nested error is the point: the old shell
-            // mapper special-cased `Routing(Database)` and let every other
-            // routing failure — a download, a bad template — fall through to a
-            // bare string.
-            PresetManagerError::Routing(source) => Self::from(source),
-            PresetManagerError::Source(source) => Self::from(source),
-            PresetManagerError::MissingRoutingTemplateSource => {
-                invalid(Sub::Preset, "sources.routingTemplate", &error)
-            }
         }
     }
 }
@@ -285,14 +261,6 @@ impl From<UpdateManagerError> for AppError {
         match error {
             UpdateManagerError::Database(source) => database_error(&source, Sub::Update),
             UpdateManagerError::RulesetGeo(source) => ruleset_geo_error(&source),
-            UpdateManagerError::InvalidSourceUrl(source) => Self::validation(
-                Sub::Update,
-                source.to_string(),
-                vec![ValidationIssue::new(
-                    source.field.field,
-                    source.reason.clone(),
-                )],
-            ),
         }
     }
 }

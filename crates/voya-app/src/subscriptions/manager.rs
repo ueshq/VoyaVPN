@@ -371,7 +371,7 @@ impl<'db> SubscriptionManager<'db> {
         proxy_url: Option<&str>,
     ) -> Result<SubscriptionUpdateResult> {
         let prepared = self
-            .prepare_subscription_update(config, subscription_id, prefer_proxy, proxy_url)
+            .prepare_subscription_update(subscription_id, prefer_proxy, proxy_url)
             .await?;
         self.apply_prepared_subscription_update(config, prepared)
             .await
@@ -379,20 +379,12 @@ impl<'db> SubscriptionManager<'db> {
 
     pub async fn prepare_subscription_update(
         &self,
-        config: &AppConfig,
         subscription_id: Option<&str>,
         prefer_proxy: bool,
         proxy_url: Option<&str>,
     ) -> Result<PreparedSubscriptionUpdate> {
         let subscriptions = self.database.subscriptions().list().await?;
-        prepare_subscription_snapshot(
-            config,
-            subscriptions,
-            subscription_id,
-            prefer_proxy,
-            proxy_url,
-        )
-        .await
+        prepare_subscription_snapshot(subscriptions, subscription_id, prefer_proxy, proxy_url).await
     }
 
     pub async fn apply_prepared_subscription_update(
@@ -802,18 +794,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn subscription_update_downloads_base64_more_url_and_conversion_target() {
+    async fn subscription_update_downloads_base64_and_more_url() {
         let seen_user_agents = Arc::new(Mutex::new(Vec::new()));
         let main = STANDARD.encode("vless://uuid-a@example.test:443#US%20A");
         let extra = "trojan://secret@example.test:443#US%20B".to_string();
-        let converted = "vless://uuid-c@example.test:443#US%20C".to_string();
         let base = spawn_http_fixture(
-            HashMap::from([
-                ("/main".to_string(), main),
-                ("/extra".to_string(), extra),
-                ("/convert".to_string(), converted),
-            ]),
-            3,
+            HashMap::from([("/main".to_string(), main), ("/extra".to_string(), extra)]),
+            2,
             Arc::clone(&seen_user_agents),
         )
         .await;
@@ -823,7 +810,6 @@ mod tests {
         let manager = SubscriptionManager::new(&database);
         let mut config = AppConfig::default();
         config.gui_item.auto_create_subscription_group = false;
-        config.const_item.sub_convert_url = Some(format!("{base}/convert?url={{0}}"));
         manager
             .save_subscription(SubItem {
                 id: "sub-plain".to_string(),
@@ -835,38 +821,24 @@ mod tests {
             })
             .await
             .expect("subscription manager test operation should succeed");
-        manager
-            .save_subscription(SubItem {
-                id: "sub-convert".to_string(),
-                remarks: "Convert".to_string(),
-                url: format!("{base}/raw"),
-                more_url: format!("{base}/should-not-fetch"),
-                user_agent: "SubUA/3".to_string(),
-                convert_target: Some("clash".to_string()),
-                ..SubItem::default()
-            })
-            .await
-            .expect("subscription manager test operation should succeed");
-
         let result = manager
             .update_subscriptions(&mut config, None, false, None)
             .await
             .expect("subscription manager test operation should succeed");
-        assert_eq!(result.updated, 2);
-        assert_eq!(result.imported, 3);
+        assert_eq!(result.updated, 1);
+        assert_eq!(result.imported, 2);
 
         let profiles = database
             .profiles()
             .list()
             .await
             .expect("subscription manager test operation should succeed");
-        assert_eq!(profiles.len(), 3);
+        assert_eq!(profiles.len(), 2);
         assert!(profiles.iter().any(|profile| profile.remarks == "US A"));
         assert!(profiles.iter().any(|profile| profile.remarks == "US B"));
-        assert!(profiles.iter().any(|profile| profile.remarks == "US C"));
         assert_eq!(
             seen_user_agents.lock().await.as_slice(),
-            ["SubUA/3", "SubUA/3", "SubUA/3"]
+            ["SubUA/3", "SubUA/3"]
         );
     }
 
@@ -1520,7 +1492,7 @@ mod tests {
         let original = config.clone();
 
         let prepared = manager
-            .prepare_subscription_update(&config, Some("empty-network"), false, None)
+            .prepare_subscription_update(Some("empty-network"), false, None)
             .await
             .expect("empty response should produce a skipped result");
 
@@ -1562,7 +1534,7 @@ mod tests {
             .await
             .expect("subscription should be saved");
         let prepared = manager
-            .prepare_subscription_update(&config, Some("changing-source"), false, None)
+            .prepare_subscription_update(Some("changing-source"), false, None)
             .await
             .expect("subscription should be prepared");
         assert!(prepared.has_imports());

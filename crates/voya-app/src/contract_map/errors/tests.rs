@@ -103,7 +103,6 @@ fn the_same_database_failure_is_classified_identically_through_every_manager() {
         GroupManagerError::Database(db_row_error()).into(),
         SubscriptionManagerError::Database(db_row_error()).into(),
         RoutingManagerError::Database(db_row_error()).into(),
-        PresetManagerError::Database(db_row_error()).into(),
         ExportManagerError::Database(db_row_error()).into(),
         UpdateManagerError::Database(db_row_error()).into(),
         SpeedtestError::Database(db_row_error()).into(),
@@ -112,7 +111,6 @@ fn the_same_database_failure_is_classified_identically_through_every_manager() {
         // Nested through two managers, which is where the old shell mappers
         // disagreed the most.
         SubscriptionManagerError::Profile(ProfileManagerError::Database(db_row_error())).into(),
-        PresetManagerError::Routing(RoutingManagerError::Database(db_row_error())).into(),
         SpeedtestError::Profile(ProfileManagerError::Database(db_row_error())).into(),
         GroupManagerError::Profile(ProfileManagerError::Database(db_row_error())).into(),
     ];
@@ -127,17 +125,6 @@ fn the_same_database_failure_is_classified_identically_through_every_manager() {
             "{error:?}"
         );
     }
-}
-
-/// The old mapper special-cased `Routing(Database)` and let every other nested
-/// routing failure fall through to an untyped `Preset` string.
-#[test]
-fn a_nested_routing_download_survives_the_preset_boundary() {
-    let mapped: AppError =
-        PresetManagerError::Routing(RoutingManagerError::Download(download_error())).into();
-
-    assert_eq!(mapped.kind, AppErrorKind::Network);
-    assert_eq!(mapped.subsystem, AppErrorSubsystem::Routing);
 }
 
 // ---------------------------------------------------------------------------
@@ -339,12 +326,6 @@ fn a_forbidden_subscription_url_is_a_field_rejection() {
 fn routing_failures_are_classified() {
     assert_kinds(vec![
         (
-            "download",
-            RoutingManagerError::Download(download_error()),
-            "network",
-            AppErrorSubsystem::Routing,
-        ),
-        (
             "routing not found",
             RoutingManagerError::RoutingNotFound("r-1".to_string()),
             "notFound",
@@ -362,18 +343,6 @@ fn routing_failures_are_classified() {
         (
             "missing id",
             RoutingManagerError::MissingRoutingId,
-            "validation",
-            AppErrorSubsystem::Routing,
-        ),
-        (
-            "invalid template",
-            RoutingManagerError::InvalidTemplate("{".to_string()),
-            "validation",
-            AppErrorSubsystem::Routing,
-        ),
-        (
-            "invalid rules",
-            RoutingManagerError::InvalidRules("[".to_string()),
             "validation",
             AppErrorSubsystem::Routing,
         ),
@@ -633,20 +602,6 @@ fn qr_and_dns_failures_are_classified() {
 }
 
 #[test]
-fn update_source_rejections_reach_the_settings_field_that_holds_them() {
-    let mapped: AppError = UpdateManagerError::InvalidSourceUrl(crate::updates::InvalidSourceUrl {
-        field: crate::updates::SourceUrlField::GEO,
-        reason: voya_contracts::ValidationCode::SourceUrlNotHttps,
-    })
-    .into();
-
-    let AppErrorKind::Validation { issues } = &mapped.kind else {
-        panic!("expected a validation failure, got {mapped:?}");
-    };
-    assert_eq!(issues[0].field, "sources.geo");
-}
-
-#[test]
 fn rejected_ipc_text_names_the_argument_that_carried_it() {
     let mapped = input_text_error(
         &InputSafetyError::TooLong,
@@ -742,12 +697,9 @@ mod guards {
     const fn routing(error: &RoutingManagerError) {
         match error {
             RoutingManagerError::Database(_)
-            | RoutingManagerError::Download(_)
             | RoutingManagerError::RoutingNotFound(_)
             | RoutingManagerError::MissingRoutingId
             | RoutingManagerError::RuleNotFound { .. }
-            | RoutingManagerError::InvalidTemplate(_)
-            | RoutingManagerError::InvalidRules(_)
             | RoutingManagerError::InvalidMove { .. } => (),
         }
     }
@@ -759,15 +711,6 @@ mod guards {
             | GroupManagerError::NotGroupProfile
             | GroupManagerError::Validation(_)
             | GroupManagerError::SingboxConfig(_) => (),
-        }
-    }
-
-    const fn preset(error: &PresetManagerError) {
-        match error {
-            PresetManagerError::Database(_)
-            | PresetManagerError::Routing(_)
-            | PresetManagerError::Source(_)
-            | PresetManagerError::MissingRoutingTemplateSource => (),
         }
     }
 
@@ -783,9 +726,7 @@ mod guards {
 
     const fn update(error: &UpdateManagerError) {
         match error {
-            UpdateManagerError::Database(_)
-            | UpdateManagerError::RulesetGeo(_)
-            | UpdateManagerError::InvalidSourceUrl(_) => (),
+            UpdateManagerError::Database(_) | UpdateManagerError::RulesetGeo(_) => (),
         }
     }
 

@@ -1262,6 +1262,7 @@ fn singbox_ruleset_generation_prefers_resolved_local_asset_paths() {
     );
     assert_eq!(local.url, None);
     assert_eq!(remote.r#type.as_deref(), Some("remote"));
+    assert_eq!(remote.url.as_deref(), Some("https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-geosite/geosite-google.srs"));
     assert_eq!(remote.download_detour.as_deref(), Some(PROXY_TAG));
 }
 

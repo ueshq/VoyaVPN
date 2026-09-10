@@ -29,7 +29,7 @@ const bridgeMocks = vi.hoisted(() => {
     pushToast: vi.fn(),
     pushTransientEvent: vi.fn(),
     refreshSpeedtestStatus: vi.fn(() => Promise.resolve()),
-    requestTab: vi.fn(),
+    setActiveTab: vi.fn(),
     setConnectionsView: vi.fn(),
     transientStreamEventListen: listenFor("transientStreamEvent"),
   };
@@ -56,7 +56,7 @@ vi.mock("@/ipc/runtime-event-store", () => ({
 vi.mock("@/stores/shell-store", () => ({
   useShellStore: {
     getState: () => ({
-      requestTab: bridgeMocks.requestTab,
+      setActiveTab: bridgeMocks.setActiveTab,
       setConnectionsView: bridgeMocks.setConnectionsView,
     }),
   },
@@ -127,7 +127,7 @@ describe("EventBridge", () => {
     });
 
     expect(invalidateQueries).toHaveBeenCalledExactlyOnceWith({ queryKey: ["ui-preferences"] });
-    expect(bridgeMocks.requestTab).not.toHaveBeenCalled();
+    expect(bridgeMocks.setActiveTab).not.toHaveBeenCalled();
     expect(bridgeMocks.pushToast).toHaveBeenCalledWith({
       description: "the tray handle is gone",
       severity: "info",
@@ -181,7 +181,7 @@ describe("EventBridge", () => {
     });
 
     expect(bridgeMocks.pushTransientEvent).toHaveBeenCalledWith(transient);
-    expect(bridgeMocks.requestTab).toHaveBeenCalledWith("connections");
+    expect(bridgeMocks.setActiveTab).toHaveBeenCalledWith("connections");
     expect(bridgeMocks.setConnectionsView).toHaveBeenCalledWith("connections");
 
     act(() => {
@@ -191,6 +191,6 @@ describe("EventBridge", () => {
     });
 
     expect(bridgeMocks.setConnectionsView).toHaveBeenLastCalledWith("logs");
-    expect(bridgeMocks.requestTab).toHaveBeenLastCalledWith("connections");
+    expect(bridgeMocks.setActiveTab).toHaveBeenLastCalledWith("connections");
   });
 });

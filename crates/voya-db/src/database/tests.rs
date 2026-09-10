@@ -2024,6 +2024,8 @@ async fn settings_payload_with_retired_keys_still_loads() {
         assert!(rewritten["dns"].get(key).is_none(), "`{key}` came back");
     }
     assert!(rewritten["speedTest"].get("delayIntervalMs").is_none());
+    assert!(stored.get("sources").is_some());
+    assert!(rewritten.get("sources").is_none());
     for key in ["downloadUrl", "udpTarget", "mixedConcurrency"] {
         assert!(stored["speedTest"].get(key).is_some());
         assert!(rewritten["speedTest"].get(key).is_none());
@@ -2037,6 +2039,93 @@ async fn settings_payload_with_retired_keys_still_loads() {
         database.settings().load().await.expect("reload settings"),
         loaded
     );
+}
+
+#[tokio::test]
+async fn retiring_custom_sources_preserves_settings_and_existing_routing() {
+    let database = Database::connect_in_memory().await.expect("open database");
+    let routing = RoutingItem {
+        id: "existing-routing".to_string(),
+        remarks: "Previously imported routing".to_string(),
+        rule_set: vec![RulesItem {
+            id: "existing-rule".to_string(),
+            domain: Some(vec!["full:example.test".to_string()]),
+            outbound_tag: Some("direct".to_string()),
+            ..RulesItem::default()
+        }],
+        ..RoutingItem::default()
+    };
+    database
+        .routings()
+        .upsert(&routing)
+        .await
+        .expect("save routing");
+    database
+        .routings()
+        .set_active(&routing.id)
+        .await
+        .expect("activate routing");
+    let routings_before = database.routings().list().await.expect("snapshot routings");
+    let active_before = database
+        .routings()
+        .active()
+        .await
+        .expect("snapshot active routing");
+
+    let mut payload: serde_json::Value =
+        serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("current settings fixture");
+    payload["dns"]["remote"] = serde_json::json!("https://dns.example.test/dns-query");
+    let expected: AppSettingsV1 =
+        serde_json::from_value(payload.clone()).expect("current settings");
+    payload["sources"] = serde_json::json!({
+        "geo": "https://retired.example.test/{0}.dat",
+        "singboxRuleset": "https://retired.example.test/{0}/{1}.srs",
+        "routingTemplate": "https://retired.example.test/template.json",
+        "subscriptionConverter": "https://retired.example.test/sub?url={0}"
+    });
+    sqlx::query("INSERT INTO app_settings (id, schema_version, payload) VALUES (1, ?, ?)")
+        .bind(i64::from(CURRENT_SCHEMA_VERSION))
+        .bind(payload.to_string())
+        .execute(database.pool())
+        .await
+        .expect("store old settings");
+
+    let loaded = database.settings().load().await.expect("load old sources");
+    assert_eq!(loaded, expected, "only the retired sources may change");
+    database
+        .settings()
+        .save(&loaded)
+        .await
+        .expect("save current settings");
+    let rewritten: String = sqlx::query_scalar("SELECT payload FROM app_settings WHERE id = 1")
+        .fetch_one(database.pool())
+        .await
+        .expect("read persisted settings");
+    let rewritten: serde_json::Value = serde_json::from_str(&rewritten).expect("persisted JSON");
+    assert_eq!(
+        rewritten,
+        serde_json::to_value(&expected).expect("expected JSON")
+    );
+    assert_eq!(
+        database.routings().list().await.expect("routings"),
+        routings_before
+    );
+    assert_eq!(
+        database.routings().active().await.expect("active routing"),
+        active_before
+    );
+
+    // Retiring a known key must not weaken the strict contract for other keys.
+    payload["neverAContractKey"] = serde_json::json!(true);
+    sqlx::query("UPDATE app_settings SET payload = ? WHERE id = 1")
+        .bind(payload.to_string())
+        .execute(database.pool())
+        .await
+        .expect("store unknown key");
+    assert!(matches!(
+        database.settings().load().await,
+        Err(DbError::Json { .. })
+    ));
 }
 
 #[tokio::test]

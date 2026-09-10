@@ -19,7 +19,7 @@ Frontend rules:
 - TypeScript IPC DTOs that mirror Rust types are generated, not hand-written.
 - Generated binding drift is a build failure once the scaffold exists.
 
-Backend command groups follow subsystem ownership: profiles, subscriptions, routing, DNS, config generation, core runtime, system proxy, TUN/elevation, proxy runtime, speedtest, updates, hotkeys, QR, certificates, and presets. The proxy runtime is backed by the sing-box Clash-compatible API, whose protocol names remain unchanged below the product boundary.
+Backend command groups follow subsystem ownership: profiles, subscriptions, routing, DNS, config generation, core runtime, system proxy, TUN/elevation, proxy runtime, speedtest, updates, hotkeys, QR, and certificates. The proxy runtime is backed by the sing-box Clash-compatible API, whose protocol names remain unchanged below the product boundary.
 
 Events use three frontend channels:
 
@@ -48,3 +48,9 @@ The typed IPC decision remains unchanged. The monorepo migration remaps the path
 - Locale files referenced by frontend i18n now live in `packages/i18n/src/locales`.
 
 Generated bindings are still owned by Rust `specta`/`tauri-specta` and must not be edited by hand.
+
+## Amendment (2026-09): Retire Configurable Sources
+
+The Settings Sources tab and its configuration-template import command have been removed. `AppSettingsV1` no longer exposes `sources`; Geo/SRS downloads and subscription conversion use the existing built-in source defaults. Conversion remains conditional on the subscription’s conversion target. Existing routing and DNS records are preserved.
+
+The database settings reader drops the retired top-level `sources` key before strict deserialization. The schema version stays unchanged; the next settings save writes the current shape. No replacement import command or source-settings API is provided.

@@ -51,8 +51,7 @@ pub(super) fn convert_geo_to_ruleset(
             .as_ref()
             .map(|routing| routing.custom_ruleset_path4_singbox.as_str()),
     )?;
-    let source_url = nonempty_str(context.app_config.const_item.srs_source_url.as_deref())
-        .unwrap_or(SINGBOX_RULESET_URL);
+    let source_url = SINGBOX_RULESET_URL;
     config.route.rule_set = Some(
         unique_rule_sets
             .into_iter()

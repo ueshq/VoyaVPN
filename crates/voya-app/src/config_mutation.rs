@@ -12,7 +12,6 @@ use voya_db::{Database, DbError};
 use crate::{
     dns::DnsManager,
     groups::GroupManager,
-    presets::PresetManager,
     profiles::ProfileManager,
     routing::RoutingManager,
     settings_save::{settings_from_app_config, state_from_app_config},
@@ -191,11 +190,6 @@ impl ConfigMutationGuard<'_> {
     #[must_use]
     pub fn dns(&self) -> DnsManager<'_> {
         DnsManager::new_in(&self.unit_of_work)
-    }
-
-    #[must_use]
-    pub fn presets(&self) -> PresetManager<'_> {
-        PresetManager::new_in(&self.unit_of_work)
     }
 
     pub async fn commit(self) -> Result<AppConfig, ConfigMutationError> {

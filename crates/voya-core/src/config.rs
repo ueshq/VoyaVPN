@@ -21,7 +21,6 @@ pub struct AppConfig {
     pub routing_basic_item: RoutingBasicItem,
     pub gui_item: GuiItem,
     pub ui_item: UiItem,
-    pub const_item: ConstItem,
     pub speed_test_item: SpeedTestItem,
     pub mux4_sbox_item: Mux4SboxItem,
     pub hysteria_item: HysteriaItem,
@@ -42,7 +41,6 @@ impl Default for AppConfig {
             routing_basic_item: RoutingBasicItem::default(),
             gui_item: GuiItem::default(),
             ui_item: UiItem::default(),
-            const_item: ConstItem::default(),
             speed_test_item: SpeedTestItem::default(),
             mux4_sbox_item: Mux4SboxItem::default(),
             hysteria_item: HysteriaItem::default(),
@@ -164,14 +162,6 @@ impl Default for UiItem {
             current_language: DEFAULT_LANGUAGE.to_string(),
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct ConstItem {
-    pub sub_convert_url: Option<String>,
-    pub geo_source_url: Option<String>,
-    pub srs_source_url: Option<String>,
-    pub route_rules_template_source_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

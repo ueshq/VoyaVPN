@@ -167,18 +167,6 @@ vi.mock("@/ipc", () => ({
   disconnectCore: vi.fn(),
   generateQrCode: vi.fn(() => Promise.resolve({ mimeType: "image/svg+xml", svg: "<svg />" })),
   getWindowChromeConfig: vi.fn(() => Promise.resolve({ titleBarLayout: "none" })),
-  importConfigTemplate: vi.fn(() =>
-    Promise.resolve({
-      sources: {
-        geoSourceUrl: null,
-        srsSourceUrl: null,
-        routeRulesTemplateSourceUrl: null,
-      },
-      routingIds: ["routing-default"],
-      activeRoutingId: "routing-default",
-      reusedExistingRouting: false,
-    }),
-  ),
   importProfilesFromText: vi.fn(),
   IpcCommandError: class IpcCommandError extends Error {},
   listGroupChildCandidates: vi.fn(() => Promise.resolve([])),
@@ -228,7 +216,6 @@ vi.mock("@/ipc", () => ({
   saveRouting: vi.fn(),
   saveRoutingRule: vi.fn(),
   saveAppSettings: vi.fn(),
-  saveConfigSources: vi.fn((settings) => Promise.resolve(settings)),
   saveAppConfig: vi.fn((config) => Promise.resolve(config)),
   saveUiPreferences: vi.fn((preferences) => Promise.resolve(preferences)),
   saveDnsSettings: vi.fn(),
@@ -322,8 +309,6 @@ describe("App", () => {
     useShellStore.setState({
       activeTab: "profiles",
       connectionsView: "connections",
-      navigationGuard: null,
-      pendingTab: null,
       sidebarCollapsed: false,
     });
     useToastStore.setState({ toasts: [] });

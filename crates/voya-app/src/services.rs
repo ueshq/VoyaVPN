@@ -15,7 +15,6 @@ use crate::{
     dns::DnsManager,
     exports::ExportManager,
     groups::GroupManager,
-    presets::PresetManager,
     profiles::{ProfileExManager, ProfileManager},
     routing::RoutingManager,
     runtime::RuntimeManager,
@@ -115,11 +114,6 @@ impl AppServices {
     #[must_use]
     pub fn exports(&self) -> ExportManager<'_> {
         ExportManager::new(&self.database)
-    }
-
-    #[must_use]
-    pub fn presets(&self) -> PresetManager<'_> {
-        PresetManager::new(&self.database)
     }
 
     #[must_use]

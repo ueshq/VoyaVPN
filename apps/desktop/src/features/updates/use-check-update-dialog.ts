@@ -1,3 +1,5 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { settingsSaveQueue } from "@/features/settings/settings-save-queue";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -23,6 +25,7 @@ export type UpdateWorkingState =
 
 export function useCheckUpdateDialog() {
   const { t } = useI18n();
+  const queue = settingsSaveQueue(useQueryClient());
   const [appUpdaterStatus, setAppUpdaterStatus] = useState<AppUpdaterStatus | null>(null);
   const [appUpdaterCheck, setAppUpdaterCheck] = useState<AppUpdateCheckResult | null>(null);
   const [appUpdaterError, setAppUpdaterError] = useState<string | null>(null);
@@ -79,6 +82,7 @@ export function useCheckUpdateDialog() {
     setAppUpdaterError(null);
     setAppInstallResult(null);
     try {
+      await queue.settled();
       setAppInstallResult(await installCheckedAppUpdate());
     } catch (error) {
       setAppUpdaterError(getErrorMessage(error));
@@ -91,6 +95,7 @@ export function useCheckUpdateDialog() {
     setWorking("app-restart");
     setAppUpdaterError(null);
     try {
+      await queue.settled();
       await relaunch();
     } catch (error) {
       setAppUpdaterError(getErrorMessage(error));
@@ -104,6 +109,7 @@ export function useCheckUpdateDialog() {
     setResourceErrors((current) => ({ ...current, [kind]: null }));
     setResourceResults((current) => ({ ...current, [kind]: null }));
     try {
+      await queue.settled();
       const result = kind === "geo" ? await updateGeoAssets() : await updateSrsAssets();
       setResourceResults((current) => ({ ...current, [kind]: result }));
     } catch (error) {

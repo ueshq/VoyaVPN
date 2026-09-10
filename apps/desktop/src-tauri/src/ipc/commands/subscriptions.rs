@@ -130,7 +130,6 @@ pub async fn update_subscriptions<R: tauri::Runtime>(
         .services()
         .subscriptions()
         .prepare_subscription_update(
-            &snapshot,
             subscription_id.as_deref(),
             prefer_proxy,
             proxy_url.as_deref(),

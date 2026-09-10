@@ -39,7 +39,6 @@
     "deleteSubscriptionTitle": "删除订阅？"
   },
   "coreFlowReason": {
-    "configTemplateImported": "配置模板导入",
     "connect": "连接",
     "connectionModeChanged": "连接模式切换",
     "disconnect": "断开连接",
@@ -162,7 +161,6 @@
     "theme": "主题"
   },
   "notices": {
-    "configurationRefreshFailed": "刷新配置失败",
     "connectionModeRefreshFailed": "刷新连接模式失败",
     "connectionModeSavedRestartFailed": "连接模式已保存；重启内核失败",
     "coreStartedSystemProxyFailed": "内核已启动；更新系统代理失败",
@@ -187,31 +185,12 @@
     "subscriptionRefreshFailed": "刷新订阅失败",
     "systemProxyRestoreFailed": "恢复系统代理失败",
     "systemProxyStatusRefreshFailed": "刷新系统代理状态失败",
-    "templateImportedRestartFailed": "模板已导入；重启内核失败",
     "trayRefreshFailed": "刷新托盘失败",
     "tunSavedRestartFailed": "TUN 已保存；重启内核失败",
     "tunStatusRefreshFailed": "刷新 TUN 状态失败"
   },
   "options": {
     "autostart": "开机自启",
-    "configTemplate": {
-      "advancedHint": "此操作导入结构化来源、Simple DNS 和路由预设。",
-      "applied": "配置模板已导入",
-      "appliedDescription": "已更新来源、DNS 和路由设置，并启用导入的路由。",
-      "apply": "导入",
-      "applying": "正在导入…",
-      "custom": "自定义",
-      "customDescription": "使用本卡片当前填写的来源地址；导入失败时不会回退到内置路由。",
-      "customSourcesRequired": "自定义导入必须填写路由模板来源地址。",
-      "default": "默认",
-      "defaultDescription": "清除区域来源，恢复内置 DNS，并导入内置路由模板。",
-      "import": "导入配置模板",
-      "invalidSourceUrl": "每个自定义来源都必须是不含凭据的有效 HTTPS URL。",
-      "reusedDescription": "已复用并启用现有的相同路由模板。",
-      "selectPrompt": "请选择模板",
-      "title": "导入配置模板"
-    },
-    "geoSource": "Geo 文件来源",
     "hotkeyKey": "热键按键",
     "hotkeyKeyPlaceholder": "按下按键",
     "hotkeyShowWindow": "显示窗口",
@@ -234,12 +213,9 @@
       "up": "上"
     },
     "loading": "正在加载",
-    "routeTemplateSource": "路由模板来源",
-    "runtimeCore": "核心",
+    "runtimeCore": "内核",
     "runtimeNetwork": "网络",
-    "saved": "已保存",
-    "sources": "来源",
-    "srsSource": "sing-box 规则集来源"
+    "saved": "已保存"
   },
   "panes": {
     "dns": {
@@ -256,7 +232,6 @@
       "loading": "Loading DNS settings",
       "proxyStrategy": "Proxy strategy",
       "remoteDns": "Remote DNS",
-      "simpleTitle": "Simple DNS",
       "standard": "Standard",
       "title": "DNS"
     },
@@ -670,8 +645,6 @@
     "screenUnavailable": "当前平台或权限状态不支持屏幕二维码扫描。"
   },
   "settings": {
-    "closeUnsavedDescription": "保存全部修改、放弃修改，或继续编辑。",
-    "closeUnsavedTitle": "设置尚未保存",
     "core": {
       "allowInsecure": "默认跳过证书验证 (allowInsecure)",
       "bindInterface": "绑定网口",
@@ -685,10 +658,8 @@
       "muxEnabled": "开启 Mux 多路复用",
       "muxProtocol": "sing-box Mux 多路复用协议",
       "sendThrough": "本地出站地址 (SendThrough)",
-      "title": "Core: 基础设置",
       "userAgent": "用户代理 (User-Agent)"
     },
-    "discardChanges": "放弃修改",
     "fields": {
       "hysteriaDownMbps": "Hysteria 最大下行带宽 (Mbps)",
       "hysteriaUpMbps": "Hysteria 最大上行带宽 (Mbps)",
@@ -707,16 +678,10 @@
       "systemProxyExceptions": "例外",
       "systemProxyProtocol": "高级代理设置，协议选择 (可选)",
       "tunAutoRoute": "自动路由",
-      "tunMode": "Tun 模式设置",
       "tunStack": "协议栈",
       "tunStrictRoute": "严格路由"
     },
     "perAppProxy": "分应用代理",
-    "saveAll": "保存全部",
-    "saveBeforeActions": "请先保存或放弃待处理的修改，再执行此操作。",
-    "sources": {
-      "subscriptionConverter": "订阅转换网址 (可选)"
-    },
     "startup": "启动",
     "tabGeneral": "通用",
     "tabTests": "测试",
@@ -727,7 +692,28 @@
       "timeout": "测速单个超时值",
       "proxyDelayConcurrency": "代理组测延迟并发数"
     },
-    "unsavedChanges": "存在未保存的修改"
+    "categories": "设置分类",
+    "autosave": {
+      "automatic": "修改后自动保存",
+      "saving": "正在保存…",
+      "failed": "修改保存失败",
+      "retry": "重试"
+    },
+    "sections": {
+      "appearance": "外观",
+      "shortcuts": "快捷键",
+      "coreBasics": "内核与日志",
+      "outbound": "出站设置",
+      "multiplexing": "多路复用",
+      "tun": "TUN",
+      "systemProxy": "系统代理",
+      "testExecution": "测试执行",
+      "testAddresses": "测试地址",
+      "dnsBehavior": "DNS 解析行为",
+      "dnsServers": "DNS 服务器与策略",
+      "dnsHosts": "Hosts 与预期 IP",
+      "resources": "规则资源"
+    }
   },
   "speedtest": {
     "outcome": {
@@ -811,7 +797,7 @@
       "unsupported": "不支持"
     },
     "checkApp": "检查应用",
-    "geoDescription": "使用当前配置的来源和运行时代理策略立即更新 Geo 资源。",
+    "geoDescription": "使用内置来源和运行时代理策略立即更新 Geo 资源。",
     "geoTitle": "Geo 资源",
     "installApp": "安装应用",
     "noAppUpdate": "应用已是最新",
@@ -820,7 +806,7 @@
     "resourceUpdated": "已更新 {{count}} 个文件",
     "restartApp": "重启应用",
     "restartRequired": "重启 VoyaVPN 以完成更新。",
-    "srsDescription": "使用当前配置的来源和运行时代理策略立即更新 SRS 规则集。",
+    "srsDescription": "使用内置来源和运行时代理策略立即更新 SRS 规则集。",
     "srsTitle": "SRS 资源",
     "title": "检查更新",
     "updateNow": "立即更新",

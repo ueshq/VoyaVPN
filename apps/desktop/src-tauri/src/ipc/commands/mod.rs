@@ -27,7 +27,6 @@ use voya_app::hotkeys::{
 };
 use voya_app::input_safety;
 use voya_app::invalidation;
-use voya_app::presets::PresetManager;
 use voya_app::profiles::ProfileManager;
 use voya_app::qr::QrCodeManager;
 use voya_app::routing::RoutingManager;
@@ -44,7 +43,6 @@ use voya_app::updates::UpdateManager;
 use voya_contracts::{
     AppError, AppErrorSubsystem, AppNotice, AppNoticeLevel, AppSettingsV1, AppUpdaterState,
     AppUpdaterStatus, AppearanceSettings, CertificateFetchRequest, CertificateFetchResult,
-    ConfigTemplateImportOptions, ConfigTemplateImportResult, ConfigTemplateSelection,
     CoreFlowReason, CoreSeedInstallResult, CoreSeedInstallStatus, CoreType as ContractCoreType,
     DnsSettings as DnsSettingsContract, ExportProfilesFormat, ExportProfilesRequest,
     ExportProfilesResult, GroupChildCandidate as GroupChildContract,
@@ -88,7 +86,6 @@ mod dns;
 mod groups;
 mod lifecycle;
 mod platform;
-mod presets;
 mod profiles;
 mod proxy;
 mod routing;
@@ -105,7 +102,6 @@ pub use connection::*;
 pub use dns::*;
 pub use groups::*;
 pub use platform::*;
-pub use presets::*;
 pub use profiles::*;
 pub use proxy::*;
 pub use routing::*;

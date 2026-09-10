@@ -100,18 +100,6 @@ where
     );
 }
 
-pub(super) fn emit_preset_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str)
-where
-    R: tauri::Runtime,
-{
-    emit_invalidation(
-        app,
-        NoticeCode::ConfigurationRefreshFailed,
-        reason,
-        invalidation::config_template_scopes(),
-    );
-}
-
 /// Proxy-runtime commands. `config_changed` is true only for the traffic-mode
 /// command, which also persists a settings field.
 pub(super) fn emit_proxy_runtime_invalidation<R>(
@@ -200,10 +188,6 @@ impl ConfigChange {
     pub(super) const DNS: Self = Self {
         reason: CoreFlowReason::DnsChanged,
         restart_failed_code: NoticeCode::DnsSavedRestartFailed,
-    };
-    pub(super) const CONFIG_TEMPLATE: Self = Self {
-        reason: CoreFlowReason::ConfigTemplateImported,
-        restart_failed_code: NoticeCode::TemplateImportedRestartFailed,
     };
     pub(super) const TUN: Self = Self {
         reason: CoreFlowReason::TunChanged,

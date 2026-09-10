@@ -4,7 +4,6 @@
 mod download;
 pub mod probe;
 mod subscription;
-mod url;
 
 pub mod certificates;
 pub mod clash;
@@ -20,7 +19,6 @@ pub use subscription::{
     SubscriptionFetchOptions, SubscriptionFetchResult, SubscriptionFetchSource,
     DEFAULT_SUB_CONVERT_CONFIG, DEFAULT_SUB_CONVERT_URL,
 };
-pub use url::{validate_absolute_http_url, validate_absolute_https_url, UrlValidationError};
 
 pub(crate) use download::{
     build_http_client, is_denied_local_host, read_response_text_limited, LimitedBodyReadError,

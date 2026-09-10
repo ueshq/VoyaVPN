@@ -26,7 +26,6 @@ export {
   loadAppSettings,
   generateQrCode,
   getWindowChromeConfig,
-  importConfigTemplate,
   importProfilesFromText,
   IpcCommandError,
   installCoreSeed,

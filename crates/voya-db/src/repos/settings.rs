@@ -17,8 +17,8 @@ use crate::{
 ///
 /// Any change to `AppSettingsV1` must therefore either stay backwards
 /// compatible (add fields with `#[serde(default)]`) or carry the removed or
-/// renamed key in [`RETIRED_DNS_KEYS`] / [`RENAMED_SPEEDTEST_KEYS`], which
-/// [`normalize_retired_keys`] applies to the stored JSON before serde sees it.
+/// renamed key in [`normalize_retired_keys`], which cleans up the stored JSON
+/// before serde sees it.
 /// The `persisted_settings_payload_from_an_earlier_build_still_loads` and
 /// `settings_payload_with_retired_keys_still_loads` tests pin both halves
 /// against checked-in fixtures, so an accidental break is caught here rather
@@ -132,6 +132,11 @@ fn payload_error(source: serde_json::Error) -> DbError {
 }
 
 fn normalize_retired_keys(value: &mut serde_json::Value) {
+    // Source overrides were retired; resource downloads now use built-in defaults.
+    if let Some(settings) = value.as_object_mut() {
+        settings.remove("sources");
+    }
+
     if let Some(dns) = value
         .get_mut("dns")
         .and_then(serde_json::Value::as_object_mut)

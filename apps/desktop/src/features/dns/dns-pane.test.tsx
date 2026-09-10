@@ -1,125 +1,48 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { AppError, DnsSettings } from "@/ipc/bindings";
-
+import { changeLocale } from "@voya/i18n";
+import { resetSettingsBackend, settingsIpc } from "@/features/settings/settings-backend.test-fixture";
 import { DnsPane } from "./dns-pane";
+import { useDnsSettings } from "./use-dns-settings";
 
-const ipcMocks = vi.hoisted(() => {
-  class MockIpcCommandError extends Error {
-    readonly appError: AppError;
-
-    constructor(appError: AppError) {
-      super("IPC failed");
-      this.appError = appError;
-    }
-  }
-
-  return {
-    IpcCommandError: MockIpcCommandError,
-    loadDnsSettings: vi.fn(),
-    saveDnsSettings: vi.fn(),
-  };
-});
-
-vi.mock("@/ipc", () => ipcMocks);
-
-describe("DnsPane", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    ipcMocks.loadDnsSettings.mockResolvedValue(dnsSettings());
-    ipcMocks.saveDnsSettings.mockImplementation(async (settings: DnsSettings) => settings);
-  });
-
-  afterEach(cleanup);
-
-  it("renders the embedded DNS form and saves an edited remote resolver", async () => {
-    const user = userEvent.setup();
-    renderPane();
-
-    const remote = await screen.findByLabelText("Remote DNS");
-    expect(screen.getByRole("heading", { level: 2, name: "DNS" })).toBeInTheDocument();
-    expect(screen.getByText("Standard")).toBeInTheDocument();
-
-    await user.type(remote, "https://dns.google/dns-query");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() => expect(ipcMocks.saveDnsSettings).toHaveBeenCalledTimes(1));
-    expect(ipcMocks.saveDnsSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ remote: "https://dns.google/dns-query" }),
-    );
-  });
-
-  it("surfaces local validation issues without calling the backend", async () => {
-    const user = userEvent.setup();
-    renderPane();
-
-    const hosts = await screen.findByLabelText("Hosts");
-    await user.type(hosts, "missing-answer");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(await screen.findByText("1 errors")).toBeInTheDocument();
-    expect(ipcMocks.saveDnsSettings).not.toHaveBeenCalled();
-  });
-
-  // The backend names resolver issues `direct`/`remote`/`bootstrap`; those three
-  // inputs used to accept no error at all, so a rejected resolver only surfaced
-  // as the generic banner and the field itself stayed unmarked.
-  it("renders backend resolver issues on the field each one names", async () => {
-    const user = userEvent.setup();
-    ipcMocks.saveDnsSettings.mockRejectedValueOnce(
-      new ipcMocks.IpcCommandError({
-        kind: {
-          issues: [
-            { code: { code: "dnsAddressEmpty" }, field: "direct", scope: [] },
-            { code: { code: "dnsAddressPort", port: "0" }, field: "bootstrap", scope: [] },
-          ],
-          type: "validation",
-        },
-        message: "DNS rejected",
-        subsystem: "dns",
-      }),
-    );
-    renderPane();
-
-    const direct = await screen.findByLabelText("Direct DNS");
-    await user.type(direct, "://");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    // The backend sends codes; the pane renders the locale strings for them.
-    const directError = await screen.findByText("The DNS address must not be empty");
-    expect(direct).toHaveAttribute("aria-invalid", "true");
-    expect(direct).toHaveAttribute("aria-describedby", directError.id);
-    expect(
-      screen.getByText("0 is not a valid DNS server port (1-65535)"),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Remote DNS")).not.toHaveAttribute("aria-invalid");
-  });
-});
-
-function renderPane() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <DnsPane />
-    </QueryClientProvider>,
-  );
+vi.mock("@/ipc", async () => (await import("@/features/settings/settings-backend.test-fixture")).settingsIpc);
+beforeEach(async () => { resetSettingsBackend(); await changeLocale("en"); });
+afterEach(cleanup);
+function mount() {
+  function Pane() { return <DnsPane controller={useDnsSettings()} />; }
+  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><Pane /></QueryClientProvider>);
 }
 
-function dnsSettings(): DnsSettings {
-  return {
-    addCommonHosts: null,
-    blockBindingQuery: null,
-    bootstrap: null,
-    direct: null,
-    directExpectedIps: null,
-    directStrategy: null,
-    fakeIp: null,
-    globalFakeIp: null,
-    hosts: null,
-    proxyStrategy: null,
-    remote: null,
-  };
-}
+describe("DNS fields", () => {
+  it("commits a resolver on blur and has no manual save controls", async () => {
+    mount();
+    const input = await screen.findByLabelText("Remote DNS");
+    fireEvent.change(input, { target: { value: "https://dns.google/dns-query" } });
+    expect(settingsIpc.saveDnsSettings).not.toHaveBeenCalled();
+    fireEvent.blur(input);
+    await waitFor(() => expect(settingsIpc.saveDnsSettings).toHaveBeenCalledWith(expect.objectContaining({ remote: "https://dns.google/dns-query" })));
+    expect(screen.queryByRole("button", { name: /Save|Reload/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps multiline input until blur and shows validation at its field", async () => {
+    mount();
+    const input = await screen.findByLabelText("Hosts");
+    fireEvent.change(input, { target: { value: "invalid-host" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(settingsIpc.saveDnsSettings).not.toHaveBeenCalled();
+    fireEvent.blur(input);
+    await waitFor(() => expect(input).toHaveAttribute("aria-invalid", "true"));
+    expect(input).toHaveAccessibleDescription("Every host line must contain a domain and at least one answer");
+    expect(input).toHaveValue("invalid-host");
+  });
+
+  it("saves checkboxes immediately and preserves the FakeIP dependency", async () => {
+    mount();
+    const fakeIp = await screen.findByLabelText("FakeIP");
+    expect(screen.getByLabelText("Global FakeIP")).toBeDisabled();
+    fireEvent.click(fakeIp);
+    await waitFor(() => expect(settingsIpc.saveDnsSettings).toHaveBeenCalledWith(expect.objectContaining({ fakeIp: true })));
+    expect(screen.getByLabelText("Global FakeIP")).toBeEnabled();
+  });
+});

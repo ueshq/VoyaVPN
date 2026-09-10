@@ -32,7 +32,7 @@ pub async fn update_geo_assets(
     let proxy_url = runtime_proxy_url(true, None, &config);
 
     update_manager(&state)
-        .update_geo_assets(&config, proxy_url)
+        .update_geo_assets(proxy_url)
         .await
         .map_err(AppError::from)
 }
@@ -46,7 +46,7 @@ pub async fn update_srs_assets(
     let proxy_url = runtime_proxy_url(true, None, &config);
 
     update_manager(&state)
-        .update_srs_assets(&config, proxy_url)
+        .update_srs_assets(proxy_url)
         .await
         .map_err(AppError::from)
 }

@@ -72,16 +72,6 @@ pub fn dns_scopes() -> Vec<InvalidationScope> {
     vec![InvalidationScope::Dns, InvalidationScope::AppSettings]
 }
 
-/// `import_config_template`, which rewrites DNS, routing and the asset sources
-/// in one commit.
-pub fn config_template_scopes() -> Vec<InvalidationScope> {
-    vec![
-        InvalidationScope::Dns,
-        InvalidationScope::Routings,
-        InvalidationScope::AppSettings,
-    ]
-}
-
 /// Proxy-runtime commands that talk to the core's Clash-compatible API.
 ///
 /// `config_changed` is true only for `proxy_set_traffic_mode`, the one command
@@ -239,10 +229,8 @@ mod tests {
     }
 
     #[test]
-    fn dns_and_template_saves_refresh_the_settings_bundle() {
+    fn dns_saves_refresh_the_settings_bundle() {
         assert!(dns_scopes().contains(&InvalidationScope::AppSettings));
-        assert!(config_template_scopes().contains(&InvalidationScope::AppSettings));
-        assert!(config_template_scopes().contains(&InvalidationScope::Routings));
     }
 
     #[test]
@@ -259,7 +247,6 @@ mod tests {
             subscription_scopes(true, true),
             routing_scopes(true),
             dns_scopes(),
-            config_template_scopes(),
             proxy_runtime_scopes(true),
             settings_bundle_scopes(),
             connection_mode_scopes(),

@@ -82,6 +82,11 @@ test("loads the app shell and opens in-shell settings", async ({ page }) => {
   await page.getByRole("tab", { name: "Settings" }).click();
 
   await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
+  const settings = page.getByRole("region", { name: "Settings" });
+  await expect(settings.getByRole("tab")).toHaveText([
+    "General", "Core", "Network", "DNS", "Tests", "Updates",
+  ]);
+  await expect(settings.getByRole("button", { name: "Import configuration template" })).toHaveCount(0);
   // Settings render inside the main shell: no window plugin call may be made to
   // spawn or drive a second window. (Counting a command that no longer exists in
   // bindings.ts, as this test used to, could never fail.)
@@ -89,7 +94,7 @@ test("loads the app shell and opens in-shell settings", async ({ page }) => {
   expect(calls.filter((call) => call.command.startsWith("plugin:window|"))).toEqual([]);
 });
 
-test("guards unsaved settings when leaving the settings tab", async ({ page }) => {
+test("automatically saves shortcuts and freely leaves settings", async ({ page }) => {
   await page.getByRole("tab", { name: "Settings" }).click();
 
   const settings = page.getByRole("region", { name: "Settings" });
@@ -111,100 +116,37 @@ test("guards unsaved settings when leaving the settings tab", async ({ page }) =
 
   await hotkeyCapture.blur();
   await page.getByRole("tab", { name: "Home" }).click();
-  const unsavedDialog = page.getByRole("alertdialog");
-  await expect(unsavedDialog).toBeVisible();
-  await unsavedDialog.getByRole("button", { name: "Discard changes" }).click();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect.poll(async () => (await smokeCalls(page)).some((call) => call.command === "save_app_settings")).toBe(true);
   await expect(page.getByRole("region", { name: "Connection home" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Settings" })).toHaveCount(0);
 });
 
-test("imports the default configuration template from the Settings sources card", async ({ page }) => {
-  await page.getByRole("tab", { name: "Settings" }).click();
+test("commits settings input on Enter and flushes numeric input on imperative navigation", async ({ page }) => {
+  await page.getByRole("tab", { name: "Settings", exact: true }).click();
+  const settings = page.getByRole("region", { name: "Settings", exact: true });
+  await settings.getByRole("tab", { name: "Core", exact: true }).click();
+  const agent = settings.getByLabel("User-Agent");
+  await agent.fill("browser-autosave-agent");
+  expect((await smokeCalls(page)).filter((call) => call.command === "save_app_settings")).toHaveLength(0);
+  await agent.press("Enter");
+  await expect.poll(async () => (await smokeCalls(page)).filter((call) => call.command === "save_app_settings").at(-1)?.args)
+    .toMatchObject({ settings: { core: { defaultUserAgent: "browser-autosave-agent" } } });
+  await agent.blur();
+  expect((await smokeCalls(page)).filter((call) => call.command === "save_app_settings")).toHaveLength(1);
 
-  const settings = page.getByRole("region", { name: "Settings" });
-  await settings.getByRole("tab", { name: "Sources" }).click();
-
-  const geoSource = settings.getByLabel("Geo files source");
-  const srsSource = settings.getByLabel("sing-box ruleset source");
-  const routingSource = settings.getByLabel("Routing template source");
-  const importButton = settings.getByRole("button", {
-    exact: true,
-    name: "Import configuration template",
-  });
-
-  await expect(settings.getByRole("tab", { name: "Sources" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  await expect(geoSource).toBeEnabled();
-  await expect(srsSource).toBeEnabled();
-  await expect(routingSource).toBeEnabled();
-  await expect(importButton).toBeVisible();
-
-  const drafts = {
-    geo: "https://draft.example.test/geo/{0}.dat",
-    routing: "https://draft.example.test/routing-template.json",
-    srs: "https://draft.example.test/rules/{1}.srs",
-  };
-  await geoSource.fill(drafts.geo);
-  await srsSource.fill(drafts.srs);
-  await routingSource.fill(drafts.routing);
-  await expect(importButton).toBeDisabled();
-  await settings.getByRole("button", { exact: true, name: "Save all" }).click();
-  await expect(importButton).toBeEnabled();
-
-  await importButton.click();
-  let templateDialog = page.getByRole("dialog", { name: "Import configuration template" });
-  await expect(templateDialog).toBeVisible();
-
-  const optionNames = ["Default", "Custom"];
-  for (const optionName of optionNames) {
-    await expect(templateDialog.getByRole("button", { name: new RegExp(`^${optionName}`) })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-  }
-
-  const applyButton = templateDialog.getByRole("button", { exact: true, name: "Import" });
-  await expect(applyButton).toBeDisabled();
-  await templateDialog.getByRole("button", { name: /^Custom/ }).click();
-  await expect(applyButton).toBeEnabled();
-  await page.keyboard.press("Escape");
-  await expect(templateDialog).toBeHidden();
-  await expect(settings).toBeVisible();
-
-  await expect(geoSource).toHaveValue(drafts.geo);
-  await expect(srsSource).toHaveValue(drafts.srs);
-  await expect(routingSource).toHaveValue(drafts.routing);
-
-  await importButton.click();
-  templateDialog = page.getByRole("dialog", { name: "Import configuration template" });
-  await expect(templateDialog).toBeVisible();
-  await expect(templateDialog.getByRole("button", { exact: true, name: "Import" })).toBeDisabled();
-
-  await templateDialog.getByRole("button", { name: /^Default/ }).click();
-  await templateDialog.getByRole("button", { exact: true, name: "Import" }).click();
-
-  await expect(templateDialog).toBeHidden();
-  await expect(page.getByText("Configuration template imported", { exact: true })).toBeVisible();
-  await expect(geoSource).toHaveValue("");
-  await expect(srsSource).toHaveValue("");
-  await expect(routingSource).toHaveValue("");
-
-  const importCall = await page.evaluate(() => {
-    const state = window.__VOYA_SMOKE__.state as {
-      calls: Array<{ args: Record<string, unknown>; command: string }>;
-    };
-    return state.calls.filter((call) => call.command === "import_config_template").at(-1);
-  });
-  expect(importCall).toEqual({
-    args: {
-      preferProxy: true,
-      proxyUrl: null,
-      selection: { type: "default" },
-    },
-    command: "import_config_template",
-  });
+  await settings.getByRole("tab", { name: "Network", exact: true }).click();
+  const mtu = settings.getByLabel("MTU", { exact: true });
+  await mtu.fill("");
+  await mtu.blur();
+  await expect(mtu).toHaveAttribute("aria-invalid", "true");
+  expect((await smokeCalls(page)).filter((call) => call.command === "save_app_settings")).toHaveLength(1);
+  await mtu.fill("9000");
+  await page.evaluate(() => window.__VOYA_SMOKE__.emit("app-event", { kind: "selectTab", payload: "profiles" }));
+  await expect(page.getByRole("heading", { level: 1, name: "Nodes", exact: true })).toBeVisible();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect.poll(async () => (await smokeCalls(page)).filter((call) => call.command === "save_app_settings").at(-1)?.args)
+    .toMatchObject({ settings: { network: { tun: { mtu: 9000 } } } });
 });
 
 test("adds and imports profiles, activates one, and connects through the fake runtime", async ({ page }) => {
@@ -343,16 +285,16 @@ test("edits routing and DNS settings without network or OS side effects", async 
   await page.getByRole("tab", { name: "Settings" }).click();
   const settings = page.getByRole("region", { name: "Settings" });
   await settings.getByRole("tab", { name: "DNS" }).click();
-  await expect(settings.getByRole("heading", { exact: true, name: "DNS" })).toBeVisible();
+  await expect(settings.getByRole("heading", { name: "DNS servers and strategies" })).toBeVisible();
   await settings.getByRole("checkbox", { exact: true, name: "FakeIP" }).check();
   await settings.getByLabel("Remote DNS").fill("https://dns.google/dns-query");
-  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await settings.getByLabel("Remote DNS").blur();
 
   // Asserting the static "FakeIP" label proves nothing about the save; read the
   // recorded payload instead.
   await expect
-    .poll(async () => (await smokeCalls(page)).filter((call) => call.command === "save_dns_settings").length)
-    .toBeGreaterThan(0);
+    .poll(async () => (await smokeCalls(page)).filter((call) => call.command === "save_dns_settings").at(-1)?.args)
+    .toMatchObject({ settings: { fakeIp: true, remote: "https://dns.google/dns-query" } });
 
   const dnsCall = (await smokeCalls(page)).filter((call) => call.command === "save_dns_settings").at(-1);
   expect(dnsCall?.args).toMatchObject({

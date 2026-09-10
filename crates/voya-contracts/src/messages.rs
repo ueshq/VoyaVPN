@@ -44,7 +44,6 @@ pub enum NoticeCode {
     SubscriptionRefreshFailed,
     RoutingRefreshFailed,
     DnsRefreshFailed,
-    ConfigurationRefreshFailed,
     ProxyViewRefreshFailed,
     ConnectionModeRefreshFailed,
     SettingsRefreshFailed,
@@ -56,7 +55,6 @@ pub enum NoticeCode {
     RoutingRulesDeletedRestartFailed,
     RoutingRuleMovedRestartFailed,
     DnsSavedRestartFailed,
-    TemplateImportedRestartFailed,
     TunSavedRestartFailed,
     ConnectionModeSavedRestartFailed,
     SettingsSavedRuntimeUpdateFailed,
@@ -88,7 +86,6 @@ pub enum CoreFlowReason {
     Disconnect,
     RoutingChanged,
     DnsChanged,
-    ConfigTemplateImported,
     TunChanged,
     ConnectionModeChanged,
     SettingsSaved,
@@ -268,9 +265,6 @@ pub enum ValidationCode {
         found: u32,
         expected: u32,
     },
-    SourceUrlNotHttp,
-    SourceUrlNotHttps,
-    SourceUrlHasCredentials,
     TunMtuOutOfRange {
         min: u32,
         max: u32,
@@ -309,7 +303,7 @@ pub enum ValidationScope {
 ///
 /// `field` is a stable identifier, not a display label: the DNS pane keys its
 /// inputs by `direct`/`remote`/`bootstrap`/`hosts`, the settings surface by its
-/// contract path (`sources.geo`), and the group builder by `children`.
+/// contract path (`network.tun.mtu`), and the group builder by `children`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ValidationIssue {

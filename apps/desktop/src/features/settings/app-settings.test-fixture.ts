@@ -2,10 +2,8 @@ import type { AppSettingsV1 } from "@/ipc/bindings";
 
 export function makeAppSettings({
   defaultUserAgent = "agent-before-edit",
-  subscriptionConverter = null,
 }: {
   defaultUserAgent?: string;
-  subscriptionConverter?: string | null;
 } = {}): AppSettingsV1 {
   return {
     schemaVersion: 1,
@@ -67,12 +65,6 @@ export function makeAppSettings({
       hosts: null,
       proxyStrategy: null,
       remote: null,
-    },
-    sources: {
-      geo: null,
-      routingTemplate: null,
-      singboxRuleset: null,
-      subscriptionConverter,
     },
     speedTest: {
       delayIntervalSeconds: 1,
