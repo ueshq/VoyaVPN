@@ -6,6 +6,7 @@ use crate::{CoreState, CoreType, SystemProxyType, TunBackend, ValidationIssue};
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "lowercase")]
 pub enum TitleBarLayout {
+    Macos,
     Windows,
     None,
 }
@@ -200,6 +201,9 @@ pub struct CoreSeedInstallResult {
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeStatusResponse {
+    /// Milliseconds since this core connected; absent outside a confirmed connection.
+    #[specta(type = Option<f64>)]
+    pub connected_duration_ms: Option<u64>,
     pub state: CoreState,
     /// The confirmed running tunnel, independent of the saved connection mode.
     /// Absent during transitions, pending cleanup, and local-proxy operation.

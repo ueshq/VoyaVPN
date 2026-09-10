@@ -42,8 +42,8 @@ import type {
   WindowChromeConfig,
 } from "../../src/ipc/bindings";
 
-export async function installTauriSmokeMock(page: Page) {
-  await page.addInitScript(() => {
+export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowChromeConfig["titleBarLayout"] = "none") {
+  await page.addInitScript((titleBarLayout) => {
     type CommandArgs = Record<string, unknown>;
     type Profile = Record<string, unknown>;
     type ProfileRow = {
@@ -81,6 +81,7 @@ export async function installTauriSmokeMock(page: Page) {
     let nextProfileId = 1;
     let nextRoutingId = 1;
     let nextRuleId = 1;
+    let windowMaximized = false;
 
     const state: MockState = {
       calls: [] as Array<{ command: string; args: CommandArgs }>,
@@ -95,7 +96,7 @@ export async function installTauriSmokeMock(page: Page) {
       runtime: {
         activeProfileId: null,
         mainPid: null,
-        prePid: null,
+        prePid: null, connectedDurationMs: null,
         activeTunBackend: null,
         runningCoreType: null,
         state: "disconnected",
@@ -248,6 +249,15 @@ export async function installTauriSmokeMock(page: Page) {
         case "plugin:event|emit_to":
         case "plugin:resources|close":
         case "plugin:window|close":
+        case "plugin:window|minimize":
+        case "plugin:window|start_dragging":
+        case "set_window_acrylic":
+          return Promise.resolve(null);
+        case "plugin:window|is_maximized":
+          return Promise.resolve(windowMaximized);
+        case "plugin:window|toggle_maximize":
+          windowMaximized = !windowMaximized;
+          emitEvent("tauri://resize", { width: 1180, height: 760 });
           return Promise.resolve(null);
         case "plugin:app|version":
           return Promise.resolve("0.1.0");
@@ -266,7 +276,7 @@ export async function installTauriSmokeMock(page: Page) {
         case "get_window_chrome_config":
           // Called on every boot by use-window-chrome; leaving it unmocked meant
           // the shell silently fell back through its catch on each smoke run.
-          return Promise.resolve({ titleBarLayout: "none" } satisfies WindowChromeConfig);
+          return Promise.resolve({ titleBarLayout } satisfies WindowChromeConfig);
         case "load_ui_preferences":
           return Promise.resolve(clone(state.settings.appearance));
         case "load_app_settings":
@@ -281,7 +291,7 @@ export async function installTauriSmokeMock(page: Page) {
           state.runtime = {
             activeProfileId: active ? String(active.profile.id) : null,
             mainPid: 4242,
-            prePid: null,
+            prePid: null, connectedDurationMs: 0,
             activeTunBackend: null,
             runningCoreType: "singBox",
             state: "connected",
@@ -293,7 +303,7 @@ export async function installTauriSmokeMock(page: Page) {
           state.runtime = {
             activeProfileId: null,
             mainPid: null,
-            prePid: null,
+            prePid: null, connectedDurationMs: null,
             activeTunBackend: null,
             runningCoreType: null,
             state: "disconnected",
@@ -303,6 +313,7 @@ export async function installTauriSmokeMock(page: Page) {
         case "restart_core":
           state.runtime = {
             ...state.runtime,
+            connectedDurationMs: 0,
             mainPid: 4243,
             state: "connected",
           };
@@ -1022,7 +1033,7 @@ export async function installTauriSmokeMock(page: Page) {
       }
       return String(value);
     }
-  });
+  }, titleBarLayout);
 }
 
 declare global {

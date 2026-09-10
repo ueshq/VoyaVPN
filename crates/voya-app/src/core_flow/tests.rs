@@ -481,6 +481,7 @@ async fn a_restarted_core_refreshes_proxy_state_before_the_snapshot() {
                 outcome: CoreExitOutcome::Restarted {
                     attempt: 1,
                     snapshot: SupervisorSnapshot {
+                        connected_duration_ms: Some(0),
                         state: SupervisorConnectionState::Connected,
                         active_tun_backend: None,
                         active_profile_id: Some("active".to_string()),

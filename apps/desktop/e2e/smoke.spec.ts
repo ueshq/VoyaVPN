@@ -44,7 +44,7 @@ async function connectFakeCore(page: Page) {
           payload: {
             activeProfileId: null,
             mainPid: 4242,
-            prePid: null,
+            prePid: null, connectedDurationMs: null,
             activeTunBackend: null,
             runningCoreType: "singBox",
             state: "connected",
@@ -73,7 +73,7 @@ test.afterEach(async ({ page }) => {
 });
 
 test("loads the app shell and opens in-shell settings", async ({ page }) => {
-  await expect(page.getByRole("heading", { name: "VoyaVPN" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Not protected" })).toBeVisible();
   await expect(page.getByTestId("sidebar-footer")).toContainText("Disconnected");
   await expect(page.getByTestId("sidebar-footer")).toContainText("Up 0 B/s");
   await expect(page.getByRole("tab", { name: "Home" })).toHaveAttribute("aria-selected", "true");
@@ -252,15 +252,18 @@ test("adds and imports profiles, activates one, and connects through the fake ru
   await shareQrDialog.getByRole("button", { name: "Close" }).first().click();
 
   await page.getByRole("tab", { name: "Home" }).click();
-  await expect(page.getByTestId("home-subscription-card")).toBeVisible();
   await expect(page.getByRole("switch", { name: "TUN mode", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Switch node" }).click();
+  await expect(page.getByTestId("home-subscription-card")).toBeVisible();
   const importedNode = page.getByRole("option", { name: /Smoke Imported VLESS/ });
   await importedNode.dblclick();
-  await expect(importedNode).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("dialog", { name: "Switch node" })).toBeHidden();
   const connectButton = page.getByTestId("home-connect-button");
   await expect(connectButton).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByTestId("home-status-card")).toContainText("PID 4242");
-  await expect(coreStateBadge(page, "Connected")).toBeVisible();
+  await page.getByRole("button", { name: "Details" }).click();
+  await expect(page.getByRole("dialog", { name: "Connection details" })).toContainText("4242");
+  await page.keyboard.press("Escape");
+  await expect(coreStateBadge(page, "Connected")).toHaveCount(1);
 
   await connectButton.click();
   await expect(connectButton).toHaveAttribute("aria-pressed", "false");
@@ -461,6 +464,7 @@ test("keeps macOS proxy setup manual through PAC, disconnect and verified cleanu
   await page.getByTestId("home-connect-button").click();
   await expect(page.getByTestId("home-status-card")).toContainText("Local proxy ready");
   await expect(page.getByText("Protected", { exact: true })).toHaveCount(0);
+  await page.getByText("Manual proxy setup", { exact: true }).click();
   const panel = page.getByTestId("manual-proxy-panel");
   await expect(panel).toContainText("127.0.0.1:10808");
   await expect(panel).toContainText("unknown");

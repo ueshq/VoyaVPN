@@ -49,6 +49,7 @@ export type RuntimeEventState = {
   proxyConnections: ProxyConnectionsSnapshot | null;
   proxyMonitorStatus: RuntimeProxyMonitorStatus;
   coreState: RuntimeStatusResponse | null;
+  coreStateReceivedAt: number | null;
   lastTransientEvent: TransientStreamEvent | null;
   logLines: StoredLogLine[];
   pushTransientEvent: (event: TransientStreamEvent) => void;
@@ -127,6 +128,7 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
   proxyConnections: null,
   proxyMonitorStatus: initialProxyMonitorStatus,
   coreState: null,
+  coreStateReceivedAt: null,
   lastTransientEvent: null,
   logLines: [],
   pushTransientEvent: (event) => {
@@ -188,7 +190,7 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
       switch (event.kind) {
         case "coreState":
           markRuntimeUpdate("coreState");
-          return { coreState: event.payload, lastTransientEvent: event };
+          return { coreState: event.payload, coreStateReceivedAt: performance.now(), lastTransientEvent: event };
         case "statistics": {
           const payload = parseStatisticsSnapshot(event.payload);
           if (!payload) {
@@ -255,7 +257,7 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
     set({ proxyMonitorStatus: makeProxyMonitorStatus("stopped", false, true, message) }),
   setCoreState: (coreState) => {
     markRuntimeUpdate("coreState");
-    set({ coreState });
+    set({ coreState, coreStateReceivedAt: performance.now() });
   },
   setSpeedtestRunning: (speedtestRunning) => set({ speedtestRunning }),
   setSpeedtestStatus: (status) => set({ speedtestRunning: status.running }),

@@ -21,6 +21,7 @@ import { HomeScreen } from "./home-screen";
 
 type RuntimeState = {
   coreState: RuntimeStatusResponse | null;
+  coreStateReceivedAt: number | null;
   setCoreState: (state: RuntimeStatusResponse) => void;
   statistics: StatisticsSnapshot | null;
   sysProxy: SystemProxyStatusResponse | null;
@@ -32,6 +33,7 @@ type RuntimeState = {
 const runtimeMock = vi.hoisted(() => {
   const state: RuntimeState = {
     coreState: null,
+    coreStateReceivedAt: null,
     setCoreState: vi.fn(),
     statistics: null,
     sysProxy: null,
@@ -85,7 +87,7 @@ const ipcMock = vi.hoisted(() => {
 const disconnectedStatus: RuntimeStatusResponse = {
   activeProfileId: null,
   mainPid: null,
-  prePid: null,
+  prePid: null, connectedDurationMs: null,
   activeTunBackend: null,
   runningCoreType: null,
   state: "disconnected",
@@ -94,7 +96,7 @@ const disconnectedStatus: RuntimeStatusResponse = {
 const connectedStatus: RuntimeStatusResponse = {
   activeProfileId: "node-tokyo",
   mainPid: 4242,
-  prePid: null,
+  prePid: null, connectedDurationMs: null,
   activeTunBackend: null,
   runningCoreType: "singBox",
   state: "connected",
@@ -241,27 +243,23 @@ describe("HomeScreen", () => {
     expect(await screen.findByText("No nodes available")).toBeInTheDocument();
   });
 
-  it("lights up the protected state with node info and marks the running node", async () => {
+  it("shows the running node, details and a searchable node picker", async () => {
     runtimeMock.state.sysProxy = sysProxyStatus;
     runtimeMock.state.coreState = connectedStatus;
-    mockProfileList([
-      makeActiveProfile({ id: "node-tokyo", remarks: "Tokyo Edge" }),
-    ]);
-
+    mockProfileList([makeActiveProfile({ id: "node-tokyo", remarks: "Tokyo Edge" })]);
+    const user = userEvent.setup();
     renderHome();
-
-    expect(screen.getByText("Protected")).toBeInTheDocument();
-    expect(screen.getByTestId("home-status-card")).toHaveTextContent("PID 4242");
+    expect(screen.getByRole("heading", { name: "Connected", level: 1 })).toBeInTheDocument();
     expect(connectButton()).toHaveAttribute("aria-pressed", "true");
     expect(connectButton()).toHaveAccessibleName("Disconnect");
-    expect(screen.getByRole("button", { name: "Restart" })).toBeInTheDocument();
-    expect(
-      await screen.findByRole("button", { name: "Current node: Tokyo Edge" }),
-    ).toBeInTheDocument();
-
+    expect(await screen.findByRole("heading", { name: "Tokyo Edge" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Details" }));
+    expect(screen.getByRole("dialog", { name: "Connection details" })).toHaveTextContent("4242");
+    expect(screen.getByRole("button", { name: "Restart" })).toBeEnabled();
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("button", { name: "Details" })).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Switch node" }));
     const row = await screen.findByRole("option", { name: /Tokyo Edge/ });
-    // Blue selection is seeded to the active node; the green "live" dot marks the
-    // node that is actually running.
     expect(row).toHaveAttribute("aria-selected", "true");
     expect(row.querySelector(".bg-connected")).not.toBeNull();
   });
@@ -274,6 +272,7 @@ describe("HomeScreen", () => {
 
     const user = userEvent.setup();
     renderHome();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Switch node" }));
 
     await user.click(await screen.findByRole("option", { name: /Tokyo Edge/ }));
 
@@ -284,7 +283,7 @@ describe("HomeScreen", () => {
     expect(ipcMock.restartCore).not.toHaveBeenCalled();
   });
 
-  it("labels a running manual proxy as locally ready and preserves unknown configuration", () => {
+  it("labels a running manual proxy as locally ready and preserves unknown configuration", async () => {
     runtimeMock.state.coreState = connectedStatus;
     runtimeMock.state.sysProxy = {
       ...sysProxyStatus, management: "manual", observation: "unknown",
@@ -292,7 +291,8 @@ describe("HomeScreen", () => {
     };
     renderHome();
     expect(screen.getByText("Local proxy ready")).toBeInTheDocument();
-    expect(screen.queryByText("Protected")).not.toBeInTheDocument();
+    expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByText("Manual proxy setup"));
     expect(screen.getByText("System proxy")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("unknown");
     expect(useToastStore.getState().toasts).toHaveLength(0);
@@ -302,7 +302,7 @@ describe("HomeScreen", () => {
     runtimeMock.state.coreState = connectedStatus;
     const view = renderHome();
     expect(screen.getByText("Protection status unknown")).toBeInTheDocument();
-    expect(screen.queryByText("Protected")).not.toBeInTheDocument();
+    expect(screen.queryByText("Connected")).not.toBeInTheDocument();
     expect(ipcMock.systemProxyStatus).not.toHaveBeenCalled();
     view.unmount();
   });
@@ -312,8 +312,8 @@ describe("HomeScreen", () => {
     runtimeMock.state.sysProxy = { ...sysProxyStatus, management: "manual" };
     runtimeMock.state.tun = { ...tunStatusResponse, enabled: true, backend: "macosPacketTunnel" };
     renderHome();
-    expect(screen.getByText(activeTunBackend ? "Protected" : "Local proxy ready")).toBeInTheDocument();
-    if (!activeTunBackend) expect(screen.queryByText("Protected")).not.toBeInTheDocument();
+    expect(screen.getByText(activeTunBackend ? "Connected" : "Local proxy ready")).toBeInTheDocument();
+    if (!activeTunBackend) expect(screen.queryByText("Connected")).not.toBeInTheDocument();
   });
 
   it("offers a retry when native tunnel cleanup is pending and refreshes TUN after failure", async () => {
@@ -337,6 +337,7 @@ describe("HomeScreen", () => {
 
     const user = userEvent.setup();
     renderHome();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Switch node" }));
 
     await user.dblClick(await screen.findByRole("option", { name: /Tokyo Edge/ }));
 
@@ -349,7 +350,7 @@ describe("HomeScreen", () => {
     runtimeMock.state.coreState = {
       activeProfileId: "node-old",
       mainPid: 1,
-      prePid: null,
+      prePid: null, connectedDurationMs: null,
       activeTunBackend: null,
       runningCoreType: "singBox",
       state: "connected",
@@ -358,6 +359,7 @@ describe("HomeScreen", () => {
 
     const user = userEvent.setup();
     renderHome();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Switch node" }));
 
     await user.dblClick(await screen.findByRole("option", { name: /Tokyo Edge/ }));
 
@@ -371,6 +373,7 @@ describe("HomeScreen", () => {
 
     const user = userEvent.setup();
     renderHome();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Switch node" }));
 
     const tokyo = await screen.findByRole("option", { name: /Tokyo Edge/ });
     tokyo.focus();
@@ -389,6 +392,7 @@ describe("HomeScreen", () => {
 
     const user = userEvent.setup();
     renderHome();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Switch node" }));
 
     const tokyo = await screen.findByRole("option", { name: /Tokyo Edge/ });
     const osaka = screen.getByRole("option", { name: /Osaka Edge/ });
@@ -435,8 +439,10 @@ describe("HomeScreen", () => {
 
     const user = userEvent.setup();
     renderHome();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Switch node" }));
 
     await user.click(await screen.findByRole("option", { name: /Tokyo Edge/ }));
+    await user.keyboard("{Escape}");
     await user.click(connectButton());
 
     expect(ipcMock.setActiveProfile).toHaveBeenCalledWith("tokyo");
@@ -454,8 +460,10 @@ describe("HomeScreen", () => {
 
     const user = userEvent.setup();
     renderHome();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Switch node" }));
 
     await screen.findByRole("option", { name: /Osaka Edge/ });
+    await user.keyboard("{Escape}");
     await user.click(connectButton());
 
     await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1));
@@ -474,9 +482,11 @@ describe("HomeScreen", () => {
     const user = userEvent.setup();
     renderHome();
 
-    const osaka = await screen.findByRole("option", { name: /Osaka Edge/ });
+
     await user.click(connectButton());
     expect(connectButton()).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Switch node" }));
+    const osaka = await screen.findByRole("option", { name: /Osaka Edge/ });
 
     await user.dblClick(osaka);
 
@@ -492,6 +502,7 @@ describe("HomeScreen", () => {
 
     const user = userEvent.setup();
     renderHome();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Switch node" }));
 
     const tokyo = await screen.findByRole("option", { name: /Tokyo Edge/ });
     tokyo.focus();
@@ -510,6 +521,7 @@ describe("HomeScreen", () => {
 
     const user = userEvent.setup();
     const { queryClient } = renderHome();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Switch node" }));
 
     await user.click(await screen.findByRole("option", { name: /Tokyo Edge/ }));
     expect(screen.getByRole("option", { name: /Tokyo Edge/ })).toHaveAttribute(
@@ -534,6 +546,7 @@ describe("HomeScreen", () => {
       "true",
     );
 
+    await user.keyboard("{Escape}");
     await user.click(connectButton());
 
     await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1));
@@ -548,6 +561,7 @@ describe("HomeScreen", () => {
 
     const user = userEvent.setup();
     renderHome();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Switch node" }));
 
     await screen.findByRole("option", { name: /Tokyo Edge/ });
     await user.type(screen.getByRole("textbox", { name: "Search nodes…" }), "osaka");
@@ -576,7 +590,9 @@ describe("HomeScreen", () => {
 
     const user = userEvent.setup();
     renderHome();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Switch node" }));
     await screen.findByRole("option", { name: /Tokyo Edge/ });
+    await user.keyboard("{Escape}");
     await user.click(connectButton());
 
     await waitFor(() => expect(useModalStore.getState().stack).toHaveLength(1));
@@ -602,7 +618,9 @@ describe("HomeScreen", () => {
 
     const user = userEvent.setup();
     renderHome();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Switch node" }));
     await screen.findByRole("option", { name: /Tokyo Edge/ });
+    await user.keyboard("{Escape}");
     await user.click(connectButton());
 
     await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(2));
@@ -624,7 +642,9 @@ describe("HomeScreen", () => {
 
     const user = userEvent.setup();
     renderHome();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Switch node" }));
     await screen.findByRole("option", { name: /Tokyo Edge/ });
+    await user.keyboard("{Escape}");
     await user.click(connectButton());
 
     await waitFor(() =>
@@ -651,7 +671,7 @@ describe("HomeScreen", () => {
     expect(runtimeMock.state.setCoreState).toHaveBeenCalledWith({
       activeProfileId: "node-tokyo",
       mainPid: 4242,
-      prePid: null,
+      prePid: null, connectedDurationMs: null,
       activeTunBackend: null,
       runningCoreType: "singBox",
       state: "connected",
@@ -667,6 +687,7 @@ describe("HomeScreen", () => {
     const user = userEvent.setup();
 
     renderHome();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Switch node" }));
 
     expect(await screen.findByText("No subscription")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Add subscription" }));
@@ -806,6 +827,37 @@ describe("HomeScreen", () => {
 
     resolveConnect?.(connectedStatus);
     await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1));
+  });
+
+  it("prevents connecting during a pending mode transaction", async () => {
+    let resolveMode: ((status: ConnectionModeStatus) => void) | undefined;
+    ipcMock.setConnectionMode.mockImplementation(() => new Promise<ConnectionModeStatus>((resolve) => { resolveMode = resolve; }));
+    const user = userEvent.setup();
+    renderHome();
+    await user.click(tunSwitch());
+    expect(connectButton()).toBeDisabled();
+    await user.click(connectButton());
+    expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
+    resolveMode?.(connectionModeStatus);
+    await waitFor(() => expect(connectButton()).toBeEnabled());
+  });
+
+  it("keeps the current node honest when the running profile differs from the saved selection", async () => {
+    runtimeMock.state.coreState = connectedStatus;
+    mockProfileList([makeActiveProfile({ id: "other", remarks: "Other saved node" })]);
+    const user = userEvent.setup();
+    renderHome();
+    expect(await screen.findByRole("heading", { name: "node-tokyo" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Other saved node" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Switch node" }));
+    ipcMock.restartCore.mockRejectedValueOnce(new Error("switch failed"));
+    await user.click(screen.getByRole("button", { name: "Use selected node" }));
+    await waitFor(() => expect(ipcMock.restartCore).toHaveBeenCalledOnce());
+    expect(screen.getByRole("dialog", { name: "Switch node" })).toBeInTheDocument();
+    expect(useToastStore.getState().toasts.at(-1)?.description).toBe("switch failed");
+    await user.click(screen.getByRole("button", { name: "Use selected node" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch node" })).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Switch node" })).toHaveFocus();
   });
 
   it("keeps a committed mode change successful when only the status refresh fails", async () => {

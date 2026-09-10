@@ -1,0 +1,38 @@
+/* Desktop window chrome only; dialogs remain above the titlebar's stacking context. */
+.app-shell {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  height: 100vh;
+  min-height: 34rem;
+  overflow: hidden;
+  isolation: isolate;
+}
+.shell-content-column {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: var(--home-canvas, var(--background));
+}
+.shell-panel { height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
+.shell-titlebar {
+  position: absolute;
+  z-index: 20;
+  inset: 0 0 auto;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  background: inherit;
+  user-select: none;
+}
+.app-shell:not([data-window-chrome="none"]):not([data-active-tab="home"]) .shell-panel {
+  padding-top: 40px;
+}
+.app-shell[data-window-chrome="macos"] .app-sidebar[data-collapsed="true"] { width: 96px; }
+.app-shell[data-window-chrome="macos"] .app-sidebar[data-collapsed="true"] .sidebar-toolbar {
+  height: 112px;
+  padding-top: 56px;
+}
+@media (max-height: 700px) {
+  .app-shell:not([data-window-chrome="none"]) .home-content { padding-top: 56px; }
+}

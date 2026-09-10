@@ -26,12 +26,6 @@ import { missingCorePayload, runWithElevation } from "./runtime-action";
 type RuntimeAction = "connect" | "disconnect" | "restart";
 export type Translation = ReturnType<typeof useI18n>["t"];
 
-export type ActiveNodeInfo = {
-  delayMs: number | null;
-  id: string;
-  name: string;
-};
-
 /**
  * Runtime controller for the Home screen: connect/disconnect/restart with
  * elevation + missing-core handling, the unified connection-mode switcher,
@@ -65,10 +59,10 @@ export function useHomeRuntime(t: Translation) {
   const state = coreState?.state ?? "disconnected";
   const connected = state === "connected";
   const inProgress = state === "connecting" || state === "disconnecting";
-  const busy = inProgress || pendingAction !== null || switchingId !== null;
+  const busy = inProgress || pendingAction !== null || switchingId !== null || modePending || pacPending;
   // One guard for both mode-mutating controls: they write the same config
   // transaction, so letting them overlap races two `set_connection_mode` calls.
-  const modeBusy = busy || modePending || pacPending;
+  const modeBusy = busy;
 
   const activeProfile = profilesQuery.data?.entries.find((item) => item.isActive) ?? null;
   const activeProfileId = activeProfile?.profile.id ?? null;
@@ -83,15 +77,9 @@ export function useHomeRuntime(t: Translation) {
   const runningEntry = runningId
     ? (profilesQuery.data?.entries.find((item) => item.profile.id === runningId) ?? null)
     : null;
-  const activeNodeEntry = runningEntry ?? (connected ? activeProfile : null);
-  const activeNode: ActiveNodeInfo | null = activeNodeEntry
-    ? {
-        delayMs:
-          activeNodeEntry.metrics.delayMs > 0 ? activeNodeEntry.metrics.delayMs : null,
-        id: activeNodeEntry.profile.id,
-        name: activeNodeEntry.profile.remarks || activeNodeEntry.profile.id,
-      }
-    : null;
+  const nodeEntry = connected
+    ? runningEntry
+    : profilesQuery.data?.entries.find((item) => item.profile.id === selectedId) ?? activeProfile;
 
   // Seed the local selection from the persisted active profile and re-sync it
   // whenever the active profile changes (e.g. after a switch). Adjusting state
@@ -166,7 +154,7 @@ export function useHomeRuntime(t: Translation) {
     // and the backend-reported connecting/disconnecting states (tray or
     // auto-connect), so a double-click can never race another runtime command.
     if (busy) {
-      return;
+      return false;
     }
 
     setSelectedId(indexId);
@@ -179,6 +167,7 @@ export function useHomeRuntime(t: Translation) {
         wasConnected ? restartCore() : connectActiveProfile(),
       );
       if (isLatest()) setCoreState(status);
+      return status.state === "connected";
     } catch (error) {
       const missingCore = missingCorePayload(error);
       if (missingCore) {
@@ -190,6 +179,7 @@ export function useHomeRuntime(t: Translation) {
           title: t(wasConnected ? "actions.restart" : "actions.connect"),
         });
       }
+      return false;
     } finally {
       await refreshStatus();
       // `set_active_profile` emits the profiles invalidation that drives the
@@ -297,7 +287,7 @@ export function useHomeRuntime(t: Translation) {
   }
 
   function activateProfile(indexId: string) {
-    void switchActiveAndApply(indexId);
+    return switchActiveAndApply(indexId);
   }
 
   function changeTunEnabled(enabled: boolean) {
@@ -319,7 +309,7 @@ export function useHomeRuntime(t: Translation) {
   return {
     activeTunBackend: coreState?.activeTunBackend ?? null,
     activateProfile,
-    activeNode,
+    nodeEntry,
     activeSubscriptionId: activeProfile?.profile.subscriptionId ?? null,
     busy,
     changeTunEnabled,
@@ -336,6 +326,7 @@ export function useHomeRuntime(t: Translation) {
     pacPending,
     profiles: profilesQuery.data?.entries ?? [],
     profilesPending: profilesQuery.isPending,
+    profilesError: profilesQuery.error,
     restart,
     runningId,
     selectProfile,
@@ -344,6 +335,10 @@ export function useHomeRuntime(t: Translation) {
     switchingId,
     togglePac,
     tunProviderSummary,
+    tunIssue: tun?.providerPathMismatch
+      ? tunProviderPathMismatchDescription(tun, t)
+      : tun && (["error", "permissionRequired", "missingComponent"].includes(tun.providerState) || tun.lastProviderError)
+        ? tunProviderSummary : null,
   };
 }
 

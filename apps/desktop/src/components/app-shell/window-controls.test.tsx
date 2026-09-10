@@ -52,13 +52,25 @@ describe("Windows title-bar controls", () => {
     expect(unlisten).toHaveBeenCalledOnce();
   });
 
-  it("renders a draggable brand label and closes through the window IPC", async () => {
+  it("renders only a drag region and Windows controls, with no visible brand", async () => {
     const user = userEvent.setup();
-    const { container } = render(<TitleBar />);
+    const { container } = render(<TitleBar layout="windows" />);
 
-    expect(screen.getByText("VoyaVPN")).toBeInTheDocument();
+    expect(screen.queryByText("VoyaVPN")).not.toBeInTheDocument();
     expect(container.querySelector("[data-tauri-drag-region]")).toBeInTheDocument();
+    for (const button of screen.getAllByRole("button")) {
+      expect(button.closest("[data-tauri-drag-region]")).toBeNull();
+    }
     await user.click(screen.getByRole("button", { name: "Close" }));
     expect(windowMocks.closeWindow).toHaveBeenCalledOnce();
+  });
+
+  it("leaves macOS caption buttons native and omits chrome on web/Linux", () => {
+    const { container, rerender } = render(<TitleBar layout="macos" />);
+    expect(container.querySelector("[data-tauri-drag-region]")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(windowMocks.onWindowResized).not.toHaveBeenCalled();
+    rerender(<TitleBar layout="none" />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

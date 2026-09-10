@@ -96,9 +96,35 @@
       "localProxy": "A local system proxy is configured; traffic forwarding has not been verified.",
       "otherProxy": "A different system proxy is configured.",
       "cleanup": "Before switching modes, disconnecting or quitting, manually turn off any system proxy you configured for VoyaVPN. The app cannot restore it automatically.",
+      "exit": {
+        "localTitle": "Check system proxy before quitting",
+        "localMessage": "A system proxy still points to this Mac. If it is used by VoyaVPN, quitting may interrupt internet access.\n\nOpen Network settings, then Details → Proxies for the relevant network. Turn off the proxies you set up for VoyaVPN, then quit. Leave other apps’ proxies unchanged.",
+        "unknownTitle": "Unable to confirm system proxy settings",
+        "unknownMessage": "VoyaVPN could not confirm your system proxy settings. This does not mean your network has a problem.\n\nIf you manually set up a proxy for VoyaVPN, turn it off in Network settings → Details → Proxies before quitting. If you did not, you can quit now.",
+        "quitAnyway": "Quit anyway",
+        "settingsError": "Network settings could not be opened. VoyaVPN is still running. Go to System Settings → Network → relevant network → Details → Proxies, turn off the proxies you set up for VoyaVPN, then quit."
+      },
       "copy": "Copy address",
       "copied": "Address copied"
-    }
+    },
+    "latency": "Latency",
+    "duration": "Connection time",
+    "connectedHint": "Connected. Enjoy every step of your journey.",
+    "currentNodeLabel": "Current node",
+    "selectedNodeLabel": "Selected node",
+    "details": "Details",
+    "switchNode": "Switch node",
+    "nodePickerHint": "Select a node, then apply. Double-click or press Enter to connect immediately.",
+    "manageSubscriptions": "Manage subscriptions",
+    "applyNode": "Use selected node",
+    "connectionDetails": "Connection details",
+    "serverAddress": "Server address",
+    "serverPort": "Port",
+    "protocol": "Protocol",
+    "processId": "Process ID",
+    "tunDiagnostics": "TUN diagnostics",
+    "manualProxySetup": "Manual proxy setup",
+    "disconnectLabel": "Disconnect"
   },
   "logCodes": {
     "connected": "Core supervisor started",
@@ -874,5 +900,12 @@
     "maximize": "Maximize",
     "minimize": "Minimize",
     "restore": "Restore"
+  },
+  "sidebar": {
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar",
+    "traffic": "Live traffic",
+    "upload": "Up",
+    "download": "Down"
   }
 }

@@ -6,6 +6,8 @@ export type ShellTab = "home" | "proxies" | "profiles" | "settings" | "connectio
 export type ConnectionsView = "connections" | "logs";
 
 type ShellState = {
+  sidebarCollapsed: boolean;
+  toggleSidebar: () => void;
   activeTab: ShellTab;
   /** Switch tabs unconditionally, bypassing any registered navigation guard. */
   setActiveTab: (tab: ShellTab) => void;
@@ -30,6 +32,8 @@ type ShellState = {
 };
 
 export const useShellStore = create<ShellState>((set) => ({
+  sidebarCollapsed: false,
+  toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   activeTab: "home",
   setActiveTab: (activeTab) => set({ activeTab, pendingTab: null }),
   requestTab: (tab) =>

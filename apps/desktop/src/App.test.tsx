@@ -11,6 +11,7 @@ import {
   proxyStartMonitor,
   proxyStopMonitor,
   loadUiPreferences,
+  getWindowChromeConfig,
 } from "@/ipc";
 import type {
   ProxyConnectionItem,
@@ -77,6 +78,7 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
       proxyConnections: null,
       proxyMonitorStatus: initialMonitorStatus,
       coreState: null,
+      coreStateReceivedAt: null,
       lastTransientEvent: null,
       logLines: [],
       pushTransientEvent: vi.fn(),
@@ -216,7 +218,7 @@ vi.mock("@/ipc", () => ({
     Promise.resolve({
       activeProfileId: null,
       mainPid: null,
-      prePid: null,
+      prePid: null, connectedDurationMs: null,
       activeTunBackend: null,
       runningCoreType: null,
       state: "disconnected",
@@ -324,6 +326,7 @@ describe("App", () => {
       connectionsView: "connections",
       navigationGuard: null,
       pendingTab: null,
+      sidebarCollapsed: false,
     });
     useToastStore.setState({ toasts: [] });
     usePreferencesStore.setState({ themeMode: "system" });
@@ -332,6 +335,7 @@ describe("App", () => {
     document.documentElement.className = "";
     vi.mocked(loadUiPreferences).mockReset();
     vi.mocked(loadUiPreferences).mockResolvedValue({ language: "en", theme: "system" });
+    vi.mocked(getWindowChromeConfig).mockResolvedValue({ titleBarLayout: "none" });
     vi.mocked(proxyCloseConnection).mockClear();
     vi.mocked(proxyListConnections).mockClear();
     vi.mocked(proxyStartMonitor).mockClear();
@@ -368,6 +372,37 @@ describe("App", () => {
     expect(within(sidebar).queryByRole("button", { name: "Theme" })).toBeNull();
   });
 
+  it("collapses the sidebar without losing navigation or accessible labels", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+    expect(screen.getByRole("button", { name: "Expand sidebar" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getAllByRole("tab")).toHaveLength(6);
+    await user.click(screen.getByRole("tab", { name: "Settings" }));
+    expect(await screen.findByRole("region", { name: "Settings" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Expand sidebar" }));
+    expect(screen.getByRole("button", { name: "Collapse sidebar" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it.each(["macos", "windows", "none"] as const)("uses %s chrome without a separate titlebar row", async (layout) => {
+    vi.mocked(getWindowChromeConfig).mockResolvedValue({ titleBarLayout: layout });
+    const { container } = renderApp();
+    await waitFor(() => expect(container.querySelector(".app-shell")).toHaveAttribute("data-window-chrome", layout));
+    const toolbar = container.querySelector(".sidebar-toolbar");
+    const toggle = screen.getByRole("button", { name: "Collapse sidebar" });
+    expect(toggle).not.toHaveAttribute("data-tauri-drag-region");
+    if (layout === "none") {
+      expect(toolbar).not.toHaveAttribute("data-tauri-drag-region");
+      expect(container.querySelector('[data-slot="titlebar"]')).toBeNull();
+    } else {
+      expect(toolbar).toHaveAttribute("data-tauri-drag-region");
+      expect(container.querySelector('.shell-content-column > [data-slot="titlebar"]')).toBeInTheDocument();
+    }
+    expect(screen.queryAllByRole("button", { name: "Minimize" })).toHaveLength(layout === "windows" ? 1 : 0);
+    expect(container.querySelector('[data-slot="titlebar-placeholder"]')).toBeNull();
+    expect(screen.queryByText("VoyaVPN")).not.toBeInTheDocument();
+  });
+
   it("defaults to the connection home hero", async () => {
     useShellStore.setState({ activeTab: "home" });
 
@@ -375,7 +410,7 @@ describe("App", () => {
 
     const hero = await screen.findByRole("region", { name: "Connection home" });
     // The app name is the Home page's h1 (the sidebar brand is a plain label).
-    expect(within(hero).getByRole("heading", { level: 1, name: "VoyaVPN" })).toBeInTheDocument();
+    expect(within(hero).getByRole("heading", { level: 1, name: "Not protected" })).toBeInTheDocument();
     expect(within(hero).getByRole("button", { name: "Connect" })).toBeInTheDocument();
     expect(within(hero).getByText("Not protected")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-footer")).toHaveTextContent("Disconnected");

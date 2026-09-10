@@ -117,6 +117,7 @@ pub fn runtime_status_response(
     snapshot: crate::supervisor::SupervisorSnapshot,
 ) -> voya_contracts::RuntimeStatusResponse {
     voya_contracts::RuntimeStatusResponse {
+        connected_duration_ms: snapshot.connected_duration_ms,
         state: match snapshot.state {
             crate::supervisor::SupervisorConnectionState::CleanupPending => {
                 voya_contracts::CoreState::CleanupPending
@@ -150,6 +151,9 @@ pub fn runtime_status_event(
     snapshot: Option<&crate::supervisor::SupervisorSnapshot>,
 ) -> voya_contracts::RuntimeStatusResponse {
     voya_contracts::RuntimeStatusResponse {
+        connected_duration_ms: snapshot
+            .filter(|_| state == voya_contracts::CoreState::Connected)
+            .and_then(|snapshot| snapshot.connected_duration_ms),
         state,
         active_tun_backend: snapshot
             .filter(|_| state == voya_contracts::CoreState::Connected)

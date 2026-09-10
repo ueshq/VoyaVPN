@@ -651,6 +651,7 @@ fn every_traffic_mode_round_trips() {
 #[test]
 fn the_status_response_and_the_status_event_agree_on_every_field() {
     let snapshot = SupervisorSnapshot {
+        connected_duration_ms: Some(1458000),
         state: SupervisorConnectionState::Connected,
         active_profile_id: Some("running-node".to_string()),
         active_tun_backend: Some(voya_platform::tun::TunBackend::MacosPacketTunnel),
@@ -672,6 +673,8 @@ fn the_status_response_and_the_status_event_agree_on_every_field() {
         voya_contracts::CoreState::Connected
     ));
     assert!(matches!(event.state, voya_contracts::CoreState::Connected));
+    assert_eq!(event.connected_duration_ms, Some(1458000));
+    assert_eq!(event.connected_duration_ms, response.connected_duration_ms);
     assert_eq!(event.active_profile_id, response.active_profile_id);
     assert_eq!(event.main_pid, response.main_pid);
     assert_eq!(event.pre_pid, response.pre_pid);
@@ -699,6 +702,7 @@ fn the_status_response_and_the_status_event_agree_on_every_field() {
         connecting.active_profile_id.as_deref(),
         Some("requested-node")
     );
+    assert_eq!(connecting.connected_duration_ms, None);
     assert_eq!(connecting.main_pid, None);
     assert_eq!(connecting.pre_pid, None);
     assert_eq!(connecting.running_core_type, None);

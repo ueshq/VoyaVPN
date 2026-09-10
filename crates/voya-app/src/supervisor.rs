@@ -1,4 +1,9 @@
-use std::{fmt, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    fmt,
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
@@ -167,6 +172,8 @@ pub enum SupervisorConnectionState {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SupervisorSnapshot {
+    /// Elapsed time since this running core successfully connected.
+    pub connected_duration_ms: Option<u64>,
     pub state: SupervisorConnectionState,
     pub active_tun_backend: Option<TunBackend>,
     pub active_profile_id: Option<String>,
@@ -207,6 +214,7 @@ impl SupervisorSnapshot {
     pub const fn disconnected() -> Self {
         Self {
             state: SupervisorConnectionState::Disconnected,
+            connected_duration_ms: None,
             active_tun_backend: None,
             active_profile_id: None,
             main_pid: None,
@@ -591,6 +599,7 @@ fn native_tun_start_request(
 }
 
 struct RunningCore {
+    connected_since: Option<Instant>,
     active_profile_id: Option<String>,
     main: Option<ProcessHandle>,
     pre: Option<ProcessHandle>,
@@ -610,6 +619,7 @@ struct RunningNativeTun {
 impl RunningCore {
     fn empty() -> Self {
         Self {
+            connected_since: None,
             active_profile_id: None,
             main: None,
             pre: None,
@@ -646,7 +656,7 @@ impl RunningCore {
         None
     }
 
-    fn snapshot(&self) -> SupervisorSnapshot {
+    fn snapshot(&self, now: Instant) -> SupervisorSnapshot {
         let cleanup_pending = self
             .native_tun
             .as_ref()
@@ -656,6 +666,9 @@ impl RunningCore {
         // must not leak either of them once the core is gone.
         let live_request = connected.then_some(self.last_request.as_ref()).flatten();
         SupervisorSnapshot {
+            connected_duration_ms: self.connected_since.filter(|_| connected).map(|start| {
+                u64::try_from(now.saturating_duration_since(start).as_millis()).unwrap_or(u64::MAX)
+            }),
             state: if cleanup_pending {
                 SupervisorConnectionState::CleanupPending
             } else if connected {
@@ -1025,6 +1038,7 @@ mod tests {
                 .expect_err("failed start");
             let status = supervisor.status().await.expect("status");
             assert_eq!(status.active_tun_backend, None);
+            assert_eq!(status.connected_duration_ms, None);
             if accepted {
                 assert!(error.to_string().contains("original start error"));
                 assert!(error.to_string().contains("stop timed out"));
@@ -1255,7 +1269,10 @@ mod tests {
                 stderr: "refusing to sudo kill pid 100".to_string(),
             }),
         );
-        let deps = SupervisorDeps::new(runner, elevation).with_target_os(TargetOs::Linux);
+        let clock = FakeClock::new();
+        let deps = SupervisorDeps::new(runner, elevation)
+            .with_target_os(TargetOs::Linux)
+            .with_clock(Arc::new(clock.clone()));
         let supervisor = CoreSupervisor::spawn(deps);
 
         supervisor
@@ -1275,6 +1292,7 @@ mod tests {
             .await
             .expect("start");
 
+        clock.advance(Duration::from_secs(7));
         let error = supervisor.stop().await.expect_err("sudo kill should fail");
         assert!(matches!(
             error,
@@ -1287,6 +1305,7 @@ mod tests {
         let snapshot = supervisor.status().await.expect("status after failed stop");
         assert_eq!(snapshot.state, SupervisorConnectionState::Connected);
         assert_eq!(snapshot.main_pid, Some(100));
+        assert_eq!(snapshot.connected_duration_ms, Some(7000));
         assert_eq!(
             events.lock().as_slice(),
             [
@@ -1759,6 +1778,79 @@ sleep 30
         }
     }
 
+    #[tokio::test]
+    async fn connected_duration_tracks_backend_lifetime_and_resets_on_restart() {
+        for target in [TargetOs::Linux, TargetOs::Windows, TargetOs::Macos] {
+            let clock = FakeClock::new();
+            let events = SharedEvents::default();
+            let deps = SupervisorDeps::new(
+                Arc::new(FakeRunner::new(events.clone())),
+                Arc::new(ElevationState::new()),
+            )
+            .with_target_os(target)
+            .with_clock(Arc::new(clock.clone()))
+            .with_native_tun_controller(Arc::new(RecordingNativeTunController { events }));
+            let supervisor = CoreSupervisor::spawn(deps);
+            assert_eq!(
+                supervisor
+                    .status()
+                    .await
+                    .expect("idle")
+                    .connected_duration_ms,
+                None
+            );
+            let mut request = crash_test_request();
+            request.tun_enabled = target != TargetOs::Linux;
+            request.main = request.main.with_config_path("/tmp/voya/config.json");
+            assert_eq!(
+                supervisor
+                    .start(request.clone())
+                    .await
+                    .expect("start")
+                    .connected_duration_ms,
+                Some(0)
+            );
+            clock.advance(Duration::from_millis(1458000));
+            assert_eq!(
+                supervisor
+                    .status()
+                    .await
+                    .expect("reopened view")
+                    .connected_duration_ms,
+                Some(1458000)
+            );
+            assert_eq!(
+                supervisor
+                    .restart(request)
+                    .await
+                    .expect("restart")
+                    .connected_duration_ms,
+                Some(0)
+            );
+            clock.advance(Duration::from_secs(2));
+            if target == TargetOs::Linux {
+                let pid = supervisor
+                    .status()
+                    .await
+                    .expect("running")
+                    .main_pid
+                    .expect("pid");
+                assert_eq!(
+                    supervisor
+                        .process_exited(pid, Some(1))
+                        .await
+                        .expect("crash restart")
+                        .connected_duration_ms,
+                    Some(0)
+                );
+            }
+            assert_eq!(
+                supervisor.stop().await.expect("stop").connected_duration_ms,
+                None
+            );
+        }
+    }
+
     /// Crash restarts are immediate but bounded: without the budget a core that
     /// exits on every spawn (a bound listen port, a missing rule-set file) was
     /// respawned as fast as the reaper could report it, forever, while the
@@ -2104,8 +2196,10 @@ sleep 30
             .await
             .expect_err("the replacement cannot spawn");
 
+        let status = supervisor.status().await.expect("status");
+        assert_eq!(status.connected_duration_ms, None);
         assert_eq!(
-            supervisor.status().await.expect("status").state,
+            status.state,
             SupervisorConnectionState::Disconnected,
             "the old core was stopped, so the shell must be told the core is down"
         );

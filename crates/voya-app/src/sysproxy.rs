@@ -21,6 +21,12 @@ const SYSPROXY_SCRIPT_DIR_NAME: &str = "sysproxy";
 const SYSPROXY_DIRTY_MARKER_FILE_NAME: &str = "proxy-dirty";
 const SYSPROXY_DIRTY_MARKER_CONTENTS: &[u8] = b"dirty\n";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ManualProxyExitWarning {
+    LocalProxy,
+    Unknown,
+}
+
 #[derive(Clone)]
 pub struct SystemProxyManager {
     service: SystemProxyService,
@@ -159,6 +165,23 @@ impl SystemProxyManager {
             status.manual_cleanup_required = false;
         }
         Ok(status)
+    }
+
+    /// An exit request also rechecks settings, so a verified cleanup does not
+    /// require returning to Home just to retire a legacy marker.
+    pub fn manual_exit_warning(
+        &self,
+        config: &AppConfig,
+    ) -> Result<Option<ManualProxyExitWarning>, SystemProxyManagerError> {
+        let status = self.recheck_manual_proxy(config)?;
+        if status.management != SystemProxyManagement::Manual {
+            return Ok(None);
+        }
+        Ok(match status.observation {
+            SystemProxyObservation::LocalProxy => Some(ManualProxyExitWarning::LocalProxy),
+            SystemProxyObservation::Unknown => Some(ManualProxyExitWarning::Unknown),
+            SystemProxyObservation::Clear | SystemProxyObservation::OtherProxy => None,
+        })
     }
 
     pub fn open_network_settings(&self) -> Result<(), SystemProxyManagerError> {
@@ -367,6 +390,89 @@ mod tests {
         fn observe(&self) -> SystemProxyObservation {
             self.0
         }
+    }
+
+    #[test]
+    fn exit_recheck_warns_only_for_local_or_unverified_proxy_settings() {
+        for (observation, warning) in [
+            (SystemProxyObservation::Clear, None),
+            (SystemProxyObservation::OtherProxy, None),
+            (
+                SystemProxyObservation::LocalProxy,
+                Some(ManualProxyExitWarning::LocalProxy),
+            ),
+            (
+                SystemProxyObservation::Unknown,
+                Some(ManualProxyExitWarning::Unknown),
+            ),
+        ] {
+            for legacy_marker in [false, true] {
+                let app_dir = unique_app_dir("exit-recheck");
+                let runner = Arc::new(RecordingRunner::default());
+                let pac = Arc::new(RecordingPac::default());
+                let service = SystemProxyService::new(runner.clone(), pac.clone())
+                    .with_observer(Arc::new(TestObserver(observation)));
+                let manager = SystemProxyManager::with_target_os(
+                    service,
+                    AppPaths::new(app_dir.clone()),
+                    TargetOs::Macos,
+                );
+                if legacy_marker {
+                    manager.write_dirty_marker().expect("legacy marker");
+                }
+                assert_eq!(
+                    manager
+                        .manual_exit_warning(&AppConfig::default())
+                        .expect("exit recheck"),
+                    warning,
+                    "{observation:?}, legacy marker: {legacy_marker}",
+                );
+                assert_eq!(
+                    manager.dirty_marker_path().exists(),
+                    legacy_marker && warning.is_some(),
+                );
+                // Checking before confirmation must keep the connection and
+                // PAC running and must never write system network settings.
+                assert!(runner.oneshots().is_empty());
+                assert_eq!(*pac.starts.lock().expect("starts"), 0);
+                assert_eq!(*pac.stops.lock().expect("stops"), 0);
+                let _ = fs::remove_dir_all(app_dir);
+            }
+        }
+    }
+
+    #[test]
+    fn exit_rechecks_settings_again_after_the_user_returns_from_network_settings() {
+        struct MutableObserver(Mutex<SystemProxyObservation>);
+        impl voya_platform::sysproxy::SystemProxyObserver for MutableObserver {
+            fn observe(&self) -> SystemProxyObservation {
+                *self.0.lock().expect("observation")
+            }
+        }
+        let app_dir = unique_app_dir("exit-retry");
+        let observer = Arc::new(MutableObserver(Mutex::new(
+            SystemProxyObservation::LocalProxy,
+        )));
+        let service = SystemProxyService::new(
+            Arc::new(RecordingRunner::default()),
+            Arc::new(RecordingPac::default()),
+        )
+        .with_observer(observer.clone());
+        let manager = SystemProxyManager::with_target_os(
+            service,
+            AppPaths::new(app_dir.clone()),
+            TargetOs::Macos,
+        );
+        let config = AppConfig::default();
+        manager.write_dirty_marker().expect("legacy marker");
+        assert_eq!(
+            manager.manual_exit_warning(&config).expect("first exit"),
+            Some(ManualProxyExitWarning::LocalProxy),
+        );
+        *observer.0.lock().expect("observation") = SystemProxyObservation::Clear;
+        assert_eq!(manager.manual_exit_warning(&config).expect("retry"), None);
+        assert!(!manager.dirty_marker_path().exists());
+        let _ = fs::remove_dir_all(app_dir);
     }
 
     #[test]

@@ -96,9 +96,35 @@
       "localProxy": "检测到本地系统代理；这不代表流量转发已验证成功。",
       "otherProxy": "检测到其他系统代理。",
       "cleanup": "切换模式、断开连接或退出前，请手动关闭为 VoyaVPN 配置的系统代理；应用无法自动恢复。",
+      "exit": {
+        "localTitle": "退出前检查系统代理",
+        "localMessage": "检测到系统代理仍指向本机。若它用于 VoyaVPN，退出后可能无法上网。\n\n请打开网络设置，在对应网络的“详细信息 → 代理”中关闭为 VoyaVPN 设置的代理，再退出。其他应用的代理请保留。",
+        "unknownTitle": "无法确认系统代理状态",
+        "unknownMessage": "VoyaVPN 未能确认系统代理设置，这不代表网络出现故障。\n\n若曾为 VoyaVPN 手动设置代理，请在网络设置的“详细信息 → 代理”中关闭后再退出；若没有设置，可直接退出。",
+        "quitAnyway": "仍然退出",
+        "settingsError": "无法打开网络设置，VoyaVPN 已保持运行。请手动前往“系统设置 → 网络 → 对应网络 → 详细信息 → 代理”，关闭为 VoyaVPN 设置的代理后再退出。"
+      },
       "copy": "复制地址",
       "copied": "地址已复制"
-    }
+    },
+    "latency": "延迟",
+    "duration": "连接时长",
+    "connectedHint": "连接已建立，安心浏览每一程",
+    "currentNodeLabel": "当前节点",
+    "selectedNodeLabel": "待连接节点",
+    "details": "详情",
+    "switchNode": "切换节点",
+    "nodePickerHint": "选中节点后确认应用，也可双击或按 Enter 立即连接。",
+    "manageSubscriptions": "管理订阅",
+    "applyNode": "使用所选节点",
+    "connectionDetails": "连接详情",
+    "serverAddress": "服务器地址",
+    "serverPort": "端口",
+    "protocol": "协议",
+    "processId": "进程 ID",
+    "tunDiagnostics": "TUN 诊断",
+    "manualProxySetup": "手动代理配置",
+    "disconnectLabel": "断开连接"
   },
   "logCodes": {
     "connected": "内核守护进程已启动",
@@ -874,5 +900,12 @@
     "maximize": "最大化",
     "minimize": "最小化",
     "restore": "还原"
+  },
+  "sidebar": {
+    "expand": "展开侧栏",
+    "collapse": "收起侧栏",
+    "traffic": "实时流量",
+    "upload": "上传",
+    "download": "下载"
   }
 }

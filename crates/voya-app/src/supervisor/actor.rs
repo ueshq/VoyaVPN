@@ -59,7 +59,7 @@ impl SupervisorActor {
                 let _ = reply.send(self.stop());
             }
             SupervisorCommand::Status(reply) => {
-                let _ = reply.send(Ok(self.running.snapshot()));
+                let _ = reply.send(Ok(self.running.snapshot(self.deps.clock.now())));
             }
             SupervisorCommand::ProcessExited {
                 process_id,
@@ -171,6 +171,7 @@ impl SupervisorActor {
         };
 
         let mut partial = RunningCore {
+            connected_since: None,
             active_profile_id: request.active_profile_id.clone(),
             main: None,
             pre: None,
@@ -220,9 +221,10 @@ impl SupervisorActor {
             .map_or(request.main.core_type, |pre| pre.core_type);
         partial.running_core_type = Some(running_core_type);
 
+        partial.connected_since = Some(self.deps.clock.now());
         self.running = partial;
 
-        Ok(self.running.snapshot())
+        Ok(self.running.snapshot(self.deps.clock.now()))
     }
 
     fn start_native_tun(
@@ -234,7 +236,9 @@ impl SupervisorActor {
         let result = self.deps.native_tun_controller.start(native_request);
         let cleanup_pending = matches!(&result, Err(NativeTunError::StartCleanupFailed { .. }));
         if result.is_err() && !cleanup_pending {
-            return result.map(|()| self.running.snapshot()).map_err(Into::into);
+            return result
+                .map(|()| self.running.snapshot(self.deps.clock.now()))
+                .map_err(Into::into);
         }
         self.native_tun_generation = self.native_tun_generation.wrapping_add(1);
         let generation = self.native_tun_generation;
@@ -244,6 +248,7 @@ impl SupervisorActor {
             .as_ref()
             .map_or(request.main.core_type, |pre| pre.core_type);
         self.running = RunningCore {
+            connected_since: result.is_ok().then(|| self.deps.clock.now()),
             active_profile_id: request.active_profile_id.clone(),
             main: None,
             pre: None,
@@ -259,7 +264,7 @@ impl SupervisorActor {
         };
         self.spawn_native_tun_health_watcher(generation, backend);
         result?;
-        Ok(self.running.snapshot())
+        Ok(self.running.snapshot(self.deps.clock.now()))
     }
 
     fn stop(&mut self) -> Result<SupervisorSnapshot, SupervisorError> {
@@ -328,7 +333,7 @@ impl SupervisorActor {
         exit_code: Option<i32>,
     ) -> Result<SupervisorSnapshot, SupervisorError> {
         if !self.running.contains_pid(process_id) {
-            return Ok(self.running.snapshot());
+            return Ok(self.running.snapshot(self.deps.clock.now()));
         }
 
         let active_profile_id = self.running.active_profile_id.clone();

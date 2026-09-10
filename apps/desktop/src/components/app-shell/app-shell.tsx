@@ -82,31 +82,23 @@ export function AppShell() {
 
   return (
     <main className="bg-background text-foreground">
-      <div className="grid h-screen min-h-[34rem] grid-cols-[auto_1fr] grid-rows-[auto_1fr] overflow-hidden">
-        {/* Titlebar row: the Windows build draws its own borderless title bar
-            (it spans both columns); every other platform keeps its native frame
-            and leaves this structural row empty (collapsing to zero height). */}
-        {titleBarLayout === "windows" ? (
-          <TitleBar />
-        ) : (
-          <div className="col-span-2" data-slot="titlebar-placeholder" />
-        )}
+      <div className="app-shell" data-active-tab={activeTab} data-window-chrome={titleBarLayout}>
+        <AppSidebar titleBarLayout={titleBarLayout} />
 
-        <AppSidebar />
-
-        <div
-          aria-labelledby={`shell-tab-${activeTab}`}
-          className="min-h-0 min-w-0 overflow-hidden bg-background outline-none"
-          id={SHELL_PANEL_ID}
-          role="tabpanel"
-          tabIndex={0}
-        >
-          {/* Keyed on the active tab so a crashed screen recovers by navigating
-              away, and so the sidebar/footer survive a screen render error or a
-              rejected lazy chunk instead of the whole root unmounting. */}
-          <AppErrorBoundary resetKey={activeTab}>
-            <Suspense fallback={<ScreenFallback />}>{renderActiveScreen(activeTab)}</Suspense>
-          </AppErrorBoundary>
+        <div className="shell-content-column">
+          <TitleBar layout={titleBarLayout} />
+          <div
+            aria-labelledby={`shell-tab-${activeTab}`}
+            className="shell-panel outline-none"
+            id={SHELL_PANEL_ID}
+            role="tabpanel"
+            tabIndex={0}
+          >
+            {/* Keep the sidebar and window controls mounted when a screen fails. */}
+            <AppErrorBoundary resetKey={activeTab}>
+              <Suspense fallback={<ScreenFallback />}>{renderActiveScreen(activeTab)}</Suspense>
+            </AppErrorBoundary>
+          </div>
         </div>
       </div>
 

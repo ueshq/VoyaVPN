@@ -114,9 +114,8 @@ export const commands = {
 	 */
 	installCoreSeed: (coreType: CoreType) => typedError<CoreSeedInstallResult, AppError>(__TAURI_INVOKE("install_core_seed", { coreType })),
 	/**
-	 *  Report the window decoration this build should render. Only Windows gets the
-	 *  custom borderless title bar; macOS and Linux keep their native frame, and the
-	 *  web fallback (no Tauri runtime) resolves to `none` on the frontend.
+	 *  macOS overlays native traffic lights on the webview; Windows renders caption
+	 *  buttons in its borderless window. Linux and the web fallback use `none`.
 	 */
 	getWindowChromeConfig: () => typedError<WindowChromeConfig, AppError>(__TAURI_INVOKE("get_window_chrome_config")),
 	/**
@@ -905,6 +904,8 @@ export type Routing_Serialize = {
  *  anything sends one to the backend.
  */
 export type RuntimeStatusResponse = {
+	/**  Milliseconds since this core connected; absent outside a confirmed connection. */
+	connectedDurationMs: number | null,
 	state: CoreState,
 	/**
 	 *  The confirmed running tunnel, independent of the saved connection mode.
@@ -1124,7 +1125,7 @@ export type SystemProxyType = "forcedClear" | "forcedChange" | "unchanged" | "pa
 
 export type ThemeMode = "system" | "light" | "dark";
 
-export type TitleBarLayout = "windows" | "none";
+export type TitleBarLayout = "macos" | "windows" | "none";
 
 export type TlsMode = "tls" | "reality";
 

@@ -10,7 +10,7 @@ vi.mock("@/ipc", async () => ({
 }));
 
 const core: RuntimeStatusResponse = {
-  state: "connected", activeTunBackend: null, activeProfileId: "node", mainPid: 1, prePid: null, runningCoreType: "singBox",
+  state: "connected", activeTunBackend: null, activeProfileId: "node", mainPid: 1, prePid: null, connectedDurationMs: null, runningCoreType: "singBox",
 };
 const proxy: SystemProxyStatusResponse = {
   management: "manual", observation: "clear", manualCleanupRequired: false,

@@ -15,7 +15,7 @@ import { getProtocolLabel } from "@/features/profiles/profile-constants";
 import { profileAddress, profilePort } from "@/features/profiles/profile-display";
 
 /**
- * Always-visible node list for the Home screen. A controlled, IPC-free component:
+ * Searchable node list inside the Home node picker. A controlled, IPC-free component:
  * single-click (or Space) selects a row locally (blue highlight via
  * {@link dataTableRowSelected}); double-click (or Enter) activates it — the parent
  * decides what "activate" does (switch + connect/restart). While a runtime
@@ -55,7 +55,7 @@ export function NodeList({
   const listRef = useRef<HTMLUListElement>(null);
 
   // Keep the imported order stable (no active-pin sort) so rows never jump
-  // around in an always-visible list; only filter by remarks / address.
+  // around inside the picker; only filter by remarks / address.
   const filtered = useMemo<ProfileListEntry[]>(() => {
     const query = filterText.trim().toLowerCase();
     if (!query) {

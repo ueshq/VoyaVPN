@@ -196,7 +196,11 @@ pub fn run() {
     app.run(|app, event| {
         match event {
             // The first point at which a native dialog can be shown.
-            RunEvent::Ready => report_startup_failure(app),
+            RunEvent::Ready => {
+                #[cfg(target_os = "macos")]
+                ipc::window::install_native_caption_inset(app);
+                report_startup_failure(app);
+            }
             RunEvent::ExitRequested { api, code, .. } => {
                 if !exit_prompt::defer_for_manual_proxy(app, &api, code) {
                     shutdown_for_exit(app);

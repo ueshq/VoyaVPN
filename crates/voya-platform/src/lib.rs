@@ -16,3 +16,5 @@ pub mod sysproxy;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 pub mod tun;
+#[cfg(target_os = "macos")]
+pub mod window_chrome;

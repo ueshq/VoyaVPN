@@ -33,8 +33,12 @@ ADR 0004's automatic system-proxy restoration requirement for macOS only.
   Any loopback proxy is conservatively considered to need manual cleanup; the
   application does not claim ownership of or modify third-party settings.
 - Legacy `proxy-dirty` files cause a manual reminder. Startup/stop never clear
-  them. Only explicit recheck with no observed loopback proxy and a complete
-  observation clears the marker. Unknown observations cannot clear it.
+  them. A user-requested recheck (including the check before quitting) clears
+  the marker only with no observed loopback proxy and a complete observation.
+  Unknown observations cannot clear it. Exit reminders distinguish detected
+  local proxies from an unverified state and offer Open Network settings as
+  the default action, Quit anyway, and Cancel. Opening settings or cancelling
+  keeps the connection running; the next exit request checks settings again.
 - The app continues hosting local PAC. A URL is exposed only after its listener
   starts and remains stable until stopped. Disconnect/VPN/exit stop that local
   listener and remind the user to remove manually configured proxies.

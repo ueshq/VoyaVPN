@@ -54,12 +54,21 @@ the app is not proof of a registration defect.
    copyable PAC URL.
 4. Enable TUN mode, disconnect and exit in separate trials.
    Each leaves manually configured OS proxies untouched and displays a cleanup
-   reminder. Exit must offer the reminder before terminating when a local
-   proxy, old dirty marker, or unknown observation remains.
+   reminder. Exit rechecks settings before terminating. A local proxy shows a
+   potential loss-of-connectivity reminder; an unknown observation explains
+   that settings could not be confirmed without claiming a network failure.
+   The default action opens Network settings and leaves the app/connection
+   running. Cancel/Escape also keeps it running; only Quit anyway exits.
+   Repeat through tray Quit and Cmd+Q, including with the main window hidden.
+   Verify all three buttons are localized in both Chinese locales. If opening
+   settings fails, show the manual navigation path and keep the app running.
 5. With a legacy `proxy-dirty` in the isolated test app-data directory, startup
    must not execute recovery scripts or remove the marker. Remove the local
-   proxies manually, then click Check again; only a complete observation with
-   no local proxy permits marker removal. A denied read stays Unknown.
+   proxies manually, then click Check again or request exit; only a complete
+   observation with no local proxy permits marker removal. After verified
+   cleanup, exit must proceed without a stale reminder, including when the
+   user returns from Network settings without clicking Check again first.
+   A denied read stays Unknown and preserves the marker.
 6. Repeat with a third-party proxy configured: report it separately and leave
    every third-party setting unchanged. A local proxy on any other network
    service must still prevent clearing the marker.

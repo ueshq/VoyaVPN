@@ -164,7 +164,7 @@ describe("ProxyGroupsScreen", () => {
     ipcMocks.state.coreState = {
       activeProfileId: null,
       mainPid: null,
-      prePid: null,
+      prePid: null, connectedDurationMs: null,
       activeTunBackend: null,
       runningCoreType: null,
       state: "disconnected",

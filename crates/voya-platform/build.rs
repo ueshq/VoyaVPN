@@ -12,10 +12,12 @@ fn build_macos_packet_tunnel_bridge() {
     println!("cargo:rerun-if-changed={source}");
     println!("cargo:rerun-if-changed=native/macos_tunnel_wait.h");
     println!("cargo:rerun-if-changed=native/macos_sysproxy.m");
+    println!("cargo:rerun-if-changed=native/macos_window_chrome.m");
 
     cc::Build::new()
         .file(source)
         .file("native/macos_sysproxy.m")
+        .file("native/macos_window_chrome.m")
         .flag("-fobjc-arc")
         .flag("-fblocks")
         .flag("-mmacosx-version-min=10.15")

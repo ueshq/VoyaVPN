@@ -9,6 +9,7 @@ import { cn } from "@voya/ui/lib/utils";
 // to a calm surface hover.
 export function SidebarNavItem({
   active,
+  collapsed = false,
   icon: Icon,
   id,
   label,
@@ -16,6 +17,7 @@ export function SidebarNavItem({
   panelId,
 }: {
   active: boolean;
+  collapsed?: boolean;
   icon: LucideIcon;
   id: string;
   label: string;
@@ -26,12 +28,9 @@ export function SidebarNavItem({
     <button
       aria-controls={panelId}
       aria-selected={active}
-      className={cn(
-        "flex h-10 w-full shrink-0 items-center gap-3 rounded-md ps-3 pe-4 text-sm font-medium outline-none transition-colors duration-short ease-out-practical focus-visible:ring-2 focus-visible:ring-ring/50",
-        active
-          ? "bg-accent-blue-light text-brand"
-          : "text-sidebar-foreground hover:bg-accent",
-      )}
+      aria-label={label}
+      title={collapsed ? label : undefined}
+      className={cn("sidebar-nav-item", active && "sidebar-nav-item-active")}
       id={id}
       onClick={onSelect}
       role="tab"
@@ -39,7 +38,7 @@ export function SidebarNavItem({
       type="button"
     >
       <Icon className="size-4 shrink-0" aria-hidden="true" />
-      <span className="flex-1 truncate text-start">{label}</span>
+      <span className={cn("flex-1 truncate text-start", collapsed && "sr-only")}>{label}</span>
     </button>
   );
 }

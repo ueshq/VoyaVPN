@@ -12,6 +12,12 @@ try {
     resolve(root, "crates/voya-platform/native/macos_tunnel_wait_tests.m"),
     "-framework", "Foundation", "-framework", "NetworkExtension", "-o", binary]);
   run(binary, []);
+  const chromeBinary = join(directory, "window-chrome-tests");
+  run("xcrun", ["clang", "-fobjc-arc", "-fblocks", "-Wall", "-Wextra", "-Werror",
+    resolve(root, "crates/voya-platform/native/macos_window_chrome.m"),
+    resolve(root, "crates/voya-platform/native/macos_window_chrome_tests.m"),
+    "-framework", "AppKit", "-o", chromeBinary]);
+  run(chromeBinary, []);
 } finally {
   rmSync(directory, { recursive: true, force: true });
 }

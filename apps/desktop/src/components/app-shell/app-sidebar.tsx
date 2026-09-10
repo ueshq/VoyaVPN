@@ -1,14 +1,12 @@
 import type * as React from "react";
-import { ArrowDown, ArrowUp, Home, LoaderCircle, Network, Plug, Power, Route, Settings, Shield, WifiOff } from "lucide-react";
+import { ArrowDown, ArrowUp, Home, Network, PanelLeft, Plug, Route, Settings, Shield } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import { BrandMark } from "@/assets/brand-mark";
 import { SidebarNavItem } from "@/components/app-shell/sidebar-nav-item";
-import { cn } from "@voya/ui/lib/utils";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
 import { useRuntimeEventStore } from "@/ipc";
-import type { CoreState } from "@/ipc/bindings";
+import type { CoreState, TitleBarLayout } from "@/ipc/bindings";
 import { formatBytesPerSecond } from "@voya/utils/formatting";
 import { type ShellTab, useShellStore } from "@/stores/shell-store";
 
@@ -18,7 +16,7 @@ export const SHELL_PANEL_ID = "shell-tabpanel";
 
 type NavItem = { icon: LucideIcon; titleKey: TranslationKey; value: ShellTab };
 
-// Flat six-destination nav (Hiddify-style): no grouping, no collapsing.
+// Keep every existing destination reachable in both sidebar widths.
 const navItems: NavItem[] = [
   { icon: Home, titleKey: "tabs.home", value: "home" },
   { icon: Network, titleKey: "tabs.proxies", value: "proxies" },
@@ -36,10 +34,12 @@ const CORE_STATE_TRANSLATION_KEYS = {
   disconnecting: "status.disconnecting",
 } as const satisfies Record<CoreState, TranslationKey>;
 
-export function AppSidebar() {
+export function AppSidebar({ titleBarLayout }: { titleBarLayout: TitleBarLayout }) {
   const { t } = useI18n();
   const activeTab = useShellStore((state) => state.activeTab);
   const requestTab = useShellStore((state) => state.requestTab);
+  const collapsed = useShellStore((state) => state.sidebarCollapsed);
+  const toggleSidebar = useShellStore((state) => state.toggleSidebar);
 
   // Manual-activation tablist keyboard pattern: arrows move focus between the
   // roving-tabIndex tabs (Enter/Space then activates the native button). The
@@ -67,18 +67,25 @@ export function AppSidebar() {
   }
 
   return (
-    <aside className="flex h-full min-h-0 w-72 flex-col border-e border-sidebar-border bg-sidebar text-sidebar-foreground">
-      {/* Brand block: a plain label, not a heading — the page-level h1 lives in
-          the content area (Home renders the app name as its PageTitle). */}
-      <div className="flex shrink-0 items-center gap-3 px-5 pt-5 pb-4">
-        <BrandMark className="size-9 shrink-0 rounded-xl" aria-hidden="true" />
-        <p className="truncate text-base font-semibold leading-none">{t("app.name")}</p>
+    <aside className="app-sidebar" data-collapsed={collapsed}>
+      <div className="sidebar-toolbar" data-tauri-drag-region={titleBarLayout !== "none" ? true : undefined}>
+        <button
+          aria-expanded={!collapsed}
+          aria-controls="sidebar-navigation"
+          aria-label={t(collapsed ? "sidebar.expand" : "sidebar.collapse")}
+          className="sidebar-toggle"
+          onClick={toggleSidebar}
+          type="button"
+        >
+          <PanelLeft aria-hidden="true" className="size-4" />
+        </button>
       </div>
 
       <nav
         aria-label={t("tabs.aria")}
         aria-orientation="vertical"
-        className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-2"
+        className="sidebar-navigation"
+        id="sidebar-navigation"
         onKeyDown={handleNavKeyDown}
         role="tablist"
       >
@@ -86,6 +93,7 @@ export function AppSidebar() {
           <SidebarNavItem
             key={item.value}
             active={activeTab === item.value}
+            collapsed={collapsed}
             icon={item.icon}
             id={`shell-tab-${item.value}`}
             label={t(item.titleKey)}
@@ -109,35 +117,22 @@ function SidebarFooter() {
   const statistics = useRuntimeEventStore((state) => state.statistics);
 
   const state = coreState?.state ?? "disconnected";
-  const StateIcon = state === "connected" ? Power : state === "disconnected" ? WifiOff : LoaderCircle;
-  const inTransition = state === "connecting" || state === "disconnecting";
-  const uploadLabel = t("status.upload", { speed: formatBytesPerSecond(statistics?.uploadBytesPerSecond ?? 0) });
-  const downloadLabel = t("status.download", { speed: formatBytesPerSecond(statistics?.downloadBytesPerSecond ?? 0) });
+  const upload = formatBytesPerSecond(statistics?.uploadBytesPerSecond ?? 0);
+  const download = formatBytesPerSecond(statistics?.downloadBytesPerSecond ?? 0);
 
   return (
-    <div
-      aria-label={t("status.aria")}
-      className="mt-auto shrink-0 border-t border-sidebar-border px-5 py-4 text-xs"
-      data-testid="sidebar-footer"
-    >
-      <div
-        className={cn(
-          "flex items-center gap-2 font-medium",
-          state === "connected" ? "text-connected" : "text-sidebar-foreground",
-        )}
-      >
-        <StateIcon className={cn("size-3.5 shrink-0", inTransition && "animate-spin")} aria-hidden="true" />
-        <span className="truncate">{t(CORE_STATE_TRANSLATION_KEYS[state])}</span>
+    <div aria-label={t("status.aria")} className="sidebar-footer" data-testid="sidebar-footer">
+      <span className="sr-only">{t(CORE_STATE_TRANSLATION_KEYS[state])}</span>
+      <p className="sidebar-traffic-title">{t("sidebar.traffic")}</p>
+      <div className="sidebar-traffic-row" aria-label={t("status.upload", { speed: upload })}>
+        <ArrowUp aria-hidden="true" className="size-4" />
+        <span className="sidebar-traffic-label">{t("sidebar.upload")}{" "}</span>
+        <span className="sidebar-traffic-value">{upload}</span>
       </div>
-      <div className="mt-2 flex flex-col gap-1 text-muted-foreground">
-        <span className="flex items-center gap-2">
-          <ArrowUp className="size-3.5 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 truncate font-mono tabular-nums">{uploadLabel}</span>
-        </span>
-        <span className="flex items-center gap-2">
-          <ArrowDown className="size-3.5 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 truncate font-mono tabular-nums">{downloadLabel}</span>
-        </span>
+      <div className="sidebar-traffic-row" aria-label={t("status.download", { speed: download })}>
+        <ArrowDown aria-hidden="true" className="size-4" />
+        <span className="sidebar-traffic-label">{t("sidebar.download")}{" "}</span>
+        <span className="sidebar-traffic-value">{download}</span>
       </div>
     </div>
   );

@@ -1,11 +1,11 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::Manager;
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-use voya_platform::{
-    coreinfo::TargetOs,
-    sysproxy::{SystemProxyManagement, SystemProxyObservation},
+use tauri_plugin_dialog::{
+    DialogExt, MessageDialogButtons, MessageDialogKind, MessageDialogResult,
 };
+use voya_app::sysproxy::ManualProxyExitWarning;
+use voya_platform::coreinfo::TargetOs;
 
 use crate::AppState;
 
@@ -40,38 +40,77 @@ pub(crate) fn defer_for_manual_proxy<R: tauri::Runtime>(
     let manager = state.system_proxy_manager();
     let exit_code = exit_code.unwrap_or(0);
     let app = app.clone();
-    let text = voya_app::tray::manual_proxy_exit_text(&config.ui_item.current_language);
+    let language = config.ui_item.current_language.clone();
     tauri::async_runtime::spawn(async move {
-        let result = tauri::async_runtime::spawn_blocking(move || manager.status(&config)).await;
-        let warn = match result {
-            Ok(Ok(status)) => {
-                status.management == SystemProxyManagement::Manual
-                    && (status.manual_cleanup_required
-                        || status.observation == SystemProxyObservation::Unknown)
+        let result =
+            tauri::async_runtime::spawn_blocking(move || manager.manual_exit_warning(&config))
+                .await;
+        let warning = match result {
+            Ok(Ok(warning)) => warning,
+            Ok(Err(error)) => {
+                tracing::warn!(?error, "failed to recheck system proxy before exit");
+                Some(ManualProxyExitWarning::Unknown)
             }
-            _ => true,
+            Err(error) => {
+                tracing::warn!(?error, "system proxy exit check did not complete");
+                Some(ManualProxyExitWarning::Unknown)
+            }
         };
-        if !warn {
+        let Some(warning) = warning else {
             ACKNOWLEDGED.store(true, Ordering::SeqCst);
             app.exit(exit_code);
             return;
-        }
+        };
+        let text = voya_app::tray::manual_proxy_exit_text(&language, warning);
         let handle = app.clone();
         app.dialog()
             .message(text.message)
             .title(text.title)
             .kind(MessageDialogKind::Warning)
-            .buttons(MessageDialogButtons::OkCancelCustom(text.quit, text.cancel))
-            .show(move |quit| {
-                PENDING.store(false, Ordering::SeqCst);
-                if quit {
+            // The default action helps resolve the issue; quitting requires
+            // the explicit secondary action. Escape keeps the app running.
+            .buttons(MessageDialogButtons::YesNoCancelCustom(
+                text.open_settings.clone(),
+                text.quit.clone(),
+                text.cancel.clone(),
+            ))
+            .show_with_result(move |result| {
+                if result == MessageDialogResult::Custom(text.quit) {
                     ACKNOWLEDGED.store(true, Ordering::SeqCst);
                     handle.exit(exit_code);
-                } else if let Some(window) = handle.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
+                    return;
                 }
+                show_main_window(&handle);
+                if result != MessageDialogResult::Custom(text.open_settings.clone()) {
+                    PENDING.store(false, Ordering::SeqCst);
+                    return;
+                }
+                tauri::async_runtime::spawn(async move {
+                    let result = tauri::async_runtime::spawn_blocking(
+                        voya_platform::sysproxy::open_network_settings,
+                    )
+                    .await;
+                    if matches!(result, Ok(Ok(()))) {
+                        PENDING.store(false, Ordering::SeqCst);
+                        return;
+                    }
+                    tracing::warn!(?result, "failed to open network settings from exit reminder");
+                    handle
+                        .dialog()
+                        .message(text.settings_error)
+                        .title(text.open_settings)
+                        .kind(MessageDialogKind::Error)
+                        .buttons(MessageDialogButtons::OkCustom(text.cancel))
+                        .show(|_| PENDING.store(false, Ordering::SeqCst));
+                });
             });
     });
     true
+}
+
+fn show_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
 }
