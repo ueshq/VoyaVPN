@@ -21,8 +21,18 @@ ADR 0004's automatic system-proxy restoration requirement for macOS only.
 - macOS system proxy management is always manual. No lifecycle path generates
   or executes system-proxy scripts. Stored custom script paths remain inert.
   Windows/Linux retain automatic management.
-- Home uses a TUN mode switch: on selects TUN, off selects system proxy. PAC
-  remains a secondary switch while TUN is off. Persisted fields remain; old
+- Home uses a TUN mode switch: on selects TUN, off selects system proxy. A
+  single traffic-mode control offers smart routing (rule), global and direct.
+  All three are core routing modes; selecting one preserves the existing
+  system-proxy/PAC preference and TUN flag. Offline changes save the preference
+  without connecting. Online changes save it, apply the core mode, then close
+  existing core connections so applications reconnect under the new mode.
+  Each live step has a timeout, reports its own failure through AppError, and
+  keeps the saved preference available for an explicit retry. Startup and
+  config reload retain their separate mode-application behavior.
+  Manual proxy addresses, observation, recheck and system-settings actions
+  live in Settings → Network; Home retains the factual connection status.
+  Persisted fields remain; old
   non-TUN `forcedClear`/`unchanged` preferences become `forcedChange` at startup,
   and fresh installs default to system proxy. Automatic OS proxy setup still
   waits for a connected core. The selected mode is

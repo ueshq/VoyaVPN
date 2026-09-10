@@ -174,7 +174,7 @@ async function openContextSubmenu(menu: HTMLElement, name: string) {
 
 describe("ProfilesScreen", () => {
   beforeEach(() => {
-    useRuntimeActionStore.setState({ pendingAction: null, modePending: false, pacPending: false, switchingId: null });
+    useRuntimeActionStore.setState({ pendingAction: null, modePending: false, switchingId: null });
     Object.values(ipcMocks).forEach((mock) => {
       if ("mockReset" in mock) {
         mock.mockReset();

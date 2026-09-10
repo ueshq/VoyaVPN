@@ -22,7 +22,7 @@ describe("manual system proxy", () => {
     render(<ManualProxyPanel status={status} connected tunEnabled={false} />);
     expect(screen.getByRole("status")).toHaveTextContent("unknown");
     expect(screen.getByText(/HTTP \/ HTTPS \/ SOCKS:/)).toHaveTextContent("127.0.0.1:10808");
-    expect(screen.getByText(/Before switching modes/)).toHaveTextContent("cannot restore it automatically");
+    expect(screen.getByText(/Before changing TUN mode/)).toHaveTextContent("cannot restore it automatically");
     expect(commands.openNetworkSettings).not.toHaveBeenCalled();
   });
 

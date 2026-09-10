@@ -208,7 +208,7 @@ function connectButton() {
 
 describe("HomeScreen", () => {
   beforeEach(async () => {
-    useRuntimeActionStore.setState({ pendingAction: null, modePending: false, pacPending: false, switchingId: null });
+    useRuntimeActionStore.setState({ pendingAction: null, modePending: false, switchingId: null });
     await changeLocale("en", { persist: false });
     vi.clearAllMocks();
     runtimeMock.state.coreState = null;
@@ -301,9 +301,9 @@ describe("HomeScreen", () => {
     renderHome();
     expect(screen.getByText("Local proxy ready")).toBeInTheDocument();
     expect(screen.queryByText("Connected")).not.toBeInTheDocument();
-    await userEvent.setup().click(screen.getByText("Manual proxy setup"));
-    expect(screen.getByText("System proxy")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("unknown");
+    expect(screen.queryByText("Manual proxy setup")).not.toBeInTheDocument();
+    expect(screen.queryByText("Configure your system proxy manually to use the local listener.")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("manual-proxy-panel")).not.toBeInTheDocument();
     expect(useToastStore.getState().toasts).toHaveLength(0);
   });
 
@@ -715,7 +715,7 @@ describe("HomeScreen", () => {
     await waitFor(() => expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("vpn", null));
   });
 
-  it("turns saved TUN off from the keyboard and keeps the PAC preference", async () => {
+  it("turns saved TUN off from the keyboard and preserves the system proxy preference", async () => {
     runtimeMock.state.tun = { ...tunStatusResponse, enabled: true };
     runtimeMock.state.sysProxy = { ...sysProxyStatus, requestedMode: "pac", pacAvailable: true };
     ipcMock.systemProxyStatus.mockResolvedValue(runtimeMock.state.sysProxy);
@@ -728,7 +728,7 @@ describe("HomeScreen", () => {
     await user.keyboard(" ");
     await waitFor(() => expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("systemProxy", null));
     await waitFor(() => expect(tunSwitch()).not.toBeChecked());
-    expect(screen.getByRole("switch", { name: "Smart mode (PAC)" })).toBeChecked();
+    expect(screen.queryByRole("switch", { name: "Smart mode (PAC)" })).not.toBeInTheDocument();
     expect(ipcMock.tunRequestElevation).not.toHaveBeenCalled();
   });
 
@@ -744,34 +744,15 @@ describe("HomeScreen", () => {
     expect(screen.queryByRole("switch", { name: "Smart mode (PAC)" })).not.toBeInTheDocument();
   });
 
-  it("surfaces the PAC toggle only in system proxy mode and disables it without support", async () => {
-    runtimeMock.state.sysProxy = {
-      ...sysProxyStatus,
-      effectiveMode: "forcedChange",
-      pacAvailable: false,
-      requestedMode: "forcedChange",
-    };
-
+  it("offers one traffic mode control on platforms without PAC support", async () => {
+    runtimeMock.state.coreState = disconnectedStatus;
+    runtimeMock.state.sysProxy = { ...sysProxyStatus, pacAvailable: false };
     renderHome();
 
-    const pac = screen.getByRole("switch", { name: "Smart mode (PAC)" });
-    expect(pac).toBeDisabled();
-    expect(screen.getByText("Smart proxy is not supported on this platform.")).toBeInTheDocument();
-  });
-
-  it("toggles PAC through the unified mode command when supported", async () => {
-    const user = userEvent.setup();
-    runtimeMock.state.sysProxy = {
-      ...sysProxyStatus,
-      effectiveMode: "forcedChange",
-      pacAvailable: true,
-      requestedMode: "forcedChange",
-    };
-
-    renderHome();
-
-    await user.click(screen.getByRole("switch", { name: "Smart mode (PAC)" }));
-    await waitFor(() => expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("systemProxy", true));
+    expect(screen.queryByRole("switch", { name: "Smart mode (PAC)" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Smart proxy is not supported on this platform.")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Smart routing" })).toBeEnabled());
+    expect(screen.getByRole("group", { name: "Traffic mode" })).toBeInTheDocument();
   });
 
   it("shows the backend reason and restores controls when mode switching fails", async () => {

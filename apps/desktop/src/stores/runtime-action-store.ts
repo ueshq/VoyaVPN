@@ -5,11 +5,10 @@ import { create } from "zustand";
 export const useRuntimeActionStore = create<{
   pendingAction: "connect" | "disconnect" | "restart" | null;
   modePending: boolean;
-  pacPending: boolean;
   switchingId: string | null;
-}>(() => ({ pendingAction: null, modePending: false, pacPending: false, switchingId: null }));
+}>(() => ({ pendingAction: null, modePending: false, switchingId: null }));
 
 export function runtimeActionPending() {
-  const { pendingAction, modePending, pacPending, switchingId } = useRuntimeActionStore.getState();
-  return pendingAction !== null || modePending || pacPending || switchingId !== null;
+  const { pendingAction, modePending, switchingId } = useRuntimeActionStore.getState();
+  return pendingAction !== null || modePending || switchingId !== null;
 }

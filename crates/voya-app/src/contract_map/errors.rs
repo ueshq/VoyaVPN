@@ -30,14 +30,27 @@ use voya_net::{certificates::CertificateError, ruleset::RulesetGeoError, Downloa
 use voya_platform::coreinfo::CoreInfoError;
 
 use crate::{
-    autostart::AutostartManagerError, config_mutation::ConfigMutationError,
-    connection_mode::ConnectionModeError, dns::DnsManagerError, elevation::ElevationError,
-    exports::ExportManagerError, groups::GroupManagerError, input_safety::InputSafetyError,
-    profiles::ProfileManagerError, proxy_runtime::ProxyRuntimeError, qr::QrCodeError,
-    routing::RoutingManagerError, runtime::RuntimeError, settings_flow::SettingsSaveError,
-    settings_save::AppSettingsValidationError, speedtest::SpeedtestError,
-    subscriptions::SubscriptionManagerError, supervisor::SupervisorError,
-    sysproxy::SystemProxyManagerError, tun::TunManagerError, updates::UpdateManagerError,
+    autostart::AutostartManagerError,
+    config_mutation::ConfigMutationError,
+    connection_mode::ConnectionModeError,
+    dns::DnsManagerError,
+    elevation::ElevationError,
+    exports::ExportManagerError,
+    groups::GroupManagerError,
+    input_safety::InputSafetyError,
+    profiles::ProfileManagerError,
+    proxy_runtime::{ProxyRuntimeError, TrafficModeChangeError},
+    qr::QrCodeError,
+    routing::RoutingManagerError,
+    runtime::RuntimeError,
+    settings_flow::SettingsSaveError,
+    settings_save::AppSettingsValidationError,
+    speedtest::SpeedtestError,
+    subscriptions::SubscriptionManagerError,
+    supervisor::SupervisorError,
+    sysproxy::SystemProxyManagerError,
+    tun::TunManagerError,
+    updates::UpdateManagerError,
 };
 
 use AppErrorSubsystem as Sub;
@@ -315,6 +328,18 @@ impl From<ProxyRuntimeError> for AppError {
             | ProxyRuntimeError::MonitorRuntimeUnavailable
             | ProxyRuntimeError::InvalidStatePort => internal(Sub::ProxyRuntime, &error),
         }
+    }
+}
+
+impl From<TrafficModeChangeError> for AppError {
+    fn from(error: TrafficModeChangeError) -> Self {
+        let message = error.to_string();
+        let mut mapped = match error {
+            TrafficModeChangeError::Apply(source)
+            | TrafficModeChangeError::CloseConnections(source) => Self::from(source),
+        };
+        mapped.message = message;
+        mapped
     }
 }
 

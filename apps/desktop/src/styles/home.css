@@ -84,7 +84,6 @@
 .home-mode-container { margin-top: 24px; text-align: center; }
 .home-modes { display: inline-flex; justify-content: center; align-items: center; flex-wrap: wrap; padding: 10px 0; border: 1px solid var(--home-border); border-radius: 999px; background: var(--home-card); box-shadow: 0 1px 2px rgb(31 41 55 / 6%); }
 .home-mode { display: flex; align-items: center; gap: 12px; padding: 0 24px; }
-.home-mode + .home-mode { border-inline-start: 1px solid var(--home-border); }
 .home-mode label { color: var(--home-muted); font-size: 13px; font-weight: 400; }
 .home-mode [data-slot="switch"] { width: 36px; height: 21px; background: #c8d3e3; }
 .home-mode [data-slot="switch"][data-state="checked"] { background: #2864f3; }
@@ -93,8 +92,6 @@
 .home-traffic-mode { display: flex; flex-direction: column; align-items: center; margin-top: 12px; }
 .home-traffic-mode-label { margin-bottom: 6px; color: var(--home-muted); font-size: 12px; }
 .home-traffic-mode-options { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; padding: 3px; border: 1px solid var(--home-border); border-radius: 10px; background: var(--home-card); }
-.home-manual-proxy { width: min(100%, 560px); margin-top: 12px; font-size: 12px; color: var(--home-muted); }
-.home-manual-proxy summary { cursor: pointer; text-align: center; margin-bottom: 8px; }
 .node-card-surface { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 88px; padding: 12px 24px; border: 1px solid var(--home-border); border-radius: 16px; background: var(--home-card); box-shadow: 0 3px 10px rgb(31 41 55 / 3%); }
 .home-node-icon, .node-card-icon { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border: 1px solid var(--home-border); border-radius: 12px; background: var(--home-canvas); font-size: 24px; color: var(--home-muted); }
 .home-node-content, .node-card-content { flex: 1; min-width: 0; }

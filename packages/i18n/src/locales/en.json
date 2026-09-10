@@ -55,7 +55,6 @@
     "modeTun": "TUN mode",
     "noNodes": "No nodes available",
     "nodes": "Nodes",
-    "pacToggle": "Smart mode (PAC)",
     "protected": "Protected",
     "protectedHint": "Your traffic is routed through the active node.",
     "searchNodes": "Search nodes…",
@@ -76,7 +75,6 @@
     "unprotectedHint": "Connect to route your traffic securely.",
     "protectionUnknown": "Protection status unknown",
     "localProxyReady": "Local proxy ready",
-    "manualProxyHint": "Configure your system proxy manually to use the local listener.",
     "cleanupPending": "Tunnel cleanup pending",
     "retryDisconnect": "Retry disconnect",
     "manualProxy": {
@@ -91,7 +89,7 @@
       "clear": "No enabled system proxy was found.",
       "localProxy": "A local system proxy is configured; traffic forwarding has not been verified.",
       "otherProxy": "A different system proxy is configured.",
-      "cleanup": "Before switching modes, disconnecting or quitting, manually turn off any system proxy you configured for VoyaVPN. The app cannot restore it automatically.",
+      "cleanup": "Before changing TUN mode, disconnecting or quitting, manually turn off any system proxy you configured for VoyaVPN. The app cannot restore it automatically.",
       "exit": {
         "localTitle": "Check system proxy before quitting",
         "localMessage": "A system proxy still points to this Mac. If it is used by VoyaVPN, quitting may interrupt internet access.\n\nOpen Network settings, then Details → Proxies for the relevant network. Turn off the proxies you set up for VoyaVPN, then quit. Leave other apps’ proxies unchanged.",
@@ -119,10 +117,9 @@
     "protocol": "Protocol",
     "processId": "Process ID",
     "tunDiagnostics": "TUN diagnostics",
-    "manualProxySetup": "Manual proxy setup",
     "disconnectLabel": "Disconnect",
     "trafficMode": "Traffic mode",
-    "trafficModeNextConnection": "Applies on the next connection"
+    "trafficModeSmart": "Smart routing"
   },
   "logCodes": {
     "connected": "Core supervisor started",
@@ -669,7 +666,8 @@
       "systemProxyProtocol": "Advanced proxy settings, protocol selection (optional)",
       "tunAutoRoute": "Auto Route",
       "tunStack": "Stack",
-      "tunStrictRoute": "Strict Route"
+      "tunStrictRoute": "Strict Route",
+      "manualProxySetup": "Manual proxy setup"
     },
     "perAppProxy": "Per-app proxy",
     "startup": "Startup",

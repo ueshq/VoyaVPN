@@ -15,7 +15,7 @@ export function useProfileActivation(
 ) {
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const switchingId = useRuntimeActionStore((state) => state.switchingId);
-  const pending = useRuntimeActionStore((state) => state.pendingAction !== null || state.modePending || state.pacPending);
+  const pending = useRuntimeActionStore((state) => state.pendingAction !== null || state.modePending);
   const setCoreState = useRuntimeEventStore((state) => state.setCoreState);
   const openModal = useModalStore((state) => state.openModal);
   const pushToast = useToastStore((state) => state.pushToast);

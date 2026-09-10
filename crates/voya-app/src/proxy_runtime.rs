@@ -27,6 +27,7 @@ use crate::{
 };
 
 mod traffic_mode;
+pub use traffic_mode::{TrafficModeChangeError, TrafficModeChangeOutcome};
 
 /// Fallback per-node latency budget when the configured speed-test timeout is
 /// unusable; matches `SpeedTestItem::default().speed_test_timeout`.

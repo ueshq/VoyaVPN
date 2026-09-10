@@ -37,6 +37,25 @@ fn kind_name(kind: &AppErrorKind) -> &'static str {
     }
 }
 
+#[test]
+fn traffic_mode_errors_report_whether_the_mode_was_applied() {
+    for (error, expected) in [
+        (
+            TrafficModeChangeError::Apply(ProxyRuntimeError::InvalidStatePort),
+            "was saved but could not be applied",
+        ),
+        (
+            TrafficModeChangeError::CloseConnections(ProxyRuntimeError::InvalidStatePort),
+            "was applied, but existing connections could not be closed",
+        ),
+    ] {
+        let mapped = AppError::from(error);
+        assert_eq!(mapped.subsystem, AppErrorSubsystem::ProxyRuntime);
+        assert_eq!(mapped.kind, AppErrorKind::Internal);
+        assert!(mapped.message.contains(expected));
+    }
+}
+
 fn assert_kinds<E>(cases: Vec<(&'static str, E, &'static str, AppErrorSubsystem)>)
 where
     E: Into<AppError>,

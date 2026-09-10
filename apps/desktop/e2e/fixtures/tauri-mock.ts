@@ -6,6 +6,7 @@ import type { Page } from "@playwright/test";
 // field now fails `pnpm --filter @voya/desktop typecheck` instead of failing a
 // smoke assertion with a confusing message.
 import type {
+  AppError,
   AppSettingsV1,
   AppUpdaterStatus,
   ConnectionModeStatus,
@@ -67,6 +68,8 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       settings: AppSettingsV1;
       sysProxy: SystemProxyStatusResponse;
       tun: TunStatus;
+      trafficModeFailure: "apply" | "close" | null;
+      appliedTrafficMode: TrafficMode;
     };
     type Callback = (event: { id: number; event: string; payload: unknown }) => void;
     type Listener = { eventId: number; eventName: string; handlerId: number };
@@ -80,6 +83,8 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
     let windowMaximized = false;
 
     const state: MockState = {
+      trafficModeFailure: null,
+      appliedTrafficMode: "rule",
       calls: [] as Array<{ command: string; args: CommandArgs }>,
       dns: makeDnsSettings(),
       profiles: [] as ProfileRow[],
@@ -209,6 +214,15 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           keys: scopes.map((kind) => ({ reason: command, scope: { kind } })),
         });
         return value;
+      }, (error: unknown) => {
+        // A live mode failure happens after persistence, so its cache changes
+        // are announced on the error path as well.
+        if (command === "proxy_set_traffic_mode") {
+          emitEvent("invalidate-event", {
+            keys: scopes.map((kind) => ({ reason: command, scope: { kind } })),
+          });
+        }
+        throw error;
       });
     }
 
@@ -561,6 +575,20 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           return Promise.resolve(clone(state.connections));
         case "proxy_set_traffic_mode":
           state.settings.proxy.trafficMode = String(args.mode ?? "rule") as TrafficMode;
+          if (state.runtime.state === "connected" && state.settings.proxy.trafficMode !== "unchanged") {
+            const failure = state.trafficModeFailure;
+            state.trafficModeFailure = null;
+            if (failure !== "apply") state.appliedTrafficMode = state.settings.proxy.trafficMode;
+            if (failure) {
+              return Promise.reject({
+                kind: { type: "network" }, subsystem: "proxyRuntime",
+                message: failure === "apply"
+                  ? "traffic mode was saved but could not be applied to the running core: simulated API failure"
+                  : "traffic mode was applied, but existing connections could not be closed: simulated API failure",
+              } satisfies AppError);
+            }
+            state.connections.connections = [];
+          }
           return Promise.resolve({ mode: state.settings.proxy.trafficMode } satisfies TrafficModeResponse);
         case "proxy_reload_config":
           return Promise.resolve(null);

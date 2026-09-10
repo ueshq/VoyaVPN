@@ -13,7 +13,6 @@ import { ConnectedInfo } from "./connected-info";
 import { ConnectionModeSwitcher } from "./connection-mode-switcher";
 import { TrafficModeSwitcher } from "./traffic-mode-switcher";
 import { ConnectionDetailsDialog, NodePickerDialog } from "./home-dialogs";
-import { ManualProxyPanel } from "./manual-proxy-panel";
 import { useHomeRuntime } from "./use-home-runtime";
 
 export function HomeScreen() {
@@ -37,8 +36,7 @@ export function HomeScreen() {
         : home.connected ? t("home.protectionUnknown")
           : home.state === "connecting" ? t("status.connecting")
             : home.state === "disconnecting" ? t("status.disconnecting") : t("home.unprotected");
-  const hint = localReady ? t("home.manualProxyHint")
-    : protectedConnection ? t("home.connectedHint")
+  const hint = protectedConnection ? t("home.connectedHint")
       : home.state === "disconnected" ? t("home.unprotectedHint") : "";
   const profile = home.nodeEntry?.profile;
   const rawName = profile?.remarks || profile?.id || home.runningId || t(home.profilesPending ? "status.loadingScreen" : "home.noNodes");
@@ -60,16 +58,10 @@ export function HomeScreen() {
             <p className="home-status-hint">{hint || "\u00a0"}</p>
           </div>
           <ConnectedInfo delayMs={delayMs} t={t} />
-          <ConnectionModeSwitcher tunEnabled={home.tunEnabled} modeBusy={home.modeBusy} modePending={home.modePending} onTunChange={home.changeTunEnabled} onPacToggle={home.togglePac} pacActive={home.pacActive} pacAvailable={home.pacAvailable} pacPending={home.pacPending} t={t} />
+          <ConnectionModeSwitcher tunEnabled={home.tunEnabled} modeBusy={home.modeBusy} modePending={home.modePending} onTunChange={home.changeTunEnabled} t={t} />
           <TrafficModeSwitcher />
           {home.tunEnabled && home.tunIssue ? (
             <p className="home-diagnostic" role="status">{home.tunIssue}</p>
-          ) : null}
-          {manualProxy && home.sysProxy ? (
-            <details className="home-manual-proxy">
-              <summary>{t("home.manualProxySetup")}</summary>
-              <ManualProxyPanel status={home.sysProxy} connected={home.connected} tunEnabled={home.tunEnabled} />
-            </details>
           ) : null}
         </div>
 

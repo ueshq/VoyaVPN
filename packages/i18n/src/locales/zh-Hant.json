@@ -55,7 +55,6 @@
     "modeTun": "TUN模式",
     "noNodes": "沒有可用節點",
     "nodes": "節點",
-    "pacToggle": "智慧分流 (PAC)",
     "protected": "已受保護",
     "protectedHint": "流量正透過目前節點轉發。",
     "searchNodes": "搜尋節點…",
@@ -76,7 +75,6 @@
     "unprotectedHint": "連線以安全轉發流量。",
     "protectionUnknown": "保護狀態尚未確認",
     "localProxyReady": "本機代理已就緒",
-    "manualProxyHint": "請手動設定系統代理以使用本機監聽連接埠。",
     "cleanupPending": "通道尚未清理",
     "retryDisconnect": "重試中斷連線",
     "manualProxy": {
@@ -91,7 +89,7 @@
       "clear": "未發現已啟用的系統代理。",
       "localProxy": "偵測到本機系統代理；這不代表流量轉送已驗證成功。",
       "otherProxy": "偵測到其他系統代理。",
-      "cleanup": "切換模式、中斷連線或結束前，請手動關閉為 VoyaVPN 設定的系統代理；應用程式無法自動還原。",
+      "cleanup": "切換 TUN 模式、中斷連線或結束前，請手動關閉為 VoyaVPN 設定的系統代理；應用程式無法自動還原。",
       "exit": {
         "localTitle": "結束前檢查系統代理",
         "localMessage": "偵測到系統代理仍指向本機。若它用於 VoyaVPN，結束後可能無法上網。\n\n請開啟網路設定，在對應網路的「詳細資訊 → 代理伺服器」中關閉為 VoyaVPN 設定的代理，再結束應用程式。請保留其他應用程式的代理。",
@@ -119,10 +117,9 @@
     "protocol": "協定",
     "processId": "程序 ID",
     "tunDiagnostics": "TUN 診斷",
-    "manualProxySetup": "手動代理設定",
     "disconnectLabel": "中斷連線",
     "trafficMode": "流量模式",
-    "trafficModeNextConnection": "下次連線生效"
+    "trafficModeSmart": "智慧分流"
   },
   "logCodes": {
     "connected": "核心守護程序已啟動",
@@ -669,7 +666,8 @@
       "systemProxyProtocol": "進階代理設定，協定選擇 (可選)",
       "tunAutoRoute": "自動路由",
       "tunStack": "協定堆疊",
-      "tunStrictRoute": "嚴格路由"
+      "tunStrictRoute": "嚴格路由",
+      "manualProxySetup": "手動代理設定"
     },
     "perAppProxy": "分應用代理",
     "startup": "啟動",

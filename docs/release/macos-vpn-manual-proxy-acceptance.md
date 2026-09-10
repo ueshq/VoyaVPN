@@ -42,19 +42,23 @@ the app is not proof of a registration defect.
 
 ## Manual system proxy
 
-1. Turn off TUN mode, connect the local core and copy its displayed
-   address. Home must say Local proxy ready, separately showing the observed
-   system configuration. Verify no proxy-setting script was created/executed.
+1. Turn off TUN mode, connect the local core and copy its address from
+   Settings → Network → Manual proxy setup. Home must say Local proxy ready;
+   the settings panel separately shows the observed system configuration. Verify no proxy-setting script was created/executed.
 2. Open Network settings using the app's fixed action. Follow the displayed
    navigation and configure HTTP/HTTPS or SOCKS manually for the test service,
    copying the bypass list as appropriate. Recheck should detect a local proxy.
-3. Enable PAC. Its copyable URL must appear only after the local server starts;
+3. With an existing PAC preference in the isolated test configuration, its copyable URL must appear only after the local server starts;
    repeated status reads must keep the same URL. Fetch it and inspect the PAC
    response. Occupying the test PAC port must produce an error with no stale
    copyable PAC URL.
+   Switch Smart routing / Global / Direct while connected. The system proxy
+   preference and PAC URL must stay stable, the core must keep running, and
+   existing core connections must close so new connections use the selected
+   mode. Custom PAC bypasses still act before traffic reaches the core.
 4. Enable TUN mode, disconnect and exit in separate trials.
-   Each leaves manually configured OS proxies untouched and displays a cleanup
-   reminder. Exit rechecks settings before terminating. A local proxy shows a
+   Each leaves manually configured OS proxies untouched; the network settings
+   panel provides cleanup instructions. Exit rechecks settings before terminating. A local proxy shows a
    potential loss-of-connectivity reminder; an unknown observation explains
    that settings could not be confirmed without claiming a network failure.
    The default action opens Network settings and leaves the app/connection

@@ -43,7 +43,7 @@ export function ManualProxyPanel({ status, connected, tunEnabled }: {
 
   return (
     <div className="grid w-full gap-2 rounded-lg border bg-muted/30 p-3 text-sm" data-testid="manual-proxy-panel">
-      <p className="font-medium">{t("home.modeSystemProxy")}</p>
+      <p className="font-medium">{t("settings.network.manualProxySetup")}</p>
       <p className="text-muted-foreground">{t("home.manualProxy.instructions")}</p>
       <p role="status">{observation}</p>
       {address ? (

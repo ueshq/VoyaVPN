@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,6 +17,7 @@ type SettingsTab = (props: { controller: AppSettingsFormController }) => React.R
 
 describe("semantic settings tabs", () => {
   beforeEach(() => {
+    useRuntimeEventStore.setState({ coreState: null, tun: null });
     useRuntimeEventStore.getState().setSysProxy({ management: "automatic", observation: "unknown", manualCleanupRequired: false,
       requestedMode: "forcedClear", effectiveMode: "forcedClear", pacAvailable: true, proxy: null, pacUrl: null, exceptions: "" });
   });
@@ -25,6 +26,36 @@ describe("semantic settings tabs", () => {
     useRuntimeEventStore.getState().setSysProxy({ ...status, management: "manual" });
     const { container } = render(<TabHarness Component={NetworkTab} />);
     expect(container.querySelector("#rt-sysproxy-script-path")).not.toBeInTheDocument();
+    expect(screen.getByText("Manual proxy setup")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Copy address" })).not.toBeInTheDocument();
+  });
+
+  it("keeps manual proxy addresses and observations live while the network tab is open", () => {
+    useRuntimeEventStore.getState().setSysProxy({
+      ...useRuntimeEventStore.getState().sysProxy!, management: "manual",
+      requestedMode: "pac", proxy: "127.0.0.1:10808", pacUrl: "http://127.0.0.1:10811/pac?t=test",
+    });
+    render(<TabHarness Component={NetworkTab} />);
+    expect(screen.queryByRole("button", { name: "Copy address" })).not.toBeInTheDocument();
+    act(() => useRuntimeEventStore.getState().setCoreState({
+      activeProfileId: "node", activeTunBackend: null, connectedDurationMs: 0,
+      mainPid: 42, prePid: null, runningCoreType: "singBox", state: "connected",
+    }));
+    expect(screen.getByText("PAC: http://127.0.0.1:10811/pac?t=test")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy address" })).toBeEnabled();
+    act(() => useRuntimeEventStore.getState().setSysProxy({
+      ...useRuntimeEventStore.getState().sysProxy!, observation: "clear",
+    }));
+    expect(screen.getByRole("status")).toHaveTextContent("No enabled system proxy was found.");
+    act(() => useRuntimeEventStore.getState().setCoreState({
+      ...useRuntimeEventStore.getState().coreState!, state: "disconnected",
+    }));
+    expect(screen.queryByRole("button", { name: "Copy address" })).not.toBeInTheDocument();
+  });
+
+  it("hides manual setup on automatically managed platforms", () => {
+    render(<TabHarness Component={NetworkTab} />);
+    expect(screen.queryByTestId("manual-proxy-panel")).not.toBeInTheDocument();
   });
   it("updates all core, multiplexing, and Hysteria controls", async () => {
     const user = userEvent.setup();

@@ -42,7 +42,7 @@ export function ProxyGroupsPanel() {
   const { t } = useI18n();
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const monitorStatus = useRuntimeEventStore((state) => state.proxyMonitorStatus);
-  const runtimeBusy = useRuntimeActionStore((state) => state.pendingAction !== null || state.modePending || state.pacPending || state.switchingId !== null);
+  const runtimeBusy = useRuntimeActionStore((state) => state.pendingAction !== null || state.modePending || state.switchingId !== null);
   // The Clash API only exists while the core runs; without this guard the screen
   // renders its raw transport failure ("error sending request for url …") as if
   // it were a proxy problem.

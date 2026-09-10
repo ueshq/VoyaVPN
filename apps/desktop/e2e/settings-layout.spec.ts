@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { AppSettingsV1, RuntimeStatusResponse, SystemProxyStatusResponse, TunStatus } from "../src/ipc/bindings";
 import { installTauriSmokeMock } from "./fixtures/tauri-mock";
 
 for (const viewport of [{ width: 960, height: 640 }, { width: 1180, height: 760 }, { width: 1440, height: 900 }]) {
@@ -35,5 +36,43 @@ for (const viewport of [{ width: 960, height: 640 }, { width: 1180, height: 760 
         await expect(settings.getByRole("tab", { name: labels[1], exact: true })).toHaveAttribute("aria-selected", "true");
       });
     }
+  }
+}
+
+for (const locale of ["en", "zh-Hans"] as const) {
+  for (const theme of ["light", "dark"] as const) {
+    test(`manual proxy settings fit the minimum window in ${locale} ${theme}`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width: 960, height: 640 });
+      await page.emulateMedia({ colorScheme: theme });
+      await installTauriSmokeMock(page, "macos");
+      await page.addInitScript((language) => {
+        const state = window.__VOYA_SMOKE__.state as {
+          settings: AppSettingsV1; sysProxy: SystemProxyStatusResponse; runtime: RuntimeStatusResponse;
+        };
+        state.settings.appearance.language = language;
+        state.sysProxy = { ...state.sysProxy, management: "manual", requestedMode: "pac", pacAvailable: true,
+          proxy: "127.0.0.1:10808", pacUrl: `http://127.0.0.1:10811/pac?t=${"long-address".repeat(12)}` };
+        state.runtime = { ...state.runtime, state: "connected", mainPid: 42, runningCoreType: "singBox" };
+      }, locale);
+      await page.goto("/");
+      await expect(page.getByText(locale === "en" ? "Manual proxy setup" : "手动代理配置", { exact: true })).toHaveCount(0);
+      await expect(page.getByText(locale === "en" ? "Applies on the next connection" : "下次连接生效")).toHaveCount(0);
+      await page.getByRole("tab", { name: locale === "en" ? "Settings" : "设置", exact: true }).click();
+      await page.getByRole("tab", { name: locale === "en" ? "Network" : "网络", exact: true }).click();
+      const panel = page.getByTestId("manual-proxy-panel");
+      await expect(panel).toBeVisible();
+      await expect(panel).toContainText("http://127.0.0.1:10811/pac");
+      const content = page.getByRole("tabpanel").last();
+      await expect.poll(() => content.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+      await panel.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: testInfo.outputPath("manual-proxy-settings.png") });
+      // The open settings panel follows a TUN change without a remount.
+      await page.evaluate(() => {
+        const state = window.__VOYA_SMOKE__.state as { tun: TunStatus };
+        state.tun.enabled = true;
+        window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "tunChanged", payload: state.tun });
+      });
+      await expect(panel.getByRole("button", { name: locale === "en" ? "Copy address" : "复制地址" })).toHaveCount(0);
+    });
   }
 }

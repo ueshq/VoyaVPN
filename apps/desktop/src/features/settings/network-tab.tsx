@@ -9,6 +9,7 @@ import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { PerAppProxyDialog } from "@/features/routing/per-app-proxy-dialog";
 
 import { TunDiagnosticsButton } from "./tun-diagnostics-button";
+import { ManualProxyPanel } from "./manual-proxy-panel";
 import type { AppSettingsFormController } from "./use-app-settings";
 
 // Both are closed sets in sing-box, and neither is validated on save: an unknown
@@ -26,7 +27,9 @@ export function NetworkTab({ controller }: { controller: AppSettingsFormControll
   const { t } = useI18n();
   const { settings, update } = controller;
   const [perAppOpen, setPerAppOpen] = useState(false);
-  const proxyManagement = useRuntimeEventStore((state) => state.sysProxy?.management);
+  const sysProxy = useRuntimeEventStore((state) => state.sysProxy);
+  const connected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
+  const tunEnabled = useRuntimeEventStore((state) => state.tun?.enabled ?? false);
 
   const patchTun = (patch: Partial<typeof settings.network.tun>) =>
     update((current) => ({
@@ -73,13 +76,16 @@ export function NetworkTab({ controller }: { controller: AppSettingsFormControll
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.sections.systemProxy")}>
+        {sysProxy?.management === "manual" ? (
+          <ManualProxyPanel status={sysProxy} connected={connected} tunEnabled={tunEnabled} />
+        ) : null}
         <SettingsRow>
           <SettingsCheckbox field="network.systemProxy.bypassLocal" checked={settings.network.systemProxy.bypassLocal} label={t("settings.network.bypassLocalAddress")} onCheckedChange={(bypassLocal) => patchSystemProxy({ bypassLocal: bypassLocal === true })} />
         </SettingsRow>
         <TextField field="network.systemProxy.exceptions" id="rt-sysproxy-exceptions" label={t("settings.network.systemProxyExceptions")} onChange={(exceptions) => patchSystemProxy({ exceptions })} value={settings.network.systemProxy.exceptions} />
         <TextField field="network.systemProxy.advancedProtocol" id="rt-sysproxy-advanced-protocol" label={t("settings.network.systemProxyProtocol")} onChange={(advancedProtocol) => patchSystemProxy({ advancedProtocol })} value={settings.network.systemProxy.advancedProtocol} />
         <TextField field="network.systemProxy.customPacPath" id="rt-sysproxy-pac-path" label={t("settings.network.customPacPath")} onChange={(value) => patchSystemProxy({ customPacPath: nullableText(value) })} value={settings.network.systemProxy.customPacPath ?? ""} />
-        {proxyManagement === "automatic" ? <TextField field="network.systemProxy.customScriptPath" id="rt-sysproxy-script-path" label={t("settings.network.customScriptPath")} onChange={(value) => patchSystemProxy({ customScriptPath: nullableText(value) })} value={settings.network.systemProxy.customScriptPath ?? ""} /> : null}
+        {sysProxy?.management === "automatic" ? <TextField field="network.systemProxy.customScriptPath" id="rt-sysproxy-script-path" label={t("settings.network.customScriptPath")} onChange={(value) => patchSystemProxy({ customScriptPath: nullableText(value) })} value={settings.network.systemProxy.customScriptPath ?? ""} /> : null}
       </SettingsGroup>
 
       {/* Explicit action: the

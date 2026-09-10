@@ -117,36 +117,18 @@ pub async fn proxy_set_traffic_mode<R: tauri::Runtime>(
     mode: voya_contracts::TrafficMode,
 ) -> Result<voya_contracts::TrafficModeResponse, AppError> {
     let mode = traffic_mode_from_contract(mode);
-    let committed = mutate_config(&state, async |_unit_of_work, config| {
-        let changed = config.proxy_ui_item.traffic_mode != mode;
-        if changed {
-            config.proxy_ui_item.traffic_mode = mode;
-        }
-        Ok::<_, AppError>(changed)
-    })
-    .await?;
-    let changed = committed.value;
-    let config = committed.config;
-    if mode != TrafficMode::Unchanged {
-        let clash_api = current_clash_api_access(&state).await;
-        if let Err(error) = state
-            .proxy_runtime()
-            .set_traffic_mode_if_running(&clash_api, mode)
-            .await
-        {
-            report_post_commit_error(
-                &app,
-                NoticeCode::ProxyModeSavedRuntimeUpdateFailed,
-                &error.to_string(),
-                AppNoticeLevel::Warning,
-            );
-        }
-    }
-
-    emit_proxy_runtime_invalidation(&app, "proxy-traffic-mode-changed", changed);
+    let snapshot = state.supervisor().status().await.map_err(AppError::from)?;
+    let outcome = state
+        .proxy_runtime()
+        .change_traffic_mode(state.config_mutations(), &snapshot, mode)
+        .await
+        .map_err(AppError::from)?;
+    // The preference is already committed, including when a live step fails.
+    emit_proxy_runtime_invalidation(&app, "proxy-traffic-mode-changed", outcome.config_changed);
+    outcome.runtime_result.map_err(AppError::from)?;
 
     Ok(voya_contracts::TrafficModeResponse {
-        mode: traffic_mode_to_contract(config.proxy_ui_item.traffic_mode),
+        mode: traffic_mode_to_contract(outcome.mode),
     })
 }
 

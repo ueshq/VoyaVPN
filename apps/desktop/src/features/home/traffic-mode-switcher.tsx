@@ -10,7 +10,7 @@ import { queryKeys } from "@/ipc/query-keys";
 import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
 
 const modes = [
-  { value: "rule", labelKey: "proxy.trafficModeRule" },
+  { value: "rule", labelKey: "home.trafficModeSmart" },
   { value: "global", labelKey: "proxy.trafficModeGlobal" },
   { value: "direct", labelKey: "proxy.trafficModeDirect" },
 ] as const;
@@ -19,7 +19,7 @@ export function TrafficModeSwitcher() {
   const { t } = useI18n();
   const client = useQueryClient();
   const state = useRuntimeEventStore((store) => store.coreState?.state);
-  const pending = useRuntimeActionStore((store) => store.pendingAction !== null || store.modePending || store.pacPending || store.switchingId !== null);
+  const pending = useRuntimeActionStore((store) => store.pendingAction !== null || store.modePending || store.switchingId !== null);
   const query = useQuery({ queryKey: queryKeys.appSettings, queryFn: loadAppSettings });
   const mutation = useMutation({
     mutationFn: proxySetTrafficMode,
@@ -31,7 +31,19 @@ export function TrafficModeSwitcher() {
         ? { ...current, proxy: { ...current.proxy, trafficMode: mode } }
         : current);
     },
-    onSettled: () => useRuntimeActionStore.setState({ modePending: false }),
+    onSettled: async () => {
+      // Persistence can succeed before the live update fails. Reconcile both
+      // the saved choice and the connection list on either outcome.
+      try {
+        await Promise.all([
+          client.invalidateQueries({ queryKey: queryKeys.appSettings }),
+          client.invalidateQueries({ queryKey: queryKeys.proxyConnections }),
+          client.invalidateQueries({ queryKey: queryKeys.proxyGroups }),
+        ]);
+      } finally {
+        useRuntimeActionStore.setState({ modePending: false });
+      }
+    },
   });
   const ready = state === "connected" || state === "disconnected";
   const disabled = !ready || pending || !query.data || query.isError;
@@ -58,7 +70,6 @@ export function TrafficModeSwitcher() {
           >{t(labelKey)}</Button>
         ))}
       </div>
-      {state === "disconnected" ? <p className="home-mode-hint">{t("home.trafficModeNextConnection")}</p> : null}
       {query.error ? (
         <div className="home-mode-hint" role="alert">
           {getErrorMessage(query.error)}

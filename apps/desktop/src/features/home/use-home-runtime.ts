@@ -41,7 +41,6 @@ export function useHomeRuntime(t: Translation) {
   const pushToast = useToastStore((state) => state.pushToast);
   const pendingAction = useRuntimeActionStore((state) => state.pendingAction);
   const modePending = useRuntimeActionStore((state) => state.modePending);
-  const pacPending = useRuntimeActionStore((state) => state.pacPending);
   // Local node selection (blue highlight). Seeded from the persisted active
   // profile; single-clicks move it without touching the backend.
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -61,9 +60,9 @@ export function useHomeRuntime(t: Translation) {
   const state = coreState?.state ?? "disconnected";
   const connected = state === "connected";
   const inProgress = state === "connecting" || state === "disconnecting";
-  const busy = inProgress || pendingAction !== null || switchingId !== null || modePending || pacPending;
-  // One guard for both mode-mutating controls: they write the same config
-  // transaction, so letting them overlap races two `set_connection_mode` calls.
+  const busy = inProgress || pendingAction !== null || switchingId !== null || modePending;
+  // TUN and traffic mode both update the connection configuration, so their
+  // commands share one guard with connect/disconnect and profile switching.
   const modeBusy = busy;
 
   const activeProfile = profilesQuery.data?.entries.find((item) => item.isActive) ?? null;
@@ -71,9 +70,7 @@ export function useHomeRuntime(t: Translation) {
   // The green "live" dot follows the node that is actually running, which differs
   // from the persisted-active node only while disconnected.
   const runningId = connected ? (coreState?.activeProfileId ?? null) : null;
-  const pacAvailable = sysProxy?.pacAvailable ?? false;
   const tunEnabled = tun?.enabled ?? false;
-  const pacActive = sysProxy?.requestedMode === "pac";
   const tunProviderSummary = tun ? tunProviderLabel(tun, t) : null;
 
   const runningEntry = runningId
@@ -225,26 +222,6 @@ export function useHomeRuntime(t: Translation) {
     }
   }
 
-  async function runPacToggle() {
-    if (modeBusy || runtimeActionPending() || tunEnabled) {
-      return;
-    }
-    useRuntimeActionStore.setState({ pacPending: true });
-    try {
-      const nextPac = !pacActive;
-      await setConnectionMode("systemProxy", nextPac);
-    } catch (error) {
-      pushToast({
-        description: getErrorMessage(error),
-        severity: "error",
-        title: t("status.connectionModeChangeFailed"),
-      });
-    } finally {
-      await refreshStatus();
-      useRuntimeActionStore.setState({ pacPending: false });
-    }
-  }
-
   function changeTunEnabled(enabled: boolean) {
     void runTunChange(enabled);
   }
@@ -255,10 +232,6 @@ export function useHomeRuntime(t: Translation) {
 
   function selectProfile(indexId: string) {
     setSelectedId(indexId);
-  }
-
-  function togglePac() {
-    void runPacToggle();
   }
 
   return {
@@ -277,9 +250,6 @@ export function useHomeRuntime(t: Translation) {
     mainPid: coreState?.mainPid ?? null,
     modeBusy,
     modePending,
-    pacActive,
-    pacAvailable,
-    pacPending,
     profiles: profilesQuery.data?.entries ?? [],
     profilesPending: profilesQuery.isPending,
     profilesError: profilesQuery.error,
@@ -289,7 +259,6 @@ export function useHomeRuntime(t: Translation) {
     selectedId,
     state,
     switchingId,
-    togglePac,
     tunProviderSummary,
     tunIssue: tun?.providerPathMismatch
       ? tunProviderPathMismatchDescription(tun, t)

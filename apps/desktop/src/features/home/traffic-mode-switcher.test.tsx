@@ -32,8 +32,13 @@ function renderSwitcher() {
 beforeEach(() => {
   mocks.state = "disconnected";
   mocks.load.mockReset().mockResolvedValue(makeAppSettings());
-  mocks.save.mockReset().mockImplementation((mode) => Promise.resolve({ mode }));
-  useRuntimeActionStore.setState({ pendingAction: null, modePending: false, pacPending: false, switchingId: null });
+  mocks.save.mockReset().mockImplementation((mode) => {
+    const settings = makeAppSettings();
+    settings.proxy.trafficMode = mode;
+    mocks.load.mockResolvedValue(settings);
+    return Promise.resolve({ mode });
+  });
+  useRuntimeActionStore.setState({ pendingAction: null, modePending: false, switchingId: null });
   useToastStore.setState({ toasts: [] });
 });
 afterEach(() => {
@@ -46,7 +51,7 @@ describe("home traffic mode", () => {
   it("saves a preset while disconnected and updates the shared settings cache", async () => {
     const user = userEvent.setup();
     const { client } = renderSwitcher();
-    expect(screen.getByText("Applies on the next connection")).toBeInTheDocument();
+    expect(screen.queryByText("Applies on the next connection")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "Global" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: "Global" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Global" })).toHaveAttribute("aria-pressed", "true"));
@@ -59,9 +64,9 @@ describe("home traffic mode", () => {
     mocks.state = "connected";
     const user = userEvent.setup();
     renderSwitcher();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Rule" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Smart routing" })).toBeEnabled());
     expect(screen.queryByText("Applies on the next connection")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Rule" }));
+    await user.click(screen.getByRole("button", { name: "Smart routing" }));
     await waitFor(() => expect(mocks.save).toHaveBeenCalledOnce());
   });
 
@@ -72,8 +77,36 @@ describe("home traffic mode", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Direct" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: "Direct" }));
     await waitFor(() => expect(useToastStore.getState().toasts.at(-1)?.description).toBe("database unavailable"));
-    expect(screen.getByRole("button", { name: "Rule" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Smart routing" })).toHaveAttribute("aria-pressed", "true");
     expect(runtimeActionPending()).toBe(false);
+  });
+
+  it.each([
+    "traffic mode was saved but could not be applied to the running core",
+    "traffic mode was applied, but existing connections could not be closed",
+  ])("reconciles a committed preference after %s and allows retry", async (message) => {
+    mocks.state = "connected";
+    mocks.save.mockImplementationOnce((mode) => {
+      const settings = makeAppSettings();
+      settings.proxy.trafficMode = mode;
+      mocks.load.mockResolvedValue(settings);
+      return Promise.reject(new Error(message));
+    });
+    const user = userEvent.setup();
+    const { client } = renderSwitcher();
+    client.setQueryData(queryKeys.proxyConnections, { connections: ["old"] });
+    client.setQueryData(queryKeys.proxyGroups, { trafficMode: "rule" });
+    const global = screen.getByRole("button", { name: "Global" });
+    await waitFor(() => expect(global).toBeEnabled());
+    await user.click(global);
+    await waitFor(() => expect(useToastStore.getState().toasts.at(-1)?.description).toBe(message));
+    await waitFor(() => expect(global).toHaveAttribute("aria-pressed", "true"));
+    await waitFor(() => expect(global).toBeEnabled());
+    expect(client.getQueryState(queryKeys.proxyConnections)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(queryKeys.proxyGroups)?.isInvalidated).toBe(true);
+    expect(runtimeActionPending()).toBe(false);
+    await user.click(global);
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(2));
   });
 
   it("keeps the global guard until a save finishes even after leaving home", async () => {
@@ -103,9 +136,9 @@ describe("home traffic mode", () => {
     mocks.load.mockRejectedValueOnce(new Error("read failed"));
     const user = userEvent.setup();
     renderSwitcher();
-    expect(screen.getByRole("button", { name: "Rule" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Smart routing" })).toBeDisabled();
     expect(await screen.findByRole("alert")).toHaveTextContent("read failed");
     await user.click(screen.getByRole("button", { name: "Try again" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Rule" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Smart routing" })).toBeEnabled());
   });
 });
