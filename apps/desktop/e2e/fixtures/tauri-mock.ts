@@ -115,7 +115,7 @@ export async function installTauriSmokeMock(page: Page) {
         pacAvailable: false,
         pacUrl: null as string | null,
         proxy: null as string | null,
-        requestedMode: "forcedClear",
+        requestedMode: "forcedChange",
       },
       tun: {
         allowEnableTun: true,
@@ -143,11 +143,7 @@ export async function installTauriSmokeMock(page: Page) {
     };
 
     function connectionModeStatus(): ConnectionModeStatus {
-      const mode = state.tun.enabled
-        ? "vpn"
-        : ["forcedChange", "pac"].includes(state.sysProxy.requestedMode)
-          ? "systemProxy"
-          : "proxyOnly";
+      const mode = state.tun.enabled ? "vpn" : "systemProxy";
 
       return {
         mode,
@@ -339,14 +335,14 @@ export async function installTauriSmokeMock(page: Page) {
         case "connection_mode_status":
           return Promise.resolve(connectionModeStatus());
         case "set_connection_mode": {
-          const mode = String(args.mode ?? "proxyOnly");
+          const mode = String(args.mode ?? "systemProxy");
           const pacEnabled = args.pacEnabled == null ? state.sysProxy.requestedMode === "pac" : args.pacEnabled === true;
           if (mode === "vpn") {
             state.tun = { ...state.tun, enabled: true };
           } else {
             state.tun = { ...state.tun, enabled: false };
             const requestedMode =
-              mode === "systemProxy" ? (pacEnabled ? "pac" : "forcedChange") : "forcedClear";
+              pacEnabled ? "pac" : "forcedChange";
             state.sysProxy = {
               ...state.sysProxy,
               effectiveMode: requestedMode,
@@ -889,7 +885,7 @@ export async function installTauriSmokeMock(page: Page) {
             customPacPath: null as string | null,
             customScriptPath: null as string | null,
             exceptions: "",
-            mode: "forcedClear",
+            mode: "forcedChange",
           },
           tun: {
             autoRoute: true,

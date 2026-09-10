@@ -42,7 +42,7 @@ export const commands = {
 	setSystemProxyMode: (mode: SystemProxyType) => typedError<SystemProxyStatusResponse, AppError>(__TAURI_INVOKE("set_system_proxy_mode", { mode })),
 	connectionModeStatus: () => typedError<ConnectionModeStatus, AppError>(__TAURI_INVOKE("connection_mode_status")),
 	/**
-	 *  Switches the app between the three Hiddify-style connection modes.
+	 *  Switches the app between system proxy and TUN mode.
 	 * 
 	 *  The transaction itself is `voya_app::connection_mode`: the mode is always
 	 *  persisted, but the machine's proxy settings are only rewritten while the
@@ -331,12 +331,10 @@ export type ConfigTemplateImportResult = {
 export type ConfigTemplateSelection = { type: "default" } | { type: "custom"; sources: ConfigSourceSettings };
 
 /**
- *  Hiddify-style top-level connection mode. A derived view over the two
+ *  Top-level connection mode. A derived view over the two
  *  persisted primitives (system proxy type + TUN flag), never stored itself.
  */
 export type ConnectionMode = 
-/**  Local inbounds only; automatic proxies are cleared and TUN stays off. */
-"proxyOnly" | 
 /**  Local inbound for system proxy use (optionally PAC); macOS setup is manual. */
 "systemProxy" | 
 /**  TUN mode; all traffic is routed through the virtual interface. */

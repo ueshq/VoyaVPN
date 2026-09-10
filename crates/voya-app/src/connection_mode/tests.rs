@@ -37,13 +37,13 @@ fn derivation_covers_every_primitive_combination() {
         (
             SysProxyType::ForcedClear,
             false,
-            ConnectionMode::ProxyOnly,
+            ConnectionMode::SystemProxy,
             false,
         ),
         (
             SysProxyType::Unchanged,
             false,
-            ConnectionMode::ProxyOnly,
+            ConnectionMode::SystemProxy,
             false,
         ),
         (
@@ -54,6 +54,8 @@ fn derivation_covers_every_primitive_combination() {
         ),
         (SysProxyType::Pac, false, ConnectionMode::SystemProxy, true),
         (SysProxyType::ForcedClear, true, ConnectionMode::Vpn, false),
+        (SysProxyType::Unchanged, true, ConnectionMode::Vpn, false),
+        (SysProxyType::ForcedChange, true, ConnectionMode::Vpn, false),
         (SysProxyType::Pac, true, ConnectionMode::Vpn, true),
     ] {
         let (mode, pac) = derive_connection_mode(&config_with(sys_proxy, tun));
@@ -63,17 +65,6 @@ fn derivation_covers_every_primitive_combination() {
             "{sys_proxy:?} tun={tun}"
         );
     }
-}
-
-#[test]
-fn apply_proxy_only_clears_both_primitives() {
-    let mut config = config_with(SysProxyType::Pac, true);
-    apply_connection_mode(&mut config, ConnectionMode::ProxyOnly, false);
-    assert!(!config.tun_mode_item.enable_tun);
-    assert_eq!(
-        config.system_proxy_item.sys_proxy_type,
-        SysProxyType::ForcedClear
-    );
 }
 
 #[test]
@@ -104,7 +95,6 @@ fn apply_vpn_preserves_stored_system_proxy_type() {
 #[test]
 fn round_trip_apply_then_derive_is_stable() {
     for (mode, pac) in [
-        (ConnectionMode::ProxyOnly, false),
         (ConnectionMode::SystemProxy, false),
         (ConnectionMode::SystemProxy, true),
         (ConnectionMode::Vpn, false),
@@ -419,7 +409,7 @@ impl Harness {
         Self {
             coordinator: ConfigMutationCoordinator::new(
                 database,
-                Arc::new(RwLock::new(AppConfig::default())),
+                Arc::new(RwLock::new(config_with(SysProxyType::ForcedClear, false))),
             ),
             elevation: Arc::new(ElevationState::new()),
             paths,

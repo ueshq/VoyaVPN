@@ -253,7 +253,7 @@ test("adds and imports profiles, activates one, and connects through the fake ru
 
   await page.getByRole("tab", { name: "Home" }).click();
   await expect(page.getByTestId("home-subscription-card")).toBeVisible();
-  await expect(page.getByTestId("home-mode-switcher")).toBeVisible();
+  await expect(page.getByRole("switch", { name: "TUN mode", exact: true })).toBeVisible();
   const importedNode = page.getByRole("option", { name: /Smoke Imported VLESS/ });
   await importedNode.dblclick();
   await expect(importedNode).toHaveAttribute("aria-selected", "true");
@@ -417,6 +417,36 @@ test("routes the three IPC event channels into the shell", async ({ page }) => {
     .toBeGreaterThan(before);
 });
 
+test("switches TUN on and off while preserving the system proxy PAC choice", async ({ page }) => {
+  const tun = page.getByRole("switch", { name: "TUN mode", exact: true });
+  const pac = page.getByRole("switch", { name: "Smart mode (PAC)", exact: true });
+  await expect(tun).not.toBeChecked();
+  await expect(page.getByRole("button", { name: /^(Proxy only|System proxy|VPN)$/ })).toHaveCount(0);
+  await page.evaluate(() => {
+    const state = window.__VOYA_SMOKE__.state as { sysProxy: import("../src/ipc/bindings").SystemProxyStatusResponse };
+    state.sysProxy.pacAvailable = true;
+    window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "sysProxyChanged", payload: state.sysProxy });
+  });
+  await pac.check();
+  await expect(pac).toBeChecked();
+  await page.getByText("TUN mode", { exact: true }).click();
+  await expect(tun).toBeChecked();
+  await expect(tun).toBeEnabled();
+  await expect(pac).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath("home-tun-on.png"), animations: "disabled" });
+  await tun.focus();
+  await page.keyboard.press("Space");
+  await expect(tun).not.toBeChecked();
+  await expect(tun).toBeEnabled();
+  await expect(pac).toBeChecked();
+  await page.screenshot({ path: test.info().outputPath("home-tun-off.png"), animations: "disabled" });
+  expect((await smokeCalls(page)).filter((call) => call.command === "set_connection_mode")).toEqual([
+    { command: "set_connection_mode", args: { mode: "systemProxy", pacEnabled: true } },
+    { command: "set_connection_mode", args: { mode: "vpn", pacEnabled: null } },
+    { command: "set_connection_mode", args: { mode: "systemProxy", pacEnabled: null } },
+  ]);
+});
+
 test("keeps macOS proxy setup manual through PAC, disconnect and verified cleanup", async ({ page }) => {
   await expect(page.getByTestId("home-connect-button")).toBeVisible();
   await page.evaluate(() => {
@@ -427,7 +457,7 @@ test("keeps macOS proxy setup manual through PAC, disconnect and verified cleanu
     };
     window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "sysProxyChanged", payload: state.sysProxy });
   });
-  await page.getByRole("button", { name: "System proxy (manual)", exact: true }).click();
+  await expect(page.getByRole("switch", { name: "TUN mode", exact: true })).not.toBeChecked();
   await page.getByTestId("home-connect-button").click();
   await expect(page.getByTestId("home-status-card")).toContainText("Local proxy ready");
   await expect(page.getByText("Protected", { exact: true })).toHaveCount(0);

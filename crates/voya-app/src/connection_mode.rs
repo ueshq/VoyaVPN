@@ -44,20 +44,14 @@ use crate::{
 };
 
 /// Derives the current connection mode and whether PAC is the selected system
-/// proxy flavor. TUN wins over everything; `Unchanged` counts as proxy-only
-/// because the OS proxy is not being managed.
+/// proxy flavor. TUN wins over everything; all non-TUN states use system proxy.
 #[must_use]
 pub fn derive_connection_mode(config: &AppConfig) -> (ConnectionMode, bool) {
     let pac_enabled = matches!(config.system_proxy_item.sys_proxy_type, SysProxyType::Pac);
     if config.tun_mode_item.enable_tun {
         return (ConnectionMode::Vpn, pac_enabled);
     }
-    match config.system_proxy_item.sys_proxy_type {
-        SysProxyType::Pac | SysProxyType::ForcedChange => {
-            (ConnectionMode::SystemProxy, pac_enabled)
-        }
-        SysProxyType::ForcedClear | SysProxyType::Unchanged => (ConnectionMode::ProxyOnly, false),
-    }
+    (ConnectionMode::SystemProxy, pac_enabled)
 }
 
 /// Applies a connection mode onto the config primitives. Entering `Vpn` keeps
@@ -65,10 +59,6 @@ pub fn derive_connection_mode(config: &AppConfig) -> (ConnectionMode, bool) {
 /// force-disable or fall back per platform); leaving it turns TUN off.
 pub fn apply_connection_mode(config: &mut AppConfig, mode: ConnectionMode, pac_enabled: bool) {
     match mode {
-        ConnectionMode::ProxyOnly => {
-            config.tun_mode_item.enable_tun = false;
-            config.system_proxy_item.sys_proxy_type = SysProxyType::ForcedClear;
-        }
         ConnectionMode::SystemProxy => {
             config.tun_mode_item.enable_tun = false;
             config.system_proxy_item.sys_proxy_type = if pac_enabled {
@@ -125,8 +115,8 @@ pub struct ConnectionModeOutcome {
     /// because no core is running.
     pub system_proxy_applied: bool,
     pub tun_status: TunStatus,
-    /// Only a TUN flip needs a running core to be restarted; a proxy-only or
-    /// system-proxy switch is picked up live.
+    /// Only a TUN flip needs a running core to be restarted; a system-proxy
+    /// flavor change is picked up live.
     pub tun_flag_changed: bool,
 }
 
@@ -188,7 +178,7 @@ impl ConnectionModeManager {
         }
     }
 
-    /// Switch the app between proxy-only / system proxy / VPN.
+    /// Switch the app between system proxy and TUN mode.
     ///
     /// `pac_enabled` of `None` keeps whatever PAC flavor is already stored.
     /// `connected` is the supervisor state the caller observed: it decides

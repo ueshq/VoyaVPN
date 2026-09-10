@@ -27,7 +27,7 @@ the app is not proof of a registration defect.
 
 ## VPN lifecycle
 
-1. Connect/disconnect ten consecutive times. Each success requires agreement
+1. Enable TUN mode, then connect/disconnect ten consecutive times. Each success requires agreement
    between Home, `scutil --nc list`, current NetworkExtension state and actual
    traffic/exit-IP checks from a browser and a terminal. A provider log alone
    is insufficient.
@@ -42,7 +42,7 @@ the app is not proof of a registration defect.
 
 ## Manual system proxy
 
-1. Select System proxy (manual), connect the local core and copy its displayed
+1. Turn off TUN mode, connect the local core and copy its displayed
    address. Home must say Local proxy ready, separately showing the observed
    system configuration. Verify no proxy-setting script was created/executed.
 2. Open Network settings using the app's fixed action. Follow the displayed
@@ -52,7 +52,7 @@ the app is not proof of a registration defect.
    repeated status reads must keep the same URL. Fetch it and inspect the PAC
    response. Occupying the test PAC port must produce an error with no stale
    copyable PAC URL.
-4. Switch to Proxy only, enter VPN, disconnect and exit in separate trials.
+4. Enable TUN mode, disconnect and exit in separate trials.
    Each leaves manually configured OS proxies untouched and displays a cleanup
    reminder. Exit must offer the reminder before terminating when a local
    proxy, old dirty marker, or unknown observation remains.

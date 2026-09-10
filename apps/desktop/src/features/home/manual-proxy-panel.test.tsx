@@ -19,17 +19,17 @@ beforeEach(() => { vi.resetAllMocks(); });
 
 describe("manual system proxy", () => {
   it("keeps unknown state explicit and provides manual cleanup instructions", () => {
-    render(<ManualProxyPanel status={status} connected mode="systemProxy" />);
+    render(<ManualProxyPanel status={status} connected tunEnabled={false} />);
     expect(screen.getByRole("status")).toHaveTextContent("unknown");
     expect(screen.getByText(/HTTP \/ HTTPS \/ SOCKS:/)).toHaveTextContent("127.0.0.1:10808");
     expect(screen.getByText(/Before switching modes/)).toHaveTextContent("cannot restore it automatically");
     expect(commands.openNetworkSettings).not.toHaveBeenCalled();
   });
 
-  it("does not offer stale addresses while disconnected or in VPN mode", () => {
-    const view = render(<ManualProxyPanel status={{ ...status, requestedMode: "pac", pacUrl: "http://127.0.0.1:10811/pac" }} connected={false} mode="systemProxy" />);
+  it("does not offer stale addresses while disconnected or in TUN mode", () => {
+    const view = render(<ManualProxyPanel status={{ ...status, requestedMode: "pac", pacUrl: "http://127.0.0.1:10811/pac" }} connected={false} tunEnabled={false} />);
     expect(screen.queryByRole("button", { name: "Copy address" })).not.toBeInTheDocument();
-    view.rerender(<ManualProxyPanel status={status} connected mode="vpn" />);
+    view.rerender(<ManualProxyPanel status={status} connected tunEnabled />);
     expect(screen.queryByRole("button", { name: "Copy address" })).not.toBeInTheDocument();
   });
 
@@ -37,7 +37,7 @@ describe("manual system proxy", () => {
     const user = userEvent.setup();
     commands.recheckSystemProxy.mockResolvedValue({ ...status, observation: "clear", manualCleanupRequired: false });
     commands.openNetworkSettings.mockRejectedValue(new Error("Cannot open settings"));
-    render(<ManualProxyPanel status={status} connected mode="systemProxy" />);
+    render(<ManualProxyPanel status={status} connected tunEnabled={false} />);
     await user.click(screen.getByRole("button", { name: "Check again" }));
     await waitFor(() => expect(useRuntimeEventStore.getState().sysProxy?.observation).toBe("clear"));
     await user.click(screen.getByRole("button", { name: "Open Network settings" }));
@@ -48,11 +48,11 @@ describe("manual system proxy", () => {
   it("copies the running PAC address and leaves a failed PAC without a copy action", async () => {
     const user = userEvent.setup();
     const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
-    const view = render(<ManualProxyPanel status={{ ...status, observation: "localProxy", requestedMode: "pac", pacUrl: "http://127.0.0.1:10811/pac?t=1" }} connected mode="systemProxy" />);
+    const view = render(<ManualProxyPanel status={{ ...status, observation: "localProxy", requestedMode: "pac", pacUrl: "http://127.0.0.1:10811/pac?t=1" }} connected tunEnabled={false} />);
     await user.click(screen.getByRole("button", { name: "Copy address" }));
     expect(write).toHaveBeenCalledWith("http://127.0.0.1:10811/pac?t=1");
     expect(await screen.findByText("Address copied")).toBeInTheDocument();
-    view.rerender(<ManualProxyPanel status={{ ...status, observation: "otherProxy", requestedMode: "pac", pacUrl: null }} connected mode="systemProxy" />);
+    view.rerender(<ManualProxyPanel status={{ ...status, observation: "otherProxy", requestedMode: "pac", pacUrl: null }} connected tunEnabled={false} />);
     expect(screen.queryByRole("button", { name: "Copy address" })).not.toBeInTheDocument();
     expect(screen.getByText("A different system proxy is configured.")).toBeInTheDocument();
   });
@@ -61,7 +61,7 @@ describe("manual system proxy", () => {
     const user = userEvent.setup();
     let resolve!: (value: SystemProxyStatusResponse) => void;
     commands.recheckSystemProxy.mockReturnValue(new Promise<SystemProxyStatusResponse>((done) => { resolve = done; }));
-    render(<ManualProxyPanel status={status} connected mode="systemProxy" />);
+    render(<ManualProxyPanel status={status} connected tunEnabled={false} />);
     await user.click(screen.getByRole("button", { name: "Check again" }));
     const latest: SystemProxyStatusResponse = { ...status, observation: "localProxy" };
     act(() => useRuntimeEventStore.getState().pushTransientEvent({ kind: "sysProxyChanged", payload: latest }));

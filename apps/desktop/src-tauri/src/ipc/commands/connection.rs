@@ -18,7 +18,7 @@ pub async fn connection_mode_status(
     ))
 }
 
-/// Switches the app between the three Hiddify-style connection modes.
+/// Switches the app between system proxy and TUN mode.
 ///
 /// The transaction itself is `voya_app::connection_mode`: the mode is always
 /// persisted, but the machine's proxy settings are only rewritten while the

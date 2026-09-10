@@ -197,7 +197,7 @@ describe("PerAppProxyDialog", () => {
     expect(ipcMocks.saveRoutingRule).not.toHaveBeenCalled();
   });
 
-  it("makes the TUN-only hint prominent when the mode is not VPN", async () => {
+  it("makes the TUN-only hint prominent when the mode is not TUN", async () => {
     ipcMocks.connectionModeStatus.mockResolvedValue({
       mode: "systemProxy",
       pacAvailable: true,
@@ -209,7 +209,7 @@ describe("PerAppProxyDialog", () => {
     renderDialog();
 
     expect(
-      await screen.findByText("App-based rules only take effect in VPN (TUN) mode."),
+      await screen.findByText("App-based rules only take effect in TUN mode."),
     ).toBeInTheDocument();
   });
 

@@ -21,7 +21,11 @@ ADR 0004's automatic system-proxy restoration requirement for macOS only.
 - macOS system proxy management is always manual. No lifecycle path generates
   or executes system-proxy scripts. Stored custom script paths remain inert.
   Windows/Linux retain automatic management.
-- The three connection modes and persisted fields remain. The selected mode is
+- Home uses a TUN mode switch: on selects TUN, off selects system proxy. PAC
+  remains a secondary switch while TUN is off. Persisted fields remain; old
+  non-TUN `forcedClear`/`unchanged` preferences become `forcedChange` at startup,
+  and fresh installs default to system proxy. Automatic OS proxy setup still
+  waits for a connected core. The selected mode is
   separate from observed system settings. A running local core is described as
   locally ready; only a connected VPN is described as protecting macOS traffic.
 - The platform adapter reads HTTP, HTTPS, SOCKS and PAC for every network service

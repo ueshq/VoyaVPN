@@ -282,7 +282,7 @@ pub struct SystemProxyItem {
 impl Default for SystemProxyItem {
     fn default() -> Self {
         Self {
-            sys_proxy_type: SysProxyType::ForcedClear,
+            sys_proxy_type: SysProxyType::ForcedChange,
             system_proxy_exceptions: DEFAULT_SYSTEM_PROXY_EXCEPTIONS.to_string(),
             not_proxy_local_address: true,
             system_proxy_advanced_protocol: String::new(),

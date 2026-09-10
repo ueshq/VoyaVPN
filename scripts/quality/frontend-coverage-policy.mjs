@@ -36,7 +36,6 @@ export const criticalModules = [
   "apps/desktop/src/ipc/updater.ts",
   "apps/desktop/src/features/settings/use-app-settings.ts",
   "apps/desktop/src/features/dns/use-dns-settings.ts",
-  "apps/desktop/src/features/home/connection-mode.ts",
   "apps/desktop/src/features/profiles/profile-form-schema.ts",
   "apps/desktop/src/features/proxy/proxy-group-order.ts",
   "apps/desktop/src/features/routing/per-app-proxy-rule.ts",

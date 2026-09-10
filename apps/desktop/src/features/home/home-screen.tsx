@@ -18,7 +18,7 @@ import { useHomeRuntime } from "./use-home-runtime";
 /**
  * Connection home, Hiddify-style: the subscription profile card on top, a hero
  * card with the central connect button + connected info + unified connection
- * mode switcher, and the node list below. Single-accent discipline: interactive
+ * TUN switch, and the node list below. Single-accent discipline: interactive
  * chrome stays brand blue; affirmative green (`--connected` / `--connected-glow`)
  * marks an active runtime; the heading distinguishes local readiness from VPN
  * protection. It only uses the runtime
@@ -102,11 +102,10 @@ export function HomeScreen() {
               />
             ) : null}
             <ConnectionModeSwitcher
-              connectionMode={home.connectionMode}
-              manualProxy={manualProxy}
+              tunEnabled={home.tunEnabled}
               modeBusy={home.modeBusy}
               modePending={home.modePending}
-              onModeChange={home.changeConnectionMode}
+              onTunChange={home.changeTunEnabled}
               onPacToggle={home.togglePac}
               pacActive={home.pacActive}
               pacAvailable={home.pacAvailable}
@@ -115,7 +114,7 @@ export function HomeScreen() {
               tunProviderSummary={home.tunProviderSummary}
             />
             {manualProxy && home.sysProxy ? (
-              <ManualProxyPanel status={home.sysProxy} connected={home.connected} mode={home.connectionMode} />
+              <ManualProxyPanel status={home.sysProxy} connected={home.connected} tunEnabled={home.tunEnabled} />
             ) : null}
           </CardContent>
         </Card>

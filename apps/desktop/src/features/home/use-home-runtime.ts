@@ -13,7 +13,7 @@ import {
   tunStatus,
   useRuntimeEventStore,
 } from "@/ipc";
-import type { ConnectionMode, TunStatus } from "@/ipc/bindings";
+import type { TunStatus } from "@/ipc/bindings";
 import { refreshRuntimeStatus, runtimeStatusErrorKeys } from "@/ipc/runtime-status";
 import { beginRuntimeRead } from "@/ipc/runtime-state-version";
 import { profilesQueryKey } from "@/ipc/query-keys";
@@ -21,7 +21,6 @@ import { getErrorMessage } from "@voya/utils/error";
 import { useModalStore } from "@/stores/modal-store";
 import { useToastStore } from "@/stores/toast-store";
 
-import { deriveConnectionMode, isPacActive } from "./connection-mode";
 import { missingCorePayload, runWithElevation } from "./runtime-action";
 
 type RuntimeAction = "connect" | "disconnect" | "restart";
@@ -46,7 +45,7 @@ export function useHomeRuntime(t: Translation) {
   const openModal = useModalStore((state) => state.openModal);
   const pushToast = useToastStore((state) => state.pushToast);
   const [pendingAction, setPendingAction] = useState<RuntimeAction | null>(null);
-  const [modePending, setModePending] = useState<ConnectionMode | null>(null);
+  const [modePending, setModePending] = useState(false);
   const [pacPending, setPacPending] = useState(false);
   // Local node selection (blue highlight). Seeded from the persisted active
   // profile; single-clicks move it without touching the backend.
@@ -69,7 +68,7 @@ export function useHomeRuntime(t: Translation) {
   const busy = inProgress || pendingAction !== null || switchingId !== null;
   // One guard for both mode-mutating controls: they write the same config
   // transaction, so letting them overlap races two `set_connection_mode` calls.
-  const modeBusy = busy || modePending !== null || pacPending;
+  const modeBusy = busy || modePending || pacPending;
 
   const activeProfile = profilesQuery.data?.entries.find((item) => item.isActive) ?? null;
   const activeProfileId = activeProfile?.profile.id ?? null;
@@ -77,8 +76,8 @@ export function useHomeRuntime(t: Translation) {
   // from the persisted-active node only while disconnected.
   const runningId = connected ? (coreState?.activeProfileId ?? null) : null;
   const pacAvailable = sysProxy?.pacAvailable ?? false;
-  const connectionMode = deriveConnectionMode(sysProxy, tun);
-  const pacActive = isPacActive(sysProxy);
+  const tunEnabled = tun?.enabled ?? false;
+  const pacActive = sysProxy?.requestedMode === "pac";
   const tunProviderSummary = tun ? tunProviderLabel(tun, t) : null;
 
   const runningEntry = runningId
@@ -217,11 +216,11 @@ export function useHomeRuntime(t: Translation) {
   }
 
   /**
-   * TUN preflight shared by the VPN mode entry: native component + provider
+   * TUN preflight: native component + provider
    * path checks, then on-demand elevation (one native prompt, no stored
-   * password). Returns false when VPN cannot (or should not) be enabled.
+   * password). Returns false when TUN cannot (or should not) be enabled.
    */
-  async function ensureVpnPreconditions(): Promise<boolean> {
+  async function ensureTunPreconditions(): Promise<boolean> {
     const current = await tunStatus();
     if (current.backend !== "process" && !current.nativeComponentReady) {
       pushToast({
@@ -250,20 +249,20 @@ export function useHomeRuntime(t: Translation) {
     return true;
   }
 
-  async function runConnectionMode(mode: ConnectionMode, pacEnabled: boolean | null = null) {
+  async function runTunChange(enabled: boolean) {
     // `modeBusy` also covers a pending connect/disconnect/restart: flipping TUN
     // while the core is still starting persists the flag but cannot restart the
-    // not-yet-connected core, leaving the UI claiming VPN over a non-TUN core.
-    if (modeBusy || (mode === connectionMode && pacEnabled === null)) {
+    // not-yet-connected core, leaving the UI claiming TUN over a non-TUN core.
+    if (modeBusy || enabled === tunEnabled) {
       return;
     }
 
-    setModePending(mode);
+    setModePending(true);
     try {
-      if (mode === "vpn" && !(await ensureVpnPreconditions())) {
+      if (enabled && !(await ensureTunPreconditions())) {
         return;
       }
-      await setConnectionMode(mode, pacEnabled);
+      await setConnectionMode(enabled ? "vpn" : "systemProxy", null);
     } catch (error) {
       pushToast({
         description: getErrorMessage(error),
@@ -273,12 +272,12 @@ export function useHomeRuntime(t: Translation) {
       return;
     } finally {
       await refreshStatus();
-      setModePending(null);
+      setModePending(false);
     }
   }
 
   async function runPacToggle() {
-    if (modeBusy || connectionMode !== "systemProxy") {
+    if (modeBusy || tunEnabled) {
       return;
     }
     setPacPending(true);
@@ -301,8 +300,8 @@ export function useHomeRuntime(t: Translation) {
     void switchActiveAndApply(indexId);
   }
 
-  function changeConnectionMode(mode: ConnectionMode) {
-    void runConnectionMode(mode);
+  function changeTunEnabled(enabled: boolean) {
+    void runTunChange(enabled);
   }
 
   function restart() {
@@ -323,9 +322,9 @@ export function useHomeRuntime(t: Translation) {
     activeNode,
     activeSubscriptionId: activeProfile?.profile.subscriptionId ?? null,
     busy,
-    changeConnectionMode,
+    changeTunEnabled,
     connected,
-    connectionMode,
+    tunEnabled,
     sysProxy,
     handlePrimaryAction,
     inProgress,

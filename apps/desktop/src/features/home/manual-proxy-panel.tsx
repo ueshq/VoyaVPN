@@ -6,12 +6,12 @@ import { useMountedRef } from "@voya/utils/use-mounted-ref";
 import { openNetworkSettings, recheckSystemProxy } from "@/ipc/commands";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { beginRuntimeRead } from "@/ipc/runtime-state-version";
-import type { ConnectionMode, SystemProxyStatusResponse } from "@/ipc/bindings";
+import type { SystemProxyStatusResponse } from "@/ipc/bindings";
 
-export function ManualProxyPanel({ status, connected, mode }: {
+export function ManualProxyPanel({ status, connected, tunEnabled }: {
   status: SystemProxyStatusResponse;
   connected: boolean;
-  mode: ConnectionMode;
+  tunEnabled: boolean;
 }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
@@ -19,9 +19,9 @@ export function ManualProxyPanel({ status, connected, mode }: {
   const [copied, setCopied] = useState(false);
   const mounted = useMountedRef();
   const setSysProxy = useRuntimeEventStore((state) => state.setSysProxy);
-  const endpoint = connected && mode !== "vpn" ? status.proxy : null;
-  const pacUrl = connected && mode === "systemProxy" ? status.pacUrl : null;
-  const address = status.requestedMode === "pac" && mode === "systemProxy" ? pacUrl : endpoint;
+  const endpoint = connected && !tunEnabled ? status.proxy : null;
+  const pacUrl = connected && !tunEnabled ? status.pacUrl : null;
+  const address = status.requestedMode === "pac" ? pacUrl : endpoint;
   const observation = status.observation === "clear" ? t("home.manualProxy.clear")
     : status.observation === "localProxy" ? t("home.manualProxy.localProxy")
       : status.observation === "otherProxy" ? t("home.manualProxy.otherProxy")
@@ -43,7 +43,7 @@ export function ManualProxyPanel({ status, connected, mode }: {
 
   return (
     <div className="grid w-full gap-2 rounded-lg border bg-muted/30 p-3 text-sm" data-testid="manual-proxy-panel">
-      <p className="font-medium">{t("home.modeSystemProxyManual")}</p>
+      <p className="font-medium">{t("home.modeSystemProxy")}</p>
       <p className="text-muted-foreground">{t("home.manualProxy.instructions")}</p>
       <p role="status">{observation}</p>
       {address ? (
@@ -54,7 +54,7 @@ export function ManualProxyPanel({ status, connected, mode }: {
         </p>
       ) : <p className="text-muted-foreground">{t("home.manualProxy.inactive")}</p>}
       {endpoint && status.exceptions ? <p className="break-words text-xs">{t("home.manualProxy.bypass", { exceptions: status.exceptions })}</p> : null}
-      {status.manualCleanupRequired || mode !== "systemProxy" ? (
+      {status.manualCleanupRequired || tunEnabled ? (
         <p className="text-amber-700 dark:text-amber-400">{t("home.manualProxy.cleanup")}</p>
       ) : <p className="text-xs text-muted-foreground">{t("home.manualProxy.cleanup")}</p>}
       <div className="flex flex-wrap gap-2">

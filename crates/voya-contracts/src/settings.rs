@@ -235,7 +235,7 @@ impl Default for SystemProxySettings {
         // step with `voya_core::SystemProxyItem::default()`; the equivalence is
         // guarded by a test in voya-app's settings mapping layer.
         Self {
-            mode: SystemProxyType::ForcedClear,
+            mode: SystemProxyType::ForcedChange,
             exceptions: DEFAULT_SYSTEM_PROXY_EXCEPTIONS.to_string(),
             bypass_local: true,
             advanced_protocol: String::new(),
@@ -413,7 +413,7 @@ mod tests {
         assert_eq!(value["schemaVersion"], CURRENT_SCHEMA_VERSION);
         assert_eq!(
             value["network"]["systemProxy"]["mode"],
-            serde_json::Value::String("forcedClear".to_string())
+            serde_json::Value::String("forcedChange".to_string())
         );
         assert!(value.get("core").is_some());
         assert!(value.get("CoreBasicItem").is_none());

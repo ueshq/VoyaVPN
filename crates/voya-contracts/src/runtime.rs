@@ -36,13 +36,11 @@ pub enum SystemProxyType {
     Pac,
 }
 
-/// Hiddify-style top-level connection mode. A derived view over the two
+/// Top-level connection mode. A derived view over the two
 /// persisted primitives (system proxy type + TUN flag), never stored itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ConnectionMode {
-    /// Local inbounds only; automatic proxies are cleared and TUN stays off.
-    ProxyOnly,
     /// Local inbound for system proxy use (optionally PAC); macOS setup is manual.
     SystemProxy,
     /// TUN mode; all traffic is routed through the virtual interface.

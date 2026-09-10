@@ -116,7 +116,7 @@ pub fn manual_proxy_exit_text(language: &str) -> ManualProxyExitText {
             .to_string()
     };
     ManualProxyExitText {
-        title: text("/home/modeSystemProxyManual"),
+        title: text("/home/modeSystemProxy"),
         message: text("/home/manualProxy/cleanup"),
         quit: tray_labels(&language).quit.to_string(),
         cancel: text("/actions/cancel"),

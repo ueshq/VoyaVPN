@@ -245,7 +245,7 @@ vi.mock("@/ipc", () => ({
   ),
   setConnectionMode: vi.fn(() =>
     Promise.resolve({
-      mode: "proxyOnly",
+      mode: "systemProxy",
       pacAvailable: false,
       pacEnabled: false,
       processRulesEffective: false,
