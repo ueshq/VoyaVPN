@@ -49,7 +49,8 @@ for (const layout of ["macos", "windows"] as const) {
       await expect(heading).toBeVisible();
       expect((await heading.boundingBox())!.y).toBeGreaterThanOrEqual(40);
       await expect(panel).toHaveCSS("padding-top", "40px");
-      const action = panel.getByRole("button").and(page.locator(":enabled")).filter({ visible: true }).first();
+      const action = panel.getByRole("button").or(panel.getByRole("menuitem"))
+        .and(page.locator(":enabled")).filter({ visible: true }).first();
       await expect(action).toBeVisible();
       await action.click({ trial: true });
       await expect(titlebar).toHaveCSS("background-color", await page.locator(".shell-content-column").evaluate((el) => getComputedStyle(el).backgroundColor));

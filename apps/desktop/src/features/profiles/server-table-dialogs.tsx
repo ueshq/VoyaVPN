@@ -23,11 +23,11 @@ export function ServerTableDialogs({ controller }: { controller: ServerTableCont
     dialogState,
     handleDialogImport,
     handleSave,
-    importOpen,
+    importMethod,
     pendingDelete,
     saveError,
     setDialogState,
-    setImportOpen,
+    setImportMethod,
     setPendingDelete,
     setShareQrContent,
     setSubscriptionsOpen,
@@ -42,6 +42,7 @@ export function ServerTableDialogs({ controller }: { controller: ServerTableCont
     <>
       {detailsItem ? <ProfileDetailsDialog controller={controller} item={detailsItem} /> : null}
       <ProfileDialog
+        onCloseFocus={controller.restoreProfileDialogFocus}
         mode={dialogState?.mode ?? "create"}
         onOpenChange={(open) => !open && setDialogState(null)}
         onSubmit={handleSave}
@@ -51,10 +52,17 @@ export function ServerTableDialogs({ controller }: { controller: ServerTableCont
       />
       <ImportProfilesDialog
         onImported={handleDialogImport}
-        onOpenChange={setImportOpen}
-        open={importOpen}
+        method={importMethod ?? "text"}
+        onCloseFocus={() => controller.importTriggerRef.current?.focus()}
+        onOpenChange={(open) => !open && setImportMethod(null)}
+        open={importMethod !== null}
       />
-      <SubscriptionsDialog onOpenChange={setSubscriptionsOpen} open={subscriptionsOpen} />
+      <SubscriptionsDialog
+        initialMode="create"
+        onCloseFocus={() => controller.addTriggerRef.current?.focus()}
+        onOpenChange={setSubscriptionsOpen}
+        open={subscriptionsOpen}
+      />
       <ShareQrDialog
         content={shareQrContent ?? ""}
         onOpenChange={(open) => !open && setShareQrContent(null)}

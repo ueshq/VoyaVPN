@@ -41,9 +41,15 @@ test("profile cards stay usable across themes, window sizes and a 5k node list",
     for (const [width, height] of [[1232, 800], [1180, 760], [960, 640], [800, 640]]) {
       await page.setViewportSize({ width, height });
       await expect.poll(() => toolbar.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0);
-      for (const name of ["从剪贴板导入", "导入", "订阅"]) {
-        await expect(toolbar.getByRole("button", { name, exact: true })).toBeInViewport({ ratio: 1 });
+      for (const name of ["新增", "导入"]) {
+        await expect(toolbar.getByRole("menuitem", { name, exact: true })).toBeInViewport({ ratio: 1 });
       }
+      await toolbar.getByRole("menuitem", { name: "导入", exact: true }).click();
+      for (const item of await page.getByRole("menu").getByRole("menuitem").all()) {
+        await expect(item).toBeInViewport({ ratio: 1 });
+      }
+      await page.keyboard.press("Escape");
+      await expect(toolbar.getByRole("menuitem", { name: "导入", exact: true })).toBeFocused();
       await expect(cards.first()).toBeInViewport({ ratio: 1 });
       await expect.poll(() => viewport.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0);
       await expect.poll(() => cards.evaluateAll((elements) => {
@@ -101,8 +107,8 @@ test("profile cards show a loading skeleton while the profile query is pending",
     for (const [width, height] of [[1232, 800], [960, 640], [800, 640]]) {
       await page.setViewportSize({ width, height });
       await expect.poll(() => toolbar.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0);
-      for (const name of ["Import from clipboard", "Import", "Subscriptions"]) {
-        await expect(toolbar.getByRole("button", { name, exact: true })).toBeInViewport({ ratio: 1 });
+      for (const name of ["Add", "Import"]) {
+        await expect(toolbar.getByRole("menuitem", { name, exact: true })).toBeInViewport({ ratio: 1 });
       }
       await page.screenshot({ path: testInfo.outputPath(`cards-loading-${colorScheme}-${width}.png`) });
     }

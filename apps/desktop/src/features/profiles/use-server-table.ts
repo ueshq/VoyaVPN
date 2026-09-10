@@ -5,7 +5,6 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   cancelSpeedtest,
   deleteProfiles,
-  importProfilesFromText,
   listProfiles,
   listSubscriptions,
   runSpeedtest,
@@ -34,6 +33,7 @@ import {
   supportsShareLinkExport,
   type ProfileExportKind,
 } from "./server-table-actions";
+import type { ImportMethod } from "./import-methods";
 import { CONFIG_TYPES } from "./profile-constants";
 import { applyLiveUpdates } from "./server-table-live-updates";
 
@@ -45,8 +45,10 @@ type DialogState =
 export function useServerTable() {
   const [dialogState, setDialogStateInternal] = useState<DialogState>(null);
   const [filterText, setFilterText] = useState("");
-  const [importOpen, setImportOpen] = useState(false);
-  const [importingFromClipboard, setImportingFromClipboard] = useState(false);
+  const [importMethod, setImportMethod] = useState<ImportMethod | null>(null);
+  const profileDialogTriggerRef = useRef<HTMLElement | null>(null);
+  const addTriggerRef = useRef<HTMLButtonElement>(null);
+  const importTriggerRef = useRef<HTMLButtonElement>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
   const [operationMessage, setOperationMessage] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
@@ -138,6 +140,10 @@ export function useServerTable() {
 
   // Opening or closing the editor drops the previous rejection message.
   function setDialogState(next: DialogState) {
+    if (next) {
+      profileDialogTriggerRef.current = next.mode === "create" ? addTriggerRef.current
+        : document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    }
     setSaveError(null);
     setDialogStateInternal(next);
   }
@@ -174,31 +180,6 @@ export function useServerTable() {
     // rejected save would discard every in-progress edit.
     if (await runOperation(() => save(profile), setSaveError)) {
       setDialogStateInternal(null);
-    }
-  }
-
-  async function handleImportFromClipboard() {
-    setOperationError(null);
-    setOperationMessage(null);
-
-    if (!navigator.clipboard?.readText) {
-      setOperationError(t("panes.profiles.import.clipboardUnavailable"));
-      return;
-    }
-
-    setImportingFromClipboard(true);
-    try {
-      const text = (await navigator.clipboard.readText()).trim();
-      if (!text) {
-        throw new Error(t("panes.profiles.import.clipboardEmpty"));
-      }
-
-      const result = await importProfilesFromText(text, null);
-      await handleDialogImport(result);
-    } catch (error) {
-      setOperationError(getErrorMessage(error));
-    } finally {
-      setImportingFromClipboard(false);
     }
   }
 
@@ -322,11 +303,16 @@ export function useServerTable() {
     handleCancelSpeedtest,
     handleDialogImport,
     handleExport,
-    handleImportFromClipboard,
     handleSave,
     handleSpeedtest,
-    importOpen,
-    importingFromClipboard,
+    importMethod,
+    addTriggerRef,
+    restoreProfileDialogFocus: () => {
+      const trigger = profileDialogTriggerRef.current;
+      if (trigger?.isConnected) trigger.focus();
+      else viewportRef.current?.focus();
+    },
+    importTriggerRef,
     operationError,
     operationMessage,
     pendingDelete,
@@ -341,7 +327,7 @@ export function useServerTable() {
     selectedId,
     setDialogState,
     setFilterText,
-    setImportOpen,
+    setImportMethod,
     setPendingDelete,
     setShareQrContent,
     setSubscriptionsOpen,

@@ -178,7 +178,7 @@ describe("LogsPanel", () => {
 
     await user.type(screen.getByRole("searchbox", { name: "Search logs" }), "cancellation");
 
-    expect(screen.getByText("Speedtest cancellation requested")).toBeInTheDocument();
+    expect(screen.getByText("Ping cancellation requested")).toBeInTheDocument();
     expect(screen.queryByText("inbound/mixed started")).not.toBeInTheDocument();
   });
 

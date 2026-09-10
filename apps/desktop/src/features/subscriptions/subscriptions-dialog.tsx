@@ -53,6 +53,8 @@ import {
 import { metadataBySubscriptionId } from "./subscription-usage";
 
 type SubscriptionsDialogProps = {
+  initialMode?: "create" | "manage";
+  onCloseFocus?: () => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
 };
@@ -96,7 +98,11 @@ function intervalMinutesFromHours(hours: string): number | null {
   return Math.max(1, Math.round(parsed * 60));
 }
 
-export function SubscriptionsDialog({ onOpenChange, open }: SubscriptionsDialogProps) {
+export function SubscriptionsDialog({ initialMode = "manage", ...props }: SubscriptionsDialogProps) {
+  return <SubscriptionsDialogSession key={initialMode === "create" ? `create:${props.open}` : "manage"} {...props} />;
+}
+
+function SubscriptionsDialogSession({ onCloseFocus, onOpenChange, open }: Omit<SubscriptionsDialogProps, "initialMode">) {
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<Subscription>(() => createBlankSubscription());
   const [intervalHours, setIntervalHours] = useState("");
@@ -195,7 +201,11 @@ export function SubscriptionsDialog({ onOpenChange, open }: SubscriptionsDialogP
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <ScrollableDialogContent closeLabel={t("actions.close")} width="5xl">
+        <ScrollableDialogContent
+          closeLabel={t("actions.close")}
+          onCloseAutoFocus={onCloseFocus ? (event) => { event.preventDefault(); onCloseFocus(); } : undefined}
+          width="5xl"
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Rss className="size-4" aria-hidden="true" />

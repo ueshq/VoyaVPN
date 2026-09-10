@@ -37,6 +37,7 @@ import { TransportPanel } from "./profile-transport-panel";
 
 type ProfileDialogProps = {
   mode: "create" | "edit";
+  onCloseFocus?: () => void;
   onOpenChange: (open: boolean) => void;
   onSubmit: (profile: ReturnType<typeof prepareProfileForSave>) => Promise<void>;
   open: boolean;
@@ -47,13 +48,14 @@ type ProfileDialogProps = {
   saveError?: string | null;
 };
 
-export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile, saveError }: ProfileDialogProps) {
+export function ProfileDialog({ onCloseFocus, mode, onOpenChange, onSubmit, open, profile, saveError }: ProfileDialogProps) {
   const formKey = `${mode}:${profile?.profile.id ?? "new"}:${open ? "open" : "closed"}`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <ProfileDialogForm
         key={formKey}
+        onCloseFocus={onCloseFocus}
         mode={mode}
         onOpenChange={onOpenChange}
         onSubmit={onSubmit}
@@ -65,6 +67,7 @@ export function ProfileDialog({ mode, onOpenChange, onSubmit, open, profile, sav
 }
 
 function ProfileDialogForm({
+  onCloseFocus,
   mode,
   onOpenChange,
   onSubmit,
@@ -92,7 +95,11 @@ function ProfileDialogForm({
   });
 
   return (
-    <ScrollableDialogContent closeLabel={t("actions.close")} width="68rem">
+    <ScrollableDialogContent
+      closeLabel={t("actions.close")}
+      onCloseAutoFocus={onCloseFocus ? (event) => { event.preventDefault(); onCloseFocus(); } : undefined}
+      width="68rem"
+    >
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <Server className="size-4" aria-hidden="true" />

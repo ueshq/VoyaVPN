@@ -384,7 +384,15 @@
           "updated": "已更新 {{count}} 个。"
         }
       },
+      "importMethods": {
+        "text": "从文本导入",
+        "file": "从文件导入",
+        "qrImage": "扫描二维码图片",
+        "qrClipboard": "扫描剪贴板图片",
+        "qrScreen": "扫描屏幕二维码"
+      },
       "importDialog": {
+        "reading": "正在读取内容…",
         "description": "Import share links, subscription URLs, or JSON payloads.",
         "file": "File",
         "fileAria": "Import payload file",
@@ -403,7 +411,7 @@
         "moveDown": "下移",
         "moveTop": "移到顶部",
         "moveUp": "上移",
-        "speedtest": "测延迟"
+        "speedtest": "测速"
       },
       "panels": {
         "custom": "自定义配置",
@@ -437,8 +445,8 @@
       "title": "节点",
       "toolbar": {
         "add": "新增",
-        "bulkExport": "批量导出",
-        "bulkSpeedtest": "批量测延迟",
+        "bulkExport": "导出",
+        "bulkSpeedtest": "全节点测速",
         "delete": "删除",
         "edit": "编辑",
         "filterPlaceholder": "过滤备注或地址",

@@ -138,7 +138,7 @@
     "restarting": "Reconnecting active node",
     "restartingAfterChange": "{{reason}} — restarting the core",
     "runtimeStatusRefreshFailed": "{{reason}} failed and the core state could not be read",
-    "speedtestCancellationRequested": "Speedtest cancellation requested",
+    "speedtestCancellationRequested": "Ping cancellation requested",
     "subscriptionAutoUpdateFailed": "Automatic subscription update failed for {{remarks}}",
     "subscriptionAutoUpdateFinished": "Automatic subscription update finished for {{remarks}} ({{imported}} nodes imported)"
   },
@@ -384,7 +384,15 @@
           "updated": "{{count}} updated."
         }
       },
+      "importMethods": {
+        "text": "Import from text",
+        "file": "Import from file",
+        "qrImage": "Scan QR image",
+        "qrClipboard": "Scan clipboard image",
+        "qrScreen": "Scan screen"
+      },
       "importDialog": {
+        "reading": "Reading content…",
         "description": "Import share links, subscription URLs, or JSON payloads.",
         "file": "File",
         "fileAria": "Import payload file",
@@ -403,7 +411,7 @@
         "moveDown": "Move down",
         "moveTop": "Move to top",
         "moveUp": "Move up",
-        "speedtest": "Test latency"
+        "speedtest": "Ping"
       },
       "panels": {
         "custom": "Custom configuration",
@@ -431,14 +439,14 @@
         "wireGuard": "WireGuard proxy node"
       },
       "speedtest": {
-        "cancelTitle": "Cancel speedtest",
+        "cancelTitle": "Cancel ping",
         "stop": "Stop"
       },
       "title": "Nodes",
       "toolbar": {
         "add": "Add",
-        "bulkExport": "Bulk export",
-        "bulkSpeedtest": "Test all latencies",
+        "bulkExport": "Export",
+        "bulkSpeedtest": "Ping all",
         "delete": "Delete",
         "edit": "Edit",
         "filterPlaceholder": "Filter remarks or address",

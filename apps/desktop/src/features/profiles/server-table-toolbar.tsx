@@ -1,5 +1,6 @@
+import { useRef } from "react";
 import {
-  ClipboardPaste,
+  ChevronDown,
   FilePlus2,
   FileWarning,
   Rss,
@@ -18,10 +19,12 @@ import {
   Menubar,
   MenubarContent,
   MenubarMenu,
+  MenubarItem,
   MenubarTrigger,
 } from "@voya/ui/components/menubar";
 import { getErrorMessage } from "@voya/utils/error";
 
+import { IMPORT_METHODS } from "./import-methods";
 import { ExportMenuItems, SpeedtestButton } from "./server-table-menus";
 import type { ServerTableController } from "./use-server-table";
 
@@ -30,21 +33,28 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
     filterText,
     handleBulkExport,
     handleCancelSpeedtest,
-    handleImportFromClipboard,
     handleSpeedtest,
-    importingFromClipboard,
+    addTriggerRef,
+    importTriggerRef,
     operationError,
     operationMessage,
     profiles,
     profilesQuery,
     setDialogState,
     setFilterText,
-    setImportOpen,
+    setImportMethod,
     setSubscriptionsOpen,
     speedtestRunning,
     t,
     undecodableProfiles,
   } = controller;
+  const openingDialogRef = useRef(false);
+  function handleMenuClose(event: Event) {
+    if (openingDialogRef.current) {
+      event.preventDefault();
+      openingDialogRef.current = false;
+    }
+  }
   const batchActionsDisabled = profilesQuery.isLoading || (!filterText.trim() && profiles.length === 0);
 
   return (
@@ -71,10 +81,33 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
           </div>
           <Toolbar className="min-w-0 max-w-full justify-end">
             <ToolbarGroup className="min-w-0 flex-wrap justify-end gap-y-2">
-              <Button onClick={() => setDialogState({ mode: "create" })} size="sm" type="button">
-                <FilePlus2 className="size-4" aria-hidden="true" />
-                {t("panes.profiles.toolbar.add")}
-              </Button>
+              <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
+                <MenubarMenu>
+                  <MenubarTrigger asChild className="h-8">
+                    <Button ref={addTriggerRef} size="sm" type="button">
+                      <FilePlus2 className="size-4" aria-hidden="true" />
+                      {t("panes.profiles.toolbar.add")}
+                      <ChevronDown className="size-3" aria-hidden="true" />
+                    </Button>
+                  </MenubarTrigger>
+                  <MenubarContent onCloseAutoFocus={handleMenuClose}>
+                    <MenubarItem onSelect={() => {
+                      openingDialogRef.current = true;
+                      setDialogState({ mode: "create" });
+                    }}>
+                      <FilePlus2 aria-hidden="true" />
+                      {t("panes.profiles.dialog.addTitle")}
+                    </MenubarItem>
+                    <MenubarItem onSelect={() => {
+                      openingDialogRef.current = true;
+                      setSubscriptionsOpen(true);
+                    }}>
+                      <Rss aria-hidden="true" />
+                      {t("home.subscriptionCard.add")}
+                    </MenubarItem>
+                  </MenubarContent>
+                </MenubarMenu>
+              </Menubar>
               <SpeedtestButton
                 disabled={batchActionsDisabled}
                 label={t("panes.profiles.toolbar.bulkSpeedtest")}
@@ -103,24 +136,28 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
             </ToolbarGroup>
 
             <ToolbarGroup className="min-w-0 flex-wrap justify-end gap-y-2">
-              <Button
-                disabled={importingFromClipboard}
-                onClick={() => void handleImportFromClipboard()}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                <ClipboardPaste className="size-4" aria-hidden="true" />
-                {t("panes.profiles.import.clipboard")}
-              </Button>
-              <Button onClick={() => setImportOpen(true)} size="sm" type="button" variant="outline">
-                <Upload className="size-4" aria-hidden="true" />
-                {t("panes.profiles.toolbar.import")}
-              </Button>
-              <Button onClick={() => setSubscriptionsOpen(true)} size="sm" type="button" variant="outline">
-                <Rss className="size-4" aria-hidden="true" />
-                {t("panes.profiles.toolbar.subscriptions")}
-              </Button>
+              <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
+                <MenubarMenu>
+                  <MenubarTrigger asChild className="h-8">
+                    <Button ref={importTriggerRef} size="sm" type="button" variant="outline">
+                      <Upload className="size-4" aria-hidden="true" />
+                      {t("panes.profiles.toolbar.import")}
+                      <ChevronDown className="size-3" aria-hidden="true" />
+                    </Button>
+                  </MenubarTrigger>
+                  <MenubarContent onCloseAutoFocus={handleMenuClose}>
+                    {IMPORT_METHODS.map(({ method, icon: Icon, labelKey }) => (
+                      <MenubarItem key={method} onSelect={() => {
+                        openingDialogRef.current = true;
+                        setImportMethod(method);
+                      }}>
+                        <Icon aria-hidden="true" />
+                        {t(labelKey)}
+                      </MenubarItem>
+                    ))}
+                  </MenubarContent>
+                </MenubarMenu>
+              </Menubar>
             </ToolbarGroup>
           </Toolbar>
         </PageHeaderActions>

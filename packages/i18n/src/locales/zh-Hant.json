@@ -384,7 +384,15 @@
           "updated": "已更新 {{count}} 個。"
         }
       },
+      "importMethods": {
+        "text": "從文字匯入",
+        "file": "從檔案匯入",
+        "qrImage": "掃描 QR 碼圖片",
+        "qrClipboard": "掃描剪貼簿圖片",
+        "qrScreen": "掃描螢幕 QR 碼"
+      },
       "importDialog": {
+        "reading": "正在讀取內容…",
         "description": "Import share links, subscription URLs, or JSON payloads.",
         "file": "File",
         "fileAria": "Import payload file",
@@ -403,7 +411,7 @@
         "moveDown": "下移",
         "moveTop": "移至頂部",
         "moveUp": "上移",
-        "speedtest": "測延遲"
+        "speedtest": "測速"
       },
       "panels": {
         "custom": "自訂設定檔",
@@ -437,8 +445,8 @@
       "title": "節點",
       "toolbar": {
         "add": "新增",
-        "bulkExport": "批次匯出",
-        "bulkSpeedtest": "批次測延遲",
+        "bulkExport": "匯出",
+        "bulkSpeedtest": "全節點測速",
         "delete": "刪除",
         "edit": "編輯",
         "filterPlaceholder": "篩選備註或位址",

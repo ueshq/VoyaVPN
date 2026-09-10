@@ -141,9 +141,60 @@ test("commits settings input on Enter and flushes numeric input on imperative na
     .toMatchObject({ settings: { network: { tun: { mtu: 9000 } } } });
 });
 
+test("node menus defer actions until a method is chosen and restore keyboard focus", async ({ page }, testInfo) => {
+  await page.getByRole("tablist", { name: "Main sections" }).getByRole("tab", { name: "Nodes" }).click();
+  const add = page.getByRole("menuitem", { name: "Add", exact: true });
+  await add.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveCount(2);
+  await page.screenshot({ animations: "disabled", path: testInfo.outputPath("nodes-add-menu.png") });
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(add).toBeFocused();
+  await add.click();
+  await page.getByRole("menuitem", { name: "Add subscription", exact: true }).click();
+  const subscriptions = page.getByRole("dialog", { name: "Subscriptions" });
+  await subscriptions.getByLabel("Remarks", { exact: true }).fill("Unsaved source");
+  await page.keyboard.press("Escape");
+  await expect(add).toBeFocused();
+  await add.click();
+  await page.getByRole("menuitem", { name: "Add subscription", exact: true }).click();
+  await expect(subscriptions.getByLabel("Remarks", { exact: true })).toHaveValue("");
+  await page.keyboard.press("Escape");
+
+  const importTrigger = page.getByRole("menuitem", { name: "Import", exact: true });
+  for (const [method, action] of [
+    ["Import from clipboard", "Paste"],
+    ["Import from text", null],
+    ["Import from file", "File"],
+    ["Scan QR image", "Scan image"],
+    ["Scan clipboard image", "Clipboard image"],
+    ["Scan screen", "Screen"],
+  ] as const) {
+    await importTrigger.click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("menu").getByRole("menuitem")).toHaveCount(6);
+    if (method === "Import from text") await page.screenshot({ animations: "disabled", path: testInfo.outputPath("nodes-import-menu.png") });
+    await page.getByRole("menuitem", { name: method, exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Import Nodes" });
+    await expect(dialog).toBeVisible();
+    if (method === "Import from clipboard") await page.screenshot({ animations: "disabled", path: testInfo.outputPath("nodes-clipboard-dialog.png") });
+    await expect(dialog.getByRole("textbox", { name: "Import payload" })).toHaveValue("");
+    for (const name of ["Paste", "File", "Scan image", "Clipboard image", "Screen"]) {
+      await expect(dialog.getByRole("button", { name, exact: true })).toHaveCount(name === action ? 1 : 0);
+    }
+    await page.keyboard.press("Escape");
+    await expect(importTrigger).toBeFocused();
+  }
+  expect((await smokeCalls(page)).filter(({ command }) => ["import_profiles_from_text", "scan_screen_qr", "save_subscription"].includes(command))).toHaveLength(0);
+});
+
 test("adds and imports profiles, activates one, and connects through the fake runtime", async ({ page }) => {
   await page.getByRole("tablist", { name: "Main sections" }).getByRole("tab", { name: "Nodes" }).click();
-  await page.getByRole("button", { exact: true, name: "Add" }).click();
+  await page.getByRole("menuitem", { exact: true, name: "Add" }).click();
+  await page.getByRole("menuitem", { exact: true, name: "Add node" }).click();
   await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
   await page.getByRole("combobox", { name: "Protocol" }).click();
   await page.getByRole("option", { name: /VLESS/ }).click();
@@ -156,7 +207,8 @@ test("adds and imports profiles, activates one, and connects through the fake ru
   await expect(page.getByText("Smoke Manual VLESS")).toBeVisible();
   await expect(page.getByText("manual.example.test")).toBeVisible();
 
-  await page.getByRole("button", { exact: true, name: "Import" }).click();
+  await page.getByRole("menuitem", { exact: true, name: "Import" }).click();
+  await page.getByRole("menuitem", { exact: true, name: "Scan QR image" }).click();
   const importDialog = page.getByRole("dialog", { name: "Import Nodes" });
   await importDialog.getByLabel("Scan image").setInputFiles({
     buffer: Buffer.from(
@@ -407,7 +459,7 @@ test("routes the three IPC event channels into the shell", async ({ page }) => {
 
   // Invalidation: the profiles query refetches.
   await page.getByRole("tablist", { name: "Main sections" }).getByRole("tab", { name: "Nodes" }).click();
-  await expect(page.getByRole("button", { exact: true, name: "Add" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { exact: true, name: "Add" })).toBeVisible();
   const before = (await smokeCalls(page)).filter((call) => call.command === "list_profiles").length;
 
   await page.evaluate(() => {
