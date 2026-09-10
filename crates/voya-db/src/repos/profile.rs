@@ -219,7 +219,7 @@ fn decode_profile_rows(rows: &[SqliteRow]) -> Result<ProfileListing> {
                 tracing::warn!(
                     index_id = %row.try_get::<String, _>("index_id").unwrap_or_default(),
                     error = %error,
-                    "skipping a stored profile this build cannot decode"
+                    "skipping a stored node this build cannot decode"
                 );
             }
             Err(error) => return Err(error),
@@ -229,7 +229,7 @@ fn decode_profile_rows(rows: &[SqliteRow]) -> Result<ProfileListing> {
     if skipped_rows > 0 {
         tracing::warn!(
             skipped_rows,
-            "some profiles were hidden because their stored payload could not be decoded"
+            "some nodes were hidden because their stored payload could not be decoded"
         );
     }
 

@@ -32,7 +32,7 @@ describe("PageSection primitives", () => {
         actions={<button type="button">New</button>}
         count="12"
         data-testid="title"
-        title="Profiles"
+        title="Nodes"
       />,
     );
 
@@ -40,7 +40,7 @@ describe("PageSection primitives", () => {
     expect(title.dataset.slot).toBe("page-title");
     expect(title.className).toContain("px-6");
 
-    const heading = getByRole("heading", { level: 1, name: "Profiles" });
+    const heading = getByRole("heading", { level: 1, name: "Nodes" });
     expect(heading.className).toContain("text-2xl");
     expect(getByText("12")).toBeInTheDocument();
     // Actions park at the trailing edge via the logical ms-auto push.

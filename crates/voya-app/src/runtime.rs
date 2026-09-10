@@ -409,9 +409,9 @@ fn cleanup_config_file(paths: &AppPaths, file_name: &str) -> Result<(), RuntimeE
 
 #[derive(Debug, Error)]
 pub enum RuntimeError {
-    #[error("active profile id is empty")]
+    #[error("active node id is empty")]
     MissingActiveProfileId,
-    #[error("active profile {0} was not found")]
+    #[error("active node {0} was not found")]
     ActiveProfileNotFound(String),
     #[error("runtime validation failed: {errors:?}; warnings: {warnings:?}")]
     Validation {

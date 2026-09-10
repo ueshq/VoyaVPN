@@ -363,7 +363,7 @@ describe("App", () => {
     const tabNames = within(tablist)
       .getAllByRole("tab")
       .map((tab) => tab.textContent);
-    expect(tabNames).toEqual(["Home", "Proxies", "Profiles", "Settings", "Connections", "Rules"]);
+    expect(tabNames).toEqual(["Home", "Proxies", "Nodes", "Settings", "Connections", "Rules"]);
     expect(footer).toHaveTextContent("Disconnected");
     expect(footer).toHaveTextContent("Up 0 B/s");
     expect(footer).toHaveTextContent("Down 0 B/s");
@@ -423,7 +423,7 @@ describe("App", () => {
 
     await waitFor(() => expect(document.documentElement).toHaveAttribute("lang", "en"));
     expect(document.documentElement).toHaveAttribute("dir", "ltr");
-    expect(screen.getByRole("tab", { name: "Profiles" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Nodes" })).toBeInTheDocument();
   });
 
   it("hydrates the theme through the dedicated preferences query", async () => {
@@ -481,7 +481,7 @@ describe("App", () => {
       vi.mocked(runtimeStoreMock.getState().setProxyMonitorStarting).mock.invocationCallOrder[0]!,
     ).toBeLessThan(vi.mocked(proxyStartMonitor).mock.invocationCallOrder[0]!);
 
-    await activateTab(/Profiles/);
+    await activateTab(/Nodes/);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1_999);
     });
@@ -600,7 +600,7 @@ describe("App", () => {
     });
     expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe("running");
 
-    await activateTab(/Profiles/);
+    await activateTab(/Nodes/);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });

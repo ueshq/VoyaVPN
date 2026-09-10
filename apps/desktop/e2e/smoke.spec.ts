@@ -208,9 +208,9 @@ test("imports the default configuration template from the Settings sources card"
 });
 
 test("adds and imports profiles, activates one, and connects through the fake runtime", async ({ page }) => {
-  await page.getByRole("tab", { name: "Profiles" }).click();
+  await page.getByRole("tab", { name: "Nodes" }).click();
   await page.getByRole("button", { exact: true, name: "Add" }).click();
-  await expect(page.getByRole("dialog", { name: "Add profile" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
   await page.getByRole("combobox", { name: "Protocol" }).click();
   await page.getByRole("option", { name: /VLESS/ }).click();
   await page.getByLabel("Remarks").fill("Smoke Manual VLESS");
@@ -224,7 +224,7 @@ test("adds and imports profiles, activates one, and connects through the fake ru
 
   await page.getByRole("menuitem", { name: "More actions" }).click();
   await page.getByRole("menuitem", { exact: true, name: "Import" }).click();
-  const importDialog = page.getByRole("dialog", { name: "Import Profiles" });
+  const importDialog = page.getByRole("dialog", { name: "Import Nodes" });
   await importDialog.getByLabel("Scan image").setInputFiles({
     buffer: Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
@@ -326,7 +326,7 @@ test("edits routing and DNS settings without network or OS side effects", async 
   await expect(page.getByRole("heading", { exact: true, name: "Rules" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Default routing" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Profile" }).click();
+  await page.getByRole("button", { name: "Routing profile" }).click();
   await page.getByLabel("Remarks").fill("Smoke routing");
   await page.getByLabel("Source URL").fill("https://rules.example.test/smoke");
   await page.getByRole("button", { name: "Save" }).click();
@@ -405,7 +405,7 @@ test("routes the three IPC event channels into the shell", async ({ page }) => {
   await expect(coreStateBadge(page, "Connected")).toBeVisible();
 
   // Invalidation: the profiles query refetches.
-  await page.getByRole("tab", { name: "Profiles" }).click();
+  await page.getByRole("tab", { name: "Nodes" }).click();
   await expect(page.getByRole("button", { exact: true, name: "Add" })).toBeVisible();
   const before = (await smokeCalls(page)).filter((call) => call.command === "list_profiles").length;
 

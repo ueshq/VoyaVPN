@@ -61,7 +61,7 @@ describe("SubscriptionsDialog", () => {
 
     expect(await screen.findByText("No subscriptions")).toBeInTheDocument();
     expect(
-      screen.getByText("Add a subscription source to import profiles automatically."),
+      screen.getByText("Add a subscription source to import nodes automatically."),
     ).toBeInTheDocument();
   });
 
@@ -113,7 +113,7 @@ describe("SubscriptionsDialog", () => {
     await user.click(await screen.findByRole("button", { name: /Fixture sub/ }));
     await user.click(screen.getByRole("button", { name: "Update selected" }));
     await waitFor(() => expect(ipcMocks.updateSubscriptions).toHaveBeenCalledWith("sub-1", true, null));
-    expect(await screen.findByText("1 updated, 4 profiles imported")).toBeInTheDocument();
+    expect(await screen.findByText("1 updated, 4 nodes imported")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Update all" }));
     await waitFor(() => expect(ipcMocks.updateSubscriptions).toHaveBeenLastCalledWith(null, true, null));
@@ -204,7 +204,7 @@ describe("SubscriptionsDialog", () => {
     expect(alert).toHaveTextContent("request failed");
     expect(alert).not.toHaveTextContent("secret");
     expect(alert).not.toHaveTextContent("private");
-    expect(screen.queryByText("0 updated, 0 profiles imported")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 updated, 0 nodes imported")).not.toBeInTheDocument();
   });
 
   it("keeps per-source reasons visible next to a partial success", async () => {
@@ -212,7 +212,7 @@ describe("SubscriptionsDialog", () => {
     ipcMocks.listSubscriptions.mockResolvedValue([makeSubscription()]);
     ipcMocks.updateSubscriptions.mockResolvedValue({
       imported: 4,
-      messages: ["Backup->no importable profiles were found"],
+      messages: ["Backup->no importable nodes were found"],
       removedExisting: 0,
       skipped: 1,
       updated: 1,
@@ -223,8 +223,8 @@ describe("SubscriptionsDialog", () => {
     await user.click(screen.getByRole("button", { name: "Update all" }));
 
     const status = await screen.findByRole("status");
-    expect(status).toHaveTextContent("1 updated, 4 profiles imported");
-    expect(status).toHaveTextContent("no importable profiles were found");
+    expect(status).toHaveTextContent("1 updated, 4 nodes imported");
+    expect(status).toHaveTextContent("no importable nodes were found");
   });
 
   it("clears the editor, reports redacted failures, and closes explicitly", async () => {

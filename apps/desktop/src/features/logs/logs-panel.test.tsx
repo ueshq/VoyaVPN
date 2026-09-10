@@ -149,7 +149,7 @@ describe("LogsPanel", () => {
     expect(screen.getByText("voyavpn::runtime: spawn failed")).toBeInTheDocument();
     // App-authored lines resolve their code, interpolate their reason, and
     // append the untranslated detail.
-    expect(screen.getByText("Connecting active profile")).toBeInTheDocument();
+    expect(screen.getByText("Connecting active node")).toBeInTheDocument();
     expect(screen.getByText("Routing change — restarting the core")).toBeInTheDocument();
     expect(
       screen.getByText("The core stopped and will not be restarted: exit code 1"),

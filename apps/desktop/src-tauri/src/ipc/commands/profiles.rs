@@ -15,7 +15,7 @@ pub async fn list_profiles(
     )?;
     validate_optional_ipc_text(
         filter.as_deref(),
-        "profile filter",
+        "node filter",
         IPC_FILTER_MAX_CHARS,
         AppErrorSubsystem::Profile,
     )?;
@@ -57,7 +57,7 @@ pub async fn delete_profiles<R: tauri::Runtime>(
 ) -> Result<u32, AppError> {
     validate_ipc_text_list(
         &index_ids,
-        "profile index id",
+        "node id",
         IPC_ID_MAX_CHARS,
         AppErrorSubsystem::Profile,
     )?;
@@ -81,7 +81,7 @@ pub async fn copy_profiles<R: tauri::Runtime>(
 ) -> Result<Vec<ProfileListEntry>, AppError> {
     validate_ipc_text_list(
         &index_ids,
-        "profile index id",
+        "node id",
         IPC_ID_MAX_CHARS,
         AppErrorSubsystem::Profile,
     )?;
@@ -145,7 +145,7 @@ pub async fn set_active_profile<R: tauri::Runtime>(
 ) -> Result<ProfileListEntry, AppError> {
     validate_required_ipc_text(
         &index_id,
-        "profile index id",
+        "node id",
         IPC_ID_MAX_CHARS,
         AppErrorSubsystem::Profile,
     )?;
@@ -180,7 +180,7 @@ pub async fn move_profile<R: tauri::Runtime>(
     )?;
     validate_required_ipc_text(
         &index_id,
-        "profile index id",
+        "node id",
         IPC_ID_MAX_CHARS,
         AppErrorSubsystem::Profile,
     )?;

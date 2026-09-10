@@ -18,7 +18,7 @@ pub enum GroupManagerError {
     Database(#[from] DbError),
     #[error(transparent)]
     Profile(#[from] ProfileManagerError),
-    #[error("profile is not a policy group or proxy chain")]
+    #[error("node is not a policy group or proxy chain")]
     NotGroupProfile,
     #[error("group validation failed: {0:?}")]
     Validation(Vec<ValidationMessage>),

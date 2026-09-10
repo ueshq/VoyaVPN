@@ -284,9 +284,9 @@ impl CoreConfigContextBuilderAllResult {
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ContextBuildError {
-    #[error("active profile id is empty")]
+    #[error("active node id is empty")]
     MissingActiveProfileId,
-    #[error("active profile {0} was not found")]
+    #[error("active node {0} was not found")]
     ActiveProfileNotFound(String),
 }
 

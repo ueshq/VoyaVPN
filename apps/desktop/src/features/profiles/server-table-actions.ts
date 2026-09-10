@@ -53,7 +53,7 @@ export function exportFileName(kind: ProfileExportKind) {
     case "clientConfig":
       return "voyavpn-client-config.json";
     case "voyaBundle":
-      return "voyavpn-profile-bundle.voya";
+      return "voyavpn-node-bundle.voya";
     case "shareBase64":
       return "voyavpn-share-links-base64.txt";
     case "shareLinks":
@@ -61,11 +61,11 @@ export function exportFileName(kind: ProfileExportKind) {
   }
 }
 
-export function exportFileFilter(kind: ProfileExportKind) {
+export function exportFileFilter(kind: ProfileExportKind, t: TranslateFn) {
   return kind === "clientConfig"
     ? { extensions: ["json"], name: "JSON" }
     : kind === "voyaBundle"
-      ? { extensions: ["voya"], name: "Voya profile bundle" }
+      ? { extensions: ["voya"], name: t("panes.profiles.export.voyaBundle") }
       : { extensions: ["txt"], name: "Text" };
 }
 

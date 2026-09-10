@@ -49,7 +49,7 @@ describe("subscriptionUpdateMessages", () => {
       result({
         messages: [
           "Airport->request failed https://user:secret@example.test/sub?token=private",
-          "Backup->no importable profiles were found",
+          "Backup->no importable nodes were found",
         ],
       }),
     );

@@ -146,7 +146,7 @@ describe("SubscriptionCard", () => {
     });
     await waitFor(() =>
       expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
-        description: "1 updated, 3 profiles imported",
+        description: "1 updated, 3 nodes imported",
         severity: "info",
         title: "Subscription updated",
       }),

@@ -48,7 +48,7 @@ pub(super) async fn export_profiles_result(
 ) -> Result<ExportProfilesResult, AppError> {
     validate_ipc_text_list(
         &index_ids,
-        "profile index id",
+        "node id",
         IPC_ID_MAX_CHARS,
         AppErrorSubsystem::Export,
     )?;

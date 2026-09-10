@@ -154,7 +154,7 @@ describe("GroupBuilder child ordering", () => {
     await user.click(screen.getByRole("button", { name: "Remove child" }));
 
     expect(childIds()).toBe("");
-    expect(screen.getByText("No child profiles selected")).toBeInTheDocument();
+    expect(screen.getByText("No member nodes selected")).toBeInTheDocument();
   });
 });
 
@@ -207,7 +207,7 @@ describe("GroupBuilder preview", () => {
       await screen.findByText("The group refers back to itself: root → leaf-a → root"),
     ).toBeInTheDocument();
     expect(screen.getByText("Validation warnings")).toBeInTheDocument();
-    expect(screen.getByText("Member profile leaf-c was not found")).toBeInTheDocument();
+    expect(screen.getByText("Member node leaf-c was not found")).toBeInTheDocument();
     expect(screen.getByText("No generated routes")).toBeInTheDocument();
   });
 
@@ -245,7 +245,7 @@ describe("GroupBuilder child picker", () => {
     expect(await screen.findByText("Leaf A")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Choose children" }));
 
-    const picker = await screen.findByRole("dialog", { name: "Select child profiles" });
+    const picker = await screen.findByRole("dialog", { name: "Select member nodes" });
     await user.click(within(picker).getByRole("checkbox", { name: /Leaf B/ }));
     await user.click(within(picker).getByRole("button", { name: "Cancel" }));
 
@@ -254,7 +254,7 @@ describe("GroupBuilder child picker", () => {
 
     // Reopening starts from the committed selection, not from the discarded draft.
     await user.click(screen.getByRole("button", { name: "Choose children" }));
-    const reopened = await screen.findByRole("dialog", { name: "Select child profiles" });
+    const reopened = await screen.findByRole("dialog", { name: "Select member nodes" });
     expect(within(reopened).getByRole("checkbox", { name: /Leaf B/ })).not.toBeChecked();
     expect(within(reopened).getByRole("checkbox", { name: /Leaf A/ })).toBeChecked();
   });
@@ -266,7 +266,7 @@ describe("GroupBuilder child picker", () => {
     expect(await screen.findByText("Leaf A")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Choose children" }));
 
-    const picker = await screen.findByRole("dialog", { name: "Select child profiles" });
+    const picker = await screen.findByRole("dialog", { name: "Select member nodes" });
     const blocked = within(picker).getByRole("checkbox", { name: /Leaf D/ });
     expect(blocked).toBeDisabled();
 

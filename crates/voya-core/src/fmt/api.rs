@@ -44,7 +44,7 @@ pub enum ShareError {
     },
     #[error("invalid full custom config")]
     InvalidFullConfig,
-    #[error("invalid Voya profile bundle: {reason}")]
+    #[error("invalid Voya node bundle: {reason}")]
     InvalidVoyaBundle { reason: String },
 }
 

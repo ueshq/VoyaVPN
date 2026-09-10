@@ -48,7 +48,7 @@ pub enum SubscriptionManagerError {
     InvalidSubscriptionUrl,
     #[error("subscription filter is invalid: {0}")]
     InvalidFilter(String),
-    #[error("no importable profiles were found")]
+    #[error("no importable nodes were found")]
     NoImportableProfiles,
 }
 
@@ -433,7 +433,7 @@ impl<'db> SubscriptionManager<'db> {
                         .removed_existing
                         .saturating_add(import.removed_existing);
                     result.messages.push(format!(
-                        "{}->imported {} profiles",
+                        "{}->imported {} nodes",
                         prepared_import.item.remarks, import.imported
                     ));
                 }
@@ -441,7 +441,7 @@ impl<'db> SubscriptionManager<'db> {
                     persist_subscription_metadata(self.database, &prepared_import, false).await?;
                     result.skipped = result.skipped.saturating_add(1);
                     result.messages.push(format!(
-                        "{}->no profiles were imported",
+                        "{}->no nodes were imported",
                         prepared_import.item.remarks
                     ));
                 }
@@ -449,7 +449,7 @@ impl<'db> SubscriptionManager<'db> {
                     persist_subscription_metadata(self.database, &prepared_import, false).await?;
                     result.skipped = result.skipped.saturating_add(1);
                     result.messages.push(format!(
-                        "{}->no importable profiles were found",
+                        "{}->no importable nodes were found",
                         prepared_import.item.remarks
                     ));
                 }
@@ -504,7 +504,7 @@ impl<'db> SubscriptionManager<'db> {
                     self.add_subscription_from_url(line).await?;
                     added_subscription = true;
                     messages.push(format!(
-                        "Line {} added as a subscription source; run subscription update to import its profiles.",
+                        "Line {} added as a subscription source; run subscription update to import its nodes.",
                         line_index + 1
                     ));
                     continue;
@@ -919,7 +919,7 @@ mod tests {
             result
                 .messages
                 .iter()
-                .any(|message| message == "Mirrored->imported 1 profiles"),
+                .any(|message| message == "Mirrored->imported 1 nodes"),
             "{:?}",
             result.messages
         );
@@ -1327,7 +1327,7 @@ mod tests {
             result
                 .messages
                 .iter()
-                .any(|message| message.contains("Junk->no importable profiles were found")),
+                .any(|message| message.contains("Junk->no importable nodes were found")),
             "{:?}",
             result.messages
         );
@@ -1335,7 +1335,7 @@ mod tests {
             result
                 .messages
                 .iter()
-                .any(|message| message.contains("Filtered->no profiles were imported")),
+                .any(|message| message.contains("Filtered->no nodes were imported")),
             "{:?}",
             result.messages
         );
@@ -1343,7 +1343,7 @@ mod tests {
             result
                 .messages
                 .iter()
-                .any(|message| message.contains("URL Only->no importable profiles were found")),
+                .any(|message| message.contains("URL Only->no importable nodes were found")),
             "{:?}",
             result.messages
         );

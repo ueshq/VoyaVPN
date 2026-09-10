@@ -258,7 +258,7 @@ pub fn export_voya_profile_bundle(items: &[ProfileItem]) -> Result<String, Share
         .filter(|item| item.config_type() != ConfigType::Custom)
         .collect::<Vec<_>>();
     if exportable.is_empty() {
-        return Err(invalid_voya_bundle("no exportable profiles"));
+        return Err(invalid_voya_bundle("no exportable nodes"));
     }
 
     let references = exportable
@@ -271,7 +271,7 @@ pub fn export_voya_profile_bundle(items: &[ProfileItem]) -> Result<String, Share
         let reference = references
             .get(item.index_id.as_str())
             .cloned()
-            .ok_or_else(|| invalid_voya_bundle("profile id is required"))?;
+            .ok_or_else(|| invalid_voya_bundle("node id is required"))?;
         let child_refs = item
             .protocol
             .child_profile_ids()
@@ -356,7 +356,7 @@ pub fn parse_voya_profile_bundle(
         let index_id = id_map
             .get(entry.reference())
             .cloned()
-            .ok_or_else(|| invalid_voya_bundle("profile reference was not resolved"))?;
+            .ok_or_else(|| invalid_voya_bundle("node reference was not resolved"))?;
         let mut profile = match entry {
             VoyaBundleProfile::Node { share_uri, .. } => parse_share_link(&share_uri)?,
             VoyaBundleProfile::PolicyGroup {
@@ -447,17 +447,17 @@ fn custom_import(
 
 fn validate_voya_bundle(profiles: &[VoyaBundleProfile]) -> Result<(), ShareError> {
     if profiles.is_empty() {
-        return Err(invalid_voya_bundle("bundle contains no profiles"));
+        return Err(invalid_voya_bundle("bundle contains no nodes"));
     }
     let mut references = BTreeSet::new();
     for profile in profiles {
         let reference = profile.reference().trim();
         if reference.is_empty() {
-            return Err(invalid_voya_bundle("profile reference is required"));
+            return Err(invalid_voya_bundle("node reference is required"));
         }
         if !references.insert(reference) {
             return Err(invalid_voya_bundle(format!(
-                "duplicate profile reference {reference}"
+                "duplicate node reference {reference}"
             )));
         }
     }
@@ -499,12 +499,12 @@ fn validate_voya_bundle_branch<'a>(
     }
     if !visiting.insert(reference) {
         return Err(invalid_voya_bundle(format!(
-            "profile reference cycle includes {reference}"
+            "node reference cycle includes {reference}"
         )));
     }
     let profile = profiles
         .get(reference)
-        .ok_or_else(|| invalid_voya_bundle(format!("unresolved profile {reference}")))?;
+        .ok_or_else(|| invalid_voya_bundle(format!("unresolved node {reference}")))?;
     for child in profile.child_refs() {
         validate_voya_bundle_branch(child, profiles, visiting, visited)?;
     }

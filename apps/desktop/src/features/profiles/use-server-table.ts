@@ -305,7 +305,7 @@ export function useServerTable() {
     if (saveFile) {
       const path = await saveTextFile({
         defaultPath: exportFileName(kind),
-        filters: [exportFileFilter(kind)],
+        filters: [exportFileFilter(kind, t)],
         text: result.text,
       });
       if (path) {

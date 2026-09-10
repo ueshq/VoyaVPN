@@ -465,7 +465,7 @@ char *voya_macos_packet_tunnel_start(const char *config_path, const char *profil
             return VoyaCopyCString(@"error:config path is not valid UTF-8");
         }
         if (profile_id != NULL && profileId == nil) {
-            return VoyaCopyCString(@"error:profile id is not valid UTF-8");
+            return VoyaCopyCString(@"error:node id is not valid UTF-8");
         }
 
         NSError *error = nil;

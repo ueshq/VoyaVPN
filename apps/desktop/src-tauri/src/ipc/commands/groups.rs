@@ -9,7 +9,7 @@ pub async fn list_group_child_candidates(
 ) -> Result<Vec<GroupChildContract>, AppError> {
     validate_present_ipc_text(
         current_index_id.as_deref(),
-        "profile index id",
+        "node id",
         IPC_ID_MAX_CHARS,
         AppErrorSubsystem::Group,
     )?;

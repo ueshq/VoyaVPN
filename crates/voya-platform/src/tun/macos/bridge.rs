@@ -55,7 +55,7 @@ mod macos_packet_tunnel_bridge {
     ) -> Result<String, NativeTunError> {
         let config_path = c_string(config_path, "main config path")?;
         let profile_id = match profile_id {
-            Some(profile_id) => Some(c_string(profile_id, "active profile id")?),
+            Some(profile_id) => Some(c_string(profile_id, "active node id")?),
             None => None,
         };
         bridge_string("start macOS PacketTunnel", || {

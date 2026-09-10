@@ -320,7 +320,7 @@ describe("ProfilesScreen", () => {
     const menu = await openRowContextMenu(1);
     await userEvent.click(within(menu).getByRole("menuitem", { name: "Edit" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "Edit profile" });
+    const dialog = await screen.findByRole("dialog", { name: "Edit node" });
     expect(within(dialog).getByLabelText("Remarks")).toHaveValue("Server 1");
   });
 
@@ -421,9 +421,9 @@ describe("ProfilesScreen", () => {
 
     renderProfiles();
 
-    expect(await screen.findByText("No profiles")).toBeInTheDocument();
+    expect(await screen.findByText("No nodes")).toBeInTheDocument();
     expect(
-      screen.getByText("Add a profile or import one from a subscription to get started."),
+      screen.getByText("Add a node or import one from a subscription to get started."),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("server-row")).not.toBeInTheDocument();
   });
@@ -529,7 +529,7 @@ describe("ProfilesScreen", () => {
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "3 stored profile(s) could not be read by this version and are hidden. They were most likely written by a newer build; updating VoyaVPN should show them again.",
+        "3 stored node(s) could not be read by this version and are hidden. They were most likely written by a newer build; updating VoyaVPN should show them again.",
       ),
     ).toBeInTheDocument();
   });
@@ -607,7 +607,7 @@ describe("ProfilesScreen", () => {
     const rows = screen.getAllByTestId("server-row");
     expect(rows[0]).toHaveAttribute("aria-selected", "true");
     expect(rows[1]).toHaveAttribute("aria-selected", "false");
-    expect(screen.getByText("Imported 2 profile(s).")).toBeInTheDocument();
+    expect(screen.getByText("Imported 2 node(s).")).toBeInTheDocument();
   });
 
   it("refreshes and selects a profile imported from a scanned screen QR code", async () => {
@@ -641,7 +641,7 @@ describe("ProfilesScreen", () => {
 
     expect(await screen.findByText("Scanned node")).toBeInTheDocument();
     expect(screen.getByTestId("server-row")).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("Imported 1 profile(s).")).toBeInTheDocument();
+    expect(screen.getByText("Imported 1 node(s).")).toBeInTheDocument();
   });
 
   it("imports profiles directly from clipboard text", async () => {
@@ -669,7 +669,7 @@ describe("ProfilesScreen", () => {
 
     renderProfiles();
 
-    const filterInput = await screen.findByRole("searchbox", { name: "Filter profiles" });
+    const filterInput = await screen.findByRole("searchbox", { name: "Filter nodes" });
     fireEvent.change(filterInput, { target: { value: "hidden" } });
 
     await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
@@ -683,7 +683,7 @@ describe("ProfilesScreen", () => {
     expect(filterInput).toHaveValue("");
     expect(screen.getByTestId("server-row")).toHaveAttribute("aria-selected", "true");
     expect(
-      screen.getByText("Imported 1 profile(s). 1 updated. 2 duplicate(s) removed."),
+      screen.getByText("Imported 1 node(s). 1 updated. 2 duplicate(s) removed."),
     ).toBeInTheDocument();
   });
 
@@ -723,7 +723,7 @@ describe("ProfilesScreen", () => {
     renderProfiles();
 
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("searchbox", { name: "Filter profiles" }), {
+    fireEvent.change(screen.getByRole("searchbox", { name: "Filter nodes" }), {
       target: { value: "Server 1" },
     });
     await waitFor(() => expect(ipcMocks.listProfiles).toHaveBeenCalledWith(null, "Server 1"));
@@ -863,7 +863,7 @@ describe("ProfilesScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: /Save/ }));
 
     await waitFor(() => expect(ipcMocks.saveProfile).toHaveBeenCalled());
-    const dialog = await screen.findByRole("dialog", { name: "Add profile" });
+    const dialog = await screen.findByRole("dialog", { name: "Add node" });
     expect(await within(dialog).findByText("profile address is already used")).toBeInTheDocument();
     // The form remounts whenever the dialog toggles, so staying open is what
     // preserves the values the user already typed.
@@ -974,7 +974,7 @@ describe("ProfilesScreen", () => {
     const menu = await openRowContextMenu();
     await userEvent.click(within(menu).getByRole("menuitem", { name: "Edit" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "Edit profile" });
+    const dialog = await screen.findByRole("dialog", { name: "Edit node" });
     expect(within(dialog).getByLabelText("Host")).toHaveValue("cdn.example.test");
     expect(within(dialog).getByLabelText("Path")).toHaveValue("/obfs");
     fireEvent.change(within(dialog).getByLabelText("Remarks"), { target: { value: "Renamed node" } });
@@ -999,7 +999,7 @@ describe("ProfilesScreen", () => {
       renderProfiles();
 
       fireEvent.click(await screen.findByRole("button", { name: "新增" }));
-      const dialog = await screen.findByRole("dialog", { name: "新增配置" });
+      const dialog = await screen.findByRole("dialog", { name: "新增节点" });
       const remarks = within(dialog).getByLabelText("备注");
       const address = within(dialog).getByLabelText("地址");
 
@@ -1041,7 +1041,7 @@ describe("ProfilesScreen", () => {
       await userEvent.click(await screen.findByRole("menuitem", { name: "从剪贴板导入" }));
 
       expect(
-        await screen.findByText("已导入 3 个配置。 已跳过 1 个。 2 个解析失败。"),
+        await screen.findByText("已导入 3 个节点。 已跳过 1 个。 2 个解析失败。"),
       ).toBeInTheDocument();
     });
   });
@@ -1081,7 +1081,7 @@ describe("ProfilesScreen", () => {
     expect(within(exportMenu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
       "Share links",
       "Share links (Base64)",
-      "Voya profile bundle",
+      "Voya node bundle",
       "Client config",
       "Show QR",
       "Save share links",
@@ -1126,7 +1126,7 @@ describe("ProfilesScreen", () => {
 
     await waitFor(() => expect(ipcMocks.dedupeProfiles).toHaveBeenCalledWith(null, null));
     expect(
-      await screen.findByText("Removed 1 duplicate profile(s); kept 2 of 3."),
+      await screen.findByText("Removed 1 duplicate node(s); kept 2 of 3."),
     ).toBeInTheDocument();
   });
 
@@ -1157,7 +1157,7 @@ describe("ProfilesScreen", () => {
       expect(ipcMocks.exportProfileShareLinks).toHaveBeenCalledWith(["profile-0", "profile-1"]),
     );
     expect(
-      await screen.findByText("Skipped 1 profile(s) without a share link."),
+      await screen.findByText("Skipped 1 node(s) without a share link."),
     ).toBeInTheDocument();
   });
 

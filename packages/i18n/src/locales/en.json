@@ -26,11 +26,11 @@
   "confirm": {
     "cancel": "Cancel",
     "dedupeProfilesConfirm": "Remove duplicates",
-    "dedupeProfilesDescription": "Duplicate profiles across every subscription will be permanently deleted. This action cannot be undone.",
-    "dedupeProfilesTitle": "Remove duplicate profiles?",
+    "dedupeProfilesDescription": "Duplicate nodes across every subscription will be permanently deleted. This action cannot be undone.",
+    "dedupeProfilesTitle": "Remove duplicate nodes?",
     "deleteProfilesConfirm": "Delete",
-    "deleteProfilesDescription": "{{count}} selected profile(s) will be permanently deleted. This action cannot be undone.",
-    "deleteProfilesTitle": "Delete profiles?",
+    "deleteProfilesDescription": "{{count}} selected node(s) will be permanently deleted. This action cannot be undone.",
+    "deleteProfilesTitle": "Delete nodes?",
     "deleteRoutingConfirm": "Delete",
     "deleteRoutingDescription": "“{{name}}” and its {{count}} rule(s) will be permanently deleted. This action cannot be undone.",
     "deleteRoutingRuleConfirm": "Delete",
@@ -38,7 +38,7 @@
     "deleteRoutingRuleTitle": "Delete rule?",
     "deleteRoutingTitle": "Delete routing profile?",
     "deleteSubscriptionConfirm": "Delete",
-    "deleteSubscriptionDescription": "“{{name}}” and every profile imported from it will be permanently deleted. This action cannot be undone.",
+    "deleteSubscriptionDescription": "“{{name}}” and every node imported from it will be permanently deleted. This action cannot be undone.",
     "deleteSubscriptionTitle": "Delete subscription?"
   },
   "coreFlowReason": {
@@ -69,7 +69,7 @@
       "expired": "Expired",
       "lastUpdated": "Updated {{time}}",
       "none": "No subscription",
-      "noneHint": "Add a subscription to import servers",
+      "noneHint": "Add a subscription to import nodes",
       "remainingDays": "{{days}} days left",
       "remainingTraffic": "{{amount}} left",
       "update": "Update subscription",
@@ -128,7 +128,7 @@
   },
   "logCodes": {
     "connected": "Core supervisor started",
-    "connecting": "Connecting active profile",
+    "connecting": "Connecting active node",
     "coreExitGaveUp": "The core stopped and will not be restarted",
     "coreExitRestarted": "The core exited and was restarted (attempt {{attempt}})",
     "coreExitRetryScheduled": "The core exited; retrying in {{delayMs}} ms (attempt {{attempt}})",
@@ -140,12 +140,12 @@
     "previousCoreStillRunning": "{{reason}} failed; the previous core is still running",
     "restarted": "Core supervisor restarted",
     "restartedAfterChange": "{{reason}} — core restarted",
-    "restarting": "Restarting active profile",
+    "restarting": "Reconnecting active node",
     "restartingAfterChange": "{{reason}} — restarting the core",
     "runtimeStatusRefreshFailed": "{{reason}} failed and the core state could not be read",
     "speedtestCancellationRequested": "Speedtest cancellation requested",
     "subscriptionAutoUpdateFailed": "Automatic subscription update failed for {{remarks}}",
-    "subscriptionAutoUpdateFinished": "Automatic subscription update finished for {{remarks}} ({{imported}} profiles imported)"
+    "subscriptionAutoUpdateFinished": "Automatic subscription update finished for {{remarks}} ({{imported}} nodes imported)"
   },
   "menu": {
     "themeDark": "Dark",
@@ -173,7 +173,7 @@
     "dnsRefreshFailed": "DNS refresh failed",
     "dnsSavedRestartFailed": "DNS saved; core restart failed",
     "nativeTunStopped": "Native TUN stopped",
-    "profileRefreshFailed": "Profile refresh failed",
+    "profileRefreshFailed": "Node list refresh failed",
     "proxyModeSavedRuntimeUpdateFailed": "Proxy mode saved; runtime update failed",
     "proxyViewRefreshFailed": "Proxy view refresh failed",
     "routingDeletedRestartFailed": "Routing deleted; core restart failed",
@@ -267,9 +267,9 @@
       "applyChildren": "Apply",
       "chainMarker": "Chain",
       "chooseChildren": "Choose children",
-      "chooseDescription": "Choose servers, policy groups, or proxy chains for the current group.",
+      "chooseDescription": "Choose nodes, policy groups, or proxy chains for the current group.",
       "draftName": "Draft group",
-      "filterChildren": "Filter child profiles",
+      "filterChildren": "Filter member nodes",
       "groupFallback": "Group",
       "groupMarker": "Group",
       "loadFallback": "Fallback",
@@ -278,13 +278,13 @@
       "loadMode": "Load mode",
       "loadRandom": "Random",
       "loadRoundRobin": "Round robin",
-      "loadingChildren": "Loading profiles",
+      "loadingChildren": "Loading nodes",
       "moveChildDown": "Move child down",
       "moveChildUp": "Move child up",
       "nested": "Nested",
-      "noChildren": "No child profiles selected",
+      "noChildren": "No member nodes selected",
       "noGeneratedRoutes": "No generated routes",
-      "noMatches": "No matching profiles",
+      "noMatches": "No matching nodes",
       "preview": "Preview",
       "previewGenerated": "Preview generated from validated children",
       "previewRoutesTitle": "Generated routes",
@@ -293,7 +293,7 @@
       "routeDialerProxy": "Dialer proxy",
       "routeDownloadDialerProxy": "Download dialer proxy",
       "routeOutbounds": "Outbounds",
-      "selectChildren": "Select child profiles",
+      "selectChildren": "Select member nodes",
       "selectedChildren": "Selected children",
       "subscriptionChildGroup": "Subscription child group",
       "subscriptionFilter": "Subscription filter",
@@ -311,8 +311,8 @@
     },
     "profiles": {
       "aria": {
-        "activeProfile": "Active profile",
-        "filter": "Filter profiles"
+        "activeProfile": "Active node",
+        "filter": "Filter nodes"
       },
       "certFetch": {
         "allowInsecure": "Allow insecure fetch",
@@ -347,32 +347,32 @@
         "toggle": "Columns"
       },
       "dedupe": {
-        "removed": "Removed {{removed}} duplicate profile(s); kept {{kept}} of {{total}}."
+        "removed": "Removed {{removed}} duplicate node(s); kept {{kept}} of {{total}}."
       },
       "dialog": {
-        "addTitle": "Add profile",
+        "addTitle": "Add node",
         "cancel": "Cancel",
-        "description": "Create or edit a persisted proxy profile using the generated profile IPC contract.",
-        "editTitle": "Edit profile",
+        "description": "Add or edit a node and save its connection settings.",
+        "editTitle": "Edit node",
         "save": "Save"
       },
-      "empty": "No profiles",
-      "emptyDescription": "Add a profile or import one from a subscription to get started.",
+      "empty": "No nodes",
+      "emptyDescription": "Add a node or import one from a subscription to get started.",
       "export": {
         "clientConfig": "Client config",
         "clipboardUnavailable": "Clipboard write is unavailable in this context.",
-        "copied": "Copied {{count}} exported profile(s) to clipboard.",
+        "copied": "Copied export data for {{count}} node(s) to clipboard.",
         "export": "Export",
-        "noProfiles": "There are no profiles to export.",
-        "noSelection": "Select at least one profile to export.",
+        "noProfiles": "There are no nodes to export.",
+        "noSelection": "Select at least one node to export.",
         "saveClientConfig": "Save client config",
         "saveShareLinks": "Save share links",
         "savedFile": "Saved export to {{path}}.",
         "shareBase64": "Share links (Base64)",
         "shareLinks": "Share links",
         "showQr": "Show QR",
-        "skippedUnsupported": "Skipped {{count}} profile(s) without a share link.",
-        "voyaBundle": "Voya profile bundle"
+        "skippedUnsupported": "Skipped {{count}} node(s) without a share link.",
+        "voyaBundle": "Voya node bundle"
       },
       "fields": {
         "address": "Address",
@@ -440,7 +440,7 @@
           "deduped": "{{count}} duplicate(s) skipped from payload.",
           "failed": "{{count}} failed to parse.",
           "filtered": "{{count}} filtered.",
-          "imported": "Imported {{count}} profile(s).",
+          "imported": "Imported {{count}} node(s).",
           "removedDuplicates": "{{count}} duplicate(s) removed.",
           "skipped": "{{count}} skipped.",
           "target": "Target: {{target}}.",
@@ -457,7 +457,7 @@
         "payload": "Import payload",
         "subscriptionTarget": "Subscription target",
         "target": "Target",
-        "title": "Import Profiles"
+        "title": "Import Nodes"
       },
       "menu": {
         "actionsFor": "Actions for {{name}}",
@@ -469,29 +469,29 @@
         "speedtest": "Speedtest"
       },
       "panels": {
-        "custom": "Custom profile",
+        "custom": "Custom configuration",
         "policyGroup": "Policy group",
-        "profile": "Profile",
+        "profile": "Node",
         "protocol": "Protocol",
         "proxyChain": "Proxy chain",
         "security": "Security",
         "transport": "Transport"
       },
       "protocolDescriptions": {
-        "anytls": "AnyTLS proxy profile",
+        "anytls": "AnyTLS proxy node",
         "custom": "Custom sing-box configuration",
-        "http": "HTTP proxy profile",
-        "hysteria2": "Hysteria2 proxy profile",
-        "naive": "Naive proxy profile",
+        "http": "HTTP proxy node",
+        "hysteria2": "Hysteria2 proxy node",
+        "naive": "Naive proxy node",
         "policyGroup": "Policy group",
         "proxyChain": "Proxy chain",
-        "shadowsocks": "Shadowsocks proxy profile",
-        "socks": "SOCKS proxy profile",
-        "trojan": "Trojan proxy profile",
-        "tuic": "TUIC proxy profile",
-        "vless": "VLESS proxy profile",
-        "vmess": "VMess proxy profile",
-        "wireGuard": "WireGuard proxy profile"
+        "shadowsocks": "Shadowsocks proxy node",
+        "socks": "SOCKS proxy node",
+        "trojan": "Trojan proxy node",
+        "tuic": "TUIC proxy node",
+        "vless": "VLESS proxy node",
+        "vmess": "VMess proxy node",
+        "wireGuard": "WireGuard proxy node"
       },
       "speedtest": {
         "buttonTitle": "{{label}} speedtest",
@@ -504,7 +504,7 @@
         "tcp": "TCP",
         "udp": "UDP"
       },
-      "title": "Profiles",
+      "title": "Nodes",
       "toolbar": {
         "add": "Add",
         "bulkExport": "Bulk export",
@@ -518,7 +518,7 @@
         "rows": "{{rows}} rows",
         "subscriptions": "Subscriptions"
       },
-      "undecodable": "{{count}} stored profile(s) could not be read by this version and are hidden. They were most likely written by a newer build; updating VoyaVPN should show them again.",
+      "undecodable": "{{count}} stored node(s) could not be read by this version and are hidden. They were most likely written by a newer build; updating VoyaVPN should show them again.",
       "untitled": "Untitled",
       "validation": {
         "addressRequired": "address is required",
@@ -578,9 +578,9 @@
       "perAppTunOnlyHint": "App-based rules only take effect in TUN mode.",
       "port": "port",
       "process": "Process",
-      "profile": "Profile",
-      "profileCount": "{{count}} profiles",
-      "profiles": "Profiles",
+      "profile": "Routing profile",
+      "profileCount": "{{count}} routing profiles",
+      "profiles": "Routing profiles",
       "protocol": "Protocol",
       "remarks": "remarks",
       "rule": "Rule",
@@ -606,7 +606,7 @@
       "details": "Subscription details",
       "disabled": "Disabled",
       "empty": "No subscriptions",
-      "emptyDescription": "Add a subscription source to import profiles automatically.",
+      "emptyDescription": "Add a subscription source to import nodes automatically.",
       "enabled": "Enabled",
       "filter": "Filter",
       "loading": "Loading subscriptions",
@@ -618,7 +618,7 @@
       "untitled": "Untitled",
       "updateAll": "Update all",
       "updateNothingImported": "Nothing was imported or updated.",
-      "updateResult": "{{updated}} updated, {{imported}} profiles imported",
+      "updateResult": "{{updated}} updated, {{imported}} nodes imported",
       "updateSelected": "Update selected",
       "url": "URL",
       "userAgent": "User agent"
@@ -707,7 +707,7 @@
       "muxMaxConnections": "sing-box Mux max connections",
       "muxPadding": "sing-box Mux padding",
       "speedTestDelayInterval": "Delay between speed test batches (seconds)",
-      "speedTestPageSize": "Servers per speed test batch"
+      "speedTestPageSize": "Nodes per speed test batch"
     },
     "network": {
       "bypassLocalAddress": "Do not use proxy servers for local (intranet) addresses",
@@ -749,7 +749,7 @@
       "completed": "Completed",
       "coreUnavailable": "The test core could not be started",
       "failed": "Test failed",
-      "invalidProfile": "The profile is not valid",
+      "invalidProfile": "The node is not valid",
       "noAvailablePort": "No free local port",
       "proxyConnectFailed": "Proxy connection failed",
       "proxyConnectionClosed": "Proxy connection closed",
@@ -809,7 +809,7 @@
     "dns": "DNS",
     "home": "Home",
     "logs": "Logs",
-    "profiles": "Profiles",
+    "profiles": "Nodes",
     "proxies": "Proxies",
     "rules": "Rules",
     "settings": "Settings"
@@ -847,7 +847,7 @@
     "dnsHostsLine": "Host line {{line}} must contain a domain and at least one answer",
     "dnsSettings": "DNS settings validation failed",
     "expectedIps": "Expected IPs must be comma-separated without embedded whitespace",
-    "groupChildNotFound": "Member profile {{profileId}} was not found",
+    "groupChildNotFound": "Member node {{profileId}} was not found",
     "groupCycle": "{{group}} contains itself through {{child}}",
     "groupCyclePath": "The group refers back to itself: {{path}}",
     "groupDuplicateChildIgnored": "Duplicate member {{profileId}} was ignored",
@@ -867,7 +867,7 @@
     "listItem": "List items cannot be empty",
     "negativeHysteriaBandwidth": "Hysteria bandwidth cannot be negative",
     "network": "Network must be tcp, udp, or tcp,udp",
-    "notAGroupProfile": "This profile is not a policy group or proxy chain",
+    "notAGroupProfile": "This node is not a policy group or proxy chain",
     "policyGroupWithoutValidChildren": "The policy group has no usable members",
     "port": "Port must be a comma-separated list of ports or ranges",
     "portRange": "Port values must be between 0 and 65535 and ranges must ascend",

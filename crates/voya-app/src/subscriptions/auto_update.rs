@@ -719,7 +719,7 @@ mod tests {
         let imported = SubscriptionUpdateResult {
             updated: 1,
             skipped: 1,
-            messages: vec!["Other->no profiles were imported".to_string()],
+            messages: vec!["Other->no nodes were imported".to_string()],
             ..SubscriptionUpdateResult::default()
         };
         assert_eq!(unusable_update_message(&imported), None);
@@ -727,12 +727,12 @@ mod tests {
         let nothing_usable = SubscriptionUpdateResult {
             updated: 0,
             skipped: 1,
-            messages: vec!["Plan->no importable profiles were found".to_string()],
+            messages: vec!["Plan->no importable nodes were found".to_string()],
             ..SubscriptionUpdateResult::default()
         };
         assert_eq!(
             unusable_update_message(&nothing_usable).as_deref(),
-            Some("Plan->no importable profiles were found")
+            Some("Plan->no importable nodes were found")
         );
 
         let nothing_attempted = SubscriptionUpdateResult::default();

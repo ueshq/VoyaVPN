@@ -85,7 +85,7 @@ describe("ImportProfilesDialog import results", () => {
     // open, the profiles banner owns it once it closes.
     expect(
       await screen.findByText(
-        "Imported 0 profile(s). 1 skipped. 2 failed to parse. Target: Manual import.",
+        "Imported 0 node(s). 1 skipped. 2 failed to parse. Target: Manual import.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("line 3: unsupported scheme")).toBeInTheDocument();
@@ -102,7 +102,7 @@ describe("ImportProfilesDialog import results", () => {
     await user.click(screen.getByRole("button", { name: "Import payload" }));
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
-    expect(screen.queryByText(/Imported 1 profile/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Imported 1 node/)).not.toBeInTheDocument();
   });
 });
 

@@ -23,11 +23,11 @@ pub type Result<T> = std::result::Result<T, ProfileManagerError>;
 pub enum ProfileManagerError {
     #[error(transparent)]
     Database(#[from] DbError),
-    #[error("profile {0} was not found")]
+    #[error("node {0} was not found")]
     ProfileNotFound(String),
-    #[error("profile id is required")]
+    #[error("node id is required")]
     MissingProfileId,
-    #[error("cannot move profile {index_id}: {reason}")]
+    #[error("cannot move node {index_id}: {reason}")]
     InvalidMove { index_id: String, reason: String },
 }
 

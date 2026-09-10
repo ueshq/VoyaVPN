@@ -13,7 +13,7 @@ pub async fn run_speedtest<R: tauri::Runtime>(
     };
     validate_ipc_text_list(
         &index_ids,
-        "profile index id",
+        "node id",
         IPC_ID_MAX_CHARS,
         AppErrorSubsystem::Speedtest,
     )?;

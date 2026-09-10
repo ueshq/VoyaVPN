@@ -19,9 +19,9 @@ pub enum ExportManagerError {
     Share(#[from] ShareError),
     #[error(transparent)]
     Singbox(#[from] SingboxConfigError),
-    #[error("select at least one profile to export")]
+    #[error("select at least one node to export")]
     EmptySelection,
-    #[error("profile not found: {0}")]
+    #[error("node not found: {0}")]
     ProfileNotFound(String),
 }
 
