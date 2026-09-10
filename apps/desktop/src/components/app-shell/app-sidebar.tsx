@@ -1,5 +1,5 @@
 import type * as React from "react";
-import { ArrowDown, ArrowUp, Home, PanelLeft, Plug, Route, Settings, Shield } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, Home, PanelLeft, Route, Settings, Shield } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { SidebarNavItem } from "@/components/app-shell/sidebar-nav-item";
@@ -21,7 +21,7 @@ const navItems: NavItem[] = [
   { icon: Home, titleKey: "tabs.home", value: "home" },
   { icon: Shield, titleKey: "tabs.profiles", value: "profiles" },
   { icon: Route, titleKey: "tabs.rules", value: "rules" },
-  { icon: Plug, titleKey: "tabs.connections", value: "connections" },
+  { icon: Activity, titleKey: "tabs.connections", value: "connections" },
   { icon: Settings, titleKey: "tabs.settings", value: "settings" },
 ];
 

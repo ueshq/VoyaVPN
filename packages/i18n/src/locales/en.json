@@ -276,12 +276,24 @@
     },
     "logs": {
       "empty": "No log lines",
-      "jumpToLatest": "Jump to latest",
+      "jumpToLatest": "Back to latest",
       "levelFilterLabel": "Filter by level",
       "noMatches": "No matching log lines",
-      "noMatchesDescription": "Adjust your search or active log levels.",
-      "search": "Filter log lines",
-      "toggleLevel": "Toggle {{level}} logs"
+      "noMatchesDescription": "Adjust your search or log filter.",
+      "search": "Search logs",
+      "standard": "Standard",
+      "issues": "Warnings & errors",
+      "all": "All",
+      "clearDisplay": "Clear display",
+      "details": "Log details",
+      "count": "{{count}} of {{total}} log entries",
+      "levels": {
+        "trace": "Trace",
+        "debug": "Debug",
+        "info": "Info",
+        "warn": "Warning",
+        "error": "Error"
+      }
     },
     "profiles": {
       "aria": {
@@ -495,12 +507,7 @@
       "viewTabsAria": "Node views"
     },
     "proxyConnections": {
-      "columns": {
-        "heading": "Toggle columns",
-        "reset": "Reset to defaults",
-        "toggle": "Columns"
-      },
-      "empty": "No connections"
+      "empty": "No active connections"
     },
     "proxyGroups": {
       "empty": "No proxy groups",
@@ -601,7 +608,7 @@
     "delay": "Delay",
     "destination": "Destination",
     "download": "Down",
-    "filterConnections": "Filter connections",
+    "filterConnections": "Search domains, IPs or applications",
     "groups": "Groups",
     "host": "Host",
     "monitorFailed": "Failed",
@@ -627,7 +634,7 @@
     "type": "Type",
     "udp": "UDP",
     "upload": "Up",
-    "viewTabsAria": "Connection views",
+    "viewTabsAria": "Network activity views",
     "moreActions": "More"
   },
   "qr": {
@@ -780,10 +787,10 @@
   },
   "tabs": {
     "aria": "Main sections",
-    "connections": "Connections",
+    "connections": "Network activity",
     "dns": "DNS",
     "home": "Home",
-    "logs": "Logs",
+    "logs": "Runtime logs",
     "profiles": "Nodes",
     "rules": "Rules",
     "settings": "Settings"
@@ -880,5 +887,31 @@
     "traffic": "Live traffic",
     "upload": "Up",
     "download": "Down"
+  },
+  "activity": {
+    "liveConnections": "Live connections",
+    "target": "Destination",
+    "application": "Application",
+    "traffic": "Traffic",
+    "connectionDetails": "Connection details",
+    "processPath": "Application path",
+    "sourceAddress": "Source address",
+    "destinationAddress": "Destination address",
+    "protocol": "Protocol",
+    "startedAt": "Started at",
+    "rule": "Matched rule",
+    "proxyChain": "Proxy chain",
+    "ended": "Ended",
+    "disconnectOne": "Disconnect this connection",
+    "disconnectAll": "Disconnect all connections",
+    "refresh": "Refresh list",
+    "connectToView": "Connect to view network activity",
+    "goHome": "Go to Home",
+    "noMatches": "No matching connections",
+    "clearSearch": "Clear search",
+    "updateFailed": "Unable to update connections right now",
+    "previousData": "Showing previous data",
+    "connectionCount": "{{count}} connections",
+    "filteredConnections": "{{count}} of {{total}} connections"
   }
 }

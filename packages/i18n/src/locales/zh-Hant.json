@@ -276,12 +276,24 @@
     },
     "logs": {
       "empty": "尚無日誌",
-      "jumpToLatest": "跳至最新",
+      "jumpToLatest": "回到最新",
       "levelFilterLabel": "依等級篩選",
       "noMatches": "沒有符合的日誌",
-      "noMatchesDescription": "調整搜尋條件或啟用的日誌等級。",
-      "search": "篩選日誌",
-      "toggleLevel": "切換 {{level}} 日誌"
+      "noMatchesDescription": "調整搜尋條件或日誌篩選。",
+      "search": "搜尋日誌",
+      "standard": "一般",
+      "issues": "僅異常",
+      "all": "全部",
+      "clearDisplay": "清空顯示",
+      "details": "日誌詳情",
+      "count": "{{count}} / {{total}} 筆日誌",
+      "levels": {
+        "trace": "追蹤",
+        "debug": "偵錯",
+        "info": "資訊",
+        "warn": "警告",
+        "error": "錯誤"
+      }
     },
     "profiles": {
       "aria": {
@@ -495,12 +507,7 @@
       "viewTabsAria": "節點檢視"
     },
     "proxyConnections": {
-      "columns": {
-        "heading": "顯示欄位",
-        "reset": "恢復預設",
-        "toggle": "欄位"
-      },
-      "empty": "尚無連線"
+      "empty": "目前沒有活動連線"
     },
     "proxyGroups": {
       "empty": "尚無代理群組",
@@ -601,7 +608,7 @@
     "delay": "延遲",
     "destination": "目標",
     "download": "下行",
-    "filterConnections": "過濾連線",
+    "filterConnections": "搜尋網域、IP 或應用程式",
     "groups": "分組",
     "host": "主機",
     "monitorFailed": "失敗",
@@ -627,7 +634,7 @@
     "type": "類型",
     "udp": "UDP",
     "upload": "上行",
-    "viewTabsAria": "連線視圖",
+    "viewTabsAria": "網路活動檢視",
     "moreActions": "更多"
   },
   "qr": {
@@ -780,10 +787,10 @@
   },
   "tabs": {
     "aria": "主要區域",
-    "connections": "連線",
+    "connections": "網路活動",
     "dns": "DNS",
     "home": "主頁",
-    "logs": "日誌",
+    "logs": "執行日誌",
     "profiles": "節點",
     "rules": "規則",
     "settings": "設定"
@@ -880,5 +887,31 @@
     "traffic": "即時流量",
     "upload": "上傳",
     "download": "下載"
+  },
+  "activity": {
+    "liveConnections": "即時連線",
+    "target": "存取目標",
+    "application": "應用程式",
+    "traffic": "流量",
+    "connectionDetails": "連線詳情",
+    "processPath": "應用程式路徑",
+    "sourceAddress": "來源位址",
+    "destinationAddress": "目標位址",
+    "protocol": "協定",
+    "startedAt": "開始時間",
+    "rule": "符合規則",
+    "proxyChain": "代理鏈",
+    "ended": "已結束",
+    "disconnectOne": "中斷此連線",
+    "disconnectAll": "中斷所有連線",
+    "refresh": "重新整理列表",
+    "connectToView": "連線後即可查看網路活動",
+    "goHome": "前往首頁",
+    "noMatches": "找不到符合的連線",
+    "clearSearch": "清除搜尋",
+    "updateFailed": "暫時無法更新連線",
+    "previousData": "顯示上次資料",
+    "connectionCount": "{{count}} 個連線",
+    "filteredConnections": "{{count}} / {{total}} 個連線"
   }
 }

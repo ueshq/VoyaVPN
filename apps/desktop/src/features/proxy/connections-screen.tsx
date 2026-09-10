@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { PageSection, PageTitle } from "@/components/app-shell/page-section";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@voya/ui/components/tabs";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { useShellStore } from "@/stores/shell-store";
 
 import { ConnectionsPanel } from "./connections-panel";
-import { LogsPanel } from "@/features/logs/logs-panel";
+import { LogsPanel, type LogFilter } from "@/features/logs/logs-panel";
 
 /**
  * The Connections shell destination: one large page title with two sub-views —
@@ -16,6 +17,9 @@ export function ConnectionsScreen() {
   const { t } = useI18n();
   const view = useShellStore((state) => state.connectionsView);
   const setView = useShellStore((state) => state.setConnectionsView);
+  const [connectionSearch, setConnectionSearch] = useState("");
+  const [logSearch, setLogSearch] = useState("");
+  const [logFilter, setLogFilter] = useState<LogFilter>("standard");
 
   return (
     <PageSection aria-label={t("tabs.connections")}>
@@ -31,17 +35,22 @@ export function ConnectionsScreen() {
         <PageTitle
           actions={
             <TabsList aria-label={t("proxy.viewTabsAria")}>
-              <TabsTrigger value="connections">{t("tabs.connections")}</TabsTrigger>
+              <TabsTrigger value="connections">{t("activity.liveConnections")}</TabsTrigger>
               <TabsTrigger value="logs">{t("tabs.logs")}</TabsTrigger>
             </TabsList>
           }
           title={t("tabs.connections")}
         />
         <TabsContent className="min-h-0 flex-1" value="connections">
-          <ConnectionsPanel />
+          <ConnectionsPanel filter={connectionSearch} onFilterChange={setConnectionSearch} />
         </TabsContent>
         <TabsContent className="min-h-0 flex-1" value="logs">
-          <LogsPanel />
+          <LogsPanel
+            search={logSearch}
+            onSearchChange={setLogSearch}
+            filter={logFilter}
+            onFilterChange={setLogFilter}
+          />
         </TabsContent>
       </Tabs>
     </PageSection>

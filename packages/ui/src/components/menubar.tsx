@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as MenubarPrimitive from "@radix-ui/react-menubar";
-import { Check, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
 import { cn } from "@voya/ui/lib/utils";
 
@@ -77,29 +77,6 @@ function MenubarItem({
   );
 }
 
-function MenubarCheckboxItem({
-  className,
-  children,
-  checked,
-  ...props
-}: React.ComponentProps<typeof MenubarPrimitive.CheckboxItem>) {
-  return (
-    <MenubarPrimitive.CheckboxItem
-      data-slot="menubar-checkbox-item"
-      checked={checked}
-      className={cn(itemClasses, "py-1.5 pe-2 ps-8", className)}
-      {...props}
-    >
-      <span className="absolute start-2 flex size-4 items-center justify-center">
-        <MenubarPrimitive.ItemIndicator data-slot="menubar-item-indicator">
-          <Check aria-hidden="true" />
-        </MenubarPrimitive.ItemIndicator>
-      </span>
-      {children}
-    </MenubarPrimitive.CheckboxItem>
-  );
-}
-
 function MenubarSeparator({ className, ...props }: React.ComponentProps<typeof MenubarPrimitive.Separator>) {
   return (
     <MenubarPrimitive.Separator
@@ -133,7 +110,6 @@ function MenubarSubContent({ className, ...props }: React.ComponentProps<typeof 
 
 export {
   Menubar,
-  MenubarCheckboxItem,
   MenubarContent,
   MenubarItem,
   MenubarMenu,

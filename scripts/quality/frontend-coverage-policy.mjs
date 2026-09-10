@@ -71,7 +71,6 @@ export const runtimeModules = [
   { path: "apps/desktop/src/features/updates/app-update-flow.ts", lines: 85, branches: 75 },
   { path: "apps/desktop/src/stores/preferences-store.ts", lines: 80, branches: 55 },
   { path: "apps/desktop/src/stores/toast-store.ts", lines: 70, branches: 80 },
-  { path: "apps/desktop/src/stores/column-visibility-store.ts", lines: 45, branches: 10 },
   // Promoted out of `untestedModules` once the typed-contract passes gave them
   // real tests. Measured at promotion: modal-host 92/80, routing-rules-panel
   // 100/100, routing-dialogs 100/100, modal-store 86/100.

@@ -60,6 +60,7 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       dns: DnsSettings;
       profiles: ProfileRow[];
       proxy: ProxyGroupsSnapshot;
+      connections: ProxyConnectionsSnapshot;
       unhandled: string[];
       routings: Routing[];
       runtime: RuntimeStatusResponse;
@@ -83,6 +84,7 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       dns: makeDnsSettings(),
       profiles: [] as ProfileRow[],
       proxy: makeProxyGroups(),
+      connections: makeConnectionsSnapshot(),
       // Every command the mock does not implement lands here so a smoke run can
       // fail loudly instead of silently exercising an error path (the way the
       // unmocked boot-time `get_window_chrome_config` used to).
@@ -552,30 +554,11 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           return Promise.resolve(clone({ ...state.proxy, trafficMode: state.settings.proxy.trafficMode }));
         }
         case "proxy_list_connections":
-          return Promise.resolve({
-            connections: [
-              {
-                chains: ["PROXY", "Smoke Node"],
-                connectionType: "HTTPS",
-                destination: "93.184.216.34",
-                download: 2048,
-                host: "smoke.example.test:443",
-                id: "smoke-connection",
-                network: "tcp",
-                process: "smoke-app",
-                processPath: "/usr/bin/smoke-app",
-                rule: "Match",
-                rulePayload: "",
-                source: "127.0.0.1:54321",
-                start: "2026-01-01T00:00:00Z",
-                upload: 1024,
-              },
-            ],
-            downloadTotal: 2048,
-            uploadTotal: 1024,
-          } satisfies ProxyConnectionsSnapshot);
+          return Promise.resolve(clone(state.connections));
         case "proxy_close_connection":
-          return Promise.resolve({ connections: [], downloadTotal: 0, uploadTotal: 0 } satisfies ProxyConnectionsSnapshot);
+          state.connections.connections = args.connectionId == null
+            ? [] : state.connections.connections.filter((connection) => connection.id !== args.connectionId);
+          return Promise.resolve(clone(state.connections));
         case "proxy_set_traffic_mode":
           state.settings.proxy.trafficMode = String(args.mode ?? "rule") as TrafficMode;
           return Promise.resolve({ mode: state.settings.proxy.trafficMode } satisfies TrafficModeResponse);
@@ -946,6 +929,31 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
     function readArray(args: CommandArgs, key: string) {
       const value = args[key];
       return Array.isArray(value) ? value : [];
+    }
+
+    function makeConnectionsSnapshot(): ProxyConnectionsSnapshot {
+      return {
+        connections: [
+          {
+            chains: ["PROXY", "Smoke Node"],
+            connectionType: "HTTPS",
+            destination: "93.184.216.34",
+            download: 2048,
+            host: "smoke.example.test:443",
+            id: "smoke-connection",
+            network: "tcp",
+            process: "smoke-app",
+            processPath: "/usr/bin/smoke-app",
+            rule: "Match",
+            rulePayload: "",
+            source: "127.0.0.1:54321",
+            start: "2026-01-01T00:00:00Z",
+            upload: 1024,
+          },
+        ],
+        downloadTotal: 2048,
+        uploadTotal: 1024,
+      };
     }
 
     function readStringArray(args: CommandArgs, key: string) {

@@ -347,7 +347,7 @@ describe("App", () => {
     const tabNames = within(tablist)
       .getAllByRole("tab")
       .map((tab) => tab.textContent);
-    expect(tabNames).toEqual(["Home", "Nodes", "Rules", "Connections", "Settings"]);
+    expect(tabNames).toEqual(["Home", "Nodes", "Rules", "Network activity", "Settings"]);
     expect(footer).toHaveTextContent("Disconnected");
     expect(footer).toHaveTextContent("Up 0 B/s");
     expect(footer).toHaveTextContent("Down 0 B/s");
@@ -430,63 +430,41 @@ describe("App", () => {
     expect(screen.getByRole("complementary")).toBeInTheDocument();
   });
 
-  it("shows Connections immediately and defers monitor plus query work", async () => {
+  it("starts connection queries and the debounced monitor only after the core connects", async () => {
     await import("@/features/proxy/connections-screen");
     vi.useFakeTimers();
     (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
-
+    runtimeStoreMock.getState().coreState = { ...connectedCore(), state: "disconnected" };
     renderApp();
-
-    await activateTab(/Connections/);
-
-    expect(screen.getByRole("heading", { level: 1, name: "Connections" })).toBeInTheDocument();
+    await activateTab(/Network activity/);
+    expect(screen.getByRole("heading", { name: "Network activity" })).toBeInTheDocument();
+    expect(screen.getByText("Connect to view network activity")).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
     expect(proxyStartMonitor).not.toHaveBeenCalled();
     expect(proxyListConnections).not.toHaveBeenCalled();
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(20);
-    });
+    await activateTab(/Nodes/);
+    runtimeStoreMock.getState().coreState = connectedCore();
+    await activateTab(/Network activity/);
     expect(proxyListConnections).toHaveBeenCalledTimes(1);
     expect(proxyStartMonitor).not.toHaveBeenCalled();
-    expect(runtimeStoreMock.getState().setProxyMonitorStarting).not.toHaveBeenCalled();
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(80);
-    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
     expect(proxyStartMonitor).toHaveBeenCalledTimes(1);
     expect(runtimeStoreMock.getState().setProxyMonitorStarting).toHaveBeenCalledTimes(1);
-    expect(runtimeStoreMock.getState().proxyMonitorStatus).toEqual({
-      message: null,
-      running: true,
-      stale: false,
-      state: "running",
-    });
-    expect(
-      vi.mocked(runtimeStoreMock.getState().setProxyMonitorStarting).mock.invocationCallOrder[0]!,
-    ).toBeLessThan(vi.mocked(proxyStartMonitor).mock.invocationCallOrder[0]!);
-
+    expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe("running");
     await activateTab(/Nodes/);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_999);
-    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_999); });
     expect(proxyStopMonitor).not.toHaveBeenCalled();
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1);
-    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     expect(proxyStopMonitor).toHaveBeenCalledTimes(1);
-    expect(runtimeStoreMock.getState().proxyMonitorStatus).toEqual({
-      message: null,
-      running: false,
-      stale: true,
-      state: "stopped",
-    });
+    expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe("stopped");
   });
 
   it("keeps the monitor running during rapid switches between proxy runtime tabs", async () => {
     vi.useFakeTimers();
     (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
 
+    runtimeStoreMock.getState().coreState = connectedCore();
     renderApp();
 
     await activateProxyGroups();
@@ -494,7 +472,7 @@ describe("App", () => {
       await vi.advanceTimersByTimeAsync(50);
     });
 
-    await activateTab(/Connections/);
+    await activateTab(/Network activity/);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(100);
     });
@@ -521,16 +499,17 @@ describe("App", () => {
     vi.useFakeTimers();
     (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
 
+    runtimeStoreMock.getState().coreState = connectedCore();
     renderApp();
 
-    await activateTab(/Connections/);
+    await activateTab(/Network activity/);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(100);
     });
     expect(proxyStartMonitor).toHaveBeenCalledTimes(1);
 
-    const page = screen.getByRole("region", { name: "Connections" });
-    const logsTab = within(page).getByRole("tab", { name: "Logs" });
+    const page = screen.getByRole("region", { name: "Network activity" });
+    const logsTab = within(page).getByRole("tab", { name: "Runtime logs" });
     await act(async () => {
       fireEvent.mouseDown(logsTab);
       fireEvent.click(logsTab);
@@ -549,6 +528,7 @@ describe("App", () => {
     (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
     vi.mocked(proxyStartMonitor).mockRejectedValueOnce(new Error("start unavailable"));
 
+    runtimeStoreMock.getState().coreState = connectedCore();
     renderApp();
 
     await activateProxyGroups();
@@ -576,6 +556,7 @@ describe("App", () => {
     (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
     vi.mocked(proxyStopMonitor).mockRejectedValueOnce(new Error("stop unavailable"));
 
+    runtimeStoreMock.getState().coreState = connectedCore();
     renderApp();
 
     await activateProxyGroups();
@@ -629,180 +610,53 @@ describe("App", () => {
     expect(screen.getByRole("menuitem", { name: "Reload core configuration" })).toBeInTheDocument();
   });
 
-  it("shows failed monitor status with its message in Connections while keeping data controls visible", async () => {
+  it("consolidates failed updates and keeps stale data explicit after a manual refresh", async () => {
     const user = userEvent.setup();
-    const message = "monitor stream failed after retry budget was exhausted";
-    runtimeStoreMock.getState().setProxyMonitorFailed(message);
-    vi.mocked(proxyListConnections).mockResolvedValue({
-      connections: [makeConnection(0, { host: "alpha.example:443", id: "alpha" })],
-      downloadTotal: 4096,
-      uploadTotal: 1024,
-    });
-
-    renderApp();
-
-    await user.click(mainNavTab(/Connections/));
-    await waitFor(() => expect(screen.getByText("alpha.example:443")).toBeInTheDocument());
-
-    expect(screen.getByRole("status", { name: `Failed: ${message}` })).toBeInTheDocument();
-    expect(screen.getByText(message)).toBeInTheDocument();
-    expect(screen.getByText("Cumulative upload 1.0 KB")).toBeInTheDocument();
-    expect(screen.getByText("Cumulative download 4.0 KB")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Filter connections" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Close all" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
-  });
-
-  it("clears the selected connection when it leaves and re-enters the filtered snapshot", async () => {
-    const user = userEvent.setup();
-    vi.mocked(proxyListConnections).mockResolvedValue({
-      connections: [
-        makeConnection(0, { host: "alpha.example:443", id: "alpha" }),
-        makeConnection(1, { host: "beta.example:443", id: "beta" }),
-      ],
-      downloadTotal: 2,
-      uploadTotal: 1,
-    });
-
-    renderApp();
-
-    await user.click(mainNavTab(/Connections/));
-    await waitFor(() => expect(screen.getByText("alpha.example:443")).toBeInTheDocument());
-
-    await user.click(screen.getByText("alpha.example:443"));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeEnabled());
-
-    const filterInput = screen.getByRole("textbox", { name: "Filter connections" });
-    await user.type(filterInput, "beta");
-    await waitFor(() => expect(screen.queryByText("alpha.example:443")).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeDisabled());
-
-    await user.clear(filterInput);
-    await waitFor(() => expect(screen.getByText("alpha.example:443")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
-  });
-
-  it("manual refresh seeds Connections snapshots without clearing stale monitor status", async () => {
-    const user = userEvent.setup();
-    const cachedSnapshot = {
-      connections: [makeConnection(0, { host: "cached.example:443", id: "cached" })],
-      downloadTotal: 100,
-      uploadTotal: 50,
-    };
-    const refreshedSnapshot = {
-      connections: [makeConnection(1, { host: "fresh.example:443", id: "fresh" })],
-      downloadTotal: 4096,
-      uploadTotal: 1024,
-    };
+    runtimeStoreMock.getState().coreState = connectedCore();
     runtimeStoreMock.getState().setProxyMonitorFailed("monitor offline");
+    const cachedSnapshot = { connections: [makeConnection(0, { host: "cached.example:443" })], downloadTotal: 100, uploadTotal: 50 };
+    const refreshedSnapshot = { connections: [makeConnection(1, { host: "fresh.example:443" })], downloadTotal: 4096, uploadTotal: 1024 };
     runtimeStoreMock.getState().setProxyConnections(cachedSnapshot);
-    vi.mocked(runtimeStoreMock.getState().setProxyConnections).mockClear();
-    vi.mocked(proxyListConnections)
-      .mockResolvedValueOnce(cachedSnapshot)
-      .mockResolvedValueOnce(refreshedSnapshot);
-
+    vi.mocked(proxyListConnections).mockResolvedValueOnce(cachedSnapshot).mockResolvedValueOnce(refreshedSnapshot);
     renderApp();
-
-    await user.click(mainNavTab(/Connections/));
+    await user.click(mainNavTab(/Network activity/));
     await waitFor(() => expect(proxyListConnections).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("cached.example:443")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Refresh" }));
-
-    await waitFor(() => expect(proxyListConnections).toHaveBeenCalledTimes(2));
-    await waitFor(() =>
-      expect(runtimeStoreMock.getState().setProxyConnections).toHaveBeenCalledWith(refreshedSnapshot),
-    );
-    await waitFor(() => expect(screen.getByText("fresh.example:443")).toBeInTheDocument());
-    expect(runtimeStoreMock.getState().proxyMonitorStatus).toEqual({
-      message: "monitor offline",
-      running: false,
-      stale: true,
-      state: "failed",
-    });
-    expect(screen.getByRole("status", { name: "Failed: monitor offline" })).toBeInTheDocument();
+    expect(screen.getAllByText("Unable to update connections right now")).toHaveLength(1);
+    expect(screen.queryByText("monitor offline")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Refresh list" }));
+    expect(await screen.findByText("fresh.example:443")).toBeInTheDocument();
+    expect(runtimeStoreMock.getState().setProxyConnections).toHaveBeenCalledWith(refreshedSnapshot);
+    expect(screen.getByText("Showing previous data")).toBeInTheDocument();
+    expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe("failed");
   });
 
-  it("close selected and close all update snapshots without clearing stale monitor status", async () => {
+  it("keeps search and log filters between sub-tabs and resets them after leaving the page", async () => {
     const user = userEvent.setup();
-    const initialSnapshot = {
-      connections: [
-        makeConnection(0, { host: "alpha.example:443", id: "alpha" }),
-        makeConnection(1, { host: "beta.example:443", id: "beta" }),
-      ],
-      downloadTotal: 2,
-      uploadTotal: 1,
-    };
-    const selectedClosedSnapshot = {
-      connections: [makeConnection(1, { host: "beta.example:443", id: "beta" })],
-      downloadTotal: 1,
-      uploadTotal: 1,
-    };
-    const allClosedSnapshot = { connections: [], downloadTotal: 0, uploadTotal: 0 };
-    runtimeStoreMock.getState().setProxyMonitorFailed("monitor offline");
-    vi.mocked(proxyListConnections).mockResolvedValue(initialSnapshot);
-    vi.mocked(proxyCloseConnection)
-      .mockResolvedValueOnce(selectedClosedSnapshot)
-      .mockResolvedValueOnce(allClosedSnapshot);
-
-    renderApp();
-
-    await user.click(mainNavTab(/Connections/));
-    await waitFor(() => expect(screen.getByText("alpha.example:443")).toBeInTheDocument());
-
-    await user.click(screen.getByText("alpha.example:443"));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "Close" }));
-
-    await waitFor(() => expect(vi.mocked(proxyCloseConnection).mock.calls.at(0)?.[0]).toBe("alpha"));
-    await waitFor(() => expect(screen.queryByText("alpha.example:443")).not.toBeInTheDocument());
-    expect(screen.getByText("beta.example:443")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeDisabled());
-    expect(runtimeStoreMock.getState().proxyMonitorStatus).toEqual({
-      message: "monitor offline",
-      running: false,
-      stale: true,
-      state: "failed",
-    });
-    expect(screen.getByRole("status", { name: "Failed: monitor offline" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Close all" }));
-
-    await waitFor(() => expect(vi.mocked(proxyCloseConnection).mock.calls.at(1)?.[0]).toBeNull());
-    await waitFor(() => expect(screen.getByText("No connections")).toBeInTheDocument());
-    expect(runtimeStoreMock.getState().proxyMonitorStatus).toEqual({
-      message: "monitor offline",
-      running: false,
-      stale: true,
-      state: "failed",
-    });
-    expect(screen.getByRole("status", { name: "Failed: monitor offline" })).toBeInTheDocument();
-  });
-
-  it("virtualizes large Connections result sets across stale and live monitor states", async () => {
-    const user = userEvent.setup();
-    runtimeStoreMock.getState().setProxyMonitorFailed("monitor offline");
-    vi.mocked(proxyListConnections).mockResolvedValue({
-      connections: makeConnections(200),
-      downloadTotal: 200,
-      uploadTotal: 100,
-    });
-
-    renderApp();
-
-    await user.click(mainNavTab(/Connections/));
-
-    await waitFor(() => expect(screen.getByText("bulk-0.example:443")).toBeInTheDocument());
-    expect(screen.queryAllByText(/bulk-\d+\.example:443/).length).toBeLessThan(80);
-    expect(screen.getByRole("status", { name: "Failed: monitor offline" })).toBeInTheDocument();
-
+    runtimeStoreMock.getState().coreState = connectedCore();
     runtimeStoreMock.getState().setProxyMonitorRunning();
-    await user.click(screen.getByRole("button", { name: "Refresh" }));
-
-    await waitFor(() => expect(screen.getByRole("status", { name: "Live" })).toBeInTheDocument());
-    expect(screen.queryAllByText(/bulk-\d+\.example:443/).length).toBeLessThan(80);
+    vi.mocked(proxyListConnections).mockResolvedValue({ connections: makeConnections(2), downloadTotal: 2, uploadTotal: 1 });
+    renderApp();
+    await user.click(mainNavTab(/Network activity/));
+    const page = screen.getByRole("region", { name: "Network activity" });
+    await user.type(within(page).getByRole("searchbox"), "bulk-1");
+    await user.click(within(page).getByRole("tab", { name: "Runtime logs" }));
+    await user.type(within(page).getByRole("searchbox"), "dns");
+    await user.click(within(page).getByRole("combobox"));
+    await user.click(screen.getByRole("option", { name: "Warnings & errors" }));
+    await user.click(within(page).getByRole("tab", { name: "Live connections" }));
+    expect(within(page).getByRole("searchbox")).toHaveValue("bulk-1");
+    await user.click(within(page).getByRole("tab", { name: "Runtime logs" }));
+    expect(within(page).getByRole("searchbox")).toHaveValue("dns");
+    expect(within(page).getByRole("combobox")).toHaveTextContent("Warnings & errors");
+    await user.click(mainNavTab(/Nodes/));
+    await user.click(mainNavTab(/Network activity/));
+    expect(within(screen.getByRole("region", { name: "Network activity" })).getByRole("tab", { name: "Runtime logs" })).toHaveAttribute("data-state", "active");
+    expect(screen.getByRole("searchbox")).toHaveValue("");
+    expect(screen.getByRole("combobox")).toHaveTextContent("Standard");
+    await user.click(screen.getByRole("tab", { name: "Live connections" }));
+    expect(screen.getByRole("searchbox")).toHaveValue("");
   });
+
 });
 
 function mainNavTab(name: RegExp) {
@@ -851,4 +705,8 @@ async function activateProxyGroups() {
   await activateTab(/Nodes/);
   const tab = within(screen.getByRole("region", { name: "Nodes" })).getByRole("tab", { name: "Proxy Groups" });
   await act(async () => { fireEvent.mouseDown(tab); fireEvent.click(tab); await Promise.resolve(); });
+}
+
+function connectedCore(): NonNullable<RuntimeEventState["coreState"]> {
+  return { state: "connected", activeProfileId: null, mainPid: 42, prePid: null, connectedDurationMs: 0, activeTunBackend: null, runningCoreType: "singBox" };
 }

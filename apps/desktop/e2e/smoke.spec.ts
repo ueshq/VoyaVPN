@@ -234,18 +234,20 @@ test("uses the proxy groups and connections routes through the proxy runtime IPC
   await page.getByRole("tab", { name: "Home", exact: true }).click();
   await page.getByRole("button", { exact: true, name: "Direct" }).click();
   await expect(page.getByRole("button", { exact: true, name: "Direct" })).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("tab", { name: "Connections", exact: true }).click();
-  await expect(page.getByRole("heading", { exact: true, name: "Connections" })).toBeVisible();
+  await page.getByRole("tab", { name: "Network activity", exact: true }).click();
+  await expect(page.getByRole("heading", { exact: true, name: "Network activity" })).toBeVisible();
   await expect(page.getByText("smoke.example.test:443", { exact: true })).toBeVisible();
   await page.getByText("smoke.example.test:443", { exact: true }).click();
-  await page.getByRole("button", { exact: true, name: "Close" }).click();
-  await expect(page.getByText("No connections", { exact: true })).toBeVisible();
+  await page.getByRole("button", { exact: true, name: "Disconnect this connection" }).click();
+  await expect(page.getByText("Ended", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByText("No active connections", { exact: true })).toBeVisible();
 
-  const connectionsPage = page.getByRole("region", { name: "Connections" });
-  await connectionsPage.getByRole("tab", { name: "Logs" }).click();
+  const connectionsPage = page.getByRole("region", { name: "Network activity" });
+  await connectionsPage.getByRole("tab", { name: "Runtime logs" }).click();
   await expect(page.getByText("No log lines", { exact: true })).toBeVisible();
-  await connectionsPage.getByRole("tab", { name: "Connections" }).click();
-  await expect(page.getByText("No connections", { exact: true })).toBeVisible();
+  await connectionsPage.getByRole("tab", { name: "Live connections" }).click();
+  await expect(page.getByText("No active connections", { exact: true })).toBeVisible();
 
   const calls = await smokeCalls(page);
 
@@ -332,7 +334,7 @@ test("edits routing and DNS settings without network or OS side effects", async 
   await page.getByLabel("Remarks").fill("Smoke direct rule");
   await page.getByLabel("Outbound").fill("direct");
   await page.getByLabel("Domain").fill("domain:example.test");
-  await page.getByLabel("Network").fill("tcp");
+  await page.getByRole("dialog").getByRole("textbox", { name: /^network$/i }).fill("tcp");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("Smoke direct rule")).toBeVisible();
   await expect(page.getByText("domain:example.test")).toBeVisible();

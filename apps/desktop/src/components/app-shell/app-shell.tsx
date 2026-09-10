@@ -112,6 +112,7 @@ function ScreenFallback() {
  */
 function useProxyMonitorLifecycle(activeTab: ShellTab) {
   const profilesView = useShellStore((state) => state.profilesView);
+  const coreConnected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
   const { t } = useI18n();
   const pushToast = useToastStore((state) => state.pushToast);
   const messages = useMemo(
@@ -154,9 +155,9 @@ function useProxyMonitorLifecycle(activeTab: ShellTab) {
 
   useEffect(() => {
     controllerRef.current?.setWanted(
-      activeTab === "connections" || (activeTab === "profiles" && profilesView === "proxyGroups"),
+      coreConnected && (activeTab === "connections" || (activeTab === "profiles" && profilesView === "proxyGroups")),
     );
-  }, [activeTab, profilesView]);
+  }, [activeTab, profilesView, coreConnected]);
 }
 
 function isTauriRuntime() {
