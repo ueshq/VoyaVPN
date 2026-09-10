@@ -25,9 +25,6 @@
   },
   "confirm": {
     "cancel": "取消",
-    "dedupeProfilesConfirm": "刪除重複項",
-    "dedupeProfilesDescription": "所有訂閱中的重複節點將被永久刪除，此操作無法復原。",
-    "dedupeProfilesTitle": "刪除重複的節點？",
     "deleteProfilesConfirm": "刪除",
     "deleteProfilesDescription": "已選擇的 {{count}} 個節點將被永久刪除。此操作無法復原。",
     "deleteProfilesTitle": "刪除節點？",
@@ -324,31 +321,6 @@
         "missingPem": "請先貼上或抓取 PEM 憑證，再計算 SHA-256。",
         "shaCalculated": "已計算 {{count}} 個 SHA-256 指紋。"
       },
-      "columns": {
-        "heading": "顯示欄位",
-        "labels": {
-          "address": "位址",
-          "delay": "延遲",
-          "group": "分組",
-          "indexHeader": "#",
-          "ipInfo": "IP 資訊",
-          "port": "埠",
-          "protocol": "協定",
-          "remarks": "備註",
-          "security": "安全",
-          "speed": "速度",
-          "todayDown": "今日下行",
-          "todayUp": "今日上行",
-          "totalDown": "總下行",
-          "totalUp": "總上行",
-          "transport": "傳輸"
-        },
-        "reset": "恢復預設",
-        "toggle": "欄位"
-      },
-      "dedupe": {
-        "removed": "已刪除 {{removed}} 個重複節點；共 {{total}} 個，保留 {{kept}} 個。"
-      },
       "dialog": {
         "addTitle": "新增節點",
         "cancel": "取消",
@@ -466,7 +438,7 @@
         "moveDown": "下移",
         "moveTop": "移至頂部",
         "moveUp": "上移",
-        "speedtest": "測速"
+        "speedtest": "測延遲"
       },
       "panels": {
         "custom": "自訂設定檔",
@@ -494,27 +466,18 @@
         "wireGuard": "WireGuard 代理節點"
       },
       "speedtest": {
-        "buttonTitle": "{{label}} 測速",
         "cancelTitle": "取消測速",
-        "mixed": "混合",
-        "more": "更多測速",
-        "real": "真連",
-        "speed": "測速",
-        "stop": "停止",
-        "tcp": "TCP",
-        "udp": "UDP"
+        "stop": "停止"
       },
       "title": "節點",
       "toolbar": {
         "add": "新增",
         "bulkExport": "批次匯出",
-        "bulkSpeedtest": "批次測速",
-        "dedupe": "去重",
+        "bulkSpeedtest": "批次測延遲",
         "delete": "刪除",
         "edit": "編輯",
         "filterPlaceholder": "篩選備註或位址",
         "import": "匯入",
-        "more": "更多操作",
         "rows": "{{rows}} 筆",
         "subscriptions": "訂閱"
       },
@@ -526,6 +489,31 @@
         "credentialRequired": "請填寫密碼或 ID",
         "remarksRequired": "請填寫備註",
         "uuidRequired": "請填寫 UUID"
+      },
+      "card": {
+        "local": "本機節點",
+        "default": "預設節點",
+        "using": "使用中",
+        "use": "使用節點",
+        "switching": "切換中…",
+        "details": "詳情",
+        "detailsTitle": "節點詳情",
+        "select": "選擇 {{name}}"
+      },
+      "cardFields": {
+        "address": "位址",
+        "delay": "延遲",
+        "group": "分組",
+        "ipInfo": "IP 資訊",
+        "port": "埠",
+        "protocol": "協定",
+        "remarks": "備註",
+        "security": "安全",
+        "todayDown": "今日下行",
+        "todayUp": "今日上行",
+        "totalDown": "總下行",
+        "totalUp": "總上行",
+        "transport": "傳輸"
       }
     },
     "proxyConnections": {
@@ -734,12 +722,10 @@
     "tabTests": "測試",
     "tabUpdates": "更新",
     "tests": {
-      "downloadUrl": "測速檔案位址",
       "ipApiUrl": "目前連接資訊測試地址",
-      "mixedConcurrency": "多執行緒測試時的並發數量",
       "pingUrl": "真連線測試位址",
       "timeout": "測速單個超時值",
-      "udpTarget": "UDP 測試網址"
+      "proxyDelayConcurrency": "代理組測延遲並行數"
     },
     "unsavedChanges": "存在未儲存的修改"
   },
@@ -757,7 +743,6 @@
       "skipped": "已略過",
       "testing": "測試中",
       "timedOut": "要求逾時",
-      "udpTestFailed": "UDP 測試失敗",
       "unknown": "未知結果",
       "waiting": "等待中"
     }
@@ -863,7 +848,6 @@
     "invalidRealityPublicKey": "REALITY 需要公開金鑰",
     "invalidShadowsocksMethod": "不支援此 Shadowsocks 加密方式",
     "invalidSubscriptionFilter": "訂閱篩選規則 {{pattern}} 不是有效的正規表示式",
-    "invalidUdpTestTarget": "請使用 host:port 格式，前方可加上測試類型",
     "listItem": "清單項目不可為空",
     "negativeHysteriaBandwidth": "Hysteria 頻寬不可為負數",
     "network": "network 只能是 tcp、udp 或 tcp,udp",

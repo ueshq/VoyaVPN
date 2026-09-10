@@ -5,15 +5,14 @@
 //! same-typed neighbour here (`url`/`more_url`, `domain_strategy`/
 //! `domain_strategy4_singbox`, `ip`/`domain`/`protocol`/`process`,
 //! `direct`/`remote`/`bootstrap`, `total_up`/`total_down`/`today_up`/
-//! `today_down`, `delay`/`speed`) would swap silently otherwise: the compiler
+//! `today_down`, `delay`/`sort`) would swap silently otherwise: the compiler
 //! cannot tell two `String`s or two `i64`s apart.
 
 use voya_core::{
     ConfigType, MultipleLoad, ProfileExItem, ProfileItem, ProfileListItem,
-    ProfileProtocol as CoreProfileProtocol, ProfileSortKey as CoreProfileSortKey,
-    ProfileTransport as CoreProfileTransport, RoutingItem, RuleType, RulesItem,
-    ServerEndpoint as CoreServerEndpoint, ServerStatItem, SimpleDnsItem, SubItem,
-    TlsMode as CoreTlsMode, TlsSettings as CoreTlsSettings,
+    ProfileProtocol as CoreProfileProtocol, ProfileTransport as CoreProfileTransport, RoutingItem,
+    RuleType, RulesItem, ServerEndpoint as CoreServerEndpoint, ServerStatItem, SimpleDnsItem,
+    SubItem, TlsMode as CoreTlsMode, TlsSettings as CoreTlsSettings,
 };
 
 use voya_contracts::{ProfileKind, SpeedtestOutcome};
@@ -494,55 +493,6 @@ fn protocol_transport_and_tls_round_trip_together() {
     }
 }
 
-/// `profile_sort_key_from_contract` renames three keys (`Protocol` ->
-/// `ConfigType`, `Transport` -> `Network`, `Tls` -> `StreamSecurity`), so a
-/// mismatch sorts the table by the wrong column and nothing fails.
-#[test]
-fn every_sort_key_maps_to_its_renamed_domain_key() {
-    let cases = [
-        (ProfileSortKey::Sort, CoreProfileSortKey::Sort),
-        (ProfileSortKey::Protocol, CoreProfileSortKey::ConfigType),
-        (ProfileSortKey::Remarks, CoreProfileSortKey::Remarks),
-        (ProfileSortKey::Address, CoreProfileSortKey::Address),
-        (ProfileSortKey::Port, CoreProfileSortKey::Port),
-        (ProfileSortKey::Transport, CoreProfileSortKey::Network),
-        (ProfileSortKey::Tls, CoreProfileSortKey::StreamSecurity),
-        (ProfileSortKey::Delay, CoreProfileSortKey::Delay),
-        (ProfileSortKey::Speed, CoreProfileSortKey::Speed),
-        (ProfileSortKey::IpInfo, CoreProfileSortKey::IpInfo),
-        (
-            ProfileSortKey::SubscriptionId,
-            CoreProfileSortKey::SubscriptionId,
-        ),
-    ];
-
-    for (contract, domain) in cases {
-        assert_eq!(
-            profile_sort_key_from_contract(contract),
-            domain,
-            "{contract:?}"
-        );
-    }
-
-    // A new key without a row above fails to compile here.
-    const fn exhaustive(key: ProfileSortKey) {
-        match key {
-            ProfileSortKey::Sort
-            | ProfileSortKey::Protocol
-            | ProfileSortKey::Remarks
-            | ProfileSortKey::Address
-            | ProfileSortKey::Port
-            | ProfileSortKey::Transport
-            | ProfileSortKey::Tls
-            | ProfileSortKey::Delay
-            | ProfileSortKey::Speed
-            | ProfileSortKey::IpInfo
-            | ProfileSortKey::SubscriptionId => (),
-        }
-    }
-    exhaustive(ProfileSortKey::Sort);
-}
-
 #[test]
 fn every_load_strategy_round_trips() {
     for strategy in [
@@ -751,7 +701,6 @@ fn profile_list_entry_keeps_metrics_and_traffic_in_their_own_fields() {
         profile_ex: ProfileExItem {
             index_id: "profile-index-id".to_string(),
             delay: 111,
-            speed: 222.0,
             sort: 333,
             message: Some("timedOut".to_string()),
             ip_info: Some("metrics-ip-info".to_string()),
@@ -768,7 +717,6 @@ fn profile_list_entry_keeps_metrics_and_traffic_in_their_own_fields() {
     });
 
     assert_eq!(entry.metrics.delay_ms, 111);
-    assert!((entry.metrics.speed_bytes_per_second - 222.0).abs() < f64::EPSILON);
     assert_eq!(entry.metrics.sort, 333);
     assert_eq!(entry.metrics.outcome, Some(SpeedtestOutcome::TimedOut));
     assert_eq!(entry.metrics.ip_info.as_deref(), Some("metrics-ip-info"));

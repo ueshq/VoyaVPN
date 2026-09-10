@@ -102,7 +102,12 @@ const RETIRED_DNS_KEYS: [&str; 3] = ["useSystemHosts", "serveStale", "parallelQu
 /// Keys `AppSettingsV1::speed_test` renamed, as `(stored, current)`.
 ///
 /// `delayIntervalMs` always held seconds; only the name was wrong.
-const RENAMED_SPEEDTEST_KEYS: [(&str, &str); 1] = [("delayIntervalMs", "delayIntervalSeconds")];
+const RENAMED_SPEEDTEST_KEYS: [(&str, &str); 2] = [
+    ("delayIntervalMs", "delayIntervalSeconds"),
+    ("mixedConcurrency", "proxyDelayConcurrency"),
+];
+
+const RETIRED_SPEEDTEST_KEYS: [&str; 2] = ["downloadUrl", "udpTarget"];
 
 /// Reads a stored payload into the current contract.
 ///
@@ -140,6 +145,9 @@ fn normalize_retired_keys(value: &mut serde_json::Value) {
         .get_mut("speedTest")
         .and_then(serde_json::Value::as_object_mut)
     {
+        for key in RETIRED_SPEEDTEST_KEYS {
+            speedtest.remove(key);
+        }
         for (stored, current) in RENAMED_SPEEDTEST_KEYS {
             if let Some(stored_value) = speedtest.remove(stored) {
                 // A payload already carrying the current key wins: only a row

@@ -34,7 +34,7 @@ export function NodePickerDialog({ home, open, onOpenChange, onSubscriptions, on
           {home.profilesError ? <p className="text-sm text-destructive" role="alert">{getErrorMessage(home.profilesError)}</p> : null}
           <div className="flex h-64 min-h-32 flex-col">
             <NodeList
-              busy={home.busy}
+              busy={home.activationBusy}
               isPending={home.profilesPending}
               onActivate={(id) => void activate(id)}
               onSelect={home.selectProfile}
@@ -46,7 +46,7 @@ export function NodePickerDialog({ home, open, onOpenChange, onSubscriptions, on
           </div>
         </div>
         <DialogFooter>
-          <Button disabled={home.busy || !home.selectedId} onClick={() => { if (home.selectedId) void activate(home.selectedId); }}>
+          <Button disabled={home.activationBusy || !home.selectedId} onClick={() => { if (home.selectedId) void activate(home.selectedId); }}>
             {t("home.applyNode")}
           </Button>
         </DialogFooter>

@@ -56,6 +56,9 @@ export const runtimeModules = [
   // Connect/disconnect and mode switching on the home screen.
   { path: "apps/desktop/src/features/home/use-home-runtime.ts", lines: 65, branches: 50 },
   { path: "apps/desktop/src/features/home/runtime-action.ts", lines: 50, branches: 25 },
+  // Shared activation retains the guards and recovery paths extracted from Home.
+  { path: "apps/desktop/src/features/home/use-profile-activation.ts", lines: 80, branches: 75 },
+  { path: "apps/desktop/src/stores/runtime-action-store.ts", lines: 90, branches: 90 },
   // Proxy-monitor lifecycle.
   { path: "apps/desktop/src/components/app-shell/app-shell.tsx", lines: 75, branches: 55 },
   { path: "apps/desktop/src/features/profiles/use-server-table.ts", lines: 75, branches: 55 },

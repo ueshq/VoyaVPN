@@ -59,10 +59,6 @@ impl<'db> ProfileExManager<'db> {
         self.update(index_id, |item| item.delay = delay).await
     }
 
-    pub async fn set_test_speed(&self, index_id: &str, speed: f64) -> Result<ProfileExItem> {
-        self.update(index_id, |item| item.speed = speed).await
-    }
-
     pub async fn set_test_message(
         &self,
         index_id: &str,

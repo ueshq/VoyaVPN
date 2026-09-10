@@ -114,7 +114,6 @@ export const VALIDATION_KEYS: Record<ValidationCode["code"], TranslationKey> = {
   invalidRealityPublicKey: "validation.invalidRealityPublicKey",
   invalidShadowsocksMethod: "validation.invalidShadowsocksMethod",
   invalidSubscriptionFilter: "validation.invalidSubscriptionFilter",
-  invalidUdpTestTarget: "validation.invalidUdpTestTarget",
   negativeHysteriaBandwidth: "validation.negativeHysteriaBandwidth",
   notAGroupProfile: "validation.notAGroupProfile",
   policyGroupWithoutValidChildren: "validation.policyGroupWithoutValidChildren",
@@ -157,7 +156,6 @@ export const SPEEDTEST_OUTCOME_KEYS: Record<SpeedtestOutcome, TranslationKey> = 
   skipped: "speedtest.outcome.skipped",
   testing: "speedtest.outcome.testing",
   timedOut: "speedtest.outcome.timedOut",
-  udpTestFailed: "speedtest.outcome.udpTestFailed",
   unknown: "speedtest.outcome.unknown",
   waiting: "speedtest.outcome.waiting",
 };

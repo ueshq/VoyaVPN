@@ -160,7 +160,6 @@ vi.mock("@/ipc", () => ({
   proxyStopMonitor: vi.fn(() => Promise.resolve({ state: "stopped", running: false, stale: true, message: null })),
   proxyTestDelay: vi.fn(() => Promise.resolve([])),
   copyProfiles: vi.fn(),
-  dedupeProfiles: vi.fn(),
   deleteSubscriptions: vi.fn(),
   deleteProfiles: vi.fn(),
   deleteRoutingRules: vi.fn(),
@@ -256,7 +255,6 @@ vi.mock("@/ipc", () => ({
   ),
   setWindowAcrylic: vi.fn(() => Promise.resolve(null)),
   speedtestStatus: vi.fn(() => Promise.resolve({ running: false })),
-  sortProfiles: vi.fn(),
   tunRequestElevation: vi.fn(),
   systemProxyStatus: vi.fn(() =>
     Promise.resolve({

@@ -22,7 +22,6 @@ voya-contracts.workspace = true
 voya-db.workspace = true
 voya-net.workspace = true
 voya-platform.workspace = true
-voya-udptest.workspace = true
 
 [dev-dependencies]
 sqlx.workspace = true

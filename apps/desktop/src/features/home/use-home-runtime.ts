@@ -7,7 +7,6 @@ import {
   disconnectCore,
   listProfiles,
   restartCore,
-  setActiveProfile,
   setConnectionMode,
   tunRequestElevation,
   tunStatus,
@@ -18,10 +17,12 @@ import { refreshRuntimeStatus, runtimeStatusErrorKeys } from "@/ipc/runtime-stat
 import { beginRuntimeRead } from "@/ipc/runtime-state-version";
 import { profilesQueryKey } from "@/ipc/query-keys";
 import { getErrorMessage } from "@voya/utils/error";
+import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
 import { useModalStore } from "@/stores/modal-store";
 import { useToastStore } from "@/stores/toast-store";
 
 import { missingCorePayload, runWithElevation } from "./runtime-action";
+import { useProfileActivation } from "./use-profile-activation";
 
 type RuntimeAction = "connect" | "disconnect" | "restart";
 export type Translation = ReturnType<typeof useI18n>["t"];
@@ -38,17 +39,18 @@ export function useHomeRuntime(t: Translation) {
   const tun = useRuntimeEventStore((state) => state.tun);
   const openModal = useModalStore((state) => state.openModal);
   const pushToast = useToastStore((state) => state.pushToast);
-  const [pendingAction, setPendingAction] = useState<RuntimeAction | null>(null);
-  const [modePending, setModePending] = useState(false);
-  const [pacPending, setPacPending] = useState(false);
+  const pendingAction = useRuntimeActionStore((state) => state.pendingAction);
+  const modePending = useRuntimeActionStore((state) => state.modePending);
+  const pacPending = useRuntimeActionStore((state) => state.pacPending);
   // Local node selection (blue highlight). Seeded from the persisted active
   // profile; single-clicks move it without touching the backend.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Tracks the active profile the selection was last seeded from, so re-seeding
   // only fires when the active profile actually changes.
   const [seededFor, setSeededFor] = useState<string | null>(null);
-  // The node whose switch+connect is currently in flight (spinner / re-entry guard).
-  const [switchingId, setSwitchingId] = useState<string | null>(null);
+  const { activateProfile, busy: activationBusy, switchingId } = useProfileActivation(t, {
+    onSelect: setSelectedId,
+  });
   // Shares the ProfilesScreen query cache (same key) so resolving the active
   // node's name here costs no extra fetch and stays in sync after a switch.
   const profilesQuery = useQuery({
@@ -102,11 +104,11 @@ export function useHomeRuntime(t: Translation) {
   }
 
   async function runRuntimeAction(action: RuntimeAction) {
-    if (busy) {
+    if (busy || runtimeActionPending()) {
       return;
     }
 
-    setPendingAction(action);
+    useRuntimeActionStore.setState({ pendingAction: action });
     const isLatest = beginRuntimeRead("coreState");
     try {
       const status = await runWithElevation(() =>
@@ -131,7 +133,7 @@ export function useHomeRuntime(t: Translation) {
       }
     } finally {
       await refreshStatus();
-      setPendingAction(null);
+      useRuntimeActionStore.setState({ pendingAction: null });
     }
   }
 
@@ -146,49 +148,6 @@ export function useHomeRuntime(t: Translation) {
     }
   }
 
-  // Switch the active profile to `indexId` and apply it: restart the tunnel when
-  // already connected, otherwise connect. Drives double-click / Enter and the
-  // connect button when its selection differs from the active profile.
-  async function switchActiveAndApply(indexId: string) {
-    // `busy` covers the in-flight switch, a pending connect/disconnect/restart
-    // and the backend-reported connecting/disconnecting states (tray or
-    // auto-connect), so a double-click can never race another runtime command.
-    if (busy) {
-      return false;
-    }
-
-    setSelectedId(indexId);
-    setSwitchingId(indexId);
-    const wasConnected = connected;
-    try {
-      await setActiveProfile(indexId);
-      const isLatest = beginRuntimeRead("coreState");
-      const status = await runWithElevation(() =>
-        wasConnected ? restartCore() : connectActiveProfile(),
-      );
-      if (isLatest()) setCoreState(status);
-      return status.state === "connected";
-    } catch (error) {
-      const missingCore = missingCorePayload(error);
-      if (missingCore) {
-        openModal("missingCore", { missingCore });
-      } else {
-        pushToast({
-          description: getErrorMessage(error),
-          severity: "error",
-          title: t(wasConnected ? "actions.restart" : "actions.connect"),
-        });
-      }
-      return false;
-    } finally {
-      await refreshStatus();
-      // `set_active_profile` emits the profiles invalidation that drives the
-      // active-node highlight, whether or not the connect that follows it
-      // succeeds.
-      setSwitchingId(null);
-    }
-  }
-
   function handlePrimaryAction() {
     if (connected || state === "cleanupPending") {
       void runRuntimeAction("disconnect");
@@ -198,7 +157,7 @@ export function useHomeRuntime(t: Translation) {
     // Connect to the locally-selected node. When it differs from the persisted
     // active profile, switch first so connect uses it; otherwise connect directly.
     if (selectedId && selectedId !== activeProfileId) {
-      void switchActiveAndApply(selectedId);
+      void activateProfile(selectedId);
 
       return;
     }
@@ -243,11 +202,11 @@ export function useHomeRuntime(t: Translation) {
     // `modeBusy` also covers a pending connect/disconnect/restart: flipping TUN
     // while the core is still starting persists the flag but cannot restart the
     // not-yet-connected core, leaving the UI claiming TUN over a non-TUN core.
-    if (modeBusy || enabled === tunEnabled) {
+    if (modeBusy || runtimeActionPending() || enabled === tunEnabled) {
       return;
     }
 
-    setModePending(true);
+    useRuntimeActionStore.setState({ modePending: true });
     try {
       if (enabled && !(await ensureTunPreconditions())) {
         return;
@@ -262,15 +221,15 @@ export function useHomeRuntime(t: Translation) {
       return;
     } finally {
       await refreshStatus();
-      setModePending(false);
+      useRuntimeActionStore.setState({ modePending: false });
     }
   }
 
   async function runPacToggle() {
-    if (modeBusy || tunEnabled) {
+    if (modeBusy || runtimeActionPending() || tunEnabled) {
       return;
     }
-    setPacPending(true);
+    useRuntimeActionStore.setState({ pacPending: true });
     try {
       const nextPac = !pacActive;
       await setConnectionMode("systemProxy", nextPac);
@@ -282,12 +241,8 @@ export function useHomeRuntime(t: Translation) {
       });
     } finally {
       await refreshStatus();
-      setPacPending(false);
+      useRuntimeActionStore.setState({ pacPending: false });
     }
-  }
-
-  function activateProfile(indexId: string) {
-    return switchActiveAndApply(indexId);
   }
 
   function changeTunEnabled(enabled: boolean) {
@@ -309,6 +264,7 @@ export function useHomeRuntime(t: Translation) {
   return {
     activeTunBackend: coreState?.activeTunBackend ?? null,
     activateProfile,
+    activationBusy,
     nodeEntry,
     activeSubscriptionId: activeProfile?.profile.subscriptionId ?? null,
     busy,

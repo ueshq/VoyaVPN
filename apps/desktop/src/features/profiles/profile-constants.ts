@@ -1,4 +1,4 @@
-import type { MoveAction, ProfileKind, SpeedtestKind } from "@/ipc/bindings";
+import type { MoveAction, ProfileKind } from "@/ipc/bindings";
 import type { TranslationFunction } from "@voya/i18n";
 
 export const CONFIG_TYPES = {
@@ -25,14 +25,6 @@ export const MOVE_ACTIONS = {
   Bottom: "bottom",
   Position: "position",
 } as const satisfies Record<string, MoveAction>;
-
-export const SPEED_ACTIONS = {
-  Download: "download",
-  Latency: "latency",
-  Mixed: "mixed",
-  TcpConnect: "tcpConnect",
-  Udp: "udp",
-} as const satisfies Record<string, SpeedtestKind>;
 
 export type ProfileProtocol = (typeof CONFIG_TYPES)[keyof typeof CONFIG_TYPES];
 

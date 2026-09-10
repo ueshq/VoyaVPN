@@ -20,7 +20,7 @@
 
 use voya_contracts::InvalidationScope;
 
-/// Profile-list mutations: save, delete, copy, move, sort, dedupe, the group
+/// Profile-list mutations: save, delete, copy, move, the group
 /// editor's save, and the profile rows a speedtest run rewrites.
 ///
 /// The child-candidate picker lists the same rows the profile table does, so it

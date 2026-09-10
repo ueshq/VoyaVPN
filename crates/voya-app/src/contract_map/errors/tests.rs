@@ -795,7 +795,6 @@ mod guards {
             | SpeedtestError::Profile(_)
             | SpeedtestError::Network(_)
             | SpeedtestError::Io(_)
-            | SpeedtestError::Udp(_)
             | SpeedtestError::CoreInfo(_)
             | SpeedtestError::Path(_)
             | SpeedtestError::Process(_)

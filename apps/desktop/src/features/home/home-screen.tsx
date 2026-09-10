@@ -71,7 +71,7 @@ export function HomeScreen() {
           ) : null}
         </div>
 
-        <div className="home-node-card">
+        <div className="node-card-surface home-node-card">
           <div aria-hidden="true" className="home-node-icon">{flag || <Globe2 className="size-6" strokeWidth={1.5} />}</div>
           <div className="home-node-content">
             <p className="home-node-label">{t(home.connected ? "home.currentNodeLabel" : "home.selectedNodeLabel")}</p>

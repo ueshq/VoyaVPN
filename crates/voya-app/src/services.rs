@@ -5,7 +5,7 @@
 
 use std::{path::Path, sync::Arc};
 
-use voya_contracts::{AppSettingsV1, SpeedtestKind, SystemProxyType};
+use voya_contracts::{AppSettingsV1, SystemProxyType};
 pub use voya_core::{AppConfig, CoreType, SysProxyType, TrafficMode, DEFAULT_LOCAL_PORT};
 use voya_db::{Database, DbError};
 use voya_platform::{coreinfo::TargetOs, paths::AppPaths, process::ProcessRunner};
@@ -171,7 +171,6 @@ impl AppServices {
         &self,
         manager: &SpeedtestManager,
         config: &AppConfig,
-        kind: SpeedtestKind,
         profile_ids: Vec<String>,
         on_result: F,
     ) -> crate::speedtest::Result<SpeedtestRunResult>
@@ -179,7 +178,7 @@ impl AppServices {
         F: Fn(SpeedtestResult) + Send + Sync,
     {
         manager
-            .run_with_callback(&self.database, config, kind, profile_ids, on_result)
+            .run_with_callback(&self.database, config, profile_ids, on_result)
             .await
     }
 

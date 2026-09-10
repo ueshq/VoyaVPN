@@ -5,17 +5,25 @@ import { afterEach, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
 
-import type { ImportProfilesResult, Profile, ProfileListEntry } from "@/ipc/bindings";
+import { IpcCommandError } from "@/ipc";
+import { useModalStore } from "@/stores/modal-store";
+import type { AppError, ImportProfilesResult, Profile, ProfileListEntry, RuntimeStatusResponse } from "@/ipc/bindings";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { useProfileColumnsStore } from "@/stores/column-visibility-store";
+import { useRuntimeActionStore } from "@/stores/runtime-action-store";
+import { useToastStore } from "@/stores/toast-store";
 import { makeProfileFixture } from "@/test/profile-fixture";
 
-import { MOVE_ACTIONS, SPEED_ACTIONS } from "./profile-constants";
+import { MOVE_ACTIONS } from "./profile-constants";
 import { ProfilesScreen } from "./server-table";
 import { applyLiveUpdates } from "./server-table-live-updates";
 
 const ipcMocks = vi.hoisted(() => ({
-  dedupeProfiles: vi.fn(),
+  connectActiveProfile: vi.fn(),
+  restartCore: vi.fn(),
+  runtimeStatus: vi.fn(),
+  systemProxyStatus: vi.fn(),
+  tunStatus: vi.fn(),
+  tunRequestElevation: vi.fn(),
   deleteSubscriptions: vi.fn(),
   deleteProfiles: vi.fn(),
   exportProfileShareLinks: vi.fn(),
@@ -34,7 +42,6 @@ const ipcMocks = vi.hoisted(() => ({
   saveProfile: vi.fn(),
   saveSubscription: vi.fn(),
   setActiveProfile: vi.fn(),
-  sortProfiles: vi.fn(),
   updateSubscriptions: vi.fn(),
 }));
 
@@ -45,6 +52,10 @@ vi.mock("@/ipc", async () => {
 
   return {
     ...ipcMocks,
+    IpcCommandError: class extends Error {
+      readonly appError: AppError;
+      constructor(appError: AppError) { super(appError.message); this.appError = appError; }
+    },
     useRuntimeEventStore: runtimeStore.useRuntimeEventStore,
   };
 });
@@ -163,20 +174,26 @@ async function openContextSubmenu(menu: HTMLElement, name: string) {
 
 describe("ProfilesScreen", () => {
   beforeEach(() => {
+    useRuntimeActionStore.setState({ pendingAction: null, modePending: false, pacPending: false, switchingId: null });
     Object.values(ipcMocks).forEach((mock) => {
       if ("mockReset" in mock) {
         mock.mockReset();
       }
     });
-    // Column visibility persists to localStorage, so reset it between tests to
-    // keep the default-column expectations independent of prior toggles.
-    useProfileColumnsStore.getState().resetColumnVisibility();
+    window.localStorage.removeItem("voyavpn.profileColumns");
+    useToastStore.setState({ toasts: [] });
+    useModalStore.setState({ stack: [] });
     useRuntimeEventStore.setState({
+      coreState: null,
       serverStatsByProfileId: {},
       speedtestResultsByProfileId: {},
       speedtestRunning: false,
     });
-    ipcMocks.dedupeProfiles.mockResolvedValue({ kept: 0, removedProfileIds: [], total: 0 });
+    ipcMocks.connectActiveProfile.mockResolvedValue({ state: "connected", activeProfileId: "profile-0" });
+    ipcMocks.restartCore.mockResolvedValue({ state: "connected", activeProfileId: "profile-0" });
+    ipcMocks.runtimeStatus.mockImplementation(async () => useRuntimeEventStore.getState().coreState);
+    ipcMocks.systemProxyStatus.mockResolvedValue(null);
+    ipcMocks.tunStatus.mockResolvedValue(null);
     ipcMocks.deleteSubscriptions.mockResolvedValue(1);
     ipcMocks.deleteProfiles.mockResolvedValue(1);
     ipcMocks.exportProfileShareLinks.mockImplementation(async (indexIds: string[]) => ({
@@ -197,7 +214,6 @@ describe("ProfilesScreen", () => {
     });
     ipcMocks.cancelSpeedtest.mockResolvedValue({ running: false });
     ipcMocks.runSpeedtest.mockResolvedValue({
-      action: SPEED_ACTIONS.Download,
       cancelled: false,
       completedCount: 0,
       results: [],
@@ -213,7 +229,6 @@ describe("ProfilesScreen", () => {
     ipcMocks.saveProfile.mockImplementation(async (profile: Profile) => makeProfile(99, profile));
     ipcMocks.saveSubscription.mockResolvedValue(makeSubscription());
     ipcMocks.setActiveProfile.mockImplementation(async (profileId: string) => makeProfile(0, { id: profileId }));
-    ipcMocks.sortProfiles.mockResolvedValue([]);
     ipcMocks.updateSubscriptions.mockResolvedValue({ imported: 0, messages: [], removedExisting: 0, skipped: 0, updated: 0 });
   });
 
@@ -223,7 +238,7 @@ describe("ProfilesScreen", () => {
     renderProfiles();
 
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
-    expect(screen.getByRole("table")).toHaveAttribute("aria-rowcount", "5001");
+    expect(screen.getAllByRole("listitem")[0]).toHaveAttribute("aria-setsize", "5000");
     expect(screen.getAllByTestId("server-row").length).toBeLessThan(60);
     expect(screen.queryByText("Server 4999")).not.toBeInTheDocument();
   });
@@ -256,31 +271,24 @@ describe("ProfilesScreen", () => {
     expect(updated[499].traffic.todayDownload).toBe(499 * 2048 + 59);
   });
 
-  it("shows speedtest status messages even when a previous speed value exists", async () => {
+  it.each([
+    ["waiting", "Waiting"],
+    ["testing", "Testing"],
+    ["timedOut", "Request timed out"],
+    ["cancelled", "Cancelled"],
+  ] as const)("shows %s instead of a previous latency", async (outcome, label) => {
     const profile = makeProfile(0);
-    profile.metrics = {
-      ...profile.metrics,
-      delayMs: -1,
-      ipInfo: null,
-      outcome: "timedOut",
-      speedBytesPerSecond: 2048,
-    };
+    profile.metrics = { ...profile.metrics, delayMs: 42, outcome };
     mockProfileList([profile]);
-
     renderProfiles();
-
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
+    expect(screen.getByText(label)).toBeInTheDocument();
+    expect(screen.queryByText("42 ms")).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Speed" })).not.toBeInTheDocument();
-    const menu = await openRowContextMenu();
-    const speedMenu = await openContextSubmenu(menu, "Speedtest");
-    await userEvent.click(within(speedMenu).getByRole("menuitem", { name: "Speed" }));
-
-    expect(await screen.findByRole("columnheader", { name: "Speed" })).toBeInTheDocument();
-    expect(await screen.findByText("Request timed out")).toBeInTheDocument();
-    expect(screen.queryByText("2.0 KB/s")).not.toBeInTheDocument();
   });
 
-  it("removes multi-select and copy while keeping row actions and sorting", async () => {
+
+  it("keeps row actions without multi-select, copy, sorting, or dedupe", async () => {
     const profiles = makeProfiles(3);
     mockProfileList(profiles);
 
@@ -291,12 +299,15 @@ describe("ProfilesScreen", () => {
     const rows = screen.getAllByTestId("server-row");
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Copy" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Sort" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sort" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Dedupe" })).not.toBeInTheDocument();
 
     await userEvent.click(rows[0]!);
     fireEvent.click(rows[1]!, { ctrlKey: true });
-    expect(rows[0]).toHaveAttribute("aria-selected", "false");
-    expect(rows[1]).toHaveAttribute("aria-selected", "true");
-    expect(rows[2]).toHaveAttribute("aria-selected", "false");
+    expect(rows[0]).toHaveAttribute("data-selected", "false");
+    expect(rows[1]).toHaveAttribute("data-selected", "true");
+    expect(rows[2]).toHaveAttribute("data-selected", "false");
     expect(screen.queryByRole("button", { name: /Activate/ })).not.toBeInTheDocument();
 
     const menu = await openRowContextMenu(0);
@@ -304,11 +315,9 @@ describe("ProfilesScreen", () => {
     const confirm = await screen.findByRole("alertdialog");
     fireEvent.click(within(confirm).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
-    await userEvent.click(screen.getByRole("button", { name: "Remarks" }));
 
     expect(ipcMocks.setActiveProfile).not.toHaveBeenCalled();
     expect(ipcMocks.deleteProfiles).toHaveBeenCalledWith(["profile-0"]);
-    expect(ipcMocks.sortProfiles).toHaveBeenCalledWith(null, "remarks", true);
   });
 
   it("opens the targeted profile editor from the row context menu", async () => {
@@ -337,18 +346,18 @@ describe("ProfilesScreen", () => {
 
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
 
-    const speedButton = screen.getByRole("button", { name: "Bulk speedtest" });
+    const speedButton = screen.getByRole("button", { name: "Test all latencies" });
     await userEvent.click(speedButton);
 
-    await waitFor(() => expect(speedButton).toBeDisabled());
+    await waitFor(() => expect(speedButton).toHaveAccessibleName("Stop"));
     expect(ipcMocks.runSpeedtest).toHaveBeenCalledWith({
-      kind: SPEED_ACTIONS.Latency,
       target: { scope: "all" },
     });
 
     rejectSpeedtest(new Error("boom"));
 
-    await waitFor(() => expect(speedButton).toBeEnabled());
+    await waitFor(() => expect(speedButton).toHaveAccessibleName("Test all latencies"));
+    expect(speedButton).toBeEnabled();
   });
 
   it("runs a row speedtest only for the context-menu target", async () => {
@@ -358,46 +367,53 @@ describe("ProfilesScreen", () => {
 
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
     const menu = await openRowContextMenu();
-    const speedMenu = await openContextSubmenu(menu, "Speedtest");
-    await userEvent.click(within(speedMenu).getByRole("menuitem", { name: "Real" }));
+    await userEvent.click(within(menu).getByRole("menuitem", { name: "Test latency" }));
 
     expect(ipcMocks.runSpeedtest).toHaveBeenCalledWith({
-      kind: SPEED_ACTIONS.Latency,
       target: { scope: "profiles", profileIds: ["profile-0"] },
     });
   });
 
-  it("runs alternate batch speedtests against all profiles", async () => {
-    mockProfileList(makeProfiles(2));
-
+  it("tests all profiles and always displays latency despite old column preferences", async () => {
+    window.localStorage.setItem("voyavpn.profileColumns", JSON.stringify({ state: { columnVisibility: { delay: false, remarks: false } } }));
+    const profile = makeProfile(0);
+    profile.metrics.delayMs = 42;
+    mockProfileList([profile]);
     renderProfiles();
-
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("menuitem", { name: "More speed tests" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "TCP" }));
-
-    expect(ipcMocks.runSpeedtest).toHaveBeenCalledWith({
-      kind: SPEED_ACTIONS.TcpConnect,
-      target: { scope: "all" },
-    });
+    expect(screen.getByText("42 ms")).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Columns" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Test all latencies" }));
+    expect(ipcMocks.runSpeedtest).toHaveBeenCalledWith({ target: { scope: "all" } });
   });
 
-  it("reflects an already running speedtest from the runtime store", async () => {
+  it("offers Stop for an existing run and disables the row action", async () => {
     mockProfileList(makeProfiles(1));
     useRuntimeEventStore.setState({ speedtestRunning: true });
-
     renderProfiles();
-
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
-
-    await waitFor(() => expect(screen.getByRole("button", { name: "Bulk speedtest" })).toBeDisabled());
-
-    // Stop is reachable through the split-button menu and stays enabled while a
-    // run is in flight, even as the probe items are disabled.
-    await userEvent.click(screen.getByRole("menuitem", { name: "More speed tests" }));
-    const stopItem = await screen.findByRole("menuitem", { name: "Stop" });
-    expect(stopItem).not.toHaveAttribute("data-disabled");
+    expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
+    const menu = await openRowContextMenu();
+    expect(within(menu).getByRole("menuitem", { name: "Test latency" })).toHaveAttribute("data-disabled");
+    expect(ipcMocks.runSpeedtest).not.toHaveBeenCalled();
   });
+
+  it("waits for the run to finish after cancellation is requested", async () => {
+    let finishRun!: (value: Awaited<ReturnType<typeof ipcMocks.runSpeedtest>>) => void;
+    ipcMocks.runSpeedtest.mockReturnValue(new Promise((resolve) => { finishRun = resolve; }));
+    ipcMocks.cancelSpeedtest.mockResolvedValue({ running: true });
+    mockProfileList(makeProfiles(1));
+    renderProfiles();
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Test all latencies" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Stop" }));
+    expect(ipcMocks.cancelSpeedtest).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    expect(ipcMocks.runSpeedtest).toHaveBeenCalledOnce();
+    finishRun({ cancelled: true, completedCount: 0, selectedCount: 1, results: [] });
+    expect(await screen.findByRole("button", { name: "Test all latencies" })).toBeEnabled();
+  });
+
 
   it("confirms before deleting and cancels without calling the delete IPC", async () => {
     mockProfileList(makeProfiles(3));
@@ -428,94 +444,150 @@ describe("ProfilesScreen", () => {
     expect(screen.queryByTestId("server-row")).not.toBeInTheDocument();
   });
 
-  it("ships high-signal columns and collapses niche ones by default", async () => {
-    mockProfileList(makeProfiles(3));
-
+  it("shows a compact card with subscription name, details and an accessible selection button", async () => {
+    const profile = makeProfile(0, { subscriptionId: "sub-1", remarks: "🇯🇵 Tokyo" });
+    profile.metrics.delayMs = 42;
+    profile.metrics.ipInfo = "Tokyo IP";
+    mockProfileList([profile]);
+    ipcMocks.listSubscriptions.mockResolvedValue([{ ...makeSubscription(), id: "sub-1", remarks: "Travel" }]);
     renderProfiles();
-
-    expect(await screen.findByText("Server 0")).toBeInTheDocument();
-
-    for (const label of ["Protocol", "Remarks", "Address", "Delay", "Group"]) {
-      expect(screen.getByRole("columnheader", { name: label })).toBeInTheDocument();
-    }
-    expect(screen.queryByRole("columnheader", { name: "IP info" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "Security" })).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("menuitem", { name: "Columns" }));
-    await userEvent.click(await screen.findByRole("menuitemcheckbox", { name: "IP info" }));
-    expect(await screen.findByRole("columnheader", { name: "IP info" })).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("menuitemcheckbox", { name: "IP info" }));
+    expect(await screen.findByText("Tokyo")).toBeInTheDocument();
+    expect(await screen.findByText("Travel")).toBeInTheDocument();
+    expect(screen.getByText("42 ms")).toBeInTheDocument();
+    expect(screen.queryByText("Tokyo IP")).not.toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    const selection = screen.getByRole("button", { name: "Select 🇯🇵 Tokyo" });
+    selection.focus();
+    await userEvent.keyboard(" ");
+    expect(selection).toHaveAttribute("aria-pressed", "true");
+    expect(ipcMocks.setActiveProfile).not.toHaveBeenCalled();
+    const details = screen.getByRole("button", { name: "Details" });
+    await userEvent.click(details);
+    const dialog = screen.getByRole("dialog", { name: "Node details" });
+    expect(dialog).toHaveTextContent("Tokyo IP");
+    expect(dialog).toHaveTextContent("443");
+    expect(dialog).toHaveTextContent("Travel");
     await userEvent.keyboard("{Escape}");
-    expect(screen.queryByRole("columnheader", { name: "IP info" })).not.toBeInTheDocument();
+    expect(details).toHaveFocus();
   });
 
-  it("reveals niche traffic columns through the column menu", async () => {
-    mockProfileList(makeProfiles(3));
-
-    renderProfiles();
-
-    expect(await screen.findByText("Server 1")).toBeInTheDocument();
-    // Traffic columns are collapsed by default to cut horizontal scroll.
-    expect(screen.queryByRole("columnheader", { name: "Total up" })).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("menuitem", { name: "Columns" }));
-    await userEvent.click(await screen.findByRole("menuitemcheckbox", { name: "Total up" }));
-    await userEvent.keyboard("{Escape}");
-
-    expect(await screen.findByRole("columnheader", { name: "Total up" })).toBeInTheDocument();
-    expect(screen.getAllByText("4.0 KB").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("8.0 KB").length).toBeGreaterThan(0);
-  });
-
-  it("keeps the statistics stream out of the table until a traffic column is visible", async () => {
+  it("subscribes to live traffic only in the open node details", async () => {
     mockProfileList([makeProfile(0)]);
-
     renderProfiles();
-
-    expect(await screen.findByText("Server 0")).toBeInTheDocument();
-
-    act(() => {
-      useRuntimeEventStore.setState({
-        serverStatsByProfileId: {
-          "profile-0": {
-            dateNow: 20260101,
-            indexId: "profile-0",
-            todayDown: 4096,
-            todayUp: 2048,
-            totalDown: 8192,
-            totalUp: 4096,
-          },
-        },
-      });
-    });
-
-    // Traffic columns ship hidden, so the once-per-second statistics stream must
-    // not rebuild the row model to update cells nobody can see.
+    await screen.findByText("Server 0");
+    act(() => useRuntimeEventStore.setState({ serverStatsByProfileId: {
+      "profile-0": { dateNow: 20260101, indexId: "profile-0", todayDown: 4096, todayUp: 2048, totalDown: 8192, totalUp: 4096 },
+    } }));
     expect(screen.queryByText("4.0 KB")).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("menuitem", { name: "Columns" }));
-    await userEvent.click(await screen.findByRole("menuitemcheckbox", { name: "Total up" }));
+    await userEvent.click(screen.getByRole("button", { name: "Details" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("4.0 KB");
+    act(() => useRuntimeEventStore.setState({ serverStatsByProfileId: {
+      "profile-0": { dateNow: 20260101, indexId: "profile-0", todayDown: 16384, todayUp: 2048, totalDown: 16384, totalUp: 4096 },
+    } }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("16.0 KB");
     await userEvent.keyboard("{Escape}");
-
-    // Revealing the column subscribes to the live map and shows the live value.
-    expect(await screen.findByRole("columnheader", { name: "Total up" })).toBeInTheDocument();
-    expect(await screen.findByText("4.0 KB")).toBeInTheDocument();
+    expect(screen.queryByText("16.0 KB")).not.toBeInTheDocument();
   });
 
-  it("restores default columns from the column menu reset action", async () => {
-    mockProfileList(makeProfiles(3));
-
+  it("opens the same edit action from the visible card menu", async () => {
+    mockProfileList([makeProfile(0)]);
     renderProfiles();
+    await screen.findByText("Server 0");
+    await userEvent.click(screen.getByRole("menuitem", { name: /Actions for Server 0/ }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Edit" }));
+    expect(await screen.findByRole("dialog", { name: "Edit node" })).toBeInTheDocument();
+  });
 
-    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+  it("connects the requested card, guards repeated activation and marks the running node", async () => {
+    mockProfileList(makeProfiles(2));
+    let finish!: (status: RuntimeStatusResponse) => void;
+    ipcMocks.connectActiveProfile.mockReturnValue(new Promise<RuntimeStatusResponse>((resolve) => { finish = resolve; }));
+    renderProfiles();
+    await screen.findByText("Server 0");
+    const target = within(screen.getAllByTestId("server-row")[1]!);
+    fireEvent.click(target.getByRole("button", { name: "Use node" }));
+    fireEvent.click(target.getByRole("button", { name: "Switching…" }));
+    await waitFor(() => expect(ipcMocks.connectActiveProfile).toHaveBeenCalledOnce());
+    expect(ipcMocks.setActiveProfile).toHaveBeenCalledExactlyOnceWith("profile-1");
+    expect(ipcMocks.setActiveProfile.mock.invocationCallOrder[0]).toBeLessThan(ipcMocks.connectActiveProfile.mock.invocationCallOrder[0]!);
+    expect(screen.getByRole("button", { name: "Use node" })).toBeDisabled();
+    await act(async () => finish({ activeProfileId: "profile-1", activeTunBackend: null, mainPid: 42, prePid: null, runningCoreType: "singBox", state: "connected", connectedDurationMs: 0 }));
+    expect(await screen.findByRole("button", { name: "In use" })).toBeDisabled();
+    expect(target.getByText("Active node")).toBeInTheDocument();
+    expect(ipcMocks.restartCore).not.toHaveBeenCalled();
+  });
 
-    await userEvent.click(screen.getByRole("menuitem", { name: "Columns" }));
-    await userEvent.click(await screen.findByRole("menuitemcheckbox", { name: "IP info" }));
-    expect(await screen.findByRole("columnheader", { name: "IP info" })).toBeInTheDocument();
+  it("restarts when switching a connected node and keeps actual runtime distinct from default", async () => {
+    mockProfileList(makeProfiles(2));
+    useRuntimeEventStore.setState({ coreState: { activeProfileId: "profile-1", activeTunBackend: null, mainPid: 42, prePid: null, runningCoreType: "singBox", state: "connected", connectedDurationMs: 0 } });
+    renderProfiles();
+    await screen.findByText("Server 0");
+    const cards = screen.getAllByTestId("server-row");
+    expect(within(cards[0]!).getByText("Default node")).toBeInTheDocument();
+    expect(within(cards[1]!).getByRole("button", { name: "In use" })).toBeDisabled();
+    await userEvent.click(within(cards[0]!).getByRole("button", { name: "Use node" }));
+    await waitFor(() => expect(ipcMocks.restartCore).toHaveBeenCalledOnce());
+    await waitFor(() => expect(within(cards[0]!).getByRole("button", { name: "In use" })).toBeDisabled());
+    expect(ipcMocks.connectActiveProfile).not.toHaveBeenCalled();
+  });
 
-    await userEvent.click(screen.getByRole("menuitem", { name: "Reset to defaults" }));
-    expect(screen.queryByRole("columnheader", { name: "IP info" })).not.toBeInTheDocument();
+  it("reports connection failure and allows retry", async () => {
+    mockProfileList([makeProfile(0)]);
+    ipcMocks.connectActiveProfile.mockRejectedValueOnce(new Error("Connection failed"));
+    renderProfiles();
+    await screen.findByText("Server 0");
+    await userEvent.click(screen.getByRole("button", { name: "Use node" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Use node" })).toBeEnabled());
+    expect(useToastStore.getState().toasts.some((toast) => toast.description === "Connection failed")).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "Use node" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "In use" })).toBeDisabled());
+    expect(ipcMocks.connectActiveProfile).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["connecting", "disconnecting", "cleanupPending"] as const)("disables use during %s", async (state) => {
+    mockProfileList([makeProfile(0)]);
+    useRuntimeEventStore.setState({ coreState: { activeProfileId: null, activeTunBackend: null, mainPid: null, prePid: null, runningCoreType: null, state, connectedDurationMs: null } });
+    renderProfiles();
+    await screen.findByText("Server 0");
+    expect(screen.getByRole("button", { name: "Use node" })).toBeDisabled();
+  });
+
+  it("opens missing-core recovery when using a card", async () => {
+    mockProfileList([makeProfile(0)]);
+    ipcMocks.connectActiveProfile.mockRejectedValue(new IpcCommandError({
+      kind: { type: "missingCore", coreType: "singBox", candidates: [], searchDir: "/cores", downloadUrl: "https://example.test/core" },
+      message: "Core unavailable", subsystem: "runtime",
+    }));
+    renderProfiles();
+    await screen.findByText("Server 0");
+    await userEvent.click(screen.getByRole("button", { name: "Use node" }));
+    await waitFor(() => expect(useModalStore.getState().stack[0]).toMatchObject({ kind: "missingCore" }));
+    expect(useToastStore.getState().toasts).toHaveLength(0);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Use node" })).toBeEnabled());
+  });
+
+  it.each([true, false])("handles one-time authorization from a card (granted: %s)", async (granted) => {
+    mockProfileList([makeProfile(0)]);
+    ipcMocks.connectActiveProfile.mockRejectedValueOnce(new IpcCommandError({ kind: { type: "elevationRequired" }, message: "Authorization required", subsystem: "tun" }));
+    ipcMocks.tunRequestElevation.mockResolvedValue({ elevationGranted: granted });
+    renderProfiles();
+    await screen.findByText("Server 0");
+    await userEvent.click(screen.getByRole("button", { name: "Use node" }));
+    await waitFor(() => expect(useRuntimeActionStore.getState().switchingId).toBeNull());
+    expect(ipcMocks.tunRequestElevation).toHaveBeenCalledOnce();
+    expect(ipcMocks.connectActiveProfile).toHaveBeenCalledTimes(granted ? 2 : 1);
+    if (!granted) expect(screen.getByRole("button", { name: "Use node" })).toBeEnabled();
+  });
+
+  it("inherits a runtime operation started on another screen", async () => {
+    useRuntimeActionStore.setState({ pendingAction: "connect" });
+    mockProfileList([makeProfile(0)]);
+    renderProfiles();
+    await screen.findByText("Server 0");
+    expect(screen.getByRole("button", { name: "Use node" })).toBeDisabled();
+    act(() => useRuntimeActionStore.setState({ pendingAction: null }));
+    expect(screen.getByRole("button", { name: "Use node" })).toBeEnabled();
+    expect(ipcMocks.setActiveProfile).not.toHaveBeenCalled();
   });
 
   it("states how many stored profiles this build could not read", async () => {
@@ -556,11 +628,21 @@ describe("ProfilesScreen", () => {
 
     renderProfiles();
 
-    // Import and subscription management live in the toolbar overflow menu;
-    // update-all is intentionally available only inside subscription management.
-    await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
+    // Import and subscription management are directly available in the toolbar;
+    // update-all is available only inside subscription management.
+    const toolbar = within(screen.getByRole("toolbar"));
+    for (const name of ["Import from clipboard", "Import", "Subscriptions"]) {
+      expect(toolbar.getByRole("button", { name })).toBeVisible();
+    }
+    expect(toolbar.queryByRole("menuitem", { name: "More actions" })).not.toBeInTheDocument();
+    expect(toolbar.queryByRole("button", { name: "More actions" })).not.toBeInTheDocument();
+    expect(toolbar.queryByRole("button", { name: "Update subs" })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Update subs" })).not.toBeInTheDocument();
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Import" }));
+    await userEvent.click(toolbar.getByRole("button", { name: "Subscriptions" }));
+    expect(await screen.findByRole("dialog", { name: "Subscriptions" })).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await userEvent.click(await screen.findByRole("button", { name: "Import" }));
     fireEvent.change(screen.getByLabelText("Import payload"), {
       target: { value: "vless://uuid@example.test:443#US" },
     });
@@ -596,8 +678,7 @@ describe("ProfilesScreen", () => {
 
     renderProfiles();
 
-    await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Import" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Import" }));
     fireEvent.change(screen.getByLabelText("Import payload"), {
       target: { value: "vless://uuid@example.test:443#Imported" },
     });
@@ -605,8 +686,8 @@ describe("ProfilesScreen", () => {
 
     expect(await screen.findByText("Imported node")).toBeInTheDocument();
     const rows = screen.getAllByTestId("server-row");
-    expect(rows[0]).toHaveAttribute("aria-selected", "true");
-    expect(rows[1]).toHaveAttribute("aria-selected", "false");
+    expect(rows[0]).toHaveAttribute("data-selected", "true");
+    expect(rows[1]).toHaveAttribute("data-selected", "false");
     expect(screen.getByText("Imported 2 node(s).")).toBeInTheDocument();
   });
 
@@ -629,8 +710,7 @@ describe("ProfilesScreen", () => {
 
     renderProfiles();
 
-    await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Import" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Import" }));
     await userEvent.click(await screen.findByRole("button", { name: "Screen" }));
     expect(await screen.findByLabelText("Import payload")).toHaveValue(
       "vless://uuid@example.test:443#Scanned",
@@ -640,7 +720,7 @@ describe("ProfilesScreen", () => {
     await userEvent.click(screen.getByRole("button", { name: "Import payload" }));
 
     expect(await screen.findByText("Scanned node")).toBeInTheDocument();
-    expect(screen.getByTestId("server-row")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("server-row")).toHaveAttribute("data-selected", "true");
     expect(screen.getByText("Imported 1 node(s).")).toBeInTheDocument();
   });
 
@@ -652,10 +732,13 @@ describe("ProfilesScreen", () => {
       remarks: "Clipboard node",
     });
     let imported = false;
+    let finishImport!: () => void;
+    const pendingImport = new Promise<void>((resolve) => { finishImport = resolve; });
     ipcMocks.listProfiles.mockImplementation(async (_subscription_id: string | null, filter: string | null) =>
       listing(imported && !filter ? [importedProfile] : []),
     );
     ipcMocks.importProfilesFromText.mockImplementation(async () => {
+      await pendingImport;
       imported = true;
       return makeImportResult({
         imported: 1,
@@ -672,16 +755,21 @@ describe("ProfilesScreen", () => {
     const filterInput = await screen.findByRole("searchbox", { name: "Filter nodes" });
     fireEvent.change(filterInput, { target: { value: "hidden" } });
 
-    await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Import from clipboard" }));
+    const importButton = await screen.findByRole("button", { name: "Import from clipboard" });
+    await userEvent.click(importButton);
 
     await waitFor(() => expect(readText).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(ipcMocks.importProfilesFromText).toHaveBeenCalledWith(clipboardText, null),
     );
+    expect(importButton).toBeDisabled();
+    await userEvent.click(importButton);
+    expect(ipcMocks.importProfilesFromText).toHaveBeenCalledTimes(1);
+    await act(async () => { finishImport(); });
     expect(await screen.findByText("Clipboard node")).toBeInTheDocument();
+    await waitFor(() => expect(importButton).toBeEnabled());
     expect(filterInput).toHaveValue("");
-    expect(screen.getByTestId("server-row")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("server-row")).toHaveAttribute("data-selected", "true");
     expect(
       screen.getByText("Imported 1 node(s). 1 updated. 2 duplicate(s) removed."),
     ).toBeInTheDocument();
@@ -693,8 +781,7 @@ describe("ProfilesScreen", () => {
 
     renderProfiles();
 
-    await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Import from clipboard" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Import from clipboard" }));
 
     await waitFor(() => expect(readText).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Clipboard is empty.")).toBeInTheDocument();
@@ -707,8 +794,7 @@ describe("ProfilesScreen", () => {
 
     renderProfiles();
 
-    await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Import from clipboard" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Import from clipboard" }));
 
     expect(await screen.findByText("Clipboard text read is unavailable in this WebView.")).toBeInTheDocument();
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
@@ -1037,8 +1123,7 @@ describe("ProfilesScreen", () => {
     await withLocale("zh-Hans", async () => {
       renderProfiles();
 
-      await userEvent.click(await screen.findByRole("menuitem", { name: "更多操作" }));
-      await userEvent.click(await screen.findByRole("menuitem", { name: "从剪贴板导入" }));
+      await userEvent.click(await screen.findByRole("button", { name: "从剪贴板导入" }));
 
       expect(
         await screen.findByText("已导入 3 个节点。 已跳过 1 个。 2 个解析失败。"),
@@ -1046,26 +1131,18 @@ describe("ProfilesScreen", () => {
     });
   });
 
-  it("offers each speedtest probe exactly once in the row menu", async () => {
+  it("offers only the direct latency action in the row menu", async () => {
     mockProfileList(makeProfiles(1));
-
     renderProfiles();
-
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
     const menu = await openRowContextMenu();
-    const speedMenu = await openContextSubmenu(menu, "Speedtest");
-
-    // "Fast" used to sit next to "Real" while dispatching the same `latency`
-    // probe, so the menu offered one operation under two labels.
-    expect(within(speedMenu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
-      "TCP",
-      "Real",
-      "UDP",
-      "Speed",
-      "Mixed",
-      "Stop",
-    ]);
+    const latencyItem = within(menu).getByRole("menuitem", { name: "Test latency" });
+    expect(latencyItem).not.toHaveAttribute("aria-haspopup");
+    for (const name of ["TCP", "UDP", "Speed", "Mixed", "Speedtest"]) {
+      expect(within(menu).queryByRole("menuitem", { name })).not.toBeInTheDocument();
+    }
   });
+
 
   it("renders the shared export entries through the context-menu primitives", async () => {
     mockProfileList(makeProfiles(1));
@@ -1087,47 +1164,6 @@ describe("ProfilesScreen", () => {
       "Save share links",
       "Save client config",
     ]);
-  });
-
-  it("confirms before deduping and cancels without deleting duplicates", async () => {
-    mockProfileList(makeProfiles(3));
-
-    renderProfiles();
-
-    expect(await screen.findByText("Server 0")).toBeInTheDocument();
-    await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Dedupe" }));
-
-    // Dedupe deletes rows across every subscription, so it is gated exactly the
-    // way per-row delete is instead of firing from a single menu click.
-    const confirm = await screen.findByRole("alertdialog");
-    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
-
-    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
-    expect(ipcMocks.dedupeProfiles).not.toHaveBeenCalled();
-  });
-
-  it("reports how many duplicates the confirmed dedupe removed", async () => {
-    mockProfileList(makeProfiles(3));
-    ipcMocks.dedupeProfiles.mockResolvedValue({
-      kept: 2,
-      removedProfileIds: ["profile-2"],
-      total: 3,
-    });
-
-    renderProfiles();
-
-    expect(await screen.findByText("Server 0")).toBeInTheDocument();
-    await userEvent.click(await screen.findByRole("menuitem", { name: "More actions" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Dedupe" }));
-    fireEvent.click(
-      within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Remove duplicates" }),
-    );
-
-    await waitFor(() => expect(ipcMocks.dedupeProfiles).toHaveBeenCalledWith(null, null));
-    expect(
-      await screen.findByText("Removed 1 duplicate node(s); kept 2 of 3."),
-    ).toBeInTheDocument();
   });
 
   it("bulk exports the shareable profiles instead of failing on a policy group", async () => {

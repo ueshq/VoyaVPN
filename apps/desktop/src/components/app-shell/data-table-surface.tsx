@@ -6,11 +6,6 @@
 // virtualizer `estimateSize` and the screen tests assert the exact 38px / 40px
 // rows. Screens compose these with `cn(...)` alongside their own geometry.
 
-// Outer well: the table rests in a sunken surface so populated rows read as
-// raised content floating above it. Mirrors the previous `border bg-card` well
-// minus the height/flex geometry the screen owns.
-export const dataTableWell = "overflow-hidden rounded-md border bg-surface-sunken";
-
 // Sticky header band: a restrained raised surface with uppercase muted labels —
 // quieter than the body so the data leads.
 export const dataTableHeader = "bg-surface-raised text-xs font-semibold uppercase text-muted-foreground";

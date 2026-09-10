@@ -14,11 +14,11 @@ use voya_app::contract_map::{
     certificate_error, core_info_error, core_seed_install_result, dns_from_contract,
     dns_to_contract, group_child_to_contract, group_preview_to_contract,
     import_profiles_to_contract, input_text_error, move_action_from_contract,
-    profile_dedupe_to_contract, profile_from_contract, profile_list_to_contract,
-    profile_listing_to_contract, profile_sort_key_from_contract, routing_from_contract,
-    routing_to_contract, rule_from_contract, runtime_status_event, runtime_status_response,
-    subscription_from_contract, subscription_metadata_to_contract, subscription_to_contract,
-    subscription_update_to_contract, traffic_mode_from_contract, traffic_mode_to_contract,
+    profile_from_contract, profile_list_to_contract, profile_listing_to_contract,
+    routing_from_contract, routing_to_contract, rule_from_contract, runtime_status_event,
+    runtime_status_response, subscription_from_contract, subscription_metadata_to_contract,
+    subscription_to_contract, subscription_update_to_contract, traffic_mode_from_contract,
+    traffic_mode_to_contract,
 };
 use voya_app::dns::DnsManager;
 use voya_app::groups::GroupManager;
@@ -50,8 +50,7 @@ use voya_contracts::{
     ExportProfilesResult, GroupChildCandidate as GroupChildContract,
     GroupPreview as GroupPreviewContract, ImportProfilesResult as ImportProfilesContract,
     InvalidationScope, LogCode, MoveAction as ContractMoveAction, NoticeCode,
-    Profile as ProfileContract, ProfileDedupeResult as ProfileDedupeContract, ProfileListEntry,
-    ProfileListing, ProfileSortKey as ProfileSortContract, ProxyConnectionsSnapshot,
+    Profile as ProfileContract, ProfileListEntry, ProfileListing, ProxyConnectionsSnapshot,
     ProxyDelayTestResult, ProxyGroupsSnapshot, ProxyMonitorStatus, QrCodeImage, QrScanResult,
     ResourceUpdateFile, Routing as RoutingContract, RoutingRule as RoutingRuleContract,
     RuntimeStatusResponse, SpeedtestResult, SpeedtestRunResult, SpeedtestStatus,

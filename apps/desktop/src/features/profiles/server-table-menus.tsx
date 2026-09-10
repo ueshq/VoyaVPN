@@ -1,25 +1,20 @@
 import {
-  Activity,
   ArrowDown,
   ArrowUp,
-  ChevronDown,
   ChevronsDown,
   ChevronsUp,
-  Clock,
   Download,
   FileJson2,
-  Gauge,
   Link,
+  MoreHorizontal,
   Pencil,
   QrCode,
-  Radio,
   Share2,
   Square,
   Trash2,
-  Wifi,
   Zap,
 } from "lucide-react";
-import type { ReactElement, ReactNode } from "react";
+import type { ComponentType, ReactElement, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@voya/ui/components/button";
@@ -35,31 +30,34 @@ import {
 } from "@voya/ui/components/context-menu";
 import {
   Menubar,
-  MenubarContent,
-  MenubarItem,
   MenubarMenu,
-  MenubarSeparator,
   MenubarTrigger,
+  MenubarContent,
+  MenubarSub,
+  MenubarSubTrigger,
+  MenubarSubContent,
+  MenubarItem,
+  MenubarSeparator,
 } from "@voya/ui/components/menubar";
 import { moveProfile } from "@/ipc";
-import type { ProfileListEntry, SpeedtestKind, SpeedtestTarget } from "@/ipc/bindings";
+import type { ProfileListEntry, SpeedtestTarget } from "@/ipc/bindings";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
-import { MOVE_ACTIONS, SPEED_ACTIONS } from "./profile-constants";
+import { MOVE_ACTIONS } from "./profile-constants";
 import type { ProfileExportKind } from "./server-table-actions";
-import type { TranslateFn } from "./server-table-columns";
+import type { TranslationFunction as TranslateFn } from "@voya/i18n";
 import type { ServerTableController } from "./use-server-table";
 
 // The Menubar and ContextMenu variants of the same list are rendered from one
-// descriptor array through an injected item primitive, so a new export kind or
-// probe mode is added once instead of two or three times (which is how the
-// duplicated Fast/Real latency entry went unnoticed).
+// descriptor array through an injected item primitive, so each export kind
+// is added once for both menus.
 type MenuItemProps = {
   children: ReactNode;
   disabled?: boolean;
   onSelect?: () => void;
   title?: string;
+  variant?: "default" | "destructive";
 };
 
 type MenuItemComponent = (props: MenuItemProps) => ReactNode;
@@ -89,22 +87,7 @@ const EXPORT_MENU_ENTRIES: readonly ExportMenuEntry[] = [
   { icon: FileJson2, kind: "clientConfig", labelKey: "panes.profiles.export.saveClientConfig", mode: "save" },
 ];
 
-// `latency` is the real-delay probe; there is no separate cheap "fast" kind in
-// `SpeedtestKind`, so the menu offers each probe exactly once.
-const SPEED_MENU_ENTRIES: ReadonlyArray<{ action: SpeedtestKind; icon: LucideIcon; labelKey: TranslationKey }> = [
-  { action: SPEED_ACTIONS.TcpConnect, icon: Activity, labelKey: "panes.profiles.speedtest.tcp" },
-  { action: SPEED_ACTIONS.Latency, icon: Clock, labelKey: "panes.profiles.speedtest.real" },
-  { action: SPEED_ACTIONS.Udp, icon: Radio, labelKey: "panes.profiles.speedtest.udp" },
-  { action: SPEED_ACTIONS.Download, icon: Gauge, labelKey: "panes.profiles.speedtest.speed" },
-  { action: SPEED_ACTIONS.Mixed, icon: Wifi, labelKey: "panes.profiles.speedtest.mixed" },
-];
-
-// Speedtest split button: the default real-delay probe runs straight from the
-// primary control, while the chevron opens a menu for every probe mode plus the
-// running-only Stop. The dropdown reuses the Menubar primitive (no new
-// dependency) so its trigger and items expose `menuitem` roles, mirroring the
-// Columns menu.
-export function SpeedtestSplitButton({
+export function SpeedtestButton({
   disabled,
   label,
   onCancel,
@@ -114,60 +97,23 @@ export function SpeedtestSplitButton({
   disabled: boolean;
   label: string;
   onCancel: () => Promise<void>;
-  onRun: (kind: SpeedtestKind) => Promise<void>;
+  onRun: () => Promise<void>;
   running: boolean;
 }) {
   const { t } = useI18n();
 
   return (
-    <div className="flex items-center">
-      <Button
-        className="rounded-e-none"
-        disabled={disabled || running}
-        onClick={() => void onRun(SPEED_ACTIONS.Latency)}
-        size="sm"
-        title={t("panes.profiles.speedtest.buttonTitle", { label })}
-        type="button"
-        variant="outline"
-      >
-        <Zap className="size-4" aria-hidden="true" />
-        {label}
-      </Button>
-      <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
-        <MenubarMenu>
-          <MenubarTrigger asChild>
-            <Button
-              aria-label={t("panes.profiles.speedtest.more")}
-              className="rounded-s-none border-s-0 px-2"
-              disabled={disabled}
-              size="sm"
-              title={t("panes.profiles.speedtest.more")}
-              type="button"
-              variant="outline"
-            >
-              <ChevronDown className="size-4" aria-hidden="true" />
-            </Button>
-          </MenubarTrigger>
-          <MenubarContent align="start">
-            <SpeedMenuItems
-              onRun={onRun}
-              primitives={MENUBAR_PRIMITIVES}
-              running={running}
-              t={t}
-            />
-            <MenubarSeparator />
-            <MenubarItem
-              disabled={!running}
-              onSelect={() => void onCancel()}
-              title={t("panes.profiles.speedtest.cancelTitle")}
-            >
-              <Square className="size-4" aria-hidden="true" />
-              {t("panes.profiles.speedtest.stop")}
-            </MenubarItem>
-          </MenubarContent>
-        </MenubarMenu>
-      </Menubar>
-    </div>
+    <Button
+      disabled={!running && disabled}
+      onClick={() => void (running ? onCancel() : onRun())}
+      size="sm"
+      title={running ? t("panes.profiles.speedtest.cancelTitle") : label}
+      type="button"
+      variant="outline"
+    >
+      {running ? <Square className="size-4" aria-hidden="true" /> : <Zap className="size-4" aria-hidden="true" />}
+      {running ? t("panes.profiles.speedtest.stop") : label}
+    </Button>
   );
 }
 
@@ -180,107 +126,112 @@ export function ProfileRowContextMenu({
   controller: ServerTableController;
   item: ProfileListEntry;
 }) {
-  const {
-    handleCancelSpeedtest,
-    handleExport,
-    handleSpeedtest,
-    requestDelete,
-    runOperation,
-    selectOnly,
-    setDialogState,
-    speedtestRunning,
-    t,
-  } = controller;
-  const indexId = item.profile.id;
-  const target: SpeedtestTarget = { scope: "profiles", profileIds: [indexId] };
-  const runTargetSpeedtest = (kind: SpeedtestKind) => handleSpeedtest(kind, target);
-
   return (
-    // A row action can open a modal dialog. Keeping the short-lived context
-    // menu non-modal avoids competing focus scopes while the menu closes.
     <ContextMenu modal={false}>
-      <ContextMenuTrigger asChild onContextMenu={() => selectOnly(indexId)}>
+      <ContextMenuTrigger asChild onContextMenu={() => controller.selectOnly(item.profile.id)}>
         {children}
       </ContextMenuTrigger>
-      <ContextMenuContent
-        aria-label={t("panes.profiles.menu.actionsFor", {
-          name: item.profile.remarks || indexId,
-        })}
-      >
-        <ContextMenuItem onSelect={() => setDialogState({ mode: "edit", profile: item })}>
-          <Pencil className="size-4" aria-hidden="true" />
-          {t("panes.profiles.toolbar.edit")}
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <Zap className="size-4" aria-hidden="true" />
-            {t("panes.profiles.menu.speedtest")}
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <SpeedMenuItems
-              onRun={runTargetSpeedtest}
-              primitives={CONTEXT_MENU_PRIMITIVES}
-              running={speedtestRunning}
-              t={t}
-            />
-            <ContextMenuSeparator />
-            <ContextMenuItem
-              disabled={!speedtestRunning}
-              onSelect={() => void handleCancelSpeedtest()}
-              title={t("panes.profiles.speedtest.cancelTitle")}
-            >
-              <Square className="size-4" aria-hidden="true" />
-              {t("panes.profiles.speedtest.stop")}
-            </ContextMenuItem>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <ArrowDown className="size-4" aria-hidden="true" />
-            {t("panes.profiles.menu.move")}
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ContextMenuItem onSelect={() => void runOperation(() => moveProfile(null, indexId, MOVE_ACTIONS.Top, null))}>
-              <ChevronsUp className="size-4" aria-hidden="true" />
-              {t("panes.profiles.menu.moveTop")}
-            </ContextMenuItem>
-            <ContextMenuItem onSelect={() => void runOperation(() => moveProfile(null, indexId, MOVE_ACTIONS.Up, null))}>
-              <ArrowUp className="size-4" aria-hidden="true" />
-              {t("panes.profiles.menu.moveUp")}
-            </ContextMenuItem>
-            <ContextMenuItem onSelect={() => void runOperation(() => moveProfile(null, indexId, MOVE_ACTIONS.Down, null))}>
-              <ArrowDown className="size-4" aria-hidden="true" />
-              {t("panes.profiles.menu.moveDown")}
-            </ContextMenuItem>
-            <ContextMenuItem onSelect={() => void runOperation(() => moveProfile(null, indexId, MOVE_ACTIONS.Bottom, null))}>
-              <ChevronsDown className="size-4" aria-hidden="true" />
-              {t("panes.profiles.menu.moveBottom")}
-            </ContextMenuItem>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <Share2 className="size-4" aria-hidden="true" />
-            {t("panes.profiles.export.export")}
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ExportMenuItems
-              onExport={(kind) => void handleExport(kind, [indexId])}
-              onSave={(kind) => void handleExport(kind, [indexId], false, true)}
-              onShowQr={() => void handleExport("shareLinks", [indexId], true)}
-              primitives={CONTEXT_MENU_PRIMITIVES}
-              t={t}
-            />
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => requestDelete([indexId])} variant="destructive">
-          <Trash2 className="size-4" aria-hidden="true" />
-          {t("panes.profiles.toolbar.delete")}
-        </ContextMenuItem>
+      <ContextMenuContent aria-label={controller.t("panes.profiles.menu.actionsFor", { name: item.profile.remarks || item.profile.id })}>
+        <ProfileMenuItems controller={controller} item={item} primitives={CONTEXT_ACTION_PRIMITIVES} />
       </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+type ActionMenuPrimitives = MenuPrimitives & {
+  Sub: ComponentType<{ children: ReactNode }>;
+  SubTrigger: ComponentType<{ children: ReactNode }>;
+  SubContent: ComponentType<{ children: ReactNode }>;
+};
+const CONTEXT_ACTION_PRIMITIVES: ActionMenuPrimitives = {
+  ...CONTEXT_MENU_PRIMITIVES, Sub: ContextMenuSub, SubTrigger: ContextMenuSubTrigger, SubContent: ContextMenuSubContent,
+};
+const MENUBAR_ACTION_PRIMITIVES: ActionMenuPrimitives = {
+  ...MENUBAR_PRIMITIVES, Sub: MenubarSub, SubTrigger: MenubarSubTrigger, SubContent: MenubarSubContent,
+};
+
+export function ProfileCardMenu({ controller, item }: { controller: ServerTableController; item: ProfileListEntry }) {
+  const label = controller.t("panes.profiles.menu.actionsFor", { name: item.profile.remarks || item.profile.id });
+  return (
+    <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
+      <MenubarMenu>
+        <MenubarTrigger asChild>
+          <Button aria-label={label} onClick={() => controller.selectOnly(item.profile.id)} size="icon" variant="ghost">
+            <MoreHorizontal aria-hidden="true" className="size-4" />
+          </Button>
+        </MenubarTrigger>
+        <MenubarContent align="end" aria-label={label}>
+          <ProfileMenuItems controller={controller} item={item} primitives={MENUBAR_ACTION_PRIMITIVES} />
+        </MenubarContent>
+      </MenubarMenu>
+    </Menubar>
+  );
+}
+
+function ProfileMenuItems({ controller, item, primitives: { Item, Separator, Sub, SubContent, SubTrigger } }: {
+  controller: ServerTableController;
+  item: ProfileListEntry;
+  primitives: ActionMenuPrimitives;
+}) {
+  const { handleExport, handleSpeedtest, requestDelete, runOperation, setDialogState, speedtestRunning, t } = controller;
+  const indexId = item.profile.id;
+  const target: SpeedtestTarget = { scope: "profiles", profileIds: [indexId] };
+  return (
+    <>
+      <Item onSelect={() => setDialogState({ mode: "edit", profile: item })}>
+        <Pencil className="size-4" aria-hidden="true" />
+        {t("panes.profiles.toolbar.edit")}
+      </Item>
+      <Separator />
+      <Item disabled={speedtestRunning} onSelect={() => void handleSpeedtest(target)}>
+        <Zap className="size-4" aria-hidden="true" />
+        {t("panes.profiles.menu.speedtest")}
+      </Item>
+      <Sub>
+        <SubTrigger>
+          <ArrowDown className="size-4" aria-hidden="true" />
+          {t("panes.profiles.menu.move")}
+        </SubTrigger>
+        <SubContent>
+          <Item onSelect={() => void runOperation(() => moveProfile(null, indexId, MOVE_ACTIONS.Top, null))}>
+            <ChevronsUp className="size-4" aria-hidden="true" />
+            {t("panes.profiles.menu.moveTop")}
+          </Item>
+          <Item onSelect={() => void runOperation(() => moveProfile(null, indexId, MOVE_ACTIONS.Up, null))}>
+            <ArrowUp className="size-4" aria-hidden="true" />
+            {t("panes.profiles.menu.moveUp")}
+          </Item>
+          <Item onSelect={() => void runOperation(() => moveProfile(null, indexId, MOVE_ACTIONS.Down, null))}>
+            <ArrowDown className="size-4" aria-hidden="true" />
+            {t("panes.profiles.menu.moveDown")}
+          </Item>
+          <Item onSelect={() => void runOperation(() => moveProfile(null, indexId, MOVE_ACTIONS.Bottom, null))}>
+            <ChevronsDown className="size-4" aria-hidden="true" />
+            {t("panes.profiles.menu.moveBottom")}
+          </Item>
+        </SubContent>
+      </Sub>
+      <Sub>
+        <SubTrigger>
+          <Share2 className="size-4" aria-hidden="true" />
+          {t("panes.profiles.export.export")}
+        </SubTrigger>
+        <SubContent>
+          <ExportMenuItems
+            onExport={(kind) => void handleExport(kind, [indexId])}
+            onSave={(kind) => void handleExport(kind, [indexId], false, true)}
+            onShowQr={() => void handleExport("shareLinks", [indexId], true)}
+            primitives={{ Item, Separator }}
+            t={t}
+          />
+        </SubContent>
+      </Sub>
+      <Separator />
+      <Item onSelect={() => requestDelete([indexId])} variant="destructive">
+        <Trash2 className="size-4" aria-hidden="true" />
+        {t("panes.profiles.toolbar.delete")}
+      </Item>
+    </>
   );
 }
 
@@ -316,33 +267,6 @@ export function ExportMenuItems({
 
         return (
           <Item key={entry.labelKey} onSelect={onSelect}>
-            <Icon className="size-4" aria-hidden="true" />
-            {t(entry.labelKey)}
-          </Item>
-        );
-      })}
-    </>
-  );
-}
-
-function SpeedMenuItems({
-  onRun,
-  primitives: { Item } = MENUBAR_PRIMITIVES,
-  running,
-  t,
-}: {
-  onRun: (kind: SpeedtestKind) => Promise<void>;
-  primitives?: MenuPrimitives;
-  running: boolean;
-  t: TranslateFn;
-}) {
-  return (
-    <>
-      {SPEED_MENU_ENTRIES.map((entry) => {
-        const Icon = entry.icon;
-
-        return (
-          <Item disabled={running} key={entry.labelKey} onSelect={() => void onRun(entry.action)}>
             <Icon className="size-4" aria-hidden="true" />
             {t(entry.labelKey)}
           </Item>

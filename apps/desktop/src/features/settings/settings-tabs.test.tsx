@@ -80,8 +80,11 @@ describe("semantic settings tabs", () => {
       if (input.type === "number") fireEvent.change(input, { target: { value: "25" } });
     }
 
-    expect(screen.getByLabelText("Speed Test URL")).toHaveValue("https://new.example.test");
+    expect(screen.getByLabelText("Speed Ping Test URL")).toHaveValue("https://new.example.test");
     expect(container.querySelector("#rt-speedtest-timeout")).toHaveValue(25);
+    expect(screen.getByLabelText("Proxy group latency test concurrency")).toHaveValue(25);
+    expect(screen.queryByLabelText("Speed Test URL")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("UDP Test Url")).not.toBeInTheDocument();
   });
 
   it("selects the active UI language when the stored language was removed", () => {

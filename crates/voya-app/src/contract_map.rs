@@ -16,14 +16,10 @@ pub use profiles::{profile_from_contract, profile_to_contract};
 use voya_contracts::{
     GroupChildCandidate as GroupChildContract, GroupPreview as GroupPreviewContract,
     GroupPreviewRoute as GroupPreviewRouteContract, GroupValidation as GroupValidationContract,
-    MoveAction, ProfileDedupeResult as ProfileDedupeContract, ProfileListEntry,
-    ProfileListing as ProfileListingContract, ProfileMetrics, ProfileSortKey, ProfileTraffic,
-    SpeedtestOutcome,
+    MoveAction, ProfileListEntry, ProfileListing as ProfileListingContract, ProfileMetrics,
+    ProfileTraffic, SpeedtestOutcome,
 };
-use voya_core::{
-    GroupChildCandidate, GroupPreview, MoveAction as CoreMoveAction, ProfileDedupeResult,
-    ProfileListItem, ProfileSortKey as CoreProfileSortKey,
-};
+use voya_core::{GroupChildCandidate, GroupPreview, MoveAction as CoreMoveAction, ProfileListItem};
 
 use crate::profiles::ProfileListing;
 
@@ -214,7 +210,6 @@ pub fn profile_list_to_contract(item: ProfileListItem) -> ProfileListEntry {
         profile: profile_to_contract(item.profile),
         metrics: ProfileMetrics {
             delay_ms: item.profile_ex.delay,
-            speed_bytes_per_second: item.profile_ex.speed,
             sort: item.profile_ex.sort,
             // The column still holds whatever the build that last wrote it
             // stored, prose included; `from_stored` is where that is decided.
@@ -250,32 +245,6 @@ pub fn profile_listing_to_contract(listing: ProfileListing) -> ProfileListingCon
             .map(profile_list_to_contract)
             .collect(),
         undecodable_profiles: u32::try_from(listing.undecodable_profiles).unwrap_or(u32::MAX),
-    }
-}
-
-#[must_use]
-pub fn profile_dedupe_to_contract(result: ProfileDedupeResult) -> ProfileDedupeContract {
-    ProfileDedupeContract {
-        total: result.total,
-        kept: result.kept,
-        removed_profile_ids: result.removed_index_ids,
-    }
-}
-
-#[must_use]
-pub const fn profile_sort_key_from_contract(key: ProfileSortKey) -> CoreProfileSortKey {
-    match key {
-        ProfileSortKey::Sort => CoreProfileSortKey::Sort,
-        ProfileSortKey::Protocol => CoreProfileSortKey::ConfigType,
-        ProfileSortKey::Remarks => CoreProfileSortKey::Remarks,
-        ProfileSortKey::Address => CoreProfileSortKey::Address,
-        ProfileSortKey::Port => CoreProfileSortKey::Port,
-        ProfileSortKey::Transport => CoreProfileSortKey::Network,
-        ProfileSortKey::Tls => CoreProfileSortKey::StreamSecurity,
-        ProfileSortKey::Delay => CoreProfileSortKey::Delay,
-        ProfileSortKey::Speed => CoreProfileSortKey::Speed,
-        ProfileSortKey::IpInfo => CoreProfileSortKey::IpInfo,
-        ProfileSortKey::SubscriptionId => CoreProfileSortKey::SubscriptionId,
     }
 }
 

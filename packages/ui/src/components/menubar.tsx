@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as MenubarPrimitive from "@radix-ui/react-menubar";
-import { Check } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 
 import { cn } from "@voya/ui/lib/utils";
 
@@ -61,14 +61,17 @@ function MenubarContent({
 function MenubarItem({
   className,
   inset,
+  variant = "default",
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Item> & {
   inset?: boolean;
+  variant?: "default" | "destructive";
 }) {
   return (
     <MenubarPrimitive.Item
       data-slot="menubar-item"
-      className={cn(itemClasses, inset && "ps-8", className)}
+      data-variant={variant}
+      className={cn(itemClasses, "data-[variant=destructive]:text-destructive", inset && "ps-8", className)}
       {...props}
     />
   );
@@ -107,6 +110,27 @@ function MenubarSeparator({ className, ...props }: React.ComponentProps<typeof M
   );
 }
 
+function MenubarSub(props: React.ComponentProps<typeof MenubarPrimitive.Sub>) {
+  return <MenubarPrimitive.Sub {...props} />;
+}
+
+function MenubarSubTrigger({ children, className, ...props }: React.ComponentProps<typeof MenubarPrimitive.SubTrigger>) {
+  return (
+    <MenubarPrimitive.SubTrigger className={cn(itemClasses, className)} {...props}>
+      {children}
+      <ChevronRight aria-hidden="true" className="ms-auto size-4" />
+    </MenubarPrimitive.SubTrigger>
+  );
+}
+
+function MenubarSubContent({ className, ...props }: React.ComponentProps<typeof MenubarPrimitive.SubContent>) {
+  return (
+    <MenubarPrimitive.Portal>
+      <MenubarPrimitive.SubContent className={cn(contentClasses, className)} {...props} />
+    </MenubarPrimitive.Portal>
+  );
+}
+
 export {
   Menubar,
   MenubarCheckboxItem,
@@ -115,4 +139,7 @@ export {
   MenubarMenu,
   MenubarSeparator,
   MenubarTrigger,
+  MenubarSub,
+  MenubarSubTrigger,
+  MenubarSubContent,
 };

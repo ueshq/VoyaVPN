@@ -290,11 +290,9 @@ pub struct SourceSettings {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SpeedtestSettings {
     pub timeout_seconds: i32,
-    pub download_url: String,
     pub latency_url: String,
-    pub mixed_concurrency: i32,
+    pub proxy_delay_concurrency: i32,
     pub ip_lookup_url: String,
-    pub udp_target: String,
     pub page_size: Option<i32>,
     pub delay_interval_seconds: Option<i32>,
 }
@@ -303,11 +301,9 @@ impl Default for SpeedtestSettings {
     fn default() -> Self {
         Self {
             timeout_seconds: 10,
-            download_url: "https://cachefly.cachefly.net/50mb.test".to_string(),
             latency_url: "https://www.google.com/generate_204".to_string(),
-            mixed_concurrency: 5,
+            proxy_delay_concurrency: 5,
             ip_lookup_url: String::new(),
-            udp_target: "ntp:pool.ntp.org".to_string(),
             page_size: None,
             delay_interval_seconds: None,
         }

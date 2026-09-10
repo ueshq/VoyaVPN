@@ -6,7 +6,7 @@ import {
 } from "@/ipc";
 import type { ExportProfilesResult, ImportProfilesResult, ProfileKind } from "@/ipc/bindings";
 import { CONFIG_TYPES } from "./profile-constants";
-import type { TranslateFn } from "./server-table-columns";
+import type { TranslationFunction as TranslateFn } from "@voya/i18n";
 
 export type ProfileExportKind = "clientConfig" | "shareBase64" | "shareLinks" | "voyaBundle";
 

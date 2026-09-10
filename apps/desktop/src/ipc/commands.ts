@@ -16,11 +16,9 @@ import type {
   MoveAction,
   ConfigTemplateImportResult,
   ConfigTemplateSelection,
-  ProfileDedupeResult,
   Profile,
   ProfileListEntry,
   ProfileListing,
-  ProfileSortKey,
   QrCodeImage,
   QrScanResult,
   Routing_Deserialize,
@@ -192,21 +190,6 @@ export async function moveProfile(
   position: number | null = null,
 ): Promise<ProfileListEntry[]> {
   return unwrapCommandResult(await commands.moveProfile(subscriptionId, indexId, action, position));
-}
-
-export async function sortProfiles(
-  subscriptionId: string | null,
-  sortKey: ProfileSortKey,
-  ascending: boolean,
-): Promise<ProfileListEntry[]> {
-  return unwrapCommandResult(await commands.sortProfiles(subscriptionId, sortKey, ascending));
-}
-
-export async function dedupeProfiles(
-  subscriptionId: string | null = null,
-  keepOlder: boolean | null = null,
-): Promise<ProfileDedupeResult> {
-  return unwrapCommandResult(await commands.dedupeProfiles(subscriptionId, keepOlder));
 }
 
 export async function listSubscriptions(): Promise<Subscription[]> {

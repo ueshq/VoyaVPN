@@ -10,13 +10,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use futures_util::{
-    future::BoxFuture,
-    stream::{FuturesUnordered, StreamExt},
-};
+use futures_util::future::BoxFuture;
 use thiserror::Error;
 use tokio::time;
-use voya_contracts::SpeedtestKind;
 pub use voya_contracts::{SpeedtestOutcome, SpeedtestResult, SpeedtestRunResult, SpeedtestStatus};
 use voya_core::{
     generate_singbox_speedtest_config_json, AppConfig, ConfigType, CoreConfigContextBuilder,
@@ -24,20 +20,18 @@ use voya_core::{
     DEFAULT_LOCAL_PORT,
 };
 use voya_db::{Database, DbError};
-use voya_net::probe::{tcp_connect_delay, tcp_port_is_open, NetworkProbeError, SocksHttpProbe};
+use voya_net::probe::{tcp_port_is_open, NetworkProbeError, SocksHttpProbe};
 use voya_platform::{
     coreinfo::{get_core_info, CoreInfoError, TargetOs},
     filesystem,
     paths::{AppPaths, PathError},
     process::{ProcessError, ProcessHandle, ProcessRole, ProcessRunner, ProcessSpawn},
 };
-use voya_udptest::{UdpTestError, UdpTestService};
 
 use crate::profiles::ProfileExManager;
 use crate::redaction::redact_urls;
 use crate::runtime::{core_launch_plan, load_runtime_core_gen_env};
 
-const TCPING_TIMEOUT: Duration = Duration::from_secs(5);
 const REALPING_FALLBACK_URL: &str = "https://www.google.com/generate_204";
 const SPEEDTEST_BATCH_PAGE_SIZE: usize = 1000;
 const SPEEDTEST_DELAY_INTERVAL: Duration = Duration::from_secs(1);
@@ -56,8 +50,6 @@ pub enum SpeedtestError {
     Network(#[from] NetworkProbeError),
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error(transparent)]
-    Udp(#[from] UdpTestError),
     #[error(transparent)]
     CoreInfo(#[from] CoreInfoError),
     #[error(transparent)]
@@ -91,13 +83,8 @@ pub enum SpeedtestError {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ServerTestItem {
     pub index_id: String,
-    pub address: String,
-    pub server_port: i32,
     pub socks_port: u16,
-    pub config_type: ConfigType,
-    pub queue_num: usize,
     pub profile: ProfileItem,
-    pub core_type: CoreType,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -147,51 +134,18 @@ impl SpeedtestItemFailure {
 }
 
 pub trait SpeedtestProbe: Send + Sync {
-    fn tcping(
-        &self,
-        item: ServerTestItem,
-        cancel: CancellationFlag,
-    ) -> BoxFuture<'static, Result<i32>>;
-
     fn realping(
         &self,
         socks_port: u16,
         speed_test_item: SpeedTestItem,
         cancel: CancellationFlag,
     ) -> BoxFuture<'static, Result<RealPingProbeResult>>;
-
-    fn download_speed(
-        &self,
-        socks_port: u16,
-        speed_test_item: SpeedTestItem,
-        cancel: CancellationFlag,
-    ) -> BoxFuture<'static, Result<f64>>;
-
-    fn udp_test(
-        &self,
-        socks_port: u16,
-        speed_test_item: SpeedTestItem,
-        cancel: CancellationFlag,
-    ) -> BoxFuture<'static, Result<i32>>;
 }
 
 #[derive(Clone, Default)]
 pub struct ReqwestSpeedtestProbe;
 
 impl SpeedtestProbe for ReqwestSpeedtestProbe {
-    fn tcping(
-        &self,
-        item: ServerTestItem,
-        cancel: CancellationFlag,
-    ) -> BoxFuture<'static, Result<i32>> {
-        Box::pin(async move {
-            check_cancelled(&cancel)?;
-            tcp_connect_delay(&item.address, item.server_port, TCPING_TIMEOUT, &cancel)
-                .await
-                .map_err(Into::into)
-        })
-    }
-
     fn realping(
         &self,
         socks_port: u16,
@@ -220,44 +174,6 @@ impl SpeedtestProbe for ReqwestSpeedtestProbe {
             };
 
             Ok(RealPingProbeResult { delay, ip_info })
-        })
-    }
-
-    fn download_speed(
-        &self,
-        socks_port: u16,
-        speed_test_item: SpeedTestItem,
-        cancel: CancellationFlag,
-    ) -> BoxFuture<'static, Result<f64>> {
-        Box::pin(async move {
-            check_cancelled(&cancel)?;
-            let client = SocksHttpProbe::new(socks_port)?;
-            let timeout = Duration::from_secs(
-                u64::try_from(speed_test_item.speed_test_timeout.max(1)).unwrap_or(1),
-            );
-            client
-                .download_speed(speed_test_item.speed_test_url.as_str(), timeout, &cancel)
-                .await
-                .map_err(Into::into)
-        })
-    }
-
-    fn udp_test(
-        &self,
-        socks_port: u16,
-        speed_test_item: SpeedTestItem,
-        cancel: CancellationFlag,
-    ) -> BoxFuture<'static, Result<i32>> {
-        Box::pin(async move {
-            check_cancelled(&cancel)?;
-            let (service, target) =
-                UdpTestService::from_target(Some(&speed_test_item.udp_test_target));
-            let elapsed = service
-                .send_via_socks5(LOOPBACK_ADDR, socks_port, &target, Duration::from_secs(5))
-                .await?;
-            check_cancelled(&cancel)?;
-
-            Ok(millis_i32(elapsed))
         })
     }
 }
@@ -339,12 +255,7 @@ async fn select_test_items(
                 .map_err(|_| SpeedtestError::InvalidSocksPort(socks_port_i32))?;
             Ok(ServerTestItem {
                 index_id: profile.index_id.clone(),
-                address: profile.address().to_string(),
-                server_port: profile.port(),
                 socks_port,
-                config_type: profile.config_type(),
-                queue_num,
-                core_type: CoreType::sing_box,
                 profile,
             })
         })
@@ -367,14 +278,6 @@ fn group_prepared_items(
         }
     }
     groups
-}
-
-fn unique_result_count(results: &[SpeedtestResult]) -> usize {
-    let mut seen = HashSet::new();
-    results
-        .iter()
-        .filter(|result| seen.insert(result.index_id.as_str()))
-        .count()
 }
 
 fn speedtest_page_size(config: &AppConfig, selected_count: usize) -> usize {
@@ -401,26 +304,6 @@ fn speedtest_delay_interval(config: &AppConfig) -> Duration {
         .unwrap_or(SPEEDTEST_DELAY_INTERVAL)
 }
 
-fn mixed_concurrency_count(config: &AppConfig, selected_count: usize) -> usize {
-    let configured = usize::try_from(config.speed_test_item.mixed_concurrency_count)
-        .ok()
-        .filter(|value| *value > 0)
-        .unwrap_or(1);
-    configured.min(selected_count.max(1))
-}
-
-fn dedicated_concurrency_count(
-    action: SpeedtestKind,
-    config: &AppConfig,
-    selected_count: usize,
-) -> usize {
-    if action == SpeedtestKind::Mixed {
-        mixed_concurrency_count(config, selected_count)
-    } else {
-        1
-    }
-}
-
 /// Classify a probe failure into a persisted, translatable outcome.
 ///
 /// Exhaustive on purpose. The previous version ended in `_ => raw`, which put
@@ -430,7 +313,6 @@ fn dedicated_concurrency_count(
 fn speedtest_outcome(error: &SpeedtestError) -> SpeedtestOutcome {
     match error {
         SpeedtestError::Cancelled => SpeedtestOutcome::Cancelled,
-        SpeedtestError::Udp(_) => SpeedtestOutcome::UdpTestFailed,
         SpeedtestError::Network(source) => network_probe_outcome(source),
         SpeedtestError::Io(source) => io_outcome(source.kind()),
         // The profile itself could not be turned into a config.
@@ -457,7 +339,7 @@ fn speedtest_outcome(error: &SpeedtestError) -> SpeedtestOutcome {
 
 fn network_probe_outcome(error: &NetworkProbeError) -> SpeedtestOutcome {
     match error {
-        NetworkProbeError::Timeout => SpeedtestOutcome::TimedOut,
+        NetworkProbeError::Cancelled => SpeedtestOutcome::Cancelled,
         NetworkProbeError::Http(source) if source.is_timeout() => SpeedtestOutcome::TimedOut,
         NetworkProbeError::Http(source) if source.is_connect() => {
             SpeedtestOutcome::ProxyConnectFailed
@@ -489,29 +371,28 @@ const fn measured_outcome(delay: i32) -> SpeedtestOutcome {
 
 /// The optional technical line shown under a failed probe.
 ///
-/// Only the two error families whose `Display` provably cannot name a local
-/// path qualify, and both are redacted anyway: a probe URL carries the user's
+/// Only HTTP errors whose `Display` cannot name a local path qualify,
+/// and they are redacted: a probe URL carries the user's
 /// own test endpoint. Everything else contributes its code and nothing more.
 fn speedtest_detail(error: &SpeedtestError) -> Option<String> {
     match error {
         SpeedtestError::Network(source @ NetworkProbeError::Http(_)) => {
             Some(redact_urls(&source.to_string()))
         }
-        SpeedtestError::Udp(source) => Some(redact_urls(&source.to_string())),
         _ => None,
     }
 }
 
 /// Marks the whole selection as pending before the first probe starts.
 ///
-/// The two or three writes per profile run inside a single transaction: every
+/// The two writes per profile run inside a single transaction: every
 /// `ProfileExManager` update is otherwise its own autocommit round trip, so a
 /// 1000-profile selection paid thousands of journalled commits before any core
 /// even launched. Callbacks fire after the commit so nothing is announced that
 /// is not yet durable.
 async fn clear_previous_results<F>(
     database: &Database,
-    action: SpeedtestKind,
+
     selected: &[ServerTestItem],
     on_result: &F,
 ) -> Result<()>
@@ -522,69 +403,28 @@ where
     {
         let profile_ex = ProfileExManager::new_in(&unit_of_work);
         for item in selected {
-            match action {
-                SpeedtestKind::TcpConnect | SpeedtestKind::Latency | SpeedtestKind::Udp => {
-                    profile_ex.set_test_delay(&item.index_id, 0).await?;
-                    profile_ex
-                        .set_test_message(&item.index_id, SpeedtestOutcome::Testing.as_stored())
-                        .await?;
-                }
-                SpeedtestKind::Download => {
-                    profile_ex.set_test_speed(&item.index_id, 0.0).await?;
-                    profile_ex
-                        .set_test_message(&item.index_id, SpeedtestOutcome::Waiting.as_stored())
-                        .await?;
-                }
-                SpeedtestKind::Mixed => {
-                    profile_ex.set_test_delay(&item.index_id, 0).await?;
-                    profile_ex.set_test_speed(&item.index_id, 0.0).await?;
-                    profile_ex
-                        .set_test_message(&item.index_id, SpeedtestOutcome::Waiting.as_stored())
-                        .await?;
-                }
-            }
+            profile_ex.set_test_delay(&item.index_id, 0).await?;
+            profile_ex
+                .set_test_message(&item.index_id, SpeedtestOutcome::Testing.as_stored())
+                .await?;
         }
     }
     unit_of_work.commit().await?;
 
     for item in selected {
-        on_result(make_pending_result(action, item.index_id.clone()));
+        on_result(make_pending_result(item.index_id.clone()));
     }
 
     Ok(())
 }
 
-fn make_pending_result(action: SpeedtestKind, index_id: String) -> SpeedtestResult {
-    match action {
-        SpeedtestKind::TcpConnect | SpeedtestKind::Latency | SpeedtestKind::Udp => {
-            SpeedtestResult {
-                action,
-                index_id,
-                delay: Some(0),
-                speed: None,
-                outcome: SpeedtestOutcome::Testing,
-                detail: None,
-                ip_info: None,
-            }
-        }
-        SpeedtestKind::Download => SpeedtestResult {
-            action,
-            index_id,
-            delay: None,
-            speed: Some(0.0),
-            outcome: SpeedtestOutcome::Waiting,
-            detail: None,
-            ip_info: None,
-        },
-        SpeedtestKind::Mixed => SpeedtestResult {
-            action,
-            index_id,
-            delay: Some(0),
-            speed: Some(0.0),
-            outcome: SpeedtestOutcome::Waiting,
-            detail: None,
-            ip_info: None,
-        },
+fn make_pending_result(index_id: String) -> SpeedtestResult {
+    SpeedtestResult {
+        index_id,
+        delay: Some(0),
+        outcome: SpeedtestOutcome::Testing,
+        detail: None,
+        ip_info: None,
     }
 }
 
@@ -592,17 +432,14 @@ fn make_pending_result(action: SpeedtestKind, index_id: String) -> SpeedtestResu
 /// `Testing`/`Waiting` marker `clear_previous_results` wrote, so a failed or
 /// cancelled run cannot leave rows stuck in that state across restarts.
 fn make_failure_result(
-    action: SpeedtestKind,
     index_id: String,
     outcome: SpeedtestOutcome,
     detail: Option<String>,
 ) -> SpeedtestResult {
-    let speed = matches!(action, SpeedtestKind::Download | SpeedtestKind::Mixed).then_some(0.0);
     SpeedtestResult {
-        action,
         index_id,
         delay: Some(-1),
-        speed,
+
         outcome,
         detail,
         ip_info: None,
@@ -614,9 +451,7 @@ async fn persist_speedtest_result(database: &Database, result: &SpeedtestResult)
     if let Some(delay) = result.delay {
         profile_ex.set_test_delay(&result.index_id, delay).await?;
     }
-    if let Some(speed) = result.speed {
-        profile_ex.set_test_speed(&result.index_id, speed).await?;
-    }
+
     // Only the code is persisted. `detail` stays on the event: it is a
     // transient diagnostic, and storing prose in this column is exactly what
     // froze the user's language at the moment the test ran.
@@ -644,10 +479,6 @@ fn is_cancelled(cancel: &CancellationFlag) -> bool {
     cancel.load(Ordering::SeqCst)
 }
 
-fn millis_i32(duration: Duration) -> i32 {
-    i32::try_from(duration.as_millis()).unwrap_or(i32::MAX)
-}
-
 #[cfg(test)]
 mod tests {
     use std::{
@@ -667,7 +498,6 @@ mod tests {
         /// How many `realping` calls hold open until the run is cancelled, so
         /// a test can block the first run and let a superseding one through.
         blocking_realpings: Arc<AtomicUsize>,
-        download_delay: Duration,
     }
 
     impl RecordingProbe {
@@ -680,21 +510,6 @@ mod tests {
     }
 
     impl SpeedtestProbe for RecordingProbe {
-        fn tcping(
-            &self,
-            item: ServerTestItem,
-            _cancel: CancellationFlag,
-        ) -> BoxFuture<'static, Result<i32>> {
-            let calls = Arc::clone(&self.calls);
-            Box::pin(async move {
-                calls
-                    .lock()
-                    .expect("speedtest test operation should succeed")
-                    .push(format!("tcping:{}", item.index_id));
-                Ok(11)
-            })
-        }
-
         fn realping(
             &self,
             socks_port: u16,
@@ -725,42 +540,6 @@ mod tests {
                 })
             })
         }
-
-        fn download_speed(
-            &self,
-            socks_port: u16,
-            _speed_test_item: SpeedTestItem,
-            _cancel: CancellationFlag,
-        ) -> BoxFuture<'static, Result<f64>> {
-            let calls = Arc::clone(&self.calls);
-            let delay = self.download_delay;
-            Box::pin(async move {
-                calls
-                    .lock()
-                    .expect("speedtest test operation should succeed")
-                    .push(format!("speedtest:{socks_port}"));
-                if !delay.is_zero() {
-                    time::sleep(delay).await;
-                }
-                Ok(2048.0)
-            })
-        }
-
-        fn udp_test(
-            &self,
-            socks_port: u16,
-            _speed_test_item: SpeedTestItem,
-            _cancel: CancellationFlag,
-        ) -> BoxFuture<'static, Result<i32>> {
-            let calls = Arc::clone(&self.calls);
-            Box::pin(async move {
-                calls
-                    .lock()
-                    .expect("speedtest test operation should succeed")
-                    .push(format!("udp:{socks_port}"));
-                Ok(55)
-            })
-        }
     }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
@@ -773,7 +552,6 @@ mod tests {
     struct RecordingCoreBackend {
         starts: Arc<StdMutex<Vec<RecordedCoreStart>>>,
         active: Arc<AtomicUsize>,
-        max_active: Arc<AtomicUsize>,
         stop_all_calls: Arc<AtomicUsize>,
         /// Makes `start` fail the way a missing core binary or a readiness
         /// timeout does.
@@ -791,10 +569,6 @@ mod tests {
                 .clone()
         }
 
-        fn max_active(&self) -> usize {
-            self.max_active.load(Ordering::SeqCst)
-        }
-
         fn stop_all_calls(&self) -> usize {
             self.stop_all_calls.load(Ordering::SeqCst)
         }
@@ -809,7 +583,6 @@ mod tests {
         ) -> BoxFuture<'static, Result<Box<dyn SpeedtestCoreSession>>> {
             let starts = Arc::clone(&self.starts);
             let active = Arc::clone(&self.active);
-            let max_active = Arc::clone(&self.max_active);
             let start_failure = self.start_failure;
             let cancel_in_start = self.cancel_in_start;
             Box::pin(async move {
@@ -830,8 +603,7 @@ mod tests {
                         "no probe core",
                     )));
                 }
-                let active_now = active.fetch_add(1, Ordering::SeqCst) + 1;
-                max_active.fetch_max(active_now, Ordering::SeqCst);
+                active.fetch_add(1, Ordering::SeqCst);
                 Ok(Box::new(RecordingCoreSession { active }) as Box<dyn SpeedtestCoreSession>)
             })
         }
@@ -854,7 +626,7 @@ mod tests {
     impl SpeedtestCoreSession for RecordingCoreSession {}
 
     #[tokio::test]
-    async fn speedtest_manager_mixedtest_combines_realping_and_speedtest() {
+    async fn speedtest_manager_realping_persists_latency_and_ip_info() {
         let database = Database::connect_in_memory()
             .await
             .expect("speedtest test operation should succeed");
@@ -866,12 +638,7 @@ mod tests {
         let config = AppConfig::default();
 
         let run = manager
-            .run(
-                &database,
-                &config,
-                SpeedtestKind::Mixed,
-                vec!["a".to_string()],
-            )
+            .run(&database, &config, vec!["a".to_string()])
             .await
             .expect("speedtest test operation should succeed");
 
@@ -881,10 +648,7 @@ mod tests {
         assert_eq!(starts.len(), 1);
         assert_eq!(starts[0].ports.len(), 1);
         let port = starts[0].ports[0];
-        assert_eq!(
-            probe.calls(),
-            vec![format!("realping:{port}"), format!("speedtest:{port}")]
-        );
+        assert_eq!(probe.calls(), vec![format!("realping:{port}")]);
         let profile_ex = database
             .profile_exs()
             .get("a")
@@ -892,7 +656,6 @@ mod tests {
             .expect("speedtest test operation should succeed")
             .expect("speedtest test operation should succeed");
         assert_eq!(profile_ex.delay, 44);
-        assert_eq!(profile_ex.speed, 2048.0);
         assert_eq!(profile_ex.ip_info.as_deref(), Some("US"));
     }
 
@@ -909,12 +672,7 @@ mod tests {
             SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
 
         let run = manager
-            .run(
-                &database,
-                &AppConfig::default(),
-                SpeedtestKind::Latency,
-                Vec::new(),
-            )
+            .run(&database, &AppConfig::default(), Vec::new())
             .await
             .expect("speedtest test operation should succeed");
 
@@ -933,37 +691,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn speedtest_manager_speedtest_realpings_before_download() {
-        let database = Database::connect_in_memory()
-            .await
-            .expect("speedtest test operation should succeed");
-        insert_profile(&database, "a", 443).await;
-        let probe = Arc::new(RecordingProbe::default());
-        let backend = Arc::new(RecordingCoreBackend::default());
-        let manager =
-            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
-
-        manager
-            .run(
-                &database,
-                &AppConfig::default(),
-                SpeedtestKind::Download,
-                vec!["a".to_string()],
-            )
-            .await
-            .expect("speedtest test operation should succeed");
-
-        let starts = backend.starts();
-        assert_eq!(starts.len(), 1);
-        assert_eq!(starts[0].ports.len(), 1);
-        let port = starts[0].ports[0];
-        assert_eq!(
-            probe.calls(),
-            vec![format!("realping:{port}"), format!("speedtest:{port}")]
-        );
-    }
-
-    #[tokio::test]
     async fn speedtest_manager_realping_batches_one_temp_core() {
         let database = Database::connect_in_memory()
             .await
@@ -976,12 +703,7 @@ mod tests {
             SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
 
         manager
-            .run(
-                &database,
-                &AppConfig::default(),
-                SpeedtestKind::Latency,
-                Vec::new(),
-            )
+            .run(&database, &AppConfig::default(), Vec::new())
             .await
             .expect("speedtest test operation should succeed");
 
@@ -999,102 +721,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn speedtest_manager_udp_batches_one_temp_core() {
-        let database = Database::connect_in_memory()
-            .await
-            .expect("speedtest test operation should succeed");
-        insert_profile(&database, "a", 443).await;
-        insert_profile(&database, "b", 8443).await;
-        let probe = Arc::new(RecordingProbe::default());
-        let backend = Arc::new(RecordingCoreBackend::default());
-        let manager =
-            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
-
-        manager
-            .run(
-                &database,
-                &AppConfig::default(),
-                SpeedtestKind::Udp,
-                Vec::new(),
-            )
-            .await
-            .expect("speedtest test operation should succeed");
-
-        let starts = backend.starts();
-        assert_eq!(starts.len(), 1);
-        assert_eq!(starts[0].ports.len(), 2);
-        assert_eq!(
-            probe.calls(),
-            starts[0]
-                .ports
-                .iter()
-                .map(|port| format!("udp:{port}"))
-                .collect::<Vec<_>>()
-        );
-    }
-
-    #[tokio::test]
-    async fn speedtest_manager_speedtest_runs_dedicated_cores_serially() {
-        let database = Database::connect_in_memory()
-            .await
-            .expect("speedtest test operation should succeed");
-        insert_profile(&database, "a", 443).await;
-        insert_profile(&database, "b", 8443).await;
-        insert_profile(&database, "c", 9443).await;
-        let probe = Arc::new(RecordingProbe {
-            calls: Arc::new(StdMutex::new(Vec::new())),
-            download_delay: Duration::from_millis(50),
-            ..RecordingProbe::default()
-        });
-        let backend = Arc::new(RecordingCoreBackend::default());
-        let manager =
-            SpeedtestManager::with_probe_and_backend(test_paths(), probe, backend.clone());
-        let mut config = AppConfig::default();
-        config.speed_test_item.mixed_concurrency_count = 2;
-
-        manager
-            .run(&database, &config, SpeedtestKind::Download, Vec::new())
-            .await
-            .expect("speedtest test operation should succeed");
-
-        let starts = backend.starts();
-        assert_eq!(starts.len(), 3);
-        assert!(starts.iter().all(|start| start.ports.len() == 1));
-        assert_eq!(backend.max_active(), 1);
-    }
-
-    #[tokio::test]
-    async fn speedtest_manager_mixedtest_uses_configured_dedicated_core_concurrency() {
-        let database = Database::connect_in_memory()
-            .await
-            .expect("speedtest test operation should succeed");
-        insert_profile(&database, "a", 443).await;
-        insert_profile(&database, "b", 8443).await;
-        insert_profile(&database, "c", 9443).await;
-        let probe = Arc::new(RecordingProbe {
-            calls: Arc::new(StdMutex::new(Vec::new())),
-            download_delay: Duration::from_millis(50),
-            ..RecordingProbe::default()
-        });
-        let backend = Arc::new(RecordingCoreBackend::default());
-        let manager =
-            SpeedtestManager::with_probe_and_backend(test_paths(), probe, backend.clone());
-        let mut config = AppConfig::default();
-        config.speed_test_item.mixed_concurrency_count = 2;
-
-        manager
-            .run(&database, &config, SpeedtestKind::Mixed, Vec::new())
-            .await
-            .expect("speedtest test operation should succeed");
-
-        let starts = backend.starts();
-        assert_eq!(starts.len(), 3);
-        assert!(starts.iter().all(|start| start.ports.len() == 1));
-        assert_eq!(backend.max_active(), 2);
-    }
-
-    #[tokio::test]
-    async fn speedtest_manager_dedicated_prepare_reserves_ports_across_batch() {
+    async fn speedtest_manager_prepare_reserves_ports_across_batch() {
         let database = Database::connect_in_memory()
             .await
             .expect("speedtest test operation should succeed");
@@ -1105,7 +732,7 @@ mod tests {
         let manager =
             SpeedtestManager::with_probe_and_backend(test_paths(), probe, backend.clone());
         let mut config = AppConfig::default();
-        config.speed_test_item.mixed_concurrency_count = 2;
+
         let reserved_base = reserve_speedtest_base_port(&mut config);
         let reserved_port = i32::from(
             reserved_base
@@ -1115,7 +742,7 @@ mod tests {
         );
 
         manager
-            .run(&database, &config, SpeedtestKind::Mixed, Vec::new())
+            .run(&database, &config, Vec::new())
             .await
             .expect("speedtest test operation should succeed");
 
@@ -1145,12 +772,11 @@ mod tests {
         let manager =
             SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
         let task_manager = manager.clone();
-        let mut config = AppConfig::default();
-        config.speed_test_item.mixed_concurrency_count = 1;
+        let config = AppConfig::default();
 
         let handle = tokio::spawn(async move {
             task_manager
-                .run(&database, &config, SpeedtestKind::Mixed, Vec::new())
+                .run(&database, &config, Vec::new())
                 .await
                 .expect("speedtest test operation should succeed")
         });
@@ -1177,7 +803,8 @@ mod tests {
         assert_eq!(run.completed_count, 1);
         let starts = backend.starts();
         assert_eq!(starts.len(), 1);
-        assert_eq!(starts[0].ports.len(), 1);
+        assert_eq!(starts[0].ports.len(), 2);
+        assert_eq!(backend.active.load(Ordering::SeqCst), 0);
         assert_eq!(
             probe.calls(),
             vec![format!("realping:{}", starts[0].ports[0])]
@@ -1206,12 +833,7 @@ mod tests {
             SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
 
         let run = manager
-            .run(
-                &database,
-                &AppConfig::default(),
-                SpeedtestKind::Latency,
-                Vec::new(),
-            )
+            .run(&database, &AppConfig::default(), Vec::new())
             .await
             .expect("a core that will not start must not abort the run");
 
@@ -1248,12 +870,7 @@ mod tests {
             SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
 
         let run = manager
-            .run(
-                &database,
-                &AppConfig::default(),
-                SpeedtestKind::Mixed,
-                Vec::new(),
-            )
+            .run(&database, &AppConfig::default(), Vec::new())
             .await
             .expect("a cancel while a core starts is a cancelled run, not an error");
 
@@ -1280,12 +897,7 @@ mod tests {
             SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
 
         let run = manager
-            .run(
-                &database,
-                &AppConfig::default(),
-                SpeedtestKind::Latency,
-                Vec::new(),
-            )
+            .run(&database, &AppConfig::default(), Vec::new())
             .await
             .expect("an invalid profile must not abort the run");
 
@@ -1326,7 +938,7 @@ mod tests {
 
         let started = Instant::now();
         manager
-            .run(&database, &config, SpeedtestKind::Latency, Vec::new())
+            .run(&database, &config, Vec::new())
             .await
             .expect("speedtest test operation should succeed");
         let elapsed = started.elapsed();
@@ -1360,20 +972,14 @@ mod tests {
         let backend = Arc::new(RecordingCoreBackend::default());
         let manager =
             SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
-        let mut config = AppConfig::default();
-        config.speed_test_item.mixed_concurrency_count = 1;
+        let config = AppConfig::default();
 
         let first_manager = manager.clone();
         let first_database = database.clone();
         let first_config = config.clone();
         let first = tokio::spawn(async move {
             first_manager
-                .run(
-                    &first_database,
-                    &first_config,
-                    SpeedtestKind::Mixed,
-                    Vec::new(),
-                )
+                .run(&first_database, &first_config, Vec::new())
                 .await
                 .expect("the superseded run still completes")
         });
@@ -1396,7 +1002,7 @@ mod tests {
         );
 
         let second = manager
-            .run(&database, &config, SpeedtestKind::Mixed, Vec::new())
+            .run(&database, &config, Vec::new())
             .await
             .expect("the superseding run completes");
         let first = first

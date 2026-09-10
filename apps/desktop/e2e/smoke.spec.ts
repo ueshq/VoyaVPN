@@ -222,8 +222,7 @@ test("adds and imports profiles, activates one, and connects through the fake ru
   await expect(page.getByText("Smoke Manual VLESS")).toBeVisible();
   await expect(page.getByText("manual.example.test")).toBeVisible();
 
-  await page.getByRole("menuitem", { name: "More actions" }).click();
-  await page.getByRole("menuitem", { exact: true, name: "Import" }).click();
+  await page.getByRole("button", { exact: true, name: "Import" }).click();
   const importDialog = page.getByRole("dialog", { name: "Import Nodes" });
   await importDialog.getByLabel("Scan image").setInputFiles({
     buffer: Buffer.from(

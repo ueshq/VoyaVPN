@@ -134,6 +134,14 @@ function reportEventBridgeError(context: string, error: unknown) {
 }
 
 function routeInvalidation(event: InvalidateEvent, queryClient: ReturnType<typeof useQueryClient>) {
+  // A renderer restored during a test has no pending run promise of its own.
+  // Refresh from the backend when profile results are invalidated on completion.
+  const runtime = useRuntimeEventStore.getState();
+  if (runtime.speedtestRunning && event.keys.some((item) => item.scope.kind === "profiles")) {
+    void runtime.refreshSpeedtestStatus().catch((error: unknown) => {
+      reportEventBridgeError("failed to refresh speedtest status", error);
+    });
+  }
   event.keys.forEach((item) => {
     // `null` only for a scope this build cannot map, which `check:bindings`
     // makes impossible; skipping beats throwing inside the event callback.

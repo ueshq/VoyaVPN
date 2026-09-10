@@ -238,7 +238,6 @@ pub struct Profile {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProfileMetrics {
     pub delay_ms: i32,
-    pub speed_bytes_per_second: f64,
     pub sort: i32,
     /// The last probe's outcome, decoded from the persisted `profile_ex`
     /// column. `None` means the profile has never been tested.
@@ -286,31 +285,6 @@ pub struct ProfileListEntry {
 pub struct ProfileListing {
     pub entries: Vec<ProfileListEntry>,
     pub undecodable_profiles: u32,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub enum ProfileSortKey {
-    #[default]
-    Sort,
-    Protocol,
-    Remarks,
-    Address,
-    Port,
-    Transport,
-    Tls,
-    Delay,
-    Speed,
-    IpInfo,
-    SubscriptionId,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ProfileDedupeResult {
-    pub total: u32,
-    pub kept: u32,
-    pub removed_profile_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]

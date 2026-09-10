@@ -5227,7 +5227,6 @@ dependencies = [
  "voya-db",
  "voya-net",
  "voya-platform",
- "voya-udptest",
 ]
 
 [[package]]
@@ -5302,14 +5301,6 @@ dependencies = [
  "url",
  "voya-core",
  "zeroize",
-]
-
-[[package]]
-name = "voya-udptest"
-version = "0.1.0"
-dependencies = [
- "thiserror 2.0.18",
- "tokio",
 ]
 
 [[package]]

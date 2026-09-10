@@ -147,19 +147,6 @@ pub fn validate_app_settings(
         srs_source_url: settings.sources.singbox_ruleset.clone(),
         route_rules_template_source_url: settings.sources.routing_template.clone(),
     })?;
-    // Validated on the save path only: the mapping in `app_config_from_settings`
-    // also runs when a stored configuration is loaded, so rejecting there would
-    // block startup on a value that is already persisted. It has to be rejected
-    // somewhere, because `parse_udp_test_target` fills in the named kind's
-    // default host — a half-typed `dns:` would silently probe a server the user
-    // never named.
-    voya_udptest::validate_udp_test_target(&settings.speed_test.udp_target).map_err(|_| {
-        AppSettingsValidationError::InvalidText {
-            field: "speedTest.udpTarget",
-            label: "UDP test target",
-            reason: contracts::ValidationCode::InvalidUdpTestTarget,
-        }
-    })?;
     if !(i32::try_from(TUN_MTU_RANGE.0).unwrap_or(i32::MAX)
         ..=i32::try_from(TUN_MTU_RANGE.1).unwrap_or(i32::MAX))
         .contains(&settings.network.tun.mtu)
@@ -224,9 +211,6 @@ fn input_safety_text(code: &contracts::ValidationCode) -> &'static str {
         contracts::ValidationCode::TextTooLong => "value is too long",
         contracts::ValidationCode::TextControlCharacters => "control characters are not allowed",
         contracts::ValidationCode::TooManyItems => "too many items",
-        contracts::ValidationCode::InvalidUdpTestTarget => {
-            "value must be host:port, optionally prefixed with a test kind"
-        }
         _ => "value is not valid",
     }
 }
@@ -333,11 +317,9 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
         },
         speed_test: contracts::SpeedtestSettings {
             timeout_seconds: config.speed_test_item.speed_test_timeout,
-            download_url: config.speed_test_item.speed_test_url.clone(),
             latency_url: config.speed_test_item.speed_ping_test_url.clone(),
-            mixed_concurrency: config.speed_test_item.mixed_concurrency_count,
+            proxy_delay_concurrency: config.speed_test_item.proxy_delay_concurrency,
             ip_lookup_url: config.speed_test_item.ipapi_url.clone(),
-            udp_target: config.speed_test_item.udp_test_target.clone(),
             page_size: config.speed_test_item.speed_test_page_size,
             delay_interval_seconds: config.speed_test_item.speed_test_delay_interval_seconds,
         },
@@ -453,11 +435,9 @@ pub fn app_config_from_settings(
         },
         speed_test_item: SpeedTestItem {
             speed_test_timeout: settings.speed_test.timeout_seconds,
-            speed_test_url: settings.speed_test.download_url.clone(),
             speed_ping_test_url: settings.speed_test.latency_url.clone(),
-            mixed_concurrency_count: settings.speed_test.mixed_concurrency,
+            proxy_delay_concurrency: settings.speed_test.proxy_delay_concurrency,
             ipapi_url: settings.speed_test.ip_lookup_url.clone(),
-            udp_test_target: settings.speed_test.udp_target.clone(),
             speed_test_page_size: settings.speed_test.page_size,
             speed_test_delay_interval_seconds: settings.speed_test.delay_interval_seconds,
         },
@@ -710,11 +690,9 @@ mod tests {
             },
             speed_test_item: SpeedTestItem {
                 speed_test_timeout: 21,
-                speed_test_url: "https://speed.test/download".to_string(),
                 speed_ping_test_url: "https://speed.test/latency".to_string(),
-                mixed_concurrency_count: 22,
+                proxy_delay_concurrency: 22,
                 ipapi_url: "https://speed.test/ip".to_string(),
-                udp_test_target: "udp.test:5353".to_string(),
                 speed_test_page_size: Some(23),
                 speed_test_delay_interval_seconds: Some(24),
             },
@@ -963,37 +941,6 @@ mod tests {
             validate_app_settings(&settings),
             Err(AppSettingsValidationError::InvalidTunMtu)
         );
-    }
-
-    /// A stored target is resolved with `parse_udp_test_target`, which fills in
-    /// the named kind's default host, so a half-typed entry that reached the
-    /// database would probe a server the user never named.
-    #[test]
-    fn settings_validation_rejects_a_malformed_udp_test_target() {
-        let mut settings = contracts::AppSettingsV1::default();
-        validate_app_settings(&settings).expect("the default UDP target is well formed");
-
-        for target in ["dns:", "unknown:example.com", "2001:db8::1"] {
-            settings.speed_test.udp_target = target.to_string();
-            assert_eq!(
-                validate_app_settings(&settings),
-                Err(AppSettingsValidationError::InvalidText {
-                    field: "speedTest.udpTarget",
-                    label: "UDP test target",
-                    reason: contracts::ValidationCode::InvalidUdpTestTarget,
-                }),
-                "{target} should be rejected"
-            );
-        }
-
-        // An empty target is the "use the built-in default" shape, not a typo.
-        for target in ["1.1.1.1:53", "dns:1.1.1.1:53", "ntp:pool.ntp.org", ""] {
-            settings.speed_test.udp_target = target.to_string();
-            assert!(
-                validate_app_settings(&settings).is_ok(),
-                "{target} should be accepted"
-            );
-        }
     }
 
     #[test]

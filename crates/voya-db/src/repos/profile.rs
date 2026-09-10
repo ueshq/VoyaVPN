@@ -17,7 +17,6 @@ const PROFILE_LIST_QUERY: &str = r#"
     SELECT
         p.*,
         COALESCE(e.delay, 0) AS ex_delay,
-        COALESCE(e.speed, 0.0) AS ex_speed,
         COALESCE(e.sort, 0) AS ex_sort,
         e.message AS ex_message,
         e.ip_info AS ex_ip_info
@@ -318,7 +317,6 @@ fn row_to_profile_ex_joined(row: &SqliteRow) -> Result<ProfileExItem> {
     Ok(ProfileExItem {
         index_id: row.try_get("index_id")?,
         delay: row.try_get("ex_delay")?,
-        speed: row.try_get("ex_speed")?,
         sort: row.try_get("ex_sort")?,
         message: row.try_get("ex_message")?,
         ip_info: row.try_get("ex_ip_info")?,

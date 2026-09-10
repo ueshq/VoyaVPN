@@ -66,8 +66,6 @@ export const commands = {
 	exportProfileClientConfig: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_client_config", { indexIds })),
 	setActiveProfile: (indexId: string) => typedError<ProfileListEntry, AppError>(__TAURI_INVOKE("set_active_profile", { indexId })),
 	moveProfile: (subscriptionId: string | null, indexId: string, action: MoveAction, position: number | null) => typedError<ProfileListEntry[], AppError>(__TAURI_INVOKE("move_profile", { subscriptionId, indexId, action, position })),
-	sortProfiles: (subscriptionId: string | null, sortKey: ProfileSortKey, ascending: boolean) => typedError<ProfileListEntry[], AppError>(__TAURI_INVOKE("sort_profiles", { subscriptionId, sortKey, ascending })),
-	dedupeProfiles: (subscriptionId: string | null, keepOlder: boolean | null) => typedError<ProfileDedupeResult, AppError>(__TAURI_INVOKE("dedupe_profiles", { subscriptionId, keepOlder })),
 	listGroupChildCandidates: (currentIndexId: string | null, filter: string | null) => typedError<GroupChildCandidate[], AppError>(__TAURI_INVOKE("list_group_child_candidates", { currentIndexId, filter })),
 	previewGroupProfile: (profile: Profile) => typedError<GroupPreview, AppError>(__TAURI_INVOKE("preview_group_profile", { profile })),
 	saveGroupProfile: (profile: Profile) => typedError<ProfileListEntry, AppError>(__TAURI_INVOKE("save_group_profile", { profile })),
@@ -662,12 +660,6 @@ export type Profile = {
 	tls: TlsSettings | null,
 };
 
-export type ProfileDedupeResult = {
-	total: number,
-	kept: number,
-	removedProfileIds: string[],
-};
-
 export type ProfileKind = "vmess" | "custom" | "shadowsocks" | "socks" | "vless" | "trojan" | "hysteria2" | "tuic" | "wireGuard" | "http" | "anytls" | "naive" | "policyGroup" | "proxyChain";
 
 export type ProfileListEntry = {
@@ -697,7 +689,6 @@ export type ProfileListing = {
 
 export type ProfileMetrics = {
 	delayMs: number,
-	speedBytesPerSecond: number | null,
 	sort: number,
 	/**
 	 *  The last probe's outcome, decoded from the persisted `profile_ex`
@@ -708,8 +699,6 @@ export type ProfileMetrics = {
 };
 
 export type ProfileProtocol = { kind: "vmess"; server: ServerEndpoint; uuid: string; cipher: string | null } | { kind: "custom"; source: string; filter: string | null } | { kind: "shadowsocks"; server: ServerEndpoint; password: string; method: string; udpOverTcp: boolean } | { kind: "socks"; server: ServerEndpoint; username: string; password: string } | { kind: "vless"; server: ServerEndpoint; uuid: string; flow: string | null; encryption: string | null } | { kind: "trojan"; server: ServerEndpoint; password: string } | { kind: "hysteria2"; server: ServerEndpoint; password: string; portHops: string | null; obfuscationPassword: string | null } | { kind: "tuic"; server: ServerEndpoint; uuid: string; password: string; congestionControl: string | null } | { kind: "wireGuard"; server: ServerEndpoint; privateKey: string; peerPublicKey: string | null; presharedKey: string | null; interfaceAddress: string | null; allowedIps: string | null; reserved: string | null; mtu: number | null } | { kind: "http"; server: ServerEndpoint; username: string; password: string } | { kind: "anytls"; server: ServerEndpoint; password: string } | { kind: "naive"; server: ServerEndpoint; username: string; password: string; quic: boolean; congestionControl: string | null; insecureConcurrency: number | null; udpOverTcp: boolean } | { kind: "policyGroup"; childProfileIds: string[]; sourceSubscriptionId: string | null; filter: string | null; strategy: LoadStrategy } | { kind: "proxyChain"; childProfileIds: string[] };
-
-export type ProfileSortKey = "sort" | "protocol" | "remarks" | "address" | "port" | "transport" | "tls" | "delay" | "speed" | "ipInfo" | "subscriptionId";
 
 export type ProfileTraffic = {
 	totalUpload: number | null,
@@ -952,8 +941,6 @@ export type SourceSettings = {
 	routingTemplate: string | null,
 };
 
-export type SpeedtestKind = "tcpConnect" | "latency" | "udp" | "download" | "mixed";
-
 /**
  *  How a probe ended, as a code rather than a sentence.
  * 
@@ -967,8 +954,8 @@ export type SpeedtestOutcome =
 "waiting" | 
 /**  The probe is running right now. */
 "testing" | 
-/**  The probe finished; `delay` / `speed` carry the measurement. */
-"completed" | "timedOut" | "proxyConnectFailed" | "proxyConnectionRefused" | "proxyConnectionClosed" | "udpTestFailed" | "cancelled" | 
+/**  The probe finished; `delay` carries the measurement. */
+"completed" | "timedOut" | "proxyConnectFailed" | "proxyConnectionRefused" | "proxyConnectionClosed" | "cancelled" | 
 /**  The run ended before this profile's turn came up. */
 "skipped" | 
 /**  The profile's own configuration is invalid, so nothing was probed. */
@@ -986,7 +973,6 @@ export type SpeedtestOutcome =
 "unknown";
 
 export type SpeedtestRequest = {
-	kind: SpeedtestKind,
 	target: SpeedtestTarget,
 };
 
@@ -1000,17 +986,14 @@ export type SpeedtestRequest = {
  *  profile table renders.
  */
 export type SpeedtestResult = {
-	action: SpeedtestKind,
 	indexId: string,
 	delay: number | null,
-	speed: number | null,
 	outcome: SpeedtestOutcome,
 	detail: string | null,
 	ipInfo: string | null,
 };
 
 export type SpeedtestRunResult = {
-	action: SpeedtestKind,
 	cancelled: boolean,
 	selectedCount: number,
 	completedCount: number,
@@ -1019,11 +1002,9 @@ export type SpeedtestRunResult = {
 
 export type SpeedtestSettings = {
 	timeoutSeconds: number,
-	downloadUrl: string,
 	latencyUrl: string,
-	mixedConcurrency: number,
+	proxyDelayConcurrency: number,
 	ipLookupUrl: string,
-	udpTarget: string,
 	pageSize: number | null,
 	delayIntervalSeconds: number | null,
 };
@@ -1232,7 +1213,7 @@ export type TunStatus = {
  */
 export type ValidationCode = { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "invalidFinalMask" } | { code: "unsupportedNetwork"; network: string } | { code: "unsupportedProtocol"; protocol: string } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "notAGroupProfile" } | { code: "groupCycle"; group: string; child: string } | 
 /**  The cycle found by the group builder, which knows the whole path. */
-{ code: "groupCyclePath"; path: string[] } | { code: "groupWithoutValidChild"; group: string } | { code: "policyGroupWithoutValidChildren" } | { code: "proxyChainWithoutValidChildren" } | { code: "proxyChainSingleHop" } | { code: "groupChildNotFound"; profileId: string } | { code: "groupDuplicateChildIgnored"; profileId: string } | { code: "invalidSubscriptionFilter"; pattern: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "sourceUrlNotHttp" } | { code: "sourceUrlNotHttps" } | { code: "sourceUrlHasCredentials" } | { code: "invalidUdpTestTarget" } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | 
+{ code: "groupCyclePath"; path: string[] } | { code: "groupWithoutValidChild"; group: string } | { code: "policyGroupWithoutValidChildren" } | { code: "proxyChainWithoutValidChildren" } | { code: "proxyChainSingleHop" } | { code: "groupChildNotFound"; profileId: string } | { code: "groupDuplicateChildIgnored"; profileId: string } | { code: "invalidSubscriptionFilter"; pattern: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "sourceUrlNotHttp" } | { code: "sourceUrlNotHttps" } | { code: "sourceUrlHasCredentials" } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | 
 /**
  *  A rejection this contract has no code for. The English `message` is the
  *  failing manager's own diagnostic and is rendered verbatim.

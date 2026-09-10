@@ -1,35 +1,29 @@
 import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import {
   cancelSpeedtest,
-  dedupeProfiles,
   deleteProfiles,
   importProfilesFromText,
   listProfiles,
+  listSubscriptions,
   runSpeedtest,
   saveGroupProfile,
   saveProfile,
   saveTextFile,
-  sortProfiles,
   useRuntimeEventStore,
 } from "@/ipc";
 import type {
   ImportProfilesResult,
   Profile,
   ProfileListEntry,
-  ProfileSortKey,
-  ServerStatItem,
-  SpeedtestKind,
-  SpeedtestResult,
   SpeedtestTarget,
 } from "@/ipc/bindings";
-import { profilesQueryKey } from "@/ipc/query-keys";
+import { profilesQueryKey, queryKeys } from "@/ipc/query-keys";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
-import { useProfileColumnsStore } from "@/stores/column-visibility-store";
+import { useProfileActivation } from "@/features/home/use-profile-activation";
 
 import {
   exportFileFilter,
@@ -40,24 +34,8 @@ import {
   supportsShareLinkExport,
   type ProfileExportKind,
 } from "./server-table-actions";
-import {
-  buildGridMinWidth,
-  buildGridTemplateColumns,
-  serverColumns,
-} from "./server-table-columns";
 import { CONFIG_TYPES } from "./profile-constants";
 import { applyLiveUpdates } from "./server-table-live-updates";
-
-// The statistics stream ticks once per second while traffic flows and the
-// speedtest stream bursts one pending marker per selected profile, so the live
-// maps are only subscribed to while a column that can actually show them is
-// visible. Subscribing unconditionally re-rendered the whole virtualized table
-// (and rebuilt the TanStack row model) once per second to update cells that are
-// hidden by default.
-const TRAFFIC_COLUMN_IDS = ["todayUp", "todayDown", "totalUp", "totalDown"];
-const METRIC_COLUMN_IDS = ["delay", "speed", "ipInfo"];
-const EMPTY_SERVER_STATS: Record<string, ServerStatItem> = {};
-const EMPTY_SPEEDTEST_RESULTS: Record<string, SpeedtestResult> = {};
 
 type DialogState =
   | { mode: "create"; profile?: null }
@@ -71,25 +49,23 @@ export function useServerTable() {
   const [importingFromClipboard, setImportingFromClipboard] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
   const [operationMessage, setOperationMessage] = useState<string | null>(null);
-  const [pendingDedupe, setPendingDedupe] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [shareQrContent, setShareQrContent] = useState<string | null>(null);
-  const [sortState, setSortState] = useState<{ ascending: boolean; key: ProfileSortKey } | null>(null);
   const [subscriptionsOpen, setSubscriptionsOpen] = useState(false);
   const { t } = useI18n();
-  const columnVisibility = useProfileColumnsStore((state) => state.columnVisibility);
-  const setColumnVisibility = useProfileColumnsStore((state) => state.setColumnVisibility);
-  const resetColumnVisibility = useProfileColumnsStore((state) => state.resetColumnVisibility);
-  const trafficColumnsVisible = TRAFFIC_COLUMN_IDS.some((id) => columnVisibility[id] !== false);
-  const metricColumnsVisible = METRIC_COLUMN_IDS.some((id) => columnVisibility[id] !== false);
-  const serverStatsByProfileId = useRuntimeEventStore((state) =>
-    trafficColumnsVisible ? state.serverStatsByProfileId : EMPTY_SERVER_STATS,
-  );
-  const speedtestResultsByProfileId = useRuntimeEventStore((state) =>
-    metricColumnsVisible ? state.speedtestResultsByProfileId : EMPTY_SPEEDTEST_RESULTS,
-  );
+  const [detailsId, setDetailsId] = useState<string | null>(null);
+  const detailsTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const activation = useProfileActivation(t, { onSelect: setSelectedId });
+  const subscriptionsQuery = useQuery({
+    queryFn: listSubscriptions,
+    queryKey: queryKeys.subscriptions,
+  });
+  const subscriptionNames = useMemo(() => new Map(
+    (subscriptionsQuery.data ?? []).map((item) => [item.id, item.remarks || t("panes.subscriptions.untitled")]),
+  ), [subscriptionsQuery.data, t]);
+  const speedtestResultsByProfileId = useRuntimeEventStore((state) => state.speedtestResultsByProfileId);
   const speedtestRunning = useRuntimeEventStore((state) => state.speedtestRunning);
   const setSpeedtestRunning = useRuntimeEventStore((state) => state.setSpeedtestRunning);
   const queryClient = useQueryClient();
@@ -102,10 +78,10 @@ export function useServerTable() {
     () =>
       applyLiveUpdates(
         profilesQuery.data?.entries ?? [],
-        serverStatsByProfileId,
+        undefined,
         speedtestResultsByProfileId,
       ),
-    [profilesQuery.data, serverStatsByProfileId, speedtestResultsByProfileId],
+    [profilesQuery.data, speedtestResultsByProfileId],
   );
   // Stored servers this build could not read. The backend skips those rows so
   // one of them cannot hide every other server, and reports how many it
@@ -113,51 +89,33 @@ export function useServerTable() {
   // indistinguishable from data loss.
   const undecodableProfiles = profilesQuery.data?.undecodableProfiles ?? 0;
 
-  const tableColumns = useMemo<ColumnDef<ProfileListEntry>[]>(
-    () =>
-      serverColumns.map((column) => ({
-        id: column.id,
-        header: column.labelKey,
-        // The structural `#`/state column is always shown; everything else can
-        // be collapsed through the column menu.
-        enableHiding: column.id !== "state",
-      })),
-    [],
-  );
-  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table owns stable row-model helpers internally.
-  const table = useReactTable({
-    columns: tableColumns,
-    data: profiles,
-    getCoreRowModel: getCoreRowModel(),
-    getRowId: (row) => row.profile.id,
-    onColumnVisibilityChange: setColumnVisibility,
-    state: { columnVisibility },
-  });
-  const hideableColumns = table.getAllLeafColumns().filter((column) => column.getCanHide());
-  const visibleColumns = useMemo(
-    () => serverColumns.filter((column) => column.id === "state" || columnVisibility[column.id] !== false),
-    [columnVisibility],
-  );
-  const gridTemplateColumns = useMemo(() => buildGridTemplateColumns(visibleColumns), [visibleColumns]);
-  const gridMinWidth = useMemo(() => buildGridMinWidth(visibleColumns), [visibleColumns]);
-  const rows = table.getRowModel().rows;
   const viewportRef = useRef<HTMLDivElement>(null);
   const rowVirtualizer = useVirtualizer({
-    count: rows.length,
-    estimateSize: () => 38,
+    count: profiles.length,
+    estimateSize: () => 100,
+    getItemKey: (index) => profiles[index]!.profile.id,
     getScrollElement: () => viewportRef.current,
     initialRect: { height: 520, width: 1200 },
-    overscan: 10,
+    overscan: 5,
   });
   const visibleRows = rowVirtualizer.getVirtualItems();
-  const renderedRows =
-    visibleRows.length > 0
-      ? visibleRows
-      : rows.slice(0, Math.min(rows.length, 30)).map((row, index) => ({
-          index,
-          key: row.id,
-          start: index * 38,
-        }));
+  const renderedRows = visibleRows.length > 0 ? visibleRows : profiles.slice(0, 15).map((item, index) => ({
+    index, key: item.profile.id, start: index * 100,
+  }));
+  function subscriptionName(item: ProfileListEntry) {
+    return item.profile.subscriptionId
+      ? subscriptionNames.get(item.profile.subscriptionId) ?? t("panes.subscriptions.untitled")
+      : t("panes.profiles.card.local");
+  }
+  function openDetails(id: string, trigger: HTMLButtonElement) {
+    detailsTriggerRef.current = trigger;
+    setDetailsId(id);
+  }
+  function restoreDetailsFocus() {
+    const trigger = detailsTriggerRef.current;
+    if (trigger?.isConnected) trigger.focus();
+    else viewportRef.current?.focus();
+  }
   // Reports whether the operation succeeded so callers that own a dialog can
   // keep it open (with the user's edits) when the backend rejects the request.
   // `onError` redirects the message to that dialog instead of the toolbar
@@ -192,31 +150,6 @@ export function useServerTable() {
     }
   }
 
-  // Destructive: dedupe deletes every duplicate across all subscriptions, so it
-  // goes through the same confirmation gate as delete instead of firing from a
-  // single menu click.
-  function requestDedupe() {
-    setPendingDedupe(true);
-  }
-
-  async function confirmDedupe() {
-    setPendingDedupe(false);
-    setOperationError(null);
-    setOperationMessage(null);
-    try {
-      const result = await dedupeProfiles(null, null);
-      setOperationMessage(
-        t("panes.profiles.dedupe.removed", {
-          kept: result.kept,
-          removed: result.removedProfileIds.length,
-          total: result.total,
-        }),
-      );
-    } catch (error) {
-      setOperationError(getErrorMessage(error));
-    }
-  }
-
   function confirmDelete() {
     const indexIds = pendingDelete;
     setPendingDelete(null);
@@ -230,12 +163,6 @@ export function useServerTable() {
 
   function selectOnly(indexId: string) {
     setSelectedId(indexId);
-  }
-
-  async function handleSort(sortKey: ProfileSortKey) {
-    const ascending = sortState?.key === sortKey ? !sortState.ascending : true;
-    setSortState({ ascending, key: sortKey });
-    await runOperation(() => sortProfiles(null, sortKey, ascending));
   }
 
   async function handleSave(profile: Profile) {
@@ -362,12 +289,11 @@ export function useServerTable() {
     }
   }
 
-  async function handleSpeedtest(kind: SpeedtestKind, target: SpeedtestTarget) {
-    setColumnVisibility((current) => ({ ...current, delay: true, speed: true }));
+  async function handleSpeedtest(target: SpeedtestTarget) {
+    if (useRuntimeEventStore.getState().speedtestRunning) return;
     setSpeedtestRunning(true);
     try {
       await runOperation(() => runSpeedtest({
-        kind,
         target,
       }));
     } finally {
@@ -376,39 +302,38 @@ export function useServerTable() {
   }
 
   async function handleCancelSpeedtest() {
-    await runOperation(() => cancelSpeedtest());
-    setSpeedtestRunning(false);
+    await runOperation(async () => {
+      const status = await cancelSpeedtest();
+      useRuntimeEventStore.getState().setSpeedtestStatus(status);
+    });
   }
 
   return {
-    confirmDedupe,
+    activation,
+    detailsId,
+    openDetails,
+    restoreDetailsFocus,
+    setDetailsId,
+    subscriptionName,
     confirmDelete,
     dialogState,
     filterText,
-    gridMinWidth,
-    gridTemplateColumns,
     handleBulkExport,
     handleCancelSpeedtest,
     handleDialogImport,
     handleExport,
     handleImportFromClipboard,
     handleSave,
-    handleSort,
     handleSpeedtest,
-    hideableColumns,
     importOpen,
     importingFromClipboard,
     operationError,
     operationMessage,
-    pendingDedupe,
     pendingDelete,
     profiles,
     profilesQuery,
     renderedRows,
-    requestDedupe,
     requestDelete,
-    resetColumnVisibility,
-    rows,
     rowVirtualizer,
     runOperation,
     saveError,
@@ -417,18 +342,15 @@ export function useServerTable() {
     setDialogState,
     setFilterText,
     setImportOpen,
-    setPendingDedupe,
     setPendingDelete,
     setShareQrContent,
     setSubscriptionsOpen,
     shareQrContent,
-    sortState,
     speedtestRunning,
     subscriptionsOpen,
     t,
     undecodableProfiles,
     viewportRef,
-    visibleColumns,
   };
 }
 

@@ -41,7 +41,6 @@ export function applyLiveUpdates(
         delayMs: speedtestResult.delay ?? withStats.metrics.delayMs,
         ipInfo: speedtestResult.ipInfo ?? withStats.metrics.ipInfo,
         outcome: speedtestResult.outcome,
-        speedBytesPerSecond: speedtestResult.speed ?? withStats.metrics.speedBytesPerSecond,
       },
     };
   });

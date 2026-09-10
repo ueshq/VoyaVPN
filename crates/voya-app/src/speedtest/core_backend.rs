@@ -18,8 +18,8 @@ use crate::runtime::{resolve_core_executable, write_core_config};
 /// Base readiness budget for a freshly started probe core.
 const SPEEDTEST_READY_TIMEOUT: Duration = Duration::from_secs(3);
 /// Extra readiness budget per inbound: a batch core opens one SOCKS listener
-/// per profile, so a large page legitimately needs longer than a single
-/// dedicated core does.
+/// per profile, so a large page legitimately needs longer than a core with
+/// one listener does.
 const SPEEDTEST_READY_PER_ENTRY: Duration = Duration::from_millis(5);
 const SPEEDTEST_READY_TIMEOUT_MAX: Duration = Duration::from_secs(15);
 const SPEEDTEST_READY_INTERVAL: Duration = Duration::from_millis(50);

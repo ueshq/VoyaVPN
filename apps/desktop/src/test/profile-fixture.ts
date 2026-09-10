@@ -22,7 +22,6 @@ export function makeProfileFixture(
       ipInfo: index % 2 === 0 ? "US" : null,
       outcome: null,
       sort: index * 10,
-      speedBytesPerSecond: index % 2 === 0 ? 2048 : null,
     },
     profile: {
       displayLog: overrides.displayLog ?? true,

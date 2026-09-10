@@ -12,24 +12,22 @@ import { buttonVariants } from "@voya/ui/components/button-variants";
 import { SubscriptionsDialog } from "@/features/subscriptions/subscriptions-dialog";
 
 import { ImportProfilesDialog } from "./import-profiles-dialog";
+import { ProfileDetailsDialog } from "./profile-details-dialog";
 import { ProfileDialog } from "./profile-dialog";
 import { ShareQrDialog } from "./share-qr-dialog";
 import type { ServerTableController } from "./use-server-table";
 
 export function ServerTableDialogs({ controller }: { controller: ServerTableController }) {
   const {
-    confirmDedupe,
     confirmDelete,
     dialogState,
     handleDialogImport,
     handleSave,
     importOpen,
-    pendingDedupe,
     pendingDelete,
     saveError,
     setDialogState,
     setImportOpen,
-    setPendingDedupe,
     setPendingDelete,
     setShareQrContent,
     setSubscriptionsOpen,
@@ -38,8 +36,11 @@ export function ServerTableDialogs({ controller }: { controller: ServerTableCont
     t,
   } = controller;
 
+  const detailsItem = controller.profiles.find((item) => item.profile.id === controller.detailsId);
+
   return (
     <>
+      {detailsItem ? <ProfileDetailsDialog controller={controller} item={detailsItem} /> : null}
       <ProfileDialog
         mode={dialogState?.mode ?? "create"}
         onOpenChange={(open) => !open && setDialogState(null)}
@@ -59,25 +60,6 @@ export function ServerTableDialogs({ controller }: { controller: ServerTableCont
         onOpenChange={(open) => !open && setShareQrContent(null)}
         open={shareQrContent !== null}
       />
-      <AlertDialog open={pendingDedupe} onOpenChange={(open) => !open && setPendingDedupe(false)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("confirm.dedupeProfilesTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("confirm.dedupeProfilesDescription")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className={buttonVariants({ variant: "destructive" })}
-              onClick={() => void confirmDedupe()}
-            >
-              {t("confirm.dedupeProfilesConfirm")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => !open && setPendingDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

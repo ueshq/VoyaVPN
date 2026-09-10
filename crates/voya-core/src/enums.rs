@@ -36,26 +36,6 @@ impl ConfigType {
     pub const fn is_group_type(self) -> bool {
         matches!(self, Self::PolicyGroup | Self::ProxyChain)
     }
-
-    #[must_use]
-    pub const fn sort_rank(self) -> u8 {
-        match self {
-            Self::VMess => 0,
-            Self::Custom => 1,
-            Self::Shadowsocks => 2,
-            Self::SOCKS => 3,
-            Self::VLESS => 4,
-            Self::Trojan => 5,
-            Self::Hysteria2 => 6,
-            Self::TUIC => 7,
-            Self::WireGuard => 8,
-            Self::HTTP => 9,
-            Self::Anytls => 10,
-            Self::Naive => 11,
-            Self::PolicyGroup => 12,
-            Self::ProxyChain => 13,
-        }
-    }
 }
 
 #[allow(non_camel_case_types)]

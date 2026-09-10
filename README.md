@@ -18,7 +18,6 @@ TypeScript, Tailwind v4, and shadcn/ui foundations.
 - `crates/voya-db`: SQLite repositories and migrations.
 - `crates/voya-platform`: OS-specific paths, process, proxy, TUN, and hotkey adapters.
 - `crates/voya-net`: downloads, updates, subscriptions, Clash API, and ruleset clients.
-- `crates/voya-udptest`: UDP tester support.
 - `crates/voya-app`: application orchestration, including the product-level proxy runtime backed by the sing-box Clash-compatible API.
 
 The root `package.json` `version` is the release-artifact version read by `pnpm release -- artifacts`; keep app, Tauri, and Cargo versions aligned when intentionally bumping releases.

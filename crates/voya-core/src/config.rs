@@ -5,9 +5,7 @@ pub const DEFAULT_LOG_LEVEL: &str = "warning";
 pub const DEFAULT_DOMAIN_STRATEGY: &str = "AsIs";
 pub const DEFAULT_TUN_ICMP_ROUTING: &str = "rule";
 pub const DEFAULT_LANGUAGE: &str = "en";
-pub const DEFAULT_SPEED_TEST_URL: &str = "https://cachefly.cachefly.net/50mb.test";
 pub const DEFAULT_SPEED_PING_TEST_URL: &str = "https://www.google.com/generate_204";
-pub const DEFAULT_UDP_TEST_TARGET: &str = "ntp:pool.ntp.org";
 pub const DEFAULT_SINGBOX_MUX: &str = "h2mux";
 pub const DEFAULT_SYSTEM_PROXY_EXCEPTIONS: &str = "localhost,127.0.0.0/8,::1";
 pub const DEFAULT_DIRECT_DNS: &str = "119.29.29.29";
@@ -179,11 +177,9 @@ pub struct ConstItem {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpeedTestItem {
     pub speed_test_timeout: i32,
-    pub speed_test_url: String,
     pub speed_ping_test_url: String,
-    pub mixed_concurrency_count: i32,
+    pub proxy_delay_concurrency: i32,
     pub ipapi_url: String,
-    pub udp_test_target: String,
     pub speed_test_page_size: Option<i32>,
     pub speed_test_delay_interval_seconds: Option<i32>,
 }
@@ -192,11 +188,9 @@ impl Default for SpeedTestItem {
     fn default() -> Self {
         Self {
             speed_test_timeout: 10,
-            speed_test_url: DEFAULT_SPEED_TEST_URL.to_string(),
             speed_ping_test_url: DEFAULT_SPEED_PING_TEST_URL.to_string(),
-            mixed_concurrency_count: 5,
+            proxy_delay_concurrency: 5,
             ipapi_url: String::new(),
-            udp_test_target: DEFAULT_UDP_TEST_TARGET.to_string(),
             speed_test_page_size: None,
             speed_test_delay_interval_seconds: None,
         }
@@ -384,7 +378,7 @@ mod tests {
         assert_eq!(config.tun_mode_item.mtu, 1500);
         assert!(!config.tun_mode_item.strict_route);
         assert_eq!(config.speed_test_item.speed_test_timeout, 10);
-        assert_eq!(config.speed_test_item.mixed_concurrency_count, 5);
+        assert_eq!(config.speed_test_item.proxy_delay_concurrency, 5);
         assert_eq!(config.mux4_sbox_item.protocol, "h2mux");
         assert_eq!(config.hysteria_item.up_mbps, 100);
         assert_eq!(config.hysteria_item.down_mbps, 100);

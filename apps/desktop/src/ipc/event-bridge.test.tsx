@@ -25,6 +25,7 @@ const bridgeMocks = vi.hoisted(() => {
     appEventListen: listenFor("appEvent"),
     invalidateEventListen: listenFor("invalidateEvent"),
     listeners,
+    speedtestRunning: false,
     pushToast: vi.fn(),
     pushTransientEvent: vi.fn(),
     refreshSpeedtestStatus: vi.fn(() => Promise.resolve()),
@@ -45,6 +46,7 @@ vi.mock("@/ipc/bindings", () => ({
 vi.mock("@/ipc/runtime-event-store", () => ({
   useRuntimeEventStore: {
     getState: () => ({
+      speedtestRunning: bridgeMocks.speedtestRunning,
       pushTransientEvent: bridgeMocks.pushTransientEvent,
       refreshSpeedtestStatus: bridgeMocks.refreshSpeedtestStatus,
     }),
@@ -69,6 +71,7 @@ vi.mock("@/stores/toast-store", () => ({
 describe("EventBridge", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    bridgeMocks.speedtestRunning = false;
     for (const listeners of Object.values(bridgeMocks.listeners)) {
       listeners.length = 0;
     }
@@ -130,6 +133,26 @@ describe("EventBridge", () => {
       severity: "info",
       title: "Tray refresh failed",
     });
+  });
+
+  it("refreshes a restored running test when profile results change", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={queryClient}><EventBridge /></QueryClientProvider>);
+    await waitFor(() => expect(bridgeMocks.invalidateEventListen).toHaveBeenCalledOnce());
+    bridgeMocks.refreshSpeedtestStatus.mockClear();
+    bridgeMocks.speedtestRunning = true;
+    act(() => {
+      bridgeMocks.listeners.invalidateEvent[0]?.({
+        payload: { keys: [{ scope: { kind: "subscriptions" }, reason: "updated" }] },
+      });
+    });
+    expect(bridgeMocks.refreshSpeedtestStatus).not.toHaveBeenCalled();
+    act(() => {
+      bridgeMocks.listeners.invalidateEvent[0]?.({
+        payload: { keys: [{ scope: { kind: "profiles" }, reason: "updated" }] },
+      });
+    });
+    await waitFor(() => expect(bridgeMocks.refreshSpeedtestStatus).toHaveBeenCalledOnce());
   });
 
   it("routes transient streams and tab selection through the shell store", async () => {

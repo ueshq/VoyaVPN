@@ -17,7 +17,6 @@ import type {
   GroupPreview,
   ImportProfilesResult,
   ProcessCandidate,
-  ProfileDedupeResult,
   ProfileKind,
   ProxyConnectionsSnapshot,
   ProxyDelayTestResult,
@@ -28,7 +27,6 @@ import type {
   Routing_Serialize,
   RoutingRule,
   RuntimeStatusResponse,
-  SpeedtestKind,
   SpeedtestRunResult,
   SpeedtestStatus,
   Subscription,
@@ -175,7 +173,6 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
     // no longer invalidates for itself.
     const invalidationScopes: Record<string, string[]> = {
       copy_profiles: profileScopes,
-      dedupe_profiles: profileScopes,
       delete_profiles: profileScopes,
       delete_routing_rules: routingScopes,
       delete_routings: routingScopes,
@@ -201,7 +198,6 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       set_connection_mode: connectionModeScopes,
       set_system_proxy_mode: connectionModeScopes,
       set_tun_enabled: connectionModeScopes,
-      sort_profiles: profileScopes,
       update_subscriptions: [...subscriptionScopes, ...profileScopes],
     };
 
@@ -402,12 +398,7 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           return Promise.resolve(clone(copies));
         }
         case "move_profile":
-        case "sort_profiles":
           return Promise.resolve(clone(state.profiles));
-        case "dedupe_profiles":
-          return Promise.resolve(
-            { kept: state.profiles.length, removedProfileIds: [], total: state.profiles.length } satisfies ProfileDedupeResult,
-          );
         case "list_group_child_candidates":
           return Promise.resolve(
             state.profiles.map((row) => ({
@@ -492,7 +483,6 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           );
         case "run_speedtest":
           return Promise.resolve({
-            action: readRecord(args, "request").kind as SpeedtestKind,
             cancelled: false,
             completedCount: 0,
             results: [],
@@ -703,7 +693,6 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           ipInfo: existing?.metrics.ipInfo ?? null,
           outcome: existing?.metrics.outcome ?? null,
           sort: existing?.metrics.sort ?? state.profiles.length,
-          speedBytesPerSecond: existing?.metrics.speedBytesPerSecond ?? null,
         },
         traffic: existing?.traffic ?? {
           date: 20260601,
@@ -930,13 +919,11 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
         },
         speedTest: {
           delayIntervalSeconds: null as number | null,
-          downloadUrl: "https://cachefly.cachefly.net/50mb.test",
           ipLookupUrl: "",
           latencyUrl: "https://www.google.com/generate_204",
-          mixedConcurrency: 5,
+          proxyDelayConcurrency: 5,
           pageSize: null as number | null,
           timeoutSeconds: 10,
-          udpTarget: "ntp:pool.ntp.org",
         },
         multiplexing: { maxConnections: 4, padding: false, protocol: "h2mux" },
         grpc: {

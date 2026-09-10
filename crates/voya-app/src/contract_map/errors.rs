@@ -304,7 +304,6 @@ impl From<SpeedtestError> for AppError {
             SpeedtestError::Profile(source) => Self::from(source),
             SpeedtestError::CoreInfo(ref source) => core_info_error(source, Sub::Speedtest),
             SpeedtestError::Network(ref source) => network(Sub::Speedtest, source),
-            SpeedtestError::Udp(ref source) => network(Sub::Speedtest, source),
             SpeedtestError::Io(ref source) => io(Sub::Speedtest, source),
             SpeedtestError::Path(ref source) => io(Sub::Speedtest, source),
             SpeedtestError::Process(ref source) => io(Sub::Speedtest, source),

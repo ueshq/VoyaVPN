@@ -1,13 +1,9 @@
 import type * as React from "react";
-import { MoreHorizontal } from "lucide-react";
 
-import { Menubar, MenubarContent, MenubarMenu, MenubarTrigger } from "@voya/ui/components/menubar";
 import { cn } from "@voya/ui/lib/utils";
 
 // Shared screen-toolbar vocabulary. Screens compose a `Toolbar` row out of one
-// or more `ToolbarGroup` clusters (separated by a hairline rule), spill the
-// low-priority actions into a `ToolbarOverflow` "⋯" menu. The overflow menu
-// reuses the existing `Menubar` primitive so we add no new dropdown dependency.
+// or more `ToolbarGroup` clusters separated by a hairline rule.
 
 function Toolbar({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -35,28 +31,4 @@ function ToolbarGroup({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-// Overflow "⋯" menu built on Menubar (no new dependency). Pass MenubarItem /
-// MenubarCheckboxItem / MenubarSeparator children. `label` names the trigger for
-// assistive tech and the tooltip; `className`/rest props flow to the content.
-function ToolbarOverflow({
-  align = "end",
-  children,
-  className,
-  label,
-  ...props
-}: React.ComponentProps<typeof MenubarContent> & { label: string }) {
-  return (
-    <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
-      <MenubarMenu>
-        <MenubarTrigger aria-label={label} className="size-8 justify-center p-0" title={label}>
-          <MoreHorizontal className="size-4" aria-hidden="true" />
-        </MenubarTrigger>
-        <MenubarContent align={align} className={className} {...props}>
-          {children}
-        </MenubarContent>
-      </MenubarMenu>
-    </Menubar>
-  );
-}
-
-export { Toolbar, ToolbarGroup, ToolbarOverflow };
+export { Toolbar, ToolbarGroup };

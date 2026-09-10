@@ -25,9 +25,6 @@
   },
   "confirm": {
     "cancel": "取消",
-    "dedupeProfilesConfirm": "删除重复项",
-    "dedupeProfilesDescription": "所有订阅中的重复节点将被永久删除，此操作无法撤销。",
-    "dedupeProfilesTitle": "删除重复的节点？",
     "deleteProfilesConfirm": "删除",
     "deleteProfilesDescription": "已选择的 {{count}} 个节点将被永久删除。此操作无法撤销。",
     "deleteProfilesTitle": "删除节点？",
@@ -324,31 +321,6 @@
         "missingPem": "请先粘贴或抓取 PEM 证书，再计算 SHA-256。",
         "shaCalculated": "已计算 {{count}} 个 SHA-256 指纹。"
       },
-      "columns": {
-        "heading": "显示列",
-        "labels": {
-          "address": "地址",
-          "delay": "延迟",
-          "group": "分组",
-          "indexHeader": "#",
-          "ipInfo": "IP 信息",
-          "port": "端口",
-          "protocol": "协议",
-          "remarks": "备注",
-          "security": "安全",
-          "speed": "速度",
-          "todayDown": "今日下行",
-          "todayUp": "今日上行",
-          "totalDown": "总下行",
-          "totalUp": "总上行",
-          "transport": "传输"
-        },
-        "reset": "恢复默认",
-        "toggle": "列"
-      },
-      "dedupe": {
-        "removed": "已删除 {{removed}} 个重复节点；共 {{total}} 个，保留 {{kept}} 个。"
-      },
       "dialog": {
         "addTitle": "新增节点",
         "cancel": "取消",
@@ -466,7 +438,7 @@
         "moveDown": "下移",
         "moveTop": "移到顶部",
         "moveUp": "上移",
-        "speedtest": "测速"
+        "speedtest": "测延迟"
       },
       "panels": {
         "custom": "自定义配置",
@@ -494,27 +466,18 @@
         "wireGuard": "WireGuard 代理节点"
       },
       "speedtest": {
-        "buttonTitle": "{{label}} 测速",
         "cancelTitle": "取消测速",
-        "mixed": "混合",
-        "more": "更多测速",
-        "real": "真连",
-        "speed": "测速",
-        "stop": "停止",
-        "tcp": "TCP",
-        "udp": "UDP"
+        "stop": "停止"
       },
       "title": "节点",
       "toolbar": {
         "add": "新增",
         "bulkExport": "批量导出",
-        "bulkSpeedtest": "批量测速",
-        "dedupe": "去重",
+        "bulkSpeedtest": "批量测延迟",
         "delete": "删除",
         "edit": "编辑",
         "filterPlaceholder": "过滤备注或地址",
         "import": "导入",
-        "more": "更多操作",
         "rows": "{{rows}} 条",
         "subscriptions": "订阅"
       },
@@ -526,6 +489,31 @@
         "credentialRequired": "请填写密码或 ID",
         "remarksRequired": "请填写备注",
         "uuidRequired": "请填写 UUID"
+      },
+      "card": {
+        "local": "本地节点",
+        "default": "默认节点",
+        "using": "使用中",
+        "use": "使用节点",
+        "switching": "切换中…",
+        "details": "详情",
+        "detailsTitle": "节点详情",
+        "select": "选择 {{name}}"
+      },
+      "cardFields": {
+        "address": "地址",
+        "delay": "延迟",
+        "group": "分组",
+        "ipInfo": "IP 信息",
+        "port": "端口",
+        "protocol": "协议",
+        "remarks": "备注",
+        "security": "安全",
+        "todayDown": "今日下行",
+        "todayUp": "今日上行",
+        "totalDown": "总下行",
+        "totalUp": "总上行",
+        "transport": "传输"
       }
     },
     "proxyConnections": {
@@ -734,12 +722,10 @@
     "tabTests": "测试",
     "tabUpdates": "更新",
     "tests": {
-      "downloadUrl": "测速文件地址",
       "ipApiUrl": "当前连接信息测试地址",
-      "mixedConcurrency": "多线程测试时的并发数量",
       "pingUrl": "真连接测试地址",
       "timeout": "测速单个超时值",
-      "udpTarget": "UDP 测试地址"
+      "proxyDelayConcurrency": "代理组测延迟并发数"
     },
     "unsavedChanges": "存在未保存的修改"
   },
@@ -757,7 +743,6 @@
       "skipped": "已跳过",
       "testing": "测试中",
       "timedOut": "请求超时",
-      "udpTestFailed": "UDP 测试失败",
       "unknown": "未知结果",
       "waiting": "等待中"
     }
@@ -863,7 +848,6 @@
     "invalidRealityPublicKey": "REALITY 需要公钥",
     "invalidShadowsocksMethod": "不支持该 Shadowsocks 加密方式",
     "invalidSubscriptionFilter": "订阅过滤规则 {{pattern}} 不是有效的正则表达式",
-    "invalidUdpTestTarget": "请使用 host:port 格式，可在前面加上测试类型",
     "listItem": "列表项不能为空",
     "negativeHysteriaBandwidth": "Hysteria 带宽不能为负数",
     "network": "network 只能是 tcp、udp 或 tcp,udp",

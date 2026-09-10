@@ -36,7 +36,6 @@ pub const DEFAULT_LOG_FILTER: &str = concat!(
     "voya_db=info,",
     "voya_net=info,",
     "voya_platform=info,",
-    "voya_udptest=info,",
     "voyavpn=info,",
     "voyavpn_lib=info,",
     "voya::core_output=off",

@@ -78,13 +78,11 @@
   },
   "speedTest": {
     "timeoutSeconds": 10,
-    "downloadUrl": "https://cachefly.cachefly.net/50mb.test",
     "latencyUrl": "https://www.google.com/generate_204",
-    "mixedConcurrency": 5,
     "ipLookupUrl": "",
-    "udpTarget": "ntp:pool.ntp.org",
     "pageSize": null,
-    "delayIntervalSeconds": null
+    "delayIntervalSeconds": null,
+    "proxyDelayConcurrency": 5
   },
   "multiplexing": {
     "protocol": "h2mux",

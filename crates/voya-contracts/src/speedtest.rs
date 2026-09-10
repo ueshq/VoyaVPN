@@ -1,16 +1,6 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub enum SpeedtestKind {
-    TcpConnect,
-    Latency,
-    Udp,
-    Download,
-    Mixed,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(
     tag = "scope",
@@ -26,7 +16,6 @@ pub enum SpeedtestTarget {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SpeedtestRequest {
-    pub kind: SpeedtestKind,
     pub target: SpeedtestTarget,
 }
 
@@ -43,13 +32,12 @@ pub enum SpeedtestOutcome {
     Waiting,
     /// The probe is running right now.
     Testing,
-    /// The probe finished; `delay` / `speed` carry the measurement.
+    /// The probe finished; `delay` carries the measurement.
     Completed,
     TimedOut,
     ProxyConnectFailed,
     ProxyConnectionRefused,
     ProxyConnectionClosed,
-    UdpTestFailed,
     Cancelled,
     /// The run ended before this profile's turn came up.
     Skipped,
@@ -81,7 +69,6 @@ impl SpeedtestOutcome {
             Self::ProxyConnectFailed => "proxyConnectFailed",
             Self::ProxyConnectionRefused => "proxyConnectionRefused",
             Self::ProxyConnectionClosed => "proxyConnectionClosed",
-            Self::UdpTestFailed => "udpTestFailed",
             Self::Cancelled => "cancelled",
             Self::Skipped => "skipped",
             Self::InvalidProfile => "invalidProfile",
@@ -120,7 +107,6 @@ impl SpeedtestOutcome {
             Self::ProxyConnectFailed,
             Self::ProxyConnectionRefused,
             Self::ProxyConnectionClosed,
-            Self::UdpTestFailed,
             Self::Cancelled,
             Self::Skipped,
             Self::InvalidProfile,
@@ -152,7 +138,7 @@ fn legacy_outcome(lowercase: &str) -> Option<SpeedtestOutcome> {
         "proxy connection failed" => Some(SpeedtestOutcome::ProxyConnectFailed),
         "proxy connection refused" => Some(SpeedtestOutcome::ProxyConnectionRefused),
         "proxy connection closed" => Some(SpeedtestOutcome::ProxyConnectionClosed),
-        "udp test failed" => Some(SpeedtestOutcome::UdpTestFailed),
+        "udp test failed" | "udptestfailed" => Some(SpeedtestOutcome::Failed),
         "skipped" => Some(SpeedtestOutcome::Skipped),
         _ => None,
     }
@@ -168,10 +154,8 @@ fn legacy_outcome(lowercase: &str) -> Option<SpeedtestOutcome> {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SpeedtestResult {
-    pub action: SpeedtestKind,
     pub index_id: String,
     pub delay: Option<i32>,
-    pub speed: Option<f64>,
     pub outcome: SpeedtestOutcome,
     pub detail: Option<String>,
     pub ip_info: Option<String>,
@@ -180,7 +164,6 @@ pub struct SpeedtestResult {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SpeedtestRunResult {
-    pub action: SpeedtestKind,
     pub cancelled: bool,
     pub selected_count: u32,
     pub completed_count: u32,
@@ -198,18 +181,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn request_contract_uses_explicit_kind_and_target() {
+    fn request_contract_uses_explicit_target() {
         let request = SpeedtestRequest {
-            kind: SpeedtestKind::Latency,
             target: SpeedtestTarget::Profiles {
                 profile_ids: vec!["node-1".to_string()],
             },
         };
         let value = serde_json::to_value(request).expect("serialize speed test request");
 
-        assert_eq!(value["kind"], "latency");
+        assert!(value.get("kind").is_none());
         assert_eq!(value["target"]["scope"], "profiles");
         assert_eq!(value["target"]["profileIds"][0], "node-1");
+    }
+
+    #[test]
+    fn requests_no_longer_accept_a_probe_kind() {
+        for kind in ["tcpConnect", "latency", "udp", "download", "mixed"] {
+            assert!(
+                serde_json::from_value::<SpeedtestRequest>(serde_json::json!({
+                    "kind": kind, "target": { "scope": "all" }
+                }))
+                .is_err()
+            );
+        }
+        assert!(
+            serde_json::from_value::<SpeedtestRequest>(serde_json::json!({
+                "target": { "scope": "all" }
+            }))
+            .is_ok()
+        );
     }
 
     #[test]
@@ -222,7 +222,6 @@ mod tests {
             SpeedtestOutcome::ProxyConnectFailed,
             SpeedtestOutcome::ProxyConnectionRefused,
             SpeedtestOutcome::ProxyConnectionClosed,
-            SpeedtestOutcome::UdpTestFailed,
             SpeedtestOutcome::Cancelled,
             SpeedtestOutcome::Skipped,
             SpeedtestOutcome::InvalidProfile,
@@ -265,7 +264,8 @@ mod tests {
                 "proxy connection closed",
                 SpeedtestOutcome::ProxyConnectionClosed,
             ),
-            ("UDP test failed", SpeedtestOutcome::UdpTestFailed),
+            ("UDP test failed", SpeedtestOutcome::Failed),
+            ("udpTestFailed", SpeedtestOutcome::Failed),
             ("cancelled", SpeedtestOutcome::Cancelled),
             ("Skipped", SpeedtestOutcome::Skipped),
             // A successful latency probe stored the millisecond count, and a
@@ -290,16 +290,5 @@ mod tests {
 
         assert_eq!(SpeedtestOutcome::from_stored(""), None);
         assert_eq!(SpeedtestOutcome::from_stored("   "), None);
-    }
-
-    #[test]
-    fn speed_test_contract_rejects_retired_numeric_and_pascal_case_values() {
-        assert!(serde_json::from_value::<SpeedtestKind>(serde_json::json!(1)).is_err());
-        assert!(serde_json::from_value::<SpeedtestKind>(serde_json::json!("TcpConnect")).is_err());
-        assert_eq!(
-            serde_json::from_value::<SpeedtestKind>(serde_json::json!("tcpConnect"))
-                .expect("camelCase string enum should be accepted"),
-            SpeedtestKind::TcpConnect
-        );
     }
 }

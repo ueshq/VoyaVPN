@@ -706,47 +706,16 @@ impl Default for RulesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ProfileExItem {
     pub index_id: String,
     pub delay: i32,
-    pub speed: f64,
     pub sort: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ip_info: Option<String>,
-}
-
-impl Default for ProfileExItem {
-    fn default() -> Self {
-        Self {
-            index_id: String::new(),
-            delay: 0,
-            speed: 0.0,
-            sort: 0,
-            message: None,
-            ip_info: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ProfileSortKey {
-    #[default]
-    Sort,
-    ConfigType,
-    Remarks,
-    Address,
-    Port,
-    Network,
-    StreamSecurity,
-    Delay,
-    Speed,
-    IpInfo,
-    SubscriptionId,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -756,14 +725,6 @@ pub struct ProfileListItem {
     pub profile_ex: ProfileExItem,
     pub server_stat: ServerStatItem,
     pub is_active: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProfileDedupeResult {
-    pub total: u32,
-    pub kept: u32,
-    pub removed_index_ids: Vec<String>,
 }
 
 #[must_use]

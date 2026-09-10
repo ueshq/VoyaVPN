@@ -9,7 +9,7 @@ const tokyo: ProfileListEntry = {
     id: "design-tokyo", remarks: "🇯🇵 日本 · 东京 01", displayLog: true, subscriptionId: null, tls: null, transport: null,
     protocol: { kind: "wireGuard", server: { address: "203.0.113.24", port: 51820 }, privateKey: "fixture", peerPublicKey: null, presharedKey: null, interfaceAddress: null, allowedIps: null, reserved: null, mtu: null },
   },
-  metrics: { delayMs: 32, ipInfo: null, outcome: null, sort: 0, speedBytesPerSecond: null },
+  metrics: { delayMs: 32, ipInfo: null, outcome: null, sort: 0 },
   traffic: { date: 1, todayDownload: 0, todayUpload: 0, totalDownload: 0, totalUpload: 0 },
 };
 

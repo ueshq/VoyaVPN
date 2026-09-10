@@ -1026,7 +1026,7 @@ mod tests {
 
     /// The group builder lets a user pair explicit children with a dynamic
     /// source subscription. Deleting that subscription must not take the
-    /// user-authored group (and its selection/sort/speed data) with it.
+    /// user-authored group (and its selection/sort/latency data) with it.
     #[tokio::test]
     async fn deleting_a_subscription_detaches_user_groups_and_drops_only_its_auto_group() {
         let database = Database::connect_in_memory()
@@ -1999,11 +1999,6 @@ mod tests {
             .set_sort("active", 20)
             .await
             .expect("subscription manager test operation should succeed");
-        profile_manager
-            .profile_ex()
-            .set_test_speed("active", 42.0)
-            .await
-            .expect("subscription manager test operation should succeed");
         config.index_id = "active".to_string();
 
         let result = manager
@@ -2027,7 +2022,6 @@ mod tests {
         assert_eq!(profiles[0].0.index_id, "active");
         assert_eq!(profiles[0].0.remarks, "Imported");
         assert_eq!(profiles[0].1.sort, 20);
-        assert_eq!(profiles[0].1.speed, 42.0);
     }
 
     fn sample_profile(index_id: &str, remarks: &str) -> ProfileItem {

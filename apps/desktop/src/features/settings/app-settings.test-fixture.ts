@@ -76,13 +76,11 @@ export function makeAppSettings({
     },
     speedTest: {
       delayIntervalSeconds: 1,
-      downloadUrl: "https://speed.example.test",
       ipLookupUrl: "https://ip.example.test",
       latencyUrl: "https://ping.example.test",
-      mixedConcurrency: 4,
+      proxyDelayConcurrency: 4,
       pageSize: 10,
       timeoutSeconds: 10,
-      udpTarget: "dns:1.1.1.1:53",
     },
     multiplexing: { maxConnections: 4, padding: false, protocol: "h2mux" },
     grpc: {

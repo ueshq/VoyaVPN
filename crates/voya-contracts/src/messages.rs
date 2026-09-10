@@ -271,7 +271,6 @@ pub enum ValidationCode {
     SourceUrlNotHttp,
     SourceUrlNotHttps,
     SourceUrlHasCredentials,
-    InvalidUdpTestTarget,
     TunMtuOutOfRange {
         min: u32,
         max: u32,

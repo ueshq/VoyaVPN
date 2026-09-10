@@ -1,5 +1,4 @@
 use std::{
-    cmp::Ordering,
     collections::HashMap,
     sync::atomic::{AtomicU64, Ordering as AtomicOrdering},
     time::{SystemTime, UNIX_EPOCH},
@@ -7,9 +6,8 @@ use std::{
 
 use thiserror::Error;
 use voya_core::{
-    profile_items_match, AppConfig, MoveAction, ProfileDedupeResult, ProfileExItem, ProfileItem,
-    ProfileListItem, ProfileProtocol, ProfileSortKey, ProfileTransport, ServerEndpoint,
-    ServerStatItem,
+    AppConfig, MoveAction, ProfileExItem, ProfileItem, ProfileListItem, ProfileProtocol,
+    ProfileTransport, ServerEndpoint, ServerStatItem,
 };
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 
@@ -293,28 +291,6 @@ impl<'db> ProfileManager<'db> {
             .items)
     }
 
-    pub async fn sort_profiles(
-        &self,
-        config: &AppConfig,
-        subscription_id: Option<&str>,
-        sort_key: ProfileSortKey,
-        ascending: bool,
-    ) -> Result<Vec<ProfileListItem>> {
-        let mut items = self
-            .database
-            .profiles()
-            .list_with_profile_ex(subscription_id)
-            .await?
-            .items;
-        sort_profile_pairs(&mut items, sort_key, ascending);
-        self.renumber_sort(&items).await?;
-
-        Ok(self
-            .list_profiles(config, subscription_id, None)
-            .await?
-            .items)
-    }
-
     /// Rewrites the gap-based sort keys so the list reads `10, 20, 30, …`.
     ///
     /// The gaps are what let `move_profile` place a row between two neighbours
@@ -338,54 +314,6 @@ impl<'db> ProfileManager<'db> {
             .collect::<Vec<_>>();
 
         self.profile_ex().set_sort_many(&reordered).await
-    }
-
-    pub async fn dedupe_profiles(
-        &self,
-        config: &mut AppConfig,
-        subscription_id: Option<&str>,
-        keep_older: bool,
-    ) -> Result<ProfileDedupeResult> {
-        let mut profiles = self
-            .database
-            .profiles()
-            .list_by_subscription_id(subscription_id)
-            .await?;
-        let total = profiles.len();
-        if !keep_older {
-            profiles.reverse();
-        }
-
-        let mut kept = Vec::<ProfileItem>::new();
-        let mut removed_index_ids = Vec::new();
-
-        for profile in profiles {
-            if profile.is_complex() {
-                kept.push(profile);
-                continue;
-            }
-
-            if kept
-                .iter()
-                .any(|existing| profile_items_match(existing, &profile, false))
-            {
-                removed_index_ids.push(profile.index_id);
-            } else {
-                kept.push(profile);
-            }
-        }
-
-        self.database
-            .profiles()
-            .delete_many(&removed_index_ids)
-            .await?;
-        self.ensure_active_profile(config).await?;
-
-        Ok(ProfileDedupeResult {
-            total: u32::try_from(total).unwrap_or(u32::MAX),
-            kept: u32::try_from(total.saturating_sub(removed_index_ids.len())).unwrap_or(u32::MAX),
-            removed_index_ids,
-        })
     }
 
     pub async fn ensure_active_profile(&self, config: &mut AppConfig) -> Result<bool> {
@@ -627,92 +555,6 @@ fn trim_string(value: &mut String) {
     *value = value.trim().to_string();
 }
 
-fn sort_profile_pairs(
-    items: &mut Vec<(ProfileItem, ProfileExItem)>,
-    sort_key: ProfileSortKey,
-    ascending: bool,
-) {
-    match sort_key {
-        ProfileSortKey::Sort => items.sort_by_key(|(_, profile_ex)| profile_ex.sort),
-        ProfileSortKey::ConfigType => {
-            items.sort_by_key(|(profile, _)| profile.config_type().sort_rank());
-        }
-        ProfileSortKey::Remarks => {
-            items.sort_by(|(left, _), (right, _)| text_cmp(&left.remarks, &right.remarks));
-        }
-        ProfileSortKey::Address => {
-            items.sort_by(|(left, _), (right, _)| text_cmp(left.address(), right.address()));
-        }
-        ProfileSortKey::Port => items.sort_by_key(|(profile, _)| profile.port()),
-        ProfileSortKey::Network => {
-            items.sort_by(|(left, _), (right, _)| text_cmp(left.network(), right.network()));
-        }
-        ProfileSortKey::StreamSecurity => {
-            items.sort_by(|(left, _), (right, _)| {
-                text_cmp(left.stream_security(), right.stream_security())
-            });
-        }
-        ProfileSortKey::Delay => {
-            items.sort_by_key(|(_, profile_ex)| profile_ex.delay);
-            move_invalid_delay_to_end(items);
-        }
-        ProfileSortKey::Speed => {
-            items.sort_by(|(_, left), (_, right)| numeric_cmp(left.speed, right.speed));
-            move_invalid_speed_to_end(items);
-        }
-        ProfileSortKey::IpInfo => {
-            items.sort_by(|(_, left), (_, right)| {
-                text_cmp(
-                    left.ip_info.as_deref().unwrap_or(""),
-                    right.ip_info.as_deref().unwrap_or(""),
-                )
-            });
-        }
-        ProfileSortKey::SubscriptionId => {
-            items.sort_by(|(left, _), (right, _)| {
-                text_cmp(
-                    left.subscription_id.as_deref().unwrap_or(""),
-                    right.subscription_id.as_deref().unwrap_or(""),
-                )
-            });
-        }
-    }
-
-    if !ascending {
-        items.reverse();
-        if sort_key == ProfileSortKey::Delay {
-            move_invalid_delay_to_end(items);
-        }
-        if sort_key == ProfileSortKey::Speed {
-            move_invalid_speed_to_end(items);
-        }
-    }
-}
-
-fn move_invalid_delay_to_end(items: &mut Vec<(ProfileItem, ProfileExItem)>) {
-    let (mut valid, invalid): (Vec<_>, Vec<_>) = items
-        .drain(..)
-        .partition(|(_, profile_ex)| profile_ex.delay > 0);
-    valid.extend(invalid);
-    *items = valid;
-}
-
-fn move_invalid_speed_to_end(items: &mut Vec<(ProfileItem, ProfileExItem)>) {
-    let (mut valid, invalid): (Vec<_>, Vec<_>) = items
-        .drain(..)
-        .partition(|(_, profile_ex)| profile_ex.speed > 0.0);
-    valid.extend(invalid);
-    *items = valid;
-}
-
-fn numeric_cmp(left: f64, right: f64) -> Ordering {
-    left.partial_cmp(&right).unwrap_or(Ordering::Equal)
-}
-
-fn text_cmp(left: &str, right: &str) -> Ordering {
-    left.to_lowercase().cmp(&right.to_lowercase())
-}
-
 fn contains_case_insensitive(value: &str, needle: &str) -> bool {
     value.to_lowercase().contains(&needle.to_lowercase())
 }
@@ -751,8 +593,8 @@ fn generate_profile_id() -> String {
 #[cfg(test)]
 mod tests {
     use voya_core::{
-        MoveAction, MultipleLoad, ProfileProtocol, ProfileSortKey, ProfileTransport,
-        ServerEndpoint, SubItem, TlsMode, TlsSettings,
+        MoveAction, ProfileProtocol, ProfileTransport, ServerEndpoint, SubItem, TlsMode,
+        TlsSettings,
     };
 
     use super::*;
@@ -817,7 +659,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn profile_copy_move_and_sort_update_profile_ex_state() {
+    async fn profile_copy_and_move_update_profile_ex_state() {
         let database = Database::connect_in_memory()
             .await
             .expect("profile manager test operation should succeed");
@@ -866,24 +708,13 @@ mod tests {
         assert_eq!(copied[0].profile.remarks, "A-clone");
         assert_eq!(copied[0].server_stat.total_up, 100);
         assert_eq!(copied[0].server_stat.total_down, 200);
-
-        manager
-            .sort_profiles(&config, None, ProfileSortKey::Port, false)
-            .await
-            .expect("profile manager test operation should succeed");
-        let sorted = manager
-            .list_profiles(&config, None, None)
-            .await
-            .expect("profile manager test operation should succeed")
-            .items;
-        assert_eq!(sorted[0].profile.remarks, "C");
     }
 
     /// Reordering inside a subscription must renumber only that subscription's
     /// rows, and `MoveAction::Position` must land the row at the requested
     /// index rather than anywhere the gap-based numbering happens to allow.
     #[tokio::test]
-    async fn scoped_move_and_sort_reorder_only_the_selected_subscription() {
+    async fn scoped_move_reorders_only_the_selected_subscription() {
         let database = Database::connect_in_memory()
             .await
             .expect("profile manager test operation should succeed");
@@ -933,18 +764,6 @@ mod tests {
             "a scoped move must list only the subscription's own profiles"
         );
 
-        let sorted = manager
-            .sort_profiles(&config, Some("sub-scope"), ProfileSortKey::Port, false)
-            .await
-            .expect("profile manager test operation should succeed");
-        assert_eq!(
-            sorted
-                .iter()
-                .map(|item| item.profile.remarks.as_str())
-                .collect::<Vec<_>>(),
-            vec!["S3", "S2", "S1"]
-        );
-
         let outsider_sort = manager
             .profile_ex()
             .ensure(&outsider.profile.index_id)
@@ -955,54 +774,6 @@ mod tests {
             outsider_sort, outsider.profile_ex.sort,
             "profiles outside the scope keep their sort"
         );
-    }
-
-    #[tokio::test]
-    async fn profile_dedupe_respects_keep_older_and_ignores_complex_profiles() {
-        let database = Database::connect_in_memory()
-            .await
-            .expect("profile manager test operation should succeed");
-        let manager = ProfileManager::new(&database);
-        let mut config = AppConfig::default();
-        let old = manager
-            .save_profile(&mut config, sample_profile("old", "Old", 443))
-            .await
-            .expect("profile manager test operation should succeed");
-        let mut duplicate = sample_profile("new", "New", 443);
-        duplicate.index_id = "new".to_string();
-        manager
-            .save_profile(&mut config, duplicate)
-            .await
-            .expect("profile manager test operation should succeed");
-        let group = ProfileItem {
-            index_id: "group".to_string(),
-            remarks: "Group".to_string(),
-            protocol: ProfileProtocol::PolicyGroup {
-                child_profile_ids: vec![old.profile.index_id.clone()],
-                source_subscription_id: None,
-                filter: None,
-                strategy: MultipleLoad::LeastPing,
-            },
-            ..ProfileItem::default()
-        };
-        manager
-            .save_profile(&mut config, group)
-            .await
-            .expect("profile manager test operation should succeed");
-
-        let result = manager
-            .dedupe_profiles(&mut config, None, true)
-            .await
-            .expect("profile manager test operation should succeed");
-        assert_eq!(result.total, 3);
-        assert_eq!(result.kept, 2);
-        assert_eq!(result.removed_index_ids, vec!["new".to_string()]);
-        assert!(database
-            .profiles()
-            .get("group")
-            .await
-            .expect("profile manager test operation should succeed")
-            .is_some());
     }
 
     #[tokio::test]
@@ -1024,11 +795,6 @@ mod tests {
             .expect("profile manager test operation should succeed");
         manager
             .profile_ex()
-            .set_test_speed(&profile.profile.index_id, 45.0)
-            .await
-            .expect("profile manager test operation should succeed");
-        manager
-            .profile_ex()
             .set_test_message(&profile.profile.index_id, "ok")
             .await
             .expect("profile manager test operation should succeed");
@@ -1039,7 +805,6 @@ mod tests {
             .expect("profile manager test operation should succeed");
 
         assert_eq!(updated.delay, 123);
-        assert_eq!(updated.speed, 45.0);
         assert_eq!(updated.message.as_deref(), Some("ok"));
         assert_eq!(updated.ip_info.as_deref(), Some("US"));
     }
@@ -1071,13 +836,25 @@ mod tests {
             .await
             .expect("profile manager test operation should succeed");
 
-        let sorted = manager
-            .sort_profiles(&config, None, ProfileSortKey::Port, true)
+        let mut items = database
+            .profiles()
+            .list_with_profile_ex(None)
+            .await
+            .expect("profile manager test operation should succeed")
+            .items;
+        items.reverse();
+        manager
+            .renumber_sort(&items)
             .await
             .expect("profile manager test operation should succeed");
+        let renumbered = manager
+            .list_profiles(&config, None, None)
+            .await
+            .expect("profile manager test operation should succeed")
+            .items;
 
         assert_eq!(
-            sorted
+            renumbered
                 .iter()
                 .map(|item| (item.profile.remarks.as_str(), item.profile_ex.sort))
                 .collect::<Vec<_>>(),
@@ -1095,14 +872,25 @@ mod tests {
             "a batched renumber must not discard speedtest results"
         );
 
-        // Re-running the same sort has nothing left to move, and must still
-        // report the same order rather than shifting rows by a step.
-        let resorted = manager
-            .sort_profiles(&config, None, ProfileSortKey::Port, true)
+        // Re-numbering the persisted order has nothing left to move and must
+        // preserve the existing gap-based keys.
+        let items = database
+            .profiles()
+            .list_with_profile_ex(None)
+            .await
+            .expect("profile manager test operation should succeed")
+            .items;
+        manager
+            .renumber_sort(&items)
             .await
             .expect("profile manager test operation should succeed");
+        let renumbered_again = manager
+            .list_profiles(&config, None, None)
+            .await
+            .expect("profile manager test operation should succeed")
+            .items;
         assert_eq!(
-            resorted
+            renumbered_again
                 .iter()
                 .map(|item| (item.profile.remarks.as_str(), item.profile_ex.sort))
                 .collect::<Vec<_>>(),

@@ -39,8 +39,6 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::export_profile_client_config,
         commands::set_active_profile::<tauri::Wry>,
         commands::move_profile::<tauri::Wry>,
-        commands::sort_profiles::<tauri::Wry>,
-        commands::dedupe_profiles::<tauri::Wry>,
         commands::list_group_child_candidates,
         commands::preview_group_profile,
         commands::save_group_profile::<tauri::Wry>,
@@ -88,8 +86,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_contracts::TlsSettings>()
         .typ::<voya_contracts::ProfileListEntry>()
         .typ::<voya_contracts::ProfileListing>()
-        .typ::<voya_contracts::ProfileSortKey>()
-        .typ::<voya_contracts::ProfileDedupeResult>()
         .typ::<voya_contracts::GroupChildCandidate>()
         .typ::<voya_contracts::GroupValidation>()
         .typ::<voya_contracts::GroupPreview>()
@@ -131,7 +127,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_contracts::ExportProfilesRequest>()
         .typ::<voya_contracts::ExportProfilesResult>()
         .typ::<voya_contracts::ExportProfilesFormat>()
-        .typ::<voya_contracts::SpeedtestKind>()
         .typ::<voya_contracts::SpeedtestTarget>()
         .typ::<voya_contracts::SpeedtestRequest>()
         .typ::<voya_contracts::TrafficMode>()

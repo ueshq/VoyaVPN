@@ -62,13 +62,11 @@ describe("runtime event store", () => {
 
   it("stores speedtest result events without ending the running state", () => {
     const result: SpeedtestResult = {
-      action: "latency",
       delay: 42,
       indexId: "profile-a",
       detail: null,
       ipInfo: "US",
       outcome: "completed",
-      speed: null,
     };
 
     useRuntimeEventStore.getState().setSpeedtestRunning(true);

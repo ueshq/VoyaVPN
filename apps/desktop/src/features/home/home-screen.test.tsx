@@ -14,6 +14,7 @@ import type {
   TunStatus,
 } from "@/ipc/bindings";
 import { useModalStore } from "@/stores/modal-store";
+import { useRuntimeActionStore } from "@/stores/runtime-action-store";
 import { useToastStore } from "@/stores/toast-store";
 import { makeProfileFixture } from "@/test/profile-fixture";
 
@@ -202,6 +203,7 @@ function connectButton() {
 
 describe("HomeScreen", () => {
   beforeEach(async () => {
+    useRuntimeActionStore.setState({ pendingAction: null, modePending: false, pacPending: false, switchingId: null });
     await changeLocale("en", { persist: false });
     vi.clearAllMocks();
     runtimeMock.state.coreState = null;

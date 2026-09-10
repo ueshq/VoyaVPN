@@ -1097,7 +1097,7 @@ async fn unit_of_work_commit_failure_rolls_back_rows_settings_and_state() {
             .await
             .expect("foreign keys should be deferred");
         sqlx::query(
-            "INSERT INTO profile_ex_items (index_id, delay, speed, sort) VALUES ('missing-profile', 0, 0, 0)",
+            "INSERT INTO profile_ex_items (index_id, delay, sort) VALUES ('missing-profile', 0, 0)",
         )
         .execute(&mut **transaction)
         .await
@@ -2012,6 +2012,7 @@ async fn settings_payload_with_retired_keys_still_loads() {
 
     // The renamed key kept its value; the unit was always seconds.
     assert_eq!(loaded.speed_test.delay_interval_seconds, Some(24));
+    assert_eq!(loaded.speed_test.proxy_delay_concurrency, 5);
     // Neighbouring fields survived the normalization untouched.
     assert_eq!(loaded.speed_test.page_size, Some(23));
     assert_eq!(loaded.dns.add_common_hosts, Some(true));
@@ -2023,6 +2024,53 @@ async fn settings_payload_with_retired_keys_still_loads() {
         assert!(rewritten["dns"].get(key).is_none(), "`{key}` came back");
     }
     assert!(rewritten["speedTest"].get("delayIntervalMs").is_none());
+    for key in ["downloadUrl", "udpTarget", "mixedConcurrency"] {
+        assert!(stored["speedTest"].get(key).is_some());
+        assert!(rewritten["speedTest"].get(key).is_none());
+    }
+    database
+        .settings()
+        .save(&loaded)
+        .await
+        .expect("save normalized settings");
+    assert_eq!(
+        database.settings().load().await.expect("reload settings"),
+        loaded
+    );
+}
+
+#[tokio::test]
+async fn current_proxy_delay_concurrency_wins_over_the_retired_key() {
+    let database = Database::connect_in_memory()
+        .await
+        .expect("database should open");
+    let mut payload: serde_json::Value = serde_json::from_str(RETIRED_KEYS_SETTINGS_PAYLOAD)
+        .expect("old settings fixture should parse");
+    payload["speedTest"]["proxyDelayConcurrency"] = serde_json::json!(7);
+    payload["speedTest"]["mixedConcurrency"] = serde_json::json!(19);
+    sqlx::query("INSERT INTO app_settings (id, schema_version, payload) VALUES (1, ?, ?)")
+        .bind(i64::from(CURRENT_SCHEMA_VERSION))
+        .bind(payload.to_string())
+        .execute(database.pool())
+        .await
+        .expect("store settings");
+    let loaded = database
+        .settings()
+        .load()
+        .await
+        .expect("settings should normalize");
+    assert_eq!(loaded.speed_test.proxy_delay_concurrency, 7);
+
+    payload["speedTest"]["neverAContractKey"] = serde_json::json!(true);
+    sqlx::query("UPDATE app_settings SET payload = ? WHERE id = 1")
+        .bind(payload.to_string())
+        .execute(database.pool())
+        .await
+        .expect("store unknown key");
+    assert!(matches!(
+        database.settings().load().await,
+        Err(DbError::Json { .. })
+    ));
 }
 
 /// Normalizing retired keys must not turn `AppSettingsV1` into a lenient
@@ -2301,7 +2349,7 @@ async fn profile_listings_filter_by_subscription_and_join_missing_extensions() {
             &ProfileExItem {
                 index_id: "subscribed".to_string(),
                 delay: 42,
-                speed: 1.5,
+
                 sort: 5,
                 message: Some("measured".to_string()),
                 ip_info: Some("JP".to_string()),
@@ -2406,12 +2454,10 @@ async fn profile_listings_filter_by_subscription_and_join_missing_extensions() {
         .execute(database.pool())
         .await
         .expect("foreign keys should be togglable");
-    sqlx::query(
-        "INSERT INTO profile_ex_items (index_id, delay, speed, sort) VALUES ('orphan', 0, 0, 0)",
-    )
-    .execute(database.pool())
-    .await
-    .expect("the orphan row should be stored");
+    sqlx::query("INSERT INTO profile_ex_items (index_id, delay, sort) VALUES ('orphan', 0, 0)")
+        .execute(database.pool())
+        .await
+        .expect("the orphan row should be stored");
     sqlx::query("PRAGMA foreign_keys = ON")
         .execute(database.pool())
         .await
@@ -2457,7 +2503,7 @@ async fn profile_ex_set_sort_upserts_without_disturbing_measurements() {
         .upsert(&ProfileExItem {
             index_id: profile.index_id.clone(),
             delay: 120,
-            speed: 3.5,
+
             sort: 7,
             message: Some("measured".to_string()),
             ip_info: Some("JP".to_string()),
@@ -2546,8 +2592,8 @@ async fn profile_ex_set_sort_many_matches_repeated_set_sort() {
         expected
             .iter()
             .find(|item| item.index_id == "sortable-b")
-            .map(|item| (item.delay, item.speed, item.message.as_deref())),
-        Some((120, 3.5, Some("measured"))),
+            .map(|item| (item.delay, item.message.as_deref())),
+        Some((120, Some("measured"))),
         "reordering must not discard speedtest results"
     );
 
@@ -2582,7 +2628,7 @@ async fn seeded_sortable_database() -> Database {
         .upsert(&ProfileExItem {
             index_id: "sortable-b".to_string(),
             delay: 120,
-            speed: 3.5,
+
             sort: 99,
             message: Some("measured".to_string()),
             ip_info: Some("JP".to_string()),
@@ -2997,4 +3043,70 @@ fn endpoint(address: &str, port: i32) -> ServerEndpoint {
         address: address.to_string(),
         port,
     }
+}
+
+#[tokio::test]
+async fn retiring_download_speed_preserves_existing_node_data() {
+    let fixture = TempDatabase::new("retire-download-speed.sqlite");
+    let path = fixture.path();
+    let old_migrator = sqlx::migrate::Migrator {
+        migrations: Cow::Owned(
+            MIGRATOR
+                .iter()
+                .filter(|migration| migration.version <= 3)
+                .cloned()
+                .collect(),
+        ),
+        ..sqlx::migrate::Migrator::DEFAULT
+    };
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(true)
+                .foreign_keys(true),
+        )
+        .await
+        .expect("old database should open");
+    old_migrator
+        .run(&pool)
+        .await
+        .expect("old schema should apply");
+    let profile = sample_profile();
+    ProfileRepository::new(&pool)
+        .upsert(&profile)
+        .await
+        .expect("store old profile");
+    sqlx::query("INSERT INTO profile_ex_items (index_id, delay, speed, sort, message, ip_info) VALUES (?, 42, 4096, 17, 'completed', 'US')")
+        .bind(&profile.index_id).execute(&pool).await.expect("store old measurements");
+    pool.close().await;
+
+    let database = Database::connect(path).await.expect("upgrade database");
+    assert_eq!(
+        database
+            .profiles()
+            .get(&profile.index_id)
+            .await
+            .expect("read profile"),
+        Some(profile.clone())
+    );
+    let metrics = database
+        .profile_exs()
+        .get(&profile.index_id)
+        .await
+        .expect("read measurements")
+        .expect("measurements survive");
+    assert_eq!(metrics.delay, 42);
+    assert_eq!(metrics.sort, 17);
+    assert_eq!(metrics.message.as_deref(), Some("completed"));
+    assert_eq!(metrics.ip_info.as_deref(), Some("US"));
+    let columns = sqlx::query("PRAGMA table_info(profile_ex_items)")
+        .fetch_all(database.pool())
+        .await
+        .expect("inspect migrated columns");
+    assert!(!columns
+        .iter()
+        .any(|row| row.get::<String, _>("name") == "speed"));
+    database.close().await;
 }

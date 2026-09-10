@@ -25,9 +25,6 @@
   },
   "confirm": {
     "cancel": "Cancel",
-    "dedupeProfilesConfirm": "Remove duplicates",
-    "dedupeProfilesDescription": "Duplicate nodes across every subscription will be permanently deleted. This action cannot be undone.",
-    "dedupeProfilesTitle": "Remove duplicate nodes?",
     "deleteProfilesConfirm": "Delete",
     "deleteProfilesDescription": "{{count}} selected node(s) will be permanently deleted. This action cannot be undone.",
     "deleteProfilesTitle": "Delete nodes?",
@@ -324,31 +321,6 @@
         "missingPem": "Paste or fetch a PEM certificate before calculating SHA-256.",
         "shaCalculated": "Calculated {{count}} SHA-256 fingerprint(s)."
       },
-      "columns": {
-        "heading": "Toggle columns",
-        "labels": {
-          "address": "Address",
-          "delay": "Delay",
-          "group": "Group",
-          "indexHeader": "#",
-          "ipInfo": "IP info",
-          "port": "Port",
-          "protocol": "Protocol",
-          "remarks": "Remarks",
-          "security": "Security",
-          "speed": "Speed",
-          "todayDown": "Today down",
-          "todayUp": "Today up",
-          "totalDown": "Total down",
-          "totalUp": "Total up",
-          "transport": "Transport"
-        },
-        "reset": "Reset to defaults",
-        "toggle": "Columns"
-      },
-      "dedupe": {
-        "removed": "Removed {{removed}} duplicate node(s); kept {{kept}} of {{total}}."
-      },
       "dialog": {
         "addTitle": "Add node",
         "cancel": "Cancel",
@@ -466,7 +438,7 @@
         "moveDown": "Move down",
         "moveTop": "Move to top",
         "moveUp": "Move up",
-        "speedtest": "Speedtest"
+        "speedtest": "Test latency"
       },
       "panels": {
         "custom": "Custom configuration",
@@ -494,27 +466,18 @@
         "wireGuard": "WireGuard proxy node"
       },
       "speedtest": {
-        "buttonTitle": "{{label}} speedtest",
         "cancelTitle": "Cancel speedtest",
-        "mixed": "Mixed",
-        "more": "More speed tests",
-        "real": "Real",
-        "speed": "Speed",
-        "stop": "Stop",
-        "tcp": "TCP",
-        "udp": "UDP"
+        "stop": "Stop"
       },
       "title": "Nodes",
       "toolbar": {
         "add": "Add",
         "bulkExport": "Bulk export",
-        "bulkSpeedtest": "Bulk speedtest",
-        "dedupe": "Dedupe",
+        "bulkSpeedtest": "Test all latencies",
         "delete": "Delete",
         "edit": "Edit",
         "filterPlaceholder": "Filter remarks or address",
         "import": "Import",
-        "more": "More actions",
         "rows": "{{rows}} rows",
         "subscriptions": "Subscriptions"
       },
@@ -526,6 +489,31 @@
         "credentialRequired": "password or ID is required",
         "remarksRequired": "remarks are required",
         "uuidRequired": "UUID is required"
+      },
+      "card": {
+        "local": "Local node",
+        "default": "Default node",
+        "using": "In use",
+        "use": "Use node",
+        "switching": "Switching…",
+        "details": "Details",
+        "detailsTitle": "Node details",
+        "select": "Select {{name}}"
+      },
+      "cardFields": {
+        "address": "Address",
+        "delay": "Delay",
+        "group": "Group",
+        "ipInfo": "IP info",
+        "port": "Port",
+        "protocol": "Protocol",
+        "remarks": "Remarks",
+        "security": "Security",
+        "todayDown": "Today down",
+        "todayUp": "Today up",
+        "totalDown": "Total down",
+        "totalUp": "Total up",
+        "transport": "Transport"
       }
     },
     "proxyConnections": {
@@ -734,12 +722,10 @@
     "tabTests": "Tests",
     "tabUpdates": "Updates",
     "tests": {
-      "downloadUrl": "Speed Test URL",
       "ipApiUrl": "Current connection info test URL",
-      "mixedConcurrency": "The number of concurrent tests during multi-test",
       "pingUrl": "Speed Ping Test URL",
       "timeout": "Speed Test Single Timeout Value",
-      "udpTarget": "UDP Test Url"
+      "proxyDelayConcurrency": "Proxy group latency test concurrency"
     },
     "unsavedChanges": "Unsaved changes"
   },
@@ -757,7 +743,6 @@
       "skipped": "Skipped",
       "testing": "Testing",
       "timedOut": "Request timed out",
-      "udpTestFailed": "UDP test failed",
       "unknown": "Unknown result",
       "waiting": "Waiting"
     }
@@ -863,7 +848,6 @@
     "invalidRealityPublicKey": "REALITY needs a public key",
     "invalidShadowsocksMethod": "The Shadowsocks cipher is not supported",
     "invalidSubscriptionFilter": "The subscription filter {{pattern}} is not a valid regular expression",
-    "invalidUdpTestTarget": "Use host:port, optionally prefixed with a test kind",
     "listItem": "List items cannot be empty",
     "negativeHysteriaBandwidth": "Hysteria bandwidth cannot be negative",
     "network": "Network must be tcp, udp, or tcp,udp",

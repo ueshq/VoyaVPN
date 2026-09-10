@@ -603,10 +603,10 @@ fn delay_timeout_ms(config: &AppConfig) -> u32 {
 }
 
 /// How many latency probes may be in flight at once. Reuses the shared
-/// speed-test concurrency setting, mirroring the speedtest manager, and never
+/// proxy-group concurrency setting, and never
 /// returns zero because `buffered(0)` would stall the stream.
 fn delay_test_concurrency(config: &AppConfig, node_count: usize) -> usize {
-    let configured = usize::try_from(config.speed_test_item.mixed_concurrency_count)
+    let configured = usize::try_from(config.speed_test_item.proxy_delay_concurrency)
         .ok()
         .filter(|value| *value > 0)
         .unwrap_or(1);
@@ -933,7 +933,7 @@ mod tests {
         );
 
         config.speed_test_item.speed_test_timeout = 3;
-        config.speed_test_item.mixed_concurrency_count = 0;
+        config.speed_test_item.proxy_delay_concurrency = 0;
         assert_eq!(delay_timeout_ms(&config), 3_000);
         assert_eq!(
             delay_test_concurrency(&config, 40),

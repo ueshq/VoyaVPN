@@ -35,11 +35,10 @@ impl<'executor> ProfileExRepository<'executor> {
             sqlx::query(
                 r#"
             INSERT INTO profile_ex_items (
-                index_id, delay, speed, sort, message, ip_info
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                index_id, delay, sort, message, ip_info
+            ) VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(index_id) DO UPDATE SET
                 delay = excluded.delay,
-                speed = excluded.speed,
                 sort = excluded.sort,
                 message = excluded.message,
                 ip_info = excluded.ip_info
@@ -47,7 +46,6 @@ impl<'executor> ProfileExRepository<'executor> {
             )
             .bind(&item.index_id)
             .bind(item.delay)
-            .bind(item.speed)
             .bind(item.sort)
             .bind(&item.message)
             .bind(&item.ip_info),
@@ -192,7 +190,6 @@ fn row_to_profile_ex(row: SqliteRow) -> Result<ProfileExItem> {
     Ok(ProfileExItem {
         index_id: row.try_get("index_id")?,
         delay: row.try_get("delay")?,
-        speed: row.try_get("speed")?,
         sort: row.try_get("sort")?,
         message: row.try_get("message")?,
         ip_info: row.try_get("ip_info")?,
