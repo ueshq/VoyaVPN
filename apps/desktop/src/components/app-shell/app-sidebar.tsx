@@ -1,5 +1,5 @@
 import type * as React from "react";
-import { ArrowDown, ArrowUp, Home, Network, PanelLeft, Plug, Route, Settings, Shield } from "lucide-react";
+import { ArrowDown, ArrowUp, Home, PanelLeft, Plug, Route, Settings, Shield } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { SidebarNavItem } from "@/components/app-shell/sidebar-nav-item";
@@ -19,11 +19,10 @@ type NavItem = { icon: LucideIcon; titleKey: TranslationKey; value: ShellTab };
 // Keep every existing destination reachable in both sidebar widths.
 const navItems: NavItem[] = [
   { icon: Home, titleKey: "tabs.home", value: "home" },
-  { icon: Network, titleKey: "tabs.proxies", value: "proxies" },
   { icon: Shield, titleKey: "tabs.profiles", value: "profiles" },
-  { icon: Settings, titleKey: "tabs.settings", value: "settings" },
-  { icon: Plug, titleKey: "tabs.connections", value: "connections" },
   { icon: Route, titleKey: "tabs.rules", value: "rules" },
+  { icon: Plug, titleKey: "tabs.connections", value: "connections" },
+  { icon: Settings, titleKey: "tabs.settings", value: "settings" },
 ];
 
 const CORE_STATE_TRANSLATION_KEYS = {

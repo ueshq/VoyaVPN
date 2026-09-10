@@ -31,6 +31,7 @@ const bridgeMocks = vi.hoisted(() => {
     refreshSpeedtestStatus: vi.fn(() => Promise.resolve()),
     setActiveTab: vi.fn(),
     setConnectionsView: vi.fn(),
+    setProfilesView: vi.fn(),
     transientStreamEventListen: listenFor("transientStreamEvent"),
   };
 });
@@ -58,6 +59,7 @@ vi.mock("@/stores/shell-store", () => ({
     getState: () => ({
       setActiveTab: bridgeMocks.setActiveTab,
       setConnectionsView: bridgeMocks.setConnectionsView,
+      setProfilesView: bridgeMocks.setProfilesView,
     }),
   },
 }));
@@ -192,5 +194,10 @@ describe("EventBridge", () => {
 
     expect(bridgeMocks.setConnectionsView).toHaveBeenLastCalledWith("logs");
     expect(bridgeMocks.setActiveTab).toHaveBeenLastCalledWith("connections");
+    for (const target of ["proxyGroups", "profiles"]) {
+      act(() => bridgeMocks.listeners.appEvent[0]?.({ payload: { kind: "selectTab", payload: target } }));
+      expect(bridgeMocks.setProfilesView).toHaveBeenLastCalledWith(target);
+      expect(bridgeMocks.setActiveTab).toHaveBeenLastCalledWith("profiles");
+    }
   });
 });

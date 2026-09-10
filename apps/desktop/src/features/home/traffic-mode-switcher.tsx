@@ -1,0 +1,70 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { useI18n } from "@voya/i18n/use-i18n";
+import { Button } from "@voya/ui/components/button";
+import { cn } from "@voya/ui/lib/utils";
+import { getErrorMessage } from "@voya/utils/error";
+import { loadAppSettings, proxySetTrafficMode, useRuntimeEventStore } from "@/ipc";
+import type { AppSettingsV1, TrafficMode } from "@/ipc/bindings";
+import { queryKeys } from "@/ipc/query-keys";
+import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
+
+const modes = [
+  { value: "rule", labelKey: "proxy.trafficModeRule" },
+  { value: "global", labelKey: "proxy.trafficModeGlobal" },
+  { value: "direct", labelKey: "proxy.trafficModeDirect" },
+] as const;
+
+export function TrafficModeSwitcher() {
+  const { t } = useI18n();
+  const client = useQueryClient();
+  const state = useRuntimeEventStore((store) => store.coreState?.state);
+  const pending = useRuntimeActionStore((store) => store.pendingAction !== null || store.modePending || store.pacPending || store.switchingId !== null);
+  const query = useQuery({ queryKey: queryKeys.appSettings, queryFn: loadAppSettings });
+  const mutation = useMutation({
+    mutationFn: proxySetTrafficMode,
+    meta: { errorTitle: t("proxy.trafficModeFailed") },
+    onSuccess: async ({ mode }) => {
+      // An invalidation read may still be in flight when the command returns.
+      await client.cancelQueries({ queryKey: queryKeys.appSettings });
+      client.setQueryData<AppSettingsV1>(queryKeys.appSettings, (current) => current
+        ? { ...current, proxy: { ...current.proxy, trafficMode: mode } }
+        : current);
+    },
+    onSettled: () => useRuntimeActionStore.setState({ modePending: false }),
+  });
+  const ready = state === "connected" || state === "disconnected";
+  const disabled = !ready || pending || !query.data || query.isError;
+
+  function selectMode(mode: TrafficMode) {
+    if (disabled || runtimeActionPending()) return;
+    useRuntimeActionStore.setState({ modePending: true });
+    mutation.mutate(mode);
+  }
+
+  return (
+    <div className="home-traffic-mode">
+      <span className="home-traffic-mode-label" id="home-traffic-mode-label">{t("home.trafficMode")}</span>
+      <div aria-labelledby="home-traffic-mode-label" className="home-traffic-mode-options" role="group">
+        {modes.map(({ value, labelKey }) => (
+          <Button
+            aria-pressed={query.data?.proxy.trafficMode === value}
+            className={cn("h-8 px-4 text-xs text-[var(--home-ink)]", query.data?.proxy.trafficMode === value && "bg-background text-foreground shadow-sm")}
+            disabled={disabled}
+            key={value}
+            onClick={() => selectMode(value)}
+            type="button"
+            variant="ghost"
+          >{t(labelKey)}</Button>
+        ))}
+      </div>
+      {state === "disconnected" ? <p className="home-mode-hint">{t("home.trafficModeNextConnection")}</p> : null}
+      {query.error ? (
+        <div className="home-mode-hint" role="alert">
+          {getErrorMessage(query.error)}
+          <Button onClick={() => void query.refetch()} size="sm" type="button" variant="ghost">{t("actions.retry")}</Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}

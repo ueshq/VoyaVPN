@@ -120,7 +120,9 @@
     "processId": "进程 ID",
     "tunDiagnostics": "TUN 诊断",
     "manualProxySetup": "手动代理配置",
-    "disconnectLabel": "断开连接"
+    "disconnectLabel": "断开连接",
+    "trafficMode": "流量模式",
+    "trafficModeNextConnection": "下次连接生效"
   },
   "logCodes": {
     "connected": "内核守护进程已启动",
@@ -489,7 +491,8 @@
         "totalDown": "总下行",
         "totalUp": "总上行",
         "transport": "传输"
-      }
+      },
+      "viewTabsAria": "节点视图"
     },
     "proxyConnections": {
       "columns": {
@@ -624,7 +627,8 @@
     "type": "类型",
     "udp": "UDP",
     "upload": "上行",
-    "viewTabsAria": "连接视图"
+    "viewTabsAria": "连接视图",
+    "moreActions": "更多"
   },
   "qr": {
     "clipboardImageMissing": "剪贴板中没有图片。",
@@ -781,7 +785,6 @@
     "home": "主页",
     "logs": "日志",
     "profiles": "节点",
-    "proxies": "代理",
     "rules": "规则",
     "settings": "设置"
   },

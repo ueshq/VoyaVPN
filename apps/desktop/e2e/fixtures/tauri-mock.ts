@@ -527,7 +527,7 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           state.settings.dns = clone(state.dns);
           return Promise.resolve(clone(state.dns));
         case "proxy_list_groups":
-          return Promise.resolve(clone(state.proxy));
+          return Promise.resolve(clone({ ...state.proxy, trafficMode: state.settings.proxy.trafficMode }));
         case "proxy_test_delay":
           return Promise.resolve(
             readStringArray(args, "nodeNames").map((name) => ({ delay: 23, name, outcome: "completed" }) satisfies ProxyDelayTestResult),
@@ -549,7 +549,7 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
                 : group,
             ),
           };
-          return Promise.resolve(clone(state.proxy));
+          return Promise.resolve(clone({ ...state.proxy, trafficMode: state.settings.proxy.trafficMode }));
         }
         case "proxy_list_connections":
           return Promise.resolve({

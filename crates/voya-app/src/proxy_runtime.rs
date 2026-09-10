@@ -26,6 +26,8 @@ use crate::{
     supervisor::ClashApiAccess,
 };
 
+mod traffic_mode;
+
 /// Fallback per-node latency budget when the configured speed-test timeout is
 /// unusable; matches `SpeedTestItem::default().speed_test_timeout`.
 const DEFAULT_DELAY_TIMEOUT_MS: u32 = 10_000;

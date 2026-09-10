@@ -309,6 +309,7 @@ describe("App", () => {
     useShellStore.setState({
       activeTab: "profiles",
       connectionsView: "connections",
+      profilesView: "profiles",
       sidebarCollapsed: false,
     });
     useToastStore.setState({ toasts: [] });
@@ -336,7 +337,7 @@ describe("App", () => {
     delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   });
 
-  it("renders the six-item sidebar nav with the speed footer", () => {
+  it("renders the five-item sidebar nav with the speed footer", () => {
     renderApp();
 
     const sidebar = screen.getByRole("complementary");
@@ -346,7 +347,7 @@ describe("App", () => {
     const tabNames = within(tablist)
       .getAllByRole("tab")
       .map((tab) => tab.textContent);
-    expect(tabNames).toEqual(["Home", "Proxies", "Nodes", "Settings", "Connections", "Rules"]);
+    expect(tabNames).toEqual(["Home", "Nodes", "Rules", "Connections", "Settings"]);
     expect(footer).toHaveTextContent("Disconnected");
     expect(footer).toHaveTextContent("Up 0 B/s");
     expect(footer).toHaveTextContent("Down 0 B/s");
@@ -360,7 +361,7 @@ describe("App", () => {
     renderApp();
     await user.click(screen.getByRole("button", { name: "Collapse sidebar" }));
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getAllByRole("tab")).toHaveLength(6);
+    expect(within(screen.getByRole("tablist", { name: "Main sections" })).getAllByRole("tab")).toHaveLength(5);
     await user.click(screen.getByRole("tab", { name: "Settings" }));
     expect(await screen.findByRole("region", { name: "Settings" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Expand sidebar" }));
@@ -406,7 +407,7 @@ describe("App", () => {
 
     await waitFor(() => expect(document.documentElement).toHaveAttribute("lang", "en"));
     expect(document.documentElement).toHaveAttribute("dir", "ltr");
-    expect(screen.getByRole("tab", { name: "Nodes" })).toBeInTheDocument();
+    expect(mainNavTab(/Nodes/)).toBeInTheDocument();
   });
 
   it("hydrates the theme through the dedicated preferences query", async () => {
@@ -488,7 +489,7 @@ describe("App", () => {
 
     renderApp();
 
-    await activateTab(/Proxies/);
+    await activateProxyGroups();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(50);
     });
@@ -501,7 +502,7 @@ describe("App", () => {
     expect(proxyStartMonitor).toHaveBeenCalledTimes(1);
     expect(proxyStopMonitor).not.toHaveBeenCalled();
 
-    await activateTab(/Proxies/);
+    await activateProxyGroups();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
@@ -550,7 +551,7 @@ describe("App", () => {
 
     renderApp();
 
-    await activateTab(/Proxies/);
+    await activateProxyGroups();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(100);
     });
@@ -577,13 +578,13 @@ describe("App", () => {
 
     renderApp();
 
-    await activateTab(/Proxies/);
+    await activateProxyGroups();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(100);
     });
     expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe("running");
 
-    await activateTab(/Nodes/);
+    await activateTab(/Home/);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
@@ -602,27 +603,30 @@ describe("App", () => {
     });
   });
 
-  it("shows stale monitor status in Proxies without replacing toolbar controls", async () => {
+  it("shows stale monitor status in the embedded groups panel without replacing toolbar controls", async () => {
     const user = userEvent.setup();
     runtimeStoreMock.getState().setProxyMonitorStopped();
 
     renderApp();
 
-    await user.click(mainNavTab(/Proxies/));
+    await user.click(mainNavTab(/Nodes/));
+    await user.click(within(screen.getByRole("region", { name: "Nodes" })).getByRole("tab", { name: "Proxy Groups" }));
 
     expect(screen.getByRole("status", { name: "Stale: Stopped" })).toBeInTheDocument();
     // Scope toolbar-control assertions to the Proxies region. The home
     // hero's system-proxy selector also exposes "Direct"/"Global" buttons, so
     // scoping keeps these queries unambiguous and robust to shell layout.
-    const proxies = screen.getByRole("region", { name: "Proxies" });
+    const proxies = await screen.findByRole("region", { name: "Proxy Groups" });
     expect(within(proxies).queryByText(/Up .*\/s/)).not.toBeInTheDocument();
     expect(within(proxies).queryByText(/Down .*\/s/)).not.toBeInTheDocument();
-    expect(within(proxies).getByRole("button", { name: "Rule" })).toBeInTheDocument();
-    expect(within(proxies).getByRole("button", { name: "Global" })).toBeInTheDocument();
-    expect(within(proxies).getByRole("button", { name: "Direct" })).toBeInTheDocument();
-    expect(within(proxies).getByRole("button", { name: "Reload core configuration" })).toBeInTheDocument();
+    expect(within(proxies).queryByRole("button", { name: "Rule" })).not.toBeInTheDocument();
+    expect(within(proxies).queryByRole("button", { name: "Global" })).not.toBeInTheDocument();
+    expect(within(proxies).queryByRole("button", { name: "Direct" })).not.toBeInTheDocument();
+    expect(within(proxies).getByRole("menuitem", { name: "More" })).toBeInTheDocument();
     expect(within(proxies).getByRole("button", { name: "Test all" })).toBeInTheDocument();
-    expect(within(proxies).getByRole("button", { name: "Refresh runtime state" })).toBeInTheDocument();
+    await user.click(within(proxies).getByRole("menuitem", { name: "More" }));
+    expect(screen.getByRole("menuitem", { name: "Refresh runtime state" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Reload core configuration" })).toBeInTheDocument();
   });
 
   it("shows failed monitor status with its message in Connections while keeping data controls visible", async () => {
@@ -841,4 +845,10 @@ function makeConnection(index: number, overrides: Partial<ProxyConnectionItem> =
 
 function makeConnections(count: number): ProxyConnectionItem[] {
   return Array.from({ length: count }, (_, index) => makeConnection(index));
+}
+
+async function activateProxyGroups() {
+  await activateTab(/Nodes/);
+  const tab = within(screen.getByRole("region", { name: "Nodes" })).getByRole("tab", { name: "Proxy Groups" });
+  await act(async () => { fireEvent.mouseDown(tab); fireEvent.click(tab); await Promise.resolve(); });
 }

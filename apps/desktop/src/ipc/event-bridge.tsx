@@ -15,7 +15,7 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationFunction } from "@voya/i18n";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
 import { getErrorMessage } from "@voya/utils/error";
-import { type ConnectionsView, type ShellTab, useShellStore } from "@/stores/shell-store";
+import { type ConnectionsView, type ProfilesView, type ShellTab, useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
 
 type Unlisten = () => void;
@@ -173,18 +173,21 @@ function routeAppEvent(event: AppEvent, t: TranslationFunction) {
       if (target.view) {
         useShellStore.getState().setConnectionsView(target.view);
       }
+      if (target.profilesView) {
+        useShellStore.getState().setProfilesView(target.profilesView);
+      }
       useShellStore.getState().setActiveTab(target.tab);
       return;
     }
   }
 }
 
-function toShellTarget(tab: ShellTabTarget): { tab: ShellTab; view?: ConnectionsView } {
+function toShellTarget(tab: ShellTabTarget): { tab: ShellTab; view?: ConnectionsView; profilesView?: ProfilesView } {
   switch (tab) {
     case "profiles":
-      return { tab: "profiles" };
+      return { tab: "profiles", profilesView: "profiles" };
     case "proxyGroups":
-      return { tab: "proxies" };
+      return { tab: "profiles", profilesView: "proxyGroups" };
     case "proxyConnections":
       return { tab: "connections", view: "connections" };
     case "logs":

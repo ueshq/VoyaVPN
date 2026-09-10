@@ -32,11 +32,6 @@ const RulesScreen = lazy(() =>
     default: RoutingScreen,
   })),
 );
-const ProxyGroupsScreen = lazy(() =>
-  import("@/features/proxy/proxy-groups-screen").then(({ ProxyGroupsScreen }) => ({
-    default: ProxyGroupsScreen,
-  })),
-);
 const ConnectionsScreen = lazy(() =>
   import("@/features/proxy/connections-screen").then(({ ConnectionsScreen }) => ({
     default: ConnectionsScreen,
@@ -60,8 +55,6 @@ function renderActiveScreen(tab: ShellTab) {
       return <ProfilesScreen />;
     case "rules":
       return <RulesScreen />;
-    case "proxies":
-      return <ProxyGroupsScreen />;
     case "connections":
       return <ConnectionsScreen />;
     case "settings":
@@ -118,6 +111,7 @@ function ScreenFallback() {
  * proxy-runtime surface is on screen, the controller owns everything else.
  */
 function useProxyMonitorLifecycle(activeTab: ShellTab) {
+  const profilesView = useShellStore((state) => state.profilesView);
   const { t } = useI18n();
   const pushToast = useToastStore((state) => state.pushToast);
   const messages = useMemo(
@@ -159,12 +153,10 @@ function useProxyMonitorLifecycle(activeTab: ShellTab) {
   }, []);
 
   useEffect(() => {
-    controllerRef.current?.setWanted(isProxyTab(activeTab));
-  }, [activeTab]);
-}
-
-function isProxyTab(tab: ShellTab) {
-  return tab === "proxies" || tab === "connections";
+    controllerRef.current?.setWanted(
+      activeTab === "connections" || (activeTab === "profiles" && profilesView === "proxyGroups"),
+    );
+  }, [activeTab, profilesView]);
 }
 
 function isTauriRuntime() {

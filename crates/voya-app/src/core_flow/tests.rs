@@ -148,11 +148,49 @@ impl NativeTunController for StoppedNativeTun {
     }
 }
 
+#[derive(Clone, Default)]
+struct ModeTransport {
+    requests: Arc<Mutex<Vec<voya_net::clash::ClashHttpRequest>>>,
+    events_before_apply: Arc<Mutex<Vec<Vec<String>>>>,
+    observe_sink: Option<RecordingSink>,
+    fail: bool,
+}
+
+impl ClashHttpTransport for ModeTransport {
+    fn send_json<'transport>(
+        &'transport self,
+        request: voya_net::clash::ClashHttpRequest,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = voya_net::clash::Result<serde_json::Value>>
+                + Send
+                + 'transport,
+        >,
+    > {
+        Box::pin(async move {
+            if let Some(sink) = &self.observe_sink {
+                self.events_before_apply
+                    .lock()
+                    .expect("events")
+                    .push(sink.events());
+            }
+            self.requests.lock().expect("mode requests").push(request);
+            if self.fail {
+                return Err(voya_net::clash::ClashError::Request(
+                    "mode unavailable".into(),
+                ));
+            }
+            Ok(serde_json::Value::Null)
+        })
+    }
+}
+
 struct Harness {
     database: Database,
     paths: AppPaths,
     supervisor: CoreSupervisor,
     sink: RecordingSink,
+    mode_transport: ModeTransport,
 }
 
 impl Harness {
@@ -182,14 +220,15 @@ impl Harness {
             paths,
             supervisor,
             sink: RecordingSink::default(),
+            mode_transport: ModeTransport::default(),
         }
     }
 
-    fn flow(&self) -> CoreFlow<'_> {
+    fn flow(&self) -> CoreFlow<'_, ModeTransport> {
         self.flow_with_proxy_runner(RecordingRunner::default())
     }
 
-    fn flow_with_proxy_runner(&self, runner: RecordingRunner) -> CoreFlow<'_> {
+    fn flow_with_proxy_runner(&self, runner: RecordingRunner) -> CoreFlow<'_, ModeTransport> {
         let system_proxy = SystemProxyManager::with_target_os(
             SystemProxyService::new(Arc::new(runner), Arc::new(SilentPac)),
             self.paths.clone(),
@@ -198,7 +237,10 @@ impl Harness {
         self.flow_with_proxy_manager(system_proxy)
     }
 
-    fn flow_with_proxy_manager(&self, system_proxy: SystemProxyManager) -> CoreFlow<'_> {
+    fn flow_with_proxy_manager(
+        &self,
+        system_proxy: SystemProxyManager,
+    ) -> CoreFlow<'_, ModeTransport> {
         let tun = TunManager::with_target_os_and_native_tun(
             Arc::new(ElevationState::new()),
             TargetOs::Linux,
@@ -216,6 +258,9 @@ impl Harness {
             tun,
             Arc::new(self.sink.clone()),
         )
+        .with_proxy_runtime(ProxyRuntimeManager::with_transport(
+            self.mode_transport.clone(),
+        ))
     }
 }
 
@@ -224,6 +269,95 @@ fn active_config() -> AppConfig {
         index_id: "active".to_string(),
         ..AppConfig::default()
     }
+}
+
+#[tokio::test]
+async fn saved_mode_is_applied_before_connect_restart_and_recovery_are_announced() {
+    let harness = Harness::new().await;
+    let transport = ModeTransport {
+        observe_sink: Some(harness.sink.clone()),
+        ..ModeTransport::default()
+    };
+    let flow = harness
+        .flow()
+        .with_proxy_runtime(ProxyRuntimeManager::with_transport(transport.clone()));
+    let mut config = active_config();
+    config.proxy_ui_item.traffic_mode = voya_core::TrafficMode::Global;
+    let first = flow.connect(&config).await.expect("connect");
+    let restarted = flow.restart(&config).await.expect("restart");
+    flow.restart_if_connected(&config, CoreFlowReason::Connect)
+        .await
+        .expect("config restart");
+    flow.handle_core_exit(
+        &config,
+        CoreExitEvent {
+            active_profile_id: Some("active".into()),
+            process_id: 11,
+            exit_code: Some(2),
+            outcome: CoreExitOutcome::Restarted {
+                attempt: 1,
+                snapshot: restarted.clone(),
+            },
+        },
+    )
+    .await;
+    let requests = transport.requests.lock().expect("requests");
+    assert_eq!(requests.len(), 4);
+    for request in requests.iter() {
+        assert_eq!(request.body, Some(serde_json::json!({ "mode": "global" })));
+    }
+    assert_eq!(
+        requests[0].bearer_token.as_deref(),
+        first
+            .clash_api_access()
+            .secret
+            .as_ref()
+            .map(crate::supervisor::ClashApiSecret::as_str)
+    );
+    let observations = transport.events_before_apply.lock().expect("observations");
+    for (index, events) in observations.iter().enumerate() {
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| event.starts_with("state:Connected:"))
+                .count(),
+            index
+        );
+    }
+}
+
+#[tokio::test]
+async fn startup_mode_failure_warns_and_keeps_the_saved_preference() {
+    let harness = Harness::new().await;
+    // Pause after SQLite setup; its worker threads use wall-clock scheduling.
+    tokio::time::pause();
+    let transport = ModeTransport {
+        fail: true,
+        ..ModeTransport::default()
+    };
+    let mut config = active_config();
+    config.proxy_ui_item.traffic_mode = voya_core::TrafficMode::Direct;
+    let snapshot = harness
+        .flow()
+        .with_proxy_runtime(ProxyRuntimeManager::with_transport(transport))
+        .connect(&config)
+        .await
+        .expect("core still connected");
+    assert_eq!(snapshot.state, SupervisorConnectionState::Connected);
+    assert_eq!(
+        config.proxy_ui_item.traffic_mode,
+        voya_core::TrafficMode::Direct
+    );
+    let events = harness.sink.events();
+    let warning = events
+        .iter()
+        .position(|event| event == "notice:Warn:proxyModeSavedRuntimeUpdateFailed")
+        .expect("warning");
+    let connected = events
+        .iter()
+        .position(|event| event.starts_with("state:Connected:"))
+        .expect("connected");
+    assert!(warning < connected);
 }
 
 fn temp_paths() -> AppPaths {

@@ -127,11 +127,11 @@ pub async fn proxy_set_traffic_mode<R: tauri::Runtime>(
     .await?;
     let changed = committed.value;
     let config = committed.config;
-    if changed && mode != TrafficMode::Unchanged {
+    if mode != TrafficMode::Unchanged {
         let clash_api = current_clash_api_access(&state).await;
         if let Err(error) = state
             .proxy_runtime()
-            .set_traffic_mode(&clash_api, mode)
+            .set_traffic_mode_if_running(&clash_api, mode)
             .await
         {
             report_post_commit_error(
@@ -165,11 +165,24 @@ pub async fn proxy_reload_config<R: tauri::Runtime>(
     )?;
     let clash_api = current_clash_api_access(&state).await;
 
-    state
+    let config = current_config(&state);
+    let mode_error = state
         .proxy_runtime()
-        .reload_config(&clash_api, path.as_deref())
+        .reload_config_with_mode(
+            &clash_api,
+            path.as_deref(),
+            config.proxy_ui_item.traffic_mode,
+        )
         .await
         .map_err(AppError::from)?;
+    if let Some(error) = mode_error {
+        report_post_commit_error(
+            &app,
+            NoticeCode::ProxyModeSavedRuntimeUpdateFailed,
+            &error.to_string(),
+            AppNoticeLevel::Warning,
+        );
+    }
     emit_proxy_runtime_invalidation(&app, "proxy-config-reloaded", false);
 
     Ok(())

@@ -16,6 +16,7 @@ import type {
 import { useModalStore } from "@/stores/modal-store";
 import { useRuntimeActionStore } from "@/stores/runtime-action-store";
 import { useToastStore } from "@/stores/toast-store";
+import { makeAppSettings } from "@/features/settings/app-settings.test-fixture";
 import { makeProfileFixture } from "@/test/profile-fixture";
 
 import { HomeScreen } from "./home-screen";
@@ -68,6 +69,8 @@ const ipcMock = vi.hoisted(() => {
   return {
     IpcCommandError: MockIpcCommandError,
     connectActiveProfile: vi.fn(),
+    loadAppSettings: vi.fn(),
+    proxySetTrafficMode: vi.fn(),
     deleteSubscriptions: vi.fn(),
     disconnectCore: vi.fn(),
     listProfiles: vi.fn(),
@@ -154,6 +157,8 @@ const missingTunnelMessages = {
 
 vi.mock("@/ipc", () => ({
   connectActiveProfile: ipcMock.connectActiveProfile,
+  loadAppSettings: ipcMock.loadAppSettings,
+  proxySetTrafficMode: ipcMock.proxySetTrafficMode,
   deleteSubscriptions: ipcMock.deleteSubscriptions,
   disconnectCore: ipcMock.disconnectCore,
   IpcCommandError: ipcMock.IpcCommandError,
@@ -213,6 +218,8 @@ describe("HomeScreen", () => {
     vi.mocked(runtimeMock.state.setTun).mockImplementation((status) => { runtimeMock.state.tun = status; });
     vi.mocked(runtimeMock.state.setSysProxy).mockImplementation((status) => { runtimeMock.state.sysProxy = status; });
     ipcMock.connectActiveProfile.mockResolvedValue(connectedStatus);
+    ipcMock.loadAppSettings.mockResolvedValue(makeAppSettings());
+    ipcMock.proxySetTrafficMode.mockResolvedValue({ mode: "rule" });
     ipcMock.disconnectCore.mockResolvedValue(disconnectedStatus);
     ipcMock.restartCore.mockResolvedValue(connectedStatus);
     ipcMock.runtimeStatus.mockResolvedValue(disconnectedStatus);

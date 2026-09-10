@@ -11,6 +11,7 @@ import { cn } from "@voya/ui/lib/utils";
 import { ConnectButton } from "./connect-button";
 import { ConnectedInfo } from "./connected-info";
 import { ConnectionModeSwitcher } from "./connection-mode-switcher";
+import { TrafficModeSwitcher } from "./traffic-mode-switcher";
 import { ConnectionDetailsDialog, NodePickerDialog } from "./home-dialogs";
 import { ManualProxyPanel } from "./manual-proxy-panel";
 import { useHomeRuntime } from "./use-home-runtime";
@@ -60,6 +61,7 @@ export function HomeScreen() {
           </div>
           <ConnectedInfo delayMs={delayMs} t={t} />
           <ConnectionModeSwitcher tunEnabled={home.tunEnabled} modeBusy={home.modeBusy} modePending={home.modePending} onTunChange={home.changeTunEnabled} onPacToggle={home.togglePac} pacActive={home.pacActive} pacAvailable={home.pacAvailable} pacPending={home.pacPending} t={t} />
+          <TrafficModeSwitcher />
           {home.tunEnabled && home.tunIssue ? (
             <p className="home-diagnostic" role="status">{home.tunIssue}</p>
           ) : null}

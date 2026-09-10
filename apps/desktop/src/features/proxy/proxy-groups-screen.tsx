@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Gauge, Inbox, Network, RefreshCw, RotateCw, Wifi, WifiOff, Zap } from "lucide-react";
+import { Check, Gauge, Inbox, MoreHorizontal, Network, RefreshCw, RotateCw, Wifi, WifiOff, Zap } from "lucide-react";
 
 import {
   dataTableHeader,
@@ -8,18 +8,17 @@ import {
   dataTableRowSelected,
 } from "@/components/app-shell/data-table-surface";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
-import { PageHeader, PageHeaderActions, PageSection, PageTitle } from "@/components/app-shell/page-section";
+import { PageHeader, PageHeaderActions } from "@/components/app-shell/page-section";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { EmptyState } from "@voya/ui/components/empty-state";
 import { ScrollArea } from "@voya/ui/components/scroll-area";
 import { useI18n } from "@voya/i18n/use-i18n";
-import type { TranslationKey } from "@voya/i18n";
+import { Menubar, MenubarMenu, MenubarContent, MenubarItem, MenubarTrigger } from "@voya/ui/components/menubar";
 import {
   proxyListGroups,
   proxyReloadConfig,
   proxySelectNode,
-  proxySetTrafficMode,
   proxyTestDelay,
   useRuntimeEventStore,
 } from "@/ipc";
@@ -27,36 +26,32 @@ import type {
   ProxyDelayTestResult,
   ProxyGroup,
   ProxyNode,
-  TrafficMode,
 } from "@/ipc/bindings";
 import { speedtestOutcomeText } from "@/ipc/messages";
 import { queryKeys } from "@/ipc/query-keys";
 import { formatDelay } from "@voya/utils/formatting";
 import { getErrorMessage } from "@voya/utils/error";
 import { cn } from "@voya/ui/lib/utils";
+import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
 import { ProxyMonitorStatusBadge } from "@/features/proxy/proxy-monitor-status-badge";
 
 import { isAutoGroup, orderProxyGroups } from "./proxy-group-order";
 
-const trafficModeOptions: Array<{ labelKey: TranslationKey; value: TrafficMode }> = [
-  { labelKey: "proxy.trafficModeRule", value: "rule" },
-  { labelKey: "proxy.trafficModeGlobal", value: "global" },
-  { labelKey: "proxy.trafficModeDirect", value: "direct" },
-];
-
-export function ProxyGroupsScreen() {
+export function ProxyGroupsPanel() {
   const queryClient = useQueryClient();
   const { t } = useI18n();
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const monitorStatus = useRuntimeEventStore((state) => state.proxyMonitorStatus);
+  const runtimeBusy = useRuntimeActionStore((state) => state.pendingAction !== null || state.modePending || state.pacPending || state.switchingId !== null);
   // The Clash API only exists while the core runs; without this guard the screen
   // renders its raw transport failure ("error sending request for url …") as if
   // it were a proxy problem.
-  const coreDisconnected = coreState != null && coreState.state !== "connected";
+  const coreDisconnected = coreState?.state !== "connected";
   const [delayResults, setDelayResults] = useState<Record<string, ProxyDelayTestResult>>({});
   const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null);
 
   const groupsQuery = useQuery({
+    enabled: !coreDisconnected,
     queryFn: proxyListGroups,
     queryKey: queryKeys.proxyGroups,
   });
@@ -89,12 +84,6 @@ export function ProxyGroupsScreen() {
     mutationFn: () => proxyReloadConfig(null),
     // `proxy_reload_config` emits proxyGroups + proxyConnections itself.
   });
-  const trafficModeMutation = useMutation({
-    meta: { errorTitle: t("proxy.trafficModeFailed") },
-    mutationFn: proxySetTrafficMode,
-    // `proxy_set_traffic_mode` emits proxyGroups + proxyConnections and, when
-    // the persisted mode really changed, appSettings.
-  });
   const selectMutation = useMutation({
     meta: { errorTitle: t("proxy.selectNodeFailed") },
     mutationFn: ({ groupName, nodeName }: { groupName: string; nodeName: string }) =>
@@ -119,50 +108,20 @@ export function ProxyGroupsScreen() {
   }
 
   function selectNode(node: ProxyNode) {
-    if (!selectedGroup || node.active || selectedGroup.proxyType.toLowerCase() !== "selector") {
+    if (runtimeActionPending() || !selectedGroup || node.active || selectedGroup.proxyType.toLowerCase() !== "selector") {
       return;
     }
     selectMutation.mutate({ groupName: selectedGroup.name, nodeName: node.name });
   }
 
   return (
-    <PageSection aria-label={t("tabs.proxies")}>
-      <PageTitle title={t("tabs.proxies")} />
+    <section aria-label={t("panes.proxyGroups.title")} className="flex h-full min-h-0 flex-col">
       <PageHeader>
         <ProxyMonitorStatusBadge className="max-w-[15rem]" status={monitorStatus} />
         <PageHeaderActions>
-          <div className="hidden h-9 items-center rounded-lg bg-muted p-[3px] md:flex">
-            {trafficModeOptions.map((option) => (
-              <Button
-                key={option.value}
-                aria-pressed={snapshot?.trafficMode === option.value}
-                className={cn(
-                  "h-7 px-2 text-xs",
-                  snapshot?.trafficMode === option.value && "bg-background text-foreground shadow-sm hover:bg-background",
-                )}
-                disabled={trafficModeMutation.isPending}
-                onClick={() => trafficModeMutation.mutate(option.value)}
-                type="button"
-                variant="ghost"
-              >
-                {t(option.labelKey)}
-              </Button>
-            ))}
-          </div>
-          <Button
-            aria-label={t("actions.reloadCoreConfig")}
-            disabled={reloadMutation.isPending}
-            onClick={() => reloadMutation.mutate()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <RotateCw className="size-4" aria-hidden="true" />
-            {t("actions.reloadCoreConfig")}
-          </Button>
           <Button
             aria-label={t("proxy.testAll")}
-            disabled={delayMutation.isPending}
+            disabled={coreDisconnected || delayMutation.isPending}
             onClick={() => runDelayTest([])}
             size="sm"
             type="button"
@@ -170,17 +129,22 @@ export function ProxyGroupsScreen() {
             <Zap className="size-4" aria-hidden="true" />
             {t("proxy.testAll")}
           </Button>
-          <Button
-            aria-label={t("actions.refreshRuntimeState")}
-            disabled={groupsQuery.isFetching}
-            onClick={() => void groupsQuery.refetch()}
-            size="sm"
-            type="button"
-            variant="secondary"
-          >
-            <RefreshCw className={cn("size-4", groupsQuery.isFetching && "animate-spin")} aria-hidden="true" />
-            {t("actions.refreshRuntimeState")}
-          </Button>
+          <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none"><MenubarMenu>
+            <MenubarTrigger asChild>
+              <Button aria-label={t("proxy.moreActions")} size="sm" type="button" variant="outline">
+                <MoreHorizontal className="size-4" aria-hidden="true" />
+                {t("proxy.moreActions")}
+              </Button>
+            </MenubarTrigger>
+            <MenubarContent align="end">
+              <MenubarItem disabled={coreDisconnected || runtimeBusy || reloadMutation.isPending} onSelect={() => reloadMutation.mutate()}>
+                <RotateCw className="size-4" aria-hidden="true" />{t("actions.reloadCoreConfig")}
+              </MenubarItem>
+              <MenubarItem disabled={coreDisconnected || groupsQuery.isFetching} onSelect={() => void groupsQuery.refetch()}>
+                <RefreshCw className="size-4" aria-hidden="true" />{t("actions.refreshRuntimeState")}
+              </MenubarItem>
+            </MenubarContent>
+          </MenubarMenu></Menubar>
         </PageHeaderActions>
       </PageHeader>
 
@@ -299,13 +263,13 @@ export function ProxyGroupsScreen() {
               delayResults={delayResults}
               nodes={selectedNodes}
               onSelect={selectNode}
-              selectable={selectedGroup?.proxyType.toLowerCase() === "selector"}
+              selectable={!runtimeBusy && selectedGroup?.proxyType.toLowerCase() === "selector"}
             />
           </div>
         </div>
         </>
       )}
-    </PageSection>
+    </section>
   );
 }
 

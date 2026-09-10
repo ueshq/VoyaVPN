@@ -25,9 +25,11 @@ use std::sync::Arc;
 
 use voya_contracts::{CoreFlowReason, LogCode, NoticeCode};
 use voya_core::AppConfig;
+use voya_net::clash::{ClashHttpTransport, ReqwestClashHttpTransport};
 use voya_platform::sysproxy::SystemProxyStatus;
 
 use crate::{
+    proxy_runtime::ProxyRuntimeManager,
     runtime::{RuntimeError, RuntimeManager},
     supervisor::{
         CoreExitEvent, CoreExitOutcome, NativeTunExitEvent, SupervisorConnectionState,
@@ -87,11 +89,12 @@ pub trait CoreFlowSink: Send + Sync {
     fn notice(&self, level: CoreFlowLevel, code: NoticeCode, detail: &str);
 }
 
-pub struct CoreFlow<'flow> {
+pub struct CoreFlow<'flow, T = ReqwestClashHttpTransport> {
     runtime: RuntimeManager<'flow>,
     system_proxy: SystemProxyManager,
     tun: TunManager,
     sink: Arc<dyn CoreFlowSink>,
+    proxy_runtime: ProxyRuntimeManager<T>,
 }
 
 impl<'flow> CoreFlow<'flow> {
@@ -107,6 +110,23 @@ impl<'flow> CoreFlow<'flow> {
             system_proxy,
             tun,
             sink,
+            proxy_runtime: ProxyRuntimeManager::new(),
+        }
+    }
+}
+
+impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
+    #[must_use]
+    pub fn with_proxy_runtime<U: ClashHttpTransport>(
+        self,
+        proxy_runtime: ProxyRuntimeManager<U>,
+    ) -> CoreFlow<'flow, U> {
+        CoreFlow {
+            runtime: self.runtime,
+            system_proxy: self.system_proxy,
+            tun: self.tun,
+            sink: self.sink,
+            proxy_runtime,
         }
     }
 
@@ -193,6 +213,7 @@ impl<'flow> CoreFlow<'flow> {
                     Some(&exit),
                 );
                 // The pid changed, so the UI needs the new snapshot.
+                self.settle_traffic_mode(config, &snapshot).await;
                 self.settle_system_proxy(
                     config,
                     ProxyAction::Apply,
@@ -285,6 +306,7 @@ impl<'flow> CoreFlow<'flow> {
         snapshot: &SupervisorSnapshot,
         code: LogCode,
     ) {
+        self.settle_traffic_mode(config, snapshot).await;
         self.sink.log(CoreFlowLevel::Info, code, None);
         self.settle_system_proxy(
             config,
@@ -295,6 +317,23 @@ impl<'flow> CoreFlow<'flow> {
         self.sink
             .core_state(CoreFlowState::Connected, None, Some(snapshot));
         self.report_tun_status(config).await;
+    }
+
+    async fn settle_traffic_mode(&self, config: &AppConfig, snapshot: &SupervisorSnapshot) {
+        if let Err(error) = self
+            .proxy_runtime
+            .apply_saved_traffic_mode(
+                &snapshot.clash_api_access(),
+                config.proxy_ui_item.traffic_mode,
+            )
+            .await
+        {
+            self.sink.notice(
+                CoreFlowLevel::Warn,
+                NoticeCode::ProxyModeSavedRuntimeUpdateFailed,
+                &error.to_string(),
+            );
+        }
     }
 
     async fn settle_disconnected(

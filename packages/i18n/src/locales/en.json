@@ -120,7 +120,9 @@
     "processId": "Process ID",
     "tunDiagnostics": "TUN diagnostics",
     "manualProxySetup": "Manual proxy setup",
-    "disconnectLabel": "Disconnect"
+    "disconnectLabel": "Disconnect",
+    "trafficMode": "Traffic mode",
+    "trafficModeNextConnection": "Applies on the next connection"
   },
   "logCodes": {
     "connected": "Core supervisor started",
@@ -489,7 +491,8 @@
         "totalDown": "Total down",
         "totalUp": "Total up",
         "transport": "Transport"
-      }
+      },
+      "viewTabsAria": "Node views"
     },
     "proxyConnections": {
       "columns": {
@@ -624,7 +627,8 @@
     "type": "Type",
     "udp": "UDP",
     "upload": "Up",
-    "viewTabsAria": "Connection views"
+    "viewTabsAria": "Connection views",
+    "moreActions": "More"
   },
   "qr": {
     "clipboardImageMissing": "Clipboard does not contain an image.",
@@ -781,7 +785,6 @@
     "home": "Home",
     "logs": "Logs",
     "profiles": "Nodes",
-    "proxies": "Proxies",
     "rules": "Rules",
     "settings": "Settings"
   },

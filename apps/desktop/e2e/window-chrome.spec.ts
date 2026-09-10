@@ -42,8 +42,8 @@ for (const layout of ["macos", "windows"] as const) {
     await expect(sidebar).toHaveCSS("width", "240px");
 
     // Every destination has its own scroll viewport below the drag strip.
-    for (const name of ["Proxies", "Nodes", "Settings", "Connections", "Rules"]) {
-      await page.getByRole("tab", { name, exact: true }).click();
+    for (const name of ["Nodes", "Settings", "Connections", "Rules"]) {
+      await page.getByRole("tablist", { name: "Main sections" }).getByRole("tab", { name, exact: true }).click();
       const panel = page.locator("#shell-tabpanel");
       const heading = panel.locator('[data-slot="page-title"]');
       await expect(heading).toBeVisible();

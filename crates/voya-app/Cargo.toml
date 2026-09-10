@@ -24,6 +24,7 @@ voya-net.workspace = true
 voya-platform.workspace = true
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
 sqlx.workspace = true
 voya-net = { workspace = true, features = ["test-utils"] }
 voya-platform = { workspace = true, features = ["test-support"] }

@@ -120,7 +120,9 @@
     "processId": "程序 ID",
     "tunDiagnostics": "TUN 診斷",
     "manualProxySetup": "手動代理設定",
-    "disconnectLabel": "中斷連線"
+    "disconnectLabel": "中斷連線",
+    "trafficMode": "流量模式",
+    "trafficModeNextConnection": "下次連線生效"
   },
   "logCodes": {
     "connected": "核心守護程序已啟動",
@@ -489,7 +491,8 @@
         "totalDown": "總下行",
         "totalUp": "總上行",
         "transport": "傳輸"
-      }
+      },
+      "viewTabsAria": "節點檢視"
     },
     "proxyConnections": {
       "columns": {
@@ -624,7 +627,8 @@
     "type": "類型",
     "udp": "UDP",
     "upload": "上行",
-    "viewTabsAria": "連線視圖"
+    "viewTabsAria": "連線視圖",
+    "moreActions": "更多"
   },
   "qr": {
     "clipboardImageMissing": "剪貼簿中沒有圖片。",
@@ -781,7 +785,6 @@
     "home": "主頁",
     "logs": "日誌",
     "profiles": "節點",
-    "proxies": "代理",
     "rules": "規則",
     "settings": "設定"
   },

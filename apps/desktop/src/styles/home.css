@@ -41,7 +41,7 @@
   min-height: 100%;
   flex-direction: column;
   align-items: center;
-  padding: clamp(44px, 12.75vh, 102px) 28px clamp(32px, 9vh, 72px);
+  padding: clamp(36px, 10vh, 80px) 28px clamp(24px, 5vh, 40px);
 }
 .home-hero { display: flex; flex-direction: column; align-items: center; width: 100%; margin-bottom: 48px; }
 .home-power {
@@ -90,6 +90,9 @@
 .home-mode [data-slot="switch"][data-state="checked"] { background: #2864f3; }
 .home-mode [data-slot="switch-thumb"] { width: 17px; height: 17px; }
 .home-mode-hint, .home-diagnostic { margin-top: 10px; max-width: 520px; color: var(--home-muted); font-size: 11px; text-align: center; overflow-wrap: anywhere; }
+.home-traffic-mode { display: flex; flex-direction: column; align-items: center; margin-top: 12px; }
+.home-traffic-mode-label { margin-bottom: 6px; color: var(--home-muted); font-size: 12px; }
+.home-traffic-mode-options { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; padding: 3px; border: 1px solid var(--home-border); border-radius: 10px; background: var(--home-card); }
 .home-manual-proxy { width: min(100%, 560px); margin-top: 12px; font-size: 12px; color: var(--home-muted); }
 .home-manual-proxy summary { cursor: pointer; text-align: center; margin-bottom: 8px; }
 .node-card-surface { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 88px; padding: 12px 24px; border: 1px solid var(--home-border); border-radius: 16px; background: var(--home-card); box-shadow: 0 3px 10px rgb(31 41 55 / 3%); }
@@ -126,8 +129,8 @@
 .app-sidebar[data-collapsed="true"] .sidebar-traffic-title, .app-sidebar[data-collapsed="true"] .sidebar-traffic-label { display: none; }
 .app-sidebar[data-collapsed="true"] .sidebar-traffic-row { flex-direction: column; gap: 2px; }
 .app-sidebar[data-collapsed="true"] .sidebar-traffic-value { margin-inline-start: 0; }
-@media (min-height: 760px) { .home-node-card { margin-top: auto; } .home-hero { margin-bottom: 72px; } }
-@media (max-height: 700px) { .home-content { padding-top: 36px; } .home-power { width: 144px; height: 144px; } .home-status { margin-top: 22px; } .home-mode-container { margin-top: 20px; } .home-hero { margin-bottom: 36px; } }
+@media (min-height: 760px) { .home-node-card { margin-top: auto; } .home-hero { margin-bottom: 56px; } }
+@media (max-height: 700px) { .home-content { padding-top: 36px; } .home-power { width: 144px; height: 144px; } .home-status { margin-top: 22px; } .home-mode-container { margin-top: 20px; } .home-hero { margin-bottom: 24px; } }
 @media (max-width: 1050px) { .home-node-card { padding: 12px 16px; } .home-node-meta, .node-card-meta { gap: 4px 8px; } .home-node-address, .node-card-address { max-width: 150px; } }
 
 /* Both screens share the node surface; only Home constrains its width. */

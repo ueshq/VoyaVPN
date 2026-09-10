@@ -7,7 +7,7 @@ import { createAppQueryClient } from "@/components/app-shell/query-client";
 import type { ProxyGroupsSnapshot, RuntimeStatusResponse } from "@/ipc/bindings";
 import { useToastStore } from "@/stores/toast-store";
 
-import { ProxyGroupsScreen } from "./proxy-groups-screen";
+import { ProxyGroupsPanel } from "./proxy-groups-screen";
 
 const ipcMocks = vi.hoisted(() => {
   const state = {
@@ -84,7 +84,7 @@ function renderScreen() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <ProxyGroupsScreen />
+      <ProxyGroupsPanel />
     </QueryClientProvider>,
   );
 }
@@ -95,14 +95,17 @@ afterEach(() => {
   queryClients.clear();
 });
 
-describe("ProxyGroupsScreen", () => {
+describe("ProxyGroupsPanel", () => {
   beforeEach(() => {
     ipcMocks.proxyListGroups.mockReset().mockResolvedValue(snapshot());
     ipcMocks.proxyReloadConfig.mockReset().mockResolvedValue(null);
     ipcMocks.proxySelectNode.mockReset().mockResolvedValue(snapshot());
     ipcMocks.proxySetTrafficMode.mockReset().mockResolvedValue({ mode: "rule" });
     ipcMocks.proxyTestDelay.mockReset().mockResolvedValue([]);
-    ipcMocks.state.coreState = null;
+    ipcMocks.state.coreState = {
+      activeProfileId: null, mainPid: null, prePid: null, connectedDurationMs: null,
+      activeTunBackend: null, runningCoreType: null, state: "connected",
+    };
     useToastStore.setState({ toasts: [] });
   });
 
@@ -130,7 +133,8 @@ describe("ProxyGroupsScreen", () => {
     const user = userEvent.setup();
     renderScreen();
 
-    await user.click(await screen.findByRole("button", { name: "Reload core configuration" }));
+    await user.click(screen.getByRole("menuitem", { name: "More" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Reload core configuration" }));
 
     await waitFor(() =>
       expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
@@ -177,6 +181,8 @@ describe("ProxyGroupsScreen", () => {
 
     expect(await screen.findByText("Connect first")).toBeInTheDocument();
     expect(screen.queryByText(/error sending request/)).not.toBeInTheDocument();
+    expect(ipcMocks.proxyListGroups).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Test all" })).toBeDisabled();
   });
 
   it("keeps quiet while the proxy calls succeed", async () => {
