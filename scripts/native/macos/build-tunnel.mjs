@@ -17,6 +17,7 @@ import {
   incompatiblePacketTunnelBundle,
   packetTunnelBundleIdentifier,
   packetTunnelLayout,
+  packetTunnelSources,
   resolvePacketTunnelVersions,
   distributionFromIdentityName,
 } from "./tunnel-layout.mjs";
@@ -37,7 +38,7 @@ const nativeRoot = resolve(repoRoot, "apps", "desktop", "src-tauri", "native", "
 const outRoot = resolve(repoRoot, "target", "native", "macos");
 const appBundle = resolve(process.env.VOYAVPN_MACOS_APP_BUNDLE || resolve(outRoot, "VoyaVPN.app"));
 const appContents = resolve(appBundle, "Contents");
-const providerSource = resolve(nativeRoot, "PacketTunnel", "PacketTunnelProvider.swift");
+const providerSources = packetTunnelSources(nativeRoot);
 const resolvedIdentity = resolveIdentityFromEnv();
 const macosDistribution = distributionFromIdentityName(
   resolvedIdentity?.name ?? "",
@@ -283,7 +284,7 @@ function buildPacketTunnel() {
     );
   }
 
-  args.push(providerSource, "-o", appexBinary);
+  args.push(...providerSources, "-o", appexBinary);
   run("xcrun", args, { cwd: repoRoot });
   removeSwiftModuleArtifacts(appexBinary);
 
@@ -348,8 +349,10 @@ function maybeCodesign(profiles) {
 
 function main() {
   requireDarwin("macOS native tunnel build must run on macOS with Xcode command line tools.");
-  if (!existsSync(providerSource)) {
-    throw new Error("macOS PacketTunnel source is missing.");
+  for (const source of providerSources) {
+    if (!existsSync(source)) {
+      throw new Error(`macOS PacketTunnel source is missing: ${source}`);
+    }
   }
   buildPacketTunnel();
   const profiles = stageProvisioningProfiles();

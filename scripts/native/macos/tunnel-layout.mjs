@@ -5,6 +5,16 @@ import { checkedCapture } from "../../lib/common.mjs";
 export const appBundleIdentifier = "app.voyavpn.desktop";
 export const packetTunnelBundleIdentifier = "app.voyavpn.desktop.PacketTunnel";
 
+/** The build and native checks compile exactly the same provider sources. */
+export function packetTunnelSources(nativeRoot) {
+  return [
+    "PacketTunnelProvider.swift",
+    "PacketTunnelRuntime.swift",
+    "PacketTunnelDiagnostics.swift",
+    "PacketTunnelPlatform.swift",
+  ].map((name) => resolve(nativeRoot, "PacketTunnel", name));
+}
+
 export function normalizeDistribution(value) {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (!normalized || normalized === "auto") {
