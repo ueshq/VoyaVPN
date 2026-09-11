@@ -35,7 +35,6 @@ export function ServerTableToolbar({
   controller: NodeToolbarController;
 }) {
   const {
-    nodeGroups,
     handleBulkExport,
     handleCancelSpeedtest,
     handleSpeedtest,
@@ -93,44 +92,15 @@ export function ServerTableToolbar({
                 <Rss aria-hidden="true" className="size-4" />
                 {t("home.subscriptionCard.add")}
               </Button>
-              <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
-                <MenubarMenu>
-                  <MenubarTrigger asChild className="h-8">
-                    <Button
-                      ref={addTriggerRef}
-                      size="sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      <FilePlus2 className="size-4" aria-hidden="true" />
-                      {t("panes.profiles.toolbar.add")}
-                      <ChevronDown className="size-3" aria-hidden="true" />
-                    </Button>
-                  </MenubarTrigger>
-                  <MenubarContent onCloseAutoFocus={handleMenuClose}>
-                    <MenubarItem
-                      onSelect={() => {
-                        openingDialogRef.current = true;
-                        setDialogState({ mode: "create" });
-                      }}
-                    >
-                      <FilePlus2 aria-hidden="true" />
-                      {t("panes.profiles.dialog.addTitle")}
-                    </MenubarItem>
-                    <MenubarItem
-                      onSelect={() => {
-                        openingDialogRef.current = true;
-                        nodeGroups.open(
-                          { kind: "name", group: null },
-                          addTriggerRef.current,
-                        );
-                      }}
-                    >
-                      {t("nodeGroups.create")}
-                    </MenubarItem>
-                  </MenubarContent>
-                </MenubarMenu>
-              </Menubar>
+              <Button
+                ref={addTriggerRef}
+                size="sm"
+                variant="outline"
+                onClick={() => setDialogState({ mode: "create" })}
+              >
+                <FilePlus2 className="size-4" aria-hidden="true" />
+                {t("panes.profiles.toolbar.add")}
+              </Button>
               <SpeedtestButton
                 disabled={batchActionsDisabled}
                 label={t("panes.profiles.toolbar.bulkSpeedtest")}
@@ -201,14 +171,6 @@ export function ServerTableToolbar({
         </PageHeaderActions>
       </PageHeader>
 
-      {nodeGroups.query.error ? (
-        <InlinePageError>
-          {getErrorMessage(nodeGroups.query.error)}
-        </InlinePageError>
-      ) : null}
-      {!nodeGroups.dialog && nodeGroups.error ? (
-        <InlinePageError>{nodeGroups.error}</InlinePageError>
-      ) : null}
       {operationError ? (
         <InlinePageError>{operationError}</InlinePageError>
       ) : null}

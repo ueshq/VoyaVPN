@@ -32,7 +32,6 @@ export const queryKeys = {
   settingsApply: ["app-settings", "apply-status"],
   connectionMode: ["connection-mode"],
   dns: ["dns"],
-  nodeGroups: ["node-groups"],
   processCandidates: ["process-candidates"],
   profileShareQr: ["profile-share-qr"],
   profiles: ["profiles"],
@@ -73,8 +72,6 @@ export function invalidationQueryKey(
       return queryKeys.connectionMode;
     case "dns":
       return queryKeys.dns;
-    case "nodeGroups":
-      return queryKeys.nodeGroups;
     case "profiles":
       return queryKeys.profiles;
     case "proxyConnections":

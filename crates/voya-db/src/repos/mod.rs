@@ -1,5 +1,3 @@
-mod node_groups;
-pub use node_groups::NodeGroupRepository;
 mod profile;
 mod profile_ex;
 mod routing;

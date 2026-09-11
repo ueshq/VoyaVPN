@@ -197,63 +197,6 @@ impl<'db> ProfileManager<'db> {
         Ok(deleted)
     }
 
-    pub async fn copy_profiles(
-        &self,
-        config: &mut AppConfig,
-        index_ids: &[String],
-    ) -> Result<Vec<ProfileListItem>> {
-        self.require_manual(index_ids).await?;
-        let mut copied = Vec::new();
-        let mut next_sort =
-            self.database.profile_exs().max_sort().await? + DEFAULT_PROFILE_SORT_STEP;
-
-        for index_id in index_ids {
-            let Some(source) = self.database.profiles().get(index_id).await? else {
-                continue;
-            };
-            let mut profile = source.clone();
-            profile.index_id = generate_profile_id();
-            profile.remarks = format!("{}-clone", source.remarks);
-            normalize_profile(&mut profile);
-
-            let profile_ex = ProfileExItem {
-                index_id: profile.index_id.clone(),
-                sort: next_sort,
-                ..ProfileExItem::default()
-            };
-            next_sort += DEFAULT_PROFILE_SORT_STEP;
-            self.database
-                .profiles()
-                .upsert_with_profile_ex(&profile, &profile_ex)
-                .await?;
-            let group_id = self
-                .database
-                .node_groups()
-                .group_for_profile(&source.index_id)
-                .await?;
-            self.database
-                .node_groups()
-                .assign(&profile.index_id, group_id.as_deref())
-                .await?;
-            let server_stat = self
-                .database
-                .server_stats()
-                .clone_stat(&source.index_id, &profile.index_id)
-                .await?
-                .unwrap_or_else(|| empty_server_stat(&profile.index_id));
-            copied.push(to_list_item(
-                profile,
-                profile_ex,
-                server_stat,
-                &config.index_id,
-            ));
-        }
-
-        self.ensure_active_profile(config).await?;
-
-        Ok(copied)
-    }
-
     pub async fn set_active_profile(
         &self,
         config: &mut AppConfig,
@@ -301,22 +244,11 @@ impl<'db> ProfileManager<'db> {
         if !items.iter().any(|(p, _)| p.index_id == index_id) {
             return Err(ProfileManagerError::ProfileNotFound(index_id.to_string()));
         }
-        let memberships = self
-            .database
-            .node_groups()
-            .snapshot()
-            .await?
-            .memberships
-            .into_iter()
-            .map(|m| (m.profile_id, m.group_id))
-            .collect::<HashMap<_, _>>();
-        let group = memberships.get(index_id);
         let members = items
             .iter()
             .enumerate()
             .filter(|(_, (p, _))| {
                 p.subscription_id.is_none()
-                    && memberships.get(&p.index_id) == group
                     && subscription_id.is_none_or(|id| p.subscription_id.as_deref() == Some(id))
             })
             .collect::<Vec<_>>();
@@ -718,13 +650,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn profile_copy_and_move_update_profile_ex_state() {
+    async fn local_sorting_ignores_retired_memberships() {
         let database = Database::connect_in_memory()
             .await
             .expect("profile manager test operation should succeed");
         let manager = ProfileManager::new(&database);
         let mut config = AppConfig::default();
-        let a = manager
+        manager
             .save_profile(&mut config, sample_profile("a", "A", 1000))
             .await
             .expect("profile manager test operation should succeed");
@@ -737,6 +669,11 @@ mod tests {
             .await
             .expect("profile manager test operation should succeed");
 
+        // Current-baseline databases may still contain manual folder rows. They
+        // cannot partition local ordering or affect node identity/selection.
+        sqlx::raw_sql("INSERT INTO node_groups (id, name, sort) VALUES ('old', 'Old', 0); INSERT INTO node_group_memberships (profile_id, group_id) VALUES ('c', 'old')")
+            .execute(database.pool()).await.expect("old folder fixture");
+        config.index_id = "a".to_string();
         manager
             .move_profile(&config, None, &c.profile.index_id, MoveAction::Top, None)
             .await
@@ -746,27 +683,21 @@ mod tests {
             .await
             .expect("profile manager test operation should succeed")
             .items;
-        assert_eq!(moved[0].profile.remarks, "C");
-
-        database
-            .server_stats()
-            .upsert(&ServerStatItem {
-                index_id: a.profile.index_id.clone(),
-                total_up: 100,
-                total_down: 200,
-                today_up: 10,
-                today_down: 20,
-                date_now: 1,
-            })
-            .await
-            .expect("profile manager test operation should succeed");
-        let copied = manager
-            .copy_profiles(&mut config, std::slice::from_ref(&a.profile.index_id))
-            .await
-            .expect("profile manager test operation should succeed");
-        assert_eq!(copied[0].profile.remarks, "A-clone");
-        assert_eq!(copied[0].server_stat.total_up, 100);
-        assert_eq!(copied[0].server_stat.total_down, 200);
+        assert_eq!(
+            moved
+                .iter()
+                .map(|item| item.profile.index_id.as_str())
+                .collect::<Vec<_>>(),
+            ["c", "a", "b"]
+        );
+        assert_eq!(config.index_id, "a");
+        let membership: String = sqlx::query_scalar(
+            "SELECT group_id FROM node_group_memberships WHERE profile_id = 'c'",
+        )
+        .fetch_one(database.pool())
+        .await
+        .expect("old membership retained");
+        assert_eq!(membership, "old");
     }
 
     /// Persisted ownership is authoritative, including mixed batch requests.
@@ -805,10 +736,6 @@ mod tests {
         let mixed = vec!["outsider".to_string(), "s1".to_string()];
         assert!(matches!(
             manager.delete_profiles(&mut config, &mixed).await,
-            Err(ProfileManagerError::SubscriptionReadOnly(_))
-        ));
-        assert!(matches!(
-            manager.copy_profiles(&mut config, &mixed).await,
             Err(ProfileManagerError::SubscriptionReadOnly(_))
         ));
         assert!(matches!(

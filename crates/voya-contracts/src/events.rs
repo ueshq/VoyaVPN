@@ -21,8 +21,6 @@ use crate::{LogLineBody, NoticeCode, ServerStatItem};
 pub enum InvalidationScope {
     /// `["profiles"]` — the profile list, every filter slice of it.
     Profiles,
-    /// `["node-groups"]` — user-owned folders and node memberships.
-    NodeGroups,
     /// `["subscriptions"]`
     Subscriptions,
     /// `["subscription-metadata"]`

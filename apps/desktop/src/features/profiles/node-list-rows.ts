@@ -1,19 +1,14 @@
-import type {
-  NodeGroup,
-  NodeGroupsSnapshot,
-  ProfileListEntry,
-  Subscription,
-} from "@/ipc/bindings";
+import type { ProfileListEntry, Subscription } from "@/ipc/bindings";
 
-export const UNASSIGNED_GROUP_KEY = "unassigned";
-type GroupBoundary = { groupKey: string; last: boolean };
+export const LOCAL_GROUP_KEY = "local";
+export type NodeSourceKey = typeof LOCAL_GROUP_KEY | `subscription:${string}`;
+type GroupBoundary = { groupKey: NodeSourceKey; last: boolean };
 export type NodeListRow = GroupBoundary &
   (
     | { kind: "profile"; key: string; item: ProfileListEntry }
     | {
         kind: "group";
-        key: string;
-        group: NodeGroup | null;
+        key: NodeSourceKey;
         subscription: Subscription | null;
         name: string;
         members: ProfileListEntry[];
@@ -21,47 +16,40 @@ export type NodeListRow = GroupBoundary &
       }
   );
 
-/** Manual membership never overrides subscription provenance. */
-export function profilesByNodeGroup(
-  profiles: ProfileListEntry[],
-  snapshot: NodeGroupsSnapshot,
-) {
-  const assignments = new Map(
-    snapshot.memberships.map((m) => [m.profileId, m.groupId]),
-  );
-  const byGroup = new Map<string | null, ProfileListEntry[]>([[null, []]]);
-  for (const group of snapshot.groups) byGroup.set(group.id, []);
-  for (const profile of profiles) {
-    if (profile.profile.subscriptionId) continue;
-    const id = assignments.get(profile.profile.id) ?? null;
-    (byGroup.get(id) ?? byGroup.get(null))!.push(profile);
+/** Source ownership is the only grouping authority. Names never identify groups. */
+export function profilesByNodeGroup(profiles: readonly ProfileListEntry[]) {
+  const byGroup = new Map<NodeSourceKey, ProfileListEntry[]>();
+  for (const item of profiles) {
+    const key: NodeSourceKey = item.profile.subscriptionId
+      ? `subscription:${item.profile.subscriptionId}`
+      : LOCAL_GROUP_KEY;
+    const members = byGroup.get(key) ?? [];
+    members.push(item);
+    byGroup.set(key, members);
   }
   return byGroup;
 }
 
 export function nodeListRows(
   profiles: ProfileListEntry[],
-  snapshot: NodeGroupsSnapshot,
   collapsed: ReadonlySet<string>,
-  unassignedName: string,
+  localName: string,
   subscriptions: readonly Subscription[] = [],
-  unknownName = unassignedName,
+  unknownName: string,
 ): NodeListRow[] {
-  const byGroup = profilesByNodeGroup(profiles, snapshot);
+  const byGroup = profilesByNodeGroup(profiles);
   const rows: NodeListRow[] = [];
   function append(
-    groupKey: string,
+    groupKey: NodeSourceKey,
     name: string,
-    members: ProfileListEntry[],
-    group: NodeGroup | null,
     subscription: Subscription | null,
   ) {
+    const members = byGroup.get(groupKey) ?? [];
     const expanded = !collapsed.has(groupKey);
     rows.push({
       kind: "group",
       key: groupKey,
       groupKey,
-      group,
       subscription,
       name,
       members,
@@ -78,40 +66,15 @@ export function nodeListRows(
           last: index === members.length - 1,
         }),
       );
+    byGroup.delete(groupKey);
   }
-  const sources = new Map<string, ProfileListEntry[]>();
-  for (const profile of profiles)
-    if (profile.profile.subscriptionId) {
-      const id = profile.profile.subscriptionId;
-      const members = sources.get(id) ?? [];
-      members.push(profile);
-      sources.set(id, members);
-    }
   for (const source of [...subscriptions].sort(
     (a, b) => a.sort - b.sort || a.id.localeCompare(b.id),
-  )) {
-    append(
-      `subscription:${source.id}`,
-      source.remarks,
-      sources.get(source.id) ?? [],
-      null,
-      source,
-    );
-    sources.delete(source.id);
-  }
-  // Retain read-only source groups when subscription metadata cannot be loaded.
-  for (const [id, members] of sources)
-    append(`subscription:${id}`, unknownName, members, null, null);
-  for (const group of snapshot.groups)
-    append(
-      `manual:${group.id}`,
-      group.name,
-      byGroup.get(group.id)!,
-      group,
-      null,
-    );
-  const unassigned = byGroup.get(null)!;
-  if (unassigned.length)
-    append(UNASSIGNED_GROUP_KEY, unassignedName, unassigned, null, null);
+  ))
+    append(`subscription:${source.id}`, source.remarks || unknownName, source);
+  // Keep source nodes isolated even before subscription information is available.
+  for (const key of byGroup.keys())
+    if (key !== LOCAL_GROUP_KEY) append(key, unknownName, null);
+  if (byGroup.has(LOCAL_GROUP_KEY)) append(LOCAL_GROUP_KEY, localName, null);
   return rows;
 }

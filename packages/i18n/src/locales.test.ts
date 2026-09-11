@@ -69,9 +69,9 @@ describe("i18n locales", () => {
     const translatedKeys = [
       "actions.connect",
       "actions.settings",
-      "nodeGroups.create",
-      "nodeGroups.edit",
-      "nodeGroups.duplicateName",
+      "nodeGroups.local",
+      "nodeGroups.test",
+      "subscriptions.edit",
       "confirm.deleteProfilesTitle",
       "modal.language",
       "modal.theme",

@@ -175,15 +175,8 @@ export async function openNetworkSettings(): Promise<void> {
   unwrapCommandResult(await commands.openNetworkSettings());
 }
 
-export const listNodeGroups = wrapCommand(commands.listNodeGroups);
-export const saveNodeGroup = wrapCommand(commands.saveNodeGroup);
-export const deleteNodeGroup = wrapCommand(commands.deleteNodeGroup);
-export const moveNodeGroup = wrapCommand(commands.moveNodeGroup);
-export const assignNodeGroups = wrapCommand(commands.assignNodeGroups);
 
-export const copyProfiles = wrapCommand(commands.copyProfiles);
 
-export const updateNodeGroup = wrapCommand(commands.updateNodeGroup);
 
 export const getSettingsApplyStatus = wrapCommand(commands.getSettingsApplyStatus);
 

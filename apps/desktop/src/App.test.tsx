@@ -205,7 +205,6 @@ vi.mock("@/ipc/commands", () => ({
       message: null,
     }),
   ),
-  copyProfiles: vi.fn(),
   deleteSubscriptions: vi.fn(),
   deleteProfiles: vi.fn(),
   deleteRoutingRules: vi.fn(),
@@ -236,7 +235,6 @@ vi.mock("@/ipc/commands", () => ({
   ),
   listProcessCandidates: vi.fn(() => Promise.resolve([])),
   listRoutings: vi.fn(() => Promise.resolve([])),
-  listNodeGroups: vi.fn(() => Promise.resolve({ groups: [], memberships: [] })),
   listProfiles: vi.fn(() =>
     Promise.resolve({ entries: [], undecodableProfiles: 0 }),
   ),

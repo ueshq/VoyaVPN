@@ -126,7 +126,6 @@ pub enum AppErrorSubsystem {
     Config,
     Dns,
     Export,
-    Group,
     Profile,
     ProxyRuntime,
     Qr,
@@ -148,7 +147,6 @@ pub enum AppErrorEntity {
     Routing,
     RoutingRule,
     Subscription,
-    NodeGroup,
     /// The core-info table has no entry for the requested core type.
     CoreInfo,
 }

@@ -827,31 +827,12 @@
     "filteredConnections": "{{count}} / {{total}} 個連線"
   },
   "nodeGroups": {
-    "unassigned": "未分組",
-    "create": "建立分組",
-    "delete": "刪除分組",
-    "name": "分組名稱",
-    "duplicateName": "已存在同名分組。",
-    "description": "分組用於整理節點，不會改變目前連線。",
+    "local": "本地節點",
     "groupCount": "{{count}} 個分組",
     "membersCount": "{{count}} 個節點",
     "test": "測試本組",
-    "actions": "{{name}}的分組操作",
-    "membersDescription": "選取的節點會移入本組，取消選取的原成員會移到未分組。",
-    "deleteDescription": "刪除「{{name}}」？組內節點會移到未分組。",
-    "searchMembers": "搜尋節點",
-    "selectedCount": "已選 {{count}} 個",
-    "selectResults": "選取搜尋結果",
-    "clearResults": "取消選取搜尋結果",
-    "noMatches": "沒有符合的節點。",
-    "moveTo": "移動到分組",
-    "copyNode": "複製節點",
-    "edit": "編輯分組",
-    "editTitle": "編輯「{{name}}」",
-    "members": "分組成員",
     "exportFor": "匯出「{{name}}」",
-    "empty": "此分組尚無節點，可透過「編輯分組」新增成員。",
-    "notFound": "此分組已不存在，請重新整理列表後再試。"
+    "empty": "此分組暫無節點。"
   },
   "common": {
     "advanced": "進階選項",

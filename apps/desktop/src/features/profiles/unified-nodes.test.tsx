@@ -12,8 +12,7 @@ import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAppQueryClient } from "@/components/app-shell/query-client";
 import type {
-  NodeGroupAssignment,
-  NodeGroupsSnapshot,
+  Subscription,
   RuntimeStatusResponse,
 } from "@/ipc/bindings";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
@@ -21,23 +20,17 @@ import { queryKeys } from "@/ipc/query-keys";
 import { useRuntimeActionStore } from "@/stores/runtime-action-store";
 import { makeProfileFixture } from "@/test/profile-fixture";
 import { ProfilesScreen } from "./server-table";
-import { nodeListRows, UNASSIGNED_GROUP_KEY } from "./node-list-rows";
+import { nodeListRows, LOCAL_GROUP_KEY } from "./node-list-rows";
 
 const mocks = vi.hoisted(() => ({
-  copyProfiles: vi.fn(),
-  listNodeGroups: vi.fn(),
-  saveNodeGroup: vi.fn(),
-  updateNodeGroup: vi.fn(),
   exportProfileShareLinks: vi.fn(),
   exportProfileShareLinksBase64: vi.fn(),
   exportProfileVoyaBundle: vi.fn(),
   saveTextFile: vi.fn(),
   generateQrCode: vi.fn(),
-  deleteNodeGroup: vi.fn(),
-  moveNodeGroup: vi.fn(),
-  assignNodeGroups: vi.fn(),
   listProfiles: vi.fn(),
   listSubscriptions: vi.fn(),
+  listSubscriptionMetadata: vi.fn(),
   runSpeedtest: vi.fn(),
   setActiveProfile: vi.fn(),
   connectActiveProfile: vi.fn(),
@@ -48,13 +41,18 @@ vi.mock("@/ipc/commands", async (original) => ({
   ...mocks,
 }));
 vi.mock("@/ipc/file-dialog", () => ({ saveTextFile: mocks.saveTextFile }));
-let groups: NodeGroupsSnapshot;
+
 const profiles = [
-  makeProfileFixture(0, { remarks: "Tokyo" }),
-  makeProfileFixture(1, { remarks: "Tokyo" }),
+  makeProfileFixture(0, { remarks: "Tokyo", subscriptionId: "a" }),
+  makeProfileFixture(1, { remarks: "Tokyo", subscriptionId: "b" }),
   makeProfileFixture(2, { remarks: "Paris" }),
-  makeProfileFixture(3, { remarks: "Osaka" }),
+  makeProfileFixture(3, { remarks: "Osaka", subscriptionId: "a" }),
 ];
+function source(id: string, remarks: string, sort: number): Subscription {
+  return { id, remarks, sort, additionalUrl: "", autoUpdateIntervalMinutes: null,
+    converterTarget: null, enabled: true, filter: null, url: "https://example.test/sub", userAgent: "" };
+}
+const subscriptions = [source("b", "Backup", 1), source("a", "Asia", 0)];
 const clients = new Set<QueryClient>();
 const clipboardDescriptor = Object.getOwnPropertyDescriptor(
   navigator,
@@ -89,23 +87,11 @@ function renderScreen() {
 function changed() {
   clients.forEach(
     (client) =>
-      void client.invalidateQueries({ queryKey: queryKeys.nodeGroups }),
+      void client.invalidateQueries({ queryKey: queryKeys.profiles }),
   );
 }
 function card(name: string) {
   return screen.getByRole("article", { name });
-}
-async function menu(name: string, action: string) {
-  if (action === "Edit group") {
-    await userEvent.click(
-      within(card(name)).getByRole("button", { name: action }),
-    );
-    return;
-  }
-  await userEvent.click(
-    within(card(name)).getByRole("menuitem", { name: `Actions for ${name}` }),
-  );
-  await userEvent.click(await screen.findByRole("menuitem", { name: action }));
 }
 beforeEach(() => {
   vi.resetAllMocks();
@@ -114,17 +100,6 @@ beforeEach(() => {
     configurable: true,
     value: { writeText },
   });
-  groups = {
-    groups: [
-      { id: "a", name: "Asia", sort: 0 },
-      { id: "b", name: "Backup", sort: 1 },
-    ],
-    memberships: [
-      { profileId: "profile-0", groupId: "a" },
-      { profileId: "profile-3", groupId: "a" },
-      { profileId: "profile-1", groupId: "b" },
-    ],
-  };
   useRuntimeActionStore.setState({
     pendingAction: null,
     modePending: false,
@@ -136,59 +111,13 @@ beforeEach(() => {
     speedtestResultsByProfileId: {},
     speedtestRunning: false,
   });
-  mocks.listNodeGroups.mockImplementation(async () => structuredClone(groups));
   mocks.listProfiles.mockResolvedValue({
     entries: profiles,
     undecodableProfiles: 0,
   });
-  mocks.listSubscriptions.mockResolvedValue([]);
+  mocks.listSubscriptions.mockResolvedValue(subscriptions);
+  mocks.listSubscriptionMetadata.mockResolvedValue([]);
   mocks.runSpeedtest.mockResolvedValue(null);
-  mocks.saveNodeGroup.mockImplementation(async (id, name) => {
-    const group = { id: id ?? "new", name: name.trim(), sort: 2 };
-    groups.groups = [...groups.groups.filter((g) => g.id !== id), group];
-    changed();
-    return group;
-  });
-  mocks.deleteNodeGroup.mockImplementation(async (id) => {
-    groups.groups = groups.groups.filter((g) => g.id !== id);
-    groups.memberships = groups.memberships.filter((m) => m.groupId !== id);
-    changed();
-    return null;
-  });
-  mocks.assignNodeGroups.mockImplementation(
-    async (changes: NodeGroupAssignment[]) => {
-      for (const c of changes) {
-        groups.memberships = groups.memberships.filter(
-          (m) => m.profileId !== c.profileId,
-        );
-        if (c.groupId)
-          groups.memberships.push({
-            profileId: c.profileId,
-            groupId: c.groupId,
-          });
-      }
-      changed();
-      return null;
-    },
-  );
-  mocks.updateNodeGroup.mockImplementation(
-    async (id, name, changes: NodeGroupAssignment[]) => {
-      const group = groups.groups.find((g) => g.id === id)!;
-      group.name = name.trim();
-      for (const c of changes) {
-        groups.memberships = groups.memberships.filter(
-          (m) => m.profileId !== c.profileId,
-        );
-        if (c.groupId)
-          groups.memberships.push({
-            profileId: c.profileId,
-            groupId: c.groupId,
-          });
-      }
-      changed();
-      return group;
-    },
-  );
   for (const [exporter, format] of [
     [mocks.exportProfileShareLinks, "shareLinks"],
     [mocks.exportProfileShareLinksBase64, "shareLinksBase64"],
@@ -204,8 +133,6 @@ beforeEach(() => {
     mimeType: "image/svg+xml",
     svg: "<svg></svg>",
   });
-  mocks.copyProfiles.mockResolvedValue([]);
-  mocks.moveNodeGroup.mockResolvedValue(null);
   mocks.setActiveProfile.mockResolvedValue(profiles[2]);
   mocks.connectActiveProfile.mockResolvedValue(core("connected"));
   mocks.restartCore.mockResolvedValue(core("connected"));
@@ -219,273 +146,118 @@ afterEach(() => {
   clients.clear();
 });
 
-describe("manual node folders", () => {
-  it("works offline, opens multiple groups and keeps duplicate names as separate nodes", async () => {
+describe("source-derived node groups", () => {
+  it("orders subscriptions by source and puts all local nodes last with continuous boundaries", () => {
+    const rows = nodeListRows(profiles, new Set(), "Local nodes", [...subscriptions, source("empty", "Empty", 2)], "Unknown");
+    expect(rows.map((row) => [row.key, row.groupKey, row.last])).toEqual([
+      ["subscription:a", "subscription:a", false],
+      ["profile:profile-0", "subscription:a", false],
+      ["profile:profile-3", "subscription:a", true],
+      ["subscription:b", "subscription:b", false],
+      ["profile:profile-1", "subscription:b", true],
+      ["subscription:empty", "subscription:empty", true],
+      ["local", "local", false],
+      ["profile:profile-2", "local", true],
+    ]);
+    const collapsed = nodeListRows(profiles, new Set(["subscription:a", "subscription:b", LOCAL_GROUP_KEY]), "Local nodes", subscriptions, "Unknown");
+    expect(collapsed).toHaveLength(3);
+    expect(collapsed.every((row) => row.kind === "group" && row.last && !row.expanded)).toBe(true);
+  });
+
+  it("keeps same-name and unavailable subscriptions distinct from local nodes", () => {
+    const rows = nodeListRows(profiles, new Set(), "Local nodes", [source("a", "Same", 0), source("b", "Same", 0)], "Unknown");
+    expect(rows.filter((row) => row.kind === "group").map((row) => [row.key, row.name])).toEqual([
+      ["subscription:a", "Same"], ["subscription:b", "Same"], ["local", "Local nodes"],
+    ]);
+    const unavailable = nodeListRows(profiles, new Set(), "Local nodes", [], "Unknown");
+    expect(unavailable.filter((row) => row.kind === "group").map((row) => [row.key, row.name, row.members.length])).toEqual([
+      ["subscription:a", "Unknown", 2], ["subscription:b", "Unknown", 1], ["local", "Local nodes", 1],
+    ]);
+    expect(nodeListRows([], new Set(), "Local nodes", [source("empty", "", 0)], "Unknown")[0]).toMatchObject({ name: "Unknown", members: [], last: true });
+  });
+
+  it("shows only populated local groups and retains empty subscriptions", async () => {
+    mocks.listProfiles.mockResolvedValue({ entries: [], undecodableProfiles: 0 });
     renderScreen();
     await screen.findByRole("button", { name: "Asia" });
-    expect(screen.getAllByTestId("server-row")).toHaveLength(4);
-    await userEvent.click(screen.getByRole("button", { name: "Asia" }));
-    await userEvent.click(screen.getByRole("button", { name: "Backup" }));
-    expect(screen.getAllByTestId("server-row")).toHaveLength(1);
-    await userEvent.click(screen.getByRole("button", { name: "Asia" }));
-    await userEvent.click(screen.getByRole("button", { name: "Backup" }));
+    expect(screen.queryByRole("button", { name: "Local nodes" })).not.toBeInTheDocument();
+    expect(screen.getAllByTestId("node-group-card")).toHaveLength(2);
+    expect(screen.getByRole("menuitem", { name: "Export Asia" })).toBeDisabled();
+    expect(within(card("Asia")).getByRole("button", { name: "Test group" })).toBeDisabled();
+    expect(nodeListRows([], new Set(), "Local nodes", [], "Unknown")).toEqual([]);
+  });
+
+  it("works offline, preserves duplicate node identities and collapse state through refresh", async () => {
+    renderScreen();
+    const toggle = await screen.findByRole("button", { name: "Asia" });
     expect(screen.getAllByTestId("server-row")).toHaveLength(4);
     expect(screen.getAllByText("Tokyo")).toHaveLength(2);
-    expect(mocks.connectActiveProfile).not.toHaveBeenCalled();
-    expect(mocks.setActiveProfile).not.toHaveBeenCalled();
-  });
-  it("has no page search and preserves collapsed groups through query refresh", async () => {
-    renderScreen();
-    await screen.findByRole("button", { name: "Asia" });
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Asia" }));
+    await userEvent.click(toggle);
+    expect(screen.getAllByTestId("server-row")).toHaveLength(2);
     await act(async () => changed());
-    expect(screen.getByRole("button", { name: "Asia" })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
-    expect(screen.getByRole("button", { name: "Backup" })).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
-  });
-  it("creates an expanded group and rejects duplicate names", async () => {
-    renderScreen();
-    await screen.findByRole("button", { name: "Asia" });
-    await userEvent.click(screen.getByRole("menuitem", { name: /Add/ }));
-    await userEvent.click(
-      screen.getByRole("menuitem", { name: "Create group" }),
-    );
-    const input = screen.getByRole("textbox", { name: "Group name" });
-    await userEvent.type(input, "Asia");
-    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
-    await userEvent.clear(input);
-    await userEvent.type(input, "Work");
-    await userEvent.keyboard("{Enter}");
-    expect(await screen.findByRole("button", { name: "Work" })).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
-    expect(mocks.saveNodeGroup).toHaveBeenCalledWith(null, "Work");
-  });
-  it("renames a group without connecting", async () => {
-    renderScreen();
-    await screen.findByRole("button", { name: "Asia" });
-    await menu("Asia", "Edit group");
-    const input = screen.getByRole("textbox", { name: "Group name" });
-    await userEvent.clear(input);
-    await userEvent.type(input, "Travel");
-    await userEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(
-      await screen.findByRole("button", { name: "Travel" }),
-    ).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(toggle);
+    expect(screen.getAllByTestId("server-row")).toHaveLength(4);
+    expect(mocks.setActiveProfile).not.toHaveBeenCalled();
     expect(mocks.connectActiveProfile).not.toHaveBeenCalled();
   });
-  it("deletes a folder while retaining its nodes", async () => {
+
+  it("hides the local group when its final node is removed", async () => {
     renderScreen();
-    await screen.findByRole("button", { name: "Asia" });
-    await menu("Asia", "Delete group");
-    await userEvent.click(
-      within(screen.getByRole("dialog")).getByRole("button", {
-        name: "Delete group",
-      }),
-    );
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: "Asia" }),
-      ).not.toBeInTheDocument(),
-    );
-    expect(screen.getAllByTestId("server-row")).toHaveLength(4);
+    await screen.findByRole("button", { name: "Local nodes" });
+    mocks.listProfiles.mockResolvedValue({ entries: profiles.filter((p) => p.profile.subscriptionId), undecodableProfiles: 0 });
+    await act(async () => changed());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Local nodes" })).not.toBeInTheDocument());
+    expect(screen.getAllByTestId("node-group-card")).toHaveLength(2);
   });
-  it("saves the name and one membership delta together", async () => {
+
+  it("uses source identity for renamed subscriptions and preserves their collapsed state", async () => {
+    const { client } = renderScreen();
+    await userEvent.click(await screen.findByRole("button", { name: "Asia" }));
+    mocks.listSubscriptions.mockResolvedValue([source("a", "Renamed", 0), subscriptions[0]]);
+    await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.subscriptions }); });
+    expect(await screen.findByRole("button", { name: "Renamed" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "Asia" })).not.toBeInTheDocument();
+  });
+
+  it("removes group editing, node copies and transfers from both node menus", async () => {
     renderScreen();
-    await screen.findByRole("button", { name: "Asia" });
-    await menu("Asia", "Edit group");
-    const dialog = screen.getByRole("dialog");
-    await userEvent.click(
-      within(dialog).getByRole("checkbox", { name: "Osaka" }),
-    );
-    await userEvent.click(
-      within(dialog).getByRole("checkbox", { name: "Paris" }),
-    );
-    fireEvent.change(
-      within(dialog).getByRole("textbox", { name: "Group name" }),
-      { target: { value: "Travel" } },
-    );
-    await userEvent.click(within(dialog).getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(mocks.updateNodeGroup).toHaveBeenCalledWith("a", "Travel", [
-        { profileId: "profile-3", groupId: null },
-        { profileId: "profile-2", groupId: "a" },
-      ]),
-    );
+    await screen.findByRole("button", { name: "Local nodes" });
+    expect(screen.queryByText("Create group")).not.toBeInTheDocument();
+    expect(screen.queryByText("Edit group")).not.toBeInTheDocument();
+    expect(screen.queryByText("Delete group")).not.toBeInTheDocument();
+    for (const name of ["Asia", "Backup"])
+      expect(within(card(name)).getByRole("button", { name: "Subscription settings" })).toBeVisible();
+    const row = screen.getAllByTestId("server-row").find((r) => within(r).queryByText("Paris"))!;
+    for (const context of [false, true]) {
+      if (context) fireEvent.contextMenu(row);
+      else await userEvent.click(within(row).getByRole("menuitem", { name: "Actions for Paris" }));
+      expect(screen.queryByRole("menuitem", { name: "Copy node" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("menuitem", { name: "Move to group" })).not.toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: "Edit" })).toBeVisible();
+      expect(screen.getByRole("menuitem", { name: "Delete" })).toBeVisible();
+      await userEvent.keyboard("{Escape}");
+    }
+    await userEvent.click(screen.getAllByRole("menuitem", { name: "Actions for Tokyo" })[0]!);
+    for (const name of ["Edit", "Copy node", "Move to group", "Delete"])
+      expect(screen.queryByRole("menuitem", { name })).not.toBeInTheDocument();
+  });
+
+  it("tests all source members while collapsed without selecting or connecting", async () => {
+    renderScreen();
+    await userEvent.click(await screen.findByRole("button", { name: "Asia" }));
+    await userEvent.click(within(card("Asia")).getByRole("button", { name: "Test group" }));
+    expect(mocks.runSpeedtest).toHaveBeenCalledWith(expect.objectContaining({ target: { scope: "profiles", profileIds: ["profile-0", "profile-3"] } }));
     expect(mocks.setActiveProfile).not.toHaveBeenCalled();
+    expect(mocks.connectActiveProfile).not.toHaveBeenCalled();
   });
-  it("keeps member edits and reports a failed save", async () => {
-    mocks.updateNodeGroup.mockRejectedValue(
-      new Error("Membership save failed"),
-    );
-    renderScreen();
-    await screen.findByRole("button", { name: "Asia" });
-    await menu("Asia", "Edit group");
-    await userEvent.click(screen.getByRole("checkbox", { name: "Paris" }));
-    await userEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Membership save failed",
-    );
-    expect(screen.getByRole("checkbox", { name: "Paris" })).toBeChecked();
-  });
-  it("tests all members even when the group is collapsed", async () => {
-    renderScreen();
-    await screen.findByRole("button", { name: "Asia" });
-    await userEvent.click(screen.getByRole("button", { name: "Asia" }));
-    await userEvent.click(
-      within(card("Asia")).getByRole("button", { name: "Test group" }),
-    );
-    expect(mocks.runSpeedtest).toHaveBeenCalledWith({
-      target: { scope: "profiles", profileIds: ["profile-0", "profile-3"] },
-    });
-  });
-  it("keeps node management usable when group loading fails", async () => {
-    mocks.listNodeGroups.mockRejectedValue(new Error("Groups unavailable"));
-    renderScreen();
-    expect(await screen.findByText("Groups unavailable")).toBeInTheDocument();
-    expect(screen.getAllByTestId("server-row")).toHaveLength(4);
-  });
-  it.each(["disconnected", "connected"] as const)(
-    "uses the ordinary activation flow while %s",
-    async (state) => {
-      useRuntimeEventStore.setState({ coreState: core(state) });
-      renderScreen();
-      await screen.findByRole("button", { name: "Asia" });
-      if (state === "connected")
-        await act(async () =>
-          useRuntimeEventStore.setState({
-            coreState: { ...core(state), activeProfileId: "profile-0" },
-          }),
-        );
-      await userEvent.click(
-        within(screen.getByText("Paris").closest("article")!).getByRole(
-          "button",
-          { name: "Use node" },
-        ),
-      );
-      expect(mocks.setActiveProfile).toHaveBeenCalledWith("profile-2");
-      await waitFor(() =>
-        expect(
-          state === "connected"
-            ? mocks.restartCore
-            : mocks.connectActiveProfile,
-        ).toHaveBeenCalledOnce(),
-      );
-    },
-  );
-  it("flattens large lists with stable node identities", () => {
-    const many = Array.from({ length: 5000 }, (_, i) => makeProfileFixture(i));
-    const snapshot = {
-      groups: groups.groups,
-      memberships: many.map((p) => ({ profileId: p.profile.id, groupId: "a" })),
-    };
-    const rows = nodeListRows(many, snapshot, new Set(), "Unassigned");
-    expect(rows).toHaveLength(5002);
-    expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);
-  });
-  it("reorders folders without choosing a node", async () => {
-    renderScreen();
-    await screen.findByRole("button", { name: "Asia" });
-    await menu("Asia", "Move down");
-    expect(mocks.moveNodeGroup).toHaveBeenCalledWith("a", "down");
-    await menu("Backup", "Move up");
-    expect(mocks.moveNodeGroup).toHaveBeenCalledWith("b", "up");
-    expect(mocks.setActiveProfile).not.toHaveBeenCalled();
-  });
-  it("moves a saved node to a group from its menu", async () => {
-    renderScreen();
-    await screen.findByText("Paris");
-    await userEvent.click(
-      screen.getByRole("menuitem", { name: "Actions for Paris" }),
-    );
-    const submenu = screen.getByRole("menuitem", { name: "Move to group" });
-    submenu.focus();
-    await userEvent.keyboard("{ArrowRight}");
-    await userEvent.click(
-      await screen.findByRole("menuitem", { name: "Asia" }),
-    );
-    expect(mocks.assignNodeGroups).toHaveBeenCalledWith([
-      { profileId: "profile-2", groupId: "a" },
-    ]);
-    expect(mocks.setActiveProfile).not.toHaveBeenCalled();
-  });
-  it("copies a node through the saved-node command", async () => {
-    renderScreen();
-    await screen.findByText("Paris");
-    await userEvent.click(
-      screen.getByRole("menuitem", { name: "Actions for Paris" }),
-    );
-    await userEvent.click(screen.getByRole("menuitem", { name: "Copy node" }));
-    expect(mocks.copyProfiles).toHaveBeenCalledWith(["profile-2"]);
-    expect(mocks.setActiveProfile).not.toHaveBeenCalled();
-  });
-  it("selects search results in the member dialog and cancels without writing", async () => {
-    renderScreen();
-    await screen.findByRole("button", { name: "Asia" });
-    await menu("Asia", "Edit group");
-    const dialog = within(screen.getByRole("dialog"));
-    fireEvent.change(dialog.getByRole("searchbox"), {
-      target: { value: "Tokyo" },
-    });
-    expect(dialog.getAllByRole("checkbox")).toHaveLength(2);
-    await userEvent.click(
-      dialog.getByRole("button", { name: "Select results" }),
-    );
-    expect(
-      dialog
-        .getAllByRole("checkbox")
-        .every((box) => box.getAttribute("aria-checked") === "true"),
-    ).toBe(true);
-    await userEvent.click(
-      dialog.getByRole("button", { name: "Clear results" }),
-    );
-    expect(
-      dialog
-        .getAllByRole("checkbox")
-        .every((box) => box.getAttribute("aria-checked") === "false"),
-    ).toBe(true);
-    fireEvent.change(dialog.getByRole("searchbox"), {
-      target: { value: "no-such-member" },
-    });
-    expect(dialog.getByText("No matching nodes.")).toBeInTheDocument();
-    await userEvent.click(dialog.getByRole("button", { name: "Cancel" }));
-    expect(mocks.updateNodeGroup).not.toHaveBeenCalled();
-    await waitFor(() =>
-      expect(
-        within(card("Asia")).getByRole("button", { name: "Edit group" }),
-      ).toHaveFocus(),
-    );
-  });
-  it("keeps a failed rename editable and blocks duplicate submissions", async () => {
-    let reject!: (error: Error) => void;
-    mocks.updateNodeGroup.mockImplementation(
-      () =>
-        new Promise((_, rejectSave) => {
-          reject = rejectSave;
-        }),
-    );
-    renderScreen();
-    await screen.findByRole("button", { name: "Asia" });
-    await menu("Asia", "Edit group");
-    const name = screen.getByRole("textbox", { name: "Group name" });
-    await userEvent.clear(name);
-    await userEvent.type(name, "Travel");
-    await userEvent.dblClick(screen.getByRole("button", { name: "Save" }));
-    expect(mocks.updateNodeGroup).toHaveBeenCalledOnce();
-    await userEvent.keyboard("{Escape}");
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    await act(async () => reject(new Error("Rename unavailable")));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Rename unavailable",
-    );
-    expect(name).toHaveValue("Travel");
+
+  it("flattens a large local list with stable node IDs", () => {
+    const many = Array.from({ length: 5000 }, (_, index) => makeProfileFixture(index));
+    const rows = nodeListRows(many, new Set(), "Local nodes", [], "Unknown");
+    expect(rows).toHaveLength(5001);
+    expect(rows[5000]).toMatchObject({ key: "profile:profile-4999", groupKey: LOCAL_GROUP_KEY, last: true });
   });
 });
 
@@ -497,53 +269,6 @@ describe("group panels and scoped export", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: action }));
   }
 
-  it("marks continuous panel boundaries, including empty and unassigned groups", () => {
-    const empty = { id: "empty", name: "Empty", sort: 2 };
-    const rows = nodeListRows(
-      profiles,
-      { ...groups, groups: [...groups.groups, empty] },
-      new Set(),
-      "Unassigned",
-    );
-    expect(rows.map((row) => [row.key, row.groupKey, row.last])).toEqual([
-      ["manual:a", "manual:a", false],
-      ["profile:profile-0", "manual:a", false],
-      ["profile:profile-3", "manual:a", true],
-      ["manual:b", "manual:b", false],
-      ["profile:profile-1", "manual:b", true],
-      ["manual:empty", "manual:empty", true],
-      ["unassigned", UNASSIGNED_GROUP_KEY, false],
-      ["profile:profile-2", UNASSIGNED_GROUP_KEY, true],
-    ]);
-    const collapsed = nodeListRows(
-      profiles,
-      groups,
-      new Set(["manual:a", "manual:b", UNASSIGNED_GROUP_KEY]),
-      "Unassigned",
-    );
-    expect(collapsed).toHaveLength(3);
-    expect(
-      collapsed.every(
-        (row) => row.kind === "group" && row.last && !row.expanded,
-      ),
-    ).toBe(true);
-  });
-
-  it("shows an empty panel and disables its export", async () => {
-    groups.memberships = groups.memberships.filter((m) => m.groupId !== "b");
-    renderScreen();
-    await screen.findByRole("button", { name: "Backup" });
-    expect(
-      within(card("Backup")).getByText(/No nodes in this group/),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("menuitem", { name: "Export Backup" }),
-    ).toBeDisabled();
-    expect(
-      within(card("Unassigned")).queryByRole("button", { name: "Edit group" }),
-    ).not.toBeInTheDocument();
-  });
-
   it.each([
     ["Share links", "exportProfileShareLinks"],
     ["Share links (Base64)", "exportProfileShareLinksBase64"],
@@ -554,7 +279,7 @@ describe("group panels and scoped export", () => {
       renderScreen();
       await screen.findByRole("button", { name: "Asia" });
       await userEvent.click(screen.getByRole("button", { name: "Asia" }));
-      groups.memberships.push({ profileId: "profile-2", groupId: "a" });
+      mocks.listProfiles.mockResolvedValue({ entries: profiles.map((p) => p.profile.id === "profile-2" ? { ...p, profile: { ...p.profile, subscriptionId: "a" } } : p), undecodableProfiles: 0 });
       await exportGroup("Asia", label);
       await waitFor(() =>
         expect(mocks[command]).toHaveBeenCalledWith([
@@ -569,11 +294,11 @@ describe("group panels and scoped export", () => {
     },
   );
 
-  it("exports only unassigned nodes and keeps removed export formats absent", async () => {
+  it("exports only local nodes and keeps removed export formats absent", async () => {
     renderScreen();
     await screen.findByRole("button", { name: "Asia" });
     await userEvent.click(
-      screen.getByRole("menuitem", { name: "Export Unassigned" }),
+      screen.getByRole("menuitem", { name: "Export Local nodes" }),
     );
     expect(
       screen
@@ -638,14 +363,9 @@ describe("group panels and scoped export", () => {
     async (failure) => {
       renderScreen();
       await screen.findByRole("button", { name: "Asia" });
-      if (failure === "deleted")
-        groups.groups = groups.groups.filter((group) => group.id !== "a");
-      else if (failure === "empty")
-        groups.memberships = groups.memberships.filter(
-          (m) => m.groupId !== "a",
-        );
-      else
-        mocks.listNodeGroups.mockRejectedValue(new Error("Groups unavailable"));
+      if (failure === "load failed")
+        mocks.listProfiles.mockRejectedValue(new Error("Profiles unavailable"));
+      else mocks.listProfiles.mockResolvedValue({ entries: profiles.filter((p) => p.profile.subscriptionId !== "a"), undecodableProfiles: 0 });
       await exportGroup("Asia", "Share links");
       expect(await screen.findByRole("alert")).toBeInTheDocument();
       expect(mocks.exportProfileShareLinks).not.toHaveBeenCalled();
@@ -654,6 +374,7 @@ describe("group panels and scoped export", () => {
 
   it("skips unsupported share protocols but includes them in a Voya bundle", async () => {
     const http = makeProfileFixture(4, {
+      subscriptionId: "a",
       protocol: {
         kind: "http",
         server: { address: "http.test", port: 8080 },
@@ -665,7 +386,6 @@ describe("group panels and scoped export", () => {
       entries: [...profiles, http],
       undecodableProfiles: 0,
     });
-    groups.memberships.push({ profileId: http.profile.id, groupId: "a" });
     renderScreen();
     await screen.findByRole("button", { name: "Asia" });
     await exportGroup("Asia", "Share links");
@@ -684,18 +404,4 @@ describe("group panels and scoped export", () => {
     );
   });
 
-  it("validates the combined name and cancels unchanged edits without writing", async () => {
-    renderScreen();
-    await screen.findByRole("button", { name: "Asia" });
-    await menu("Asia", "Edit group");
-    const name = screen.getByRole("textbox", { name: "Group name" });
-    fireEvent.change(name, { target: { value: " Backup " } });
-    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
-    fireEvent.change(name, { target: { value: " " } });
-    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
-    fireEvent.change(name, { target: { value: "Asia" } });
-    await userEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(mocks.updateNodeGroup).not.toHaveBeenCalled();
-  });
 });

@@ -7,8 +7,6 @@ import type { Page } from "@playwright/test";
 // smoke assertion with a confusing message.
 import type {
   AppError,
-  NodeGroupsSnapshot,
-  NodeGroupAssignment,
   AppSettingsV1,
   AppUpdaterStatus,
   ConnectionModeStatus,
@@ -62,7 +60,6 @@ export async function installTauriSmokeMock(
       profiles: ProfileRow[];
       subscriptions: Subscription[];
       subscriptionMetadata: SubscriptionMetadata[];
-      nodeGroups: NodeGroupsSnapshot;
       connections: ProxyConnectionsSnapshot;
       unhandled: string[];
       routings: Routing[];
@@ -86,7 +83,6 @@ export async function installTauriSmokeMock(
     const listeners: Listener[] = [];
     let nextCallbackId = 1;
     let nextProfileId = 1;
-    let nextGroupId = 1;
     let nextRoutingId = 1;
     let nextRuleId = 1;
     let windowMaximized = false;
@@ -98,7 +94,6 @@ export async function installTauriSmokeMock(
       calls: [] as Array<{ command: string; args: CommandArgs }>,
       dns: makeDnsSettings(),
       profiles: [] as ProfileRow[],
-      nodeGroups: { groups: [], memberships: [] },
       subscriptions: [],
       subscriptionMetadata: [],
       connections: makeConnectionsSnapshot(),
@@ -178,7 +173,7 @@ export async function installTauriSmokeMock(
           : null;
     }
 
-    const profileScopes = ["profiles", "nodeGroups"];
+    const profileScopes = ["profiles"];
     const subscriptionScopes = ["subscriptions", "subscriptionMetadata"];
     const routingScopes = ["routings"];
     const proxyRuntimeScopes = ["proxyConnections"];
@@ -188,12 +183,6 @@ export async function installTauriSmokeMock(
     // for every committed mutation, so the mock has to as well — the frontend
     // no longer invalidates for itself.
     const invalidationScopes: Record<string, string[]> = {
-      copy_profiles: profileScopes,
-      save_node_group: profileScopes,
-      update_node_group: profileScopes,
-      delete_node_group: profileScopes,
-      move_node_group: profileScopes,
-      assign_node_groups: profileScopes,
       delete_profiles: profileScopes,
       delete_routing_rules: routingScopes,
       delete_routings: routingScopes,
@@ -262,17 +251,13 @@ export async function installTauriSmokeMock(
         return Promise.reject(new Error("Simulated failure"));
       }
 
-      const manualIds = ["delete_profiles", "copy_profiles"].includes(command)
+      const manualIds = command === "delete_profiles"
         ? readStringArray(args, "indexIds")
         : command === "save_profile"
           ? [String(readRecord(args, "profile").id ?? "")]
           : command === "move_profile"
             ? [String(args.indexId ?? "")]
-            : ["assign_node_groups", "update_node_group"].includes(command)
-              ? (args.assignments as NodeGroupAssignment[]).map(
-                  (item) => item.profileId,
-                )
-              : [];
+            : [];
       if (
         state.profiles.some(
           (row) =>
@@ -474,111 +459,6 @@ export async function installTauriSmokeMock(
           settleManualProxy();
           return Promise.resolve(connectionModeStatus());
         }
-        case "list_node_groups":
-          return Promise.resolve(clone(state.nodeGroups));
-        case "save_node_group": {
-          const name = String(args.name ?? "").trim();
-          if (
-            !name ||
-            state.nodeGroups.groups.some(
-              (g) => g.name === name && g.id !== args.id,
-            )
-          )
-            return Promise.reject(new Error("Invalid group name"));
-          const existing = state.nodeGroups.groups.find(
-            (g) => g.id === args.id,
-          );
-          const group = {
-            id: existing?.id ?? `node-group-${nextGroupId++}`,
-            name,
-            sort: existing?.sort ?? state.nodeGroups.groups.length,
-          };
-          if (existing) Object.assign(existing, group);
-          else state.nodeGroups.groups.push(group);
-          return Promise.resolve(clone(group));
-        }
-        case "update_node_group": {
-          const name = String(args.name ?? "").trim();
-          const group = state.nodeGroups.groups.find((g) => g.id === args.id);
-          const changes = args.assignments as NodeGroupAssignment[];
-          if (
-            !group ||
-            !name ||
-            state.nodeGroups.groups.some(
-              (g) => g.name === name && g.id !== args.id,
-            )
-          )
-            return Promise.reject(new Error("Invalid group name"));
-          if (
-            new Set(changes.map((a) => a.profileId)).size !== changes.length ||
-            changes.some(
-              (a) =>
-                !state.profiles.some((p) => p.profile.id === a.profileId) ||
-                (a.groupId &&
-                  !state.nodeGroups.groups.some((g) => g.id === a.groupId)),
-            )
-          )
-            return Promise.reject(new Error("Invalid membership"));
-          group.name = name;
-          for (const change of changes) {
-            state.nodeGroups.memberships = state.nodeGroups.memberships.filter(
-              (m) => m.profileId !== change.profileId,
-            );
-            if (change.groupId)
-              state.nodeGroups.memberships.push({
-                profileId: change.profileId,
-                groupId: change.groupId,
-              });
-          }
-          return Promise.resolve(clone(group));
-        }
-        case "delete_node_group": {
-          state.nodeGroups.groups = state.nodeGroups.groups.filter(
-            (g) => g.id !== args.id,
-          );
-          state.nodeGroups.memberships = state.nodeGroups.memberships.filter(
-            (m) => m.groupId !== args.id,
-          );
-          return Promise.resolve(null);
-        }
-        case "move_node_group": {
-          const groups = state.nodeGroups.groups;
-          const from = groups.findIndex((g) => g.id === args.id);
-          if (from < 0) return Promise.reject(new Error("Group not found"));
-          const to =
-            args.action === "up"
-              ? Math.max(0, from - 1)
-              : Math.min(groups.length - 1, from + 1);
-          const [group] = groups.splice(from, 1);
-          groups.splice(to, 0, group);
-          groups.forEach((g, index) => {
-            g.sort = index;
-          });
-          return Promise.resolve(null);
-        }
-        case "assign_node_groups": {
-          const changes = args.assignments as NodeGroupAssignment[];
-          if (
-            changes.some(
-              (a) =>
-                !state.profiles.some((p) => p.profile.id === a.profileId) ||
-                (a.groupId &&
-                  !state.nodeGroups.groups.some((g) => g.id === a.groupId)),
-            )
-          )
-            return Promise.reject(new Error("Node or group not found"));
-          for (const change of changes) {
-            state.nodeGroups.memberships = state.nodeGroups.memberships.filter(
-              (m) => m.profileId !== change.profileId,
-            );
-            if (change.groupId)
-              state.nodeGroups.memberships.push({
-                profileId: change.profileId,
-                groupId: change.groupId,
-              });
-          }
-          return Promise.resolve(null);
-        }
         case "list_profiles":
           // The real command answers with the rows plus the number of stored
           // profiles the build could not decode; the fixture never seeds an
@@ -600,37 +480,12 @@ export async function installTauriSmokeMock(
           state.profiles = state.profiles.filter(
             (row) => !ids.includes(String(row.profile.id)),
           );
-          state.nodeGroups.memberships = state.nodeGroups.memberships.filter(
-            (m) => !ids.includes(m.profileId),
-          );
           if (
             state.runtime.activeProfileId &&
             ids.includes(state.runtime.activeProfileId)
           )
             void dispatch("disconnect_core", {});
           return Promise.resolve(ids.length);
-        }
-        case "copy_profiles": {
-          const ids = readStringArray(args, "indexIds");
-          const copies = state.profiles
-            .filter((row) => ids.includes(String(row.profile.id)))
-            .map((row) => {
-              const copy = upsertProfile({
-                ...row.profile,
-                id: "",
-                remarks: `${String(row.profile.remarks)} Copy`,
-              });
-              const groupId = state.nodeGroups.memberships.find(
-                (m) => m.profileId === row.profile.id,
-              )?.groupId;
-              if (groupId)
-                state.nodeGroups.memberships.push({
-                  profileId: String(copy.profile.id),
-                  groupId,
-                });
-              return copy;
-            });
-          return Promise.resolve(clone(copies));
         }
         case "move_profile":
           return Promise.resolve(clone(state.profiles));
@@ -659,9 +514,6 @@ export async function installTauriSmokeMock(
           );
           state.profiles = state.profiles.filter(
             (row) => !removed.includes(String(row.profile.id)),
-          );
-          state.nodeGroups.memberships = state.nodeGroups.memberships.filter(
-            (item) => !removed.includes(item.profileId),
           );
           if (
             state.runtime.activeProfileId &&

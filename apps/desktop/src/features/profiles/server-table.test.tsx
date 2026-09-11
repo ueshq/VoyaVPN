@@ -45,7 +45,6 @@ const ipcMocks = vi.hoisted(() => ({
   generateQrCode: vi.fn(),
   importProfilesFromText: vi.fn(),
   listProfiles: vi.fn(),
-  listNodeGroups: vi.fn(),
   listSubscriptionMetadata: vi.fn(() => Promise.resolve([])),
   listSubscriptions: vi.fn(),
   moveProfile: vi.fn(),
@@ -250,7 +249,6 @@ describe("ProfilesScreen", () => {
       makeImportResult({ imported: 1, importedProfileIds: ["profile-new"] }),
     );
     ipcMocks.listSubscriptions.mockResolvedValue([]);
-    ipcMocks.listNodeGroups.mockResolvedValue({ groups: [], memberships: [] });
     ipcMocks.moveProfile.mockResolvedValue([]);
     ipcMocks.cancelSpeedtest.mockResolvedValue({ running: false });
     ipcMocks.runSpeedtest.mockResolvedValue({
@@ -895,13 +893,12 @@ describe("ProfilesScreen", () => {
     expect(await screen.findByText("profile list failed")).toBeInTheDocument();
   });
 
-  it("offers subscription and import directly with manual actions in the secondary menu", async () => {
+  it("offers subscription and node creation directly alongside import", async () => {
     mockProfileList([]);
     renderProfiles();
     const toolbar = within(screen.getByRole("toolbar"));
-    for (const name of ["Add", "Import"]) {
-      expect(toolbar.getByRole("menuitem", { name })).toBeVisible();
-    }
+    expect(toolbar.getByRole("button", { name: "Add" })).toBeVisible();
+    expect(toolbar.getByRole("menuitem", { name: "Import" })).toBeVisible();
     for (const name of ["Import from clipboard", "Subscriptions"]) {
       expect(toolbar.queryByRole("button", { name })).not.toBeInTheDocument();
     }
@@ -990,16 +987,11 @@ describe("ProfilesScreen", () => {
     },
   );
 
-  it("opens the Add menu with the keyboard and restores focus after dismissing the editor", async () => {
+  it("opens the node editor directly with the keyboard and restores focus", async () => {
     mockProfileList([]);
     renderProfiles();
-    const trigger = screen.getByRole("menuitem", { name: "Add" });
+    const trigger = screen.getByRole("button", { name: "Add" });
     trigger.focus();
-    await userEvent.keyboard("{Enter}");
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(
-      within(screen.getByRole("menu")).getAllByRole("menuitem"),
-    ).toHaveLength(2);
     await userEvent.keyboard("{Enter}");
     expect(
       await screen.findByRole("dialog", { name: "Add node" }),
@@ -1592,10 +1584,7 @@ describe("ProfilesScreen", () => {
     await withLocale("zh-Hans", async () => {
       renderProfiles();
 
-      await userEvent.click(screen.getByRole("menuitem", { name: "新增" }));
-      await userEvent.click(
-        await screen.findByRole("menuitem", { name: "新增节点" }),
-      );
+      await userEvent.click(screen.getByRole("button", { name: "新增" }));
       const dialog = await screen.findByRole("dialog", { name: "新增节点" });
       const remarks = within(dialog).getByLabelText("备注");
       const address = within(dialog).getByLabelText("地址");
@@ -1613,10 +1602,7 @@ describe("ProfilesScreen", () => {
     await withLocale("zh-Hans", async () => {
       renderProfiles();
 
-      await userEvent.click(screen.getByRole("menuitem", { name: "新增" }));
-      await userEvent.click(
-        await screen.findByRole("menuitem", { name: "新增节点" }),
-      );
+      await userEvent.click(screen.getByRole("button", { name: "新增" }));
       fireEvent.click(await screen.findByRole("button", { name: /保存/ }));
 
       // The zod schema carries codes; the visible sentence comes from the locale.
@@ -1738,10 +1724,7 @@ function makeSubscription() {
 }
 
 async function openAddNode() {
-  await userEvent.click(screen.getByRole("menuitem", { name: "Add" }));
-  await userEvent.click(
-    await screen.findByRole("menuitem", { name: "Add node" }),
-  );
+  await userEvent.click(screen.getByRole("button", { name: "Add" }));
 }
 
 async function openImport(method = "Import from text") {

@@ -11,9 +11,9 @@ use sqlx::{
 use tokio::sync::Mutex;
 
 use crate::{
-    AppStateRepository, DbError, NodeGroupRepository, ProfileExRepository, ProfileRepository,
-    Result, RoutingRepository, ServerStatRepository, SettingsRepository,
-    SubscriptionMetadataRepository, SubscriptionRepository,
+    AppStateRepository, DbError, ProfileExRepository, ProfileRepository, Result, RoutingRepository,
+    ServerStatRepository, SettingsRepository, SubscriptionMetadataRepository,
+    SubscriptionRepository,
 };
 
 pub const DATABASE_NAME: &str = "voyavpn.sqlite";
@@ -210,7 +210,6 @@ macro_rules! session_accessors {
 
 session_accessors! {
     profiles => ProfileRepository,
-    node_groups => NodeGroupRepository,
     profile_exs => ProfileExRepository,
     server_stats => ServerStatRepository,
     subscriptions => SubscriptionRepository,

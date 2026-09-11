@@ -62,15 +62,13 @@ export function useNodeListData(
     () =>
       nodeListRows(
         profiles,
-        nodeGroups.snapshot,
         nodeGroups.collapsed,
-        t("nodeGroups.unassigned"),
+        t("nodeGroups.local"),
         subscriptionsQuery.data,
         t("panes.subscriptions.untitled"),
       ),
     [
       profiles,
-      nodeGroups.snapshot,
       nodeGroups.collapsed,
       subscriptionsQuery.data,
       t,

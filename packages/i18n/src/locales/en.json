@@ -827,31 +827,12 @@
     "filteredConnections": "{{count}} of {{total}} connections"
   },
   "nodeGroups": {
-    "unassigned": "Unassigned",
-    "create": "Create group",
-    "delete": "Delete group",
-    "name": "Group name",
-    "duplicateName": "A group with this name already exists.",
-    "description": "Organize nodes into folders. Grouping does not change your connection.",
+    "local": "Local nodes",
     "groupCount": "{{count}} groups",
     "membersCount": "{{count}} nodes",
     "test": "Test group",
-    "actions": "Actions for {{name}}",
-    "membersDescription": "Select nodes to move into this group. Unchecked members move to Unassigned.",
-    "deleteDescription": "Delete “{{name}}”? Its nodes will move to Unassigned.",
-    "searchMembers": "Search nodes",
-    "selectedCount": "{{count}} selected",
-    "selectResults": "Select results",
-    "clearResults": "Clear results",
-    "noMatches": "No matching nodes.",
-    "moveTo": "Move to group",
-    "copyNode": "Copy node",
-    "edit": "Edit group",
-    "editTitle": "Edit {{name}}",
-    "members": "Group members",
     "exportFor": "Export {{name}}",
-    "empty": "No nodes in this group. Add members with Edit group.",
-    "notFound": "This group no longer exists. Refresh the list and try again."
+    "empty": "No nodes in this group."
   },
   "common": {
     "advanced": "Advanced options",

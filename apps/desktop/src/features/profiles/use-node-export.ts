@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { listProfiles, listNodeGroups } from "@/ipc/commands";
+import { listProfiles } from "@/ipc/commands";
 import { saveTextFile } from "@/ipc/file-dialog";
 import type { ProfileListEntry } from "@/ipc/bindings";
-import { profilesByNodeGroup } from "./node-list-rows";
+import { profilesByNodeGroup, type NodeSourceKey } from "./node-list-rows";
 import {
   exportFileFilter,
   exportFileName,
@@ -104,36 +104,15 @@ export function useNodeExport(
   }
 
   async function handleGroupExport(
-    groupKey: string,
+    groupKey: NodeSourceKey,
     kind: ProfileExportKind,
     destination: ProfileExportDestination = "clipboard",
   ) {
     await runOperation(async () => {
-      const [listing, snapshot] = await Promise.all([
-        listProfiles(null, null),
-        listNodeGroups(),
-      ]);
-      if (groupKey.startsWith("subscription:")) {
-        await performBatchExport(
-          kind,
-          listing.entries.filter(
-            (entry) => entry.profile.subscriptionId === groupKey.slice(13),
-          ),
-          destination,
-        );
-        return;
-      }
-      const groupId = groupKey.startsWith("manual:") ? groupKey.slice(7) : null;
-      if (
-        groupId !== null &&
-        !snapshot.groups.some((group) => group.id === groupId)
-      ) {
-        setOperationError(t("nodeGroups.notFound"));
-        return;
-      }
+      const listing = await listProfiles(null, null);
       await performBatchExport(
         kind,
-        profilesByNodeGroup(listing.entries, snapshot).get(groupId) ?? [],
+        profilesByNodeGroup(listing.entries).get(groupKey) ?? [],
         destination,
       );
     });

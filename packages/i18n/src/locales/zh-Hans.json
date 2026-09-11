@@ -827,31 +827,12 @@
     "filteredConnections": "{{count}} / {{total}} 个连接"
   },
   "nodeGroups": {
-    "unassigned": "未分组",
-    "create": "创建分组",
-    "delete": "删除分组",
-    "name": "分组名称",
-    "duplicateName": "已存在同名分组。",
-    "description": "分组用于整理节点，不会改变当前连接。",
+    "local": "本地节点",
     "groupCount": "{{count}} 个分组",
     "membersCount": "{{count}} 个节点",
     "test": "测试本组",
-    "actions": "{{name}}的分组操作",
-    "membersDescription": "选中的节点会移入本组，取消选择的原成员会移到未分组。",
-    "deleteDescription": "删除“{{name}}”？组内节点会移到未分组。",
-    "searchMembers": "搜索节点",
-    "selectedCount": "已选 {{count}} 个",
-    "selectResults": "选择搜索结果",
-    "clearResults": "取消选择搜索结果",
-    "noMatches": "没有匹配的节点。",
-    "moveTo": "移动到分组",
-    "copyNode": "复制节点",
-    "edit": "编辑分组",
-    "editTitle": "编辑“{{name}}”",
-    "members": "分组成员",
     "exportFor": "导出“{{name}}”",
-    "empty": "此分组暂无节点，可通过“编辑分组”添加成员。",
-    "notFound": "此分组已不存在，请刷新列表后重试。"
+    "empty": "此分组暂无节点。"
   },
   "common": {
     "advanced": "高级选项",

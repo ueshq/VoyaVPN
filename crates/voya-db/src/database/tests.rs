@@ -179,22 +179,15 @@ async fn fresh_schema_contains_only_current_tables_and_columns() {
 }
 
 #[tokio::test]
-async fn statistics_repository_rolls_over_cleans_orphans_and_clones() {
+async fn statistics_repository_rolls_over_cleans_orphans_and_accumulates() {
     let database = Database::connect_in_memory()
         .await
         .expect("database test operation should succeed");
     let mut source = sample_profile();
     source.index_id = "source".to_string();
-    let mut clone = sample_profile();
-    clone.index_id = "clone".to_string();
     database
         .profiles()
         .upsert(&source)
-        .await
-        .expect("database test operation should succeed");
-    database
-        .profiles()
-        .upsert(&clone)
         .await
         .expect("database test operation should succeed");
 
@@ -254,19 +247,9 @@ async fn statistics_repository_rolls_over_cleans_orphans_and_clones() {
     assert_eq!(rolled.total_down, 2000);
     assert_eq!(rolled.date_now, 2);
 
-    let cloned = database
-        .server_stats()
-        .clone_stat("source", "clone")
-        .await
-        .expect("database test operation should succeed")
-        .expect("database test operation should succeed");
-    assert_eq!(cloned.index_id, "clone");
-    assert_eq!(cloned.total_up, 1000);
-    assert_eq!(cloned.total_down, 2000);
-
     let updated = database
         .server_stats()
-        .add_traffic("clone", 3, 50, 70)
+        .add_traffic("source", 3, 50, 70)
         .await
         .expect("database test operation should succeed");
     assert_eq!(updated.today_up, 50);

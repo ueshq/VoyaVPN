@@ -67,11 +67,6 @@ impl AppServices {
     }
 
     #[must_use]
-    pub fn node_groups(&self) -> crate::node_groups::NodeGroupManager<'_> {
-        crate::node_groups::NodeGroupManager::new(&self.database)
-    }
-
-    #[must_use]
     pub fn profiles(&self) -> ProfileManager<'_> {
         ProfileManager::new(&self.database)
     }

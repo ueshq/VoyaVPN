@@ -20,9 +20,9 @@
 
 use voya_contracts::InvalidationScope;
 
-/// Saved-node and manual-group mutations invalidate both list projections.
+/// Saved-node mutations invalidate the profile list used to derive source groups.
 pub fn profile_scopes(config_changed: bool) -> Vec<InvalidationScope> {
-    let mut scopes = vec![InvalidationScope::Profiles, InvalidationScope::NodeGroups];
+    let mut scopes = vec![InvalidationScope::Profiles];
     push_config_scopes(&mut scopes, config_changed);
     scopes
 }
@@ -39,7 +39,6 @@ pub fn subscription_scopes(profiles_changed: bool, config_changed: bool) -> Vec<
     ];
     if profiles_changed {
         scopes.push(InvalidationScope::Profiles);
-        scopes.push(InvalidationScope::NodeGroups);
     }
     push_config_scopes(&mut scopes, config_changed);
     scopes
@@ -111,11 +110,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn profile_scopes_always_refresh_the_list_and_the_child_picker() {
-        assert_eq!(
-            profile_scopes(false),
-            vec![InvalidationScope::Profiles, InvalidationScope::NodeGroups]
-        );
+    fn profile_scopes_always_refresh_the_list() {
+        assert_eq!(profile_scopes(false), vec![InvalidationScope::Profiles]);
     }
 
     #[test]
@@ -125,11 +121,7 @@ mod tests {
         // projection of.
         assert_eq!(
             profile_scopes(true),
-            vec![
-                InvalidationScope::Profiles,
-                InvalidationScope::NodeGroups,
-                InvalidationScope::AppSettings,
-            ]
+            vec![InvalidationScope::Profiles, InvalidationScope::AppSettings]
         );
     }
 
@@ -142,9 +134,7 @@ mod tests {
                 assert!(
                     matches!(
                         scope,
-                        InvalidationScope::Profiles
-                            | InvalidationScope::NodeGroups
-                            | InvalidationScope::AppSettings
+                        InvalidationScope::Profiles | InvalidationScope::AppSettings
                     ),
                     "unexpected profile scope {scope:?}"
                 );
@@ -167,7 +157,6 @@ mod tests {
                 InvalidationScope::Subscriptions,
                 InvalidationScope::SubscriptionMetadata,
                 InvalidationScope::Profiles,
-                InvalidationScope::NodeGroups,
             ]
         );
     }
@@ -180,7 +169,6 @@ mod tests {
                 InvalidationScope::Subscriptions,
                 InvalidationScope::SubscriptionMetadata,
                 InvalidationScope::Profiles,
-                InvalidationScope::NodeGroups,
                 InvalidationScope::AppSettings,
             ]
         );

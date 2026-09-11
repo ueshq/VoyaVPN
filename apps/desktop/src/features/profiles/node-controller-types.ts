@@ -18,14 +18,11 @@ export type NodeMenuController = Pick<NodeOperation, "runOperation"> &
   Pick<NodeEditor, "requestDelete" | "setDialogState" | "setSelectedId"> &
   Pick<NodeExport, "handleExport"> &
   Pick<NodeSpeedtest, "handleSpeedtest" | "speedtestRunning"> &
-  Pick<NodeShared, "nodeGroups" | "t">;
+  Pick<NodeShared, "t">;
 
 export type NodeDetailsController = Pick<NodeListData, "subscriptionName"> &
   Pick<NodeEditor, "restoreDetailsFocus" | "setDetailsId"> &
   Pick<NodeShared, "t">;
-
-export type NodeGroupDialogsController = Pick<NodeListData, "profiles" | "viewportRef"> &
-  Pick<NodeShared, "nodeGroups" | "t">;
 
 export type NodeGroupCardController = Pick<NodeListData, "subscriptionMetadata"> &
   Pick<
@@ -71,7 +68,7 @@ export type NodeDialogsController = Pick<NodeOperation, "operationError"> &
     | "subscriptionsOpen"
   > &
   Pick<NodeExport, "setShareQrContent" | "shareQrContent"> &
-  Pick<NodeShared, "nodeGroups" | "t">;
+  Pick<NodeShared, "t">;
 
 export type NodeToolbarController = Pick<NodeOperation, "operationError" | "operationMessage"> &
   Pick<NodeListData, "profiles" | "profilesQuery" | "rows" | "undecodableProfiles"> &
@@ -79,7 +76,7 @@ export type NodeToolbarController = Pick<NodeOperation, "operationError" | "oper
   Pick<NodeSubscriptions, "openSubscription"> &
   Pick<NodeExport, "handleBulkExport"> &
   Pick<NodeSpeedtest, "handleCancelSpeedtest" | "handleSpeedtest" | "speedtestRunning"> &
-  Pick<NodeShared, "nodeGroups" | "t">;
+  Pick<NodeShared, "t">;
 
 export type NodeListController = Pick<NodeOperation, "runOperation"> &
   Pick<

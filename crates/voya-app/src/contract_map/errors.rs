@@ -564,29 +564,5 @@ fn internal(subsystem: AppErrorSubsystem, error: &impl std::fmt::Display) -> App
     AppError::internal(subsystem, error.to_string())
 }
 
-impl From<crate::node_groups::NodeGroupError> for AppError {
-    fn from(error: crate::node_groups::NodeGroupError) -> Self {
-        match error {
-            crate::node_groups::NodeGroupError::Profile(source) => Self::from(source),
-            crate::node_groups::NodeGroupError::Database(source) => {
-                database_error(&source, Sub::Group)
-            }
-            crate::node_groups::NodeGroupError::GroupNotFound(ref id) => not_found(
-                Sub::Group,
-                AppErrorEntity::NodeGroup,
-                Some(id.clone()),
-                &error,
-            ),
-            crate::node_groups::NodeGroupError::ProfileNotFound(ref id) => not_found(
-                Sub::Group,
-                AppErrorEntity::Profile,
-                Some(id.clone()),
-                &error,
-            ),
-            _ => invalid(Sub::Group, "nodeGroup", &error),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests;

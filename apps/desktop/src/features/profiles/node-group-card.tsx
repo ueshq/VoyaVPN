@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -7,8 +6,6 @@ import {
   RefreshCw,
   Settings,
   Trash2,
-  MoreHorizontal,
-  Pencil,
   Share2,
 } from "lucide-react";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -17,9 +14,7 @@ import { Button } from "@voya/ui/components/button";
 import {
   Menubar,
   MenubarContent,
-  MenubarItem,
   MenubarMenu,
-  MenubarSeparator,
   MenubarTrigger,
 } from "@voya/ui/components/menubar";
 import { ExportMenuItems, SpeedtestButton } from "./server-table-menus";
@@ -41,17 +36,11 @@ export function NodeGroupCard({
     handleCancelSpeedtest,
     speedtestRunning,
   } = controller;
-  const group = row.group;
   const subscription = row.subscription;
   const { language } = useI18n();
   const metadata = subscription
     ? controller.subscriptionMetadata.get(subscription.id)
     : null;
-  const trigger = useRef<HTMLButtonElement>(null);
-  const opening = useRef(false);
-  const position = nodeGroups.snapshot.groups.findIndex(
-    (g) => g.id === group?.id,
-  );
   return (
     <article
       className="node-group-surface node-group-header"
@@ -150,19 +139,6 @@ export function NodeGroupCard({
             }
             running={speedtestRunning}
           />
-          {group ? (
-            <Button
-              disabled={nodeGroups.busy}
-              size="sm"
-              variant="outline"
-              onClick={(event) =>
-                nodeGroups.open({ kind: "edit", group }, event.currentTarget)
-              }
-            >
-              <Pencil aria-hidden="true" className="size-4" />
-              {t("nodeGroups.edit")}
-            </Button>
-          ) : null}
           <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
             <MenubarMenu>
               <MenubarTrigger asChild>
@@ -192,60 +168,6 @@ export function NodeGroupCard({
               </MenubarContent>
             </MenubarMenu>
           </Menubar>
-          {group ? (
-            <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
-              <MenubarMenu>
-                <MenubarTrigger asChild>
-                  <Button
-                    ref={trigger}
-                    aria-label={t("nodeGroups.actions", { name: group.name })}
-                    disabled={nodeGroups.busy}
-                    size="icon"
-                    variant="ghost"
-                  >
-                    <MoreHorizontal aria-hidden="true" className="size-4" />
-                  </Button>
-                </MenubarTrigger>
-                <MenubarContent
-                  align="end"
-                  onCloseAutoFocus={(event) => {
-                    if (opening.current) {
-                      event.preventDefault();
-                      opening.current = false;
-                    }
-                  }}
-                >
-                  <MenubarItem
-                    disabled={position <= 0}
-                    onSelect={() => void nodeGroups.move(group.id, "up")}
-                  >
-                    {t("panes.profiles.menu.moveUp")}
-                  </MenubarItem>
-                  <MenubarItem
-                    disabled={
-                      position === nodeGroups.snapshot.groups.length - 1
-                    }
-                    onSelect={() => void nodeGroups.move(group.id, "down")}
-                  >
-                    {t("panes.profiles.menu.moveDown")}
-                  </MenubarItem>
-                  <MenubarSeparator />
-                  <MenubarItem
-                    variant="destructive"
-                    onSelect={() => {
-                      opening.current = true;
-                      nodeGroups.open(
-                        { kind: "delete", group },
-                        trigger.current,
-                      );
-                    }}
-                  >
-                    {t("nodeGroups.delete")}
-                  </MenubarItem>
-                </MenubarContent>
-              </MenubarMenu>
-            </Menubar>
-          ) : null}
         </div>
       </div>
       {subscription ? (

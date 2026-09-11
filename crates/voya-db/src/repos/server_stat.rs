@@ -173,25 +173,6 @@ impl<'executor> ServerStatRepository<'executor> {
 
         row_to_server_stat(row)
     }
-
-    pub async fn clone_stat(
-        &self,
-        index_id: &str,
-        to_index_id: &str,
-    ) -> Result<Option<ServerStatItem>> {
-        if index_id == to_index_id {
-            return self.get(index_id).await;
-        }
-
-        let Some(mut item) = self.get(index_id).await? else {
-            return Ok(None);
-        };
-
-        item.index_id = to_index_id.to_string();
-        self.upsert(&item).await?;
-
-        Ok(Some(item))
-    }
 }
 
 fn row_to_server_stat(row: SqliteRow) -> Result<ServerStatItem> {

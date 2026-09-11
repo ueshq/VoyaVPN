@@ -78,34 +78,6 @@ pub async fn delete_profiles<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn copy_profiles<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
-    state: tauri::State<'_, AppState>,
-    index_ids: Vec<String>,
-) -> Result<Vec<ProfileListEntry>, AppError> {
-    validate_ipc_text_list(
-        &index_ids,
-        "node id",
-        IPC_ID_MAX_CHARS,
-        AppErrorSubsystem::Profile,
-    )?;
-    let copied = mutate_config(&state, async |unit_of_work, config| {
-        Ok(ProfileManager::new_in(unit_of_work)
-            .copy_profiles(config, &index_ids)
-            .await?)
-    })
-    .await?;
-    emit_profile_invalidation(&app, "profiles-copied", copied.config_changed);
-
-    Ok(copied
-        .value
-        .into_iter()
-        .map(profile_list_to_contract)
-        .collect())
-}
-
-#[tauri::command]
-#[specta::specta]
 pub async fn export_profile_share_links(
     state: tauri::State<'_, AppState>,
     index_ids: Vec<String>,

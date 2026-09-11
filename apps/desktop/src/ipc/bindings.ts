@@ -59,15 +59,8 @@ export const commands = {
 	loadDnsSettings: () => typedError<DnsSettings, AppError>(__TAURI_INVOKE("load_dns_settings")),
 	saveDnsSettings: (settings: DnsSettings) => typedError<DnsSettings, AppError>(__TAURI_INVOKE("save_dns_settings", { settings })),
 	listProfiles: (subscriptionId: string | null, filter: string | null) => typedError<ProfileListing, AppError>(__TAURI_INVOKE("list_profiles", { subscriptionId, filter })),
-	listNodeGroups: () => typedError<NodeGroupsSnapshot, AppError>(__TAURI_INVOKE("list_node_groups")),
-	saveNodeGroup: (id: string | null, name: string) => typedError<NodeGroup, AppError>(__TAURI_INVOKE("save_node_group", { id, name })),
-	updateNodeGroup: (id: string, name: string, assignments: NodeGroupAssignment[]) => typedError<NodeGroup, AppError>(__TAURI_INVOKE("update_node_group", { id, name, assignments })),
-	deleteNodeGroup: (id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_node_group", { id })),
-	moveNodeGroup: (id: string, action: MoveAction) => typedError<null, AppError>(__TAURI_INVOKE("move_node_group", { id, action })),
-	assignNodeGroups: (assignments: NodeGroupAssignment[]) => typedError<null, AppError>(__TAURI_INVOKE("assign_node_groups", { assignments })),
 	saveProfile: (profile: Profile) => typedError<ProfileListEntry, AppError>(__TAURI_INVOKE("save_profile", { profile })),
 	deleteProfiles: (indexIds: string[]) => typedError<number, AppError>(__TAURI_INVOKE("delete_profiles", { indexIds })),
-	copyProfiles: (indexIds: string[]) => typedError<ProfileListEntry[], AppError>(__TAURI_INVOKE("copy_profiles", { indexIds })),
 	exportProfileShareLinks: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_share_links", { indexIds })),
 	exportProfileShareLinksBase64: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_share_links_base64", { indexIds })),
 	exportProfileVoyaBundle: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_voya_bundle", { indexIds })),
@@ -158,7 +151,7 @@ export type AppError = {
 };
 
 /**  The kind of row a [`AppErrorKind::NotFound`] refers to. */
-export type AppErrorEntity = "profile" | "routing" | "routingRule" | "subscription" | "nodeGroup" | 
+export type AppErrorEntity = "profile" | "routing" | "routingRule" | "subscription" | 
 /**  The core-info table has no entry for the requested core type. */
 "coreInfo";
 
@@ -209,7 +202,7 @@ export type AppErrorSubsystem =
 /**  The shell itself: window chrome, event emission, background tasks. */
 "app" | "autostart" | "certificate" | 
 /**  Reading or writing the persisted application configuration. */
-"config" | "dns" | "export" | "group" | "profile" | "proxyRuntime" | "qr" | "routing" | 
+"config" | "dns" | "export" | "profile" | "proxyRuntime" | "qr" | "routing" | 
 /**  Core lifecycle: config generation, supervisor, connect/disconnect. */
 "runtime" | "speedtest" | "subscription" | "sysProxy" | "tun" | "update";
 
@@ -459,8 +452,6 @@ export type InvalidateEvent = {
 export type InvalidationScope = 
 /**  `["profiles"]` — the profile list, every filter slice of it. */
 { kind: "profiles" } | 
-/**  `["node-groups"]` — user-owned folders and node memberships. */
-{ kind: "nodeGroups" } | 
 /**  `["subscriptions"]` */
 { kind: "subscriptions" } | 
 /**  `["subscription-metadata"]` */
@@ -552,27 +543,6 @@ export type NetworkSettings = {
 	tun: TunSettings,
 	systemProxy: SystemProxySettings,
 	inbounds: InboundSettings[],
-};
-
-export type NodeGroup = {
-	id: string,
-	name: string,
-	sort: number,
-};
-
-export type NodeGroupAssignment = {
-	profileId: string,
-	groupId: string | null,
-};
-
-export type NodeGroupMembership = {
-	profileId: string,
-	groupId: string,
-};
-
-export type NodeGroupsSnapshot = {
-	groups: NodeGroup[],
-	memberships: NodeGroupMembership[],
 };
 
 /**

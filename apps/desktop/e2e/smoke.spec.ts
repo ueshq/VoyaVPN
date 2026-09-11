@@ -231,15 +231,8 @@ test("node menus defer actions until a method is chosen and restore keyboard foc
     .getByRole("tablist", { name: "Main sections" })
     .getByRole("tab", { name: "Nodes" })
     .click();
-  const add = page.getByRole("menuitem", { name: "Add", exact: true });
+  const add = page.getByRole("button", { name: "Add", exact: true });
   await add.focus();
-  await page.keyboard.press("Enter");
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveCount(2);
-  await page.screenshot({
-    animations: "disabled",
-    path: testInfo.outputPath("nodes-add-menu.png"),
-  });
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
   await page.keyboard.press("Escape");
@@ -326,8 +319,7 @@ test("adds and imports profiles, activates one, and connects through the fake ru
     .getByRole("tablist", { name: "Main sections" })
     .getByRole("tab", { name: "Nodes" })
     .click();
-  await page.getByRole("menuitem", { exact: true, name: "Add" }).click();
-  await page.getByRole("menuitem", { exact: true, name: "Add node" }).click();
+  await page.getByRole("button", { exact: true, name: "Add" }).click();
   await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
   await page.getByRole("combobox", { name: "Protocol" }).click();
   await page.getByRole("option", { name: /VLESS/ }).click();
@@ -341,6 +333,8 @@ test("adds and imports profiles, activates one, and connects through the fake ru
 
   await expect(page.getByText("Smoke Manual VLESS")).toBeVisible();
   await expect(page.getByText("manual.example.test")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Local nodes", exact: true })).toBeVisible();
+  await expect(page.locator('[data-group-key="local"]').filter({ hasText: "Smoke Manual VLESS" })).toHaveCount(1);
 
   await page.getByRole("menuitem", { exact: true, name: "Import" }).click();
   await page
@@ -363,6 +357,7 @@ test("adds and imports profiles, activates one, and connects through the fake ru
     .getByRole("button", { exact: true, name: "Import" })
     .click();
   await expect(page.getByText("Smoke Imported VLESS")).toBeVisible();
+  await expect(page.locator('[data-group-key="local"]').filter({ hasText: "Smoke Imported VLESS" })).toHaveCount(1);
 
   const importedProfileRow = page
     .getByTestId("server-row")
@@ -535,7 +530,7 @@ test("keeps the simplified navigation usable at desktop and minimum sizes", asyn
       ).toHaveCount(0);
       await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
       await expect(
-        page.getByRole("button", { name: "Unassigned", exact: true }),
+        page.getByRole("button", { name: "Local nodes", exact: true }),
       ).toBeVisible();
       await expect(page.getByTestId("server-row").first()).toBeVisible();
       await page.screenshot({
@@ -676,7 +671,7 @@ test("routes the three IPC event channels into the shell", async ({ page }) => {
     .getByRole("tab", { name: "Nodes" })
     .click();
   await expect(
-    page.getByRole("menuitem", { exact: true, name: "Add" }),
+    page.getByRole("button", { exact: true, name: "Add" }),
   ).toBeVisible();
   const before = (await smokeCalls(page)).filter(
     (call) => call.command === "list_profiles",

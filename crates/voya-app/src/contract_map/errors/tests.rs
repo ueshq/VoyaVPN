@@ -119,7 +119,6 @@ fn database_failures_keep_their_code_and_reset_hint() {
 fn the_same_database_failure_is_classified_identically_through_every_manager() {
     let mapped: Vec<AppError> = vec![
         ProfileManagerError::Database(db_row_error()).into(),
-        crate::node_groups::NodeGroupError::Database(db_row_error()).into(),
         SubscriptionManagerError::Database(db_row_error()).into(),
         RoutingManagerError::Database(db_row_error()).into(),
         ExportManagerError::Database(db_row_error()).into(),
@@ -860,47 +859,4 @@ mod guards {
 /// A core validator finding, for the error mappings that carry one.
 fn validation_message(code: CoreValidationCode) -> voya_core::validation::ValidationMessage {
     voya_core::validation::ValidationMessage::new(code)
-}
-
-#[test]
-fn manual_group_failures_are_classified() {
-    use crate::node_groups::NodeGroupError as E;
-    assert_kinds(vec![
-        (
-            "empty",
-            E::EmptyName,
-            "validation",
-            AppErrorSubsystem::Group,
-        ),
-        (
-            "duplicate",
-            E::DuplicateName,
-            "validation",
-            AppErrorSubsystem::Group,
-        ),
-        (
-            "duplicate assignment",
-            E::DuplicateAssignment,
-            "validation",
-            AppErrorSubsystem::Group,
-        ),
-        (
-            "move",
-            E::InvalidMove,
-            "validation",
-            AppErrorSubsystem::Group,
-        ),
-        (
-            "missing group",
-            E::GroupNotFound("g".into()),
-            "notFound",
-            AppErrorSubsystem::Group,
-        ),
-        (
-            "missing node",
-            E::ProfileNotFound("p".into()),
-            "notFound",
-            AppErrorSubsystem::Group,
-        ),
-    ]);
 }

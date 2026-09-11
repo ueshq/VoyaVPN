@@ -1214,22 +1214,6 @@ mod tests {
             .set_sort("active", 20)
             .await
             .expect("subscription manager test operation should succeed");
-        let groups = crate::node_groups::NodeGroupManager::new(&database);
-        let survivor_group = groups.save(None, "Survivor").await.expect("folder");
-        let removed_group = groups.save(None, "Removed").await.expect("folder");
-        groups
-            .assign(&[
-                voya_contracts::NodeGroupAssignment {
-                    profile_id: "active".into(),
-                    group_id: Some(survivor_group.id.clone()),
-                },
-                voya_contracts::NodeGroupAssignment {
-                    profile_id: original_index_id.clone(),
-                    group_id: Some(removed_group.id),
-                },
-            ])
-            .await
-            .expect("memberships");
         config.index_id = "active".to_string();
 
         let result = manager
@@ -1252,10 +1236,6 @@ mod tests {
         assert_eq!(profiles.len(), 1);
         assert_eq!(profiles[0].0.index_id, "active");
         assert_eq!(profiles[0].0.remarks, "Imported");
-        let memberships = groups.list().await.expect("folders").memberships;
-        assert_eq!(memberships.len(), 1);
-        assert_eq!(memberships[0].profile_id, "active");
-        assert_eq!(memberships[0].group_id, survivor_group.id);
         assert_eq!(profiles[0].1.sort, 20);
     }
 
