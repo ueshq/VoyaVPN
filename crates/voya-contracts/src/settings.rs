@@ -3,26 +3,11 @@ use specta::Type;
 
 use crate::{SystemProxyType, TrafficMode, CURRENT_SCHEMA_VERSION};
 
-// LOAD-BEARING FOR PERSISTENCE, not just for IPC.
-//
-// `voya_db::SettingsRepository` stores this exact type as the JSON payload of
-// `app_settings`, so this struct and every nested settings struct below is also
-// the on-disk schema of every installed database. They all carry
-// `deny_unknown_fields`, which makes both directions breaking: removing or
-// renaming a field rejects payloads written by earlier builds, and adding one
-// without `#[serde(default)]` rejects them for the missing key. Either way
-// `load()` fails for existing installs, `AppServices::load_config` propagates
-// it out of `setup()`, and the app cannot launch.
-//
-// So: add fields with `#[serde(default)]`. When one really has to go or be
-// renamed, handle the stored key in voya-db's `normalize_retired_keys`, which
-// `SettingsRepository::load` applies before serde sees the stored JSON. voya-db pins both the current layout and a
-// row from before the last such removal against checked-in fixtures
-// (`crates/voya-db/fixtures/app_settings_v1.json` and
-// `app_settings_v1_retired_keys.json`).
-//
-// Deliberately a plain comment, not a doc comment: specta copies doc comments
-// into `bindings.ts`, and this note is for Rust authors only.
+// Settings use the same strict current shape for IPC and persistence. The
+// database baseline rejects historical installations before reading these DTOs;
+// there are no retired-field conversions. Keep the current settings fixture and
+// generated bindings aligned when changing the contract.
+// Plain comments avoid exporting persistence guidance into TypeScript bindings.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AppSettingsV1 {
@@ -114,7 +99,7 @@ impl Default for CoreSettings {
     fn default() -> Self {
         Self {
             log_enabled: false,
-            log_level: "warning".to_string(),
+            log_level: "warn".to_string(),
             mux_enabled: false,
             default_allow_insecure: false,
             default_fingerprint: String::new(),

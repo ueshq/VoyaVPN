@@ -16,8 +16,6 @@ import { homedir, tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { truthy } from "../lib/common.mjs";
 
-export { isCliEntrypoint, repoRootFromScript, truthy } from "../lib/common.mjs";
-
 export const DEFAULT_SING_BOX_VERSION = "v1.13.14";
 const SING_BOX_REPO = "SagerNet/sing-box";
 const SING_BOX_CORE_DIR = "sing_box";
@@ -225,19 +223,9 @@ export function verifyStagedSingBoxSeed({
     };
   }
 
-  // A seed staged before this table existed, or by hand, cannot be verified.
-  // Re-staging is the default answer, but the escape hatch keeps an offline
-  // developer working: the result is reported as unpinned, which readiness
-  // turns into a stable blocker.
-  const unverifiedAllowed = truthy(env[ALLOW_UNPINNED_SING_BOX_ENV]);
-  const unverified = (code, reason) =>
-    unverifiedAllowed
-      ? { code, manifest: { assetName }, ok: true, pinned: false, reason, staged: true }
-      : { code, ok: false, reason, staged: true };
-
   const manifest = readSingBoxSeedManifest(seedDir);
   if (!manifest) {
-    return unverified("manifest-missing", `${SING_BOX_SEED_MANIFEST} is missing or unreadable`);
+    return { code: "manifest-missing", ok: false, reason: `${SING_BOX_SEED_MANIFEST} is missing or unreadable`, staged: true };
   }
   if (manifest.version !== version) {
     return {
@@ -257,6 +245,10 @@ export function verifyStagedSingBoxSeed({
   }
 
   const status = singBoxPinStatus({ arch, env, platform, version });
+  if (!/^[a-f0-9]{64}$/i.test(String(manifest.sha256 ?? "")) ||
+      !/^[a-f0-9]{64}$/i.test(String(manifest.executableSha256 ?? ""))) {
+    return { code: "manifest-invalid", ok: false, reason: `${SING_BOX_SEED_MANIFEST} must contain archive and executable SHA-256 digests`, staged: true };
+  }
   if (status.pinned && manifest.sha256 !== status.expected) {
     return {
       code: "archive-digest-mismatch",
@@ -270,9 +262,6 @@ export function verifyStagedSingBoxSeed({
   }
 
   const executable = join(seedDir, executableName);
-  if (!/^[a-f0-9]{64}$/i.test(String(manifest.executableSha256 ?? ""))) {
-    return unverified("manifest-legacy", `${SING_BOX_SEED_MANIFEST} predates executable digest pinning`);
-  }
   const actual = sha256OfFile(executable);
   if (actual.toLowerCase() !== String(manifest.executableSha256).toLowerCase()) {
     return {

@@ -1180,7 +1180,7 @@ export async function installTauriSmokeMock(
           defaultUserAgent: "",
           fragmentEnabled: false,
           logEnabled: false,
-          logLevel: "warning",
+          logLevel: "warn",
           muxEnabled: false,
           sendThrough: null as string | null,
         },

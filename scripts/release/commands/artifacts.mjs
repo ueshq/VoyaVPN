@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import { parseArgs } from "../../lib/args.mjs";
-import { repoRootFromScript } from "../../lib/common.mjs";
+import { readPackageVersion, repoRootFromScript } from "../../lib/common.mjs";
 import { isStableChannel, placeholderText, sha256File, sha256Text } from "../validation.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
@@ -65,11 +65,6 @@ Options:
 The designated Tauri 2 updater payload (Windows NSIS -setup.exe, Linux .AppImage,
 macOS .app.tar.gz with a sibling .sig) is marked \`updaterPayload: true\` in the
 manifest; a stable collection fails when the bundle has none.`);
-}
-
-async function readPackageVersion() {
-  const packageJson = JSON.parse(await readFile(resolve(repoRoot, "package.json"), "utf8"));
-  return packageJson.version;
 }
 
 async function walkFiles(root) {
@@ -275,7 +270,7 @@ async function main(argv = []) {
     throw new Error("--target is required");
   }
 
-  const version = options.version ?? (await readPackageVersion());
+  const version = options.version ?? (await readPackageVersion(repoRoot));
   const inputDir = resolve(repoRoot, options.input);
   const outputDir = resolve(repoRoot, options.output);
   const productSlug = slugify(options.product);

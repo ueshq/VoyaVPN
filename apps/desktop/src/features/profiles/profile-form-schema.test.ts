@@ -7,7 +7,7 @@ import type {
   TlsSettings,
 } from "@/ipc/bindings";
 
-import { profileValidationMessage } from "./profile-form-errors";
+import { profileValidationMessage } from "./profile-form-utils";
 import {
   createDefaultProfile,
   activeProfileFormValues,

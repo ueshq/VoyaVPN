@@ -207,8 +207,6 @@ pub fn profile_list_to_contract(item: ProfileListItem) -> ProfileListEntry {
         metrics: ProfileMetrics {
             delay_ms: item.profile_ex.delay,
             sort: item.profile_ex.sort,
-            // The column still holds whatever the build that last wrote it
-            // stored, prose included; `from_stored` is where that is decided.
             outcome: item
                 .profile_ex
                 .message

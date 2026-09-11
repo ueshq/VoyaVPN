@@ -22,7 +22,7 @@ import {
   sha256Text,
   walkArtifactManifests,
 } from "../validation.mjs";
-import { stableCoreTypes, stableTargets } from "../matrix.mjs";
+import { stableTargets } from "../matrix.mjs";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = repoRootFromScript(import.meta.url);
@@ -811,22 +811,7 @@ function validateCoreManifest(manifest, cdnBaseUrl) {
   assert(manifest.baseUrl === cdnBaseUrl, "core manifest baseUrl must match readiness CDN base URL");
   assert(Array.isArray(manifest.assets), "core manifest assets[] must be an array");
 
-  const present = new Set(manifest.assets.map((asset) => `${asset.coreType}/${asset.os}/${asset.arch}`));
-  const missing = missingExpectedValues(
-    stableCoreTypes.flatMap((coreType) => stableTargets.map((target) => `${coreType}/${target.os}/${target.arch}`)),
-    present,
-  );
-  assert(missing.length === 0, `core manifest is missing first-stable asset(s): ${missing.join(", ")}`);
-
-  for (const asset of manifest.assets) {
-    assert(stableCoreTypes.includes(asset.coreType), `core asset type is not supported in stable releases: ${asset.coreType}`);
-    assert(isUrlDerivedFromBase(asset.url, cdnBaseUrl), `core asset URL is not CDN-derived: ${asset.name}`);
-    assert(!/github\.com|voyavpn\.example|placeholder/i.test(asset.url), `core asset production URL is forbidden: ${asset.url}`);
-    assert(isPositiveByteSize(asset.bytes), `core asset has invalid bytes: ${asset.name}`);
-    assert(isSha256Hex(asset.sha256), `core asset has invalid sha256: ${asset.name}`);
-    assert(Array.isArray(asset.executableCandidates) && asset.executableCandidates.length > 0, `core asset has no executable candidates: ${asset.name}`);
-    assert(typeof asset.upstreamUrl === "string" && asset.upstreamUrl.length > 0, `core asset has no upstream URL: ${asset.name}`);
-  }
+  assert(manifest.assets.length === 0, "downloadable core assets are not supported; sing-box is bundled with the application");
 }
 
 function safeRelativePath(value, context) {

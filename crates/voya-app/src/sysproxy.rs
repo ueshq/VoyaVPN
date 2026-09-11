@@ -82,7 +82,7 @@ impl SystemProxyManager {
     ) -> Result<SystemProxyStatus, SystemProxyManagerError> {
         let request = self.request(config, force_disable)?;
         let mut status = self.service.status(&request)?;
-        self.decorate_manual_status(&mut status)?;
+        Self::decorate_manual_status(&mut status);
         Ok(status)
     }
 
@@ -98,7 +98,7 @@ impl SystemProxyManager {
         }
 
         let mut status = self.service.apply(&request)?;
-        self.decorate_manual_status(&mut status)?;
+        Self::decorate_manual_status(&mut status);
         if status.management == SystemProxyManagement::Automatic
             && status.effective_type == SysProxyType::ForcedClear
         {
@@ -129,7 +129,7 @@ impl SystemProxyManager {
         let mut request = self.request(config, false)?;
         request.item.sys_proxy_type = SysProxyType::ForcedClear;
         let mut status = self.service.apply(&request)?;
-        self.decorate_manual_status(&mut status)?;
+        Self::decorate_manual_status(&mut status);
         if status.management == SystemProxyManagement::Automatic
             && status.effective_type == SysProxyType::ForcedClear
         {
@@ -139,41 +139,21 @@ impl SystemProxyManager {
         Ok(true)
     }
 
-    fn decorate_manual_status(
-        &self,
-        status: &mut SystemProxyStatus,
-    ) -> Result<(), SystemProxyManagerError> {
+    fn decorate_manual_status(status: &mut SystemProxyStatus) {
         if status.management == SystemProxyManagement::Manual {
-            status.manual_cleanup_required = self.dirty_marker_exists()?
-                || status.observation == SystemProxyObservation::LocalProxy;
-        }
-        Ok(())
-    }
-
-    pub fn recheck_manual_proxy(
-        &self,
-        config: &AppConfig,
-    ) -> Result<SystemProxyStatus, SystemProxyManagerError> {
-        let mut status = self.status(config)?;
-        if status.management == SystemProxyManagement::Manual
-            && matches!(
+            status.manual_cleanup_required = matches!(
                 status.observation,
-                SystemProxyObservation::Clear | SystemProxyObservation::OtherProxy
-            )
-        {
-            self.clear_dirty_marker()?;
-            status.manual_cleanup_required = false;
+                SystemProxyObservation::LocalProxy | SystemProxyObservation::Unknown
+            );
         }
-        Ok(status)
     }
 
-    /// An exit request also rechecks settings, so a verified cleanup does not
-    /// require returning to Home just to retire a legacy marker.
+    /// Every exit request observes current system settings before prompting.
     pub fn manual_exit_warning(
         &self,
         config: &AppConfig,
     ) -> Result<Option<ManualProxyExitWarning>, SystemProxyManagerError> {
-        let status = self.recheck_manual_proxy(config)?;
+        let status = self.status(config)?;
         if status.management != SystemProxyManagement::Manual {
             return Ok(None);
         }
@@ -427,10 +407,7 @@ mod tests {
                     warning,
                     "{observation:?}, legacy marker: {legacy_marker}",
                 );
-                assert_eq!(
-                    manager.dirty_marker_path().exists(),
-                    legacy_marker && warning.is_some(),
-                );
+                assert_eq!(manager.dirty_marker_path().exists(), legacy_marker,);
                 // Checking before confirmation must keep the connection and
                 // PAC running and must never write system network settings.
                 assert!(runner.oneshots().is_empty());
@@ -464,7 +441,6 @@ mod tests {
             TargetOs::Macos,
         );
         let config = AppConfig::default();
-        manager.write_dirty_marker().expect("legacy marker");
         assert_eq!(
             manager.manual_exit_warning(&config).expect("first exit"),
             Some(ManualProxyExitWarning::LocalProxy),
@@ -476,7 +452,7 @@ mod tests {
     }
 
     #[test]
-    fn manual_recovery_never_executes_or_clears_an_unverified_marker() {
+    fn manual_proxy_status_ignores_historical_markers() {
         for observation in [
             SystemProxyObservation::Unknown,
             SystemProxyObservation::LocalProxy,
@@ -498,26 +474,20 @@ mod tests {
             assert!(!manager
                 .restore_dirty_proxy_if_needed(&config)
                 .expect("startup"));
-            assert!(
-                manager
-                    .restore(&config)
-                    .expect("disconnect")
-                    .manual_cleanup_required
-            );
-            assert!(
-                manager
-                    .status(&config)
-                    .expect("read")
-                    .manual_cleanup_required
-            );
-            assert!(manager.dirty_marker_path().exists());
-            let status = manager.recheck_manual_proxy(&config).expect("recheck");
             let pending = matches!(
                 observation,
                 SystemProxyObservation::Unknown | SystemProxyObservation::LocalProxy
             );
-            assert_eq!(status.manual_cleanup_required, pending);
-            assert_eq!(manager.dirty_marker_path().exists(), pending);
+            for status in [manager.restore(&config), manager.status(&config)] {
+                assert_eq!(
+                    status.expect("observation").manual_cleanup_required,
+                    pending
+                );
+            }
+            assert_eq!(
+                fs::read(manager.dirty_marker_path()).expect("untouched marker"),
+                SYSPROXY_DIRTY_MARKER_CONTENTS
+            );
             assert!(runner.oneshots().is_empty());
             let _ = fs::remove_dir_all(app_dir);
         }

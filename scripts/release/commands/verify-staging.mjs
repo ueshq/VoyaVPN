@@ -21,7 +21,7 @@ import {
   verifyTauriUpdaterSignature,
   verifyTauriUpdaterSignatureFile,
 } from "../updater-signatures.mjs";
-import { stableCoreTypes, stableTargets } from "../matrix.mjs";
+import { stableTargets } from "../matrix.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const stableUpdaterTargets = stableTargets
@@ -31,8 +31,6 @@ const releaseTargetNames = stableTargets
   .map((target) => target.releaseTarget)
   .sort((left, right) => left.localeCompare(right));
 const releaseTargetSet = new Set(releaseTargetNames);
-const stableOs = [...new Set(stableTargets.map((target) => target.os))];
-const stableArchs = [...new Set(stableTargets.map((target) => target.arch))];
 const releaseTargetEntries = stableTargets.map(({ releaseTarget, os, arch }) => ({
   releaseTarget,
   target: os,
@@ -519,69 +517,12 @@ function validateCoreManifest(manifest, rawOptions = {}) {
     failures.push("core manifest assets must be an array");
   }
 
-  const seen = new Set();
-  const candidates = [];
-  for (const [assetIndex, asset] of (manifest.assets ?? []).entries()) {
-    const label = `core manifest assets[${assetIndex}]`;
-    const coreType = requiredString(asset.coreType, `${label} coreType`, failures);
-    const os = requiredString(asset.os, `${label} os`, failures);
-    const arch = requiredString(asset.arch, `${label} arch`, failures);
-    if (coreType && !stableCoreTypes.includes(coreType)) {
-      failures.push(`${label} coreType is not supported by the stable release`);
-    }
-    if (os && !stableOs.includes(os)) {
-      failures.push(`${label} os must be one of ${stableOs.join(", ")}`);
-    }
-    if (arch && !stableArchs.includes(arch)) {
-      failures.push(`${label} arch must be one of ${stableArchs.join(", ")}`);
-    }
-    if (coreType && os && arch) {
-      const key = `${coreType}/${os}/${arch}`;
-      if (seen.has(key)) {
-        failures.push(`core manifest has duplicate entry for ${key}`);
-      }
-      seen.add(key);
-    }
-
-    requiredString(asset.version, `${label} version`, failures);
-    requiredString(asset.license, `${label} license`, failures);
-    requiredString(asset.name, `${label} name`, failures);
-    const bytes = requiredBytes(asset.bytes, `${label} bytes`, failures);
-    const sha256 = requiredSha256(asset.sha256, `${label} sha256`, failures);
-    const parsed = assertAllowedUrl(asset.url, `${label} url`, baseUrl, options, failures);
-    if (asset.upstreamUrl) {
-      try {
-        new URL(asset.upstreamUrl);
-      } catch {
-        failures.push(`${label} upstreamUrl is not a valid URL`);
-      }
-    }
-    if (parsed && bytes && sha256) {
-      candidates.push({ label, url: parsed.toString(), bytes, sha256 });
-    }
-  }
-
-  const missing = [];
-  for (const coreType of stableCoreTypes) {
-    for (const os of stableOs) {
-      for (const arch of stableArchs) {
-        const key = `${coreType}/${os}/${arch}`;
-        if (!seen.has(key)) {
-          missing.push(key);
-        }
-      }
-    }
-  }
-  if (missing.length > 0) {
-    failures.push(`core manifest is missing required entries: ${missing.join(", ")}`);
+  if (Array.isArray(manifest.assets) && manifest.assets.length !== 0) {
+    failures.push("downloadable core assets are not supported; sing-box is bundled with the application");
   }
   assertNoFailures("core manifest", failures);
 
-  return {
-    assetCount: manifest.assets.length,
-    coreTypes: stableCoreTypes.filter((coreType) => manifest.assets.some((asset) => asset.coreType === coreType)),
-    candidates,
-  };
+  return { assetCount: 0, coreTypes: [], candidates: [] };
 }
 
 async function fetchWithTimeout(url, init, timeoutMs) {

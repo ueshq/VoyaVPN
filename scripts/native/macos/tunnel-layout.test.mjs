@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -11,6 +11,7 @@ import {
   packagingModeForDistribution,
   requiredNetworkExtensionValue,
   resolvePacketTunnelVersions,
+  resolveDmgPath,
 } from "./tunnel-layout.mjs";
 
 describe("Libbox framework layout", () => {
@@ -106,5 +107,46 @@ describe("PacketTunnel version fields", () => {
 
   it("refuses to guess when no version is available at all", () => {
     expect(() => resolvePacketTunnelVersions({})).toThrow(/Unable to resolve a PacketTunnel version/u);
+  });
+});
+
+describe("macOS DMG artifact paths", () => {
+  const options = {
+    appContents: "/Applications/VoyaVPN.app/Contents",
+    dmgDir: "/tmp/voya-dmg",
+    version: "1.2.3",
+    env: {},
+  };
+
+  it.each([
+    ["arm64", "aarch64"],
+    ["x86_64", "x64"],
+    ["x86_64 arm64\n", "universal"],
+    ["", "aarch64"],
+  ])("names the image from bundle architectures %j", (archs, suffix) => {
+    const captureCommand = vi.fn()
+      .mockReturnValueOnce({ stdout: "VoyaVPN\n" })
+      .mockReturnValueOnce({ stdout: archs });
+    expect(resolveDmgPath({ ...options, hostArch: "arm64", captureCommand }))
+      .toBe(`/tmp/voya-dmg/VoyaVPN_1.2.3_${suffix}.dmg`);
+    expect(captureCommand).toHaveBeenLastCalledWith(
+      "lipo", ["-archs", "/Applications/VoyaVPN.app/Contents/MacOS/VoyaVPN"], { env: options.env },
+    );
+  });
+
+  it("honors explicit path and architecture without reading the bundle", () => {
+    const captureCommand = vi.fn();
+    expect(resolveDmgPath({
+      ...options, captureCommand,
+      env: { VOYAVPN_MACOS_DMG_PATH: " /tmp/custom.dmg ", VOYAVPN_MACOS_DMG_ARCH: "ignored" },
+    })).toBe("/tmp/custom.dmg");
+    expect(resolveDmgPath({ ...options, captureCommand, env: { VOYAVPN_MACOS_DMG_ARCH: " universal " } }))
+      .toBe("/tmp/voya-dmg/VoyaVPN_1.2.3_universal.dmg");
+    expect(captureCommand).not.toHaveBeenCalled();
+  });
+
+  it("reports bundle inspection failures before selecting an artifact", () => {
+    const captureCommand = vi.fn(() => { throw new Error("cannot inspect bundle"); });
+    expect(() => resolveDmgPath({ ...options, captureCommand })).toThrow("cannot inspect bundle");
   });
 });

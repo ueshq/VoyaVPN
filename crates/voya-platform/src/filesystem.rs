@@ -96,32 +96,6 @@ pub fn file_exists(path: &Path) -> io::Result<bool> {
     }
 }
 
-/// Rejects a retired standalone configuration without modifying it.
-pub fn reject_incompatible_config(path: &Path, expected_schema_version: u32) -> io::Result<()> {
-    if !file_exists(path)? {
-        return Ok(());
-    }
-
-    Err(io::Error::new(
-        io::ErrorKind::InvalidData,
-        format!(
-            "unsupported configuration at {}; expected database schema version {expected_schema_version}; remove it manually with: {}",
-            path.display(),
-            manual_remove_command(path),
-        ),
-    ))
-}
-
-#[cfg(windows)]
-fn manual_remove_command(path: &Path) -> String {
-    format!("Remove-Item -LiteralPath '{}'", path.display())
-}
-
-#[cfg(not(windows))]
-fn manual_remove_command(path: &Path) -> String {
-    format!("rm -- '{}'", path.display())
-}
-
 pub fn remove_matching_files(dir: &Path, prefix: &str, suffix: &str) -> io::Result<Vec<PathBuf>> {
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
@@ -261,31 +235,5 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .map_or(0, |duration| duration.as_nanos());
         std::env::temp_dir().join(format!("voyavpn-{name}-{}-{nonce}", std::process::id()))
-    }
-
-    #[test]
-    fn incompatible_configuration_is_rejected_without_modification() {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |duration| duration.as_nanos());
-        let path = std::env::temp_dir().join(format!(
-            "voya-incompatible-config-{}-{nonce}.json",
-            std::process::id()
-        ));
-        let original = b"retired configuration";
-        fs::write(&path, original).expect("test fixture should be writable");
-
-        let error = reject_incompatible_config(&path, 1)
-            .expect_err("retired configuration must be rejected");
-        let message = error.to_string();
-        assert!(message.contains(path.to_string_lossy().as_ref()));
-        assert!(message.contains("schema version 1"));
-        assert!(message.contains("remove it manually"));
-        assert_eq!(
-            fs::read(&path).expect("fixture must remain readable"),
-            original
-        );
-
-        fs::remove_file(path).expect("test fixture should be removable");
     }
 }

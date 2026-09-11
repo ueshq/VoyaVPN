@@ -3,8 +3,8 @@ import { resolve, win32 } from "node:path";
 
 import {
   capture,
+  checkedCapture,
   environmentValue,
-  commandFailure,
   isCliEntrypoint,
   repoRootFromScript,
   run,
@@ -37,17 +37,6 @@ const localBuildEnvNames = [
   "WINDOWS_CERTIFICATE_BASE64",
   "WINDOWS_CERTIFICATE_PASSWORD",
 ];
-
-function captureChecked(captureCommand, program, args, options) {
-  const result = captureCommand(program, args, options);
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    throw commandFailure(program, args, result);
-  }
-  return result;
-}
 
 function trimWindowsPath(value) {
   const trimmed = String(value ?? "").trim().replace(/^"|"$/g, "");
@@ -130,11 +119,11 @@ export function assertRustTargetInstalled({
 } = {}) {
   let result;
   try {
-    result = captureChecked(
-      captureCommand,
+    result = checkedCapture(
       "rustc",
       ["--print", "target-libdir", "--target", rustTarget],
       { env, encoding: "utf8", windowsHide: true },
+      captureCommand,
     );
   } catch (error) {
     throw new Error(rustMsvcPrerequisiteMessage(rustTarget), { cause: error });
@@ -209,11 +198,11 @@ export function assertSafeExistingInstalls(entries, expectedAppPath) {
 export function readExistingWindowsInstalls({ env = process.env, captureCommand = capture } = {}) {
   const executable = powershellExecutable(env);
   const args = ["-NoProfile", "-NonInteractive", "-Command", powershellJsonScript()];
-  const result = captureChecked(captureCommand, executable, args, {
+  const result = checkedCapture(executable, args, {
     env,
     encoding: "utf8",
     windowsHide: true,
-  });
+  }, captureCommand);
   const output = String(result.stdout ?? "").trim();
   if (!output) {
     return [];
@@ -227,11 +216,11 @@ export function readExistingWindowsInstalls({ env = process.env, captureCommand 
 }
 
 export function assertWindowsGuiStopped({ env = process.env, captureCommand = capture } = {}) {
-  const result = captureChecked(
-    captureCommand,
+  const result = checkedCapture(
     "tasklist.exe",
     ["/FI", `IMAGENAME eq ${mainExecutableName}`, "/NH", "/FO", "CSV"],
     { env, encoding: "utf8", windowsHide: true },
+    captureCommand,
   );
   if (String(result.stdout ?? "").split(/\r?\n/).some((line) => /^"voyavpn\.exe"/i.test(line.trim()))) {
     throw new Error(

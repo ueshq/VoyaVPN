@@ -73,10 +73,6 @@ export function forbiddenHostReason(hostname, { allowTestHosts = false } = {}) {
   return null;
 }
 
-export function isForbiddenStableHost(hostname, options = {}) {
-  return forbiddenHostReason(hostname, options) !== null;
-}
-
 /**
  * Normalizes a release base URL: protocol policy, no embedded credentials, no
  * query string or fragment, no trailing slash, and the shared forbidden-host

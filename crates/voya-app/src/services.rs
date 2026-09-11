@@ -5,7 +5,6 @@
 
 use std::{path::Path, sync::Arc};
 
-use voya_contracts::SystemProxyType;
 pub use voya_core::{AppConfig, CoreType, SysProxyType, TrafficMode, DEFAULT_LOCAL_PORT};
 use voya_db::{Database, DbError};
 use voya_platform::{coreinfo::TargetOs, paths::AppPaths, process::ProcessRunner};
@@ -53,23 +52,8 @@ impl AppServices {
     /// Only the database can fail here: every settings field is typed, so the
     /// projection itself is total.
     pub async fn load_config(&self) -> Result<AppConfig, DbError> {
-        let mut settings = self.database.settings().load().await?;
-        // Retire the former local-only choice without changing an existing TUN
-        // or PAC selection. Only the saved preference changes here; automatic
-        // system proxy management waits until the core connects.
-        if !settings.network.tun.enabled
-            && matches!(
-                settings.network.system_proxy.mode,
-                SystemProxyType::ForcedClear | SystemProxyType::Unchanged
-            )
-        {
-            settings.network.system_proxy.mode = SystemProxyType::ForcedChange;
-        }
+        let settings = self.database.settings().load().await?;
         let state = self.database.app_state().load().await?;
-        self.database
-            .settings()
-            .save_with_state(&settings, &state)
-            .await?;
         Ok(app_config_from_settings(&settings, &state))
     }
 
@@ -209,7 +193,7 @@ impl AppServices {
 mod tests {
     use super::*;
     use crate::settings_save::settings_from_app_config;
-    use voya_contracts::AppSettingsV1;
+    use voya_contracts::{AppSettingsV1, SystemProxyType};
 
     #[tokio::test]
     async fn fresh_database_loads_default_settings_and_reopens() {
@@ -223,6 +207,11 @@ mod tests {
         let services = AppServices::connect(&database_path, runtime_paths.clone())
             .await
             .expect("fresh database should connect");
+        services.database.close().await;
+        let before = std::fs::read(&database_path).expect("fresh database bytes");
+        let services = AppServices::connect(&database_path, runtime_paths.clone())
+            .await
+            .expect("current database should connect");
         let initial = services
             .load_config()
             .await
@@ -233,6 +222,10 @@ mod tests {
         );
         assert!(!initial.tun_mode_item.enable_tun);
         services.database.close().await;
+        assert_eq!(
+            std::fs::read(&database_path).expect("database bytes"),
+            before
+        );
 
         let reopened = AppServices::connect(&database_path, runtime_paths)
             .await
@@ -251,7 +244,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn loading_retires_non_tun_local_only_preferences_and_preserves_other_settings() {
+    async fn loading_preserves_all_current_proxy_preferences_without_rewriting() {
         for mode in [
             SystemProxyType::ForcedClear,
             SystemProxyType::Unchanged,
@@ -259,10 +252,8 @@ mod tests {
             SystemProxyType::Pac,
         ] {
             for tun_enabled in [false, true] {
-                let app_dir = std::env::temp_dir().join(format!(
-                    "voyavpn-mode-upgrade-test-{}",
-                    uuid::Uuid::new_v4()
-                ));
+                let app_dir = std::env::temp_dir()
+                    .join(format!("voyavpn-mode-read-test-{}", uuid::Uuid::new_v4()));
                 let database_path = app_dir.join(voya_db::DATABASE_NAME);
                 let paths = AppPaths::new(&app_dir);
                 let services = AppServices::connect(&database_path, paths.clone())
@@ -277,17 +268,9 @@ mod tests {
                     .settings()
                     .save(&expected)
                     .await
-                    .expect("old settings");
-                if !tun_enabled
-                    && matches!(
-                        mode,
-                        SystemProxyType::ForcedClear | SystemProxyType::Unchanged
-                    )
-                {
-                    expected.network.system_proxy.mode = SystemProxyType::ForcedChange;
-                }
+                    .expect("settings");
 
-                let loaded = services.load_config().await.expect("upgraded settings");
+                let loaded = services.load_config().await.expect("settings read");
                 assert_eq!(settings_from_app_config(&loaded), expected);
                 assert_eq!(
                     services
@@ -295,20 +278,22 @@ mod tests {
                         .settings()
                         .load()
                         .await
-                        .expect("persisted upgrade"),
+                        .expect("stored settings"),
                     expected
                 );
                 services.database.close().await;
 
+                let before = std::fs::read(&database_path).expect("database bytes");
                 let reopened = AppServices::connect(&database_path, paths)
                     .await
                     .expect("reopen");
-                let reloaded = reopened
-                    .load_config()
-                    .await
-                    .expect("reload upgraded settings");
+                let reloaded = reopened.load_config().await.expect("reload settings");
                 assert_eq!(settings_from_app_config(&reloaded), expected);
                 reopened.database.close().await;
+                assert_eq!(
+                    std::fs::read(&database_path).expect("database bytes"),
+                    before
+                );
                 std::fs::remove_dir_all(app_dir).expect("remove test database");
             }
         }

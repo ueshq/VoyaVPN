@@ -21,7 +21,7 @@ use voya_platform::{
     paths::{AppPaths, PathError},
 };
 
-use crate::coregen::{SnapshotCoreGenData, SnapshotCoreGenEnv};
+use crate::coregen::SnapshotCoreGenEnv;
 use crate::supervisor::{
     ClashApiSecret, CoreProcessSpec, CoreSupervisor, SupervisorConnectionState, SupervisorError,
     SupervisorSnapshot, SupervisorStartRequest,
@@ -448,10 +448,8 @@ pub(crate) async fn load_runtime_core_gen_env(
     Ok(SnapshotCoreGenEnv::new(
         config,
         core_gen_platform(target_os),
-        SnapshotCoreGenData {
-            profiles: database.profiles().list().await?,
-            routings: database.routings().list().await?,
-        },
+        database.profiles().list().await?,
+        database.routings().list().await?,
     )
     .with_singbox_ruleset_paths(local_singbox_ruleset_paths(paths)))
 }
@@ -593,10 +591,8 @@ mod tests {
         let env = SnapshotCoreGenEnv::new(
             &config,
             CoreGenPlatform::Linux,
-            SnapshotCoreGenData {
-                profiles: vec![profile.clone()],
-                ..SnapshotCoreGenData::default()
-            },
+            vec![profile.clone()],
+            Vec::new(),
         );
 
         let contexts = runtime_config_contexts(&env, &config, &profile, TargetOs::Linux);
@@ -642,10 +638,8 @@ mod tests {
         let env = SnapshotCoreGenEnv::new(
             &config,
             CoreGenPlatform::Linux,
-            SnapshotCoreGenData {
-                profiles: vec![profile.clone()],
-                ..SnapshotCoreGenData::default()
-            },
+            vec![profile.clone()],
+            Vec::new(),
         );
 
         let contexts = runtime_config_contexts(&env, &config, &profile, TargetOs::Linux);
@@ -782,10 +776,8 @@ mod tests {
         let env = SnapshotCoreGenEnv::new(
             &config,
             CoreGenPlatform::Linux,
-            SnapshotCoreGenData {
-                profiles: vec![profile.clone()],
-                routings: vec![routing],
-            },
+            vec![profile.clone()],
+            vec![routing],
         );
 
         let contexts = runtime_config_contexts(&env, &config, &profile, TargetOs::Linux);
@@ -813,10 +805,8 @@ mod tests {
         let env = SnapshotCoreGenEnv::new(
             &config,
             CoreGenPlatform::MacOS,
-            SnapshotCoreGenData {
-                profiles: vec![profile.clone()],
-                ..SnapshotCoreGenData::default()
-            },
+            vec![profile.clone()],
+            Vec::new(),
         );
 
         for contexts in [

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatBytes, formatBytesPerSecond, formatDelay, formatSpeed, formatTraffic } from "./formatting";
+import { formatBytes, formatBytesPerSecond, formatDelay } from "./formatting";
 
 describe("formatting", () => {
   it("formats byte counts with shared binary units", () => {
@@ -11,20 +11,17 @@ describe("formatting", () => {
   });
 
   it("formats live byte rates with the sidebar speed-row precision", () => {
-    expect(formatBytesPerSecond(512)).toBe("512 B/s");
+    expect(formatBytesPerSecond(0)).toBe("0 B/s");
+    expect(formatBytesPerSecond(512.6)).toBe("513 B/s");
+    expect(formatBytesPerSecond(1024)).toBe("1.0 KB/s");
     expect(formatBytesPerSecond(2048)).toBe("2.0 KB/s");
     expect(formatBytesPerSecond(10 * 1024)).toBe("10 KB/s");
+    expect(formatBytesPerSecond(1024 ** 2)).toBe("1.0 MB/s");
+    expect(formatBytesPerSecond(1024 ** 3)).toBe("1.0 GB/s");
+    expect(formatBytesPerSecond(1024 ** 4)).toBe("1024 GB/s");
   });
 
-  it("formats speedtest speed values while hiding empty values", () => {
-    expect(formatSpeed(null)).toBe("");
-    expect(formatSpeed(0)).toBe("");
-    expect(formatSpeed(768)).toBe("768 B/s");
-    expect(formatSpeed(2048)).toBe("2.0 KB/s");
-    expect(formatSpeed(10 * 1024)).toBe("10.0 KB/s");
-  });
-
-  it("formats delays with an optional fallback", () => {
+  it("hides absent or unsuccessful latency measurements", () => {
     expect(formatDelay(42)).toBe("42 ms");
     expect(formatDelay(0)).toBe("");
     expect(formatDelay(null)).toBe("");
@@ -32,10 +29,4 @@ describe("formatting", () => {
     expect(formatDelay(-1)).toBe("");
   });
 
-  it("formats traffic while hiding empty values", () => {
-    expect(formatTraffic(undefined)).toBe("");
-    expect(formatTraffic(0)).toBe("");
-    expect(formatTraffic(1536)).toBe("1.5 KB");
-    expect(formatTraffic(10 * 1024)).toBe("10 KB");
-  });
 });

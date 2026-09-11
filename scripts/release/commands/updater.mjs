@@ -1,7 +1,7 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { parseArgs } from "../../lib/args.mjs";
-import { repoRootFromScript } from "../../lib/common.mjs";
+import { readPackageVersion, repoRootFromScript } from "../../lib/common.mjs";
 import { resolveApprovedUpdaterPublicKey, verifyTauriUpdaterSignatureFile } from "../updater-signatures.mjs";
 import { stableTargets } from "../matrix.mjs";
 import {
@@ -71,11 +71,6 @@ Options:
   --target <platform[,..]>     Platform key to include when no manifest exists
   --placeholder-signatures     Emit dry-run placeholder updater URLs and signatures.
                                Stable rejects this option and requires signed payloads.`);
-}
-
-async function readPackageVersion() {
-  const packageJson = JSON.parse(await readFile(resolve(repoRoot, "package.json"), "utf8"));
-  return packageJson.version;
 }
 
 function normalizeBaseUrl(baseUrl, channel) {
@@ -308,7 +303,7 @@ async function main(argv = []) {
     throw new Error("Stable updater metadata cannot use --placeholder-signatures; use a dry-run channel for placeholders.");
   }
 
-  const version = options.version ?? (await readPackageVersion());
+  const version = options.version ?? (await readPackageVersion(repoRoot));
   const baseUrl = resolveBaseUrl(options);
   const notes = options.notes ?? `VoyaVPN ${version} ${options.channel} release`;
   const pubDate = options.pubDate ?? new Date().toISOString();

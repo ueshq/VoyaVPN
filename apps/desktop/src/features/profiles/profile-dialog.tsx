@@ -26,7 +26,7 @@ import {
   SelectField,
   TextField,
 } from "./profile-form-fields";
-import { profileValidationMessage } from "./profile-form-errors";
+import { profileValidationMessage } from "./profile-form-utils";
 import {
   createDefaultProfile,
   normalizeProfileForForm,

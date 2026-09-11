@@ -5,7 +5,7 @@ import {
   changeLocale,
   getInitialLocale,
   i18next,
-  localeOptions,
+  isLocale,
   type Locale,
 } from "@voya/i18n";
 import { loadUiPreferences } from "@/ipc/commands";
@@ -85,8 +85,4 @@ export async function applyUiPreferences(
   }
   // A cache refresh or an older save must not replace the user's newer preview.
   if (persist && preview) await applyUiPreferences(preview.preferences, { persist: false });
-}
-
-function isLocale(value: string): value is Locale {
-  return localeOptions.some((locale) => locale.code === value);
 }

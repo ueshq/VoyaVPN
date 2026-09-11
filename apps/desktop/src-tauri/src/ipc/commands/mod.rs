@@ -71,7 +71,6 @@ const IPC_LIST_MAX_ITEMS: usize = 1024;
 mod app;
 mod connection;
 mod connection_mode;
-mod core_flow;
 mod dns;
 mod lifecycle;
 mod node_groups;
@@ -102,6 +101,6 @@ pub use sysproxy::*;
 pub use tun::*;
 pub use updates::*;
 
-pub(crate) use core_flow::core_flow;
 pub(crate) use lifecycle::emit_subscription_invalidation;
+pub(crate) use runtime::core_flow;
 pub(crate) use support::{emit_app_log, emit_core_log};

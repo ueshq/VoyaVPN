@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -35,6 +35,20 @@ describe("core asset manifest", () => {
     expect(manifest.assets).toEqual([]);
     expect(evidence.assetCount).toBe(0);
     expect(evidence.validations.githubUrlsOnlyInUpstreamReferences).toBe(true);
+  });
+
+  it.each(["stable", "beta"])("rejects standalone core downloads for %s", async (channel) => {
+    const outputDir = await mkdtemp(join(tmpdir(), "voyavpn-core-assets-rejected-"));
+    temporaryDirectories.push(outputDir);
+    const fixture = join(outputDir, "source.json");
+    const output = join(outputDir, "core-assets.json");
+    await writeFile(fixture, JSON.stringify({ assets: [{ coreType: "sing_box" }] }));
+
+    await expect(main([
+      "--fixture", fixture, "--out", output, "--channel", channel,
+      "--base-url", "https://cdn.voyavpn.dev/stable",
+    ])).rejects.toThrow(/not supported/);
+    await expect(readFile(output)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("fails closed for a GitHub stable CDN base", async () => {

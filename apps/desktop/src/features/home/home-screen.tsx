@@ -1,26 +1,35 @@
 import { useRef, useState } from "react";
-import { ChevronRight, ArrowRight } from "lucide-react";
-import { NodeCountryIcon } from "@/components/node-country-icon";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowRight, ChevronRight, Power } from "lucide-react";
 
-import worldMap from "@/assets/world-map.svg";
+import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { SubscriptionsDialog } from "@/features/subscriptions/subscriptions-dialog";
-
-import { profileNameWithoutFlag } from "@/features/profiles/profile-display";
-import { getProtocolLabel } from "@/features/profiles/profile-constants";
+import { Button } from "@voya/ui/components/button";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@voya/ui/components/dialog";
+import { Label } from "@voya/ui/components/label";
+import { Switch } from "@voya/ui/components/switch";
 import { cn } from "@voya/ui/lib/utils";
 
-import { ConnectButton } from "./connect-button";
-import { ConnectedInfo } from "./connected-info";
-import { ConnectionModeSwitcher } from "./connection-mode-switcher";
-import { TrafficModeSwitcher } from "./traffic-mode-switcher";
-import { ConnectionDetailsDialog } from "./home-dialogs";
-import { useHomeRuntime } from "./use-home-runtime";
-import { useShellStore } from "@/stores/shell-store";
-import { Button } from "@voya/ui/components/button";
+import worldMap from "@/assets/world-map.svg";
+import { NodeCountryIcon } from "@/components/node-country-icon";
+import { getProtocolLabel } from "@/features/profiles/profile-constants";
+import { profileNameWithoutFlag } from "@/features/profiles/profile-display";
+import { SubscriptionsDialog } from "@/features/subscriptions/subscriptions-dialog";
 import { loadAppSettings } from "@/ipc/commands";
 import { queryKeys } from "@/ipc/query-keys";
-import { useQuery } from "@tanstack/react-query";
+import { useShellStore } from "@/stores/shell-store";
+
+import { ConnectedInfo } from "./connected-info";
+import { TrafficModeSwitcher } from "./traffic-mode-switcher";
+import { useHomeRuntime } from "./use-home-runtime";
 
 export function HomeScreen() {
   const { t } = useI18n();
@@ -50,22 +59,26 @@ export function HomeScreen() {
     home.connected &&
     (home.sysProxy?.management === "automatic" ||
       (manualProxy && home.activeTunBackend === "macosPacketTunnel"));
-  const headline = home.switchingId ? t("home.switchingNode") :
-    home.state === "cleanupPending"
-      ? t("home.cleanupPending")
-      : home.connected && direct
-        ? t("home.directConnection")
-        : localReady
-          ? t("home.localProxyReady")
-          : protectedConnection
-            ? t("status.connected")
-            : home.connected
-              ? t("home.protectionUnknown")
-              : home.state === "connecting"
-                ? t("status.connecting")
-                : home.state === "disconnecting"
-                  ? t("status.disconnecting")
-                  : t("home.unprotected");
+  let headline: string;
+  if (home.switchingId) {
+    headline = t("home.switchingNode");
+  } else if (home.state === "cleanupPending") {
+    headline = t("home.cleanupPending");
+  } else if (home.connected && direct) {
+    headline = t("home.directConnection");
+  } else if (localReady) {
+    headline = t("home.localProxyReady");
+  } else if (protectedConnection) {
+    headline = t("status.connected");
+  } else if (home.connected) {
+    headline = t("home.protectionUnknown");
+  } else if (home.state === "connecting") {
+    headline = t("status.connecting");
+  } else if (home.state === "disconnecting") {
+    headline = t("status.disconnecting");
+  } else {
+    headline = t("home.unprotected");
+  }
   const hint =
     home.connected && direct
       ? t("home.directHint")
@@ -226,5 +239,146 @@ export function HomeScreen() {
         open={subscriptionsOpen}
       />
     </section>
+  );
+}
+
+function ConnectButton({
+  label,
+  busy,
+  cleanupPending = false,
+  connected,
+  inProgress,
+  onPrimaryAction,
+  t,
+}: {
+  label?: string;
+  busy: boolean;
+  cleanupPending?: boolean;
+  connected: boolean;
+  inProgress: boolean;
+  onPrimaryAction: () => void;
+  t: TranslationFunction;
+}) {
+  const action =
+    label ??
+    (cleanupPending
+      ? t("home.retryDisconnect")
+      : connected
+        ? t("actions.disconnect")
+        : t("actions.connect"));
+  return (
+    <button
+      aria-busy={busy || undefined}
+      aria-label={action}
+      aria-pressed={connected}
+      className={cn("home-power", connected && "home-power-connected")}
+      data-testid="home-connect-button"
+      disabled={busy}
+      onClick={onPrimaryAction}
+      type="button"
+    >
+      {inProgress || busy ? (
+        <span aria-hidden="true" className="home-power-progress" />
+      ) : null}
+      <Power aria-hidden="true" className="size-11" strokeWidth={1.9} />
+      <span>
+        {connected && !cleanupPending ? t("home.disconnectLabel") : action}
+      </span>
+    </button>
+  );
+}
+
+function ConnectionModeSwitcher({
+  tunEnabled,
+  modeBusy,
+  modePending,
+  onTunChange,
+  t,
+}: {
+  tunEnabled: boolean;
+  modeBusy: boolean;
+  modePending: boolean;
+  onTunChange: (enabled: boolean) => void;
+  t: TranslationFunction;
+}) {
+  return (
+    <div className="home-mode-container">
+      <div className="home-modes">
+        <div className="home-mode">
+          <Label htmlFor="home-tun-switch">{t("home.modeTun")}</Label>
+          <Switch
+            aria-busy={modePending}
+            checked={tunEnabled}
+            disabled={modeBusy}
+            id="home-tun-switch"
+            onCheckedChange={onTunChange}
+          />
+        </div>
+      </div>
+      <p className="home-mode-hint">{t("home.tunHint")}</p>
+    </div>
+  );
+}
+
+type HomeRuntime = ReturnType<typeof useHomeRuntime>;
+
+function ConnectionDetailsDialog({
+  home,
+  open,
+  onOpenChange,
+  onCloseFocus,
+  t,
+}: {
+  home: HomeRuntime;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCloseFocus: () => void;
+  t: TranslationFunction;
+}) {
+  const profile = home.nodeEntry?.profile;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]"
+        closeLabel={t("actions.close")}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          onCloseFocus();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{t("home.connectionDetails")}</DialogTitle>
+          <DialogDescription>
+            {profile?.remarks ||
+              profile?.id ||
+              home.runningId ||
+              t("home.noNodes")}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-4 text-sm [&_dt]:text-muted-foreground [&_dd]:break-words">
+            <dt>{t("home.serverAddress")}</dt>
+            <dd>{profile ? profile.protocol.server.address || "—" : "—"}</dd>
+            <dt>{t("home.serverPort")}</dt>
+            <dd>{profile ? profile.protocol.server.port || "—" : "—"}</dd>
+            <dt>{t("home.protocol")}</dt>
+            <dd>{profile ? getProtocolLabel(profile.protocol.kind) : "—"}</dd>
+            <dt>{t("home.processId")}</dt>
+            <dd>{home.mainPid ?? "—"}</dd>
+            <dt>{t("home.tunDiagnostics")}</dt>
+            <dd>{home.tunProviderSummary ?? "—"}</dd>
+          </dl>
+        </DialogBody>
+        <DialogFooter>
+          <Button
+            disabled={!home.connected || home.busy}
+            onClick={home.restart}
+            variant="outline"
+          >
+            {t("actions.restart")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

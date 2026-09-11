@@ -11,7 +11,20 @@ use voya_core::{
 };
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 
-use super::{ProfileListing, DEFAULT_PROFILE_SORT_STEP};
+const DEFAULT_PROFILE_SORT_STEP: i32 = 10;
+
+/// A profile listing plus the count of stored profiles this build could not
+/// read.
+///
+/// `voya-db` skips a row whose stored payload it cannot decode instead of
+/// failing the whole listing, which keeps the rest of the servers usable. The
+/// count rides along with the rows so the profiles screen can state it: a list
+/// that is quietly short otherwise looks like data loss.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ProfileListing {
+    pub items: Vec<ProfileListItem>,
+    pub undecodable_profiles: usize,
+}
 
 static PROFILE_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -121,7 +134,7 @@ impl<'db> ProfileManager<'db> {
             !self.database.profiles().exists(&profile.index_id).await?
         };
 
-        normalize_profile(config, &mut profile);
+        normalize_profile(&mut profile);
 
         let profile_ex = if is_new {
             ProfileExItem {
@@ -201,7 +214,7 @@ impl<'db> ProfileManager<'db> {
             let mut profile = source.clone();
             profile.index_id = generate_profile_id();
             profile.remarks = format!("{}-clone", source.remarks);
-            normalize_profile(config, &mut profile);
+            normalize_profile(&mut profile);
 
             let profile_ex = ProfileExItem {
                 index_id: profile.index_id.clone(),
@@ -409,7 +422,7 @@ impl<'db> ProfileManager<'db> {
     }
 }
 
-pub(crate) fn normalize_profile(_config: &AppConfig, profile: &mut ProfileItem) {
+pub(crate) fn normalize_profile(profile: &mut ProfileItem) {
     profile.index_id = profile.index_id.trim().to_string();
     trim_string(&mut profile.remarks);
     normalize_protocol(&mut profile.protocol);

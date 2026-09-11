@@ -6,7 +6,7 @@ use std::{
 
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteSynchronous},
-    Sqlite, SqlitePool, Transaction,
+    Row, Sqlite, SqlitePool, Transaction,
 };
 use tokio::sync::Mutex;
 
@@ -68,16 +68,25 @@ impl Database {
             .synchronous(SqliteSynchronous::Normal)
             .busy_timeout(BUSY_TIMEOUT);
 
-        // Validate, switch to WAL and migrate on a throwaway single-connection
-        // pool, then drop it before opening the pool the application keeps.
-        //
-        // sqlx caches prepared statements per connection, and that cache holds
-        // the column metadata each statement was prepared against. A migration
-        // that runs `ALTER TABLE … ADD COLUMN` after a connection has already
-        // served a query leaves that connection able to hand back rows shaped
-        // like the *old* schema, which decodes as an out-of-bounds column read
-        // for every query issued afterwards on it. Migrating in isolation means
-        // no connection in the long-lived pool can predate the schema it serves.
+        // Even closing a read/write connection can checkpoint a WAL left by a
+        // crashed older build. Inspect existing files read-only first so a
+        // refusal preserves both the database and its uncheckpointed data.
+        if path.try_exists().map_err(|source| DbError::Io {
+            path: path.to_path_buf(),
+            source,
+        })? {
+            let inspection = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(options.clone().read_only(true).create_if_missing(false))
+                .await?;
+            let result = validate_existing_schema(&inspection, path).await;
+            inspection.close().await;
+            result?;
+        }
+
+        // Validate before any persistent PRAGMA or schema write. Initialize on
+        // a separate connection so the application pool's prepared statements
+        // only ever see the complete current schema.
         {
             let migration_pool = SqlitePoolOptions::new()
                 .max_connections(1)
@@ -226,56 +235,88 @@ async fn enable_write_ahead_logging(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
-/// Rejects databases this build cannot migrate, before sqlx reports the same
-/// condition as an opaque `VersionMissing` without the file path or a reset hint.
+/// Accepts only a fresh database or the exact current baseline. This runs before
+/// WAL or the migrator can write to an unsupported database.
 async fn validate_existing_schema(pool: &SqlitePool, path: &Path) -> Result<()> {
     let user_table_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> '_sqlx_migrations'",
     )
     .fetch_one(pool)
     .await?;
-    if user_table_count == 0 {
-        return Ok(());
-    }
-
     let expected = latest_migration_version();
-    let found = applied_migration_version(pool).await?;
-    match found {
-        Some(applied) if applied <= expected => Ok(()),
-        _ => Err(DbError::UnsupportedDatabaseSchema {
-            path: path.to_path_buf(),
-            found,
-            expected,
-            manual_reset_command: manual_database_reset_command(path),
-        }),
-    }
-}
-
-/// Highest migration version this build knows how to apply.
-fn latest_migration_version() -> i64 {
-    MIGRATOR
-        .iter()
-        .map(|migration| migration.version)
-        .max()
-        .unwrap_or_default()
-}
-
-/// Highest migration version recorded in the sqlx bookkeeping table, or `None`
-/// when the file has user tables that this application never created.
-async fn applied_migration_version(pool: &SqlitePool) -> Result<Option<i64>> {
+    let unsupported = |found| DbError::UnsupportedDatabaseSchema {
+        path: path.to_path_buf(),
+        found,
+        expected,
+        manual_reset_command: manual_database_reset_command(path),
+    };
     let has_bookkeeping: i64 = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations')",
     )
     .fetch_one(pool)
     .await?;
     if has_bookkeeping == 0 {
-        return Ok(None);
+        return if user_table_count == 0 {
+            Ok(())
+        } else {
+            Err(unsupported(None))
+        };
     }
 
-    let applied = sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(version) FROM _sqlx_migrations")
-        .fetch_one(pool)
+    let columns = sqlx::query("PRAGMA table_info(_sqlx_migrations)")
+        .fetch_all(pool)
         .await?;
-    Ok(applied)
+    if [
+        "version",
+        "description",
+        "installed_on",
+        "success",
+        "checksum",
+        "execution_time",
+    ]
+    .iter()
+    .any(|name| {
+        !columns
+            .iter()
+            .any(|row| row.get::<String, _>("name") == *name)
+    }) {
+        return Err(unsupported(None));
+    }
+    let rows =
+        sqlx::query("SELECT version, success, checksum FROM _sqlx_migrations ORDER BY version")
+            .fetch_all(pool)
+            .await?;
+    // sqlx may have created its bookkeeping table before an interrupted first
+    // initialization. Only an empty table with no application tables is fresh.
+    if rows.is_empty() && user_table_count == 0 {
+        return Ok(());
+    }
+    let found = rows
+        .last()
+        .and_then(|row| row.try_get::<i64, _>("version").ok());
+    if rows.len() != 1 || user_table_count == 0 {
+        return Err(unsupported(found));
+    }
+    let row = &rows[0];
+    let success: i64 = row.try_get("success").map_err(|_| unsupported(found))?;
+    let checksum: Vec<u8> = row.try_get("checksum").map_err(|_| unsupported(found))?;
+    if success != 1
+        || !MIGRATOR.iter().any(|baseline| {
+            Some(baseline.version) == found && baseline.checksum.as_ref() == checksum.as_slice()
+        })
+    {
+        return Err(unsupported(found));
+    }
+    Ok(())
+}
+
+/// The current baseline's identifier, separate from the settings DTO version.
+fn latest_migration_version() -> i64 {
+    MIGRATOR
+        .iter()
+        .map(|migration| migration.version)
+        .max()
+        .unwrap_or_default()
 }
 
 /// The write-ahead log and shared-memory sidecars have to go with the database

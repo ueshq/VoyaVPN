@@ -32,7 +32,7 @@ export const commands = {
 	restartCore: () => typedError<RuntimeStatusResponse, AppError>(__TAURI_INVOKE("restart_core")),
 	runtimeStatus: () => typedError<RuntimeStatusResponse, AppError>(__TAURI_INVOKE("runtime_status")),
 	systemProxyStatus: () => typedError<SystemProxyStatusResponse, AppError>(__TAURI_INVOKE("system_proxy_status")),
-	/**  Explicit recheck may retire a legacy dirty marker once local proxies are gone. */
+	/**  Refresh the observed system proxy state and notify the renderer. */
 	recheckSystemProxy: () => typedError<SystemProxyStatusResponse, AppError>(__TAURI_INVOKE("recheck_system_proxy")),
 	/**  Fixed destination; renderer input cannot turn this into an arbitrary opener. */
 	openNetworkSettings: () => typedError<null, AppError>(__TAURI_INVOKE("open_network_settings")),
@@ -374,7 +374,7 @@ export type CoreType = "singBox";
 export type DatabaseErrorCode = 
 /**
  *  The stored schema is not the one this build expects; the database has to
- *  be migrated or reset before anything else will work.
+ *  be reset manually before anything else will work.
  */
 "schemaUnsupported" | 
 /**  A stored payload could not be decoded — one bad row, or a damaged file. */
@@ -854,10 +854,8 @@ export type ShellTabTarget = "profiles" | "proxyConnections" | "logs";
 /**
  *  How a probe ended, as a code rather than a sentence.
  * 
- *  This is **persisted**: it is what `profile_ex.message` holds, so the prose
- *  that used to live there ("Speedtesting", "request timed out", "Skipped")
- *  froze the user's language at the moment the test ran. Rows written by
- *  earlier builds still decode — see [`SpeedtestOutcome::from_stored`].
+ *  Persisted in `profile_ex.message` using the same camelCase codes as IPC.
+ *  Unrecognised stored values become `Unknown` without hiding the profile.
  */
 export type SpeedtestOutcome = 
 /**  Selected and queued behind another probe. */
@@ -876,10 +874,7 @@ export type SpeedtestOutcome =
 "noAvailablePort" | 
 /**  A failure with no more specific code. */
 "failed" | 
-/**
- *  A stored value this build cannot classify — written by a build that
- *  spelled the column differently. Better than silently dropping the row.
- */
+/**  A stored value this build cannot classify, without dropping the row. */
 "unknown";
 
 export type SpeedtestRequest = {

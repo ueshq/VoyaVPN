@@ -37,7 +37,7 @@ const resources = Object.fromEntries(
   localeOptions.map(({ code }) => [code, { translation: i18nResources[code] }]),
 ) as Record<Locale, { translation: object }>;
 
-function isLocale(value: string | null | undefined): value is Locale {
+export function isLocale(value: string | null | undefined): value is Locale {
   return localeOptions.some((locale) => locale.code === value);
 }
 

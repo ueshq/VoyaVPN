@@ -72,10 +72,11 @@ export const runtimeModules = [
   { path: "apps/desktop/src/stores/toast-store.ts", lines: 70, branches: 80 },
   // Promoted out of `untestedModules` once the typed-contract passes gave them
   // real tests. Measured at promotion: modal-host 92/80, routing-rules-panel
-  // 100/100, routing-dialogs 100/100, modal-store 86/100.
+  // 100/100, routing-dialogs 100/100, modal-store 86/100. Routing dialogs now
+  // live in routing-screen; the same floor protects the consolidated screen.
   { path: "apps/desktop/src/components/app-shell/modal-host.tsx", lines: 82, branches: 70 },
   { path: "apps/desktop/src/features/routing/routing-rules-panel.tsx", lines: 90, branches: 90 },
-  { path: "apps/desktop/src/features/routing/routing-dialogs.tsx", lines: 90, branches: 90 },
+  { path: "apps/desktop/src/features/routing/routing-screen.tsx", lines: 90, branches: 90 },
   { path: "apps/desktop/src/stores/modal-store.ts", lines: 75, branches: 90 },
 ];
 

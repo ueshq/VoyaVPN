@@ -92,7 +92,6 @@ export function CoreTab({
             "debug",
             "info",
             "warn",
-            "warning",
             "error",
           ]}
           value={settings.core.logLevel}

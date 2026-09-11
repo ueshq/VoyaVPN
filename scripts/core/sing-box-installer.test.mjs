@@ -2,15 +2,9 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  isCliEntrypoint,
-  repoRootFromScript,
-  truthy,
-} from "../lib/common.mjs";
 import {
   ALLOW_SEED_BACKFILL_ENV,
   ALLOW_UNPINNED_SING_BOX_ENV,
@@ -22,15 +16,12 @@ import {
   expectedSingBoxArchiveSha256,
   fetchAndStageSingBoxSeed,
   installSingBoxCore,
-  isCliEntrypoint as installerIsCliEntrypoint,
   readSingBoxSeedManifest,
-  repoRootFromScript as installerRepoRootFromScript,
   shouldSkipSingBoxInstall,
   singBoxAppExecutable,
   singBoxAssetName,
   singBoxPinStatus,
   singBoxSeedDir,
-  truthy as installerTruthy,
   verifyStagedSingBoxSeed,
 } from "./sing-box-installer.mjs";
 
@@ -68,16 +59,6 @@ async function writeStagedWindowsSeed(seedDir, executableBody = "seed-sing-box")
 }
 
 describe("sing-box core installer", () => {
-  it("keeps the moved common helpers available from the installer", () => {
-    const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
-
-    expect(installerIsCliEntrypoint).toBe(isCliEntrypoint);
-    expect(installerRepoRootFromScript).toBe(repoRootFromScript);
-    expect(installerRepoRootFromScript()).toBe(repoRoot);
-    expect(installerTruthy).toBe(truthy);
-    expect(truthy(" yes ")).toBe(true);
-  });
-
   it("selects pinned upstream assets for supported platforms", () => {
     expect(singBoxAssetName({ arch: "arm64", platform: "darwin", version: "v1.13.14" })).toBe(
       "sing-box-1.13.14-darwin-arm64.tar.gz",
@@ -364,21 +345,25 @@ describe("sing-box seed integrity pinning", () => {
     }
   });
 
-  it("keeps an unverifiable seed usable only behind the escape hatch", async () => {
-    const workDir = await mkdtemp(join(tmpdir(), "voyavpn-sing-box-legacy-"));
+  it("rejects missing or incomplete seed manifests even with the unpinned escape hatch", async () => {
+    const workDir = await mkdtemp(join(tmpdir(), "voyavpn-sing-box-manifest-"));
     try {
       const repoRoot = join(workDir, "repo");
       const seedDir = singBoxSeedDir(repoRoot);
-      await mkdir(seedDir, { recursive: true });
-      await writeFile(join(seedDir, "sing-box.exe"), "seed-sing-box");
-
-      const verify = (env) =>
-        verifyStagedSingBoxSeed({ arch: "x64", env, platform: "win32", repoRoot, version: pinnedVersion });
-
-      // A seed with no manifest at all is re-staged by default...
-      expect(verify({})).toMatchObject({ code: "manifest-missing", ok: false });
-      // ...and accepted, but reported as unpinned, for an offline developer.
-      expect(verify({ [ALLOW_UNPINNED_SING_BOX_ENV]: "1" })).toMatchObject({ ok: true, pinned: false });
+      await writeStagedWindowsSeed(seedDir);
+      const current = readSingBoxSeedManifest(seedDir);
+      const manifestPath = join(seedDir, "sing-box.seed.json");
+      for (const env of [{}, { [ALLOW_UNPINNED_SING_BOX_ENV]: "1" }]) {
+        const verify = () => verifyStagedSingBoxSeed({ arch: "x64", env, platform: "win32", repoRoot, version: pinnedVersion });
+        await rm(manifestPath, { force: true });
+        expect(verify()).toMatchObject({ code: "manifest-missing", ok: false });
+        for (const missing of ["sha256", "executableSha256"]) {
+          for (const invalid of [undefined, "", "invalid-digest"]) {
+            await writeFile(manifestPath, JSON.stringify({ ...current, [missing]: invalid }));
+            expect(verify()).toMatchObject({ code: "manifest-invalid", ok: false });
+          }
+        }
+      }
     } finally {
       await rm(workDir, { force: true, recursive: true });
     }

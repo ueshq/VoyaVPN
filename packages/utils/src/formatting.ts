@@ -1,7 +1,7 @@
 const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
-const RATE_UNITS = ["KB/s", "MB/s", "GB/s"] as const;
+const RATE_UNITS = ["B/s", "KB/s", "MB/s", "GB/s"] as const;
 
-function formatScaledBinary(value: number, units: readonly string[], fixedFraction = false) {
+function formatScaledBinary(value: number, units: readonly string[], fixedFraction: boolean) {
   let scaled = value;
   let unitIndex = 0;
 
@@ -26,45 +26,14 @@ export function formatBytesPerSecond(value: number) {
     return `${Math.round(value)} B/s`;
   }
 
-  let scaled = value / 1024;
-  let unitIndex = 0;
-
-  while (scaled >= 1024 && unitIndex < RATE_UNITS.length - 1) {
-    scaled /= 1024;
-    unitIndex += 1;
-  }
-
-  return `${scaled >= 10 ? scaled.toFixed(0) : scaled.toFixed(1)} ${RATE_UNITS[unitIndex]}`;
+  return formatScaledBinary(value, RATE_UNITS, false);
 }
 
-/**
- * A measured latency, or nothing.
- *
- * There is no fallback parameter any more: its only caller passed the
- * backend's pre-formatted `delayLabel`/status prose, which is the string the
- * locale resources could not translate. A node with no measurement now renders its
- * own translated outcome next to this.
- */
+/** A measured latency, or an empty string when no measurement is available. */
 export function formatDelay(delay: number | null | undefined) {
   if (typeof delay === "number" && delay > 0) {
     return `${delay} ms`;
   }
 
   return "";
-}
-
-export function formatSpeed(speed: number | null | undefined) {
-  if (!speed || speed <= 0) {
-    return "";
-  }
-
-  return formatScaledBinary(speed, ["B/s", "KB/s", "MB/s", "GB/s", "TB/s"], true);
-}
-
-export function formatTraffic(value: number | null | undefined) {
-  if (!value || value <= 0) {
-    return "";
-  }
-
-  return formatScaledBinary(value, BYTE_UNITS);
 }

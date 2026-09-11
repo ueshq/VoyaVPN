@@ -44,7 +44,7 @@ pub async fn set_system_proxy_mode<R: tauri::Runtime>(
     Ok(system_proxy_status_response(status))
 }
 
-/// Explicit recheck may retire a legacy dirty marker once local proxies are gone.
+/// Refresh the observed system proxy state and notify the renderer.
 #[tauri::command]
 #[specta::specta]
 pub async fn recheck_system_proxy<R: tauri::Runtime>(
@@ -53,11 +53,9 @@ pub async fn recheck_system_proxy<R: tauri::Runtime>(
 ) -> Result<SystemProxyStatusResponse, AppError> {
     let config = current_config(&state);
     let manager = state.system_proxy_manager();
-    let status = run_blocking("recheck system proxy", move || {
-        manager.recheck_manual_proxy(&config)
-    })
-    .await?
-    .map_err(AppError::from)?;
+    let status = run_blocking("recheck system proxy", move || manager.status(&config))
+        .await?
+        .map_err(AppError::from)?;
     emit_sysproxy_changed(&app, &status)?;
     Ok(system_proxy_status_response(status))
 }

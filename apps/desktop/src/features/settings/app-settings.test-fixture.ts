@@ -17,7 +17,7 @@ export function makeAppSettings({
       defaultUserAgent,
       fragmentEnabled: false,
       logEnabled: false,
-      logLevel: "warning",
+      logLevel: "warn",
       muxEnabled: false,
       sendThrough: null,
     },

@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     collections::BTreeSet,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -16,6 +15,7 @@ use crate::{blob, AppStateRecord};
 use super::*;
 
 mod country;
+mod schema;
 
 /// The stored shape of every value voya-db writes into a SQLite `TEXT` column.
 ///
@@ -25,31 +25,10 @@ mod country;
 /// machine. Pinning them here turns that into a failing test.
 const PINNED_BLOB_SHAPES: &str = include_str!("../../fixtures/profile_blobs_v1.json");
 
-/// A settings payload as an earlier build wrote it.
-///
-/// `AppSettingsV1` is both the IPC DTO and the on-disk settings schema, and it
-/// is strict in both directions (`deny_unknown_fields`), so a field edited for
-/// UI reasons stops every existing install from loading its settings — which
-/// `setup()` turns into a launch failure.
+/// The current strict settings payload, pinned for schema drift detection.
 const PINNED_SETTINGS_PAYLOAD: &str = include_str!("../../fixtures/app_settings_v1.json");
 
-/// The same payload as an *older* build wrote it, before three DNS settings
-/// sing-box cannot express were removed and `speedTest.delayIntervalMs` was
-/// renamed to say the seconds it always held.
-///
-/// This is the row a user upgrading from that build still has on disk.
-const RETIRED_KEYS_SETTINGS_PAYLOAD: &str =
-    include_str!("../../fixtures/app_settings_v1_retired_keys.json");
-
-/// Every value `network.systemProxy.mode` can hold, with the string the
-/// `String`-typed version of that field stored.
-///
-/// The field is now a `SystemProxyType`. That is only safe because the enum's
-/// `rename_all = "camelCase"` emits precisely these literals, and nothing else
-/// in the suite can catch a drift: `json_shape` compares paths, and both the
-/// old and the new form are a JSON string at the same path. So the values are
-/// pinned here, and `typed_settings_enums_keep_their_persisted_strings` fails
-/// the moment a variant renames.
+/// Canonical persisted and IPC spellings of each system-proxy mode.
 const PINNED_SYSTEM_PROXY_MODES: [(SystemProxyType, &str); 4] = [
     (SystemProxyType::ForcedClear, "forcedClear"),
     (SystemProxyType::ForcedChange, "forcedChange"),
@@ -57,7 +36,7 @@ const PINNED_SYSTEM_PROXY_MODES: [(SystemProxyType, &str); 4] = [
     (SystemProxyType::Pac, "pac"),
 ];
 
-/// The same pinning for `proxy.trafficMode`, now a `TrafficMode`.
+/// Canonical persisted and IPC spellings of each traffic mode.
 const PINNED_TRAFFIC_MODES: [(TrafficMode, &str); 4] = [
     (TrafficMode::Rule, "rule"),
     (TrafficMode::Global, "global"),
@@ -1325,45 +1304,6 @@ async fn unit_of_work_write_survives_a_concurrent_autocommit_writer() {
 }
 
 #[tokio::test]
-async fn database_written_by_a_newer_build_is_rejected_with_a_reset_hint() {
-    let fixture = TempDatabase::new("newer-schema.sqlite");
-    let path = fixture.path();
-    let database = Database::connect(path)
-        .await
-        .expect("file backed database should open");
-    database.close().await;
-
-    let future_version = latest_migration_version() + 1;
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect_with(SqliteConnectOptions::new().filename(path))
-        .await
-        .expect("fixture should open");
-    sqlx::query(
-        "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) VALUES (?, 'from a newer build', 1, X'00', 0)",
-    )
-    .bind(future_version)
-    .execute(&pool)
-    .await
-    .expect("future migration row should be recorded");
-    pool.close().await;
-
-    let error = Database::connect(path)
-        .await
-        .expect_err("a database from a newer build must be rejected");
-    match &error {
-        DbError::UnsupportedDatabaseSchema {
-            found, expected, ..
-        } => {
-            assert_eq!(*found, Some(future_version));
-            assert_eq!(*expected, latest_migration_version());
-        }
-        other => panic!("unexpected error: {other}"),
-    }
-    assert!(error.to_string().contains("reset it manually with"));
-}
-
-#[tokio::test]
 async fn interrupted_first_launch_is_healed_by_the_migrator() {
     let fixture = TempDatabase::new("interrupted-first-launch.sqlite");
     let path = fixture.path();
@@ -1404,25 +1344,6 @@ async fn interrupted_first_launch_is_healed_by_the_migrator() {
             .expect("settings should load"),
         AppSettingsV1::default()
     );
-
-    database.close().await;
-}
-
-#[tokio::test]
-async fn schema_gate_accepts_a_database_from_an_older_build() {
-    let fixture = TempDatabase::new("older-schema.sqlite");
-    let path = fixture.path();
-    let database = Database::connect(path)
-        .await
-        .expect("file backed database should open");
-    sqlx::query("DELETE FROM _sqlx_migrations WHERE version > 1")
-        .execute(database.pool())
-        .await
-        .expect("bookkeeping rows should be removable");
-
-    validate_existing_schema(database.pool(), path)
-        .await
-        .expect("a database from an older build must still be accepted");
 
     database.close().await;
 }
@@ -1525,10 +1446,7 @@ async fn profile_listings_skip_rows_this_build_cannot_decode() {
     .execute(database.pool())
     .await
     .expect("the raw row should be stored");
-    // A TLS blob missing `alpn`. `TlsSettings` carries `#[serde(default)]`, so
-    // this row — written before `alpn` existed — must still DECODE. This is the
-    // forward-compatibility guarantee that keeps an additive change to
-    // `TlsSettings` from silently hiding every profile written by an older build.
+    // Current TLS input permits omitted optional fields, including `alpn`.
     sqlx::query(
         r#"INSERT INTO profile_items (index_id, config_type, remarks, protocol, tls)
            VALUES ('missing-alpn', 'trojan', 'Missing alpn',
@@ -1618,7 +1536,7 @@ async fn profile_listings_skip_rows_this_build_cannot_decode() {
             .await
             .expect("a defaulted field must not make an older row undecodable")
             .is_some(),
-        "the row predating `alpn` must decode through #[serde(default)]"
+        "optional TLS fields must retain their current defaults"
     );
     assert!(matches!(
         database.profiles().get("mislabelled").await,
@@ -1910,7 +1828,7 @@ async fn settings_reject_a_schema_version_this_build_cannot_read() {
         .bind(future_version)
         .execute(database.pool())
         .await
-        .expect("migration 0003 relaxed the CHECK, so a future version must be storable");
+        .expect("the version CHECK permits detecting unsupported settings versions");
     match database.settings().load().await {
         Err(DbError::UnsupportedDatabaseSchema {
             found, expected, ..
@@ -1954,7 +1872,7 @@ async fn settings_reject_a_schema_version_this_build_cannot_read() {
 }
 
 #[tokio::test]
-async fn persisted_settings_payload_from_an_earlier_build_still_loads() {
+async fn current_settings_payload_matches_the_pinned_shape() {
     let database = Database::connect_in_memory()
         .await
         .expect("database test operation should succeed");
@@ -1965,10 +1883,11 @@ async fn persisted_settings_payload_from_an_earlier_build_still_loads() {
         .await
         .expect("the pinned payload should be storable");
 
-    let loaded = database.settings().load().await.expect(
-        "AppSettingsV1 is the on-disk settings schema: a removed, renamed, or newly required \
-         field stops every existing install from loading its settings",
-    );
+    let loaded = database
+        .settings()
+        .load()
+        .await
+        .expect("the current settings fixture must load");
     assert_eq!(loaded.schema_version, CURRENT_SCHEMA_VERSION);
 
     let pinned: serde_json::Value =
@@ -1978,219 +1897,10 @@ async fn persisted_settings_payload_from_an_earlier_build_still_loads() {
     assert_eq!(
         json_shape(&pinned),
         json_shape(&current),
-        "the settings layout changed: give every added field `#[serde(default)]`, never remove \
-         or rename one, then refresh crates/voya-db/fixtures/app_settings_v1.json"
+        "the current settings fixture must match the DTO layout"
     );
 }
 
-/// A settings row written before the retired-key cleanup still loads, with the
-/// renamed value intact.
-///
-/// `AppSettingsV1` denies unknown fields, so this row would otherwise fail to
-/// deserialize and take `setup()` down with it on the first launch after an
-/// upgrade. `SettingsRepository::load` normalizes the stored JSON first; this
-/// pins that it drops exactly the retired keys, carries `delayIntervalMs` over
-/// to `delayIntervalSeconds`, and leaves every other field alone.
-#[tokio::test]
-async fn settings_payload_with_retired_keys_still_loads() {
-    let stored: serde_json::Value = serde_json::from_str(RETIRED_KEYS_SETTINGS_PAYLOAD)
-        .expect("the retired-key payload should be JSON");
-    for key in ["useSystemHosts", "serveStale", "parallelQuery"] {
-        assert!(
-            stored["dns"].get(key).is_some(),
-            "the fixture stops proving anything once `{key}` is gone from it"
-        );
-    }
-    assert_eq!(
-        stored["speedTest"]["delayIntervalMs"],
-        serde_json::json!(24)
-    );
-
-    let database = Database::connect_in_memory()
-        .await
-        .expect("database test operation should succeed");
-    sqlx::query("INSERT INTO app_settings (id, schema_version, payload) VALUES (1, ?, ?)")
-        .bind(i64::from(CURRENT_SCHEMA_VERSION))
-        .bind(RETIRED_KEYS_SETTINGS_PAYLOAD)
-        .execute(database.pool())
-        .await
-        .expect("the retired-key payload should be storable");
-
-    let loaded = database.settings().load().await.expect(
-        "a settings row written before the retired keys were removed must keep loading, or the          first launch after an upgrade fails in `setup()`",
-    );
-
-    // The renamed key kept its value; the unit was always seconds.
-    assert_eq!(loaded.speed_test.delay_interval_seconds, Some(24));
-    // Neighbouring fields survived the normalization untouched.
-    assert_eq!(loaded.speed_test.page_size, Some(23));
-    assert_eq!(loaded.dns.add_common_hosts, Some(true));
-    assert_eq!(loaded.dns.direct.as_deref(), Some("119.29.29.29"));
-
-    // And what this build writes back no longer mentions them.
-    let rewritten = serde_json::to_value(&loaded).expect("settings should serialize");
-    for key in ["useSystemHosts", "serveStale", "parallelQuery"] {
-        assert!(rewritten["dns"].get(key).is_none(), "`{key}` came back");
-    }
-    assert!(rewritten["speedTest"].get("delayIntervalMs").is_none());
-    assert!(stored.get("sources").is_some());
-    assert!(rewritten.get("sources").is_none());
-    assert!(stored.get("shortcuts").is_some());
-    assert!(rewritten.get("shortcuts").is_none());
-    for key in ["downloadUrl", "udpTarget"] {
-        assert!(stored["speedTest"].get(key).is_some());
-        assert!(rewritten["speedTest"].get(key).is_none());
-    }
-    database
-        .settings()
-        .save(&loaded)
-        .await
-        .expect("save normalized settings");
-    assert_eq!(
-        database.settings().load().await.expect("reload settings"),
-        loaded
-    );
-}
-
-#[tokio::test]
-async fn retiring_shortcuts_preserves_other_settings_and_cleans_saved_payload() {
-    for shortcut in [
-        serde_json::Value::Null,
-        serde_json::json!({
-            "alt": true,
-            "control": true,
-            "shift": false,
-            "keyCode": 86,
-        }),
-    ] {
-        let database = Database::connect_in_memory().await.expect("open database");
-        let mut expected: AppSettingsV1 =
-            serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("read current settings fixture");
-        expected.appearance.language = "zh-Hans".to_string();
-        expected.behavior.autostart = true;
-        expected.network.tun.mtu = 1400;
-        let expected_payload = serde_json::to_value(&expected).expect("serialize settings");
-        let mut old_payload = expected_payload.clone();
-        old_payload["shortcuts"] = serde_json::json!({ "showWindowShortcut": shortcut });
-        sqlx::query("INSERT INTO app_settings (id, schema_version, payload) VALUES (1, ?, ?)")
-            .bind(i64::from(CURRENT_SCHEMA_VERSION))
-            .bind(old_payload.to_string())
-            .execute(database.pool())
-            .await
-            .expect("store settings with retired shortcut");
-
-        let loaded = database.settings().load().await.expect("load old settings");
-        assert_eq!(loaded, expected);
-        database
-            .settings()
-            .save(&loaded)
-            .await
-            .expect("save settings");
-
-        let saved: String = sqlx::query_scalar("SELECT payload FROM app_settings WHERE id = 1")
-            .fetch_one(database.pool())
-            .await
-            .expect("read saved payload");
-        let saved: serde_json::Value = serde_json::from_str(&saved).expect("parse saved payload");
-        assert!(saved.get("shortcuts").is_none());
-        assert_eq!(saved, expected_payload);
-        assert_eq!(
-            database.settings().load().await.expect("reload settings"),
-            expected
-        );
-    }
-}
-
-#[tokio::test]
-async fn retiring_custom_sources_preserves_settings_and_existing_routing() {
-    let database = Database::connect_in_memory().await.expect("open database");
-    let routing = RoutingItem {
-        id: "existing-routing".to_string(),
-        remarks: "Previously imported routing".to_string(),
-        rule_set: vec![RulesItem {
-            id: "existing-rule".to_string(),
-            domain: Some(vec!["full:example.test".to_string()]),
-            outbound_tag: Some("direct".to_string()),
-            ..RulesItem::default()
-        }],
-        ..RoutingItem::default()
-    };
-    database
-        .routings()
-        .upsert(&routing)
-        .await
-        .expect("save routing");
-    database
-        .routings()
-        .set_active(&routing.id)
-        .await
-        .expect("activate routing");
-    let routings_before = database.routings().list().await.expect("snapshot routings");
-    let active_before = database
-        .routings()
-        .active()
-        .await
-        .expect("snapshot active routing");
-
-    let mut payload: serde_json::Value =
-        serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("current settings fixture");
-    payload["dns"]["remote"] = serde_json::json!("https://dns.example.test/dns-query");
-    let expected: AppSettingsV1 =
-        serde_json::from_value(payload.clone()).expect("current settings");
-    payload["sources"] = serde_json::json!({
-        "geo": "https://retired.example.test/{0}.dat",
-        "singboxRuleset": "https://retired.example.test/{0}/{1}.srs",
-        "routingTemplate": "https://retired.example.test/template.json",
-        "subscriptionConverter": "https://retired.example.test/sub?url={0}"
-    });
-    sqlx::query("INSERT INTO app_settings (id, schema_version, payload) VALUES (1, ?, ?)")
-        .bind(i64::from(CURRENT_SCHEMA_VERSION))
-        .bind(payload.to_string())
-        .execute(database.pool())
-        .await
-        .expect("store old settings");
-
-    let loaded = database.settings().load().await.expect("load old sources");
-    assert_eq!(loaded, expected, "only the retired sources may change");
-    database
-        .settings()
-        .save(&loaded)
-        .await
-        .expect("save current settings");
-    let rewritten: String = sqlx::query_scalar("SELECT payload FROM app_settings WHERE id = 1")
-        .fetch_one(database.pool())
-        .await
-        .expect("read persisted settings");
-    let rewritten: serde_json::Value = serde_json::from_str(&rewritten).expect("persisted JSON");
-    assert_eq!(
-        rewritten,
-        serde_json::to_value(&expected).expect("expected JSON")
-    );
-    assert_eq!(
-        database.routings().list().await.expect("routings"),
-        routings_before
-    );
-    assert_eq!(
-        database.routings().active().await.expect("active routing"),
-        active_before
-    );
-
-    // Retiring a known key must not weaken the strict contract for other keys.
-    payload["neverAContractKey"] = serde_json::json!(true);
-    sqlx::query("UPDATE app_settings SET payload = ? WHERE id = 1")
-        .bind(payload.to_string())
-        .execute(database.pool())
-        .await
-        .expect("store unknown key");
-    assert!(matches!(
-        database.settings().load().await,
-        Err(DbError::Json { .. })
-    ));
-}
-
-/// Normalizing retired keys must not turn `AppSettingsV1` into a lenient
-/// deserializer: a key that was never part of the contract is still a hard
-/// error, so a corrupt or hand-edited row is reported rather than half-read.
 #[tokio::test]
 async fn settings_payload_with_an_unknown_key_is_still_rejected() {
     let database = Database::connect_in_memory()
@@ -2212,16 +1922,7 @@ async fn settings_payload_with_an_unknown_key_is_still_rejected() {
     ));
 }
 
-/// Two settings fields stopped being `String` and became the `specta` enums
-/// that already described their values. This proves the stored bytes did not
-/// move with them.
-///
-/// For every variant of both fields: a payload an earlier (`String`-typed)
-/// build wrote still deserializes, and re-serializing it reproduces that
-/// payload exactly — same literal at the same path, and every other field
-/// untouched. A renamed variant, a changed `rename_all`, or a swapped default
-/// fails here instead of silently rewriting `app_settings.payload` on the first
-/// save after an upgrade.
+/// Typed settings enums use the current persisted vocabulary.
 #[test]
 fn typed_settings_enums_keep_their_persisted_strings() {
     for (mode, stored) in PINNED_SYSTEM_PROXY_MODES {
@@ -2237,13 +1938,7 @@ fn typed_settings_enums_keep_their_persisted_strings() {
     }
 }
 
-/// Round-trips one pinned field value through the persisted representation.
-///
-/// `path` walks into the payload, `stored` is the literal the `String` form
-/// wrote there, and `set` puts the typed variant onto a settings value. The
-/// three assertions are the three ways this could break: a payload written by
-/// the previous build no longer loads, this build writes a different literal, or
-/// this build rewrites some *other* field on the way through.
+/// A typed value and a stored value must round-trip to identical JSON.
 fn assert_pinned_settings_value(path: &[&str], stored: &str, set: impl FnOnce(&mut AppSettingsV1)) {
     let mut expected: serde_json::Value =
         serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("the pinned payload should be JSON");
@@ -2255,7 +1950,7 @@ fn assert_pinned_settings_value(path: &[&str], stored: &str, set: impl FnOnce(&m
     }
     *cursor = serde_json::Value::String(stored.to_string());
 
-    // 1. A payload holding the string an earlier build wrote still loads.
+    // Decode the canonical stored spelling.
     let loaded: AppSettingsV1 = serde_json::from_value(expected.clone()).unwrap_or_else(|error| {
         panic!(
             "`{}` = \"{stored}\" should still deserialize: {error}",
@@ -2263,7 +1958,7 @@ fn assert_pinned_settings_value(path: &[&str], stored: &str, set: impl FnOnce(&m
         )
     });
 
-    // 2. And writing it back reproduces that payload byte for byte.
+    // Writing it back reproduces the same payload.
     let written = serde_json::to_value(&loaded).expect("settings should serialize");
     assert_eq!(
         written,
@@ -2272,8 +1967,7 @@ fn assert_pinned_settings_value(path: &[&str], stored: &str, set: impl FnOnce(&m
         path.join(".")
     );
 
-    // 3. The same literal is what the typed variant produces from scratch, so a
-    //    fresh install and an upgraded one store the same bytes.
+    // The typed variant produces the same literal from scratch.
     let mut settings = AppSettingsV1::default();
     set(&mut settings);
     let fresh = serde_json::to_value(&settings).expect("settings should serialize");
@@ -2284,7 +1978,7 @@ fn assert_pinned_settings_value(path: &[&str], stored: &str, set: impl FnOnce(&m
     assert_eq!(
         cursor,
         &serde_json::Value::String(stored.to_string()),
-        "`{}` must serialize as the string the `String`-typed field stored",
+        "`{}` must serialize with its canonical spelling",
         path.join(".")
     );
 }
@@ -2386,9 +2080,10 @@ fn stored_blob_shapes_match_the_pinned_fixture() {
         blob::rules_from_text(&fixture["rules"].to_string()).expect("pinned rules should decode"),
         rules
     );
-    assert!(blob::rules_from_text("   ")
-        .expect("a blank rule set column should decode")
-        .is_empty());
+    for invalid in ["", "   ", "null", "{}"] {
+        assert!(blob::rules_from_text(invalid).is_err());
+    }
+    assert!(blob::rules_from_text("[]").expect("empty array").is_empty());
 }
 
 #[tokio::test]
@@ -2847,80 +2542,6 @@ async fn add_traffic_accumulates_totals_and_restarts_the_daily_counters() {
     );
 }
 
-#[tokio::test]
-async fn a_database_written_by_the_first_migration_upgrades_in_place() {
-    let fixture = TempDatabase::new("migration-0001.sqlite");
-    let path = fixture.path();
-    // `Migrator`'s fields are public but semver-exempt; this is the only way to
-    // build a file that stops at an older migration.
-    let first_migration_only = sqlx::migrate::Migrator {
-        migrations: Cow::Owned(
-            MIGRATOR
-                .iter()
-                .filter(|migration| migration.version == 1)
-                .cloned()
-                .collect(),
-        ),
-        ..sqlx::migrate::Migrator::DEFAULT
-    };
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect_with(
-            SqliteConnectOptions::new()
-                .filename(path)
-                .create_if_missing(true)
-                .foreign_keys(true),
-        )
-        .await
-        .expect("the fixture database should open");
-    first_migration_only
-        .run(&pool)
-        .await
-        .expect("the first migration should apply");
-    sqlx::query(
-        "INSERT INTO subscriptions (id, remarks, url) VALUES ('sub-1', 'Existing', 'https://example.com/sub')",
-    )
-    .execute(&pool)
-    .await
-    .expect("a pre-upgrade row should be stored");
-    pool.close().await;
-
-    let database = Database::connect(path)
-        .await
-        .expect("a database from an older build must upgrade in place");
-    let subscription = database
-        .subscriptions()
-        .get("sub-1")
-        .await
-        .expect("the subscription lookup should succeed")
-        .expect("the pre-upgrade row must survive the upgrade");
-    assert_eq!(subscription.remarks, "Existing");
-    assert_eq!(
-        subscription.auto_update_interval_minutes, None,
-        "migration 0002 adds a nullable column to existing rows"
-    );
-    assert!(database
-        .subscription_metadata()
-        .list()
-        .await
-        .expect("migration 0002 should have created subscription_metadata")
-        .is_empty());
-    sqlx::query("UPDATE schema_metadata SET version = 2 WHERE id = 1")
-        .execute(database.pool())
-        .await
-        .expect("migration 0003 should have relaxed the pinned version CHECK");
-    assert_eq!(
-        database
-            .settings()
-            .load()
-            .await
-            .expect("settings should load after the upgrade"),
-        AppSettingsV1::default()
-    );
-
-    database.close().await;
-}
-
 /// The JSON pointer of every value in `value`, with array indices collapsed.
 ///
 /// Comparing these instead of whole documents lets the settings pin catch an
@@ -3145,267 +2766,4 @@ fn endpoint(address: &str, port: i32) -> ServerEndpoint {
         address: address.to_string(),
         port,
     }
-}
-
-#[tokio::test]
-async fn retiring_download_speed_preserves_existing_node_data() {
-    let fixture = TempDatabase::new("retire-download-speed.sqlite");
-    let path = fixture.path();
-    let old_migrator = sqlx::migrate::Migrator {
-        migrations: Cow::Owned(
-            MIGRATOR
-                .iter()
-                .filter(|migration| migration.version <= 3)
-                .cloned()
-                .collect(),
-        ),
-        ..sqlx::migrate::Migrator::DEFAULT
-    };
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect_with(
-            SqliteConnectOptions::new()
-                .filename(path)
-                .create_if_missing(true)
-                .foreign_keys(true),
-        )
-        .await
-        .expect("old database should open");
-    old_migrator
-        .run(&pool)
-        .await
-        .expect("old schema should apply");
-    let profile = sample_profile();
-    ProfileRepository::new(&pool)
-        .upsert(&profile)
-        .await
-        .expect("store old profile");
-    sqlx::query("INSERT INTO profile_ex_items (index_id, delay, speed, sort, message, ip_info) VALUES (?, 42, 4096, 17, 'completed', 'US')")
-        .bind(&profile.index_id).execute(&pool).await.expect("store old measurements");
-    pool.close().await;
-
-    let database = Database::connect(path).await.expect("upgrade database");
-    assert_eq!(
-        database
-            .profiles()
-            .get(&profile.index_id)
-            .await
-            .expect("read profile"),
-        Some(profile.clone())
-    );
-    let metrics = database
-        .profile_exs()
-        .get(&profile.index_id)
-        .await
-        .expect("read measurements")
-        .expect("measurements survive");
-    assert_eq!(metrics.delay, 42);
-    assert_eq!(metrics.sort, 17);
-    assert_eq!(metrics.message.as_deref(), Some("completed"));
-    assert_eq!(metrics.ip_info.as_deref(), Some("US"));
-    let columns = sqlx::query("PRAGMA table_info(profile_ex_items)")
-        .fetch_all(database.pool())
-        .await
-        .expect("inspect migrated columns");
-    assert!(!columns
-        .iter()
-        .any(|row| row.get::<String, _>("name") == "speed"));
-    database.close().await;
-}
-
-#[tokio::test]
-async fn manual_group_migration_removes_executable_profiles_and_preserves_ordinary_data() {
-    let fixture = TempDatabase::new("manual-groups.sqlite");
-    let path = &fixture.path;
-    let old = sqlx::migrate::Migrator {
-        migrations: Cow::Owned(
-            MIGRATOR
-                .iter()
-                .filter(|m| m.version <= 4)
-                .cloned()
-                .collect(),
-        ),
-        ..sqlx::migrate::Migrator::DEFAULT
-    };
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect_with(
-            SqliteConnectOptions::new()
-                .filename(path)
-                .create_if_missing(true)
-                .foreign_keys(true),
-        )
-        .await
-        .expect("old database");
-    old.run(&pool).await.expect("old schema");
-    let profile = sample_profile();
-    ProfileRepository::new(&pool)
-        .upsert(&profile)
-        .await
-        .expect("ordinary node");
-    for (id, kind, name) in [
-        ("old-policy", "policyGroup", "Policy"),
-        ("old-chain", "proxyChain", "Chain"),
-        ("old-custom", "custom", profile.remarks.as_str()),
-    ] {
-        sqlx::query(
-            "INSERT INTO profile_items(index_id,config_type,remarks,protocol) VALUES (?,?,?,?)",
-        )
-        .bind(id)
-        .bind(kind)
-        .bind(name)
-        .bind(format!(r#"{{"kind":"{kind}"}}"#))
-        .execute(&pool)
-        .await
-        .expect("retired node");
-        sqlx::query("INSERT INTO profile_ex_items(index_id,delay) VALUES (?,99)")
-            .bind(id)
-            .execute(&pool)
-            .await
-            .expect("metrics");
-        sqlx::query("INSERT INTO server_stat_items(index_id,total_up) VALUES (?,900)")
-            .bind(id)
-            .execute(&pool)
-            .await
-            .expect("traffic");
-    }
-    sqlx::query("UPDATE app_state SET active_profile_id='old-policy'")
-        .execute(&pool)
-        .await
-        .expect("old selection");
-    let rules = serde_json::json!([{"id":"retired-policy","outboundTag":"Policy"},{"id":"retired-chain","outboundTag":"Chain"},{"id":"same-name-survives","outboundTag":profile.remarks},{"id":"direct","outboundTag":"direct"},{"id":"unrelated","outboundTag":"Elsewhere"}]);
-    sqlx::query("INSERT INTO routing_items(id,rule_set) VALUES ('routing',?)")
-        .bind(rules.to_string())
-        .execute(&pool)
-        .await
-        .expect("routes");
-    let mut settings: serde_json::Value =
-        serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("settings");
-    settings["behavior"]["autoCreateSubscriptionGroup"] = serde_json::json!(true);
-    settings["proxy"]["nodeSorting"] = serde_json::json!(3);
-    sqlx::query("INSERT INTO app_settings(id,schema_version,payload) VALUES(1,1,?)")
-        .bind(settings.to_string())
-        .execute(&pool)
-        .await
-        .expect("settings");
-    pool.close().await;
-    let db = Database::connect(path).await.expect("upgrade");
-    assert_eq!(db.profiles().list().await.expect("profiles"), vec![profile]);
-    assert!(db
-        .app_state()
-        .load()
-        .await
-        .expect("selection")
-        .active_profile_id
-        .is_none());
-    for sql in [
-        "SELECT COUNT(*) FROM profile_ex_items",
-        "SELECT COUNT(*) FROM server_stat_items",
-    ] {
-        let count: i64 = sqlx::query_scalar(sql)
-            .fetch_one(db.pool())
-            .await
-            .expect("count");
-        assert_eq!(count, 0);
-    }
-    let remaining: String =
-        sqlx::query_scalar("SELECT rule_set FROM routing_items WHERE id='routing'")
-            .fetch_one(db.pool())
-            .await
-            .expect("routes");
-    let remaining: serde_json::Value = serde_json::from_str(&remaining).expect("rules");
-    assert_eq!(remaining, serde_json::json!([rules[2], rules[3], rules[4]]));
-    settings["behavior"]
-        .as_object_mut()
-        .expect("behavior")
-        .remove("autoCreateSubscriptionGroup");
-    settings["proxy"]
-        .as_object_mut()
-        .expect("proxy")
-        .remove("nodeSorting");
-    let saved: String = sqlx::query_scalar("SELECT payload FROM app_settings")
-        .fetch_one(db.pool())
-        .await
-        .expect("payload");
-    assert_eq!(
-        serde_json::from_str::<serde_json::Value>(&saved).expect("json"),
-        settings
-    );
-    assert!(serde_json::from_str::<AppSettingsV1>(&saved).is_ok());
-    assert!(db
-        .node_groups()
-        .snapshot()
-        .await
-        .expect("folders")
-        .groups
-        .is_empty());
-    assert!(db
-        .node_groups()
-        .snapshot()
-        .await
-        .expect("memberships")
-        .memberships
-        .is_empty());
-    db.close().await;
-    let reopened = Database::connect(path).await.expect("migration runs once");
-    assert_eq!(
-        reopened
-            .profiles()
-            .list()
-            .await
-            .expect("ordinary nodes")
-            .len(),
-        1
-    );
-    reopened.close().await;
-}
-
-#[tokio::test]
-async fn subscription_ownership_migration_only_removes_manual_memberships() {
-    let fixture = TempDatabase::new("subscription-ownership.sqlite");
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect_with(
-            SqliteConnectOptions::new()
-                .filename(fixture.path())
-                .create_if_missing(true)
-                .foreign_keys(true),
-        )
-        .await
-        .expect("fixture");
-    let previous = sqlx::migrate::Migrator {
-        migrations: Cow::Owned(
-            MIGRATOR
-                .iter()
-                .filter(|migration| migration.version < 7)
-                .cloned()
-                .collect(),
-        ),
-        ..sqlx::migrate::Migrator::DEFAULT
-    };
-    previous.run(&pool).await.expect("previous schema");
-    sqlx::raw_sql(r#"
-        INSERT INTO subscriptions (id, remarks, url) VALUES ('source', 'Source', 'https://source.test');
-        INSERT INTO node_groups (id, name, sort) VALUES ('manual', 'Manual', 0);
-        INSERT INTO profile_items (index_id, config_type, subscription_id, remarks, protocol)
-        VALUES ('owned', 'socks', 'source', 'Same', '{"kind":"socks","server":{"address":"source.test","port":1080},"username":"","password":""}'),
-               ('local', 'socks', NULL, 'Same', '{"kind":"socks","server":{"address":"local.test","port":1080},"username":"","password":""}');
-        INSERT INTO node_group_memberships (profile_id, group_id) VALUES ('owned', 'manual'), ('local', 'manual');
-    "#).execute(&pool).await.expect("legacy mixed group");
-    pool.close().await;
-    let database = Database::connect(fixture.path()).await.expect("upgrade");
-    let groups = database.node_groups().snapshot().await.expect("groups");
-    assert_eq!(groups.groups.len(), 1);
-    assert_eq!(groups.memberships.len(), 1);
-    assert_eq!(groups.memberships[0].profile_id, "local");
-    assert_eq!(database.profiles().list().await.expect("profiles").len(), 2);
-    assert_eq!(
-        database
-            .subscriptions()
-            .list()
-            .await
-            .expect("sources")
-            .len(),
-        1
-    );
 }

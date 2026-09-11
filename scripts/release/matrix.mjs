@@ -7,6 +7,4 @@ const stableTargets = [
   { os: "linux", arch: "arm64", updater: "linux-aarch64", releaseTarget: "linux-aarch64" },
 ];
 
-const stableCoreTypes = [];
-
-export { stableCoreTypes, stableTargets };
+export { stableTargets };

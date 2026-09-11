@@ -1,7 +1,7 @@
 use crate::{SysProxyType, TrafficMode};
 
 pub const DEFAULT_LOCAL_PORT: i32 = 10808;
-pub const DEFAULT_LOG_LEVEL: &str = "warning";
+pub const DEFAULT_LOG_LEVEL: &str = "warn";
 pub const DEFAULT_DOMAIN_STRATEGY: &str = "AsIs";
 pub const DEFAULT_TUN_ICMP_ROUTING: &str = "rule";
 pub const DEFAULT_LANGUAGE: &str = "en";
@@ -335,7 +335,7 @@ mod tests {
         assert_eq!(config.inbound[0].protocol, "socks");
         assert_eq!(config.inbound[0].local_port, 10808);
         assert!(config.inbound[0].sniffing_enabled);
-        assert_eq!(config.core_basic_item.loglevel, "warning");
+        assert_eq!(config.core_basic_item.loglevel, "warn");
         assert_eq!(config.routing_basic_item.domain_strategy, "AsIs");
         assert_eq!(config.tun_mode_item.mtu, 1500);
         assert!(!config.tun_mode_item.strict_route);

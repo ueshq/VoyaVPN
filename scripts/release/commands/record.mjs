@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { parseArgs } from "../../lib/args.mjs";
-import { repoRootFromScript } from "../../lib/common.mjs";
+import { readPackageVersion, repoRootFromScript } from "../../lib/common.mjs";
 import { stableTargets } from "../matrix.mjs";
 import { sha256File, walkArtifactManifests } from "../validation.mjs";
 
@@ -88,11 +88,6 @@ async function git(args) {
   } catch {
     return "";
   }
-}
-
-async function packageVersion() {
-  const packageJson = JSON.parse(await readFile(resolve(repoRoot, "package.json"), "utf8"));
-  return packageJson.version;
 }
 
 function field(value) {
@@ -489,7 +484,7 @@ function gateChecklistRows() {
 }
 
 async function buildReleaseRecord(options) {
-  const version = options.version ?? (await packageVersion());
+  const version = options.version ?? (await readPackageVersion(repoRoot));
   const [commit, branch, status, upstream] = await Promise.all([
     git(["rev-parse", "HEAD"]),
     git(["branch", "--show-current"]),

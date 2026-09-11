@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { capture, checkedCapture, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
+import { resolveDmgPath } from "./tunnel-layout.mjs";
 import { prepareVoyaForLocalBuild } from "./local-runtime.mjs";
 import { resolveSigningIdentity } from "./provisioning.mjs";
 
@@ -84,11 +85,6 @@ function requireNotaryCredentials() {
 
 function plistValue(plistPath, keyPath) {
   return checkedCapture("/usr/libexec/PlistBuddy", ["-c", `Print ${keyPath}`, plistPath], commandOptions()).stdout.trim();
-}
-
-function appExecutablePath() {
-  const executable = plistValue(resolve(appContents, "Info.plist"), ":CFBundleExecutable");
-  return resolve(appContents, "MacOS", executable);
 }
 
 function installedExecutableName() {
@@ -179,35 +175,6 @@ function runNetworkExtensionDoctor(appPath, env, extraArgs = []) {
   run("node", args, commandOptions(env));
 }
 
-function archSuffix() {
-  const explicit = process.env.VOYAVPN_MACOS_DMG_ARCH?.trim();
-  if (explicit) {
-    return explicit;
-  }
-
-  const archs = checkedCapture("lipo", ["-archs", appExecutablePath()], commandOptions()).stdout.trim().split(/\s+/).filter(Boolean);
-  const hasArm64 = archs.includes("arm64");
-  const hasX64 = archs.includes("x86_64");
-  if (hasArm64 && hasX64) {
-    return "universal";
-  }
-  if (hasArm64) {
-    return "aarch64";
-  }
-  if (hasX64) {
-    return "x64";
-  }
-  return process.arch === "arm64" ? "aarch64" : process.arch === "x64" ? "x64" : process.arch;
-}
-
-function dmgPath() {
-  const explicit = process.env.VOYAVPN_MACOS_DMG_PATH?.trim();
-  if (explicit) {
-    return resolve(explicit);
-  }
-  return resolve(dmgDir, `VoyaVPN_${packageJson.version}_${archSuffix()}.dmg`);
-}
-
 function main() {
   requireMacos();
   requireNotaryCredentials();
@@ -256,7 +223,7 @@ function main() {
     run("spctl", ["--assess", "--type", "execute", "--verbose=4", appBundle], commandOptions(verifyEnv));
   }
 
-  const finalDmgPath = dmgPath();
+  const finalDmgPath = resolveDmgPath({ appContents, dmgDir, version: packageJson.version });
   const dmgEnv = {
     ...verifyEnv,
     VOYAVPN_MACOS_DMG_PATH: finalDmgPath,

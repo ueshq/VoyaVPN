@@ -92,7 +92,7 @@ const darwinBundle = {
 };
 
 describe("release artifacts", () => {
-  it("skips symbolic links while walking bundle outputs", async () => {
+  it("uses the root package version and skips symbolic links in bundle outputs", async () => {
     const root = await workDir();
     const inputDir = join(root, "bundle");
     const outputDir = join(root, "out");
@@ -122,13 +122,13 @@ describe("release artifacts", () => {
         "darwin-x86_64",
         "--channel",
         "beta",
-        "--version",
-        "0.1.0",
       ],
       { cwd: repoRoot },
     );
 
     const manifest = JSON.parse(await readFile(join(outputDir, "artifact-manifest.json"), "utf8"));
+    const packageJson = JSON.parse(await readFile(join(repoRoot, "package.json"), "utf8"));
+    expect(manifest.version).toBe(packageJson.version);
     expect(manifest.artifacts).toHaveLength(1);
     expect(manifest.artifacts[0].originalRelativePath).toBe("dmg/VoyaVPN_0.1.0_x64.dmg");
   });

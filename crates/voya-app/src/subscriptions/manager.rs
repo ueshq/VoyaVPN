@@ -203,7 +203,7 @@ impl<'db> SubscriptionManager<'db> {
 
         for profile in &mut profiles {
             profile.subscription_id = subscription_id.map(str::to_string);
-            normalize_profile(config, profile);
+            normalize_profile(profile);
         }
 
         let before_dedupe = profiles.len();

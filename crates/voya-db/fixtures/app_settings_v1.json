@@ -11,7 +11,7 @@
   },
   "core": {
     "logEnabled": false,
-    "logLevel": "warning",
+    "logLevel": "warn",
     "muxEnabled": false,
     "defaultAllowInsecure": false,
     "defaultFingerprint": "",

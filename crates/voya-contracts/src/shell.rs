@@ -158,7 +158,7 @@ pub enum AppErrorEntity {
 #[serde(rename_all = "camelCase")]
 pub enum DatabaseErrorCode {
     /// The stored schema is not the one this build expects; the database has to
-    /// be migrated or reset before anything else will work.
+    /// be reset manually before anything else will work.
     SchemaUnsupported,
     /// A stored payload could not be decoded — one bad row, or a damaged file.
     Corrupt,

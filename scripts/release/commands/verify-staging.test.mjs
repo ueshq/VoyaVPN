@@ -169,6 +169,11 @@ describe("release staging verification", () => {
     ).rejects.toThrow(/signature does not match local \.sig artifact|signature verification failed/);
   });
 
+  it.each([null, {}, "", 42])("rejects a malformed core asset list: %j", (assets) => {
+    expect(() => validateCoreManifest({ ...validCoreManifest(), assets }, { cdnBaseUrl }))
+      .toThrow(/assets must be an array/);
+  });
+
   it("rejects downloadable core asset entries", () => {
     const manifest = validCoreManifest();
     manifest.assets.push({

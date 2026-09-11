@@ -1,13 +1,9 @@
 {
   "_comment": [
-    "Pinned wire format of every value voya-db serializes into a SQLite TEXT column.",
-    "These blobs are the raw serde shape of the voya-core domain types and carry no",
-    "version tag of their own, so an accidental rename, a removed field, or a new",
-    "field without #[serde(default)] silently breaks every profile row already on",
-    "disk. Changing anything here is a persistence-schema change: keep it backwards",
-    "compatible, or bump schemaVersion with a migration.",
-    "Keyed by schemaVersion so the pin and voya_contracts::CURRENT_SCHEMA_VERSION",
-    "cannot drift apart."
+    "Current format of values voya-db serializes into SQLite TEXT columns.",
+    "Optional protocol fields retain their current input defaults.",
+    "Breaking persistence changes require a new baseline, not a historical decoder.",
+    "The DTO version is separate from the database baseline identifier."
   ],
   "schemaVersion": 1,
   "protocols": {

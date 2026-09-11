@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { checkedCapture } from "../../lib/common.mjs";
 
 export const appBundleIdentifier = "app.voyavpn.desktop";
 export const packetTunnelBundleIdentifier = "app.voyavpn.desktop.PacketTunnel";
@@ -99,4 +100,36 @@ export function incompatiblePacketTunnelBundle(appContents, distribution) {
 export function libboxBinaryPath(frameworkPath) {
   const direct = join(frameworkPath, "Libbox");
   return existsSync(direct) ? direct : join(frameworkPath, "Versions", "A", "Libbox");
+}
+
+/** The build and DMG signing steps must resolve the same artifact filename. */
+export function resolveDmgPath({
+  appContents,
+  dmgDir,
+  version,
+  env = process.env,
+  hostArch = process.arch,
+  captureCommand = checkedCapture,
+}) {
+  const explicit = env.VOYAVPN_MACOS_DMG_PATH?.trim();
+  if (explicit) return resolve(explicit);
+
+  let arch = env.VOYAVPN_MACOS_DMG_ARCH?.trim();
+  if (!arch) {
+    const executableName = captureCommand(
+      "/usr/libexec/PlistBuddy",
+      ["-c", "Print :CFBundleExecutable", resolve(appContents, "Info.plist")],
+      { env },
+    ).stdout.trim();
+    const executable = resolve(appContents, "MacOS", executableName);
+    const archs = captureCommand("lipo", ["-archs", executable], { env }).stdout.trim().split(/\s+/);
+    const hasArm64 = archs.includes("arm64");
+    const hasX64 = archs.includes("x86_64");
+    if (hasArm64 && hasX64) arch = "universal";
+    else if (hasArm64) arch = "aarch64";
+    else if (hasX64) arch = "x64";
+    else arch = hostArch === "arm64" ? "aarch64" : hostArch;
+  }
+
+  return resolve(dmgDir, `VoyaVPN_${version}_${arch}.dmg`);
 }

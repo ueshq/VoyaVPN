@@ -54,10 +54,6 @@ pub mod blob {
     }
 
     pub fn rules_from_text(value: &str) -> Result<Vec<RulesItem>, BlobError> {
-        if value.trim().is_empty() {
-            return Ok(Vec::new());
-        }
-
         serde_json::from_str(value).map_err(|source| BlobError::Deserialize {
             type_name: "RulesItem[]",
             source,

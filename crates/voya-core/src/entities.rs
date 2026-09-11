@@ -9,12 +9,8 @@ pub struct ServerEndpoint {
     pub port: i32,
 }
 
-/// Persisted as-is inside the profile blob column, so every field that is not
-/// structurally required carries `#[serde(default)]`: a row written before that
-/// field existed must still decode after an upgrade instead of being skipped as
-/// undecodable. `#[serde(default)]` only affects deserialization, so the
-/// serialized shape pinned by `voya-db`'s blob fixture is unchanged. New fields
-/// must be added with `#[serde(default)]` for the same reason.
+/// The current tagged protocol format. Optional credentials and protocol options
+/// have defaults for minimal inputs; required server and identity fields do not.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(
     tag = "kind",
@@ -262,8 +258,8 @@ impl ProfileProtocol {
     }
 }
 
-/// Every field is optional by nature and defaulted on deserialization for the
-/// same forward-compatibility reason as [`ProfileProtocol`].
+/// Transport options are optional and default on deserialization, as in
+/// [`ProfileProtocol`].
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(
     tag = "kind",
@@ -387,13 +383,8 @@ pub enum TlsMode {
     Reality,
 }
 
-/// Persisted as-is inside the profile blob column.
-///
-/// The container-level `#[serde(default)]` is what makes an older row survive
-/// an upgrade: a TLS block written before a field existed decodes with that
-/// field defaulted instead of failing with `missing field` and being skipped.
-/// It changes deserialization only, so the shape pinned by `voya-db`'s blob
-/// fixture is unchanged, and it covers fields added later automatically.
+/// Current TLS options. Omitted options use their protocol defaults; unknown
+/// fields are rejected. The database pins the serialized shape in its fixture.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct TlsSettings {

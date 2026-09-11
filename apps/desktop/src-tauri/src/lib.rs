@@ -40,7 +40,6 @@ use voya_app::{
 };
 use voya_platform::{
     coreinfo::{copy_seed_core_assets, TargetOs},
-    filesystem::reject_incompatible_config,
     paths::{core_seed_resources_dir, AppPaths},
     process::{
         classify_core_log_line, JobAssignedRunner, PlatformProcessJobFactory, ProcessLogSink,
@@ -216,11 +215,9 @@ pub fn run() {
 /// Split out of `setup` so a failure is a value rather than a `?` that
 /// disappears into `build().expect(..)`: in a packaged build (no console on
 /// Windows, a bundle on macOS) that made the process vanish with no
-/// explanation, including for `reject_incompatible_config`, which is a
-/// deliberate, user-actionable refusal.
+/// explanation, including user-actionable database schema failures.
 fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     let app_config_dir = app.path().app_config_dir()?;
-    reject_incompatible_config(&app_config_dir.join("guiNConfig.json"), 1)?;
     let runtime_paths = AppPaths::new(&app_config_dir);
     runtime_paths.ensure_dirs()?;
     // Installed before the first `tracing::warn!` below so the startup

@@ -149,16 +149,11 @@ const SINGBOX_FALLBACK_LOG_LEVEL: &str = "warn";
 
 /// Translates the app's log level onto sing-box's accepted `log.level` set.
 ///
-/// The settings UI stores `none`/`trace`/`debug`/`info`/`warn`/`warning`/`error`,
-/// so `warning` needs sing-box's spelling and `none` (which is expressed as
-/// `log.disabled` instead) must not reach `log.level` at all.
+/// The settings UI uses sing-box spellings. `none` is expressed through
+/// `log.disabled` and must not reach `log.level`.
 fn singbox_log_level(configured: &str) -> &'static str {
     let lowercased = configured.trim().to_ascii_lowercase();
     let normalized = lowercased.as_str();
-    // The app inherited v2rayN's `warning`; sing-box only accepts `warn`.
-    if normalized == "warning" {
-        return "warn";
-    }
     SINGBOX_LOG_LEVELS
         .iter()
         .copied()

@@ -16,17 +16,12 @@ pub(crate) struct SnapshotCoreGenEnv {
     clash_api_secret: Option<String>,
 }
 
-#[derive(Debug, Clone, Default)]
-pub(crate) struct SnapshotCoreGenData {
-    pub(crate) profiles: Vec<ProfileItem>,
-    pub(crate) routings: Vec<RoutingItem>,
-}
-
 impl SnapshotCoreGenEnv {
     pub(crate) fn new(
         config: &AppConfig,
         platform: CoreGenPlatform,
-        data: SnapshotCoreGenData,
+        profiles: Vec<ProfileItem>,
+        routings: Vec<RoutingItem>,
     ) -> Self {
         Self {
             local_socks_port: config
@@ -34,8 +29,8 @@ impl SnapshotCoreGenEnv {
                 .first()
                 .map_or(voya_core::DEFAULT_LOCAL_PORT, |inbound| inbound.local_port),
             platform,
-            profiles: data.profiles,
-            routings: data.routings,
+            profiles,
+            routings,
             singbox_ruleset_paths: BTreeMap::new(),
             clash_api_secret: None,
         }
@@ -107,7 +102,8 @@ mod tests {
         let env = SnapshotCoreGenEnv::new(
             &AppConfig::default(),
             CoreGenPlatform::Linux,
-            SnapshotCoreGenData::default(),
+            Vec::new(),
+            Vec::new(),
         );
 
         assert_eq!(env.get_clash_api_secret(), None);
@@ -119,7 +115,8 @@ mod tests {
         let env = SnapshotCoreGenEnv::new(
             &AppConfig::default(),
             CoreGenPlatform::Linux,
-            SnapshotCoreGenData::default(),
+            Vec::new(),
+            Vec::new(),
         )
         .with_clash_api_secret(secret.clone());
 

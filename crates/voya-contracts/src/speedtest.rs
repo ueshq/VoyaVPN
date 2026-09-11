@@ -21,10 +21,8 @@ pub struct SpeedtestRequest {
 
 /// How a probe ended, as a code rather than a sentence.
 ///
-/// This is **persisted**: it is what `profile_ex.message` holds, so the prose
-/// that used to live there ("Speedtesting", "request timed out", "Skipped")
-/// froze the user's language at the moment the test ran. Rows written by
-/// earlier builds still decode — see [`SpeedtestOutcome::from_stored`].
+/// Persisted in `profile_ex.message` using the same camelCase codes as IPC.
+/// Unrecognised stored values become `Unknown` without hiding the profile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum SpeedtestOutcome {
@@ -49,8 +47,7 @@ pub enum SpeedtestOutcome {
     NoAvailablePort,
     /// A failure with no more specific code.
     Failed,
-    /// A stored value this build cannot classify — written by a build that
-    /// spelled the column differently. Better than silently dropping the row.
+    /// A stored value this build cannot classify, without dropping the row.
     Unknown,
 }
 
@@ -79,68 +76,15 @@ impl SpeedtestOutcome {
         }
     }
 
-    /// Decode one stored `profile_ex.message` value.
-    ///
-    /// Three generations of value can be in the column and all of them have to
-    /// come back as something the UI can render:
-    ///
-    /// 1. A code this build wrote — matched exactly.
-    /// 2. The English prose earlier builds wrote ("Speedtesting wait",
-    ///    "request timed out", "Skipped") — matched case-insensitively against
-    ///    the table below, so an upgraded install keeps its last results.
-    /// 3. A bare number, which is what the pre-code builds stored for a
-    ///    successful latency or download probe (`delay.to_string()`).
-    ///
-    /// Anything else becomes [`SpeedtestOutcome::Unknown`] rather than failing
-    /// the read: one unrecognisable cell must never hide the profile row.
+    /// Decode a current status code without failing the row on unknown values.
     #[must_use]
     pub fn from_stored(value: &str) -> Option<Self> {
         let value = value.trim();
         if value.is_empty() {
             return None;
         }
-        let known = [
-            Self::Waiting,
-            Self::Testing,
-            Self::Completed,
-            Self::TimedOut,
-            Self::ProxyConnectFailed,
-            Self::ProxyConnectionRefused,
-            Self::ProxyConnectionClosed,
-            Self::Cancelled,
-            Self::Skipped,
-            Self::InvalidProfile,
-            Self::CoreUnavailable,
-            Self::NoAvailablePort,
-            Self::Failed,
-            Self::Unknown,
-        ];
-        if let Some(outcome) = known
-            .into_iter()
-            .find(|outcome| outcome.as_stored() == value)
-        {
-            return Some(outcome);
-        }
-        if value.parse::<f64>().is_ok() {
-            return Some(Self::Completed);
-        }
-
-        Some(legacy_outcome(&value.to_ascii_lowercase()).unwrap_or(Self::Unknown))
-    }
-}
-
-/// The prose earlier builds persisted, mapped onto the codes that replaced it.
-fn legacy_outcome(lowercase: &str) -> Option<SpeedtestOutcome> {
-    match lowercase {
-        "speedtesting" => Some(SpeedtestOutcome::Testing),
-        "speedtesting wait" => Some(SpeedtestOutcome::Waiting),
-        "request timed out" => Some(SpeedtestOutcome::TimedOut),
-        "proxy connection failed" => Some(SpeedtestOutcome::ProxyConnectFailed),
-        "proxy connection refused" => Some(SpeedtestOutcome::ProxyConnectionRefused),
-        "proxy connection closed" => Some(SpeedtestOutcome::ProxyConnectionClosed),
-        "udp test failed" | "udptestfailed" => Some(SpeedtestOutcome::Failed),
-        "skipped" => Some(SpeedtestOutcome::Skipped),
-        _ => None,
+        let deserializer = serde::de::value::StrDeserializer::<serde::de::value::Error>::new(value);
+        Some(Self::deserialize(deserializer).unwrap_or(Self::Unknown))
     }
 }
 
@@ -246,50 +190,34 @@ mod tests {
     }
 
     #[test]
-    fn rows_written_by_earlier_builds_still_decode() {
-        // Exactly what `clear_previous_results`, `speedtest_error_message` and
-        // `run_realping` used to write into `profile_ex.message` / `ip_info`.
-        let legacy: &[(&str, SpeedtestOutcome)] = &[
-            ("Speedtesting", SpeedtestOutcome::Testing),
-            ("Speedtesting wait", SpeedtestOutcome::Waiting),
-            ("request timed out", SpeedtestOutcome::TimedOut),
-            (
-                "proxy connection failed",
-                SpeedtestOutcome::ProxyConnectFailed,
-            ),
-            (
-                "proxy connection refused",
-                SpeedtestOutcome::ProxyConnectionRefused,
-            ),
-            (
-                "proxy connection closed",
-                SpeedtestOutcome::ProxyConnectionClosed,
-            ),
-            ("UDP test failed", SpeedtestOutcome::Failed),
-            ("udpTestFailed", SpeedtestOutcome::Failed),
-            ("cancelled", SpeedtestOutcome::Cancelled),
-            ("Skipped", SpeedtestOutcome::Skipped),
-            // A successful latency probe stored the millisecond count, and a
-            // download probe the byte rate.
-            ("42", SpeedtestOutcome::Completed),
-            ("2048", SpeedtestOutcome::Completed),
-            ("-1", SpeedtestOutcome::Completed),
-            // Anything else must degrade, never fail the row.
-            (
-                "failed to write speedtest config /Users/someone/Library/config.json: denied",
-                SpeedtestOutcome::Unknown,
-            ),
-        ];
-
-        for (stored, expected) in legacy {
+    fn noncanonical_stored_values_are_unknown() {
+        for stored in [
+            "Speedtesting",
+            "Speedtesting wait",
+            "request timed out",
+            "proxy connection failed",
+            "proxy connection refused",
+            "proxy connection closed",
+            "UDP test failed",
+            "udpTestFailed",
+            "Skipped",
+            "42",
+            "2048",
+            "-1",
+            "NaN",
+            "a future status code",
+        ] {
             assert_eq!(
                 SpeedtestOutcome::from_stored(stored),
-                Some(*expected),
-                "legacy value `{stored}` decoded wrongly"
+                Some(SpeedtestOutcome::Unknown),
+                "noncanonical value `{stored}` must not be interpreted as a current status"
             );
         }
-
         assert_eq!(SpeedtestOutcome::from_stored(""), None);
         assert_eq!(SpeedtestOutcome::from_stored("   "), None);
+        assert_eq!(
+            SpeedtestOutcome::from_stored(" timedOut "),
+            Some(SpeedtestOutcome::TimedOut)
+        );
     }
 }

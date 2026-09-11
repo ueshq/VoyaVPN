@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -29,6 +30,11 @@ export function repoRootFromScript(importMetaUrl = import.meta.url) {
 
 export function isCliEntrypoint(importMetaUrl) {
   return process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href === importMetaUrl : false;
+}
+
+export async function readPackageVersion(repoRoot) {
+  const packageJson = JSON.parse(await readFile(resolve(repoRoot, "package.json"), "utf8"));
+  return packageJson.version;
 }
 
 // Only long flags: short flags such as `-p` mean "package" to cargo and
@@ -80,8 +86,8 @@ export function capture(program, args, options = {}) {
 }
 
 /** Capture a required command, preserving output and reporting failures safely. */
-export function checkedCapture(program, args, options = {}) {
-  const result = capture(program, args, options);
+export function checkedCapture(program, args, options = {}, captureCommand = capture) {
+  const result = captureCommand(program, args, options);
   if (result.error) {
     throw result.error;
   }

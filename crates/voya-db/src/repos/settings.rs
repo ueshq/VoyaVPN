@@ -5,24 +5,9 @@ use crate::{
     AppStateRecord, DbError, Result,
 };
 
-/// Stores the IPC settings DTO verbatim as the on-disk settings payload.
-///
-/// `voya_contracts::AppSettingsV1` is therefore two contracts at once: the type
-/// tauri-specta exports to `bindings.ts`, and the JSON layout of every installed
-/// database's `app_settings.payload`. Because the contract and its nested
-/// structs carry `deny_unknown_fields`, a field edited for UI reasons is a
-/// storage-format change — removing or renaming one makes [`Self::load`] fail
-/// for every existing install, which `AppServices::load_config` propagates into
-/// `setup()` and turns into a launch failure.
-///
-/// Any change to `AppSettingsV1` must therefore either stay backwards
-/// compatible (add fields with `#[serde(default)]`) or carry the removed or
-/// renamed key in [`normalize_retired_keys`], which cleans up the stored JSON
-/// before serde sees it.
-/// The `persisted_settings_payload_from_an_earlier_build_still_loads` and
-/// `settings_payload_with_retired_keys_still_loads` tests pin both halves
-/// against checked-in fixtures, so an accidental break is caught here rather
-/// than on a user's machine.
+/// Stores the current IPC settings DTO verbatim. Database initialization rejects
+/// historical baselines; this repository strictly reads the current payload and
+/// never converts retired keys. Missing settings use the current defaults.
 #[derive(Debug, Clone, Copy)]
 pub struct SettingsRepository<'executor> {
     executor: RepositoryExecutor<'executor>,
@@ -50,7 +35,7 @@ impl<'executor> SettingsRepository<'executor> {
                 manual_reset_command: settings_reset_command(),
             });
         }
-        let settings = deserialize_payload(&payload)?;
+        let settings: AppSettingsV1 = serde_json::from_str(&payload).map_err(payload_error)?;
         if settings.schema_version != CURRENT_SCHEMA_VERSION {
             return Err(DbError::UnsupportedDatabaseSchema {
                 path: "app_settings.payload".into(),
@@ -91,73 +76,10 @@ impl<'executor> SettingsRepository<'executor> {
     }
 }
 
-/// Keys `AppSettingsV1::dns` used to have and no longer does.
-///
-/// sing-box 1.13 cannot express any of them (`hosts` falls back to
-/// `/etc/hosts` even for an explicit empty list, and `option/dns.go` has no
-/// stale-serving or parallel-query knob), so the three settings were dropped
-/// rather than wired.
-const RETIRED_DNS_KEYS: [&str; 3] = ["useSystemHosts", "serveStale", "parallelQuery"];
-
-/// Keys `AppSettingsV1::speed_test` renamed, as `(stored, current)`.
-///
-/// `delayIntervalMs` always held seconds; only the name was wrong.
-const RENAMED_SPEEDTEST_KEYS: [(&str, &str); 1] = [("delayIntervalMs", "delayIntervalSeconds")];
-
-const RETIRED_SPEEDTEST_KEYS: [&str; 2] = ["downloadUrl", "udpTarget"];
-
-/// Reads a stored payload into the current contract.
-///
-/// `AppSettingsV1` and every struct nested in it deny unknown fields, so a row
-/// written before a field was removed or renamed would fail to deserialize and
-/// take `setup()` down with it. Normalizing the stored JSON first — dropping
-/// the retired keys, moving the renamed ones onto their current name and their
-/// stored value — keeps those rows loading while leaving `deny_unknown_fields`
-/// strict about keys that were never part of the contract. The first save after
-/// an upgrade rewrites the row in the current shape.
-fn deserialize_payload(payload: &str) -> Result<AppSettingsV1> {
-    let mut value = serde_json::from_str::<serde_json::Value>(payload).map_err(payload_error)?;
-    normalize_retired_keys(&mut value);
-    serde_json::from_value(value).map_err(payload_error)
-}
-
 fn payload_error(source: serde_json::Error) -> DbError {
     DbError::Json {
         path: "app_settings.payload".into(),
         source,
-    }
-}
-
-fn normalize_retired_keys(value: &mut serde_json::Value) {
-    // Retired top-level settings are discarded only at the persistence boundary.
-    if let Some(settings) = value.as_object_mut() {
-        settings.remove("sources");
-        settings.remove("shortcuts");
-    }
-
-    if let Some(dns) = value
-        .get_mut("dns")
-        .and_then(serde_json::Value::as_object_mut)
-    {
-        for key in RETIRED_DNS_KEYS {
-            dns.remove(key);
-        }
-    }
-
-    if let Some(speedtest) = value
-        .get_mut("speedTest")
-        .and_then(serde_json::Value::as_object_mut)
-    {
-        for key in RETIRED_SPEEDTEST_KEYS {
-            speedtest.remove(key);
-        }
-        for (stored, current) in RENAMED_SPEEDTEST_KEYS {
-            if let Some(stored_value) = speedtest.remove(stored) {
-                // A payload already carrying the current key wins: only a row
-                // that predates the rename should be filled in from the old one.
-                speedtest.entry(current).or_insert(stored_value);
-            }
-        }
     }
 }
 
@@ -170,10 +92,7 @@ fn validated_payload(settings: &AppSettingsV1) -> Result<String> {
             manual_reset_command: settings_reset_command(),
         });
     }
-    let payload = serde_json::to_string(settings).map_err(|source| DbError::Json {
-        path: "app_settings.payload".into(),
-        source,
-    })?;
+    let payload = serde_json::to_string(settings).map_err(payload_error)?;
     Ok(payload)
 }
 

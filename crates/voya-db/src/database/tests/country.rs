@@ -13,38 +13,20 @@ fn measured(profile: &ProfileItem, code: Option<&str>) -> SpeedtestResult {
 }
 
 #[tokio::test]
-async fn country_migration_preserves_old_metrics_and_survives_restart() {
-    let fixture = TempDatabase::new("country-migration.sqlite");
-    let old = sqlx::migrate::Migrator {
-        migrations: Cow::Owned(
-            MIGRATOR
-                .iter()
-                .filter(|m| m.version <= 5)
-                .cloned()
-                .collect(),
-        ),
-        ..sqlx::migrate::Migrator::DEFAULT
-    };
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect_with(
-            SqliteConnectOptions::new()
-                .filename(fixture.path())
-                .create_if_missing(true),
-        )
-        .await
-        .expect("old database");
-    old.run(&pool).await.expect("old schema");
+async fn country_measurements_and_metrics_survive_restart() {
+    let fixture = TempDatabase::new("country-restart.sqlite");
+    let database = Database::connect(fixture.path()).await.expect("database");
+    let pool = database.pool();
     let profile = sample_profile();
-    ProfileRepository::new(&pool)
+    ProfileRepository::new(pool)
         .upsert(&profile)
         .await
-        .expect("old profile");
+        .expect("profile");
     sqlx::query("INSERT INTO profile_ex_items (index_id, delay, sort, message, ip_info) VALUES (?, 23, 17, 'completed', 'US')")
-        .bind(&profile.index_id).execute(&pool).await.expect("old measurements");
-    pool.close().await;
+        .bind(&profile.index_id).execute(pool).await.expect("measurements");
+    database.close().await;
 
-    let db = Database::connect(fixture.path()).await.expect("migrate");
+    let db = Database::connect(fixture.path()).await.expect("reopen");
     let previous = db
         .profile_exs()
         .get(&profile.index_id)
@@ -53,7 +35,7 @@ async fn country_migration_preserves_old_metrics_and_survives_restart() {
         .expect("row");
     assert_eq!(
         previous.country_code, None,
-        "raw historical IP text is not a measured country"
+        "raw IP text is not a measured country"
     );
     assert_eq!((previous.delay, previous.sort), (23, 17));
     assert_eq!(previous.ip_info.as_deref(), Some("US"));

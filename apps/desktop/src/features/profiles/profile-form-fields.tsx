@@ -1,5 +1,5 @@
 import { useI18n } from "@voya/i18n/use-i18n";
-import { profileValidationMessage } from "./profile-form-errors";
+import { profileValidationMessage } from "./profile-form-utils";
 import { createContext, useContext, useId } from "react";
 import type * as React from "react";
 import { Controller } from "react-hook-form";

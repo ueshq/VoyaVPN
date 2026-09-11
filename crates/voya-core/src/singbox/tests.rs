@@ -1451,11 +1451,10 @@ fn singbox_speedtest_config_adds_mixed_inbound_proxy_and_route_per_entry() {
 }
 
 #[test]
-fn singbox_log_level_maps_app_levels_onto_singbox_names() {
+fn singbox_log_level_accepts_current_levels_and_defaults_invalid_values() {
     // (stored app level, generated `log.level`, generated `log.disabled`)
     let cases = [
         (crate::DEFAULT_LOG_LEVEL, "warn", None),
-        ("warning", "warn", None),
         ("warn", "warn", None),
         ("trace", "trace", None),
         ("debug", "debug", None),

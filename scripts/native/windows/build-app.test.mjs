@@ -101,6 +101,19 @@ describe("Windows local app build", () => {
     });
   });
 
+  it("propagates native probe failures instead of treating them as an empty result", () => {
+    expect(() => readExistingWindowsInstalls({
+      env: {},
+      captureCommand: () => ({ status: 1, stdout: "[]", stderr: "Access denied" }),
+    })).toThrow(/failed with status 1: Access denied/);
+
+    const spawnError = new Error("Unable to start tasklist");
+    expect(() => assertWindowsGuiStopped({
+      env: {},
+      captureCommand: () => ({ error: spawnError, status: null, stdout: "" }),
+    })).toThrow(spawnError);
+  });
+
   it("invokes pnpm through the current Node.js Corepack entrypoint on Windows", () => {
     expect(windowsPnpmInvocation({
       env: {},
