@@ -26,16 +26,12 @@ describe("verify:local is the single source of truth for the gate list", () => {
   // list mentioned `check:architecture` at all.
   it("is mirrored step for step by the CI baseline job", () => {
     expect(baseline).not.toBe("");
-    const missing = gates.filter((gate) => !baseline.includes(`pnpm run ${gate}`));
-
-    expect(missing).toEqual([]);
+    const inCi = [...baseline.matchAll(/pnpm run (check:[\w:-]+)/gu)].map((match) => match[1]);
+    expect(inCi).toEqual(gates);
   });
 
-  it("leaves no baseline gate out of verify:local", () => {
-    const inCi = [...baseline.matchAll(/pnpm run (check:[\w:-]+)/gu)].map((match) => match[1]);
-    const extra = [...new Set(inCi)].filter((gate) => !gates.includes(gate));
-
-    expect(extra).toEqual([]);
+  it("runs each canonical gate exactly once", () => {
+    expect(new Set(gates).size).toBe(gates.length);
   });
 
   it.each(["AGENTS.md", "README.md"])("is documented gate for gate in %s", (document) => {
