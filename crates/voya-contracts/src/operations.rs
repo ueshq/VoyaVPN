@@ -26,7 +26,6 @@ pub enum ExportProfilesFormat {
     ShareLinks,
     ShareLinksBase64,
     VoyaBundle,
-    ClientConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]

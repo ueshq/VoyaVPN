@@ -155,10 +155,6 @@ export async function exportProfileVoyaBundle(indexIds: string[]): Promise<Expor
   return unwrapCommandResult(await commands.exportProfileVoyaBundle(indexIds));
 }
 
-export async function exportProfileClientConfig(indexIds: string[]): Promise<ExportProfilesResult> {
-  return unwrapCommandResult(await commands.exportProfileClientConfig(indexIds));
-}
-
 export async function setActiveProfile(indexId: string): Promise<ProfileListEntry> {
   return unwrapCommandResult(await commands.setActiveProfile(indexId));
 }
@@ -350,3 +346,5 @@ export async function moveNodeGroup(id: string, action: MoveAction): Promise<nul
 export async function assignNodeGroups(assignments: NodeGroupAssignment[]): Promise<null> { return unwrapCommandResult(await commands.assignNodeGroups(assignments)); }
 
 export async function copyProfiles(indexIds: string[]): Promise<ProfileListEntry[]> { return unwrapCommandResult(await commands.copyProfiles(indexIds)); }
+
+export async function updateNodeGroup(id: string, name: string, assignments: NodeGroupAssignment[]): Promise<NodeGroup> { return unwrapCommandResult(await commands.updateNodeGroup(id, name, assignments)); }

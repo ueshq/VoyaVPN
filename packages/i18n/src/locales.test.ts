@@ -70,7 +70,7 @@ describe("i18n locales", () => {
       "actions.connect",
       "actions.settings",
       "nodeGroups.create",
-      "nodeGroups.manageMembers",
+      "nodeGroups.edit",
       "nodeGroups.duplicateName",
       "confirm.deleteProfilesTitle",
       "modal.language",

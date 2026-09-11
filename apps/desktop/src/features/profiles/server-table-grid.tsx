@@ -38,7 +38,8 @@ export function ProfileCardList({ controller }: { controller: ServerTableControl
               const rowProps = {
                 "aria-posinset": virtualRow.index + 1,
                 "aria-setsize": rows.length,
-                className: "absolute start-0 top-0 w-full pb-3",
+                className: cn("absolute start-0 top-0 w-full node-group-segment", row.kind === "group" && "node-group-start", row.last && "node-group-end"),
+                "data-group-key": row.groupKey,
                 "data-index": virtualRow.index,
                 ref: rowVirtualizer.measureElement,
                 style: { transform: `translateY(${virtualRow.start}px)` },
@@ -58,7 +59,7 @@ export function ProfileCardList({ controller }: { controller: ServerTableControl
               return (
                 <li key={row.key} {...rowProps}>
                   <ProfileRowContextMenu controller={controller} item={item}>
-                    <article className={cn("node-card-surface profile-node-card", row.groupId && "grouped-node-card", selected && "profile-node-card-selected")} data-testid="server-row" data-selected={selected} onClick={() => selectOnly(id)}>
+                    <article className={cn("node-card-surface node-group-surface profile-node-card", selected && "profile-node-card-selected")} data-testid="server-row" data-selected={selected} onClick={() => selectOnly(id)}>
                       <div aria-hidden="true" className="node-card-icon">{flag || <Globe2 className="size-6" strokeWidth={1.5} />}</div>
                       <div className="node-card-content">
                         <button aria-label={t("panes.profiles.card.select", { name: rawName })} aria-pressed={selected} data-row-focus className="node-card-select" onClick={() => selectOnly(id)} type="button">

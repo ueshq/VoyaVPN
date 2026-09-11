@@ -45,6 +45,7 @@ const wrapperNames = [
   "copyProfiles",
   "listNodeGroups",
   "saveNodeGroup",
+  "updateNodeGroup",
   "deleteNodeGroup",
   "moveNodeGroup",
   "assignNodeGroups",
@@ -52,7 +53,6 @@ const wrapperNames = [
   "exportProfileShareLinks",
   "exportProfileShareLinksBase64",
   "exportProfileVoyaBundle",
-  "exportProfileClientConfig",
   "setActiveProfile",
   "moveProfile",
   "listSubscriptions",
@@ -152,6 +152,7 @@ function forwardingCases(): Array<[WrapperName, unknown[], unknown[]]> {
     // Defaulted parameters have to survive an argument-less call.
     ["listProfiles", [], [null, null]],
     ["saveNodeGroup", [null,"Work"], [null,"Work"]],
+    ["updateNodeGroup", ["g", "Work", [{profileId:"p",groupId:"g"}]], ["g", "Work", [{profileId:"p",groupId:"g"}]]],
     ["saveNodeGroup", ["g","Home"], ["g","Home"]],
     ["moveNodeGroup", ["g","down"], ["g","down"]],
     ["deleteNodeGroup", ["g"], ["g"]],

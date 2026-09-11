@@ -6,6 +6,7 @@ import {
   cancelSpeedtest,
   deleteProfiles,
   listProfiles,
+  listNodeGroups,
   listSubscriptions,
   runSpeedtest,
   saveProfile,
@@ -23,7 +24,7 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import { useProfileActivation } from "@/features/home/use-profile-activation";
 import { useNodeGroups } from "./use-node-groups";
-import { nodeListRows } from "./node-list-rows";
+import { nodeListRows, profilesByNodeGroup } from "./node-list-rows";
 
 import {
   exportFileFilter,
@@ -45,7 +46,6 @@ type DialogState =
 export function useServerTable() {
   const nodeGroups = useNodeGroups();
   const [dialogState, setDialogStateInternal] = useState<DialogState>(null);
-  const [filterText, setFilterText] = useState("");
   const [importMethod, setImportMethod] = useState<ImportMethod | null>(null);
   const profileDialogTriggerRef = useRef<HTMLElement | null>(null);
   const addTriggerRef = useRef<HTMLButtonElement>(null);
@@ -92,7 +92,7 @@ export function useServerTable() {
   const undecodableProfiles = profilesQuery.data?.undecodableProfiles ?? 0;
 
   const viewportRef = useRef<HTMLDivElement>(null);
-  const rows = useMemo(() => nodeListRows(profiles, nodeGroups.snapshot, nodeGroups.expanded, filterText, t("nodeGroups.unassigned")), [profiles, nodeGroups.snapshot, nodeGroups.expanded, filterText, t]);
+  const rows = useMemo(() => nodeListRows(profiles, nodeGroups.snapshot, nodeGroups.collapsed, t("nodeGroups.unassigned")), [profiles, nodeGroups.snapshot, nodeGroups.collapsed, t]);
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     estimateSize: () => 100,
@@ -186,10 +186,8 @@ export function useServerTable() {
     setOperationMessage(formatImportSummary(result, t));
     const importedIndexIds = result.importedProfileIds;
     if (importedIndexIds.length > 0) {
-      setFilterText("");
       setSelectedId(importedIndexIds[0] ?? null);
-      // Optimistic: jump straight to the unfiltered list the caller was just
-      // switched to. `import_profiles_from_text` still emits profiles +
+      // Refresh the complete list after import. `import_profiles_from_text` still emits profiles +
       // subscriptions + subscriptionMetadata for every other cache.
       const refreshedProfiles = await listProfiles(null, null);
       queryClient.setQueryData(profilesQueryKey(""), refreshedProfiles);
@@ -205,7 +203,7 @@ export function useServerTable() {
     const result = await runProfileExport(kind, indexIds);
     if (showQr) {
       setShareQrContent(result.text);
-      return;
+      return true;
     }
 
     if (saveFile) {
@@ -217,7 +215,7 @@ export function useServerTable() {
       if (path) {
         setOperationMessage(t("panes.profiles.export.savedFile", { path }));
       }
-      return;
+      return !!path;
     }
 
     if (!navigator.clipboard?.writeText) {
@@ -225,6 +223,7 @@ export function useServerTable() {
     }
     await navigator.clipboard.writeText(result.text);
     setOperationMessage(t("panes.profiles.export.copied", { count: result.count }));
+    return true;
   }
 
   async function handleExport(kind: ProfileExportKind, indexIds: string[], showQr = false, saveFile = false) {
@@ -247,22 +246,35 @@ export function useServerTable() {
     setOperationMessage(null);
     try {
       const allProfiles = (await listProfiles(null, null)).entries;
-      // Share-link exporters reject group/chain/custom/HTTP profiles, and the
-      // backend fails the whole batch on the first rejection, so those profiles
-      // are dropped here instead of breaking the export for everyone else.
-      const exportable = isShareLinkExport(kind)
-        ? allProfiles.filter((item) => supportsShareLinkExport(item.profile.protocol.kind))
-        : allProfiles;
-      const skipped = allProfiles.length - exportable.length;
-      const indexIds = exportable.map((item) => item.profile.id);
-      if (indexIds.length === 0) {
-        setOperationError(t("panes.profiles.export.noProfiles"));
+      await performBatchExport(kind, allProfiles, showQr, saveFile);
+    } catch (error) {
+      setOperationError(getErrorMessage(error));
+    }
+  }
+
+  async function performBatchExport(kind: ProfileExportKind, entries: ProfileListEntry[], showQr: boolean, saveFile: boolean) {
+    const exportable = isShareLinkExport(kind)
+      ? entries.filter((item) => supportsShareLinkExport(item.profile.protocol.kind))
+      : entries;
+    if (!exportable.length) {
+      setOperationError(t("panes.profiles.export.noProfiles"));
+      return;
+    }
+    const completed = await performExport(kind, exportable.map((item) => item.profile.id), showQr, saveFile);
+    const skipped = entries.length - exportable.length;
+    if (completed && skipped > 0) setOperationMessage(t("panes.profiles.export.skippedUnsupported", { count: skipped }));
+  }
+
+  async function handleGroupExport(groupId: string | null, kind: ProfileExportKind, showQr = false, saveFile = false) {
+    setOperationError(null);
+    setOperationMessage(null);
+    try {
+      const [listing, snapshot] = await Promise.all([listProfiles(null, null), listNodeGroups()]);
+      if (groupId !== null && !snapshot.groups.some((group) => group.id === groupId)) {
+        setOperationError(t("nodeGroups.notFound"));
         return;
       }
-      await performExport(kind, indexIds, showQr, saveFile);
-      if (skipped > 0) {
-        setOperationMessage(t("panes.profiles.export.skippedUnsupported", { count: skipped }));
-      }
+      await performBatchExport(kind, profilesByNodeGroup(listing.entries, snapshot).get(groupId) ?? [], showQr, saveFile);
     } catch (error) {
       setOperationError(getErrorMessage(error));
     }
@@ -298,8 +310,8 @@ export function useServerTable() {
     subscriptionName,
     confirmDelete,
     dialogState,
-    filterText,
     handleBulkExport,
+    handleGroupExport,
     handleCancelSpeedtest,
     handleDialogImport,
     handleExport,
@@ -326,7 +338,6 @@ export function useServerTable() {
     selectOnly,
     selectedId,
     setDialogState,
-    setFilterText,
     setImportMethod,
     setPendingDelete,
     setShareQrContent,

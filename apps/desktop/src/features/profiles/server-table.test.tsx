@@ -809,8 +809,7 @@ describe("ProfilesScreen", () => {
 
     renderProfiles();
 
-    const filterInput = await screen.findByRole("searchbox", { name: "Filter nodes" });
-    fireEvent.change(filterInput, { target: { value: "hidden" } });
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
 
     await openImport("Import from clipboard");
     await userEvent.click(screen.getByRole("button", { name: "Paste" }));
@@ -828,7 +827,6 @@ describe("ProfilesScreen", () => {
     await act(async () => { finishImport(); });
     expect(await screen.findByText("Clipboard node")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(filterInput).toHaveValue("");
     expect(screen.getByTestId("server-row")).toHaveAttribute("data-selected", "true");
     expect(
       screen.getByText("Imported 1 node(s). 1 updated. 2 duplicate(s) removed."),
@@ -862,7 +860,7 @@ describe("ProfilesScreen", () => {
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
   });
 
-  it("exports every profile even when the list is filtered", async () => {
+  it("exports every profile from the global toolbar", async () => {
     const profiles = makeProfiles(2);
     ipcMocks.listProfiles.mockImplementation(async (_subscriptionId: string | null, filter: string | null) =>
       listing(filter ? [profiles[1]!] : profiles),
@@ -871,10 +869,7 @@ describe("ProfilesScreen", () => {
     renderProfiles();
 
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("searchbox", { name: "Filter nodes" }), {
-      target: { value: "Server 1" },
-    });
-    await waitFor(() => expect(screen.getByRole("searchbox", { name: "Filter nodes" })).toHaveValue("Server 1"));
+
 
     await userEvent.click(screen.getByRole("menuitem", { name: "Export" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Show QR" }));
@@ -1219,10 +1214,8 @@ describe("ProfilesScreen", () => {
       "Share links",
       "Share links (Base64)",
       "Voya node bundle",
-      "Client config",
       "Show QR",
       "Save share links",
-      "Save client config",
     ]);
   });
 

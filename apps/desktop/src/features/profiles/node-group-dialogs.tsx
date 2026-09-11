@@ -13,11 +13,11 @@ export function NodeGroupDialogs({ controller }: { controller: ServerTableContro
   const { nodeGroups, t, viewportRef } = controller;
   const dialog = nodeGroups.dialog;
   return <Dialog open={!!dialog} onOpenChange={(open) => { if (!open) nodeGroups.close(); }}>
-    <DialogContent closeLabel={t("actions.close")} onCloseAutoFocus={(event) => { event.preventDefault(); nodeGroups.restoreFocus(viewportRef.current); }}>
+    <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto" closeLabel={t("actions.close")} onCloseAutoFocus={(event) => { event.preventDefault(); nodeGroups.restoreFocus(viewportRef.current); }}>
       {dialog?.kind === "name" ? <GroupNameForm controller={controller} group={dialog.group} key={dialog.group?.id ?? "new"} /> : null}
-      {dialog?.kind === "members" ? <GroupMembersForm controller={controller} group={dialog.group} key={dialog.group.id} /> : null}
+      {dialog?.kind === "edit" ? <GroupEditForm controller={controller} group={dialog.group} key={dialog.group.id} /> : null}
       {dialog?.kind === "delete" ? <>
-        <DialogHeader><DialogTitle>{t("nodeGroups.delete")}</DialogTitle><DialogDescription>{t("nodeGroups.deleteDescription", { name: dialog.group.name })}</DialogDescription></DialogHeader>
+        <DialogHeader className="shrink-0"><DialogTitle>{t("nodeGroups.delete")}</DialogTitle><DialogDescription>{t("nodeGroups.deleteDescription", { name: dialog.group.name })}</DialogDescription></DialogHeader>
         <GroupError controller={controller} />
         <DialogFooter><Button disabled={nodeGroups.busy} onClick={nodeGroups.close} variant="outline">{t("confirm.cancel")}</Button><Button disabled={nodeGroups.busy} onClick={() => void nodeGroups.remove(dialog.group.id)} variant="destructive">{t("nodeGroups.delete")}</Button></DialogFooter>
       </> : null}
@@ -33,17 +33,21 @@ function GroupNameForm({ controller, group }: { controller: ServerTableControlle
   const { nodeGroups, t } = controller;
   const [name, setName] = useState(group?.name ?? "");
   const duplicate = nodeGroups.snapshot.groups.some((g) => g.id !== group?.id && g.name === name.trim());
-  return <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); if (name.trim() && !duplicate) void nodeGroups.saveName(group?.id ?? null, name); }}>
-    <DialogHeader><DialogTitle>{t(group ? "nodeGroups.rename" : "nodeGroups.create")}</DialogTitle><DialogDescription>{t("nodeGroups.description")}</DialogDescription></DialogHeader>
-    <label className="grid gap-2 text-sm">{t("nodeGroups.name")}<Input value={name} onChange={(event) => setName(event.target.value)} maxLength={256} autoFocus /></label>
+  return <form className="flex min-h-0 max-h-[calc(100dvh-2rem)] flex-col" onSubmit={(event) => { event.preventDefault(); if (name.trim() && !duplicate) void nodeGroups.saveName(group?.id ?? null, name); }}>
+    <DialogHeader className="shrink-0"><DialogTitle>{t("nodeGroups.create")}</DialogTitle><DialogDescription>{t("nodeGroups.description")}</DialogDescription></DialogHeader>
+    <div className="grid min-h-0 gap-4 overflow-y-auto px-6 py-4">
+    <label className="grid gap-2 text-sm">{t("nodeGroups.name")}<Input disabled={nodeGroups.busy} value={name} onChange={(event) => setName(event.target.value)} maxLength={256} autoFocus /></label>
     {duplicate ? <p className="text-sm text-destructive" role="alert">{t("nodeGroups.duplicateName")}</p> : null}
     <GroupError controller={controller} />
-    <DialogFooter><Button disabled={nodeGroups.busy} onClick={nodeGroups.close} type="button" variant="outline">{t("confirm.cancel")}</Button><Button disabled={nodeGroups.busy || !name.trim() || duplicate} type="submit">{t("panes.profiles.dialog.save")}</Button></DialogFooter>
+    </div>
+    <DialogFooter className="shrink-0"><Button disabled={nodeGroups.busy} onClick={nodeGroups.close} type="button" variant="outline">{t("confirm.cancel")}</Button><Button disabled={nodeGroups.busy || !name.trim() || duplicate} type="submit">{t("panes.profiles.dialog.save")}</Button></DialogFooter>
   </form>;
 }
 
-function GroupMembersForm({ controller, group }: { controller: ServerTableController; group: NodeGroup }) {
+function GroupEditForm({ controller, group }: { controller: ServerTableController; group: NodeGroup }) {
   const { profiles, nodeGroups, t } = controller;
+  const [name, setName] = useState(group.name);
+  const duplicate = nodeGroups.snapshot.groups.some((g) => g.id !== group.id && g.name === name.trim());
   const [initial] = useState(() => new Set(nodeGroups.snapshot.memberships.filter((m) => m.groupId === group.id).map((m) => m.profileId)));
   const [selected, setSelected] = useState(() => new Set(initial));
   const [search, setSearch] = useState("");
@@ -58,13 +62,17 @@ function GroupMembersForm({ controller, group }: { controller: ServerTableContro
   function save() {
     const changes: NodeGroupAssignment[] = [];
     for (const id of new Set([...initial, ...selected])) if (initial.has(id) !== selected.has(id)) changes.push({ profileId: id, groupId: selected.has(id) ? group.id : null });
-    if (!changes.length) nodeGroups.close(); else void nodeGroups.assign(changes, true);
+    if (!name.trim() || duplicate) return;
+    if (!changes.length && name.trim() === group.name) nodeGroups.close(); else void nodeGroups.update(group.id, name, changes);
   }
-  return <>
-    <DialogHeader><DialogTitle>{t("nodeGroups.manageTitle", { name: group.name })}</DialogTitle><DialogDescription>{t("nodeGroups.membersDescription")}</DialogDescription></DialogHeader>
-    <Input aria-label={t("nodeGroups.searchMembers")} type="search" value={search} onChange={(event) => setSearch(event.target.value)} />
-    <div className="flex flex-wrap items-center gap-2 text-sm"><span>{t("nodeGroups.selectedCount", { count: selected.size })}</span><Button disabled={nodeGroups.busy} size="sm" variant="ghost" onClick={() => setSelected((previous) => new Set([...previous, ...members.map((m) => m.profile.id)]))}>{t("nodeGroups.selectResults")}</Button><Button disabled={nodeGroups.busy} size="sm" variant="ghost" onClick={() => setSelected((previous) => { const next = new Set(previous); for (const member of members) next.delete(member.profile.id); return next; })}>{t("nodeGroups.clearResults")}</Button></div>
-    <div className="h-[min(45vh,24rem)] overflow-auto rounded border" ref={viewport} tabIndex={0} aria-label={t("nodeGroups.manageMembers")} onKeyDown={(event) => navigateVirtualList(event, members.length, (index) => virtualizer.scrollToIndex(index), "data-member-index", '[role="checkbox"]')}>
+  return <form className="flex min-h-0 max-h-[calc(100dvh-2rem)] flex-col" onSubmit={(event) => { event.preventDefault(); save(); }}>
+    <DialogHeader className="shrink-0"><DialogTitle>{t("nodeGroups.editTitle", { name: group.name })}</DialogTitle><DialogDescription>{t("nodeGroups.membersDescription")}</DialogDescription></DialogHeader>
+    <div className="grid min-h-0 gap-4 overflow-y-auto px-6 py-4">
+    <label className="grid gap-2 text-sm">{t("nodeGroups.name")}<Input disabled={nodeGroups.busy} value={name} onChange={(event) => setName(event.target.value)} maxLength={256} autoFocus /></label>
+    {duplicate ? <p className="text-sm text-destructive" role="alert">{t("nodeGroups.duplicateName")}</p> : null}
+    <Input disabled={nodeGroups.busy} aria-label={t("nodeGroups.searchMembers")} placeholder={t("nodeGroups.searchMembers")} type="search" value={search} onChange={(event) => setSearch(event.target.value)} />
+    <div className="flex flex-wrap items-center gap-2 text-sm"><span>{t("nodeGroups.selectedCount", { count: selected.size })}</span><Button type="button" disabled={nodeGroups.busy} size="sm" variant="ghost" onClick={() => setSelected((previous) => new Set([...previous, ...members.map((m) => m.profile.id)]))}>{t("nodeGroups.selectResults")}</Button><Button type="button" disabled={nodeGroups.busy} size="sm" variant="ghost" onClick={() => setSelected((previous) => { const next = new Set(previous); for (const member of members) next.delete(member.profile.id); return next; })}>{t("nodeGroups.clearResults")}</Button></div>
+    <div className="h-[clamp(8rem,calc(100dvh-26rem),20rem)] overflow-auto rounded border" ref={viewport} tabIndex={0} aria-label={t("nodeGroups.members")} onKeyDown={(event) => navigateVirtualList(event, members.length, (index) => virtualizer.scrollToIndex(index), "data-member-index", '[role="checkbox"]')}>
       <div className="relative" style={{ height: virtualizer.getTotalSize() }}>
         {rendered.map((row) => {
           const member = members[row.index]!.profile;
@@ -78,6 +86,7 @@ function GroupMembersForm({ controller, group }: { controller: ServerTableContro
       {!members.length ? <p className="p-4 text-sm text-muted-foreground">{t("nodeGroups.noMatches")}</p> : null}
     </div>
     <GroupError controller={controller} />
-    <DialogFooter><Button disabled={nodeGroups.busy} onClick={nodeGroups.close} variant="outline">{t("confirm.cancel")}</Button><Button disabled={nodeGroups.busy} onClick={save}>{t("panes.profiles.dialog.save")}</Button></DialogFooter>
-  </>;
+    </div>
+    <DialogFooter className="shrink-0"><Button type="button" disabled={nodeGroups.busy} onClick={nodeGroups.close} variant="outline">{t("confirm.cancel")}</Button><Button type="submit" disabled={nodeGroups.busy || !name.trim() || duplicate}>{t("panes.profiles.dialog.save")}</Button></DialogFooter>
+  </form>;
 }

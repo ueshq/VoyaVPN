@@ -86,6 +86,18 @@ impl<'db> NodeGroupManager<'db> {
         Ok(group)
     }
 
+    /// The caller owns one UnitOfWork so name and membership commit together.
+    pub async fn update(
+        &self,
+        id: &str,
+        name: &str,
+        assignments: &[NodeGroupAssignment],
+    ) -> Result<NodeGroup> {
+        let group = self.save(Some(id), name).await?;
+        self.assign(assignments).await?;
+        Ok(group)
+    }
+
     pub async fn delete(&self, id: &str) -> Result<()> {
         if !self.database.node_groups().delete(id).await? {
             return Err(NodeGroupError::GroupNotFound(id.to_string()));

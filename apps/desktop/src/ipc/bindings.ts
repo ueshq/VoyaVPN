@@ -59,6 +59,7 @@ export const commands = {
 	listProfiles: (subscriptionId: string | null, filter: string | null) => typedError<ProfileListing, AppError>(__TAURI_INVOKE("list_profiles", { subscriptionId, filter })),
 	listNodeGroups: () => typedError<NodeGroupsSnapshot, AppError>(__TAURI_INVOKE("list_node_groups")),
 	saveNodeGroup: (id: string | null, name: string) => typedError<NodeGroup, AppError>(__TAURI_INVOKE("save_node_group", { id, name })),
+	updateNodeGroup: (id: string, name: string, assignments: NodeGroupAssignment[]) => typedError<NodeGroup, AppError>(__TAURI_INVOKE("update_node_group", { id, name, assignments })),
 	deleteNodeGroup: (id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_node_group", { id })),
 	moveNodeGroup: (id: string, action: MoveAction) => typedError<null, AppError>(__TAURI_INVOKE("move_node_group", { id, action })),
 	assignNodeGroups: (assignments: NodeGroupAssignment[]) => typedError<null, AppError>(__TAURI_INVOKE("assign_node_groups", { assignments })),
@@ -68,7 +69,6 @@ export const commands = {
 	exportProfileShareLinks: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_share_links", { indexIds })),
 	exportProfileShareLinksBase64: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_share_links_base64", { indexIds })),
 	exportProfileVoyaBundle: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_voya_bundle", { indexIds })),
-	exportProfileClientConfig: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_client_config", { indexIds })),
 	setActiveProfile: (indexId: string) => typedError<ProfileListEntry, AppError>(__TAURI_INVOKE("set_active_profile", { indexId })),
 	moveProfile: (subscriptionId: string | null, indexId: string, action: MoveAction, position: number | null) => typedError<ProfileListEntry[], AppError>(__TAURI_INVOKE("move_profile", { subscriptionId, indexId, action, position })),
 	listSubscriptions: () => typedError<Subscription[], AppError>(__TAURI_INVOKE("list_subscriptions")),
@@ -396,7 +396,7 @@ export type DnsSettings = {
 	directExpectedIps: string | null,
 };
 
-export type ExportProfilesFormat = "shareLinks" | "shareLinksBase64" | "voyaBundle" | "clientConfig";
+export type ExportProfilesFormat = "shareLinks" | "shareLinksBase64" | "voyaBundle";
 
 export type ExportProfilesRequest = {
 	indexIds: string[],

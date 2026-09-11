@@ -54,7 +54,7 @@ test("profile cards stay usable across themes, window sizes and a 5k node list",
       await expect.poll(() => viewport.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0);
       await expect.poll(() => cards.evaluateAll((elements) => {
         const boxes = elements.map((element) => element.getBoundingClientRect());
-        return boxes.every((box, index) => index === 0 || box.top >= boxes[index - 1]!.bottom + 11);
+        return boxes.every((box, index) => index === 0 || Math.abs(box.top - boxes[index - 1]!.bottom) < 1);
       })).toBe(true);
       await expect(cards.first().getByRole("button", { name: "使用节点", exact: true })).toBeInViewport({ ratio: 1 });
       await page.screenshot({ path: testInfo.outputPath(`cards-${colorScheme}-${width}.png`) });
@@ -78,12 +78,7 @@ test("profile cards stay usable across themes, window sizes and a 5k node list",
     await expect(cards.filter({ hasText: "Card node 4999" })).toBeInViewport({ ratio: 1 });
   }).toPass();
   await page.screenshot({ path: testInfo.outputPath("cards-last-node.png") });
-  await page.getByRole("searchbox", { name: "过滤节点" }).fill("Card node 4999");
-  await expect(cards).toHaveCount(1);
-  await expect(cards.first()).toContainText("Card node 4999");
-  await page.getByRole("searchbox", { name: "过滤节点" }).fill("no matching card");
-  await expect(page.getByText("暂无节点", { exact: true })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath("cards-empty.png") });
+  await expect(page.getByRole("searchbox", { name: "过滤节点" })).toHaveCount(0);
   expect(await page.evaluate(() => (window.__VOYA_SMOKE__.state as { unhandled: string[] }).unhandled)).toEqual([]);
 });
 
@@ -113,4 +108,16 @@ test("profile cards show a loading skeleton while the profile query is pending",
       await page.screenshot({ path: testInfo.outputPath(`cards-loading-${colorScheme}-${width}.png`) });
     }
   }
+});
+
+
+test("profile list shows its empty state when no saved nodes exist", async ({ page }, testInfo) => {
+  await installTauriSmokeMock(page);
+  await page.addInitScript(() => { (window.__VOYA_SMOKE__.state as { profiles: ProfileListEntry[] }).profiles = []; });
+  await page.goto("/");
+  await page.getByRole("tab", { name: "Nodes", exact: true }).click();
+  await expect(page.getByTestId("server-row")).toHaveCount(0);
+  await expect(page.getByRole("searchbox")).toHaveCount(0);
+  await expect(page.getByText("No nodes", { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("cards-empty.png") });
 });

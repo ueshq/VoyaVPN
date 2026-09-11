@@ -4,7 +4,6 @@ import {
   ChevronsDown,
   ChevronsUp,
   Download,
-  FileJson2,
   Link,
   MoreHorizontal,
   Pencil,
@@ -80,11 +79,9 @@ const EXPORT_MENU_ENTRIES: readonly ExportMenuEntry[] = [
   { icon: Link, kind: "shareLinks", labelKey: "panes.profiles.export.shareLinks", mode: "export" },
   { icon: Share2, kind: "shareBase64", labelKey: "panes.profiles.export.shareBase64", mode: "export" },
   { icon: Link, kind: "voyaBundle", labelKey: "panes.profiles.export.voyaBundle", mode: "export" },
-  { icon: FileJson2, kind: "clientConfig", labelKey: "panes.profiles.export.clientConfig", mode: "export" },
   { mode: "separator" },
   { icon: QrCode, labelKey: "panes.profiles.export.showQr", mode: "qr" },
   { icon: Download, kind: "shareLinks", labelKey: "panes.profiles.export.saveShareLinks", mode: "save" },
-  { icon: FileJson2, kind: "clientConfig", labelKey: "panes.profiles.export.saveClientConfig", mode: "save" },
 ];
 
 export function SpeedtestButton({

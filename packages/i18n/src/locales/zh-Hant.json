@@ -236,8 +236,7 @@
     },
     "profiles": {
       "aria": {
-        "activeProfile": "目前節點",
-        "filter": "篩選節點"
+        "activeProfile": "目前節點"
       },
       "certFetch": {
         "allowInsecure": "允許不安全抓取",
@@ -259,13 +258,11 @@
       "empty": "尚無節點",
       "emptyDescription": "新增節點，或從訂閱匯入一個以開始。",
       "export": {
-        "clientConfig": "用戶端設定",
         "clipboardUnavailable": "目前環境不支援寫入剪貼簿。",
         "copied": "已將 {{count}} 個節點的匯出內容複製到剪貼簿。",
         "export": "匯出",
         "noProfiles": "沒有可匯出的節點。",
         "noSelection": "請至少選擇一個節點再匯出。",
-        "saveClientConfig": "儲存用戶端設定",
         "saveShareLinks": "儲存分享連結",
         "savedFile": "已儲存匯出到 {{path}}。",
         "shareBase64": "分享連結（Base64）",
@@ -400,7 +397,6 @@
         "bulkSpeedtest": "全節點測速",
         "delete": "刪除",
         "edit": "編輯",
-        "filterPlaceholder": "搜尋節點或代理群組…",
         "import": "匯入",
         "rows": "{{rows}} 筆",
         "subscriptions": "訂閱"
@@ -810,7 +806,6 @@
   "nodeGroups": {
     "unassigned": "未分組",
     "create": "建立分組",
-    "rename": "重新命名分組",
     "delete": "刪除分組",
     "name": "分組名稱",
     "duplicateName": "已存在同名分組。",
@@ -819,8 +814,6 @@
     "membersCount": "{{count}} 個節點",
     "test": "測試本組",
     "actions": "{{name}}的分組操作",
-    "manageMembers": "管理成員",
-    "manageTitle": "管理{{name}}",
     "membersDescription": "選取的節點會移入本組，取消選取的原成員會移到未分組。",
     "deleteDescription": "刪除「{{name}}」？組內節點會移到未分組。",
     "searchMembers": "搜尋節點",
@@ -829,6 +822,12 @@
     "clearResults": "取消選取搜尋結果",
     "noMatches": "沒有符合的節點。",
     "moveTo": "移動到分組",
-    "copyNode": "複製節點"
+    "copyNode": "複製節點",
+    "edit": "編輯分組",
+    "editTitle": "編輯「{{name}}」",
+    "members": "分組成員",
+    "exportFor": "匯出「{{name}}」",
+    "empty": "此分組尚無節點，可透過「編輯分組」新增成員。",
+    "notFound": "此分組已不存在，請重新整理列表後再試。"
   }
 }

@@ -231,7 +231,6 @@ impl From<ExportManagerError> for AppError {
         match error {
             ExportManagerError::Database(source) => database_error(&source, Sub::Export),
             ExportManagerError::Share(ref source) => internal(Sub::Export, source),
-            ExportManagerError::Singbox(ref source) => internal(Sub::Export, source),
             ExportManagerError::EmptySelection => invalid(Sub::Export, "profileIds", &error),
             ExportManagerError::ProfileNotFound(ref id) => not_found(
                 Sub::Export,

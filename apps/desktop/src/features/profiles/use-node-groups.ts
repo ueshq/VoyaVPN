@@ -1,15 +1,14 @@
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { assignNodeGroups, deleteNodeGroup, listNodeGroups, moveNodeGroup, saveNodeGroup } from "@/ipc";
+import { assignNodeGroups, deleteNodeGroup, listNodeGroups, moveNodeGroup, saveNodeGroup, updateNodeGroup } from "@/ipc";
 import type { MoveAction, NodeGroup, NodeGroupAssignment, NodeGroupsSnapshot } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
 import { getErrorMessage } from "@voya/utils/error";
-import { UNASSIGNED_GROUP_KEY } from "./node-list-rows";
 
 const EMPTY_GROUPS: NodeGroupsSnapshot = { groups: [], memberships: [] };
 type GroupDialog =
   | { kind: "name"; group: NodeGroup | null }
-  | { kind: "members" | "delete"; group: NodeGroup }
+  | { kind: "edit" | "delete"; group: NodeGroup }
   | null;
 
 export function useNodeGroups() {
@@ -18,7 +17,7 @@ export function useNodeGroups() {
     queryKey: queryKeys.nodeGroups,
   });
   const snapshot = query.data ?? EMPTY_GROUPS;
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set([UNASSIGNED_GROUP_KEY]));
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [dialog, setDialog] = useState<GroupDialog>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -48,7 +47,7 @@ export function useNodeGroups() {
   }
 
   function toggle(id: string) {
-    setExpanded((previous) => {
+    setCollapsed((previous) => {
       const next = new Set(previous);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -59,7 +58,7 @@ export function useNodeGroups() {
   return {
     query,
     snapshot,
-    expanded,
+    collapsed,
     dialog,
     error,
     busy,
@@ -74,9 +73,11 @@ export function useNodeGroups() {
     async saveName(id: string | null, name: string) {
       const result = await run(() => saveNodeGroup(id, name));
       if (result) {
-        if (!id) setExpanded((previous) => new Set([...previous, result.value.id]));
         setDialog(null);
       }
+    },
+    async update(id: string, name: string, assignments: NodeGroupAssignment[]) {
+      if (await run(() => updateNodeGroup(id, name, assignments))) setDialog(null);
     },
     async remove(id: string) {
       if (await run(() => deleteNodeGroup(id))) setDialog(null);
@@ -84,10 +85,8 @@ export function useNodeGroups() {
     async move(id: string, action: MoveAction) {
       await run(() => moveNodeGroup(id, action));
     },
-    async assign(assignments: NodeGroupAssignment[], close = false) {
-      if (await run(() => assignNodeGroups(assignments))) {
-        if (close) setDialog(null);
-      }
+    async assign(assignments: NodeGroupAssignment[]) {
+      await run(() => assignNodeGroups(assignments));
     },
   };
 }

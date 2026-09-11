@@ -4,7 +4,6 @@ import {
   FilePlus2,
   FileWarning,
   Rss,
-  Search,
   Share2,
   Upload,
 } from "lucide-react";
@@ -14,7 +13,6 @@ import { InlinePageError } from "@/components/app-shell/inline-page-error";
 import { PageHeader, PageHeaderActions } from "@/components/app-shell/page-section";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
-import { Input } from "@voya/ui/components/input";
 import {
   Menubar,
   MenubarContent,
@@ -31,7 +29,6 @@ import type { ServerTableController } from "./use-server-table";
 
 export function ServerTableToolbar({ controller }: { controller: ServerTableController }) {
   const {
-    filterText,
     nodeGroups,
     handleBulkExport,
     handleCancelSpeedtest,
@@ -43,7 +40,6 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
     profiles,
     profilesQuery,
     setDialogState,
-    setFilterText,
     setImportMethod,
     setSubscriptionsOpen,
     speedtestRunning,
@@ -61,7 +57,7 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
 
   return (
     <>
-      <PageHeader className="grid grid-cols-[auto_minmax(0,1fr)] xl:grid-cols-[auto_minmax(0,1fr)_auto]">
+      <PageHeader className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Badge className="h-6 bg-background tabular-nums text-muted-foreground" variant="outline">
             {t("panes.profiles.toolbar.rows", { rows: profiles.length.toLocaleString() })}
@@ -71,22 +67,8 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
           </Badge>
         </div>
 
-        <PageHeaderActions className="contents">
-          <div className="relative w-56 max-w-full justify-self-end">
-            <Search
-              className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              aria-label={t("panes.profiles.aria.filter")}
-              className="h-8 ps-9"
-              onChange={(event) => setFilterText(event.target.value)}
-              placeholder={t("panes.profiles.toolbar.filterPlaceholder")}
-              type="search"
-              value={filterText}
-            />
-          </div>
-          <Toolbar className="col-span-2 min-w-0 max-w-full justify-self-end justify-end xl:col-span-1">
+        <PageHeaderActions className="min-w-0 max-w-full">
+          <Toolbar className="min-w-0 max-w-full justify-end">
             <ToolbarGroup className="min-w-0 flex-wrap justify-end gap-y-2">
               <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
                 <MenubarMenu>

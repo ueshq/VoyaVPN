@@ -133,15 +133,6 @@ pub async fn export_profile_voya_bundle(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn export_profile_client_config(
-    state: tauri::State<'_, AppState>,
-    index_ids: Vec<String>,
-) -> Result<ExportProfilesResult, AppError> {
-    export_profiles_result(&state, index_ids, ExportProfilesFormat::ClientConfig).await
-}
-
-#[tauri::command]
-#[specta::specta]
 pub async fn set_active_profile<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,

@@ -57,12 +57,7 @@ pub(super) async fn export_profiles_result(
     state
         .services()
         .exports()
-        .export_profiles(
-            state.runtime_paths(),
-            &config,
-            TargetOs::current(),
-            ExportProfilesRequest { index_ids, format },
-        )
+        .export_profiles(&config, ExportProfilesRequest { index_ids, format })
         .await
         .map_err(AppError::from)
 }

@@ -236,8 +236,7 @@
     },
     "profiles": {
       "aria": {
-        "activeProfile": "Active node",
-        "filter": "Filter nodes"
+        "activeProfile": "Active node"
       },
       "certFetch": {
         "allowInsecure": "Allow insecure fetch",
@@ -259,13 +258,11 @@
       "empty": "No nodes",
       "emptyDescription": "Add a node or import one from a subscription to get started.",
       "export": {
-        "clientConfig": "Client config",
         "clipboardUnavailable": "Clipboard write is unavailable in this context.",
         "copied": "Copied export data for {{count}} node(s) to clipboard.",
         "export": "Export",
         "noProfiles": "There are no nodes to export.",
         "noSelection": "Select at least one node to export.",
-        "saveClientConfig": "Save client config",
         "saveShareLinks": "Save share links",
         "savedFile": "Saved export to {{path}}.",
         "shareBase64": "Share links (Base64)",
@@ -400,7 +397,6 @@
         "bulkSpeedtest": "Ping all",
         "delete": "Delete",
         "edit": "Edit",
-        "filterPlaceholder": "Search nodes or groups…",
         "import": "Import",
         "rows": "Nodes: {{rows}}",
         "subscriptions": "Subscriptions"
@@ -810,7 +806,6 @@
   "nodeGroups": {
     "unassigned": "Unassigned",
     "create": "Create group",
-    "rename": "Rename group",
     "delete": "Delete group",
     "name": "Group name",
     "duplicateName": "A group with this name already exists.",
@@ -819,8 +814,6 @@
     "membersCount": "{{count}} nodes",
     "test": "Test group",
     "actions": "Actions for {{name}}",
-    "manageMembers": "Manage members",
-    "manageTitle": "Manage {{name}}",
     "membersDescription": "Select nodes to move into this group. Unchecked members move to Unassigned.",
     "deleteDescription": "Delete “{{name}}”? Its nodes will move to Unassigned.",
     "searchMembers": "Search nodes",
@@ -829,6 +822,12 @@
     "clearResults": "Clear results",
     "noMatches": "No matching nodes.",
     "moveTo": "Move to group",
-    "copyNode": "Copy node"
+    "copyNode": "Copy node",
+    "edit": "Edit group",
+    "editTitle": "Edit {{name}}",
+    "members": "Group members",
+    "exportFor": "Export {{name}}",
+    "empty": "No nodes in this group. Add members with Edit group.",
+    "notFound": "This group no longer exists. Refresh the list and try again."
   }
 }

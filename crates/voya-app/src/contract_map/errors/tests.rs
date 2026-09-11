@@ -683,7 +683,6 @@ mod guards {
         match error {
             ExportManagerError::Database(_)
             | ExportManagerError::Share(_)
-            | ExportManagerError::Singbox(_)
             | ExportManagerError::EmptySelection
             | ExportManagerError::ProfileNotFound(_) => (),
         }

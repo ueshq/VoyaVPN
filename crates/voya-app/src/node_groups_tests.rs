@@ -233,3 +233,88 @@ async fn subscription_refresh_preserves_surviving_ids_and_clears_removed_selecti
     assert_eq!(snapshot.memberships[0].profile_id, ids[0]);
     assert!(config.index_id.is_empty());
 }
+
+#[tokio::test]
+async fn editing_a_group_commits_name_and_only_changed_members() {
+    let db = database().await;
+    let manager = NodeGroupManager::new(&db);
+    let group = manager.save(None, "Work").await.expect("group");
+    let other = manager.save(None, "Other").await.expect("other");
+    manager
+        .assign(&[
+            assignment("a", Some(&group.id)),
+            assignment("b", Some(&group.id)),
+            assignment("c", Some(&other.id)),
+            assignment("d", Some(&other.id)),
+        ])
+        .await
+        .expect("members");
+    let unit = db.begin().await.expect("transaction");
+    let saved = NodeGroupManager::new_in(&unit)
+        .update(
+            &group.id,
+            "  Travel  ",
+            &[assignment("a", None), assignment("c", Some(&group.id))],
+        )
+        .await
+        .expect("update");
+    unit.commit().await.expect("commit");
+    assert_eq!(saved.name, "Travel");
+    let snapshot = manager.list().await.expect("snapshot");
+    assert_eq!(snapshot.groups[0].name, "Travel");
+    assert_eq!(
+        db.node_groups().group_for_profile("a").await.expect("a"),
+        None
+    );
+    assert_eq!(
+        db.node_groups().group_for_profile("b").await.expect("b"),
+        Some(group.id.clone())
+    );
+    assert_eq!(
+        db.node_groups().group_for_profile("c").await.expect("c"),
+        Some(group.id)
+    );
+    assert_eq!(
+        db.node_groups().group_for_profile("d").await.expect("d"),
+        Some(other.id)
+    );
+}
+
+#[tokio::test]
+async fn editing_failure_rolls_back_both_name_and_members() {
+    let db = database().await;
+    let manager = NodeGroupManager::new(&db);
+    let group = manager.save(None, "Work").await.expect("group");
+    manager.save(None, "Taken").await.expect("other");
+    manager
+        .assign(&[assignment("a", Some(&group.id))])
+        .await
+        .expect("member");
+    let before = manager.list().await.expect("before");
+    for (id, name, changes) in [
+        (group.id.as_str(), "Taken", vec![assignment("a", None)]),
+        (group.id.as_str(), "  ", vec![assignment("a", None)]),
+        (
+            group.id.as_str(),
+            "Travel",
+            vec![
+                assignment("a", None),
+                assignment("missing", Some(&group.id)),
+            ],
+        ),
+        (
+            group.id.as_str(),
+            "Travel",
+            vec![assignment("a", None), assignment("b", Some("missing"))],
+        ),
+        ("missing", "Travel", vec![assignment("a", None)]),
+    ] {
+        let unit = db.begin().await.expect("transaction");
+        assert!(NodeGroupManager::new_in(&unit)
+            .update(id, name, &changes)
+            .await
+            .is_err());
+        drop(unit);
+        assert_eq!(manager.list().await.expect("after"), before);
+    }
+}

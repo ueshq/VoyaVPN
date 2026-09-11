@@ -175,6 +175,7 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
     const invalidationScopes: Record<string, string[]> = {
       copy_profiles: profileScopes,
       save_node_group: profileScopes,
+      update_node_group: profileScopes,
       delete_node_group: profileScopes,
       move_node_group: profileScopes,
       assign_node_groups: profileScopes,
@@ -378,6 +379,19 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           const existing = state.nodeGroups.groups.find((g) => g.id === args.id);
           const group = { id: existing?.id ?? `node-group-${nextGroupId++}`, name, sort: existing?.sort ?? state.nodeGroups.groups.length };
           if (existing) Object.assign(existing, group); else state.nodeGroups.groups.push(group);
+          return Promise.resolve(clone(group));
+        }
+        case "update_node_group": {
+          const name = String(args.name ?? "").trim();
+          const group = state.nodeGroups.groups.find((g) => g.id === args.id);
+          const changes = args.assignments as NodeGroupAssignment[];
+          if (!group || !name || state.nodeGroups.groups.some((g) => g.name === name && g.id !== args.id)) return Promise.reject(new Error("Invalid group name"));
+          if (new Set(changes.map((a) => a.profileId)).size !== changes.length || changes.some((a) => !state.profiles.some((p) => p.profile.id === a.profileId) || (a.groupId && !state.nodeGroups.groups.some((g) => g.id === a.groupId)))) return Promise.reject(new Error("Invalid membership"));
+          group.name = name;
+          for (const change of changes) {
+            state.nodeGroups.memberships = state.nodeGroups.memberships.filter((m) => m.profileId !== change.profileId);
+            if (change.groupId) state.nodeGroups.memberships.push({ profileId: change.profileId, groupId: change.groupId });
+          }
           return Promise.resolve(clone(group));
         }
         case "delete_node_group": {

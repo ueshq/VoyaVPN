@@ -1,5 +1,4 @@
 import {
-  exportProfileClientConfig,
   exportProfileVoyaBundle,
   exportProfileShareLinks,
   exportProfileShareLinksBase64,
@@ -8,7 +7,7 @@ import type { ExportProfilesResult, ImportProfilesResult, ProfileKind } from "@/
 import { CONFIG_TYPES } from "./profile-constants";
 import type { TranslationFunction as TranslateFn } from "@voya/i18n";
 
-export type ProfileExportKind = "clientConfig" | "shareBase64" | "shareLinks" | "voyaBundle";
+export type ProfileExportKind = "shareBase64" | "shareLinks" | "voyaBundle";
 
 // `export_share_link` (crates/voya-core/src/fmt/entry.rs) only knows these node
 // protocols and returns `WrongConfigType` for anything else; the backend
@@ -37,8 +36,6 @@ export function supportsShareLinkExport(kind: ProfileKind) {
 
 export function runProfileExport(kind: ProfileExportKind, indexIds: string[]): Promise<ExportProfilesResult> {
   switch (kind) {
-    case "clientConfig":
-      return exportProfileClientConfig(indexIds);
     case "voyaBundle":
       return exportProfileVoyaBundle(indexIds);
     case "shareBase64":
@@ -50,8 +47,6 @@ export function runProfileExport(kind: ProfileExportKind, indexIds: string[]): P
 
 export function exportFileName(kind: ProfileExportKind) {
   switch (kind) {
-    case "clientConfig":
-      return "voyavpn-client-config.json";
     case "voyaBundle":
       return "voyavpn-node-bundle.voya";
     case "shareBase64":
@@ -62,9 +57,7 @@ export function exportFileName(kind: ProfileExportKind) {
 }
 
 export function exportFileFilter(kind: ProfileExportKind, t: TranslateFn) {
-  return kind === "clientConfig"
-    ? { extensions: ["json"], name: "JSON" }
-    : kind === "voyaBundle"
+  return kind === "voyaBundle"
       ? { extensions: ["voya"], name: t("panes.profiles.export.voyaBundle") }
       : { extensions: ["txt"], name: "Text" };
 }

@@ -47,6 +47,33 @@ pub async fn save_node_group<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn update_node_group<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    id: String,
+    name: String,
+    assignments: Vec<NodeGroupAssignment>,
+) -> Result<NodeGroup, AppError> {
+    validate_required_ipc_text(&id, "group id", IPC_ID_MAX_CHARS, AppErrorSubsystem::Group)?;
+    validate_required_ipc_text(
+        &name,
+        "group name",
+        IPC_NAME_MAX_CHARS,
+        AppErrorSubsystem::Group,
+    )?;
+    validate_assignments(&assignments)?;
+    let saved = mutate_config(&state, async |unit, _| {
+        Ok(NodeGroupManager::new_in(unit)
+            .update(&id, &name, &assignments)
+            .await?)
+    })
+    .await?;
+    emit_profile_invalidation(&app, "node-group-updated", false);
+    Ok(saved.value)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn delete_node_group<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
@@ -87,12 +114,22 @@ pub async fn assign_node_groups<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     assignments: Vec<NodeGroupAssignment>,
 ) -> Result<(), AppError> {
+    validate_assignments(&assignments)?;
+    mutate_config(&state, async |unit, _| {
+        Ok(NodeGroupManager::new_in(unit).assign(&assignments).await?)
+    })
+    .await?;
+    emit_profile_invalidation(&app, "node-groups-assigned", false);
+    Ok(())
+}
+
+fn validate_assignments(assignments: &[NodeGroupAssignment]) -> Result<(), AppError> {
     let ids = assignments
         .iter()
         .map(|a| a.profile_id.clone())
         .collect::<Vec<_>>();
     validate_ipc_text_list(&ids, "node id", IPC_ID_MAX_CHARS, AppErrorSubsystem::Group)?;
-    for assignment in &assignments {
+    for assignment in assignments {
         validate_present_ipc_text(
             assignment.group_id.as_deref(),
             "group id",
@@ -100,10 +137,5 @@ pub async fn assign_node_groups<R: tauri::Runtime>(
             AppErrorSubsystem::Group,
         )?;
     }
-    mutate_config(&state, async |unit, _| {
-        Ok(NodeGroupManager::new_in(unit).assign(&assignments).await?)
-    })
-    .await?;
-    emit_profile_invalidation(&app, "node-groups-assigned", false);
     Ok(())
 }

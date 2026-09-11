@@ -236,8 +236,7 @@
     },
     "profiles": {
       "aria": {
-        "activeProfile": "当前节点",
-        "filter": "过滤节点"
+        "activeProfile": "当前节点"
       },
       "certFetch": {
         "allowInsecure": "允许不安全抓取",
@@ -259,13 +258,11 @@
       "empty": "暂无节点",
       "emptyDescription": "新增节点，或从订阅导入一个以开始。",
       "export": {
-        "clientConfig": "客户端配置",
         "clipboardUnavailable": "当前环境不支持写入剪贴板。",
         "copied": "已将 {{count}} 个节点的导出内容复制到剪贴板。",
         "export": "导出",
         "noProfiles": "没有可导出的节点。",
         "noSelection": "请至少选择一个节点再导出。",
-        "saveClientConfig": "保存客户端配置",
         "saveShareLinks": "保存分享链接",
         "savedFile": "已保存导出到 {{path}}。",
         "shareBase64": "分享链接（Base64）",
@@ -400,7 +397,6 @@
         "bulkSpeedtest": "全节点测速",
         "delete": "删除",
         "edit": "编辑",
-        "filterPlaceholder": "搜索节点或代理组…",
         "import": "导入",
         "rows": "{{rows}} 条",
         "subscriptions": "订阅"
@@ -810,7 +806,6 @@
   "nodeGroups": {
     "unassigned": "未分组",
     "create": "创建分组",
-    "rename": "重命名分组",
     "delete": "删除分组",
     "name": "分组名称",
     "duplicateName": "已存在同名分组。",
@@ -819,8 +814,6 @@
     "membersCount": "{{count}} 个节点",
     "test": "测试本组",
     "actions": "{{name}}的分组操作",
-    "manageMembers": "管理成员",
-    "manageTitle": "管理{{name}}",
     "membersDescription": "选中的节点会移入本组，取消选择的原成员会移到未分组。",
     "deleteDescription": "删除“{{name}}”？组内节点会移到未分组。",
     "searchMembers": "搜索节点",
@@ -829,6 +822,12 @@
     "clearResults": "取消选择搜索结果",
     "noMatches": "没有匹配的节点。",
     "moveTo": "移动到分组",
-    "copyNode": "复制节点"
+    "copyNode": "复制节点",
+    "edit": "编辑分组",
+    "editTitle": "编辑“{{name}}”",
+    "members": "分组成员",
+    "exportFor": "导出“{{name}}”",
+    "empty": "此分组暂无节点，可通过“编辑分组”添加成员。",
+    "notFound": "此分组已不存在，请刷新列表后重试。"
   }
 }
