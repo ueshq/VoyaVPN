@@ -29,16 +29,14 @@ const ipcMocks = vi.hoisted(() => ({
   exportProfileShareLinks: vi.fn(),
   generateQrCode: vi.fn(),
   importProfilesFromText: vi.fn(),
-  listGroupChildCandidates: vi.fn(),
   listProfiles: vi.fn(),
+  listNodeGroups: vi.fn(),
   listSubscriptionMetadata: vi.fn(() => Promise.resolve([])),
   listSubscriptions: vi.fn(),
   moveProfile: vi.fn(),
-  previewGroupProfile: vi.fn(),
   cancelSpeedtest: vi.fn(),
   runSpeedtest: vi.fn(),
   scanScreenQr: vi.fn(),
-  saveGroupProfile: vi.fn(),
   saveProfile: vi.fn(),
   saveSubscription: vi.fn(),
   setActiveProfile: vi.fn(),
@@ -205,13 +203,9 @@ describe("ProfilesScreen", () => {
     ipcMocks.importProfilesFromText.mockResolvedValue(
       makeImportResult({ imported: 1, importedProfileIds: ["profile-new"] }),
     );
-    ipcMocks.listGroupChildCandidates.mockResolvedValue([]);
     ipcMocks.listSubscriptions.mockResolvedValue([]);
+    ipcMocks.listNodeGroups.mockResolvedValue({ groups: [], memberships: [] });
     ipcMocks.moveProfile.mockResolvedValue([]);
-    ipcMocks.previewGroupProfile.mockResolvedValue({
-      validation: { childProfileIds: [], errors: [], valid: true, warnings: [] },
-      singboxRoutes: [],
-    });
     ipcMocks.cancelSpeedtest.mockResolvedValue({ running: false });
     ipcMocks.runSpeedtest.mockResolvedValue({
       cancelled: false,
@@ -225,7 +219,6 @@ describe("ProfilesScreen", () => {
       status: "unavailable",
       text: null,
     });
-    ipcMocks.saveGroupProfile.mockImplementation(async (profile: Profile) => makeProfile(100, profile));
     ipcMocks.saveProfile.mockImplementation(async (profile: Profile) => makeProfile(99, profile));
     ipcMocks.saveSubscription.mockResolvedValue(makeSubscription());
     ipcMocks.setActiveProfile.mockImplementation(async (profileId: string) => makeProfile(0, { id: profileId }));
@@ -238,7 +231,7 @@ describe("ProfilesScreen", () => {
     renderProfiles();
 
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
-    expect(screen.getAllByRole("listitem")[0]).toHaveAttribute("aria-setsize", "5000");
+    expect(screen.getAllByRole("listitem")[0]).toHaveAttribute("aria-setsize", "5001");
     expect(screen.getAllByTestId("server-row").length).toBeLessThan(60);
     expect(screen.queryByText("Server 4999")).not.toBeInTheDocument();
   });
@@ -392,7 +385,7 @@ describe("ProfilesScreen", () => {
     useRuntimeEventStore.setState({ speedtestRunning: true });
     renderProfiles();
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
+    expect(screen.getAllByRole("button", { name: "Stop" })[0]!).toBeEnabled();
     const menu = await openRowContextMenu();
     expect(within(menu).getByRole("menuitem", { name: "Ping" })).toHaveAttribute("data-disabled");
     expect(ipcMocks.runSpeedtest).not.toHaveBeenCalled();
@@ -406,9 +399,9 @@ describe("ProfilesScreen", () => {
     renderProfiles();
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Ping all" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Stop" }));
+    await userEvent.click((await screen.findAllByRole("button", { name: "Stop" }))[0]!);
     expect(ipcMocks.cancelSpeedtest).toHaveBeenCalledOnce();
-    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Stop" })[0]!).toBeInTheDocument();
     expect(ipcMocks.runSpeedtest).toHaveBeenCalledOnce();
     finishRun({ cancelled: true, completedCount: 0, selectedCount: 1, results: [] });
     expect(await screen.findByRole("button", { name: "Ping all" })).toBeEnabled();
@@ -695,7 +688,7 @@ describe("ProfilesScreen", () => {
     trigger.focus();
     await userEvent.keyboard("{Enter}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(within(screen.getByRole("menu")).getAllByRole("menuitem")).toHaveLength(2);
+    expect(within(screen.getByRole("menu")).getAllByRole("menuitem")).toHaveLength(3);
     await userEvent.keyboard("{Enter}");
     expect(await screen.findByRole("dialog", { name: "Add node" })).toBeVisible();
     await userEvent.keyboard("{Escape}");
@@ -881,7 +874,7 @@ describe("ProfilesScreen", () => {
     fireEvent.change(screen.getByRole("searchbox", { name: "Filter nodes" }), {
       target: { value: "Server 1" },
     });
-    await waitFor(() => expect(ipcMocks.listProfiles).toHaveBeenCalledWith(null, "Server 1"));
+    await waitFor(() => expect(screen.getByRole("searchbox", { name: "Filter nodes" })).toHaveValue("Server 1"));
 
     await userEvent.click(screen.getByRole("menuitem", { name: "Export" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Show QR" }));
@@ -898,31 +891,24 @@ describe("ProfilesScreen", () => {
     expect(within(dialog).getByAltText("Generated QR code")).toBeInTheDocument();
   });
 
-  it("keeps the QR dialog closed when the context-menu profile cannot export a share link", async () => {
+  it("keeps the QR dialog closed when share link export fails", async () => {
     mockProfileList([
       makeProfile(0, {
-        protocol: {
-          childProfileIds: [],
-          filter: null,
-          kind: "policyGroup",
-          sourceSubscriptionId: null,
-          strategy: "leastPing",
-        },
-        remarks: "Policy group",
+        remarks: "Export node",
       }),
     ]);
     ipcMocks.exportProfileShareLinks.mockRejectedValue(
-      new Error("share export does not support policy groups"),
+      new Error("share export failed"),
     );
 
     renderProfiles();
 
-    expect(await screen.findByText("Policy group")).toBeInTheDocument();
+    expect(await screen.findByText("Export node")).toBeInTheDocument();
     const menu = await openRowContextMenu();
     const exportMenu = await openContextSubmenu(menu, "Export");
     await userEvent.click(within(exportMenu).getByRole("menuitem", { name: "Show QR" }));
 
-    expect(await screen.findByText("share export does not support policy groups")).toBeInTheDocument();
+    expect(await screen.findByText("share export failed")).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Show QR" })).not.toBeInTheDocument();
     expect(ipcMocks.generateQrCode).not.toHaveBeenCalled();
   });
@@ -973,8 +959,8 @@ describe("ProfilesScreen", () => {
     await userEvent.click(screen.getByRole("combobox", { name: "Protocol" }));
     const protocolOptions = within(await screen.findByRole("listbox")).getAllByRole("option");
     const protocolLabels = [
-      "VMess", "Custom", "Shadowsocks", "SOCKS", "VLESS", "Trojan", "Hysteria2",
-      "TUIC", "WireGuard", "HTTP", "AnyTLS", "Naive", "Policy Group", "Proxy Chain",
+      "VMess", "Shadowsocks", "SOCKS", "VLESS", "Trojan", "Hysteria2",
+      "TUIC", "WireGuard", "HTTP", "AnyTLS", "Naive",
     ];
     expect(protocolOptions).toHaveLength(protocolLabels.length);
     protocolLabels.forEach((label) => {
@@ -1240,121 +1226,7 @@ describe("ProfilesScreen", () => {
     ]);
   });
 
-  it("exports the shareable profiles instead of failing on a policy group", async () => {
-    mockProfileList([
-      ...makeProfiles(2),
-      makeProfile(2, {
-        protocol: {
-          childProfileIds: [],
-          filter: null,
-          kind: "policyGroup",
-          sourceSubscriptionId: null,
-          strategy: "leastPing",
-        },
-        remarks: "Policy group",
-      }),
-    ]);
 
-    renderProfiles();
-
-    expect(await screen.findByText("Server 0")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("menuitem", { name: "Export" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Show QR" }));
-
-    // The backend collects share links with `?`, so one policy group would
-    // otherwise fail the export for every node in the list.
-    await waitFor(() =>
-      expect(ipcMocks.exportProfileShareLinks).toHaveBeenCalledWith(["profile-0", "profile-1"]),
-    );
-    expect(
-      await screen.findByText("Skipped 1 node(s) without a share link."),
-    ).toBeInTheDocument();
-  });
-
-  it("builds a policy group with child picker and generator preview", async () => {
-    const user = userEvent.setup();
-
-    mockProfileList([]);
-    ipcMocks.listGroupChildCandidates.mockResolvedValue([
-      {
-        address: "a.example.test",
-        isGroup: false,
-        profileId: "leaf-a",
-        protocol: "vless",
-        reason: null,
-        remarks: "Leaf A",
-        selectable: true,
-        subscriptionId: "",
-      },
-      {
-        address: "chain",
-        isGroup: true,
-        profileId: "chain-a",
-        protocol: "proxyChain",
-        reason: null,
-        remarks: "Chain A",
-        selectable: true,
-        subscriptionId: "",
-      },
-    ]);
-    ipcMocks.previewGroupProfile.mockResolvedValue({
-      validation: {
-        childProfileIds: ["leaf-a", "chain-a"],
-        errors: [],
-        valid: true,
-        warnings: [],
-      },
-      singboxRoutes: [
-        {
-          detour: null,
-          dialerProxy: null,
-          downloadDialerProxy: null,
-          kind: "selector",
-          outbounds: ["proxy-auto", "proxy-1-Leaf A", "proxy-2-Chain A"],
-          tag: "proxy",
-        },
-        {
-          detour: null,
-          dialerProxy: null,
-          downloadDialerProxy: null,
-          kind: "urltest",
-          outbounds: ["proxy-1-Leaf A", "proxy-2-Chain A"],
-          tag: "proxy-auto",
-        },
-      ],
-    });
-
-    renderProfiles();
-
-    await openAddNode();
-    await selectComboboxOption("Protocol", "Policy Group");
-    fireEvent.change(screen.getByLabelText("Remarks"), { target: { value: "Mixed policy" } });
-    await user.click(await screen.findByRole("button", { name: "Choose children" }));
-
-    await user.click(await screen.findByRole("checkbox", { name: /Leaf A/ }));
-    await user.click(screen.getByRole("checkbox", { name: /Chain A/ }));
-    await user.click(screen.getByRole("button", { name: "Apply" }));
-
-    expect(await screen.findByText("Leaf A")).toBeInTheDocument();
-    expect(await screen.findByText("Chain A")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Preview" }));
-    expect(await screen.findByText("Generated routes")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Save/ }));
-
-    await waitFor(() =>
-      expect(ipcMocks.saveGroupProfile).toHaveBeenCalledWith(
-        expect.objectContaining({
-          protocol: expect.objectContaining({
-            childProfileIds: ["leaf-a", "chain-a"],
-            kind: "policyGroup",
-          }),
-          remarks: "Mixed policy",
-        }),
-      ),
-    );
-  }, 10_000);
 });
 
 // Every field of the generated `ImportProfilesResult`; overriding only what a
@@ -1394,7 +1266,6 @@ function makeSubscription() {
     enabled: true,
     filter: null,
     id: "sub-1",
-    preSocksPort: null,
     remarks: "Fixture",
     sort: 1,
     url: "https://example.test/sub",

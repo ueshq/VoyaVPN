@@ -1,14 +1,13 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{SpeedtestOutcome, ValidationIssue};
+use crate::SpeedtestOutcome;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ProfileKind {
     #[default]
     Vmess,
-    Custom,
     Shadowsocks,
     Socks,
     Vless,
@@ -19,8 +18,6 @@ pub enum ProfileKind {
     Http,
     Anytls,
     Naive,
-    PolicyGroup,
-    ProxyChain,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
@@ -28,17 +25,6 @@ pub enum ProfileKind {
 pub struct ServerEndpoint {
     pub address: String,
     pub port: i32,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub enum LoadStrategy {
-    #[default]
-    LeastPing,
-    Fallback,
-    Random,
-    RoundRobin,
-    LeastLoad,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
@@ -53,10 +39,6 @@ pub enum ProfileProtocol {
         server: ServerEndpoint,
         uuid: String,
         cipher: Option<String>,
-    },
-    Custom {
-        source: String,
-        filter: Option<String>,
     },
     Shadowsocks {
         server: ServerEndpoint,
@@ -119,15 +101,6 @@ pub enum ProfileProtocol {
         insecure_concurrency: Option<i32>,
         udp_over_tcp: bool,
     },
-    PolicyGroup {
-        child_profile_ids: Vec<String>,
-        source_subscription_id: Option<String>,
-        filter: Option<String>,
-        strategy: LoadStrategy,
-    },
-    ProxyChain {
-        child_profile_ids: Vec<String>,
-    },
 }
 
 impl ProfileProtocol {
@@ -135,7 +108,6 @@ impl ProfileProtocol {
     pub const fn kind(&self) -> ProfileKind {
         match self {
             Self::Vmess { .. } => ProfileKind::Vmess,
-            Self::Custom { .. } => ProfileKind::Custom,
             Self::Shadowsocks { .. } => ProfileKind::Shadowsocks,
             Self::Socks { .. } => ProfileKind::Socks,
             Self::Vless { .. } => ProfileKind::Vless,
@@ -146,8 +118,6 @@ impl ProfileProtocol {
             Self::Http { .. } => ProfileKind::Http,
             Self::Anytls { .. } => ProfileKind::Anytls,
             Self::Naive { .. } => ProfileKind::Naive,
-            Self::PolicyGroup { .. } => ProfileKind::PolicyGroup,
-            Self::ProxyChain { .. } => ProfileKind::ProxyChain,
         }
     }
 }
@@ -285,46 +255,6 @@ pub struct ProfileListEntry {
 pub struct ProfileListing {
     pub entries: Vec<ProfileListEntry>,
     pub undecodable_profiles: u32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct GroupChildCandidate {
-    pub profile_id: String,
-    pub remarks: String,
-    pub address: String,
-    pub protocol: ProfileKind,
-    pub subscription_id: Option<String>,
-    pub is_group: bool,
-    pub selectable: bool,
-    pub reason: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct GroupValidation {
-    pub valid: bool,
-    pub child_profile_ids: Vec<String>,
-    pub errors: Vec<ValidationIssue>,
-    pub warnings: Vec<ValidationIssue>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct GroupPreviewRoute {
-    pub tag: String,
-    pub kind: String,
-    pub dialer_proxy: Option<String>,
-    pub download_dialer_proxy: Option<String>,
-    pub detour: Option<String>,
-    pub outbounds: Vec<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct GroupPreview {
-    pub validation: GroupValidation,
-    pub singbox_routes: Vec<GroupPreviewRoute>,
 }
 
 #[cfg(test)]

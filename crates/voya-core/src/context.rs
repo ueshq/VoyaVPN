@@ -1,17 +1,13 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    net::IpAddr,
-};
+use std::{collections::BTreeMap, net::IpAddr};
 
 use serde_json::Value;
 use thiserror::Error;
 
 use crate::{
-    group_children::{resolve_group_children, GroupChildSource},
     singbox::support::{singbox_supports_config_type, state_port2},
     validation::{ValidationCode, ValidationMessage, ValidationScope},
     AppConfig, ConfigType, CoreType, InboundProtocol, ProfileItem, ProfileProtocol,
-    ProfileTransport, RoutingItem, RulesItem, ServerEndpoint, SimpleDnsItem, SubItem, TlsMode,
+    ProfileTransport, RoutingItem, RulesItem, ServerEndpoint, SimpleDnsItem, TlsMode,
 };
 
 pub const PROXY_TAG: &str = "proxy";
@@ -319,17 +315,8 @@ pub trait CoreGenEnv {
     fn get_profile_by_index_id(&self, index_id: &str) -> Option<ProfileItem>;
 
     fn get_profile_by_remarks(&self, remarks: &str) -> Option<ProfileItem>;
-
-    fn get_profile_items_ordered_by_index_ids(&self, index_ids: &[String]) -> Vec<ProfileItem>;
-
-    fn get_profile_items_by_subscription_id(&self, subscription_id: &str) -> Vec<ProfileItem>;
-
-    fn get_subscription(&self, subscription_id: &str) -> Option<SubItem>;
-
     fn get_default_routing(&self, config: &AppConfig) -> Option<RoutingItem>;
-
     fn get_local_port(&self, protocol: InboundProtocol) -> i32;
-
     fn get_singbox_ruleset_paths(&self) -> BTreeMap<String, String> {
         BTreeMap::new()
     }
@@ -440,8 +427,7 @@ where
         node_context: &CoreConfigContext,
     ) -> Option<CoreConfigContextBuilderResult> {
         let config = &node_context.app_config;
-        let node = &node_context.node;
-        let pre_socks_item = pre_socks_item(config, node, self.env)?;
+        let pre_socks_item = pre_socks_item(config, self.env)?;
         let mut pre_socks_result = self.build(config, &pre_socks_item);
         let pre_socks_domains = pre_socks_result.context.protect_domain_list.clone();
         pre_socks_result.context.protect_domain_list = node_context.protect_domain_list.clone();
@@ -470,148 +456,8 @@ where
         context: &mut CoreConfigContext,
         node: &ProfileItem,
     ) -> NodeValidatorResult {
-        if node.config_type().is_group_type() {
-            return self.register_group_node(context, node);
-        }
-
         register_single_node(context, node)
     }
-
-    fn register_group_node(
-        &self,
-        context: &mut CoreConfigContext,
-        node: &ProfileItem,
-    ) -> NodeValidatorResult {
-        if !node.config_type().is_group_type() {
-            return NodeValidatorResult::empty();
-        }
-
-        let mut ancestors = BTreeSet::new();
-        ancestors.insert(node.index_id.clone());
-        let mut global_visited = BTreeSet::new();
-        global_visited.insert(node.index_id.clone());
-        self.traverse_group_node(context, node, &mut global_visited, &ancestors)
-    }
-
-    fn traverse_group_node(
-        &self,
-        context: &mut CoreConfigContext,
-        node: &ProfileItem,
-        global_visited: &mut BTreeSet<String>,
-        ancestors: &BTreeSet<String>,
-    ) -> NodeValidatorResult {
-        let mut child_index_ids = Vec::new();
-        let mut child_index_seen = BTreeSet::new();
-        let mut child_result = NodeValidatorResult::empty();
-        let group_child_list = self.group_child_profile_items(&node.protocol, &mut child_result);
-
-        for child_node in group_child_list {
-            if ancestors.contains(&child_node.index_id) {
-                child_result.push_error(ValidationCode::GroupCycle {
-                    group: node.remarks.clone(),
-                    child: child_node.remarks.clone(),
-                });
-                continue;
-            }
-
-            if global_visited.contains(&child_node.index_id) {
-                push_unique_child_index(
-                    &mut child_index_ids,
-                    &mut child_index_seen,
-                    &child_node.index_id,
-                );
-                continue;
-            }
-
-            if !child_node.config_type().is_group_type() {
-                let child_node_result = register_single_node(context, &child_node);
-                child_result.extend_scoped(
-                    &ValidationScope::GroupChild {
-                        group: node.remarks.clone(),
-                        child: child_node.remarks.clone(),
-                    },
-                    &child_node_result,
-                );
-                if !child_node_result.success() {
-                    continue;
-                }
-
-                global_visited.insert(child_node.index_id.clone());
-                push_unique_child_index(
-                    &mut child_index_ids,
-                    &mut child_index_seen,
-                    &child_node.index_id,
-                );
-                continue;
-            }
-
-            let mut new_ancestors = ancestors.clone();
-            new_ancestors.insert(child_node.index_id.clone());
-            let child_group_result =
-                self.traverse_group_node(context, &child_node, global_visited, &new_ancestors);
-            child_result.extend_scoped(
-                &ValidationScope::GroupChild {
-                    group: node.remarks.clone(),
-                    child: child_node.remarks.clone(),
-                },
-                &child_group_result,
-            );
-            if !child_group_result.success() {
-                continue;
-            }
-
-            global_visited.insert(child_node.index_id.clone());
-            push_unique_child_index(
-                &mut child_index_ids,
-                &mut child_index_seen,
-                &child_node.index_id,
-            );
-        }
-
-        if child_index_ids.is_empty() {
-            child_result.push_error(ValidationCode::GroupWithoutValidChild {
-                group: node.remarks.clone(),
-            });
-            return child_result;
-        }
-
-        child_result.warnings.extend(child_result.errors.clone());
-        child_result.errors.clear();
-
-        let mut resolved_node = node.clone();
-        resolved_node
-            .protocol
-            .replace_child_profile_ids(child_index_ids);
-        context
-            .all_proxies_map
-            .insert(resolved_node.index_id.clone(), resolved_node);
-        child_result
-    }
-
-    fn group_child_profile_items(
-        &self,
-        protocol: &ProfileProtocol,
-        result: &mut NodeValidatorResult,
-    ) -> Vec<ProfileItem> {
-        let resolution = resolve_group_children(protocol, self);
-        if let Some(pattern) = &resolution.invalid_filter {
-            result.push_error(ValidationCode::InvalidSubscriptionFilter {
-                pattern: pattern.clone(),
-            });
-        }
-        for index_id in &resolution.missing_child_ids {
-            result.push_warning(ValidationCode::GroupChildNotFound {
-                profile_id: index_id.clone(),
-            });
-        }
-        for index_id in &resolution.duplicate_child_ids {
-            result.push_warning(ValidationCode::GroupDuplicateChildIgnored {
-                profile_id: index_id.clone(),
-            });
-        }
-        resolution.children
-    }
-
     fn resolve_rule_outbounds(
         &self,
         context: &mut CoreConfigContext,
@@ -670,23 +516,6 @@ where
     }
 }
 
-impl<E> GroupChildSource for CoreConfigContextBuilder<'_, E>
-where
-    E: CoreGenEnv,
-{
-    fn children_by_index_ids(&self, index_ids: &[String]) -> Vec<ProfileItem> {
-        if index_ids.is_empty() {
-            return Vec::new();
-        }
-        self.env.get_profile_items_ordered_by_index_ids(index_ids)
-    }
-
-    fn children_by_subscription_id(&self, subscription_id: &str) -> Vec<ProfileItem> {
-        self.env
-            .get_profile_items_by_subscription_id(subscription_id)
-    }
-}
-
 mod node_registration;
 mod validation;
 use node_registration::{pre_socks_item, register_single_node};
@@ -701,7 +530,6 @@ mod tests {
     struct MemoryEnv {
         platform: CoreGenPlatform,
         profiles: Vec<ProfileItem>,
-        subs: Vec<SubItem>,
         routings: Vec<RoutingItem>,
         local_socks_port: i32,
     }
@@ -711,7 +539,6 @@ mod tests {
             Self {
                 platform: CoreGenPlatform::Linux,
                 profiles: Vec::new(),
-                subs: Vec::new(),
                 routings: Vec::new(),
                 local_socks_port: 10808,
             }
@@ -736,29 +563,6 @@ mod tests {
                 .find(|profile| profile.remarks == remarks)
                 .cloned()
         }
-
-        fn get_profile_items_ordered_by_index_ids(&self, index_ids: &[String]) -> Vec<ProfileItem> {
-            index_ids
-                .iter()
-                .filter_map(|index_id| self.get_profile_by_index_id(index_id))
-                .collect()
-        }
-
-        fn get_profile_items_by_subscription_id(&self, subscription_id: &str) -> Vec<ProfileItem> {
-            self.profiles
-                .iter()
-                .filter(|profile| profile.subscription_id.as_deref() == Some(subscription_id))
-                .cloned()
-                .collect()
-        }
-
-        fn get_subscription(&self, subscription_id: &str) -> Option<SubItem> {
-            self.subs
-                .iter()
-                .find(|sub| sub.id == subscription_id)
-                .cloned()
-        }
-
         fn get_default_routing(&self, config: &AppConfig) -> Option<RoutingItem> {
             self.routings
                 .iter()
@@ -832,91 +636,6 @@ mod tests {
                 .map(|profile| profile.index_id.as_str()),
             Some("rule")
         );
-    }
-
-    #[test]
-    fn context_group_resolution_detects_cycles_and_dedupes_children() {
-        let leaf = vless_profile("leaf", "Leaf", "leaf.example.com");
-        let mut root = group_profile("root", "Root", "leaf,leaf,nested");
-        let nested = group_profile("nested", "Nested", "root,leaf");
-        if let ProfileProtocol::PolicyGroup {
-            source_subscription_id,
-            filter,
-            ..
-        } = &mut root.protocol
-        {
-            *source_subscription_id = Some("sub".to_string());
-            *filter = Some("^Sub".to_string());
-        }
-        let sub_leaf = ProfileItem {
-            subscription_id: Some("sub".to_string()),
-            ..vless_profile("sub-leaf", "Sub Leaf", "sub.example.com")
-        };
-        let ignored_sub_leaf = ProfileItem {
-            subscription_id: Some("sub".to_string()),
-            ..vless_profile("ignored-sub-leaf", "Ignored", "ignored.example.com")
-        };
-        let env = MemoryEnv {
-            profiles: vec![leaf, root.clone(), nested, sub_leaf, ignored_sub_leaf],
-            ..MemoryEnv::default()
-        };
-
-        let result = CoreConfigContextBuilder::new(&env).build(&app_config("root"), &root);
-
-        assert!(result.success());
-        assert_eq!(
-            result
-                .context
-                .all_proxies_map
-                .get("root")
-                .map(|profile| profile.protocol.child_profile_ids()),
-            Some(
-                [
-                    "sub-leaf".to_string(),
-                    "leaf".to_string(),
-                    "nested".to_string()
-                ]
-                .as_slice()
-            )
-        );
-        assert!(result
-            .validator_result
-            .warnings
-            .iter()
-            .any(|warning| matches!(warning.code, ValidationCode::GroupCycle { .. })));
-    }
-
-    #[test]
-    fn context_invalid_subscription_filter_matches_nothing_and_reports_error() {
-        let sub_leaf = ProfileItem {
-            subscription_id: Some("sub".to_string()),
-            ..vless_profile("sub-leaf", "Sub Leaf", "sub.example.com")
-        };
-        let group = ProfileItem {
-            index_id: "group".to_string(),
-            remarks: "Group".to_string(),
-            protocol: ProfileProtocol::PolicyGroup {
-                child_profile_ids: Vec::new(),
-                source_subscription_id: Some("sub".to_string()),
-                filter: Some("^(HK|SG".to_string()),
-                strategy: crate::MultipleLoad::LeastPing,
-            },
-            ..ProfileItem::default()
-        };
-        let env = MemoryEnv {
-            profiles: vec![sub_leaf, group.clone()],
-            ..MemoryEnv::default()
-        };
-
-        let result = CoreConfigContextBuilder::new(&env).build(&app_config("group"), &group);
-
-        assert!(!result.success());
-        assert!(result
-            .validator_result
-            .errors
-            .iter()
-            .any(|error| matches!(error.code, ValidationCode::InvalidSubscriptionFilter { .. })));
-        assert!(!result.context.all_proxies_map.contains_key("sub-leaf"));
     }
 
     #[test]
@@ -1098,94 +817,6 @@ mod tests {
         assert_eq!(pre_port, main_port + 1);
     }
 
-    #[test]
-    fn context_group_children_put_subscription_members_before_explicit_ids() {
-        // Validation (`crate::groups`) and generation must agree on this order,
-        // so both go through `crate::group_children`.
-        let explicit = vless_profile("explicit", "Explicit", "explicit.example.com");
-        let sub_leaf = ProfileItem {
-            subscription_id: Some("sub".to_string()),
-            ..vless_profile("sub-leaf", "Sub Leaf", "sub.example.com")
-        };
-        let invalid_sub_leaf = ProfileItem {
-            subscription_id: Some("sub".to_string()),
-            ..vless_profile("invalid-sub-leaf", "Sub Broken", "")
-        };
-        let mut group = group_profile("group", "Group", "explicit,missing,explicit");
-        if let ProfileProtocol::PolicyGroup {
-            source_subscription_id,
-            ..
-        } = &mut group.protocol
-        {
-            *source_subscription_id = Some("sub".to_string());
-        }
-        let env = MemoryEnv {
-            profiles: vec![explicit, sub_leaf, invalid_sub_leaf, group.clone()],
-            ..MemoryEnv::default()
-        };
-
-        let result = CoreConfigContextBuilder::new(&env).build(&app_config("group"), &group);
-
-        assert!(result.success(), "{:?}", result.validator_result);
-        assert_eq!(
-            result
-                .context
-                .all_proxies_map
-                .get("group")
-                .map(|profile| profile.protocol.child_profile_ids()),
-            Some(["sub-leaf".to_string(), "explicit".to_string()].as_slice())
-        );
-        assert!(result
-            .validator_result
-            .warnings
-            .iter()
-            .any(|warning| warning.code
-                == ValidationCode::GroupChildNotFound {
-                    profile_id: "missing".to_string(),
-                }));
-        assert!(result
-            .validator_result
-            .warnings
-            .iter()
-            .any(|warning| warning.code
-                == ValidationCode::GroupDuplicateChildIgnored {
-                    profile_id: "explicit".to_string(),
-                }));
-    }
-
-    #[test]
-    fn context_custom_pre_socks_uses_configured_port_without_tun() {
-        let active = ProfileItem {
-            index_id: "custom".to_string(),
-            subscription_id: Some("custom-sub".to_string()),
-            remarks: "Custom".to_string(),
-            protocol: ProfileProtocol::Custom {
-                source: String::new(),
-                filter: None,
-            },
-            ..ProfileItem::default()
-        };
-        let env = MemoryEnv {
-            profiles: vec![active.clone()],
-            subs: vec![SubItem {
-                id: "custom-sub".to_string(),
-                pre_socks_port: Some(18888),
-                ..SubItem::default()
-            }],
-            ..MemoryEnv::default()
-        };
-
-        let result = CoreConfigContextBuilder::new(&env).build_all(&app_config("custom"), &active);
-
-        let pre_context = &result
-            .pre_socks_result
-            .as_ref()
-            .expect("custom pre socks context")
-            .context;
-        assert_eq!(pre_context.node.config_type(), ConfigType::SOCKS);
-        assert_eq!(pre_context.node.port(), 18888);
-    }
-
     fn routing_with_outbound_tag(outbound_tag: &str) -> RoutingItem {
         RoutingItem {
             id: "routing".to_string(),
@@ -1235,20 +866,6 @@ mod tests {
                 ech_config: Vec::new(),
                 final_mask: None,
             }),
-            ..ProfileItem::default()
-        }
-    }
-
-    fn group_profile(index_id: &str, remarks: &str, child_items: &str) -> ProfileItem {
-        ProfileItem {
-            index_id: index_id.to_string(),
-            remarks: remarks.to_string(),
-            protocol: ProfileProtocol::PolicyGroup {
-                child_profile_ids: child_items.split(',').map(str::to_string).collect(),
-                source_subscription_id: None,
-                filter: None,
-                strategy: crate::MultipleLoad::LeastPing,
-            },
             ..ProfileItem::default()
         }
     }

@@ -23,7 +23,6 @@ pub(crate) fn protocol_name(config_type: ConfigType) -> &'static str {
         ConfigType::WireGuard => "wireguard",
         ConfigType::Anytls => "anytls",
         ConfigType::Naive => "naive",
-        ConfigType::Custom | ConfigType::PolicyGroup | ConfigType::ProxyChain => "vmess",
     }
 }
 

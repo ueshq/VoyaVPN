@@ -1,32 +1,12 @@
 use super::*;
 
-pub(super) fn pre_socks_item<E: CoreGenEnv>(
-    config: &AppConfig,
-    node: &ProfileItem,
-    env: &E,
-) -> Option<ProfileItem> {
+pub(super) fn pre_socks_item<E: CoreGenEnv>(config: &AppConfig, env: &E) -> Option<ProfileItem> {
     // The topology is an injected platform fact, not something derived from
     // `CoreGenPlatform`: macOS runs TUN inside the single NetworkExtension
     // config (ADR 0005), so `build_all` must not synthesize a pre-socks context
     // there even though macOS is "non-Windows".
-    if node.config_type() != ConfigType::Custom
-        && config.tun_mode_item.enable_tun
-        && env.tun_topology().is_pre_socks()
-    {
+    if config.tun_mode_item.enable_tun && env.tun_topology().is_pre_socks() {
         return Some(socks_profile(env.get_local_port(InboundProtocol::socks)));
-    }
-
-    let subscription_pre_socks_port = node
-        .subscription_id
-        .as_deref()
-        .and_then(|id| env.get_subscription(id))
-        .and_then(|subscription| subscription.pre_socks_port);
-    if node.config_type() == ConfigType::Custom
-        && matches!(subscription_pre_socks_port, Some(1..=65535))
-    {
-        return Some(socks_profile(
-            subscription_pre_socks_port.unwrap_or_default(),
-        ));
     }
 
     None
@@ -36,10 +16,6 @@ pub(super) fn register_single_node(
     context: &mut CoreConfigContext,
     node: &ProfileItem,
 ) -> NodeValidatorResult {
-    if node.config_type().is_group_type() {
-        return NodeValidatorResult::empty();
-    }
-
     let result = validate_node(node, context.run_core_type);
     if !result.success() {
         return result;

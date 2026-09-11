@@ -151,3 +151,5 @@
   .profile-node-actions { width: 100%; justify-content: flex-end; }
   .profile-node-latency { margin-inline-end: auto; margin-inline-start: 56px; max-width: none; }
 }
+
+.grouped-node-card { margin-inline-start: 24px; width: calc(100% - 24px); }

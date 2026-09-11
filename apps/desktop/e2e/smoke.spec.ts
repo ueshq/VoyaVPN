@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
+import { savedNodeFixture } from "./fixtures/saved-node";
+
 import { installTauriSmokeMock } from "./fixtures/tauri-mock";
 
 const importFixture = readFileSync(new URL("./fixtures/vless-share-link.txt", import.meta.url), "utf8").trim();
@@ -147,7 +149,7 @@ test("node menus defer actions until a method is chosen and restore keyboard foc
   await add.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveCount(2);
+  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveCount(3);
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath("nodes-add-menu.png") });
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
@@ -255,27 +257,12 @@ test("adds and imports profiles, activates one, and connects through the fake ru
   await expect(page.getByTestId("sidebar-footer")).toContainText("Disconnected");
 });
 
-test("uses the proxy groups and connections routes through the proxy runtime IPC", async ({ page }) => {
+test("uses traffic modes and connections through the proxy runtime IPC", async ({ page }) => {
   await page.getByRole("tab", { name: "Home", exact: true }).click();
   await expect(page.getByText("Applies on the next connection")).toHaveCount(0);
   await page.getByRole("button", { name: "Global", exact: true }).click();
   await expect(page.getByRole("button", { name: "Global", exact: true })).toHaveAttribute("aria-pressed", "true");
-  expect((await smokeCalls(page)).some((call) => call.command === "proxy_list_groups")).toBe(false);
   await connectFakeCore(page);
-  await page.getByRole("tablist", { name: "Main sections" }).getByRole("tab", { name: "Nodes", exact: true }).click();
-  await page.getByRole("tablist", { name: "Node views" }).getByRole("tab", { name: "Proxy Groups" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-  await expect(page.getByRole("heading", { exact: true, name: "Nodes" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Smoke Node VLESS 23 ms Active/ })).toBeVisible();
-  await page.getByRole("button", { name: /Smoke Backup Node/ }).click();
-  // The selection has to be observable in the UI, not just in the call ledger.
-  await expect(page.getByRole("button", { name: /Smoke Backup Node VLESS 41 ms Active/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Smoke Node VLESS 23 ms/ })).toBeEnabled();
-
-  await page.getByRole("button", { exact: true, name: "Test selected" }).click();
-  await page.getByRole("menuitem", { name: "More", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Reload core configuration", exact: true }).click();
-  await page.getByRole("tab", { name: "Home", exact: true }).click();
   const oldConnection = await page.evaluate(() => (window.__VOYA_SMOKE__.state as {
     connections: import("../src/ipc/bindings").ProxyConnectionsSnapshot;
   }).connections.connections[0]!);
@@ -308,27 +295,21 @@ test("uses the proxy groups and connections routes through the proxy runtime IPC
 
   expect(calls.map((call) => call.command)).toEqual(
     expect.arrayContaining([
-      "proxy_list_groups",
-      "proxy_select_node",
-      "proxy_reload_config",
-      "proxy_test_delay",
       "proxy_set_traffic_mode",
       "proxy_start_monitor",
       "proxy_list_connections",
       "proxy_close_connection",
     ]),
   );
-  expect(calls.filter((call) => call.command === "proxy_select_node").at(-1)?.args).toMatchObject({
-    groupName: "PROXY",
-    nodeName: "Smoke Backup Node",
-  });
-  // Only testable nodes of the shown group are probed.
-  expect(calls.filter((call) => call.command === "proxy_test_delay").at(-1)?.args.nodeNames).toEqual(
-    expect.arrayContaining(["Smoke Node", "Smoke Backup Node"]),
-  );
 });
 
 test("keeps the simplified navigation usable at desktop and minimum sizes", async ({ page }, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.evaluate((profile) => {
+    const state = window.__VOYA_SMOKE__.state as { profiles: import("../src/ipc/bindings").ProfileListEntry[] };
+    state.profiles = [profile];
+    window.__VOYA_SMOKE__.emit("invalidate-event", { keys: [{ scope: { kind: "profiles" } }] });
+  }, savedNodeFixture);
   const mainNav = page.getByRole("tablist", { name: "Main sections" });
   await expect(mainNav.getByRole("tab")).toHaveCount(5);
   await expect(mainNav.getByRole("tab", { name: "Proxies", exact: true })).toHaveCount(0);
@@ -345,33 +326,18 @@ test("keeps the simplified navigation usable at desktop and minimum sizes", asyn
       }
       await page.screenshot({ path: testInfo.outputPath(`home-${viewport.width}-${colorScheme}.png`) });
       await mainNav.getByRole("tab", { name: "Nodes", exact: true }).click();
-      const views = page.getByRole("tablist", { name: "Node views" });
-      await views.getByRole("tab", { name: "Nodes", exact: true }).click();
-      await page.keyboard.press("ArrowRight");
-      await expect(views.getByRole("tab", { name: "Proxy Groups" })).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByRole("tablist", { name: "Node views" })).toHaveCount(0);
       await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-      await expect(page.getByText("Connect first", { exact: true })).toBeVisible();
-      await expect(page.getByRole("button", { name: "Test all", exact: true })).toBeDisabled();
-      await page.screenshot({ path: testInfo.outputPath(`groups-${viewport.width}-${colorScheme}.png`) });
+      await expect(page.getByRole("button", { name: "Unassigned", exact: true })).toBeVisible();
+      await expect(page.getByTestId("server-row").first()).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`nodes-${viewport.width}-${colorScheme}.png`) });
       await mainNav.getByRole("tab", { name: "Home", exact: true }).click();
       await mainNav.getByRole("tab", { name: "Nodes", exact: true }).click();
-      await expect(views.getByRole("tab", { name: "Proxy Groups" })).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByRole("heading", { name: "Nodes", exact: true })).toBeVisible();
     }
   }
   await page.evaluate(() => window.__VOYA_SMOKE__.emit("app-event", { kind: "selectTab", payload: "profiles" }));
-  await expect(page.getByRole("tablist", { name: "Node views" }).getByRole("tab", { name: "Nodes", exact: true })).toHaveAttribute("aria-selected", "true");
-  await page.evaluate(() => window.__VOYA_SMOKE__.emit("app-event", { kind: "selectTab", payload: "proxyGroups" }));
-  await expect(page.getByRole("tablist", { name: "Node views" }).getByRole("tab", { name: "Proxy Groups" })).toHaveAttribute("aria-selected", "true");
-  await connectFakeCore(page);
-  for (const viewport of [{ width: 1180, height: 760 }, { width: 960, height: 640 }]) {
-    await page.setViewportSize(viewport);
-    for (const colorScheme of ["light", "dark"] as const) {
-      await page.emulateMedia({ colorScheme });
-      await expect(page.getByRole("button", { name: /Smoke Backup Node/ })).toBeVisible();
-      await expect(page.getByRole("button", { name: "Test all", exact: true })).toBeEnabled();
-      await page.screenshot({ path: testInfo.outputPath(`groups-connected-${viewport.width}-${colorScheme}.png`) });
-    }
-  }
+  await expect(mainNav.getByRole("tab", { name: "Nodes", exact: true })).toHaveAttribute("aria-selected", "true");
 });
 
 test("edits routing and DNS settings without network or OS side effects", async ({ page }) => {

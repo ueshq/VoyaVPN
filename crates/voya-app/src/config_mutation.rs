@@ -11,7 +11,6 @@ use voya_db::{Database, DbError};
 
 use crate::{
     dns::DnsManager,
-    groups::GroupManager,
     profiles::ProfileManager,
     routing::RoutingManager,
     settings_save::{settings_from_app_config, state_from_app_config},
@@ -170,11 +169,6 @@ impl ConfigMutationGuard<'_> {
     #[must_use]
     pub fn profiles(&self) -> ProfileManager<'_> {
         ProfileManager::new_in(&self.unit_of_work)
-    }
-
-    #[must_use]
-    pub fn groups(&self) -> GroupManager<'_> {
-        GroupManager::new_in(&self.unit_of_work)
     }
 
     #[must_use]

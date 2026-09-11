@@ -3,13 +3,9 @@ export {
   calculateCertificateSha256,
   proxyCloseConnection,
   proxyListConnections,
-  proxyListGroups,
-  proxyReloadConfig,
-  proxySelectNode,
   proxySetTrafficMode,
   proxyStartMonitor,
   proxyStopMonitor,
-  proxyTestDelay,
   connectActiveProfile,
   cancelSpeedtest,
   disconnectCore,
@@ -30,7 +26,6 @@ export {
   IpcCommandError,
   installCoreSeed,
   connectionModeStatus,
-  listGroupChildCandidates,
   listProcessCandidates,
   listProfiles,
   listRoutings,
@@ -43,8 +38,6 @@ export {
   runtimeStatus,
   runSpeedtest,
   scanScreenQr,
-  previewGroupProfile,
-  saveGroupProfile,
   saveProfile,
   saveAppSettings,
   saveDnsSettings,
@@ -66,3 +59,7 @@ export {
 export { EventBridge } from "@/ipc/event-bridge";
 export { saveTextFile } from "@/ipc/file-dialog";
 export { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+
+export { listNodeGroups, saveNodeGroup, deleteNodeGroup, moveNodeGroup, assignNodeGroups } from "./commands";
+
+export { copyProfiles } from "./commands";

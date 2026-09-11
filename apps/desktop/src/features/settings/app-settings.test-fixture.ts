@@ -70,7 +70,6 @@ export function makeAppSettings({
       delayIntervalSeconds: 1,
       ipLookupUrl: "https://ip.example.test",
       latencyUrl: "https://ping.example.test",
-      proxyDelayConcurrency: 4,
       pageSize: 10,
       timeoutSeconds: 10,
     },
@@ -81,6 +80,6 @@ export function makeAppSettings({
       permitWithoutStream: false,
     },
     hysteria: { downloadMbps: 100, hopIntervalSeconds: 30, uploadMbps: 100 },
-    proxy: { nodeSorting: 0, trafficMode: "rule" },
+    proxy: { trafficMode: "rule" },
   };
 }

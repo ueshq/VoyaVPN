@@ -3,20 +3,16 @@ use std::{
     time::Duration,
 };
 
-use futures_util::{stream, StreamExt};
 use thiserror::Error;
 use tokio::{runtime::Handle, sync::watch, task::JoinHandle, time};
-use voya_contracts::SpeedtestOutcome;
 pub use voya_contracts::{
-    ProxyConnectionItem, ProxyConnectionsSnapshot, ProxyDelayTestResult, ProxyGroup,
-    ProxyGroupsSnapshot, ProxyMonitorState, ProxyMonitorStatus, ProxyNode,
+    ProxyConnectionItem, ProxyConnectionsSnapshot, ProxyMonitorState, ProxyMonitorStatus,
 };
-use voya_core::{AppConfig, TrafficMode};
+use voya_core::TrafficMode;
 use voya_net::clash::{
     ClashApiEndpoint, ClashConnection as NetClashConnection,
     ClashConnectionMetadata as NetClashConnectionMetadata, ClashConnections as NetClashConnections,
-    ClashDelayResponse, ClashError, ClashHttpTransport, ClashProvidersResponse,
-    ClashProxiesResponse, ClashProxy, ClashRestClient, ClashWebSocketClient, ClashWebSocketEvent,
+    ClashError, ClashHttpTransport, ClashRestClient, ClashWebSocketClient, ClashWebSocketEvent,
     ClashWebSocketResource, ReqwestClashHttpTransport,
 };
 
@@ -29,37 +25,15 @@ use crate::{
 mod traffic_mode;
 pub use traffic_mode::{TrafficModeChangeError, TrafficModeChangeOutcome};
 
-/// Fallback per-node latency budget when the configured speed-test timeout is
-/// unusable; matches `SpeedTestItem::default().speed_test_timeout`.
-const DEFAULT_DELAY_TIMEOUT_MS: u32 = 10_000;
 const PROXY_WS_RECONNECT_INITIAL_DELAY: Duration = Duration::from_secs(1);
 const PROXY_WS_RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
 const PROXY_WS_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const ALLOW_SELECT_TYPES: &[&str] = &["selector", "urltest", "loadbalance", "fallback"];
-const NOT_ALLOW_TEST_TYPES: &[&str] = &[
-    "selector",
-    "urltest",
-    "direct",
-    "reject",
-    "compatible",
-    "pass",
-    "loadbalance",
-    "fallback",
-];
-const PROVIDER_PROXY_VEHICLE_TYPES: &[&str] = &["file", "http"];
-
 pub type Result<T> = std::result::Result<T, ProxyRuntimeError>;
 
 #[derive(Debug, Error)]
 pub enum ProxyRuntimeError {
     #[error(transparent)]
     Api(#[from] ClashError),
-    #[error("proxy group {0} was not found")]
-    GroupNotFound(String),
-    #[error("proxy node {0} was not found")]
-    NodeNotFound(String),
-    #[error("proxy group {0} is not a selector")]
-    GroupNotSelector(String),
     #[error("invalid traffic mode {0:?}")]
     InvalidTrafficMode(TrafficMode),
     #[error("proxy monitor lock is poisoned")]
@@ -102,24 +76,6 @@ where
     pub fn with_transport(transport: T) -> Self {
         Self { transport }
     }
-
-    pub async fn groups(
-        &self,
-        config: &AppConfig,
-        access: &ClashApiAccess,
-    ) -> Result<ProxyGroupsSnapshot> {
-        let client = self.client(access)?;
-        let proxies = client.get_proxies().await?;
-        let providers = client.get_proxy_providers().await.unwrap_or_default();
-
-        Ok(build_proxy_groups_snapshot(
-            &proxies,
-            &providers,
-            config.proxy_ui_item.node_sorting,
-            config.proxy_ui_item.traffic_mode,
-        ))
-    }
-
     pub async fn connections(&self, access: &ClashApiAccess) -> Result<ProxyConnectionsSnapshot> {
         self.client(access)?
             .get_connections()
@@ -127,75 +83,6 @@ where
             .map(connections_snapshot)
             .map_err(Into::into)
     }
-
-    pub async fn select_node(
-        &self,
-        config: &AppConfig,
-        access: &ClashApiAccess,
-        group_name: &str,
-        node_name: &str,
-    ) -> Result<ProxyGroupsSnapshot> {
-        let client = self.client(access)?;
-        let proxies = client.get_proxies().await?;
-        let group = proxies
-            .proxies
-            .get(group_name)
-            .ok_or_else(|| ProxyRuntimeError::GroupNotFound(group_name.to_string()))?;
-        if !group.proxy_type.eq_ignore_ascii_case("selector") {
-            return Err(ProxyRuntimeError::GroupNotSelector(group_name.to_string()));
-        }
-        if !group.all.iter().any(|name| name == node_name) {
-            return Err(ProxyRuntimeError::NodeNotFound(node_name.to_string()));
-        }
-
-        client.select_proxy(group_name, node_name).await?;
-        self.groups(config, access).await
-    }
-
-    pub async fn test_delay(
-        &self,
-        config: &AppConfig,
-        access: &ClashApiAccess,
-        node_names: Vec<String>,
-    ) -> Result<Vec<ProxyDelayTestResult>> {
-        let client = self.client(access)?;
-        let names = if node_names.is_empty() {
-            client
-                .get_proxies()
-                .await?
-                .proxies
-                .into_iter()
-                .filter_map(|(name, proxy)| is_testable_type(&proxy.proxy_type).then_some(name))
-                .collect::<Vec<_>>()
-        } else {
-            node_names
-        };
-
-        let timeout_ms = delay_timeout_ms(config);
-        let test_url = config.speed_test_item.speed_ping_test_url.as_str();
-        let concurrency = delay_test_concurrency(config, names.len());
-        let client = &client;
-
-        // Testing one node at a time costs a full timeout per unreachable
-        // node, so "test all" takes minutes on a large subscription. `buffered`
-        // overlaps the requests while still yielding results in the order the
-        // caller asked for them.
-        let results = stream::iter(names)
-            .map(|name| async move {
-                let response = client.delay_proxy(&name, timeout_ms, test_url).await;
-                ProxyDelayTestResult {
-                    name,
-                    delay: response.as_ref().ok().and_then(|response| response.delay),
-                    outcome: delay_outcome(response.as_ref()),
-                }
-            })
-            .buffered(concurrency)
-            .collect::<Vec<_>>()
-            .await;
-
-        Ok(results)
-    }
-
     pub async fn set_traffic_mode(&self, access: &ClashApiAccess, mode: TrafficMode) -> Result<()> {
         let Some(mode) = traffic_mode_api_value(mode) else {
             return Err(ProxyRuntimeError::InvalidTrafficMode(mode));
@@ -206,13 +93,6 @@ where
             .await
             .map_err(Into::into)
     }
-
-    pub async fn reload_config(&self, access: &ClashApiAccess, path: Option<&str>) -> Result<()> {
-        let client = self.client(access)?;
-        let _ = client.close_connection(None).await;
-        client.reload_config(path).await.map_err(Into::into)
-    }
-
     pub async fn close_connection(
         &self,
         access: &ClashApiAccess,
@@ -427,110 +307,6 @@ pub fn traffic_mode_api_value(mode: TrafficMode) -> Option<&'static str> {
         TrafficMode::Unchanged => None,
     }
 }
-
-fn build_proxy_groups_snapshot(
-    proxies: &ClashProxiesResponse,
-    providers: &ClashProvidersResponse,
-    sorting: i32,
-    traffic_mode: TrafficMode,
-) -> ProxyGroupsSnapshot {
-    let mut groups = proxies
-        .proxies
-        .iter()
-        .filter(|(_, proxy)| is_selectable_type(&proxy.proxy_type))
-        .map(|(name, proxy)| {
-            let mut nodes = proxy
-                .all
-                .iter()
-                .filter_map(|node_name| {
-                    find_proxy(node_name, proxies, providers).map(|node| {
-                        proxy_node(node_name, node, proxy.now.as_deref() == Some(node_name))
-                    })
-                })
-                .collect::<Vec<_>>();
-            sort_nodes(&mut nodes, sorting);
-
-            ProxyGroup {
-                name: proxy.name.clone().unwrap_or_else(|| name.clone()),
-                proxy_type: proxy.proxy_type.clone(),
-                now: proxy.now.clone(),
-                nodes,
-            }
-        })
-        .collect::<Vec<_>>();
-    groups.sort_by(|left, right| left.name.cmp(&right.name));
-
-    ProxyGroupsSnapshot {
-        groups,
-        traffic_mode: crate::contract_map::traffic_mode_to_contract(traffic_mode),
-    }
-}
-
-fn find_proxy<'proxies>(
-    name: &str,
-    proxies: &'proxies ClashProxiesResponse,
-    providers: &'proxies ClashProvidersResponse,
-) -> Option<&'proxies ClashProxy> {
-    proxies.proxies.get(name).or_else(|| {
-        providers
-            .providers
-            .values()
-            .filter(|provider| {
-                provider
-                    .vehicle_type
-                    .as_deref()
-                    .is_some_and(is_provider_proxy_vehicle_type)
-            })
-            .flat_map(|provider| provider.proxies.iter())
-            .find(|proxy| proxy.name.as_deref() == Some(name))
-    })
-}
-
-fn proxy_node(name: &str, proxy: &ClashProxy, active: bool) -> ProxyNode {
-    let delay = proxy
-        .history
-        .last()
-        .map(|item| item.delay)
-        .filter(|delay| *delay > 0)
-        .or_else(|| (proxy.delay > 0).then_some(proxy.delay));
-    ProxyNode {
-        name: name.to_string(),
-        proxy_type: proxy.proxy_type.clone(),
-        delay,
-        udp: proxy.udp,
-        active,
-        testable: is_testable_type(&proxy.proxy_type),
-    }
-}
-
-/// What a Clash delay probe reported, as a code.
-///
-/// The Proxies screen used to render the transport error's own `Display` where
-/// the delay would have gone, which put untranslated English into a column of
-/// numbers. A delay of `0` or less means the node did not answer.
-fn delay_outcome(
-    response: std::result::Result<&ClashDelayResponse, &ClashError>,
-) -> SpeedtestOutcome {
-    match response {
-        Ok(response) if response.delay.is_some_and(|delay| delay > 0) => {
-            SpeedtestOutcome::Completed
-        }
-        Ok(_) => SpeedtestOutcome::TimedOut,
-        Err(ClashError::Request(message)) if message.to_ascii_lowercase().contains("timed out") => {
-            SpeedtestOutcome::TimedOut
-        }
-        Err(_) => SpeedtestOutcome::Failed,
-    }
-}
-
-fn sort_nodes(nodes: &mut [ProxyNode], sorting: i32) {
-    match sorting {
-        0 => nodes.sort_by_key(|node| node.delay.unwrap_or(i32::MAX)),
-        1 => nodes.sort_by(|left, right| left.name.cmp(&right.name)),
-        _ => {}
-    }
-}
-
 fn connections_snapshot(connections: NetClashConnections) -> ProxyConnectionsSnapshot {
     ProxyConnectionsSnapshot {
         download_total: connections.download_total,
@@ -594,43 +370,6 @@ fn endpoint_label(address: Option<&str>, port: Option<&str>) -> String {
         (None, None) => String::new(),
     }
 }
-
-/// Per-node latency budget in milliseconds, taken from the configured
-/// speed-test timeout so one setting governs every latency probe.
-fn delay_timeout_ms(config: &AppConfig) -> u32 {
-    u32::try_from(config.speed_test_item.speed_test_timeout)
-        .ok()
-        .filter(|seconds| *seconds > 0)
-        .and_then(|seconds| seconds.checked_mul(1_000))
-        .unwrap_or(DEFAULT_DELAY_TIMEOUT_MS)
-}
-
-/// How many latency probes may be in flight at once. Reuses the shared
-/// proxy-group concurrency setting, and never
-/// returns zero because `buffered(0)` would stall the stream.
-fn delay_test_concurrency(config: &AppConfig, node_count: usize) -> usize {
-    let configured = usize::try_from(config.speed_test_item.proxy_delay_concurrency)
-        .ok()
-        .filter(|value| *value > 0)
-        .unwrap_or(1);
-    configured.min(node_count.max(1))
-}
-
-fn is_selectable_type(proxy_type: &str) -> bool {
-    let proxy_type = proxy_type.to_ascii_lowercase();
-    ALLOW_SELECT_TYPES.contains(&proxy_type.as_str())
-}
-
-fn is_testable_type(proxy_type: &str) -> bool {
-    let proxy_type = proxy_type.to_ascii_lowercase();
-    !NOT_ALLOW_TEST_TYPES.contains(&proxy_type.as_str())
-}
-
-fn is_provider_proxy_vehicle_type(vehicle_type: &str) -> bool {
-    let vehicle_type = vehicle_type.to_ascii_lowercase();
-    PROVIDER_PROXY_VEHICLE_TYPES.contains(&vehicle_type.as_str())
-}
-
 #[cfg(test)]
 mod tests {
     use std::{
@@ -641,7 +380,7 @@ mod tests {
     };
 
     use serde_json::{json, Value};
-    use voya_core::{SpeedTestItem, DEFAULT_LOCAL_PORT};
+    use voya_core::DEFAULT_LOCAL_PORT;
     use voya_net::clash::{ClashHttpMethod, ClashHttpRequest, ClashTraffic as NetClashTraffic};
 
     use super::*;
@@ -700,44 +439,6 @@ mod tests {
         }
     }
 
-    /// Records how many delay probes overlap so the bounded-concurrency
-    /// behaviour can be asserted without depending on wall-clock timing.
-    #[derive(Clone, Default)]
-    struct ConcurrencyProbeTransport {
-        state: Arc<Mutex<ConcurrencyProbe>>,
-    }
-
-    #[derive(Default)]
-    struct ConcurrencyProbe {
-        in_flight: usize,
-        max_in_flight: usize,
-        urls: Vec<String>,
-    }
-
-    impl ClashHttpTransport for ConcurrencyProbeTransport {
-        fn send_json<'transport>(
-            &'transport self,
-            request: ClashHttpRequest,
-        ) -> Pin<Box<dyn Future<Output = voya_net::clash::Result<Value>> + Send + 'transport>>
-        {
-            Box::pin(async move {
-                {
-                    let mut state = self.state.lock().expect("probe lock");
-                    state.in_flight += 1;
-                    state.max_in_flight = state.max_in_flight.max(state.in_flight);
-                    state.urls.push(request.url.clone());
-                }
-                // Yield so every probe the stream started is counted before
-                // the first one completes.
-                tokio::task::yield_now().await;
-                tokio::task::yield_now().await;
-                self.state.lock().expect("probe lock").in_flight -= 1;
-
-                Ok(json!({ "delay": 20 }))
-            })
-        }
-    }
-
     #[derive(Default)]
     struct CaptureSink {
         connections: Mutex<Vec<ProxyConnectionsSnapshot>>,
@@ -751,17 +452,6 @@ mod tests {
                 .push(event);
         }
     }
-
-    fn config() -> AppConfig {
-        AppConfig {
-            speed_test_item: SpeedTestItem {
-                speed_ping_test_url: "https://example.com/generate_204".to_string(),
-                ..SpeedTestItem::default()
-            },
-            ..AppConfig::default()
-        }
-    }
-
     /// The port a running core reports. It must match the URLs `MockTransport`
     /// registers, which are built from the same `DEFAULT_LOCAL_PORT + 5`
     /// offset the generated `experimental.clash_api` uses.
@@ -809,143 +499,6 @@ mod tests {
             format!("http://127.0.0.1:{}/configs", DEFAULT_LOCAL_PORT + 5)
         );
         assert_eq!(requests[0].body, Some(json!({ "mode": "direct" })));
-    }
-
-    #[tokio::test]
-    async fn proxy_runtime_reload_uses_force_configs() {
-        let transport = MockTransport::default();
-        transport.respond("/connections", Value::Null);
-        transport.respond("/configs?force=true", Value::Null);
-        let manager = ProxyRuntimeManager::with_transport(transport.clone());
-
-        manager
-            .reload_config(&access(RUNTIME_PORT), Some("/tmp/config.yaml"))
-            .await
-            .expect("reload");
-
-        let requests = transport.requests();
-        assert_eq!(requests.len(), 2);
-        assert_eq!(requests[0].method, ClashHttpMethod::Delete);
-        assert_eq!(requests[1].method, ClashHttpMethod::Put);
-        assert_eq!(
-            requests[1].url,
-            format!(
-                "http://127.0.0.1:{}/configs?force=true",
-                DEFAULT_LOCAL_PORT + 5
-            )
-        );
-    }
-
-    #[tokio::test]
-    async fn proxy_runtime_selects_active_node_with_put() {
-        let transport = MockTransport::default();
-        transport.respond(
-            "/proxies",
-            json!({
-                "proxies": {
-                    "Proxy": { "name": "Proxy", "type": "Selector", "now": "A", "all": ["A", "B"] },
-                    "A": { "name": "A", "type": "ss", "history": [{ "delay": 12 }] },
-                    "B": { "name": "B", "type": "ss", "history": [{ "delay": 8 }] }
-                }
-            }),
-        );
-        transport.respond("/proxies/Proxy", Value::Null);
-        transport.respond("/providers/proxies", json!({ "providers": {} }));
-        let manager = ProxyRuntimeManager::with_transport(transport.clone());
-
-        let snapshot = manager
-            .select_node(&config(), &access(RUNTIME_PORT), "Proxy", "B")
-            .await
-            .expect("select proxy");
-
-        let requests = transport.requests();
-        assert_eq!(requests[1].method, ClashHttpMethod::Put);
-        assert_eq!(requests[1].body, Some(json!({ "name": "B" })));
-        assert_eq!(snapshot.groups[0].nodes[0].name, "B");
-    }
-
-    #[tokio::test]
-    async fn proxy_runtime_tests_delay_for_named_nodes() {
-        let transport = MockTransport::default();
-        transport.respond(
-            "/proxies/A/delay?timeout=10000&url=https%3A%2F%2Fexample.com%2Fgenerate_204",
-            json!({ "delay": 37 }),
-        );
-        let manager = ProxyRuntimeManager::with_transport(transport);
-
-        let results = manager
-            .test_delay(&config(), &access(RUNTIME_PORT), vec!["A".to_string()])
-            .await
-            .expect("delay");
-
-        assert_eq!(
-            results,
-            vec![ProxyDelayTestResult {
-                name: "A".to_string(),
-                delay: Some(37),
-                outcome: SpeedtestOutcome::Completed,
-            }]
-        );
-    }
-
-    #[tokio::test]
-    async fn proxy_runtime_tests_delay_with_bounded_concurrency_in_request_order() {
-        let transport = ConcurrencyProbeTransport::default();
-        let manager = ProxyRuntimeManager::with_transport(transport.clone());
-        let names = (0..8)
-            .map(|index| format!("node-{index}"))
-            .collect::<Vec<_>>();
-
-        let results = manager
-            .test_delay(&config(), &access(RUNTIME_PORT), names.clone())
-            .await
-            .expect("delay");
-
-        assert_eq!(
-            results
-                .iter()
-                .map(|result| result.name.clone())
-                .collect::<Vec<_>>(),
-            names,
-            "results must follow the requested order"
-        );
-        assert!(results.iter().all(|result| result.delay == Some(20)));
-
-        let probe = transport.state.lock().expect("probe lock");
-        assert_eq!(probe.urls.len(), names.len());
-        assert!(
-            probe.max_in_flight > 1,
-            "delay probes must overlap instead of running one at a time"
-        );
-        assert!(
-            probe.max_in_flight <= 5,
-            "concurrency must stay within the configured speed-test limit, saw {}",
-            probe.max_in_flight
-        );
-    }
-
-    #[test]
-    fn proxy_runtime_delay_budget_follows_the_speed_test_settings() {
-        let mut config = config();
-        assert_eq!(delay_timeout_ms(&config), 10_000);
-        assert_eq!(delay_test_concurrency(&config, 40), 5);
-        assert_eq!(
-            delay_test_concurrency(&config, 2),
-            2,
-            "never start more probes than there are nodes"
-        );
-
-        config.speed_test_item.speed_test_timeout = 3;
-        config.speed_test_item.proxy_delay_concurrency = 0;
-        assert_eq!(delay_timeout_ms(&config), 3_000);
-        assert_eq!(
-            delay_test_concurrency(&config, 40),
-            1,
-            "buffered(0) would stall the stream"
-        );
-
-        config.speed_test_item.speed_test_timeout = -1;
-        assert_eq!(delay_timeout_ms(&config), DEFAULT_DELAY_TIMEOUT_MS);
     }
 
     #[tokio::test]

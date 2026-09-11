@@ -11,7 +11,6 @@ import { profileValidationMessage } from "./profile-form-errors";
 import {
   createDefaultProfile,
   normalizeProfileForForm,
-  prepareGroupDraftForPreview,
   prepareProfileForSave,
   profileFormSchema,
   PROFILE_VALIDATION_CODES,
@@ -55,9 +54,6 @@ describe("profile form contract transformations", () => {
 
   it("creates protocol-specific defaults without retired compatibility fields", () => {
     expect(createDefaultProfile()).toMatchObject({ address: "", configType: "vmess", port: 443 });
-    expect(createDefaultProfile("custom")).toMatchObject({ address: "", port: 0 });
-    expect(createDefaultProfile("policyGroup")).toMatchObject({ address: "group", port: 0 });
-    expect(createDefaultProfile("proxyChain")).toMatchObject({ address: "chain", port: 0 });
   });
 
   it("validates required node fields and strict port bounds", () => {
@@ -113,11 +109,6 @@ describe("profile form contract transformations", () => {
         (issue) => issue.message === PROFILE_VALIDATION_CODES.uuidRequired,
       ),
     ).toBe(true);
-    expect(
-      profileFormSchema.safeParse(createDefaultProfile("custom")).error?.issues.some(
-        (issue) => issue.message === PROFILE_VALIDATION_CODES.configSourceRequired,
-      ),
-    ).toBe(true);
   });
 
   it("maps validation codes onto locale strings and passes anything else through", () => {
@@ -135,9 +126,6 @@ describe("profile form contract transformations", () => {
     expect(profileValidationMessage(PROFILE_VALIDATION_CODES.uuidRequired, t)).toBe(
       "t:panes.profiles.validation.uuidRequired",
     );
-    expect(profileValidationMessage(PROFILE_VALIDATION_CODES.configSourceRequired, t)).toBe(
-      "t:panes.profiles.validation.configSourceRequired",
-    );
     // zod's own issues (port bounds, ...) have no code and stay verbatim.
     expect(profileValidationMessage("Too big: expected number to be <=65535", t)).toBe(
       "Too big: expected number to be <=65535",
@@ -145,46 +133,7 @@ describe("profile form contract transformations", () => {
     expect(profileValidationMessage(undefined, t)).toBeUndefined();
   });
 
-  it("names an unnamed group draft with the caller's translated placeholder", () => {
-    expect(
-      prepareGroupDraftForPreview({ configType: "policyGroup" }, "草稿分组").remarks,
-    ).toBe("草稿分组");
-    // Without an override the untranslated fallback is used, and an explicit
-    // draft name always wins.
-    expect(prepareGroupDraftForPreview({ configType: "policyGroup" }).remarks).toBe("Draft group");
-    expect(
-      prepareGroupDraftForPreview({ configType: "policyGroup", remarks: " Named " }, "草稿分组").remarks,
-    ).toBe("Named");
-  });
 
-  it("normalizes partial group drafts and profile reference lists", () => {
-    expect(prepareGroupDraftForPreview({
-      configType: "policyGroup",
-      protocolOptions: {
-        childProfileIds: " first, second\nfirst ",
-        filter: "  jp  ",
-        loadStrategy: "fallback",
-        sourceSubscriptionId: " sub-a ",
-      },
-    })).toMatchObject({
-      protocol: {
-        childProfileIds: ["first", "second", "first"],
-        filter: "jp",
-        kind: "policyGroup",
-        sourceSubscriptionId: "sub-a",
-        strategy: "fallback",
-      },
-      remarks: "Draft group",
-    });
-    expect(prepareGroupDraftForPreview({
-      configType: "proxyChain",
-      protocolOptions: { childProfileIds: "a,b" },
-      remarks: " Chain ",
-    })).toMatchObject({
-      protocol: { childProfileIds: ["a", "b"], kind: "proxyChain" },
-      remarks: "Chain",
-    });
-  });
 });
 
 function profile(protocol: ProfileProtocol, transport: ProfileTransport | null): Profile {
@@ -202,7 +151,6 @@ function profile(protocol: ProfileProtocol, transport: ProfileTransport | null):
 function protocols(): Array<{ kind: ProfileProtocol["kind"]; protocol: ProfileProtocol }> {
   return [
     { kind: "vmess", protocol: vmessProtocol() },
-    { kind: "custom", protocol: { filter: "us", kind: "custom", source: "{\"outbounds\":[]}" } },
     { kind: "shadowsocks", protocol: { kind: "shadowsocks", method: "2022-blake3-aes-128-gcm", password: "secret", server: endpoint, udpOverTcp: true } },
     { kind: "socks", protocol: { kind: "socks", password: "secret", server: endpoint, username: "user" } },
     { kind: "vless", protocol: { encryption: "none", flow: "xtls-rprx-vision", kind: "vless", server: endpoint, uuid: "uuid-vless" } },
@@ -213,8 +161,6 @@ function protocols(): Array<{ kind: ProfileProtocol["kind"]; protocol: ProfilePr
     { kind: "http", protocol: { kind: "http", password: "secret", server: endpoint, username: "user" } },
     { kind: "anytls", protocol: { kind: "anytls", password: "secret", server: endpoint } },
     { kind: "naive", protocol: { congestionControl: "bbr", insecureConcurrency: 2, kind: "naive", password: "secret", quic: true, server: endpoint, udpOverTcp: true, username: "user" } },
-    { kind: "policyGroup", protocol: { childProfileIds: ["a", "b"], filter: "jp", kind: "policyGroup", sourceSubscriptionId: "sub-a", strategy: "roundRobin" } },
-    { kind: "proxyChain", protocol: { childProfileIds: ["a", "b"], kind: "proxyChain" } },
   ];
 }
 
@@ -243,5 +189,5 @@ function tcpTransport(): ProfileTransport {
 }
 
 function supportsTransport(protocol: ProfileProtocol) {
-  return !["custom", "policyGroup", "proxyChain", "wireGuard"].includes(protocol.kind);
+  return !["wireGuard"].includes(protocol.kind);
 }

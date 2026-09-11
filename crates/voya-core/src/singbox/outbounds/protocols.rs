@@ -105,10 +105,7 @@ pub(crate) fn build_outbound(context: &CoreConfigContext, node: &ProfileItem) ->
             outbound.insecure_concurrency = insecure_concurrency.filter(|value| *value > 0);
             outbound.udp_over_tcp = (*udp_over_tcp).then_some(true);
         }
-        ProfileProtocol::WireGuard { .. }
-        | ProfileProtocol::Custom { .. }
-        | ProfileProtocol::PolicyGroup { .. }
-        | ProfileProtocol::ProxyChain { .. } => {}
+        ProfileProtocol::WireGuard { .. } => {}
     }
 
     fill_outbound_tls(&mut outbound, context, node);

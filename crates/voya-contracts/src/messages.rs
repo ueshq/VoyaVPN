@@ -214,31 +214,6 @@ pub enum ValidationCode {
     UnsupportedShadowsocksNetwork {
         network: String,
     },
-    // ---- policy groups and proxy chains ----
-    NotAGroupProfile,
-    GroupCycle {
-        group: String,
-        child: String,
-    },
-    /// The cycle found by the group builder, which knows the whole path.
-    GroupCyclePath {
-        path: Vec<String>,
-    },
-    GroupWithoutValidChild {
-        group: String,
-    },
-    PolicyGroupWithoutValidChildren,
-    ProxyChainWithoutValidChildren,
-    ProxyChainSingleHop,
-    GroupChildNotFound {
-        profile_id: String,
-    },
-    GroupDuplicateChildIgnored {
-        profile_id: String,
-    },
-    InvalidSubscriptionFilter {
-        pattern: String,
-    },
     // ---- routing rules ----
     RoutingRuleWithoutOutbound {
         rule: String,
@@ -295,7 +270,6 @@ pub enum ValidationCode {
     deny_unknown_fields
 )]
 pub enum ValidationScope {
-    GroupChild { group: String, child: String },
     RoutingRuleOutbound { rule: String, outbound: String },
 }
 
@@ -376,17 +350,17 @@ mod tests {
         let issue = ValidationIssue {
             field: "activeProfile".to_string(),
             code: ValidationCode::InvalidPort,
-            scope: vec![ValidationScope::GroupChild {
-                group: "Group".to_string(),
-                child: "Leaf".to_string(),
+            scope: vec![ValidationScope::RoutingRuleOutbound {
+                rule: "Group".to_string(),
+                outbound: "Leaf".to_string(),
             }],
         };
         let value = serde_json::to_value(&issue).expect("serialize issue");
 
         assert_eq!(value["field"], "activeProfile");
         assert_eq!(value["code"]["code"], "invalidPort");
-        assert_eq!(value["scope"][0]["kind"], "groupChild");
-        assert_eq!(value["scope"][0]["group"], "Group");
+        assert_eq!(value["scope"][0]["kind"], "routingRuleOutbound");
+        assert_eq!(value["scope"][0]["rule"], "Group");
     }
 
     #[test]

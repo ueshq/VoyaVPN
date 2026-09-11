@@ -1,8 +1,11 @@
+import { navigateVirtualList } from "./virtual-list-keyboard";
 import { ChevronRight, Globe2, Inbox, LoaderCircle } from "lucide-react";
 
 import { EmptyState } from "@voya/ui/components/empty-state";
 import { Skeleton } from "@voya/ui/components/skeleton";
 import { cn } from "@voya/ui/lib/utils";
+
+import { NodeGroupCard } from "./node-group-card";
 
 import { profileLatency } from "./profile-card-data";
 import { getProtocolLabel } from "./profile-constants";
@@ -11,11 +14,11 @@ import { ProfileCardMenu, ProfileRowContextMenu } from "./server-table-menus";
 import type { ServerTableController } from "./use-server-table";
 
 export function ProfileCardList({ controller }: { controller: ServerTableController }) {
-  const { activation, openDetails, profilesQuery, profiles, renderedRows, rowVirtualizer, selectOnly, selectedId, subscriptionName, t, viewportRef } = controller;
+  const { activation, openDetails, profilesQuery, rows, renderedRows, rowVirtualizer, selectOnly, selectedId, subscriptionName, t, viewportRef } = controller;
   return (
     <div className="min-h-0 flex-1 p-4">
-      <div aria-label={t("panes.profiles.title")} className="profile-card-list h-full overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="server-table-viewport" ref={viewportRef} tabIndex={-1}>
-        {profilesQuery.isLoading ? (
+      <div aria-label={t("panes.profiles.title")} className="profile-card-list h-full overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="server-table-viewport" ref={viewportRef} tabIndex={0} onKeyDown={(event) => navigateVirtualList(event, rows.length, (index) => rowVirtualizer.scrollToIndex(index), "data-index", "button[data-row-focus]")}>
+        {profilesQuery.isLoading && !rows.length ? (
           <div aria-label={t("status.loadingScreen")} aria-busy="true" className="grid gap-3" role="status">
             {Array.from({ length: 6 }, (_, index) => (
               <div className="node-card-surface" key={index}>
@@ -25,13 +28,23 @@ export function ProfileCardList({ controller }: { controller: ServerTableControl
               </div>
             ))}
           </div>
-        ) : profiles.length === 0 ? (
+        ) : rows.length === 0 ? (
           <EmptyState className="min-h-[18rem] content-center" description={t("panes.profiles.emptyDescription")} icon={Inbox} title={t("panes.profiles.empty")} />
         ) : (
           <ul aria-label={t("panes.profiles.title")} className="relative w-full" style={{ height: rowVirtualizer.getTotalSize() }}>
             {renderedRows.map((virtualRow) => {
-              const item = profiles[virtualRow.index];
-              if (!item) return null;
+              const row = rows[virtualRow.index];
+              if (!row) return null;
+              const rowProps = {
+                "aria-posinset": virtualRow.index + 1,
+                "aria-setsize": rows.length,
+                className: "absolute start-0 top-0 w-full pb-3",
+                "data-index": virtualRow.index,
+                ref: rowVirtualizer.measureElement,
+                style: { transform: `translateY(${virtualRow.start}px)` },
+              };
+              if (row.kind === "group") return <li key={row.key} {...rowProps}><NodeGroupCard row={row} controller={controller} /></li>;
+              const item = row.item;
               const { profile } = item;
               const id = profile.id;
               const selected = selectedId === id;
@@ -43,12 +56,12 @@ export function ProfileCardList({ controller }: { controller: ServerTableControl
               const group = subscriptionName(item);
               const address = profileAddress(profile) || "—";
               return (
-                <li aria-posinset={virtualRow.index + 1} aria-setsize={profiles.length} className="absolute start-0 top-0 w-full pb-3" data-index={virtualRow.index} key={id} ref={rowVirtualizer.measureElement} style={{ transform: `translateY(${virtualRow.start}px)` }}>
+                <li key={row.key} {...rowProps}>
                   <ProfileRowContextMenu controller={controller} item={item}>
-                    <article className={cn("node-card-surface profile-node-card", selected && "profile-node-card-selected")} data-testid="server-row" data-selected={selected} onClick={() => selectOnly(id)}>
+                    <article className={cn("node-card-surface profile-node-card", row.groupId && "grouped-node-card", selected && "profile-node-card-selected")} data-testid="server-row" data-selected={selected} onClick={() => selectOnly(id)}>
                       <div aria-hidden="true" className="node-card-icon">{flag || <Globe2 className="size-6" strokeWidth={1.5} />}</div>
                       <div className="node-card-content">
-                        <button aria-label={t("panes.profiles.card.select", { name: rawName })} aria-pressed={selected} className="node-card-select" onClick={() => selectOnly(id)} type="button">
+                        <button aria-label={t("panes.profiles.card.select", { name: rawName })} aria-pressed={selected} data-row-focus className="node-card-select" onClick={() => selectOnly(id)} type="button">
                           <span className="node-card-label">
                             <span className="truncate" title={group}>{group}</span>
                             {running ? <span className="node-card-state"><span aria-hidden="true" className="size-1.5 rounded-full bg-connected" />{t("panes.profiles.aria.activeProfile")}</span>

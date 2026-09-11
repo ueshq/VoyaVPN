@@ -1,7 +1,5 @@
-import type { UseFormGetValues, UseFormSetValue } from "react-hook-form";
 
 import { useI18n } from "@voya/i18n/use-i18n";
-import { GroupBuilder } from "@/features/groups/group-builder";
 
 import { CONFIG_TYPES, type ProfileProtocol } from "./profile-constants";
 import {
@@ -12,61 +10,23 @@ import {
   type Register,
 } from "./profile-form-fields";
 import { passwordLabel, requiresUsername, optionalNumber, usernameLabel } from "./profile-form-utils";
-import type { ProfileFormValues } from "./profile-form-schema";
 
 type ProtocolPanelProps = {
   configType: ProfileProtocol;
   control: ProfileFormControl;
-  getValues: UseFormGetValues<ProfileFormValues>;
   passwordError?: string;
   register: Register;
-  setValue: UseFormSetValue<ProfileFormValues>;
   usernameError?: string;
 };
 
 export function ProtocolPanel({
   configType,
   control,
-  getValues,
   passwordError,
   register,
-  setValue,
   usernameError,
 }: ProtocolPanelProps) {
   const { t } = useI18n();
-
-  if (configType === CONFIG_TYPES.PolicyGroup || configType === CONFIG_TYPES.ProxyChain) {
-    return (
-      <Panel
-        title={
-          configType === CONFIG_TYPES.PolicyGroup
-            ? t("panes.profiles.panels.policyGroup")
-            : t("panes.profiles.panels.proxyChain")
-        }
-      >
-        <GroupBuilder
-          configType={configType}
-          control={control}
-          getValues={getValues}
-          register={register}
-          setValue={setValue}
-        />
-      </Panel>
-    );
-  }
-
-  if (configType === CONFIG_TYPES.Custom) {
-    // `address` is the config source for custom profiles and is already edited
-    // in the Profile panel; registering a second input for it would leave two
-    // fields fighting over one react-hook-form ref.
-    return (
-      <Panel title={t("panes.profiles.panels.custom")}>
-        <div className="grid gap-3 lg:grid-cols-2">
-          <TextField label={t("panes.profiles.fields.filter")} {...register("protocolOptions.filter")} />
-        </div>
-      </Panel>
-    );
-  }
 
   return (
     <Panel title={t("panes.profiles.panels.protocol")}>

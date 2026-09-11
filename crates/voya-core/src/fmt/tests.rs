@@ -535,62 +535,7 @@ fn fmt_wireguard_config_parses_peers_and_inline_comments() {
 }
 
 #[test]
-fn voya_profile_bundle_round_trips_group_references() {
-    let child_a = ProfileItem {
-        index_id: "child-a".to_string(),
-        remarks: "child-a".to_string(),
-        protocol: ProfileProtocol::Socks {
-            server: endpoint("127.0.0.1", 1080),
-            username: "u".to_string(),
-            password: "p".to_string(),
-        },
-        ..ProfileItem::default()
-    };
-    let child_b = ProfileItem {
-        index_id: "child-b".to_string(),
-        remarks: "child-b".to_string(),
-        protocol: ProfileProtocol::Vmess {
-            server: endpoint("vmess.example", 443),
-            uuid: "00000000-0000-0000-0000-000000000002".to_string(),
-            cipher: None,
-        },
-        ..ProfileItem::default()
-    };
-    let group = ProfileItem {
-        index_id: "group-1".to_string(),
-        remarks: "group-1".to_string(),
-        protocol: ProfileProtocol::PolicyGroup {
-            child_profile_ids: vec!["child-a".to_string(), "child-b".to_string()],
-            source_subscription_id: Some("original-sub".to_string()),
-            filter: None,
-            strategy: MultipleLoad::LeastPing,
-        },
-        ..ProfileItem::default()
-    };
-
-    let uri =
-        export_voya_profile_bundle(&[group, child_a, child_b]).expect("export Voya profile bundle");
-    assert!(uri.starts_with(VOYA_PROFILE_BUNDLE_PREFIX));
-    let resolved = parse_voya_profile_bundle(&uri, "sub-123").expect("parse Voya profile bundle");
-    assert_eq!(resolved.len(), 3);
-    let resolved_group = resolved
-        .iter()
-        .find(|item| item.remarks == "group-1")
-        .expect("resolved group");
-    let ProfileProtocol::PolicyGroup {
-        child_profile_ids,
-        source_subscription_id,
-        ..
-    } = &resolved_group.protocol
-    else {
-        panic!("expected policy group");
-    };
-    assert_eq!(source_subscription_id.as_deref(), Some("sub-123"));
-    assert_eq!(child_profile_ids, &["voya-import-2", "voya-import-3"]);
-}
-
-#[test]
-fn voya_profile_bundle_rejects_versions_fields_missing_refs_and_cycles() {
+fn voya_profile_bundle_rejects_versions_invalid_refs_and_retired_kinds() {
     for json in [
         r#"{"schemaVersion":2,"profiles":[]}"#,
         r#"{"schemaVersion":1,"profiles":[],"retired":true}"#,
@@ -603,22 +548,6 @@ fn voya_profile_bundle_rejects_versions_fields_missing_refs_and_cycles() {
         let uri = format!("{VOYA_PROFILE_BUNDLE_PREFIX}{payload}");
         assert!(parse_voya_profile_bundle(&uri, "sub").is_err());
     }
-}
-
-#[test]
-fn share_full_custom_import_helpers_classify_configs_without_file_writes() {
-    let unsupported =
-        r#"{"remarks":"unsupported custom","inbounds":[],"outbounds":[],"routing":{}}"#;
-    assert!(parse_full_custom_config(unsupported, None).is_err());
-
-    let singbox_array = r#"[{"inbounds":[],"outbounds":[],"route":{},"dns":{}}]"#;
-    let imports =
-        parse_full_custom_config(singbox_array, Some("sub")).expect("singbox array custom");
-    assert_eq!(imports.len(), 1);
-    assert_eq!(imports[0].kind, CustomConfigKind::SingBox);
-
-    let html = "<!doctype html><html><head></head></html>";
-    assert!(parse_full_custom_config(html, None).is_err());
 }
 
 #[test]

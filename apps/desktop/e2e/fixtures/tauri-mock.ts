@@ -7,19 +7,16 @@ import type { Page } from "@playwright/test";
 // smoke assertion with a confusing message.
 import type {
   AppError,
+  NodeGroupsSnapshot,
+  NodeGroupAssignment,
   AppSettingsV1,
   AppUpdaterStatus,
   ConnectionModeStatus,
   DnsSettings,
   ExportProfilesResult,
-  GroupChildCandidate,
-  GroupPreview,
   ImportProfilesResult,
   ProcessCandidate,
-  ProfileKind,
   ProxyConnectionsSnapshot,
-  ProxyDelayTestResult,
-  ProxyGroupsSnapshot,
   ProxyMonitorStatus,
   QrCodeImage,
   ResourceUpdateFile,
@@ -60,7 +57,7 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       calls: Array<{ command: string; args: CommandArgs }>;
       dns: DnsSettings;
       profiles: ProfileRow[];
-      proxy: ProxyGroupsSnapshot;
+      nodeGroups: NodeGroupsSnapshot;
       connections: ProxyConnectionsSnapshot;
       unhandled: string[];
       routings: Routing[];
@@ -68,6 +65,7 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       settings: AppSettingsV1;
       sysProxy: SystemProxyStatusResponse;
       tun: TunStatus;
+      failNextCommand: string | null;
       trafficModeFailure: "apply" | "close" | null;
       appliedTrafficMode: TrafficMode;
     };
@@ -78,17 +76,19 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
     const listeners: Listener[] = [];
     let nextCallbackId = 1;
     let nextProfileId = 1;
+    let nextGroupId = 1;
     let nextRoutingId = 1;
     let nextRuleId = 1;
     let windowMaximized = false;
 
     const state: MockState = {
+      failNextCommand: null,
       trafficModeFailure: null,
       appliedTrafficMode: "rule",
       calls: [] as Array<{ command: string; args: CommandArgs }>,
       dns: makeDnsSettings(),
       profiles: [] as ProfileRow[],
-      proxy: makeProxyGroups(),
+      nodeGroups: { groups: [], memberships: [] },
       connections: makeConnectionsSnapshot(),
       // Every command the mock does not implement lands here so a smoke run can
       // fail loudly instead of silently exercising an error path (the way the
@@ -163,10 +163,10 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
         ? (state.sysProxy.pacUrl ?? "http://127.0.0.1:10811/pac?t=smoke") : null;
     }
 
-    const profileScopes = ["profiles", "groupChildCandidates"];
+    const profileScopes = ["profiles", "nodeGroups"];
     const subscriptionScopes = ["subscriptions", "subscriptionMetadata"];
     const routingScopes = ["routings"];
-    const proxyRuntimeScopes = ["proxyGroups", "proxyConnections"];
+    const proxyRuntimeScopes = ["proxyConnections"];
     const connectionModeScopes = ["connectionMode", "appSettings"];
 
     // Mirrors `voya_app::invalidation`: the real shell emits an InvalidateEvent
@@ -174,6 +174,10 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
     // no longer invalidates for itself.
     const invalidationScopes: Record<string, string[]> = {
       copy_profiles: profileScopes,
+      save_node_group: profileScopes,
+      delete_node_group: profileScopes,
+      move_node_group: profileScopes,
+      assign_node_groups: profileScopes,
       delete_profiles: profileScopes,
       delete_routing_rules: routingScopes,
       delete_routings: routingScopes,
@@ -182,13 +186,10 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       move_profile: profileScopes,
       move_routing_rule: routingScopes,
       proxy_close_connection: proxyRuntimeScopes,
-      proxy_reload_config: proxyRuntimeScopes,
-      proxy_select_node: proxyRuntimeScopes,
       proxy_set_traffic_mode: [...proxyRuntimeScopes, "appSettings"],
       run_speedtest: profileScopes,
       save_app_settings: ["appSettings", "uiPreferences", "dns", "connectionMode"],
       save_dns_settings: ["dns", "appSettings"],
-      save_group_profile: profileScopes,
       save_profile: profileScopes,
       save_routing: routingScopes,
       save_routing_rule: routingScopes,
@@ -228,6 +229,7 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
 
     function dispatch(command: string, args: CommandArgs = {}) {
       state.calls.push({ command, args });
+      if (state.failNextCommand === command) { state.failNextCommand = null; return Promise.reject(new Error("Simulated failure")); }
 
       switch (command) {
         case "plugin:event|listen": {
@@ -369,6 +371,38 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           settleManualProxy();
           return Promise.resolve(connectionModeStatus());
         }
+        case "list_node_groups": return Promise.resolve(clone(state.nodeGroups));
+        case "save_node_group": {
+          const name = String(args.name ?? "").trim();
+          if (!name || state.nodeGroups.groups.some((g) => g.name === name && g.id !== args.id)) return Promise.reject(new Error("Invalid group name"));
+          const existing = state.nodeGroups.groups.find((g) => g.id === args.id);
+          const group = { id: existing?.id ?? `node-group-${nextGroupId++}`, name, sort: existing?.sort ?? state.nodeGroups.groups.length };
+          if (existing) Object.assign(existing, group); else state.nodeGroups.groups.push(group);
+          return Promise.resolve(clone(group));
+        }
+        case "delete_node_group": {
+          state.nodeGroups.groups = state.nodeGroups.groups.filter((g) => g.id !== args.id);
+          state.nodeGroups.memberships = state.nodeGroups.memberships.filter((m) => m.groupId !== args.id);
+          return Promise.resolve(null);
+        }
+        case "move_node_group": {
+          const groups = state.nodeGroups.groups;
+          const from = groups.findIndex((g) => g.id === args.id);
+          if (from < 0) return Promise.reject(new Error("Group not found"));
+          const to = args.action === "up" ? Math.max(0, from - 1) : Math.min(groups.length - 1, from + 1);
+          const [group] = groups.splice(from, 1); groups.splice(to, 0, group);
+          groups.forEach((g, index) => { g.sort = index; });
+          return Promise.resolve(null);
+        }
+        case "assign_node_groups": {
+          const changes = args.assignments as NodeGroupAssignment[];
+          if (changes.some((a) => !state.profiles.some((p) => p.profile.id === a.profileId) || (a.groupId && !state.nodeGroups.groups.some((g) => g.id === a.groupId)))) return Promise.reject(new Error("Node or group not found"));
+          for (const change of changes) {
+            state.nodeGroups.memberships = state.nodeGroups.memberships.filter((m) => m.profileId !== change.profileId);
+            if (change.groupId) state.nodeGroups.memberships.push({ profileId: change.profileId, groupId: change.groupId });
+          }
+          return Promise.resolve(null);
+        }
         case "list_profiles":
           // The real command answers with the rows plus the number of stored
           // profiles the build could not decode; the fixture never seeds an
@@ -381,10 +415,6 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           const row = upsertProfile(readRecord(args, "profile"));
           return Promise.resolve(clone(row));
         }
-        case "save_group_profile": {
-          const row = upsertProfile(readRecord(args, "profile"));
-          return Promise.resolve(clone(row));
-        }
         case "set_active_profile": {
           const row = setActiveProfile(String(args.indexId ?? ""));
           return Promise.resolve(clone(row));
@@ -392,41 +422,24 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
         case "delete_profiles": {
           const ids = readStringArray(args, "indexIds");
           state.profiles = state.profiles.filter((row) => !ids.includes(String(row.profile.id)));
+          state.nodeGroups.memberships = state.nodeGroups.memberships.filter((m) => !ids.includes(m.profileId));
+          if (state.runtime.activeProfileId && ids.includes(state.runtime.activeProfileId)) void dispatch("disconnect_core", {});
           return Promise.resolve(ids.length);
         }
         case "copy_profiles": {
           const ids = readStringArray(args, "indexIds");
           const copies = state.profiles
             .filter((row) => ids.includes(String(row.profile.id)))
-            .map((row) =>
-              upsertProfile({
-                ...row.profile,
-                id: "",
-                remarks: `${String(row.profile.remarks)} Copy`,
-              }),
-            );
+            .map((row) => {
+              const copy = upsertProfile({ ...row.profile, id: "", remarks: `${String(row.profile.remarks)} Copy` });
+              const groupId = state.nodeGroups.memberships.find((m) => m.profileId === row.profile.id)?.groupId;
+              if (groupId) state.nodeGroups.memberships.push({ profileId: String(copy.profile.id), groupId });
+              return copy;
+            });
           return Promise.resolve(clone(copies));
         }
         case "move_profile":
           return Promise.resolve(clone(state.profiles));
-        case "list_group_child_candidates":
-          return Promise.resolve(
-            state.profiles.map((row) => ({
-              address: profileAddress(row.profile),
-              protocol: readRecord(row.profile, "protocol").kind as ProfileKind,
-              profileId: String(row.profile.id),
-              isGroup: ["policyGroup", "proxyChain"].includes(String(readRecord(row.profile, "protocol").kind)),
-              reason: null,
-              remarks: String(row.profile.remarks),
-              selectable: true,
-              subscriptionId: nullableString(row.profile.subscriptionId),
-            }) satisfies GroupChildCandidate),
-          );
-        case "preview_group_profile":
-          return Promise.resolve({
-            singboxRoutes: [],
-            validation: { childProfileIds: [], errors: [], valid: true, warnings: [] },
-          } satisfies GroupPreview);
         case "list_subscriptions":
           return Promise.resolve([] satisfies Subscription[]);
         case "list_subscription_metadata":
@@ -441,7 +454,6 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
             enabled: true,
             filter: null,
             id: "sub-smoke",
-            preSocksPort: null,
             remarks: "Smoke",
             sort: 0,
             url: "",
@@ -542,31 +554,6 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           state.dns = mergeDeep(state.dns, readRecord(args, "settings"));
           state.settings.dns = clone(state.dns);
           return Promise.resolve(clone(state.dns));
-        case "proxy_list_groups":
-          return Promise.resolve(clone({ ...state.proxy, trafficMode: state.settings.proxy.trafficMode }));
-        case "proxy_test_delay":
-          return Promise.resolve(
-            readStringArray(args, "nodeNames").map((name) => ({ delay: 23, name, outcome: "completed" }) satisfies ProxyDelayTestResult),
-          );
-        case "proxy_select_node": {
-          // Selecting has to move `now`/`active`, otherwise the assertion that a
-          // click switched the node can only ever observe the seeded snapshot.
-          const groupName = String(args.groupName ?? "");
-          const nodeName = String(args.nodeName ?? "");
-          state.proxy = {
-            ...state.proxy,
-            groups: state.proxy.groups.map((group) =>
-              group.name === groupName
-                ? {
-                    ...group,
-                    nodes: group.nodes.map((node) => ({ ...node, active: node.name === nodeName })),
-                    now: nodeName,
-                  }
-                : group,
-            ),
-          };
-          return Promise.resolve(clone({ ...state.proxy, trafficMode: state.settings.proxy.trafficMode }));
-        }
         case "proxy_list_connections":
           return Promise.resolve(clone(state.connections));
         case "proxy_close_connection":
@@ -590,8 +577,6 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
             state.connections.connections = [];
           }
           return Promise.resolve({ mode: state.settings.proxy.trafficMode } satisfies TrafficModeResponse);
-        case "proxy_reload_config":
-          return Promise.resolve(null);
         case "proxy_start_monitor":
           return Promise.resolve({ message: null, running: true, stale: false, state: "running" } satisfies ProxyMonitorStatus);
         case "proxy_stop_monitor":
@@ -649,7 +634,7 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       const existingIndex = state.profiles.findIndex((row) => row.profile.id === profile.id);
       const existing = existingIndex >= 0 ? state.profiles[existingIndex] : null;
       const row = {
-        isActive: existing?.isActive ?? state.profiles.length === 0,
+        isActive: existing?.isActive ?? false,
         profile,
         metrics: {
           delayMs: existing?.metrics.delayMs ?? -1,
@@ -878,7 +863,6 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           delayIntervalSeconds: null as number | null,
           ipLookupUrl: "",
           latencyUrl: "https://www.google.com/generate_204",
-          proxyDelayConcurrency: 5,
           pageSize: null as number | null,
           timeoutSeconds: 10,
         },
@@ -889,24 +873,7 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           permitWithoutStream: false,
         },
         hysteria: { downloadMbps: 100, hopIntervalSeconds: 30, uploadMbps: 100 },
-        proxy: { nodeSorting: 0, trafficMode: "rule" },
-      };
-    }
-
-    function makeProxyGroups(): ProxyGroupsSnapshot {
-      return {
-        groups: [
-          {
-            name: "PROXY",
-            nodes: [
-              { active: true, delay: 23, name: "Smoke Node", proxyType: "VLESS", testable: true, udp: true },
-              { active: false, delay: 41, name: "Smoke Backup Node", proxyType: "VLESS", testable: true, udp: true },
-            ],
-            now: "Smoke Node",
-            proxyType: "Selector",
-          },
-        ],
-        trafficMode: "rule",
+        proxy: { trafficMode: "rule" },
       };
     }
 

@@ -16,18 +16,6 @@ use voya_core::validation::{
     ValidationScope as CoreValidationScope,
 };
 
-/// The field a group-builder finding is addressed to.
-///
-/// The group form has three inputs the validator can be talking about, and the
-/// builder highlights the one that is named.
-fn group_field(code: &CoreValidationCode) -> &'static str {
-    match code {
-        CoreValidationCode::NotAGroupProfile => "protocol",
-        CoreValidationCode::InvalidSubscriptionFilter { .. } => "filter",
-        _ => "children",
-    }
-}
-
 /// One core finding as a contract issue addressed to `field`.
 #[must_use]
 pub fn validation_issue_to_contract(
@@ -43,19 +31,6 @@ pub fn validation_issue_to_contract(
             .map(validation_scope_to_contract)
             .collect(),
     }
-}
-
-/// Core findings from the group builder, each addressed to the input it is
-/// about.
-#[must_use]
-pub fn group_validation_to_contract(messages: Vec<CoreValidationMessage>) -> Vec<ValidationIssue> {
-    messages
-        .into_iter()
-        .map(|message| {
-            let field = group_field(&message.code);
-            validation_issue_to_contract(field, message)
-        })
-        .collect()
 }
 
 #[must_use]
@@ -80,30 +55,6 @@ pub fn validation_code_to_contract(code: CoreValidationCode) -> ValidationCode {
         CoreValidationCode::UnsupportedShadowsocksNetwork { network } => {
             ValidationCode::UnsupportedShadowsocksNetwork { network }
         }
-        CoreValidationCode::NotAGroupProfile => ValidationCode::NotAGroupProfile,
-        CoreValidationCode::GroupCycle { group, child } => {
-            ValidationCode::GroupCycle { group, child }
-        }
-        CoreValidationCode::GroupCyclePath { path } => ValidationCode::GroupCyclePath { path },
-        CoreValidationCode::GroupWithoutValidChild { group } => {
-            ValidationCode::GroupWithoutValidChild { group }
-        }
-        CoreValidationCode::PolicyGroupWithoutValidChildren => {
-            ValidationCode::PolicyGroupWithoutValidChildren
-        }
-        CoreValidationCode::ProxyChainWithoutValidChildren => {
-            ValidationCode::ProxyChainWithoutValidChildren
-        }
-        CoreValidationCode::ProxyChainSingleHop => ValidationCode::ProxyChainSingleHop,
-        CoreValidationCode::GroupChildNotFound { profile_id } => {
-            ValidationCode::GroupChildNotFound { profile_id }
-        }
-        CoreValidationCode::GroupDuplicateChildIgnored { profile_id } => {
-            ValidationCode::GroupDuplicateChildIgnored { profile_id }
-        }
-        CoreValidationCode::InvalidSubscriptionFilter { pattern } => {
-            ValidationCode::InvalidSubscriptionFilter { pattern }
-        }
         CoreValidationCode::RoutingRuleWithoutOutbound { rule } => {
             ValidationCode::RoutingRuleWithoutOutbound { rule }
         }
@@ -116,9 +67,6 @@ pub fn validation_code_to_contract(code: CoreValidationCode) -> ValidationCode {
 #[must_use]
 pub fn validation_scope_to_contract(scope: CoreValidationScope) -> ValidationScope {
     match scope {
-        CoreValidationScope::GroupChild { group, child } => {
-            ValidationScope::GroupChild { group, child }
-        }
         CoreValidationScope::RoutingRuleOutbound { rule, outbound } => {
             ValidationScope::RoutingRuleOutbound { rule, outbound }
         }
@@ -130,38 +78,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn group_findings_are_addressed_to_the_input_they_are_about() {
-        let issues = group_validation_to_contract(vec![
-            CoreValidationMessage::new(CoreValidationCode::NotAGroupProfile),
-            CoreValidationMessage::new(CoreValidationCode::InvalidSubscriptionFilter {
-                pattern: "^(HK".to_string(),
-            }),
-            CoreValidationMessage::new(CoreValidationCode::ProxyChainSingleHop),
-        ]);
-
-        assert_eq!(
-            issues
-                .iter()
-                .map(|issue| issue.field.as_str())
-                .collect::<Vec<_>>(),
-            vec!["protocol", "filter", "children"]
-        );
-        assert_eq!(
-            issues[1].code,
-            ValidationCode::InvalidSubscriptionFilter {
-                pattern: "^(HK".to_string()
-            }
-        );
-    }
-
-    #[test]
     fn findings_keep_the_breadcrumb_the_validator_walked() {
         let issue = validation_issue_to_contract(
             "activeProfile",
             CoreValidationMessage::new(CoreValidationCode::InvalidPort).within(
-                CoreValidationScope::GroupChild {
-                    group: "Group".to_string(),
-                    child: "Leaf".to_string(),
+                CoreValidationScope::RoutingRuleOutbound {
+                    rule: "Rule".to_string(),
+                    outbound: "Leaf".to_string(),
                 },
             ),
         );
@@ -170,9 +93,9 @@ mod tests {
         assert_eq!(issue.code, ValidationCode::InvalidPort);
         assert_eq!(
             issue.scope,
-            vec![ValidationScope::GroupChild {
-                group: "Group".to_string(),
-                child: "Leaf".to_string(),
+            vec![ValidationScope::RoutingRuleOutbound {
+                rule: "Rule".to_string(),
+                outbound: "Leaf".to_string(),
             }]
         );
     }
@@ -202,27 +125,6 @@ mod tests {
             CoreValidationCode::UnsupportedShadowsocksNetwork {
                 network: String::new(),
             },
-            CoreValidationCode::NotAGroupProfile,
-            CoreValidationCode::GroupCycle {
-                group: String::new(),
-                child: String::new(),
-            },
-            CoreValidationCode::GroupCyclePath { path: Vec::new() },
-            CoreValidationCode::GroupWithoutValidChild {
-                group: String::new(),
-            },
-            CoreValidationCode::PolicyGroupWithoutValidChildren,
-            CoreValidationCode::ProxyChainWithoutValidChildren,
-            CoreValidationCode::ProxyChainSingleHop,
-            CoreValidationCode::GroupChildNotFound {
-                profile_id: String::new(),
-            },
-            CoreValidationCode::GroupDuplicateChildIgnored {
-                profile_id: String::new(),
-            },
-            CoreValidationCode::InvalidSubscriptionFilter {
-                pattern: String::new(),
-            },
             CoreValidationCode::RoutingRuleWithoutOutbound {
                 rule: String::new(),
             },
@@ -242,6 +144,6 @@ mod tests {
             })
             .collect::<std::collections::BTreeSet<_>>();
 
-        assert_eq!(tags.len(), 23);
+        assert_eq!(tags.len(), 13);
     }
 }

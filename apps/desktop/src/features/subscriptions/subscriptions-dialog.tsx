@@ -74,7 +74,6 @@ function createBlankSubscription(): Subscription {
     enabled: true,
     filter: null,
     id: "",
-    preSocksPort: null,
     remarks: "",
     sort: 0,
     url: "",
@@ -403,8 +402,8 @@ function SubscriptionsDialogSession({ onCloseFocus, onOpenChange, open }: Omit<S
         </ScrollableDialogContent>
       </Dialog>
 
-      {/* Deleting a source cascades to every profile imported from it (and to
-          its auto group) on the backend, so it needs the same confirmation gate
+      {/* Deleting a source cascades to every profile imported from it and its
+          manual group membership on the backend, so it needs the same confirmation gate
           the profiles table uses for a destructive action. */}
       <AlertDialog open={pendingDelete} onOpenChange={setPendingDelete}>
         <AlertDialogContent>

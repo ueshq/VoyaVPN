@@ -274,7 +274,6 @@ fn row_to_profile(row: &SqliteRow) -> Result<ProfileItem> {
 const fn config_type_to_str(value: ConfigType) -> &'static str {
     match value {
         ConfigType::VMess => "vmess",
-        ConfigType::Custom => "custom",
         ConfigType::Shadowsocks => "shadowsocks",
         ConfigType::SOCKS => "socks",
         ConfigType::VLESS => "vless",
@@ -285,15 +284,12 @@ const fn config_type_to_str(value: ConfigType) -> &'static str {
         ConfigType::HTTP => "http",
         ConfigType::Anytls => "anytls",
         ConfigType::Naive => "naive",
-        ConfigType::PolicyGroup => "policyGroup",
-        ConfigType::ProxyChain => "proxyChain",
     }
 }
 
 fn config_type_from_str(value: &str) -> Result<ConfigType> {
     match value {
         "vmess" => Ok(ConfigType::VMess),
-        "custom" => Ok(ConfigType::Custom),
         "shadowsocks" => Ok(ConfigType::Shadowsocks),
         "socks" => Ok(ConfigType::SOCKS),
         "vless" => Ok(ConfigType::VLESS),
@@ -304,8 +300,6 @@ fn config_type_from_str(value: &str) -> Result<ConfigType> {
         "http" => Ok(ConfigType::HTTP),
         "anytls" => Ok(ConfigType::Anytls),
         "naive" => Ok(ConfigType::Naive),
-        "policyGroup" => Ok(ConfigType::PolicyGroup),
-        "proxyChain" => Ok(ConfigType::ProxyChain),
         _ => Err(DbError::InvalidEnum {
             enum_name: "ConfigType",
             value: value.to_string(),

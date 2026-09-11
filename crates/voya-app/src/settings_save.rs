@@ -139,8 +139,7 @@ pub fn saved_config_requires_runtime_restart(original: &AppConfig, updated: &App
         || original.routing_basic_item != updated.routing_basic_item
         || original.mux4_sbox_item != updated.mux4_sbox_item
         || original.hysteria_item != updated.hysteria_item
-        // `traffic_mode` selects the generated outbound; `node_sorting` only
-        // orders the proxy-groups snapshot the UI renders.
+        // Traffic mode changes generated routing.
         || original.proxy_ui_item.traffic_mode != updated.proxy_ui_item.traffic_mode
         || original.inbound != updated.inbound
         || original.simple_dns_item != updated.simple_dns_item
@@ -181,7 +180,6 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
             autostart: config.gui_item.auto_run,
             statistics: config.gui_item.enable_statistics,
             realtime_speed: config.gui_item.display_real_time_speed,
-            auto_create_subscription_group: Some(config.gui_item.auto_create_subscription_group),
         },
         core: contracts::CoreSettings {
             log_enabled: config.core_basic_item.log_enabled,
@@ -257,7 +255,6 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
         speed_test: contracts::SpeedtestSettings {
             timeout_seconds: config.speed_test_item.speed_test_timeout,
             latency_url: config.speed_test_item.speed_ping_test_url.clone(),
-            proxy_delay_concurrency: config.speed_test_item.proxy_delay_concurrency,
             ip_lookup_url: config.speed_test_item.ipapi_url.clone(),
             page_size: config.speed_test_item.speed_test_page_size,
             delay_interval_seconds: config.speed_test_item.speed_test_delay_interval_seconds,
@@ -279,7 +276,6 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
         },
         proxy: contracts::ProxySettings {
             traffic_mode: traffic_mode_to_contract(config.proxy_ui_item.traffic_mode),
-            node_sorting: config.proxy_ui_item.node_sorting,
         },
     }
 }
@@ -343,10 +339,6 @@ pub fn app_config_from_settings(
             auto_run: settings.behavior.autostart,
             enable_statistics: settings.behavior.statistics,
             display_real_time_speed: settings.behavior.realtime_speed,
-            auto_create_subscription_group: settings
-                .behavior
-                .auto_create_subscription_group
-                .unwrap_or(true),
         },
         ui_item: UiItem {
             current_theme: theme_to_config(settings.appearance.theme).map(str::to_string),
@@ -355,7 +347,6 @@ pub fn app_config_from_settings(
         speed_test_item: SpeedTestItem {
             speed_test_timeout: settings.speed_test.timeout_seconds,
             speed_ping_test_url: settings.speed_test.latency_url.clone(),
-            proxy_delay_concurrency: settings.speed_test.proxy_delay_concurrency,
             ipapi_url: settings.speed_test.ip_lookup_url.clone(),
             speed_test_page_size: settings.speed_test.page_size,
             speed_test_delay_interval_seconds: settings.speed_test.delay_interval_seconds,
@@ -372,7 +363,6 @@ pub fn app_config_from_settings(
         },
         proxy_ui_item: ProxyUiItem {
             traffic_mode: traffic_mode_from_contract(settings.proxy.traffic_mode),
-            node_sorting: settings.proxy.node_sorting,
         },
         system_proxy_item: SystemProxyItem {
             sys_proxy_type: sysproxy_type_from_contract(settings.network.system_proxy.mode),
@@ -576,7 +566,6 @@ mod tests {
                 auto_run: true,
                 enable_statistics: false,
                 display_real_time_speed: true,
-                auto_create_subscription_group: false,
             },
             ui_item: UiItem {
                 current_theme: Some("Dark".to_string()),
@@ -585,7 +574,6 @@ mod tests {
             speed_test_item: SpeedTestItem {
                 speed_test_timeout: 21,
                 speed_ping_test_url: "https://speed.test/latency".to_string(),
-                proxy_delay_concurrency: 22,
                 ipapi_url: "https://speed.test/ip".to_string(),
                 speed_test_page_size: Some(23),
                 speed_test_delay_interval_seconds: Some(24),
@@ -602,7 +590,6 @@ mod tests {
             },
             proxy_ui_item: ProxyUiItem {
                 traffic_mode: TrafficMode::Global,
-                node_sorting: 51,
             },
             system_proxy_item: SystemProxyItem {
                 sys_proxy_type: SysProxyType::Pac,
@@ -785,15 +772,8 @@ mod tests {
     }
 
     #[test]
-    fn runtime_restart_policy_tracks_traffic_mode_but_not_node_sorting() {
+    fn runtime_restart_policy_tracks_traffic_mode() {
         let original = AppConfig::default();
-
-        let mut sorted = original.clone();
-        sorted.proxy_ui_item.node_sorting += 1;
-        assert!(
-            !saved_config_requires_runtime_restart(&original, &sorted),
-            "node sorting only orders the proxy-groups snapshot the UI renders"
-        );
 
         let mut mode = original.clone();
         mode.proxy_ui_item.traffic_mode = TrafficMode::Global;
@@ -808,7 +788,6 @@ mod tests {
         };
         original.routing_basic_item.routing_index_id = "routing-a".to_string();
         original.ui_item.current_language = "zh-Hans".to_string();
-        original.proxy_ui_item.node_sorting = 3;
 
         let target = config_from_settings(&settings_from_app_config(&original), &original);
 

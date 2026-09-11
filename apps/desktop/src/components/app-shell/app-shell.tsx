@@ -111,7 +111,6 @@ function ScreenFallback() {
  * proxy-runtime surface is on screen, the controller owns everything else.
  */
 function useProxyMonitorLifecycle(activeTab: ShellTab) {
-  const profilesView = useShellStore((state) => state.profilesView);
   const coreConnected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
   const { t } = useI18n();
   const pushToast = useToastStore((state) => state.pushToast);
@@ -155,9 +154,9 @@ function useProxyMonitorLifecycle(activeTab: ShellTab) {
 
   useEffect(() => {
     controllerRef.current?.setWanted(
-      coreConnected && (activeTab === "connections" || (activeTab === "profiles" && profilesView === "proxyGroups")),
+      coreConnected && activeTab === "connections",
     );
-  }, [activeTab, profilesView, coreConnected]);
+  }, [activeTab, coreConnected]);
 }
 
 function isTauriRuntime() {

@@ -7,9 +7,8 @@ use std::{
 use sqlx::Row;
 use voya_contracts::{AppSettingsV1, SystemProxyType, TrafficMode, CURRENT_SCHEMA_VERSION};
 use voya_core::{
-    MultipleLoad, ProfileExItem, ProfileItem, ProfileProtocol, ProfileTransport, RoutingItem,
-    RuleType, RulesItem, ServerEndpoint, ServerStatItem, SubItem, SubMetadataItem, TlsMode,
-    TlsSettings,
+    ProfileExItem, ProfileItem, ProfileProtocol, ProfileTransport, RoutingItem, RuleType,
+    RulesItem, ServerEndpoint, ServerStatItem, SubItem, SubMetadataItem, TlsMode, TlsSettings,
 };
 
 use crate::{blob, AppStateRecord};
@@ -119,7 +118,12 @@ async fn fresh_schema_contains_only_current_tables_and_columns() {
         .into_iter()
         .map(|row| row.get::<String, _>("name"))
         .collect::<Vec<_>>();
-    for retired in ["auto_update_interval", "update_time", "memo"] {
+    for retired in [
+        "auto_update_interval",
+        "update_time",
+        "memo",
+        "pre_socks_port",
+    ] {
         assert!(!subscription_columns.iter().any(|column| column == retired));
     }
 
@@ -142,6 +146,8 @@ async fn fresh_schema_contains_only_current_tables_and_columns() {
         [
             "app_settings",
             "app_state",
+            "node_group_memberships",
+            "node_groups",
             "profile_ex_items",
             "profile_items",
             "routing_items",
@@ -161,6 +167,8 @@ async fn fresh_schema_contains_only_current_tables_and_columns() {
     assert_eq!(
         indexes,
         [
+            "idx_node_group_memberships_group",
+            "idx_node_groups_sort",
             "idx_profile_items_config_type",
             "idx_profile_items_subscription_id",
             "idx_routing_items_sort",
@@ -2012,7 +2020,6 @@ async fn settings_payload_with_retired_keys_still_loads() {
 
     // The renamed key kept its value; the unit was always seconds.
     assert_eq!(loaded.speed_test.delay_interval_seconds, Some(24));
-    assert_eq!(loaded.speed_test.proxy_delay_concurrency, 5);
     // Neighbouring fields survived the normalization untouched.
     assert_eq!(loaded.speed_test.page_size, Some(23));
     assert_eq!(loaded.dns.add_common_hosts, Some(true));
@@ -2168,40 +2175,6 @@ async fn retiring_custom_sources_preserves_settings_and_existing_routing() {
 
     // Retiring a known key must not weaken the strict contract for other keys.
     payload["neverAContractKey"] = serde_json::json!(true);
-    sqlx::query("UPDATE app_settings SET payload = ? WHERE id = 1")
-        .bind(payload.to_string())
-        .execute(database.pool())
-        .await
-        .expect("store unknown key");
-    assert!(matches!(
-        database.settings().load().await,
-        Err(DbError::Json { .. })
-    ));
-}
-
-#[tokio::test]
-async fn current_proxy_delay_concurrency_wins_over_the_retired_key() {
-    let database = Database::connect_in_memory()
-        .await
-        .expect("database should open");
-    let mut payload: serde_json::Value = serde_json::from_str(RETIRED_KEYS_SETTINGS_PAYLOAD)
-        .expect("old settings fixture should parse");
-    payload["speedTest"]["proxyDelayConcurrency"] = serde_json::json!(7);
-    payload["speedTest"]["mixedConcurrency"] = serde_json::json!(19);
-    sqlx::query("INSERT INTO app_settings (id, schema_version, payload) VALUES (1, ?, ?)")
-        .bind(i64::from(CURRENT_SCHEMA_VERSION))
-        .bind(payload.to_string())
-        .execute(database.pool())
-        .await
-        .expect("store settings");
-    let loaded = database
-        .settings()
-        .load()
-        .await
-        .expect("settings should normalize");
-    assert_eq!(loaded.speed_test.proxy_delay_concurrency, 7);
-
-    payload["speedTest"]["neverAContractKey"] = serde_json::json!(true);
     sqlx::query("UPDATE app_settings SET payload = ? WHERE id = 1")
         .bind(payload.to_string())
         .execute(database.pool())
@@ -2979,10 +2952,6 @@ fn sample_protocols() -> Vec<ProfileProtocol> {
             uuid: "11111111-1111-1111-1111-111111111111".to_string(),
             cipher: Some("auto".to_string()),
         },
-        ProfileProtocol::Custom {
-            source: "/configs/custom.json".to_string(),
-            filter: Some("keep-me".to_string()),
-        },
         ProfileProtocol::Shadowsocks {
             server: endpoint("shadowsocks.example.com", 8388),
             password: "shadowsocks-password".to_string(),
@@ -3044,15 +3013,6 @@ fn sample_protocols() -> Vec<ProfileProtocol> {
             insecure_concurrency: Some(4),
             udp_over_tcp: true,
         },
-        ProfileProtocol::PolicyGroup {
-            child_profile_ids: vec!["profile-a".to_string(), "profile-b".to_string()],
-            source_subscription_id: Some("subscription-1".to_string()),
-            filter: Some("HK".to_string()),
-            strategy: MultipleLoad::LeastPing,
-        },
-        ProfileProtocol::ProxyChain {
-            child_profile_ids: vec!["profile-a".to_string(), "profile-b".to_string()],
-        },
     ]
 }
 
@@ -3061,7 +3021,6 @@ fn sample_protocols() -> Vec<ProfileProtocol> {
 fn protocol_fixture_key(protocol: &ProfileProtocol) -> &'static str {
     match protocol {
         ProfileProtocol::Vmess { .. } => "vmess",
-        ProfileProtocol::Custom { .. } => "custom",
         ProfileProtocol::Shadowsocks { .. } => "shadowsocks",
         ProfileProtocol::Socks { .. } => "socks",
         ProfileProtocol::Vless { .. } => "vless",
@@ -3072,8 +3031,6 @@ fn protocol_fixture_key(protocol: &ProfileProtocol) -> &'static str {
         ProfileProtocol::Http { .. } => "http",
         ProfileProtocol::Anytls { .. } => "anytls",
         ProfileProtocol::Naive { .. } => "naive",
-        ProfileProtocol::PolicyGroup { .. } => "policyGroup",
-        ProfileProtocol::ProxyChain { .. } => "proxyChain",
     }
 }
 
@@ -3249,4 +3206,151 @@ async fn retiring_download_speed_preserves_existing_node_data() {
         .iter()
         .any(|row| row.get::<String, _>("name") == "speed"));
     database.close().await;
+}
+
+#[tokio::test]
+async fn manual_group_migration_removes_executable_profiles_and_preserves_ordinary_data() {
+    let fixture = TempDatabase::new("manual-groups.sqlite");
+    let path = &fixture.path;
+    let old = sqlx::migrate::Migrator {
+        migrations: Cow::Owned(
+            MIGRATOR
+                .iter()
+                .filter(|m| m.version <= 4)
+                .cloned()
+                .collect(),
+        ),
+        ..sqlx::migrate::Migrator::DEFAULT
+    };
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(true)
+                .foreign_keys(true),
+        )
+        .await
+        .expect("old database");
+    old.run(&pool).await.expect("old schema");
+    let profile = sample_profile();
+    ProfileRepository::new(&pool)
+        .upsert(&profile)
+        .await
+        .expect("ordinary node");
+    for (id, kind, name) in [
+        ("old-policy", "policyGroup", "Policy"),
+        ("old-chain", "proxyChain", "Chain"),
+        ("old-custom", "custom", profile.remarks.as_str()),
+    ] {
+        sqlx::query(
+            "INSERT INTO profile_items(index_id,config_type,remarks,protocol) VALUES (?,?,?,?)",
+        )
+        .bind(id)
+        .bind(kind)
+        .bind(name)
+        .bind(format!(r#"{{"kind":"{kind}"}}"#))
+        .execute(&pool)
+        .await
+        .expect("retired node");
+        sqlx::query("INSERT INTO profile_ex_items(index_id,delay) VALUES (?,99)")
+            .bind(id)
+            .execute(&pool)
+            .await
+            .expect("metrics");
+        sqlx::query("INSERT INTO server_stat_items(index_id,total_up) VALUES (?,900)")
+            .bind(id)
+            .execute(&pool)
+            .await
+            .expect("traffic");
+    }
+    sqlx::query("UPDATE app_state SET active_profile_id='old-policy'")
+        .execute(&pool)
+        .await
+        .expect("old selection");
+    let rules = serde_json::json!([{"id":"retired-policy","outboundTag":"Policy"},{"id":"retired-chain","outboundTag":"Chain"},{"id":"same-name-survives","outboundTag":profile.remarks},{"id":"direct","outboundTag":"direct"},{"id":"unrelated","outboundTag":"Elsewhere"}]);
+    sqlx::query("INSERT INTO routing_items(id,rule_set) VALUES ('routing',?)")
+        .bind(rules.to_string())
+        .execute(&pool)
+        .await
+        .expect("routes");
+    let mut settings: serde_json::Value =
+        serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("settings");
+    settings["behavior"]["autoCreateSubscriptionGroup"] = serde_json::json!(true);
+    settings["proxy"]["nodeSorting"] = serde_json::json!(3);
+    sqlx::query("INSERT INTO app_settings(id,schema_version,payload) VALUES(1,1,?)")
+        .bind(settings.to_string())
+        .execute(&pool)
+        .await
+        .expect("settings");
+    pool.close().await;
+    let db = Database::connect(path).await.expect("upgrade");
+    assert_eq!(db.profiles().list().await.expect("profiles"), vec![profile]);
+    assert!(db
+        .app_state()
+        .load()
+        .await
+        .expect("selection")
+        .active_profile_id
+        .is_none());
+    for sql in [
+        "SELECT COUNT(*) FROM profile_ex_items",
+        "SELECT COUNT(*) FROM server_stat_items",
+    ] {
+        let count: i64 = sqlx::query_scalar(sql)
+            .fetch_one(db.pool())
+            .await
+            .expect("count");
+        assert_eq!(count, 0);
+    }
+    let remaining: String =
+        sqlx::query_scalar("SELECT rule_set FROM routing_items WHERE id='routing'")
+            .fetch_one(db.pool())
+            .await
+            .expect("routes");
+    let remaining: serde_json::Value = serde_json::from_str(&remaining).expect("rules");
+    assert_eq!(remaining, serde_json::json!([rules[2], rules[3], rules[4]]));
+    settings["behavior"]
+        .as_object_mut()
+        .expect("behavior")
+        .remove("autoCreateSubscriptionGroup");
+    settings["proxy"]
+        .as_object_mut()
+        .expect("proxy")
+        .remove("nodeSorting");
+    let saved: String = sqlx::query_scalar("SELECT payload FROM app_settings")
+        .fetch_one(db.pool())
+        .await
+        .expect("payload");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&saved).expect("json"),
+        settings
+    );
+    assert!(serde_json::from_str::<AppSettingsV1>(&saved).is_ok());
+    assert!(db
+        .node_groups()
+        .snapshot()
+        .await
+        .expect("folders")
+        .groups
+        .is_empty());
+    assert!(db
+        .node_groups()
+        .snapshot()
+        .await
+        .expect("memberships")
+        .memberships
+        .is_empty());
+    db.close().await;
+    let reopened = Database::connect(path).await.expect("migration runs once");
+    assert_eq!(
+        reopened
+            .profiles()
+            .list()
+            .await
+            .expect("ordinary nodes")
+            .len(),
+        1
+    );
+    reopened.close().await;
 }

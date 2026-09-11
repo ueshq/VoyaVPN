@@ -170,7 +170,7 @@ pub fn parse_wireguard_config(input: &str) -> Result<Vec<ProfileItem>, ShareErro
     }
 
     if result.is_empty() {
-        Err(ShareError::InvalidFullConfig)
+        Err(ShareError::InvalidWireGuardConfig)
     } else {
         Ok(result)
     }

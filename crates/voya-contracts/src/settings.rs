@@ -93,10 +93,6 @@ pub struct BehaviorSettings {
     pub autostart: bool,
     pub statistics: bool,
     pub realtime_speed: bool,
-    /// `None` means enabled (the default); optional so settings blobs saved by
-    /// older builds keep deserializing under `deny_unknown_fields`.
-    #[serde(default)]
-    pub auto_create_subscription_group: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
@@ -277,7 +273,6 @@ pub struct AppDnsSettings {
 pub struct SpeedtestSettings {
     pub timeout_seconds: i32,
     pub latency_url: String,
-    pub proxy_delay_concurrency: i32,
     pub ip_lookup_url: String,
     pub page_size: Option<i32>,
     pub delay_interval_seconds: Option<i32>,
@@ -288,7 +283,6 @@ impl Default for SpeedtestSettings {
         Self {
             timeout_seconds: 10,
             latency_url: "https://www.google.com/generate_204".to_string(),
-            proxy_delay_concurrency: 5,
             ip_lookup_url: String::new(),
             page_size: None,
             delay_interval_seconds: None,
@@ -358,14 +352,12 @@ pub struct ProxySettings {
     /// strings this field already stores (`rule`, `global`, `direct`,
     /// `unchanged`).
     pub traffic_mode: TrafficMode,
-    pub node_sorting: i32,
 }
 
 impl Default for ProxySettings {
     fn default() -> Self {
         Self {
             traffic_mode: TrafficMode::Rule,
-            node_sorting: 0,
         }
     }
 }

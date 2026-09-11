@@ -261,7 +261,6 @@ fn singbox_tls_only_protocols_always_emit_a_tls_block() {
 fn singbox_protocol_support_table_agrees_with_node_validation() {
     for config_type in [
         ConfigType::VMess,
-        ConfigType::Custom,
         ConfigType::Shadowsocks,
         ConfigType::SOCKS,
         ConfigType::VLESS,
@@ -272,8 +271,6 @@ fn singbox_protocol_support_table_agrees_with_node_validation() {
         ConfigType::HTTP,
         ConfigType::Anytls,
         ConfigType::Naive,
-        ConfigType::PolicyGroup,
-        ConfigType::ProxyChain,
     ] {
         let node = ProfileItem {
             remarks: format!("{config_type:?}"),
@@ -294,8 +291,7 @@ fn singbox_protocol_support_table_agrees_with_node_validation() {
                         | crate::validation::ValidationCode::UnsupportedProtocolNetwork { .. }
                 )
             });
-        let expected_rejection =
-            !config_type.is_complex_type() && !singbox_supports_config_type(config_type);
+        let expected_rejection = !singbox_supports_config_type(config_type);
         assert_eq!(
             rejects_protocol, expected_rejection,
             "validation and generation disagree about {config_type:?}"
@@ -823,76 +819,6 @@ fn singbox_shadowsocks_plugin_options_come_from_the_shared_model() {
 }
 
 #[test]
-fn singbox_chain_through_policy_group_clones_the_upstream_branch() {
-    // `[Group, node]` chains fan the upstream hop out once per group member;
-    // the `-clone-` outbounds this produces had no test at all.
-    let n1 = socks_node("n1", "node-1");
-    let n2 = socks_node("n2", "node-2");
-    let n3 = socks_node("n3", "node-3");
-    let group = ProfileItem {
-        index_id: "group".to_string(),
-        remarks: "Group".to_string(),
-        protocol: ProfileProtocol::PolicyGroup {
-            child_profile_ids: vec!["n1".to_string(), "n2".to_string()],
-            source_subscription_id: None,
-            filter: None,
-            strategy: MultipleLoad::LeastPing,
-        },
-        ..ProfileItem::default()
-    };
-    let chain = ProfileItem {
-        index_id: "chain".to_string(),
-        remarks: "Chain".to_string(),
-        protocol: ProfileProtocol::ProxyChain {
-            child_profile_ids: vec!["group".to_string(), "n3".to_string()],
-        },
-        ..ProfileItem::default()
-    };
-    let mut context = test_context(AppConfig::default(), chain);
-    for node in [n1, n2, n3, group] {
-        context.all_proxies_map.insert(node.index_id.clone(), node);
-    }
-
-    let generated = generate_singbox_config(&context).expect("sing-box config should generate");
-    let detour_of = |tag: &str| {
-        generated
-            .outbounds
-            .iter()
-            .find(|outbound| outbound.tag == tag)
-            .unwrap_or_else(|| panic!("outbound `{tag}` should exist"))
-            .detour
-            .clone()
-    };
-
-    assert_eq!(
-        detour_of("proxy-clone-1").as_deref(),
-        Some("chain-proxy-1-Group-1-node-1")
-    );
-    assert_eq!(
-        detour_of("proxy-clone-2").as_deref(),
-        Some("chain-proxy-1-Group-2-node-2")
-    );
-    // Each branch terminates at its own group member, which keeps the two
-    // chains independent instead of sharing the last hop.
-    assert_eq!(detour_of("chain-proxy-1-Group-1-node-1"), None);
-    assert_eq!(detour_of("chain-proxy-1-Group-2-node-2"), None);
-
-    let selector = generated
-        .outbounds
-        .iter()
-        .find(|outbound| outbound.tag == PROXY_TAG)
-        .expect("selector outbound");
-    assert_eq!(
-        selector.outbounds.as_ref(),
-        Some(&vec![
-            "proxy-auto".to_string(),
-            "proxy-clone-1".to_string(),
-            "proxy-clone-2".to_string()
-        ])
-    );
-}
-
-#[test]
 fn singbox_dns_bootstrap_and_expected_ips_reach_servers_and_rules() {
     let mut app_config = AppConfig::default();
     app_config.simple_dns_item.bootstrap_dns = Some("223.5.5.5:5353".to_string());
@@ -976,34 +902,6 @@ fn singbox_wireguard_reserved_requires_exactly_three_bytes() {
     for value in ["1,2", "1,2,3,4", "1,x,3", "1,256,3", "1,,2,3"] {
         assert_eq!(parse_wireguard_reserved(Some(value)), None);
     }
-}
-
-#[test]
-fn singbox_outbound_proxy_chain_detour_matches_golden() {
-    let n1 = socks_node("n1", "node-1");
-    let n2 = socks_node("n2", "node-2");
-    let chain = ProfileItem {
-        index_id: "chain".to_string(),
-        remarks: "chain".to_string(),
-        protocol: ProfileProtocol::ProxyChain {
-            child_profile_ids: vec!["n1".to_string(), "n2".to_string()],
-        },
-        ..ProfileItem::default()
-    };
-    let mut context = test_context(AppConfig::default(), chain);
-    context.all_proxies_map.insert(n1.index_id.clone(), n1);
-    context.all_proxies_map.insert(n2.index_id.clone(), n2);
-
-    let generated = generate_singbox_config(&context).expect("sing-box config should generate");
-    let value = serde_json::to_value(&generated.outbounds)
-        .expect("sing-box proxy chain outbounds should serialize to JSON");
-    assert_no_nulls(&value);
-
-    let expected: Value = serde_json::from_str(include_str!(
-        "../../../../tests/golden/singbox/outbounds/proxy_chain_detour.json"
-    ))
-    .expect("sing-box proxy chain golden fixture should parse as JSON");
-    golden::assert_json_eq("singbox-proxy-chain-detour", &expected, &value);
 }
 
 #[test]
@@ -1165,37 +1063,6 @@ fn singbox_outbound_live_protocol_matrix_serializes_without_nulls() {
         &serde_json::to_value(&generated.endpoints[0])
             .expect("sing-box wireguard endpoint should serialize to JSON"),
     );
-}
-
-#[test]
-fn singbox_selector_policy_group_order_dedupe_and_urltest_match_golden() {
-    let n1 = socks_node("n1", "node-1");
-    let n2 = socks_node("n2", "node-2");
-    let group = ProfileItem {
-        index_id: "group".to_string(),
-        remarks: "fallback".to_string(),
-        protocol: ProfileProtocol::PolicyGroup {
-            child_profile_ids: vec!["n1".to_string(), "n1".to_string(), "n2".to_string()],
-            source_subscription_id: None,
-            filter: None,
-            strategy: MultipleLoad::Fallback,
-        },
-        ..ProfileItem::default()
-    };
-    let mut context = test_context(AppConfig::default(), group);
-    context.all_proxies_map.insert(n1.index_id.clone(), n1);
-    context.all_proxies_map.insert(n2.index_id.clone(), n2);
-
-    let generated = generate_singbox_config(&context).expect("sing-box config should generate");
-    let value = serde_json::to_value(&generated.outbounds)
-        .expect("sing-box policy group outbounds should serialize to JSON");
-    assert_no_nulls(&value);
-
-    let expected: Value = serde_json::from_str(include_str!(
-        "../../../../tests/golden/singbox/outbounds/policy_group_selector.json"
-    ))
-    .expect("sing-box policy group golden fixture should parse as JSON");
-    golden::assert_json_eq("singbox-policy-group-selector", &expected, &value);
 }
 
 #[test]
@@ -1584,68 +1451,6 @@ fn singbox_speedtest_config_adds_mixed_inbound_proxy_and_route_per_entry() {
 }
 
 #[test]
-fn singbox_speedtest_config_routes_policy_group_and_proxy_chain_entries() {
-    let group = ProfileItem {
-        index_id: "group".to_string(),
-        remarks: "group".to_string(),
-        protocol: ProfileProtocol::PolicyGroup {
-            child_profile_ids: vec!["g1".to_string(), "g2".to_string()],
-            source_subscription_id: None,
-            filter: None,
-            strategy: MultipleLoad::Fallback,
-        },
-        ..ProfileItem::default()
-    };
-    let mut group_context = test_context(AppConfig::default(), group);
-    group_context
-        .all_proxies_map
-        .insert("g1".to_string(), socks_node("g1", "group-node-1"));
-    group_context
-        .all_proxies_map
-        .insert("g2".to_string(), socks_node("g2", "group-node-2"));
-
-    let chain = ProfileItem {
-        index_id: "chain".to_string(),
-        remarks: "chain".to_string(),
-        protocol: ProfileProtocol::ProxyChain {
-            child_profile_ids: vec!["c1".to_string(), "c2".to_string()],
-        },
-        ..ProfileItem::default()
-    };
-    let mut chain_context = test_context(AppConfig::default(), chain);
-    chain_context
-        .all_proxies_map
-        .insert("c1".to_string(), socks_node("c1", "chain-node-1"));
-    chain_context
-        .all_proxies_map
-        .insert("c2".to_string(), socks_node("c2", "chain-node-2"));
-
-    let generated = generate_singbox_speedtest_config(&[
-        SpeedtestConfigEntry {
-            index_id: "group".to_string(),
-            port: 12100,
-            context: group_context,
-        },
-        SpeedtestConfigEntry {
-            index_id: "chain".to_string(),
-            port: 12101,
-            context: chain_context,
-        },
-    ]);
-
-    assert_speedtest_singbox_route(&generated, 12100);
-    assert_speedtest_singbox_route(&generated, 12101);
-    assert!(generated
-        .outbounds
-        .iter()
-        .any(|outbound| outbound.tag.starts_with("proxy12100")));
-    assert!(generated
-        .outbounds
-        .iter()
-        .any(|outbound| outbound.tag.starts_with("proxy12101")));
-}
-
-#[test]
 fn singbox_log_level_maps_app_levels_onto_singbox_names() {
     // (stored app level, generated `log.level`, generated `log.disabled`)
     let cases = [
@@ -1693,16 +1498,6 @@ fn singbox_default_log_level_is_generated_as_warn() {
     // `none` is the only level that disables logging, so the default must not.
     assert_eq!(value.pointer("/log/disabled"), None);
 }
-
-fn assert_speedtest_singbox_route(generated: &SingboxConfig, port: i32) {
-    let inbound_tag = format!("mixed{port}");
-    let proxy_tag = format!("proxy{port}");
-    assert!(generated.route.rules.iter().any(|rule| {
-        rule.inbound.as_ref() == Some(&vec![inbound_tag.clone()])
-            && rule.outbound.as_deref() == Some(proxy_tag.as_str())
-    }));
-}
-
 fn is_priority_proxy_route_rule(rule: &SingboxRule) -> bool {
     rule.outbound.as_deref() == Some(PROXY_TAG) && is_priority_proxy_domain_suffix(rule)
 }
@@ -1820,10 +1615,6 @@ fn sample_protocol(config_type: ConfigType) -> ProfileProtocol {
             uuid: "00000000-0000-0000-0000-000000000041".to_string(),
             cipher: Some(DEFAULT_SECURITY.to_string()),
         },
-        ConfigType::Custom => ProfileProtocol::Custom {
-            source: String::new(),
-            filter: None,
-        },
         ConfigType::Shadowsocks => ProfileProtocol::Shadowsocks {
             server,
             password: "secret".to_string(),
@@ -1884,15 +1675,6 @@ fn sample_protocol(config_type: ConfigType) -> ProfileProtocol {
             congestion_control: None,
             insecure_concurrency: None,
             udp_over_tcp: false,
-        },
-        ConfigType::PolicyGroup => ProfileProtocol::PolicyGroup {
-            child_profile_ids: Vec::new(),
-            source_subscription_id: None,
-            filter: None,
-            strategy: MultipleLoad::LeastPing,
-        },
-        ConfigType::ProxyChain => ProfileProtocol::ProxyChain {
-            child_profile_ids: Vec::new(),
         },
     }
 }

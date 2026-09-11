@@ -20,17 +20,9 @@
 
 use voya_contracts::InvalidationScope;
 
-/// Profile-list mutations: save, delete, copy, move, the group
-/// editor's save, and the profile rows a speedtest run rewrites.
-///
-/// The child-candidate picker lists the same rows the profile table does, so it
-/// goes stale with it — that is the `group-child-candidates` cache the backend
-/// never used to touch.
+/// Saved-node and manual-group mutations invalidate both list projections.
 pub fn profile_scopes(config_changed: bool) -> Vec<InvalidationScope> {
-    let mut scopes = vec![
-        InvalidationScope::Profiles,
-        InvalidationScope::GroupChildCandidates,
-    ];
+    let mut scopes = vec![InvalidationScope::Profiles, InvalidationScope::NodeGroups];
     push_config_scopes(&mut scopes, config_changed);
     scopes
 }
@@ -47,7 +39,7 @@ pub fn subscription_scopes(profiles_changed: bool, config_changed: bool) -> Vec<
     ];
     if profiles_changed {
         scopes.push(InvalidationScope::Profiles);
-        scopes.push(InvalidationScope::GroupChildCandidates);
+        scopes.push(InvalidationScope::NodeGroups);
     }
     push_config_scopes(&mut scopes, config_changed);
     scopes
@@ -77,10 +69,7 @@ pub fn dns_scopes() -> Vec<InvalidationScope> {
 /// `config_changed` is true only for `proxy_set_traffic_mode`, the one command
 /// here that also persists a settings field (`proxy.trafficMode`).
 pub fn proxy_runtime_scopes(config_changed: bool) -> Vec<InvalidationScope> {
-    let mut scopes = vec![
-        InvalidationScope::ProxyGroups,
-        InvalidationScope::ProxyConnections,
-    ];
+    let mut scopes = vec![InvalidationScope::ProxyConnections];
     push_config_scopes(&mut scopes, config_changed);
     scopes
 }
@@ -125,10 +114,7 @@ mod tests {
     fn profile_scopes_always_refresh_the_list_and_the_child_picker() {
         assert_eq!(
             profile_scopes(false),
-            vec![
-                InvalidationScope::Profiles,
-                InvalidationScope::GroupChildCandidates
-            ]
+            vec![InvalidationScope::Profiles, InvalidationScope::NodeGroups]
         );
     }
 
@@ -141,7 +127,7 @@ mod tests {
             profile_scopes(true),
             vec![
                 InvalidationScope::Profiles,
-                InvalidationScope::GroupChildCandidates,
+                InvalidationScope::NodeGroups,
                 InvalidationScope::AppSettings,
             ]
         );
@@ -157,7 +143,7 @@ mod tests {
                     matches!(
                         scope,
                         InvalidationScope::Profiles
-                            | InvalidationScope::GroupChildCandidates
+                            | InvalidationScope::NodeGroups
                             | InvalidationScope::AppSettings
                     ),
                     "unexpected profile scope {scope:?}"
@@ -181,7 +167,7 @@ mod tests {
                 InvalidationScope::Subscriptions,
                 InvalidationScope::SubscriptionMetadata,
                 InvalidationScope::Profiles,
-                InvalidationScope::GroupChildCandidates,
+                InvalidationScope::NodeGroups,
             ]
         );
     }
@@ -194,7 +180,7 @@ mod tests {
                 InvalidationScope::Subscriptions,
                 InvalidationScope::SubscriptionMetadata,
                 InvalidationScope::Profiles,
-                InvalidationScope::GroupChildCandidates,
+                InvalidationScope::NodeGroups,
                 InvalidationScope::AppSettings,
             ]
         );
@@ -213,15 +199,11 @@ mod tests {
     fn proxy_runtime_scopes_add_the_bundle_only_for_the_traffic_mode_command() {
         assert_eq!(
             proxy_runtime_scopes(false),
-            vec![
-                InvalidationScope::ProxyGroups,
-                InvalidationScope::ProxyConnections
-            ]
+            vec![InvalidationScope::ProxyConnections]
         );
         assert_eq!(
             proxy_runtime_scopes(true),
             vec![
-                InvalidationScope::ProxyGroups,
                 InvalidationScope::ProxyConnections,
                 InvalidationScope::AppSettings,
             ]

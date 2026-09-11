@@ -57,6 +57,11 @@ export const commands = {
 	loadDnsSettings: () => typedError<DnsSettings, AppError>(__TAURI_INVOKE("load_dns_settings")),
 	saveDnsSettings: (settings: DnsSettings) => typedError<DnsSettings, AppError>(__TAURI_INVOKE("save_dns_settings", { settings })),
 	listProfiles: (subscriptionId: string | null, filter: string | null) => typedError<ProfileListing, AppError>(__TAURI_INVOKE("list_profiles", { subscriptionId, filter })),
+	listNodeGroups: () => typedError<NodeGroupsSnapshot, AppError>(__TAURI_INVOKE("list_node_groups")),
+	saveNodeGroup: (id: string | null, name: string) => typedError<NodeGroup, AppError>(__TAURI_INVOKE("save_node_group", { id, name })),
+	deleteNodeGroup: (id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_node_group", { id })),
+	moveNodeGroup: (id: string, action: MoveAction) => typedError<null, AppError>(__TAURI_INVOKE("move_node_group", { id, action })),
+	assignNodeGroups: (assignments: NodeGroupAssignment[]) => typedError<null, AppError>(__TAURI_INVOKE("assign_node_groups", { assignments })),
 	saveProfile: (profile: Profile) => typedError<ProfileListEntry, AppError>(__TAURI_INVOKE("save_profile", { profile })),
 	deleteProfiles: (indexIds: string[]) => typedError<number, AppError>(__TAURI_INVOKE("delete_profiles", { indexIds })),
 	copyProfiles: (indexIds: string[]) => typedError<ProfileListEntry[], AppError>(__TAURI_INVOKE("copy_profiles", { indexIds })),
@@ -66,9 +71,6 @@ export const commands = {
 	exportProfileClientConfig: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_client_config", { indexIds })),
 	setActiveProfile: (indexId: string) => typedError<ProfileListEntry, AppError>(__TAURI_INVOKE("set_active_profile", { indexId })),
 	moveProfile: (subscriptionId: string | null, indexId: string, action: MoveAction, position: number | null) => typedError<ProfileListEntry[], AppError>(__TAURI_INVOKE("move_profile", { subscriptionId, indexId, action, position })),
-	listGroupChildCandidates: (currentIndexId: string | null, filter: string | null) => typedError<GroupChildCandidate[], AppError>(__TAURI_INVOKE("list_group_child_candidates", { currentIndexId, filter })),
-	previewGroupProfile: (profile: Profile) => typedError<GroupPreview, AppError>(__TAURI_INVOKE("preview_group_profile", { profile })),
-	saveGroupProfile: (profile: Profile) => typedError<ProfileListEntry, AppError>(__TAURI_INVOKE("save_group_profile", { profile })),
 	listSubscriptions: () => typedError<Subscription[], AppError>(__TAURI_INVOKE("list_subscriptions")),
 	listSubscriptionMetadata: () => typedError<SubscriptionMetadata[], AppError>(__TAURI_INVOKE("list_subscription_metadata")),
 	saveSubscription: (item: Subscription) => typedError<Subscription, AppError>(__TAURI_INVOKE("save_subscription", { item })),
@@ -88,13 +90,9 @@ export const commands = {
 	 *  runs off the async runtime.
 	 */
 	listProcessCandidates: () => typedError<ProcessCandidate[], AppError>(__TAURI_INVOKE("list_process_candidates")),
-	proxyListGroups: () => typedError<ProxyGroupsSnapshot, AppError>(__TAURI_INVOKE("proxy_list_groups")),
-	proxyTestDelay: (nodeNames: string[]) => typedError<ProxyDelayTestResult[], AppError>(__TAURI_INVOKE("proxy_test_delay", { nodeNames })),
-	proxySelectNode: (groupName: string, nodeName: string) => typedError<ProxyGroupsSnapshot, AppError>(__TAURI_INVOKE("proxy_select_node", { groupName, nodeName })),
 	proxyListConnections: () => typedError<ProxyConnectionsSnapshot, AppError>(__TAURI_INVOKE("proxy_list_connections")),
 	proxyCloseConnection: (connectionId: string | null) => typedError<ProxyConnectionsSnapshot, AppError>(__TAURI_INVOKE("proxy_close_connection", { connectionId })),
 	proxySetTrafficMode: (mode: TrafficMode) => typedError<TrafficModeResponse, AppError>(__TAURI_INVOKE("proxy_set_traffic_mode", { mode })),
-	proxyReloadConfig: (path: string | null) => typedError<null, AppError>(__TAURI_INVOKE("proxy_reload_config", { path })),
 	proxyStartMonitor: () => typedError<ProxyMonitorStatus, AppError>(__TAURI_INVOKE("proxy_start_monitor")),
 	proxyStopMonitor: () => typedError<ProxyMonitorStatus, AppError>(__TAURI_INVOKE("proxy_stop_monitor")),
 	runSpeedtest: (request: SpeedtestRequest) => typedError<SpeedtestRunResult, AppError>(__TAURI_INVOKE("run_speedtest", { request })),
@@ -172,7 +170,7 @@ export type AppError = {
 };
 
 /**  The kind of row a [`AppErrorKind::NotFound`] refers to. */
-export type AppErrorEntity = "profile" | "routing" | "routingRule" | "subscription" | "proxyGroup" | "proxyNode" | 
+export type AppErrorEntity = "profile" | "routing" | "routingRule" | "subscription" | "nodeGroup" | 
 /**  The core-info table has no entry for the requested core type. */
 "coreInfo";
 
@@ -287,11 +285,6 @@ export type BehaviorSettings = {
 	autostart: boolean,
 	statistics: boolean,
 	realtimeSpeed: boolean,
-	/**
-	 *  `None` means enabled (the default); optional so settings blobs saved by
-	 *  older builds keep deserializing under `deny_unknown_fields`.
-	 */
-	autoCreateSubscriptionGroup?: boolean | null,
 };
 
 export type CertificateFetchRequest = {
@@ -416,38 +409,6 @@ export type ExportProfilesResult = {
 	format: ExportProfilesFormat,
 };
 
-export type GroupChildCandidate = {
-	profileId: string,
-	remarks: string,
-	address: string,
-	protocol: ProfileKind,
-	subscriptionId: string | null,
-	isGroup: boolean,
-	selectable: boolean,
-	reason: string | null,
-};
-
-export type GroupPreview = {
-	validation: GroupValidation,
-	singboxRoutes: GroupPreviewRoute[],
-};
-
-export type GroupPreviewRoute = {
-	tag: string,
-	kind: string,
-	dialerProxy: string | null,
-	downloadDialerProxy: string | null,
-	detour: string | null,
-	outbounds: string[],
-};
-
-export type GroupValidation = {
-	valid: boolean,
-	childProfileIds: string[],
-	errors: ValidationIssue[],
-	warnings: ValidationIssue[],
-};
-
 export type GrpcSettings = {
 	idleTimeoutSeconds: number | null,
 	healthCheckTimeoutSeconds: number | null,
@@ -510,8 +471,8 @@ export type InvalidateEvent = {
 export type InvalidationScope = 
 /**  `["profiles"]` — the profile list, every filter slice of it. */
 { kind: "profiles" } | 
-/**  `["group-child-candidates"]` — the policy-group / chain child picker. */
-{ kind: "groupChildCandidates" } | 
+/**  `["node-groups"]` — user-owned folders and node memberships. */
+{ kind: "nodeGroups" } | 
 /**  `["subscriptions"]` */
 { kind: "subscriptions" } | 
 /**  `["subscription-metadata"]` */
@@ -526,12 +487,8 @@ export type InvalidationScope =
 { kind: "uiPreferences" } | 
 /**  `["connection-mode"]` — TUN / system-proxy mode and its availability. */
 { kind: "connectionMode" } | 
-/**  `["proxy-groups"]` */
-{ kind: "proxyGroups" } | 
 /**  `["proxy-connections"]` */
 { kind: "proxyConnections" };
-
-export type LoadStrategy = "leastPing" | "fallback" | "random" | "roundRobin" | "leastLoad";
 
 /**
  *  A log line the **app** wrote, named by code.
@@ -609,6 +566,27 @@ export type NetworkSettings = {
 	inbounds: InboundSettings[],
 };
 
+export type NodeGroup = {
+	id: string,
+	name: string,
+	sort: number,
+};
+
+export type NodeGroupAssignment = {
+	profileId: string,
+	groupId: string | null,
+};
+
+export type NodeGroupMembership = {
+	profileId: string,
+	groupId: string,
+};
+
+export type NodeGroupsSnapshot = {
+	groups: NodeGroup[],
+	memberships: NodeGroupMembership[],
+};
+
 /**
  *  What the backend is telling the user about, as a code the frontend
  *  translates.
@@ -642,7 +620,7 @@ export type Profile = {
 	tls: TlsSettings | null,
 };
 
-export type ProfileKind = "vmess" | "custom" | "shadowsocks" | "socks" | "vless" | "trojan" | "hysteria2" | "tuic" | "wireGuard" | "http" | "anytls" | "naive" | "policyGroup" | "proxyChain";
+export type ProfileKind = "vmess" | "shadowsocks" | "socks" | "vless" | "trojan" | "hysteria2" | "tuic" | "wireGuard" | "http" | "anytls" | "naive";
 
 export type ProfileListEntry = {
 	profile: Profile,
@@ -680,7 +658,7 @@ export type ProfileMetrics = {
 	ipInfo: string | null,
 };
 
-export type ProfileProtocol = { kind: "vmess"; server: ServerEndpoint; uuid: string; cipher: string | null } | { kind: "custom"; source: string; filter: string | null } | { kind: "shadowsocks"; server: ServerEndpoint; password: string; method: string; udpOverTcp: boolean } | { kind: "socks"; server: ServerEndpoint; username: string; password: string } | { kind: "vless"; server: ServerEndpoint; uuid: string; flow: string | null; encryption: string | null } | { kind: "trojan"; server: ServerEndpoint; password: string } | { kind: "hysteria2"; server: ServerEndpoint; password: string; portHops: string | null; obfuscationPassword: string | null } | { kind: "tuic"; server: ServerEndpoint; uuid: string; password: string; congestionControl: string | null } | { kind: "wireGuard"; server: ServerEndpoint; privateKey: string; peerPublicKey: string | null; presharedKey: string | null; interfaceAddress: string | null; allowedIps: string | null; reserved: string | null; mtu: number | null } | { kind: "http"; server: ServerEndpoint; username: string; password: string } | { kind: "anytls"; server: ServerEndpoint; password: string } | { kind: "naive"; server: ServerEndpoint; username: string; password: string; quic: boolean; congestionControl: string | null; insecureConcurrency: number | null; udpOverTcp: boolean } | { kind: "policyGroup"; childProfileIds: string[]; sourceSubscriptionId: string | null; filter: string | null; strategy: LoadStrategy } | { kind: "proxyChain"; childProfileIds: string[] };
+export type ProfileProtocol = { kind: "vmess"; server: ServerEndpoint; uuid: string; cipher: string | null } | { kind: "shadowsocks"; server: ServerEndpoint; password: string; method: string; udpOverTcp: boolean } | { kind: "socks"; server: ServerEndpoint; username: string; password: string } | { kind: "vless"; server: ServerEndpoint; uuid: string; flow: string | null; encryption: string | null } | { kind: "trojan"; server: ServerEndpoint; password: string } | { kind: "hysteria2"; server: ServerEndpoint; password: string; portHops: string | null; obfuscationPassword: string | null } | { kind: "tuic"; server: ServerEndpoint; uuid: string; password: string; congestionControl: string | null } | { kind: "wireGuard"; server: ServerEndpoint; privateKey: string; peerPublicKey: string | null; presharedKey: string | null; interfaceAddress: string | null; allowedIps: string | null; reserved: string | null; mtu: number | null } | { kind: "http"; server: ServerEndpoint; username: string; password: string } | { kind: "anytls"; server: ServerEndpoint; password: string } | { kind: "naive"; server: ServerEndpoint; username: string; password: string; quic: boolean; congestionControl: string | null; insecureConcurrency: number | null; udpOverTcp: boolean };
 
 export type ProfileTraffic = {
 	totalUpload: number | null,
@@ -715,31 +693,6 @@ export type ProxyConnectionsSnapshot = {
 	connections: ProxyConnectionItem[],
 };
 
-/**
- *  One node's delay measurement.
- * 
- *  `outcome` replaced a `message` that was the Clash client error's own
- *  `Display` text, which the Proxies screen rendered verbatim in place of the
- *  delay.
- */
-export type ProxyDelayTestResult = {
-	name: string,
-	delay: number | null,
-	outcome: SpeedtestOutcome,
-};
-
-export type ProxyGroup = {
-	name: string,
-	proxyType: string,
-	now: string | null,
-	nodes: ProxyNode[],
-};
-
-export type ProxyGroupsSnapshot = {
-	groups: ProxyGroup[],
-	trafficMode: TrafficMode,
-};
-
 export type ProxyMonitorState = "running" | "stopped" | "failed";
 
 export type ProxyMonitorStatus = {
@@ -747,22 +700,6 @@ export type ProxyMonitorStatus = {
 	running: boolean,
 	stale: boolean,
 	message: string | null,
-};
-
-/**
- *  One node inside a proxy group.
- * 
- *  There is no `delay_label`: formatting `42` as `"42ms"` in Rust hard-coded
- *  both the unit spacing and the numeral system, and the frontend already owns
- *  `formatDelay`.
- */
-export type ProxyNode = {
-	name: string,
-	proxyType: string,
-	delay: number | null,
-	udp: boolean,
-	active: boolean,
-	testable: boolean,
 };
 
 export type ProxySettings = {
@@ -773,7 +710,6 @@ export type ProxySettings = {
 	 *  `unchanged`).
 	 */
 	trafficMode: TrafficMode,
-	nodeSorting: number,
 };
 
 export type QrCodeImage = {
@@ -903,7 +839,7 @@ export type ServerStatItem = {
 	dateNow: number | null,
 };
 
-export type ShellTabTarget = "profiles" | "proxyGroups" | "proxyConnections" | "logs";
+export type ShellTabTarget = "profiles" | "proxyConnections" | "logs";
 
 /**
  *  How a probe ended, as a code rather than a sentence.
@@ -967,7 +903,6 @@ export type SpeedtestRunResult = {
 export type SpeedtestSettings = {
 	timeoutSeconds: number,
 	latencyUrl: string,
-	proxyDelayConcurrency: number,
 	ipLookupUrl: string,
 	pageSize: number | null,
 	delayIntervalSeconds: number | null,
@@ -1000,7 +935,6 @@ export type Subscription = {
 	sort: number,
 	filter: string | null,
 	converterTarget: string | null,
-	preSocksPort: number | null,
 	autoUpdateIntervalMinutes: number | null,
 };
 
@@ -1175,9 +1109,7 @@ export type TunStatus = {
  *  greppable, it shows the English diagnostic verbatim, and adding a code for
  *  one is a purely additive change.
  */
-export type ValidationCode = { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "invalidFinalMask" } | { code: "unsupportedNetwork"; network: string } | { code: "unsupportedProtocol"; protocol: string } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "notAGroupProfile" } | { code: "groupCycle"; group: string; child: string } | 
-/**  The cycle found by the group builder, which knows the whole path. */
-{ code: "groupCyclePath"; path: string[] } | { code: "groupWithoutValidChild"; group: string } | { code: "policyGroupWithoutValidChildren" } | { code: "proxyChainWithoutValidChildren" } | { code: "proxyChainSingleHop" } | { code: "groupChildNotFound"; profileId: string } | { code: "groupDuplicateChildIgnored"; profileId: string } | { code: "invalidSubscriptionFilter"; pattern: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | 
+export type ValidationCode = { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "invalidFinalMask" } | { code: "unsupportedNetwork"; network: string } | { code: "unsupportedProtocol"; protocol: string } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | 
 /**
  *  A rejection this contract has no code for. The English `message` is the
  *  failing manager's own diagnostic and is rendered verbatim.
@@ -1207,7 +1139,7 @@ export type ValidationIssue = {
  *  untranslatable. The frontend renders the breadcrumb from these entries and
  *  the translated message after it.
  */
-export type ValidationScope = { kind: "groupChild"; group: string; child: string } | { kind: "routingRuleOutbound"; rule: string; outbound: string };
+export type ValidationScope = { kind: "routingRuleOutbound"; rule: string; outbound: string };
 
 export type WindowChromeConfig = {
 	titleBarLayout: TitleBarLayout,

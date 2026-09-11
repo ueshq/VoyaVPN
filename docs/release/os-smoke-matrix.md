@@ -79,7 +79,7 @@ These checks cover parity features that are user-visible in v2rayN but implement
 
 | Area | Verification |
 | --- | --- |
-| Full config templates | Open Settings, then Full Config Template. Edit the sing-box JSON object template, toggle Enabled/Add proxy only, set Proxy detour, save, reopen, and verify persisted values. Connect one sing-box profile that should consume the enabled template. |
+| Manual node groups | While disconnected, create/rename/reorder groups, move nodes and remove a group. Verify nodes survive deletion, membership persists after restart, and only Use connects. |
 | Certificate fetch | Open a TLS profile, fetch leaf cert, fetch chain, calculate SHA from pasted PEM, and save. Verify self-signed or invalid chains fail by default and succeed only when Allow insecure fetch is explicitly enabled for the fetch action. |
 | QR import | Open Profiles > Import and import from an image QR code, clipboard text, clipboard image, and screen scan. Confirm decoded QR content is shown for review before import. On macOS screen-recording restrictions or Linux Wayland limitations, record the exact unavailable message and confirm image/clipboard paths still work. |
 | Share/export | In Profiles, select one and multiple profiles. Export share links, base64 share links, inner links, and client config from the toolbar and row context menu. Confirm clipboard contents and the read-only Show QR dialog match the selected profile order. |

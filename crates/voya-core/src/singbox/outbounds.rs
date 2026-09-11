@@ -1,10 +1,8 @@
 use super::*;
 
-mod groups;
 mod protocols;
 mod stream;
 
-pub(super) use groups::*;
 pub(super) use protocols::*;
 pub(super) use stream::*;
 
@@ -14,42 +12,8 @@ pub(crate) enum SingboxServer {
     Endpoint(Box<SingboxEndpoint>),
 }
 
-impl SingboxServer {
-    fn tag(&self) -> &str {
-        match self {
-            Self::Outbound(outbound) => &outbound.tag,
-            Self::Endpoint(endpoint) => &endpoint.tag,
-        }
-    }
-
-    fn set_tag(&mut self, tag: String) {
-        match self {
-            Self::Outbound(outbound) => outbound.tag = tag,
-            Self::Endpoint(endpoint) => endpoint.tag = tag,
-        }
-    }
-
-    fn detour(&self) -> Option<&str> {
-        match self {
-            Self::Outbound(outbound) => outbound.detour.as_deref(),
-            Self::Endpoint(endpoint) => endpoint.detour.as_deref(),
-        }
-    }
-
-    fn set_detour(&mut self, detour: &str) {
-        match self {
-            Self::Outbound(outbound) => outbound.detour = Some(detour.to_string()),
-            Self::Endpoint(endpoint) => endpoint.detour = Some(detour.to_string()),
-        }
-    }
-
-    fn starts_with(&self, prefix: &str) -> bool {
-        self.tag().starts_with(prefix)
-    }
-}
-
 pub(super) fn gen_outbounds(config: &mut SingboxConfig, context: &CoreConfigContext) {
-    let servers = build_all_proxy_servers(context, &context.node, PROXY_TAG, true);
+    let servers = build_proxy_servers(context, &context.node, PROXY_TAG);
     prepend_servers(config, servers);
 }
 
@@ -73,4 +37,28 @@ pub(super) fn append_servers(config: &mut SingboxConfig, servers: Vec<SingboxSer
             SingboxServer::Endpoint(endpoint) => config.endpoints.push(*endpoint),
         }
     }
+}
+
+pub(super) fn build_proxy_server(
+    context: &CoreConfigContext,
+    node: &ProfileItem,
+    base_tag_name: &str,
+) -> Option<SingboxServer> {
+    if node.config_type() == ConfigType::WireGuard {
+        let mut endpoint = build_wireguard_endpoint(node)?;
+        endpoint.tag = base_tag_name.to_string();
+        return Some(SingboxServer::Endpoint(Box::new(endpoint)));
+    }
+
+    let mut outbound = build_outbound(context, node);
+    outbound.tag = base_tag_name.to_string();
+    Some(SingboxServer::Outbound(Box::new(outbound)))
+}
+
+pub(super) fn build_proxy_servers(
+    context: &CoreConfigContext,
+    node: &ProfileItem,
+    tag: &str,
+) -> Vec<SingboxServer> {
+    build_proxy_server(context, node, tag).into_iter().collect()
 }

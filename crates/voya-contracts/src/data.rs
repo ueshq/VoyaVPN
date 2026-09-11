@@ -13,7 +13,6 @@ pub struct Subscription {
     pub sort: i32,
     pub filter: Option<String>,
     pub converter_target: Option<String>,
-    pub pre_socks_port: Option<i32>,
     pub auto_update_interval_minutes: Option<i32>,
 }
 
@@ -77,7 +76,6 @@ impl Default for Subscription {
             sort: 0,
             filter: None,
             converter_target: None,
-            pre_socks_port: None,
             auto_update_interval_minutes: None,
         }
     }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{ConfigType, MultipleLoad, RuleType};
+use crate::{ConfigType, RuleType};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -28,11 +28,6 @@ pub enum ProfileProtocol {
         uuid: String,
         #[serde(default)]
         cipher: Option<String>,
-    },
-    Custom {
-        source: String,
-        #[serde(default)]
-        filter: Option<String>,
     },
     Shadowsocks {
         server: ServerEndpoint,
@@ -115,20 +110,6 @@ pub enum ProfileProtocol {
         #[serde(default)]
         udp_over_tcp: bool,
     },
-    PolicyGroup {
-        #[serde(default)]
-        child_profile_ids: Vec<String>,
-        #[serde(default)]
-        source_subscription_id: Option<String>,
-        #[serde(default)]
-        filter: Option<String>,
-        #[serde(default)]
-        strategy: MultipleLoad,
-    },
-    ProxyChain {
-        #[serde(default)]
-        child_profile_ids: Vec<String>,
-    },
 }
 
 impl Default for ProfileProtocol {
@@ -149,10 +130,6 @@ impl ProfileProtocol {
                 server,
                 uuid: String::new(),
                 cipher: None,
-            },
-            ConfigType::Custom => Self::Custom {
-                source: String::new(),
-                filter: None,
             },
             ConfigType::Shadowsocks => Self::Shadowsocks {
                 server,
@@ -215,15 +192,6 @@ impl ProfileProtocol {
                 insecure_concurrency: None,
                 udp_over_tcp: false,
             },
-            ConfigType::PolicyGroup => Self::PolicyGroup {
-                child_profile_ids: Vec::new(),
-                source_subscription_id: None,
-                filter: None,
-                strategy: MultipleLoad::LeastPing,
-            },
-            ConfigType::ProxyChain => Self::ProxyChain {
-                child_profile_ids: Vec::new(),
-            },
         }
     }
 
@@ -231,7 +199,6 @@ impl ProfileProtocol {
     pub const fn config_type(&self) -> ConfigType {
         match self {
             Self::Vmess { .. } => ConfigType::VMess,
-            Self::Custom { .. } => ConfigType::Custom,
             Self::Shadowsocks { .. } => ConfigType::Shadowsocks,
             Self::Socks { .. } => ConfigType::SOCKS,
             Self::Vless { .. } => ConfigType::VLESS,
@@ -242,8 +209,6 @@ impl ProfileProtocol {
             Self::Http { .. } => ConfigType::HTTP,
             Self::Anytls { .. } => ConfigType::Anytls,
             Self::Naive { .. } => ConfigType::Naive,
-            Self::PolicyGroup { .. } => ConfigType::PolicyGroup,
-            Self::ProxyChain { .. } => ConfigType::ProxyChain,
         }
     }
 
@@ -261,16 +226,12 @@ impl ProfileProtocol {
             | Self::Http { server, .. }
             | Self::Anytls { server, .. }
             | Self::Naive { server, .. } => Some(server),
-            Self::Custom { .. } | Self::PolicyGroup { .. } | Self::ProxyChain { .. } => None,
         }
     }
 
     #[must_use]
     pub fn searchable_address(&self) -> &str {
-        match self {
-            Self::Custom { source, .. } => source,
-            _ => self.server().map_or("", |server| server.address.as_str()),
-        }
+        self.server().map_or("", |server| server.address.as_str())
     }
 
     #[must_use]
@@ -286,7 +247,6 @@ impl ProfileProtocol {
             | Self::Anytls { password, .. }
             | Self::Naive { password, .. } => password,
             Self::WireGuard { private_key, .. } => private_key,
-            Self::Custom { .. } | Self::PolicyGroup { .. } | Self::ProxyChain { .. } => "",
         }
     }
 
@@ -298,27 +258,6 @@ impl ProfileProtocol {
             | Self::Naive { username, .. } => username,
             Self::Tuic { uuid, .. } => uuid,
             _ => "",
-        }
-    }
-
-    #[must_use]
-    pub fn child_profile_ids(&self) -> &[String] {
-        match self {
-            Self::PolicyGroup {
-                child_profile_ids, ..
-            }
-            | Self::ProxyChain { child_profile_ids } => child_profile_ids,
-            _ => &[],
-        }
-    }
-
-    pub fn replace_child_profile_ids(&mut self, profile_ids: Vec<String>) {
-        match self {
-            Self::PolicyGroup {
-                child_profile_ids, ..
-            }
-            | Self::ProxyChain { child_profile_ids } => *child_profile_ids = profile_ids,
-            _ => {}
         }
     }
 }
@@ -502,11 +441,6 @@ impl Default for ProfileItem {
 
 impl ProfileItem {
     #[must_use]
-    pub fn is_complex(&self) -> bool {
-        self.config_type().is_complex_type()
-    }
-
-    #[must_use]
     pub const fn config_type(&self) -> ConfigType {
         self.protocol.config_type()
     }
@@ -556,7 +490,6 @@ pub struct SubItem {
     pub sort: i32,
     pub filter: Option<String>,
     pub convert_target: Option<String>,
-    pub pre_socks_port: Option<i32>,
     pub auto_update_interval_minutes: Option<i32>,
 }
 
@@ -572,7 +505,6 @@ impl Default for SubItem {
             sort: 0,
             filter: None,
             convert_target: None,
-            pre_socks_port: None,
             auto_update_interval_minutes: None,
         }
     }
@@ -772,18 +704,17 @@ mod tests {
 
     #[test]
     fn profile_protocol_serializes_tagged_string_enums() {
-        let protocol = ProfileProtocol::PolicyGroup {
-            child_profile_ids: vec!["node-a".to_string()],
-            source_subscription_id: None,
-            filter: None,
-            strategy: MultipleLoad::LeastLoad,
+        let protocol = ProfileProtocol::Vmess {
+            server: ServerEndpoint {
+                address: "node.example".to_string(),
+                port: 443,
+            },
+            uuid: "uuid".to_string(),
+            cipher: None,
         };
-
-        assert_eq!(
-            serde_json::to_string(&protocol)
-                .expect("profile protocol should serialize to compact JSON"),
-            r#"{"kind":"policyGroup","childProfileIds":["node-a"],"sourceSubscriptionId":null,"filter":null,"strategy":"leastLoad"}"#
-        );
+        let json = serde_json::to_value(&protocol).expect("protocol JSON");
+        assert_eq!(json["kind"], "vmess");
+        assert_eq!(json["server"]["port"], 443);
     }
 
     #[test]

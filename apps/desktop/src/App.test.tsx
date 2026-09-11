@@ -152,13 +152,9 @@ vi.mock("@/ipc", () => ({
   appUpdateStatus: vi.fn(() => Promise.resolve({ currentVersion: "0.1.0", state: "unconfigured", message: null })),
   proxyCloseConnection: vi.fn(() => Promise.resolve({ connections: [], downloadTotal: 0, uploadTotal: 0 })),
   proxyListConnections: vi.fn(() => Promise.resolve({ connections: [], downloadTotal: 0, uploadTotal: 0 })),
-  proxyListGroups: vi.fn(() => Promise.resolve({ groups: [], trafficMode: "rule" })),
-  proxyReloadConfig: vi.fn(() => Promise.resolve(null)),
-  proxySelectNode: vi.fn(() => Promise.resolve({ groups: [], trafficMode: "rule" })),
   proxySetTrafficMode: vi.fn(),
   proxyStartMonitor: vi.fn(() => Promise.resolve({ state: "running", running: true, stale: false, message: null })),
   proxyStopMonitor: vi.fn(() => Promise.resolve({ state: "stopped", running: false, stale: true, message: null })),
-  proxyTestDelay: vi.fn(() => Promise.resolve([])),
   copyProfiles: vi.fn(),
   deleteSubscriptions: vi.fn(),
   deleteProfiles: vi.fn(),
@@ -169,7 +165,6 @@ vi.mock("@/ipc", () => ({
   getWindowChromeConfig: vi.fn(() => Promise.resolve({ titleBarLayout: "none" })),
   importProfilesFromText: vi.fn(),
   IpcCommandError: class IpcCommandError extends Error {},
-  listGroupChildCandidates: vi.fn(() => Promise.resolve([])),
   loadDnsSettings: vi.fn(() =>
     Promise.resolve({
       addCommonHosts: null,
@@ -187,6 +182,7 @@ vi.mock("@/ipc", () => ({
   ),
   listProcessCandidates: vi.fn(() => Promise.resolve([])),
   listRoutings: vi.fn(() => Promise.resolve([])),
+  listNodeGroups: vi.fn(() => Promise.resolve({ groups: [], memberships: [] })),
   listProfiles: vi.fn(() => Promise.resolve({ entries: [], undecodableProfiles: 0 })),
   listSubscriptionMetadata: vi.fn(() => Promise.resolve([])),
   listSubscriptions: vi.fn(() => Promise.resolve([])),
@@ -194,12 +190,6 @@ vi.mock("@/ipc", () => ({
   loadUiPreferences: vi.fn(() => Promise.resolve({ language: "en", theme: "system" })),
   moveRoutingRule: vi.fn(),
   moveProfile: vi.fn(),
-  previewGroupProfile: vi.fn(() =>
-    Promise.resolve({
-      validation: { childIndexIds: [], errors: [], normalizedChildItems: "", valid: true, warnings: [] },
-      singboxRoutes: [],
-    }),
-  ),
   restartCore: vi.fn(),
   runtimeStatus: vi.fn(() =>
     Promise.resolve({
@@ -212,7 +202,6 @@ vi.mock("@/ipc", () => ({
     }),
   ),
   saveProfile: vi.fn(),
-  saveGroupProfile: vi.fn(),
   saveRouting: vi.fn(),
   saveRoutingRule: vi.fn(),
   saveAppSettings: vi.fn(),
@@ -309,7 +298,6 @@ describe("App", () => {
     useShellStore.setState({
       activeTab: "profiles",
       connectionsView: "connections",
-      profilesView: "profiles",
       sidebarCollapsed: false,
     });
     useToastStore.setState({ toasts: [] });
@@ -460,39 +448,16 @@ describe("App", () => {
     expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe("stopped");
   });
 
-  it("keeps the monitor running during rapid switches between proxy runtime tabs", async () => {
+
+  it("does not start the proxy monitor on Nodes even when connected", async () => {
     vi.useFakeTimers();
     (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
-
     runtimeStoreMock.getState().coreState = connectedCore();
     renderApp();
-
-    await activateProxyGroups();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(50);
-    });
-
-    await activateTab(/Network activity/);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(100);
-    });
-
-    expect(proxyStartMonitor).toHaveBeenCalledTimes(1);
-    expect(proxyStopMonitor).not.toHaveBeenCalled();
-
-    await activateProxyGroups();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000);
-    });
-
-    expect(proxyStartMonitor).toHaveBeenCalledTimes(1);
-    expect(proxyStopMonitor).not.toHaveBeenCalled();
-    expect(runtimeStoreMock.getState().proxyMonitorStatus).toEqual({
-      message: null,
-      running: true,
-      stale: false,
-      state: "running",
-    });
+    await activateTab(/Nodes/);
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(proxyStartMonitor).not.toHaveBeenCalled();
+    expect(proxyListConnections).not.toHaveBeenCalled();
   });
 
   it("keeps the proxy monitor running while viewing the logs sub-tab", async () => {
@@ -531,7 +496,7 @@ describe("App", () => {
     runtimeStoreMock.getState().coreState = connectedCore();
     renderApp();
 
-    await activateProxyGroups();
+    await activateTab(/Network activity/);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(100);
     });
@@ -559,7 +524,7 @@ describe("App", () => {
     runtimeStoreMock.getState().coreState = connectedCore();
     renderApp();
 
-    await activateProxyGroups();
+    await activateTab(/Network activity/);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(100);
     });
@@ -584,31 +549,6 @@ describe("App", () => {
     });
   });
 
-  it("shows stale monitor status in the embedded groups panel without replacing toolbar controls", async () => {
-    const user = userEvent.setup();
-    runtimeStoreMock.getState().setProxyMonitorStopped();
-
-    renderApp();
-
-    await user.click(mainNavTab(/Nodes/));
-    await user.click(within(screen.getByRole("region", { name: "Nodes" })).getByRole("tab", { name: "Proxy Groups" }));
-
-    expect(screen.getByRole("status", { name: "Stale: Stopped" })).toBeInTheDocument();
-    // Scope toolbar-control assertions to the Proxies region. The home
-    // hero's system-proxy selector also exposes "Direct"/"Global" buttons, so
-    // scoping keeps these queries unambiguous and robust to shell layout.
-    const proxies = await screen.findByRole("region", { name: "Proxy Groups" });
-    expect(within(proxies).queryByText(/Up .*\/s/)).not.toBeInTheDocument();
-    expect(within(proxies).queryByText(/Down .*\/s/)).not.toBeInTheDocument();
-    expect(within(proxies).queryByRole("button", { name: "Rule" })).not.toBeInTheDocument();
-    expect(within(proxies).queryByRole("button", { name: "Global" })).not.toBeInTheDocument();
-    expect(within(proxies).queryByRole("button", { name: "Direct" })).not.toBeInTheDocument();
-    expect(within(proxies).getByRole("menuitem", { name: "More" })).toBeInTheDocument();
-    expect(within(proxies).getByRole("button", { name: "Test all" })).toBeInTheDocument();
-    await user.click(within(proxies).getByRole("menuitem", { name: "More" }));
-    expect(screen.getByRole("menuitem", { name: "Refresh runtime state" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Reload core configuration" })).toBeInTheDocument();
-  });
 
   it("consolidates failed updates and keeps stale data explicit after a manual refresh", async () => {
     const user = userEvent.setup();
@@ -701,11 +641,6 @@ function makeConnections(count: number): ProxyConnectionItem[] {
   return Array.from({ length: count }, (_, index) => makeConnection(index));
 }
 
-async function activateProxyGroups() {
-  await activateTab(/Nodes/);
-  const tab = within(screen.getByRole("region", { name: "Nodes" })).getByRole("tab", { name: "Proxy Groups" });
-  await act(async () => { fireEvent.mouseDown(tab); fireEvent.click(tab); await Promise.resolve(); });
-}
 
 function connectedCore(): NonNullable<RuntimeEventState["coreState"]> {
   return { state: "connected", activeProfileId: null, mainPid: 42, prePid: null, connectedDurationMs: 0, activeTunBackend: null, runningCoreType: "singBox" };

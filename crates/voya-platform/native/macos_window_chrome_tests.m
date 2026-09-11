@@ -5,7 +5,15 @@
 void voya_install_window_chrome(void *handle, double left, double top);
 
 static void finish_layout(void) {
-  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
+  // The inset is applied asynchronously on the main queue. A fixed delay can
+  // expire before AppKit services that queue, especially during a build.
+  __block BOOL finished = NO;
+  dispatch_async(dispatch_get_main_queue(), ^{ finished = YES; });
+  NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5];
+  while (!finished && deadline.timeIntervalSinceNow > 0) {
+    [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+  }
+  assert(finished && "Timed out waiting for the main queue to finish window layout");
 }
 
 static void assert_inset(NSWindow *window) {

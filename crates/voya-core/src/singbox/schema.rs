@@ -391,14 +391,6 @@ pub struct SingboxOutbound {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plugin_opts: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub outbounds: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub interrupt_exist_connections: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tolerance: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub detour: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub bind_interface: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inet4_bind_address: Option<String>,
@@ -439,10 +431,6 @@ impl Default for SingboxOutbound {
             packet_encoding: None,
             plugin: None,
             plugin_opts: None,
-            outbounds: None,
-            interrupt_exist_connections: None,
-            tolerance: None,
-            detour: None,
             bind_interface: None,
             inet4_bind_address: None,
             tls: None,
@@ -486,8 +474,6 @@ pub struct SingboxEndpoint {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub peers: Vec<SingboxPeer>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub detour: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub bind_interface: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inet4_bind_address: Option<String>,
@@ -507,7 +493,6 @@ impl Default for SingboxEndpoint {
             udp_timeout: None,
             workers: None,
             peers: Vec::new(),
-            detour: None,
             bind_interface: None,
             inet4_bind_address: None,
         }

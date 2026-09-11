@@ -80,19 +80,6 @@ impl<T: ClashHttpTransport> ProxyRuntimeManager<T> {
             .map_err(|error| TrafficModeChangeError::CloseConnections(error.into()))
     }
 
-    /// Reload errors reject the operation; a mode failure is post-commit and is
-    /// returned separately so the shell can report a warning without lying
-    /// about whether the reload succeeded.
-    pub async fn reload_config_with_mode(
-        &self,
-        access: &ClashApiAccess,
-        path: Option<&str>,
-        mode: TrafficMode,
-    ) -> Result<Option<ProxyRuntimeError>> {
-        self.reload_config(access, path).await?;
-        Ok(self.apply_saved_traffic_mode(access, mode).await.err())
-    }
-
     /// A saved preference is valid while disconnected: there is no core to call.
     /// Do not gate this on whether persistence changed; the same mode retries a
     /// previous post-commit failure against the current core.
@@ -139,8 +126,9 @@ fn mode_timeout() -> ProxyRuntimeError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, Value};
+    use serde_json::Value;
     use std::{future::Future, pin::Pin, sync::RwLock};
+    use voya_core::AppConfig;
     use voya_db::Database;
     use voya_net::clash::{ClashHttpMethod, ClashHttpRequest};
 
@@ -489,21 +477,5 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(start.elapsed(), APPLY_BUDGET);
         assert_eq!(transport.0.lock().expect("state").requests.len(), 5);
-    }
-
-    #[tokio::test]
-    async fn reload_reapplies_saved_mode_after_restoring_old_cache() {
-        let transport = ModeTransport::default();
-        let result = ProxyRuntimeManager::with_transport(transport.clone())
-            .reload_config_with_mode(&access(), None, TrafficMode::Global)
-            .await
-            .expect("reload");
-        assert!(result.is_none());
-        let state = transport.0.lock().expect("state");
-        assert_eq!(state.mode, "global");
-        assert_eq!(
-            state.requests.last().expect("last request").body,
-            Some(json!({"mode":"global"}))
-        );
     }
 }

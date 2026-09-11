@@ -9,20 +9,6 @@ export function optionalNumber(value: unknown) {
   return Number(value);
 }
 
-export function addressLabel(configType: ProfileProtocol, t: TranslationFunction) {
-  if (configType === CONFIG_TYPES.Custom) {
-    return t("panes.profiles.fields.addressConfig");
-  }
-  if (configType === CONFIG_TYPES.PolicyGroup) {
-    return t("panes.profiles.fields.addressGroupTag");
-  }
-  if (configType === CONFIG_TYPES.ProxyChain) {
-    return t("panes.profiles.fields.addressChainTag");
-  }
-
-  return t("panes.profiles.fields.address");
-}
-
 export function passwordLabel(configType: ProfileProtocol, t: TranslationFunction) {
   // TUIC is deliberately absent: it carries a UUID *and* a password, and the
   // UUID is edited through the username input (see `usernameLabel`).

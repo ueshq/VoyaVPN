@@ -10,9 +10,9 @@ use serde_json::{Map, Value};
 
 use crate::{
     generate_singbox_config, generate_singbox_config_value, AppConfig, CoreConfigContext,
-    CoreGenPlatform, CoreType, MultipleLoad, ProfileItem, ProfileProtocol, ProfileTransport,
-    RoutingItem, RuleType, RulesItem, ServerEndpoint, TlsMode, TlsSettings, BLOCK_TAG, DIRECT_TAG,
-    LOOPBACK, PROXY_TAG,
+    CoreGenPlatform, CoreType, ProfileItem, ProfileProtocol, ProfileTransport, RoutingItem,
+    RuleType, RulesItem, ServerEndpoint, TlsMode, TlsSettings, BLOCK_TAG, DIRECT_TAG, LOOPBACK,
+    PROXY_TAG,
 };
 
 #[derive(Debug, Deserialize)]
@@ -112,8 +112,6 @@ pub(crate) fn canonicalize(value: &Value) -> Value {
 pub(crate) fn generated_value_for_case(case: &GoldenCase) -> Value {
     match case.generated.as_str() {
         "singbox.outbound.vless_ws_tls_mux" => singbox_vless_ws_tls_mux_outbound(),
-        "singbox.outbound.proxy_chain_detour" => singbox_proxy_chain_detour(),
-        "singbox.outbound.policy_group_selector" => singbox_policy_group_selector(),
         "singbox.dns.fakeip_typed" => singbox_fakeip_typed_dns(),
         "singbox.route.rulesets_from_dns" => singbox_rulesets_from_dns(),
         "singbox.inbounds.tun" => singbox_tun_inbounds(),
@@ -129,7 +127,6 @@ pub(crate) fn generated_value_for_case(case: &GoldenCase) -> Value {
         "singbox.outbound.vmess_h2_tls" => singbox_vmess_h2_tls_outbound(),
         "singbox.outbound.vless_quic_tls" => singbox_vless_quic_tls_outbound(),
         "singbox.outbound.shadowsocks_plugins" => singbox_shadowsocks_plugins_outbounds(),
-        "singbox.outbound.policy_group_strategies" => singbox_policy_group_strategies(),
         "singbox.route.bind_interface_windows" => singbox_bind_interface_windows_outbounds(),
         generated => panic!(
             "golden case `{}` references unknown generated selector `{generated}`",
@@ -430,16 +427,6 @@ fn singbox_vless_quic_tls_context() -> CoreConfigContext {
     singbox_context(AppConfig::default(), node)
 }
 
-/// The five `MultipleLoad` strategies, four of which collapse to a plain
-/// urltest group; only `Fallback` adds a `tolerance`.
-const POLICY_GROUP_STRATEGIES: &[(&str, MultipleLoad)] = &[
-    ("leastPing", MultipleLoad::LeastPing),
-    ("fallback", MultipleLoad::Fallback),
-    ("random", MultipleLoad::Random),
-    ("roundRobin", MultipleLoad::RoundRobin),
-    ("leastLoad", MultipleLoad::LeastLoad),
-];
-
 fn singbox_shadowsocks_plugin_contexts() -> [CoreConfigContext; 2] {
     // The SIP003 option string is built once for both the share link and the
     // generated config (`crate::protocol_common::shadowsocks_plugin_for`), so
@@ -492,45 +479,6 @@ fn singbox_shadowsocks_plugins_outbounds() -> Value {
         "v2rayPlugin": proxy_outbound_of(websocket),
     })
 }
-
-fn singbox_policy_group_strategy_context(strategy: MultipleLoad) -> CoreConfigContext {
-    let n1 = singbox_socks_node("n1", "node-1");
-    let n2 = singbox_socks_node("n2", "node-2");
-    let group = ProfileItem {
-        index_id: "group".to_string(),
-        remarks: "strategy".to_string(),
-        protocol: ProfileProtocol::PolicyGroup {
-            child_profile_ids: vec!["n1".to_string(), "n2".to_string()],
-            source_subscription_id: None,
-            filter: None,
-            strategy,
-        },
-        ..ProfileItem::default()
-    };
-    let mut context = singbox_context(AppConfig::default(), group);
-    context.all_proxies_map.insert(n1.index_id.clone(), n1);
-    context.all_proxies_map.insert(n2.index_id.clone(), n2);
-    context
-}
-
-fn singbox_policy_group_strategies() -> Value {
-    let mut strategies = Map::new();
-    for (label, strategy) in POLICY_GROUP_STRATEGIES {
-        let generated = generate_singbox_config(&singbox_policy_group_strategy_context(*strategy))
-            .expect("policy group config should generate");
-        let groups = generated
-            .outbounds
-            .iter()
-            .filter(|outbound| matches!(outbound.r#type.as_str(), "selector" | "urltest"))
-            .collect::<Vec<_>>();
-        strategies.insert(
-            (*label).to_string(),
-            serde_json::to_value(groups).expect("policy group outbounds serialize"),
-        );
-    }
-    Value::Object(strategies)
-}
-
 fn singbox_bind_interface_windows_context() -> CoreConfigContext {
     // Windows applies `bind_interface` with TUN off; every other platform needs
     // TUN for it to take effect (`singbox::support::apply_outbound_bind_interface`).
@@ -574,48 +522,6 @@ fn proxy_outbound_of(context: CoreConfigContext) -> Value {
     )
     .expect("sing-box outbound serializes")
 }
-
-fn singbox_proxy_chain_detour() -> Value {
-    let n1 = singbox_socks_node("n1", "node-1");
-    let n2 = singbox_socks_node("n2", "node-2");
-    let chain = ProfileItem {
-        index_id: "chain".to_string(),
-        remarks: "chain".to_string(),
-        protocol: ProfileProtocol::ProxyChain {
-            child_profile_ids: vec!["n1".to_string(), "n2".to_string()],
-        },
-        ..ProfileItem::default()
-    };
-    let mut context = singbox_context(AppConfig::default(), chain);
-    context.all_proxies_map.insert(n1.index_id.clone(), n1);
-    context.all_proxies_map.insert(n2.index_id.clone(), n2);
-
-    let generated = generate_singbox_config(&context).expect("sing-box config should generate");
-    serde_json::to_value(generated.outbounds).expect("sing-box outbounds serialize")
-}
-
-fn singbox_policy_group_selector() -> Value {
-    let n1 = singbox_socks_node("n1", "node-1");
-    let n2 = singbox_socks_node("n2", "node-2");
-    let group = ProfileItem {
-        index_id: "group".to_string(),
-        remarks: "fallback".to_string(),
-        protocol: ProfileProtocol::PolicyGroup {
-            child_profile_ids: vec!["n1".to_string(), "n1".to_string(), "n2".to_string()],
-            source_subscription_id: None,
-            filter: None,
-            strategy: MultipleLoad::Fallback,
-        },
-        ..ProfileItem::default()
-    };
-    let mut context = singbox_context(AppConfig::default(), group);
-    context.all_proxies_map.insert(n1.index_id.clone(), n1);
-    context.all_proxies_map.insert(n2.index_id.clone(), n2);
-
-    let generated = generate_singbox_config(&context).expect("sing-box config should generate");
-    serde_json::to_value(generated.outbounds).expect("sing-box outbounds serialize")
-}
-
 fn singbox_fakeip_typed_dns() -> Value {
     let (dns_context, _) = singbox_routing_dns_contexts();
     serde_json::to_value(
@@ -1046,13 +952,6 @@ fn acceptance_configs_for_case(case: &GoldenCase) -> Vec<Value> {
                     .expect("Shadowsocks plugin acceptance config should generate")
             })
             .collect(),
-        "singbox.outbound.policy_group_strategies" => POLICY_GROUP_STRATEGIES
-            .iter()
-            .map(|(_, strategy)| {
-                generate_singbox_config_value(&singbox_policy_group_strategy_context(*strategy))
-                    .expect("policy group acceptance config should generate")
-            })
-            .collect(),
         "singbox.route.bind_interface_windows" => {
             vec![
                 generate_singbox_config_value(&singbox_bind_interface_windows_context())
@@ -1141,4 +1040,27 @@ fn unique_suffix() -> u128 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or(0)
+}
+
+#[test]
+fn generated_configs_only_have_ordinary_nodes_and_platform_forwarding() {
+    let mut checked = 0;
+    for case in load_matrix().cases {
+        for config in acceptance_configs_for_case(&case) {
+            for outbound in config["outbounds"].as_array().expect("outbounds") {
+                assert!(
+                    !matches!(outbound["type"].as_str(), Some("selector" | "urltest")),
+                    "{}: {outbound}",
+                    case.id
+                );
+                assert!(
+                    outbound.get("detour").is_none(),
+                    "{}: user chain {outbound}",
+                    case.id
+                );
+            }
+            checked += 1;
+        }
+    }
+    assert!(checked > 0);
 }

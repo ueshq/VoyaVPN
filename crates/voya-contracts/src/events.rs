@@ -21,8 +21,8 @@ use crate::{LogLineBody, NoticeCode, ServerStatItem};
 pub enum InvalidationScope {
     /// `["profiles"]` — the profile list, every filter slice of it.
     Profiles,
-    /// `["group-child-candidates"]` — the policy-group / chain child picker.
-    GroupChildCandidates,
+    /// `["node-groups"]` — user-owned folders and node memberships.
+    NodeGroups,
     /// `["subscriptions"]`
     Subscriptions,
     /// `["subscription-metadata"]`
@@ -37,8 +37,6 @@ pub enum InvalidationScope {
     UiPreferences,
     /// `["connection-mode"]` — TUN / system-proxy mode and its availability.
     ConnectionMode,
-    /// `["proxy-groups"]`
-    ProxyGroups,
     /// `["proxy-connections"]`
     ProxyConnections,
 }
@@ -118,7 +116,6 @@ pub struct AppNotice {
 #[serde(rename_all = "camelCase")]
 pub enum ShellTabTarget {
     Profiles,
-    ProxyGroups,
     ProxyConnections,
     Logs,
 }

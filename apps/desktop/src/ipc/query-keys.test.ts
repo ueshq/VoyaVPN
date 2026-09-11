@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import type { InvalidationScope } from "@/ipc/bindings";
 import {
-  groupChildCandidatesQueryKey,
   invalidationQueryKey,
   profileShareQrQueryKey,
   profilesQueryKey,
@@ -47,7 +46,6 @@ const productionSources = Object.entries(sources).filter(
 
 /** Parameterised keys, mapped back to the root a scope can invalidate. */
 const keyFactories = {
-  groupChildCandidatesQueryKey: () => groupChildCandidatesQueryKey(null),
   profileShareQrQueryKey: () => profileShareQrQueryKey("share-link"),
   profilesQueryKey: () => profilesQueryKey(""),
 };
@@ -164,10 +162,6 @@ describe("query key registry", () => {
   it("builds every parameterised key on top of its registry root", () => {
     expect(profilesQueryKey("us")[0]).toBe(queryKeys.profiles[0]);
     expect(profilesQueryKey("us")[1]).toEqual({ filter: "us" });
-    expect(groupChildCandidatesQueryKey("profile-1")).toEqual([
-      queryKeys.groupChildCandidates[0],
-      "profile-1",
-    ]);
     expect(profileShareQrQueryKey("vmess://x")).toEqual([queryKeys.profileShareQr[0], "vmess://x"]);
   });
 

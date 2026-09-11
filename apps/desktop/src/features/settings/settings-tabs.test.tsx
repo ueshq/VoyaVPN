@@ -98,7 +98,6 @@ describe("semantic settings tabs", () => {
 
     expect(screen.getByLabelText("Speed Ping Test URL")).toHaveValue("https://new.example.test");
     expect(container.querySelector("#rt-speedtest-timeout")).toHaveValue("25");
-    expect(screen.getByLabelText("Proxy group latency test concurrency")).toHaveValue("25");
     expect(screen.queryByLabelText("Speed Test URL")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("UDP Test Url")).not.toBeInTheDocument();
   });

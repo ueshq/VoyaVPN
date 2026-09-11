@@ -15,9 +15,8 @@ use thiserror::Error;
 use tokio::time;
 pub use voya_contracts::{SpeedtestOutcome, SpeedtestResult, SpeedtestRunResult, SpeedtestStatus};
 use voya_core::{
-    generate_singbox_speedtest_config_json, AppConfig, ConfigType, CoreConfigContextBuilder,
-    CoreType, InboundProtocol, ProfileItem, SpeedTestItem, SpeedtestConfigEntry,
-    DEFAULT_LOCAL_PORT,
+    generate_singbox_speedtest_config_json, AppConfig, CoreConfigContextBuilder, CoreType,
+    InboundProtocol, ProfileItem, SpeedTestItem, SpeedtestConfigEntry, DEFAULT_LOCAL_PORT,
 };
 use voya_db::{Database, DbError};
 use voya_net::probe::{tcp_port_is_open, NetworkProbeError, SocksHttpProbe};
@@ -244,10 +243,7 @@ async fn select_test_items(
     profiles
         .into_iter()
         .enumerate()
-        .filter(|(_, profile)| {
-            profile.config_type() != ConfigType::Custom
-                && (profile.config_type().is_complex_type() || profile.port() > 0)
-        })
+        .filter(|(_, profile)| profile.port() > 0)
         .map(|(queue_num, profile)| {
             let socks_port_i32 =
                 base_port.saturating_add(i32::try_from(queue_num).unwrap_or(i32::MAX));

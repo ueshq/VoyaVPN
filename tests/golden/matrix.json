@@ -21,41 +21,6 @@
       "volatile_fields": []
     },
     {
-      "id": "singbox-proxy-chain-detour",
-      "core": "sing-box",
-      "fixture": "singbox/outbounds/proxy_chain_detour.json",
-      "generated": "singbox.outbound.proxy_chain_detour",
-      "summary": "sing-box ProxyChain expansion with detour linking from the proxy entrypoint to the chain hop.",
-      "hotspots": [
-        "proxy-chain",
-        "detour"
-      ],
-      "reference_paths": [
-        "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs",
-        "ServiceLib.Tests/CoreConfig/Singbox/CoreConfigSingboxServiceTests.cs"
-      ],
-      "core_acceptance": false,
-      "volatile_fields": []
-    },
-    {
-      "id": "singbox-policy-group-selector",
-      "core": "sing-box",
-      "fixture": "singbox/outbounds/policy_group_selector.json",
-      "generated": "singbox.outbound.policy_group_selector",
-      "summary": "sing-box selector/urltest policy group with child dedupe and selector ordering.",
-      "hotspots": [
-        "policy-group",
-        "selector",
-        "urltest"
-      ],
-      "reference_paths": [
-        "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs",
-        "ServiceLib.Tests/CoreConfig/Singbox/CoreConfigSingboxServiceTests.cs"
-      ],
-      "core_acceptance": false,
-      "volatile_fields": []
-    },
-    {
       "id": "singbox-outbound-tuic-tls",
       "core": "sing-box",
       "fixture": "singbox/outbounds/tuic_tls.json",
@@ -314,23 +279,6 @@
       "reference_paths": [
         "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs",
         "ServiceLib/Handler/Fmt/ShadowsocksFmt.cs"
-      ],
-      "core_acceptance": true
-    },
-    {
-      "id": "singbox-outbound-policy-group-strategies",
-      "core": "sing-box",
-      "fixture": "singbox/outbounds/policy_group_strategies.json",
-      "generated": "singbox.outbound.policy_group_strategies",
-      "summary": "sing-box policy-group output for all five MultipleLoad strategies: only Fallback emits a urltest tolerance, the other four collapse to a plain urltest.",
-      "hotspots": [
-        "policy-group",
-        "selector",
-        "urltest"
-      ],
-      "reference_paths": [
-        "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs",
-        "ServiceLib.Tests/CoreConfig/Singbox/CoreConfigSingboxServiceTests.cs"
       ],
       "core_acceptance": true
     },

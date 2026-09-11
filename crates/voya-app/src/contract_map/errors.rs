@@ -36,7 +36,6 @@ use crate::{
     dns::DnsManagerError,
     elevation::ElevationError,
     exports::ExportManagerError,
-    groups::GroupManagerError,
     input_safety::InputSafetyError,
     profiles::ProfileManagerError,
     proxy_runtime::{ProxyRuntimeError, TrafficModeChangeError},
@@ -170,29 +169,6 @@ impl From<ProfileManagerError> for AppError {
     }
 }
 
-impl From<GroupManagerError> for AppError {
-    fn from(error: GroupManagerError) -> Self {
-        match error {
-            GroupManagerError::Database(source) => database_error(&source, Sub::Group),
-            // A nested profile failure keeps the profile subsystem: the group
-            // editor lists profiles, and the row is what actually failed.
-            GroupManagerError::Profile(source) => Self::from(source),
-            GroupManagerError::NotGroupProfile => {
-                invalid(Sub::Group, "protocol", &GroupManagerError::NotGroupProfile)
-            }
-            GroupManagerError::Validation(errors) => Self::validation(
-                Sub::Group,
-                "group validation failed".to_string(),
-                errors
-                    .into_iter()
-                    .map(|message| validation_issue_to_contract("childProfileIds", message))
-                    .collect(),
-            ),
-            GroupManagerError::SingboxConfig(source) => internal(Sub::Group, &source),
-        }
-    }
-}
-
 impl From<SubscriptionManagerError> for AppError {
     fn from(error: SubscriptionManagerError) -> Self {
         match error {
@@ -200,7 +176,6 @@ impl From<SubscriptionManagerError> for AppError {
                 database_error(&source, Sub::Subscription)
             }
             SubscriptionManagerError::Profile(source) => Self::from(source),
-            SubscriptionManagerError::Group(source) => Self::from(*source),
             SubscriptionManagerError::Download(source) => {
                 download_error(&source, Sub::Subscription)
             }
@@ -308,21 +283,6 @@ impl From<ProxyRuntimeError> for AppError {
     fn from(error: ProxyRuntimeError) -> Self {
         match error {
             ProxyRuntimeError::Api(ref source) => network(Sub::ProxyRuntime, source),
-            ProxyRuntimeError::GroupNotFound(ref name) => not_found(
-                Sub::ProxyRuntime,
-                AppErrorEntity::ProxyGroup,
-                Some(name.clone()),
-                &error,
-            ),
-            ProxyRuntimeError::NodeNotFound(ref name) => not_found(
-                Sub::ProxyRuntime,
-                AppErrorEntity::ProxyNode,
-                Some(name.clone()),
-                &error,
-            ),
-            ProxyRuntimeError::GroupNotSelector(_) => {
-                invalid(Sub::ProxyRuntime, "groupName", &error)
-            }
             ProxyRuntimeError::InvalidTrafficMode(_) => invalid(Sub::ProxyRuntime, "mode", &error),
             ProxyRuntimeError::MonitorLockPoisoned
             | ProxyRuntimeError::MonitorRuntimeUnavailable
@@ -594,6 +554,29 @@ fn io(subsystem: AppErrorSubsystem, error: &impl std::fmt::Display) -> AppError 
 
 fn internal(subsystem: AppErrorSubsystem, error: &impl std::fmt::Display) -> AppError {
     AppError::internal(subsystem, error.to_string())
+}
+
+impl From<crate::node_groups::NodeGroupError> for AppError {
+    fn from(error: crate::node_groups::NodeGroupError) -> Self {
+        match error {
+            crate::node_groups::NodeGroupError::Database(source) => {
+                database_error(&source, Sub::Group)
+            }
+            crate::node_groups::NodeGroupError::GroupNotFound(ref id) => not_found(
+                Sub::Group,
+                AppErrorEntity::NodeGroup,
+                Some(id.clone()),
+                &error,
+            ),
+            crate::node_groups::NodeGroupError::ProfileNotFound(ref id) => not_found(
+                Sub::Group,
+                AppErrorEntity::Profile,
+                Some(id.clone()),
+                &error,
+            ),
+            _ => invalid(Sub::Group, "nodeGroup", &error),
+        }
+    }
 }
 
 #[cfg(test)]

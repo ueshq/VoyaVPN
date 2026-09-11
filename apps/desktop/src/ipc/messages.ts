@@ -97,11 +97,6 @@ export const VALIDATION_KEYS: Record<ValidationCode["code"], TranslationKey> = {
   dnsAddressPort: "validation.dnsAddressPort",
   dnsExpectedIps: "validation.expectedIps",
   dnsHostsLine: "validation.dnsHostsLine",
-  groupChildNotFound: "validation.groupChildNotFound",
-  groupCycle: "validation.groupCycle",
-  groupCyclePath: "validation.groupCyclePath",
-  groupDuplicateChildIgnored: "validation.groupDuplicateChildIgnored",
-  groupWithoutValidChild: "validation.groupWithoutValidChild",
   hysteriaHopIntervalTooShort: "validation.hysteriaHopIntervalTooShort",
   invalidAddress: "validation.invalidAddress",
   invalidFinalMask: "validation.invalidFinalMask",
@@ -110,12 +105,7 @@ export const VALIDATION_KEYS: Record<ValidationCode["code"], TranslationKey> = {
   invalidPort: "validation.invalidPort",
   invalidRealityPublicKey: "validation.invalidRealityPublicKey",
   invalidShadowsocksMethod: "validation.invalidShadowsocksMethod",
-  invalidSubscriptionFilter: "validation.invalidSubscriptionFilter",
   negativeHysteriaBandwidth: "validation.negativeHysteriaBandwidth",
-  notAGroupProfile: "validation.notAGroupProfile",
-  policyGroupWithoutValidChildren: "validation.policyGroupWithoutValidChildren",
-  proxyChainSingleHop: "validation.proxyChainSingleHop",
-  proxyChainWithoutValidChildren: "validation.proxyChainWithoutValidChildren",
   routingRuleOutboundNotFound: "validation.routingRuleOutboundNotFound",
   routingRuleWithoutOutbound: "validation.routingRuleWithoutOutbound",
   textControlCharacters: "validation.textControlCharacters",
@@ -133,7 +123,6 @@ export const VALIDATION_KEYS: Record<ValidationCode["code"], TranslationKey> = {
 };
 
 export const VALIDATION_SCOPE_KEYS: Record<ValidationScope["kind"], TranslationKey> = {
-  groupChild: "validation.scope.groupChild",
   routingRuleOutbound: "validation.scope.routingRuleOutbound",
 };
 
@@ -187,7 +176,6 @@ export function validationText(t: TranslationFunction, issue: ValidationIssue) {
       ? issue.code.message
       : t(VALIDATION_KEYS[issue.code.code], {
           ...issue.code,
-          ...("path" in issue.code ? { path: issue.code.path.join(" → ") } : {}),
         });
   if (issue.scope.length === 0) {
     return message;

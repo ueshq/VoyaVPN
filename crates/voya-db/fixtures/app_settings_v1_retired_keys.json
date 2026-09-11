@@ -7,8 +7,7 @@
   "behavior": {
     "autostart": false,
     "statistics": false,
-    "realtimeSpeed": false,
-    "autoCreateSubscriptionGroup": null
+    "realtimeSpeed": false
   },
   "core": {
     "logEnabled": false,
@@ -83,7 +82,6 @@
     "timeoutSeconds": 10,
     "downloadUrl": "https://cachefly.cachefly.net/50mb.test",
     "latencyUrl": "https://www.google.com/generate_204",
-    "mixedConcurrency": 5,
     "ipLookupUrl": "",
     "udpTarget": "ntp:pool.ntp.org",
     "pageSize": 23,
@@ -105,8 +103,7 @@
     "hopIntervalSeconds": 30
   },
   "proxy": {
-    "trafficMode": "rule",
-    "nodeSorting": 0
+    "trafficMode": "rule"
   },
   "shortcuts": {
     "showWindowShortcut": null

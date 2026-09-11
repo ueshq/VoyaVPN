@@ -11,3 +11,4 @@ These ADRs are baseline contracts for the VoyaVPN full rewrite, based on the ini
 - [0005 - Native Transparent Tunnel Backends](0005-native-transparent-tunnel-backends.md)
 - [0006 - Priority Proxy Domain List](0006-priority-proxy-domain-list.md)
 - [0007 - macOS Manual System Proxy and Tunnel Ownership](0007-macos-manual-system-proxy.md)
+- [0008 - Manual Node Groups](0008-manual-node-groups.md)

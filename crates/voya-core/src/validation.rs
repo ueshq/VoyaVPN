@@ -1,11 +1,6 @@
 //! Validator findings as codes, not sentences.
 //!
-//! `validate_node`, the group traversal in [`crate::context`] and the group
-//! builder in [`crate::groups`] all report problems that end up on screen: the
-//! group builder renders them directly, and `connect` carries them out through
-//! `RuntimeError::Validation`. They used to be `String`s built with `format!`,
-//! which meant users of non-English locales read them in English and
-//! `pnpm check:i18n` — which only sees frontend source — could not tell.
+//! Node and routing validation findings are carried to the UI as localized codes.
 //!
 //! These types are deliberately voya-core's own rather than the contract ones:
 //! this crate has no `voya-contracts` dependency, so the mapping lives in
@@ -33,60 +28,18 @@ pub enum ValidationCode {
     InvalidShadowsocksMethod,
     InvalidRealityPublicKey,
     InvalidFinalMask,
-    UnsupportedNetwork {
-        network: String,
-    },
-    UnsupportedProtocol {
-        protocol: String,
-    },
-    UnsupportedProtocolNetwork {
-        protocol: String,
-        network: String,
-    },
-    UnsupportedShadowsocksNetwork {
-        network: String,
-    },
-    // ---- policy groups and proxy chains ----
-    NotAGroupProfile,
-    GroupCycle {
-        group: String,
-        child: String,
-    },
-    /// The cycle the group builder found, which knows the whole path.
-    GroupCyclePath {
-        path: Vec<String>,
-    },
-    GroupWithoutValidChild {
-        group: String,
-    },
-    PolicyGroupWithoutValidChildren,
-    ProxyChainWithoutValidChildren,
-    ProxyChainSingleHop,
-    GroupChildNotFound {
-        profile_id: String,
-    },
-    GroupDuplicateChildIgnored {
-        profile_id: String,
-    },
-    InvalidSubscriptionFilter {
-        pattern: String,
-    },
+    UnsupportedNetwork { network: String },
+    UnsupportedProtocol { protocol: String },
+    UnsupportedProtocolNetwork { protocol: String, network: String },
+    UnsupportedShadowsocksNetwork { network: String },
     // ---- routing rules ----
-    RoutingRuleWithoutOutbound {
-        rule: String,
-    },
-    RoutingRuleOutboundNotFound {
-        rule: String,
-        outbound: String,
-    },
+    RoutingRuleWithoutOutbound { rule: String },
+    RoutingRuleOutboundNotFound { rule: String, outbound: String },
 }
 
 /// One hop of the path a validator walked to reach a finding.
 ///
-/// The traversal used to glue `"group child A / B: "` onto the front of the
-/// child's own message. That prefix is the reason a child's finding could not
-/// be translated: it was prose wrapped around prose. Now the hops travel
-/// alongside the code and the renderer assembles the breadcrumb.
+/// Routing findings identify the rule and the node it targets.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(
     tag = "kind",
@@ -94,7 +47,6 @@ pub enum ValidationCode {
     rename_all_fields = "camelCase"
 )]
 pub enum ValidationScope {
-    GroupChild { group: String, child: String },
     RoutingRuleOutbound { rule: String, outbound: String },
 }
 
@@ -137,25 +89,25 @@ mod tests {
     #[test]
     fn scopes_nest_outermost_first() {
         let message = ValidationMessage::new(ValidationCode::InvalidPort)
-            .within(ValidationScope::GroupChild {
-                group: "Inner".to_string(),
-                child: "Leaf".to_string(),
+            .within(ValidationScope::RoutingRuleOutbound {
+                rule: "Inner".to_string(),
+                outbound: "Leaf".to_string(),
             })
-            .within(ValidationScope::GroupChild {
-                group: "Outer".to_string(),
-                child: "Inner".to_string(),
+            .within(ValidationScope::RoutingRuleOutbound {
+                rule: "Outer".to_string(),
+                outbound: "Inner".to_string(),
             });
 
         assert_eq!(
             message.scope,
             vec![
-                ValidationScope::GroupChild {
-                    group: "Outer".to_string(),
-                    child: "Inner".to_string(),
+                ValidationScope::RoutingRuleOutbound {
+                    rule: "Outer".to_string(),
+                    outbound: "Inner".to_string(),
                 },
-                ValidationScope::GroupChild {
-                    group: "Inner".to_string(),
-                    child: "Leaf".to_string(),
+                ValidationScope::RoutingRuleOutbound {
+                    rule: "Inner".to_string(),
+                    outbound: "Leaf".to_string(),
                 },
             ]
         );

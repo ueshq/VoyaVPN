@@ -68,6 +68,10 @@ pub async fn delete_profiles<R: tauri::Runtime>(
     })
     .await?;
     emit_profile_invalidation(&app, "profiles-deleted", deleted.config_changed);
+    core_flow(&app, &state)
+        .disconnect_removed_profile(&current_config(&state))
+        .await
+        .map_err(AppError::from)?;
 
     Ok(u32::try_from(deleted.value).unwrap_or(u32::MAX))
 }

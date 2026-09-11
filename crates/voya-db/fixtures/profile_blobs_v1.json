@@ -13,57 +13,76 @@
   "protocols": {
     "vmess": {
       "kind": "vmess",
-      "server": { "address": "vmess.example.com", "port": 443 },
+      "server": {
+        "address": "vmess.example.com",
+        "port": 443
+      },
       "uuid": "11111111-1111-1111-1111-111111111111",
       "cipher": "auto"
     },
-    "custom": {
-      "kind": "custom",
-      "source": "/configs/custom.json",
-      "filter": "keep-me"
-    },
     "shadowsocks": {
       "kind": "shadowsocks",
-      "server": { "address": "shadowsocks.example.com", "port": 8388 },
+      "server": {
+        "address": "shadowsocks.example.com",
+        "port": 8388
+      },
       "password": "shadowsocks-password",
       "method": "2022-blake3-aes-256-gcm",
       "udpOverTcp": true
     },
     "socks": {
       "kind": "socks",
-      "server": { "address": "socks.example.com", "port": 1080 },
+      "server": {
+        "address": "socks.example.com",
+        "port": 1080
+      },
       "username": "socks-user",
       "password": "socks-password"
     },
     "vless": {
       "kind": "vless",
-      "server": { "address": "vless.example.com", "port": 443 },
+      "server": {
+        "address": "vless.example.com",
+        "port": 443
+      },
       "uuid": "22222222-2222-2222-2222-222222222222",
       "flow": "xtls-rprx-vision",
       "encryption": "none"
     },
     "trojan": {
       "kind": "trojan",
-      "server": { "address": "trojan.example.com", "port": 443 },
+      "server": {
+        "address": "trojan.example.com",
+        "port": 443
+      },
       "password": "trojan-password"
     },
     "hysteria2": {
       "kind": "hysteria2",
-      "server": { "address": "hysteria2.example.com", "port": 443 },
+      "server": {
+        "address": "hysteria2.example.com",
+        "port": 443
+      },
       "password": "hysteria2-password",
       "portHops": "20000-30000",
       "obfuscationPassword": "salamander"
     },
     "tuic": {
       "kind": "tuic",
-      "server": { "address": "tuic.example.com", "port": 443 },
+      "server": {
+        "address": "tuic.example.com",
+        "port": 443
+      },
       "uuid": "33333333-3333-3333-3333-333333333333",
       "password": "tuic-password",
       "congestionControl": "bbr"
     },
     "wireGuard": {
       "kind": "wireGuard",
-      "server": { "address": "wireguard.example.com", "port": 51820 },
+      "server": {
+        "address": "wireguard.example.com",
+        "port": 51820
+      },
       "privateKey": "wireguard-private-key",
       "peerPublicKey": "wireguard-peer-public-key",
       "presharedKey": "wireguard-preshared-key",
@@ -74,41 +93,53 @@
     },
     "http": {
       "kind": "http",
-      "server": { "address": "http.example.com", "port": 8080 },
+      "server": {
+        "address": "http.example.com",
+        "port": 8080
+      },
       "username": "http-user",
       "password": "http-password"
     },
     "anytls": {
       "kind": "anytls",
-      "server": { "address": "anytls.example.com", "port": 443 },
+      "server": {
+        "address": "anytls.example.com",
+        "port": 443
+      },
       "password": "anytls-password"
     },
     "naive": {
       "kind": "naive",
-      "server": { "address": "naive.example.com", "port": 443 },
+      "server": {
+        "address": "naive.example.com",
+        "port": 443
+      },
       "username": "naive-user",
       "password": "naive-password",
       "quic": true,
       "congestionControl": "cubic",
       "insecureConcurrency": 4,
       "udpOverTcp": true
-    },
-    "policyGroup": {
-      "kind": "policyGroup",
-      "childProfileIds": ["profile-a", "profile-b"],
-      "sourceSubscriptionId": "subscription-1",
-      "filter": "HK",
-      "strategy": "leastPing"
-    },
-    "proxyChain": {
-      "kind": "proxyChain",
-      "childProfileIds": ["profile-a", "profile-b"]
     }
   },
   "transports": {
-    "tcp": { "kind": "tcp", "header": "http", "host": "tcp.example.com", "path": "/tcp" },
-    "kcp": { "kind": "kcp", "header": "none", "seed": "kcp-seed", "mtu": 1350 },
-    "websocket": { "kind": "websocket", "host": "websocket.example.com", "path": "/websocket" },
+    "tcp": {
+      "kind": "tcp",
+      "header": "http",
+      "host": "tcp.example.com",
+      "path": "/tcp"
+    },
+    "kcp": {
+      "kind": "kcp",
+      "header": "none",
+      "seed": "kcp-seed",
+      "mtu": 1350
+    },
+    "websocket": {
+      "kind": "websocket",
+      "host": "websocket.example.com",
+      "path": "/websocket"
+    },
     "httpUpgrade": {
       "kind": "httpUpgrade",
       "host": "httpupgrade.example.com",
@@ -121,26 +152,41 @@
       "mode": "packet-up",
       "extra": "{}"
     },
-    "http2": { "kind": "http2", "host": "http2.example.com", "path": "/http2" },
+    "http2": {
+      "kind": "http2",
+      "host": "http2.example.com",
+      "path": "/http2"
+    },
     "grpc": {
       "kind": "grpc",
       "authority": "grpc.example.com",
       "serviceName": "GunService",
       "mode": "gun"
     },
-    "quic": { "kind": "quic", "host": "quic.example.com", "path": "/quic" }
+    "quic": {
+      "kind": "quic",
+      "host": "quic.example.com",
+      "path": "/quic"
+    }
   },
   "tls": {
     "mode": "reality",
     "serverName": "tls.example.com",
-    "alpn": ["h2", "http/1.1"],
+    "alpn": [
+      "h2",
+      "http/1.1"
+    ],
     "realityPublicKey": "reality-public-key",
     "realityShortId": "0123456789abcdef",
     "realitySpiderX": "/spider",
     "mldsa65Verify": "mldsa65-verify",
     "certificatePem": "-----BEGIN CERTIFICATE-----",
-    "certificateSha256": ["aabbcc"],
-    "echConfig": ["ech-config"],
+    "certificateSha256": [
+      "aabbcc"
+    ],
+    "echConfig": [
+      "ech-config"
+    ],
     "finalMask": "final-mask"
   },
   "rules": [
@@ -149,16 +195,29 @@
       "type": "field",
       "port": "53",
       "network": "udp",
-      "inboundTag": ["socks-in"],
+      "inboundTag": [
+        "socks-in"
+      ],
       "outboundTag": "direct",
-      "ip": ["1.1.1.1"],
-      "domain": ["full:dns.example.com"],
-      "protocol": ["dns"],
-      "process": ["dig"],
+      "ip": [
+        "1.1.1.1"
+      ],
+      "domain": [
+        "full:dns.example.com"
+      ],
+      "protocol": [
+        "dns"
+      ],
+      "process": [
+        "dig"
+      ],
       "enabled": true,
       "remarks": "DNS rule",
       "ruleType": "dns"
     },
-    { "id": "rule-empty", "enabled": false }
+    {
+      "id": "rule-empty",
+      "enabled": false
+    }
   ]
 }

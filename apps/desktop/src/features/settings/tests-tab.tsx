@@ -17,7 +17,6 @@ export function TestsTab({ controller }: { controller: AppSettingsFormController
     <div className="grid gap-4">
       <SettingsGroup title={t("settings.sections.testExecution")}>
         <NumberField field="speedTest.timeoutSeconds" id="rt-speedtest-timeout" label={t("settings.tests.timeout")} onChange={(timeoutSeconds) => patchTests({ timeoutSeconds: timeoutSeconds ?? 0 })} value={settings.speedTest.timeoutSeconds} />
-        <NumberField field="speedTest.proxyDelayConcurrency" id="rt-speedtest-concurrency" label={t("settings.tests.proxyDelayConcurrency")} onChange={(proxyDelayConcurrency) => patchTests({ proxyDelayConcurrency: proxyDelayConcurrency ?? 0 })} value={settings.speedTest.proxyDelayConcurrency} />
         <NumberField nullable field="speedTest.pageSize" id="rt-speedtest-page-size" label={t("settings.fields.speedTestPageSize")} onChange={(pageSize) => patchTests({ pageSize })} value={settings.speedTest.pageSize} />
         <NumberField nullable field="speedTest.delayIntervalSeconds" id="rt-speedtest-delay-interval" label={t("settings.fields.speedTestDelayInterval")} onChange={(delayIntervalSeconds) => patchTests({ delayIntervalSeconds })} value={settings.speedTest.delayIntervalSeconds} />
       </SettingsGroup>

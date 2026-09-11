@@ -183,6 +183,15 @@ impl<'db> ProfileManager<'db> {
                 .profiles()
                 .upsert_with_profile_ex(&profile, &profile_ex)
                 .await?;
+            let group_id = self
+                .database
+                .node_groups()
+                .group_for_profile(&source.index_id)
+                .await?;
+            self.database
+                .node_groups()
+                .assign(&profile.index_id, group_id.as_deref())
+                .await?;
             let server_stat = self
                 .database
                 .server_stats()
@@ -242,49 +251,62 @@ impl<'db> ProfileManager<'db> {
         let items = self
             .database
             .profiles()
-            .list_with_profile_ex(subscription_id)
+            .list_with_profile_ex(None)
             .await?
             .items;
-        let Some(index) = items
-            .iter()
-            .position(|(profile, _)| profile.index_id == index_id)
-        else {
+        if !items.iter().any(|(p, _)| p.index_id == index_id) {
             return Err(ProfileManagerError::ProfileNotFound(index_id.to_string()));
-        };
-
-        self.renumber_sort(&items).await?;
-
-        let count = items.len();
-        let next_sort = match action {
-            MoveAction::Top if index == 0 => None,
-            MoveAction::Top => Some(DEFAULT_PROFILE_SORT_STEP - 1),
-            MoveAction::Up if index == 0 => None,
-            MoveAction::Up => Some(
-                i32::try_from(index).unwrap_or(i32::MAX / DEFAULT_PROFILE_SORT_STEP)
-                    * DEFAULT_PROFILE_SORT_STEP
-                    - 1,
-            ),
-            MoveAction::Down if index + 1 >= count => None,
-            MoveAction::Down => Some(
-                (i32::try_from(index).unwrap_or(i32::MAX / DEFAULT_PROFILE_SORT_STEP) + 2)
-                    * DEFAULT_PROFILE_SORT_STEP
-                    + 1,
-            ),
-            MoveAction::Bottom if index + 1 >= count => None,
-            MoveAction::Bottom => Some(
-                i32::try_from(count).unwrap_or(i32::MAX / DEFAULT_PROFILE_SORT_STEP)
-                    * DEFAULT_PROFILE_SORT_STEP
-                    + 1,
-            ),
-            MoveAction::Position => {
-                Some(position.unwrap_or_default() * DEFAULT_PROFILE_SORT_STEP + 1)
-            }
-        };
-
-        if let Some(sort) = next_sort {
-            self.profile_ex().set_sort(index_id, sort).await?;
         }
-
+        let memberships = self
+            .database
+            .node_groups()
+            .snapshot()
+            .await?
+            .memberships
+            .into_iter()
+            .map(|m| (m.profile_id, m.group_id))
+            .collect::<HashMap<_, _>>();
+        let group = memberships.get(index_id);
+        let members = items
+            .iter()
+            .enumerate()
+            .filter(|(_, (p, _))| {
+                memberships.get(&p.index_id) == group
+                    && subscription_id.is_none_or(|id| p.subscription_id.as_deref() == Some(id))
+            })
+            .collect::<Vec<_>>();
+        let from = members
+            .iter()
+            .position(|(_, (p, _))| p.index_id == index_id)
+            .ok_or_else(|| ProfileManagerError::ProfileNotFound(index_id.to_string()))?;
+        let to = match action {
+            MoveAction::Top => 0,
+            MoveAction::Up => from.saturating_sub(1),
+            MoveAction::Down => (from + 1).min(members.len() - 1),
+            MoveAction::Bottom => members.len() - 1,
+            MoveAction::Position => usize::try_from(position.unwrap_or_default())
+                .unwrap_or(0)
+                .min(members.len() - 1),
+        };
+        let mut ordered = members
+            .iter()
+            .map(|(_, (p, _))| p.index_id.as_str())
+            .collect::<Vec<_>>();
+        let moved = ordered.remove(from);
+        ordered.insert(to, moved);
+        self.renumber_sort(&items).await?;
+        let updates = members
+            .iter()
+            .zip(ordered)
+            .map(|((slot, _), id)| {
+                (
+                    id,
+                    (i32::try_from(*slot).unwrap_or(i32::MAX / DEFAULT_PROFILE_SORT_STEP - 1) + 1)
+                        * DEFAULT_PROFILE_SORT_STEP,
+                )
+            })
+            .collect::<Vec<_>>();
+        self.profile_ex().set_sort_many(&updates).await?;
         Ok(self
             .list_profiles(config, subscription_id, None)
             .await?
@@ -321,16 +343,8 @@ impl<'db> ProfileManager<'db> {
             return Ok(false);
         }
 
-        let profiles = self.database.profiles().list().await?;
-        let next_active = profiles
-            .iter()
-            .find(|profile| profile.port() > 0)
-            .or_else(|| profiles.first())
-            .map(|profile| profile.index_id.clone())
-            .unwrap_or_default();
-        let changed = config.index_id != next_active;
-        config.index_id = next_active;
-
+        let changed = !config.index_id.is_empty();
+        config.index_id.clear();
         Ok(changed)
     }
 
@@ -377,10 +391,6 @@ fn normalize_protocol(protocol: &mut ProfileProtocol) {
             normalize_server(server);
             trim_string(uuid);
             trim_option(cipher);
-        }
-        ProfileProtocol::Custom { source, filter } => {
-            trim_string(source);
-            trim_option(filter);
         }
         ProfileProtocol::Shadowsocks {
             server,
@@ -473,19 +483,6 @@ fn normalize_protocol(protocol: &mut ProfileProtocol) {
             trim_string(username);
             trim_string(password);
             trim_option(congestion_control);
-        }
-        ProfileProtocol::PolicyGroup {
-            child_profile_ids,
-            source_subscription_id,
-            filter,
-            ..
-        } => {
-            normalize_values(child_profile_ids);
-            trim_option(source_subscription_id);
-            trim_option(filter);
-        }
-        ProfileProtocol::ProxyChain { child_profile_ids } => {
-            normalize_values(child_profile_ids);
         }
     }
 }
@@ -600,7 +597,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn profile_crud_defaults_active_and_persists_order() {
+    async fn profile_crud_leaves_selection_empty_and_persists_order() {
         let database = Database::connect_in_memory()
             .await
             .expect("profile manager test operation should succeed");
@@ -616,7 +613,7 @@ mod tests {
             .await
             .expect("profile manager test operation should succeed");
 
-        assert_eq!(config.index_id, first.profile.index_id);
+        assert!(config.index_id.is_empty());
         assert_eq!(first.profile.network(), "raw");
         assert!(first.profile_ex.sort < second.profile_ex.sort);
 
@@ -626,18 +623,18 @@ mod tests {
             .expect("profile manager test operation should succeed")
             .items;
         assert_eq!(listed.len(), 2);
-        assert!(listed[0].is_active);
+        assert!(!listed[0].is_active);
         assert_eq!(listed[1].profile.remarks, "B");
     }
 
     #[tokio::test]
-    async fn profile_active_selection_moves_when_active_profile_is_deleted() {
+    async fn profile_active_selection_clears_when_active_profile_is_deleted() {
         let database = Database::connect_in_memory()
             .await
             .expect("profile manager test operation should succeed");
         let manager = ProfileManager::new(&database);
         let mut config = AppConfig::default();
-        let first = manager
+        let _first = manager
             .save_profile(&mut config, sample_profile("first", "A", 443))
             .await
             .expect("profile manager test operation should succeed");
@@ -655,7 +652,7 @@ mod tests {
             .await
             .expect("profile manager test operation should succeed");
 
-        assert_eq!(config.index_id, first.profile.index_id);
+        assert!(config.index_id.is_empty());
     }
 
     #[tokio::test]

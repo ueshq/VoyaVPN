@@ -1,17 +1,16 @@
 import { commands } from "@/ipc/bindings";
 import type {
   AppError,
+  NodeGroup,
+  NodeGroupAssignment,
+  NodeGroupsSnapshot,
   AppUpdaterStatus,
   CertificateFetchRequest,
   CertificateFetchResult,
   ProxyConnectionsSnapshot,
-  ProxyDelayTestResult,
   ProxyMonitorStatus,
-  ProxyGroupsSnapshot,
   DnsSettings,
   ExportProfilesResult,
-  GroupChildCandidate,
-  GroupPreview,
   ImportProfilesResult,
   MoveAction,
   Profile,
@@ -140,23 +139,6 @@ export async function saveProfile(
   return unwrapCommandResult(await commands.saveProfile(profile));
 }
 
-export async function listGroupChildCandidates(
-  currentIndexId: string | null = null,
-  filter: string | null = null,
-): Promise<GroupChildCandidate[]> {
-  return unwrapCommandResult(await commands.listGroupChildCandidates(currentIndexId, filter));
-}
-
-export async function previewGroupProfile(profile: Profile): Promise<GroupPreview> {
-  return unwrapCommandResult(await commands.previewGroupProfile(profile));
-}
-
-export async function saveGroupProfile(
-  profile: Profile,
-): Promise<ProfileListEntry> {
-  return unwrapCommandResult(await commands.saveGroupProfile(profile));
-}
-
 export async function deleteProfiles(indexIds: string[]): Promise<number> {
   return unwrapCommandResult(await commands.deleteProfiles(indexIds));
 }
@@ -275,21 +257,6 @@ export async function moveRoutingRule(
   return unwrapCommandResult(await commands.moveRoutingRule(routingId, ruleId, action, position));
 }
 
-export async function proxyListGroups(): Promise<ProxyGroupsSnapshot> {
-  return unwrapCommandResult(await commands.proxyListGroups());
-}
-
-export async function proxyTestDelay(nodeNames: string[] = []): Promise<ProxyDelayTestResult[]> {
-  return unwrapCommandResult(await commands.proxyTestDelay(nodeNames));
-}
-
-export async function proxySelectNode(
-  groupName: string,
-  nodeName: string,
-): Promise<ProxyGroupsSnapshot> {
-  return unwrapCommandResult(await commands.proxySelectNode(groupName, nodeName));
-}
-
 export async function proxyListConnections(): Promise<ProxyConnectionsSnapshot> {
   return unwrapCommandResult(await commands.proxyListConnections());
 }
@@ -302,10 +269,6 @@ export async function proxyCloseConnection(
 
 export async function proxySetTrafficMode(mode: TrafficMode): Promise<TrafficModeResponse> {
   return unwrapCommandResult(await commands.proxySetTrafficMode(mode));
-}
-
-export async function proxyReloadConfig(path: string | null = null): Promise<null> {
-  return unwrapCommandResult(await commands.proxyReloadConfig(path));
 }
 
 export async function proxyStartMonitor(): Promise<ProxyMonitorStatus> {
@@ -379,3 +342,11 @@ export async function recheckSystemProxy(): Promise<SystemProxyStatusResponse> {
 export async function openNetworkSettings(): Promise<void> {
   unwrapCommandResult(await commands.openNetworkSettings());
 }
+
+export async function listNodeGroups(): Promise<NodeGroupsSnapshot> { return unwrapCommandResult(await commands.listNodeGroups()); }
+export async function saveNodeGroup(id: string | null, name: string): Promise<NodeGroup> { return unwrapCommandResult(await commands.saveNodeGroup(id, name)); }
+export async function deleteNodeGroup(id: string): Promise<null> { return unwrapCommandResult(await commands.deleteNodeGroup(id)); }
+export async function moveNodeGroup(id: string, action: MoveAction): Promise<null> { return unwrapCommandResult(await commands.moveNodeGroup(id, action)); }
+export async function assignNodeGroups(assignments: NodeGroupAssignment[]): Promise<null> { return unwrapCommandResult(await commands.assignNodeGroups(assignments)); }
+
+export async function copyProfiles(indexIds: string[]): Promise<ProfileListEntry[]> { return unwrapCommandResult(await commands.copyProfiles(indexIds)); }

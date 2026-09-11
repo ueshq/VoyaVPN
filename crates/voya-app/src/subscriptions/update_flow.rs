@@ -1,13 +1,12 @@
 //! Prepare-then-commit machinery for subscription updates: the network fetch
 //! snapshot (built outside any mutation lock), server-reported metadata
-//! persistence, and the auto-group bootstrap that runs after a first import.
+//! persistence. Manual group membership is independent of subscriptions.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use voya_core::{
-    parse_profile_update_interval_minutes, parse_subscription_userinfo, AppConfig, MultipleLoad,
-    ProfileItem, ProfileProtocol, SubItem, SubMetadataItem, SubscriptionUpdateResult,
-    SubscriptionUserInfo,
+    parse_profile_update_interval_minutes, parse_subscription_userinfo, SubItem, SubMetadataItem,
+    SubscriptionUpdateResult, SubscriptionUserInfo,
 };
 use voya_db::DatabaseSession;
 use voya_net::{
@@ -15,9 +14,9 @@ use voya_net::{
     SubscriptionFetchResult, SubscriptionFetchSource,
 };
 
-use crate::{groups::GroupManager, redaction::redact_urls};
+use crate::redaction::redact_urls;
 
-use super::manager::{is_http_url, Result, SubscriptionManagerError};
+use super::manager::{is_http_url, Result};
 
 #[derive(Debug)]
 pub struct PreparedSubscriptionUpdate {
@@ -176,56 +175,6 @@ pub(super) async fn persist_subscription_metadata(
     }
 
     Ok(())
-}
-
-/// Creates the delay-based "Auto" policy group for a subscription on its
-/// first successful import. Children resolve dynamically from the
-/// subscription at config-generation time, so the group is created once and
-/// never refreshed; a user-modified group with the same source is left
-/// untouched. Returns the group remarks when one was created.
-pub(super) async fn ensure_subscription_auto_group(
-    database: DatabaseSession<'_>,
-    config: &mut AppConfig,
-    subscription_id: &str,
-    activate: bool,
-) -> Result<Option<String>> {
-    let profiles = database.profiles().list().await?;
-    let already_exists = profiles.iter().any(|profile| {
-        matches!(
-            &profile.protocol,
-            ProfileProtocol::PolicyGroup {
-                source_subscription_id: Some(source),
-                ..
-            } if source == subscription_id
-        )
-    });
-    if already_exists {
-        return Ok(None);
-    }
-    let Some(subscription) = database.subscriptions().get(subscription_id).await? else {
-        return Ok(None);
-    };
-
-    let remarks = format!("{} · Auto", subscription.remarks);
-    let group = ProfileItem {
-        remarks: remarks.clone(),
-        protocol: ProfileProtocol::PolicyGroup {
-            child_profile_ids: Vec::new(),
-            source_subscription_id: Some(subscription_id.to_string()),
-            filter: None,
-            strategy: MultipleLoad::LeastPing,
-        },
-        ..ProfileItem::default()
-    };
-    let saved = GroupManager::from_session(database)
-        .save_group_profile(config, group)
-        .await
-        .map_err(|error| SubscriptionManagerError::Group(Box::new(error)))?;
-    if activate {
-        config.index_id.clone_from(&saved.profile.index_id);
-    }
-
-    Ok(Some(remarks))
 }
 
 fn header_value<'headers>(

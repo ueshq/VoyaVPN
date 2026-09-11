@@ -10,8 +10,7 @@ use voya_app::certificates::{
 use voya_app::config_mutation::{CommittedMutation, UnitOfWork};
 use voya_app::contract_map::{
     certificate_error, core_info_error, core_seed_install_result, dns_from_contract,
-    dns_to_contract, group_child_to_contract, group_preview_to_contract,
-    import_profiles_to_contract, input_text_error, move_action_from_contract,
+    dns_to_contract, import_profiles_to_contract, input_text_error, move_action_from_contract,
     profile_from_contract, profile_list_to_contract, profile_listing_to_contract,
     routing_from_contract, routing_to_contract, rule_from_contract, runtime_status_event,
     runtime_status_response, subscription_from_contract, subscription_metadata_to_contract,
@@ -19,7 +18,6 @@ use voya_app::contract_map::{
     traffic_mode_to_contract,
 };
 use voya_app::dns::DnsManager;
-use voya_app::groups::GroupManager;
 use voya_app::input_safety;
 use voya_app::invalidation;
 use voya_app::profiles::ProfileManager;
@@ -40,14 +38,13 @@ use voya_contracts::{
     AppUpdaterStatus, AppearanceSettings, CertificateFetchRequest, CertificateFetchResult,
     CoreFlowReason, CoreSeedInstallResult, CoreSeedInstallStatus, CoreType as ContractCoreType,
     DnsSettings as DnsSettingsContract, ExportProfilesFormat, ExportProfilesRequest,
-    ExportProfilesResult, GroupChildCandidate as GroupChildContract,
-    GroupPreview as GroupPreviewContract, ImportProfilesResult as ImportProfilesContract,
-    InvalidationScope, LogCode, MoveAction as ContractMoveAction, NoticeCode,
-    Profile as ProfileContract, ProfileListEntry, ProfileListing, ProxyConnectionsSnapshot,
-    ProxyDelayTestResult, ProxyGroupsSnapshot, ProxyMonitorStatus, QrCodeImage, QrScanResult,
-    ResourceUpdateFile, Routing as RoutingContract, RoutingRule as RoutingRuleContract,
-    RuntimeStatusResponse, SpeedtestResult, SpeedtestRunResult, SpeedtestStatus,
-    Subscription as SubscriptionContract, SubscriptionMetadata as SubscriptionMetadataContract,
+    ExportProfilesResult, ImportProfilesResult as ImportProfilesContract, InvalidationScope,
+    LogCode, MoveAction as ContractMoveAction, NoticeCode, Profile as ProfileContract,
+    ProfileListEntry, ProfileListing, ProxyConnectionsSnapshot, ProxyMonitorStatus, QrCodeImage,
+    QrScanResult, ResourceUpdateFile, Routing as RoutingContract,
+    RoutingRule as RoutingRuleContract, RuntimeStatusResponse, SpeedtestResult, SpeedtestRunResult,
+    SpeedtestStatus, Subscription as SubscriptionContract,
+    SubscriptionMetadata as SubscriptionMetadataContract,
     SubscriptionUpdateResult as SubscriptionUpdateContract, SystemProxyStatusResponse,
     SystemProxyType, TunProviderDiagnostics, TunStatus,
 };
@@ -68,7 +65,6 @@ use crate::AppState;
 const IPC_ID_MAX_CHARS: usize = 128;
 const IPC_NAME_MAX_CHARS: usize = 256;
 const IPC_FILTER_MAX_CHARS: usize = 256;
-const IPC_PATH_MAX_CHARS: usize = 4096;
 const IPC_PROXY_URL_MAX_CHARS: usize = 2048;
 const IPC_QR_CONTENT_MAX_CHARS: usize = 4096;
 const IPC_LIST_MAX_ITEMS: usize = 1024;
@@ -78,8 +74,8 @@ mod connection;
 mod connection_mode;
 mod core_flow;
 mod dns;
-mod groups;
 mod lifecycle;
+mod node_groups;
 mod platform;
 mod profiles;
 mod proxy;
@@ -95,7 +91,7 @@ mod updates;
 pub use app::*;
 pub use connection::*;
 pub use dns::*;
-pub use groups::*;
+pub use node_groups::*;
 pub use platform::*;
 pub use profiles::*;
 pub use proxy::*;

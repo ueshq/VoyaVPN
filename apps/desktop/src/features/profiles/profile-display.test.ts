@@ -5,12 +5,9 @@ import type { Profile, ProfileProtocol, ProfileTransport } from "@/ipc/bindings"
 import { profileAddress, profilePort, profileTransportName } from "./profile-display";
 
 describe("profile display projections", () => {
-  it("projects server, custom, and group addresses", () => {
+  it("projects node addresses and ports", () => {
     expect(profileAddress(profile({ kind: "trojan", password: "secret", server: { address: "node.example", port: 443 } }))).toBe("node.example");
-    expect(profileAddress(profile({ filter: null, kind: "custom", source: "custom.json" }))).toBe("custom.json");
-    expect(profileAddress(profile({ childProfileIds: [], kind: "proxyChain" }))).toBe("");
     expect(profilePort(profile({ kind: "trojan", password: "secret", server: { address: "node.example", port: 8443 } }))).toBe(8443);
-    expect(profilePort(profile({ childProfileIds: [], kind: "proxyChain" }))).toBe(0);
   });
 
   it.each([

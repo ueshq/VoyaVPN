@@ -30,6 +30,11 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::load_dns_settings,
         commands::save_dns_settings::<tauri::Wry>,
         commands::list_profiles,
+        commands::list_node_groups,
+        commands::save_node_group::<tauri::Wry>,
+        commands::delete_node_group::<tauri::Wry>,
+        commands::move_node_group::<tauri::Wry>,
+        commands::assign_node_groups::<tauri::Wry>,
         commands::save_profile::<tauri::Wry>,
         commands::delete_profiles::<tauri::Wry>,
         commands::copy_profiles::<tauri::Wry>,
@@ -39,9 +44,6 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::export_profile_client_config,
         commands::set_active_profile::<tauri::Wry>,
         commands::move_profile::<tauri::Wry>,
-        commands::list_group_child_candidates,
-        commands::preview_group_profile,
-        commands::save_group_profile::<tauri::Wry>,
         commands::list_subscriptions,
         commands::list_subscription_metadata,
         commands::save_subscription::<tauri::Wry>,
@@ -56,13 +58,9 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::delete_routing_rules::<tauri::Wry>,
         commands::move_routing_rule::<tauri::Wry>,
         commands::list_process_candidates,
-        commands::proxy_list_groups,
-        commands::proxy_test_delay,
-        commands::proxy_select_node::<tauri::Wry>,
         commands::proxy_list_connections,
         commands::proxy_close_connection::<tauri::Wry>,
         commands::proxy_set_traffic_mode::<tauri::Wry>,
-        commands::proxy_reload_config::<tauri::Wry>,
         commands::proxy_start_monitor,
         commands::proxy_stop_monitor,
         commands::run_speedtest::<tauri::Wry>,
@@ -80,15 +78,12 @@ fn ipc_commands() -> Commands<tauri::Wry> {
 pub fn specta_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         .typ::<voya_contracts::Profile>()
+        .typ::<voya_contracts::ProfileKind>()
         .typ::<voya_contracts::ProfileProtocol>()
         .typ::<voya_contracts::ProfileTransport>()
         .typ::<voya_contracts::TlsSettings>()
         .typ::<voya_contracts::ProfileListEntry>()
         .typ::<voya_contracts::ProfileListing>()
-        .typ::<voya_contracts::GroupChildCandidate>()
-        .typ::<voya_contracts::GroupValidation>()
-        .typ::<voya_contracts::GroupPreview>()
-        .typ::<voya_contracts::GroupPreviewRoute>()
         .typ::<voya_contracts::Subscription>()
         .typ::<voya_contracts::SubscriptionMetadata>()
         .typ::<voya_contracts::ImportProfilesResult>()
@@ -99,10 +94,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_contracts::MoveAction>()
         .typ::<voya_contracts::DnsSettings>()
         .typ::<voya_contracts::ValidationIssue>()
-        .typ::<voya_contracts::ProxyGroupsSnapshot>()
-        .typ::<voya_contracts::ProxyGroup>()
-        .typ::<voya_contracts::ProxyNode>()
-        .typ::<voya_contracts::ProxyDelayTestResult>()
         .typ::<voya_contracts::ProxyConnectionsSnapshot>()
         .typ::<voya_contracts::ProxyConnectionItem>()
         .typ::<voya_contracts::ProxyMonitorState>()

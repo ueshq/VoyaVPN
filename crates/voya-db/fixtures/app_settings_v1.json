@@ -7,8 +7,7 @@
   "behavior": {
     "autostart": false,
     "statistics": false,
-    "realtimeSpeed": false,
-    "autoCreateSubscriptionGroup": null
+    "realtimeSpeed": false
   },
   "core": {
     "logEnabled": false,
@@ -75,8 +74,7 @@
     "latencyUrl": "https://www.google.com/generate_204",
     "ipLookupUrl": "",
     "pageSize": null,
-    "delayIntervalSeconds": null,
-    "proxyDelayConcurrency": 5
+    "delayIntervalSeconds": null
   },
   "multiplexing": {
     "protocol": "h2mux",
@@ -94,7 +92,6 @@
     "hopIntervalSeconds": 30
   },
   "proxy": {
-    "trafficMode": "rule",
-    "nodeSorting": 0
+    "trafficMode": "rule"
   }
 }

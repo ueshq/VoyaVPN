@@ -952,3 +952,55 @@ async fn pending_native_cleanup_publishes_retired_pac_before_the_pending_state()
         .expect("pending event");
     assert!(proxy < pending);
 }
+
+#[tokio::test]
+async fn removing_the_running_node_stops_it_without_selecting_another_node() {
+    let harness = Harness::new().await;
+    let mut config = active_config();
+    let flow = harness.flow();
+    flow.connect(&config).await.expect("connect");
+    harness
+        .database
+        .profiles()
+        .upsert(&singbox_profile("other"))
+        .await
+        .expect("another node");
+    flow.disconnect_removed_profile(&config)
+        .await
+        .expect("still exists");
+    assert_eq!(
+        harness.supervisor.status().await.expect("status").state,
+        SupervisorConnectionState::Connected
+    );
+    crate::profiles::ProfileManager::new(&harness.database)
+        .delete_profiles(&mut config, &["active".into()])
+        .await
+        .expect("delete current");
+    assert!(config.index_id.is_empty());
+    flow.disconnect_removed_profile(&config)
+        .await
+        .expect("reconcile");
+    let status = harness.supervisor.status().await.expect("status");
+    assert_eq!(status.state, SupervisorConnectionState::Disconnected);
+    assert!(status.active_profile_id.is_none());
+    let events = harness.sink.events();
+    assert!(events.contains(&"statistics:zero".into()));
+    assert!(events.contains(&"sysproxy".into()));
+    // A repeated notification must not interrupt a newer valid selection.
+    config.index_id = "other".into();
+    flow.connect(&config).await.expect("select other");
+    flow.disconnect_removed_profile(&config)
+        .await
+        .expect("late reconciliation");
+    assert_eq!(
+        harness
+            .supervisor
+            .status()
+            .await
+            .expect("status")
+            .active_profile_id
+            .as_deref(),
+        Some("other")
+    );
+    flow.disconnect(&config).await.expect("cleanup");
+}

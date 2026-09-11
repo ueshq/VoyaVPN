@@ -33,14 +33,7 @@ pub(super) fn apply_outbound_send_through(config: &mut SingboxConfig, context: &
 }
 
 fn should_bind_outbound(outbound: &SingboxOutbound) -> bool {
-    if matches!(
-        outbound.r#type.as_str(),
-        "direct" | "block" | "dns" | "selector" | "urltest"
-    ) || outbound
-        .detour
-        .as_deref()
-        .is_some_and(|detour| !detour.is_empty())
-    {
+    if matches!(outbound.r#type.as_str(), "direct" | "block" | "dns") {
         return false;
     }
     outbound
@@ -48,33 +41,6 @@ fn should_bind_outbound(outbound: &SingboxOutbound) -> bool {
         .as_deref()
         .is_none_or(|server| !is_loopback_address(server))
 }
-
-fn child_nodes(context: &CoreConfigContext, node: &ProfileItem) -> Vec<ProfileItem> {
-    let mut seen = BTreeSet::new();
-    node.protocol
-        .child_profile_ids()
-        .iter()
-        .filter(|node_id| seen.insert((*node_id).clone()))
-        .filter_map(|node_id| context.all_proxies_map.get(node_id).cloned())
-        .collect()
-}
-
-pub(super) fn buildable_child_nodes(
-    context: &CoreConfigContext,
-    node: &ProfileItem,
-) -> Vec<ProfileItem> {
-    child_nodes(context, node)
-        .into_iter()
-        .filter(|child| child.config_type().is_group_type() || singbox_can_build_leaf(child))
-        .collect()
-}
-
-fn singbox_can_build_leaf(node: &ProfileItem) -> bool {
-    singbox_supports_config_type(node.config_type())
-        && (node.config_type() != ConfigType::WireGuard
-            || wireguard_public_key(&node.protocol).is_some())
-}
-
 /// Single source of truth for the sing-box protocol support table.
 ///
 /// `crate::context::validation` gates node validation on the same predicate so

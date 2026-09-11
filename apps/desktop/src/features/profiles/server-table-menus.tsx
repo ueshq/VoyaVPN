@@ -39,7 +39,7 @@ import {
   MenubarItem,
   MenubarSeparator,
 } from "@voya/ui/components/menubar";
-import { moveProfile } from "@/ipc";
+import { copyProfiles, moveProfile } from "@/ipc";
 import type { ProfileListEntry, SpeedtestTarget } from "@/ipc/bindings";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -182,6 +182,14 @@ function ProfileMenuItems({ controller, item, primitives: { Item, Separator, Sub
         <Pencil className="size-4" aria-hidden="true" />
         {t("panes.profiles.toolbar.edit")}
       </Item>
+      <Item onSelect={() => void runOperation(() => copyProfiles([indexId]))}>{t("nodeGroups.copyNode")}</Item>
+      <Sub>
+        <SubTrigger>{t("nodeGroups.moveTo")}</SubTrigger>
+        <SubContent>
+          <Item disabled={controller.nodeGroups.busy} onSelect={() => void controller.nodeGroups.assign([{ profileId: indexId, groupId: null }])}>{t("nodeGroups.unassigned")}</Item>
+          {controller.nodeGroups.snapshot.groups.map((group) => <Item key={group.id} disabled={controller.nodeGroups.busy} onSelect={() => void controller.nodeGroups.assign([{ profileId: indexId, groupId: group.id }])}>{group.name}</Item>)}
+        </SubContent>
+      </Sub>
       <Separator />
       <Item disabled={speedtestRunning} onSelect={() => void handleSpeedtest(target)}>
         <Zap className="size-4" aria-hidden="true" />

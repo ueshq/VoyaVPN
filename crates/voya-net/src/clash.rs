@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt, future::Future, pin::Pin};
+use std::{fmt, future::Future, pin::Pin};
 
 use futures_util::StreamExt;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
@@ -30,11 +30,6 @@ const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b'`')
     .add(b'{')
     .add(b'}');
-const QUERY_VALUE_ENCODE_SET: &AsciiSet = &PATH_SEGMENT_ENCODE_SET
-    .add(b'&')
-    .add(b'+')
-    .add(b':')
-    .add(b'=');
 const CLASH_HTTP_RESPONSE_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 
 pub type Result<T> = std::result::Result<T, ClashError>;
@@ -112,7 +107,6 @@ impl ClashApiEndpoint {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClashHttpMethod {
     Get,
-    Put,
     Patch,
     Delete,
 }
@@ -121,7 +115,6 @@ impl From<ClashHttpMethod> for Method {
     fn from(value: ClashHttpMethod) -> Self {
         match value {
             ClashHttpMethod::Get => Self::GET,
-            ClashHttpMethod::Put => Self::PUT,
             ClashHttpMethod::Patch => Self::PATCH,
             ClashHttpMethod::Delete => Self::DELETE,
         }
@@ -264,53 +257,10 @@ where
         }
     }
 
-    #[must_use]
-    pub fn endpoint(&self) -> &ClashApiEndpoint {
-        &self.endpoint
-    }
-
-    pub async fn get_proxies(&self) -> Result<ClashProxiesResponse> {
-        self.request(ClashHttpMethod::Get, "/proxies", None).await
-    }
-
-    pub async fn get_proxy_providers(&self) -> Result<ClashProvidersResponse> {
-        self.request(ClashHttpMethod::Get, "/providers/proxies", None)
-            .await
-    }
-
     pub async fn get_connections(&self) -> Result<ClashConnections> {
         self.request(ClashHttpMethod::Get, "/connections", None)
             .await
     }
-
-    pub async fn delay_proxy(
-        &self,
-        proxy_name: &str,
-        timeout_ms: u32,
-        test_url: &str,
-    ) -> Result<ClashDelayResponse> {
-        let path = format!(
-            "/proxies/{}/delay?timeout={timeout_ms}&url={}",
-            encode_segment(proxy_name),
-            encode_query_value(test_url)
-        );
-
-        self.request(ClashHttpMethod::Get, &path, None).await
-    }
-
-    pub async fn select_proxy(&self, group_name: &str, proxy_name: &str) -> Result<()> {
-        let path = format!("/proxies/{}", encode_segment(group_name));
-        self.request_value(
-            ClashHttpMethod::Put,
-            &path,
-            Some(json!({
-                "name": proxy_name,
-            })),
-        )
-        .await
-        .map(drop)
-    }
-
     pub async fn patch_configs(&self, body: Value) -> Result<()> {
         self.request_value(ClashHttpMethod::Patch, "/configs", Some(body))
             .await
@@ -320,18 +270,6 @@ where
     pub async fn set_rule_mode(&self, mode: &str) -> Result<()> {
         self.patch_configs(json!({ "mode": mode })).await
     }
-
-    pub async fn reload_config(&self, path: Option<&str>) -> Result<()> {
-        let body = path
-            .filter(|path| !path.trim().is_empty())
-            .map(|path| json!({ "path": path }))
-            .unwrap_or_else(|| json!({}));
-
-        self.request_value(ClashHttpMethod::Put, "/configs?force=true", Some(body))
-            .await
-            .map(drop)
-    }
-
     pub async fn close_connection(&self, connection_id: Option<&str>) -> Result<()> {
         let path = connection_id
             .map(str::trim)
@@ -456,53 +394,6 @@ impl ClashWebSocketSession {
             }
         }
     }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct ClashProxiesResponse {
-    pub proxies: BTreeMap<String, ClashProxy>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct ClashProxy {
-    pub all: Vec<String>,
-    pub history: Vec<ClashHistoryItem>,
-    pub name: Option<String>,
-    #[serde(rename = "type")]
-    pub proxy_type: String,
-    pub udp: bool,
-    pub now: Option<String>,
-    pub delay: i32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct ClashHistoryItem {
-    pub time: String,
-    pub delay: i32,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct ClashProvidersResponse {
-    pub providers: BTreeMap<String, ClashProvider>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct ClashProvider {
-    pub name: Option<String>,
-    pub proxies: Vec<ClashProxy>,
-    pub vehicle_type: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct ClashDelayResponse {
-    pub delay: Option<i32>,
-    pub message: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -741,13 +632,9 @@ fn normalize_path(path_and_query: &str) -> String {
 fn encode_segment(value: &str) -> String {
     utf8_percent_encode(value, PATH_SEGMENT_ENCODE_SET).to_string()
 }
-
-fn encode_query_value(value: &str) -> String {
-    utf8_percent_encode(value, QUERY_VALUE_ENCODE_SET).to_string()
-}
-
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::sync::{Arc, Mutex};
 
     use tokio::{
@@ -816,77 +703,35 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn clash_reload_uses_force_query() {
-        let transport = MockTransport::default();
-        transport.respond("/configs?force=true", Value::Null);
-        let client =
-            ClashRestClient::with_transport(ClashApiEndpoint::loopback(9090), transport.clone());
-
-        client
-            .reload_config(Some("/tmp/config.yaml"))
-            .await
-            .expect("reload");
-
-        let requests = transport.requests();
-        assert_eq!(requests.len(), 1);
-        assert_eq!(requests[0].method, ClashHttpMethod::Put);
-        assert_eq!(requests[0].url, "http://127.0.0.1:9090/configs?force=true");
-        assert_eq!(
-            requests[0].body,
-            Some(json!({ "path": "/tmp/config.yaml" }))
-        );
-    }
-
-    #[tokio::test]
-    async fn clash_delay_test_encodes_proxy_name_and_url() {
-        let transport = MockTransport::default();
-        transport.respond(
-            "/proxies/HK%20%2F%201/delay?timeout=10000&url=https%3A%2F%2Fexample.com%2Fgenerate_204",
-            json!({ "delay": 42 }),
-        );
-        let client =
-            ClashRestClient::with_transport(ClashApiEndpoint::loopback(9090), transport.clone());
-
-        let delay = client
-            .delay_proxy("HK / 1", 10_000, "https://example.com/generate_204")
-            .await
-            .expect("delay");
-
-        assert_eq!(delay.delay, Some(42));
-        let requests = transport.requests();
-        assert_eq!(requests[0].method, ClashHttpMethod::Get);
-    }
-
-    #[tokio::test]
     async fn clash_reqwest_transport_reads_small_json_under_limit() {
         let port = spawn_clash_http_response(
-            "/proxies",
+            "/connections",
             "200 OK",
-            Some(r#"{"proxies":{}}"#.len()),
-            br#"{"proxies":{}}"#.to_vec(),
+            Some(r#"{"connections":[]}"#.len()),
+            br#"{"connections":[]}"#.to_vec(),
         )
         .await;
         let client = ClashRestClient::new(ClashApiEndpoint::loopback(port));
 
-        let response = client.get_proxies().await.expect("proxies");
+        let response = client.get_connections().await.expect("connections");
 
-        assert!(response.proxies.is_empty());
+        assert!(response.connections.is_empty());
     }
 
     #[tokio::test]
     async fn clash_reqwest_transport_rejects_declared_response_above_limit() {
         let declared_length = CLASH_HTTP_RESPONSE_LIMIT_BYTES + 1;
         let port = spawn_clash_http_response(
-            "/proxies",
+            "/connections",
             "200 OK",
             Some(declared_length),
-            br#"{"proxies":{}}"#.to_vec(),
+            br#"{"connections":[]}"#.to_vec(),
         )
         .await;
         let client = ClashRestClient::new(ClashApiEndpoint::loopback(port));
 
         let error = client
-            .get_proxies()
+            .get_connections()
             .await
             .expect_err("oversized Clash response should fail");
 
@@ -1104,7 +949,7 @@ mod tests {
         let endpoint = secret_endpoint(9090);
         let request = ClashHttpRequest {
             method: ClashHttpMethod::Get,
-            url: endpoint.http_url("/proxies"),
+            url: endpoint.http_url("/connections"),
             body: None,
             bearer_token: endpoint.secret.clone(),
         };

@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import type {
-  LoadStrategy,
   Profile,
   ProfileProtocol,
   ProfileTransport,
@@ -17,7 +16,6 @@ import { CONFIG_TYPES, type ProfileProtocol as ProfileKind } from "./profile-con
  */
 export const PROFILE_VALIDATION_CODES = {
   addressRequired: "voya.profile.address.required",
-  configSourceRequired: "voya.profile.configSource.required",
   credentialRequired: "voya.profile.credential.required",
   remarksRequired: "voya.profile.remarks.required",
   uuidRequired: "voya.profile.uuid.required",
@@ -45,10 +43,6 @@ const protocolOptionsSchema = z.object({
   portHops: optionalNullableText,
   insecureConcurrency: optionalNullableNumber,
   naiveQuic: optionalNullableBool,
-  childProfileIds: optionalNullableText,
-  sourceSubscriptionId: optionalNullableText,
-  filter: optionalNullableText,
-  loadStrategy: z.custom<LoadStrategy>().nullable().optional(),
 }).default({});
 
 const transportOptionsSchema = z.object({
@@ -108,11 +102,6 @@ const tuicProfileSchema = serverProfileSchema.extend({
 
 export const profileFormSchema = z.discriminatedUnion("configType", [
   serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.VMess) }),
-  commonProfileSchema.extend({
-    address: z.string().trim().min(1, PROFILE_VALIDATION_CODES.configSourceRequired),
-    configType: z.literal(CONFIG_TYPES.Custom),
-    port: z.number().int().min(0).max(65535).default(0),
-  }),
   serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.Shadowsocks) }),
   authProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.SOCKS) }),
   serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.VLESS) }),
@@ -123,28 +112,10 @@ export const profileFormSchema = z.discriminatedUnion("configType", [
   authProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.HTTP) }),
   serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.Anytls) }),
   authProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.Naive) }),
-  commonProfileSchema.extend({
-    address: z.string().default("group"),
-    configType: z.literal(CONFIG_TYPES.PolicyGroup),
-    port: z.number().int().default(0),
-  }),
-  commonProfileSchema.extend({
-    address: z.string().default("chain"),
-    configType: z.literal(CONFIG_TYPES.ProxyChain),
-    port: z.number().int().default(0),
-  }),
 ]);
 
 export type ProfileFormValues = z.input<typeof profileFormSchema>;
 export type ParsedProfileFormValues = z.output<typeof profileFormSchema>;
-type PartialGroupDraft = {
-  address?: string;
-  configType?: ProfileKind;
-  port?: number;
-  protocolOptions?: Record<string, unknown>;
-  remarks?: string;
-  transportOptions?: Record<string, unknown>;
-};
 
 export function createDefaultProfile(configType: ProfileKind = CONFIG_TYPES.VMess): ProfileFormValues {
   return createBaseProfile(configType) as ProfileFormValues;
@@ -160,7 +131,7 @@ export function normalizeProfileForForm(profile: Profile): ProfileFormValues {
     subscriptionId: profile.subscriptionId,
     displayLog: profile.displayLog,
     remarks: profile.remarks,
-    address: server?.address ?? (protocol.kind === "custom" ? protocol.source : defaultAddress(configType)),
+    address: server?.address ?? "",
     port: server?.port ?? 0,
     ...protocolToFormFields(protocol),
     protocolOptions: protocolToFormOptions(protocol),
@@ -174,31 +145,6 @@ export function normalizeProfileForForm(profile: Profile): ProfileFormValues {
 
 export function prepareProfileForSave(values: ProfileFormValues | ParsedProfileFormValues): Profile {
   return parsedProfileToContract(profileFormSchema.parse(values));
-}
-
-export function prepareGroupDraftForPreview(
-  values: ProfileFormValues | ParsedProfileFormValues | PartialGroupDraft,
-  // Callers pass the translated placeholder; the literal is only the fallback
-  // for a draft that never reaches a rendered surface.
-  fallbackRemarks = "Draft group",
-): Profile {
-  const configType = (values as { configType?: ProfileKind }).configType ?? CONFIG_TYPES.PolicyGroup;
-  const draft = {
-    ...createBaseProfile(configType),
-    ...(values as Record<string, unknown>),
-    address: (values as { address?: string }).address || defaultAddress(configType),
-    configType,
-    remarks: (values as { remarks?: string }).remarks?.trim() || fallbackRemarks,
-    port: Number((values as { port?: number }).port ?? 0),
-    protocolOptions: {
-      ...((values as { protocolOptions?: Record<string, unknown> }).protocolOptions ?? {}),
-    },
-    transportOptions: {
-      ...((values as { transportOptions?: Record<string, unknown> }).transportOptions ?? {}),
-    },
-  };
-
-  return parsedProfileToContract(profileFormSchema.parse(draft));
 }
 
 function parsedProfileToContract(parsed: ParsedProfileFormValues): Profile {
@@ -219,8 +165,6 @@ function formProtocol(parsed: ParsedProfileFormValues): ProfileProtocol {
   switch (parsed.configType) {
     case CONFIG_TYPES.VMess:
       return { kind: "vmess", server, uuid: parsed.password ?? "", cipher: clean(options.vmessCipher) };
-    case CONFIG_TYPES.Custom:
-      return { kind: "custom", source: parsed.address, filter: clean(options.filter) };
     case CONFIG_TYPES.Shadowsocks:
       return { kind: "shadowsocks", server, password: parsed.password ?? "", method: options.method ?? "", udpOverTcp: options.udpOverTcp === true };
     case CONFIG_TYPES.SOCKS:
@@ -241,15 +185,11 @@ function formProtocol(parsed: ParsedProfileFormValues): ProfileProtocol {
       return { kind: "anytls", server, password: parsed.password ?? "" };
     case CONFIG_TYPES.Naive:
       return { kind: "naive", server, username: parsed.username ?? "", password: parsed.password ?? "", quic: options.naiveQuic === true, congestionControl: clean(options.congestionControl), insecureConcurrency: options.insecureConcurrency ?? null, udpOverTcp: options.udpOverTcp === true };
-    case CONFIG_TYPES.PolicyGroup:
-      return { kind: "policyGroup", childProfileIds: splitList(options.childProfileIds), sourceSubscriptionId: clean(options.sourceSubscriptionId), filter: clean(options.filter), strategy: options.loadStrategy ?? "leastPing" };
-    case CONFIG_TYPES.ProxyChain:
-      return { kind: "proxyChain", childProfileIds: splitList(options.childProfileIds) };
   }
 }
 
 function formTransport(parsed: ParsedProfileFormValues): ProfileTransport | null {
-  if (parsed.configType === CONFIG_TYPES.Custom || parsed.configType === CONFIG_TYPES.PolicyGroup || parsed.configType === CONFIG_TYPES.ProxyChain || parsed.configType === CONFIG_TYPES.WireGuard) return null;
+  if (parsed.configType === CONFIG_TYPES.WireGuard) return null;
   const options = parsed.transportOptions;
   switch (parsed.network || "tcp") {
     case "kcp": return { kind: "kcp", header: clean(options.header), seed: clean(options.kcpSeed), mtu: options.kcpMtu ?? null };
@@ -283,28 +223,23 @@ function formTls(parsed: ParsedProfileFormValues): TlsSettings | null {
 function protocolToFormFields(protocol: ProfileProtocol) {
   switch (protocol.kind) {
     case "vmess": return { password: protocol.uuid };
-    case "custom": return { address: protocol.source };
     case "shadowsocks": case "trojan": case "hysteria2": case "anytls": return { password: protocol.password };
     case "socks": case "http": case "naive": return { password: protocol.password, username: protocol.username };
     case "vless": return { password: protocol.uuid };
     case "tuic": return { password: protocol.password, username: protocol.uuid };
     case "wireGuard": return { password: protocol.privateKey };
-    case "policyGroup": case "proxyChain": return {};
   }
 }
 
 function protocolToFormOptions(protocol: ProfileProtocol) {
   switch (protocol.kind) {
     case "vmess": return { vmessCipher: protocol.cipher };
-    case "custom": return { filter: protocol.filter };
     case "shadowsocks": return { method: protocol.method, udpOverTcp: protocol.udpOverTcp };
     case "vless": return { flow: protocol.flow, vlessEncryption: protocol.encryption };
     case "hysteria2": return { portHops: protocol.portHops, obfuscationPassword: protocol.obfuscationPassword };
     case "tuic": return { congestionControl: protocol.congestionControl };
     case "wireGuard": return { wireGuardPeerPublicKey: protocol.peerPublicKey, wireGuardPresharedKey: protocol.presharedKey, wireGuardInterfaceAddress: protocol.interfaceAddress, wireGuardAllowedIps: protocol.allowedIps, wireGuardReserved: protocol.reserved, wireGuardMtu: protocol.mtu };
     case "naive": return { naiveQuic: protocol.quic, congestionControl: protocol.congestionControl, insecureConcurrency: protocol.insecureConcurrency, udpOverTcp: protocol.udpOverTcp };
-    case "policyGroup": return { childProfileIds: protocol.childProfileIds.join(","), sourceSubscriptionId: protocol.sourceSubscriptionId, filter: protocol.filter, loadStrategy: protocol.strategy };
-    case "proxyChain": return { childProfileIds: protocol.childProfileIds.join(",") };
     default: return {};
   }
 }
@@ -330,18 +265,7 @@ function transportNetwork(transport: ProfileTransport | null) {
 }
 
 function createBaseProfile(configType: ProfileKind) {
-  return { configType, indexId: "", subscriptionId: null, displayLog: true, remarks: "", address: defaultAddress(configType), port: defaultPort(configType), password: "", username: "", network: "tcp", streamSecurity: "", sni: "", alpn: "", publicKey: "", shortId: "", spiderX: "", mldsa65Verify: "", cert: "", certSha: "", echConfigList: "", finalmask: "", protocolOptions: {}, transportOptions: {} };
-}
-
-function defaultAddress(configType: ProfileKind) {
-  if (configType === CONFIG_TYPES.PolicyGroup) return "group";
-  if (configType === CONFIG_TYPES.ProxyChain) return "chain";
-  return "";
-}
-
-function defaultPort(configType: ProfileKind) {
-  if (configType === CONFIG_TYPES.Custom || configType === CONFIG_TYPES.PolicyGroup || configType === CONFIG_TYPES.ProxyChain) return 0;
-  return 443;
+  return { configType, indexId: "", subscriptionId: null, displayLog: true, remarks: "", address: "", port: 443, password: "", username: "", network: "tcp", streamSecurity: "", sni: "", alpn: "", publicKey: "", shortId: "", spiderX: "", mldsa65Verify: "", cert: "", certSha: "", echConfigList: "", finalmask: "", protocolOptions: {}, transportOptions: {} };
 }
 
 function clean(value: string | null | undefined) {

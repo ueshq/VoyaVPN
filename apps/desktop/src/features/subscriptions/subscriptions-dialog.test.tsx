@@ -265,7 +265,6 @@ function makeSubscription(): Subscription {
     enabled: true,
     filter: null,
     id: "sub-1",
-    preSocksPort: null,
     remarks: "Fixture sub",
     sort: 1,
     url: "https://example.test/sub",

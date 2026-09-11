@@ -325,18 +325,6 @@ pub(super) fn starts_with_ci(value: &str, prefix: &str) -> bool {
         .get(..prefix.len())
         .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
 }
-
-pub(super) fn contains_all_ci(value: &str, needles: &[&str]) -> bool {
-    let lower = value.to_ascii_lowercase();
-    needles
-        .iter()
-        .all(|needle| lower.contains(&needle.to_ascii_lowercase()))
-}
-
-pub(super) fn is_html_page(value: &str) -> bool {
-    contains_all_ci(value, &["<html", "<!doctype html", "<head"])
-}
-
 pub(super) trait StripPrefixCi {
     fn strip_prefix_ci<'a>(&'a self, prefix: &str) -> Option<&'a str>;
 }

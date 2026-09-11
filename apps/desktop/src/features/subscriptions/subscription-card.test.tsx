@@ -44,7 +44,6 @@ function subscription(overrides: Partial<Subscription> = {}): Subscription {
     enabled: true,
     filter: null,
     id: "sub-1",
-    preSocksPort: null,
     remarks: "My Airport",
     sort: 1,
     url: "https://example.test/sub",

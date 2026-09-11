@@ -2,76 +2,6 @@ use super::{lifecycle::*, support::*, *};
 
 #[tauri::command]
 #[specta::specta]
-pub async fn proxy_list_groups(
-    state: tauri::State<'_, AppState>,
-) -> Result<ProxyGroupsSnapshot, AppError> {
-    let config = current_config(&state);
-    let clash_api = current_clash_api_access(&state).await;
-
-    state
-        .proxy_runtime()
-        .groups(&config, &clash_api)
-        .await
-        .map_err(AppError::from)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn proxy_test_delay(
-    state: tauri::State<'_, AppState>,
-    node_names: Vec<String>,
-) -> Result<Vec<ProxyDelayTestResult>, AppError> {
-    validate_ipc_text_list(
-        &node_names,
-        "proxy node name",
-        IPC_NAME_MAX_CHARS,
-        AppErrorSubsystem::ProxyRuntime,
-    )?;
-    let config = current_config(&state);
-    let clash_api = current_clash_api_access(&state).await;
-
-    state
-        .proxy_runtime()
-        .test_delay(&config, &clash_api, node_names)
-        .await
-        .map_err(AppError::from)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn proxy_select_node<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
-    state: tauri::State<'_, AppState>,
-    group_name: String,
-    node_name: String,
-) -> Result<ProxyGroupsSnapshot, AppError> {
-    validate_required_ipc_text(
-        &group_name,
-        "proxy group name",
-        IPC_NAME_MAX_CHARS,
-        AppErrorSubsystem::ProxyRuntime,
-    )?;
-    validate_required_ipc_text(
-        &node_name,
-        "proxy node name",
-        IPC_NAME_MAX_CHARS,
-        AppErrorSubsystem::ProxyRuntime,
-    )?;
-    let config = current_config(&state);
-    let clash_api = current_clash_api_access(&state).await;
-    let snapshot = state
-        .proxy_runtime()
-        .select_node(&config, &clash_api, &group_name, &node_name)
-        .await
-        .map_err(AppError::from)?;
-
-    emit_proxy_runtime_invalidation(&app, "proxy-node-selected", false);
-
-    Ok(snapshot)
-}
-
-#[tauri::command]
-#[specta::specta]
 pub async fn proxy_list_connections(
     state: tauri::State<'_, AppState>,
 ) -> Result<ProxyConnectionsSnapshot, AppError> {
@@ -130,44 +60,6 @@ pub async fn proxy_set_traffic_mode<R: tauri::Runtime>(
     Ok(voya_contracts::TrafficModeResponse {
         mode: traffic_mode_to_contract(outcome.mode),
     })
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn proxy_reload_config<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
-    state: tauri::State<'_, AppState>,
-    path: Option<String>,
-) -> Result<(), AppError> {
-    validate_optional_ipc_text(
-        path.as_deref(),
-        "proxy runtime config path",
-        IPC_PATH_MAX_CHARS,
-        AppErrorSubsystem::ProxyRuntime,
-    )?;
-    let clash_api = current_clash_api_access(&state).await;
-
-    let config = current_config(&state);
-    let mode_error = state
-        .proxy_runtime()
-        .reload_config_with_mode(
-            &clash_api,
-            path.as_deref(),
-            config.proxy_ui_item.traffic_mode,
-        )
-        .await
-        .map_err(AppError::from)?;
-    if let Some(error) = mode_error {
-        report_post_commit_error(
-            &app,
-            NoticeCode::ProxyModeSavedRuntimeUpdateFailed,
-            &error.to_string(),
-            AppNoticeLevel::Warning,
-        );
-    }
-    emit_proxy_runtime_invalidation(&app, "proxy-config-reloaded", false);
-
-    Ok(())
 }
 
 #[tauri::command]

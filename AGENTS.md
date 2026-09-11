@@ -72,18 +72,18 @@ A Rust workspace of layered crates plus the Tauri desktop shell, React app, and 
 ### Rust crates (`crates/`)
 
 - **voya-contracts** — Versioned IPC/persistence DTOs shared by the app and the shell, with one canonical camelCase representation and no domain, persistence, network, platform, or Tauri dependencies. It is the **only** crate that derives `specta::Type`: every business and command DTO lives here, and `pnpm run check:architecture` rejects `derive(Type)` in the shell and `specta` in `voya-app`/`voya-core`. Depended on by `voya-db`, `voya-net`, `voya-app`, and the shell.
-- **voya-core** — Pure, OS-free, deterministic domain logic. Owns models/enums, share-link parsers, routing/DNS logic, and **sing-box config generation** (the generation-related modules are `crates/voya-core/src/config.rs`, `crates/voya-core/src/context.rs`, `crates/voya-core/src/singbox/`, and `crates/voya-core/src/groups.rs`; ADR 0003 refers to them as `coregen::`, while the file actually named `coregen.rs` is `crates/voya-app/src/coregen.rs`). Must contain **no** `#[cfg(target_os)]`, OS/Tauri/filesystem/network/process APIs. Clocks, randomness, ports, and platform facts are *injected*.
+- **voya-core** — Pure, OS-free, deterministic domain logic. Owns models/enums, share-link parsers, routing/DNS logic, and **sing-box config generation** (the generation-related modules are `crates/voya-core/src/config.rs`, `crates/voya-core/src/context.rs`, `crates/voya-core/src/singbox/`; ADR 0003 refers to them as `coregen::`, while the file actually named `coregen.rs` is `crates/voya-app/src/coregen.rs`). Must contain **no** `#[cfg(target_os)]`, OS/Tauri/filesystem/network/process APIs. Clocks, randomness, ports, and platform facts are *injected*.
 - **voya-db** — Fresh sqlx SQLite schema, migrations, repositories. It is the **only** typed persistence boundary: tagged `ProfileProtocol`, `ProfileTransport`, TLS settings, and routing rules serialize to SQLite `TEXT` only here.
 - **voya-platform** — All OS-specific code: `paths`, `process`, `elevation`, `tun`, `sysproxy`/PAC, `autostart`, `coreinfo`, `privilege`. Domain crates reach platform side effects through traits/adapters defined here.
 - **voya-net** — HTTP downloads, subscriptions, Clash REST/WebSocket, and ruleset/Geo asset acquisition.
-- **voya-app** — Orchestration layer. Managers (one module per subsystem: `runtime`, `supervisor`, `profiles`, `subscriptions`, `routing`, `dns`, `proxy_runtime`, `statistics`, `sysproxy`, `tun`, `elevation`, `updates`, etc.) that combine the domain/db/net/platform crates. `proxy_runtime` exposes product-level proxy group/connection behavior through the sing-box Clash-compatible API. No Tauri wiring here.
+- **voya-app** — Orchestration layer. Managers (one module per subsystem: `runtime`, `supervisor`, `profiles`, `subscriptions`, `routing`, `dns`, `proxy_runtime`, `statistics`, `sysproxy`, `tun`, `elevation`, `updates`, etc.) that combine the domain/db/net/platform crates. `proxy_runtime` exposes product-level connection monitoring and traffic-mode behavior through the sing-box Clash-compatible API. No Tauri wiring here.
 - **apps/desktop/src-tauri** — Tauri bootstrap and the *only* backend place that knows about Tauri APIs: command/event registration, `AppState` injection, tray, capabilities, plugins, packaging, lifecycle. `src/lib.rs` `run()` wires everything in `setup()`; IPC lives in `apps/desktop/src-tauri/src/ipc/` (`commands/` holds the `#[tauri::command]` functions split by subsystem, `ipc/window.rs` adds the two window-chrome commands, and the fixed `collect_commands!` list registers every one of them identically in debug and release builds; events live in `events.rs`).
 
 ### Frontend (`apps/desktop/src/` + `packages/`)
 
 - **`apps/desktop/src/ipc/` is the only frontend directory allowed to import `@tauri-apps/api` or Tauri plugins.** Features call typed wrappers (`commands.ts`, `updater.ts`, `process.ts`) and use the single mounted `event-bridge.tsx`, never raw `invoke`/`listen`. This is an architectural rule (ADR 0002) and is lint-enforced.
 - **`apps/desktop/src/ipc/bindings.ts` is generated** from Rust `specta`/`tauri-specta` — never edit by hand, never hand-write DTOs mirroring backend types. It is regenerated automatically under `pnpm dev` (`run()` exports it when `tauri::is_dev()`, or when `VOYAVPN_EXPORT_BINDINGS` is set); packaged debug builds no longer write it, because the export path is baked in at compile time. After changing any Rust command/event/DTO, run `pnpm generate:bindings` and commit; `pnpm check:bindings` (a CI gate) fails on drift.
-- `apps/desktop/src/features/<subsystem>/` — desktop feature UIs (profiles, subscriptions, routing, dns, proxy, groups, options, logs, qr, templates, updates, home).
+- `apps/desktop/src/features/<subsystem>/` — desktop feature UIs (profiles, subscriptions, routing, dns, proxy, settings, logs, qr, updates, home).
 - `packages/ui/src/components/` — shared shadcn/ui primitives; `apps/desktop/src/components/app-shell/` — desktop shell. State via Zustand (`apps/desktop/src/stores/`) + TanStack Query.
 - `packages/i18n/src/locales/` — Voya-maintained locale JSON; these files are the only translation source.
 
@@ -134,10 +134,10 @@ and `scripts/quality/architecture-rules.test.mjs`.
 
 Config generation correctness is judged by the **generated sing-box JSON**, not entity snapshots. Golden testing is the parity contract:
 
-- Golden fixtures live in `tests/golden/`: `singbox/` is driven by `matrix.json`, while `groups/` is loaded directly via `include_str!` in `crates/voya-core/src/groups.rs`; `voya-core` canonicalizes JSON and diffs against this corpus.
-- Fixtures must cover policy-group ordering, proxy chains, DNS final/direct detection, TUN, pre-socks, templates, and per-rule outbounds.
+- Golden fixtures live in `tests/golden/`: `singbox/` is driven by `matrix.json`; `voya-core` canonicalizes JSON and diffs against this corpus.
+- Fixtures must cover ordinary protocols, DNS final/direct detection, TUN, platform pre-socks forwarding, and per-rule outbounds.
 - Where the `sing-box` binary exists, generated configs must pass `sing-box check -c`; when absent, acceptance is skipped with explicit evidence but JSON golden parity still runs.
-- Raw JSON is allowed only at defined template/raw-config boundaries — normal profile/DNS/routing/transport/protocol data must be typed.
+- Raw JSON is allowed only at defined rule-set boundaries — normal profile/DNS/routing/transport/protocol data must be typed.
 
 ## Cores and i18n
 

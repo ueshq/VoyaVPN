@@ -74,6 +74,10 @@ pub async fn delete_subscriptions<R: tauri::Runtime>(
     })
     .await?;
     emit_subscription_invalidation(&app, "subscriptions-deleted", true, deleted.config_changed);
+    core_flow(&app, &state)
+        .disconnect_removed_profile(&current_config(&state))
+        .await
+        .map_err(AppError::from)?;
 
     Ok(deleted.value)
 }
@@ -99,6 +103,10 @@ pub async fn import_profiles_from_text<R: tauri::Runtime>(
     })
     .await?;
     emit_subscription_invalidation(&app, "profiles-imported", true, imported.config_changed);
+    core_flow(&app, &state)
+        .disconnect_removed_profile(&current_config(&state))
+        .await
+        .map_err(AppError::from)?;
 
     Ok(import_profiles_to_contract(imported.value))
 }
@@ -146,6 +154,10 @@ pub async fn update_subscriptions<R: tauri::Runtime>(
     })
     .await?;
     emit_subscription_invalidation(&app, "subscriptions-updated", true, updated.config_changed);
+    core_flow(&app, &state)
+        .disconnect_removed_profile(&current_config(&state))
+        .await
+        .map_err(AppError::from)?;
 
     Ok(subscription_update_to_contract(updated.value))
 }

@@ -7,7 +7,6 @@ pub enum ConfigType {
     #[default]
     #[serde(rename = "vmess")]
     VMess,
-    Custom,
     Shadowsocks,
     #[serde(rename = "socks")]
     SOCKS,
@@ -22,20 +21,6 @@ pub enum ConfigType {
     HTTP,
     Anytls,
     Naive,
-    PolicyGroup,
-    ProxyChain,
-}
-
-impl ConfigType {
-    #[must_use]
-    pub const fn is_complex_type(self) -> bool {
-        matches!(self, Self::Custom | Self::PolicyGroup | Self::ProxyChain)
-    }
-
-    #[must_use]
-    pub const fn is_group_type(self) -> bool {
-        matches!(self, Self::PolicyGroup | Self::ProxyChain)
-    }
 }
 
 #[allow(non_camel_case_types)]
@@ -85,19 +70,6 @@ pub enum MoveAction {
     Down,
     Bottom,
     Position,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum MultipleLoad {
-    /// Also the strategy a policy group decodes to when `strategy` is absent,
-    /// matching the fallback the sing-box selector builder already uses.
-    #[default]
-    LeastPing,
-    Fallback,
-    Random,
-    RoundRobin,
-    LeastLoad,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]

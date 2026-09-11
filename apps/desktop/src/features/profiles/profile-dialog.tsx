@@ -15,14 +15,13 @@ import {
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { ProfileListEntry } from "@/ipc/bindings";
 
-import { CONFIG_TYPES, localizeProfileProtocols, type ProfileProtocol } from "./profile-constants";
+import { localizeProfileProtocols, type ProfileProtocol } from "./profile-constants";
 import {
   Panel,
   SelectField,
   TextField,
 } from "./profile-form-fields";
 import { profileValidationMessage } from "./profile-form-errors";
-import { addressLabel } from "./profile-form-utils";
 import {
   createDefaultProfile,
   normalizeProfileForForm,
@@ -118,16 +117,6 @@ function ProfileDialogForm({
                 control={form.control}
                 label={t("panes.profiles.fields.protocol")}
                 name="configType"
-                onValueChange={(value) => {
-                  const next = value as ProfileProtocol;
-
-                  if (next === CONFIG_TYPES.PolicyGroup && !getValues("address")) {
-                    setValue("address", "group");
-                  }
-                  if (next === CONFIG_TYPES.ProxyChain && !getValues("address")) {
-                    setValue("address", "chain");
-                  }
-                }}
                 options={localizeProfileProtocols(t)}
               />
 
@@ -141,7 +130,7 @@ function ProfileDialogForm({
             <div className="grid gap-3 lg:grid-cols-[1fr_7rem]">
               <TextField
                 error={profileValidationMessage(errors.address?.message, t)}
-                label={addressLabel(configType, t)}
+                label={t("panes.profiles.fields.address")}
                 {...register("address")}
               />
               <TextField
@@ -157,10 +146,8 @@ function ProfileDialogForm({
           <ProtocolPanel
             configType={configType}
             control={form.control}
-            getValues={getValues}
             passwordError={profileValidationMessage(errors.password?.message, t)}
             register={register}
-            setValue={setValue}
             usernameError={profileValidationMessage(errors.username?.message, t)}
           />
           <TransportPanel control={form.control} register={register} />

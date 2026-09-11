@@ -1,7 +1,6 @@
 //! Share-link parsers and exporters.
 //!
-//! Standard protocol links remain interoperable. Voya-only profile groups are
-//! exchanged through the versioned `voya://profiles/v1/` bundle contract.
+//! Standard protocol links can also be exchanged as a versioned node bundle.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -15,8 +14,8 @@ use url::Url;
 
 use crate::{
     protocol_common::{nonempty_str, shadowsocks_plugin_for, RAW_HEADER_HTTP},
-    ConfigType, MultipleLoad, ProfileItem, ProfileProtocol, ProfileTransport, ServerEndpoint,
-    TlsMode, TlsSettings,
+    ConfigType, ProfileItem, ProfileProtocol, ProfileTransport, ServerEndpoint, TlsMode,
+    TlsSettings,
 };
 
 const DEFAULT_SECURITY: &str = "auto";
@@ -70,11 +69,10 @@ use common::*;
 use uri::*;
 
 pub use anytls::AnytlsFmt;
-pub use api::{CustomConfigImport, CustomConfigKind, ShareError, ShareFmt};
+pub use api::{ShareError, ShareFmt};
 pub use entry::{
     export_share_link, export_share_link_with_options, export_voya_profile_bundle,
-    parse_full_custom_config, parse_share_lines, parse_share_link, parse_voya_profile_bundle,
-    ShareLinkOptions,
+    parse_share_lines, parse_share_link, parse_voya_profile_bundle, ShareLinkOptions,
 };
 pub use hysteria2::Hysteria2Fmt;
 pub use naive::NaiveFmt;

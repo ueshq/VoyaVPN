@@ -1,11 +1,7 @@
 import type { Profile, ProfileTransport } from "@/ipc/bindings";
 
 export function profileAddress(profile: Profile) {
-  return "server" in profile.protocol
-    ? profile.protocol.server.address
-    : profile.protocol.kind === "custom"
-      ? profile.protocol.source
-      : "";
+  return profile.protocol.server.address;
 }
 
 export function profilePort(profile: Profile) {

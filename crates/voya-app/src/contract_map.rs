@@ -10,20 +10,16 @@ mod profiles;
 
 pub use data::*;
 pub use errors::{certificate_error, core_info_error, database_error, input_text_error};
-pub use messages::{group_validation_to_contract, validation_issue_to_contract};
+pub use messages::validation_issue_to_contract;
 pub use profiles::{profile_from_contract, profile_to_contract};
 
 use voya_contracts::{
-    GroupChildCandidate as GroupChildContract, GroupPreview as GroupPreviewContract,
-    GroupPreviewRoute as GroupPreviewRouteContract, GroupValidation as GroupValidationContract,
     MoveAction, ProfileListEntry, ProfileListing as ProfileListingContract, ProfileMetrics,
     ProfileTraffic, SpeedtestOutcome,
 };
-use voya_core::{GroupChildCandidate, GroupPreview, MoveAction as CoreMoveAction, ProfileListItem};
+use voya_core::{MoveAction as CoreMoveAction, ProfileListItem};
 
 use crate::profiles::ProfileListing;
-
-pub(crate) use profiles::profile_kind;
 
 #[must_use]
 pub const fn core_type_to_contract(_: voya_core::CoreType) -> voya_contracts::CoreType {
@@ -245,44 +241,6 @@ pub fn profile_listing_to_contract(listing: ProfileListing) -> ProfileListingCon
             .map(profile_list_to_contract)
             .collect(),
         undecodable_profiles: u32::try_from(listing.undecodable_profiles).unwrap_or(u32::MAX),
-    }
-}
-
-#[must_use]
-pub fn group_child_to_contract(item: GroupChildCandidate) -> GroupChildContract {
-    GroupChildContract {
-        profile_id: item.index_id,
-        remarks: item.remarks,
-        address: item.address,
-        protocol: profile_kind(item.config_type),
-        subscription_id: item.subscription_id,
-        is_group: item.is_group,
-        selectable: item.selectable,
-        reason: item.reason,
-    }
-}
-
-#[must_use]
-pub fn group_preview_to_contract(preview: GroupPreview) -> GroupPreviewContract {
-    GroupPreviewContract {
-        validation: GroupValidationContract {
-            valid: preview.validation.valid,
-            child_profile_ids: preview.validation.child_index_ids,
-            errors: group_validation_to_contract(preview.validation.errors),
-            warnings: group_validation_to_contract(preview.validation.warnings),
-        },
-        singbox_routes: preview
-            .singbox_routes
-            .into_iter()
-            .map(|route| GroupPreviewRouteContract {
-                tag: route.tag,
-                kind: route.kind,
-                dialer_proxy: route.dialer_proxy,
-                download_dialer_proxy: route.download_dialer_proxy,
-                detour: route.detour,
-                outbounds: route.outbounds,
-            })
-            .collect(),
     }
 }
 

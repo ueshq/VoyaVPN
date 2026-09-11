@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use voya_core::{
-    AppConfig, CoreGenEnv, CoreGenPlatform, InboundProtocol, ProfileItem, RoutingItem, SubItem,
+    AppConfig, CoreGenEnv, CoreGenPlatform, InboundProtocol, ProfileItem, RoutingItem,
 };
 
 use crate::supervisor::ClashApiSecret;
@@ -12,7 +12,6 @@ pub(crate) struct SnapshotCoreGenEnv {
     platform: CoreGenPlatform,
     profiles: Vec<ProfileItem>,
     routings: Vec<RoutingItem>,
-    subs: Vec<SubItem>,
     singbox_ruleset_paths: BTreeMap<String, String>,
     clash_api_secret: Option<String>,
 }
@@ -21,7 +20,6 @@ pub(crate) struct SnapshotCoreGenEnv {
 pub(crate) struct SnapshotCoreGenData {
     pub(crate) profiles: Vec<ProfileItem>,
     pub(crate) routings: Vec<RoutingItem>,
-    pub(crate) subs: Vec<SubItem>,
 }
 
 impl SnapshotCoreGenEnv {
@@ -38,7 +36,6 @@ impl SnapshotCoreGenEnv {
             platform,
             profiles: data.profiles,
             routings: data.routings,
-            subs: data.subs,
             singbox_ruleset_paths: BTreeMap::new(),
             clash_api_secret: None,
         }
@@ -82,29 +79,6 @@ impl CoreGenEnv for SnapshotCoreGenEnv {
             .find(|profile| profile.remarks == remarks)
             .cloned()
     }
-
-    fn get_profile_items_ordered_by_index_ids(&self, index_ids: &[String]) -> Vec<ProfileItem> {
-        index_ids
-            .iter()
-            .filter_map(|index_id| self.get_profile_by_index_id(index_id))
-            .collect()
-    }
-
-    fn get_profile_items_by_subscription_id(&self, subscription_id: &str) -> Vec<ProfileItem> {
-        self.profiles
-            .iter()
-            .filter(|profile| profile.subscription_id.as_deref() == Some(subscription_id))
-            .cloned()
-            .collect()
-    }
-
-    fn get_subscription(&self, subscription_id: &str) -> Option<SubItem> {
-        self.subs
-            .iter()
-            .find(|sub| sub.id == subscription_id)
-            .cloned()
-    }
-
     fn get_default_routing(&self, config: &AppConfig) -> Option<RoutingItem> {
         self.routings
             .iter()

@@ -119,7 +119,7 @@ fn database_failures_keep_their_code_and_reset_hint() {
 fn the_same_database_failure_is_classified_identically_through_every_manager() {
     let mapped: Vec<AppError> = vec![
         ProfileManagerError::Database(db_row_error()).into(),
-        GroupManagerError::Database(db_row_error()).into(),
+        crate::node_groups::NodeGroupError::Database(db_row_error()).into(),
         SubscriptionManagerError::Database(db_row_error()).into(),
         RoutingManagerError::Database(db_row_error()).into(),
         ExportManagerError::Database(db_row_error()).into(),
@@ -131,7 +131,6 @@ fn the_same_database_failure_is_classified_identically_through_every_manager() {
         // disagreed the most.
         SubscriptionManagerError::Profile(ProfileManagerError::Database(db_row_error())).into(),
         SpeedtestError::Profile(ProfileManagerError::Database(db_row_error())).into(),
-        GroupManagerError::Profile(ProfileManagerError::Database(db_row_error())).into(),
     ];
 
     for error in mapped {
@@ -398,24 +397,6 @@ fn a_rule_not_found_names_the_rule_rather_than_its_routing() {
 fn proxy_runtime_failures_are_classified() {
     assert_kinds(vec![
         (
-            "group not found",
-            ProxyRuntimeError::GroupNotFound("Proxy".to_string()),
-            "notFound",
-            AppErrorSubsystem::ProxyRuntime,
-        ),
-        (
-            "node not found",
-            ProxyRuntimeError::NodeNotFound("Tokyo".to_string()),
-            "notFound",
-            AppErrorSubsystem::ProxyRuntime,
-        ),
-        (
-            "not a selector",
-            ProxyRuntimeError::GroupNotSelector("Proxy".to_string()),
-            "validation",
-            AppErrorSubsystem::ProxyRuntime,
-        ),
-        (
             "poisoned monitor lock",
             ProxyRuntimeError::MonitorLockPoisoned,
             "internal",
@@ -507,13 +488,9 @@ fn every_generation_error_reaches_the_active_profile_field() {
             validation_message(CoreValidationCode::RoutingRuleWithoutOutbound {
                 rule: "rule".to_string(),
             }),
-            validation_message(CoreValidationCode::PolicyGroupWithoutValidChildren),
+            validation_message(CoreValidationCode::InvalidPort),
         ],
-        warnings: vec![validation_message(
-            CoreValidationCode::GroupDuplicateChildIgnored {
-                profile_id: "child".to_string(),
-            },
-        )],
+        warnings: vec![validation_message(CoreValidationCode::InvalidAddress)],
     }
     .into();
 
@@ -538,28 +515,6 @@ fn export_failures_are_classified() {
             ExportManagerError::ProfileNotFound("p-1".to_string()),
             "notFound",
             AppErrorSubsystem::Export,
-        ),
-    ]);
-}
-
-#[test]
-fn group_failures_are_classified() {
-    assert_kinds(vec![
-        (
-            "not a group",
-            GroupManagerError::NotGroupProfile,
-            "validation",
-            AppErrorSubsystem::Group,
-        ),
-        (
-            "validation",
-            GroupManagerError::Validation(vec![validation_message(
-                CoreValidationCode::GroupChildNotFound {
-                    profile_id: "child".to_string(),
-                },
-            )]),
-            "validation",
-            AppErrorSubsystem::Group,
         ),
     ]);
 }
@@ -705,7 +660,6 @@ mod guards {
         match error {
             SubscriptionManagerError::Database(_)
             | SubscriptionManagerError::Profile(_)
-            | SubscriptionManagerError::Group(_)
             | SubscriptionManagerError::Download(_)
             | SubscriptionManagerError::SubscriptionNotFound(_)
             | SubscriptionManagerError::MissingRemarks
@@ -725,17 +679,6 @@ mod guards {
             | RoutingManagerError::InvalidMove { .. } => (),
         }
     }
-
-    const fn group(error: &GroupManagerError) {
-        match error {
-            GroupManagerError::Database(_)
-            | GroupManagerError::Profile(_)
-            | GroupManagerError::NotGroupProfile
-            | GroupManagerError::Validation(_)
-            | GroupManagerError::SingboxConfig(_) => (),
-        }
-    }
-
     const fn export(error: &ExportManagerError) {
         match error {
             ExportManagerError::Database(_)
@@ -778,9 +721,6 @@ mod guards {
     const fn proxy_runtime(error: &ProxyRuntimeError) {
         match error {
             ProxyRuntimeError::Api(_)
-            | ProxyRuntimeError::GroupNotFound(_)
-            | ProxyRuntimeError::NodeNotFound(_)
-            | ProxyRuntimeError::GroupNotSelector(_)
             | ProxyRuntimeError::InvalidTrafficMode(_)
             | ProxyRuntimeError::MonitorLockPoisoned
             | ProxyRuntimeError::MonitorRuntimeUnavailable
@@ -920,4 +860,47 @@ mod guards {
 /// A core validator finding, for the error mappings that carry one.
 fn validation_message(code: CoreValidationCode) -> voya_core::validation::ValidationMessage {
     voya_core::validation::ValidationMessage::new(code)
+}
+
+#[test]
+fn manual_group_failures_are_classified() {
+    use crate::node_groups::NodeGroupError as E;
+    assert_kinds(vec![
+        (
+            "empty",
+            E::EmptyName,
+            "validation",
+            AppErrorSubsystem::Group,
+        ),
+        (
+            "duplicate",
+            E::DuplicateName,
+            "validation",
+            AppErrorSubsystem::Group,
+        ),
+        (
+            "duplicate assignment",
+            E::DuplicateAssignment,
+            "validation",
+            AppErrorSubsystem::Group,
+        ),
+        (
+            "move",
+            E::InvalidMove,
+            "validation",
+            AppErrorSubsystem::Group,
+        ),
+        (
+            "missing group",
+            E::GroupNotFound("g".into()),
+            "notFound",
+            AppErrorSubsystem::Group,
+        ),
+        (
+            "missing node",
+            E::ProfileNotFound("p".into()),
+            "notFound",
+            AppErrorSubsystem::Group,
+        ),
+    ]);
 }

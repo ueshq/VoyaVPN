@@ -69,7 +69,9 @@ describe("i18n locales", () => {
     const translatedKeys = [
       "actions.connect",
       "actions.settings",
-      "proxy.network",
+      "nodeGroups.create",
+      "nodeGroups.manageMembers",
+      "nodeGroups.duplicateName",
       "confirm.deleteProfilesTitle",
       "modal.language",
       "modal.theme",

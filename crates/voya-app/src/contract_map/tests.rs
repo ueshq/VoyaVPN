@@ -9,13 +9,13 @@
 //! cannot tell two `String`s or two `i64`s apart.
 
 use voya_core::{
-    ConfigType, MultipleLoad, ProfileExItem, ProfileItem, ProfileListItem,
-    ProfileProtocol as CoreProfileProtocol, ProfileTransport as CoreProfileTransport, RoutingItem,
-    RuleType, RulesItem, ServerEndpoint as CoreServerEndpoint, ServerStatItem, SimpleDnsItem,
-    SubItem, TlsMode as CoreTlsMode, TlsSettings as CoreTlsSettings,
+    ProfileExItem, ProfileItem, ProfileListItem, ProfileProtocol as CoreProfileProtocol,
+    ProfileTransport as CoreProfileTransport, RoutingItem, RuleType, RulesItem,
+    ServerEndpoint as CoreServerEndpoint, ServerStatItem, SimpleDnsItem, SubItem,
+    TlsMode as CoreTlsMode, TlsSettings as CoreTlsSettings,
 };
 
-use voya_contracts::{ProfileKind, SpeedtestOutcome};
+use voya_contracts::SpeedtestOutcome;
 
 use super::*;
 use crate::{
@@ -102,7 +102,6 @@ fn subscription_mapping_round_trips_every_distinct_field() {
         sort: 11,
         filter: Some("filter-value".to_string()),
         convert_target: Some("convert-target".to_string()),
-        pre_socks_port: Some(10809),
         auto_update_interval_minutes: Some(120),
     };
 
@@ -183,13 +182,6 @@ fn every_protocol() -> Vec<(&'static str, CoreProfileProtocol)> {
                 server: endpoint("vmess.test", 10_001),
                 uuid: "vmess-uuid".to_string(),
                 cipher: Some("vmess-cipher".to_string()),
-            },
-        ),
-        (
-            "custom",
-            CoreProfileProtocol::Custom {
-                source: "custom-source".to_string(),
-                filter: Some("custom-filter".to_string()),
             },
         ),
         (
@@ -281,21 +273,6 @@ fn every_protocol() -> Vec<(&'static str, CoreProfileProtocol)> {
                 congestion_control: Some("naive-congestion".to_string()),
                 insecure_concurrency: Some(7),
                 udp_over_tcp: true,
-            },
-        ),
-        (
-            "policyGroup",
-            CoreProfileProtocol::PolicyGroup {
-                child_profile_ids: vec!["policy-child".to_string()],
-                source_subscription_id: Some("policy-subscription".to_string()),
-                filter: Some("policy-filter".to_string()),
-                strategy: MultipleLoad::RoundRobin,
-            },
-        ),
-        (
-            "proxyChain",
-            CoreProfileProtocol::ProxyChain {
-                child_profile_ids: vec!["chain-child".to_string()],
             },
         ),
     ]
@@ -494,70 +471,6 @@ fn protocol_transport_and_tls_round_trip_together() {
 }
 
 #[test]
-fn every_load_strategy_round_trips() {
-    for strategy in [
-        MultipleLoad::LeastPing,
-        MultipleLoad::Fallback,
-        MultipleLoad::Random,
-        MultipleLoad::RoundRobin,
-        MultipleLoad::LeastLoad,
-    ] {
-        let protocol = CoreProfileProtocol::PolicyGroup {
-            child_profile_ids: vec!["child".to_string()],
-            source_subscription_id: None,
-            filter: None,
-            strategy,
-        };
-        let profile = ProfileItem {
-            protocol,
-            ..ProfileItem::default()
-        };
-
-        assert_eq!(
-            profile_from_contract(profile_to_contract(profile.clone())),
-            profile,
-            "{strategy:?}"
-        );
-    }
-}
-
-/// `profile_kind` is the only mapping with no inverse, so every `ConfigType`
-/// gets an explicit row instead of a round trip.
-#[test]
-fn every_config_type_maps_to_its_profile_kind() {
-    let cases = [
-        (ConfigType::VMess, ProfileKind::Vmess),
-        (ConfigType::Custom, ProfileKind::Custom),
-        (ConfigType::Shadowsocks, ProfileKind::Shadowsocks),
-        (ConfigType::SOCKS, ProfileKind::Socks),
-        (ConfigType::VLESS, ProfileKind::Vless),
-        (ConfigType::Trojan, ProfileKind::Trojan),
-        (ConfigType::Hysteria2, ProfileKind::Hysteria2),
-        (ConfigType::TUIC, ProfileKind::Tuic),
-        (ConfigType::WireGuard, ProfileKind::WireGuard),
-        (ConfigType::HTTP, ProfileKind::Http),
-        (ConfigType::Anytls, ProfileKind::Anytls),
-        (ConfigType::Naive, ProfileKind::Naive),
-        (ConfigType::PolicyGroup, ProfileKind::PolicyGroup),
-        (ConfigType::ProxyChain, ProfileKind::ProxyChain),
-    ];
-
-    for (config_type, kind) in cases {
-        let candidate = group_child_to_contract(GroupChildCandidate {
-            index_id: "child-id".to_string(),
-            remarks: "child-remarks".to_string(),
-            address: "child-address".to_string(),
-            config_type,
-            subscription_id: None,
-            is_group: false,
-            selectable: true,
-            reason: None,
-        });
-        assert_eq!(candidate.protocol, kind, "{config_type:?}");
-    }
-}
-
-#[test]
 fn every_system_proxy_mode_round_trips() {
     for mode in [
         voya_core::SysProxyType::ForcedClear,
@@ -691,9 +604,10 @@ fn profile_list_entry_keeps_metrics_and_traffic_in_their_own_fields() {
             subscription_id: None,
             display_log: false,
             remarks: "profile-remarks".to_string(),
-            protocol: CoreProfileProtocol::Custom {
-                source: "custom-source".to_string(),
-                filter: None,
+            protocol: CoreProfileProtocol::Socks {
+                server: endpoint("node.example", 1080),
+                username: String::new(),
+                password: String::new(),
             },
             transport: None,
             tls: None,

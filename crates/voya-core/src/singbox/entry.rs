@@ -72,7 +72,7 @@ pub fn generate_singbox_speedtest_config(entries: &[SpeedtestConfigEntry]) -> Si
 
         append_servers(
             &mut config,
-            build_all_proxy_servers(&entry.context, &entry.context.node, &proxy_tag, true),
+            build_proxy_servers(&entry.context, &entry.context.node, &proxy_tag),
         );
         config.route.rules.push(SingboxRule {
             inbound: Some(vec![inbound_tag]),
@@ -120,18 +120,6 @@ fn validate_proxy_ports(context: &CoreConfigContext) -> Result<(), SingboxConfig
 
     while let Some(node) = pending.pop() {
         if !node.index_id.is_empty() && !seen.insert(node.index_id.clone()) {
-            continue;
-        }
-        if node.config_type() == ConfigType::Custom {
-            continue;
-        }
-        if node.config_type().is_group_type() {
-            pending.extend(
-                node.protocol
-                    .child_profile_ids()
-                    .iter()
-                    .filter_map(|node_id| context.all_proxies_map.get(node_id).cloned()),
-            );
             continue;
         }
         if !(1..=65535).contains(&node.port()) {

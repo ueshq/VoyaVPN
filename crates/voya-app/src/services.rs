@@ -14,7 +14,6 @@ use crate::{
     config_mutation::{ConfigMutationCoordinator, SharedAppConfig},
     dns::DnsManager,
     exports::ExportManager,
-    groups::GroupManager,
     profiles::{ProfileExManager, ProfileManager},
     routing::RoutingManager,
     runtime::RuntimeManager,
@@ -87,13 +86,13 @@ impl AppServices {
     }
 
     #[must_use]
-    pub fn profiles(&self) -> ProfileManager<'_> {
-        ProfileManager::new(&self.database)
+    pub fn node_groups(&self) -> crate::node_groups::NodeGroupManager<'_> {
+        crate::node_groups::NodeGroupManager::new(&self.database)
     }
 
     #[must_use]
-    pub fn groups(&self) -> GroupManager<'_> {
-        GroupManager::new(&self.database)
+    pub fn profiles(&self) -> ProfileManager<'_> {
+        ProfileManager::new(&self.database)
     }
 
     #[must_use]
@@ -258,7 +257,6 @@ mod tests {
                     .await
                     .expect("test database");
                 let mut expected = AppSettingsV1::default();
-                expected.behavior.auto_create_subscription_group = Some(false);
                 expected.network.system_proxy.mode = mode;
                 expected.network.tun.enabled = tun_enabled;
                 expected.network.system_proxy.exceptions = "localhost,example.test".to_string();

@@ -126,25 +126,11 @@ impl Default for GrpcItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct GuiItem {
     pub auto_run: bool,
     pub enable_statistics: bool,
     pub display_real_time_speed: bool,
-    /// Create a delay-based "Auto" policy group when a subscription first
-    /// imports profiles (Hiddify-style automatic node selection).
-    pub auto_create_subscription_group: bool,
-}
-
-impl Default for GuiItem {
-    fn default() -> Self {
-        Self {
-            auto_run: false,
-            enable_statistics: false,
-            display_real_time_speed: false,
-            auto_create_subscription_group: true,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -166,7 +152,6 @@ impl Default for UiItem {
 pub struct SpeedTestItem {
     pub speed_test_timeout: i32,
     pub speed_ping_test_url: String,
-    pub proxy_delay_concurrency: i32,
     pub ipapi_url: String,
     pub speed_test_page_size: Option<i32>,
     pub speed_test_delay_interval_seconds: Option<i32>,
@@ -177,7 +162,6 @@ impl Default for SpeedTestItem {
         Self {
             speed_test_timeout: 10,
             speed_ping_test_url: DEFAULT_SPEED_PING_TEST_URL.to_string(),
-            proxy_delay_concurrency: 5,
             ipapi_url: String::new(),
             speed_test_page_size: None,
             speed_test_delay_interval_seconds: None,
@@ -239,14 +223,12 @@ impl Default for HysteriaItem {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProxyUiItem {
     pub traffic_mode: TrafficMode,
-    pub node_sorting: i32,
 }
 
 impl Default for ProxyUiItem {
     fn default() -> Self {
         Self {
             traffic_mode: TrafficMode::Rule,
-            node_sorting: 0,
         }
     }
 }
@@ -358,7 +340,6 @@ mod tests {
         assert_eq!(config.tun_mode_item.mtu, 1500);
         assert!(!config.tun_mode_item.strict_route);
         assert_eq!(config.speed_test_item.speed_test_timeout, 10);
-        assert_eq!(config.speed_test_item.proxy_delay_concurrency, 5);
         assert_eq!(config.mux4_sbox_item.protocol, "h2mux");
         assert_eq!(config.hysteria_item.up_mbps, 100);
         assert_eq!(config.hysteria_item.down_mbps, 100);

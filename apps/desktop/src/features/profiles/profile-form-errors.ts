@@ -14,8 +14,6 @@ export function profileValidationMessage(
   switch (message) {
     case PROFILE_VALIDATION_CODES.addressRequired:
       return t("panes.profiles.validation.addressRequired");
-    case PROFILE_VALIDATION_CODES.configSourceRequired:
-      return t("panes.profiles.validation.configSourceRequired");
     case PROFILE_VALIDATION_CODES.credentialRequired:
       return t("panes.profiles.validation.credentialRequired");
     case PROFILE_VALIDATION_CODES.remarksRequired:

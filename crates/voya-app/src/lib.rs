@@ -14,10 +14,10 @@ mod coregen;
 pub mod dns;
 pub mod elevation;
 pub mod exports;
-pub mod groups;
 pub mod input_safety;
 pub mod invalidation;
 pub mod logging;
+pub mod node_groups;
 pub mod profiles;
 pub mod proxy_runtime;
 pub mod qr;
@@ -62,3 +62,6 @@ mod tests {
         assert_eq!(metadata().name, "VoyaVPN");
     }
 }
+
+#[cfg(test)]
+mod node_groups_tests;

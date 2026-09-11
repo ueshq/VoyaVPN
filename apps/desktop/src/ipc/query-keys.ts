@@ -31,12 +31,11 @@ export const queryKeys = {
   appSettings: ["app-settings"],
   connectionMode: ["connection-mode"],
   dns: ["dns"],
-  groupChildCandidates: ["group-child-candidates"],
+  nodeGroups: ["node-groups"],
   processCandidates: ["process-candidates"],
   profileShareQr: ["profile-share-qr"],
   profiles: ["profiles"],
   proxyConnections: ["proxy-connections"],
-  proxyGroups: ["proxy-groups"],
   routings: ["routings"],
   subscriptionMetadata: ["subscription-metadata"],
   subscriptions: ["subscriptions"],
@@ -48,11 +47,6 @@ export type QueryKeyRoot = (typeof queryKeys)[keyof typeof queryKeys];
 /** One filter slice of the profile list. */
 export function profilesQueryKey(filter: string) {
   return [...queryKeys.profiles, { filter }] as const;
-}
-
-/** Child candidates for the group being edited (excluded from its own list). */
-export function groupChildCandidatesQueryKey(currentIndexId: string | null) {
-  return [...queryKeys.groupChildCandidates, currentIndexId] as const;
 }
 
 /** The rendered QR for one share link. */
@@ -76,14 +70,12 @@ export function invalidationQueryKey(scope: InvalidationScope): QueryKeyRoot | n
       return queryKeys.connectionMode;
     case "dns":
       return queryKeys.dns;
-    case "groupChildCandidates":
-      return queryKeys.groupChildCandidates;
+    case "nodeGroups":
+      return queryKeys.nodeGroups;
     case "profiles":
       return queryKeys.profiles;
     case "proxyConnections":
       return queryKeys.proxyConnections;
-    case "proxyGroups":
-      return queryKeys.proxyGroups;
     case "routings":
       return queryKeys.routings;
     case "subscriptionMetadata":

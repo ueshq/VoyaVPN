@@ -42,22 +42,8 @@ pub enum ShareError {
         protocol: &'static str,
         actual: ConfigType,
     },
-    #[error("invalid full custom config")]
-    InvalidFullConfig,
+    #[error("invalid WireGuard config")]
+    InvalidWireGuardConfig,
     #[error("invalid Voya node bundle: {reason}")]
     InvalidVoyaBundle { reason: String },
-}
-
-/// Full-config import formats VoyaVPN can actually run.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CustomConfigKind {
-    SingBox,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct CustomConfigImport {
-    pub kind: CustomConfigKind,
-    pub extension: String,
-    pub contents: String,
-    pub profile: ProfileItem,
 }

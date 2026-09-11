@@ -38,7 +38,6 @@ export function TrafficModeSwitcher() {
         await Promise.all([
           client.invalidateQueries({ queryKey: queryKeys.appSettings }),
           client.invalidateQueries({ queryKey: queryKeys.proxyConnections }),
-          client.invalidateQueries({ queryKey: queryKeys.proxyGroups }),
         ]);
       } finally {
         useRuntimeActionStore.setState({ modePending: false });

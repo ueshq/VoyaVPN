@@ -6,13 +6,12 @@
 //! came from keeps the entry points that call them.
 
 use voya_contracts::{
-    LoadStrategy, Profile as ProfileContract, ProfileKind, ProfileProtocol, ProfileTransport,
+    Profile as ProfileContract, ProfileProtocol, ProfileTransport,
     ServerEndpoint as ContractServerEndpoint, TlsMode, TlsSettings,
 };
 use voya_core::{
-    ConfigType, MultipleLoad, ProfileItem, ProfileProtocol as CoreProfileProtocol,
-    ProfileTransport as CoreProfileTransport, ServerEndpoint as CoreServerEndpoint,
-    TlsMode as CoreTlsMode, TlsSettings as CoreTlsSettings,
+    ProfileItem, ProfileProtocol as CoreProfileProtocol, ProfileTransport as CoreProfileTransport,
+    ServerEndpoint as CoreServerEndpoint, TlsMode as CoreTlsMode, TlsSettings as CoreTlsSettings,
 };
 
 #[must_use]
@@ -52,9 +51,6 @@ fn protocol_to_contract(protocol: CoreProfileProtocol) -> ProfileProtocol {
             uuid,
             cipher,
         },
-        CoreProfileProtocol::Custom { source, filter } => {
-            ProfileProtocol::Custom { source, filter }
-        }
         CoreProfileProtocol::Shadowsocks {
             server,
             password,
@@ -161,20 +157,6 @@ fn protocol_to_contract(protocol: CoreProfileProtocol) -> ProfileProtocol {
             insecure_concurrency,
             udp_over_tcp,
         },
-        CoreProfileProtocol::PolicyGroup {
-            child_profile_ids,
-            source_subscription_id,
-            filter,
-            strategy,
-        } => ProfileProtocol::PolicyGroup {
-            child_profile_ids,
-            source_subscription_id,
-            filter,
-            strategy: load_strategy(strategy),
-        },
-        CoreProfileProtocol::ProxyChain { child_profile_ids } => {
-            ProfileProtocol::ProxyChain { child_profile_ids }
-        }
     }
 }
 
@@ -189,9 +171,6 @@ fn protocol_from_contract(protocol: ProfileProtocol) -> CoreProfileProtocol {
             uuid,
             cipher,
         },
-        ProfileProtocol::Custom { source, filter } => {
-            CoreProfileProtocol::Custom { source, filter }
-        }
         ProfileProtocol::Shadowsocks {
             server,
             password,
@@ -298,20 +277,6 @@ fn protocol_from_contract(protocol: ProfileProtocol) -> CoreProfileProtocol {
             insecure_concurrency,
             udp_over_tcp,
         },
-        ProfileProtocol::PolicyGroup {
-            child_profile_ids,
-            source_subscription_id,
-            filter,
-            strategy,
-        } => CoreProfileProtocol::PolicyGroup {
-            child_profile_ids,
-            source_subscription_id,
-            filter,
-            strategy: load_strategy_from_contract(strategy),
-        },
-        ProfileProtocol::ProxyChain { child_profile_ids } => {
-            CoreProfileProtocol::ProxyChain { child_profile_ids }
-        }
     }
 }
 
@@ -442,44 +407,5 @@ fn server_from_contract(server: ContractServerEndpoint) -> CoreServerEndpoint {
     CoreServerEndpoint {
         address: server.address,
         port: server.port,
-    }
-}
-
-pub(crate) const fn profile_kind(config_type: ConfigType) -> ProfileKind {
-    match config_type {
-        ConfigType::VMess => ProfileKind::Vmess,
-        ConfigType::Custom => ProfileKind::Custom,
-        ConfigType::Shadowsocks => ProfileKind::Shadowsocks,
-        ConfigType::SOCKS => ProfileKind::Socks,
-        ConfigType::VLESS => ProfileKind::Vless,
-        ConfigType::Trojan => ProfileKind::Trojan,
-        ConfigType::Hysteria2 => ProfileKind::Hysteria2,
-        ConfigType::TUIC => ProfileKind::Tuic,
-        ConfigType::WireGuard => ProfileKind::WireGuard,
-        ConfigType::HTTP => ProfileKind::Http,
-        ConfigType::Anytls => ProfileKind::Anytls,
-        ConfigType::Naive => ProfileKind::Naive,
-        ConfigType::PolicyGroup => ProfileKind::PolicyGroup,
-        ConfigType::ProxyChain => ProfileKind::ProxyChain,
-    }
-}
-
-const fn load_strategy(value: MultipleLoad) -> LoadStrategy {
-    match value {
-        MultipleLoad::LeastPing => LoadStrategy::LeastPing,
-        MultipleLoad::Fallback => LoadStrategy::Fallback,
-        MultipleLoad::Random => LoadStrategy::Random,
-        MultipleLoad::RoundRobin => LoadStrategy::RoundRobin,
-        MultipleLoad::LeastLoad => LoadStrategy::LeastLoad,
-    }
-}
-
-const fn load_strategy_from_contract(value: LoadStrategy) -> MultipleLoad {
-    match value {
-        LoadStrategy::LeastPing => MultipleLoad::LeastPing,
-        LoadStrategy::Fallback => MultipleLoad::Fallback,
-        LoadStrategy::Random => MultipleLoad::Random,
-        LoadStrategy::RoundRobin => MultipleLoad::RoundRobin,
-        LoadStrategy::LeastLoad => MultipleLoad::LeastLoad,
     }
 }

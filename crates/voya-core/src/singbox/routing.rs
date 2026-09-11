@@ -430,7 +430,7 @@ fn gen_routing_user_rule_outbound(
     else {
         return PROXY_TAG.to_string();
     };
-    if !node.config_type().is_group_type() && !singbox_supports_config_type(node.config_type()) {
+    if !singbox_supports_config_type(node.config_type()) {
         return PROXY_TAG.to_string();
     }
 
@@ -447,7 +447,7 @@ fn gen_routing_user_rule_outbound(
         return tag;
     }
 
-    let servers = build_all_proxy_servers(context, &node, &tag, true);
+    let servers = build_proxy_servers(context, &node, &tag);
     if servers.is_empty() {
         return PROXY_TAG.to_string();
     }

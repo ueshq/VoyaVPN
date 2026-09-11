@@ -24,6 +24,7 @@ import {
 } from "@voya/ui/components/menubar";
 import { getErrorMessage } from "@voya/utils/error";
 
+
 import { IMPORT_METHODS } from "./import-methods";
 import { ExportMenuItems, SpeedtestButton } from "./server-table-menus";
 import type { ServerTableController } from "./use-server-table";
@@ -31,6 +32,7 @@ import type { ServerTableController } from "./use-server-table";
 export function ServerTableToolbar({ controller }: { controller: ServerTableController }) {
   const {
     filterText,
+    nodeGroups,
     handleBulkExport,
     handleCancelSpeedtest,
     handleSpeedtest,
@@ -55,17 +57,22 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
       openingDialogRef.current = false;
     }
   }
-  const batchActionsDisabled = profilesQuery.isLoading || (!filterText.trim() && profiles.length === 0);
+  const batchActionsDisabled = profilesQuery.isLoading || profiles.length === 0;
 
   return (
     <>
-      <PageHeader>
-        <Badge className="h-6 bg-background tabular-nums text-muted-foreground" variant="outline">
-          {t("panes.profiles.toolbar.rows", { rows: profiles.length.toLocaleString() })}
-        </Badge>
+      <PageHeader className="grid grid-cols-[auto_minmax(0,1fr)] xl:grid-cols-[auto_minmax(0,1fr)_auto]">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <Badge className="h-6 bg-background tabular-nums text-muted-foreground" variant="outline">
+            {t("panes.profiles.toolbar.rows", { rows: profiles.length.toLocaleString() })}
+          </Badge>
+          <Badge className="h-6 bg-background tabular-nums text-muted-foreground" variant="outline">
+            {t("nodeGroups.groupCount", { count: nodeGroups.snapshot.groups.length })}
+          </Badge>
+        </div>
 
-        <PageHeaderActions className="min-w-0 flex-1 flex-wrap justify-end">
-          <div className="relative w-56 max-w-full shrink-0">
+        <PageHeaderActions className="contents">
+          <div className="relative w-56 max-w-full justify-self-end">
             <Search
               className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden="true"
@@ -79,7 +86,7 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
               value={filterText}
             />
           </div>
-          <Toolbar className="min-w-0 max-w-full justify-end">
+          <Toolbar className="col-span-2 min-w-0 max-w-full justify-self-end justify-end xl:col-span-1">
             <ToolbarGroup className="min-w-0 flex-wrap justify-end gap-y-2">
               <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
                 <MenubarMenu>
@@ -105,6 +112,7 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
                       <Rss aria-hidden="true" />
                       {t("home.subscriptionCard.add")}
                     </MenubarItem>
+                    <MenubarItem onSelect={() => { openingDialogRef.current = true; nodeGroups.open({ kind: "name", group: null }, addTriggerRef.current); }}>{t("nodeGroups.create")}</MenubarItem>
                   </MenubarContent>
                 </MenubarMenu>
               </Menubar>
@@ -163,6 +171,8 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
         </PageHeaderActions>
       </PageHeader>
 
+      {nodeGroups.query.error ? <InlinePageError>{getErrorMessage(nodeGroups.query.error)}</InlinePageError> : null}
+      {!nodeGroups.dialog && nodeGroups.error ? <InlinePageError>{nodeGroups.error}</InlinePageError> : null}
       {operationError ? <InlinePageError>{operationError}</InlinePageError> : null}
       {profilesQuery.isError ? <InlinePageError>{getErrorMessage(profilesQuery.error)}</InlinePageError> : null}
       {operationMessage ? (

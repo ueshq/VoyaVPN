@@ -3,10 +3,6 @@ use super::*;
 pub fn validate_node(item: &ProfileItem, core_type: CoreType) -> NodeValidatorResult {
     let mut result = NodeValidatorResult::empty();
 
-    if item.config_type() == ConfigType::Custom || item.config_type().is_group_type() {
-        return result;
-    }
-
     if item.address().trim().is_empty() {
         result.push_error(ValidationCode::InvalidAddress);
     }
@@ -194,17 +190,6 @@ pub fn is_domain(candidate: &str) -> bool {
                 .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
     }) && candidate.chars().any(|ch| ch.is_ascii_alphabetic())
 }
-
-pub(super) fn push_unique_child_index(
-    child_index_ids: &mut Vec<String>,
-    child_index_seen: &mut BTreeSet<String>,
-    child_index_id: &str,
-) {
-    if child_index_seen.insert(child_index_id.to_string()) {
-        child_index_ids.push(child_index_id.to_string());
-    }
-}
-
 pub(super) fn nonempty(value: &str) -> Option<&str> {
     let value = value.trim();
     if value.is_empty() {
@@ -217,12 +202,11 @@ pub(super) fn nonempty(value: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{MultipleLoad, TlsSettings};
+    use crate::TlsSettings;
 
     #[test]
     fn validate_node_rejection_table_covers_every_branch() {
-        // A false positive here silently shrinks a policy group's selector, so
-        // every rejection needs a case pinning its exact message.
+        // Every rejection must identify the invalid node field precisely.
         let cases: &[(&str, ProfileItem, &[ValidationCode])] = &[
             ("valid vless", vless_node(), &[]),
             (
@@ -368,29 +352,6 @@ mod tests {
                 result
             );
         }
-    }
-
-    #[test]
-    fn validate_node_skips_custom_and_group_profiles() {
-        let group = ProfileItem {
-            protocol: ProfileProtocol::PolicyGroup {
-                child_profile_ids: Vec::new(),
-                source_subscription_id: None,
-                filter: None,
-                strategy: MultipleLoad::LeastPing,
-            },
-            ..ProfileItem::default()
-        };
-        let custom = ProfileItem {
-            protocol: ProfileProtocol::Custom {
-                source: String::new(),
-                filter: None,
-            },
-            ..ProfileItem::default()
-        };
-
-        assert!(validate_node(&group, CoreType::sing_box).success());
-        assert!(validate_node(&custom, CoreType::sing_box).success());
     }
 
     #[test]

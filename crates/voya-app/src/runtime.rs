@@ -20,7 +20,6 @@ use voya_platform::{
     },
     filesystem,
     paths::{AppPaths, PathError},
-    tun::{tun_backend, TunBackend},
 };
 
 use crate::coregen::{SnapshotCoreGenData, SnapshotCoreGenEnv};
@@ -142,6 +141,22 @@ impl<'runtime> RuntimeManager<'runtime> {
         cleanup_runtime_state(&self.paths)?;
 
         Ok(snapshot)
+    }
+
+    pub async fn disconnect_removed_profile(
+        &self,
+    ) -> Result<Option<SupervisorSnapshot>, RuntimeError> {
+        let _guard = self.operation_lock.lock().await;
+        let status = self.supervisor.status().await?;
+        let Some(id) = status.active_profile_id.as_deref() else {
+            return Ok(None);
+        };
+        if self.database.profiles().exists(id).await? {
+            return Ok(None);
+        }
+        let snapshot = self.supervisor.stop().await?;
+        cleanup_runtime_state(&self.paths)?;
+        Ok(Some(snapshot))
     }
 
     pub async fn status(&self) -> Result<SupervisorSnapshot, RuntimeError> {
@@ -347,39 +362,10 @@ fn runtime_config_contexts(
     env: &SnapshotCoreGenEnv,
     config: &AppConfig,
     active_profile: &voya_core::ProfileItem,
-    target_os: TargetOs,
+    _target_os: TargetOs,
 ) -> CoreConfigContextBuilderAllResult {
     let builder = CoreConfigContextBuilder::new(env);
-    if should_use_single_native_tun_config(config, target_os) {
-        return CoreConfigContextBuilderAllResult {
-            main_result: builder.build(config, active_profile),
-            pre_socks_result: None,
-        };
-    }
-
     builder.build_all(config, active_profile)
-}
-
-/// Whether TUN must be served by one config on this host.
-///
-/// `CoreConfigContextBuilder::build_all` no longer needs this for the *TUN
-/// topology* decision: `CoreGenEnv::tun_topology()` reports `SingleProcess` on
-/// macOS and Windows, so `pre_socks_item` already declines to split there.
-///
-/// It still guards `pre_socks_item`'s *other* trigger — a `ConfigType::Custom`
-/// profile whose subscription declares a `pre_socks_port` — which fires
-/// regardless of platform or TUN. Taking that split with a native backend
-/// breaks TUN outright: `build_all` clears `is_tun_enabled` on the main context
-/// and moves the TUN inbound to the pre-socks one, while both native backends
-/// ignore `NativeTunStartRequest::pre_config_path` and hand only the main
-/// config to the PacketTunnel provider / Windows service. The provider would
-/// then start a config with no `tun` inbound at all.
-fn should_use_single_native_tun_config(config: &AppConfig, target_os: TargetOs) -> bool {
-    config.tun_mode_item.enable_tun
-        && matches!(
-            tun_backend(target_os),
-            TunBackend::MacosPacketTunnel | TunBackend::WindowsService
-        )
 }
 
 fn write_runtime_config(
@@ -452,7 +438,6 @@ pub(crate) async fn load_runtime_core_gen_env(
         SnapshotCoreGenData {
             profiles: database.profiles().list().await?,
             routings: database.routings().list().await?,
-            subs: database.subscriptions().list().await?,
         },
     )
     .with_singbox_ruleset_paths(local_singbox_ruleset_paths(paths)))
@@ -837,56 +822,6 @@ mod tests {
             assert!(contexts.pre_socks_result.is_none());
             assert!(contexts.main_result.context.is_tun_enabled);
         }
-    }
-
-    /// Why `should_use_single_native_tun_config` still exists: `build_all` also
-    /// splits for a custom profile whose subscription declares a pre-socks
-    /// port, and that split clears the TUN inbound on the only config a native
-    /// backend ever starts.
-    #[test]
-    fn runtime_macos_tun_keeps_a_custom_pre_socks_profile_in_one_config() {
-        let profile = ProfileItem {
-            index_id: "active".to_string(),
-            remarks: "Custom".to_string(),
-            subscription_id: Some("sub".to_string()),
-            protocol: ProfileProtocol::Custom {
-                source: "{}".to_string(),
-                filter: None,
-            },
-            ..ProfileItem::default()
-        };
-        let config = AppConfig {
-            index_id: "active".to_string(),
-            tun_mode_item: voya_core::TunModeItem {
-                enable_tun: true,
-                ..voya_core::TunModeItem::default()
-            },
-            ..AppConfig::default()
-        };
-        let env = SnapshotCoreGenEnv::new(
-            &config,
-            CoreGenPlatform::MacOS,
-            SnapshotCoreGenData {
-                profiles: vec![profile.clone()],
-                subs: vec![voya_core::SubItem {
-                    id: "sub".to_string(),
-                    pre_socks_port: Some(20_809),
-                    ..voya_core::SubItem::default()
-                }],
-                ..SnapshotCoreGenData::default()
-            },
-        );
-
-        let split = CoreConfigContextBuilder::new(&env).build_all(&config, &profile);
-        assert!(
-            split.pre_socks_result.is_some() && !split.main_result.context.is_tun_enabled,
-            "build_all alone would hand the provider a config with no tun inbound"
-        );
-
-        let contexts = runtime_config_contexts(&env, &config, &profile, TargetOs::Macos);
-
-        assert!(contexts.pre_socks_result.is_none());
-        assert!(contexts.main_result.context.is_tun_enabled);
     }
 
     #[tokio::test]

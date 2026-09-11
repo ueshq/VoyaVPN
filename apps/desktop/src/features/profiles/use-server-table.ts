@@ -8,7 +8,6 @@ import {
   listProfiles,
   listSubscriptions,
   runSpeedtest,
-  saveGroupProfile,
   saveProfile,
   saveTextFile,
   useRuntimeEventStore,
@@ -23,6 +22,8 @@ import { profilesQueryKey, queryKeys } from "@/ipc/query-keys";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import { useProfileActivation } from "@/features/home/use-profile-activation";
+import { useNodeGroups } from "./use-node-groups";
+import { nodeListRows } from "./node-list-rows";
 
 import {
   exportFileFilter,
@@ -34,7 +35,6 @@ import {
   type ProfileExportKind,
 } from "./server-table-actions";
 import type { ImportMethod } from "./import-methods";
-import { CONFIG_TYPES } from "./profile-constants";
 import { applyLiveUpdates } from "./server-table-live-updates";
 
 type DialogState =
@@ -43,6 +43,7 @@ type DialogState =
   | null;
 
 export function useServerTable() {
+  const nodeGroups = useNodeGroups();
   const [dialogState, setDialogStateInternal] = useState<DialogState>(null);
   const [filterText, setFilterText] = useState("");
   const [importMethod, setImportMethod] = useState<ImportMethod | null>(null);
@@ -71,10 +72,9 @@ export function useServerTable() {
   const speedtestRunning = useRuntimeEventStore((state) => state.speedtestRunning);
   const setSpeedtestRunning = useRuntimeEventStore((state) => state.setSpeedtestRunning);
   const queryClient = useQueryClient();
-  const filter = filterText.trim();
   const profilesQuery = useQuery({
-    queryFn: () => listProfiles(null, filter || null),
-    queryKey: profilesQueryKey(filter),
+    queryFn: () => listProfiles(null, null),
+    queryKey: profilesQueryKey(""),
   });
   const profiles = useMemo(
     () =>
@@ -92,17 +92,18 @@ export function useServerTable() {
   const undecodableProfiles = profilesQuery.data?.undecodableProfiles ?? 0;
 
   const viewportRef = useRef<HTMLDivElement>(null);
+  const rows = useMemo(() => nodeListRows(profiles, nodeGroups.snapshot, nodeGroups.expanded, filterText, t("nodeGroups.unassigned")), [profiles, nodeGroups.snapshot, nodeGroups.expanded, filterText, t]);
   const rowVirtualizer = useVirtualizer({
-    count: profiles.length,
+    count: rows.length,
     estimateSize: () => 100,
-    getItemKey: (index) => profiles[index]!.profile.id,
+    getItemKey: (index) => rows[index]!.key,
     getScrollElement: () => viewportRef.current,
     initialRect: { height: 520, width: 1200 },
     overscan: 5,
   });
   const visibleRows = rowVirtualizer.getVirtualItems();
-  const renderedRows = visibleRows.length > 0 ? visibleRows : profiles.slice(0, 15).map((item, index) => ({
-    index, key: item.profile.id, start: index * 100,
+  const renderedRows = visibleRows.length > 0 ? visibleRows : rows.slice(0, 15).map((row, index) => ({
+    index, key: row.key, start: index * 100,
   }));
   function subscriptionName(item: ProfileListEntry) {
     return item.profile.subscriptionId
@@ -172,13 +173,10 @@ export function useServerTable() {
   }
 
   async function handleSave(profile: Profile) {
-    const save = profile.protocol.kind === CONFIG_TYPES.PolicyGroup || profile.protocol.kind === CONFIG_TYPES.ProxyChain
-      ? saveGroupProfile
-      : saveProfile;
     setSaveError(null);
     // The editor remounts its form whenever `open` toggles, so closing it on a
     // rejected save would discard every in-progress edit.
-    if (await runOperation(() => save(profile), setSaveError)) {
+    if (await runOperation(() => saveProfile(profile), setSaveError)) {
       setDialogStateInternal(null);
     }
   }
@@ -290,6 +288,8 @@ export function useServerTable() {
   }
 
   return {
+    nodeGroups,
+    rows,
     activation,
     detailsId,
     openDetails,

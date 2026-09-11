@@ -95,7 +95,6 @@ describe("home traffic mode", () => {
     const user = userEvent.setup();
     const { client } = renderSwitcher();
     client.setQueryData(queryKeys.proxyConnections, { connections: ["old"] });
-    client.setQueryData(queryKeys.proxyGroups, { trafficMode: "rule" });
     const global = screen.getByRole("button", { name: "Global" });
     await waitFor(() => expect(global).toBeEnabled());
     await user.click(global);
@@ -103,7 +102,6 @@ describe("home traffic mode", () => {
     await waitFor(() => expect(global).toHaveAttribute("aria-pressed", "true"));
     await waitFor(() => expect(global).toBeEnabled());
     expect(client.getQueryState(queryKeys.proxyConnections)?.isInvalidated).toBe(true);
-    expect(client.getQueryState(queryKeys.proxyGroups)?.isInvalidated).toBe(true);
     expect(runtimeActionPending()).toBe(false);
     await user.click(global);
     await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(2));

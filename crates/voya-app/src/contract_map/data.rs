@@ -23,7 +23,6 @@ pub fn subscription_to_contract(item: SubItem) -> SubscriptionContract {
         sort: item.sort,
         filter: item.filter,
         converter_target: item.convert_target,
-        pre_socks_port: item.pre_socks_port,
         auto_update_interval_minutes: item.auto_update_interval_minutes,
     }
 }
@@ -53,7 +52,6 @@ pub fn subscription_from_contract(item: SubscriptionContract) -> SubItem {
         sort: item.sort,
         filter: item.filter,
         convert_target: item.converter_target,
-        pre_socks_port: item.pre_socks_port,
         auto_update_interval_minutes: item.auto_update_interval_minutes,
     }
 }

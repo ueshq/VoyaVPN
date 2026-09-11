@@ -202,6 +202,25 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
         }
     }
 
+    /// Reconcile a committed node deletion without stopping a newer valid selection.
+    pub async fn disconnect_removed_profile(&self, config: &AppConfig) -> Result<(), RuntimeError> {
+        match self.runtime.disconnect_removed_profile().await {
+            Ok(Some(snapshot)) => {
+                self.sink
+                    .log(CoreFlowLevel::Info, LogCode::Disconnected, None);
+                self.settle_disconnected(config, None, Some(&snapshot))
+                    .await;
+                Ok(())
+            }
+            Ok(None) => Ok(()),
+            Err(error) => {
+                self.report_failure(CoreFlowReason::Disconnect, &error);
+                self.reconcile(config, CoreFlowReason::Disconnect).await;
+                Err(error)
+            }
+        }
+    }
+
     /// React to a core process that exited on its own.
     pub async fn handle_core_exit(&self, config: &AppConfig, event: CoreExitEvent) {
         let exit = describe_exit(&event);

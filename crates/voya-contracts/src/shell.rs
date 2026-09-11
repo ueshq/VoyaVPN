@@ -148,8 +148,7 @@ pub enum AppErrorEntity {
     Routing,
     RoutingRule,
     Subscription,
-    ProxyGroup,
-    ProxyNode,
+    NodeGroup,
     /// The core-info table has no entry for the requested core type.
     CoreInfo,
 }

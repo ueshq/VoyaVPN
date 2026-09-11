@@ -11,6 +11,7 @@ import {
 import { buttonVariants } from "@voya/ui/components/button-variants";
 import { SubscriptionsDialog } from "@/features/subscriptions/subscriptions-dialog";
 
+import { NodeGroupDialogs } from "./node-group-dialogs";
 import { ImportProfilesDialog } from "./import-profiles-dialog";
 import { ProfileDetailsDialog } from "./profile-details-dialog";
 import { ProfileDialog } from "./profile-dialog";
@@ -40,6 +41,7 @@ export function ServerTableDialogs({ controller }: { controller: ServerTableCont
 
   return (
     <>
+      <NodeGroupDialogs controller={controller} />
       {detailsItem ? <ProfileDetailsDialog controller={controller} item={detailsItem} /> : null}
       <ProfileDialog
         onCloseFocus={controller.restoreProfileDialogFocus}
