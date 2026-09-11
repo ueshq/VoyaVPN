@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{SystemProxyType, TrafficMode, CURRENT_SCHEMA_VERSION};
+use crate::{DnsSettings, SystemProxyType, TrafficMode, CURRENT_SCHEMA_VERSION};
 
 // Settings use the same strict current shape for IPC and persistence. The
 // database baseline rejects historical installations before reading these DTOs;
@@ -17,7 +17,7 @@ pub struct AppSettingsV1 {
     pub core: CoreSettings,
     pub network: NetworkSettings,
     pub routing: RoutingSettings,
-    pub dns: AppDnsSettings,
+    pub dns: DnsSettings,
     // Serialized as `speedTest`. The type follows the `Speedtest` spelling the
     // commands and events use, but the field name is a persisted JSON key and
     // stays as it is.
@@ -37,7 +37,7 @@ impl Default for AppSettingsV1 {
             core: CoreSettings::default(),
             network: NetworkSettings::default(),
             routing: RoutingSettings::default(),
-            dns: AppDnsSettings::default(),
+            dns: DnsSettings::default(),
             speed_test: SpeedtestSettings::default(),
             multiplexing: MultiplexingSettings::default(),
             grpc: GrpcSettings::default(),
@@ -235,22 +235,6 @@ impl Default for RoutingSettings {
             singbox_domain_strategy: String::new(),
         }
     }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AppDnsSettings {
-    pub add_common_hosts: Option<bool>,
-    pub fake_ip: Option<bool>,
-    pub global_fake_ip: Option<bool>,
-    pub block_binding_query: Option<bool>,
-    pub direct: Option<String>,
-    pub remote: Option<String>,
-    pub bootstrap: Option<String>,
-    pub direct_strategy: Option<String>,
-    pub proxy_strategy: Option<String>,
-    pub hosts: Option<String>,
-    pub direct_expected_ips: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]

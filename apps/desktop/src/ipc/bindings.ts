@@ -135,20 +135,6 @@ export const events = {
 };
 
 /* Types */
-export type AppDnsSettings = {
-	addCommonHosts: boolean | null,
-	fakeIp: boolean | null,
-	globalFakeIp: boolean | null,
-	blockBindingQuery: boolean | null,
-	direct: string | null,
-	remote: string | null,
-	bootstrap: string | null,
-	directStrategy: string | null,
-	proxyStrategy: string | null,
-	hosts: string | null,
-	directExpectedIps: string | null,
-};
-
 /**
  *  One failed IPC command.
  * 
@@ -252,7 +238,7 @@ export type AppSettingsV1 = {
 	core: CoreSettings,
 	network: NetworkSettings,
 	routing: RoutingSettings,
-	dns: AppDnsSettings,
+	dns: DnsSettings,
 	speedTest: SpeedtestSettings,
 	multiplexing: MultiplexingSettings,
 	grpc: GrpcSettings,

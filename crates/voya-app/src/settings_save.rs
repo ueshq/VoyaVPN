@@ -2,14 +2,14 @@ use thiserror::Error;
 use voya_contracts as contracts;
 use voya_core::{
     AppConfig, CoreBasicItem, GrpcItem, GuiItem, HysteriaItem, InItem, Mux4SboxItem, ProxyUiItem,
-    RoutingBasicItem, SimpleDnsItem, SpeedTestItem, SystemProxyItem, TunModeItem, UiItem,
+    RoutingBasicItem, SpeedTestItem, SystemProxyItem, TunModeItem, UiItem,
 };
 use voya_db::AppStateRecord;
 
 use crate::{
     contract_map::{
-        sysproxy_type_from_contract, sysproxy_type_to_contract, traffic_mode_from_contract,
-        traffic_mode_to_contract,
+        simple_dns_from_contract, simple_dns_to_contract, sysproxy_type_from_contract,
+        sysproxy_type_to_contract, traffic_mode_from_contract, traffic_mode_to_contract,
     },
     input_safety,
 };
@@ -239,19 +239,7 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
             domain_strategy: config.routing_basic_item.domain_strategy.clone(),
             singbox_domain_strategy: config.routing_basic_item.domain_strategy4_singbox.clone(),
         },
-        dns: contracts::AppDnsSettings {
-            add_common_hosts: config.simple_dns_item.add_common_hosts,
-            fake_ip: config.simple_dns_item.fake_ip,
-            global_fake_ip: config.simple_dns_item.global_fake_ip,
-            block_binding_query: config.simple_dns_item.block_binding_query,
-            direct: config.simple_dns_item.direct_dns.clone(),
-            remote: config.simple_dns_item.remote_dns.clone(),
-            bootstrap: config.simple_dns_item.bootstrap_dns.clone(),
-            direct_strategy: config.simple_dns_item.strategy4_freedom.clone(),
-            proxy_strategy: config.simple_dns_item.strategy4_proxy.clone(),
-            hosts: config.simple_dns_item.hosts.clone(),
-            direct_expected_ips: config.simple_dns_item.direct_expected_ips.clone(),
-        },
+        dns: simple_dns_to_contract(config.simple_dns_item.clone()),
         speed_test: contracts::SpeedtestSettings {
             timeout_seconds: config.speed_test_item.speed_test_timeout,
             latency_url: config.speed_test_item.speed_ping_test_url.clone(),
@@ -391,19 +379,7 @@ pub fn app_config_from_settings(
                 second_local_port_enabled: item.secondary_port_enabled,
             })
             .collect(),
-        simple_dns_item: SimpleDnsItem {
-            add_common_hosts: settings.dns.add_common_hosts,
-            fake_ip: settings.dns.fake_ip,
-            global_fake_ip: settings.dns.global_fake_ip,
-            block_binding_query: settings.dns.block_binding_query,
-            direct_dns: settings.dns.direct.clone(),
-            remote_dns: settings.dns.remote.clone(),
-            bootstrap_dns: settings.dns.bootstrap.clone(),
-            strategy4_freedom: settings.dns.direct_strategy.clone(),
-            strategy4_proxy: settings.dns.proxy_strategy.clone(),
-            hosts: settings.dns.hosts.clone(),
-            direct_expected_ips: settings.dns.direct_expected_ips.clone(),
-        },
+        simple_dns_item: simple_dns_from_contract(settings.dns.clone()),
     }
 }
 
@@ -517,6 +493,7 @@ where
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
+    use voya_core::SimpleDnsItem;
 
     use voya_core::{SysProxyType, TrafficMode};
 

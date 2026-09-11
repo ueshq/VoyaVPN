@@ -165,7 +165,11 @@ pub fn rule_from_contract(item: RoutingRuleContract) -> RulesItem {
 
 #[must_use]
 pub fn dns_to_contract(settings: DnsSettings) -> DnsContract {
-    let item = settings.simple_dns_item;
+    simple_dns_to_contract(settings.simple_dns_item)
+}
+
+#[must_use]
+pub(crate) fn simple_dns_to_contract(item: SimpleDnsItem) -> DnsContract {
     DnsContract {
         add_common_hosts: item.add_common_hosts,
         fake_ip: item.fake_ip,
@@ -184,19 +188,24 @@ pub fn dns_to_contract(settings: DnsSettings) -> DnsContract {
 #[must_use]
 pub fn dns_from_contract(settings: DnsContract) -> DnsSettings {
     DnsSettings {
-        simple_dns_item: SimpleDnsItem {
-            add_common_hosts: settings.add_common_hosts,
-            fake_ip: settings.fake_ip,
-            global_fake_ip: settings.global_fake_ip,
-            block_binding_query: settings.block_binding_query,
-            direct_dns: settings.direct,
-            remote_dns: settings.remote,
-            bootstrap_dns: settings.bootstrap,
-            strategy4_freedom: settings.direct_strategy,
-            strategy4_proxy: settings.proxy_strategy,
-            hosts: settings.hosts,
-            direct_expected_ips: settings.direct_expected_ips,
-        },
+        simple_dns_item: simple_dns_from_contract(settings),
+    }
+}
+
+#[must_use]
+pub(crate) fn simple_dns_from_contract(settings: DnsContract) -> SimpleDnsItem {
+    SimpleDnsItem {
+        add_common_hosts: settings.add_common_hosts,
+        fake_ip: settings.fake_ip,
+        global_fake_ip: settings.global_fake_ip,
+        block_binding_query: settings.block_binding_query,
+        direct_dns: settings.direct,
+        remote_dns: settings.remote,
+        bootstrap_dns: settings.bootstrap,
+        strategy4_freedom: settings.direct_strategy,
+        strategy4_proxy: settings.proxy_strategy,
+        hosts: settings.hosts,
+        direct_expected_ips: settings.direct_expected_ips,
     }
 }
 

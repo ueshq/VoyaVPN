@@ -133,6 +133,15 @@ fn dns_mapping_round_trips_every_distinct_field() {
         dns_from_contract(dns_to_contract(settings.clone())),
         settings
     );
+
+    let config = voya_core::AppConfig {
+        simple_dns_item: settings.simple_dns_item.clone(),
+        ..voya_core::AppConfig::default()
+    };
+    let bundle = crate::settings_save::settings_from_app_config(&config);
+    assert_eq!(bundle.dns, dns_to_contract(settings.clone()));
+    let restored = crate::settings_save::config_from_settings(&bundle, &config);
+    assert_eq!(restored.simple_dns_item, settings.simple_dns_item);
 }
 
 #[test]
