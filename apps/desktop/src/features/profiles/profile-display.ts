@@ -16,3 +16,8 @@ export function profileTransportName(transport: ProfileTransport | null) {
     default: return transport?.kind ?? "tcp";
   }
 }
+
+export function profileNameWithoutFlag(name: string) {
+  const flag = name.match(/\p{Regional_Indicator}{2}/u)?.[0];
+  return flag ? name.replace(flag, "").trim() || name : name;
+}

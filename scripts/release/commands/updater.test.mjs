@@ -117,12 +117,12 @@ describe("release updater metadata", () => {
     }
   });
 
-  it("resolves the legacy kind:updater payload when a manifest predates updaterPayload", async () => {
+  it("rejects manifests without an explicit updater payload", async () => {
     const workDir = await mkdtemp(join(tmpdir(), "voyavpn-updater-legacy-"));
     const latestPath = join(workDir, "latest.json");
 
     try {
-      await execFileAsync(
+      await expect(execFileAsync(
         process.execPath,
         [
           "scripts/release/cli.mjs",
@@ -137,12 +137,7 @@ describe("release updater metadata", () => {
           "https://cdn.voyavpn.test/beta/updater",
         ],
         { cwd: repoRoot },
-      );
-
-      const latest = await readJson(latestPath);
-      expect(latest.platforms["windows-x86_64"].url).toBe(
-        "https://cdn.voyavpn.test/beta/updater/voyavpn-0.1.0-stable-windows-x86-64-updater.zip",
-      );
+      )).rejects.toThrow(/No signed updater payload found/);
     } finally {
       await rm(workDir, { force: true, recursive: true });
     }

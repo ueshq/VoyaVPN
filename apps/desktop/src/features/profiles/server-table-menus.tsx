@@ -162,7 +162,7 @@ export function ProfileRowContextMenu({
     <ContextMenu modal={false}>
       <ContextMenuTrigger
         asChild
-        onContextMenu={() => controller.selectOnly(item.profile.id)}
+        onContextMenu={() => controller.setSelectedId(item.profile.id)}
       >
         {children}
       </ContextMenuTrigger>
@@ -215,7 +215,7 @@ export function ProfileCardMenu({
         <MenubarTrigger asChild>
           <Button
             aria-label={label}
-            onClick={() => controller.selectOnly(item.profile.id)}
+            onClick={() => controller.setSelectedId(item.profile.id)}
             size="icon"
             variant="ghost"
           >
@@ -366,8 +366,8 @@ function ProfileMenuItems({
         <SubContent>
           <ExportMenuItems
             onExport={(kind) => void handleExport(kind, [indexId])}
-            onSave={(kind) => void handleExport(kind, [indexId], false, true)}
-            onShowQr={() => void handleExport("shareLinks", [indexId], true)}
+            onSave={(kind) => void handleExport(kind, [indexId], "file")}
+            onShowQr={() => void handleExport("shareLinks", [indexId], "qr")}
             primitives={{ Item, Separator }}
             t={t}
           />

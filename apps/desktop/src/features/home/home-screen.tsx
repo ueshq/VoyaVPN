@@ -6,6 +6,7 @@ import worldMap from "@/assets/world-map.svg";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { SubscriptionsDialog } from "@/features/subscriptions/subscriptions-dialog";
 
+import { profileNameWithoutFlag } from "@/features/profiles/profile-display";
 import { getProtocolLabel } from "@/features/profiles/profile-constants";
 import { cn } from "@voya/ui/lib/utils";
 
@@ -79,8 +80,7 @@ export function HomeScreen() {
     profile?.id ||
     home.runningId ||
     t(home.profilesPending ? "status.loadingScreen" : "home.noNodes");
-  const flag = rawName.match(/\p{Regional_Indicator}{2}/u)?.[0];
-  const name = flag ? rawName.replace(flag, "").trim() || rawName : rawName;
+  const name = profileNameWithoutFlag(rawName);
   const delayMs =
     home.nodeEntry && home.nodeEntry.metrics.delayMs > 0
       ? home.nodeEntry.metrics.delayMs
@@ -149,7 +149,7 @@ export function HomeScreen() {
           {!noNodes ? <ConnectedInfo delayMs={delayMs} t={t} /> : null}
           <ConnectionModeSwitcher
             tunEnabled={home.tunEnabled}
-            modeBusy={home.modeBusy}
+            modeBusy={home.busy}
             modePending={home.modePending}
             onTunChange={home.changeTunEnabled}
             t={t}

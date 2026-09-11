@@ -1,7 +1,6 @@
 use std::{collections::BTreeMap, net::IpAddr};
 
 use serde_json::Value;
-use thiserror::Error;
 
 use crate::{
     singbox::support::{singbox_supports_config_type, state_port2},
@@ -278,14 +277,6 @@ impl CoreConfigContextBuilderAllResult {
     }
 }
 
-#[derive(Debug, Error, PartialEq, Eq)]
-pub enum ContextBuildError {
-    #[error("active node id is empty")]
-    MissingActiveProfileId,
-    #[error("active node {0} was not found")]
-    ActiveProfileNotFound(String),
-}
-
 pub trait CoreGenEnv {
     fn platform(&self) -> CoreGenPlatform;
 
@@ -303,16 +294,6 @@ pub trait CoreGenEnv {
     fn get_clash_api_secret(&self) -> Option<String> {
         None
     }
-
-    fn get_active_profile(&self, config: &AppConfig) -> Option<ProfileItem> {
-        let active_id = config.index_id.trim();
-        if active_id.is_empty() {
-            return None;
-        }
-        self.get_profile_by_index_id(active_id)
-    }
-
-    fn get_profile_by_index_id(&self, index_id: &str) -> Option<ProfileItem>;
 
     fn get_profile_by_remarks(&self, remarks: &str) -> Option<ProfileItem>;
     fn get_default_routing(&self, config: &AppConfig) -> Option<RoutingItem>;
@@ -334,21 +315,6 @@ where
     #[must_use]
     pub fn new(env: &'env E) -> Self {
         Self { env }
-    }
-
-    pub fn build_active(
-        &self,
-        config: &AppConfig,
-    ) -> Result<CoreConfigContextBuilderResult, ContextBuildError> {
-        let active_id = config.index_id.trim();
-        if active_id.is_empty() {
-            return Err(ContextBuildError::MissingActiveProfileId);
-        }
-        let node = self
-            .env
-            .get_active_profile(config)
-            .ok_or_else(|| ContextBuildError::ActiveProfileNotFound(active_id.to_string()))?;
-        Ok(self.build(config, &node))
     }
 
     #[must_use]
@@ -608,13 +574,6 @@ mod tests {
             self.platform
         }
 
-        fn get_profile_by_index_id(&self, index_id: &str) -> Option<ProfileItem> {
-            self.profiles
-                .iter()
-                .find(|profile| profile.index_id == index_id)
-                .cloned()
-        }
-
         fn get_profile_by_remarks(&self, remarks: &str) -> Option<ProfileItem> {
             self.profiles
                 .iter()
@@ -638,11 +597,11 @@ mod tests {
     }
 
     #[test]
-    fn context_build_active_resolves_structured_dns_routing_and_active_node() {
+    fn context_build_resolves_structured_dns_routing_for_the_supplied_node() {
         let active = vless_profile("active", "Active", "active.example.com");
         let config = app_config("active");
         let env = MemoryEnv {
-            profiles: vec![active],
+            profiles: vec![active.clone()],
             routings: vec![RoutingItem {
                 id: "routing".to_string(),
                 ..RoutingItem::default()
@@ -650,9 +609,7 @@ mod tests {
             ..MemoryEnv::default()
         };
 
-        let result = CoreConfigContextBuilder::new(&env)
-            .build_active(&config)
-            .expect("active context");
+        let result = CoreConfigContextBuilder::new(&env).build(&config, &active);
 
         assert!(result.success());
         assert_eq!(result.context.node.index_id, "active");

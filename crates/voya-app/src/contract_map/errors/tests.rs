@@ -737,7 +737,6 @@ mod guards {
             | RuntimeError::CreateConfigDir { .. }
             | RuntimeError::WriteConfig { .. }
             | RuntimeError::RemoveConfig { .. }
-            | RuntimeError::ContextBuild(_)
             | RuntimeError::SingboxConfig(_)
             | RuntimeError::CoreInfo(_)
             | RuntimeError::Database(_)

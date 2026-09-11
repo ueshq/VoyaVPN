@@ -155,9 +155,9 @@ export function ServerTableToolbar({
                     <ExportMenuItems
                       onExport={(kind) => void handleBulkExport(kind)}
                       onSave={(kind) =>
-                        void handleBulkExport(kind, false, true)
+                        void handleBulkExport(kind, "file")
                       }
-                      onShowQr={() => void handleBulkExport("shareLinks", true)}
+                      onShowQr={() => void handleBulkExport("shareLinks", "qr")}
                       t={t}
                     />
                   </MenubarContent>

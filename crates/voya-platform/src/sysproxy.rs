@@ -482,18 +482,6 @@ fn pac_url(request: &SystemProxyRequest) -> String {
     )
 }
 
-pub fn build_windows_proxy_settings(
-    item: &SystemProxyItem,
-    port: i32,
-) -> Result<WindowsProxySettings, SystemProxyError> {
-    let exception_entries = validated_proxy_exceptions(&item.system_proxy_exceptions)?;
-    Ok(build_windows_proxy_settings_with_exceptions(
-        item,
-        port,
-        &exception_entries,
-    ))
-}
-
 fn build_windows_proxy_settings_with_exceptions(
     item: &SystemProxyItem,
     port: i32,
@@ -785,7 +773,14 @@ mod tests {
             ..SystemProxyItem::default()
         };
 
-        let settings = build_windows_proxy_settings(&item, 2080).expect("windows settings");
+        let mut request = request(TargetOs::Windows, SysProxyType::ForcedChange);
+        request.item = item;
+        request.item.sys_proxy_type = SysProxyType::ForcedChange;
+        request.socks_port = 2080;
+        let plan = plan_system_proxy(&request).expect("windows proxy plan");
+        let SystemProxyAction::WindowsSetProxy(settings) = plan.action else {
+            panic!("expected Windows proxy settings");
+        };
 
         assert_eq!(
             settings.proxy,

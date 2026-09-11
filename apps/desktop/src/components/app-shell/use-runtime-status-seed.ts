@@ -1,27 +1,17 @@
 import { useEffect } from "react";
 import { i18next } from "@voya/i18n";
-import { getErrorMessage } from "@voya/utils/error";
-import { refreshRuntimeStatus, runtimeStatusErrorKeys } from "@/ipc/runtime-status";
-import { useToastStore } from "@/stores/toast-store";
+import { refreshRuntimeStatusAndReport } from "@/ipc/runtime-status";
 
 /** One always-mounted owner seeds runtime, platform capabilities and TUN. */
 export function useRuntimeStatusSeed() {
   useEffect(() => {
     let mounted = true;
     let reading = false;
-    async function refresh(channels?: Parameters<typeof refreshRuntimeStatus>[0]) {
+    async function refresh(channels?: Parameters<typeof refreshRuntimeStatusAndReport>[1]) {
       if (reading || !mounted) return;
       reading = true;
       try {
-        const failures = await refreshRuntimeStatus(channels, () => mounted);
-        if (!mounted) return;
-        for (const { channel, error } of failures) {
-          useToastStore.getState().pushToast({
-            description: getErrorMessage(error),
-            severity: "error",
-            title: i18next.t(runtimeStatusErrorKeys[channel]),
-          });
-        }
+        await refreshRuntimeStatusAndReport(i18next.t, channels, () => mounted);
       } finally {
         reading = false;
       }

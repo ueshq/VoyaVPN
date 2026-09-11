@@ -8,7 +8,7 @@ import { cn } from "@voya/ui/lib/utils";
 
 import { NodeGroupCard } from "./node-group-card";
 
-import { profileLatency } from "./profile-display";
+import { profileLatency, profileNameWithoutFlag } from "./profile-display";
 import { getProtocolLabel } from "./profile-constants";
 
 import { ProfileCardMenu, ProfileRowContextMenu } from "./server-table-menus";
@@ -26,7 +26,7 @@ export function ProfileCardList({
     rows,
     renderedRows,
     rowVirtualizer,
-    selectOnly,
+    setSelectedId,
     selectedId,
     t,
     viewportRef,
@@ -110,10 +110,7 @@ export function ProfileCardList({
               const running = activation.runningId === id;
               const switching = activation.switchingId === id;
               const rawName = profile.remarks || t("panes.profiles.untitled");
-              const flag = rawName.match(/\p{Regional_Indicator}{2}/u)?.[0];
-              const name = flag
-                ? rawName.replace(flag, "").trim() || rawName
-                : rawName;
+              const name = profileNameWithoutFlag(rawName);
               const address = profile.protocol.server.address || "—";
               return (
                 <li key={row.key} {...rowProps}>
@@ -125,7 +122,7 @@ export function ProfileCardList({
                       )}
                       data-testid="server-row"
                       data-selected={selected}
-                      onClick={() => selectOnly(id)}
+                      onClick={() => setSelectedId(id)}
                     >
                       <div aria-hidden="true" className="node-card-icon">
                         <NodeCountryIcon
@@ -140,7 +137,7 @@ export function ProfileCardList({
                           aria-pressed={selected}
                           data-row-focus
                           className="node-card-select"
-                          onClick={() => selectOnly(id)}
+                          onClick={() => setSelectedId(id)}
                           type="button"
                         >
                           <span className="node-card-label">

@@ -12,7 +12,7 @@ use tokio::{
 use voya_core::{AppConfig, CoreType, ServerStatItem};
 use voya_db::{Database, DbError};
 use voya_net::clash::{
-    decode_traffic_message, ClashWebSocketClient, ClashWebSocketEvent, ClashWebSocketResource,
+    ClashTraffic, ClashWebSocketClient, ClashWebSocketEvent, ClashWebSocketResource,
 };
 
 use crate::{
@@ -219,31 +219,6 @@ impl Drop for StatisticsManager {
     }
 }
 
-/// Turns one coalesced sample into the snapshot the UI renders. A sample with
-/// no traffic still produces a (zero) snapshot so the speed display can fall
-/// back to 0 B/s; only samples carrying traffic are written to the database.
-pub async fn apply_statistics_sample(
-    database: &Database,
-    config: &StatisticsConfigSnapshot,
-    sample: ServerSpeedSample,
-    date_now: i64,
-) -> Result<Option<StatisticsSnapshot>> {
-    if !config.enabled() {
-        return Ok(None);
-    }
-    if !sample.has_traffic() {
-        return Ok(Some(snapshot_from_sample(config, sample, None)));
-    }
-
-    let server_stat = if let Some(active_profile_id) = &config.active_profile_id {
-        Some(add_traffic(database, active_profile_id, date_now, sample).await?)
-    } else {
-        None
-    };
-
-    Ok(Some(snapshot_from_sample(config, sample, server_stat)))
-}
-
 async fn add_traffic(
     database: &Database,
     index_id: &str,
@@ -374,21 +349,15 @@ async fn record_statistics_tick(
     )))
 }
 
-#[must_use]
-pub fn parse_singbox_traffic_sample(source: &str) -> Option<ServerSpeedSample> {
-    let traffic = decode_traffic_message(source)?;
-
-    Some(ServerSpeedSample {
-        proxy_up_bytes: i64::try_from(traffic.up).unwrap_or(i64::MAX),
-        proxy_down_bytes: i64::try_from(traffic.down).unwrap_or(i64::MAX),
-        direct_up_bytes: 0,
-        direct_down_bytes: 0,
-    })
-}
-
-#[must_use]
-pub fn core_matches_singbox(core_type: Option<CoreType>) -> bool {
-    core_type.is_some_and(core_type_matches_singbox)
+impl From<ClashTraffic> for ServerSpeedSample {
+    fn from(traffic: ClashTraffic) -> Self {
+        Self {
+            proxy_up_bytes: i64::try_from(traffic.up).unwrap_or(i64::MAX),
+            proxy_down_bytes: i64::try_from(traffic.down).unwrap_or(i64::MAX),
+            direct_up_bytes: 0,
+            direct_down_bytes: 0,
+        }
+    }
 }
 
 #[must_use]
@@ -529,9 +498,7 @@ async fn run_singbox_statistics_service(
             .as_ref()
             .map(SupervisorSnapshot::clash_api_access)
             .unwrap_or_default();
-        let Some(identity) = snapshot
-            .and_then(|snapshot| core_process_identity(snapshot, core_type_matches_singbox))
-        else {
+        let Some(identity) = snapshot.and_then(core_process_identity) else {
             active_identity = None;
             reconnect_backoff.reset();
             if sleep_or_shutdown(SINGBOX_RECONNECT_INITIAL_DELAY, &mut shutdown).await {
@@ -575,12 +542,7 @@ async fn run_singbox_statistics_service(
                         match message {
                             Ok(Ok(ClashWebSocketEvent::Traffic(traffic))) => {
                                 reconnect_backoff.reset();
-                                let sample = ServerSpeedSample {
-                                    proxy_up_bytes: i64::try_from(traffic.up).unwrap_or(i64::MAX),
-                                    proxy_down_bytes: i64::try_from(traffic.down).unwrap_or(i64::MAX),
-                                    direct_up_bytes: 0,
-                                    direct_down_bytes: 0,
-                                };
+                                let sample = ServerSpeedSample::from(traffic);
                                 let _ = sample_tx.send(sample).await;
                             }
                             Ok(Ok(ClashWebSocketEvent::Connections(_))) | Err(_) => {}
@@ -629,7 +591,7 @@ async fn singbox_process_identity(supervisor: &CoreSupervisor) -> Option<CorePro
         .status()
         .await
         .ok()
-        .and_then(|snapshot| core_process_identity(snapshot, core_type_matches_singbox))
+        .and_then(core_process_identity)
 }
 
 /// Emits while traffic flows and once more when it stops, so the speed display
@@ -665,13 +627,10 @@ struct CoreProcessIdentity {
     pre_pid: Option<u32>,
 }
 
-fn core_process_identity(
-    snapshot: SupervisorSnapshot,
-    matches_core_type: fn(CoreType) -> bool,
-) -> Option<CoreProcessIdentity> {
+fn core_process_identity(snapshot: SupervisorSnapshot) -> Option<CoreProcessIdentity> {
     let core_type = snapshot.running_core_type?;
     let main_pid = snapshot.main_pid?;
-    matches_core_type(core_type).then_some(CoreProcessIdentity {
+    Some(CoreProcessIdentity {
         core_type,
         main_pid,
         pre_pid: snapshot.pre_pid,
@@ -687,11 +646,6 @@ fn update_active_identity(
     }
 
     *active_identity = Some(identity);
-    true
-}
-
-fn core_type_matches_singbox(core_type: CoreType) -> bool {
-    let _ = core_type;
     true
 }
 
@@ -715,17 +669,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn statistics_singbox_traffic_parser_reads_ws_payload() {
+    fn statistics_traffic_conversion_preserves_counts_and_saturates_overflow() {
         assert_eq!(
-            parse_singbox_traffic_sample(r#"{"up":1234,"down":5678}"#),
-            Some(ServerSpeedSample {
+            ServerSpeedSample::from(ClashTraffic {
+                up: 1234,
+                down: 5678
+            }),
+            ServerSpeedSample {
                 proxy_up_bytes: 1234,
                 proxy_down_bytes: 5678,
                 direct_up_bytes: 0,
                 direct_down_bytes: 0,
-            })
+            }
         );
-        assert_eq!(parse_singbox_traffic_sample("not-json"), None);
+        let overflow = ServerSpeedSample::from(ClashTraffic {
+            up: u64::MAX,
+            down: u64::MAX,
+        });
+        assert_eq!(overflow.proxy_up_bytes, i64::MAX);
+        assert_eq!(overflow.proxy_down_bytes, i64::MAX);
     }
 
     #[test]
@@ -756,11 +718,6 @@ mod tests {
     }
 
     #[test]
-    fn statistics_core_type_matching_follows_singbox_only() {
-        assert!(core_matches_singbox(Some(CoreType::sing_box)));
-    }
-
-    #[test]
     fn statistics_core_process_identity_tracks_pid_changes() {
         let first = SupervisorSnapshot {
             connected_duration_ms: None,
@@ -783,13 +740,10 @@ mod tests {
         };
 
         assert_ne!(
-            core_process_identity(first, core_type_matches_singbox),
-            core_process_identity(restarted, core_type_matches_singbox)
+            core_process_identity(first),
+            core_process_identity(restarted)
         );
-        assert_eq!(
-            core_process_identity(disconnected, core_type_matches_singbox),
-            None
-        );
+        assert_eq!(core_process_identity(disconnected), None);
     }
 
     #[test]
@@ -801,7 +755,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn statistics_apply_sample_keys_persistence_to_active_server_and_sums_display() {
+    async fn statistics_record_tick_keys_persistence_to_active_server_and_sums_display() {
         let database = Database::connect_in_memory()
             .await
             .expect("statistics test operation should succeed");
@@ -821,9 +775,10 @@ mod tests {
             active_profile_id: Some("active".to_string()),
         };
 
-        let snapshot = apply_statistics_sample(
+        let snapshot = record_statistics_tick(
             &database,
             &config,
+            &mut TrafficWriteBuffer::default(),
             ServerSpeedSample {
                 proxy_up_bytes: 1000,
                 proxy_down_bytes: 2000,
@@ -831,6 +786,7 @@ mod tests {
                 direct_down_bytes: 400,
             },
             10,
+            true,
         )
         .await
         .expect("statistics test operation should succeed")
@@ -871,7 +827,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn statistics_apply_sample_reports_idle_ticks_without_touching_the_database() {
+    async fn statistics_record_tick_reports_idle_ticks_without_touching_the_database() {
         let database = Database::connect_in_memory()
             .await
             .expect("statistics test operation should succeed");
@@ -887,10 +843,17 @@ mod tests {
         };
 
         let idle = ServerSpeedSample::default();
-        let snapshot = apply_statistics_sample(&database, &config, idle, 10)
-            .await
-            .expect("statistics test operation should succeed")
-            .expect("an idle tick still reports a zero snapshot");
+        let snapshot = record_statistics_tick(
+            &database,
+            &config,
+            &mut TrafficWriteBuffer::default(),
+            idle,
+            10,
+            true,
+        )
+        .await
+        .expect("statistics test operation should succeed")
+        .expect("an idle tick still reports a zero snapshot");
 
         assert_eq!(snapshot.upload_bytes_per_second, 0.0);
         assert_eq!(snapshot.download_bytes_per_second, 0.0);
@@ -922,7 +885,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn statistics_apply_sample_rolls_today_at_date_boundary() {
+    async fn statistics_record_tick_rolls_today_at_date_boundary() {
         let database = Database::connect_in_memory()
             .await
             .expect("statistics test operation should succeed");
@@ -949,9 +912,10 @@ mod tests {
             active_profile_id: Some("active".to_string()),
         };
 
-        let snapshot = apply_statistics_sample(
+        let snapshot = record_statistics_tick(
             &database,
             &config,
+            &mut TrafficWriteBuffer::default(),
             ServerSpeedSample {
                 proxy_up_bytes: 5,
                 proxy_down_bytes: 7,
@@ -959,6 +923,7 @@ mod tests {
                 direct_down_bytes: 13,
             },
             2,
+            true,
         )
         .await
         .expect("statistics test operation should succeed")

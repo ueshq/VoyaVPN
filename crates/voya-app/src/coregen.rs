@@ -66,13 +66,6 @@ impl CoreGenEnv for SnapshotCoreGenEnv {
         self.platform
     }
 
-    fn get_profile_by_index_id(&self, index_id: &str) -> Option<ProfileItem> {
-        self.profiles
-            .iter()
-            .find(|profile| profile.index_id == index_id)
-            .cloned()
-    }
-
     fn get_profile_by_remarks(&self, remarks: &str) -> Option<ProfileItem> {
         self.profiles
             .iter()

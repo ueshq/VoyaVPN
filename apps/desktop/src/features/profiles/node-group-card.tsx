@@ -183,10 +183,10 @@ export function NodeGroupCard({
                     void handleGroupExport(row.groupKey, kind)
                   }
                   onSave={(kind) =>
-                    void handleGroupExport(row.groupKey, kind, false, true)
+                    void handleGroupExport(row.groupKey, kind, "file")
                   }
                   onShowQr={() =>
-                    void handleGroupExport(row.groupKey, "shareLinks", true)
+                    void handleGroupExport(row.groupKey, "shareLinks", "qr")
                   }
                 />
               </MenubarContent>

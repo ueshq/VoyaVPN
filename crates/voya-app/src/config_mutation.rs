@@ -26,25 +26,6 @@ pub enum ConfigMutationError {
 }
 
 #[derive(Debug)]
-pub struct CommitCompensationFailure<CommitError, CompensationError> {
-    pub commit: CommitError,
-    pub compensation: Option<CompensationError>,
-}
-
-pub async fn commit_with_compensation<T, CommitError, CompensationError>(
-    commit: impl std::future::Future<Output = Result<T, CommitError>>,
-    compensate: impl FnOnce() -> Result<(), CompensationError>,
-) -> Result<T, CommitCompensationFailure<CommitError, CompensationError>> {
-    match commit.await {
-        Ok(value) => Ok(value),
-        Err(commit) => Err(CommitCompensationFailure {
-            commit,
-            compensation: compensate().err(),
-        }),
-    }
-}
-
-#[derive(Debug)]
 pub struct ConfigMutationCoordinator {
     database: Database,
     config: SharedAppConfig,
@@ -217,7 +198,6 @@ fn publish_config(config: &RwLock<AppConfig>, updated: &AppConfig) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicBool, Ordering};
     use tokio::sync::Barrier;
 
     #[tokio::test]
@@ -407,34 +387,5 @@ mod tests {
             .await
             .expect("subscription lookup should succeed")
             .is_none());
-    }
-
-    #[tokio::test]
-    async fn failed_commit_runs_compensation_and_preserves_both_errors() {
-        let compensated = AtomicBool::new(false);
-        let failure = commit_with_compensation(async { Err::<(), _>("commit failed") }, || {
-            compensated.store(true, Ordering::SeqCst);
-            Err("restore failed")
-        })
-        .await
-        .expect_err("commit should fail");
-
-        assert!(compensated.load(Ordering::SeqCst));
-        assert_eq!(failure.commit, "commit failed");
-        assert_eq!(failure.compensation, Some("restore failed"));
-    }
-
-    #[tokio::test]
-    async fn successful_commit_does_not_run_compensation() {
-        let compensated = AtomicBool::new(false);
-        let result = commit_with_compensation(async { Ok::<_, &str>(42) }, || {
-            compensated.store(true, Ordering::SeqCst);
-            Ok::<_, &str>(())
-        })
-        .await
-        .expect("commit should succeed");
-
-        assert_eq!(result, 42);
-        assert!(!compensated.load(Ordering::SeqCst));
     }
 }

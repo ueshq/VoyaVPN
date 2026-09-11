@@ -5,7 +5,6 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use voya_core::{RoutingItem, RulesItem};
 
@@ -45,8 +44,6 @@ pub enum RulesetGeoError {
     },
     #[error("invalid acquired asset {path}: {reason}")]
     InvalidAsset { path: PathBuf, reason: String },
-    #[error("failed to parse ruleset manifest: {0}")]
-    Manifest(#[from] serde_json::Error),
 }
 
 pub type Result<T> = std::result::Result<T, RulesetGeoError>;
@@ -116,86 +113,6 @@ impl SrsAsset {
             tag,
         }
     }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct RulesetGeoManifest {
-    pub geo: Vec<GeoManifestEntry>,
-    pub srs: Vec<SrsManifestEntry>,
-}
-
-impl RulesetGeoManifest {
-    pub fn from_json(input: &str) -> Result<Self> {
-        Ok(serde_json::from_str(input)?)
-    }
-
-    pub fn geo_assets(&self, source_url: Option<&str>) -> Vec<GeoAsset> {
-        let source_url = nonempty(source_url).unwrap_or(DEFAULT_GEO_SOURCE_URL);
-        self.geo
-            .iter()
-            .filter_map(|entry| {
-                let name = nonempty(Some(entry.name.as_str()))?;
-                let file_name = entry
-                    .file_name
-                    .as_deref()
-                    .and_then(|value| nonempty(Some(value)))
-                    .map(ToString::to_string)
-                    .unwrap_or_else(|| format!("{name}.dat"));
-                let url = entry
-                    .url
-                    .as_deref()
-                    .and_then(|value| nonempty(Some(value)))
-                    .map(ToString::to_string)
-                    .unwrap_or_else(|| format_geo_url(source_url, name));
-                Some(GeoAsset::new(name, file_name, url))
-            })
-            .collect()
-    }
-
-    pub fn srs_assets(&self, source_url: Option<&str>) -> Vec<SrsAsset> {
-        let source_url = nonempty(source_url).unwrap_or(DEFAULT_SINGBOX_RULESET_URL);
-        self.srs
-            .iter()
-            .filter_map(|entry| {
-                let kind = nonempty(Some(entry.kind.as_str()))?;
-                let name = nonempty(Some(entry.name.as_str()))?;
-                let mut asset = SrsAsset::new(source_url, kind, name);
-                if let Some(tag) = entry.tag.as_deref().and_then(|value| nonempty(Some(value))) {
-                    asset.tag = tag.to_string();
-                }
-                if let Some(file_name) = entry
-                    .file_name
-                    .as_deref()
-                    .and_then(|value| nonempty(Some(value)))
-                {
-                    asset.file_name = file_name.to_string();
-                }
-                if let Some(url) = entry.url.as_deref().and_then(|value| nonempty(Some(value))) {
-                    asset.url = url.to_string();
-                }
-                Some(asset)
-            })
-            .collect()
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct GeoManifestEntry {
-    pub name: String,
-    pub file_name: Option<String>,
-    pub url: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct SrsManifestEntry {
-    pub kind: String,
-    pub name: String,
-    pub tag: Option<String>,
-    pub file_name: Option<String>,
-    pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -651,32 +568,6 @@ mod tests {
     };
 
     use super::*;
-
-    #[test]
-    fn ruleset_manifest_expands_geo_and_srs_assets() {
-        let manifest = RulesetGeoManifest::from_json(
-            r#"{
-                "geo": [
-                    { "name": "geosite" },
-                    { "name": "country", "fileName": "Country.mmdb", "url": "https://cdn.example/Country.mmdb" }
-                ],
-                "srs": [
-                    { "kind": "geosite", "name": "cn" },
-                    { "kind": "geoip", "name": "private", "tag": "geoip-private-custom", "fileName": "geoip-private-custom.srs" }
-                ]
-            }"#,
-        )
-        .expect("manifest");
-
-        let geo = manifest.geo_assets(Some("https://rules.example/{0}.dat"));
-        assert_eq!(geo[0].url, "https://rules.example/geosite.dat");
-        assert_eq!(geo[1].file_name, "Country.mmdb");
-
-        let srs = manifest.srs_assets(Some("https://rules.example/{0}/{1}.srs"));
-        assert_eq!(srs[0].url, "https://rules.example/geosite/geosite-cn.srs");
-        assert_eq!(srs[1].tag, "geoip-private-custom");
-        assert_eq!(srs[1].file_name, "geoip-private-custom.srs");
-    }
 
     #[test]
     fn ruleset_collection_reads_routing_references() {

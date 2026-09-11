@@ -186,8 +186,7 @@ function isSignatureArtifact(artifact) {
  * `pnpm release -- artifacts` marks it explicitly (`updaterPayload: true`),
  * because with `createUpdaterArtifacts: true` the signed payload is the
  * installer itself (NSIS `-setup.exe`, `.AppImage`, `.app.tar.gz`) and several
- * artifacts of a target can carry a sibling `.sig`. Manifests written before
- * that flag existed still resolve through the legacy `kind: "updater"` rule.
+ * artifacts of a target can carry a sibling `.sig`.
  */
 export function selectUpdaterPayload(artifacts) {
   const candidates = (artifacts ?? []).filter((artifact) => !isSignatureArtifact(artifact));
@@ -197,11 +196,7 @@ export function selectUpdaterPayload(artifacts) {
       `artifact manifest marks ${marked.length} updater payloads: ${marked.map((artifact) => artifact.name).join(", ")}`,
     );
   }
-  if (marked.length === 1) {
-    return marked[0];
-  }
-
-  return candidates.find((artifact) => artifact.kind === "updater") ?? null;
+  return marked[0] ?? null;
 }
 
 export function findSignatureArtifact(payload, artifacts) {

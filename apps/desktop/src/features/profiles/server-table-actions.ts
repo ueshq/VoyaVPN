@@ -7,6 +7,8 @@ import type { ExportProfilesResult, ImportProfilesResult, ProfileKind } from "@/
 import { CONFIG_TYPES } from "./profile-constants";
 import type { TranslationFunction as TranslateFn } from "@voya/i18n";
 
+export type ProfileExportDestination = "clipboard" | "file" | "qr";
+
 export type ProfileExportKind = "shareBase64" | "shareLinks" | "voyaBundle";
 
 // `export_share_link` (crates/voya-core/src/fmt/entry.rs) only knows these node

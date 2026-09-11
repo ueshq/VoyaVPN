@@ -43,9 +43,10 @@ import {
   runProfileExport,
   supportsShareLinkExport,
   type ProfileExportKind,
+  type ProfileExportDestination,
 } from "./server-table-actions";
 import type { ImportMethod } from "./import-methods";
-import { applyLiveUpdates } from "./server-table-live-updates";
+import { applySpeedtestResults } from "./server-table-live-updates";
 
 type DialogState =
   | { mode: "create"; profile?: null }
@@ -179,9 +180,8 @@ export function useServerTable() {
   });
   const profiles = useMemo(
     () =>
-      applyLiveUpdates(
+      applySpeedtestResults(
         profilesQuery.data?.entries ?? [],
-        undefined,
         speedtestResultsByProfileId,
       ),
     [profilesQuery.data, speedtestResultsByProfileId],
@@ -254,7 +254,7 @@ export function useServerTable() {
     setOperationError(null);
     setOperationMessage(null);
     try {
-      // Every command routed through here emits its own profiles invalidation.
+      // Mutating commands emit their own cache invalidations.
       await operation();
       return true;
     } catch (error) {
@@ -296,10 +296,6 @@ export function useServerTable() {
     }
   }
 
-  function selectOnly(indexId: string) {
-    setSelectedId(indexId);
-  }
-
   async function handleSave(profile: Profile) {
     setSaveError(null);
     // The editor remounts its form whenever `open` toggles, so closing it on a
@@ -325,16 +321,15 @@ export function useServerTable() {
   async function performExport(
     kind: ProfileExportKind,
     indexIds: string[],
-    showQr: boolean,
-    saveFile: boolean,
+    destination: ProfileExportDestination,
   ) {
     const result = await runProfileExport(kind, indexIds);
-    if (showQr) {
+    if (destination === "qr") {
       setShareQrContent(result.text);
       return true;
     }
 
-    if (saveFile) {
+    if (destination === "file") {
       const path = await saveTextFile({
         defaultPath: exportFileName(kind),
         filters: [exportFileFilter(kind, t)],
@@ -359,43 +354,31 @@ export function useServerTable() {
   async function handleExport(
     kind: ProfileExportKind,
     indexIds: string[],
-    showQr = false,
-    saveFile = false,
+    destination: ProfileExportDestination = "clipboard",
   ) {
-    setOperationError(null);
-    setOperationMessage(null);
-    if (indexIds.length === 0) {
-      setOperationError(t("panes.profiles.export.noSelection"));
-      return;
-    }
-
-    try {
-      await performExport(kind, indexIds, showQr, saveFile);
-    } catch (error) {
-      setOperationError(getErrorMessage(error));
-    }
+    await runOperation(async () => {
+      if (indexIds.length === 0) {
+        setOperationError(t("panes.profiles.export.noSelection"));
+        return;
+      }
+      await performExport(kind, indexIds, destination);
+    });
   }
 
   async function handleBulkExport(
     kind: ProfileExportKind,
-    showQr = false,
-    saveFile = false,
+    destination: ProfileExportDestination = "clipboard",
   ) {
-    setOperationError(null);
-    setOperationMessage(null);
-    try {
+    await runOperation(async () => {
       const allProfiles = (await listProfiles(null, null)).entries;
-      await performBatchExport(kind, allProfiles, showQr, saveFile);
-    } catch (error) {
-      setOperationError(getErrorMessage(error));
-    }
+      await performBatchExport(kind, allProfiles, destination);
+    });
   }
 
   async function performBatchExport(
     kind: ProfileExportKind,
     entries: ProfileListEntry[],
-    showQr: boolean,
-    saveFile: boolean,
+    destination: ProfileExportDestination,
   ) {
     const exportable = isShareLinkExport(kind)
       ? entries.filter((item) =>
@@ -409,8 +392,7 @@ export function useServerTable() {
     const completed = await performExport(
       kind,
       exportable.map((item) => item.profile.id),
-      showQr,
-      saveFile,
+      destination,
     );
     const skipped = entries.length - exportable.length;
     if (completed && skipped > 0)
@@ -422,12 +404,9 @@ export function useServerTable() {
   async function handleGroupExport(
     groupKey: string,
     kind: ProfileExportKind,
-    showQr = false,
-    saveFile = false,
+    destination: ProfileExportDestination = "clipboard",
   ) {
-    setOperationError(null);
-    setOperationMessage(null);
-    try {
+    await runOperation(async () => {
       const [listing, snapshot] = await Promise.all([
         listProfiles(null, null),
         listNodeGroups(),
@@ -438,8 +417,7 @@ export function useServerTable() {
           listing.entries.filter(
             (entry) => entry.profile.subscriptionId === groupKey.slice(13),
           ),
-          showQr,
-          saveFile,
+          destination,
         );
         return;
       }
@@ -454,12 +432,9 @@ export function useServerTable() {
       await performBatchExport(
         kind,
         profilesByNodeGroup(listing.entries, snapshot).get(groupId) ?? [],
-        showQr,
-        saveFile,
+        destination,
       );
-    } catch (error) {
-      setOperationError(getErrorMessage(error));
-    }
+    });
   }
 
   async function handleSpeedtest(target: SpeedtestTarget) {
@@ -494,7 +469,6 @@ export function useServerTable() {
     updateSubscription,
     updatingSubscriptions,
     subscriptionTriggerRef,
-    metadataQuery,
     subscriptionsQuery,
     subscriptionMetadata,
     nodeGroups,
@@ -532,7 +506,7 @@ export function useServerTable() {
     rowVirtualizer,
     runOperation,
     saveError,
-    selectOnly,
+    setSelectedId,
     selectedId,
     setDialogState,
     setImportMethod,

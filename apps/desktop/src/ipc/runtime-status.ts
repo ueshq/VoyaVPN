@@ -1,13 +1,31 @@
-import type { TranslationKey } from "@voya/i18n";
+import type { TranslationFunction, TranslationKey } from "@voya/i18n";
+import { getErrorMessage } from "@voya/utils/error";
 import { runtimeStatus, systemProxyStatus, tunStatus } from "@/ipc/commands";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useToastStore } from "@/stores/toast-store";
 import { beginRuntimeRead, type RuntimeChannel } from "./runtime-state-version";
 
-export const runtimeStatusErrorKeys = {
+const runtimeStatusErrorKeys = {
   coreState: "status.runtimeStatusFailed",
   sysProxy: "status.sysProxyStatusFailed",
   tun: "status.tunStatusFailed",
 } satisfies Record<RuntimeChannel, TranslationKey>;
+
+export async function refreshRuntimeStatusAndReport(
+  t: TranslationFunction,
+  channels?: readonly RuntimeChannel[],
+  isMounted: () => boolean = () => true,
+): Promise<void> {
+  const failures = await refreshRuntimeStatus(channels, isMounted);
+  if (!isMounted()) return;
+  for (const { channel, error } of failures) {
+    useToastStore.getState().pushToast({
+      description: getErrorMessage(error),
+      severity: "error",
+      title: t(runtimeStatusErrorKeys[channel]),
+    });
+  }
+}
 
 /** Shared by the shell seed and explicit action reconciliation, never by Home mount. */
 export async function refreshRuntimeStatus(

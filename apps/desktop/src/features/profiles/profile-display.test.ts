@@ -2,9 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import type { ProfileTransport } from "@/ipc/bindings";
 
-import { profileTransportName } from "./profile-display";
+import { profileNameWithoutFlag, profileTransportName } from "./profile-display";
 
 describe("profile display projections", () => {
+  it.each([
+    ["🇯🇵 Tokyo", "Tokyo"],
+    [" 🇯🇵 ", " 🇯🇵 "],
+    ["  Tokyo  ", "  Tokyo  "],
+    ["Tokyo 🇯🇵 backup 🇺🇸", "Tokyo  backup 🇺🇸"],
+  ])("preserves the node name when removing its first flag from %s", (name, expected) => {
+    expect(profileNameWithoutFlag(name)).toBe(expected);
+  });
+
   it.each([
     [null, "tcp"],
     [{ header: null, host: null, kind: "tcp", path: null }, "tcp"],

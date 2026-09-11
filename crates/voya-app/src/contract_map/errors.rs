@@ -344,7 +344,6 @@ impl From<RuntimeError> for AppError {
             | RuntimeError::WriteConfig { .. }
             | RuntimeError::RemoveConfig { .. } => io(Sub::Runtime, &error),
             RuntimeError::Path(ref source) => io(Sub::Runtime, source),
-            RuntimeError::ContextBuild(ref source) => internal(Sub::Runtime, source),
             RuntimeError::SingboxConfig(ref source) => internal(Sub::Runtime, source),
         }
     }
@@ -521,9 +520,7 @@ fn ruleset_geo_error(error: &RulesetGeoError) -> AppError {
     match error {
         RulesetGeoError::Download(source) => download_error(source, Sub::Update),
         RulesetGeoError::AssetIo { .. } => io(Sub::Update, error),
-        RulesetGeoError::InvalidAsset { .. } | RulesetGeoError::Manifest(_) => {
-            internal(Sub::Update, error)
-        }
+        RulesetGeoError::InvalidAsset { .. } => internal(Sub::Update, error),
     }
 }
 

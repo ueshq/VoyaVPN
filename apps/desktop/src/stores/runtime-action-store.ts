@@ -1,14 +1,21 @@
 import { create } from "zustand";
 
-// Runtime commands outlive the screen that started them. Keep their synchronous
-// guard outside the page so navigation cannot start an overlapping operation.
-export const useRuntimeActionStore = create<{
-  pendingAction: "connect" | "disconnect" | "restart" | null;
+export type RuntimeAction = "connect" | "disconnect" | "restart";
+
+type RuntimeActionState = {
+  pendingAction: RuntimeAction | null;
   modePending: boolean;
   switchingId: string | null;
-}>(() => ({ pendingAction: null, modePending: false, switchingId: null }));
+};
 
-export function runtimeActionPending() {
-  const { pendingAction, modePending, switchingId } = useRuntimeActionStore.getState();
+// Runtime commands outlive the screen that started them. Keep their synchronous
+// guard outside the page so navigation cannot start an overlapping operation.
+export const useRuntimeActionStore = create<RuntimeActionState>(() => ({
+  pendingAction: null, modePending: false, switchingId: null,
+}));
+
+export function runtimeActionPending(
+  { pendingAction, modePending, switchingId }: RuntimeActionState = useRuntimeActionStore.getState(),
+) {
   return pendingAction !== null || modePending || switchingId !== null;
 }

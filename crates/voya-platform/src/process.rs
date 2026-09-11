@@ -155,12 +155,6 @@ impl ProcessSpawn {
     }
 
     #[must_use]
-    pub fn with_environment(mut self, environment: BTreeMap<String, String>) -> Self {
-        self.environment = environment;
-        self
-    }
-
-    #[must_use]
     pub fn with_display_log(mut self, display_log: bool) -> Self {
         self.display_log = display_log;
         self
@@ -798,7 +792,6 @@ pub fn command_output_text(stdout: &[u8], stderr: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
     #[cfg(unix)]
     use std::{sync::mpsc, time::Duration};
 
@@ -1095,8 +1088,7 @@ mod tests {
         let runner = RecordingRunner::default();
         let spawn = ProcessSpawn::new(ProcessRole::Main, "/bin/echo")
             .with_arguments(["hello".to_string()])
-            .with_working_dir("/tmp")
-            .with_environment(BTreeMap::new());
+            .with_working_dir("/tmp");
         let handle = runner.spawn(spawn).expect("spawn");
         runner.stop(&handle).expect("stop");
 

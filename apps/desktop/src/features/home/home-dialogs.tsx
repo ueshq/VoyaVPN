@@ -11,7 +11,8 @@ import {
 
 import { getProtocolLabel } from "@/features/profiles/profile-constants";
 
-import type { Translation, useHomeRuntime } from "./use-home-runtime";
+import type { TranslationFunction } from "@voya/i18n";
+import type { useHomeRuntime } from "./use-home-runtime";
 
 type HomeRuntime = ReturnType<typeof useHomeRuntime>;
 
@@ -26,7 +27,7 @@ export function ConnectionDetailsDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCloseFocus: () => void;
-  t: Translation;
+  t: TranslationFunction;
 }) {
   const profile = home.nodeEntry?.profile;
   return (

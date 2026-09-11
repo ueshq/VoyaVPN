@@ -1714,13 +1714,13 @@ mod tests {
             .save_imported_profile(&mut config, active_duplicate)
             .await
             .expect("subscription manager test operation should succeed");
-        profile_manager
-            .profile_ex()
+        database
+            .profile_exs()
             .set_sort(&original_index_id, 10)
             .await
             .expect("subscription manager test operation should succeed");
-        profile_manager
-            .profile_ex()
+        database
+            .profile_exs()
             .set_sort("active", 20)
             .await
             .expect("subscription manager test operation should succeed");

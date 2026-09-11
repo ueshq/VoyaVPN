@@ -23,12 +23,7 @@ export function TrafficModeSwitcher() {
   const { t } = useI18n();
   const client = useQueryClient();
   const state = useRuntimeEventStore((store) => store.coreState?.state);
-  const pending = useRuntimeActionStore(
-    (store) =>
-      store.pendingAction !== null ||
-      store.modePending ||
-      store.switchingId !== null,
-  );
+  const pending = useRuntimeActionStore(runtimeActionPending);
   const query = useQuery({
     queryKey: queryKeys.appSettings,
     queryFn: loadAppSettings,

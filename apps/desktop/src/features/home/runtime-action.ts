@@ -1,29 +1,42 @@
-import { IpcCommandError, tunRequestElevation } from "@/ipc/commands";
-import type { MissingCorePayload } from "@/stores/modal-store";
+import type { TranslationFunction } from "@voya/i18n";
+import { getErrorMessage } from "@voya/utils/error";
+import { connectActiveProfile, disconnectCore, IpcCommandError, restartCore, tunRequestElevation } from "@/ipc/commands";
+import type { RuntimeStatusResponse } from "@/ipc/bindings";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { beginRuntimeRead } from "@/ipc/runtime-state-version";
+import { useModalStore, type MissingCorePayload } from "@/stores/modal-store";
+import type { RuntimeAction } from "@/stores/runtime-action-store";
+import { useToastStore } from "@/stores/toast-store";
 
-/**
- * Shared runtime-action helpers used by the Home hero and the node picker. Both
- * surfaces drive the same connect/restart IPC and react to the same elevation /
- * `missingCore` failures, so the handling lives here instead of being duplicated.
- *
- * The three `statusTo*` converters that used to live here are gone: the
- * transient `coreState` / `sysProxyChanged` / `tunChanged` events now carry the
- * same `RuntimeStatusResponse` / `SystemProxyStatusResponse` / `TunStatus` the
- * commands return, so a command result goes straight into the store.
- */
+/** Apply a command response only while no newer read or event has superseded it. */
+export async function executeRuntimeAction(action: RuntimeAction) {
+  const isLatest = beginRuntimeRead("coreState");
+  const command = action === "connect" ? connectActiveProfile
+    : action === "disconnect" ? disconnectCore : restartCore;
+  const status = await runWithElevation(command);
+  if (isLatest()) useRuntimeEventStore.getState().setCoreState(status);
+  return status;
+}
 
-/**
- * A connect/restart failed because the machine needs one-time system
- * authorization first.
- *
- * The backend says so with a kind, never with a sentence. This used to also
- * accept any message containing "authorization", which matched the two texts it
- * was aimed at *and* `native authorization was cancelled` — so declining the
- * dialog re-opened it and re-ran the action — and would have matched any future
- * message that happened to use the word.
- */
-function isElevationRequiredError(error: unknown) {
-  return error instanceof IpcCommandError && error.appError.kind.type === "elevationRequired";
+export function reportRuntimeActionError(error: unknown, action: RuntimeAction, t: TranslationFunction) {
+  const missingCore = missingCorePayload(error);
+  if (missingCore) {
+    useModalStore.getState().openModal("missingCore", { missingCore });
+  } else {
+    useToastStore.getState().pushToast({
+      description: getErrorMessage(error),
+      severity: "error",
+      title: {
+        connect: t("actions.connect"),
+        disconnect: t("actions.disconnect"),
+        restart: t("actions.restart"),
+      }[action],
+    });
+  }
+}
+
+export function isRuntimeTransitioning(state: RuntimeStatusResponse["state"]) {
+  return state === "connecting" || state === "disconnecting";
 }
 
 /**
@@ -35,7 +48,7 @@ export async function runWithElevation<T>(action: () => Promise<T>): Promise<T> 
   try {
     return await action();
   } catch (error) {
-    if (!isElevationRequiredError(error)) {
+    if (!(error instanceof IpcCommandError) || error.appError.kind.type !== "elevationRequired") {
       throw error;
     }
     const status = await tunRequestElevation();

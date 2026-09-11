@@ -21,6 +21,7 @@ import type {
   Profile,
   ProfileListEntry,
   RuntimeStatusResponse,
+  SpeedtestResult,
 } from "@/ipc/bindings";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useRuntimeActionStore } from "@/stores/runtime-action-store";
@@ -29,7 +30,7 @@ import { makeProfileFixture } from "@/test/profile-fixture";
 
 import { MOVE_ACTIONS } from "./profile-constants";
 import { ProfilesScreen } from "./server-table";
-import { applyLiveUpdates } from "./server-table-live-updates";
+import { applySpeedtestResults } from "./server-table-live-updates";
 
 const ipcMocks = vi.hoisted(() => ({
   connectActiveProfile: vi.fn(),
@@ -294,32 +295,49 @@ describe("ProfilesScreen", () => {
     expect(screen.queryByText("Server 4999")).not.toBeInTheDocument();
   });
 
-  it("keeps 500 rows responsive through 1 Hz live stat batches", () => {
+  it("merges repeated speedtest batches for 500 rows without rebuilding their traffic", () => {
     const profiles = makeProfiles(500);
     const startedAt = performance.now();
     let updated = profiles;
 
     for (let tick = 0; tick < 60; tick += 1) {
-      const stats = Object.fromEntries(
-        profiles.map((profile, index) => [
-          profile.profile.id,
-          {
-            dateNow: profile.traffic.date ?? 0,
-            indexId: profile.profile.id,
-            todayDown: index * 2048 + tick,
-            todayUp: index * 1024 + tick,
-            totalDown: index * 8192 + tick,
-            totalUp: index * 4096 + tick,
-          },
-        ]),
+      const results: Record<string, SpeedtestResult> = Object.fromEntries(
+        profiles.map((profile, index) => [profile.profile.id, {
+          indexId: profile.profile.id,
+          delay: index + tick,
+          outcome: "completed",
+          detail: null,
+          ipInfo: null,
+          countryCode: null,
+        }]),
       );
-
-      updated = applyLiveUpdates(profiles, stats, {});
+      updated = applySpeedtestResults(profiles, results);
     }
 
     expect(performance.now() - startedAt).toBeLessThan(1000);
     expect(updated).toHaveLength(500);
-    expect(updated[499].traffic.todayDownload).toBe(499 * 2048 + 59);
+    expect(updated[499].metrics.delayMs).toBe(499 + 59);
+    expect(updated[499].traffic).toBe(profiles[499].traffic);
+  });
+
+  it("preserves unmatched rows, missing measurements and authoritative country data", () => {
+    const profiles = makeProfiles(2);
+    const original = profiles[0]!;
+    original.metrics = { ...original.metrics, delayMs: 42, ipInfo: "saved IP", countryCode: "JP" };
+    const result: SpeedtestResult = {
+      indexId: original.profile.id, delay: null, ipInfo: null,
+      countryCode: "US", outcome: "timedOut", detail: null,
+    };
+    expect(applySpeedtestResults(profiles, {})).toBe(profiles);
+    expect(applySpeedtestResults(profiles, { missing: result })).toBe(profiles);
+    const updated = applySpeedtestResults(profiles, { [original.profile.id]: result });
+    expect(updated[1]).toBe(profiles[1]);
+    expect(updated[0].metrics).toMatchObject({ delayMs: 42, ipInfo: "saved IP", countryCode: "JP", outcome: "timedOut" });
+    expect(original.metrics.outcome).not.toBe("timedOut");
+    const measured = applySpeedtestResults(profiles, {
+      [original.profile.id]: { ...result, delay: 0, ipInfo: "new IP", outcome: "completed" },
+    });
+    expect(measured[0].metrics).toMatchObject({ delayMs: 0, ipInfo: "new IP", outcome: "completed" });
   });
 
   it.each([
@@ -725,6 +743,31 @@ describe("ProfilesScreen", () => {
       expect(screen.getByRole("button", { name: "In use" })).toBeDisabled(),
     );
     expect(ipcMocks.connectActiveProfile).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the operation guard across remounts until failed status reconciliation settles", async () => {
+    mockProfileList([makeProfile(0)]);
+    ipcMocks.connectActiveProfile.mockRejectedValueOnce(new Error("Connection failed"));
+    let rejectStatus!: (error: Error) => void;
+    ipcMocks.systemProxyStatus.mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      rejectStatus = reject;
+    }));
+    const view = renderProfiles();
+    await userEvent.click(await screen.findByRole("button", { name: "Use node" }));
+    await waitFor(() => expect(ipcMocks.systemProxyStatus).toHaveBeenCalledOnce());
+    expect(useRuntimeActionStore.getState().switchingId).toBe("profile-0");
+
+    view.unmount();
+    renderProfiles();
+    expect(await screen.findByRole("button", { name: "Switching…" })).toBeDisabled();
+    await act(async () => rejectStatus(new Error("Proxy status unavailable")));
+    await waitFor(() => expect(useRuntimeActionStore.getState().switchingId).toBeNull());
+    expect(screen.getByRole("button", { name: "Use node" })).toBeEnabled();
+    expect(useToastStore.getState().toasts.map((toast) => toast.description)).toEqual([
+      "Connection failed", "Proxy status unavailable",
+    ]);
+    await userEvent.click(screen.getByRole("button", { name: "Use node" }));
+    await waitFor(() => expect(ipcMocks.connectActiveProfile).toHaveBeenCalledTimes(2));
   });
 
   it.each(["connecting", "disconnecting", "cleanupPending"] as const)(

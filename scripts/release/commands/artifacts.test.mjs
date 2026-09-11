@@ -145,7 +145,7 @@ describe("release artifacts", () => {
       ["appimage/VoyaVPN_0.1.0_amd64.AppImage", ".AppImage", "appimage"],
       ["deb/VoyaVPN_0.1.0_amd64.deb", ".deb", "deb"],
       ["rpm/VoyaVPN-0.1.0-1.x86_64.rpm", ".rpm", "rpm"],
-      ["updater/VoyaVPN_0.1.0_x64.updater.zip", ".zip", "updater"],
+      ["updater/VoyaVPN_0.1.0_x64.updater.zip", ".zip", "artifact"],
     ];
 
     for (const [relativePath, suffix, kind] of cases) {
@@ -169,6 +169,25 @@ describe("release artifacts", () => {
 
     // An unsigned bundle has no updater payload at all.
     expect(selectUpdaterPayloadPath(["nsis/VoyaVPN_0.1.0_x64-setup.exe"], "windows-x86_64")).toBeNull();
+  });
+
+  it("does not select retired updater archives or unmarked manifest entries", () => {
+    for (const [target, path] of [
+      ["windows-x86_64", "nsis/VoyaVPN.nsis.zip"],
+      ["linux-x86_64", "appimage/VoyaVPN.AppImage.tar.gz"],
+      ["darwin-aarch64", "macos/unrelated.tar.gz"],
+      ["windows-x86_64", "updater/VoyaVPN.zip"],
+    ]) {
+      expect(selectUpdaterPayloadPath([path, `${path}.sig`], target)).toBeNull();
+    }
+    expect(selectUpdaterPayload([{ kind: "updater", name: "old.zip" }])).toBeNull();
+    expect(selectUpdaterPayload([
+      { kind: "signature", name: "app.sig", updaterPayload: true },
+    ])).toBeNull();
+    expect(() => selectUpdaterPayload([
+      { name: "first.exe", updaterPayload: true },
+      { name: "second.exe", updaterPayload: true },
+    ])).toThrow(/marks 2 updater payloads/);
   });
 
   it("marks the Tauri 2 in-place updater payload and its signature in the manifest", async () => {

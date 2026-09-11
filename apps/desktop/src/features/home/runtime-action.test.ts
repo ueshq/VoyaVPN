@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AppError, AppErrorKind } from "@/ipc/bindings";
+import type { AppError, AppErrorKind, RuntimeStatusResponse } from "@/ipc/bindings";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { beginRuntimeRead } from "@/ipc/runtime-state-version";
 
 const ipcMocks = vi.hoisted(() => {
   // A faithful stand-in for the real error: `runWithElevation` and
@@ -18,12 +20,18 @@ const ipcMocks = vi.hoisted(() => {
     }
   }
 
-  return { IpcCommandError: MockIpcCommandError, tunRequestElevation: vi.fn() };
+  return {
+    IpcCommandError: MockIpcCommandError,
+    tunRequestElevation: vi.fn(),
+    connectActiveProfile: vi.fn(),
+    disconnectCore: vi.fn(),
+    restartCore: vi.fn(),
+  };
 });
 
 vi.mock("@/ipc/commands", () => ipcMocks);
 
-import { missingCorePayload, runWithElevation } from "./runtime-action";
+import { executeRuntimeAction, missingCorePayload, runWithElevation } from "./runtime-action";
 
 function appError(kind: AppErrorKind, message = "ipc failed"): AppError {
   return { kind, message, subsystem: "runtime" };
@@ -45,6 +53,45 @@ const missingCoreError = new ipcMocks.IpcCommandError(
 function elevationStatus(elevationGranted: boolean) {
   return { elevationGranted };
 }
+
+describe("runtime command responses", () => {
+  const connected: RuntimeStatusResponse = {
+    activeProfileId: "node", activeTunBackend: null, mainPid: 42, prePid: null,
+    runningCoreType: "singBox", state: "connected", connectedDurationMs: 0,
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    useRuntimeEventStore.setState({ coreState: null });
+  });
+
+  it.each([
+    ["connect", "connectActiveProfile"],
+    ["disconnect", "disconnectCore"],
+    ["restart", "restartCore"],
+  ] as const)("runs %s and stores its current response", async (action, command) => {
+    ipcMocks[command].mockResolvedValueOnce(connected);
+    await expect(executeRuntimeAction(action)).resolves.toBe(connected);
+    expect(ipcMocks[command]).toHaveBeenCalledExactlyOnceWith();
+    expect(useRuntimeEventStore.getState().coreState).toEqual(connected);
+  });
+
+  it.each(["event", "read"] as const)("keeps a newer %s when an older command completes", async (source) => {
+    let resolve!: (status: RuntimeStatusResponse) => void;
+    ipcMocks.connectActiveProfile.mockReturnValueOnce(new Promise<RuntimeStatusResponse>((done) => { resolve = done; }));
+    const pending = executeRuntimeAction("connect");
+    const newer = { ...connected, mainPid: 99 };
+    if (source === "event") {
+      useRuntimeEventStore.getState().pushTransientEvent({ kind: "coreState", payload: newer });
+    } else {
+      beginRuntimeRead("coreState");
+      useRuntimeEventStore.getState().setCoreState(newer);
+    }
+    resolve(connected);
+    await expect(pending).resolves.toBe(connected);
+    expect(useRuntimeEventStore.getState().coreState).toEqual(newer);
+  });
+});
 
 describe("runWithElevation", () => {
   beforeEach(() => {

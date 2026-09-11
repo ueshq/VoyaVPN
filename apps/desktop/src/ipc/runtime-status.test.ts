@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { i18next } from "@voya/i18n";
+import { useToastStore } from "@/stores/toast-store";
 import type { RuntimeStatusResponse, SystemProxyStatusResponse, TunStatus } from "./bindings";
 import { useRuntimeEventStore } from "./runtime-event-store";
-import { refreshRuntimeStatus } from "./runtime-status";
+import { refreshRuntimeStatus, refreshRuntimeStatusAndReport } from "./runtime-status";
 
 const commands = vi.hoisted(() => ({ runtimeStatus: vi.fn(), systemProxyStatus: vi.fn(), tunStatus: vi.fn() }));
 vi.mock("@/ipc/commands", () => commands);
@@ -32,6 +34,7 @@ describe("runtime status reconciliation", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     useRuntimeEventStore.setState({ coreState: null, sysProxy: null, tun: null });
+    useToastStore.setState({ toasts: [] });
     commands.runtimeStatus.mockResolvedValue(core);
     commands.systemProxyStatus.mockResolvedValue(proxy);
     commands.tunStatus.mockResolvedValue(tun);
@@ -91,5 +94,34 @@ describe("runtime status reconciliation", () => {
     expect(useRuntimeEventStore.getState().coreState).toEqual(core);
     expect(useRuntimeEventStore.getState().tun).toEqual(tun);
     expect(await refreshRuntimeStatus(["sysProxy"], () => false)).toEqual([]);
+  });
+
+  it("reports each failed channel while retaining successful status reads", async () => {
+    commands.runtimeStatus.mockRejectedValue(new Error("core read failed"));
+    commands.systemProxyStatus.mockRejectedValue(new Error("proxy read failed"));
+    commands.tunStatus.mockRejectedValueOnce(new Error("tun read failed"));
+    await refreshRuntimeStatusAndReport(i18next.t);
+    expect(useToastStore.getState().toasts).toMatchObject([
+      { title: i18next.t("status.runtimeStatusFailed"), description: "core read failed", severity: "error" },
+      { title: i18next.t("status.sysProxyStatusFailed"), description: "proxy read failed", severity: "error" },
+      { title: i18next.t("status.tunStatusFailed"), description: "tun read failed", severity: "error" },
+    ]);
+    await refreshRuntimeStatusAndReport(i18next.t, ["tun"]);
+    expect(useRuntimeEventStore.getState().tun).toEqual(tun);
+    expect(useToastStore.getState().toasts).toHaveLength(3);
+  });
+
+  it("does not report settled failures after the seed unmounts during another channel read", async () => {
+    let mounted = true;
+    const slow = deferred<TunStatus>();
+    commands.runtimeStatus.mockRejectedValue(new Error("core read failed"));
+    commands.tunStatus.mockReturnValueOnce(slow.promise);
+    const refresh = refreshRuntimeStatusAndReport(i18next.t, undefined, () => mounted);
+    await Promise.resolve();
+    mounted = false;
+    slow.resolve(tun);
+    await refresh;
+    expect(useToastStore.getState().toasts).toEqual([]);
+    expect(useRuntimeEventStore.getState().tun).toBeNull();
   });
 });

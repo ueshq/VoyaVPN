@@ -114,21 +114,20 @@ function slugify(value) {
 
 export function classifyArtifact(filePath, inputDir, suffix) {
   const relativePath = relative(inputDir, filePath).replaceAll("\\", "/").toLowerCase();
-  const isSignature = suffix.toLowerCase().endsWith(".sig");
-  const payloadSuffix = isSignature ? suffix.slice(0, -4) : suffix;
+  const lowerSuffix = suffix.toLowerCase();
 
-  if (isSignature) {
+  if (lowerSuffix.endsWith(".sig")) {
     return "signature";
   }
 
   // Bundler directory names are matched as path segments: `nsis/...` at the
   // root of the bundle dir has no leading slash, so `includes("/nsis/")` missed
   // every real bundle tree.
-  if (payloadSuffix === ".tar.gz" || payloadSuffix === ".zip" || /(^|\/)updater\//.test(relativePath)) {
+  if (relativePath.endsWith(".app.tar.gz")) {
     return "updater";
   }
 
-  switch (payloadSuffix.toLowerCase()) {
+  switch (lowerSuffix) {
     case ".dmg":
       return "dmg";
     case ".msi":
@@ -147,8 +146,7 @@ export function classifyArtifact(filePath, inputDir, suffix) {
 }
 
 /**
- * The bundle path patterns that identify the in-place updater payload per OS,
- * most specific first.
+ * The bundle path pattern identifying the current updater payload for each OS.
  *
  * With Tauri 2's `createUpdaterArtifacts: true` the updater payload is the
  * installer itself, signed in place next to a sibling `.sig`; only macOS emits a
@@ -156,13 +154,12 @@ export function classifyArtifact(filePath, inputDir, suffix) {
  * signed (Windows NSIS *and* MSI, Linux AppImage *and* .deb/.rpm), so the
  * designated installer type is chosen deliberately here instead of by suffix:
  * NSIS on Windows (the only installer type the overlay's
- * `plugins.updater.windows.installMode` configures) and AppImage on Linux. The
- * trailing `updater/` rule keeps a legacy `v1Compatible`-shaped tree resolvable.
+ * `plugins.updater.windows.installMode` configures) and AppImage on Linux.
  */
 const updaterPayloadPatterns = {
-  darwin: [/\.app\.tar\.gz$/i, /\.tar\.gz$/i, /(^|\/)updater\//i],
-  linux: [/\.appimage$/i, /\.appimage\.tar\.gz$/i, /(^|\/)updater\//i],
-  windows: [/-setup\.exe$/i, /\.nsis\.zip$/i, /(^|\/)updater\//i],
+  darwin: /\.app\.tar\.gz$/i,
+  linux: /\.appimage$/i,
+  windows: /-setup\.exe$/i,
 };
 
 export function updaterPayloadPlatform(target) {
@@ -195,16 +192,8 @@ export function selectUpdaterPayloadPath(relativePaths, target) {
       .map((path) => path.slice(0, -4).toLowerCase()),
   );
 
-  for (const pattern of updaterPayloadPatterns[platform]) {
-    const match = relativePaths.find(
-      (path) => !path.toLowerCase().endsWith(".sig") && pattern.test(path) && signed.has(path.toLowerCase()),
-    );
-    if (match) {
-      return match;
-    }
-  }
-
-  return null;
+  const pattern = updaterPayloadPatterns[platform];
+  return relativePaths.find((path) => pattern.test(path) && signed.has(path.toLowerCase())) ?? null;
 }
 
 function nextUniqueName(state, requestedName, suffix) {

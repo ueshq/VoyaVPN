@@ -1,7 +1,7 @@
 import { Switch } from "@voya/ui/components/switch";
 import { Label } from "@voya/ui/components/label";
 
-import type { Translation } from "./use-home-runtime";
+import type { TranslationFunction } from "@voya/i18n";
 
 export function ConnectionModeSwitcher({
   tunEnabled,
@@ -14,7 +14,7 @@ export function ConnectionModeSwitcher({
   modeBusy: boolean;
   modePending: boolean;
   onTunChange: (enabled: boolean) => void;
-  t: Translation;
+  t: TranslationFunction;
 }) {
   return (
     <div className="home-mode-container">

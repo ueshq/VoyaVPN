@@ -7,16 +7,15 @@ use std::{
 use thiserror::Error;
 use tokio::sync::Mutex;
 use voya_core::{
-    generate_singbox_config_json, validation::ValidationMessage, AppConfig, ContextBuildError,
-    CoreConfigContext, CoreConfigContextBuilder, CoreConfigContextBuilderAllResult,
-    CoreGenPlatform, CoreType, SingboxConfigError,
+    generate_singbox_config_json, validation::ValidationMessage, AppConfig, CoreConfigContext,
+    CoreConfigContextBuilder, CoreConfigContextBuilderAllResult, CoreGenPlatform, CoreType,
+    SingboxConfigError,
 };
 use voya_db::{Database, DbError};
 use voya_platform::{
     coreinfo::{
-        all_core_infos, copy_seed_core_asset, discover_executable,
-        discover_packaged_seed_executable, get_core_info, CoreInfo, CoreInfoError, CoreLaunch,
-        TargetOs,
+        copy_seed_core_asset, discover_executable, discover_packaged_seed_executable,
+        get_core_info, CoreInfo, CoreInfoError, CoreLaunch, TargetOs,
     },
     filesystem,
     paths::{AppPaths, PathError},
@@ -32,11 +31,6 @@ use crate::updates::local_singbox_ruleset_paths;
 pub const MAIN_CONFIG_FILE_NAME: &str = "config.json";
 pub const PRE_CONFIG_FILE_NAME: &str = "configPre.json";
 const SUDO_SCRIPT_DIR_NAME: &str = "sudo";
-
-#[must_use]
-pub fn supported_core_infos() -> &'static [CoreInfo] {
-    all_core_infos()
-}
 
 #[must_use]
 pub fn core_launch_plan(
@@ -434,8 +428,6 @@ pub enum RuntimeError {
     #[error("failed to remove runtime config {path}: {source}")]
     RemoveConfig { path: PathBuf, source: io::Error },
     #[error(transparent)]
-    ContextBuild(#[from] ContextBuildError),
-    #[error(transparent)]
     SingboxConfig(#[from] SingboxConfigError),
     #[error(transparent)]
     CoreInfo(#[from] CoreInfoError),
@@ -504,14 +496,6 @@ mod tests {
     use voya_net::clash::ClashApiEndpoint;
 
     static TEMP_PATH_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-    #[test]
-    fn coreinfo_app_layer_exposes_singbox_only() {
-        let infos = supported_core_infos();
-
-        assert_eq!(infos.len(), 1);
-        assert_eq!(infos[0].core_type, CoreType::sing_box);
-    }
 
     #[test]
     fn coreinfo_app_layer_resolves_launch_command_and_env() {

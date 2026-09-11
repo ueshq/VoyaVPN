@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { formatDelay } from "@voya/utils/formatting";
 
-import type { Translation } from "./use-home-runtime";
+import type { TranslationFunction } from "@voya/i18n";
 
 function formatConnectionDuration(milliseconds: number | null) {
   if (milliseconds == null) return "—";
@@ -14,7 +14,7 @@ function formatConnectionDuration(milliseconds: number | null) {
 }
 
 /** The backend owns elapsed time; the renderer only interpolates between samples. */
-export function ConnectedInfo({ delayMs, t }: { delayMs: number | null; t: Translation }) {
+export function ConnectedInfo({ delayMs, t }: { delayMs: number | null; t: TranslationFunction }) {
   const status = useRuntimeEventStore((state) => state.coreState);
   const receivedAt = useRuntimeEventStore((state) => state.coreStateReceivedAt);
   const [now, setNow] = useState(() => performance.now());

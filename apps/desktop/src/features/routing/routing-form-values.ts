@@ -33,37 +33,11 @@ export type RoutingFormState = {
   sourceUrl: string;
 };
 
-type RulePayload = {
-  id: string;
-  domain: string[] | null;
-  enabled: boolean;
-  inboundTags: string[] | null;
-  ip: string[] | null;
-  network: string | null;
-  outbound: string | null;
-  port: string | null;
-  process: string[] | null;
-  protocol: string[] | null;
-  remarks: string | null;
-  scope: RoutingRuleScope;
-  kind: string | null;
-};
-
 export function routingToForm(routing: Routing_Serialize | null): RoutingFormState {
   return routing
     ? {
-        icon: routing.icon,
-        singboxRulesetPath: routing.singboxRulesetPath,
+        ...routing,
         domainStrategy: routing.domainStrategy || "AsIs",
-        singboxDomainStrategy: routing.singboxDomainStrategy,
-        enabled: routing.enabled,
-        id: routing.id,
-        isActive: routing.isActive,
-        locked: routing.locked,
-        remarks: routing.remarks,
-        rules: routing.rules,
-        sort: routing.sort,
-        sourceUrl: routing.sourceUrl,
       }
     : createDefaultRouting();
 }
@@ -86,7 +60,7 @@ export function ruleToForm(rule: RoutingRule | null): RuleFormState {
   };
 }
 
-export function formToRule(form: RuleFormState): RulePayload {
+export function formToRule(form: RuleFormState): RoutingRule {
   return {
     id: form.id ?? "",
     domain: textToList(form.domain),

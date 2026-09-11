@@ -1,14 +1,10 @@
 import type { TranslationFunction } from "@voya/i18n";
-import { connectActiveProfile, restartCore, setActiveProfile } from "@/ipc/commands";
+import { setActiveProfile } from "@/ipc/commands";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { beginRuntimeRead } from "@/ipc/runtime-state-version";
-import { refreshRuntimeStatus, runtimeStatusErrorKeys } from "@/ipc/runtime-status";
+import { refreshRuntimeStatusAndReport } from "@/ipc/runtime-status";
 import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
-import { useModalStore } from "@/stores/modal-store";
-import { useToastStore } from "@/stores/toast-store";
-import { getErrorMessage } from "@voya/utils/error";
 
-import { missingCorePayload, runWithElevation } from "./runtime-action";
+import { executeRuntimeAction, isRuntimeTransitioning, reportRuntimeActionError } from "./runtime-action";
 
 export function useProfileActivation(
   t: TranslationFunction,
@@ -16,42 +12,29 @@ export function useProfileActivation(
 ) {
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const switchingId = useRuntimeActionStore((state) => state.switchingId);
-  const pending = useRuntimeActionStore((state) => state.pendingAction !== null || state.modePending);
-  const setCoreState = useRuntimeEventStore((state) => state.setCoreState);
-  const openModal = useModalStore((state) => state.openModal);
-  const pushToast = useToastStore((state) => state.pushToast);
+  const pending = useRuntimeActionStore(runtimeActionPending);
   const state = coreState?.state ?? "disconnected";
-  const busy = pending || switchingId !== null || isTransitioning(state) || state === "cleanupPending";
+  const busy = pending || isRuntimeTransitioning(state) || state === "cleanupPending";
   const runningId = state === "connected" ? coreState?.activeProfileId ?? null : null;
 
   async function activateProfile(id: string) {
     const currentState = useRuntimeEventStore.getState().coreState?.state ?? "disconnected";
-    if (runtimeActionPending() || isTransitioning(currentState) || currentState === "cleanupPending") {
+    if (runtimeActionPending() || isRuntimeTransitioning(currentState) || currentState === "cleanupPending") {
       return false;
     }
     useRuntimeActionStore.setState({ switchingId: id });
     onSelect?.(id);
-    const wasConnected = currentState === "connected";
+    const action = currentState === "connected" ? "restart" : "connect";
     try {
       await setActiveProfile(id);
-      const isLatest = beginRuntimeRead("coreState");
-      const status = await runWithElevation(() => wasConnected ? restartCore() : connectActiveProfile());
-      if (isLatest()) setCoreState(status);
+      const status = await executeRuntimeAction(action);
       return status.state === "connected";
     } catch (error) {
-      const missingCore = missingCorePayload(error);
-      if (missingCore) {
-        openModal("missingCore", { missingCore });
-      } else {
-        pushToast({ description: getErrorMessage(error), severity: "error", title: t(wasConnected ? "actions.restart" : "actions.connect") });
-      }
+      reportRuntimeActionError(error, action, t);
       return false;
     } finally {
       try {
-        const failures = await refreshRuntimeStatus();
-        for (const { channel, error } of failures) {
-          pushToast({ description: getErrorMessage(error), severity: "error", title: t(runtimeStatusErrorKeys[channel]) });
-        }
+        await refreshRuntimeStatusAndReport(t);
       } finally {
         useRuntimeActionStore.setState({ switchingId: null });
       }
@@ -59,8 +42,4 @@ export function useProfileActivation(
   }
 
   return { activateProfile, busy, runningId, switchingId };
-}
-
-function isTransitioning(state: string) {
-  return state === "connecting" || state === "disconnecting";
 }

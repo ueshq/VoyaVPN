@@ -228,11 +228,6 @@ impl std::fmt::Display for PathDisplay {
 }
 
 #[must_use]
-pub fn all_core_infos() -> &'static [CoreInfo] {
-    CORE_INFOS
-}
-
-#[must_use]
 pub fn get_core_info(core_type: CoreType) -> Option<&'static CoreInfo> {
     CORE_INFOS
         .iter()
@@ -629,7 +624,7 @@ mod tests {
 
     #[test]
     fn coreinfo_table_contains_only_singbox() {
-        let core_types = all_core_infos()
+        let core_types = CORE_INFOS
             .iter()
             .map(|core_info| core_info.core_type)
             .collect::<Vec<_>>();

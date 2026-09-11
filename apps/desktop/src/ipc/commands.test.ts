@@ -22,6 +22,8 @@ import * as ipc from "@/ipc/commands";
 const wrapperNames = [
   "loadUiPreferences",
   "loadAppSettings",
+  "getSettingsApplyStatus",
+  "applyPendingSettings",
   "saveAppSettings",
   "generateQrCode",
   "scanScreenQr",
@@ -87,7 +89,7 @@ const wrapperNames = [
 
 describe("typed IPC command facade", () => {
   beforeEach(() => {
-    for (const name of wrapperNames) {
+    for (const name of [...wrapperNames, "openNetworkSettings"]) {
       commandMocks[name].mockReset();
     }
   });
@@ -127,6 +129,16 @@ describe("typed IPC command facade", () => {
       await wrapper(...args);
 
       expect(commandMocks[name]).toHaveBeenCalledWith(...expected);
+    },
+  );
+
+  it.each([...wrapperNames, "openNetworkSettings"] as const)(
+    "propagates an underlying rejection from %s unchanged",
+    async (name) => {
+      const failure = new Error("IPC transport unavailable");
+      commandMocks[name].mockRejectedValueOnce(failure);
+      const wrapper = ipc[name] as (...args: unknown[]) => Promise<unknown>;
+      await expect(wrapper()).rejects.toBe(failure);
     },
   );
 

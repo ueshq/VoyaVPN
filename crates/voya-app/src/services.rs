@@ -5,7 +5,7 @@
 
 use std::{path::Path, sync::Arc};
 
-use voya_contracts::{AppSettingsV1, SystemProxyType};
+use voya_contracts::SystemProxyType;
 pub use voya_core::{AppConfig, CoreType, SysProxyType, TrafficMode, DEFAULT_LOCAL_PORT};
 use voya_db::{Database, DbError};
 use voya_platform::{coreinfo::TargetOs, paths::AppPaths, process::ProcessRunner};
@@ -14,10 +14,10 @@ use crate::{
     config_mutation::{ConfigMutationCoordinator, SharedAppConfig},
     dns::DnsManager,
     exports::ExportManager,
-    profiles::{ProfileExManager, ProfileManager},
+    profiles::ProfileManager,
     routing::RoutingManager,
     runtime::RuntimeManager,
-    settings_save::{app_config_from_settings, config_from_settings, settings_from_app_config},
+    settings_save::app_config_from_settings,
     speedtest::{SpeedtestManager, SpeedtestResult, SpeedtestRunResult},
     statistics::{StatisticsConfigSource, StatisticsEventSink, StatisticsManager},
     subscriptions::{
@@ -78,13 +78,8 @@ impl AppServices {
         ConfigMutationCoordinator::new(self.database.clone(), config)
     }
 
-    #[must_use]
-    pub fn config_from_settings(&self, settings: &AppSettingsV1, current: &AppConfig) -> AppConfig {
-        config_from_settings(settings, current)
-    }
-
     pub async fn initialize_profile_metrics(&self) -> crate::profiles::Result<u64> {
-        ProfileExManager::new(&self.database).init().await
+        Ok(self.database.profile_exs().delete_orphans().await?)
     }
 
     #[must_use]
@@ -208,16 +203,13 @@ impl AppServices {
     ) -> SpeedtestManager {
         SpeedtestManager::new(self.runtime_paths.clone(), core_seed_resource_dir, runner)
     }
-
-    #[must_use]
-    pub fn settings_snapshot(config: &AppConfig) -> AppSettingsV1 {
-        settings_from_app_config(config)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings_save::settings_from_app_config;
+    use voya_contracts::AppSettingsV1;
 
     #[tokio::test]
     async fn fresh_database_loads_default_settings_and_reopens() {
@@ -296,7 +288,7 @@ mod tests {
                 }
 
                 let loaded = services.load_config().await.expect("upgraded settings");
-                assert_eq!(AppServices::settings_snapshot(&loaded), expected);
+                assert_eq!(settings_from_app_config(&loaded), expected);
                 assert_eq!(
                     services
                         .database
@@ -315,7 +307,7 @@ mod tests {
                     .load_config()
                     .await
                     .expect("reload upgraded settings");
-                assert_eq!(AppServices::settings_snapshot(&reloaded), expected);
+                assert_eq!(settings_from_app_config(&reloaded), expected);
                 reopened.database.close().await;
                 std::fs::remove_dir_all(app_dir).expect("remove test database");
             }

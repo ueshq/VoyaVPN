@@ -2,7 +2,7 @@ import { Power } from "lucide-react";
 
 import { cn } from "@voya/ui/lib/utils";
 
-import type { Translation } from "./use-home-runtime";
+import type { TranslationFunction } from "@voya/i18n";
 
 export function ConnectButton({
   label,
@@ -19,7 +19,7 @@ export function ConnectButton({
   connected: boolean;
   inProgress: boolean;
   onPrimaryAction: () => void;
-  t: Translation;
+  t: TranslationFunction;
 }) {
   const action =
     label ??

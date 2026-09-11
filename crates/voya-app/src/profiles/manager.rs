@@ -11,7 +11,7 @@ use voya_core::{
 };
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 
-use super::{ProfileExManager, ProfileListing, DEFAULT_PROFILE_SORT_STEP};
+use super::{ProfileListing, DEFAULT_PROFILE_SORT_STEP};
 
 static PROFILE_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -50,11 +50,6 @@ impl<'db> ProfileManager<'db> {
     #[must_use]
     pub(crate) const fn from_session(database: DatabaseSession<'db>) -> Self {
         Self { database }
-    }
-
-    #[must_use]
-    pub fn profile_ex(&self) -> ProfileExManager<'db> {
-        ProfileExManager::from_session(self.database)
     }
 
     /// The listing behind every profile view, with the undecodable-row count
@@ -131,11 +126,15 @@ impl<'db> ProfileManager<'db> {
         let profile_ex = if is_new {
             ProfileExItem {
                 index_id: profile.index_id.clone(),
-                sort: self.profile_ex().get_max_sort().await? + DEFAULT_PROFILE_SORT_STEP,
+                sort: self.database.profile_exs().max_sort().await? + DEFAULT_PROFILE_SORT_STEP,
                 ..ProfileExItem::default()
             }
         } else {
-            let mut existing = self.profile_ex().ensure(&profile.index_id).await?;
+            let mut existing = self
+                .database
+                .profile_exs()
+                .ensure(&profile.index_id)
+                .await?;
             existing.index_id.clone_from(&profile.index_id);
             if self
                 .database
@@ -192,7 +191,8 @@ impl<'db> ProfileManager<'db> {
     ) -> Result<Vec<ProfileListItem>> {
         self.require_manual(index_ids).await?;
         let mut copied = Vec::new();
-        let mut next_sort = self.profile_ex().get_max_sort().await? + DEFAULT_PROFILE_SORT_STEP;
+        let mut next_sort =
+            self.database.profile_exs().max_sort().await? + DEFAULT_PROFILE_SORT_STEP;
 
         for index_id in index_ids {
             let Some(source) = self.database.profiles().get(index_id).await? else {
@@ -253,7 +253,7 @@ impl<'db> ProfileManager<'db> {
         let Some(profile) = self.database.profiles().get(index_id).await? else {
             return Err(ProfileManagerError::ProfileNotFound(index_id.to_string()));
         };
-        let profile_ex = self.profile_ex().ensure(index_id).await?;
+        let profile_ex = self.database.profile_exs().ensure(index_id).await?;
         let server_stat = self
             .database
             .server_stats()
@@ -338,7 +338,7 @@ impl<'db> ProfileManager<'db> {
                 )
             })
             .collect::<Vec<_>>();
-        self.profile_ex().set_sort_many(&updates).await?;
+        self.database.profile_exs().set_sort_many(&updates).await?;
         Ok(self
             .list_profiles(config, subscription_id, None)
             .await?
@@ -368,7 +368,11 @@ impl<'db> ProfileManager<'db> {
             })
             .collect::<Vec<_>>();
 
-        self.profile_ex().set_sort_many(&reordered).await
+        Ok(self
+            .database
+            .profile_exs()
+            .set_sort_many(&reordered)
+            .await?)
     }
 
     /// Validate a complete user mutation before its first write.
@@ -812,8 +816,8 @@ mod tests {
             Err(ProfileManagerError::SubscriptionReadOnly(_))
         ));
         assert_eq!(database.profiles().list().await.expect("profiles").len(), 4);
-        let outsider_sort = manager
-            .profile_ex()
+        let outsider_sort = database
+            .profile_exs()
             .ensure(&outsider.profile.index_id)
             .await
             .expect("profile manager test operation should succeed")
@@ -822,39 +826,6 @@ mod tests {
             outsider_sort, outsider.profile_ex.sort,
             "profiles outside the scope keep their sort"
         );
-    }
-
-    #[tokio::test]
-    async fn profile_ex_manager_updates_delay_speed_message_and_ip_info() {
-        let database = Database::connect_in_memory()
-            .await
-            .expect("profile manager test operation should succeed");
-        let manager = ProfileManager::new(&database);
-        let mut config = AppConfig::default();
-        let profile = manager
-            .save_profile(&mut config, sample_profile("profile", "A", 443))
-            .await
-            .expect("profile manager test operation should succeed");
-
-        manager
-            .profile_ex()
-            .set_test_delay(&profile.profile.index_id, 123)
-            .await
-            .expect("profile manager test operation should succeed");
-        manager
-            .profile_ex()
-            .set_test_message(&profile.profile.index_id, "ok")
-            .await
-            .expect("profile manager test operation should succeed");
-        let updated = manager
-            .profile_ex()
-            .set_test_ip_info(&profile.profile.index_id, "US")
-            .await
-            .expect("profile manager test operation should succeed");
-
-        assert_eq!(updated.delay, 123);
-        assert_eq!(updated.message.as_deref(), Some("ok"));
-        assert_eq!(updated.ip_info.as_deref(), Some("US"));
     }
 
     /// `renumber_sort` pushes the whole ordering through one batched write, so
@@ -878,11 +849,13 @@ mod tests {
                 .await
                 .expect("profile manager test operation should succeed");
         }
-        manager
-            .profile_ex()
-            .set_test_delay("r1", 123)
+        let mut measured = database.profile_exs().ensure("r1").await.expect("metrics");
+        measured.delay = 123;
+        database
+            .profile_exs()
+            .upsert(&measured)
             .await
-            .expect("profile manager test operation should succeed");
+            .expect("seed measurement");
 
         let mut items = database
             .profiles()
@@ -910,8 +883,8 @@ mod tests {
             "a renumber must hand out the gap-based keys in listing order"
         );
         assert_eq!(
-            manager
-                .profile_ex()
+            database
+                .profile_exs()
                 .ensure("r1")
                 .await
                 .expect("profile manager test operation should succeed")
