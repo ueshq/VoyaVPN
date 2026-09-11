@@ -11,7 +11,7 @@ const ipcMocks = vi.hoisted(() => ({
   fetchCertificate: vi.fn(),
 }));
 
-vi.mock("@/ipc", () => ipcMocks);
+vi.mock("@/ipc/commands", () => ipcMocks);
 
 function SecurityPanelHarness({ address, port }: { address: string; port: number }) {
   const form = useForm<ProfileFormValues, unknown, ParsedProfileFormValues>({

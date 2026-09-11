@@ -79,6 +79,18 @@ export function capture(program, args, options = {}) {
   });
 }
 
+/** Capture a required command, preserving output and reporting failures safely. */
+export function checkedCapture(program, args, options = {}) {
+  const result = capture(program, args, options);
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw commandFailure(program, args, result);
+  }
+  return result;
+}
+
 export function run(program, args, options = {}) {
   const result = capture(program, args, {
     ...options,

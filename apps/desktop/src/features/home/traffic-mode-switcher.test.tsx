@@ -16,11 +16,11 @@ const mocks = vi.hoisted(() => ({
   load: vi.fn(),
   save: vi.fn(),
 }));
-vi.mock("@/ipc", () => ({
+vi.mock("@/ipc/commands", () => ({
   loadAppSettings: mocks.load,
   proxySetTrafficMode: mocks.save,
-  useRuntimeEventStore: (select: (state: { coreState: { state: CoreState } }) => unknown) => select({ coreState: { state: mocks.state } }),
 }));
+vi.mock("@/ipc/runtime-event-store", () => ({ useRuntimeEventStore: (select: (state: { coreState: { state: CoreState } }) => unknown) => select({ coreState: { state: mocks.state } }) }));
 
 const clients = new Set<ReturnType<typeof createAppQueryClient>>();
 function renderSwitcher() {

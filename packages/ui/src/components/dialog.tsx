@@ -3,6 +3,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cva, type VariantProps } from "class-variance-authority";
 import { XIcon } from "lucide-react";
 
+import { useDialogFocus } from "@voya/ui/lib/dialog-focus";
 import { cn } from "@voya/ui/lib/utils";
 
 // The width variants must beat DialogContent's `sm:max-w-lg` in the cascade
@@ -70,7 +71,7 @@ function DialogContent({
   onCloseAutoFocus,
   ...props
 }: DialogContentProps) {
-  const trigger = React.useRef<HTMLElement | null>(null);
+  const focusHandlers = useDialogFocus(onOpenAutoFocus, onCloseAutoFocus);
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -81,20 +82,7 @@ function DialogContent({
           className,
         )}
         {...props}
-        onOpenAutoFocus={(event) => {
-          trigger.current =
-            document.activeElement instanceof HTMLElement
-              ? document.activeElement
-              : null;
-          onOpenAutoFocus?.(event);
-        }}
-        onCloseAutoFocus={(event) => {
-          onCloseAutoFocus?.(event);
-          if (!event.defaultPrevented && trigger.current?.isConnected) {
-            event.preventDefault();
-            trigger.current.focus();
-          }
-        }}
+        {...focusHandlers}
       >
         {children}
         {showCloseButton ? (

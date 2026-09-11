@@ -13,7 +13,7 @@ import { afterEach, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
 
-import { IpcCommandError } from "@/ipc";
+import { IpcCommandError } from "@/ipc/commands";
 import { useModalStore } from "@/stores/modal-store";
 import type {
   AppError,
@@ -57,11 +57,7 @@ const ipcMocks = vi.hoisted(() => ({
   updateSubscriptions: vi.fn(),
 }));
 
-vi.mock("@/ipc", async () => {
-  const runtimeStore = await vi.importActual<
-    typeof import("@/ipc/runtime-event-store")
-  >("@/ipc/runtime-event-store");
-
+vi.mock("@/ipc/commands", () => {
   return {
     ...ipcMocks,
     IpcCommandError: class extends Error {
@@ -71,7 +67,6 @@ vi.mock("@/ipc", async () => {
         this.appError = appError;
       }
     },
-    useRuntimeEventStore: runtimeStore.useRuntimeEventStore,
   };
 });
 

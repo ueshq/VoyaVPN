@@ -2,6 +2,7 @@ import * as React from "react";
 import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
 
 import { buttonVariants } from "@voya/ui/components/button-variants";
+import { useDialogFocus } from "@voya/ui/lib/dialog-focus";
 import { cn } from "@voya/ui/lib/utils";
 
 function AlertDialog({
@@ -40,7 +41,7 @@ function AlertDialogContent({
   onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
-  const trigger = React.useRef<HTMLElement | null>(null);
+  const focusHandlers = useDialogFocus(onOpenAutoFocus, onCloseAutoFocus);
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />
@@ -51,20 +52,7 @@ function AlertDialogContent({
           className,
         )}
         {...props}
-        onOpenAutoFocus={(event) => {
-          trigger.current =
-            document.activeElement instanceof HTMLElement
-              ? document.activeElement
-              : null;
-          onOpenAutoFocus?.(event);
-        }}
-        onCloseAutoFocus={(event) => {
-          onCloseAutoFocus?.(event);
-          if (!event.defaultPrevented && trigger.current?.isConnected) {
-            event.preventDefault();
-            trigger.current.focus();
-          }
-        }}
+        {...focusHandlers}
       />
     </AlertDialogPortal>
   );

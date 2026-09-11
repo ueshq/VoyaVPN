@@ -26,7 +26,7 @@ import {
   listRoutings,
   moveRoutingRule,
   saveRoutingRule,
-} from "@/ipc";
+} from "@/ipc/commands";
 import { queryKeys } from "@/ipc/query-keys";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { redactOperationalError } from "@voya/utils/operational-redaction";

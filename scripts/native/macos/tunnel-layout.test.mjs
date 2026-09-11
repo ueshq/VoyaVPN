@@ -1,13 +1,40 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
 import {
   distributionFromIdentityName,
   incompatiblePacketTunnelBundle,
+  libboxBinaryPath,
   packetTunnelLayout,
   packagingModeForDistribution,
   requiredNetworkExtensionValue,
   resolvePacketTunnelVersions,
 } from "./tunnel-layout.mjs";
+
+describe("Libbox framework layout", () => {
+  let root;
+  afterEach(() => {
+    if (root) rmSync(root, { recursive: true, force: true });
+  });
+
+  it.each(["Libbox", "Versions/A/Libbox"])("finds the binary at %s", (relativePath) => {
+    root = mkdtempSync(join(tmpdir(), "voya-libbox-layout-"));
+    const binary = join(root, relativePath);
+    mkdirSync(dirname(binary), { recursive: true });
+    writeFileSync(binary, "fixture");
+    expect(libboxBinaryPath(root)).toBe(binary);
+  });
+
+  it("prefers the framework root when both paths exist", () => {
+    root = mkdtempSync(join(tmpdir(), "voya-libbox-layout-"));
+    mkdirSync(join(root, "Versions", "A"), { recursive: true });
+    writeFileSync(join(root, "Versions", "A", "Libbox"), "versioned");
+    writeFileSync(join(root, "Libbox"), "root");
+    expect(libboxBinaryPath(root)).toBe(join(root, "Libbox"));
+  });
+});
 
 describe("macOS native tunnel layout", () => {
   const appContents = "/Applications/VoyaVPN.app/Contents";

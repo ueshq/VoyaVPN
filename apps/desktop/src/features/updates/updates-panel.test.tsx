@@ -19,7 +19,7 @@ const tauriMocks = vi.hoisted(() => ({
   relaunch: vi.fn(),
 }));
 
-vi.mock("@/ipc", () => ipcMocks);
+vi.mock("@/ipc/commands", () => ipcMocks);
 vi.mock("@/ipc/process", () => ({ relaunch: tauriMocks.relaunch }));
 vi.mock("@/ipc/updater", () => ({
   check: tauriMocks.check,

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import { setWindowAcrylic } from "@/ipc";
+import { setWindowAcrylic } from "@/ipc/commands";
 
 /** CSS scope hook class: marks "this window has Windows Acrylic enabled" so the veil overrides in globals.css match. */
 const ACRYLIC_SCOPE_CLASS = "voyavpn-acrylic";

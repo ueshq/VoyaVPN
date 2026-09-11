@@ -1,9 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { capture, repoRootFromScript } from "../../lib/common.mjs";
 import {
   appBundleIdentifier,
+  libboxBinaryPath,
   packetTunnelBundleIdentifier,
 } from "./tunnel-layout.mjs";
 import {
@@ -160,11 +161,6 @@ function checkProfile(identity, udid, bundleIdentifier, explicitEnvName, label) 
     }
   }
   ok(`${label} profile: ${profile.name || profile.path} (expires ${profile.expirationDate ?? "unknown"})`);
-}
-
-function libboxBinaryPath(frameworkPath) {
-  const direct = join(frameworkPath, "Libbox");
-  return existsSync(direct) ? direct : join(frameworkPath, "Versions", "A", "Libbox");
 }
 
 function checkLibbox() {

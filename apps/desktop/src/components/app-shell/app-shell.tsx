@@ -15,7 +15,7 @@ import { useAcrylicWindow } from "@/components/app-shell/use-acrylic-window";
 import { useRuntimeStatusSeed } from "@/components/app-shell/use-runtime-status-seed";
 import { useWindowChrome } from "@/components/app-shell/use-window-chrome";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { useRuntimeEventStore } from "@/ipc";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { type ShellTab, useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
 

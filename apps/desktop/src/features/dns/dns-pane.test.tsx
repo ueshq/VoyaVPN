@@ -6,7 +6,7 @@ import { resetSettingsBackend, settingsIpc } from "@/features/settings/settings-
 import { DnsPane } from "./dns-pane";
 import { useDnsSettings } from "./use-dns-settings";
 
-vi.mock("@/ipc", async () => (await import("@/features/settings/settings-backend.test-fixture")).settingsIpc);
+vi.mock("@/ipc/commands", async () => (await import("@/features/settings/settings-backend.test-fixture")).settingsIpc);
 beforeEach(async () => { resetSettingsBackend(); await changeLocale("en"); });
 afterEach(cleanup);
 function mount() {

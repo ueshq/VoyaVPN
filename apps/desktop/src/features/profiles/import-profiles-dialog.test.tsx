@@ -28,7 +28,7 @@ const scannerMocks = vi.hoisted(() => ({
   scanQrBlob: vi.fn(),
 }));
 
-vi.mock("@/ipc", () => ipcMocks);
+vi.mock("@/ipc/commands", () => ipcMocks);
 vi.mock("./qr-scanner", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./qr-scanner")>();
 

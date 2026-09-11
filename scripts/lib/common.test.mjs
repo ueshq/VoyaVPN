@@ -1,9 +1,77 @@
-import { describe, expect, it } from "vitest";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { afterEach, describe, expect, it } from "vitest";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { commandFailure, describeCommand, environmentValue, redactArgs, run, validateTiming } from "./common.mjs";
+import { checkedCapture, commandFailure, describeCommand, environmentValue, redactArgs, run, validateTiming } from "./common.mjs";
+
+const temporaryDirectories = [];
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+function commandFixture(code) {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "voyavpn-common-")));
+  temporaryDirectories.push(directory);
+  const script = join(directory, "command.mjs");
+  writeFileSync(script, code);
+  return { directory, script };
+}
+
+describe("checked command capture", () => {
+  it("preserves output without trimming and returns the process result", () => {
+    const { script } = commandFixture('process.stdout.write(" out\\n"); process.stderr.write("err\\n");');
+    expect(checkedCapture(process.execPath, [script])).toMatchObject({
+      status: 0, stdout: " out\n", stderr: "err\n",
+    });
+  });
+
+  it("passes the working directory, environment, stdin and arguments through", () => {
+    const { directory, script } = commandFixture(`
+      import { readFileSync } from "node:fs";
+      process.stdout.write(JSON.stringify({
+        cwd: process.cwd(), value: process.env.VOYA_CAPTURE_TEST,
+        input: readFileSync(0, "utf8"), args: process.argv.slice(2),
+      }));
+    `);
+    const result = checkedCapture(process.execPath, [script, "one argument", "two"], {
+      cwd: directory,
+      env: { ...process.env, VOYA_CAPTURE_TEST: "custom" },
+      input: "input\n",
+      stdio: "pipe",
+    });
+    expect(JSON.parse(result.stdout)).toEqual({
+      cwd: directory, value: "custom", input: "input\n", args: ["one argument", "two"],
+    });
+    expect(checkedCapture(process.execPath, [script], { stdio: "ignore" })).toMatchObject({
+      status: 0, stdout: null, stderr: null,
+    });
+  });
+
+  it("throws the spawn error when a command cannot be started", () => {
+    const { directory } = commandFixture("");
+    expect(() => checkedCapture(join(directory, "missing-command"), [])).toThrow(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
+  });
+
+  it.each(["stderr", "stdout"])("reports failed command %s and redacts credentials", (stream) => {
+    const { script } = commandFixture(`process.${stream}.write("failure detail\\n"); process.exit(7);`);
+    let failure;
+    try {
+      checkedCapture(process.execPath, [script, "--password", "secret-value", "--token=secret-token"]);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toContain("failed with status 7: failure detail");
+    expect(failure.message).toContain("--password *** --token=***");
+    expect(failure.message).not.toContain("secret-value");
+    expect(failure.message).not.toContain("secret-token");
+  });
+});
 
 describe("shared native tool helpers", () => {
   it("reports status and stderr while redacting command arguments", () => {
@@ -70,9 +138,7 @@ describe("command argument redaction", () => {
   });
 
   it("keeps secrets out of the failure message thrown by run()", () => {
-    const scriptDir = mkdtempSync(join(tmpdir(), "voyavpn-common-"));
-    const script = join(scriptDir, "fail.mjs");
-    writeFileSync(script, "process.exit(3);\n");
+    const { script } = commandFixture("process.exit(3);\n");
 
     expect(() => run(process.execPath, [script, "--password", "hunter2"])).toThrow(/--password \*\*\*/);
     expect(() => run(process.execPath, [script, "--password", "hunter2"])).not.toThrow(/hunter2/);

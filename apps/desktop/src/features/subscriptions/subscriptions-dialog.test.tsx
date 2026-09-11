@@ -7,7 +7,7 @@ const ipc = vi.hoisted(() => ({
   saveSubscription: vi.fn(),
   updateSubscriptions: vi.fn(),
 }));
-vi.mock("@/ipc", () => ipc);
+vi.mock("@/ipc/commands", () => ipc);
 const source: Subscription = {
   id: "source",
   remarks: "My source",

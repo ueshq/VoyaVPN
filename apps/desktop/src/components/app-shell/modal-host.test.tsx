@@ -13,7 +13,7 @@ const ipcMocks = vi.hoisted(() => ({
   installCoreSeed: vi.fn(),
 }));
 
-vi.mock("@/ipc", () => ipcMocks);
+vi.mock("@/ipc/commands", () => ipcMocks);
 
 function seedInstallResult(status: CoreSeedInstallStatus) {
   return { coreType: "singBox", installedFiles: [], status };

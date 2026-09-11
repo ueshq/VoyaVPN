@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { loadAppSettings, saveAppSettings } from "@/ipc";
+import { loadAppSettings, saveAppSettings } from "@/ipc/commands";
 import type { AppSettingsV1, AppearanceSettings } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
 import { getErrorMessage } from "@voya/utils/error";

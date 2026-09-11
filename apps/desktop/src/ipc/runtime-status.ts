@@ -1,5 +1,6 @@
 import type { TranslationKey } from "@voya/i18n";
-import { runtimeStatus, systemProxyStatus, tunStatus, useRuntimeEventStore } from "@/ipc";
+import { runtimeStatus, systemProxyStatus, tunStatus } from "@/ipc/commands";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { beginRuntimeRead, type RuntimeChannel } from "./runtime-state-version";
 
 export const runtimeStatusErrorKeys = {

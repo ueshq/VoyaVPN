@@ -18,7 +18,7 @@ import { settingsSaveQueue } from "./settings-save-queue";
 import { useAppSettings } from "./use-app-settings";
 
 vi.mock(
-  "@/ipc",
+  "@/ipc/commands",
   async () => (await import("./settings-backend.test-fixture")).settingsIpc,
 );
 

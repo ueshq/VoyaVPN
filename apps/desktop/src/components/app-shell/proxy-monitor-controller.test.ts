@@ -46,11 +46,11 @@ const ipcMocks = vi.hoisted(() => ({
   proxyStopMonitor: vi.fn(),
 }));
 
-vi.mock("@/ipc", () => ({
+vi.mock("@/ipc/commands", () => ({
   proxyStartMonitor: ipcMocks.proxyStartMonitor,
   proxyStopMonitor: ipcMocks.proxyStopMonitor,
-  useRuntimeEventStore: { getState: () => storeMock.state },
 }));
+vi.mock("@/ipc/runtime-event-store", () => ({ useRuntimeEventStore: { getState: () => storeMock.state } }));
 
 import { createProxyMonitorController } from "./proxy-monitor-controller";
 

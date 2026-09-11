@@ -12,7 +12,7 @@ import { useToastStore } from "@/stores/toast-store";
 import { ConnectionsPanel } from "./connections-panel";
 
 const ipc = vi.hoisted(() => ({ proxyCloseConnection: vi.fn(), proxyListConnections: vi.fn() }));
-vi.mock("@/ipc", async () => ({ ...ipc, ...(await vi.importActual("@/ipc/runtime-event-store")) }));
+vi.mock("@/ipc/commands", () => ipc);
 const core: RuntimeStatusResponse = {
   state: "connected",
   activeProfileId: null,

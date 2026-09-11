@@ -51,7 +51,7 @@ export class IpcCommandError extends Error {
   readonly appError: AppError;
 
   constructor(appError: AppError) {
-    super(formatAppError(appError));
+    super(appError.message);
     this.appError = appError;
     this.name = "IpcCommandError";
   }
@@ -358,18 +358,6 @@ function unwrapCommandResult<T>(result: CommandResult<T>): T {
   }
 
   return result.data;
-}
-
-/**
- * Every `AppError` carries its own diagnostic text, so formatting is a field
- * read rather than a switch.
- *
- * This used to be a 23-arm switch in which 21 arms returned `error.message`
- * unchanged and the other two reached one level deeper. Anything a caller wants
- * to *decide* now lives in `error.appError.kind`, which is typed.
- */
-function formatAppError(error: AppError): string {
-  return error.message;
 }
 
 export async function recheckSystemProxy(): Promise<SystemProxyStatusResponse> {

@@ -1,98 +1,89 @@
 use super::*;
 
-#[derive(Debug, Clone, Copy)]
-pub struct VmessFmt;
-
-impl ShareFmt for VmessFmt {
-    fn config_type(&self) -> ConfigType {
-        ConfigType::VMess
+pub(super) fn parse(input: &str) -> Result<ProfileItem, ShareError> {
+    if input.contains('@') {
+        parse_vmess_standard(input).or_else(|_| parse_vmess_base64(input))
+    } else {
+        parse_vmess_base64(input)
     }
+}
 
-    fn parse(&self, input: &str) -> Result<ProfileItem, ShareError> {
-        if input.contains('@') {
-            parse_vmess_standard(input).or_else(|_| parse_vmess_base64(input))
-        } else {
-            parse_vmess_base64(input)
-        }
-    }
-
-    fn export(&self, item: &ProfileItem) -> Result<String, ShareError> {
-        ensure_type("vmess", item, ConfigType::VMess)?;
-        ensure_address_port("vmess", item)?;
-        ensure_nonempty("vmess", "password", item.password())?;
-        let ProfileProtocol::Vmess { uuid, cipher, .. } = &item.protocol else {
-            return Err(ShareError::WrongConfigType {
-                protocol: "vmess",
-                actual: item.config_type(),
-            });
-        };
-        let network = item_network(item);
-        let transport_type = match item.transport.as_ref() {
+pub(super) fn export(item: &ProfileItem) -> Result<String, ShareError> {
+    ensure_address_port("vmess", item)?;
+    ensure_nonempty("vmess", "password", item.password())?;
+    let ProfileProtocol::Vmess { uuid, cipher, .. } = &item.protocol else {
+        return Err(ShareError::WrongConfigType {
+            protocol: "vmess",
+            actual: item.config_type(),
+        });
+    };
+    let network = item_network(item);
+    let transport_type =
+        match item.transport.as_ref() {
             Some(ProfileTransport::Tcp { header, .. })
             | Some(ProfileTransport::Kcp { header, .. }) => option_or(header, NONE),
             Some(ProfileTransport::Xhttp { mode, .. })
             | Some(ProfileTransport::Grpc { mode, .. }) => option_or(mode, NONE),
             _ => NONE.to_string(),
         };
-        let transport_host = item
-            .transport
-            .as_ref()
-            .and_then(ProfileTransport::host)
-            .unwrap_or_default()
-            .to_string();
-        let transport_path = item
-            .transport
-            .as_ref()
-            .and_then(ProfileTransport::path)
-            .unwrap_or_default()
-            .to_string();
-        let tls = item.tls.as_ref();
-        let vmess = json_object([
-            ("v", Value::String("2".to_string())),
-            ("ps", Value::String(item.remarks.trim().to_string())),
-            ("add", Value::String(item.address().to_string())),
-            ("port", Value::String(item.port().to_string())),
-            ("id", Value::String(uuid.clone())),
-            ("aid", Value::String("0".to_string())),
-            (
-                "scy",
-                Value::String(
-                    nonempty_option(cipher)
-                        .unwrap_or(DEFAULT_SECURITY)
-                        .to_string(),
-                ),
+    let transport_host = item
+        .transport
+        .as_ref()
+        .and_then(ProfileTransport::host)
+        .unwrap_or_default()
+        .to_string();
+    let transport_path = item
+        .transport
+        .as_ref()
+        .and_then(ProfileTransport::path)
+        .unwrap_or_default()
+        .to_string();
+    let tls = item.tls.as_ref();
+    let vmess = json_object([
+        ("v", Value::String("2".to_string())),
+        ("ps", Value::String(item.remarks.trim().to_string())),
+        ("add", Value::String(item.address().to_string())),
+        ("port", Value::String(item.port().to_string())),
+        ("id", Value::String(uuid.clone())),
+        ("aid", Value::String("0".to_string())),
+        (
+            "scy",
+            Value::String(
+                nonempty_option(cipher)
+                    .unwrap_or(DEFAULT_SECURITY)
+                    .to_string(),
             ),
-            (
-                "net",
-                Value::String(if network == DEFAULT_NETWORK {
-                    RAW_NETWORK_ALIAS.to_string()
-                } else {
-                    network.to_string()
-                }),
+        ),
+        (
+            "net",
+            Value::String(if network == DEFAULT_NETWORK {
+                RAW_NETWORK_ALIAS.to_string()
+            } else {
+                network.to_string()
+            }),
+        ),
+        ("type", Value::String(transport_type)),
+        ("host", Value::String(transport_host)),
+        ("path", Value::String(transport_path)),
+        ("tls", Value::String(item.stream_security().to_string())),
+        (
+            "sni",
+            Value::String(
+                tls.and_then(|tls| tls.server_name.clone())
+                    .unwrap_or_default(),
             ),
-            ("type", Value::String(transport_type)),
-            ("host", Value::String(transport_host)),
-            ("path", Value::String(transport_path)),
-            ("tls", Value::String(item.stream_security().to_string())),
-            (
-                "sni",
-                Value::String(
-                    tls.and_then(|tls| tls.server_name.clone())
-                        .unwrap_or_default(),
-                ),
-            ),
-            (
-                "alpn",
-                Value::String(tls.map(|tls| tls.alpn.join(",")).unwrap_or_default()),
-            ),
-        ]);
+        ),
+        (
+            "alpn",
+            Value::String(tls.map(|tls| tls.alpn.join(",")).unwrap_or_default()),
+        ),
+    ]);
 
-        let payload = serde_json::to_string(&vmess).map_err(|error| ShareError::InvalidJson {
-            protocol: "vmess",
-            reason: error.to_string(),
-        })?;
-        Ok(format!("vmess://{}", base64_encode(&payload, false)))
-    }
+    let payload = serde_json::to_string(&vmess).map_err(|error| ShareError::InvalidJson {
+        protocol: "vmess",
+        reason: error.to_string(),
+    })?;
+    Ok(format!("vmess://{}", base64_encode(&payload, false)))
 }
 
 fn parse_vmess_standard(input: &str) -> Result<ProfileItem, ShareError> {
@@ -201,7 +192,7 @@ fn parse_vmess_base64(input: &str) -> Result<ProfileItem, ShareError> {
         mode,
         server_name: sni,
         alpn,
-        ..default_tls_settings()
+        ..TlsSettings::default()
     });
 
     ensure_address_port("vmess", &item)?;

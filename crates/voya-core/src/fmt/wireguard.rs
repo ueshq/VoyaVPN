@@ -1,83 +1,73 @@
 use super::*;
 
-#[derive(Debug, Clone, Copy)]
-pub struct WireguardFmt;
-
-impl ShareFmt for WireguardFmt {
-    fn config_type(&self) -> ConfigType {
-        ConfigType::WireGuard
+pub(super) fn parse(input: &str) -> Result<ProfileItem, ShareError> {
+    let parsed = parse_uri(input, "wireguard")?;
+    let mut item = profile_from_uri(ConfigType::WireGuard, &parsed);
+    let allowed_ips = parsed.query.value_or("allowedips", "");
+    if let ProfileProtocol::WireGuard {
+        private_key,
+        peer_public_key,
+        preshared_key,
+        reserved,
+        interface_address,
+        allowed_ips: item_allowed_ips,
+        mtu,
+        ..
+    } = &mut item.protocol
+    {
+        *private_key = parsed.user_info;
+        *peer_public_key = nonempty(parsed.query.value_or("publickey", ""));
+        *preshared_key = nonempty(parsed.query.value_or("presharedkey", ""));
+        *reserved = nonempty(parsed.query.value_or("reserved", ""));
+        *interface_address = nonempty(parsed.query.value_or("address", ""));
+        *item_allowed_ips = nonempty(if allowed_ips.is_empty() {
+            parsed.query.value_or("allowed_ips", "")
+        } else {
+            allowed_ips
+        });
+        *mtu = parse_positive_i32(&parsed.query.value_or("mtu", ""));
     }
+    ensure_address_port("wireguard", &item)?;
+    ensure_nonempty("wireguard", "private key", item.password())?;
+    Ok(item)
+}
 
-    fn parse(&self, input: &str) -> Result<ProfileItem, ShareError> {
-        let parsed = parse_uri(input, "wireguard")?;
-        let mut item = profile_from_uri(ConfigType::WireGuard, &parsed);
-        let allowed_ips = parsed.query.value_or("allowedips", "");
-        if let ProfileProtocol::WireGuard {
-            private_key,
-            peer_public_key,
-            preshared_key,
-            reserved,
-            interface_address,
-            allowed_ips: item_allowed_ips,
-            mtu,
-            ..
-        } = &mut item.protocol
-        {
-            *private_key = parsed.user_info;
-            *peer_public_key = nonempty(parsed.query.value_or("publickey", ""));
-            *preshared_key = nonempty(parsed.query.value_or("presharedkey", ""));
-            *reserved = nonempty(parsed.query.value_or("reserved", ""));
-            *interface_address = nonempty(parsed.query.value_or("address", ""));
-            *item_allowed_ips = nonempty(if allowed_ips.is_empty() {
-                parsed.query.value_or("allowed_ips", "")
-            } else {
-                allowed_ips
-            });
-            *mtu = parse_positive_i32(&parsed.query.value_or("mtu", ""));
-        }
-        ensure_address_port("wireguard", &item)?;
-        ensure_nonempty("wireguard", "private key", item.password())?;
-        Ok(item)
+pub(super) fn export(item: &ProfileItem) -> Result<String, ShareError> {
+    ensure_address_port("wireguard", item)?;
+    ensure_nonempty("wireguard", "private key", item.password())?;
+    let ProfileProtocol::WireGuard {
+        private_key,
+        peer_public_key,
+        preshared_key,
+        interface_address,
+        allowed_ips,
+        reserved,
+        mtu,
+        ..
+    } = &item.protocol
+    else {
+        return Err(ShareError::WrongConfigType {
+            protocol: "wireguard",
+            actual: item.config_type(),
+        });
+    };
+    let mut query = Vec::new();
+    push_encoded_opt(&mut query, "publickey", peer_public_key);
+    push_encoded_opt(&mut query, "presharedkey", preshared_key);
+    push_encoded_opt(&mut query, "reserved", reserved);
+    push_encoded_opt(&mut query, "address", interface_address);
+    push_encoded_opt(&mut query, "allowedips", allowed_ips);
+    if let Some(mtu) = mtu.filter(|value| *value > 0) {
+        query.push(("mtu".to_string(), mtu.to_string()));
     }
-
-    fn export(&self, item: &ProfileItem) -> Result<String, ShareError> {
-        ensure_type("wireguard", item, ConfigType::WireGuard)?;
-        ensure_address_port("wireguard", item)?;
-        ensure_nonempty("wireguard", "private key", item.password())?;
-        let ProfileProtocol::WireGuard {
-            private_key,
-            peer_public_key,
-            preshared_key,
-            interface_address,
-            allowed_ips,
-            reserved,
-            mtu,
-            ..
-        } = &item.protocol
-        else {
-            return Err(ShareError::WrongConfigType {
-                protocol: "wireguard",
-                actual: item.config_type(),
-            });
-        };
-        let mut query = Vec::new();
-        push_encoded_opt(&mut query, "publickey", peer_public_key);
-        push_encoded_opt(&mut query, "presharedkey", preshared_key);
-        push_encoded_opt(&mut query, "reserved", reserved);
-        push_encoded_opt(&mut query, "address", interface_address);
-        push_encoded_opt(&mut query, "allowedips", allowed_ips);
-        if let Some(mtu) = mtu.filter(|value| *value > 0) {
-            query.push(("mtu".to_string(), mtu.to_string()));
-        }
-        Ok(to_uri(
-            ConfigType::WireGuard,
-            item.address(),
-            item.port(),
-            private_key,
-            &query,
-            &item.remarks,
-        ))
-    }
+    Ok(to_uri(
+        ConfigType::WireGuard,
+        item.address(),
+        item.port(),
+        private_key,
+        &query,
+        &item.remarks,
+    ))
 }
 
 pub fn parse_wireguard_config(input: &str) -> Result<Vec<ProfileItem>, ShareError> {

@@ -9,7 +9,7 @@ import {
   type AppUpdateCheckResult,
   type AppUpdateInstallResult,
 } from "@/features/updates/app-update-flow";
-import { updateGeoAssets, updateSrsAssets } from "@/ipc";
+import { updateGeoAssets, updateSrsAssets } from "@/ipc/commands";
 import type { AppUpdaterStatus, ResourceUpdateFile } from "@/ipc/bindings";
 import { relaunch } from "@/ipc/process";
 import { useI18n } from "@voya/i18n/use-i18n";

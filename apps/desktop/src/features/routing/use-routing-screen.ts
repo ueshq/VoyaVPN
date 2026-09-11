@@ -9,7 +9,7 @@ import {
   saveRouting,
   saveRoutingRule,
   setActiveRouting,
-} from "@/ipc";
+} from "@/ipc/commands";
 import type { MoveAction, RoutingRule, Routing_Serialize } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
 import { getErrorMessage } from "@voya/utils/error";

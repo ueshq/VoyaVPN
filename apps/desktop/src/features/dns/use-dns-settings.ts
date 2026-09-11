@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { loadDnsSettings, saveDnsSettings } from "@/ipc";
+import { loadDnsSettings, saveDnsSettings } from "@/ipc/commands";
 import type { AppSettingsV1, DnsSettings } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
 import { getErrorMessage } from "@voya/utils/error";

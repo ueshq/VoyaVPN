@@ -1,4 +1,4 @@
-import { appUpdateStatus } from "@/ipc";
+import { appUpdateStatus } from "@/ipc/commands";
 import type { AppUpdaterStatus } from "@/ipc/bindings";
 import { check as checkForTauriUpdate, getVersion, type Update as TauriUpdate } from "@/ipc/updater";
 

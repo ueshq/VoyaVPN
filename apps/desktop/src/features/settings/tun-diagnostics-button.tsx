@@ -3,7 +3,7 @@ import { ClipboardCopy, LoaderCircle } from "lucide-react";
 
 import { Button } from "@voya/ui/components/button";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { tunProviderDiagnostics } from "@/ipc";
+import { tunProviderDiagnostics } from "@/ipc/commands";
 import type { TunProviderDiagnostics } from "@/ipc/bindings";
 import { getErrorMessage } from "@voya/utils/error";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";

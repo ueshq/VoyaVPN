@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { z } from "zod";
 
-import { IpcCommandError } from "@/ipc";
+import { IpcCommandError } from "@/ipc/commands";
 import { validationFieldErrors } from "@/ipc/messages";
 import { translateFieldErrors, zodIssuesToErrorMap } from "@/lib/zod-errors";
 import { i18next, type TranslationFunction } from "@voya/i18n";

@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from "@voya/ui/components/dialog";
 import type { NodeGroup, NodeGroupAssignment } from "@/ipc/bindings";
-import { profileAddress } from "./profile-display";
+
 import type { ServerTableController } from "./use-server-table";
 
 export function NodeGroupDialogs({
@@ -184,7 +184,7 @@ function GroupEditForm({
       profiles.filter(
         ({ profile }) =>
           !profile.subscriptionId &&
-          `${profile.remarks}\n${profileAddress(profile)}`
+          `${profile.remarks}\n${profile.protocol.server.address}`
             .toLocaleLowerCase()
             .includes(search.trim().toLocaleLowerCase()),
       ),
@@ -349,9 +349,9 @@ function GroupEditForm({
                     </span>
                     <span
                       className="block truncate text-xs text-muted-foreground"
-                      title={`${profileAddress(member)} · ${source}`}
+                      title={`${member.protocol.server.address} · ${source}`}
                     >
-                      {profileAddress(member)} · {source}
+                      {member.protocol.server.address} · {source}
                     </span>
                   </span>
                 </label>

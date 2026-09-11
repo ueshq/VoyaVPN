@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
+import { checkedCapture, isCliEntrypoint, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
 import {
   incompatiblePacketTunnelBundle,
   packetTunnelLayout,
@@ -26,21 +26,6 @@ let packetTunnelBundle;
 let packetTunnelBinary;
 let packetTunnelProvisioningProfile;
 
-function checkedCapture(program, args, options = {}) {
-  const result = capture(program, args, {
-    cwd: options.cwd ?? repoRoot,
-    env: options.env ?? process.env,
-    stdio: options.stdio ?? "pipe",
-  });
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    throw new Error(`${program} ${args.join(" ")} failed with status ${result.status}: ${result.stderr || result.stdout}`);
-  }
-  return result;
-}
-
 function requirePath(path, label) {
   if (!existsSync(path)) {
     throw new Error(`${label} is missing: ${path}`);
@@ -59,7 +44,7 @@ function optionalOrRequiredPath(path, label) {
 }
 
 function plistValue(plistPath, keyPath) {
-  return checkedCapture("/usr/libexec/PlistBuddy", ["-c", `Print ${keyPath}`, plistPath]).stdout.trim();
+  return checkedCapture("/usr/libexec/PlistBuddy", ["-c", `Print ${keyPath}`, plistPath], { cwd: repoRoot, env: process.env, stdio: "pipe" }).stdout.trim();
 }
 
 function codesignEntitlements(path) {
@@ -107,7 +92,7 @@ function archSuffix() {
 
   const executable = appExecutablePath();
   requirePath(executable, "macOS app executable");
-  const archs = checkedCapture("lipo", ["-archs", executable]).stdout.trim().split(/\s+/).filter(Boolean);
+  const archs = checkedCapture("lipo", ["-archs", executable], { cwd: repoRoot, env: process.env, stdio: "pipe" }).stdout.trim().split(/\s+/).filter(Boolean);
   const hasArm64 = archs.includes("arm64");
   const hasX64 = archs.includes("x86_64");
   if (hasArm64 && hasX64) {

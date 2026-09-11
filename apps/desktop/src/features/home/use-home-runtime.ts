@@ -9,8 +9,8 @@ import {
   setConnectionMode,
   tunRequestElevation,
   tunStatus,
-  useRuntimeEventStore,
-} from "@/ipc";
+} from "@/ipc/commands";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { TunStatus } from "@/ipc/bindings";
 import {
   refreshRuntimeStatus,

@@ -8,7 +8,7 @@ import {
   localeOptions,
   type Locale,
 } from "@voya/i18n";
-import { loadUiPreferences } from "@/ipc";
+import { loadUiPreferences } from "@/ipc/commands";
 import { queryKeys } from "@/ipc/query-keys";
 import { getErrorMessage } from "@voya/utils/error";
 import { useToastStore } from "@/stores/toast-store";

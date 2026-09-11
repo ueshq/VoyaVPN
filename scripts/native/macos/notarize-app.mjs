@@ -1,28 +1,11 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
-import { capture, describeCommand, repoRootFromScript, run } from "../../lib/common.mjs";
+import { checkedCapture, repoRootFromScript, run } from "../../lib/common.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const appBundle = resolve(process.env.VOYAVPN_MACOS_APP_BUNDLE || resolve(repoRoot, "target", "native", "macos", "VoyaVPN.app"));
 const artifact = process.env.VOYAVPN_NOTARY_ARTIFACT ? resolve(process.env.VOYAVPN_NOTARY_ARTIFACT) : null;
 const notaryZip = resolve(repoRoot, "target", "native", "macos", "VoyaVPN-notary.zip");
-
-function captureText(program, args, options = {}) {
-  const result = capture(program, args, {
-    cwd: options.cwd ?? repoRoot,
-  });
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    // notarytool takes the app-specific password on argv, so the command line
-    // must never be echoed verbatim into an error message or CI log.
-    throw new Error(
-      `${describeCommand(program, args)} failed with status ${result.status}: ${result.stderr || result.stdout}`,
-    );
-  }
-  return result.stdout;
-}
 
 function distributionMode() {
   const normalized = String(process.env.VOYAVPN_MACOS_DISTRIBUTION ?? "developer-id").trim().toLowerCase();
@@ -87,7 +70,7 @@ function stapleTarget(submittedArtifact) {
 
 function submitForNotarization(submittedArtifact) {
   const credentials = notaryCredentials();
-  const output = captureText("xcrun", [
+  const output = checkedCapture("xcrun", [
     "notarytool",
     "submit",
     submittedArtifact,
@@ -95,12 +78,12 @@ function submitForNotarization(submittedArtifact) {
     "--output-format",
     "json",
     ...credentials,
-  ]);
+  ], { cwd: repoRoot }).stdout;
   const result = JSON.parse(output);
   const id = result.id || result.jobId;
   if (result.status !== "Accepted") {
     if (id) {
-      const log = captureText("xcrun", ["notarytool", "log", id, "--output-format", "json", ...credentials]);
+      const log = checkedCapture("xcrun", ["notarytool", "log", id, "--output-format", "json", ...credentials], { cwd: repoRoot }).stdout;
       console.error(log);
     }
     throw new Error(`notarization failed for ${submittedArtifact}: ${result.status || "unknown status"}`);

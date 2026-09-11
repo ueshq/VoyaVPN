@@ -5,7 +5,7 @@ import { NodeCountryIcon } from "@/components/node-country-icon";
 import worldMap from "@/assets/world-map.svg";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { SubscriptionsDialog } from "@/features/subscriptions/subscriptions-dialog";
-import { profileAddress } from "@/features/profiles/profile-display";
+
 import { getProtocolLabel } from "@/features/profiles/profile-constants";
 import { cn } from "@voya/ui/lib/utils";
 
@@ -17,7 +17,7 @@ import { ConnectionDetailsDialog } from "./home-dialogs";
 import { useHomeRuntime } from "./use-home-runtime";
 import { useShellStore } from "@/stores/shell-store";
 import { Button } from "@voya/ui/components/button";
-import { loadAppSettings } from "@/ipc";
+import { loadAppSettings } from "@/ipc/commands";
 import { queryKeys } from "@/ipc/query-keys";
 import { useQuery } from "@tanstack/react-query";
 
@@ -183,9 +183,9 @@ export function HomeScreen() {
               <div className="home-node-meta">
                 <span
                   className="home-node-address"
-                  title={profile ? profileAddress(profile) : undefined}
+                  title={profile ? profile.protocol.server.address : undefined}
                 >
-                  {profile ? profileAddress(profile) || "—" : "—"}
+                  {profile ? profile.protocol.server.address || "—" : "—"}
                 </span>
                 <span>
                   {profile ? getProtocolLabel(profile.protocol.kind) : "—"}

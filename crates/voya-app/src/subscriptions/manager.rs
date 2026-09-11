@@ -16,7 +16,6 @@ use voya_net::{decode_base64_payload, DownloadError};
 
 use crate::profiles::{normalize_profile, ProfileManager, ProfileManagerError};
 
-use super::ownership::profile_is_adoptable;
 use super::update_flow::{
     persist_subscription_metadata, prepare_subscription_snapshot, PreparedSubscriptionUpdate,
 };
@@ -251,7 +250,7 @@ impl<'db> SubscriptionManager<'db> {
                 .iter()
                 .enumerate()
                 .filter_map(|(index, (existing, _))| {
-                    (profile_is_adoptable(existing, subscription_id)
+                    (existing.subscription_id.as_deref() == subscription_id
                         && profile_items_match(existing, &profile, false))
                     .then_some(index)
                 })

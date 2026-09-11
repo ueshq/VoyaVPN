@@ -1,4 +1,4 @@
-import { IpcCommandError, tunRequestElevation } from "@/ipc";
+import { IpcCommandError, tunRequestElevation } from "@/ipc/commands";
 import type { MissingCorePayload } from "@/stores/modal-store";
 
 /**

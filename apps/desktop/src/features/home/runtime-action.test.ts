@@ -21,7 +21,7 @@ const ipcMocks = vi.hoisted(() => {
   return { IpcCommandError: MockIpcCommandError, tunRequestElevation: vi.fn() };
 });
 
-vi.mock("@/ipc", () => ipcMocks);
+vi.mock("@/ipc/commands", () => ipcMocks);
 
 import { missingCorePayload, runWithElevation } from "./runtime-action";
 

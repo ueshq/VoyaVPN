@@ -17,7 +17,7 @@ import {
 import { Label } from "@voya/ui/components/label";
 import { Textarea } from "@voya/ui/components/textarea";
 import { getErrorMessage } from "@voya/utils/error";
-import { generateQrCode } from "@/ipc";
+import { generateQrCode } from "@/ipc/commands";
 import { profileShareQrQueryKey } from "@/ipc/query-keys";
 
 type ShareQrDialogProps = {

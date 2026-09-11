@@ -8,6 +8,7 @@ import {
   defaultEvidencePath,
   findSignatureArtifact,
   joinUrl,
+  isStableChannel,
   normalizeReleaseUrl,
   requiredBytes,
   requiredSha256,
@@ -21,7 +22,6 @@ import {
 } from "../validation.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
-const stableChannel = "stable";
 const stableUpdaterTargets = stableTargets
   .map((target) => target.updater)
   .sort((left, right) => left.localeCompare(right));
@@ -78,15 +78,11 @@ async function readPackageVersion() {
   return packageJson.version;
 }
 
-function isStable(channel) {
-  return channel.trim().toLowerCase() === stableChannel;
-}
-
 function normalizeBaseUrl(baseUrl, channel) {
   const value = (baseUrl ?? "").trim();
   if (!value) {
     throw new Error(
-      isStable(channel)
+      isStableChannel(channel)
         ? "Stable updater metadata requires --base-url or VOYAVPN_UPDATES_BASE_URL"
         : "Updater metadata generation requires --base-url or VOYAVPN_UPDATES_BASE_URL",
     );
@@ -96,13 +92,13 @@ function normalizeBaseUrl(baseUrl, channel) {
   // local/test hosts stay allowed; the whole-URL placeholder check below is what
   // keeps a stable run off a placeholder path.
   const normalized = normalizeReleaseUrl(value, {
-    allowHttp: !isStable(channel),
+    allowHttp: !isStableChannel(channel),
     allowTestHosts: true,
-    checkHost: isStable(channel),
-    label: isStable(channel) ? "Stable updater base URL" : "Updater base URL",
+    checkHost: isStableChannel(channel),
+    label: isStableChannel(channel) ? "Stable updater base URL" : "Updater base URL",
   });
 
-  if (isStable(channel) && normalized.toLowerCase().includes("placeholder")) {
+  if (isStableChannel(channel) && normalized.toLowerCase().includes("placeholder")) {
     throw new Error(`Stable updater base URL must not use example, GitHub, or placeholder hosts: ${value}`);
   }
 
@@ -115,7 +111,7 @@ function resolveBaseUrl(options) {
     return normalizeBaseUrl(configuredBaseUrl, options.channel);
   }
 
-  if (isStable(options.channel)) {
+  if (isStableChannel(options.channel)) {
     return normalizeBaseUrl(null, options.channel);
   }
 
@@ -308,7 +304,7 @@ async function main(argv = []) {
     printHelp();
     return;
   }
-  if (isStable(options.channel) && options.placeholderSignatures) {
+  if (isStableChannel(options.channel) && options.placeholderSignatures) {
     throw new Error("Stable updater metadata cannot use --placeholder-signatures; use a dry-run channel for placeholders.");
   }
 
@@ -319,7 +315,7 @@ async function main(argv = []) {
   const inputDir = resolve(repoRoot, options.input);
   const outputPath = resolve(repoRoot, options.output);
   const evidencePath = resolve(repoRoot, options.evidenceOutput ?? defaultEvidencePath(outputPath));
-  const updaterPublicKey = isStable(options.channel) ? resolveApprovedUpdaterPublicKey() : null;
+  const updaterPublicKey = isStableChannel(options.channel) ? resolveApprovedUpdaterPublicKey() : null;
 
   const loadedManifests = await loadManifests(inputDir);
   const targets = new Map();
@@ -335,7 +331,7 @@ async function main(argv = []) {
       throw new Error(`${manifestLabel} is missing artifacts[]`);
     }
     const current = targets.get(target) ?? { target, artifacts: [], manifestDir: loaded.manifestDir };
-    if (isStable(options.channel) && current.manifestDir && current.manifestDir !== loaded.manifestDir) {
+    if (isStableChannel(options.channel) && current.manifestDir && current.manifestDir !== loaded.manifestDir) {
       throw new Error(`Stable updater metadata has multiple manifests for target ${target}`);
     }
     current.artifacts.push(...loaded.manifest.artifacts);
@@ -347,7 +343,7 @@ async function main(argv = []) {
     throw new Error("No target manifests found. Pass --target with --placeholder-signatures for dry-run metadata.");
   }
 
-  if (isStable(options.channel)) {
+  if (isStableChannel(options.channel)) {
     assertStableTargetNames(targets.keys());
   }
 
@@ -364,8 +360,8 @@ async function main(argv = []) {
     const signatureArtifact = payload ? findSignatureArtifact(payload, targetArtifacts.artifacts) : null;
 
     if (payload && signatureArtifact) {
-      const requireManifestMetadata = isStable(options.channel);
-      if (isStable(options.channel)) {
+      const requireManifestMetadata = isStableChannel(options.channel);
+      if (isStableChannel(options.channel)) {
         assertStableArtifactMetadata(payload, target, version, options.channel, `${target} updater payload`);
         assertStableArtifactMetadata(signatureArtifact, target, version, options.channel, `${target} updater signature`);
       }
@@ -383,7 +379,7 @@ async function main(argv = []) {
       );
       const signature = await readSignature(targetArtifacts.manifestDir, signatureArtifact);
       let signatureVerification = null;
-      if (isStable(options.channel)) {
+      if (isStableChannel(options.channel)) {
         assertStableSignature(signature, target);
         signatureVerification = await verifyTauriUpdaterSignatureFile(
           resolve(targetArtifacts.manifestDir, payloadEvidence.path),
@@ -459,7 +455,7 @@ async function main(argv = []) {
     platforms,
   };
 
-  if (isStable(options.channel)) {
+  if (isStableChannel(options.channel)) {
     assertStableTargetMatrix(Object.keys(platforms));
   }
 
@@ -487,10 +483,10 @@ async function main(argv = []) {
     ),
     validations: {
       urlsDerivedFromBaseUrl: true,
-      signedArtifactsRequiredForStable: isStable(options.channel),
-      stableTargetMatrixComplete: isStable(options.channel),
-      updaterPublicKeyApproved: isStable(options.channel),
-      updaterSignaturesVerified: isStable(options.channel)
+      signedArtifactsRequiredForStable: isStableChannel(options.channel),
+      stableTargetMatrixComplete: isStableChannel(options.channel),
+      updaterPublicKeyApproved: isStableChannel(options.channel),
+      updaterSignaturesVerified: isStableChannel(options.channel)
         ? evidence.every((entry) => entry.source === "signed-artifact" && entry.signatureVerified === true)
         : false,
     },
@@ -499,7 +495,7 @@ async function main(argv = []) {
     platforms: evidencePlatforms,
   };
 
-  if (isStable(options.channel)) {
+  if (isStableChannel(options.channel)) {
     assertStableDocuments(latest, evidenceDocument, baseUrl);
   }
 

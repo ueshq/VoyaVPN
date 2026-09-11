@@ -14,9 +14,9 @@ import {
   deleteSubscriptions,
   runSpeedtest,
   saveProfile,
-  saveTextFile,
-  useRuntimeEventStore,
-} from "@/ipc";
+} from "@/ipc/commands";
+import { saveTextFile } from "@/ipc/file-dialog";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type {
   ImportProfilesResult,
   Profile,

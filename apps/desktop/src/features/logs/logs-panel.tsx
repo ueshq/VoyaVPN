@@ -37,7 +37,7 @@ import {
 import { useI18n } from "@voya/i18n/use-i18n";
 
 import { logLineText } from "@/ipc/messages";
-import { useRuntimeEventStore } from "@/ipc";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { StoredLogLine } from "@/ipc/runtime-event-store";
 import type { LogLevel } from "@/ipc/bindings";
 import { cn } from "@voya/ui/lib/utils";

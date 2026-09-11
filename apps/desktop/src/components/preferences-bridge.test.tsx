@@ -11,7 +11,7 @@ const preferencesMocks = vi.hoisted(() => ({
   loadUiPreferences: vi.fn(),
 }));
 
-vi.mock("@/ipc", () => preferencesMocks);
+vi.mock("@/ipc/commands", () => preferencesMocks);
 
 describe("PreferencesBridge", () => {
   beforeEach(async () => {

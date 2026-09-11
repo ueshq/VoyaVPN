@@ -9,16 +9,11 @@ import {
   DialogTitle,
 } from "@voya/ui/components/dialog";
 import { formatBytes } from "@voya/utils/formatting";
-import { useRuntimeEventStore } from "@/ipc";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { ProfileListEntry } from "@/ipc/bindings";
 
-import { profileLatency } from "./profile-card-data";
 import { getProtocolLabel } from "./profile-constants";
-import {
-  profileAddress,
-  profilePort,
-  profileTransportName,
-} from "./profile-display";
+import { profileLatency, profileTransportName } from "./profile-display";
 import type { ServerTableController } from "./use-server-table";
 
 // Mounted only while open; the statistics selector watches this node alone.
@@ -39,8 +34,8 @@ export function ProfileDetailsDialog({
       "panes.profiles.cardFields.remarks",
       profile.remarks || t("panes.profiles.untitled"),
     ],
-    ["panes.profiles.cardFields.address", profileAddress(profile) || "—"],
-    ["panes.profiles.cardFields.port", profilePort(profile) || "—"],
+    ["panes.profiles.cardFields.address", profile.protocol.server.address || "—"],
+    ["panes.profiles.cardFields.port", profile.protocol.server.port || "—"],
     [
       "panes.profiles.cardFields.protocol",
       getProtocolLabel(profile.protocol.kind),

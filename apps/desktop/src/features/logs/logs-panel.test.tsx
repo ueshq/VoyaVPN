@@ -20,7 +20,8 @@ const storeMock = vi.hoisted(() => {
   return Object.assign(hook, { getState: () => state, state });
 });
 
-vi.mock("@/ipc", () => ({ useRuntimeEventStore: storeMock }));
+
+vi.mock("@/ipc/runtime-event-store", () => ({ useRuntimeEventStore: storeMock }));
 
 // 2026-06-01T08:09:10 local time; the panel renders the store's receipt stamp,
 // not a render-time clock read.

@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TitleBar } from "./title-bar";
-import { WindowControls } from "./window-controls";
 
 const windowMocks = vi.hoisted(() => ({
   closeWindow: vi.fn(),
@@ -24,7 +23,7 @@ describe("Windows title-bar controls", () => {
 
   it("minimizes, maximizes, and closes the active window", async () => {
     const user = userEvent.setup();
-    render(<WindowControls />);
+    render(<TitleBar layout="windows" />);
 
     await waitFor(() => expect(windowMocks.isWindowMaximized).toHaveBeenCalled());
     await user.click(screen.getByRole("button", { name: "Minimize" }));
@@ -43,7 +42,7 @@ describe("Windows title-bar controls", () => {
       resize = listener;
       return unlisten;
     });
-    const { unmount } = render(<WindowControls />);
+    const { unmount } = render(<TitleBar layout="windows" />);
 
     expect(await screen.findByRole("button", { name: "Restore" })).toBeInTheDocument();
     resize?.();

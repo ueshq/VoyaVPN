@@ -8,10 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@voya/ui/components/dialog";
-import {
-  profileAddress,
-  profilePort,
-} from "@/features/profiles/profile-display";
+
 import { getProtocolLabel } from "@/features/profiles/profile-constants";
 
 import type { Translation, useHomeRuntime } from "./use-home-runtime";
@@ -54,9 +51,9 @@ export function ConnectionDetailsDialog({
         <DialogBody>
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-4 text-sm [&_dt]:text-muted-foreground [&_dd]:break-words">
             <dt>{t("home.serverAddress")}</dt>
-            <dd>{profile ? profileAddress(profile) || "—" : "—"}</dd>
+            <dd>{profile ? profile.protocol.server.address || "—" : "—"}</dd>
             <dt>{t("home.serverPort")}</dt>
-            <dd>{profile ? profilePort(profile) || "—" : "—"}</dd>
+            <dd>{profile ? profile.protocol.server.port || "—" : "—"}</dd>
             <dt>{t("home.protocol")}</dt>
             <dd>{profile ? getProtocolLabel(profile.protocol.kind) : "—"}</dd>
             <dt>{t("home.processId")}</dt>

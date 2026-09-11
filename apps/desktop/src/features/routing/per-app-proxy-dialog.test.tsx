@@ -16,7 +16,7 @@ const ipcMocks = vi.hoisted(() => ({
   saveRoutingRule: vi.fn(),
 }));
 
-vi.mock("@/ipc", () => ipcMocks);
+vi.mock("@/ipc/commands", () => ipcMocks);
 
 const queryClients = new Set<QueryClient>();
 

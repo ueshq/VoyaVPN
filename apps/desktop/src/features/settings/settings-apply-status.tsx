@@ -5,7 +5,7 @@ import { Check, LoaderCircle, RotateCcw } from "lucide-react";
 import { Button } from "@voya/ui/components/button";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
-import { applyPendingSettings, getSettingsApplyStatus } from "@/ipc";
+import { applyPendingSettings, getSettingsApplyStatus } from "@/ipc/commands";
 import { queryKeys } from "@/ipc/query-keys";
 
 export function SettingsApplyStatus({

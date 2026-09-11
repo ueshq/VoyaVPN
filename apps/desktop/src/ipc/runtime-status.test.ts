@@ -4,10 +4,7 @@ import { useRuntimeEventStore } from "./runtime-event-store";
 import { refreshRuntimeStatus } from "./runtime-status";
 
 const commands = vi.hoisted(() => ({ runtimeStatus: vi.fn(), systemProxyStatus: vi.fn(), tunStatus: vi.fn() }));
-vi.mock("@/ipc", async () => ({
-  ...commands,
-  useRuntimeEventStore: (await import("./runtime-event-store")).useRuntimeEventStore,
-}));
+vi.mock("@/ipc/commands", () => commands);
 
 const core: RuntimeStatusResponse = {
   state: "connected", activeTunBackend: null, activeProfileId: "node", mainPid: 1, prePid: null, connectedDurationMs: null, runningCoreType: "singBox",

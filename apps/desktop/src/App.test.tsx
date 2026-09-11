@@ -20,7 +20,7 @@ import {
   proxyStopMonitor,
   loadUiPreferences,
   getWindowChromeConfig,
-} from "@/ipc";
+} from "@/ipc/commands";
 import type {
   ProxyConnectionItem,
   ProxyConnectionsSnapshot,
@@ -173,9 +173,8 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
   };
 });
 
-vi.mock("@/ipc", () => ({
+vi.mock("@/ipc/commands", () => ({
   connectActiveProfile: vi.fn(),
-  EventBridge: () => null,
   appUpdateStatus: vi.fn(() =>
     Promise.resolve({
       currentVersion: "0.1.0",
@@ -341,8 +340,9 @@ vi.mock("@/ipc", () => ({
   updateGeoAssets: vi.fn(() => Promise.resolve([])),
   updateSrsAssets: vi.fn(() => Promise.resolve([])),
   updateSubscriptions: vi.fn(),
-  useRuntimeEventStore: runtimeStoreMock.useRuntimeEventStore,
 }));
+vi.mock("@/ipc/event-bridge", () => ({ EventBridge: () => null }));
+vi.mock("@/ipc/runtime-event-store", () => ({ useRuntimeEventStore: runtimeStoreMock.useRuntimeEventStore }));
 
 function renderApp() {
   const queryClient = new QueryClient({

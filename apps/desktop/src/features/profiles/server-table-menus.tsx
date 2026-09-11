@@ -38,7 +38,7 @@ import {
   MenubarItem,
   MenubarSeparator,
 } from "@voya/ui/components/menubar";
-import { copyProfiles, moveProfile } from "@/ipc";
+import { copyProfiles, moveProfile } from "@/ipc/commands";
 import type { ProfileListEntry, SpeedtestTarget } from "@/ipc/bindings";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";

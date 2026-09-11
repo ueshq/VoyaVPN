@@ -1,6 +1,5 @@
 mod auto_update;
 mod manager;
-mod ownership;
 mod update_flow;
 
 pub use auto_update::{

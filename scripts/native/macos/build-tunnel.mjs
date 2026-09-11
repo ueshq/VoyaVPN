@@ -9,10 +9,11 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
 import {
   appBundleIdentifier,
+  libboxBinaryPath,
   incompatiblePacketTunnelBundle,
   packetTunnelBundleIdentifier,
   packetTunnelLayout,
@@ -185,14 +186,6 @@ function findLibboxFramework() {
     return null;
   }
   return libboxFramework;
-}
-
-function libboxBinaryPath(frameworkPath) {
-  const direct = join(frameworkPath, "Libbox");
-  if (existsSync(direct)) {
-    return direct;
-  }
-  return join(frameworkPath, "Versions", "A", "Libbox");
 }
 
 function libboxFrameworkLinkage(frameworkPath) {

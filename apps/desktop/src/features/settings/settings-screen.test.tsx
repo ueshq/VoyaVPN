@@ -23,7 +23,7 @@ import { SettingsScreen } from "./settings-screen";
 import { settingsSaveQueue } from "./settings-save-queue";
 
 vi.mock(
-  "@/ipc",
+  "@/ipc/commands",
   async () => (await import("./settings-backend.test-fixture")).settingsIpc,
 );
 vi.mock("@/ipc/updater", () => ({

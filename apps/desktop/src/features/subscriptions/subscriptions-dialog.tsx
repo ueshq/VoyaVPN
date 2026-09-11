@@ -14,7 +14,7 @@ import {
 } from "@voya/ui/components/dialog";
 import { Disclosure } from "@voya/ui/components/disclosure";
 import { CheckboxField, TextField } from "@voya/ui/components/form-fields";
-import { saveSubscription, updateSubscriptions } from "@/ipc";
+import { saveSubscription, updateSubscriptions } from "@/ipc/commands";
 import type { Subscription } from "@/ipc/bindings";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import {

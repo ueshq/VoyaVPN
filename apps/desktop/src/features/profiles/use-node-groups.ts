@@ -1,6 +1,13 @@
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { assignNodeGroups, deleteNodeGroup, listNodeGroups, moveNodeGroup, saveNodeGroup, updateNodeGroup } from "@/ipc";
+import {
+  assignNodeGroups,
+  deleteNodeGroup,
+  listNodeGroups,
+  moveNodeGroup,
+  saveNodeGroup,
+  updateNodeGroup,
+} from "@/ipc/commands";
 import type { MoveAction, NodeGroup, NodeGroupAssignment, NodeGroupsSnapshot } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
 import { getErrorMessage } from "@voya/utils/error";

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { getWindowChromeConfig } from "@/ipc";
+import { getWindowChromeConfig } from "@/ipc/commands";
 import type { WindowChromeConfig } from "@/ipc/bindings";
 
 /** Web (no Tauri runtime) and the brief pre-resolve window both render native chrome. */

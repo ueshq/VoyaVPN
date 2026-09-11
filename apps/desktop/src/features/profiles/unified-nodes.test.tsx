@@ -43,10 +43,11 @@ const mocks = vi.hoisted(() => ({
   connectActiveProfile: vi.fn(),
   restartCore: vi.fn(),
 }));
-vi.mock("@/ipc", async (original) => ({
-  ...(await original<typeof import("@/ipc")>()),
+vi.mock("@/ipc/commands", async (original) => ({
+  ...(await original<typeof import("@/ipc/commands")>()),
   ...mocks,
 }));
+vi.mock("@/ipc/file-dialog", () => ({ saveTextFile: mocks.saveTextFile }));
 let groups: NodeGroupsSnapshot;
 const profiles = [
   makeProfileFixture(0, { remarks: "Tokyo" }),

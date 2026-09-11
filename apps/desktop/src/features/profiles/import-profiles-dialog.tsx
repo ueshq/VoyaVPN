@@ -25,7 +25,7 @@ import { Label } from "@voya/ui/components/label";
 import { Textarea } from "@voya/ui/components/textarea";
 import { getErrorMessage } from "@voya/utils/error";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
-import { importProfilesFromText, scanScreenQr } from "@/ipc";
+import { importProfilesFromText, scanScreenQr } from "@/ipc/commands";
 import type { ImportProfilesResult } from "@/ipc/bindings";
 
 import { IMPORT_METHODS, type ImportMethod } from "./import-methods";

@@ -1,11 +1,11 @@
-import type { Profile, ProfileTransport } from "@/ipc/bindings";
+import type { TranslationFunction } from "@voya/i18n";
+import type { ProfileListEntry, ProfileTransport } from "@/ipc/bindings";
+import { speedtestOutcomeText } from "@/ipc/messages";
+import { formatDelay } from "@voya/utils/formatting";
 
-export function profileAddress(profile: Profile) {
-  return profile.protocol.server.address;
-}
-
-export function profilePort(profile: Profile) {
-  return "server" in profile.protocol ? profile.protocol.server.port : 0;
+export function profileLatency(item: ProfileListEntry, t: TranslationFunction) {
+  const { delayMs, outcome } = item.metrics;
+  return outcome && outcome !== "completed" ? speedtestOutcomeText(t, outcome) : formatDelay(delayMs) || "—";
 }
 
 export function profileTransportName(transport: ProfileTransport | null) {

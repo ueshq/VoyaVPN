@@ -2,10 +2,10 @@ import type * as React from "react";
 import { Activity, ArrowDown, ArrowUp, Home, PanelLeft, PanelRight, Route, Settings, Shield } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import { SidebarNavItem } from "@/components/app-shell/sidebar-nav-item";
+import { cn } from "@voya/ui/lib/utils";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
-import { useRuntimeEventStore } from "@/ipc";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { CoreState, TitleBarLayout } from "@/ipc/bindings";
 import { formatBytesPerSecond } from "@voya/utils/formatting";
 import { type ShellTab, useShellStore } from "@/stores/shell-store";
@@ -142,5 +142,42 @@ function SidebarFooter() {
         </div>
       ))}
     </div>
+  );
+}
+
+// ARIA tab with roving tabIndex; keyboard navigation is owned by AppSidebar.
+function SidebarNavItem({
+  active,
+  collapsed = false,
+  icon: Icon,
+  id,
+  label,
+  onSelect,
+  panelId,
+}: {
+  active: boolean;
+  collapsed?: boolean;
+  icon: LucideIcon;
+  id: string;
+  label: string;
+  onSelect: () => void;
+  panelId: string;
+}) {
+  return (
+    <button
+      aria-controls={panelId}
+      aria-selected={active}
+      aria-label={label}
+      title={collapsed ? label : undefined}
+      className={cn("sidebar-nav-item", active && "sidebar-nav-item-active")}
+      id={id}
+      onClick={onSelect}
+      role="tab"
+      tabIndex={active ? 0 : -1}
+      type="button"
+    >
+      <Icon className="size-4 shrink-0" aria-hidden="true" />
+      <span className="sidebar-nav-label truncate text-start">{label}</span>
+    </button>
   );
 }

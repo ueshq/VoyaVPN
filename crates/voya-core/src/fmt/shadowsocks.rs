@@ -1,68 +1,58 @@
 use super::*;
 
-#[derive(Debug, Clone, Copy)]
-pub struct ShadowsocksFmt;
-
-impl ShareFmt for ShadowsocksFmt {
-    fn config_type(&self) -> ConfigType {
-        ConfigType::Shadowsocks
-    }
-
-    fn parse(&self, input: &str) -> Result<ProfileItem, ShareError> {
-        let item = parse_shadowsocks_sip002(input)?;
-        ensure_address_port("ss", &item)?;
-        let ProfileProtocol::Shadowsocks {
-            password, method, ..
-        } = &item.protocol
-        else {
-            return Err(ShareError::WrongConfigType {
-                protocol: "ss",
-                actual: item.config_type(),
-            });
-        };
-        if method.trim().is_empty() {
-            return Err(ShareError::MissingField {
-                protocol: "ss",
-                field: "method",
-            });
-        }
-        ensure_nonempty("ss", "password", password)?;
-        Ok(item)
-    }
-
-    fn export(&self, item: &ProfileItem) -> Result<String, ShareError> {
-        ensure_type("ss", item, ConfigType::Shadowsocks)?;
-        ensure_address_port("ss", item)?;
-        let ProfileProtocol::Shadowsocks {
-            password, method, ..
-        } = &item.protocol
-        else {
-            return Err(ShareError::WrongConfigType {
-                protocol: "ss",
-                actual: item.config_type(),
-            });
-        };
-        let method = nonempty_str(Some(method)).ok_or(ShareError::MissingField {
+pub(super) fn parse(input: &str) -> Result<ProfileItem, ShareError> {
+    let item = parse_shadowsocks_sip002(input)?;
+    ensure_address_port("ss", &item)?;
+    let ProfileProtocol::Shadowsocks {
+        password, method, ..
+    } = &item.protocol
+    else {
+        return Err(ShareError::WrongConfigType {
+            protocol: "ss",
+            actual: item.config_type(),
+        });
+    };
+    if method.trim().is_empty() {
+        return Err(ShareError::MissingField {
             protocol: "ss",
             field: "method",
-        })?;
-        ensure_nonempty("ss", "password", password)?;
-
-        let user_info = base64_encode(&format!("{method}:{password}"), true);
-        let mut query = Vec::new();
-        if let Some(plugin) = shadowsocks_plugin_for(item) {
-            query.push(("plugin".to_string(), url_encode(&plugin.render_share())));
-        }
-
-        Ok(to_uri(
-            ConfigType::Shadowsocks,
-            item.address(),
-            item.port(),
-            &user_info,
-            &query,
-            &item.remarks,
-        ))
+        });
     }
+    ensure_nonempty("ss", "password", password)?;
+    Ok(item)
+}
+
+pub(super) fn export(item: &ProfileItem) -> Result<String, ShareError> {
+    ensure_address_port("ss", item)?;
+    let ProfileProtocol::Shadowsocks {
+        password, method, ..
+    } = &item.protocol
+    else {
+        return Err(ShareError::WrongConfigType {
+            protocol: "ss",
+            actual: item.config_type(),
+        });
+    };
+    let method = nonempty_str(Some(method)).ok_or(ShareError::MissingField {
+        protocol: "ss",
+        field: "method",
+    })?;
+    ensure_nonempty("ss", "password", password)?;
+
+    let user_info = base64_encode(&format!("{method}:{password}"), true);
+    let mut query = Vec::new();
+    if let Some(plugin) = shadowsocks_plugin_for(item) {
+        query.push(("plugin".to_string(), url_encode(&plugin.render_share())));
+    }
+
+    Ok(to_uri(
+        ConfigType::Shadowsocks,
+        item.address(),
+        item.port(),
+        &user_info,
+        &query,
+        &item.remarks,
+    ))
 }
 
 pub fn parse_ss_sip008(input: &str) -> Result<Vec<ProfileItem>, ShareError> {
@@ -196,7 +186,7 @@ fn parse_shadowsocks_plugin(plugin: &str, item: &mut ProfileItem) -> Result<(), 
             {
                 let parsed_host = parsed_host.to_string();
                 item.tls
-                    .get_or_insert_with(default_tls_settings)
+                    .get_or_insert_with(TlsSettings::default)
                     .server_name = Some(parsed_host.clone());
                 host = Some(parsed_host);
             }
@@ -214,7 +204,7 @@ fn parse_shadowsocks_plugin(plugin: &str, item: &mut ProfileItem) -> Result<(), 
             item.transport = Some(ProfileTransport::Websocket { host, path });
         }
         if plugin_parts.contains(&"tls") {
-            let tls = item.tls.get_or_insert_with(default_tls_settings);
+            let tls = item.tls.get_or_insert_with(TlsSettings::default);
             tls.mode = TlsMode::Tls;
             if let Some(cert) = plugin_parts
                 .iter()

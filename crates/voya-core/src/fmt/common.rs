@@ -75,29 +75,6 @@ pub(super) fn parse_positive_i32(value: &str) -> Option<i32> {
     value.parse::<i32>().ok().filter(|value| *value > 0)
 }
 
-/// A plain-TLS block with nothing else set.
-///
-/// `TlsSettings::default()` is that value; the named wrapper keeps the intent
-/// readable at the `get_or_insert_with` call sites.
-pub(super) fn default_tls_settings() -> TlsSettings {
-    TlsSettings::default()
-}
-
-pub(super) fn ensure_type(
-    protocol: &'static str,
-    item: &ProfileItem,
-    expected: ConfigType,
-) -> Result<(), ShareError> {
-    if item.config_type() == expected {
-        Ok(())
-    } else {
-        Err(ShareError::WrongConfigType {
-            protocol,
-            actual: item.config_type(),
-        })
-    }
-}
-
 pub(super) fn ensure_address_port(
     protocol: &'static str,
     item: &ProfileItem,

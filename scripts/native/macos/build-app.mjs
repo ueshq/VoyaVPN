@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { capture, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
+import { capture, checkedCapture, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
 import { prepareVoyaForLocalBuild } from "./local-runtime.mjs";
 import { resolveSigningIdentity } from "./provisioning.mjs";
 
@@ -25,17 +25,6 @@ function commandStatus(program, args, env = process.env) {
     throw result.error;
   }
   return result.status ?? 1;
-}
-
-function captureText(program, args) {
-  const result = capture(program, args, commandOptions());
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    throw new Error(`${program} ${args.join(" ")} failed with status ${result.status}: ${result.stderr || result.stdout}`);
-  }
-  return result.stdout;
 }
 
 function withoutEnv(env, names) {
@@ -94,7 +83,7 @@ function requireNotaryCredentials() {
 }
 
 function plistValue(plistPath, keyPath) {
-  return captureText("/usr/libexec/PlistBuddy", ["-c", `Print ${keyPath}`, plistPath]).trim();
+  return checkedCapture("/usr/libexec/PlistBuddy", ["-c", `Print ${keyPath}`, plistPath], commandOptions()).stdout.trim();
 }
 
 function appExecutablePath() {
@@ -196,7 +185,7 @@ function archSuffix() {
     return explicit;
   }
 
-  const archs = captureText("lipo", ["-archs", appExecutablePath()]).trim().split(/\s+/).filter(Boolean);
+  const archs = checkedCapture("lipo", ["-archs", appExecutablePath()], commandOptions()).stdout.trim().split(/\s+/).filter(Boolean);
   const hasArm64 = archs.includes("arm64");
   const hasX64 = archs.includes("x86_64");
   if (hasArm64 && hasX64) {

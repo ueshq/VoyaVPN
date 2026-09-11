@@ -1,41 +1,25 @@
 use super::*;
 
-#[derive(Debug, Clone, Copy)]
-pub struct SocksFmt;
-
-impl ShareFmt for SocksFmt {
-    fn config_type(&self) -> ConfigType {
-        ConfigType::SOCKS
-    }
-
-    fn parse(&self, input: &str) -> Result<ProfileItem, ShareError> {
-        let item = parse_socks_new(input)?;
-        ensure_address_port("socks", &item)?;
-        Ok(item)
-    }
-
-    fn export(&self, item: &ProfileItem) -> Result<String, ShareError> {
-        ensure_type("socks", item, ConfigType::SOCKS)?;
-        ensure_address_port("socks", item)?;
-        // Anonymous SOCKS proxies export without any userinfo at all; encoding
-        // an empty credential pair would emit a meaningless `Og` blob.
-        let user_info = if item.username().is_empty() && item.password().is_empty() {
-            String::new()
-        } else {
-            base64_encode(&format!("{}:{}", item.username(), item.password()), true)
-        };
-        Ok(to_uri(
-            ConfigType::SOCKS,
-            item.address(),
-            item.port(),
-            &user_info,
-            &[],
-            &item.remarks,
-        ))
-    }
+pub(super) fn export(item: &ProfileItem) -> Result<String, ShareError> {
+    ensure_address_port("socks", item)?;
+    // Anonymous SOCKS proxies export without any userinfo at all; encoding
+    // an empty credential pair would emit a meaningless `Og` blob.
+    let user_info = if item.username().is_empty() && item.password().is_empty() {
+        String::new()
+    } else {
+        base64_encode(&format!("{}:{}", item.username(), item.password()), true)
+    };
+    Ok(to_uri(
+        ConfigType::SOCKS,
+        item.address(),
+        item.port(),
+        &user_info,
+        &[],
+        &item.remarks,
+    ))
 }
 
-fn parse_socks_new(input: &str) -> Result<ProfileItem, ShareError> {
+pub(super) fn parse(input: &str) -> Result<ProfileItem, ShareError> {
     let parsed = parse_uri_with_schemes(input, "socks", &["socks", "socks5", "socks4"])?;
     let mut item = profile_from_uri(ConfigType::SOCKS, &parsed);
     let mut parsed_username = String::new();
@@ -60,6 +44,7 @@ fn parse_socks_new(input: &str) -> Result<ProfileItem, ShareError> {
         *username = parsed_username;
         *password = parsed_password;
     }
+    ensure_address_port("socks", &item)?;
     Ok(item)
 }
 

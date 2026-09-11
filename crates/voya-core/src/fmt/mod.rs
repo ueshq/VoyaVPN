@@ -10,6 +10,7 @@ use std::{
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use percent_encoding::percent_decode_str;
 use serde_json::{Map, Value};
+use thiserror::Error;
 use url::Url;
 
 use crate::{
@@ -51,7 +52,6 @@ const NETWORKS: &[&str] = &[
 const XHTTP_MODES: &[&str] = &["auto", "packet-up", "stream-up", "stream-one"];
 
 mod anytls;
-mod api;
 mod common;
 mod entry;
 mod hysteria2;
@@ -68,21 +68,51 @@ mod wireguard;
 use common::*;
 use uri::*;
 
-pub use anytls::AnytlsFmt;
-pub use api::{ShareError, ShareFmt};
 pub use entry::{
     export_share_link, export_share_link_with_options, export_voya_profile_bundle,
     parse_share_lines, parse_share_link, parse_voya_profile_bundle, ShareLinkOptions,
 };
-pub use hysteria2::Hysteria2Fmt;
-pub use naive::NaiveFmt;
-pub use shadowsocks::{parse_ss_sip008, ShadowsocksFmt};
-pub use socks::SocksFmt;
-pub use trojan::TrojanFmt;
-pub use tuic::TuicFmt;
-pub use vless::VlessFmt;
-pub use vmess::VmessFmt;
-pub use wireguard::{parse_wireguard_config, WireguardFmt};
+pub use shadowsocks::parse_ss_sip008;
+pub use wireguard::parse_wireguard_config;
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum ShareError {
+    #[error("share link is empty")]
+    EmptyInput,
+    #[error("unsupported share protocol")]
+    UnsupportedProtocol,
+    #[error("invalid {protocol} URI: {reason}")]
+    InvalidUri {
+        protocol: &'static str,
+        reason: String,
+    },
+    #[error("invalid {protocol} base64 payload")]
+    InvalidBase64 { protocol: &'static str },
+    #[error("invalid {protocol} JSON payload: {reason}")]
+    InvalidJson {
+        protocol: &'static str,
+        reason: String,
+    },
+    #[error("{protocol} is missing required field {field}")]
+    MissingField {
+        protocol: &'static str,
+        field: &'static str,
+    },
+    #[error("{protocol} has invalid port {port}")]
+    InvalidPort {
+        protocol: &'static str,
+        port: String,
+    },
+    #[error("{protocol} cannot export config type {actual:?}")]
+    WrongConfigType {
+        protocol: &'static str,
+        actual: ConfigType,
+    },
+    #[error("invalid WireGuard config")]
+    InvalidWireGuardConfig,
+    #[error("invalid Voya node bundle: {reason}")]
+    InvalidVoyaBundle { reason: String },
+}
 
 #[cfg(test)]
 mod tests;

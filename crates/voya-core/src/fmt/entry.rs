@@ -6,33 +6,33 @@ pub fn parse_share_link(input: &str) -> Result<ProfileItem, ShareError> {
         return Err(ShareError::EmptyInput);
     }
     if starts_with_ci(trimmed, "vmess://") {
-        VmessFmt.parse(trimmed)
+        vmess::parse(trimmed)
     } else if starts_with_ci(trimmed, "ss://") {
-        ShadowsocksFmt.parse(trimmed)
+        shadowsocks::parse(trimmed)
     } else if starts_with_ci(trimmed, "socks://")
         || starts_with_ci(trimmed, "socks5://")
         || starts_with_ci(trimmed, "socks4://")
     {
-        SocksFmt.parse(trimmed)
+        socks::parse(trimmed)
     } else if starts_with_ci(trimmed, "trojan://") {
-        TrojanFmt.parse(trimmed)
+        trojan::parse(trimmed)
     } else if starts_with_ci(trimmed, "vless://") {
-        VlessFmt.parse(trimmed)
+        vless::parse(trimmed)
     } else if starts_with_ci(trimmed, HYSTERIA2_DEFAULT_SCHEME)
         || starts_with_ci(trimmed, HYSTERIA2_ALT_SCHEME)
     {
-        Hysteria2Fmt.parse(trimmed)
+        hysteria2::parse(trimmed)
     } else if starts_with_ci(trimmed, "tuic://") {
-        TuicFmt.parse(trimmed)
+        tuic::parse(trimmed)
     } else if starts_with_ci(trimmed, "wireguard://") {
-        WireguardFmt.parse(trimmed)
+        wireguard::parse(trimmed)
     } else if starts_with_ci(trimmed, "anytls://") {
-        AnytlsFmt.parse(trimmed)
+        anytls::parse(trimmed)
     } else if starts_with_ci(trimmed, "naive://")
         || starts_with_ci(trimmed, NAIVE_HTTPS_SCHEME)
         || starts_with_ci(trimmed, NAIVE_QUIC_SCHEME)
     {
-        NaiveFmt.parse(trimmed)
+        naive::parse(trimmed)
     } else {
         Err(ShareError::UnsupportedProtocol)
     }
@@ -40,16 +40,16 @@ pub fn parse_share_link(input: &str) -> Result<ProfileItem, ShareError> {
 
 pub fn export_share_link(item: &ProfileItem) -> Result<String, ShareError> {
     match item.config_type() {
-        ConfigType::VMess => VmessFmt.export(item),
-        ConfigType::Shadowsocks => ShadowsocksFmt.export(item),
-        ConfigType::SOCKS => SocksFmt.export(item),
-        ConfigType::Trojan => TrojanFmt.export(item),
-        ConfigType::VLESS => VlessFmt.export(item),
-        ConfigType::Hysteria2 => Hysteria2Fmt.export(item),
-        ConfigType::TUIC => TuicFmt.export(item),
-        ConfigType::WireGuard => WireguardFmt.export(item),
-        ConfigType::Anytls => AnytlsFmt.export(item),
-        ConfigType::Naive => NaiveFmt.export(item),
+        ConfigType::VMess => vmess::export(item),
+        ConfigType::Shadowsocks => shadowsocks::export(item),
+        ConfigType::SOCKS => socks::export(item),
+        ConfigType::Trojan => trojan::export(item),
+        ConfigType::VLESS => vless::export(item),
+        ConfigType::Hysteria2 => hysteria2::export(item),
+        ConfigType::TUIC => tuic::export(item),
+        ConfigType::WireGuard => wireguard::export(item),
+        ConfigType::Anytls => anytls::export(item),
+        ConfigType::Naive => naive::export(item),
         actual => Err(ShareError::WrongConfigType {
             protocol: "share",
             actual,

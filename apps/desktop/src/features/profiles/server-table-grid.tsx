@@ -8,9 +8,9 @@ import { cn } from "@voya/ui/lib/utils";
 
 import { NodeGroupCard } from "./node-group-card";
 
-import { profileLatency } from "./profile-card-data";
+import { profileLatency } from "./profile-display";
 import { getProtocolLabel } from "./profile-constants";
-import { profileAddress } from "./profile-display";
+
 import { ProfileCardMenu, ProfileRowContextMenu } from "./server-table-menus";
 import type { ServerTableController } from "./use-server-table";
 
@@ -114,7 +114,7 @@ export function ProfileCardList({
               const name = flag
                 ? rawName.replace(flag, "").trim() || rawName
                 : rawName;
-              const address = profileAddress(profile) || "—";
+              const address = profile.protocol.server.address || "—";
               return (
                 <li key={row.key} {...rowProps}>
                   <ProfileRowContextMenu controller={controller} item={item}>

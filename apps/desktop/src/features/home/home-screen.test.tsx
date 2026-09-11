@@ -159,7 +159,7 @@ const missingTunnelMessages = {
     "当前运行的 VoyaVPN 缺少 VPN 扩展。请退出后从“应用程序”打开完整安装版；若仍提示缺失，请重新安装。",
 };
 
-vi.mock("@/ipc", () => ({
+vi.mock("@/ipc/commands", () => ({
   connectActiveProfile: ipcMock.connectActiveProfile,
   loadAppSettings: ipcMock.loadAppSettings,
   proxySetTrafficMode: ipcMock.proxySetTrafficMode,
@@ -178,8 +178,8 @@ vi.mock("@/ipc", () => ({
   tunRequestElevation: ipcMock.tunRequestElevation,
   tunStatus: ipcMock.tunStatus,
   updateSubscriptions: ipcMock.updateSubscriptions,
-  useRuntimeEventStore: runtimeMock.useRuntimeEventStore,
 }));
+vi.mock("@/ipc/runtime-event-store", () => ({ useRuntimeEventStore: runtimeMock.useRuntimeEventStore }));
 
 // `listProfiles` answers with the rows plus the number of stored profiles this
 // build could not decode; Home only reads the rows.

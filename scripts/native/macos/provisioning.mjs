@@ -2,25 +2,11 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
-import { capture, repoRootFromScript } from "../../lib/common.mjs";
+import { checkedCapture, repoRootFromScript } from "../../lib/common.mjs";
 import { requiredNetworkExtensionValue } from "./tunnel-layout.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const defaultDecodedDir = resolve(repoRoot, "target", "native", "macos", "decoded-provisioning-profiles");
-
-function captureText(program, args, options = {}) {
-  const result = capture(program, args, {
-    cwd: repoRoot,
-    input: options.input,
-  });
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    throw new Error(`${program} ${args.join(" ")} failed with status ${result.status}: ${result.stderr || result.stdout}`);
-  }
-  return result.stdout;
-}
 
 export function plistBuddy(plistPath, keyPath, optional = false) {
   const result = spawnSync("/usr/libexec/PlistBuddy", ["-c", `Print ${keyPath}`, plistPath], {
@@ -221,7 +207,7 @@ export function formatProfileSelectionError(label, bundleIdentifier, rejections,
 }
 
 export function listCodesigningIdentities() {
-  return parseCodesigningIdentities(captureText("security", ["find-identity", "-v", "-p", "codesigning"]));
+  return parseCodesigningIdentities(checkedCapture("security", ["find-identity", "-v", "-p", "codesigning"], { cwd: repoRoot }).stdout);
 }
 
 export function resolveSigningIdentity(spec, label = "codesigning") {
@@ -300,9 +286,10 @@ function developerCertificates(plistPath) {
       continue;
     }
     const certificate = Buffer.from(dataMatch[1].replace(/\s+/g, ""), "base64");
-    const subject = captureText("openssl", ["x509", "-inform", "DER", "-noout", "-subject"], {
+    const subject = checkedCapture("openssl", ["x509", "-inform", "DER", "-noout", "-subject"], {
+      cwd: repoRoot,
       input: certificate,
-    }).trim();
+    }).stdout.trim();
     certificates.push({ subject, fingerprint: certificateSha1Fingerprint(certificate) });
   }
   return certificates;
@@ -329,7 +316,7 @@ function readExpirationDate(plistPath) {
 }
 
 export function decodeProvisioningProfile(profilePath, decodedDir = defaultDecodedDir) {
-  const decoded = captureText("security", ["cms", "-D", "-i", profilePath]);
+  const decoded = checkedCapture("security", ["cms", "-D", "-i", profilePath], { cwd: repoRoot }).stdout;
   mkdirSync(decodedDir, { recursive: true });
   const plistPath = resolve(decodedDir, `${basename(profilePath)}.plist`);
   writeFileSync(plistPath, decoded);

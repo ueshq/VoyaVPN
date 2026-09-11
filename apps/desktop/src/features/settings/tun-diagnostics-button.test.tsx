@@ -11,7 +11,7 @@ const ipcMocks = vi.hoisted(() => ({
   tunProviderDiagnostics: vi.fn(),
 }));
 
-vi.mock("@/ipc", () => ipcMocks);
+vi.mock("@/ipc/commands", () => ipcMocks);
 
 const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
 

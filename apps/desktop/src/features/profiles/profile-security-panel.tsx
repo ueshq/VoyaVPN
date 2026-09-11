@@ -8,7 +8,7 @@ import { Label } from "@voya/ui/components/label";
 import { Switch } from "@voya/ui/components/switch";
 import { Textarea } from "@voya/ui/components/textarea";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { calculateCertificateSha256, fetchCertificate } from "@/ipc";
+import { calculateCertificateSha256, fetchCertificate } from "@/ipc/commands";
 import { getErrorMessage } from "@voya/utils/error";
 
 import { SECURITY_OPTIONS } from "./profile-constants";

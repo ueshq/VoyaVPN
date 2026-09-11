@@ -2,12 +2,14 @@ import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "no
 import { dirname, join, resolve } from "node:path";
 import {
   capture,
+  checkedCapture,
   isCliEntrypoint,
   repoRootFromScript,
   requireDarwin,
   run,
   truthy,
 } from "../../lib/common.mjs";
+import { libboxBinaryPath } from "./tunnel-layout.mjs";
 import { DEFAULT_SING_BOX_VERSION } from "../../core/sing-box-installer.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
@@ -18,26 +20,13 @@ const targetFramework = resolve(
   process.env.VOYAVPN_LIBBOX_FRAMEWORK || resolve(frameworkRoot, "Libbox.framework"),
 );
 
-function captureText(program, args, options = {}) {
-  const result = capture(program, args, {
-    cwd: options.cwd ?? repoRoot,
-  });
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    throw new Error(`${program} ${args.join(" ")} failed with status ${result.status}: ${result.stderr}`);
-  }
-  return result.stdout;
-}
-
 function ensureSource() {
   if (!existsSync(sourceDir)) {
     mkdirSync(dirname(sourceDir), { recursive: true });
     run("git", ["clone", "https://github.com/SagerNet/sing-box.git", sourceDir], { cwd: repoRoot });
   }
 
-  const status = captureText("git", ["status", "--porcelain"], { cwd: sourceDir }).trim();
+  const status = checkedCapture("git", ["status", "--porcelain"], { cwd: sourceDir }).stdout.trim();
   if (status && !truthy(process.env.VOYAVPN_SING_BOX_ALLOW_DIRTY)) {
     throw new Error(
       `sing-box source checkout has local changes: ${sourceDir}\nSet VOYAVPN_SING_BOX_ALLOW_DIRTY=1 if you intentionally want to build from this checkout.`,
@@ -64,11 +53,6 @@ export function findUniversalMacosFramework(xcframeworkPath) {
   }
   candidates.sort((left, right) => Number(/arm64_x86_64|x86_64_arm64/.test(right)) - Number(/arm64_x86_64|x86_64_arm64/.test(left)));
   return candidates[0];
-}
-
-export function libboxBinaryPath(frameworkPath) {
-  const direct = join(frameworkPath, "Libbox");
-  return existsSync(direct) ? direct : join(frameworkPath, "Versions", "A", "Libbox");
 }
 
 export function assertUniversalMacosFramework(frameworkPath, captureCommand = capture) {

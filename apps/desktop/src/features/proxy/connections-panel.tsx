@@ -22,7 +22,8 @@ import {
 } from "@voya/ui/components/menubar";
 import { Skeleton } from "@voya/ui/components/skeleton";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { proxyCloseConnection, proxyListConnections, useRuntimeEventStore } from "@/ipc";
+import { proxyCloseConnection, proxyListConnections } from "@/ipc/commands";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { ProxyConnectionItem, ProxyConnectionsSnapshot } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
 import { cn } from "@voya/ui/lib/utils";

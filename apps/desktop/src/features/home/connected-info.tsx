@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { useRuntimeEventStore } from "@/ipc";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { formatDelay } from "@voya/utils/formatting";
 
 import type { Translation } from "./use-home-runtime";

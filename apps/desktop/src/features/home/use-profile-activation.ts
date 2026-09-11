@@ -1,5 +1,6 @@
 import type { TranslationFunction } from "@voya/i18n";
-import { connectActiveProfile, restartCore, setActiveProfile, useRuntimeEventStore } from "@/ipc";
+import { connectActiveProfile, restartCore, setActiveProfile } from "@/ipc/commands";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { beginRuntimeRead } from "@/ipc/runtime-state-version";
 import { refreshRuntimeStatus, runtimeStatusErrorKeys } from "@/ipc/runtime-status";
 import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";

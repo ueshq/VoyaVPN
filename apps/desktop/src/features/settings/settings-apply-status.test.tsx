@@ -7,7 +7,7 @@ const ipc = vi.hoisted(() => ({
   getSettingsApplyStatus: vi.fn(),
   applyPendingSettings: vi.fn(),
 }));
-vi.mock("@/ipc", () => ipc);
+vi.mock("@/ipc/commands", () => ipc);
 beforeEach(() => {
   vi.resetAllMocks();
 });

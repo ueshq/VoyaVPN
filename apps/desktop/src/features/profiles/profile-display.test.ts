@@ -1,15 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { Profile, ProfileProtocol, ProfileTransport } from "@/ipc/bindings";
+import type { ProfileTransport } from "@/ipc/bindings";
 
-import { profileAddress, profilePort, profileTransportName } from "./profile-display";
+import { profileTransportName } from "./profile-display";
 
 describe("profile display projections", () => {
-  it("projects node addresses and ports", () => {
-    expect(profileAddress(profile({ kind: "trojan", password: "secret", server: { address: "node.example", port: 443 } }))).toBe("node.example");
-    expect(profilePort(profile({ kind: "trojan", password: "secret", server: { address: "node.example", port: 8443 } }))).toBe(8443);
-  });
-
   it.each([
     [null, "tcp"],
     [{ header: null, host: null, kind: "tcp", path: null }, "tcp"],
@@ -21,7 +16,3 @@ describe("profile display projections", () => {
     expect(profileTransportName(transport)).toBe(expected);
   });
 });
-
-function profile(protocol: ProfileProtocol): Profile {
-  return { displayLog: true, id: "p", protocol, remarks: "node", subscriptionId: null, tls: null, transport: null };
-}

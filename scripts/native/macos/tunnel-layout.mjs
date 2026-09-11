@@ -1,4 +1,5 @@
-import { resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 export const appBundleIdentifier = "app.voyavpn.desktop";
 export const packetTunnelBundleIdentifier = "app.voyavpn.desktop.PacketTunnel";
@@ -93,4 +94,9 @@ export function packetTunnelLayout(appContents, distribution) {
 export function incompatiblePacketTunnelBundle(appContents, distribution) {
   const oppositeDistribution = distribution === "developer-id" ? "app-store" : "developer-id";
   return packetTunnelLayout(appContents, oppositeDistribution).bundle;
+}
+
+export function libboxBinaryPath(frameworkPath) {
+  const direct = join(frameworkPath, "Libbox");
+  return existsSync(direct) ? direct : join(frameworkPath, "Versions", "A", "Libbox");
 }

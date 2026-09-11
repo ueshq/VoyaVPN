@@ -12,9 +12,9 @@ import {
   DialogTitle,
 } from "@voya/ui/components/dialog";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { connectActiveProfile, installCoreSeed } from "@/ipc";
+import { connectActiveProfile, installCoreSeed } from "@/ipc/commands";
+import type { CoreType } from "@/ipc/bindings";
 import { type MissingCorePayload, useModalStore } from "@/stores/modal-store";
-import { formatCoreType } from "@/lib/core-types";
 import { getErrorMessage } from "@voya/utils/error";
 
 export function ModalHost() {
@@ -108,4 +108,13 @@ function MissingCoreDialog({ payload }: { payload?: MissingCorePayload }) {
       </DialogFooter>
     </DialogContent>
   );
+}
+
+function formatCoreType(coreType: CoreType | null | undefined): string {
+  switch (coreType) {
+    case "singBox":
+      return "sing-box";
+    default:
+      return coreType == null ? "" : `Core ${coreType}`;
+  }
 }

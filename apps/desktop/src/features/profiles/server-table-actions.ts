@@ -2,7 +2,7 @@ import {
   exportProfileVoyaBundle,
   exportProfileShareLinks,
   exportProfileShareLinksBase64,
-} from "@/ipc";
+} from "@/ipc/commands";
 import type { ExportProfilesResult, ImportProfilesResult, ProfileKind } from "@/ipc/bindings";
 import { CONFIG_TYPES } from "./profile-constants";
 import type { TranslationFunction as TranslateFn } from "@voya/i18n";

@@ -4,11 +4,8 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { Button } from "@voya/ui/components/button";
 import { cn } from "@voya/ui/lib/utils";
 import { getErrorMessage } from "@voya/utils/error";
-import {
-  loadAppSettings,
-  proxySetTrafficMode,
-  useRuntimeEventStore,
-} from "@/ipc";
+import { loadAppSettings, proxySetTrafficMode } from "@/ipc/commands";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { AppSettingsV1, TrafficMode } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
 import {
