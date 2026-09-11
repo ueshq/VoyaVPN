@@ -193,6 +193,9 @@ pub enum LogLineBody {
     deny_unknown_fields
 )]
 pub enum ValidationCode {
+    SubscriptionReadOnly {
+        subscription_id: String,
+    },
     // ---- node fields (voya_core::context::validation) ----
     InvalidAddress,
     InvalidPort,

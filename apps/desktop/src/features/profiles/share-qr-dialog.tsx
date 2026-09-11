@@ -9,6 +9,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogBody,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -25,7 +26,11 @@ type ShareQrDialogProps = {
   open: boolean;
 };
 
-export function ShareQrDialog({ content, onOpenChange, open }: ShareQrDialogProps) {
+export function ShareQrDialog({
+  content,
+  onOpenChange,
+  open,
+}: ShareQrDialogProps) {
   const { t } = useI18n();
   const qrCodeQuery = useQuery({
     enabled: open && content.trim().length > 0,
@@ -46,7 +51,10 @@ export function ShareQrDialog({ content, onOpenChange, open }: ShareQrDialogProp
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto" closeLabel={t("actions.close")}>
+      <DialogContent
+        className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]"
+        closeLabel={t("actions.close")}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <QrCode className="size-4" aria-hidden="true" />
@@ -56,36 +64,49 @@ export function ShareQrDialog({ content, onOpenChange, open }: ShareQrDialogProp
             {t("panes.profiles.export.shareLinks")}
           </DialogDescription>
         </DialogHeader>
-
-        <div className="grid gap-4">
-          <div className="grid gap-1">
-            <Label className="text-xs text-muted-foreground" htmlFor="profile-share-qr-content">
-              {t("qr.content")}
-            </Label>
-            <Textarea
-              className="min-h-24 resize-y bg-card font-mono text-xs"
-              id="profile-share-qr-content"
-              readOnly
-              value={content}
-            />
-          </div>
-
-          {imageSource ? (
-            <div className="grid justify-items-center rounded-md border bg-background p-4">
-              <img alt={t("qr.generatedAlt")} className="size-64 max-w-full" src={imageSource} />
+        <DialogBody>
+          <div className="grid gap-4">
+            <div className="grid gap-1">
+              <Label
+                className="text-xs text-muted-foreground"
+                htmlFor="profile-share-qr-content"
+              >
+                {t("qr.content")}
+              </Label>
+              <Textarea
+                className="min-h-24 resize-y bg-card font-mono text-xs"
+                id="profile-share-qr-content"
+                readOnly
+                value={content}
+              />
             </div>
-          ) : null}
 
-          {qrCodeQuery.isError ? (
-            <Alert variant="destructive">
-              <AlertTriangle aria-hidden="true" />
-              <AlertDescription>{getErrorMessage(qrCodeQuery.error)}</AlertDescription>
-            </Alert>
-          ) : null}
-        </div>
+            {imageSource ? (
+              <div className="grid justify-items-center rounded-md border bg-background p-4">
+                <img
+                  alt={t("qr.generatedAlt")}
+                  className="size-64 max-w-full"
+                  src={imageSource}
+                />
+              </div>
+            ) : null}
 
+            {qrCodeQuery.isError ? (
+              <Alert variant="destructive">
+                <AlertTriangle aria-hidden="true" />
+                <AlertDescription>
+                  {getErrorMessage(qrCodeQuery.error)}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+          </div>
+        </DialogBody>
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} type="button" variant="outline">
+          <Button
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
+          >
             {t("actions.close")}
           </Button>
         </DialogFooter>

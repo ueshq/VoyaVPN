@@ -68,6 +68,9 @@ test-results/
 junit.xml
 *.junit.xml
 
+# Local docs
+docs/
+
 # Logs
 *.log
 npm-debug.log*

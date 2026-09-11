@@ -32,7 +32,7 @@ export function RoutingProfileList({ controller }: { controller: RoutingScreenCo
                 type="button"
               >
                 <span className="grid size-6 shrink-0 place-items-center rounded-md border bg-surface-raised">
-                  {routing.isActive ? <CheckCircle2 className="size-4 text-connected" aria-hidden="true" /> : null}
+                  {routing.isActive ? <CheckCircle2 className="size-4 text-success" aria-hidden="true" /> : null}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="line-clamp-1 text-sm font-medium">
@@ -44,7 +44,7 @@ export function RoutingProfileList({ controller }: { controller: RoutingScreenCo
                   </span>
                 </span>
                 {routing.isActive ? (
-                  <Badge className="shrink-0 border-connected/30 bg-connected/10 text-connected" variant="outline">
+                  <Badge className="shrink-0 border-connected/30 bg-connected/10 text-success" variant="outline">
                     {t("panes.routing.active")}
                   </Badge>
                 ) : null}

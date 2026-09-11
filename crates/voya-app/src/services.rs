@@ -35,6 +35,7 @@ pub struct AppServices {
     /// commands cannot interleave the runtime config write/delete around the
     /// supervisor's Start and Stop.
     runtime_lock: Arc<tokio::sync::Mutex<()>>,
+    settings_application: crate::settings_apply::SettingsApplication,
 }
 
 impl AppServices {
@@ -43,6 +44,7 @@ impl AppServices {
             database: Database::connect(database_path).await?,
             runtime_paths,
             runtime_lock: Arc::new(tokio::sync::Mutex::new(())),
+            settings_application: crate::settings_apply::SettingsApplication::default(),
         })
     }
 
@@ -124,6 +126,24 @@ impl AppServices {
     pub fn runtime(&self, supervisor: CoreSupervisor) -> RuntimeManager<'_> {
         RuntimeManager::new(&self.database, self.runtime_paths.clone(), supervisor)
             .with_operation_lock(Arc::clone(&self.runtime_lock))
+            .with_settings_application(self.settings_application.clone())
+    }
+
+    /// An explicit live mode switch acknowledges that field alone. Other
+    /// settings saved since the last connection remain pending.
+    pub fn acknowledge_traffic_mode(
+        &self,
+        snapshot: &crate::supervisor::SupervisorSnapshot,
+        outcome: &crate::proxy_runtime::TrafficModeChangeOutcome,
+    ) {
+        if snapshot.state == crate::supervisor::SupervisorConnectionState::Connected
+            && !matches!(
+                outcome.runtime_result,
+                Err(crate::proxy_runtime::TrafficModeChangeError::Apply(_))
+            )
+        {
+            self.settings_application.traffic_mode_applied(outcome.mode);
+        }
     }
 
     #[must_use]

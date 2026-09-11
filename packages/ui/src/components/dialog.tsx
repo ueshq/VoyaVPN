@@ -33,20 +33,27 @@ const scrollableDialogContentVariants = cva("overflow-hidden sm:max-w-none", {
   },
 });
 
-function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
+function Dialog({
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
 
-function DialogPortal({ ...props }: React.ComponentProps<typeof DialogPrimitive.Portal>) {
+function DialogPortal({
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Portal>) {
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
 }
 
-function DialogOverlay({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
+function DialogOverlay({
+  className,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        "fixed inset-0 z-50 bg-blanket data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className,
       )}
       {...props}
@@ -59,25 +66,42 @@ function DialogContent({
   children,
   closeLabel,
   showCloseButton = true,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: DialogContentProps) {
+  const trigger = React.useRef<HTMLElement | null>(null);
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-0 rounded-xl border bg-surface-overlay p-0 shadow-overlay duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
+          "fixed left-1/2 top-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-0 rounded-xl border bg-surface-overlay p-0 shadow-overlay duration-medium data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
           className,
         )}
         {...props}
+        onOpenAutoFocus={(event) => {
+          trigger.current =
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement
+              : null;
+          onOpenAutoFocus?.(event);
+        }}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event);
+          if (!event.defaultPrevented && trigger.current?.isConnected) {
+            event.preventDefault();
+            trigger.current.focus();
+          }
+        }}
       >
         {children}
         {showCloseButton ? (
           <DialogPrimitive.Close
             aria-label={closeLabel}
             data-slot="dialog-close"
-            className="absolute end-4 top-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="absolute end-3 top-3 grid size-8 place-items-center rounded-md opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
             <XIcon aria-hidden="true" />
             <span className="sr-only">{closeLabel}</span>
@@ -88,12 +112,16 @@ function DialogContent({
   );
 }
 
-type DialogContentProps = React.ComponentProps<typeof DialogPrimitive.Content> & {
+type DialogContentProps = React.ComponentProps<
+  typeof DialogPrimitive.Content
+> & {
   closeLabel: string;
   showCloseButton?: boolean;
 };
 
-type ScrollableDialogContentVariants = VariantProps<typeof scrollableDialogContentVariants>;
+type ScrollableDialogContentVariants = VariantProps<
+  typeof scrollableDialogContentVariants
+>;
 
 function ScrollableDialogContent({
   className,
@@ -101,10 +129,14 @@ function ScrollableDialogContent({
   rows,
   width,
   ...props
-}: Omit<DialogContentProps, keyof ScrollableDialogContentVariants> & ScrollableDialogContentVariants) {
+}: Omit<DialogContentProps, keyof ScrollableDialogContentVariants> &
+  ScrollableDialogContentVariants) {
   return (
     <DialogContent
-      className={cn(scrollableDialogContentVariants({ height, rows, width }), className)}
+      className={cn(
+        scrollableDialogContentVariants({ height, rows, width }),
+        className,
+      )}
       {...props}
     />
   );
@@ -117,13 +149,30 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2 border-b px-6 pb-4 pt-6 text-center sm:text-start", className)}
+      className={cn(
+        "flex flex-col gap-2 border-b px-6 pb-4 pt-6 text-center sm:text-start",
+        className,
+      )}
       {...props}
     />
   );
 }
 
-function DialogFooter({ children, className, ...props }: React.ComponentProps<"div">) {
+function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="dialog-body"
+      className={cn("min-h-0 overflow-y-auto p-dialog", className)}
+      {...props}
+    />
+  );
+}
+
+function DialogFooter({
+  children,
+  className,
+  ...props
+}: React.ComponentProps<"div">) {
   // A childless footer (several dialogs render `<DialogFooter />` purely for the
   // grid slot) must not paint an orphan top divider, so collapse it to nothing.
   if (React.Children.toArray(children).length === 0) {
@@ -133,7 +182,10 @@ function DialogFooter({ children, className, ...props }: React.ComponentProps<"d
   return (
     <div
       data-slot="dialog-footer"
-      className={cn("flex flex-col-reverse gap-2 border-t px-6 py-4 sm:flex-row sm:justify-end", className)}
+      className={cn(
+        "flex flex-col-reverse gap-2 border-t px-6 py-4 sm:flex-row sm:justify-end",
+        className,
+      )}
       {...props}
     >
       {children}
@@ -141,17 +193,23 @@ function DialogFooter({ children, className, ...props }: React.ComponentProps<"d
   );
 }
 
-function DialogTitle({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) {
+function DialogTitle({
+  className,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Title>) {
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-lg font-semibold leading-none", className)}
+      className={cn("text-dialog font-semibold", className)}
       {...props}
     />
   );
 }
 
-function DialogDescription({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Description>) {
+function DialogDescription({
+  className,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Description>) {
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
@@ -163,6 +221,7 @@ function DialogDescription({ className, ...props }: React.ComponentProps<typeof 
 
 export {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,

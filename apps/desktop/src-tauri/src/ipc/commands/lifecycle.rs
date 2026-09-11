@@ -185,10 +185,6 @@ impl ConfigChange {
         Self::routing(NoticeCode::RoutingRulesDeletedRestartFailed);
     pub(super) const ROUTING_RULE_MOVED: Self =
         Self::routing(NoticeCode::RoutingRuleMovedRestartFailed);
-    pub(super) const DNS: Self = Self {
-        reason: CoreFlowReason::DnsChanged,
-        restart_failed_code: NoticeCode::DnsSavedRestartFailed,
-    };
     pub(super) const TUN: Self = Self {
         reason: CoreFlowReason::TunChanged,
         restart_failed_code: NoticeCode::TunSavedRestartFailed,
@@ -196,10 +192,6 @@ impl ConfigChange {
     pub(super) const CONNECTION_MODE: Self = Self {
         reason: CoreFlowReason::ConnectionModeChanged,
         restart_failed_code: NoticeCode::ConnectionModeSavedRestartFailed,
-    };
-    pub(super) const APP_SETTINGS: Self = Self {
-        reason: CoreFlowReason::SettingsSaved,
-        restart_failed_code: NoticeCode::SettingsSavedRuntimeUpdateFailed,
     };
 }
 

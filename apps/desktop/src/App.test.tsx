@@ -1,4 +1,12 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, vi } from "vitest";
@@ -18,7 +26,10 @@ import type {
   ProxyConnectionsSnapshot,
   SpeedtestStatus,
 } from "@/ipc/bindings";
-import type { RuntimeEventState, RuntimeProxyMonitorStatus } from "@/ipc/runtime-event-store";
+import type {
+  RuntimeEventState,
+  RuntimeProxyMonitorStatus,
+} from "@/ipc/runtime-event-store";
 import { usePreferencesStore } from "@/stores/preferences-store";
 import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
@@ -89,10 +100,20 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
         state.proxyConnections = snapshot;
       }),
       setProxyMonitorFailed: vi.fn((message: string | null = null) => {
-        state.proxyMonitorStatus = makeMonitorStatus("failed", false, true, message);
+        state.proxyMonitorStatus = makeMonitorStatus(
+          "failed",
+          false,
+          true,
+          message,
+        );
       }),
       setProxyMonitorRunning: vi.fn((message: string | null = null) => {
-        state.proxyMonitorStatus = makeMonitorStatus("running", true, false, message);
+        state.proxyMonitorStatus = makeMonitorStatus(
+          "running",
+          true,
+          false,
+          message,
+        );
       }),
       setProxyMonitorStarting: vi.fn((message: string | null = null) => {
         state.proxyMonitorStatus = makeMonitorStatus(
@@ -106,7 +127,12 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
         state.proxyMonitorStatus = status;
       }),
       setProxyMonitorStopped: vi.fn((message: string | null = null) => {
-        state.proxyMonitorStatus = makeMonitorStatus("stopped", false, true, message);
+        state.proxyMonitorStatus = makeMonitorStatus(
+          "stopped",
+          false,
+          true,
+          message,
+        );
       }),
       setCoreState: vi.fn(),
       setSpeedtestRunning: vi.fn((speedtestRunning: boolean) => {
@@ -150,20 +176,48 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
 vi.mock("@/ipc", () => ({
   connectActiveProfile: vi.fn(),
   EventBridge: () => null,
-  appUpdateStatus: vi.fn(() => Promise.resolve({ currentVersion: "0.1.0", state: "unconfigured", message: null })),
-  proxyCloseConnection: vi.fn(() => Promise.resolve({ connections: [], downloadTotal: 0, uploadTotal: 0 })),
-  proxyListConnections: vi.fn(() => Promise.resolve({ connections: [], downloadTotal: 0, uploadTotal: 0 })),
+  appUpdateStatus: vi.fn(() =>
+    Promise.resolve({
+      currentVersion: "0.1.0",
+      state: "unconfigured",
+      message: null,
+    }),
+  ),
+  proxyCloseConnection: vi.fn(() =>
+    Promise.resolve({ connections: [], downloadTotal: 0, uploadTotal: 0 }),
+  ),
+  proxyListConnections: vi.fn(() =>
+    Promise.resolve({ connections: [], downloadTotal: 0, uploadTotal: 0 }),
+  ),
   proxySetTrafficMode: vi.fn(),
-  proxyStartMonitor: vi.fn(() => Promise.resolve({ state: "running", running: true, stale: false, message: null })),
-  proxyStopMonitor: vi.fn(() => Promise.resolve({ state: "stopped", running: false, stale: true, message: null })),
+  proxyStartMonitor: vi.fn(() =>
+    Promise.resolve({
+      state: "running",
+      running: true,
+      stale: false,
+      message: null,
+    }),
+  ),
+  proxyStopMonitor: vi.fn(() =>
+    Promise.resolve({
+      state: "stopped",
+      running: false,
+      stale: true,
+      message: null,
+    }),
+  ),
   copyProfiles: vi.fn(),
   deleteSubscriptions: vi.fn(),
   deleteProfiles: vi.fn(),
   deleteRoutingRules: vi.fn(),
   deleteRoutings: vi.fn(),
   disconnectCore: vi.fn(),
-  generateQrCode: vi.fn(() => Promise.resolve({ mimeType: "image/svg+xml", svg: "<svg />" })),
-  getWindowChromeConfig: vi.fn(() => Promise.resolve({ titleBarLayout: "none" })),
+  generateQrCode: vi.fn(() =>
+    Promise.resolve({ mimeType: "image/svg+xml", svg: "<svg />" }),
+  ),
+  getWindowChromeConfig: vi.fn(() =>
+    Promise.resolve({ titleBarLayout: "none" }),
+  ),
   importProfilesFromText: vi.fn(),
   IpcCommandError: class IpcCommandError extends Error {},
   loadDnsSettings: vi.fn(() =>
@@ -184,11 +238,23 @@ vi.mock("@/ipc", () => ({
   listProcessCandidates: vi.fn(() => Promise.resolve([])),
   listRoutings: vi.fn(() => Promise.resolve([])),
   listNodeGroups: vi.fn(() => Promise.resolve({ groups: [], memberships: [] })),
-  listProfiles: vi.fn(() => Promise.resolve({ entries: [], undecodableProfiles: 0 })),
+  listProfiles: vi.fn(() =>
+    Promise.resolve({ entries: [], undecodableProfiles: 0 }),
+  ),
   listSubscriptionMetadata: vi.fn(() => Promise.resolve([])),
   listSubscriptions: vi.fn(() => Promise.resolve([])),
+  getSettingsApplyStatus: vi.fn(async () => ({
+    action: "none",
+    connected: false,
+  })),
+  applyPendingSettings: vi.fn(async () => ({
+    action: "none",
+    connected: false,
+  })),
   loadAppSettings: vi.fn(() => new Promise(() => undefined)),
-  loadUiPreferences: vi.fn(() => Promise.resolve({ language: "en", theme: "system" })),
+  loadUiPreferences: vi.fn(() =>
+    Promise.resolve({ language: "en", theme: "system" }),
+  ),
   moveRoutingRule: vi.fn(),
   moveProfile: vi.fn(),
   restartCore: vi.fn(),
@@ -196,7 +262,8 @@ vi.mock("@/ipc", () => ({
     Promise.resolve({
       activeProfileId: null,
       mainPid: null,
-      prePid: null, connectedDurationMs: null,
+      prePid: null,
+      connectedDurationMs: null,
       activeTunBackend: null,
       runningCoreType: null,
       state: "disconnected",
@@ -307,23 +374,47 @@ describe("App", () => {
     window.localStorage.clear();
     document.documentElement.className = "";
     vi.mocked(loadUiPreferences).mockReset();
-    vi.mocked(loadUiPreferences).mockResolvedValue({ language: "en", theme: "system" });
-    vi.mocked(getWindowChromeConfig).mockResolvedValue({ titleBarLayout: "none" });
+    vi.mocked(loadUiPreferences).mockResolvedValue({
+      language: "en",
+      theme: "system",
+    });
+    vi.mocked(getWindowChromeConfig).mockResolvedValue({
+      titleBarLayout: "none",
+    });
     vi.mocked(proxyCloseConnection).mockClear();
     vi.mocked(proxyListConnections).mockClear();
     vi.mocked(proxyStartMonitor).mockClear();
     vi.mocked(proxyStopMonitor).mockClear();
-    vi.mocked(proxyCloseConnection).mockResolvedValue({ connections: [], downloadTotal: 0, uploadTotal: 0 });
-    vi.mocked(proxyListConnections).mockResolvedValue({ connections: [], downloadTotal: 0, uploadTotal: 0 });
-    vi.mocked(proxyStartMonitor).mockResolvedValue({ state: "running", running: true, stale: false, message: null });
-    vi.mocked(proxyStopMonitor).mockResolvedValue({ state: "stopped", running: false, stale: true, message: null });
+    vi.mocked(proxyCloseConnection).mockResolvedValue({
+      connections: [],
+      downloadTotal: 0,
+      uploadTotal: 0,
+    });
+    vi.mocked(proxyListConnections).mockResolvedValue({
+      connections: [],
+      downloadTotal: 0,
+      uploadTotal: 0,
+    });
+    vi.mocked(proxyStartMonitor).mockResolvedValue({
+      state: "running",
+      running: true,
+      stale: false,
+      message: null,
+    });
+    vi.mocked(proxyStopMonitor).mockResolvedValue({
+      state: "stopped",
+      running: false,
+      stale: true,
+      message: null,
+    });
     await changeLocale("en");
   });
 
   afterEach(() => {
     vi.useRealTimers();
     resetTestDom();
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown })
+      .__TAURI_INTERNALS__;
   });
 
   it("renders the five-item sidebar nav with the speed footer", () => {
@@ -336,12 +427,20 @@ describe("App", () => {
     const tabNames = within(tablist)
       .getAllByRole("tab")
       .map((tab) => tab.textContent);
-    expect(tabNames).toEqual(["Home", "Nodes", "Rules", "Network activity", "Settings"]);
+    expect(tabNames).toEqual([
+      "Home",
+      "Nodes",
+      "Rules",
+      "Network activity",
+      "Settings",
+    ]);
     expect(footer).toHaveTextContent("Disconnected");
     expect(footer).toHaveTextContent("Up 0 B/s");
     expect(footer).toHaveTextContent("Down 0 B/s");
     expect(screen.queryByTestId("status-bar")).not.toBeInTheDocument();
-    expect(within(sidebar).queryByRole("button", { name: "Settings" })).toBeNull();
+    expect(
+      within(sidebar).queryByRole("button", { name: "Settings" }),
+    ).toBeNull();
     expect(within(sidebar).queryByRole("button", { name: "Theme" })).toBeNull();
   });
 
@@ -349,32 +448,60 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp();
     await user.click(screen.getByRole("button", { name: "Collapse sidebar" }));
-    expect(screen.getByRole("button", { name: "Expand sidebar" })).toHaveAttribute("aria-expanded", "false");
-    expect(within(screen.getByRole("tablist", { name: "Main sections" })).getAllByRole("tab")).toHaveLength(5);
+    expect(
+      screen.getByRole("button", { name: "Expand sidebar" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
+      within(
+        screen.getByRole("tablist", { name: "Main sections" }),
+      ).getAllByRole("tab"),
+    ).toHaveLength(5);
     await user.click(screen.getByRole("tab", { name: "Settings" }));
-    expect(await screen.findByRole("region", { name: "Settings" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("region", { name: "Settings" }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Expand sidebar" }));
-    expect(screen.getByRole("button", { name: "Collapse sidebar" })).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("button", { name: "Collapse sidebar" }),
+    ).toHaveAttribute("aria-expanded", "true");
   });
 
-  it.each(["macos", "windows", "none"] as const)("uses %s chrome without a separate titlebar row", async (layout) => {
-    vi.mocked(getWindowChromeConfig).mockResolvedValue({ titleBarLayout: layout });
-    const { container } = renderApp();
-    await waitFor(() => expect(container.querySelector(".app-shell")).toHaveAttribute("data-window-chrome", layout));
-    const toolbar = container.querySelector(".sidebar-toolbar");
-    const toggle = screen.getByRole("button", { name: "Collapse sidebar" });
-    expect(toggle).not.toHaveAttribute("data-tauri-drag-region");
-    if (layout === "none") {
-      expect(toolbar).not.toHaveAttribute("data-tauri-drag-region");
-      expect(container.querySelector('[data-slot="titlebar"]')).toBeNull();
-    } else {
-      expect(toolbar).toHaveAttribute("data-tauri-drag-region");
-      expect(container.querySelector('.shell-content-column > [data-slot="titlebar"]')).toBeInTheDocument();
-    }
-    expect(screen.queryAllByRole("button", { name: "Minimize" })).toHaveLength(layout === "windows" ? 1 : 0);
-    expect(container.querySelector('[data-slot="titlebar-placeholder"]')).toBeNull();
-    expect(screen.queryByText("VoyaVPN")).not.toBeInTheDocument();
-  });
+  it.each(["macos", "windows", "none"] as const)(
+    "uses %s chrome without a separate titlebar row",
+    async (layout) => {
+      vi.mocked(getWindowChromeConfig).mockResolvedValue({
+        titleBarLayout: layout,
+      });
+      const { container } = renderApp();
+      await waitFor(() =>
+        expect(container.querySelector(".app-shell")).toHaveAttribute(
+          "data-window-chrome",
+          layout,
+        ),
+      );
+      const toolbar = container.querySelector(".sidebar-toolbar");
+      const toggle = screen.getByRole("button", { name: "Collapse sidebar" });
+      expect(toggle).not.toHaveAttribute("data-tauri-drag-region");
+      if (layout === "none") {
+        expect(toolbar).not.toHaveAttribute("data-tauri-drag-region");
+        expect(container.querySelector('[data-slot="titlebar"]')).toBeNull();
+      } else {
+        expect(toolbar).toHaveAttribute("data-tauri-drag-region");
+        expect(
+          container.querySelector(
+            '.shell-content-column > [data-slot="titlebar"]',
+          ),
+        ).toBeInTheDocument();
+      }
+      expect(
+        screen.queryAllByRole("button", { name: "Minimize" }),
+      ).toHaveLength(layout === "windows" ? 1 : 0);
+      expect(
+        container.querySelector('[data-slot="titlebar-placeholder"]'),
+      ).toBeNull();
+      expect(screen.queryByText("VoyaVPN")).not.toBeInTheDocument();
+    },
+  );
 
   it("defaults to the connection home hero", async () => {
     useShellStore.setState({ activeTab: "home" });
@@ -383,24 +510,38 @@ describe("App", () => {
 
     const hero = await screen.findByRole("region", { name: "Connection home" });
     // The app name is the Home page's h1 (the sidebar brand is a plain label).
-    expect(within(hero).getByRole("heading", { level: 1, name: "Not protected" })).toBeInTheDocument();
-    expect(within(hero).getByRole("button", { name: "Connect" })).toBeInTheDocument();
+    expect(
+      within(hero).getByRole("heading", { level: 1, name: "Not protected" }),
+    ).toBeInTheDocument();
+    expect(
+      await within(hero).findByRole("button", { name: "Add subscription" }),
+    ).toBeInTheDocument();
     expect(within(hero).getByText("Not protected")).toBeInTheDocument();
-    expect(screen.getByTestId("sidebar-footer")).toHaveTextContent("Disconnected");
+    expect(screen.getByTestId("sidebar-footer")).toHaveTextContent(
+      "Disconnected",
+    );
   });
 
   it("falls back to a supported locale when the backend stores a removed language", async () => {
     await changeLocale("zh-Hans", { persist: false });
-    vi.mocked(loadUiPreferences).mockResolvedValue({ language: "fa", theme: "system" });
+    vi.mocked(loadUiPreferences).mockResolvedValue({
+      language: "fa",
+      theme: "system",
+    });
     renderApp();
 
-    await waitFor(() => expect(document.documentElement).toHaveAttribute("lang", "en"));
+    await waitFor(() =>
+      expect(document.documentElement).toHaveAttribute("lang", "en"),
+    );
     expect(document.documentElement).toHaveAttribute("dir", "ltr");
     expect(mainNavTab(/Nodes/)).toBeInTheDocument();
   });
 
   it("hydrates the theme through the dedicated preferences query", async () => {
-    vi.mocked(loadUiPreferences).mockResolvedValue({ language: "en", theme: "dark" });
+    vi.mocked(loadUiPreferences).mockResolvedValue({
+      language: "en",
+      theme: "dark",
+    });
 
     renderApp();
 
@@ -412,7 +553,9 @@ describe("App", () => {
 
     await activateTab(/Settings/);
 
-    expect(await screen.findByRole("region", { name: "Settings" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("region", { name: "Settings" }),
+    ).toBeInTheDocument();
     expect(
       await screen.findByRole("tab", { name: "General", selected: true }),
     ).toBeInTheDocument();
@@ -422,13 +565,24 @@ describe("App", () => {
   it("starts connection queries and the debounced monitor only after the core connects", async () => {
     await import("@/features/proxy/connections-screen");
     vi.useFakeTimers();
-    (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
-    runtimeStoreMock.getState().coreState = { ...connectedCore(), state: "disconnected" };
+    (
+      window as typeof window & { __TAURI_INTERNALS__?: unknown }
+    ).__TAURI_INTERNALS__ = {};
+    runtimeStoreMock.getState().coreState = {
+      ...connectedCore(),
+      state: "disconnected",
+    };
     renderApp();
     await activateTab(/Network activity/);
-    expect(screen.getByRole("heading", { name: "Network activity" })).toBeInTheDocument();
-    expect(screen.getByText("Connect to view network activity")).toBeInTheDocument();
-    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    expect(
+      screen.getByRole("heading", { name: "Network activity" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Connect to view network activity"),
+    ).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
     expect(proxyStartMonitor).not.toHaveBeenCalled();
     expect(proxyListConnections).not.toHaveBeenCalled();
 
@@ -437,33 +591,50 @@ describe("App", () => {
     await activateTab(/Network activity/);
     expect(proxyListConnections).toHaveBeenCalledTimes(1);
     expect(proxyStartMonitor).not.toHaveBeenCalled();
-    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
     expect(proxyStartMonitor).toHaveBeenCalledTimes(1);
-    expect(runtimeStoreMock.getState().setProxyMonitorStarting).toHaveBeenCalledTimes(1);
-    expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe("running");
+    expect(
+      runtimeStoreMock.getState().setProxyMonitorStarting,
+    ).toHaveBeenCalledTimes(1);
+    expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe(
+      "running",
+    );
     await activateTab(/Nodes/);
-    await act(async () => { await vi.advanceTimersByTimeAsync(1_999); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_999);
+    });
     expect(proxyStopMonitor).not.toHaveBeenCalled();
-    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
     expect(proxyStopMonitor).toHaveBeenCalledTimes(1);
-    expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe("stopped");
+    expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe(
+      "stopped",
+    );
   });
-
 
   it("does not start the proxy monitor on Nodes even when connected", async () => {
     vi.useFakeTimers();
-    (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
+    (
+      window as typeof window & { __TAURI_INTERNALS__?: unknown }
+    ).__TAURI_INTERNALS__ = {};
     runtimeStoreMock.getState().coreState = connectedCore();
     renderApp();
     await activateTab(/Nodes/);
-    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
     expect(proxyStartMonitor).not.toHaveBeenCalled();
     expect(proxyListConnections).not.toHaveBeenCalled();
   });
 
   it("keeps the proxy monitor running while viewing the logs sub-tab", async () => {
     vi.useFakeTimers();
-    (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
+    (
+      window as typeof window & { __TAURI_INTERNALS__?: unknown }
+    ).__TAURI_INTERNALS__ = {};
 
     runtimeStoreMock.getState().coreState = connectedCore();
     renderApp();
@@ -491,8 +662,12 @@ describe("App", () => {
 
   it("marks cached proxy monitor data failed and shows a toast when start fails", async () => {
     vi.useFakeTimers();
-    (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
-    vi.mocked(proxyStartMonitor).mockRejectedValueOnce(new Error("start unavailable"));
+    (
+      window as typeof window & { __TAURI_INTERNALS__?: unknown }
+    ).__TAURI_INTERNALS__ = {};
+    vi.mocked(proxyStartMonitor).mockRejectedValueOnce(
+      new Error("start unavailable"),
+    );
 
     runtimeStoreMock.getState().coreState = connectedCore();
     renderApp();
@@ -503,8 +678,12 @@ describe("App", () => {
     });
 
     expect(proxyStartMonitor).toHaveBeenCalledTimes(1);
-    expect(runtimeStoreMock.getState().setProxyMonitorStarting).toHaveBeenCalledTimes(1);
-    expect(runtimeStoreMock.getState().setProxyMonitorFailed).toHaveBeenCalledWith("start unavailable");
+    expect(
+      runtimeStoreMock.getState().setProxyMonitorStarting,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      runtimeStoreMock.getState().setProxyMonitorFailed,
+    ).toHaveBeenCalledWith("start unavailable");
     expect(runtimeStoreMock.getState().proxyMonitorStatus).toEqual({
       message: "start unavailable",
       running: false,
@@ -519,8 +698,12 @@ describe("App", () => {
 
   it("marks cached proxy monitor data failed and shows a toast when delayed stop fails", async () => {
     vi.useFakeTimers();
-    (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
-    vi.mocked(proxyStopMonitor).mockRejectedValueOnce(new Error("stop unavailable"));
+    (
+      window as typeof window & { __TAURI_INTERNALS__?: unknown }
+    ).__TAURI_INTERNALS__ = {};
+    vi.mocked(proxyStopMonitor).mockRejectedValueOnce(
+      new Error("stop unavailable"),
+    );
 
     runtimeStoreMock.getState().coreState = connectedCore();
     renderApp();
@@ -529,7 +712,9 @@ describe("App", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(100);
     });
-    expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe("running");
+    expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe(
+      "running",
+    );
 
     await activateTab(/Home/);
     await act(async () => {
@@ -537,7 +722,9 @@ describe("App", () => {
     });
 
     expect(proxyStopMonitor).toHaveBeenCalledTimes(1);
-    expect(runtimeStoreMock.getState().setProxyMonitorFailed).toHaveBeenCalledWith("stop unavailable");
+    expect(
+      runtimeStoreMock.getState().setProxyMonitorFailed,
+    ).toHaveBeenCalledWith("stop unavailable");
     expect(runtimeStoreMock.getState().proxyMonitorStatus).toEqual({
       message: "stop unavailable",
       running: false,
@@ -550,23 +737,36 @@ describe("App", () => {
     });
   });
 
-
   it("consolidates failed updates and keeps stale data explicit after a manual refresh", async () => {
     const user = userEvent.setup();
     runtimeStoreMock.getState().coreState = connectedCore();
     runtimeStoreMock.getState().setProxyMonitorFailed("monitor offline");
-    const cachedSnapshot = { connections: [makeConnection(0, { host: "cached.example:443" })], downloadTotal: 100, uploadTotal: 50 };
-    const refreshedSnapshot = { connections: [makeConnection(1, { host: "fresh.example:443" })], downloadTotal: 4096, uploadTotal: 1024 };
+    const cachedSnapshot = {
+      connections: [makeConnection(0, { host: "cached.example:443" })],
+      downloadTotal: 100,
+      uploadTotal: 50,
+    };
+    const refreshedSnapshot = {
+      connections: [makeConnection(1, { host: "fresh.example:443" })],
+      downloadTotal: 4096,
+      uploadTotal: 1024,
+    };
     runtimeStoreMock.getState().setProxyConnections(cachedSnapshot);
-    vi.mocked(proxyListConnections).mockResolvedValueOnce(cachedSnapshot).mockResolvedValueOnce(refreshedSnapshot);
+    vi.mocked(proxyListConnections)
+      .mockResolvedValueOnce(cachedSnapshot)
+      .mockResolvedValueOnce(refreshedSnapshot);
     renderApp();
     await user.click(mainNavTab(/Network activity/));
     await waitFor(() => expect(proxyListConnections).toHaveBeenCalledTimes(1));
-    expect(screen.getAllByText("Unable to update connections right now")).toHaveLength(1);
+    expect(
+      screen.getAllByText("Unable to update connections right now"),
+    ).toHaveLength(1);
     expect(screen.queryByText("monitor offline")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Refresh list" }));
     expect(await screen.findByText("fresh.example:443")).toBeInTheDocument();
-    expect(runtimeStoreMock.getState().setProxyConnections).toHaveBeenCalledWith(refreshedSnapshot);
+    expect(
+      runtimeStoreMock.getState().setProxyConnections,
+    ).toHaveBeenCalledWith(refreshedSnapshot);
     expect(screen.getByText("Showing previous data")).toBeInTheDocument();
     expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe("failed");
   });
@@ -575,7 +775,11 @@ describe("App", () => {
     const user = userEvent.setup();
     runtimeStoreMock.getState().coreState = connectedCore();
     runtimeStoreMock.getState().setProxyMonitorRunning();
-    vi.mocked(proxyListConnections).mockResolvedValue({ connections: makeConnections(2), downloadTotal: 2, uploadTotal: 1 });
+    vi.mocked(proxyListConnections).mockResolvedValue({
+      connections: makeConnections(2),
+      downloadTotal: 2,
+      uploadTotal: 1,
+    });
     renderApp();
     await user.click(mainNavTab(/Network activity/));
     const page = screen.getByRole("region", { name: "Network activity" });
@@ -584,24 +788,33 @@ describe("App", () => {
     await user.type(within(page).getByRole("searchbox"), "dns");
     await user.click(within(page).getByRole("combobox"));
     await user.click(screen.getByRole("option", { name: "Warnings & errors" }));
-    await user.click(within(page).getByRole("tab", { name: "Live connections" }));
+    await user.click(
+      within(page).getByRole("tab", { name: "Live connections" }),
+    );
     expect(within(page).getByRole("searchbox")).toHaveValue("bulk-1");
     await user.click(within(page).getByRole("tab", { name: "Runtime logs" }));
     expect(within(page).getByRole("searchbox")).toHaveValue("dns");
-    expect(within(page).getByRole("combobox")).toHaveTextContent("Warnings & errors");
+    expect(within(page).getByRole("combobox")).toHaveTextContent(
+      "Warnings & errors",
+    );
     await user.click(mainNavTab(/Nodes/));
     await user.click(mainNavTab(/Network activity/));
-    expect(within(screen.getByRole("region", { name: "Network activity" })).getByRole("tab", { name: "Runtime logs" })).toHaveAttribute("data-state", "active");
+    expect(
+      within(
+        screen.getByRole("region", { name: "Network activity" }),
+      ).getByRole("tab", { name: "Runtime logs" }),
+    ).toHaveAttribute("data-state", "active");
     expect(screen.getByRole("searchbox")).toHaveValue("");
     expect(screen.getByRole("combobox")).toHaveTextContent("Standard");
     await user.click(screen.getByRole("tab", { name: "Live connections" }));
     expect(screen.getByRole("searchbox")).toHaveValue("");
   });
-
 });
 
 function mainNavTab(name: RegExp) {
-  return within(screen.getByRole("tablist", { name: "Main sections" })).getByRole("tab", { name });
+  return within(
+    screen.getByRole("tablist", { name: "Main sections" }),
+  ).getByRole("tab", { name });
 }
 
 async function activateTab(name: RegExp) {
@@ -618,7 +831,10 @@ function resetTestDom() {
   document.body.style.removeProperty("pointer-events");
 }
 
-function makeConnection(index: number, overrides: Partial<ProxyConnectionItem> = {}): ProxyConnectionItem {
+function makeConnection(
+  index: number,
+  overrides: Partial<ProxyConnectionItem> = {},
+): ProxyConnectionItem {
   return {
     chains: ["Proxy"],
     connectionType: "HTTP",
@@ -642,7 +858,14 @@ function makeConnections(count: number): ProxyConnectionItem[] {
   return Array.from({ length: count }, (_, index) => makeConnection(index));
 }
 
-
 function connectedCore(): NonNullable<RuntimeEventState["coreState"]> {
-  return { state: "connected", activeProfileId: null, mainPid: 42, prePid: null, connectedDurationMs: 0, activeTunBackend: null, runningCoreType: "singBox" };
+  return {
+    state: "connected",
+    activeProfileId: null,
+    mainPid: 42,
+    prePid: null,
+    connectedDurationMs: 0,
+    activeTunBackend: null,
+    runningCoreType: "singBox",
+  };
 }

@@ -36,7 +36,10 @@ import type {
   WindowChromeConfig,
 } from "../../src/ipc/bindings";
 
-export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowChromeConfig["titleBarLayout"] = "none") {
+export async function installTauriSmokeMock(
+  page: Page,
+  titleBarLayout: WindowChromeConfig["titleBarLayout"] = "none",
+) {
   await page.addInitScript((titleBarLayout) => {
     type CommandArgs = Record<string, unknown>;
     type Profile = Record<string, unknown>;
@@ -57,19 +60,26 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       calls: Array<{ command: string; args: CommandArgs }>;
       dns: DnsSettings;
       profiles: ProfileRow[];
+      subscriptions: Subscription[];
+      subscriptionMetadata: SubscriptionMetadata[];
       nodeGroups: NodeGroupsSnapshot;
       connections: ProxyConnectionsSnapshot;
       unhandled: string[];
       routings: Routing[];
       runtime: RuntimeStatusResponse;
       settings: AppSettingsV1;
+      appliedSettings?: AppSettingsV1;
       sysProxy: SystemProxyStatusResponse;
       tun: TunStatus;
       failNextCommand: string | null;
       trafficModeFailure: "apply" | "close" | null;
       appliedTrafficMode: TrafficMode;
     };
-    type Callback = (event: { id: number; event: string; payload: unknown }) => void;
+    type Callback = (event: {
+      id: number;
+      event: string;
+      payload: unknown;
+    }) => void;
     type Listener = { eventId: number; eventName: string; handlerId: number };
 
     const callbacks = new Map<number, Callback>();
@@ -89,6 +99,8 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       dns: makeDnsSettings(),
       profiles: [] as ProfileRow[],
       nodeGroups: { groups: [], memberships: [] },
+      subscriptions: [],
+      subscriptionMetadata: [],
       connections: makeConnectionsSnapshot(),
       // Every command the mock does not implement lands here so a smoke run can
       // fail loudly instead of silently exercising an error path (the way the
@@ -98,7 +110,8 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       runtime: {
         activeProfileId: null,
         mainPid: null,
-        prePid: null, connectedDurationMs: null,
+        prePid: null,
+        connectedDurationMs: null,
         activeTunBackend: null,
         runningCoreType: null,
         state: "disconnected",
@@ -159,8 +172,10 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       const serving = state.runtime.state === "connected" && !state.tun.enabled;
       state.sysProxy.effectiveMode = "unchanged";
       state.sysProxy.proxy = serving ? "127.0.0.1:10808" : null;
-      state.sysProxy.pacUrl = serving && state.sysProxy.requestedMode === "pac"
-        ? (state.sysProxy.pacUrl ?? "http://127.0.0.1:10811/pac?t=smoke") : null;
+      state.sysProxy.pacUrl =
+        serving && state.sysProxy.requestedMode === "pac"
+          ? (state.sysProxy.pacUrl ?? "http://127.0.0.1:10811/pac?t=smoke")
+          : null;
     }
 
     const profileScopes = ["profiles", "nodeGroups"];
@@ -189,7 +204,13 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       proxy_close_connection: proxyRuntimeScopes,
       proxy_set_traffic_mode: [...proxyRuntimeScopes, "appSettings"],
       run_speedtest: profileScopes,
-      save_app_settings: ["appSettings", "uiPreferences", "dns", "connectionMode"],
+      apply_pending_settings: ["appSettings"],
+      save_app_settings: [
+        "appSettings",
+        "uiPreferences",
+        "dns",
+        "connectionMode",
+      ],
       save_dns_settings: ["dns", "appSettings"],
       save_profile: profileScopes,
       save_routing: routingScopes,
@@ -211,27 +232,58 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       }
 
       // Emitted once the command has "committed", exactly like the shell.
-      return Promise.resolve(result).then((value) => {
-        emitEvent("invalidate-event", {
-          keys: scopes.map((kind) => ({ reason: command, scope: { kind } })),
-        });
-        return value;
-      }, (error: unknown) => {
-        // A live mode failure happens after persistence, so its cache changes
-        // are announced on the error path as well.
-        if (command === "proxy_set_traffic_mode") {
+      return Promise.resolve(result).then(
+        (value) => {
           emitEvent("invalidate-event", {
             keys: scopes.map((kind) => ({ reason: command, scope: { kind } })),
           });
-        }
-        throw error;
-      });
+          return value;
+        },
+        (error: unknown) => {
+          // A live mode failure happens after persistence, so its cache changes
+          // are announced on the error path as well.
+          if (command === "proxy_set_traffic_mode") {
+            emitEvent("invalidate-event", {
+              keys: scopes.map((kind) => ({
+                reason: command,
+                scope: { kind },
+              })),
+            });
+          }
+          throw error;
+        },
+      );
     }
 
     function dispatch(command: string, args: CommandArgs = {}) {
       state.calls.push({ command, args });
-      if (state.failNextCommand === command) { state.failNextCommand = null; return Promise.reject(new Error("Simulated failure")); }
+      if (state.failNextCommand === command) {
+        state.failNextCommand = null;
+        return Promise.reject(new Error("Simulated failure"));
+      }
 
+      const manualIds = ["delete_profiles", "copy_profiles"].includes(command)
+        ? readStringArray(args, "indexIds")
+        : command === "save_profile"
+          ? [String(readRecord(args, "profile").id ?? "")]
+          : command === "move_profile"
+            ? [String(args.indexId ?? "")]
+            : ["assign_node_groups", "update_node_group"].includes(command)
+              ? (args.assignments as NodeGroupAssignment[]).map(
+                  (item) => item.profileId,
+                )
+              : [];
+      if (
+        state.profiles.some(
+          (row) =>
+            manualIds.includes(String(row.profile.id)) &&
+            row.profile.subscriptionId,
+        ) ||
+        (command === "save_profile" &&
+          readRecord(args, "profile").subscriptionId) ||
+        (command === "import_profiles_from_text" && args.subscriptionId)
+      )
+        return Promise.reject(new Error("Subscription nodes are read-only"));
       switch (command) {
         case "plugin:event|listen": {
           // The event name and handler id have to be recorded: `emit` must reach
@@ -247,7 +299,9 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           return Promise.resolve(eventId);
         }
         case "plugin:event|unlisten": {
-          const index = listeners.findIndex((listener) => listener.eventId === Number(args.eventId ?? -1));
+          const index = listeners.findIndex(
+            (listener) => listener.eventId === Number(args.eventId ?? -1),
+          );
           if (index >= 0) {
             listeners.splice(index, 1);
           }
@@ -274,7 +328,9 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
             body: null,
             currentVersion: "0.1.0",
             date: null,
-            rawJson: { downloadUrl: "https://cdn.voyavpn.test/stable/latest.json" },
+            rawJson: {
+              downloadUrl: "https://cdn.voyavpn.test/stable/latest.json",
+            },
             rid: 9001,
             version: "0.2.0",
           });
@@ -284,23 +340,58 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
         case "get_window_chrome_config":
           // Called on every boot by use-window-chrome; leaving it unmocked meant
           // the shell silently fell back through its catch on each smoke run.
-          return Promise.resolve({ titleBarLayout } satisfies WindowChromeConfig);
+          return Promise.resolve({
+            titleBarLayout,
+          } satisfies WindowChromeConfig);
         case "load_ui_preferences":
           return Promise.resolve(clone(state.settings.appearance));
         case "load_app_settings":
           return Promise.resolve(clone(state.settings));
+        case "get_settings_apply_status": {
+          const connected = state.runtime.state === "connected";
+          const applied = state.appliedSettings ?? state.settings;
+          const currentCore = {
+            ...state.settings,
+            appearance: applied.appearance,
+            network: {
+              ...state.settings.network,
+              systemProxy: applied.network.systemProxy,
+            },
+          };
+          const action = !connected
+            ? "none"
+            : JSON.stringify(currentCore) !== JSON.stringify(applied)
+              ? "reconnect"
+              : JSON.stringify(state.settings.network.systemProxy) !==
+                  JSON.stringify(applied.network.systemProxy)
+                ? "reapplyProxy"
+                : "none";
+          return Promise.resolve({ action, connected });
+        }
+        case "apply_pending_settings":
+          state.appliedSettings = clone(state.settings);
+          return Promise.resolve({
+            action: "none",
+            connected: state.runtime.state === "connected",
+          });
         case "save_app_settings":
+          state.appliedSettings ??= clone(state.settings);
           state.settings = cloneRecord(args.settings) as typeof state.settings;
           state.dns = clone(state.settings.dns);
           return Promise.resolve(clone(state.settings));
         case "runtime_status":
           return Promise.resolve(clone(state.runtime));
         case "connect_active_profile": {
-          const active = state.profiles.find((row) => row.isActive) ?? state.profiles[0] ?? null;
+          state.appliedSettings = clone(state.settings);
+          const active =
+            state.profiles.find((row) => row.isActive) ??
+            state.profiles[0] ??
+            null;
           state.runtime = {
             activeProfileId: active ? String(active.profile.id) : null,
             mainPid: 4242,
-            prePid: null, connectedDurationMs: 0,
+            prePid: null,
+            connectedDurationMs: 0,
             activeTunBackend: null,
             runningCoreType: "singBox",
             state: "connected",
@@ -312,7 +403,8 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           state.runtime = {
             activeProfileId: null,
             mainPid: null,
-            prePid: null, connectedDurationMs: null,
+            prePid: null,
+            connectedDurationMs: null,
             activeTunBackend: null,
             runningCoreType: null,
             state: "disconnected",
@@ -339,15 +431,23 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
         case "set_system_proxy_mode":
           state.sysProxy = {
             ...state.sysProxy,
-            effectiveMode: String(args.mode ?? "forcedClear") as SystemProxyType,
-            requestedMode: String(args.mode ?? "forcedClear") as SystemProxyType,
+            effectiveMode: String(
+              args.mode ?? "forcedClear",
+            ) as SystemProxyType,
+            requestedMode: String(
+              args.mode ?? "forcedClear",
+            ) as SystemProxyType,
           };
           settleManualProxy();
           return Promise.resolve(clone(state.sysProxy));
         case "tun_status":
           return Promise.resolve(clone(state.tun));
         case "tun_request_elevation":
-          state.tun = { ...state.tun, elevationGranted: true, requiresElevation: false };
+          state.tun = {
+            ...state.tun,
+            elevationGranted: true,
+            requiresElevation: false,
+          };
           return Promise.resolve(clone(state.tun));
         case "set_tun_enabled":
           state.tun = { ...state.tun, enabled: Boolean(args.enabled) };
@@ -356,13 +456,15 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           return Promise.resolve(connectionModeStatus());
         case "set_connection_mode": {
           const mode = String(args.mode ?? "systemProxy");
-          const pacEnabled = args.pacEnabled == null ? state.sysProxy.requestedMode === "pac" : args.pacEnabled === true;
+          const pacEnabled =
+            args.pacEnabled == null
+              ? state.sysProxy.requestedMode === "pac"
+              : args.pacEnabled === true;
           if (mode === "vpn") {
             state.tun = { ...state.tun, enabled: true };
           } else {
             state.tun = { ...state.tun, enabled: false };
-            const requestedMode =
-              pacEnabled ? "pac" : "forcedChange";
+            const requestedMode = pacEnabled ? "pac" : "forcedChange";
             state.sysProxy = {
               ...state.sysProxy,
               effectiveMode: requestedMode,
@@ -372,48 +474,108 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           settleManualProxy();
           return Promise.resolve(connectionModeStatus());
         }
-        case "list_node_groups": return Promise.resolve(clone(state.nodeGroups));
+        case "list_node_groups":
+          return Promise.resolve(clone(state.nodeGroups));
         case "save_node_group": {
           const name = String(args.name ?? "").trim();
-          if (!name || state.nodeGroups.groups.some((g) => g.name === name && g.id !== args.id)) return Promise.reject(new Error("Invalid group name"));
-          const existing = state.nodeGroups.groups.find((g) => g.id === args.id);
-          const group = { id: existing?.id ?? `node-group-${nextGroupId++}`, name, sort: existing?.sort ?? state.nodeGroups.groups.length };
-          if (existing) Object.assign(existing, group); else state.nodeGroups.groups.push(group);
+          if (
+            !name ||
+            state.nodeGroups.groups.some(
+              (g) => g.name === name && g.id !== args.id,
+            )
+          )
+            return Promise.reject(new Error("Invalid group name"));
+          const existing = state.nodeGroups.groups.find(
+            (g) => g.id === args.id,
+          );
+          const group = {
+            id: existing?.id ?? `node-group-${nextGroupId++}`,
+            name,
+            sort: existing?.sort ?? state.nodeGroups.groups.length,
+          };
+          if (existing) Object.assign(existing, group);
+          else state.nodeGroups.groups.push(group);
           return Promise.resolve(clone(group));
         }
         case "update_node_group": {
           const name = String(args.name ?? "").trim();
           const group = state.nodeGroups.groups.find((g) => g.id === args.id);
           const changes = args.assignments as NodeGroupAssignment[];
-          if (!group || !name || state.nodeGroups.groups.some((g) => g.name === name && g.id !== args.id)) return Promise.reject(new Error("Invalid group name"));
-          if (new Set(changes.map((a) => a.profileId)).size !== changes.length || changes.some((a) => !state.profiles.some((p) => p.profile.id === a.profileId) || (a.groupId && !state.nodeGroups.groups.some((g) => g.id === a.groupId)))) return Promise.reject(new Error("Invalid membership"));
+          if (
+            !group ||
+            !name ||
+            state.nodeGroups.groups.some(
+              (g) => g.name === name && g.id !== args.id,
+            )
+          )
+            return Promise.reject(new Error("Invalid group name"));
+          if (
+            new Set(changes.map((a) => a.profileId)).size !== changes.length ||
+            changes.some(
+              (a) =>
+                !state.profiles.some((p) => p.profile.id === a.profileId) ||
+                (a.groupId &&
+                  !state.nodeGroups.groups.some((g) => g.id === a.groupId)),
+            )
+          )
+            return Promise.reject(new Error("Invalid membership"));
           group.name = name;
           for (const change of changes) {
-            state.nodeGroups.memberships = state.nodeGroups.memberships.filter((m) => m.profileId !== change.profileId);
-            if (change.groupId) state.nodeGroups.memberships.push({ profileId: change.profileId, groupId: change.groupId });
+            state.nodeGroups.memberships = state.nodeGroups.memberships.filter(
+              (m) => m.profileId !== change.profileId,
+            );
+            if (change.groupId)
+              state.nodeGroups.memberships.push({
+                profileId: change.profileId,
+                groupId: change.groupId,
+              });
           }
           return Promise.resolve(clone(group));
         }
         case "delete_node_group": {
-          state.nodeGroups.groups = state.nodeGroups.groups.filter((g) => g.id !== args.id);
-          state.nodeGroups.memberships = state.nodeGroups.memberships.filter((m) => m.groupId !== args.id);
+          state.nodeGroups.groups = state.nodeGroups.groups.filter(
+            (g) => g.id !== args.id,
+          );
+          state.nodeGroups.memberships = state.nodeGroups.memberships.filter(
+            (m) => m.groupId !== args.id,
+          );
           return Promise.resolve(null);
         }
         case "move_node_group": {
           const groups = state.nodeGroups.groups;
           const from = groups.findIndex((g) => g.id === args.id);
           if (from < 0) return Promise.reject(new Error("Group not found"));
-          const to = args.action === "up" ? Math.max(0, from - 1) : Math.min(groups.length - 1, from + 1);
-          const [group] = groups.splice(from, 1); groups.splice(to, 0, group);
-          groups.forEach((g, index) => { g.sort = index; });
+          const to =
+            args.action === "up"
+              ? Math.max(0, from - 1)
+              : Math.min(groups.length - 1, from + 1);
+          const [group] = groups.splice(from, 1);
+          groups.splice(to, 0, group);
+          groups.forEach((g, index) => {
+            g.sort = index;
+          });
           return Promise.resolve(null);
         }
         case "assign_node_groups": {
           const changes = args.assignments as NodeGroupAssignment[];
-          if (changes.some((a) => !state.profiles.some((p) => p.profile.id === a.profileId) || (a.groupId && !state.nodeGroups.groups.some((g) => g.id === a.groupId)))) return Promise.reject(new Error("Node or group not found"));
+          if (
+            changes.some(
+              (a) =>
+                !state.profiles.some((p) => p.profile.id === a.profileId) ||
+                (a.groupId &&
+                  !state.nodeGroups.groups.some((g) => g.id === a.groupId)),
+            )
+          )
+            return Promise.reject(new Error("Node or group not found"));
           for (const change of changes) {
-            state.nodeGroups.memberships = state.nodeGroups.memberships.filter((m) => m.profileId !== change.profileId);
-            if (change.groupId) state.nodeGroups.memberships.push({ profileId: change.profileId, groupId: change.groupId });
+            state.nodeGroups.memberships = state.nodeGroups.memberships.filter(
+              (m) => m.profileId !== change.profileId,
+            );
+            if (change.groupId)
+              state.nodeGroups.memberships.push({
+                profileId: change.profileId,
+                groupId: change.groupId,
+              });
           }
           return Promise.resolve(null);
         }
@@ -435,9 +597,17 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
         }
         case "delete_profiles": {
           const ids = readStringArray(args, "indexIds");
-          state.profiles = state.profiles.filter((row) => !ids.includes(String(row.profile.id)));
-          state.nodeGroups.memberships = state.nodeGroups.memberships.filter((m) => !ids.includes(m.profileId));
-          if (state.runtime.activeProfileId && ids.includes(state.runtime.activeProfileId)) void dispatch("disconnect_core", {});
+          state.profiles = state.profiles.filter(
+            (row) => !ids.includes(String(row.profile.id)),
+          );
+          state.nodeGroups.memberships = state.nodeGroups.memberships.filter(
+            (m) => !ids.includes(m.profileId),
+          );
+          if (
+            state.runtime.activeProfileId &&
+            ids.includes(state.runtime.activeProfileId)
+          )
+            void dispatch("disconnect_core", {});
           return Promise.resolve(ids.length);
         }
         case "copy_profiles": {
@@ -445,9 +615,19 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           const copies = state.profiles
             .filter((row) => ids.includes(String(row.profile.id)))
             .map((row) => {
-              const copy = upsertProfile({ ...row.profile, id: "", remarks: `${String(row.profile.remarks)} Copy` });
-              const groupId = state.nodeGroups.memberships.find((m) => m.profileId === row.profile.id)?.groupId;
-              if (groupId) state.nodeGroups.memberships.push({ profileId: String(copy.profile.id), groupId });
+              const copy = upsertProfile({
+                ...row.profile,
+                id: "",
+                remarks: `${String(row.profile.remarks)} Copy`,
+              });
+              const groupId = state.nodeGroups.memberships.find(
+                (m) => m.profileId === row.profile.id,
+              )?.groupId;
+              if (groupId)
+                state.nodeGroups.memberships.push({
+                  profileId: String(copy.profile.id),
+                  groupId,
+                });
               return copy;
             });
           return Promise.resolve(clone(copies));
@@ -455,30 +635,52 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
         case "move_profile":
           return Promise.resolve(clone(state.profiles));
         case "list_subscriptions":
-          return Promise.resolve([] satisfies Subscription[]);
+          return Promise.resolve(clone(state.subscriptions));
         case "list_subscription_metadata":
-          return Promise.resolve([] satisfies SubscriptionMetadata[]);
+          return Promise.resolve(clone(state.subscriptionMetadata));
         case "list_process_candidates":
           return Promise.resolve([] satisfies ProcessCandidate[]);
-        case "save_subscription":
-          return Promise.resolve({
-            additionalUrl: "",
-            autoUpdateIntervalMinutes: null,
-            converterTarget: null,
-            enabled: true,
-            filter: null,
-            id: "sub-smoke",
-            remarks: "Smoke",
-            sort: 0,
-            url: "",
-            userAgent: "",
-          } satisfies Subscription);
-        case "delete_subscriptions":
-          return Promise.resolve(0);
+        case "save_subscription": {
+          const source = cloneRecord(args.item) as Subscription;
+          source.id ||= `sub-${state.subscriptions.length + 1}`;
+          state.subscriptions = [
+            ...state.subscriptions.filter((item) => item.id !== source.id),
+            source,
+          ];
+          return Promise.resolve(clone(source));
+        }
+        case "delete_subscriptions": {
+          const ids = readStringArray(args, "ids");
+          const removed = state.profiles
+            .filter((row) => ids.includes(String(row.profile.subscriptionId)))
+            .map((row) => String(row.profile.id));
+          state.subscriptions = state.subscriptions.filter(
+            (item) => !ids.includes(item.id),
+          );
+          state.profiles = state.profiles.filter(
+            (row) => !removed.includes(String(row.profile.id)),
+          );
+          state.nodeGroups.memberships = state.nodeGroups.memberships.filter(
+            (item) => !removed.includes(item.profileId),
+          );
+          if (
+            state.runtime.activeProfileId &&
+            removed.includes(state.runtime.activeProfileId)
+          ) {
+            void dispatch("disconnect_core", {});
+            emitEvent("transient-stream-event", {
+              kind: "coreState",
+              payload: clone(state.runtime),
+            });
+          }
+          return Promise.resolve(ids.length);
+        }
         case "export_profile_share_links": {
           const indexIds = readStringArray(args, "indexIds");
           const links = indexIds.map((indexId) => {
-            const profile = state.profiles.find((item) => item.profile.id === indexId)?.profile;
+            const profile = state.profiles.find(
+              (item) => item.profile.id === indexId,
+            )?.profile;
             if (!profile) {
               throw new Error(`missing profile ${indexId}`);
             }
@@ -488,9 +690,11 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
             return `vless://${encodeURIComponent(String(protocol.uuid ?? protocol.password ?? ""))}@${String(server.address)}:${String(server.port)}#${encodeURIComponent(String(profile.remarks))}`;
           });
 
-          return Promise.resolve(
-            { count: links.length, format: "shareLinks", text: links.join("\n") } satisfies ExportProfilesResult,
-          );
+          return Promise.resolve({
+            count: links.length,
+            format: "shareLinks",
+            text: links.join("\n"),
+          } satisfies ExportProfilesResult);
         }
         case "import_profiles_from_text": {
           const row = upsertProfile(importedProfile(String(args.text ?? "")));
@@ -513,10 +717,50 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
             updatedProfileIds: [],
           } satisfies ImportProfilesResult);
         }
-        case "update_subscriptions":
-          return Promise.resolve(
-            { imported: 0, messages: [], removedExisting: 0, skipped: 0, updated: 0 } satisfies SubscriptionUpdateResult,
+        case "update_subscriptions": {
+          const source = state.subscriptions.find(
+            (item) => item.id === args.subscriptionId,
           );
+          if (!source)
+            return Promise.resolve({
+              imported: 0,
+              messages: [],
+              removedExisting: 0,
+              skipped: 0,
+              updated: 0,
+            } satisfies SubscriptionUpdateResult);
+          const previous = state.profiles.find(
+            (row) => row.profile.subscriptionId === source.id,
+          );
+          if (!previous)
+            upsertProfile({
+              ...importedProfile(
+                "trojan://secret@source.test:443#Subscription%20node",
+              ),
+              subscriptionId: source.id,
+            });
+          state.subscriptionMetadata = [
+            ...state.subscriptionMetadata.filter(
+              (item) => item.subscriptionId !== source.id,
+            ),
+            {
+              subscriptionId: source.id,
+              lastUpdateAt: Math.floor(Date.now() / 1000),
+              uploadBytes: null,
+              downloadBytes: null,
+              totalBytes: null,
+              expireAt: null,
+              profileTitle: null,
+            },
+          ];
+          return Promise.resolve({
+            imported: 1,
+            messages: [],
+            removedExisting: 0,
+            skipped: 0,
+            updated: 1,
+          } satisfies SubscriptionUpdateResult);
+        }
         case "run_speedtest":
           return Promise.resolve({
             cancelled: false,
@@ -534,18 +778,32 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           return Promise.resolve(clone(routing));
         }
         case "set_active_routing": {
-          state.routings = state.routings.map((routing) => ({ ...routing, isActive: routing.id === args.id }));
-          return Promise.resolve(clone(state.routings.find((routing) => routing.id === args.id) ?? state.routings[0]));
+          state.routings = state.routings.map((routing) => ({
+            ...routing,
+            isActive: routing.id === args.id,
+          }));
+          return Promise.resolve(
+            clone(
+              state.routings.find((routing) => routing.id === args.id) ??
+                state.routings[0],
+            ),
+          );
         }
         case "delete_routings": {
           const ids = readStringArray(args, "ids");
-          state.routings = state.routings.filter((routing) => !ids.includes(routing.id));
+          state.routings = state.routings.filter(
+            (routing) => !ids.includes(routing.id),
+          );
           return Promise.resolve(ids.length);
         }
         case "save_routing_rule": {
-          const routing = state.routings.find((item) => item.id === args.routingId) ?? state.routings[0];
+          const routing =
+            state.routings.find((item) => item.id === args.routingId) ??
+            state.routings[0];
           const rule = normalizeRule(readRecord(args, "rule"));
-          const existingIndex = routing.rules.findIndex((item) => item.id === rule.id);
+          const existingIndex = routing.rules.findIndex(
+            (item) => item.id === rule.id,
+          );
           routing.rules =
             existingIndex >= 0
               ? routing.rules.map((item) => (item.id === rule.id ? rule : item))
@@ -553,13 +811,19 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           return Promise.resolve(clone(routing));
         }
         case "delete_routing_rules": {
-          const routing = state.routings.find((item) => item.id === args.routingId) ?? state.routings[0];
+          const routing =
+            state.routings.find((item) => item.id === args.routingId) ??
+            state.routings[0];
           const ids = readStringArray(args, "ruleIds");
-          routing.rules = routing.rules.filter((rule) => !ids.includes(rule.id));
+          routing.rules = routing.rules.filter(
+            (rule) => !ids.includes(rule.id),
+          );
           return Promise.resolve(clone(routing));
         }
         case "move_routing_rule": {
-          const routing = state.routings.find((item) => item.id === args.routingId) ?? state.routings[0];
+          const routing =
+            state.routings.find((item) => item.id === args.routingId) ??
+            state.routings[0];
           return Promise.resolve(clone(routing));
         }
         case "load_dns_settings":
@@ -571,44 +835,79 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
         case "proxy_list_connections":
           return Promise.resolve(clone(state.connections));
         case "proxy_close_connection":
-          state.connections.connections = args.connectionId == null
-            ? [] : state.connections.connections.filter((connection) => connection.id !== args.connectionId);
+          state.connections.connections =
+            args.connectionId == null
+              ? []
+              : state.connections.connections.filter(
+                  (connection) => connection.id !== args.connectionId,
+                );
           return Promise.resolve(clone(state.connections));
         case "proxy_set_traffic_mode":
-          state.settings.proxy.trafficMode = String(args.mode ?? "rule") as TrafficMode;
-          if (state.runtime.state === "connected" && state.settings.proxy.trafficMode !== "unchanged") {
+          state.settings.proxy.trafficMode = String(
+            args.mode ?? "rule",
+          ) as TrafficMode;
+          if (
+            state.runtime.state === "connected" &&
+            state.settings.proxy.trafficMode !== "unchanged"
+          ) {
             const failure = state.trafficModeFailure;
             state.trafficModeFailure = null;
-            if (failure !== "apply") state.appliedTrafficMode = state.settings.proxy.trafficMode;
+            if (failure !== "apply")
+              state.appliedTrafficMode = state.settings.proxy.trafficMode;
             if (failure) {
               return Promise.reject({
-                kind: { type: "network" }, subsystem: "proxyRuntime",
-                message: failure === "apply"
-                  ? "traffic mode was saved but could not be applied to the running core: simulated API failure"
-                  : "traffic mode was applied, but existing connections could not be closed: simulated API failure",
+                kind: { type: "network" },
+                subsystem: "proxyRuntime",
+                message:
+                  failure === "apply"
+                    ? "traffic mode was saved but could not be applied to the running core: simulated API failure"
+                    : "traffic mode was applied, but existing connections could not be closed: simulated API failure",
               } satisfies AppError);
             }
             state.connections.connections = [];
           }
-          return Promise.resolve({ mode: state.settings.proxy.trafficMode } satisfies TrafficModeResponse);
+          return Promise.resolve({
+            mode: state.settings.proxy.trafficMode,
+          } satisfies TrafficModeResponse);
         case "proxy_start_monitor":
-          return Promise.resolve({ message: null, running: true, stale: false, state: "running" } satisfies ProxyMonitorStatus);
+          return Promise.resolve({
+            message: null,
+            running: true,
+            stale: false,
+            state: "running",
+          } satisfies ProxyMonitorStatus);
         case "proxy_stop_monitor":
-          return Promise.resolve({ message: null, running: false, stale: true, state: "stopped" } satisfies ProxyMonitorStatus);
+          return Promise.resolve({
+            message: null,
+            running: false,
+            stale: true,
+            state: "stopped",
+          } satisfies ProxyMonitorStatus);
         case "generate_qr_code":
           return Promise.resolve({
             mimeType: "image/svg+xml",
-            svg: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><rect width=\"64\" height=\"64\" fill=\"white\"/><rect x=\"8\" y=\"8\" width=\"16\" height=\"16\" fill=\"black\"/><rect x=\"40\" y=\"8\" width=\"16\" height=\"16\" fill=\"black\"/><rect x=\"8\" y=\"40\" width=\"16\" height=\"16\" fill=\"black\"/><rect x=\"32\" y=\"32\" width=\"8\" height=\"8\" fill=\"black\"/></svg>",
+            svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="white"/><rect x="8" y="8" width="16" height="16" fill="black"/><rect x="40" y="8" width="16" height="16" fill="black"/><rect x="8" y="40" width="16" height="16" fill="black"/><rect x="32" y="32" width="8" height="8" fill="black"/></svg>',
           } satisfies QrCodeImage);
         case "app_update_status":
-          return Promise.resolve({ currentVersion: "0.1.0", message: null, state: "ready" } satisfies AppUpdaterStatus);
+          return Promise.resolve({
+            currentVersion: "0.1.0",
+            message: null,
+            state: "ready",
+          } satisfies AppUpdaterStatus);
         case "update_geo_assets":
-          return Promise.resolve([{ bytes: 1024, name: "geoip.db", usedProxy: false }] satisfies ResourceUpdateFile[]);
+          return Promise.resolve([
+            { bytes: 1024, name: "geoip.db", usedProxy: false },
+          ] satisfies ResourceUpdateFile[]);
         case "update_srs_assets":
-          return Promise.resolve([{ bytes: 512, name: "rules.srs", usedProxy: false }] satisfies ResourceUpdateFile[]);
+          return Promise.resolve([
+            { bytes: 512, name: "rules.srs", usedProxy: false },
+          ] satisfies ResourceUpdateFile[]);
         default:
           state.unhandled.push(command);
-          throw { kind: "state", message: `Unhandled smoke command: ${command}` };
+          throw {
+            kind: "state",
+            message: `Unhandled smoke command: ${command}`,
+          };
       }
     }
 
@@ -639,14 +938,21 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       listeners
         .filter((listener) => listener.eventName === event)
         .forEach((listener) => {
-          callbacks.get(listener.handlerId)?.({ event, id: listener.handlerId, payload });
+          callbacks.get(listener.handlerId)?.({
+            event,
+            id: listener.handlerId,
+            payload,
+          });
         });
     }
 
     function upsertProfile(input: Record<string, unknown>) {
       const profile = normalizeProfile(input);
-      const existingIndex = state.profiles.findIndex((row) => row.profile.id === profile.id);
-      const existing = existingIndex >= 0 ? state.profiles[existingIndex] : null;
+      const existingIndex = state.profiles.findIndex(
+        (row) => row.profile.id === profile.id,
+      );
+      const existing =
+        existingIndex >= 0 ? state.profiles[existingIndex] : null;
       const row = {
         isActive: existing?.isActive ?? false,
         profile,
@@ -680,8 +986,12 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
     }
 
     function setActiveProfile(indexId: string) {
-      state.profiles = state.profiles.map((row) => ({ ...row, isActive: row.profile.id === indexId }));
-      const row = state.profiles.find((item) => item.profile.id === indexId) ?? null;
+      state.profiles = state.profiles.map((row) => ({
+        ...row,
+        isActive: row.profile.id === indexId,
+      }));
+      const row =
+        state.profiles.find((item) => item.profile.id === indexId) ?? null;
       return row;
     }
 
@@ -691,22 +1001,31 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       return {
         displayLog: Boolean(input.displayLog ?? true),
         id,
-        protocol: Object.keys(protocol).length > 0 ? protocol : {
-          kind: "vless",
-          server: { address: "smoke.example.test", port: 443 },
-          uuid: "00000000-0000-4000-8000-000000000001",
-          flow: null,
-          encryption: "none",
-        },
+        protocol:
+          Object.keys(protocol).length > 0
+            ? protocol
+            : {
+                kind: "vless",
+                server: { address: "smoke.example.test", port: 443 },
+                uuid: "00000000-0000-4000-8000-000000000001",
+                flow: null,
+                encryption: "none",
+              },
         remarks: String(input.remarks ?? "Smoke profile"),
         subscriptionId: nullableString(input.subscriptionId),
-        tls: input.tls && typeof input.tls === "object" ? clone(input.tls) : null,
-        transport: input.transport && typeof input.transport === "object" ? clone(input.transport) : null,
+        tls:
+          input.tls && typeof input.tls === "object" ? clone(input.tls) : null,
+        transport:
+          input.transport && typeof input.transport === "object"
+            ? clone(input.transport)
+            : null,
       };
     }
 
     function importedProfile(text: string): Profile {
-      const remark = decodeURIComponent(text.split("#")[1] ?? "Smoke Imported VLESS").replaceAll("+", " ");
+      const remark = decodeURIComponent(
+        text.split("#")[1] ?? "Smoke Imported VLESS",
+      ).replaceAll("+", " ");
       const addressMatch = text.match(/@([^:/?#]+)(?::(\d+))?/u);
 
       return normalizeProfile({
@@ -715,14 +1034,29 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           encryption: "none",
           flow: null,
           kind: "vless",
-          server: { address: addressMatch?.[1] ?? "imported.example.test", port: Number(addressMatch?.[2] ?? 443) },
-          uuid: text.match(/^vless:\/\/([^@]+)/u)?.[1] ?? "00000000-0000-4000-8000-000000000002",
+          server: {
+            address: addressMatch?.[1] ?? "imported.example.test",
+            port: Number(addressMatch?.[2] ?? 443),
+          },
+          uuid:
+            text.match(/^vless:\/\/([^@]+)/u)?.[1] ??
+            "00000000-0000-4000-8000-000000000002",
         },
-        tls: text.includes("security=tls") ? {
-          alpn: [], certificatePem: null, certificateSha256: [], echConfig: [], finalMask: null,
-          mldsa65Verify: null, mode: "tls", realityPublicKey: null, realityShortId: null,
-          realitySpiderX: null, serverName: null,
-        } : null,
+        tls: text.includes("security=tls")
+          ? {
+              alpn: [],
+              certificatePem: null,
+              certificateSha256: [],
+              echConfig: [],
+              finalMask: null,
+              mldsa65Verify: null,
+              mode: "tls",
+              realityPublicKey: null,
+              realityShortId: null,
+              realitySpiderX: null,
+              serverName: null,
+            }
+          : null,
         transport: text.includes("type=ws")
           ? { host: "cdn.example.test", kind: "websocket", path: "/ws" }
           : { header: null, host: null, kind: "tcp", path: null },
@@ -730,14 +1064,20 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
     }
 
     function filterProfiles(rows: ProfileRow[], filter: unknown) {
-      const needle = String(filter ?? "").trim().toLowerCase();
+      const needle = String(filter ?? "")
+        .trim()
+        .toLowerCase();
       if (!needle) {
         return clone(rows);
       }
 
       return clone(
         rows.filter((row) =>
-          [row.profile.remarks, profileAddress(row.profile), row.profile.subscriptionId]
+          [
+            row.profile.remarks,
+            profileAddress(row.profile),
+            row.profile.subscriptionId,
+          ]
             .join(" ")
             .toLowerCase()
             .includes(needle),
@@ -753,13 +1093,22 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
 
     function upsertRouting(input: Record<string, unknown>): Routing {
       const id = String(input.id ?? `routing-smoke-${nextRoutingId++}`);
-      const existingIndex = state.routings.findIndex((routing) => routing.id === id);
-      const existing = existingIndex >= 0 ? state.routings[existingIndex] : null;
+      const existingIndex = state.routings.findIndex(
+        (routing) => routing.id === id,
+      );
+      const existing =
+        existingIndex >= 0 ? state.routings[existingIndex] : null;
       const routing = {
         icon: String(input.icon ?? existing?.icon ?? ""),
-        singboxRulesetPath: String(input.singboxRulesetPath ?? existing?.singboxRulesetPath ?? ""),
-        domainStrategy: String(input.domainStrategy ?? existing?.domainStrategy ?? "AsIs"),
-        singboxDomainStrategy: String(input.singboxDomainStrategy ?? existing?.singboxDomainStrategy ?? ""),
+        singboxRulesetPath: String(
+          input.singboxRulesetPath ?? existing?.singboxRulesetPath ?? "",
+        ),
+        domainStrategy: String(
+          input.domainStrategy ?? existing?.domainStrategy ?? "AsIs",
+        ),
+        singboxDomainStrategy: String(
+          input.singboxDomainStrategy ?? existing?.singboxDomainStrategy ?? "",
+        ),
         enabled: Boolean(input.enabled ?? existing?.enabled ?? true),
         id,
         isActive: Boolean(existing?.isActive ?? state.routings.length === 0),
@@ -797,7 +1146,11 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       };
     }
 
-    function makeRouting(id: string, remarks: string, active: boolean): Routing {
+    function makeRouting(
+      id: string,
+      remarks: string,
+      active: boolean,
+    ): Routing {
       return {
         icon: "",
         singboxRulesetPath: "",
@@ -832,16 +1185,18 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           sendThrough: null as string | null,
         },
         network: {
-          inbounds: [{
-            lanConnectionsAllowed: false,
-            localPort: 10808,
-            password: "",
-            protocol: "socks",
-            secondaryPortEnabled: false,
-            separateLanPort: false,
-            sniffingEnabled: true,
-            username: "",
-          }],
+          inbounds: [
+            {
+              lanConnectionsAllowed: false,
+              localPort: 10808,
+              password: "",
+              protocol: "socks",
+              secondaryPortEnabled: false,
+              separateLanPort: false,
+              sniffingEnabled: true,
+              username: "",
+            },
+          ],
           systemProxy: {
             advancedProtocol: "",
             bypassLocal: true,
@@ -887,7 +1242,11 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
           idleTimeoutSeconds: 60,
           permitWithoutStream: false,
         },
-        hysteria: { downloadMbps: 100, hopIntervalSeconds: 30, uploadMbps: 100 },
+        hysteria: {
+          downloadMbps: 100,
+          hopIntervalSeconds: 30,
+          uploadMbps: 100,
+        },
         proxy: { trafficMode: "rule" },
       };
     }
@@ -913,14 +1272,29 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
     }
 
     function cloneRecord(value: unknown) {
-      return value && typeof value === "object" ? clone(value as Record<string, unknown>) : {};
+      return value && typeof value === "object"
+        ? clone(value as Record<string, unknown>)
+        : {};
     }
 
-    function mergeDeep<T extends Record<string, unknown>>(target: T, patch: Record<string, unknown>): T {
+    function mergeDeep<T extends Record<string, unknown>>(
+      target: T,
+      patch: Record<string, unknown>,
+    ): T {
       const next = clone(target) as Record<string, unknown>;
       Object.entries(patch).forEach(([key, value]) => {
-        if (value && typeof value === "object" && !Array.isArray(value) && next[key] && typeof next[key] === "object" && !Array.isArray(next[key])) {
-          next[key] = mergeDeep(next[key] as Record<string, unknown>, value as Record<string, unknown>);
+        if (
+          value &&
+          typeof value === "object" &&
+          !Array.isArray(value) &&
+          next[key] &&
+          typeof next[key] === "object" &&
+          !Array.isArray(next[key])
+        ) {
+          next[key] = mergeDeep(
+            next[key] as Record<string, unknown>,
+            value as Record<string, unknown>,
+          );
         } else {
           next[key] = value;
         }
@@ -930,7 +1304,9 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
 
     function readRecord(args: CommandArgs, key: string) {
       const value = args[key];
-      return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+      return value && typeof value === "object"
+        ? (value as Record<string, unknown>)
+        : {};
     }
 
     function readArray(args: CommandArgs, key: string) {
@@ -967,7 +1343,10 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
       return readArray(args, key).map(String);
     }
 
-    function readNullableStringArray(input: Record<string, unknown>, key: string) {
+    function readNullableStringArray(
+      input: Record<string, unknown>,
+      key: string,
+    ) {
       const value = input[key];
       if (!Array.isArray(value)) {
         return null;
@@ -987,13 +1366,22 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
 declare global {
   interface Window {
     __TAURI_INTERNALS__: {
-      invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
+      invoke: (
+        command: string,
+        args?: Record<string, unknown>,
+      ) => Promise<unknown>;
       metadata: {
         currentWindow: {
           label: string;
         };
       };
-      transformCallback: (callback: (event: { id: number; event: string; payload: unknown }) => void) => number;
+      transformCallback: (
+        callback: (event: {
+          id: number;
+          event: string;
+          payload: unknown;
+        }) => void,
+      ) => number;
       unregisterCallback: (id: number) => void;
     };
     __VOYA_SMOKE__: {

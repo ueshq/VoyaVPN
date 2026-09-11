@@ -1,273 +1,119 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { Subscription } from "@/ipc/bindings";
-
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SubscriptionsDialog } from "./subscriptions-dialog";
-
-const ipcMocks = vi.hoisted(() => ({
-  deleteSubscriptions: vi.fn(),
-  listSubscriptionMetadata: vi.fn(),
-  listSubscriptions: vi.fn(),
+import type { Subscription } from "@/ipc/bindings";
+const ipc = vi.hoisted(() => ({
   saveSubscription: vi.fn(),
   updateSubscriptions: vi.fn(),
 }));
-
-vi.mock("@/ipc", () => ipcMocks);
-
-const queryClients = new Set<QueryClient>();
-
-function renderDialog(overrides: { onOpenChange?: (open: boolean) => void } = {}) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { gcTime: 0, retry: false } },
+vi.mock("@/ipc", () => ipc);
+const source: Subscription = {
+  id: "source",
+  remarks: "My source",
+  url: "https://example.test/sub",
+  additionalUrl: "",
+  userAgent: "",
+  enabled: true,
+  sort: 0,
+  filter: null,
+  converterTarget: null,
+  autoUpdateIntervalMinutes: 120,
+};
+beforeEach(() => {
+  vi.resetAllMocks();
+  ipc.saveSubscription.mockImplementation(async (value: Subscription) => ({
+    ...value,
+    id: value.id || "created",
+  }));
+  ipc.updateSubscriptions.mockResolvedValue({
+    imported: 2,
+    updated: 1,
+    skipped: 0,
+    removedExisting: 0,
+    messages: [],
   });
-
-  queryClients.add(queryClient);
-
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <SubscriptionsDialog onOpenChange={overrides.onOpenChange ?? vi.fn()} open />
-    </QueryClientProvider>,
-  );
-}
-
-afterEach(() => {
-  queryClients.forEach((queryClient) => queryClient.clear());
-  queryClients.clear();
 });
-
-describe("SubscriptionsDialog", () => {
-  beforeEach(() => {
-    Object.values(ipcMocks).forEach((mock) => mock.mockReset());
-    ipcMocks.listSubscriptionMetadata.mockResolvedValue([]);
+function fill() {
+  fireEvent.change(screen.getByLabelText("Remarks"), {
+    target: { value: "New source" },
   });
-
-  it("renders a skeleton loading region while sources load", async () => {
-    // A pending promise keeps the query in its loading state long enough to
-    // assert the skeleton stands in for the source list.
-    ipcMocks.listSubscriptions.mockReturnValue(new Promise(() => {}));
-
-    renderDialog();
-
-    expect(await screen.findByLabelText("Loading subscriptions")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("URL"), {
+    target: { value: "https://example.test/sub" },
   });
-
-  it("shows a localized empty state when no sources exist", async () => {
-    ipcMocks.listSubscriptions.mockResolvedValue([]);
-
-    renderDialog();
-
-    expect(await screen.findByText("No subscriptions")).toBeInTheDocument();
-    expect(
-      screen.getByText("Add a subscription source to import nodes automatically."),
-    ).toBeInTheDocument();
+}
+describe("Subscription editor", () => {
+  it("adds and updates a source only after explicit submission", async () => {
+    const close = vi.fn();
+    render(<SubscriptionsDialog open onOpenChange={close} />);
+    fill();
+    expect(ipc.saveSubscription).not.toHaveBeenCalled();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Add and update" }),
+    );
+    await waitFor(() =>
+      expect(ipc.updateSubscriptions).toHaveBeenCalledWith(
+        "created",
+        true,
+        null,
+      ),
+    );
+    expect(close).toHaveBeenCalledWith(false);
   });
-
-  it("lists subscription sources once loaded", async () => {
-    ipcMocks.listSubscriptions.mockResolvedValue([makeSubscription()]);
-
-    renderDialog();
-
-    expect(await screen.findByText("Fixture sub")).toBeInTheDocument();
-    expect(screen.queryByText("No subscriptions")).not.toBeInTheDocument();
+  it("keeps a saved source and redacted update failure available for retry", async () => {
+    ipc.updateSubscriptions.mockRejectedValueOnce(
+      new Error("failed https://user:secret@example.test/sub?token=private"),
+    );
+    const close = vi.fn();
+    render(<SubscriptionsDialog open onOpenChange={close} />);
+    fill();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Add and update" }),
+    );
+    expect(await screen.findByRole("alert")).not.toHaveTextContent("secret");
+    expect(close).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Retry update" }));
+    await waitFor(() => expect(close).toHaveBeenCalledWith(false));
+    expect(ipc.saveSubscription.mock.calls[1][0].id).toBe("created");
   });
-
-  it("edits and saves a selected subscription through the semantic contract", async () => {
-    const user = userEvent.setup();
-    const source = makeSubscription();
-    ipcMocks.listSubscriptions.mockResolvedValue([source]);
-    ipcMocks.saveSubscription.mockImplementation(async (subscription: Subscription) => subscription);
-
-    renderDialog();
-    await user.click(await screen.findByRole("button", { name: /Fixture sub/ }));
-    await user.clear(screen.getByLabelText("Remarks"));
-    await user.type(screen.getByLabelText("Remarks"), "Production");
-    await user.type(screen.getByLabelText("User agent"), "Voya/1");
-    await user.type(screen.getByLabelText("More URL"), "https://backup.example.test/sub");
-    await user.type(screen.getByLabelText("Filter"), "us|jp");
-    await user.type(screen.getByLabelText("Convert target"), "singbox");
-    await user.click(screen.getByLabelText("Enabled"));
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() => expect(ipcMocks.saveSubscription).toHaveBeenCalledWith(expect.objectContaining({
-      additionalUrl: "https://backup.example.test/sub",
-      converterTarget: "singbox",
-      enabled: false,
-      filter: "us|jp",
-      id: "sub-1",
-      remarks: "Production",
-      userAgent: "Voya/1",
-    })));
-    expect(await screen.findByText("Subscription saved")).toBeInTheDocument();
-  });
-
-  it("updates one source, updates all sources, and deletes the selection", async () => {
-    const user = userEvent.setup();
-    ipcMocks.listSubscriptions.mockResolvedValue([makeSubscription()]);
-    ipcMocks.updateSubscriptions.mockResolvedValue({ imported: 4, messages: [], removedExisting: 0, skipped: 0, updated: 1 });
-    ipcMocks.deleteSubscriptions.mockResolvedValue(1);
-
-    renderDialog();
-    await user.click(await screen.findByRole("button", { name: /Fixture sub/ }));
-    await user.click(screen.getByRole("button", { name: "Update selected" }));
-    await waitFor(() => expect(ipcMocks.updateSubscriptions).toHaveBeenCalledWith("sub-1", true, null));
-    expect(await screen.findByText("1 updated, 4 nodes imported")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Update all" }));
-    await waitFor(() => expect(ipcMocks.updateSubscriptions).toHaveBeenLastCalledWith(null, true, null));
-
-    await user.click(screen.getByRole("button", { name: "Delete" }));
-    await confirmDeletion(user);
-    await waitFor(() => expect(ipcMocks.deleteSubscriptions).toHaveBeenCalledWith(["sub-1"]));
-    expect(await screen.findByText("Subscription deleted")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
-  });
-
-  // Deleting a source cascades to every profile imported from it, so the command
-  // must not fire on the first click.
-  it("does not delete a source until the confirmation is accepted", async () => {
-    const user = userEvent.setup();
-    ipcMocks.listSubscriptions.mockResolvedValue([makeSubscription()]);
-    ipcMocks.deleteSubscriptions.mockResolvedValue(1);
-
-    renderDialog();
-    await user.click(await screen.findByRole("button", { name: /Fixture sub/ }));
-    await user.click(screen.getByRole("button", { name: "Delete" }));
-
-    const confirmation = await screen.findByRole("alertdialog");
-    expect(confirmation).toHaveTextContent("Fixture sub");
-    expect(ipcMocks.deleteSubscriptions).not.toHaveBeenCalled();
-
-    await user.click(within(confirmation).getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
-    expect(ipcMocks.deleteSubscriptions).not.toHaveBeenCalled();
-  });
-
-  // `save` on a source with an empty id mints a fresh row per call, so a second
-  // click before the first resolves would create a duplicate subscription.
-  it("refuses a second action while one is still in flight", async () => {
-    const user = userEvent.setup();
-    ipcMocks.listSubscriptions.mockResolvedValue([]);
-    let resolveSave: ((value: Subscription) => void) | undefined;
-    ipcMocks.saveSubscription.mockReturnValue(
-      new Promise<Subscription>((resolve) => {
-        resolveSave = resolve;
+  it("edits a single source without refreshing nodes or discarding advanced values", async () => {
+    render(
+      <SubscriptionsDialog
+        open
+        subscription={{ ...source, userAgent: "Voya" }}
+        onOpenChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("Auto-update interval (hours)")).toHaveValue(
+      "2",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(ipc.saveSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "source",
+        userAgent: "Voya",
+        autoUpdateIntervalMinutes: 120,
       }),
     );
-
-    renderDialog();
-    await screen.findByText("No subscriptions");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeDisabled());
-    expect(screen.getByRole("button", { name: "Update all" })).toBeDisabled();
-
-    resolveSave?.(makeSubscription());
-    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
-    expect(ipcMocks.saveSubscription).toHaveBeenCalledTimes(1);
+    expect(ipc.updateSubscriptions).not.toHaveBeenCalled();
   });
-
-  it("gives every input a stable id that does not depend on the translated label", async () => {
-    ipcMocks.listSubscriptions.mockResolvedValue([]);
-
-    renderDialog();
-
-    await screen.findByText("No subscriptions");
-    expect(screen.getByLabelText("Remarks")).toHaveAttribute("id", "subscription-remarks");
-    expect(screen.getByLabelText("User agent")).toHaveAttribute("id", "subscription-user-agent");
-    expect(screen.getByLabelText("Auto-update interval (hours)")).toHaveAttribute(
-      "id",
-      "subscription-auto-update-interval",
-    );
-  });
-
-  // A source whose download failed comes back as a *successful* command with
-  // `skipped` + `messages`, which used to render as a green "0 updated" status.
-  it("flags a failed source instead of reporting an empty success", async () => {
-    const user = userEvent.setup();
-    ipcMocks.listSubscriptions.mockResolvedValue([makeSubscription()]);
-    ipcMocks.updateSubscriptions.mockResolvedValue({
-      imported: 0,
-      messages: ["Fixture sub->request failed https://user:secret@example.test/sub?token=private"],
-      removedExisting: 0,
-      skipped: 1,
-      updated: 0,
+  it("retains the draft on save failure and validates the interval", async () => {
+    ipc.saveSubscription.mockRejectedValue(new Error("save failed"));
+    render(<SubscriptionsDialog open onOpenChange={vi.fn()} />);
+    fill();
+    fireEvent.change(screen.getByLabelText("Auto-update interval (hours)"), {
+      target: { value: "-1" },
     });
-
-    renderDialog();
-    await screen.findByText("Fixture sub");
-    await user.click(screen.getByRole("button", { name: "Update all" }));
-
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("request failed");
-    expect(alert).not.toHaveTextContent("secret");
-    expect(alert).not.toHaveTextContent("private");
-    expect(screen.queryByText("0 updated, 0 nodes imported")).not.toBeInTheDocument();
-  });
-
-  it("keeps per-source reasons visible next to a partial success", async () => {
-    const user = userEvent.setup();
-    ipcMocks.listSubscriptions.mockResolvedValue([makeSubscription()]);
-    ipcMocks.updateSubscriptions.mockResolvedValue({
-      imported: 4,
-      messages: ["Backup->no importable nodes were found"],
-      removedExisting: 0,
-      skipped: 1,
-      updated: 1,
+    expect(
+      screen.getByRole("button", { name: "Add and update" }),
+    ).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Auto-update interval (hours)"), {
+      target: { value: "1" },
     });
-
-    renderDialog();
-    await screen.findByText("Fixture sub");
-    await user.click(screen.getByRole("button", { name: "Update all" }));
-
-    const status = await screen.findByRole("status");
-    expect(status).toHaveTextContent("1 updated, 4 nodes imported");
-    expect(status).toHaveTextContent("no importable nodes were found");
-  });
-
-  it("clears the editor, reports redacted failures, and closes explicitly", async () => {
-    const user = userEvent.setup();
-    const onOpenChange = vi.fn();
-    ipcMocks.listSubscriptions.mockResolvedValue([makeSubscription()]);
-    ipcMocks.updateSubscriptions.mockRejectedValue(
-      new Error("request failed https://user:secret@example.test/sub?token=private"),
+    await userEvent.click(
+      screen.getByRole("button", { name: "Add and update" }),
     );
-
-    renderDialog({ onOpenChange });
-    await user.click(await screen.findByRole("button", { name: /Fixture sub/ }));
-    await user.click(screen.getByRole("button", { name: "New subscription" }));
-    expect(screen.getByLabelText("Remarks")).toHaveValue("");
-    expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
-
-    await user.click(screen.getByRole("button", { name: "Update all" }));
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("request failed");
-    expect(alert).not.toHaveTextContent("secret");
-    expect(alert).not.toHaveTextContent("private");
-
-    await user.click(screen.getAllByRole("button", { name: "Close" })[0]);
-    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(await screen.findByRole("alert")).toHaveTextContent("save failed");
+    expect(screen.getByLabelText("Remarks")).toHaveValue("New source");
   });
 });
-
-async function confirmDeletion(user: ReturnType<typeof userEvent.setup>) {
-  const confirmation = await screen.findByRole("alertdialog");
-  await user.click(within(confirmation).getByRole("button", { name: "Delete" }));
-}
-
-function makeSubscription(): Subscription {
-  return {
-    additionalUrl: "",
-    autoUpdateIntervalMinutes: null,
-    converterTarget: null,
-    enabled: true,
-    filter: null,
-    id: "sub-1",
-    remarks: "Fixture sub",
-    sort: 1,
-    url: "https://example.test/sub",
-    userAgent: "",
-  };
-}

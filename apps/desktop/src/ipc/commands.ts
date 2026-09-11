@@ -44,7 +44,8 @@ import type {
   WindowChromeConfig,
 } from "@/ipc/bindings";
 
-type CommandResult<T> = { status: "ok"; data: T } | { status: "error"; error: AppError };
+type CommandResult<T> =
+  { status: "ok"; data: T } | { status: "error"; error: AppError };
 
 export class IpcCommandError extends Error {
   readonly appError: AppError;
@@ -64,7 +65,9 @@ export async function loadAppSettings(): Promise<AppSettingsV1> {
   return unwrapCommandResult(await commands.loadAppSettings());
 }
 
-export async function saveAppSettings(settings: AppSettingsV1): Promise<AppSettingsV1> {
+export async function saveAppSettings(
+  settings: AppSettingsV1,
+): Promise<AppSettingsV1> {
   return unwrapCommandResult(await commands.saveAppSettings(settings));
 }
 
@@ -82,7 +85,9 @@ export async function fetchCertificate(
   return unwrapCommandResult(await commands.fetchCertificate(request));
 }
 
-export async function calculateCertificateSha256(pem: string): Promise<string[]> {
+export async function calculateCertificateSha256(
+  pem: string,
+): Promise<string[]> {
   return unwrapCommandResult(await commands.calculateCertificateSha256(pem));
 }
 
@@ -122,7 +127,9 @@ export async function loadDnsSettings(): Promise<DnsSettings> {
   return unwrapCommandResult(await commands.loadDnsSettings());
 }
 
-export async function saveDnsSettings(settings: DnsSettings): Promise<DnsSettings> {
+export async function saveDnsSettings(
+  settings: DnsSettings,
+): Promise<DnsSettings> {
   return unwrapCommandResult(await commands.saveDnsSettings(settings));
 }
 
@@ -130,12 +137,12 @@ export async function listProfiles(
   subscriptionId: string | null = null,
   filter: string | null = null,
 ): Promise<ProfileListing> {
-  return unwrapCommandResult(await commands.listProfiles(subscriptionId, filter));
+  return unwrapCommandResult(
+    await commands.listProfiles(subscriptionId, filter),
+  );
 }
 
-export async function saveProfile(
-  profile: Profile,
-): Promise<ProfileListEntry> {
+export async function saveProfile(profile: Profile): Promise<ProfileListEntry> {
   return unwrapCommandResult(await commands.saveProfile(profile));
 }
 
@@ -143,19 +150,29 @@ export async function deleteProfiles(indexIds: string[]): Promise<number> {
   return unwrapCommandResult(await commands.deleteProfiles(indexIds));
 }
 
-export async function exportProfileShareLinks(indexIds: string[]): Promise<ExportProfilesResult> {
+export async function exportProfileShareLinks(
+  indexIds: string[],
+): Promise<ExportProfilesResult> {
   return unwrapCommandResult(await commands.exportProfileShareLinks(indexIds));
 }
 
-export async function exportProfileShareLinksBase64(indexIds: string[]): Promise<ExportProfilesResult> {
-  return unwrapCommandResult(await commands.exportProfileShareLinksBase64(indexIds));
+export async function exportProfileShareLinksBase64(
+  indexIds: string[],
+): Promise<ExportProfilesResult> {
+  return unwrapCommandResult(
+    await commands.exportProfileShareLinksBase64(indexIds),
+  );
 }
 
-export async function exportProfileVoyaBundle(indexIds: string[]): Promise<ExportProfilesResult> {
+export async function exportProfileVoyaBundle(
+  indexIds: string[],
+): Promise<ExportProfilesResult> {
   return unwrapCommandResult(await commands.exportProfileVoyaBundle(indexIds));
 }
 
-export async function setActiveProfile(indexId: string): Promise<ProfileListEntry> {
+export async function setActiveProfile(
+  indexId: string,
+): Promise<ProfileListEntry> {
   return unwrapCommandResult(await commands.setActiveProfile(indexId));
 }
 
@@ -165,14 +182,18 @@ export async function moveProfile(
   action: MoveAction,
   position: number | null = null,
 ): Promise<ProfileListEntry[]> {
-  return unwrapCommandResult(await commands.moveProfile(subscriptionId, indexId, action, position));
+  return unwrapCommandResult(
+    await commands.moveProfile(subscriptionId, indexId, action, position),
+  );
 }
 
 export async function listSubscriptions(): Promise<Subscription[]> {
   return unwrapCommandResult(await commands.listSubscriptions());
 }
 
-export async function saveSubscription(item: Subscription): Promise<Subscription> {
+export async function saveSubscription(
+  item: Subscription,
+): Promise<Subscription> {
   return unwrapCommandResult(await commands.saveSubscription(item));
 }
 
@@ -184,7 +205,9 @@ export async function importProfilesFromText(
   text: string,
   subscriptionId: string | null = null,
 ): Promise<ImportProfilesResult> {
-  return unwrapCommandResult(await commands.importProfilesFromText(text, subscriptionId));
+  return unwrapCommandResult(
+    await commands.importProfilesFromText(text, subscriptionId),
+  );
 }
 
 export async function updateSubscriptions(
@@ -192,10 +215,14 @@ export async function updateSubscriptions(
   preferProxy = true,
   proxyUrl: string | null = null,
 ): Promise<SubscriptionUpdateResult> {
-  return unwrapCommandResult(await commands.updateSubscriptions(subscriptionId, preferProxy, proxyUrl));
+  return unwrapCommandResult(
+    await commands.updateSubscriptions(subscriptionId, preferProxy, proxyUrl),
+  );
 }
 
-export async function listSubscriptionMetadata(): Promise<SubscriptionMetadata[]> {
+export async function listSubscriptionMetadata(): Promise<
+  SubscriptionMetadata[]
+> {
   return unwrapCommandResult(await commands.listSubscriptionMetadata());
 }
 
@@ -207,7 +234,9 @@ export async function setConnectionMode(
   mode: ConnectionMode,
   pacEnabled: boolean | null = null,
 ): Promise<ConnectionModeStatus> {
-  return unwrapCommandResult(await commands.setConnectionMode(mode, pacEnabled));
+  return unwrapCommandResult(
+    await commands.setConnectionMode(mode, pacEnabled),
+  );
 }
 
 export async function listProcessCandidates(): Promise<ProcessCandidate[]> {
@@ -218,7 +247,9 @@ export async function listRoutings(): Promise<Routing_Serialize[]> {
   return unwrapCommandResult(await commands.listRoutings());
 }
 
-export async function saveRouting(item: Routing_Deserialize): Promise<Routing_Serialize> {
+export async function saveRouting(
+  item: Routing_Deserialize,
+): Promise<Routing_Serialize> {
   return unwrapCommandResult(await commands.saveRouting(item));
 }
 
@@ -241,7 +272,9 @@ export async function deleteRoutingRules(
   routingId: string,
   ruleIds: string[],
 ): Promise<Routing_Serialize> {
-  return unwrapCommandResult(await commands.deleteRoutingRules(routingId, ruleIds));
+  return unwrapCommandResult(
+    await commands.deleteRoutingRules(routingId, ruleIds),
+  );
 }
 
 export async function moveRoutingRule(
@@ -250,7 +283,9 @@ export async function moveRoutingRule(
   action: MoveAction,
   position: number | null = null,
 ): Promise<Routing_Serialize> {
-  return unwrapCommandResult(await commands.moveRoutingRule(routingId, ruleId, action, position));
+  return unwrapCommandResult(
+    await commands.moveRoutingRule(routingId, ruleId, action, position),
+  );
 }
 
 export async function proxyListConnections(): Promise<ProxyConnectionsSnapshot> {
@@ -263,7 +298,9 @@ export async function proxyCloseConnection(
   return unwrapCommandResult(await commands.proxyCloseConnection(connectionId));
 }
 
-export async function proxySetTrafficMode(mode: TrafficMode): Promise<TrafficModeResponse> {
+export async function proxySetTrafficMode(
+  mode: TrafficMode,
+): Promise<TrafficModeResponse> {
   return unwrapCommandResult(await commands.proxySetTrafficMode(mode));
 }
 
@@ -275,7 +312,9 @@ export async function proxyStopMonitor(): Promise<ProxyMonitorStatus> {
   return unwrapCommandResult(await commands.proxyStopMonitor());
 }
 
-export async function runSpeedtest(request: SpeedtestRequest): Promise<SpeedtestRunResult> {
+export async function runSpeedtest(
+  request: SpeedtestRequest,
+): Promise<SpeedtestRunResult> {
   return unwrapCommandResult(await commands.runSpeedtest(request));
 }
 
@@ -299,7 +338,9 @@ export async function updateSrsAssets(): Promise<ResourceUpdateFile[]> {
   return unwrapCommandResult(await commands.updateSrsAssets());
 }
 
-export async function installCoreSeed(coreType: CoreType): Promise<CoreSeedInstallResult> {
+export async function installCoreSeed(
+  coreType: CoreType,
+): Promise<CoreSeedInstallResult> {
   return unwrapCommandResult(await commands.installCoreSeed(coreType));
 }
 
@@ -339,12 +380,50 @@ export async function openNetworkSettings(): Promise<void> {
   unwrapCommandResult(await commands.openNetworkSettings());
 }
 
-export async function listNodeGroups(): Promise<NodeGroupsSnapshot> { return unwrapCommandResult(await commands.listNodeGroups()); }
-export async function saveNodeGroup(id: string | null, name: string): Promise<NodeGroup> { return unwrapCommandResult(await commands.saveNodeGroup(id, name)); }
-export async function deleteNodeGroup(id: string): Promise<null> { return unwrapCommandResult(await commands.deleteNodeGroup(id)); }
-export async function moveNodeGroup(id: string, action: MoveAction): Promise<null> { return unwrapCommandResult(await commands.moveNodeGroup(id, action)); }
-export async function assignNodeGroups(assignments: NodeGroupAssignment[]): Promise<null> { return unwrapCommandResult(await commands.assignNodeGroups(assignments)); }
+export async function listNodeGroups(): Promise<NodeGroupsSnapshot> {
+  return unwrapCommandResult(await commands.listNodeGroups());
+}
+export async function saveNodeGroup(
+  id: string | null,
+  name: string,
+): Promise<NodeGroup> {
+  return unwrapCommandResult(await commands.saveNodeGroup(id, name));
+}
+export async function deleteNodeGroup(id: string): Promise<null> {
+  return unwrapCommandResult(await commands.deleteNodeGroup(id));
+}
+export async function moveNodeGroup(
+  id: string,
+  action: MoveAction,
+): Promise<null> {
+  return unwrapCommandResult(await commands.moveNodeGroup(id, action));
+}
+export async function assignNodeGroups(
+  assignments: NodeGroupAssignment[],
+): Promise<null> {
+  return unwrapCommandResult(await commands.assignNodeGroups(assignments));
+}
 
-export async function copyProfiles(indexIds: string[]): Promise<ProfileListEntry[]> { return unwrapCommandResult(await commands.copyProfiles(indexIds)); }
+export async function copyProfiles(
+  indexIds: string[],
+): Promise<ProfileListEntry[]> {
+  return unwrapCommandResult(await commands.copyProfiles(indexIds));
+}
 
-export async function updateNodeGroup(id: string, name: string, assignments: NodeGroupAssignment[]): Promise<NodeGroup> { return unwrapCommandResult(await commands.updateNodeGroup(id, name, assignments)); }
+export async function updateNodeGroup(
+  id: string,
+  name: string,
+  assignments: NodeGroupAssignment[],
+): Promise<NodeGroup> {
+  return unwrapCommandResult(
+    await commands.updateNodeGroup(id, name, assignments),
+  );
+}
+
+export async function getSettingsApplyStatus() {
+  return unwrapCommandResult(await commands.getSettingsApplyStatus());
+}
+
+export async function applyPendingSettings() {
+  return unwrapCommandResult(await commands.applyPendingSettings());
+}

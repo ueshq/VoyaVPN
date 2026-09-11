@@ -67,21 +67,52 @@ type MenuPrimitives = {
   Separator: MenuSeparatorComponent;
 };
 
-const MENUBAR_PRIMITIVES: MenuPrimitives = { Item: MenubarItem, Separator: MenubarSeparator };
-const CONTEXT_MENU_PRIMITIVES: MenuPrimitives = { Item: ContextMenuItem, Separator: ContextMenuSeparator };
+const MENUBAR_PRIMITIVES: MenuPrimitives = {
+  Item: MenubarItem,
+  Separator: MenubarSeparator,
+};
+const CONTEXT_MENU_PRIMITIVES: MenuPrimitives = {
+  Item: ContextMenuItem,
+  Separator: ContextMenuSeparator,
+};
 
 type ExportMenuEntry =
-  | { icon: LucideIcon; kind: ProfileExportKind; labelKey: TranslationKey; mode: "export" | "save" }
+  | {
+      icon: LucideIcon;
+      kind: ProfileExportKind;
+      labelKey: TranslationKey;
+      mode: "export" | "save";
+    }
   | { icon: LucideIcon; labelKey: TranslationKey; mode: "qr" }
   | { mode: "separator" };
 
 const EXPORT_MENU_ENTRIES: readonly ExportMenuEntry[] = [
-  { icon: Link, kind: "shareLinks", labelKey: "panes.profiles.export.shareLinks", mode: "export" },
-  { icon: Share2, kind: "shareBase64", labelKey: "panes.profiles.export.shareBase64", mode: "export" },
-  { icon: Link, kind: "voyaBundle", labelKey: "panes.profiles.export.voyaBundle", mode: "export" },
+  {
+    icon: Link,
+    kind: "shareLinks",
+    labelKey: "panes.profiles.export.shareLinks",
+    mode: "export",
+  },
+  {
+    icon: Share2,
+    kind: "shareBase64",
+    labelKey: "panes.profiles.export.shareBase64",
+    mode: "export",
+  },
+  {
+    icon: Link,
+    kind: "voyaBundle",
+    labelKey: "panes.profiles.export.voyaBundle",
+    mode: "export",
+  },
   { mode: "separator" },
   { icon: QrCode, labelKey: "panes.profiles.export.showQr", mode: "qr" },
-  { icon: Download, kind: "shareLinks", labelKey: "panes.profiles.export.saveShareLinks", mode: "save" },
+  {
+    icon: Download,
+    kind: "shareLinks",
+    labelKey: "panes.profiles.export.saveShareLinks",
+    mode: "save",
+  },
 ];
 
 export function SpeedtestButton({
@@ -108,7 +139,11 @@ export function SpeedtestButton({
       type="button"
       variant="outline"
     >
-      {running ? <Square className="size-4" aria-hidden="true" /> : <Zap className="size-4" aria-hidden="true" />}
+      {running ? (
+        <Square className="size-4" aria-hidden="true" />
+      ) : (
+        <Zap className="size-4" aria-hidden="true" />
+      )}
       {running ? t("panes.profiles.speedtest.stop") : label}
     </Button>
   );
@@ -125,11 +160,22 @@ export function ProfileRowContextMenu({
 }) {
   return (
     <ContextMenu modal={false}>
-      <ContextMenuTrigger asChild onContextMenu={() => controller.selectOnly(item.profile.id)}>
+      <ContextMenuTrigger
+        asChild
+        onContextMenu={() => controller.selectOnly(item.profile.id)}
+      >
         {children}
       </ContextMenuTrigger>
-      <ContextMenuContent aria-label={controller.t("panes.profiles.menu.actionsFor", { name: item.profile.remarks || item.profile.id })}>
-        <ProfileMenuItems controller={controller} item={item} primitives={CONTEXT_ACTION_PRIMITIVES} />
+      <ContextMenuContent
+        aria-label={controller.t("panes.profiles.menu.actionsFor", {
+          name: item.profile.remarks || item.profile.id,
+        })}
+      >
+        <ProfileMenuItems
+          controller={controller}
+          item={item}
+          primitives={CONTEXT_ACTION_PRIMITIVES}
+        />
       </ContextMenuContent>
     </ContextMenu>
   );
@@ -141,81 +187,177 @@ type ActionMenuPrimitives = MenuPrimitives & {
   SubContent: ComponentType<{ children: ReactNode }>;
 };
 const CONTEXT_ACTION_PRIMITIVES: ActionMenuPrimitives = {
-  ...CONTEXT_MENU_PRIMITIVES, Sub: ContextMenuSub, SubTrigger: ContextMenuSubTrigger, SubContent: ContextMenuSubContent,
+  ...CONTEXT_MENU_PRIMITIVES,
+  Sub: ContextMenuSub,
+  SubTrigger: ContextMenuSubTrigger,
+  SubContent: ContextMenuSubContent,
 };
 const MENUBAR_ACTION_PRIMITIVES: ActionMenuPrimitives = {
-  ...MENUBAR_PRIMITIVES, Sub: MenubarSub, SubTrigger: MenubarSubTrigger, SubContent: MenubarSubContent,
+  ...MENUBAR_PRIMITIVES,
+  Sub: MenubarSub,
+  SubTrigger: MenubarSubTrigger,
+  SubContent: MenubarSubContent,
 };
 
-export function ProfileCardMenu({ controller, item }: { controller: ServerTableController; item: ProfileListEntry }) {
-  const label = controller.t("panes.profiles.menu.actionsFor", { name: item.profile.remarks || item.profile.id });
+export function ProfileCardMenu({
+  controller,
+  item,
+}: {
+  controller: ServerTableController;
+  item: ProfileListEntry;
+}) {
+  const label = controller.t("panes.profiles.menu.actionsFor", {
+    name: item.profile.remarks || item.profile.id,
+  });
   return (
     <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
       <MenubarMenu>
         <MenubarTrigger asChild>
-          <Button aria-label={label} onClick={() => controller.selectOnly(item.profile.id)} size="icon" variant="ghost">
+          <Button
+            aria-label={label}
+            onClick={() => controller.selectOnly(item.profile.id)}
+            size="icon"
+            variant="ghost"
+          >
             <MoreHorizontal aria-hidden="true" className="size-4" />
           </Button>
         </MenubarTrigger>
         <MenubarContent align="end" aria-label={label}>
-          <ProfileMenuItems controller={controller} item={item} primitives={MENUBAR_ACTION_PRIMITIVES} />
+          <ProfileMenuItems
+            controller={controller}
+            item={item}
+            primitives={MENUBAR_ACTION_PRIMITIVES}
+          />
         </MenubarContent>
       </MenubarMenu>
     </Menubar>
   );
 }
 
-function ProfileMenuItems({ controller, item, primitives: { Item, Separator, Sub, SubContent, SubTrigger } }: {
+function ProfileMenuItems({
+  controller,
+  item,
+  primitives: { Item, Separator, Sub, SubContent, SubTrigger },
+}: {
   controller: ServerTableController;
   item: ProfileListEntry;
   primitives: ActionMenuPrimitives;
 }) {
-  const { handleExport, handleSpeedtest, requestDelete, runOperation, setDialogState, speedtestRunning, t } = controller;
+  const {
+    handleExport,
+    handleSpeedtest,
+    requestDelete,
+    runOperation,
+    setDialogState,
+    speedtestRunning,
+    t,
+  } = controller;
   const indexId = item.profile.id;
+  const manual = !item.profile.subscriptionId;
   const target: SpeedtestTarget = { scope: "profiles", profileIds: [indexId] };
   return (
     <>
-      <Item onSelect={() => setDialogState({ mode: "edit", profile: item })}>
-        <Pencil className="size-4" aria-hidden="true" />
-        {t("panes.profiles.toolbar.edit")}
-      </Item>
-      <Item onSelect={() => void runOperation(() => copyProfiles([indexId]))}>{t("nodeGroups.copyNode")}</Item>
-      <Sub>
-        <SubTrigger>{t("nodeGroups.moveTo")}</SubTrigger>
-        <SubContent>
-          <Item disabled={controller.nodeGroups.busy} onSelect={() => void controller.nodeGroups.assign([{ profileId: indexId, groupId: null }])}>{t("nodeGroups.unassigned")}</Item>
-          {controller.nodeGroups.snapshot.groups.map((group) => <Item key={group.id} disabled={controller.nodeGroups.busy} onSelect={() => void controller.nodeGroups.assign([{ profileId: indexId, groupId: group.id }])}>{group.name}</Item>)}
-        </SubContent>
-      </Sub>
-      <Separator />
-      <Item disabled={speedtestRunning} onSelect={() => void handleSpeedtest(target)}>
+      {manual ? (
+        <>
+          <Item
+            onSelect={() => setDialogState({ mode: "edit", profile: item })}
+          >
+            <Pencil className="size-4" aria-hidden="true" />
+            {t("panes.profiles.toolbar.edit")}
+          </Item>
+          <Item
+            onSelect={() => void runOperation(() => copyProfiles([indexId]))}
+          >
+            {t("nodeGroups.copyNode")}
+          </Item>
+          <Sub>
+            <SubTrigger>{t("nodeGroups.moveTo")}</SubTrigger>
+            <SubContent>
+              <Item
+                disabled={controller.nodeGroups.busy}
+                onSelect={() =>
+                  void controller.nodeGroups.assign([
+                    { profileId: indexId, groupId: null },
+                  ])
+                }
+              >
+                {t("nodeGroups.unassigned")}
+              </Item>
+              {controller.nodeGroups.snapshot.groups.map((group) => (
+                <Item
+                  key={group.id}
+                  disabled={controller.nodeGroups.busy}
+                  onSelect={() =>
+                    void controller.nodeGroups.assign([
+                      { profileId: indexId, groupId: group.id },
+                    ])
+                  }
+                >
+                  {group.name}
+                </Item>
+              ))}
+            </SubContent>
+          </Sub>
+          <Separator />
+        </>
+      ) : null}
+      <Item
+        disabled={speedtestRunning}
+        onSelect={() => void handleSpeedtest(target)}
+      >
         <Zap className="size-4" aria-hidden="true" />
         {t("panes.profiles.menu.speedtest")}
       </Item>
-      <Sub>
-        <SubTrigger>
-          <ArrowDown className="size-4" aria-hidden="true" />
-          {t("panes.profiles.menu.move")}
-        </SubTrigger>
-        <SubContent>
-          <Item onSelect={() => void runOperation(() => moveProfile(null, indexId, MOVE_ACTIONS.Top, null))}>
-            <ChevronsUp className="size-4" aria-hidden="true" />
-            {t("panes.profiles.menu.moveTop")}
-          </Item>
-          <Item onSelect={() => void runOperation(() => moveProfile(null, indexId, MOVE_ACTIONS.Up, null))}>
-            <ArrowUp className="size-4" aria-hidden="true" />
-            {t("panes.profiles.menu.moveUp")}
-          </Item>
-          <Item onSelect={() => void runOperation(() => moveProfile(null, indexId, MOVE_ACTIONS.Down, null))}>
+      {manual ? (
+        <Sub>
+          <SubTrigger>
             <ArrowDown className="size-4" aria-hidden="true" />
-            {t("panes.profiles.menu.moveDown")}
-          </Item>
-          <Item onSelect={() => void runOperation(() => moveProfile(null, indexId, MOVE_ACTIONS.Bottom, null))}>
-            <ChevronsDown className="size-4" aria-hidden="true" />
-            {t("panes.profiles.menu.moveBottom")}
-          </Item>
-        </SubContent>
-      </Sub>
+            {t("panes.profiles.menu.move")}
+          </SubTrigger>
+          <SubContent>
+            <Item
+              onSelect={() =>
+                void runOperation(() =>
+                  moveProfile(null, indexId, MOVE_ACTIONS.Top, null),
+                )
+              }
+            >
+              <ChevronsUp className="size-4" aria-hidden="true" />
+              {t("panes.profiles.menu.moveTop")}
+            </Item>
+            <Item
+              onSelect={() =>
+                void runOperation(() =>
+                  moveProfile(null, indexId, MOVE_ACTIONS.Up, null),
+                )
+              }
+            >
+              <ArrowUp className="size-4" aria-hidden="true" />
+              {t("panes.profiles.menu.moveUp")}
+            </Item>
+            <Item
+              onSelect={() =>
+                void runOperation(() =>
+                  moveProfile(null, indexId, MOVE_ACTIONS.Down, null),
+                )
+              }
+            >
+              <ArrowDown className="size-4" aria-hidden="true" />
+              {t("panes.profiles.menu.moveDown")}
+            </Item>
+            <Item
+              onSelect={() =>
+                void runOperation(() =>
+                  moveProfile(null, indexId, MOVE_ACTIONS.Bottom, null),
+                )
+              }
+            >
+              <ChevronsDown className="size-4" aria-hidden="true" />
+              {t("panes.profiles.menu.moveBottom")}
+            </Item>
+          </SubContent>
+        </Sub>
+      ) : null}
       <Sub>
         <SubTrigger>
           <Share2 className="size-4" aria-hidden="true" />
@@ -231,11 +373,15 @@ function ProfileMenuItems({ controller, item, primitives: { Item, Separator, Sub
           />
         </SubContent>
       </Sub>
-      <Separator />
-      <Item onSelect={() => requestDelete([indexId])} variant="destructive">
-        <Trash2 className="size-4" aria-hidden="true" />
-        {t("panes.profiles.toolbar.delete")}
-      </Item>
+      {manual ? (
+        <>
+          <Separator />
+          <Item onSelect={() => requestDelete([indexId])} variant="destructive">
+            <Trash2 className="size-4" aria-hidden="true" />
+            {t("panes.profiles.toolbar.delete")}
+          </Item>
+        </>
+      ) : null}
     </>
   );
 }

@@ -9,6 +9,8 @@ use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 pub enum NodeGroupError {
     #[error(transparent)]
     Database(#[from] DbError),
+    #[error(transparent)]
+    Profile(#[from] crate::profiles::ProfileManagerError),
     #[error("group name must not be empty")]
     EmptyName,
     #[error("a group with this name already exists")]
@@ -130,6 +132,14 @@ impl<'db> NodeGroupManager<'db> {
     /// Invoked inside one UnitOfWork. Validate the whole delta before writing;
     /// unrelated membership changes are never replaced by a stale dialog.
     pub async fn assign(&self, assignments: &[NodeGroupAssignment]) -> Result<()> {
+        crate::profiles::ProfileManager::from_session(self.database)
+            .require_manual(
+                &assignments
+                    .iter()
+                    .map(|item| item.profile_id.clone())
+                    .collect::<Vec<_>>(),
+            )
+            .await?;
         let groups = self.list().await?.groups;
         let mut seen = HashSet::new();
         for assignment in assignments {

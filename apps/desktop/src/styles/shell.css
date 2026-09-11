@@ -12,9 +12,14 @@
   position: relative;
   min-width: 0;
   min-height: 0;
-  background: var(--home-canvas, var(--background));
+  background: var(--background);
 }
-.shell-panel { height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
+.shell-panel {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
 .shell-titlebar {
   position: absolute;
   z-index: 20;
@@ -25,14 +30,21 @@
   background: inherit;
   user-select: none;
 }
-.app-shell:not([data-window-chrome="none"]):not([data-active-tab="home"]) .shell-panel {
+.app-shell:not([data-window-chrome="none"]):not([data-active-tab="home"])
+  .shell-panel {
   padding-top: 40px;
 }
-.app-shell[data-window-chrome="macos"] .app-sidebar { --sidebar-collapsed-width: 96px; }
-.app-shell[data-window-chrome="macos"] .app-sidebar[data-collapsed="true"] .sidebar-toolbar {
+.app-shell[data-window-chrome="macos"] .app-sidebar {
+  --sidebar-collapsed-width: 96px;
+}
+.app-shell[data-window-chrome="macos"]
+  .app-sidebar[data-collapsed="true"]
+  .sidebar-toolbar {
   height: 112px;
   padding-top: 56px;
 }
 @media (max-height: 700px) {
-  .app-shell:not([data-window-chrome="none"]) .home-content { padding-top: 56px; }
+  .app-shell:not([data-window-chrome="none"]) .home-content {
+    padding-top: 56px;
+  }
 }

@@ -1,5 +1,9 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import type { ProxyConnectionsSnapshot, RuntimeStatusResponse, TransientStreamEvent } from "../src/ipc/bindings";
+import type {
+  ProxyConnectionsSnapshot,
+  RuntimeStatusResponse,
+  TransientStreamEvent,
+} from "../src/ipc/bindings";
 import { installTauriSmokeMock } from "./fixtures/tauri-mock";
 
 const english = {
@@ -79,7 +83,10 @@ function snapshot(): ProxyConnectionsSnapshot {
   };
 }
 async function emit(page: Page, event: TransientStreamEvent) {
-  await page.evaluate((event) => window.__VOYA_SMOKE__.emit("transient-stream-event", event), event);
+  await page.evaluate(
+    (event) => window.__VOYA_SMOKE__.emit("transient-stream-event", event),
+    event,
+  );
 }
 async function seedConnections(page: Page, connections = snapshot()) {
   await page.evaluate((connections) => {
@@ -88,13 +95,28 @@ async function seedConnections(page: Page, connections = snapshot()) {
       runtime: RuntimeStatusResponse;
     };
     state.connections = connections;
-    state.runtime = { ...state.runtime, state: "connected", mainPid: 42, runningCoreType: "singBox" };
-    window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "coreState", payload: state.runtime });
-    window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "proxyConnections", payload: connections });
+    state.runtime = {
+      ...state.runtime,
+      state: "connected",
+      mainPid: 42,
+      runningCoreType: "singBox",
+    };
+    window.__VOYA_SMOKE__.emit("transient-stream-event", {
+      kind: "coreState",
+      payload: state.runtime,
+    });
+    window.__VOYA_SMOKE__.emit("transient-stream-event", {
+      kind: "proxyConnections",
+      payload: connections,
+    });
   }, connections);
 }
 async function noHorizontalScroll(locator: Locator) {
-  await expect.poll(() => locator.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await expect
+    .poll(() =>
+      locator.evaluate((element) => element.scrollWidth <= element.clientWidth),
+    )
+    .toBe(true);
 }
 
 for (const viewport of [
@@ -103,53 +125,88 @@ for (const viewport of [
 ]) {
   for (const theme of ["Light", "Dark"] as const) {
     for (const locale of ["en", "zh-Hans"] as const) {
-      test(`network activity ${viewport.width} ${theme} ${locale}`, async ({ page }, testInfo) => {
+      test(`network activity ${viewport.width} ${theme} ${locale}`, async ({
+        page,
+      }, testInfo) => {
         const labels = locale === "en" ? english : chinese;
         await page.setViewportSize(viewport);
         await installTauriSmokeMock(page);
         await page.goto("/");
         await page.getByRole("tab", { name: "Settings", exact: true }).click();
         await page.getByRole("button", { name: theme, exact: true }).click();
-        if (locale === "zh-Hans") await page.getByRole("button", { name: "简", exact: true }).click();
+        if (locale === "zh-Hans")
+          await page
+            .getByRole("button", { name: "简体中文", exact: true })
+            .click();
         await seedConnections(page);
         await page.getByRole("tab", { name: labels.page, exact: true }).click();
-        const region = page.getByRole("region", { name: labels.page, exact: true });
+        const region = page.getByRole("region", {
+          name: labels.page,
+          exact: true,
+        });
         const table = page.getByTestId("connections-viewport");
         await expect(page.getByTestId("connection-row")).toHaveCount(2);
         for (const name of [labels.target, labels.application, labels.traffic])
-          await expect(table.getByRole("button", { name, exact: true })).toBeVisible();
+          await expect(
+            table.getByRole("button", { name, exact: true }),
+          ).toBeVisible();
         await noHorizontalScroll(region);
         await noHorizontalScroll(table);
-        await page.screenshot({ path: testInfo.outputPath("connections.png"), animations: "disabled" });
+        await page.screenshot({
+          path: testInfo.outputPath("connections.png"),
+          animations: "disabled",
+        });
         const row = page.getByTestId("connection-row").first();
         await row.focus();
         await page.keyboard.press("Enter");
         const dialog = page.getByRole("dialog", { name: labels.details });
-        await expect(dialog.getByRole("heading", { name: labels.details })).toBeFocused();
+        await expect(
+          dialog.getByRole("heading", { name: labels.details }),
+        ).toBeFocused();
         await expect(dialog.getByText(longPath)).toBeAttached();
         expect((await dialog.boundingBox())!.width).toBeLessThanOrEqual(560);
         await noHorizontalScroll(dialog);
         await noHorizontalScroll(dialog.locator("dl"));
-        await dialog.getByText("Tokyo", { exact: false }).scrollIntoViewIfNeeded();
-        await page.screenshot({ path: testInfo.outputPath("connection-details.png"), animations: "disabled" });
+        await dialog
+          .getByText("Tokyo", { exact: false })
+          .scrollIntoViewIfNeeded();
+        await page.screenshot({
+          path: testInfo.outputPath("connection-details.png"),
+          animations: "disabled",
+        });
         await page.keyboard.press("Escape");
         await expect(row).toBeFocused();
-        await region.getByRole("tab", { name: labels.logs, exact: true }).click();
+        await region
+          .getByRole("tab", { name: labels.logs, exact: true })
+          .click();
         await emit(page, {
           kind: "logLine",
-          payload: { id: 1, level: "info", body: { source: "core", line: "core started" } },
+          payload: {
+            id: 1,
+            level: "info",
+            body: { source: "core", line: "core started" },
+          },
         });
         await emit(page, {
           kind: "logLine",
-          payload: { id: 2, level: "error", body: { source: "core", line: longMessage } },
+          payload: {
+            id: 2,
+            level: "error",
+            body: { source: "core", line: longMessage },
+          },
         });
         await expect(page.getByTestId("log-line")).toHaveCount(2);
         await region.getByRole("combobox").click();
-        await page.getByRole("option", { name: labels.issues, exact: true }).click();
+        await page
+          .getByRole("option", { name: labels.issues, exact: true })
+          .click();
         await expect(page.getByTestId("log-line")).toHaveCount(1);
         await noHorizontalScroll(region);
         await noHorizontalScroll(page.getByTestId("logs-viewport"));
-        await page.screenshot({ path: testInfo.outputPath("logs.png"), animations: "disabled" });
+        await page.screenshot({
+          path: testInfo.outputPath("logs.png"),
+          animations: "disabled",
+        });
         const logRow = page.getByTestId("log-line").getByRole("button");
         await logRow.focus();
         await page.keyboard.press("Enter");
@@ -158,63 +215,108 @@ for (const viewport of [
         await expect(content).toHaveText(longMessage);
         await noHorizontalScroll(content);
         await noHorizontalScroll(logDialog);
-        await expect.poll(() => content.evaluate((element) => {
-          element.scrollTop = element.scrollHeight;
-          return element.scrollHeight - element.clientHeight - element.scrollTop;
-        })).toBe(0);
-        await page.screenshot({ path: testInfo.outputPath("log-details.png"), animations: "disabled" });
+        await expect
+          .poll(() =>
+            content.evaluate((element) => {
+              element.scrollTop = element.scrollHeight;
+              return (
+                element.scrollHeight - element.clientHeight - element.scrollTop
+              );
+            }),
+          )
+          .toBe(0);
+        await page.screenshot({
+          path: testInfo.outputPath("log-details.png"),
+          animations: "disabled",
+        });
         await page.keyboard.press("Escape");
         await expect(logRow).toBeFocused();
-        await region.getByRole("menuitem", { name: labels.more, exact: true }).click();
-        await page.getByRole("menuitem", { name: labels.clear, exact: true }).click();
+        await region
+          .getByRole("menuitem", { name: labels.more, exact: true })
+          .click();
+        await page
+          .getByRole("menuitem", { name: labels.clear, exact: true })
+          .click();
         await expect(page.getByTestId("log-line")).toHaveCount(0);
       });
     }
   }
 }
 
-test("disconnected state, in-place connection, ended details and explicit stale data", async ({ page }, testInfo) => {
+test("disconnected state, in-place connection, ended details and explicit stale data", async ({
+  page,
+}, testInfo) => {
   await installTauriSmokeMock(page);
   await page.goto("/");
   await page.getByRole("tab", { name: english.page, exact: true }).click();
   const region = page.getByRole("region", { name: english.page, exact: true });
-  await expect(region.getByText("Connect to view network activity")).toBeVisible();
+  await expect(
+    region.getByText("Connect to view network activity"),
+  ).toBeVisible();
   await expect(region.getByRole("searchbox")).toHaveCount(0);
-  await expect(region.getByRole("button", { name: "Go to Home" })).toBeVisible();
-  const calls = await page.evaluate(() => (window.__VOYA_SMOKE__.state as { calls: { command: string }[] }).calls);
-  expect(calls.some((call) => ["proxy_list_connections", "proxy_start_monitor"].includes(call.command))).toBe(false);
-  await page.screenshot({ path: testInfo.outputPath("disconnected.png"), animations: "disabled" });
+  await expect(
+    region.getByRole("button", { name: "Go to Home" }),
+  ).toBeVisible();
+  const calls = await page.evaluate(
+    () =>
+      (window.__VOYA_SMOKE__.state as { calls: { command: string }[] }).calls,
+  );
+  expect(
+    calls.some((call) =>
+      ["proxy_list_connections", "proxy_start_monitor"].includes(call.command),
+    ),
+  ).toBe(false);
+  await page.screenshot({
+    path: testInfo.outputPath("disconnected.png"),
+    animations: "disabled",
+  });
   await seedConnections(page);
   await expect(page.getByTestId("connection-row")).toHaveCount(2);
   await expect
     .poll(() =>
       page.evaluate(() =>
-        (window.__VOYA_SMOKE__.state as { calls: { command: string }[] }).calls.some(
-          (call) => call.command === "proxy_start_monitor",
-        ),
+        (
+          window.__VOYA_SMOKE__.state as { calls: { command: string }[] }
+        ).calls.some((call) => call.command === "proxy_start_monitor"),
       ),
     )
     .toBe(true);
   await page.getByTestId("connection-row").first().click();
-  await seedConnections(page, { ...snapshot(), connections: [snapshot().connections[1]!] });
+  await seedConnections(page, {
+    ...snapshot(),
+    connections: [snapshot().connections[1]!],
+  });
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("Ended", { exact: true })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: english.disconnect })).toBeDisabled();
+  await expect(
+    dialog.getByRole("button", { name: english.disconnect }),
+  ).toBeDisabled();
   await expect(dialog.getByText(longPath)).toBeAttached();
   await page.keyboard.press("Escape");
   await emit(page, {
     kind: "proxyMonitorStatus",
-    payload: { running: false, state: "failed", stale: true, message: "diagnostic transport failure" },
+    payload: {
+      running: false,
+      state: "failed",
+      stale: true,
+      message: "diagnostic transport failure",
+    },
   });
-  await expect(region.getByText("Unable to update connections right now")).toHaveCount(1);
+  await expect(
+    region.getByText("Unable to update connections right now"),
+  ).toHaveCount(1);
   await region.getByRole("button", { name: "Refresh list" }).click();
   await expect(region.getByText("Showing previous data")).toBeVisible();
   await region.getByRole("menuitem", { name: "More", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Disconnect all connections" }).click();
+  await page
+    .getByRole("menuitem", { name: "Disconnect all connections" })
+    .click();
   await expect(region.getByText("No active connections")).toBeVisible();
 });
 
-test("logs follow new entries at the 500-line cap and stop following while reading older entries", async ({ page }) => {
+test("logs follow new entries at the 500-line cap and stop following while reading older entries", async ({
+  page,
+}) => {
   await installTauriSmokeMock(page);
   await page.goto("/");
   await page.getByRole("tab", { name: english.page, exact: true }).click();
@@ -225,7 +327,11 @@ test("logs follow new entries at the 500-line cap and stop following while readi
         for (let id = from; id < from + count; id++)
           window.__VOYA_SMOKE__.emit("transient-stream-event", {
             kind: "logLine",
-            payload: { id, level: "info", body: { source: "core", line: `log-line-${id}` } },
+            payload: {
+              id,
+              level: "info",
+              body: { source: "core", line: `log-line-${id}` },
+            },
           });
       },
       { from, count },
@@ -240,10 +346,14 @@ test("logs follow new entries at the 500-line cap and stop following while readi
   await viewport.evaluate((element) => {
     element.scrollTop = 400;
   });
-  await expect(page.getByRole("button", { name: "Back to latest" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Back to latest" }),
+  ).toBeVisible();
   await pushLines(510, 10);
   await expect(page.getByText("log-line-519", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Back to latest" }).click();
   await expect(page.getByText("log-line-519", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Back to latest" })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Back to latest" }),
+  ).toHaveCount(0);
 });

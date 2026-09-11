@@ -37,7 +37,8 @@ export const NOTICE_KEYS: Record<NoticeCode["code"], TranslationKey> = {
   dnsSavedRestartFailed: "notices.dnsSavedRestartFailed",
   nativeTunStopped: "notices.nativeTunStopped",
   profileRefreshFailed: "notices.profileRefreshFailed",
-  proxyModeSavedRuntimeUpdateFailed: "notices.proxyModeSavedRuntimeUpdateFailed",
+  proxyModeSavedRuntimeUpdateFailed:
+    "notices.proxyModeSavedRuntimeUpdateFailed",
   proxyViewRefreshFailed: "notices.proxyViewRefreshFailed",
   routingDeletedRestartFailed: "notices.routingDeletedRestartFailed",
   routingRefreshFailed: "notices.routingRefreshFailed",
@@ -48,7 +49,8 @@ export const NOTICE_KEYS: Record<NoticeCode["code"], TranslationKey> = {
   routingSelectedRestartFailed: "notices.routingSelectedRestartFailed",
   settingsRefreshFailed: "notices.settingsRefreshFailed",
   settingsSavedRuntimeUpdateFailed: "notices.settingsSavedRuntimeUpdateFailed",
-  settingsSavedSystemProxyUpdateFailed: "notices.settingsSavedSystemProxyUpdateFailed",
+  settingsSavedSystemProxyUpdateFailed:
+    "notices.settingsSavedSystemProxyUpdateFailed",
   subscriptionAutoUpdateFailed: "notices.subscriptionAutoUpdateFailed",
   subscriptionRefreshFailed: "notices.subscriptionRefreshFailed",
   systemProxyRestoreFailed: "notices.systemProxyRestoreFailed",
@@ -93,6 +95,7 @@ export const CORE_FLOW_REASON_KEYS: Record<CoreFlowReason, TranslationKey> = {
 };
 
 export const VALIDATION_KEYS: Record<ValidationCode["code"], TranslationKey> = {
+  subscriptionReadOnly: "validation.subscriptionReadOnly",
   dnsAddressEmpty: "validation.dnsAddressEmpty",
   dnsAddressPort: "validation.dnsAddressPort",
   dnsExpectedIps: "validation.expectedIps",
@@ -122,26 +125,30 @@ export const VALIDATION_KEYS: Record<ValidationCode["code"], TranslationKey> = {
   untranslated: "validation.invalid",
 };
 
-export const VALIDATION_SCOPE_KEYS: Record<ValidationScope["kind"], TranslationKey> = {
+export const VALIDATION_SCOPE_KEYS: Record<
+  ValidationScope["kind"],
+  TranslationKey
+> = {
   routingRuleOutbound: "validation.scope.routingRuleOutbound",
 };
 
-export const SPEEDTEST_OUTCOME_KEYS: Record<SpeedtestOutcome, TranslationKey> = {
-  cancelled: "speedtest.outcome.cancelled",
-  completed: "speedtest.outcome.completed",
-  coreUnavailable: "speedtest.outcome.coreUnavailable",
-  failed: "speedtest.outcome.failed",
-  invalidProfile: "speedtest.outcome.invalidProfile",
-  noAvailablePort: "speedtest.outcome.noAvailablePort",
-  proxyConnectFailed: "speedtest.outcome.proxyConnectFailed",
-  proxyConnectionClosed: "speedtest.outcome.proxyConnectionClosed",
-  proxyConnectionRefused: "speedtest.outcome.proxyConnectionRefused",
-  skipped: "speedtest.outcome.skipped",
-  testing: "speedtest.outcome.testing",
-  timedOut: "speedtest.outcome.timedOut",
-  unknown: "speedtest.outcome.unknown",
-  waiting: "speedtest.outcome.waiting",
-};
+export const SPEEDTEST_OUTCOME_KEYS: Record<SpeedtestOutcome, TranslationKey> =
+  {
+    cancelled: "speedtest.outcome.cancelled",
+    completed: "speedtest.outcome.completed",
+    coreUnavailable: "speedtest.outcome.coreUnavailable",
+    failed: "speedtest.outcome.failed",
+    invalidProfile: "speedtest.outcome.invalidProfile",
+    noAvailablePort: "speedtest.outcome.noAvailablePort",
+    proxyConnectFailed: "speedtest.outcome.proxyConnectFailed",
+    proxyConnectionClosed: "speedtest.outcome.proxyConnectionClosed",
+    proxyConnectionRefused: "speedtest.outcome.proxyConnectionRefused",
+    skipped: "speedtest.outcome.skipped",
+    testing: "speedtest.outcome.testing",
+    timedOut: "speedtest.outcome.timedOut",
+    unknown: "speedtest.outcome.unknown",
+    waiting: "speedtest.outcome.waiting",
+  };
 
 export function noticeText(t: TranslationFunction, code: NoticeCode) {
   return t(NOTICE_KEYS[code.code], code);
@@ -158,7 +165,10 @@ export function logLineText(t: TranslationFunction, body: LogLineBody) {
     return body.line;
   }
 
-  const reason = "reason" in body.code ? t(CORE_FLOW_REASON_KEYS[body.code.reason]) : undefined;
+  const reason =
+    "reason" in body.code
+      ? t(CORE_FLOW_REASON_KEYS[body.code.reason])
+      : undefined;
   const text = t(LOG_KEYS[body.code.code], { ...body.code, reason });
 
   return body.detail ? `${text}: ${body.detail}` : text;
@@ -192,9 +202,14 @@ export function validationFieldErrors(
   t: TranslationFunction,
   issues: readonly ValidationIssue[],
 ): Record<string, string> {
-  return Object.fromEntries(issues.map((issue) => [issue.field, validationText(t, issue)]));
+  return Object.fromEntries(
+    issues.map((issue) => [issue.field, validationText(t, issue)]),
+  );
 }
 
-export function speedtestOutcomeText(t: TranslationFunction, outcome: SpeedtestOutcome) {
+export function speedtestOutcomeText(
+  t: TranslationFunction,
+  outcome: SpeedtestOutcome,
+) {
   return t(SPEEDTEST_OUTCOME_KEYS[outcome]);
 }

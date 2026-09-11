@@ -9,6 +9,7 @@ import { Checkbox } from "@voya/ui/components/checkbox";
 import {
   Dialog,
   DialogDescription,
+  DialogBody,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -52,7 +53,10 @@ const MODE_OPTIONS: PerAppProxyMode[] = ["off", "include", "exclude"];
  * fed by an OS process picker plus manual entry. sing-box process rules only
  * match TUN traffic, so a hint appears when the current mode is not VPN.
  */
-export function PerAppProxyDialog({ onOpenChange, open }: PerAppProxyDialogProps) {
+export function PerAppProxyDialog({
+  onOpenChange,
+  open,
+}: PerAppProxyDialogProps) {
   const { t } = useI18n();
   const [error, setError] = useState<string | null>(null);
   const [manualEntry, setManualEntry] = useState("");
@@ -80,7 +84,8 @@ export function PerAppProxyDialog({ onOpenChange, open }: PerAppProxyDialogProps
     queryKey: queryKeys.connectionMode,
   });
 
-  const activeRouting = routingsQuery.data?.find((routing) => routing.isActive) ?? null;
+  const activeRouting =
+    routingsQuery.data?.find((routing) => routing.isActive) ?? null;
 
   // Seed the form from the active routing once per open cycle. Adjusting state
   // during render (React's documented pattern) instead of in an effect avoids
@@ -169,7 +174,8 @@ export function PerAppProxyDialog({ onOpenChange, open }: PerAppProxyDialogProps
     }
   }
 
-  const vpnHintProminent = modeStatusQuery.data?.processRulesEffective === false;
+  const vpnHintProminent =
+    modeStatusQuery.data?.processRulesEffective === false;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -183,167 +189,210 @@ export function PerAppProxyDialog({ onOpenChange, open }: PerAppProxyDialogProps
             {t("panes.routing.perAppDescription")}
           </DialogDescription>
         </DialogHeader>
-
-        {activeRouting == null && !routingsQuery.isLoading ? (
-          <Alert>
-            <AlertDescription>{t("panes.routing.perAppNoActiveRouting")}</AlertDescription>
-          </Alert>
-        ) : (
-          <div className="grid gap-4">
-            <div
-              aria-label={t("panes.routing.perAppTitle")}
-              className="flex h-8 w-fit items-center rounded-lg bg-muted p-0.5"
-              role="group"
-            >
-              {MODE_OPTIONS.map((option) => (
-                <Button
-                  key={option}
-                  aria-pressed={mode === option}
-                  className={cn(
-                    "h-7 rounded-md px-3 text-sm leading-none shadow-none focus-visible:relative focus-visible:z-10",
-                    mode === option
-                      ? "bg-background text-foreground hover:bg-background hover:text-foreground"
-                      : "text-subtlest hover:bg-background/60 hover:text-foreground",
-                  )}
-                  onClick={() => setMode(option)}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  {modeLabel(option, t)}
-                </Button>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground">{modeDescription(mode, t)}</p>
-
-            <Alert className={vpnHintProminent ? undefined : "border-transparent p-0 [&>svg]:hidden"}>
-              {vpnHintProminent ? <Info aria-hidden="true" className="size-4" /> : null}
-              <AlertDescription className={vpnHintProminent ? undefined : "text-xs text-subtlest"}>
-                {t("panes.routing.perAppTunOnlyHint")}
+        <DialogBody>
+          {activeRouting == null && !routingsQuery.isLoading ? (
+            <Alert>
+              <AlertDescription>
+                {t("panes.routing.perAppNoActiveRouting")}
               </AlertDescription>
             </Alert>
-
-            {mode !== "off" ? (
-              <>
-                {selected.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {selected.map((process) => (
-                      <Badge className="gap-1 pe-1" key={process.toLowerCase()} variant="secondary">
-                        <span className="max-w-48 truncate">{process}</span>
-                        <Button
-                          aria-label={t("panes.routing.perAppRemove", { process })}
-                          className="size-4 rounded-full"
-                          onClick={() => toggleProcess(process)}
-                          size="icon"
-                          type="button"
-                          variant="ghost"
-                        >
-                          <X aria-hidden="true" className="size-3" />
-                        </Button>
-                      </Badge>
-                    ))}
-                  </div>
-                ) : null}
-
-                <div className="grid gap-2">
-                  <Label className="text-xs text-muted-foreground" htmlFor="per-app-search">
-                    {t("panes.routing.perAppRunningApps")}
-                  </Label>
-                  <Input
-                    className="bg-card"
-                    id="per-app-search"
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder={t("panes.routing.perAppPickerSearch")}
-                    value={search}
-                  />
-                  <ScrollArea className="h-56 rounded-md border bg-card">
-                    {candidatesQuery.isLoading ? (
-                      <p className="p-3 text-xs text-muted-foreground" role="status">
-                        {t("panes.routing.perAppLoading")}
-                      </p>
-                    ) : filteredCandidates.length === 0 ? (
-                      <EmptyState
-                        description={t("panes.routing.perAppEmptyDescription")}
-                        icon={AppWindow}
-                        title={t("panes.routing.perAppEmpty")}
-                      />
-                    ) : (
-                      <div className="p-1">
-                        {filteredCandidates.map((candidate) => {
-                          const checked = selectedKeys.has(candidate.processName.toLowerCase());
-                          const checkboxId = `per-app-${candidate.processName.toLowerCase()}`;
-
-                          return (
-                            <Label
-                              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
-                              htmlFor={checkboxId}
-                              key={candidate.processName.toLowerCase()}
-                            >
-                              <Checkbox
-                                checked={checked}
-                                id={checkboxId}
-                                onCheckedChange={() => toggleProcess(candidate.processName)}
-                              />
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate font-medium">
-                                  {candidate.displayName}
-                                </span>
-                                {candidate.processName !== candidate.displayName ||
-                                candidate.executablePath ? (
-                                  <span className="block truncate text-xs text-muted-foreground">
-                                    {candidate.executablePath ?? candidate.processName}
-                                  </span>
-                                ) : null}
-                              </span>
-                            </Label>
-                          );
-                        })}
-                      </div>
+          ) : (
+            <div className="grid gap-4">
+              <div
+                aria-label={t("panes.routing.perAppTitle")}
+                className="flex h-8 w-fit items-center rounded-lg bg-muted p-0.5"
+                role="group"
+              >
+                {MODE_OPTIONS.map((option) => (
+                  <Button
+                    key={option}
+                    aria-pressed={mode === option}
+                    className={cn(
+                      "h-7 rounded-md px-3 text-sm leading-none shadow-none focus-visible:relative focus-visible:z-10",
+                      mode === option
+                        ? "bg-background text-foreground hover:bg-background hover:text-foreground"
+                        : "text-subtlest hover:bg-background/60 hover:text-foreground",
                     )}
-                  </ScrollArea>
-                </div>
+                    onClick={() => setMode(option)}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    {modeLabel(option, t)}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {modeDescription(mode, t)}
+              </p>
 
-                <div className="flex items-end gap-2">
-                  <div className="grid min-w-0 flex-1 gap-1">
-                    <Label className="text-xs text-muted-foreground" htmlFor="per-app-manual">
-                      {t("panes.routing.perAppManualAdd")}
+              <Alert
+                className={
+                  vpnHintProminent
+                    ? undefined
+                    : "border-transparent p-0 [&>svg]:hidden"
+                }
+              >
+                {vpnHintProminent ? (
+                  <Info aria-hidden="true" className="size-4" />
+                ) : null}
+                <AlertDescription
+                  className={
+                    vpnHintProminent ? undefined : "text-xs text-subtlest"
+                  }
+                >
+                  {t("panes.routing.perAppTunOnlyHint")}
+                </AlertDescription>
+              </Alert>
+
+              {mode !== "off" ? (
+                <>
+                  {selected.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {selected.map((process) => (
+                        <Badge
+                          className="gap-1 pe-1"
+                          key={process.toLowerCase()}
+                          variant="secondary"
+                        >
+                          <span className="max-w-48 truncate">{process}</span>
+                          <Button
+                            aria-label={t("panes.routing.perAppRemove", {
+                              process,
+                            })}
+                            className="size-4 rounded-full"
+                            onClick={() => toggleProcess(process)}
+                            size="icon"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <X aria-hidden="true" className="size-3" />
+                          </Button>
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="grid gap-2">
+                    <Label
+                      className="text-xs text-muted-foreground"
+                      htmlFor="per-app-search"
+                    >
+                      {t("panes.routing.perAppRunningApps")}
                     </Label>
                     <Input
                       className="bg-card"
-                      id="per-app-manual"
-                      onChange={(event) => setManualEntry(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          addManualEntry();
-                        }
-                      }}
-                      value={manualEntry}
+                      id="per-app-search"
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder={t("panes.routing.perAppPickerSearch")}
+                      value={search}
                     />
+                    <ScrollArea className="h-56 rounded-md border bg-card">
+                      {candidatesQuery.isLoading ? (
+                        <p
+                          className="p-3 text-xs text-muted-foreground"
+                          role="status"
+                        >
+                          {t("panes.routing.perAppLoading")}
+                        </p>
+                      ) : filteredCandidates.length === 0 ? (
+                        <EmptyState
+                          description={t(
+                            "panes.routing.perAppEmptyDescription",
+                          )}
+                          icon={AppWindow}
+                          title={t("panes.routing.perAppEmpty")}
+                        />
+                      ) : (
+                        <div className="p-1">
+                          {filteredCandidates.map((candidate) => {
+                            const checked = selectedKeys.has(
+                              candidate.processName.toLowerCase(),
+                            );
+                            const checkboxId = `per-app-${candidate.processName.toLowerCase()}`;
+
+                            return (
+                              <Label
+                                className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+                                htmlFor={checkboxId}
+                                key={candidate.processName.toLowerCase()}
+                              >
+                                <Checkbox
+                                  checked={checked}
+                                  id={checkboxId}
+                                  onCheckedChange={() =>
+                                    toggleProcess(candidate.processName)
+                                  }
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate font-medium">
+                                    {candidate.displayName}
+                                  </span>
+                                  {candidate.processName !==
+                                    candidate.displayName ||
+                                  candidate.executablePath ? (
+                                    <span className="block truncate text-xs text-muted-foreground">
+                                      {candidate.executablePath ??
+                                        candidate.processName}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </Label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </ScrollArea>
                   </div>
-                  <Button
-                    disabled={manualEntry.trim().length === 0}
-                    onClick={addManualEntry}
-                    type="button"
-                    variant="outline"
-                  >
-                    <Plus aria-hidden="true" className="size-4" />
-                    {t("actions.apply")}
-                  </Button>
-                </div>
-              </>
-            ) : null}
 
-            {error ? (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            ) : null}
-          </div>
-        )}
+                  <div className="flex items-end gap-2">
+                    <div className="grid min-w-0 flex-1 gap-1">
+                      <Label
+                        className="text-xs text-muted-foreground"
+                        htmlFor="per-app-manual"
+                      >
+                        {t("panes.routing.perAppManualAdd")}
+                      </Label>
+                      <Input
+                        className="bg-card"
+                        id="per-app-manual"
+                        onChange={(event) => setManualEntry(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            addManualEntry();
+                          }
+                        }}
+                        value={manualEntry}
+                      />
+                    </div>
+                    <Button
+                      disabled={manualEntry.trim().length === 0}
+                      onClick={addManualEntry}
+                      type="button"
+                      variant="outline"
+                    >
+                      <Plus aria-hidden="true" className="size-4" />
+                      {t("actions.apply")}
+                    </Button>
+                  </div>
+                </>
+              ) : null}
 
+              {error ? (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              ) : null}
+            </div>
+          )}
+        </DialogBody>
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} type="button" variant="outline">
+          <Button
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
+          >
             {t("actions.cancel")}
           </Button>
           <Button

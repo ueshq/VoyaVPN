@@ -71,7 +71,7 @@ function MenubarItem({
     <MenubarPrimitive.Item
       data-slot="menubar-item"
       data-variant={variant}
-      className={cn(itemClasses, "data-[variant=destructive]:text-destructive", inset && "ps-8", className)}
+      className={cn(itemClasses, "data-[variant=destructive]:text-danger", inset && "ps-8", className)}
       {...props}
     />
   );

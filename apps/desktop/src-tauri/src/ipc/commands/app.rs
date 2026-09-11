@@ -43,8 +43,6 @@ pub async fn save_app_settings<R: tauri::Runtime>(
     .await
     .map_err(AppError::from)?;
 
-    apply_settings_runtime_action(&app, &state, &outcome).await;
-
     // The tray is a native menu built from `ui_item.current_language`, so it is
     // the one surface a language change cannot reach on its own: the webview
     // re-renders, the tray keeps whatever words it was built with.
@@ -66,35 +64,32 @@ pub async fn save_app_settings<R: tauri::Runtime>(
     Ok(outcome.settings)
 }
 
-/// Bring the running core in line with the settings that were just committed.
-///
-/// Everything here happens after the commit, so a failure is a warning notice
-/// rather than a command error: the settings *are* saved.
-async fn apply_settings_runtime_action<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    state: &AppState,
-    outcome: &SettingsSaveOutcome,
-) {
-    match outcome.runtime_action {
-        SettingsRuntimeAction::Restart => {
-            restart_after_config_change(app, state, &outcome.config, ConfigChange::APP_SETTINGS)
-                .await;
-        }
-        SettingsRuntimeAction::ReapplySystemProxy => {
-            if let Err(error) = core_flow(app, state)
-                .reapply_system_proxy_if_connected(&outcome.config)
-                .await
-            {
-                report_post_commit_error(
-                    app,
-                    NoticeCode::SettingsSavedRuntimeUpdateFailed,
-                    &format!("{:?}", AppError::from(error)),
-                    AppNoticeLevel::Warning,
-                );
-            }
-        }
-        SettingsRuntimeAction::None => {}
-    }
+#[tauri::command]
+#[specta::specta]
+pub async fn get_settings_apply_status<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+) -> Result<voya_contracts::SettingsApplyStatus, AppError> {
+    core_flow(&app, &state)
+        .settings_apply_status(&current_config(&state))
+        .await
+        .map_err(AppError::from)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn apply_pending_settings<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+) -> Result<voya_contracts::SettingsApplyStatus, AppError> {
+    let captured = current_config(&state);
+    let flow = core_flow(&app, &state);
+    let result = flow.apply_pending_settings(&captured).await;
+    emit_settings_bundle_invalidation(&app, "settings-applied");
+    result.map_err(AppError::from)?;
+    flow.settings_apply_status(&current_config(&state))
+        .await
+        .map_err(AppError::from)
 }
 
 #[derive(Clone)]

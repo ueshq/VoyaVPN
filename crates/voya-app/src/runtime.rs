@@ -64,6 +64,7 @@ pub struct RuntimeManager<'runtime> {
     /// is about to launch the core against.
     operation_lock: Arc<Mutex<()>>,
     target_os: TargetOs,
+    settings_application: crate::settings_apply::SettingsApplication,
 }
 
 impl<'runtime> RuntimeManager<'runtime> {
@@ -86,6 +87,7 @@ impl<'runtime> RuntimeManager<'runtime> {
             supervisor,
             operation_lock: Arc::new(Mutex::new(())),
             target_os,
+            settings_application: crate::settings_apply::SettingsApplication::default(),
         }
     }
 
@@ -105,6 +107,20 @@ impl<'runtime> RuntimeManager<'runtime> {
     pub fn with_operation_lock(mut self, operation_lock: Arc<Mutex<()>>) -> Self {
         self.operation_lock = operation_lock;
         self
+    }
+
+    #[must_use]
+    pub fn with_settings_application(
+        mut self,
+        application: crate::settings_apply::SettingsApplication,
+    ) -> Self {
+        self.settings_application = application;
+        self
+    }
+
+    #[must_use]
+    pub fn settings_application(&self) -> &crate::settings_apply::SettingsApplication {
+        &self.settings_application
     }
 
     pub async fn connect(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
@@ -235,7 +251,10 @@ impl<'runtime> RuntimeManager<'runtime> {
         };
 
         match self.supervisor.start(request).await {
-            Ok(snapshot) => Ok(snapshot),
+            Ok(snapshot) => {
+                self.settings_application.core_applied(config);
+                Ok(snapshot)
+            }
             Err(error) => {
                 let _ = filesystem::remove_file_if_exists(&main_config_path);
                 let _ = cleanup_config_file(&self.paths, PRE_CONFIG_FILE_NAME);
@@ -395,6 +414,8 @@ fn cleanup_config_file(paths: &AppPaths, file_name: &str) -> Result<(), RuntimeE
 
 #[derive(Debug, Error)]
 pub enum RuntimeError {
+    #[error("settings could not be applied: {0}")]
+    SettingsApply(String),
     #[error("active node id is empty")]
     MissingActiveProfileId,
     #[error("active node {0} was not found")]

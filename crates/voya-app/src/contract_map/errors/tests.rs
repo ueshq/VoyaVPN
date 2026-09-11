@@ -652,7 +652,8 @@ mod guards {
             ProfileManagerError::Database(_)
             | ProfileManagerError::ProfileNotFound(_)
             | ProfileManagerError::MissingProfileId
-            | ProfileManagerError::InvalidMove { .. } => (),
+            | ProfileManagerError::InvalidMove { .. }
+            | ProfileManagerError::SubscriptionReadOnly(_) => (),
         }
     }
 
@@ -741,7 +742,8 @@ mod guards {
             | RuntimeError::CoreInfo(_)
             | RuntimeError::Database(_)
             | RuntimeError::Path(_)
-            | RuntimeError::Supervisor(_) => (),
+            | RuntimeError::Supervisor(_)
+            | RuntimeError::SettingsApply(_) => (),
         }
     }
 

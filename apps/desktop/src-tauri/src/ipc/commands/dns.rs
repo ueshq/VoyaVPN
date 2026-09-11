@@ -32,7 +32,6 @@ pub async fn save_dns_settings<R: tauri::Runtime>(
     })
     .await?;
     emit_dns_invalidation(&app, "dns-settings-saved");
-    restart_after_config_change(&app, &state, &saved.config, ConfigChange::DNS).await;
 
     Ok(dns_to_contract(saved.value))
 }

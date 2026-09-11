@@ -1,4 +1,11 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,40 +13,91 @@ import { changeLocale } from "@voya/i18n";
 import type { AppSettingsV1 } from "@/ipc/bindings";
 import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
-import { deferred, resetSettingsBackend, serverSettings, settingsIpc } from "./settings-backend.test-fixture";
+import {
+  deferred,
+  resetSettingsBackend,
+  serverSettings,
+  settingsIpc,
+} from "./settings-backend.test-fixture";
 import { SettingsScreen } from "./settings-screen";
 import { settingsSaveQueue } from "./settings-save-queue";
 
-vi.mock("@/ipc", async () => (await import("./settings-backend.test-fixture")).settingsIpc);
-vi.mock("@/ipc/updater", () => ({ check: vi.fn(), getVersion: vi.fn(async () => "0.1.0") }));
+vi.mock(
+  "@/ipc",
+  async () => (await import("./settings-backend.test-fixture")).settingsIpc,
+);
+vi.mock("@/ipc/updater", () => ({
+  check: vi.fn(),
+  getVersion: vi.fn(async () => "0.1.0"),
+}));
 vi.mock("@/ipc/process", () => ({ relaunch: vi.fn() }));
 beforeEach(async () => {
-  resetSettingsBackend(); await changeLocale("en");
-  useShellStore.setState({ activeTab: "settings" });
+  resetSettingsBackend();
+  await changeLocale("en");
+  useShellStore.setState({ activeTab: "settings", settingsTab: "general" });
   useToastStore.setState({ toasts: [] });
 });
 afterEach(cleanup);
 function mount() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   function Host() {
     const tab = useShellStore((s) => s.activeTab);
-    return <><button onClick={() => useShellStore.getState().setActiveTab("profiles")}>Leave</button><button onClick={() => useShellStore.getState().setActiveTab("settings")}>Return</button>{tab === "settings" ? <SettingsScreen /> : <p>Other page</p>}</>;
+    return (
+      <>
+        <button
+          onClick={() => useShellStore.getState().setActiveTab("profiles")}
+        >
+          Leave
+        </button>
+        <button
+          onClick={() => useShellStore.getState().setActiveTab("settings")}
+        >
+          Return
+        </button>
+        {tab === "settings" ? <SettingsScreen /> : <p>Other page</p>}
+      </>
+    );
   }
-  return { ...render(<QueryClientProvider client={client}><Host /></QueryClientProvider>), settle: () => act(() => settingsSaveQueue(client).settled()) };
+  return {
+    ...render(
+      <QueryClientProvider client={client}>
+        <Host />
+      </QueryClientProvider>,
+    ),
+    settle: () => act(() => settingsSaveQueue(client).settled()),
+  };
 }
 
 describe("redesigned automatic settings", () => {
   it("uses six compact categories, accessible groups, and no manual save actions", async () => {
     mount();
     await screen.findByLabelText("Autostart");
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["General", "Core", "Network", "DNS", "Tests", "Updates"]);
-    expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Appearance" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Save all|Discard changes|Reload/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "General",
+      "Core",
+      "Network",
+      "DNS",
+      "Tests",
+      "Updates",
+    ]);
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Settings" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Appearance" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Save all|Discard changes|Reload/ }),
+    ).not.toBeInTheDocument();
     expect(settingsIpc.loadDnsSettings).not.toHaveBeenCalled();
     const user = userEvent.setup();
-    for (const name of ["Core", "Network", "DNS", "Tests", "Updates"]) await user.click(screen.getByRole("tab", { name }));
-    expect(await screen.findByRole("heading", { name: "Rule resources" })).toBeVisible();
+    for (const name of ["Core", "Network", "DNS", "Tests", "Updates"])
+      await user.click(screen.getByRole("tab", { name }));
+    expect(
+      await screen.findByRole("heading", { name: "Rule resources" }),
+    ).toBeVisible();
   });
 
   it("submits switches immediately and text on Enter without resubmitting on blur", async () => {
@@ -64,7 +122,8 @@ describe("redesigned automatic settings", () => {
     const { settle } = mount();
     await user.click(screen.getByRole("tab", { name: "Core" }));
     const input = await screen.findByLabelText("User-Agent");
-    await user.clear(input); await user.type(input, "new-agent");
+    await user.clear(input);
+    await user.type(input, "new-agent");
     await user.click(screen.getByRole("tab", { name: "Network" }));
     await settle();
     await user.click(screen.getByRole("tab", { name: "Core" }));
@@ -76,8 +135,11 @@ describe("redesigned automatic settings", () => {
     const { settle } = mount();
     await userEvent.click(screen.getByRole("tab", { name: "Core" }));
     const input = await screen.findByLabelText("User-Agent");
-    settingsIpc.saveAppSettings.mockRejectedValueOnce(new Error("write failed"));
-    fireEvent.change(input, { target: { value: "retry-agent" } }); fireEvent.blur(input);
+    settingsIpc.saveAppSettings.mockRejectedValueOnce(
+      new Error("write failed"),
+    );
+    fireEvent.change(input, { target: { value: "retry-agent" } });
+    fireEvent.blur(input);
     await settle();
     expect(input).toHaveValue("retry-agent");
     expect(screen.getByRole("alert")).toHaveTextContent("write failed");
@@ -99,24 +161,33 @@ describe("redesigned automatic settings", () => {
     expect(serverSettings().core.defaultUserAgent).toBe("on-leave");
   });
 
-  it("allows leaving during a save, reports failure, and drops the rejected draft", async () => {
+  it("allows leaving during a save, reports failure, and retains the rejected draft for retry", async () => {
     const { settle } = mount();
     await userEvent.click(screen.getByRole("tab", { name: "Core" }));
     const input = await screen.findByLabelText("User-Agent");
     const pending = deferred<AppSettingsV1>();
     settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
-    fireEvent.change(input, { target: { value: "failed-agent" } }); fireEvent.blur(input);
-    await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1));
+    fireEvent.change(input, { target: { value: "failed-agent" } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1),
+    );
     expect(input).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Leave" }));
     expect(screen.getByText("Other page")).toBeVisible();
     pending.reject(new Error("write failed after leaving"));
     await settle();
-    expect(useToastStore.getState().toasts.at(-1)?.description).toBe("write failed after leaving");
+    expect(useToastStore.getState().toasts.at(-1)?.description).toBe(
+      "write failed after leaving",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Return" }));
     await userEvent.click(screen.getByRole("tab", { name: "Core" }));
-    expect(await screen.findByLabelText("User-Agent")).toHaveValue("agent-before-edit");
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(await screen.findByLabelText("User-Agent")).toHaveValue(
+      "failed-agent",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "write failed after leaving",
+    );
   });
 
   it("saves DNS without adding a manual action or dropping its edit on exit", async () => {

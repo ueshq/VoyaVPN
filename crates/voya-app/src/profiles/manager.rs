@@ -25,6 +25,8 @@ pub enum ProfileManagerError {
     ProfileNotFound(String),
     #[error("node id is required")]
     MissingProfileId,
+    #[error("subscription {0} owns this node; update the subscription instead")]
+    SubscriptionReadOnly(String),
     #[error("cannot move node {index_id}: {reason}")]
     InvalidMove { index_id: String, reason: String },
 }
@@ -101,6 +103,20 @@ impl<'db> ProfileManager<'db> {
     pub async fn save_profile(
         &self,
         config: &mut AppConfig,
+        profile: ProfileItem,
+    ) -> Result<ProfileListItem> {
+        self.require_manual(std::slice::from_ref(&profile.index_id))
+            .await?;
+        if let Some(owner) = &profile.subscription_id {
+            return Err(ProfileManagerError::SubscriptionReadOnly(owner.clone()));
+        }
+        self.save_imported_profile(config, profile).await
+    }
+
+    /// Only the subscription importer may write source-owned node parameters.
+    pub(crate) async fn save_imported_profile(
+        &self,
+        config: &mut AppConfig,
         mut profile: ProfileItem,
     ) -> Result<ProfileListItem> {
         let is_new = if profile.index_id.trim().is_empty() {
@@ -162,6 +178,7 @@ impl<'db> ProfileManager<'db> {
         config: &mut AppConfig,
         index_ids: &[String],
     ) -> Result<u64> {
+        self.require_manual(index_ids).await?;
         let deleted = self.database.profiles().delete_many(index_ids).await?;
         self.ensure_active_profile(config).await?;
 
@@ -173,6 +190,7 @@ impl<'db> ProfileManager<'db> {
         config: &mut AppConfig,
         index_ids: &[String],
     ) -> Result<Vec<ProfileListItem>> {
+        self.require_manual(index_ids).await?;
         let mut copied = Vec::new();
         let mut next_sort = self.profile_ex().get_max_sort().await? + DEFAULT_PROFILE_SORT_STEP;
 
@@ -260,6 +278,7 @@ impl<'db> ProfileManager<'db> {
         action: MoveAction,
         position: Option<i32>,
     ) -> Result<Vec<ProfileListItem>> {
+        self.require_manual(&[index_id.to_string()]).await?;
         let items = self
             .database
             .profiles()
@@ -283,7 +302,8 @@ impl<'db> ProfileManager<'db> {
             .iter()
             .enumerate()
             .filter(|(_, (p, _))| {
-                memberships.get(&p.index_id) == group
+                p.subscription_id.is_none()
+                    && memberships.get(&p.index_id) == group
                     && subscription_id.is_none_or(|id| p.subscription_id.as_deref() == Some(id))
             })
             .collect::<Vec<_>>();
@@ -343,11 +363,24 @@ impl<'db> ProfileManager<'db> {
             .filter_map(|(offset, (profile, profile_ex))| {
                 let sort =
                     (i32::try_from(offset).unwrap_or(i32::MAX - 1) + 1) * DEFAULT_PROFILE_SORT_STEP;
-                (profile_ex.sort != sort).then_some((profile.index_id.as_str(), sort))
+                (profile.subscription_id.is_none() && profile_ex.sort != sort)
+                    .then_some((profile.index_id.as_str(), sort))
             })
             .collect::<Vec<_>>();
 
         self.profile_ex().set_sort_many(&reordered).await
+    }
+
+    /// Validate a complete user mutation before its first write.
+    pub(crate) async fn require_manual(&self, ids: &[String]) -> Result<()> {
+        for id in ids {
+            if let Some(profile) = self.database.profiles().get(id).await? {
+                if let Some(owner) = profile.subscription_id {
+                    return Err(ProfileManagerError::SubscriptionReadOnly(owner));
+                }
+            }
+        }
+        Ok(())
     }
 
     pub async fn ensure_active_profile(&self, config: &mut AppConfig) -> Result<bool> {
@@ -719,11 +752,9 @@ mod tests {
         assert_eq!(copied[0].server_stat.total_down, 200);
     }
 
-    /// Reordering inside a subscription must renumber only that subscription's
-    /// rows, and `MoveAction::Position` must land the row at the requested
-    /// index rather than anywhere the gap-based numbering happens to allow.
+    /// Persisted ownership is authoritative, including mixed batch requests.
     #[tokio::test]
-    async fn scoped_move_reorders_only_the_selected_subscription() {
+    async fn subscription_nodes_reject_all_manual_mutations_before_batch_writes() {
         let database = Database::connect_in_memory()
             .await
             .expect("profile manager test operation should succeed");
@@ -749,30 +780,38 @@ mod tests {
             let mut profile = sample_profile(index_id, remarks, port);
             profile.subscription_id = Some("sub-scope".to_string());
             manager
-                .save_profile(&mut config, profile)
+                .save_imported_profile(&mut config, profile)
                 .await
                 .expect("profile manager test operation should succeed");
         }
 
-        let moved = manager
-            .move_profile(
-                &config,
-                Some("sub-scope"),
-                "s3",
-                MoveAction::Position,
-                Some(0),
-            )
-            .await
-            .expect("profile manager test operation should succeed");
-        assert_eq!(
-            moved
-                .iter()
-                .map(|item| item.profile.remarks.as_str())
-                .collect::<Vec<_>>(),
-            vec!["S3", "S1", "S2"],
-            "a scoped move must list only the subscription's own profiles"
-        );
-
+        let mixed = vec!["outsider".to_string(), "s1".to_string()];
+        assert!(matches!(
+            manager.delete_profiles(&mut config, &mixed).await,
+            Err(ProfileManagerError::SubscriptionReadOnly(_))
+        ));
+        assert!(matches!(
+            manager.copy_profiles(&mut config, &mixed).await,
+            Err(ProfileManagerError::SubscriptionReadOnly(_))
+        ));
+        assert!(matches!(
+            manager
+                .move_profile(
+                    &config,
+                    Some("sub-scope"),
+                    "s3",
+                    MoveAction::Position,
+                    Some(0)
+                )
+                .await,
+            Err(ProfileManagerError::SubscriptionReadOnly(_))
+        ));
+        let forged_manual = sample_profile("s1", "Override", 443);
+        assert!(matches!(
+            manager.save_profile(&mut config, forged_manual).await,
+            Err(ProfileManagerError::SubscriptionReadOnly(_))
+        ));
+        assert_eq!(database.profiles().list().await.expect("profiles").len(), 4);
         let outsider_sort = manager
             .profile_ex()
             .ensure(&outsider.profile.index_id)

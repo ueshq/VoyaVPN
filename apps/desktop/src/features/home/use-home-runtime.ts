@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -13,16 +12,21 @@ import {
   useRuntimeEventStore,
 } from "@/ipc";
 import type { TunStatus } from "@/ipc/bindings";
-import { refreshRuntimeStatus, runtimeStatusErrorKeys } from "@/ipc/runtime-status";
+import {
+  refreshRuntimeStatus,
+  runtimeStatusErrorKeys,
+} from "@/ipc/runtime-status";
 import { beginRuntimeRead } from "@/ipc/runtime-state-version";
 import { profilesQueryKey } from "@/ipc/query-keys";
 import { getErrorMessage } from "@voya/utils/error";
-import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
+import {
+  runtimeActionPending,
+  useRuntimeActionStore,
+} from "@/stores/runtime-action-store";
 import { useModalStore } from "@/stores/modal-store";
 import { useToastStore } from "@/stores/toast-store";
 
 import { missingCorePayload, runWithElevation } from "./runtime-action";
-import { useProfileActivation } from "./use-profile-activation";
 
 type RuntimeAction = "connect" | "disconnect" | "restart";
 export type Translation = ReturnType<typeof useI18n>["t"];
@@ -41,15 +45,7 @@ export function useHomeRuntime(t: Translation) {
   const pushToast = useToastStore((state) => state.pushToast);
   const pendingAction = useRuntimeActionStore((state) => state.pendingAction);
   const modePending = useRuntimeActionStore((state) => state.modePending);
-  // Local node selection (blue highlight). Seeded from the persisted active
-  // profile; single-clicks move it without touching the backend.
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  // Tracks the active profile the selection was last seeded from, so re-seeding
-  // only fires when the active profile actually changes.
-  const [seededFor, setSeededFor] = useState<string | null>(null);
-  const { activateProfile, busy: activationBusy, switchingId } = useProfileActivation(t, {
-    onSelect: setSelectedId,
-  });
+  const switchingId = useRuntimeActionStore((state) => state.switchingId);
   // Shares the ProfilesScreen query cache (same key) so resolving the active
   // node's name here costs no extra fetch and stays in sync after a switch.
   const profilesQuery = useQuery({
@@ -60,13 +56,14 @@ export function useHomeRuntime(t: Translation) {
   const state = coreState?.state ?? "disconnected";
   const connected = state === "connected";
   const inProgress = state === "connecting" || state === "disconnecting";
-  const busy = inProgress || pendingAction !== null || switchingId !== null || modePending;
+  const busy =
+    inProgress || pendingAction !== null || switchingId !== null || modePending;
   // TUN and traffic mode both update the connection configuration, so their
   // commands share one guard with connect/disconnect and profile switching.
   const modeBusy = busy;
 
-  const activeProfile = profilesQuery.data?.entries.find((item) => item.isActive) ?? null;
-  const activeProfileId = activeProfile?.profile.id ?? null;
+  const activeProfile =
+    profilesQuery.data?.entries.find((item) => item.isActive) ?? null;
   // The green "live" dot follows the node that is actually running, which differs
   // from the persisted-active node only while disconnected.
   const runningId = connected ? (coreState?.activeProfileId ?? null) : null;
@@ -74,31 +71,11 @@ export function useHomeRuntime(t: Translation) {
   const tunProviderSummary = tun ? tunProviderLabel(tun, t) : null;
 
   const runningEntry = runningId
-    ? (profilesQuery.data?.entries.find((item) => item.profile.id === runningId) ?? null)
+    ? (profilesQuery.data?.entries.find(
+        (item) => item.profile.id === runningId,
+      ) ?? null)
     : null;
-  const nodeEntry = connected
-    ? runningEntry
-    : profilesQuery.data?.entries.find((item) => item.profile.id === selectedId) ?? activeProfile;
-
-  // Seed the local selection from the persisted active profile and re-sync it
-  // whenever the active profile changes (e.g. after a switch). Adjusting state
-  // during render (React's documented pattern) instead of in an effect avoids a
-  // cascading-render lint and an extra paint. A single-click only moves
-  // `selectedId`, not the active profile, so the selection is never clobbered.
-  if (activeProfileId && activeProfileId !== seededFor) {
-    setSeededFor(activeProfileId);
-    setSelectedId(activeProfileId);
-  } else if (
-    profilesQuery.data
-    && selectedId
-    && !profilesQuery.data.entries.some((item) => item.profile.id === selectedId)
-  ) {
-    // The selected node disappeared — deleted on the Profiles screen, or pruned
-    // by a subscription update. Fall back to the persisted active profile
-    // (`null` when there is none) so Connect never targets a dead id.
-    setSeededFor(activeProfileId);
-    setSelectedId(activeProfileId);
-  }
+  const nodeEntry = connected ? runningEntry : activeProfile;
 
   async function runRuntimeAction(action: RuntimeAction) {
     if (busy || runtimeActionPending()) {
@@ -134,7 +111,9 @@ export function useHomeRuntime(t: Translation) {
     }
   }
 
-  async function refreshStatus(channels?: Parameters<typeof refreshRuntimeStatus>[0]) {
+  async function refreshStatus(
+    channels?: Parameters<typeof refreshRuntimeStatus>[0],
+  ) {
     const failures = await refreshRuntimeStatus(channels);
     for (const { channel, error } of failures) {
       pushToast({
@@ -151,13 +130,6 @@ export function useHomeRuntime(t: Translation) {
 
       return;
     }
-    // Connect to the locally-selected node. When it differs from the persisted
-    // active profile, switch first so connect uses it; otherwise connect directly.
-    if (selectedId && selectedId !== activeProfileId) {
-      void activateProfile(selectedId);
-
-      return;
-    }
     void runRuntimeAction("connect");
   }
 
@@ -170,7 +142,9 @@ export function useHomeRuntime(t: Translation) {
     const current = await tunStatus();
     if (current.backend !== "process" && !current.nativeComponentReady) {
       pushToast({
-        description: tunProviderErrorDescription(current, t) ?? t("status.nativeTunnelMissing"),
+        description:
+          tunProviderErrorDescription(current, t) ??
+          t("status.nativeTunnelMissing"),
         severity: "error",
         title: t("status.tunEnableFailed"),
       });
@@ -230,16 +204,9 @@ export function useHomeRuntime(t: Translation) {
     void runRuntimeAction("restart");
   }
 
-  function selectProfile(indexId: string) {
-    setSelectedId(indexId);
-  }
-
   return {
     activeTunBackend: coreState?.activeTunBackend ?? null,
-    activateProfile,
-    activationBusy,
     nodeEntry,
-    activeSubscriptionId: activeProfile?.profile.subscriptionId ?? null,
     busy,
     changeTunEnabled,
     connected,
@@ -255,15 +222,18 @@ export function useHomeRuntime(t: Translation) {
     profilesError: profilesQuery.error,
     restart,
     runningId,
-    selectProfile,
-    selectedId,
     state,
     switchingId,
     tunProviderSummary,
     tunIssue: tun?.providerPathMismatch
       ? tunProviderPathMismatchDescription(tun, t)
-      : tun && (["error", "permissionRequired", "missingComponent"].includes(tun.providerState) || tun.lastProviderError)
-        ? tunProviderSummary : null,
+      : tun &&
+          (["error", "permissionRequired", "missingComponent"].includes(
+            tun.providerState,
+          ) ||
+            tun.lastProviderError)
+        ? tunProviderSummary
+        : null,
   };
 }
 
@@ -290,7 +260,10 @@ function tunProviderLabel(tun: TunStatus, t: Translation) {
 }
 
 function tunProviderErrorDescription(tun: TunStatus, t: Translation) {
-  if (tun.backend === "macosPacketTunnel" && tun.providerState === "missingComponent") {
+  if (
+    tun.backend === "macosPacketTunnel" &&
+    tun.providerState === "missingComponent"
+  ) {
     return t("status.macosTunnelMissing");
   }
 
@@ -318,7 +291,10 @@ function tunBackendLabel(backend: TunStatus["backend"], t: Translation) {
   }
 }
 
-function tunProviderStateLabel(state: TunStatus["providerState"], t: Translation) {
+function tunProviderStateLabel(
+  state: TunStatus["providerState"],
+  t: Translation,
+) {
   switch (state) {
     case "running":
       return t("status.tunProviderRunning");

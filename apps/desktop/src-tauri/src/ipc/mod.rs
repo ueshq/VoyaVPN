@@ -8,6 +8,8 @@ fn ipc_commands() -> Commands<tauri::Wry> {
     collect_commands![
         commands::load_ui_preferences,
         commands::load_app_settings,
+        commands::get_settings_apply_status::<tauri::Wry>,
+        commands::apply_pending_settings::<tauri::Wry>,
         commands::save_app_settings::<tauri::Wry>,
         commands::generate_qr_code,
         commands::scan_screen_qr,

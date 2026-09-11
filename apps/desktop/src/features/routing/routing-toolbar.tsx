@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useShellStore } from "@/stores/shell-store";
 import { AppWindow, Pencil, Play, Plus, Trash2 } from "lucide-react";
 
 import { PageHeader } from "@/components/app-shell/page-section";
@@ -9,9 +9,15 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { PerAppProxyDialog } from "./per-app-proxy-dialog";
 import type { RoutingScreenController } from "./use-routing-screen";
 
-export function RoutingToolbar({ controller }: { controller: RoutingScreenController }) {
+export function RoutingToolbar({
+  controller,
+}: {
+  controller: RoutingScreenController;
+}) {
   const { t } = useI18n();
-  const [perAppOpen, setPerAppOpen] = useState(false);
+  const perAppOpen = useShellStore((state) => state.routingPerAppRequested);
+  const setPerAppOpen = (open: boolean) =>
+    useShellStore.setState({ routingPerAppRequested: open });
   const {
     activateSelectedRouting,
     requestDeleteRouting,
@@ -22,15 +28,25 @@ export function RoutingToolbar({ controller }: { controller: RoutingScreenContro
 
   return (
     <PageHeader>
-      <Badge variant="outline">{t("panes.routing.profileCount", { count: routings.length })}</Badge>
+      <Badge variant="outline">
+        {t("panes.routing.profileCount", { count: routings.length })}
+      </Badge>
 
-      <Button className="ms-auto" onClick={() => setRoutingDialog({ mode: "create" })} size="sm" type="button">
+      <Button
+        className="ms-auto"
+        onClick={() => setRoutingDialog({ mode: "create" })}
+        size="sm"
+        type="button"
+      >
         <Plus className="size-4" aria-hidden="true" />
         {t("panes.routing.profile")}
       </Button>
       <Button
         disabled={!selectedRouting}
-        onClick={() => selectedRouting && setRoutingDialog({ mode: "edit", routing: selectedRouting })}
+        onClick={() =>
+          selectedRouting &&
+          setRoutingDialog({ mode: "edit", routing: selectedRouting })
+        }
         size="sm"
         type="button"
         variant="outline"
@@ -58,12 +74,19 @@ export function RoutingToolbar({ controller }: { controller: RoutingScreenContro
         <Trash2 className="size-4" aria-hidden="true" />
         {t("actions.delete")}
       </Button>
-      <Button onClick={() => setPerAppOpen(true)} size="sm" type="button" variant="outline">
+      <Button
+        onClick={() => setPerAppOpen(true)}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
         <AppWindow className="size-4" aria-hidden="true" />
         {t("panes.routing.perAppTitle")}
       </Button>
 
-      {perAppOpen ? <PerAppProxyDialog onOpenChange={setPerAppOpen} open={perAppOpen} /> : null}
+      {perAppOpen ? (
+        <PerAppProxyDialog onOpenChange={setPerAppOpen} open={perAppOpen} />
+      ) : null}
     </PageHeader>
   );
 }

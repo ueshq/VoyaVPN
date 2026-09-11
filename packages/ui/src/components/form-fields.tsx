@@ -28,7 +28,7 @@ export function FieldLayout({ children, className, description, error, group = f
       </div> : null}
       <div className="grid min-w-0 gap-1.5">
         {children}
-        {error ? <span className="text-xs text-destructive" id={`${id}-error`}>{error}</span> : null}
+        {error ? <span className="text-xs text-danger" id={`${id}-error`}>{error}</span> : null}
       </div>
     </div>
   );
@@ -121,7 +121,7 @@ export function CheckboxField({ checked, className, description, disabled, error
       <div className="grid min-w-0 gap-1">
         <Label className={cn("text-sm leading-5", disabled ? "cursor-not-allowed" : "cursor-pointer")} htmlFor={inputId}>{label}</Label>
         {description ? <p className="text-xs text-muted-foreground" id={`${inputId}-description`}>{description}</p> : null}
-        {error ? <span className="text-xs text-destructive" id={`${inputId}-error`}>{error}</span> : null}
+        {error ? <span className="text-xs text-danger" id={`${inputId}-error`}>{error}</span> : null}
       </div>
     </div>
   );

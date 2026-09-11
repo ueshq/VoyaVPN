@@ -8,30 +8,60 @@ import type { AppSettingsV1 } from "@/ipc/bindings";
 import { usePreferencesStore } from "@/stores/preferences-store";
 import { useToastStore } from "@/stores/toast-store";
 import { useDnsSettings } from "@/features/dns/use-dns-settings";
-import { deferred, resetSettingsBackend, serverSettings, settingsIpc } from "./settings-backend.test-fixture";
+import {
+  deferred,
+  resetSettingsBackend,
+  serverSettings,
+  settingsIpc,
+} from "./settings-backend.test-fixture";
 import { settingsSaveQueue } from "./settings-save-queue";
 import { useAppSettings } from "./use-app-settings";
 
-vi.mock("@/ipc", async () => (await import("./settings-backend.test-fixture")).settingsIpc);
+vi.mock(
+  "@/ipc",
+  async () => (await import("./settings-backend.test-fixture")).settingsIpc,
+);
 
-beforeEach(async () => { resetSettingsBackend(); await changeLocale("en"); useToastStore.setState({ toasts: [] }); });
+beforeEach(async () => {
+  resetSettingsBackend();
+  await changeLocale("en");
+  useToastStore.setState({ toasts: [] });
+});
 afterEach(cleanup);
 function mount() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const hook = renderHook(() => ({ app: useAppSettings(), dns: useDnsSettings() }), {
-    wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
   });
-  return { ...hook, client, settle: () => act(() => settingsSaveQueue(client).settled()) };
+  const hook = renderHook(
+    () => ({ app: useAppSettings(), dns: useDnsSettings() }),
+    {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    },
+  );
+  return {
+    ...hook,
+    client,
+    settle: () => act(() => settingsSaveQueue(client).settled()),
+  };
 }
 
 describe("automatic app settings", () => {
   it("persists field edits against the newest snapshot and skips unchanged values", async () => {
     const { result, settle, client } = mount();
     await waitFor(() => expect(result.current.app.settings).not.toBeNull());
-    act(() => result.current.app.update((s) => ({ ...s, core: { ...s.core, logLevel: "debug" } })));
+    act(() =>
+      result.current.app.update((s) => ({
+        ...s,
+        core: { ...s.core, logLevel: "debug" },
+      })),
+    );
     await settle();
     expect(serverSettings().core.logLevel).toBe("debug");
-    expect(client.getQueryData(queryKeys.appSettings)).toEqual(serverSettings());
+    expect(client.getQueryData(queryKeys.appSettings)).toEqual(
+      serverSettings(),
+    );
     act(() => result.current.app.update((s) => ({ ...s })));
     await settle();
     expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1);
@@ -44,44 +74,85 @@ describe("automatic app settings", () => {
     await waitFor(() => expect(result.current.app.settings).not.toBeNull());
     act(() => {
       result.current.dns.updateSimple({ remote: "1.1.1.1" });
-      result.current.app.update((s) => ({ ...s, core: { ...s.core, logLevel: "debug" } }));
+      result.current.app.update((s) => ({
+        ...s,
+        core: { ...s.core, logLevel: "debug" },
+      }));
       result.current.dns.updateSimple({ fakeIp: true });
     });
     await settle();
-    expect(serverSettings()).toMatchObject({ core: { logLevel: "debug" }, dns: { remote: "1.1.1.1", fakeIp: true } });
+    expect(serverSettings()).toMatchObject({
+      core: { logLevel: "debug" },
+      dns: { remote: "1.1.1.1", fakeIp: true },
+    });
   });
 
-  it.each(["success", "failure"])("keeps newer input after an older %s and coalesces waiting edits", async (outcome) => {
-    const { result, settle } = mount();
-    await waitFor(() => expect(result.current.app.settings).not.toBeNull());
-    const pending = deferred<AppSettingsV1>();
-    settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
-    const update = (logLevel: string) => act(() => result.current.app.update((s) => ({ ...s, core: { ...s.core, logLevel } })));
-    update("debug");
-    await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1));
-    update("trace"); update("error");
-    expect(result.current.app.settings?.core.logLevel).toBe("error");
-    expect(result.current.app.working).toBe(false);
-    await act(async () => {
-      if (outcome === "success") pending.resolve(settingsIpc.saveAppSettings.mock.calls[0][0]);
-      else pending.reject(new Error("old write failed"));
-    });
-    await settle();
-    expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(2);
-    expect(serverSettings().core.logLevel).toBe("error");
-  });
+  it.each(["success", "failure"])(
+    "keeps newer input after an older %s and coalesces waiting edits",
+    async (outcome) => {
+      const { result, settle } = mount();
+      await waitFor(() => expect(result.current.app.settings).not.toBeNull());
+      const pending = deferred<AppSettingsV1>();
+      settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
+      const update = (logLevel: string) =>
+        act(() =>
+          result.current.app.update((s) => ({
+            ...s,
+            core: { ...s.core, logLevel },
+          })),
+        );
+      update("debug");
+      await waitFor(() =>
+        expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1),
+      );
+      update("trace");
+      update("error");
+      expect(result.current.app.settings?.core.logLevel).toBe("error");
+      expect(result.current.app.working).toBe(false);
+      await act(async () => {
+        if (outcome === "success")
+          pending.resolve(settingsIpc.saveAppSettings.mock.calls[0][0]);
+        else pending.reject(new Error("old write failed"));
+      });
+      await settle();
+      expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(2);
+      expect(serverSettings().core.logLevel).toBe("error");
+    },
+  );
 
   it("isolates rejected fields, translates errors, and retries the retained edit", async () => {
     const { result, settle } = mount();
     await waitFor(() => expect(result.current.app.settings).not.toBeNull());
-    settingsIpc.saveAppSettings.mockRejectedValueOnce(new settingsIpc.IpcCommandError({
-      kind: { type: "validation", issues: [{ field: "network.tun.mtu", scope: [], code: { code: "tunMtuOutOfRange", min: 576, max: 65535 } }] },
-      message: "MTU rejected", subsystem: "config",
-    }));
-    act(() => result.current.app.update((s) => ({ ...s, network: { ...s.network, tun: { ...s.network.tun, mtu: 1 } } })));
+    settingsIpc.saveAppSettings.mockRejectedValueOnce(
+      new settingsIpc.IpcCommandError({
+        kind: {
+          type: "validation",
+          issues: [
+            {
+              field: "network.tun.mtu",
+              scope: [],
+              code: { code: "tunMtuOutOfRange", min: 576, max: 65535 },
+            },
+          ],
+        },
+        message: "MTU rejected",
+        subsystem: "config",
+      }),
+    );
+    act(() =>
+      result.current.app.update((s) => ({
+        ...s,
+        network: { ...s.network, tun: { ...s.network.tun, mtu: 1 } },
+      })),
+    );
     await settle();
     expect(result.current.app.fieldErrors["network.tun.mtu"]).toContain("576");
-    act(() => result.current.app.update((s) => ({ ...s, behavior: { ...s.behavior, autostart: true } })));
+    act(() =>
+      result.current.app.update((s) => ({
+        ...s,
+        behavior: { ...s.behavior, autostart: true },
+      })),
+    );
     await settle();
     expect(serverSettings().network.tun.mtu).toBe(9000);
     expect(result.current.app.settings?.network.tun.mtu).toBe(1);
@@ -91,20 +162,36 @@ describe("automatic app settings", () => {
     expect(result.current.app.fieldErrors).toEqual({});
   });
 
-  it("reports detached failures without resurrecting drafts on re-entry", async () => {
+  it("retains detached failures and their draft for retry on re-entry", async () => {
     const { result, unmount, settle, client } = mount();
     await waitFor(() => expect(result.current.app.settings).not.toBeNull());
     const pending = deferred<AppSettingsV1>();
     settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
-    act(() => result.current.app.update((s) => ({ ...s, core: { ...s.core, logLevel: "trace" } })));
-    await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1));
+    act(() =>
+      result.current.app.update((s) => ({
+        ...s,
+        core: { ...s.core, logLevel: "trace" },
+      })),
+    );
+    await waitFor(() =>
+      expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1),
+    );
     unmount();
     pending.reject(new Error("save unavailable"));
     await settle();
-    expect(useToastStore.getState().toasts.at(-1)?.description).toBe("save unavailable");
-    const next = renderHook(useAppSettings, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+    expect(useToastStore.getState().toasts.at(-1)?.description).toBe(
+      "save unavailable",
+    );
+    const next = renderHook(useAppSettings, {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
     await waitFor(() => expect(next.result.current.working).toBe(false));
-    expect(next.result.current.settings?.core.logLevel).toBe("warning");
+    expect(next.result.current.settings?.core.logLevel).toBe("trace");
+    expect(next.result.current.error).toBe("save unavailable");
+    act(() => next.result.current.retry());
+    await settle();
     expect(next.result.current.error).toBeNull();
   });
 
@@ -113,7 +200,9 @@ describe("automatic app settings", () => {
     await waitFor(() => expect(result.current.app.settings).not.toBeNull());
     const pending = deferred<AppSettingsV1>();
     settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
-    act(() => result.current.app.setAppearance({ language: "en", theme: "dark" }));
+    act(() =>
+      result.current.app.setAppearance({ language: "en", theme: "dark" }),
+    );
     expect(usePreferencesStore.getState().themePreview).toBe("dark");
     await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalled());
     pending.reject(new Error("appearance failed"));
@@ -129,15 +218,29 @@ describe("automatic app settings", () => {
     await waitFor(() => expect(result.current.app.settings).not.toBeNull());
     const first = deferred<AppSettingsV1>();
     const second = deferred<AppSettingsV1>();
-    settingsIpc.saveAppSettings.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
-    act(() => result.current.app.setAppearance({ language: "en", theme: "dark" }));
-    await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1));
-    act(() => result.current.app.setAppearance({ language: "en", theme: "light" }));
-    await act(async () => { first.resolve(settingsIpc.saveAppSettings.mock.calls[0][0]); });
-    await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(2));
+    settingsIpc.saveAppSettings
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    act(() =>
+      result.current.app.setAppearance({ language: "en", theme: "dark" }),
+    );
+    await waitFor(() =>
+      expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1),
+    );
+    act(() =>
+      result.current.app.setAppearance({ language: "en", theme: "light" }),
+    );
+    await act(async () => {
+      first.resolve(settingsIpc.saveAppSettings.mock.calls[0][0]);
+    });
+    await waitFor(() =>
+      expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(2),
+    );
     expect(usePreferencesStore.getState().themePreview).toBe("light");
     expect(result.current.app.settings?.appearance.theme).toBe("light");
-    await act(async () => { second.resolve(settingsIpc.saveAppSettings.mock.calls[1][0]); });
+    await act(async () => {
+      second.resolve(settingsIpc.saveAppSettings.mock.calls[1][0]);
+    });
     await settle();
     expect(usePreferencesStore.getState().themeMode).toBe("light");
     expect(usePreferencesStore.getState().themePreview).toBeNull();
@@ -151,8 +254,16 @@ describe("automatic app settings", () => {
     act(() => result.current.app.retry());
     await waitFor(() => expect(result.current.app.settings).not.toBeNull());
     // A value already saved externally is a no-op at dispatch.
-    settingsIpc.loadAppSettings.mockResolvedValueOnce({ ...serverSettings(), core: { ...serverSettings().core, logLevel: "error" } });
-    act(() => result.current.app.update((s) => ({ ...s, core: { ...s.core, logLevel: "error" } })));
+    settingsIpc.loadAppSettings.mockResolvedValueOnce({
+      ...serverSettings(),
+      core: { ...serverSettings().core, logLevel: "error" },
+    });
+    act(() =>
+      result.current.app.update((s) => ({
+        ...s,
+        core: { ...s.core, logLevel: "error" },
+      })),
+    );
     await settle();
     expect(settingsIpc.saveAppSettings).not.toHaveBeenCalled();
   });

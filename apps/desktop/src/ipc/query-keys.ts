@@ -29,6 +29,7 @@ import type { InvalidationScope } from "./bindings";
  */
 export const queryKeys = {
   appSettings: ["app-settings"],
+  settingsApply: ["app-settings", "apply-status"],
   connectionMode: ["connection-mode"],
   dns: ["dns"],
   nodeGroups: ["node-groups"],
@@ -62,7 +63,9 @@ export function profileShareQrQueryKey(content: string) {
  * while `bindings.ts` is in sync — `pnpm check:bindings` is a CI gate — so the
  * bridge skips it rather than throwing inside a Tauri event callback.
  */
-export function invalidationQueryKey(scope: InvalidationScope): QueryKeyRoot | null {
+export function invalidationQueryKey(
+  scope: InvalidationScope,
+): QueryKeyRoot | null {
   switch (scope.kind) {
     case "appSettings":
       return queryKeys.appSettings;

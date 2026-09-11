@@ -7,6 +7,7 @@ import { Button } from "@voya/ui/components/button";
 import {
   Dialog,
   DialogDescription,
+  DialogBody,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -15,9 +16,13 @@ import {
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { ProfileListEntry } from "@/ipc/bindings";
 
-import { localizeProfileProtocols, type ProfileProtocol } from "./profile-constants";
+import {
+  localizeProfileProtocols,
+  type ProfileProtocol,
+} from "./profile-constants";
 import {
   Panel,
+  ProfileFields,
   SelectField,
   TextField,
 } from "./profile-form-fields";
@@ -27,6 +32,7 @@ import {
   normalizeProfileForForm,
   prepareProfileForSave,
   profileFormSchema,
+  activeProfileFormValues,
   type ParsedProfileFormValues,
   type ProfileFormValues,
 } from "./profile-form-schema";
@@ -38,7 +44,9 @@ type ProfileDialogProps = {
   mode: "create" | "edit";
   onCloseFocus?: () => void;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (profile: ReturnType<typeof prepareProfileForSave>) => Promise<void>;
+  onSubmit: (
+    profile: ReturnType<typeof prepareProfileForSave>,
+  ) => Promise<void>;
   open: boolean;
   profile?: ProfileListEntry | null;
   // Backend rejection of the last save. The dialog stays open on failure so the
@@ -47,7 +55,15 @@ type ProfileDialogProps = {
   saveError?: string | null;
 };
 
-export function ProfileDialog({ onCloseFocus, mode, onOpenChange, onSubmit, open, profile, saveError }: ProfileDialogProps) {
+export function ProfileDialog({
+  onCloseFocus,
+  mode,
+  onOpenChange,
+  onSubmit,
+  open,
+  profile,
+  saveError,
+}: ProfileDialogProps) {
   const formKey = `${mode}:${profile?.profile.id ?? "new"}:${open ? "open" : "closed"}`;
 
   return (
@@ -75,9 +91,16 @@ function ProfileDialogForm({
 }: Omit<ProfileDialogProps, "open">) {
   const { t } = useI18n();
   const form = useForm<ProfileFormValues, unknown, ParsedProfileFormValues>({
-    defaultValues: profile ? normalizeProfileForForm(profile.profile) : createDefaultProfile(),
+    defaultValues: profile
+      ? normalizeProfileForForm(profile.profile)
+      : createDefaultProfile(),
     mode: "onBlur",
-    resolver: zodResolver(profileFormSchema),
+    resolver: (values, context, options) =>
+      zodResolver(profileFormSchema)(
+        activeProfileFormValues(values),
+        context,
+        options,
+      ),
   });
   const {
     formState: { errors, isSubmitting },
@@ -86,90 +109,137 @@ function ProfileDialogForm({
     register,
     setValue,
   } = form;
-  const configType = useWatch({ control: form.control, name: "configType" }) as ProfileProtocol;
-  const security = useWatch({ control: form.control, name: "streamSecurity" }) ?? "";
+  const configType = useWatch({
+    control: form.control,
+    name: "configType",
+  }) as ProfileProtocol;
+  const security =
+    useWatch({ control: form.control, name: "streamSecurity" }) ?? "";
 
-  const submit = handleSubmit(async (values) => {
-    await onSubmit(prepareProfileForSave(values));
-  });
+  const submit = handleSubmit(
+    async (values) => {
+      await onSubmit(prepareProfileForSave(values));
+    },
+    () => {
+      // Hidden fields keep their session draft. Reveal their section on errors.
+      document
+        .querySelectorAll<HTMLDetailsElement>("#profile-form details")
+        .forEach((detail) => {
+          detail.open = true;
+        });
+      requestAnimationFrame(() =>
+        document
+          .querySelector<HTMLElement>('#profile-form [aria-invalid="true"]')
+          ?.focus(),
+      );
+    },
+  );
 
   return (
     <ScrollableDialogContent
       closeLabel={t("actions.close")}
-      onCloseAutoFocus={onCloseFocus ? (event) => { event.preventDefault(); onCloseFocus(); } : undefined}
+      onCloseAutoFocus={
+        onCloseFocus
+          ? (event) => {
+              event.preventDefault();
+              onCloseFocus();
+            }
+          : undefined
+      }
       width="68rem"
     >
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <Server className="size-4" aria-hidden="true" />
-          {mode === "edit" ? t("panes.profiles.dialog.editTitle") : t("panes.profiles.dialog.addTitle")}
+          {mode === "edit"
+            ? t("panes.profiles.dialog.editTitle")
+            : t("panes.profiles.dialog.addTitle")}
         </DialogTitle>
         <DialogDescription className="sr-only">
           {t("panes.profiles.dialog.description")}
         </DialogDescription>
       </DialogHeader>
+      <DialogBody>
+        <ProfileFields errors={errors}>
+          <form
+            className="min-h-0"
+            id="profile-form"
+            onSubmit={(event) => void submit(event)}
+          >
+            <div className="grid gap-4">
+              <Panel title={t("panes.profiles.panels.profile")}>
+                <div className="grid gap-3 lg:grid-cols-[14rem_1fr]">
+                  <SelectField
+                    control={form.control}
+                    label={t("panes.profiles.fields.protocol")}
+                    name="configType"
+                    options={localizeProfileProtocols(t)}
+                  />
 
-      <form className="min-h-0 overflow-y-auto pe-1" id="profile-form" onSubmit={(event) => void submit(event)}>
-        <div className="grid gap-4">
-          <Panel title={t("panes.profiles.panels.profile")}>
-            <div className="grid gap-3 lg:grid-cols-[14rem_1fr]">
-              <SelectField
+                  <TextField
+                    error={profileValidationMessage(errors.remarks?.message, t)}
+                    label={t("panes.profiles.fields.remarks")}
+                    {...register("remarks")}
+                  />
+                </div>
+
+                <div className="grid gap-3 lg:grid-cols-[1fr_7rem]">
+                  <TextField
+                    error={profileValidationMessage(errors.address?.message, t)}
+                    label={t("panes.profiles.fields.address")}
+                    {...register("address")}
+                  />
+                  <TextField
+                    error={profileValidationMessage(errors.port?.message, t)}
+                    inputMode="numeric"
+                    label={t("panes.profiles.fields.port")}
+                    type="number"
+                    {...register("port", { valueAsNumber: true })}
+                  />
+                </div>
+              </Panel>
+
+              <ProtocolPanel
+                configType={configType}
                 control={form.control}
-                label={t("panes.profiles.fields.protocol")}
-                name="configType"
-                options={localizeProfileProtocols(t)}
+                passwordError={profileValidationMessage(
+                  errors.password?.message,
+                  t,
+                )}
+                register={register}
+                usernameError={profileValidationMessage(
+                  errors.username?.message,
+                  t,
+                )}
               />
-
-              <TextField
-                error={profileValidationMessage(errors.remarks?.message, t)}
-                label={t("panes.profiles.fields.remarks")}
-                {...register("remarks")}
-              />
-            </div>
-
-            <div className="grid gap-3 lg:grid-cols-[1fr_7rem]">
-              <TextField
-                error={profileValidationMessage(errors.address?.message, t)}
-                label={t("panes.profiles.fields.address")}
-                {...register("address")}
-              />
-              <TextField
-                error={errors.port?.message}
-                inputMode="numeric"
-                label={t("panes.profiles.fields.port")}
-                type="number"
-                {...register("port", { valueAsNumber: true })}
+              {configType !== "wireGuard" ? (
+                <TransportPanel control={form.control} register={register} />
+              ) : null}
+              <SecurityPanel
+                control={form.control}
+                getValues={getValues}
+                register={register}
+                security={security}
+                setValue={setValue}
               />
             </div>
-          </Panel>
+          </form>
+        </ProfileFields>
 
-          <ProtocolPanel
-            configType={configType}
-            control={form.control}
-            passwordError={profileValidationMessage(errors.password?.message, t)}
-            register={register}
-            usernameError={profileValidationMessage(errors.username?.message, t)}
-          />
-          <TransportPanel control={form.control} register={register} />
-          <SecurityPanel
-            control={form.control}
-            getValues={getValues}
-            register={register}
-            security={security}
-            setValue={setValue}
-          />
-        </div>
-      </form>
-
-      {saveError ? (
-        <Alert className="mx-6 mb-2 w-auto" variant="destructive">
-          <TriangleAlert aria-hidden="true" />
-          <AlertDescription>{saveError}</AlertDescription>
-        </Alert>
-      ) : null}
-
+        {saveError ? (
+          <Alert className="mx-6 mb-2 w-auto" variant="destructive">
+            <TriangleAlert aria-hidden="true" />
+            <AlertDescription>{saveError}</AlertDescription>
+          </Alert>
+        ) : null}
+      </DialogBody>
       <DialogFooter>
-        <Button disabled={isSubmitting} onClick={() => onOpenChange(false)} type="button" variant="outline">
+        <Button
+          disabled={isSubmitting}
+          onClick={() => onOpenChange(false)}
+          type="button"
+          variant="outline"
+        >
           {t("panes.profiles.dialog.cancel")}
         </Button>
         <Button disabled={isSubmitting} form="profile-form" type="submit">

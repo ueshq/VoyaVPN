@@ -430,7 +430,7 @@ async fn saved_proxy_settings_publish_only_the_proxy_status_while_connected() {
 }
 
 #[tokio::test]
-async fn saved_proxy_application_failure_is_a_notice_and_keeps_the_core_connected() {
+async fn explicit_proxy_application_failure_is_reported_and_keeps_the_core_connected() {
     let harness = Harness::new().await;
     let mut config = active_config();
     harness.flow().connect(&config).await.expect("connect");
@@ -446,7 +446,7 @@ async fn saved_proxy_application_failure_is_a_notice_and_keeps_the_core_connecte
         ))
         .reapply_system_proxy_if_connected(&config)
         .await
-        .expect("saved settings remain successful");
+        .expect_err("explicit apply reports failure");
     assert_eq!(
         &harness.sink.events()[before..],
         [
@@ -786,7 +786,7 @@ async fn manual_pac_failure_retires_a_previously_published_url_on_every_start_pa
             "save" => {
                 flow.reapply_system_proxy_if_connected(&config)
                     .await
-                    .expect("settings remain saved");
+                    .expect_err("explicit apply reports failure");
             }
             _ => {
                 flow.handle_core_exit(

@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -30,9 +36,16 @@ vi.mock("./qr-scanner", async (importOriginal) => {
 });
 
 const queryClients = new Set<QueryClient>();
-const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(
+  navigator,
+  "clipboard",
+);
 
-function renderDialog(method: ImportMethod = "text", onImported = vi.fn(), onOpenChange = vi.fn()) {
+function renderDialog(
+  method: ImportMethod = "text",
+  onImported = vi.fn(),
+  onOpenChange = vi.fn(),
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { gcTime: 0, retry: false } },
   });
@@ -40,13 +53,19 @@ function renderDialog(method: ImportMethod = "text", onImported = vi.fn(), onOpe
 
   const ui = (open: boolean, nextMethod = method) => (
     <QueryClientProvider client={queryClient}>
-      <ImportProfilesDialog method={nextMethod} onImported={onImported} onOpenChange={onOpenChange} open={open} />
+      <ImportProfilesDialog
+        method={nextMethod}
+        onImported={onImported}
+        onOpenChange={onOpenChange}
+        open={open}
+      />
     </QueryClientProvider>
   );
   const result = render(ui(true));
   return {
     ...result,
-    setOpen: (open: boolean, nextMethod = method) => result.rerender(ui(open, nextMethod)),
+    setOpen: (open: boolean, nextMethod = method) =>
+      result.rerender(ui(open, nextMethod)),
     onImported,
     onOpenChange,
   };
@@ -58,7 +77,11 @@ beforeEach(async () => {
   Object.values(scannerMocks).forEach((mock) => mock.mockReset());
   ipcMocks.listSubscriptions.mockResolvedValue([]);
   ipcMocks.importProfilesFromText.mockResolvedValue(
-    makeImportResult({ imported: 1, importedProfileIds: ["profile-from-qr"], parsed: 1 }),
+    makeImportResult({
+      imported: 1,
+      importedProfileIds: ["profile-from-qr"],
+      parsed: 1,
+    }),
   );
 });
 
@@ -76,14 +99,19 @@ describe("ImportProfilesDialog import results", () => {
   it("keeps the dialog open with a localized summary when nothing was imported", async () => {
     const user = userEvent.setup();
     ipcMocks.importProfilesFromText.mockResolvedValue(
-      makeImportResult({ failed: 2, messages: ["line 3: unsupported scheme"], parsed: 2, skipped: 1 }),
+      makeImportResult({
+        failed: 2,
+        messages: ["line 3: unsupported scheme"],
+        parsed: 2,
+        skipped: 1,
+      }),
     );
     const { onOpenChange } = renderDialog();
 
     fireEvent.change(await screen.findByLabelText("Import payload"), {
       target: { value: "vless://uuid@example.test:443#US" },
     });
-    await user.click(screen.getByRole("button", { name: "Import payload" }));
+    await user.click(screen.getByRole("button", { name: "Import" }));
 
     // One import produces exactly one summary: the dialog owns it while it stays
     // open, the profiles banner owns it once it closes.
@@ -103,7 +131,7 @@ describe("ImportProfilesDialog import results", () => {
     fireEvent.change(await screen.findByLabelText("Import payload"), {
       target: { value: "vless://uuid@example.test:443#US" },
     });
-    await user.click(screen.getByRole("button", { name: "Import payload" }));
+    await user.click(screen.getByRole("button", { name: "Import" }));
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(screen.queryByText(/Imported 1 node/)).not.toBeInTheDocument();
@@ -114,28 +142,49 @@ describe("ImportProfilesDialog sources and lifecycle", () => {
   it("previews clipboard text, keeps edits on submission failure and retries", async () => {
     const user = userEvent.setup();
     const readText = vi.fn().mockResolvedValue("  vless://clipboard  ");
-    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { readText } });
-    ipcMocks.importProfilesFromText.mockRejectedValueOnce(new Error("Import failed"));
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { readText },
+    });
+    ipcMocks.importProfilesFromText.mockRejectedValueOnce(
+      new Error("Import failed"),
+    );
     renderDialog("clipboard");
     expect(readText).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Paste" }));
-    expect(screen.getByLabelText("Import payload")).toHaveValue("vless://clipboard");
+    expect(screen.getByLabelText("Import payload")).toHaveValue(
+      "vless://clipboard",
+    );
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByLabelText("Import payload"), { target: { value: "vless://edited" } });
-    await user.click(screen.getByRole("button", { name: "Import payload" }));
+    fireEvent.change(screen.getByLabelText("Import payload"), {
+      target: { value: "vless://edited" },
+    });
+    await user.click(screen.getByRole("button", { name: "Import" }));
     expect(await screen.findByText("Import failed")).toBeVisible();
-    expect(screen.getByLabelText("Import payload")).toHaveValue("vless://edited");
-    await user.click(screen.getByRole("button", { name: "Import payload" }));
-    expect(ipcMocks.importProfilesFromText).toHaveBeenLastCalledWith("vless://edited", null);
+    expect(screen.getByLabelText("Import payload")).toHaveValue(
+      "vless://edited",
+    );
+    await user.click(screen.getByRole("button", { name: "Import" }));
+    expect(ipcMocks.importProfilesFromText).toHaveBeenLastCalledWith(
+      "vless://edited",
+      null,
+    );
     expect(ipcMocks.importProfilesFromText).toHaveBeenCalledTimes(2);
   });
 
-  it("reads a file into the preview, allows retrying the same file and importing to a subscription", async () => {
+  it("reads a file into the preview, allows retrying the same file and importing only to manual nodes", async () => {
     const user = userEvent.setup();
-    ipcMocks.listSubscriptions.mockResolvedValue([{ id: "sub-target", remarks: "Target subscription" }]);
+    ipcMocks.listSubscriptions.mockResolvedValue([
+      { id: "sub-target", remarks: "Target subscription" },
+    ]);
     renderDialog("file");
-    const file = new File(["vless://file"], "nodes.txt", { type: "text/plain" });
-    const read = vi.fn().mockRejectedValueOnce(new Error("File unreadable")).mockResolvedValue("vless://file");
+    const file = new File(["vless://file"], "nodes.txt", {
+      type: "text/plain",
+    });
+    const read = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("File unreadable"))
+      .mockResolvedValue("vless://file");
     Object.defineProperty(file, "text", { value: read });
     const input = screen.getByLabelText("Import payload file");
     await user.upload(input, file);
@@ -144,17 +193,25 @@ describe("ImportProfilesDialog sources and lifecycle", () => {
     expect(screen.getByLabelText("Import payload")).toHaveValue("vless://file");
     expect(read).toHaveBeenCalledTimes(2);
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("combobox", { name: "Target" }));
-    await user.click(screen.getByRole("option", { name: "Target subscription" }));
-    await user.click(screen.getByRole("button", { name: "Import payload" }));
-    expect(ipcMocks.importProfilesFromText).toHaveBeenCalledWith("vless://file", "sub-target");
+    await user.click(screen.getByRole("button", { name: "Import" }));
+    expect(ipcMocks.importProfilesFromText).toHaveBeenCalledWith(
+      "vless://file",
+      null,
+    );
   });
 
   it("disables duplicate reads and ignores a clipboard result after closing and reopening", async () => {
     const user = userEvent.setup();
     let finishRead!: (value: string) => void;
-    const readText = vi.fn().mockReturnValue(new Promise<string>((resolve) => { finishRead = resolve; }));
-    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { readText } });
+    const readText = vi.fn().mockReturnValue(
+      new Promise<string>((resolve) => {
+        finishRead = resolve;
+      }),
+    );
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { readText },
+    });
     const { setOpen } = renderDialog("clipboard");
     await user.click(screen.getByRole("button", { name: "Paste" }));
     expect(screen.getByRole("status")).toHaveTextContent("Reading content…");
@@ -164,7 +221,9 @@ describe("ImportProfilesDialog sources and lifecycle", () => {
     expect(readText).toHaveBeenCalledOnce();
     setOpen(false);
     setOpen(true);
-    fireEvent.change(screen.getByLabelText("Import payload"), { target: { value: "new draft" } });
+    fireEvent.change(screen.getByLabelText("Import payload"), {
+      target: { value: "new draft" },
+    });
     await act(async () => finishRead("old clipboard"));
     expect(screen.getByLabelText("Import payload")).toHaveValue("new draft");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
@@ -173,28 +232,40 @@ describe("ImportProfilesDialog sources and lifecycle", () => {
 
   it("clears the previous preview, target and error on each opening", async () => {
     const user = userEvent.setup();
-    ipcMocks.listSubscriptions.mockResolvedValue([{ id: "sub-target", remarks: "Target subscription" }]);
-    ipcMocks.importProfilesFromText.mockRejectedValue(new Error("Import failed"));
+    ipcMocks.listSubscriptions.mockResolvedValue([
+      { id: "sub-target", remarks: "Target subscription" },
+    ]);
+    ipcMocks.importProfilesFromText.mockRejectedValue(
+      new Error("Import failed"),
+    );
     const { setOpen } = renderDialog();
-    fireEvent.change(screen.getByLabelText("Import payload"), { target: { value: "vless://draft" } });
-    await user.click(screen.getByRole("combobox", { name: "Target" }));
-    await user.click(screen.getByRole("option", { name: "Target subscription" }));
-    await user.click(screen.getByRole("button", { name: "Import payload" }));
+    fireEvent.change(screen.getByLabelText("Import payload"), {
+      target: { value: "vless://draft" },
+    });
+    await user.click(screen.getByRole("button", { name: "Import" }));
     expect(await screen.findByText("Import failed")).toBeVisible();
     setOpen(false);
     setOpen(true);
     expect(screen.getByLabelText("Import payload")).toHaveValue("");
-    expect(screen.getByRole("combobox", { name: "Target" })).toHaveTextContent("Manual import");
+    expect(
+      screen.queryByRole("combobox", { name: "Target" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Import failed")).not.toBeInTheDocument();
   });
 
   it("waits for an import result before accepting another submission or dismissal", async () => {
     const user = userEvent.setup();
     let finishImport!: (value: ImportProfilesResult) => void;
-    ipcMocks.importProfilesFromText.mockReturnValue(new Promise<ImportProfilesResult>((resolve) => { finishImport = resolve; }));
+    ipcMocks.importProfilesFromText.mockReturnValue(
+      new Promise<ImportProfilesResult>((resolve) => {
+        finishImport = resolve;
+      }),
+    );
     const { onOpenChange } = renderDialog();
-    fireEvent.change(screen.getByLabelText("Import payload"), { target: { value: "vless://draft" } });
-    const submit = screen.getByRole("button", { name: "Import payload" });
+    fireEvent.change(screen.getByLabelText("Import payload"), {
+      target: { value: "vless://draft" },
+    });
+    const submit = screen.getByRole("button", { name: "Import" });
     await user.click(submit);
     await user.click(submit);
     await user.keyboard("{Escape}");
@@ -203,18 +274,31 @@ describe("ImportProfilesDialog sources and lifecycle", () => {
     expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
     await act(async () => finishImport(makeImportResult({ failed: 1 })));
     expect(submit).toBeEnabled();
-    expect(screen.getByLabelText("Import payload")).toHaveValue("vless://draft");
+    expect(screen.getByLabelText("Import payload")).toHaveValue(
+      "vless://draft",
+    );
   });
 
   it("does not start fallback screen capture after the scan window closes", async () => {
     const user = userEvent.setup();
     let finishScan!: (value: unknown) => void;
-    ipcMocks.scanScreenQr.mockReturnValue(new Promise((resolve) => { finishScan = resolve; }));
+    ipcMocks.scanScreenQr.mockReturnValue(
+      new Promise((resolve) => {
+        finishScan = resolve;
+      }),
+    );
     const { setOpen } = renderDialog("qrScreen");
     await user.click(screen.getByRole("button", { name: "Screen" }));
     setOpen(false);
     setOpen(true);
-    await act(async () => finishScan({ status: "notFound", text: null, message: null, source: "native" }));
+    await act(async () =>
+      finishScan({
+        status: "notFound",
+        text: null,
+        message: null,
+        source: "native",
+      }),
+    );
     expect(scannerMocks.scanDisplayMediaQr).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Import payload")).toHaveValue("");
   });
@@ -227,15 +311,24 @@ describe("ImportProfilesDialog QR scanning", () => {
     renderDialog("qrImage");
 
     fireEvent.change(await screen.findByLabelText("Scan image"), {
-      target: { files: [new File(["qr"], "profile.png", { type: "image/png" })] },
+      target: {
+        files: [new File(["qr"], "profile.png", { type: "image/png" })],
+      },
     });
 
-    await waitFor(() => expect(screen.getByLabelText("Import payload")).toHaveValue("vless://image.example"));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Import payload")).toHaveValue(
+        "vless://image.example",
+      ),
+    );
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "Import payload" }));
+    await user.click(screen.getByRole("button", { name: "Import" }));
     await waitFor(() =>
-      expect(ipcMocks.importProfilesFromText).toHaveBeenCalledWith("vless://image.example", null),
+      expect(ipcMocks.importProfilesFromText).toHaveBeenCalledWith(
+        "vless://image.example",
+        null,
+      ),
     );
   });
 
@@ -249,10 +342,14 @@ describe("ImportProfilesDialog QR scanning", () => {
     scannerMocks.scanQrBlob.mockResolvedValue("trojan://clipboard.example");
     renderDialog("qrClipboard");
 
-    await userEvent.click(await screen.findByRole("button", { name: "Clipboard image" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Clipboard image" }),
+    );
 
     await waitFor(() =>
-      expect(screen.getByLabelText("Import payload")).toHaveValue("trojan://clipboard.example"),
+      expect(screen.getByLabelText("Import payload")).toHaveValue(
+        "trojan://clipboard.example",
+      ),
     );
     expect(scannerMocks.scanQrBlob).toHaveBeenCalledWith(image);
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
@@ -267,10 +364,14 @@ describe("ImportProfilesDialog QR scanning", () => {
     });
     renderDialog("qrScreen");
 
-    await userEvent.click(await screen.findByRole("button", { name: "Screen" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Screen" }),
+    );
 
     await waitFor(() =>
-      expect(screen.getByLabelText("Import payload")).toHaveValue("vmess://screen.example"),
+      expect(screen.getByLabelText("Import payload")).toHaveValue(
+        "vmess://screen.example",
+      ),
     );
     expect(scannerMocks.scanDisplayMediaQr).not.toHaveBeenCalled();
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
@@ -286,10 +387,14 @@ describe("ImportProfilesDialog QR scanning", () => {
     scannerMocks.scanDisplayMediaQr.mockResolvedValue("ss://fallback.example");
     renderDialog("qrScreen");
 
-    await userEvent.click(await screen.findByRole("button", { name: "Screen" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Screen" }),
+    );
 
     await waitFor(() =>
-      expect(screen.getByLabelText("Import payload")).toHaveValue("ss://fallback.example"),
+      expect(screen.getByLabelText("Import payload")).toHaveValue(
+        "ss://fallback.example",
+      ),
     );
     expect(scannerMocks.scanDisplayMediaQr).toHaveBeenCalledOnce();
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
@@ -307,10 +412,14 @@ describe("ImportProfilesDialog QR scanning", () => {
     );
     renderDialog("qrScreen");
 
-    await userEvent.click(await screen.findByRole("button", { name: "Screen" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Screen" }),
+    );
 
     expect(
-      await screen.findByText(/Screen QR scanning is unavailable.*Screen capture is unavailable/s),
+      await screen.findByText(
+        /Screen QR scanning is unavailable.*Screen capture is unavailable/s,
+      ),
     ).toBeInTheDocument();
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
   });
@@ -320,7 +429,9 @@ describe("ImportProfilesDialog QR scanning", () => {
     renderDialog("qrImage");
 
     fireEvent.change(await screen.findByLabelText("Scan image"), {
-      target: { files: [new File(["plain"], "plain.png", { type: "image/png" })] },
+      target: {
+        files: [new File(["plain"], "plain.png", { type: "image/png" })],
+      },
     });
 
     expect(await screen.findByText("No QR code found.")).toBeInTheDocument();
@@ -329,24 +440,32 @@ describe("ImportProfilesDialog QR scanning", () => {
   });
 
   it("translates every scanner failure code instead of surfacing its raw message", async () => {
-    scannerMocks.readClipboardImageBlob.mockRejectedValue(new QrScanError("clipboardImageMissing"));
+    scannerMocks.readClipboardImageBlob.mockRejectedValue(
+      new QrScanError("clipboardImageMissing"),
+    );
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { read: vi.fn() },
     });
     renderDialog("qrClipboard");
 
-    await userEvent.click(await screen.findByRole("button", { name: "Clipboard image" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Clipboard image" }),
+    );
 
     // The scanner throws codes, so the sentence comes from the locale files.
-    expect(await screen.findByText("Clipboard does not contain an image.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Clipboard does not contain an image."),
+    ).toBeInTheDocument();
     expect(screen.queryByText("clipboardImageMissing")).not.toBeInTheDocument();
   });
 });
 
 // Full `ImportProfilesResult` shape; a partial one is what let the dialog paper
 // over non-nullable contract fields with `??`.
-function makeImportResult(overrides: Partial<ImportProfilesResult> = {}): ImportProfilesResult {
+function makeImportResult(
+  overrides: Partial<ImportProfilesResult> = {},
+): ImportProfilesResult {
   return {
     deduped: 0,
     discardedNodeOverrides: 0,

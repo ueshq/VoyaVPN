@@ -1,38 +1,129 @@
+import { Disclosure } from "@voya/ui/components/disclosure";
 import type { DnsSettings } from "@/ipc/bindings";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { CheckboxField, SelectField, TextAreaField, TextField } from "@voya/ui/components/form-fields";
+import {
+  CheckboxField,
+  SelectField,
+  TextAreaField,
+  TextField,
+} from "@voya/ui/components/form-fields";
 import { SettingsGroup } from "@/features/settings/settings-form";
 
 import { DNS_STRATEGIES } from "./dns-constants";
 
-export function SimpleDnsForm({ errors, settings, updateSimple }: {
+export function SimpleDnsForm({
+  errors,
+  settings,
+  updateSimple,
+}: {
   errors: Record<string, string>;
   settings: DnsSettings;
   updateSimple: (patch: Partial<DnsSettings>) => void;
 }) {
   const { t } = useI18n();
-  const strategies = DNS_STRATEGIES.map((value) => ({ value, label: value || t("panes.routing.defaultValue") }));
+  const strategyLabels = {
+    "": t("panes.routing.defaultValue"), AsIs: t("panes.dns.strategyAutomatic"), UseIP: t("panes.dns.strategyAutomatic"),
+    UseIPv4: t("panes.dns.strategyIpv4"), UseIPv6: t("panes.dns.strategyIpv6"), ForceIPv4: t("panes.dns.strategyOnlyIpv4"), ForceIPv6: t("panes.dns.strategyOnlyIpv6"),
+  };
+  const strategies = DNS_STRATEGIES.map((value) => ({ value, label: strategyLabels[value] }));
   return (
     <>
+      <SettingsGroup title={t("settings.sections.dnsServers")}>
+        <TextField
+          commitOnBlur
+          error={errors.direct}
+          label={t("panes.dns.directDns")}
+          layout="row"
+          onChange={(direct) => updateSimple({ direct })}
+          value={settings.direct ?? ""}
+        />
+        <TextField
+          commitOnBlur
+          error={errors.remote}
+          label={t("panes.dns.remoteDns")}
+          layout="row"
+          onChange={(remote) => updateSimple({ remote })}
+          value={settings.remote ?? ""}
+        />
+        <TextField
+          commitOnBlur
+          error={errors.bootstrap}
+          label={t("panes.dns.bootstrapDns")}
+          layout="row"
+          onChange={(bootstrap) => updateSimple({ bootstrap })}
+          value={settings.bootstrap ?? ""}
+        />
+        <SelectField
+          options={strategies}
+          description={t("panes.dns.strategyHint")}
+          label={t("panes.dns.directStrategy")}
+          layout="row"
+          onChange={(value) => updateSimple({ directStrategy: value || null })}
+          value={settings.directStrategy ?? ""}
+        />
+        <SelectField
+          options={strategies}
+          description={t("panes.dns.strategyHint")}
+          label={t("panes.dns.proxyStrategy")}
+          layout="row"
+          onChange={(value) => updateSimple({ proxyStrategy: value || null })}
+          value={settings.proxyStrategy ?? ""}
+        />
+      </SettingsGroup>
       <SettingsGroup title={t("settings.sections.dnsBehavior")}>
         <div className="grid gap-3 @min-[42rem]:grid-cols-2">
-          <CheckboxField checked={Boolean(settings.addCommonHosts)} label={t("panes.dns.commonHosts")} onChange={(addCommonHosts) => updateSimple({ addCommonHosts })} />
-          <CheckboxField checked={Boolean(settings.blockBindingQuery)} label={t("panes.dns.blockBindingQuery")} onChange={(blockBindingQuery) => updateSimple({ blockBindingQuery })} />
-          <CheckboxField checked={Boolean(settings.fakeIp)} label={t("panes.dns.fakeIp")} onChange={(fakeIp) => updateSimple({ fakeIp })} />
-          <CheckboxField checked={Boolean(settings.globalFakeIp)} disabled={!settings.fakeIp} label={t("panes.dns.globalFakeIp")} onChange={(globalFakeIp) => updateSimple({ globalFakeIp })} />
+          <CheckboxField
+            checked={Boolean(settings.addCommonHosts)}
+            label={t("panes.dns.commonHosts")}
+            onChange={(addCommonHosts) => updateSimple({ addCommonHosts })}
+          />
+          <CheckboxField
+            checked={Boolean(settings.blockBindingQuery)}
+            label={t("panes.dns.blockBindingQuery")}
+            onChange={(blockBindingQuery) =>
+              updateSimple({ blockBindingQuery })
+            }
+          />
+          <CheckboxField
+            checked={Boolean(settings.fakeIp)}
+            label={t("panes.dns.fakeIp")}
+            onChange={(fakeIp) => updateSimple({ fakeIp })}
+          />
+          <CheckboxField
+            checked={Boolean(settings.globalFakeIp)}
+            disabled={!settings.fakeIp}
+            label={t("panes.dns.globalFakeIp")}
+              description={t("panes.dns.globalFakeIpHint")}
+            onChange={(globalFakeIp) => updateSimple({ globalFakeIp })}
+          />
         </div>
       </SettingsGroup>
-      <SettingsGroup title={t("settings.sections.dnsServers")}>
-        <TextField commitOnBlur error={errors.direct} label={t("panes.dns.directDns")} layout="row" onChange={(direct) => updateSimple({ direct })} value={settings.direct ?? ""} />
-        <TextField commitOnBlur error={errors.remote} label={t("panes.dns.remoteDns")} layout="row" onChange={(remote) => updateSimple({ remote })} value={settings.remote ?? ""} />
-        <TextField commitOnBlur error={errors.bootstrap} label={t("panes.dns.bootstrapDns")} layout="row" onChange={(bootstrap) => updateSimple({ bootstrap })} value={settings.bootstrap ?? ""} />
-        <SelectField options={strategies} label={t("panes.dns.directStrategy")} layout="row" onChange={(value) => updateSimple({ directStrategy: value || null })} value={settings.directStrategy ?? ""} />
-        <SelectField options={strategies} label={t("panes.dns.proxyStrategy")} layout="row" onChange={(value) => updateSimple({ proxyStrategy: value || null })} value={settings.proxyStrategy ?? ""} />
-      </SettingsGroup>
-      <SettingsGroup title={t("settings.sections.dnsHosts")}>
-        <TextAreaField commitOnBlur error={errors.hosts} label={t("panes.dns.hosts")} layout="row" onChange={(hosts) => updateSimple({ hosts })} value={settings.hosts ?? ""} />
-        <TextAreaField commitOnBlur error={errors.directExpectedIps} label={t("panes.dns.expectedIps")} layout="row" onChange={(directExpectedIps) => updateSimple({ directExpectedIps })} value={settings.directExpectedIps ?? ""} />
-      </SettingsGroup>
+      <Disclosure
+        title={t("common.advanced")}
+        invalid={!!errors.hosts || !!errors.directExpectedIps}
+      >
+        <SettingsGroup title={t("settings.sections.dnsHosts")}>
+          <TextAreaField
+            commitOnBlur
+            error={errors.hosts}
+            label={t("panes.dns.hosts")}
+            layout="row"
+            onChange={(hosts) => updateSimple({ hosts })}
+            value={settings.hosts ?? ""}
+          />
+          <TextAreaField
+            commitOnBlur
+            error={errors.directExpectedIps}
+            description={t("panes.dns.expectedHint")}
+            label={t("panes.dns.expectedIps")}
+            layout="row"
+            onChange={(directExpectedIps) =>
+              updateSimple({ directExpectedIps })
+            }
+            value={settings.directExpectedIps ?? ""}
+          />
+        </SettingsGroup>
+      </Disclosure>
     </>
   );
 }

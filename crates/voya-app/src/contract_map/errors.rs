@@ -163,6 +163,17 @@ impl From<ProfileManagerError> for AppError {
                 Some(id.clone()),
                 &error,
             ),
+            ProfileManagerError::SubscriptionReadOnly(id) => AppError::validation(
+                Sub::Profile,
+                error.to_string(),
+                vec![ValidationIssue {
+                    scope: vec![],
+                    field: "subscriptionId".to_string(),
+                    code: voya_contracts::ValidationCode::SubscriptionReadOnly {
+                        subscription_id: id.clone(),
+                    },
+                }],
+            ),
             ProfileManagerError::MissingProfileId => invalid(Sub::Profile, "profileId", &error),
             ProfileManagerError::InvalidMove { .. } => invalid(Sub::Profile, "position", &error),
         }
@@ -305,6 +316,7 @@ impl From<TrafficModeChangeError> for AppError {
 impl From<RuntimeError> for AppError {
     fn from(error: RuntimeError) -> Self {
         match error {
+            RuntimeError::SettingsApply(ref message) => internal(Sub::Runtime, message),
             RuntimeError::Database(source) => database_error(&source, Sub::Runtime),
             RuntimeError::CoreInfo(ref source) => core_info_error(source, Sub::Runtime),
             RuntimeError::Supervisor(source) => Self::from(source),
@@ -558,6 +570,7 @@ fn internal(subsystem: AppErrorSubsystem, error: &impl std::fmt::Display) -> App
 impl From<crate::node_groups::NodeGroupError> for AppError {
     fn from(error: crate::node_groups::NodeGroupError) -> Self {
         match error {
+            crate::node_groups::NodeGroupError::Profile(source) => Self::from(source),
             crate::node_groups::NodeGroupError::Database(source) => {
                 database_error(&source, Sub::Group)
             }

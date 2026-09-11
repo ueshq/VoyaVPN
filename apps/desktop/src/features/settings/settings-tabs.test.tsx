@@ -11,46 +11,92 @@ import { CoreTab } from "./core-tab";
 import { GeneralTab } from "./general-tab";
 import { NetworkTab } from "./network-tab";
 import { TestsTab } from "./tests-tab";
-import type { AppSettingsController, AppSettingsFormController } from "./use-app-settings";
+import type {
+  AppSettingsController,
+  AppSettingsFormController,
+} from "./use-app-settings";
 
-type SettingsTab = (props: { controller: AppSettingsFormController }) => React.ReactNode;
+type SettingsTab = (props: {
+  controller: AppSettingsFormController;
+}) => React.ReactNode;
 
 describe("semantic settings tabs", () => {
   beforeEach(() => {
     useRuntimeEventStore.setState({ coreState: null, tun: null });
-    useRuntimeEventStore.getState().setSysProxy({ management: "automatic", observation: "unknown", manualCleanupRequired: false,
-      requestedMode: "forcedClear", effectiveMode: "forcedClear", pacAvailable: true, proxy: null, pacUrl: null, exceptions: "" });
+    useRuntimeEventStore
+      .getState()
+      .setSysProxy({
+        management: "automatic",
+        observation: "unknown",
+        manualCleanupRequired: false,
+        requestedMode: "forcedClear",
+        effectiveMode: "forcedClear",
+        pacAvailable: true,
+        proxy: null,
+        pacUrl: null,
+        exceptions: "",
+      });
   });
   it("hides custom scripts when system proxy management is manual", () => {
     const status = useRuntimeEventStore.getState().sysProxy!;
-    useRuntimeEventStore.getState().setSysProxy({ ...status, management: "manual" });
+    useRuntimeEventStore
+      .getState()
+      .setSysProxy({ ...status, management: "manual" });
     const { container } = render(<TabHarness Component={NetworkTab} />);
-    expect(container.querySelector("#rt-sysproxy-script-path")).not.toBeInTheDocument();
+    expect(
+      container.querySelector("#rt-sysproxy-script-path"),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Manual proxy setup")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Copy address" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Copy address" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps manual proxy addresses and observations live while the network tab is open", () => {
     useRuntimeEventStore.getState().setSysProxy({
-      ...useRuntimeEventStore.getState().sysProxy!, management: "manual",
-      requestedMode: "pac", proxy: "127.0.0.1:10808", pacUrl: "http://127.0.0.1:10811/pac?t=test",
+      ...useRuntimeEventStore.getState().sysProxy!,
+      management: "manual",
+      requestedMode: "pac",
+      proxy: "127.0.0.1:10808",
+      pacUrl: "http://127.0.0.1:10811/pac?t=test",
     });
     render(<TabHarness Component={NetworkTab} />);
-    expect(screen.queryByRole("button", { name: "Copy address" })).not.toBeInTheDocument();
-    act(() => useRuntimeEventStore.getState().setCoreState({
-      activeProfileId: "node", activeTunBackend: null, connectedDurationMs: 0,
-      mainPid: 42, prePid: null, runningCoreType: "singBox", state: "connected",
-    }));
-    expect(screen.getByText("PAC: http://127.0.0.1:10811/pac?t=test")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Copy address" }),
+    ).not.toBeInTheDocument();
+    act(() =>
+      useRuntimeEventStore.getState().setCoreState({
+        activeProfileId: "node",
+        activeTunBackend: null,
+        connectedDurationMs: 0,
+        mainPid: 42,
+        prePid: null,
+        runningCoreType: "singBox",
+        state: "connected",
+      }),
+    );
+    expect(
+      screen.getByText("PAC: http://127.0.0.1:10811/pac?t=test"),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy address" })).toBeEnabled();
-    act(() => useRuntimeEventStore.getState().setSysProxy({
-      ...useRuntimeEventStore.getState().sysProxy!, observation: "clear",
-    }));
-    expect(screen.getByRole("status")).toHaveTextContent("No enabled system proxy was found.");
-    act(() => useRuntimeEventStore.getState().setCoreState({
-      ...useRuntimeEventStore.getState().coreState!, state: "disconnected",
-    }));
-    expect(screen.queryByRole("button", { name: "Copy address" })).not.toBeInTheDocument();
+    act(() =>
+      useRuntimeEventStore.getState().setSysProxy({
+        ...useRuntimeEventStore.getState().sysProxy!,
+        observation: "clear",
+      }),
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "No enabled system proxy was found.",
+    );
+    act(() =>
+      useRuntimeEventStore.getState().setCoreState({
+        ...useRuntimeEventStore.getState().coreState!,
+        state: "disconnected",
+      }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Copy address" }),
+    ).not.toBeInTheDocument();
   });
 
   it("hides manual setup on automatically managed platforms", () => {
@@ -61,10 +107,16 @@ describe("semantic settings tabs", () => {
     const user = userEvent.setup();
     const { container } = render(<TabHarness Component={CoreTab} />);
 
-    for (const checkbox of screen.getAllByRole("checkbox")) await user.click(checkbox);
-    for (const input of container.querySelectorAll<HTMLInputElement>('input:not([type="checkbox"])')) {
-      fireEvent.change(input, { target: { value: input.inputMode === "numeric" ? "" : "changed" } });
-      if (input.inputMode === "numeric") fireEvent.change(input, { target: { value: "12" } });
+    for (const checkbox of screen.getAllByRole("checkbox"))
+      await user.click(checkbox);
+    for (const input of container.querySelectorAll<HTMLInputElement>(
+      'input:not([type="checkbox"])',
+    )) {
+      fireEvent.change(input, {
+        target: { value: input.inputMode === "numeric" ? "" : "changed" },
+      });
+      if (input.inputMode === "numeric")
+        fireEvent.change(input, { target: { value: "12" } });
       fireEvent.blur(input);
     }
 
@@ -76,27 +128,44 @@ describe("semantic settings tabs", () => {
     const user = userEvent.setup();
     const { container } = render(<TabHarness Component={NetworkTab} />);
 
-    for (const checkbox of screen.getAllByRole("checkbox")) await user.click(checkbox);
-    for (const input of container.querySelectorAll<HTMLInputElement>('input:not([type="checkbox"])')) {
-      fireEvent.change(input, { target: { value: input.inputMode === "numeric" ? "1500" : " value " } });
+    for (const checkbox of screen.getAllByRole("checkbox"))
+      await user.click(checkbox);
+    for (const input of container.querySelectorAll<HTMLInputElement>(
+      'input:not([type="checkbox"])',
+    )) {
+      fireEvent.change(input, {
+        target: { value: input.inputMode === "numeric" ? "1500" : " value " },
+      });
       fireEvent.blur(input);
     }
 
     expect(container.querySelector("#rt-tun-mtu")).toHaveValue("1500");
-    expect(container.querySelector("#rt-sysproxy-pac-path")).toHaveValue(" value ");
-    expect(container.querySelector("#rt-sysproxy-script-path")).toHaveValue(" value ");
+    expect(container.querySelector("#rt-sysproxy-pac-path")).toHaveValue(
+      " value ",
+    );
+    expect(container.querySelector("#rt-sysproxy-script-path")).toHaveValue(
+      " value ",
+    );
   });
 
   it("updates every speed-test setting and handles empty numbers", () => {
     const { container } = render(<TabHarness Component={TestsTab} />);
 
     for (const input of container.querySelectorAll<HTMLInputElement>("input")) {
-      fireEvent.change(input, { target: { value: input.inputMode === "numeric" ? "" : "https://new.example.test" } });
-      if (input.inputMode === "numeric") fireEvent.change(input, { target: { value: "25" } });
+      fireEvent.change(input, {
+        target: {
+          value:
+            input.inputMode === "numeric" ? "" : "https://new.example.test",
+        },
+      });
+      if (input.inputMode === "numeric")
+        fireEvent.change(input, { target: { value: "25" } });
       fireEvent.blur(input);
     }
 
-    expect(screen.getByLabelText("Speed Ping Test URL")).toHaveValue("https://new.example.test");
+    expect(screen.getByLabelText("Speed Ping Test URL")).toHaveValue(
+      "https://new.example.test",
+    );
     expect(container.querySelector("#rt-speedtest-timeout")).toHaveValue("25");
     expect(screen.queryByLabelText("Speed Test URL")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("UDP Test Url")).not.toBeInTheDocument();
@@ -105,11 +174,22 @@ describe("semantic settings tabs", () => {
   it("selects the active UI language when the stored language was removed", () => {
     const settings = makeAppSettings();
     settings.appearance.language = "fa";
-    render(<GeneralTab controller={{ ...emptyController(false, null), settings }} />);
+    render(
+      <GeneralTab controller={{ ...emptyController(false, null), settings }} />,
+    );
 
-    expect(screen.getByRole("button", { name: "EN" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "简" })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("button", { name: "繁" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "English" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "简体中文" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "繁體中文" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 
   it("updates appearance and autostart", async () => {
@@ -117,9 +197,15 @@ describe("semantic settings tabs", () => {
     render(<TabHarness Component={GeneralTab} />);
 
     await user.click(screen.getByRole("button", { name: "Dark" }));
-    expect(screen.getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "true");
-    await user.click(screen.getByRole("button", { name: "简" }));
-    expect(screen.getByRole("button", { name: "简" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Dark" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await user.click(screen.getByRole("button", { name: "简体中文" }));
+    expect(screen.getByRole("button", { name: "简体中文" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     const autostart = screen.getByRole("checkbox", { name: "Autostart" });
     expect(autostart).not.toBeChecked();
     await user.click(autostart);
@@ -145,7 +231,10 @@ function TabHarness({ Component }: { Component: SettingsTab }) {
   return <Component controller={controller} />;
 }
 
-function emptyController(working: boolean, error: string | null): AppSettingsController {
+function emptyController(
+  working: boolean,
+  error: string | null,
+): AppSettingsController {
   return {
     error,
     fieldErrors: {},
@@ -154,7 +243,8 @@ function emptyController(working: boolean, error: string | null): AppSettingsCon
     retry: vi.fn(),
     setAppearance: vi.fn(),
     settings: null,
-    update: vi.fn<(updater: (current: AppSettingsV1) => AppSettingsV1) => void>(),
+    update:
+      vi.fn<(updater: (current: AppSettingsV1) => AppSettingsV1) => void>(),
     working,
   };
 }

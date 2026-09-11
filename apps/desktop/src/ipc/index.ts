@@ -1,5 +1,7 @@
 export {
   appUpdateStatus,
+  getSettingsApplyStatus,
+  applyPendingSettings,
   calculateCertificateSha256,
   proxyCloseConnection,
   proxyListConnections,
@@ -59,6 +61,13 @@ export { EventBridge } from "@/ipc/event-bridge";
 export { saveTextFile } from "@/ipc/file-dialog";
 export { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 
-export { listNodeGroups, saveNodeGroup, updateNodeGroup, deleteNodeGroup, moveNodeGroup, assignNodeGroups } from "./commands";
+export {
+  listNodeGroups,
+  saveNodeGroup,
+  updateNodeGroup,
+  deleteNodeGroup,
+  moveNodeGroup,
+  assignNodeGroups,
+} from "./commands";
 
 export { copyProfiles } from "./commands";

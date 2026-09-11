@@ -23,7 +23,9 @@
 
 use std::sync::Arc;
 
-use voya_contracts::{CoreFlowReason, LogCode, NoticeCode};
+use voya_contracts::{
+    CoreFlowReason, LogCode, NoticeCode, SettingsApplyAction, SettingsApplyStatus,
+};
 use voya_core::AppConfig;
 use voya_net::clash::{ClashHttpTransport, ReqwestClashHttpTransport};
 use voya_platform::sysproxy::SystemProxyStatus;
@@ -130,8 +132,33 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
         }
     }
 
+    pub async fn settings_apply_status(
+        &self,
+        config: &AppConfig,
+    ) -> Result<SettingsApplyStatus, RuntimeError> {
+        let connected = self.runtime.status().await?.state == SupervisorConnectionState::Connected;
+        Ok(self
+            .runtime
+            .settings_application()
+            .status(config, connected))
+    }
+
+    pub async fn apply_pending_settings(&self, config: &AppConfig) -> Result<(), RuntimeError> {
+        match self.settings_apply_status(config).await?.action {
+            SettingsApplyAction::Reconnect => {
+                self.restart_if_connected(config, CoreFlowReason::SettingsSaved)
+                    .await
+            }
+            SettingsApplyAction::ReapplyProxy => {
+                self.reapply_system_proxy_if_connected(config).await
+            }
+            SettingsApplyAction::None => Ok(()),
+        }
+    }
+
     /// Start the core for the active profile.
     pub async fn connect(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
+        let _flow = self.runtime.settings_application().flow_lock.lock().await;
         self.announce_start(config, LogCode::Connecting);
         let result = self.runtime.connect(config).await;
 
@@ -141,6 +168,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
 
     /// Restart the core, whatever state it is in.
     pub async fn restart(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
+        let _flow = self.runtime.settings_application().flow_lock.lock().await;
         self.announce_start(config, LogCode::Restarting);
         let result = self.runtime.restart(config).await;
 
@@ -154,6 +182,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
         config: &AppConfig,
         reason: CoreFlowReason,
     ) -> Result<(), RuntimeError> {
+        let _flow = self.runtime.settings_application().flow_lock.lock().await;
         if self.runtime.status().await?.state != SupervisorConnectionState::Connected {
             return Ok(());
         }
@@ -181,6 +210,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
 
     /// Stop the core and restore automatic proxies / report manual cleanup.
     pub async fn disconnect(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
+        let _flow = self.runtime.settings_application().flow_lock.lock().await;
         self.sink
             .log(CoreFlowLevel::Info, LogCode::Disconnecting, None);
         self.sink
@@ -204,6 +234,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
 
     /// Reconcile a committed node deletion without stopping a newer valid selection.
     pub async fn disconnect_removed_profile(&self, config: &AppConfig) -> Result<(), RuntimeError> {
+        let _flow = self.runtime.settings_application().flow_lock.lock().await;
         match self.runtime.disconnect_removed_profile().await {
             Ok(Some(snapshot)) => {
                 self.sink
@@ -233,12 +264,13 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
                 );
                 // The pid changed, so the UI needs the new snapshot.
                 self.settle_traffic_mode(config, &snapshot).await;
-                self.settle_system_proxy(
-                    config,
-                    ProxyAction::Apply,
-                    NoticeCode::CoreStartedSystemProxyFailed,
-                )
-                .await;
+                let _ = self
+                    .settle_system_proxy(
+                        config,
+                        ProxyAction::Apply,
+                        NoticeCode::CoreStartedSystemProxyFailed,
+                    )
+                    .await;
                 self.sink.core_state(
                     CoreFlowState::Connected,
                     event.active_profile_id,
@@ -327,12 +359,13 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
     ) {
         self.settle_traffic_mode(config, snapshot).await;
         self.sink.log(CoreFlowLevel::Info, code, None);
-        self.settle_system_proxy(
-            config,
-            ProxyAction::Apply,
-            NoticeCode::CoreStartedSystemProxyFailed,
-        )
-        .await;
+        let _ = self
+            .settle_system_proxy(
+                config,
+                ProxyAction::Apply,
+                NoticeCode::CoreStartedSystemProxyFailed,
+            )
+            .await;
         self.sink
             .core_state(CoreFlowState::Connected, None, Some(snapshot));
         self.report_tun_status(config).await;
@@ -363,12 +396,13 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
     ) {
         // Always retire app-owned proxy/PAC state. On macOS restore only stops
         // the PAC service and observes the OS; it never changes OS settings.
-        self.settle_system_proxy(
-            config,
-            ProxyAction::Restore,
-            NoticeCode::SystemProxyRestoreFailed,
-        )
-        .await;
+        let _ = self
+            .settle_system_proxy(
+                config,
+                ProxyAction::Restore,
+                NoticeCode::SystemProxyRestoreFailed,
+            )
+            .await;
         self.sink
             .core_state(CoreFlowState::Disconnected, active_profile_id, snapshot);
         self.report_tun_status(config).await;
@@ -379,12 +413,13 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
     async fn reconcile(&self, config: &AppConfig, reason: CoreFlowReason) {
         match self.runtime.status().await {
             Ok(snapshot) if snapshot.state == SupervisorConnectionState::CleanupPending => {
-                self.settle_system_proxy(
-                    config,
-                    ProxyAction::StopPac,
-                    NoticeCode::SystemProxyRestoreFailed,
-                )
-                .await;
+                let _ = self
+                    .settle_system_proxy(
+                        config,
+                        ProxyAction::StopPac,
+                        NoticeCode::SystemProxyRestoreFailed,
+                    )
+                    .await;
                 self.sink
                     .core_state(CoreFlowState::CleanupPending, None, Some(&snapshot));
                 self.report_tun_status(config).await;
@@ -398,12 +433,13 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
                     LogCode::PreviousCoreStillRunning { reason },
                     None,
                 );
-                self.settle_system_proxy(
-                    config,
-                    ProxyAction::Observe,
-                    NoticeCode::SystemProxyStatusRefreshFailed,
-                )
-                .await;
+                let _ = self
+                    .settle_system_proxy(
+                        config,
+                        ProxyAction::Observe,
+                        NoticeCode::SystemProxyStatusRefreshFailed,
+                    )
+                    .await;
                 self.sink
                     .core_state(CoreFlowState::Connected, None, Some(&snapshot));
             }
@@ -428,6 +464,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
         &self,
         config: &AppConfig,
     ) -> Result<(), RuntimeError> {
+        let _flow = self.runtime.settings_application().flow_lock.lock().await;
         if self.runtime.status().await?.state != SupervisorConnectionState::Connected {
             return Ok(());
         }
@@ -436,8 +473,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
             ProxyAction::Apply,
             NoticeCode::SettingsSavedSystemProxyUpdateFailed,
         )
-        .await;
-        Ok(())
+        .await
     }
 
     /// Every proxy side effect publishes its settled state, including failure.
@@ -447,7 +483,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
         config: &AppConfig,
         action: ProxyAction,
         failure_code: NoticeCode,
-    ) {
+    ) -> Result<(), RuntimeError> {
         let manager = self.system_proxy.clone();
         let config_copy = config.clone();
         let result = tokio::task::spawn_blocking(move || {
@@ -495,8 +531,16 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
         });
         self.sink.system_proxy_changed(&status);
         if let Some(error) = error {
+            if matches!(action, ProxyAction::Apply) {
+                self.runtime.settings_application().proxy_failed();
+            }
             self.sink.notice(CoreFlowLevel::Warn, failure_code, &error);
+            return Err(RuntimeError::SettingsApply(error));
         }
+        if matches!(action, ProxyAction::Apply) {
+            self.runtime.settings_application().proxy_applied(config);
+        }
+        Ok(())
     }
 
     /// The TUN probe forks `pluginkit`/`sc.exe`/`systemextensionsctl`, so it

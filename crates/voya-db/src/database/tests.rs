@@ -3359,3 +3359,53 @@ async fn manual_group_migration_removes_executable_profiles_and_preserves_ordina
     );
     reopened.close().await;
 }
+
+#[tokio::test]
+async fn subscription_ownership_migration_only_removes_manual_memberships() {
+    let fixture = TempDatabase::new("subscription-ownership.sqlite");
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            SqliteConnectOptions::new()
+                .filename(fixture.path())
+                .create_if_missing(true)
+                .foreign_keys(true),
+        )
+        .await
+        .expect("fixture");
+    let previous = sqlx::migrate::Migrator {
+        migrations: Cow::Owned(
+            MIGRATOR
+                .iter()
+                .filter(|migration| migration.version < 7)
+                .cloned()
+                .collect(),
+        ),
+        ..sqlx::migrate::Migrator::DEFAULT
+    };
+    previous.run(&pool).await.expect("previous schema");
+    sqlx::raw_sql(r#"
+        INSERT INTO subscriptions (id, remarks, url) VALUES ('source', 'Source', 'https://source.test');
+        INSERT INTO node_groups (id, name, sort) VALUES ('manual', 'Manual', 0);
+        INSERT INTO profile_items (index_id, config_type, subscription_id, remarks, protocol)
+        VALUES ('owned', 'socks', 'source', 'Same', '{"kind":"socks","server":{"address":"source.test","port":1080},"username":"","password":""}'),
+               ('local', 'socks', NULL, 'Same', '{"kind":"socks","server":{"address":"local.test","port":1080},"username":"","password":""}');
+        INSERT INTO node_group_memberships (profile_id, group_id) VALUES ('owned', 'manual'), ('local', 'manual');
+    "#).execute(&pool).await.expect("legacy mixed group");
+    pool.close().await;
+    let database = Database::connect(fixture.path()).await.expect("upgrade");
+    let groups = database.node_groups().snapshot().await.expect("groups");
+    assert_eq!(groups.groups.len(), 1);
+    assert_eq!(groups.memberships.len(), 1);
+    assert_eq!(groups.memberships[0].profile_id, "local");
+    assert_eq!(database.profiles().list().await.expect("profiles").len(), 2);
+    assert_eq!(
+        database
+            .subscriptions()
+            .list()
+            .await
+            .expect("sources")
+            .len(),
+        1
+    );
+}

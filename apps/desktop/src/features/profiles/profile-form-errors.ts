@@ -5,13 +5,17 @@ import { PROFILE_VALIDATION_CODES } from "./profile-form-schema";
 /**
  * Resolve a zod issue produced by `profileFormSchema` into the locale string the
  * editor renders. Codes the schema owns are translated; anything else (zod's own
- * built-in issues, such as the port range) is passed through unchanged.
+ * built-in issues) is passed through unchanged.
  */
 export function profileValidationMessage(
   message: string | undefined,
   t: TranslationFunction,
 ): string | undefined {
   switch (message) {
+    case PROFILE_VALIDATION_CODES.integerInvalid:
+      return t("validation.integer");
+    case PROFILE_VALIDATION_CODES.portInvalid:
+      return t("validation.invalidPort");
     case PROFILE_VALIDATION_CODES.addressRequired:
       return t("panes.profiles.validation.addressRequired");
     case PROFILE_VALIDATION_CODES.credentialRequired:

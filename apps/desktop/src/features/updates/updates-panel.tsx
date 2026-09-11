@@ -1,12 +1,21 @@
 import { SettingsGroup } from "@/features/settings/settings-form";
-import { Database, Download, LoaderCircle, PackageCheck, RefreshCw } from "lucide-react";
+import {
+  Database,
+  Download,
+  LoaderCircle,
+  PackageCheck,
+  RefreshCw,
+} from "lucide-react";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { cn } from "@voya/ui/lib/utils";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { redactOperationalMessage } from "@voya/utils/operational-redaction";
 import type { AppUpdaterState } from "@/ipc/bindings";
-import { useCheckUpdateDialog, type CheckUpdateDialogController } from "./use-check-update-dialog";
+import {
+  useCheckUpdateDialog,
+  type CheckUpdateDialogController,
+} from "./use-check-update-dialog";
 
 export function UpdatesPanel() {
   const controller = useCheckUpdateDialog();
@@ -29,7 +38,11 @@ const APP_UPDATER_STATE_TRANSLATION_KEYS = {
   unsupported: "updates.appUpdaterState.unsupported",
 } as const satisfies Record<AppUpdaterState, TranslationKey>;
 
-function AppUpdatePanel({ controller }: { controller: CheckUpdateDialogController }) {
+function AppUpdatePanel({
+  controller,
+}: {
+  controller: CheckUpdateDialogController;
+}) {
   const {
     appInstallResult,
     appUpdaterCheck,
@@ -53,7 +66,11 @@ function AppUpdatePanel({ controller }: { controller: CheckUpdateDialogControlle
       <div className="flex flex-wrap items-start gap-3">
         <div className="grid gap-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={appUpdaterStatus?.state === "ready" ? "secondary" : "outline"}>
+            <Badge
+              variant={
+                appUpdaterStatus?.state === "ready" ? "secondary" : "outline"
+              }
+            >
               {appUpdaterStatus
                 ? t(APP_UPDATER_STATE_TRANSLATION_KEYS[appUpdaterStatus.state])
                 : t("updates.waiting")}
@@ -68,41 +85,56 @@ function AppUpdatePanel({ controller }: { controller: CheckUpdateDialogControlle
           </p>
           {appInstallResult ? (
             <p className="text-xs text-muted-foreground">
-              {appInstallResult.state === "installed" && appInstallResult.installedVersion
-                ? t("updates.appInstalled", { version: appInstallResult.installedVersion })
+              {appInstallResult.state === "installed" &&
+              appInstallResult.installedVersion
+                ? t("updates.appInstalled", {
+                    version: appInstallResult.installedVersion,
+                  })
                 : t("updates.noAppUpdate")}
             </p>
           ) : null}
           {appInstallResult?.restartRequired ? (
-            <p className="text-xs text-muted-foreground">{t("updates.restartRequired")}</p>
+            <p className="text-xs text-muted-foreground">
+              {t("updates.restartRequired")}
+            </p>
           ) : null}
         </div>
         <div className="ms-auto flex flex-wrap items-center gap-2">
-          <Button
-            disabled={working !== null}
-            onClick={() => void onCheck()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <RefreshCw
-              className={cn("size-4", working === "app-check" && "animate-spin")}
-              aria-hidden="true"
-            />
-            {t("updates.checkApp")}
-          </Button>
-          <Button
-            disabled={working !== null || !update}
-            onClick={() => void onInstall()}
-            size="sm"
-            type="button"
-          >
-            <PackageCheck
-              className={cn("size-4", working === "app-install" && "animate-pulse")}
-              aria-hidden="true"
-            />
-            {t("updates.installApp")}
-          </Button>
+          {!appInstallResult?.restartRequired ? (
+            <Button
+              disabled={working !== null}
+              onClick={() => void onCheck()}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <RefreshCw
+                className={cn(
+                  "size-4",
+                  working === "app-check" && "animate-spin",
+                )}
+                aria-hidden="true"
+              />
+              {t("updates.checkApp")}
+            </Button>
+          ) : null}
+          {update && !appInstallResult?.restartRequired ? (
+            <Button
+              disabled={working !== null || !update}
+              onClick={() => void onInstall()}
+              size="sm"
+              type="button"
+            >
+              <PackageCheck
+                className={cn(
+                  "size-4",
+                  working === "app-install" && "animate-pulse",
+                )}
+                aria-hidden="true"
+              />
+              {t("updates.installApp")}
+            </Button>
+          ) : null}
           {appInstallResult?.restartRequired ? (
             <Button
               disabled={working !== null}
@@ -111,7 +143,10 @@ function AppUpdatePanel({ controller }: { controller: CheckUpdateDialogControlle
               type="button"
             >
               <RefreshCw
-                className={cn("size-4", working === "app-restart" && "animate-spin")}
+                className={cn(
+                  "size-4",
+                  working === "app-restart" && "animate-spin",
+                )}
                 aria-hidden="true"
               />
               {t("updates.restartApp")}
@@ -121,21 +156,24 @@ function AppUpdatePanel({ controller }: { controller: CheckUpdateDialogControlle
       </div>
 
       {appUpdaterError ? (
-        <p className="break-words text-xs text-destructive">
+        <p className="break-words text-xs text-danger">
           {redactUpdateMessage(appUpdaterError, t)}
         </p>
       ) : null}
-
     </SettingsGroup>
   );
 }
 
-function ResourceUpdatePanel({ controller }: { controller: CheckUpdateDialogController }) {
+function ResourceUpdatePanel({
+  controller,
+}: {
+  controller: CheckUpdateDialogController;
+}) {
   return (
     <SettingsGroup title={controller.t("settings.sections.resources")}>
       <div className="grid divide-y">
-      <ResourceRow controller={controller} kind="geo" />
-      <ResourceRow controller={controller} kind="srs" />
+        <ResourceRow controller={controller} kind="geo" />
+        <ResourceRow controller={controller} kind="srs" />
       </div>
     </SettingsGroup>
   );
@@ -148,17 +186,25 @@ function ResourceRow({
   controller: CheckUpdateDialogController;
   kind: "geo" | "srs";
 }) {
-  const { resourceErrors, resourceResults, t, updateResource, working } = controller;
+  const { resourceErrors, resourceResults, t, updateResource, working } =
+    controller;
   const result = resourceResults[kind];
   const error = resourceErrors[kind];
   const busy = working === kind;
   const title = kind === "geo" ? t("updates.geoTitle") : t("updates.srsTitle");
-  const description = kind === "geo" ? t("updates.geoDescription") : t("updates.srsDescription");
+  const description =
+    kind === "geo" ? t("updates.geoDescription") : t("updates.srsDescription");
   const Icon = kind === "geo" ? Database : Download;
 
   return (
-    <section className="flex flex-wrap items-start gap-3 p-3" aria-label={title}>
-      <Icon className="mt-0.5 size-4 text-muted-foreground" aria-hidden="true" />
+    <section
+      className="flex flex-wrap items-start gap-3 p-3"
+      aria-label={title}
+    >
+      <Icon
+        className="mt-0.5 size-4 text-muted-foreground"
+        aria-hidden="true"
+      />
       <div className="grid min-w-0 flex-1 gap-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">{title}</span>
@@ -175,7 +221,7 @@ function ResourceRow({
           </p>
         ) : null}
         {error ? (
-          <p className="break-words text-xs text-destructive">
+          <p className="break-words text-xs text-danger">
             {redactUpdateMessage(error, t)}
           </p>
         ) : null}
@@ -192,7 +238,7 @@ function ResourceRow({
         ) : (
           <Download className="size-4" aria-hidden="true" />
         )}
-        {t("updates.updateNow")}
+        {error ? t("settings.autosave.retry") : t("updates.updateNow")}
       </Button>
     </section>
   );

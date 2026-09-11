@@ -57,8 +57,6 @@
     "nodes": "Nodes",
     "protected": "Protected",
     "protectedHint": "Your traffic is routed through the active node.",
-    "searchNodes": "Search nodes…",
-    "selectNode": "Select node",
     "subscriptionCard": {
       "add": "Add subscription",
       "expired": "Expired",
@@ -105,12 +103,8 @@
     "duration": "Connection time",
     "connectedHint": "Connected. Enjoy every step of your journey.",
     "currentNodeLabel": "Current node",
-    "selectedNodeLabel": "Selected node",
     "details": "Details",
     "switchNode": "Switch node",
-    "nodePickerHint": "Select a node, then apply. Double-click or press Enter to connect immediately.",
-    "manageSubscriptions": "Manage subscriptions",
-    "applyNode": "Use selected node",
     "connectionDetails": "Connection details",
     "serverAddress": "Server address",
     "serverPort": "Port",
@@ -119,7 +113,16 @@
     "tunDiagnostics": "TUN diagnostics",
     "disconnectLabel": "Disconnect",
     "trafficMode": "Traffic mode",
-    "trafficModeSmart": "Smart routing"
+    "trafficModeSmart": "Smart routing",
+    "tunHint": "TUN routes device traffic through VoyaVPN. System permissions may be required.",
+    "directConnection": "Direct connection",
+    "directHint": "Traffic connects directly without using a proxy node.",
+    "globalHint": "All traffic handled by VoyaVPN uses the selected node.",
+    "smartHint": "Routing rules choose which traffic uses the proxy.",
+    "chooseNode": "Choose a node",
+    "addFirstSubscription": "Add a subscription or import nodes to get started.",
+    "switchingNode": "Switching node...",
+    "selectedNodeLabel": "Selected node"
   },
   "logCodes": {
     "connected": "Core supervisor started",
@@ -210,7 +213,15 @@
       "proxyStrategy": "Proxy strategy",
       "remoteDns": "Remote DNS",
       "standard": "Standard",
-      "title": "DNS"
+      "title": "DNS",
+      "strategyHint": "Prefer IPv4 or IPv6 when resolving a hostname. Empty uses the core default.",
+      "expectedHint": "For direct DNS: use these IP ranges to check whether a response should be accepted.",
+      "strategyAutomatic": "Automatic",
+      "strategyIpv4": "Prefer IPv4",
+      "strategyIpv6": "Prefer IPv6",
+      "strategyOnlyIpv4": "IPv4 only",
+      "strategyOnlyIpv6": "IPv6 only",
+      "globalFakeIpHint": "Requires FakeIP. Also use FakeIP in global traffic mode."
     },
     "logs": {
       "empty": "No log lines",
@@ -491,7 +502,8 @@
       "sourceUrl": "Source URL",
       "title": "Routing",
       "type": "type",
-      "untitled": "Untitled"
+      "untitled": "Untitled",
+      "chooseProfile": "Select a configuration"
     },
     "subscriptions": {
       "additionalUrl": "More URL",
@@ -607,7 +619,9 @@
     "categories": "Settings categories",
     "autosave": {
       "failed": "Could not save changes",
-      "retry": "Retry"
+      "retry": "Retry",
+      "saving": "Saving…",
+      "saved": "Saved"
     },
     "sections": {
       "appearance": "Appearance",
@@ -622,7 +636,16 @@
       "dnsServers": "DNS servers and strategies",
       "dnsHosts": "Hosts and expected IPs",
       "resources": "Rule resources"
-    }
+    },
+    "apply": {
+      "reconnect": "Apply and reconnect",
+      "proxy": "Apply proxy settings",
+      "pending": "Saved changes are waiting to be applied to this connection.",
+      "nextConnection": "Connection settings take effect on the next connection.",
+      "current": "Connection settings are up to date.",
+      "working": "Applying settings…"
+    },
+    "openRules": "Open routing rules"
   },
   "speedtest": {
     "outcome": {
@@ -760,7 +783,9 @@
     "urlCredentials": "The URL must not include credentials",
     "urlHost": "The URL must include a host",
     "urlHttps": "The URL must use https://",
-    "urlInvalid": "The URL is not valid"
+    "urlInvalid": "The URL is not valid",
+    "subscriptionReadOnly": "Subscription nodes are read-only. Update or edit the subscription source instead.",
+    "integer": "Enter a whole number"
   },
   "window": {
     "close": "Close",
@@ -827,5 +852,20 @@
     "exportFor": "Export {{name}}",
     "empty": "No nodes in this group. Add members with Edit group.",
     "notFound": "This group no longer exists. Refresh the list and try again."
+  },
+  "common": {
+    "advanced": "Advanced options",
+    "none": "None"
+  },
+  "subscriptions": {
+    "edit": "Subscription settings",
+    "sourceHint": "Nodes in this group are maintained by the subscription source.",
+    "savedUpdateFailed": "Subscription saved. The update failed; retry now or update the group later.",
+    "addAndUpdate": "Add and update",
+    "retryUpdate": "Retry update",
+    "manualImportHint": "Imported nodes are saved as manual nodes. Importing does not connect automatically.",
+    "deleteTitle": "Delete subscription “{{name}}”?",
+    "deleteHint": "This also deletes its {{count}} nodes. If one is in use, the connection will stop and the selection will be cleared.",
+    "empty": "No nodes yet. Update this subscription to fetch its nodes."
   }
 }

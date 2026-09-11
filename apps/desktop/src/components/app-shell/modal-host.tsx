@@ -4,6 +4,7 @@ import { Cpu } from "lucide-react";
 import { Button } from "@voya/ui/components/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -22,8 +23,13 @@ export function ModalHost() {
   const modal = stack.at(-1);
 
   return (
-    <Dialog open={Boolean(modal)} onOpenChange={(open) => !open && closeTopModal()}>
-      {modal?.kind === "missingCore" ? <MissingCoreDialog payload={modal.missingCore} /> : null}
+    <Dialog
+      open={Boolean(modal)}
+      onOpenChange={(open) => !open && closeTopModal()}
+    >
+      {modal?.kind === "missingCore" ? (
+        <MissingCoreDialog payload={modal.missingCore} />
+      ) : null}
     </Dialog>
   );
 }
@@ -62,27 +68,40 @@ function MissingCoreDialog({ payload }: { payload?: MissingCorePayload }) {
   }
 
   return (
-    <DialogContent closeLabel={t("actions.close")}>
+    <DialogContent
+      className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]"
+      closeLabel={t("actions.close")}
+    >
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <Cpu className="size-4" aria-hidden="true" />
           {t("missingCore.title")}
         </DialogTitle>
-        <DialogDescription>{t("missingCore.description", { core: coreName })}</DialogDescription>
+        <DialogDescription>
+          {t("missingCore.description", { core: coreName })}
+        </DialogDescription>
       </DialogHeader>
-
-      <div className="grid gap-2 text-sm">
-        {seedMissing ? <p className="text-muted-foreground">{t("missingCore.seedMissingHint")}</p> : null}
-        {error ? <p className="text-destructive">{error}</p> : null}
-      </div>
-
+      <DialogBody>
+        <div className="grid gap-2 text-sm">
+          {seedMissing ? (
+            <p className="text-muted-foreground">
+              {t("missingCore.seedMissingHint")}
+            </p>
+          ) : null}
+          {error ? <p className="text-danger">{error}</p> : null}
+        </div>
+      </DialogBody>
       <DialogFooter>
         {seedMissing ? (
           <Button onClick={closeTopModal} type="button" variant="outline">
             {t("actions.close")}
           </Button>
         ) : (
-          <Button disabled={busy || !payload} onClick={() => void installAndConnect()} type="button">
+          <Button
+            disabled={busy || !payload}
+            onClick={() => void installAndConnect()}
+            type="button"
+          >
             {busy ? t("missingCore.installing") : t("missingCore.install")}
           </Button>
         )}

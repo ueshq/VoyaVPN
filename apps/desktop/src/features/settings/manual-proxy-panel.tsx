@@ -74,7 +74,7 @@ export function ManualProxyPanel({ status, connected, tunEnabled }: {
         })} size="sm" variant="outline">{t("home.manualProxy.copy")}</Button> : null}
       </div>
       {copied ? <p role="status">{t("home.manualProxy.copied")}</p> : null}
-      {error ? <p role="alert" className="break-words text-destructive">{error}</p> : null}
+      {error ? <p role="alert" className="break-words text-danger">{error}</p> : null}
     </div>
   );
 }

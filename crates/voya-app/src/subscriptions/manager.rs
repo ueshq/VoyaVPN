@@ -151,6 +151,18 @@ impl<'db> SubscriptionManager<'db> {
         text: &str,
         subscription_id: Option<&str>,
     ) -> Result<ImportProfilesResult> {
+        if let Some(id) = subscription_id.filter(|id| !id.trim().is_empty()) {
+            return Err(ProfileManagerError::SubscriptionReadOnly(id.to_string()).into());
+        }
+        self.import_subscription_content(config, text, None).await
+    }
+
+    async fn import_subscription_content(
+        &self,
+        config: &mut AppConfig,
+        text: &str,
+        subscription_id: Option<&str>,
+    ) -> Result<ImportProfilesResult> {
         let subscription_id = subscription_id
             .map(str::trim)
             .filter(|value| !value.is_empty());
@@ -261,7 +273,9 @@ impl<'db> SubscriptionManager<'db> {
                     .collect::<Vec<_>>();
 
                 profile.index_id.clone_from(&canonical_index_id);
-                let saved = profile_manager.save_profile(config, profile).await?;
+                let saved = profile_manager
+                    .save_imported_profile(config, profile)
+                    .await?;
                 update_existing_profile_cache(
                     &mut existing_profiles,
                     saved.profile.clone(),
@@ -272,7 +286,11 @@ impl<'db> SubscriptionManager<'db> {
                 updated_index_ids.push(saved.profile.index_id.clone());
                 imported_index_ids.push(saved.profile.index_id.clone());
             } else {
-                let saved = profile_manager.save_profile(config, profile).await?;
+                // External bundle IDs cannot overwrite another source's node.
+                profile.index_id.clear();
+                let saved = profile_manager
+                    .save_imported_profile(config, profile)
+                    .await?;
                 existing_profiles.push((saved.profile.clone(), saved.profile_ex.clone()));
                 imported_index_ids.push(saved.profile.index_id.clone());
             }
@@ -375,7 +393,7 @@ impl<'db> SubscriptionManager<'db> {
             // The import runs first so the recorded `last_update_at` only
             // advances for a subscription that actually produced profiles.
             let import = self
-                .import_profiles_from_text(
+                .import_subscription_content(
                     config,
                     &prepared_import.content,
                     Some(&prepared_import.item.id),
@@ -726,7 +744,7 @@ mod tests {
         ]
         .join("\n");
         let result = manager
-            .import_profiles_from_text(&mut config, &text, Some(&sub.id))
+            .import_subscription_content(&mut config, &text, Some(&sub.id))
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -1306,7 +1324,7 @@ mod tests {
         let database = Database::connect_in_memory().await.expect("database");
         let mut config = AppConfig::default();
         let result = SubscriptionManager::new(&database)
-            .import_profiles_from_text(
+            .import_subscription_content(
                 &mut config,
                 r#"{"remarks":"full-json","inbounds":[],"outbounds":[],"route":{},"dns":{}}"#,
                 None,
@@ -1334,7 +1352,7 @@ mod tests {
         let mut config = AppConfig::default();
 
         let result = manager
-            .import_profiles_from_text(&mut config, "vmess://%%%%", None)
+            .import_subscription_content(&mut config, "vmess://%%%%", None)
             .await
             .expect("bad share line should return diagnostics");
 
@@ -1365,7 +1383,7 @@ mod tests {
         .join("\n");
 
         let result = manager
-            .import_profiles_from_text(&mut config, &text, None)
+            .import_subscription_content(&mut config, &text, None)
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -1434,11 +1452,11 @@ mod tests {
         .join("\n");
 
         let first = manager
-            .import_profiles_from_text(&mut config, &text, None)
+            .import_subscription_content(&mut config, &text, None)
             .await
             .expect("subscription manager test operation should succeed");
         let second = manager
-            .import_profiles_from_text(&mut config, &text, None)
+            .import_subscription_content(&mut config, &text, None)
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -1458,7 +1476,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn subscription_import_updates_existing_manual_duplicate_globally() {
+    async fn subscription_import_keeps_manual_duplicates_independent() {
         let database = Database::connect_in_memory()
             .await
             .expect("subscription manager test operation should succeed");
@@ -1466,7 +1484,7 @@ mod tests {
         let mut config = AppConfig::default();
         let text = test_vless_link("same.example.test", "manual node");
         let manual = manager
-            .import_profiles_from_text(&mut config, &text, None)
+            .import_subscription_content(&mut config, &text, None)
             .await
             .expect("subscription manager test operation should succeed");
         let sub = manager
@@ -1480,24 +1498,31 @@ mod tests {
             .expect("subscription manager test operation should succeed");
 
         let result = manager
-            .import_profiles_from_text(&mut config, &text, Some(&sub.id))
+            .import_subscription_content(&mut config, &text, Some(&sub.id))
             .await
             .expect("subscription manager test operation should succeed");
 
         assert_eq!(result.imported, 1);
-        assert_eq!(result.updated, 1);
-        assert_eq!(result.imported_index_ids, manual.imported_index_ids);
+        assert_eq!(result.updated, 0);
+        assert_ne!(result.imported_index_ids, manual.imported_index_ids);
         let profiles = database
             .profiles()
             .list()
             .await
             .expect("subscription manager test operation should succeed");
-        assert_eq!(profiles.len(), 1);
-        assert_eq!(profiles[0].index_id, manual.imported_index_ids[0]);
-        assert_eq!(
-            profiles[0].subscription_id.as_deref(),
-            Some(sub.id.as_str())
-        );
+        assert_eq!(profiles.len(), 2);
+        assert!(profiles
+            .iter()
+            .any(|profile| profile.index_id == manual.imported_index_ids[0]
+                && profile.subscription_id.is_none()));
+        assert!(profiles
+            .iter()
+            .any(|profile| profile.subscription_id.as_deref() == Some(sub.id.as_str())));
+        assert!(manager
+            .import_profiles_from_text(&mut config, &text, Some(&sub.id))
+            .await
+            .is_err());
+        assert_eq!(database.profiles().list().await.expect("profiles").len(), 2);
     }
 
     /// Providers commonly hand out several plan URLs that carry the same
@@ -1523,15 +1548,15 @@ mod tests {
         let text = test_vless_link("shared.example.test", "shared node");
 
         let first_a = manager
-            .import_profiles_from_text(&mut config, &text, Some("sub-a"))
+            .import_subscription_content(&mut config, &text, Some("sub-a"))
             .await
             .expect("subscription manager test operation should succeed");
         let first_b = manager
-            .import_profiles_from_text(&mut config, &text, Some("sub-b"))
+            .import_subscription_content(&mut config, &text, Some("sub-b"))
             .await
             .expect("subscription manager test operation should succeed");
         let second_a = manager
-            .import_profiles_from_text(&mut config, &text, Some("sub-a"))
+            .import_subscription_content(&mut config, &text, Some("sub-a"))
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -1583,7 +1608,7 @@ mod tests {
         let mut config = AppConfig::default();
 
         let error = manager
-            .import_profiles_from_text(
+            .import_subscription_content(
                 &mut config,
                 &test_vless_link("ghost.example.test", "ghost"),
                 Some("sub-missing"),
@@ -1628,7 +1653,7 @@ mod tests {
         ]
         .join("\n");
         let first = manager
-            .import_profiles_from_text(&mut config, &first_text, Some(&sub.id))
+            .import_subscription_content(&mut config, &first_text, Some(&sub.id))
             .await
             .expect("subscription manager test operation should succeed");
         let keep_index_id = first.imported_index_ids[0].clone();
@@ -1640,7 +1665,7 @@ mod tests {
         .join("\n");
 
         let second = manager
-            .import_profiles_from_text(&mut config, &second_text, Some(&sub.id))
+            .import_subscription_content(&mut config, &second_text, Some(&sub.id))
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -1673,7 +1698,7 @@ mod tests {
         let mut config = AppConfig::default();
         let text = "vless://uuid@example.test:443#Imported";
         let initial = manager
-            .import_profiles_from_text(&mut config, text, None)
+            .import_subscription_content(&mut config, text, None)
             .await
             .expect("subscription manager test operation should succeed");
         let original_index_id = initial.imported_index_ids[0].clone();
@@ -1687,7 +1712,7 @@ mod tests {
         active_duplicate.index_id = "active".to_string();
         active_duplicate.remarks = "Active".to_string();
         profile_manager
-            .save_profile(&mut config, active_duplicate)
+            .save_imported_profile(&mut config, active_duplicate)
             .await
             .expect("subscription manager test operation should succeed");
         profile_manager
@@ -1719,7 +1744,7 @@ mod tests {
         config.index_id = "active".to_string();
 
         let result = manager
-            .import_profiles_from_text(&mut config, text, None)
+            .import_subscription_content(&mut config, text, None)
             .await
             .expect("subscription manager test operation should succeed");
 

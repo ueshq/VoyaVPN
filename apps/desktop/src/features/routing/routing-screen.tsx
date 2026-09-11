@@ -1,3 +1,10 @@
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@voya/ui/components/select";
 import { TriangleAlert } from "lucide-react";
 
 import { PageSection, PageTitle } from "@/components/app-shell/page-section";
@@ -15,7 +22,7 @@ export function RoutingScreen() {
   const controller = useRoutingScreen();
 
   return (
-    <PageSection aria-label={t("tabs.rules")}>
+    <PageSection className="@container/routing" aria-label={t("tabs.rules")}>
       <PageTitle title={t("tabs.rules")} />
       <RoutingToolbar controller={controller} />
 
@@ -28,8 +35,31 @@ export function RoutingScreen() {
         </div>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[21rem_1fr]">
-        <RoutingProfileList controller={controller} />
+      <div className="border-b p-4 @min-[896px]/routing:hidden">
+        <Select
+          value={controller.selectedRouting?.id ?? ""}
+          onValueChange={controller.selectRouting}
+        >
+          <SelectTrigger
+            className="w-full"
+            aria-label={t("panes.routing.chooseProfile")}
+          >
+            <SelectValue placeholder={t("panes.routing.chooseProfile")} />
+          </SelectTrigger>
+          <SelectContent>
+            {controller.routings.map((routing) => (
+              <SelectItem key={routing.id} value={routing.id}>
+                {routing.remarks || t("panes.routing.untitled")}
+                {routing.isActive ? ` · ${t("panes.routing.active")}` : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid min-h-0 flex-1 grid-cols-1 @min-[896px]/routing:grid-cols-[18rem_minmax(0,1fr)]">
+        <div className="hidden min-h-0 @min-[896px]/routing:flex">
+          <RoutingProfileList controller={controller} />
+        </div>
         <RoutingRulesPanel controller={controller} />
       </div>
 

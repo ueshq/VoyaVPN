@@ -184,11 +184,10 @@ async fn copies_inherit_membership_and_sorting_stays_within_folder() {
 }
 
 #[tokio::test]
-async fn subscription_refresh_preserves_surviving_ids_and_clears_removed_selection() {
-    let db = Database::connect_in_memory().await.expect("db");
-    let subscriptions = SubscriptionManager::new(&db);
-    let mut config = AppConfig::default();
-    let sub = subscriptions
+async fn subscription_nodes_cannot_be_assigned_to_manual_groups() {
+    let db = database().await;
+    let manager = SubscriptionManager::new(&db);
+    manager
         .save_subscription(SubItem {
             id: "source".into(),
             remarks: "Source".into(),
@@ -197,41 +196,29 @@ async fn subscription_refresh_preserves_surviving_ids_and_clears_removed_selecti
         })
         .await
         .expect("subscription");
-    let first = subscriptions
-        .import_profiles_from_text(
-            &mut config,
-            "trojan://secret@a.test:443#A\ntrojan://secret@b.test:443#B",
-            Some(&sub.id),
-        )
+    let profiles = ProfileManager::new(&db);
+    let mut subscribed = db
+        .profiles()
+        .get("b")
         .await
-        .expect("import");
-    assert!(config.index_id.is_empty());
-    let ids = first.imported_index_ids;
+        .expect("load")
+        .expect("profile");
+    subscribed.subscription_id = Some("source".into());
+    profiles
+        .save_imported_profile(&mut AppConfig::default(), subscribed)
+        .await
+        .expect("internal import");
     let groups = NodeGroupManager::new(&db);
     let group = groups.save(None, "Manual").await.expect("group");
-    groups
+    assert!(groups
         .assign(&[
-            assignment(&ids[0], Some(&group.id)),
-            assignment(&ids[1], Some(&group.id)),
+            assignment("a", Some(&group.id)),
+            assignment("b", Some(&group.id))
         ])
         .await
-        .expect("assign");
-    ProfileManager::new(&db)
-        .set_active_profile(&mut config, &ids[1])
-        .await
-        .expect("select");
-    subscriptions
-        .import_profiles_from_text(
-            &mut config,
-            "trojan://secret@a.test:443#Renamed\ntrojan://secret@c.test:443#C",
-            Some(&sub.id),
-        )
-        .await
-        .expect("refresh");
-    let snapshot = groups.list().await.expect("groups");
-    assert_eq!(snapshot.memberships.len(), 1);
-    assert_eq!(snapshot.memberships[0].profile_id, ids[0]);
-    assert!(config.index_id.is_empty());
+        .is_err());
+    assert!(groups.list().await.expect("groups").memberships.is_empty());
+    assert_eq!(db.profiles().list().await.expect("profiles").len(), 4);
 }
 
 #[tokio::test]

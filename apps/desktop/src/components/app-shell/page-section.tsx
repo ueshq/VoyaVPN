@@ -1,4 +1,5 @@
-import type * as React from "react";
+import * as React from "react";
+import { useShellStore } from "@/stores/shell-store";
 
 import { Badge } from "@voya/ui/components/badge";
 import { cn } from "@voya/ui/lib/utils";
@@ -14,7 +15,11 @@ import { cn } from "@voya/ui/lib/utils";
 
 function PageSection({ className, ...props }: React.ComponentProps<"section">) {
   return (
-    <section className={cn("flex h-full min-h-0 flex-col", className)} data-slot="page-section" {...props} />
+    <section
+      className={cn("flex h-full min-h-0 flex-col", className)}
+      data-slot="page-section"
+      {...props}
+    />
   );
 }
 
@@ -32,19 +37,41 @@ function PageTitle({
   count?: React.ReactNode;
   title: React.ReactNode;
 }) {
+  const titleRef = React.useRef<HTMLHeadingElement>(null);
+  const focusTitle = useShellStore((state) => state.focusPageTitle);
+  React.useEffect(() => {
+    if (focusTitle) {
+      titleRef.current?.focus();
+      useShellStore.setState({ focusPageTitle: false });
+    }
+  }, [focusTitle]);
   return (
     <div
-      className={cn("flex shrink-0 items-center gap-3 px-6 pt-5 pb-3", className)}
+      className={cn(
+        "flex shrink-0 items-center gap-3 px-4 min-[1100px]:px-page pt-5 pb-3",
+        className,
+      )}
       data-slot="page-title"
       {...props}
     >
-      <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">{title}</h1>
+      <h1
+        ref={titleRef}
+        tabIndex={-1}
+        className="min-w-0 truncate text-page font-semibold tracking-tight outline-none"
+      >
+        {title}
+      </h1>
       {count == null ? null : (
-        <Badge className="h-6 bg-background tabular-nums text-muted-foreground" variant="outline">
+        <Badge
+          className="h-6 bg-background tabular-nums text-muted-foreground"
+          variant="outline"
+        >
           {count}
         </Badge>
       )}
-      {actions ? <div className="ms-auto flex items-center gap-2">{actions}</div> : null}
+      {actions ? (
+        <div className="ms-auto flex items-center gap-2">{actions}</div>
+      ) : null}
     </div>
   );
 }
@@ -53,7 +80,7 @@ function PageHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b bg-surface-raised px-4 py-2",
+        "flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b bg-surface-raised px-4 min-[1100px]:px-page py-2",
         className,
       )}
       data-slot="page-header"
@@ -64,7 +91,10 @@ function PageHeader({ className, ...props }: React.ComponentProps<"div">) {
 
 // Trailing toolbar cluster: parks controls against the header's end edge with the
 // canonical `ms-auto` push so screens stop re-deriving it inline.
-function PageHeaderActions({ className, ...props }: React.ComponentProps<"div">) {
+function PageHeaderActions({
+  className,
+  ...props
+}: React.ComponentProps<"div">) {
   return (
     <div
       className={cn("ms-auto flex items-center gap-2", className)}

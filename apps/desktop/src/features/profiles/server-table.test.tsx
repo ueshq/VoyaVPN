@@ -1,4 +1,12 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, vi } from "vitest";
@@ -7,7 +15,13 @@ import { changeLocale } from "@voya/i18n";
 
 import { IpcCommandError } from "@/ipc";
 import { useModalStore } from "@/stores/modal-store";
-import type { AppError, ImportProfilesResult, Profile, ProfileListEntry, RuntimeStatusResponse } from "@/ipc/bindings";
+import type {
+  AppError,
+  ImportProfilesResult,
+  Profile,
+  ProfileListEntry,
+  RuntimeStatusResponse,
+} from "@/ipc/bindings";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useRuntimeActionStore } from "@/stores/runtime-action-store";
 import { useToastStore } from "@/stores/toast-store";
@@ -44,15 +58,18 @@ const ipcMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/ipc", async () => {
-  const runtimeStore = await vi.importActual<typeof import("@/ipc/runtime-event-store")>(
-    "@/ipc/runtime-event-store",
-  );
+  const runtimeStore = await vi.importActual<
+    typeof import("@/ipc/runtime-event-store")
+  >("@/ipc/runtime-event-store");
 
   return {
     ...ipcMocks,
     IpcCommandError: class extends Error {
       readonly appError: AppError;
-      constructor(appError: AppError) { super(appError.message); this.appError = appError; }
+      constructor(appError: AppError) {
+        super(appError.message);
+        this.appError = appError;
+      }
     },
     useRuntimeEventStore: runtimeStore.useRuntimeEventStore,
   };
@@ -66,15 +83,25 @@ function listing(entries: ProfileListEntry[], undecodableProfiles = 0) {
 }
 
 function mockProfileList(entries: ProfileListEntry[], undecodableProfiles = 0) {
-  ipcMocks.listProfiles.mockResolvedValue(listing(entries, undecodableProfiles));
+  ipcMocks.listProfiles.mockResolvedValue(
+    listing(entries, undecodableProfiles),
+  );
 }
 
-function mockProfileListOnce(entries: ProfileListEntry[], undecodableProfiles = 0) {
-  ipcMocks.listProfiles.mockResolvedValueOnce(listing(entries, undecodableProfiles));
+function mockProfileListOnce(
+  entries: ProfileListEntry[],
+  undecodableProfiles = 0,
+) {
+  ipcMocks.listProfiles.mockResolvedValueOnce(
+    listing(entries, undecodableProfiles),
+  );
 }
 
 const queryClients = new Set<QueryClient>();
-const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(
+  navigator,
+  "clipboard",
+);
 
 function renderProfiles() {
   const queryClient = new QueryClient({
@@ -131,7 +158,11 @@ async function selectComboboxOption(label: string, optionLabel: string) {
 
   await user.click(screen.getByRole("combobox", { name: label }));
   const listbox = await screen.findByRole("listbox");
-  await user.click(within(listbox).getByRole("option", { name: new RegExp(`^${escapeRegExp(optionLabel)}`) }));
+  await user.click(
+    within(listbox).getByRole("option", {
+      name: new RegExp(`^${escapeRegExp(optionLabel)}`),
+    }),
+  );
 }
 
 // Locale switches never touch localStorage, and the default locale is restored
@@ -172,7 +203,11 @@ async function openContextSubmenu(menu: HTMLElement, name: string) {
 
 describe("ProfilesScreen", () => {
   beforeEach(() => {
-    useRuntimeActionStore.setState({ pendingAction: null, modePending: false, switchingId: null });
+    useRuntimeActionStore.setState({
+      pendingAction: null,
+      modePending: false,
+      switchingId: null,
+    });
     Object.values(ipcMocks).forEach((mock) => {
       if ("mockReset" in mock) {
         mock.mockReset();
@@ -187,19 +222,34 @@ describe("ProfilesScreen", () => {
       speedtestResultsByProfileId: {},
       speedtestRunning: false,
     });
-    ipcMocks.connectActiveProfile.mockResolvedValue({ state: "connected", activeProfileId: "profile-0" });
-    ipcMocks.restartCore.mockResolvedValue({ state: "connected", activeProfileId: "profile-0" });
-    ipcMocks.runtimeStatus.mockImplementation(async () => useRuntimeEventStore.getState().coreState);
+    ipcMocks.connectActiveProfile.mockResolvedValue({
+      state: "connected",
+      activeProfileId: "profile-0",
+    });
+    ipcMocks.restartCore.mockResolvedValue({
+      state: "connected",
+      activeProfileId: "profile-0",
+    });
+    ipcMocks.runtimeStatus.mockImplementation(
+      async () => useRuntimeEventStore.getState().coreState,
+    );
     ipcMocks.systemProxyStatus.mockResolvedValue(null);
     ipcMocks.tunStatus.mockResolvedValue(null);
     ipcMocks.deleteSubscriptions.mockResolvedValue(1);
     ipcMocks.deleteProfiles.mockResolvedValue(1);
-    ipcMocks.exportProfileShareLinks.mockImplementation(async (indexIds: string[]) => ({
-      count: indexIds.length,
-      format: "shareLinks",
-      text: indexIds.map((indexId) => `vless://${indexId}@example.test:443`).join("\n"),
-    }));
-    ipcMocks.generateQrCode.mockResolvedValue({ mimeType: "image/svg+xml", svg: "<svg />" });
+    ipcMocks.exportProfileShareLinks.mockImplementation(
+      async (indexIds: string[]) => ({
+        count: indexIds.length,
+        format: "shareLinks",
+        text: indexIds
+          .map((indexId) => `vless://${indexId}@example.test:443`)
+          .join("\n"),
+      }),
+    );
+    ipcMocks.generateQrCode.mockResolvedValue({
+      mimeType: "image/svg+xml",
+      svg: "<svg />",
+    });
     ipcMocks.importProfilesFromText.mockResolvedValue(
       makeImportResult({ imported: 1, importedProfileIds: ["profile-new"] }),
     );
@@ -219,10 +269,20 @@ describe("ProfilesScreen", () => {
       status: "unavailable",
       text: null,
     });
-    ipcMocks.saveProfile.mockImplementation(async (profile: Profile) => makeProfile(99, profile));
+    ipcMocks.saveProfile.mockImplementation(async (profile: Profile) =>
+      makeProfile(99, profile),
+    );
     ipcMocks.saveSubscription.mockResolvedValue(makeSubscription());
-    ipcMocks.setActiveProfile.mockImplementation(async (profileId: string) => makeProfile(0, { id: profileId }));
-    ipcMocks.updateSubscriptions.mockResolvedValue({ imported: 0, messages: [], removedExisting: 0, skipped: 0, updated: 0 });
+    ipcMocks.setActiveProfile.mockImplementation(async (profileId: string) =>
+      makeProfile(0, { id: profileId }),
+    );
+    ipcMocks.updateSubscriptions.mockResolvedValue({
+      imported: 0,
+      messages: [],
+      removedExisting: 0,
+      skipped: 0,
+      updated: 0,
+    });
   });
 
   it("keeps a 5k row profile list virtualized", async () => {
@@ -231,7 +291,10 @@ describe("ProfilesScreen", () => {
     renderProfiles();
 
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
-    expect(screen.getAllByRole("listitem")[0]).toHaveAttribute("aria-setsize", "5001");
+    expect(screen.getAllByRole("listitem")[0]).toHaveAttribute(
+      "aria-setsize",
+      "5001",
+    );
     expect(screen.getAllByTestId("server-row").length).toBeLessThan(60);
     expect(screen.queryByText("Server 4999")).not.toBeInTheDocument();
   });
@@ -269,17 +332,21 @@ describe("ProfilesScreen", () => {
     ["testing", "Testing"],
     ["timedOut", "Request timed out"],
     ["cancelled", "Cancelled"],
-  ] as const)("shows %s instead of a previous latency", async (outcome, label) => {
-    const profile = makeProfile(0);
-    profile.metrics = { ...profile.metrics, delayMs: 42, outcome };
-    mockProfileList([profile]);
-    renderProfiles();
-    expect(await screen.findByText("Server 0")).toBeInTheDocument();
-    expect(screen.getByText(label)).toBeInTheDocument();
-    expect(screen.queryByText("42 ms")).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "Speed" })).not.toBeInTheDocument();
-  });
-
+  ] as const)(
+    "shows %s instead of a previous latency",
+    async (outcome, label) => {
+      const profile = makeProfile(0);
+      profile.metrics = { ...profile.metrics, delayMs: 42, outcome };
+      mockProfileList([profile]);
+      renderProfiles();
+      expect(await screen.findByText("Server 0")).toBeInTheDocument();
+      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(screen.queryByText("42 ms")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("columnheader", { name: "Speed" }),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   it("keeps row actions without multi-select, copy, sorting, or dedupe", async () => {
     const profiles = makeProfiles(3);
@@ -291,23 +358,37 @@ describe("ProfilesScreen", () => {
 
     const rows = screen.getAllByTestId("server-row");
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Copy" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: "Sort" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Sort" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Dedupe" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Copy" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Sort" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Sort" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Dedupe" }),
+    ).not.toBeInTheDocument();
 
     await userEvent.click(rows[0]!);
     fireEvent.click(rows[1]!, { ctrlKey: true });
     expect(rows[0]).toHaveAttribute("data-selected", "false");
     expect(rows[1]).toHaveAttribute("data-selected", "true");
     expect(rows[2]).toHaveAttribute("data-selected", "false");
-    expect(screen.queryByRole("button", { name: /Activate/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Activate/ }),
+    ).not.toBeInTheDocument();
 
     const menu = await openRowContextMenu(0);
-    await userEvent.click(within(menu).getByRole("menuitem", { name: "Delete" }));
+    await userEvent.click(
+      within(menu).getByRole("menuitem", { name: "Delete" }),
+    );
     const confirm = await screen.findByRole("alertdialog");
     fireEvent.click(within(confirm).getByRole("button", { name: "Delete" }));
-    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
 
     expect(ipcMocks.setActiveProfile).not.toHaveBeenCalled();
     expect(ipcMocks.deleteProfiles).toHaveBeenCalledWith(["profile-0"]);
@@ -368,16 +449,25 @@ describe("ProfilesScreen", () => {
   });
 
   it("tests all profiles and always displays latency despite old column preferences", async () => {
-    window.localStorage.setItem("voyavpn.profileColumns", JSON.stringify({ state: { columnVisibility: { delay: false, remarks: false } } }));
+    window.localStorage.setItem(
+      "voyavpn.profileColumns",
+      JSON.stringify({
+        state: { columnVisibility: { delay: false, remarks: false } },
+      }),
+    );
     const profile = makeProfile(0);
     profile.metrics.delayMs = 42;
     mockProfileList([profile]);
     renderProfiles();
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
     expect(screen.getByText("42 ms")).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: "Columns" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Columns" }),
+    ).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Ping all" }));
-    expect(ipcMocks.runSpeedtest).toHaveBeenCalledWith({ target: { scope: "all" } });
+    expect(ipcMocks.runSpeedtest).toHaveBeenCalledWith({
+      target: { scope: "all" },
+    });
   });
 
   it("offers Stop for an existing run and disables the row action", async () => {
@@ -387,26 +477,44 @@ describe("ProfilesScreen", () => {
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Stop" })[0]!).toBeEnabled();
     const menu = await openRowContextMenu();
-    expect(within(menu).getByRole("menuitem", { name: "Ping" })).toHaveAttribute("data-disabled");
+    expect(
+      within(menu).getByRole("menuitem", { name: "Ping" }),
+    ).toHaveAttribute("data-disabled");
     expect(ipcMocks.runSpeedtest).not.toHaveBeenCalled();
   });
 
   it("waits for the run to finish after cancellation is requested", async () => {
-    let finishRun!: (value: Awaited<ReturnType<typeof ipcMocks.runSpeedtest>>) => void;
-    ipcMocks.runSpeedtest.mockReturnValue(new Promise((resolve) => { finishRun = resolve; }));
+    let finishRun!: (
+      value: Awaited<ReturnType<typeof ipcMocks.runSpeedtest>>,
+    ) => void;
+    ipcMocks.runSpeedtest.mockReturnValue(
+      new Promise((resolve) => {
+        finishRun = resolve;
+      }),
+    );
     ipcMocks.cancelSpeedtest.mockResolvedValue({ running: true });
     mockProfileList(makeProfiles(1));
     renderProfiles();
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Ping all" }));
-    await userEvent.click((await screen.findAllByRole("button", { name: "Stop" }))[0]!);
+    await userEvent.click(
+      (await screen.findAllByRole("button", { name: "Stop" }))[0]!,
+    );
     expect(ipcMocks.cancelSpeedtest).toHaveBeenCalledOnce();
-    expect(screen.getAllByRole("button", { name: "Stop" })[0]!).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Stop" })[0]!,
+    ).toBeInTheDocument();
     expect(ipcMocks.runSpeedtest).toHaveBeenCalledOnce();
-    finishRun({ cancelled: true, completedCount: 0, selectedCount: 1, results: [] });
-    expect(await screen.findByRole("button", { name: "Ping all" })).toBeEnabled();
+    finishRun({
+      cancelled: true,
+      completedCount: 0,
+      selectedCount: 1,
+      results: [],
+    });
+    expect(
+      await screen.findByRole("button", { name: "Ping all" }),
+    ).toBeEnabled();
   });
-
 
   it("confirms before deleting and cancels without calling the delete IPC", async () => {
     mockProfileList(makeProfiles(3));
@@ -416,12 +524,16 @@ describe("ProfilesScreen", () => {
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
 
     const menu = await openRowContextMenu();
-    await userEvent.click(within(menu).getByRole("menuitem", { name: "Delete" }));
+    await userEvent.click(
+      within(menu).getByRole("menuitem", { name: "Delete" }),
+    );
 
     const confirm = await screen.findByRole("alertdialog");
     fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
 
-    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
     expect(ipcMocks.deleteProfiles).not.toHaveBeenCalled();
   });
 
@@ -432,17 +544,24 @@ describe("ProfilesScreen", () => {
 
     expect(await screen.findByText("No nodes")).toBeInTheDocument();
     expect(
-      screen.getByText("Add a node or import one from a subscription to get started."),
+      screen.getByText(
+        "Add a node or import one from a subscription to get started.",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("server-row")).not.toBeInTheDocument();
   });
 
   it("shows a compact card with subscription name, details and an accessible selection button", async () => {
-    const profile = makeProfile(0, { subscriptionId: "sub-1", remarks: "🇯🇵 Tokyo" });
+    const profile = makeProfile(0, {
+      subscriptionId: "sub-1",
+      remarks: "🇯🇵 Tokyo",
+    });
     profile.metrics.delayMs = 42;
     profile.metrics.ipInfo = "Tokyo IP";
     mockProfileList([profile]);
-    ipcMocks.listSubscriptions.mockResolvedValue([{ ...makeSubscription(), id: "sub-1", remarks: "Travel" }]);
+    ipcMocks.listSubscriptions.mockResolvedValue([
+      { ...makeSubscription(), id: "sub-1", remarks: "Travel" },
+    ]);
     renderProfiles();
     expect(await screen.findByText("Tokyo")).toBeInTheDocument();
     expect(await screen.findByText("Travel")).toBeInTheDocument();
@@ -468,15 +587,37 @@ describe("ProfilesScreen", () => {
     mockProfileList([makeProfile(0)]);
     renderProfiles();
     await screen.findByText("Server 0");
-    act(() => useRuntimeEventStore.setState({ serverStatsByProfileId: {
-      "profile-0": { dateNow: 20260101, indexId: "profile-0", todayDown: 4096, todayUp: 2048, totalDown: 8192, totalUp: 4096 },
-    } }));
+    act(() =>
+      useRuntimeEventStore.setState({
+        serverStatsByProfileId: {
+          "profile-0": {
+            dateNow: 20260101,
+            indexId: "profile-0",
+            todayDown: 4096,
+            todayUp: 2048,
+            totalDown: 8192,
+            totalUp: 4096,
+          },
+        },
+      }),
+    );
     expect(screen.queryByText("4.0 KB")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Details" }));
     expect(screen.getByRole("dialog")).toHaveTextContent("4.0 KB");
-    act(() => useRuntimeEventStore.setState({ serverStatsByProfileId: {
-      "profile-0": { dateNow: 20260101, indexId: "profile-0", todayDown: 16384, todayUp: 2048, totalDown: 16384, totalUp: 4096 },
-    } }));
+    act(() =>
+      useRuntimeEventStore.setState({
+        serverStatsByProfileId: {
+          "profile-0": {
+            dateNow: 20260101,
+            indexId: "profile-0",
+            todayDown: 16384,
+            todayUp: 2048,
+            totalDown: 16384,
+            totalUp: 4096,
+          },
+        },
+      }),
+    );
     expect(screen.getByRole("dialog")).toHaveTextContent("16.0 KB");
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByText("16.0 KB")).not.toBeInTheDocument();
@@ -486,91 +627,189 @@ describe("ProfilesScreen", () => {
     mockProfileList([makeProfile(0)]);
     renderProfiles();
     await screen.findByText("Server 0");
-    await userEvent.click(screen.getByRole("menuitem", { name: /Actions for Server 0/ }));
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: /Actions for Server 0/ }),
+    );
     await userEvent.click(screen.getByRole("menuitem", { name: "Edit" }));
-    expect(await screen.findByRole("dialog", { name: "Edit node" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("dialog", { name: "Edit node" }),
+    ).toBeInTheDocument();
   });
 
   it("connects the requested card, guards repeated activation and marks the running node", async () => {
     mockProfileList(makeProfiles(2));
     let finish!: (status: RuntimeStatusResponse) => void;
-    ipcMocks.connectActiveProfile.mockReturnValue(new Promise<RuntimeStatusResponse>((resolve) => { finish = resolve; }));
+    ipcMocks.connectActiveProfile.mockReturnValue(
+      new Promise<RuntimeStatusResponse>((resolve) => {
+        finish = resolve;
+      }),
+    );
     renderProfiles();
     await screen.findByText("Server 0");
     const target = within(screen.getAllByTestId("server-row")[1]!);
     fireEvent.click(target.getByRole("button", { name: "Use node" }));
     fireEvent.click(target.getByRole("button", { name: "Switching…" }));
-    await waitFor(() => expect(ipcMocks.connectActiveProfile).toHaveBeenCalledOnce());
-    expect(ipcMocks.setActiveProfile).toHaveBeenCalledExactlyOnceWith("profile-1");
-    expect(ipcMocks.setActiveProfile.mock.invocationCallOrder[0]).toBeLessThan(ipcMocks.connectActiveProfile.mock.invocationCallOrder[0]!);
+    await waitFor(() =>
+      expect(ipcMocks.connectActiveProfile).toHaveBeenCalledOnce(),
+    );
+    expect(ipcMocks.setActiveProfile).toHaveBeenCalledExactlyOnceWith(
+      "profile-1",
+    );
+    expect(ipcMocks.setActiveProfile.mock.invocationCallOrder[0]).toBeLessThan(
+      ipcMocks.connectActiveProfile.mock.invocationCallOrder[0]!,
+    );
     expect(screen.getByRole("button", { name: "Use node" })).toBeDisabled();
-    await act(async () => finish({ activeProfileId: "profile-1", activeTunBackend: null, mainPid: 42, prePid: null, runningCoreType: "singBox", state: "connected", connectedDurationMs: 0 }));
-    expect(await screen.findByRole("button", { name: "In use" })).toBeDisabled();
+    await act(async () =>
+      finish({
+        activeProfileId: "profile-1",
+        activeTunBackend: null,
+        mainPid: 42,
+        prePid: null,
+        runningCoreType: "singBox",
+        state: "connected",
+        connectedDurationMs: 0,
+      }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "In use" }),
+    ).toBeDisabled();
     expect(target.getByText("Active node")).toBeInTheDocument();
     expect(ipcMocks.restartCore).not.toHaveBeenCalled();
   });
 
   it("restarts when switching a connected node and keeps actual runtime distinct from default", async () => {
     mockProfileList(makeProfiles(2));
-    useRuntimeEventStore.setState({ coreState: { activeProfileId: "profile-1", activeTunBackend: null, mainPid: 42, prePid: null, runningCoreType: "singBox", state: "connected", connectedDurationMs: 0 } });
+    useRuntimeEventStore.setState({
+      coreState: {
+        activeProfileId: "profile-1",
+        activeTunBackend: null,
+        mainPid: 42,
+        prePid: null,
+        runningCoreType: "singBox",
+        state: "connected",
+        connectedDurationMs: 0,
+      },
+    });
     renderProfiles();
     await screen.findByText("Server 0");
     const cards = screen.getAllByTestId("server-row");
     expect(within(cards[0]!).getByText("Default node")).toBeInTheDocument();
-    expect(within(cards[1]!).getByRole("button", { name: "In use" })).toBeDisabled();
-    await userEvent.click(within(cards[0]!).getByRole("button", { name: "Use node" }));
+    expect(
+      within(cards[1]!).getByRole("button", { name: "In use" }),
+    ).toBeDisabled();
+    await userEvent.click(
+      within(cards[0]!).getByRole("button", { name: "Use node" }),
+    );
     await waitFor(() => expect(ipcMocks.restartCore).toHaveBeenCalledOnce());
-    await waitFor(() => expect(within(cards[0]!).getByRole("button", { name: "In use" })).toBeDisabled());
+    await waitFor(() =>
+      expect(
+        within(cards[0]!).getByRole("button", { name: "In use" }),
+      ).toBeDisabled(),
+    );
     expect(ipcMocks.connectActiveProfile).not.toHaveBeenCalled();
   });
 
   it("reports connection failure and allows retry", async () => {
     mockProfileList([makeProfile(0)]);
-    ipcMocks.connectActiveProfile.mockRejectedValueOnce(new Error("Connection failed"));
+    ipcMocks.connectActiveProfile.mockRejectedValueOnce(
+      new Error("Connection failed"),
+    );
     renderProfiles();
     await screen.findByText("Server 0");
     await userEvent.click(screen.getByRole("button", { name: "Use node" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Use node" })).toBeEnabled());
-    expect(useToastStore.getState().toasts.some((toast) => toast.description === "Connection failed")).toBe(true);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Use node" })).toBeEnabled(),
+    );
+    expect(
+      useToastStore
+        .getState()
+        .toasts.some((toast) => toast.description === "Connection failed"),
+    ).toBe(true);
     await userEvent.click(screen.getByRole("button", { name: "Use node" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "In use" })).toBeDisabled());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "In use" })).toBeDisabled(),
+    );
     expect(ipcMocks.connectActiveProfile).toHaveBeenCalledTimes(2);
   });
 
-  it.each(["connecting", "disconnecting", "cleanupPending"] as const)("disables use during %s", async (state) => {
-    mockProfileList([makeProfile(0)]);
-    useRuntimeEventStore.setState({ coreState: { activeProfileId: null, activeTunBackend: null, mainPid: null, prePid: null, runningCoreType: null, state, connectedDurationMs: null } });
-    renderProfiles();
-    await screen.findByText("Server 0");
-    expect(screen.getByRole("button", { name: "Use node" })).toBeDisabled();
-  });
+  it.each(["connecting", "disconnecting", "cleanupPending"] as const)(
+    "disables use during %s",
+    async (state) => {
+      mockProfileList([makeProfile(0)]);
+      useRuntimeEventStore.setState({
+        coreState: {
+          activeProfileId: null,
+          activeTunBackend: null,
+          mainPid: null,
+          prePid: null,
+          runningCoreType: null,
+          state,
+          connectedDurationMs: null,
+        },
+      });
+      renderProfiles();
+      await screen.findByText("Server 0");
+      expect(screen.getByRole("button", { name: "Use node" })).toBeDisabled();
+    },
+  );
 
   it("opens missing-core recovery when using a card", async () => {
     mockProfileList([makeProfile(0)]);
-    ipcMocks.connectActiveProfile.mockRejectedValue(new IpcCommandError({
-      kind: { type: "missingCore", coreType: "singBox", candidates: [], searchDir: "/cores", downloadUrl: "https://example.test/core" },
-      message: "Core unavailable", subsystem: "runtime",
-    }));
+    ipcMocks.connectActiveProfile.mockRejectedValue(
+      new IpcCommandError({
+        kind: {
+          type: "missingCore",
+          coreType: "singBox",
+          candidates: [],
+          searchDir: "/cores",
+          downloadUrl: "https://example.test/core",
+        },
+        message: "Core unavailable",
+        subsystem: "runtime",
+      }),
+    );
     renderProfiles();
     await screen.findByText("Server 0");
     await userEvent.click(screen.getByRole("button", { name: "Use node" }));
-    await waitFor(() => expect(useModalStore.getState().stack[0]).toMatchObject({ kind: "missingCore" }));
+    await waitFor(() =>
+      expect(useModalStore.getState().stack[0]).toMatchObject({
+        kind: "missingCore",
+      }),
+    );
     expect(useToastStore.getState().toasts).toHaveLength(0);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Use node" })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Use node" })).toBeEnabled(),
+    );
   });
 
-  it.each([true, false])("handles one-time authorization from a card (granted: %s)", async (granted) => {
-    mockProfileList([makeProfile(0)]);
-    ipcMocks.connectActiveProfile.mockRejectedValueOnce(new IpcCommandError({ kind: { type: "elevationRequired" }, message: "Authorization required", subsystem: "tun" }));
-    ipcMocks.tunRequestElevation.mockResolvedValue({ elevationGranted: granted });
-    renderProfiles();
-    await screen.findByText("Server 0");
-    await userEvent.click(screen.getByRole("button", { name: "Use node" }));
-    await waitFor(() => expect(useRuntimeActionStore.getState().switchingId).toBeNull());
-    expect(ipcMocks.tunRequestElevation).toHaveBeenCalledOnce();
-    expect(ipcMocks.connectActiveProfile).toHaveBeenCalledTimes(granted ? 2 : 1);
-    if (!granted) expect(screen.getByRole("button", { name: "Use node" })).toBeEnabled();
-  });
+  it.each([true, false])(
+    "handles one-time authorization from a card (granted: %s)",
+    async (granted) => {
+      mockProfileList([makeProfile(0)]);
+      ipcMocks.connectActiveProfile.mockRejectedValueOnce(
+        new IpcCommandError({
+          kind: { type: "elevationRequired" },
+          message: "Authorization required",
+          subsystem: "tun",
+        }),
+      );
+      ipcMocks.tunRequestElevation.mockResolvedValue({
+        elevationGranted: granted,
+      });
+      renderProfiles();
+      await screen.findByText("Server 0");
+      await userEvent.click(screen.getByRole("button", { name: "Use node" }));
+      await waitFor(() =>
+        expect(useRuntimeActionStore.getState().switchingId).toBeNull(),
+      );
+      expect(ipcMocks.tunRequestElevation).toHaveBeenCalledOnce();
+      expect(ipcMocks.connectActiveProfile).toHaveBeenCalledTimes(
+        granted ? 2 : 1,
+      );
+      if (!granted)
+        expect(screen.getByRole("button", { name: "Use node" })).toBeEnabled();
+    },
+  );
 
   it("inherits a runtime operation started on another screen", async () => {
     useRuntimeActionStore.setState({ pendingAction: "connect" });
@@ -605,7 +844,9 @@ describe("ProfilesScreen", () => {
     renderProfiles();
 
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
-    expect(screen.queryByText(/could not be read by this version/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/could not be read by this version/),
+    ).not.toBeInTheDocument();
   });
 
   it("shows profile query errors instead of silently presenting an empty table", async () => {
@@ -616,7 +857,7 @@ describe("ProfilesScreen", () => {
     expect(await screen.findByText("profile list failed")).toBeInTheDocument();
   });
 
-  it("groups adding and importing behind menus while retaining subscription management", async () => {
+  it("offers subscription and import directly with manual actions in the secondary menu", async () => {
     mockProfileList([]);
     renderProfiles();
     const toolbar = within(screen.getByRole("toolbar"));
@@ -626,20 +867,33 @@ describe("ProfilesScreen", () => {
     for (const name of ["Import from clipboard", "Subscriptions"]) {
       expect(toolbar.queryByRole("button", { name })).not.toBeInTheDocument();
     }
-    expect(toolbar.queryByRole("menuitem", { name: "More actions" })).not.toBeInTheDocument();
-    expect(toolbar.queryByRole("button", { name: "More actions" })).not.toBeInTheDocument();
-    expect(toolbar.queryByRole("button", { name: "Update subs" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: "Update subs" })).not.toBeInTheDocument();
-    await userEvent.click(toolbar.getByRole("menuitem", { name: "Add" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Add subscription" }));
-    expect(await screen.findByRole("dialog", { name: "Subscriptions" })).toBeVisible();
+    expect(
+      toolbar.queryByRole("menuitem", { name: "More actions" }),
+    ).not.toBeInTheDocument();
+    expect(
+      toolbar.queryByRole("button", { name: "More actions" }),
+    ).not.toBeInTheDocument();
+    expect(
+      toolbar.queryByRole("button", { name: "Update subs" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Update subs" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      toolbar.getByRole("button", { name: "Add subscription" }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "Add subscription" }),
+    ).toBeVisible();
     await userEvent.keyboard("{Escape}");
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
     await openImport();
     fireEvent.change(screen.getByLabelText("Import payload"), {
       target: { value: "vless://uuid@example.test:443#US" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Import payload" }));
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
 
     await waitFor(() =>
       expect(ipcMocks.importProfilesFromText).toHaveBeenCalledWith(
@@ -657,29 +911,46 @@ describe("ProfilesScreen", () => {
     ["Scan QR image", "Scan image"],
     ["Scan clipboard image", "Clipboard image"],
     ["Scan screen", "Screen"],
-  ])("opens only the selected import source: %s", async (method, sourceButton) => {
-    const readText = mockClipboardReadText("vless://preview");
-    mockProfileList([]);
-    renderProfiles();
-    const trigger = screen.getByRole("menuitem", { name: "Import" });
-    await userEvent.click(trigger);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(readText).not.toHaveBeenCalled();
-    expect(ipcMocks.scanScreenQr).not.toHaveBeenCalled();
-    expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-    expect(within(screen.getByRole("menu")).getAllByRole("menuitem")).toHaveLength(6);
-    await userEvent.click(screen.getByRole("menuitem", { name: method! }));
-    const dialog = await screen.findByRole("dialog", { name: "Import Nodes" });
-    for (const name of ["Paste", "File", "Scan image", "Clipboard image", "Screen"]) {
-      if (name === sourceButton) expect(within(dialog).getByRole("button", { name })).toBeVisible();
-      else expect(within(dialog).queryByRole("button", { name })).not.toBeInTheDocument();
-    }
-    expect(readText).not.toHaveBeenCalled();
-    expect(ipcMocks.scanScreenQr).not.toHaveBeenCalled();
-    expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-    await userEvent.keyboard("{Escape}");
-    await waitFor(() => expect(trigger).toHaveFocus());
-  });
+  ])(
+    "opens only the selected import source: %s",
+    async (method, sourceButton) => {
+      const readText = mockClipboardReadText("vless://preview");
+      mockProfileList([]);
+      renderProfiles();
+      const trigger = screen.getByRole("menuitem", { name: "Import" });
+      await userEvent.click(trigger);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(readText).not.toHaveBeenCalled();
+      expect(ipcMocks.scanScreenQr).not.toHaveBeenCalled();
+      expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
+      expect(
+        within(screen.getByRole("menu")).getAllByRole("menuitem"),
+      ).toHaveLength(6);
+      await userEvent.click(screen.getByRole("menuitem", { name: method! }));
+      const dialog = await screen.findByRole("dialog", {
+        name: "Import Nodes",
+      });
+      for (const name of [
+        "Paste",
+        "File",
+        "Scan image",
+        "Clipboard image",
+        "Screen",
+      ]) {
+        if (name === sourceButton)
+          expect(within(dialog).getByRole("button", { name })).toBeVisible();
+        else
+          expect(
+            within(dialog).queryByRole("button", { name }),
+          ).not.toBeInTheDocument();
+      }
+      expect(readText).not.toHaveBeenCalled();
+      expect(ipcMocks.scanScreenQr).not.toHaveBeenCalled();
+      expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
+      await userEvent.keyboard("{Escape}");
+      await waitFor(() => expect(trigger).toHaveFocus());
+    },
+  );
 
   it("opens the Add menu with the keyboard and restores focus after dismissing the editor", async () => {
     mockProfileList([]);
@@ -688,9 +959,13 @@ describe("ProfilesScreen", () => {
     trigger.focus();
     await userEvent.keyboard("{Enter}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(within(screen.getByRole("menu")).getAllByRole("menuitem")).toHaveLength(3);
+    expect(
+      within(screen.getByRole("menu")).getAllByRole("menuitem"),
+    ).toHaveLength(2);
     await userEvent.keyboard("{Enter}");
-    expect(await screen.findByRole("dialog", { name: "Add node" })).toBeVisible();
+    expect(
+      await screen.findByRole("dialog", { name: "Add node" }),
+    ).toBeVisible();
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(trigger).toHaveFocus());
   });
@@ -699,19 +974,20 @@ describe("ProfilesScreen", () => {
     mockProfileList([]);
     ipcMocks.listSubscriptions.mockResolvedValue([makeSubscription()]);
     renderProfiles();
-    const trigger = screen.getByRole("menuitem", { name: "Add" });
+    const trigger = screen.getByRole("button", { name: "Add subscription" });
     await userEvent.click(trigger);
-    await userEvent.click(screen.getByRole("menuitem", { name: "Add subscription" }));
-    await userEvent.click(await screen.findByRole("button", { name: /Fixture/ }));
-    expect(screen.getByLabelText("Remarks")).toHaveValue("Fixture");
+    fireEvent.change(screen.getByLabelText("Remarks"), {
+      target: { value: "Draft" },
+    });
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(trigger).toHaveFocus());
     await userEvent.click(trigger);
-    await userEvent.click(screen.getByRole("menuitem", { name: "Add subscription" }));
     expect(await screen.findByLabelText("Remarks")).toHaveValue("");
     expect(screen.getByLabelText("URL")).toHaveValue("");
-    expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Fixture/ })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Add and update" }),
+    ).toBeDisabled();
+    expect(ipcMocks.deleteSubscriptions).not.toHaveBeenCalled();
   });
 
   it("refreshes and selects imported profiles after dialog import", async () => {
@@ -739,7 +1015,7 @@ describe("ProfilesScreen", () => {
     fireEvent.change(screen.getByLabelText("Import payload"), {
       target: { value: "vless://uuid@example.test:443#Imported" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Import payload" }));
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
 
     expect(await screen.findByText("Imported node")).toBeInTheDocument();
     const rows = screen.getAllByTestId("server-row");
@@ -762,22 +1038,31 @@ describe("ProfilesScreen", () => {
       text: "vless://uuid@example.test:443#Scanned",
     });
     ipcMocks.importProfilesFromText.mockResolvedValue(
-      makeImportResult({ imported: 1, importedProfileIds: ["profile-scanned"], parsed: 1 }),
+      makeImportResult({
+        imported: 1,
+        importedProfileIds: ["profile-scanned"],
+        parsed: 1,
+      }),
     );
 
     renderProfiles();
 
     await openImport("Scan screen");
-    await userEvent.click(await screen.findByRole("button", { name: "Screen" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Screen" }),
+    );
     expect(await screen.findByLabelText("Import payload")).toHaveValue(
       "vless://uuid@example.test:443#Scanned",
     );
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
 
-    await userEvent.click(screen.getByRole("button", { name: "Import payload" }));
+    await userEvent.click(screen.getByRole("button", { name: "Import" }));
 
     expect(await screen.findByText("Scanned node")).toBeInTheDocument();
-    expect(screen.getByTestId("server-row")).toHaveAttribute("data-selected", "true");
+    expect(screen.getByTestId("server-row")).toHaveAttribute(
+      "data-selected",
+      "true",
+    );
     expect(screen.getByText("Imported 1 node(s).")).toBeInTheDocument();
   });
 
@@ -790,9 +1075,12 @@ describe("ProfilesScreen", () => {
     });
     let imported = false;
     let finishImport!: () => void;
-    const pendingImport = new Promise<void>((resolve) => { finishImport = resolve; });
-    ipcMocks.listProfiles.mockImplementation(async (_subscription_id: string | null, filter: string | null) =>
-      listing(imported && !filter ? [importedProfile] : []),
+    const pendingImport = new Promise<void>((resolve) => {
+      finishImport = resolve;
+    });
+    ipcMocks.listProfiles.mockImplementation(
+      async (_subscription_id: string | null, filter: string | null) =>
+        listing(imported && !filter ? [importedProfile] : []),
     );
     ipcMocks.importProfilesFromText.mockImplementation(async () => {
       await pendingImport;
@@ -814,22 +1102,34 @@ describe("ProfilesScreen", () => {
     await openImport("Import from clipboard");
     await userEvent.click(screen.getByRole("button", { name: "Paste" }));
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-    const importButton = screen.getByRole("button", { name: "Import payload" });
+    const importButton = screen.getByRole("button", { name: "Import" });
     await userEvent.click(importButton);
 
     await waitFor(() => expect(readText).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(ipcMocks.importProfilesFromText).toHaveBeenCalledWith(clipboardText, null),
+      expect(ipcMocks.importProfilesFromText).toHaveBeenCalledWith(
+        clipboardText,
+        null,
+      ),
     );
     expect(importButton).toBeDisabled();
     await userEvent.click(importButton);
     expect(ipcMocks.importProfilesFromText).toHaveBeenCalledTimes(1);
-    await act(async () => { finishImport(); });
+    await act(async () => {
+      finishImport();
+    });
     expect(await screen.findByText("Clipboard node")).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(screen.getByTestId("server-row")).toHaveAttribute("data-selected", "true");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("server-row")).toHaveAttribute(
+      "data-selected",
+      "true",
+    );
     expect(
-      screen.getByText("Imported 1 node(s). 1 updated. 2 duplicate(s) removed."),
+      screen.getByText(
+        "Imported 1 node(s). 1 updated. 2 duplicate(s) removed.",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -856,34 +1156,51 @@ describe("ProfilesScreen", () => {
     await openImport("Import from clipboard");
     await userEvent.click(screen.getByRole("button", { name: "Paste" }));
 
-    expect(await screen.findByText("Clipboard text read is unavailable in this WebView.")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "Clipboard text read is unavailable in this WebView.",
+      ),
+    ).toBeInTheDocument();
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
   });
 
   it("exports every profile from the global toolbar", async () => {
     const profiles = makeProfiles(2);
-    ipcMocks.listProfiles.mockImplementation(async (_subscriptionId: string | null, filter: string | null) =>
-      listing(filter ? [profiles[1]!] : profiles),
+    ipcMocks.listProfiles.mockImplementation(
+      async (_subscriptionId: string | null, filter: string | null) =>
+        listing(filter ? [profiles[1]!] : profiles),
     );
 
     renderProfiles();
 
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
 
-
     await userEvent.click(screen.getByRole("menuitem", { name: "Export" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Show QR" }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "Show QR" }),
+    );
 
     const expectedContent =
       "vless://profile-0@example.test:443\nvless://profile-1@example.test:443";
-    expect(ipcMocks.exportProfileShareLinks).toHaveBeenCalledWith(["profile-0", "profile-1"]);
+    expect(ipcMocks.exportProfileShareLinks).toHaveBeenCalledWith([
+      "profile-0",
+      "profile-1",
+    ]);
     expect(ipcMocks.listProfiles).toHaveBeenLastCalledWith(null, null);
-    await waitFor(() => expect(ipcMocks.generateQrCode).toHaveBeenCalledWith(expectedContent));
+    await waitFor(() =>
+      expect(ipcMocks.generateQrCode).toHaveBeenCalledWith(expectedContent),
+    );
 
     const dialog = await screen.findByRole("dialog", { name: "Show QR" });
-    expect(within(dialog).getByLabelText("Content")).toHaveValue(expectedContent);
-    expect(within(dialog).getByLabelText("Content")).toHaveAttribute("readonly");
-    expect(within(dialog).getByAltText("Generated QR code")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Content")).toHaveValue(
+      expectedContent,
+    );
+    expect(within(dialog).getByLabelText("Content")).toHaveAttribute(
+      "readonly",
+    );
+    expect(
+      within(dialog).getByAltText("Generated QR code"),
+    ).toBeInTheDocument();
   });
 
   it("keeps the QR dialog closed when share link export fails", async () => {
@@ -901,26 +1218,36 @@ describe("ProfilesScreen", () => {
     expect(await screen.findByText("Export node")).toBeInTheDocument();
     const menu = await openRowContextMenu();
     const exportMenu = await openContextSubmenu(menu, "Export");
-    await userEvent.click(within(exportMenu).getByRole("menuitem", { name: "Show QR" }));
+    await userEvent.click(
+      within(exportMenu).getByRole("menuitem", { name: "Show QR" }),
+    );
 
     expect(await screen.findByText("share export failed")).toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "Show QR" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Show QR" }),
+    ).not.toBeInTheDocument();
     expect(ipcMocks.generateQrCode).not.toHaveBeenCalled();
   });
 
   it("shows QR generation errors without hiding the exported content", async () => {
     mockProfileList([makeProfile(0)]);
-    ipcMocks.generateQrCode.mockRejectedValue(new Error("QR content is too large"));
+    ipcMocks.generateQrCode.mockRejectedValue(
+      new Error("QR content is too large"),
+    );
 
     renderProfiles();
 
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
     const menu = await openRowContextMenu();
     const exportMenu = await openContextSubmenu(menu, "Export");
-    await userEvent.click(within(exportMenu).getByRole("menuitem", { name: "Show QR" }));
+    await userEvent.click(
+      within(exportMenu).getByRole("menuitem", { name: "Show QR" }),
+    );
 
     const dialog = await screen.findByRole("dialog", { name: "Show QR" });
-    expect(await within(dialog).findByText("QR content is too large")).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText("QR content is too large"),
+    ).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Content")).toHaveValue(
       "vless://profile-0@example.test:443",
     );
@@ -937,10 +1264,17 @@ describe("ProfilesScreen", () => {
     expect(rows[0]).not.toHaveAttribute("draggable");
     const menu = await openRowContextMenu();
     const moveMenu = await openContextSubmenu(menu, "Move");
-    await userEvent.click(within(moveMenu).getByRole("menuitem", { name: "Move down" }));
+    await userEvent.click(
+      within(moveMenu).getByRole("menuitem", { name: "Move down" }),
+    );
 
     await waitFor(() =>
-      expect(ipcMocks.moveProfile).toHaveBeenCalledWith(null, "profile-0", MOVE_ACTIONS.Down, null),
+      expect(ipcMocks.moveProfile).toHaveBeenCalledWith(
+        null,
+        "profile-0",
+        MOVE_ACTIONS.Down,
+        null,
+      ),
     );
   });
 
@@ -952,23 +1286,46 @@ describe("ProfilesScreen", () => {
     await openAddNode();
 
     await userEvent.click(screen.getByRole("combobox", { name: "Protocol" }));
-    const protocolOptions = within(await screen.findByRole("listbox")).getAllByRole("option");
+    const protocolOptions = within(
+      await screen.findByRole("listbox"),
+    ).getAllByRole("option");
     const protocolLabels = [
-      "VMess", "Shadowsocks", "SOCKS", "VLESS", "Trojan", "Hysteria2",
-      "TUIC", "WireGuard", "HTTP", "AnyTLS", "Naive",
+      "VMess",
+      "Shadowsocks",
+      "SOCKS",
+      "VLESS",
+      "Trojan",
+      "Hysteria2",
+      "TUIC",
+      "WireGuard",
+      "HTTP",
+      "AnyTLS",
+      "Naive",
     ];
     expect(protocolOptions).toHaveLength(protocolLabels.length);
     protocolLabels.forEach((label) => {
-      expect(screen.getByRole("option", { name: new RegExp(`^${escapeRegExp(label)}`) })).toBeInTheDocument();
+      expect(
+        screen.getByRole("option", {
+          name: new RegExp(`^${escapeRegExp(label)}`),
+        }),
+      ).toBeInTheDocument();
     });
 
     await userEvent.click(screen.getByRole("option", { name: /^WireGuard/ }));
     expect(await screen.findByLabelText("Peer public key")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Remarks"), { target: { value: "WireGuard test" } });
-    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "wg.example.test" } });
-    fireEvent.change(screen.getByLabelText("Private key"), { target: { value: "private-key" } });
-    fireEvent.change(screen.getByLabelText("Peer public key"), { target: { value: "peer-key" } });
+    fireEvent.change(screen.getByLabelText("Remarks"), {
+      target: { value: "WireGuard test" },
+    });
+    fireEvent.change(screen.getByLabelText("Address"), {
+      target: { value: "wg.example.test" },
+    });
+    fireEvent.change(screen.getByLabelText("Private key"), {
+      target: { value: "private-key" },
+    });
+    fireEvent.change(screen.getByLabelText("Peer public key"), {
+      target: { value: "peer-key" },
+    });
     fireEvent.click(screen.getByRole("button", { name: /Save/ }));
 
     await waitFor(() =>
@@ -988,22 +1345,34 @@ describe("ProfilesScreen", () => {
 
   it("keeps the editor open with its edits when the backend rejects the save", async () => {
     mockProfileList([]);
-    ipcMocks.saveProfile.mockRejectedValue(new Error("profile address is already used"));
+    ipcMocks.saveProfile.mockRejectedValue(
+      new Error("profile address is already used"),
+    );
 
     renderProfiles();
 
     await openAddNode();
-    fireEvent.change(await screen.findByLabelText("Remarks"), { target: { value: "Rejected node" } });
-    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "node.example.test" } });
-    fireEvent.change(screen.getByLabelText("UUID"), { target: { value: "uuid-rejected" } });
+    fireEvent.change(await screen.findByLabelText("Remarks"), {
+      target: { value: "Rejected node" },
+    });
+    fireEvent.change(screen.getByLabelText("Address"), {
+      target: { value: "node.example.test" },
+    });
+    fireEvent.change(screen.getByLabelText("UUID"), {
+      target: { value: "uuid-rejected" },
+    });
     fireEvent.click(screen.getByRole("button", { name: /Save/ }));
 
     await waitFor(() => expect(ipcMocks.saveProfile).toHaveBeenCalled());
     const dialog = await screen.findByRole("dialog", { name: "Add node" });
-    expect(await within(dialog).findByText("profile address is already used")).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText("profile address is already used"),
+    ).toBeInTheDocument();
     // The form remounts whenever the dialog toggles, so staying open is what
     // preserves the values the user already typed.
-    expect(within(dialog).getByLabelText("Remarks")).toHaveValue("Rejected node");
+    expect(within(dialog).getByLabelText("Remarks")).toHaveValue(
+      "Rejected node",
+    );
     expect(within(dialog).getByLabelText("UUID")).toHaveValue("uuid-rejected");
   });
 
@@ -1013,12 +1382,21 @@ describe("ProfilesScreen", () => {
     renderProfiles();
 
     await openAddNode();
-    fireEvent.change(await screen.findByLabelText("Remarks"), { target: { value: "Missing UUID" } });
-    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "node.example.test" } });
+    fireEvent.change(await screen.findByLabelText("Remarks"), {
+      target: { value: "Missing UUID" },
+    });
+    fireEvent.change(screen.getByLabelText("Address"), {
+      target: { value: "node.example.test" },
+    });
     fireEvent.click(screen.getByRole("button", { name: /Save/ }));
 
-    expect(await screen.findByText("password or ID is required")).toBeInTheDocument();
-    expect(screen.getByLabelText("UUID")).toHaveAttribute("aria-invalid", "true");
+    expect(
+      await screen.findByText("password or ID is required"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("UUID")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
     expect(ipcMocks.saveProfile).not.toHaveBeenCalled();
   });
 
@@ -1029,16 +1407,30 @@ describe("ProfilesScreen", () => {
 
     await openAddNode();
     await selectComboboxOption("Protocol", "TUIC");
-    expect(await screen.findByLabelText("Congestion control")).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText("Congestion control"),
+    ).toBeInTheDocument();
     // `insecureConcurrency` belongs to Naive, not TUIC; rendering it here would
     // silently discard whatever the user typed.
-    expect(screen.queryByLabelText("Insecure concurrency")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Insecure concurrency"),
+    ).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Remarks"), { target: { value: "TUIC node" } });
-    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "tuic.example.test" } });
-    fireEvent.change(screen.getByLabelText("UUID"), { target: { value: "uuid-tuic" } });
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "tuic-secret" } });
-    fireEvent.change(screen.getByLabelText("Congestion control"), { target: { value: "bbr" } });
+    fireEvent.change(screen.getByLabelText("Remarks"), {
+      target: { value: "TUIC node" },
+    });
+    fireEvent.change(screen.getByLabelText("Address"), {
+      target: { value: "tuic.example.test" },
+    });
+    fireEvent.change(screen.getByLabelText("UUID"), {
+      target: { value: "uuid-tuic" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "tuic-secret" },
+    });
+    fireEvent.change(screen.getByLabelText("Congestion control"), {
+      target: { value: "bbr" },
+    });
     fireEvent.click(screen.getByRole("button", { name: /Save/ }));
 
     await waitFor(() =>
@@ -1065,14 +1457,28 @@ describe("ProfilesScreen", () => {
 
     await openAddNode();
     await selectComboboxOption("Protocol", "Naive");
-    expect(await screen.findByLabelText("Insecure concurrency")).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText("Insecure concurrency"),
+    ).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Remarks"), { target: { value: "Naive node" } });
-    fireEvent.change(screen.getByLabelText("Address"), { target: { value: "naive.example.test" } });
-    fireEvent.change(screen.getByLabelText("Username"), { target: { value: "naive-user" } });
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "naive-secret" } });
-    fireEvent.change(screen.getByLabelText("Congestion control"), { target: { value: "bbr" } });
-    fireEvent.change(screen.getByLabelText("Insecure concurrency"), { target: { value: "4" } });
+    fireEvent.change(screen.getByLabelText("Remarks"), {
+      target: { value: "Naive node" },
+    });
+    fireEvent.change(screen.getByLabelText("Address"), {
+      target: { value: "naive.example.test" },
+    });
+    fireEvent.change(screen.getByLabelText("Username"), {
+      target: { value: "naive-user" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "naive-secret" },
+    });
+    fireEvent.change(screen.getByLabelText("Congestion control"), {
+      target: { value: "bbr" },
+    });
+    fireEvent.change(screen.getByLabelText("Insecure concurrency"), {
+      target: { value: "4" },
+    });
     await user.click(screen.getByRole("checkbox", { name: "QUIC" }));
     await user.click(screen.getByRole("checkbox", { name: "UDP over TCP" }));
     fireEvent.click(screen.getByRole("button", { name: /Save/ }));
@@ -1100,7 +1506,12 @@ describe("ProfilesScreen", () => {
     mockProfileList([
       makeProfile(0, {
         remarks: "Obfuscated node",
-        transport: { header: "http", host: "cdn.example.test", kind: "tcp", path: "/obfs" },
+        transport: {
+          header: "http",
+          host: "cdn.example.test",
+          kind: "tcp",
+          path: "/obfs",
+        },
       }),
     ]);
 
@@ -1111,16 +1522,25 @@ describe("ProfilesScreen", () => {
     await userEvent.click(within(menu).getByRole("menuitem", { name: "Edit" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Edit node" });
-    expect(within(dialog).getByLabelText("Host")).toHaveValue("cdn.example.test");
+    expect(within(dialog).getByLabelText("Host")).toHaveValue(
+      "cdn.example.test",
+    );
     expect(within(dialog).getByLabelText("Path")).toHaveValue("/obfs");
-    fireEvent.change(within(dialog).getByLabelText("Remarks"), { target: { value: "Renamed node" } });
+    fireEvent.change(within(dialog).getByLabelText("Remarks"), {
+      target: { value: "Renamed node" },
+    });
     fireEvent.click(within(dialog).getByRole("button", { name: /Save/ }));
 
     await waitFor(() =>
       expect(ipcMocks.saveProfile).toHaveBeenCalledWith(
         expect.objectContaining({
           remarks: "Renamed node",
-          transport: { header: "http", host: "cdn.example.test", kind: "tcp", path: "/obfs" },
+          transport: {
+            header: "http",
+            host: "cdn.example.test",
+            kind: "tcp",
+            path: "/obfs",
+          },
         }),
       ),
     );
@@ -1135,7 +1555,9 @@ describe("ProfilesScreen", () => {
       renderProfiles();
 
       await userEvent.click(screen.getByRole("menuitem", { name: "新增" }));
-      await userEvent.click(await screen.findByRole("menuitem", { name: "新增节点" }));
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: "新增节点" }),
+      );
       const dialog = await screen.findByRole("dialog", { name: "新增节点" });
       const remarks = within(dialog).getByLabelText("备注");
       const address = within(dialog).getByLabelText("地址");
@@ -1154,7 +1576,9 @@ describe("ProfilesScreen", () => {
       renderProfiles();
 
       await userEvent.click(screen.getByRole("menuitem", { name: "新增" }));
-      await userEvent.click(await screen.findByRole("menuitem", { name: "新增节点" }));
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: "新增节点" }),
+      );
       fireEvent.click(await screen.findByRole("button", { name: /保存/ }));
 
       // The zod schema carries codes; the visible sentence comes from the locale.
@@ -1176,12 +1600,16 @@ describe("ProfilesScreen", () => {
       renderProfiles();
 
       await userEvent.click(screen.getByRole("menuitem", { name: "导入" }));
-      await userEvent.click(await screen.findByRole("menuitem", { name: "从剪贴板导入" }));
-      await userEvent.click(screen.getByRole("button", { name: "Paste" }));
-      await userEvent.click(screen.getByRole("button", { name: "Import payload" }));
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: "从剪贴板导入" }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "粘贴" }));
+      await userEvent.click(screen.getByRole("button", { name: "导入" }));
 
       expect(
-        await screen.findByText("已导入 3 个节点。 已跳过 1 个。 2 个解析失败。"),
+        await screen.findByText(
+          "已导入 3 个节点。 已跳过 1 个。 2 个解析失败。",
+        ),
       ).toBeInTheDocument();
     });
   });
@@ -1194,10 +1622,11 @@ describe("ProfilesScreen", () => {
     const latencyItem = within(menu).getByRole("menuitem", { name: "Ping" });
     expect(latencyItem).not.toHaveAttribute("aria-haspopup");
     for (const name of ["TCP", "UDP", "Speed", "Mixed", "Speedtest"]) {
-      expect(within(menu).queryByRole("menuitem", { name })).not.toBeInTheDocument();
+      expect(
+        within(menu).queryByRole("menuitem", { name }),
+      ).not.toBeInTheDocument();
     }
   });
-
 
   it("renders the shared export entries through the context-menu primitives", async () => {
     mockProfileList(makeProfiles(1));
@@ -1210,7 +1639,11 @@ describe("ProfilesScreen", () => {
 
     // Both menus map the same descriptor list, so the row menu must carry every
     // export kind the toolbar offers.
-    expect(within(exportMenu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+    expect(
+      within(exportMenu)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual([
       "Share links",
       "Share links (Base64)",
       "Voya node bundle",
@@ -1218,13 +1651,13 @@ describe("ProfilesScreen", () => {
       "Save share links",
     ]);
   });
-
-
 });
 
 // Every field of the generated `ImportProfilesResult`; overriding only what a
 // test cares about keeps the mocks from drifting away from the contract.
-function makeImportResult(overrides: Partial<ImportProfilesResult> = {}): ImportProfilesResult {
+function makeImportResult(
+  overrides: Partial<ImportProfilesResult> = {},
+): ImportProfilesResult {
   return {
     deduped: 0,
     discardedNodeOverrides: 0,
@@ -1268,7 +1701,9 @@ function makeSubscription() {
 
 async function openAddNode() {
   await userEvent.click(screen.getByRole("menuitem", { name: "Add" }));
-  await userEvent.click(await screen.findByRole("menuitem", { name: "Add node" }));
+  await userEvent.click(
+    await screen.findByRole("menuitem", { name: "Add node" }),
+  );
 }
 
 async function openImport(method = "Import from text") {

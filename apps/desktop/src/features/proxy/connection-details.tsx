@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { Button } from "@voya/ui/components/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -34,7 +35,10 @@ export function ConnectionDetails({
   const { t, language } = useI18n();
   const titleRef = useRef<HTMLHeadingElement>(null);
   const date = connection?.start ? new Date(connection.start) : null;
-  const startedAt = date && Number.isFinite(date.getTime()) ? date.toLocaleString(language) : connection?.start;
+  const startedAt =
+    date && Number.isFinite(date.getTime())
+      ? date.toLocaleString(language)
+      : connection?.start;
   const fields = connection
     ? [
         [t("activity.target"), connection.host],
@@ -42,9 +46,17 @@ export function ConnectionDetails({
         [t("activity.processPath"), connection.processPath],
         [t("activity.sourceAddress"), connection.source],
         [t("activity.destinationAddress"), connection.destination],
-        [t("activity.protocol"), [connection.network, connection.connectionType].filter(Boolean).join(" / ")],
+        [
+          t("activity.protocol"),
+          [connection.network, connection.connectionType]
+            .filter(Boolean)
+            .join(" / "),
+        ],
         [t("activity.startedAt"), startedAt],
-        [t("activity.rule"), [connection.rule, connection.rulePayload].filter(Boolean).join(" · ")],
+        [
+          t("activity.rule"),
+          [connection.rule, connection.rulePayload].filter(Boolean).join(" · "),
+        ],
         [t("activity.proxyChain"), connection.chains.join(" → ")],
         [t("sidebar.upload"), connectionBytes(connection.upload)],
         [t("sidebar.download"), connectionBytes(connection.download)],
@@ -75,17 +87,28 @@ export function ConnectionDetails({
             {t("activity.connectionDetails")}
           </DialogTitle>
           <DialogDescription>
-            {ended ? t("activity.ended") : stale ? t("activity.previousData") : t("activity.liveConnections")}
+            {ended
+              ? t("activity.ended")
+              : stale
+                ? t("activity.previousData")
+                : t("activity.liveConnections")}
           </DialogDescription>
         </DialogHeader>
-        <dl className="min-h-0 select-text space-y-4 overflow-y-auto px-6 py-5 text-sm">
-          {fields.map(([label, value]) => (
-            <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-4" key={label}>
-              <dt className="text-muted-foreground">{label}</dt>
-              <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{value?.trim() || "—"}</dd>
-            </div>
-          ))}
-        </dl>
+        <DialogBody>
+          <dl className="select-text space-y-4 text-sm">
+            {fields.map(([label, value]) => (
+              <div
+                className="grid grid-cols-[7rem_minmax(0,1fr)] gap-4"
+                key={label}
+              >
+                <dt className="text-muted-foreground">{label}</dt>
+                <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">
+                  {value?.trim() || "—"}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </DialogBody>
         <DialogFooter>
           <Button
             disabled={!canDisconnect || ended || pending}

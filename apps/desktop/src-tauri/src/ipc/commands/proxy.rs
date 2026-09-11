@@ -54,6 +54,9 @@ pub async fn proxy_set_traffic_mode<R: tauri::Runtime>(
         .await
         .map_err(AppError::from)?;
     // The preference is already committed, including when a live step fails.
+    state
+        .services()
+        .acknowledge_traffic_mode(&snapshot, &outcome);
     emit_proxy_runtime_invalidation(&app, "proxy-traffic-mode-changed", outcome.config_changed);
     outcome.runtime_result.map_err(AppError::from)?;
 

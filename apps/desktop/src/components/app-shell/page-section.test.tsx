@@ -38,12 +38,14 @@ describe("PageSection primitives", () => {
 
     const title = getByTestId("title");
     expect(title.dataset.slot).toBe("page-title");
-    expect(title.className).toContain("px-6");
+    expect(title.className).toContain("min-[1100px]:px-page");
 
     const heading = getByRole("heading", { level: 1, name: "Nodes" });
-    expect(heading.className).toContain("text-2xl");
+    expect(heading.className).toContain("text-page");
     expect(getByText("12")).toBeInTheDocument();
     // Actions park at the trailing edge via the logical ms-auto push.
-    expect(getByRole("button", { name: "New" }).parentElement?.className).toContain("ms-auto");
+    expect(
+      getByRole("button", { name: "New" }).parentElement?.className,
+    ).toContain("ms-auto");
   });
 });

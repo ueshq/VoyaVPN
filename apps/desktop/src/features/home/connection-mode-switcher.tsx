@@ -4,7 +4,11 @@ import { Label } from "@voya/ui/components/label";
 import type { Translation } from "./use-home-runtime";
 
 export function ConnectionModeSwitcher({
-  tunEnabled, modeBusy, modePending, onTunChange, t,
+  tunEnabled,
+  modeBusy,
+  modePending,
+  onTunChange,
+  t,
 }: {
   tunEnabled: boolean;
   modeBusy: boolean;
@@ -17,9 +21,16 @@ export function ConnectionModeSwitcher({
       <div className="home-modes">
         <div className="home-mode">
           <Label htmlFor="home-tun-switch">{t("home.modeTun")}</Label>
-          <Switch aria-busy={modePending} checked={tunEnabled} disabled={modeBusy} id="home-tun-switch" onCheckedChange={onTunChange} />
+          <Switch
+            aria-busy={modePending}
+            checked={tunEnabled}
+            disabled={modeBusy}
+            id="home-tun-switch"
+            onCheckedChange={onTunChange}
+          />
         </div>
       </div>
+      <p className="home-mode-hint">{t("home.tunHint")}</p>
     </div>
   );
 }

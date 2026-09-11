@@ -1,3 +1,4 @@
+import { metadataBySubscriptionId } from "@/features/subscriptions/subscription-usage";
 import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -8,6 +9,9 @@ import {
   listProfiles,
   listNodeGroups,
   listSubscriptions,
+  listSubscriptionMetadata,
+  updateSubscriptions,
+  deleteSubscriptions,
   runSpeedtest,
   saveProfile,
   saveTextFile,
@@ -18,7 +22,12 @@ import type {
   Profile,
   ProfileListEntry,
   SpeedtestTarget,
+  Subscription,
 } from "@/ipc/bindings";
+import {
+  isSubscriptionUpdateFailure,
+  subscriptionUpdateMessages,
+} from "@/features/subscriptions/subscription-update-result";
 import { profilesQueryKey, queryKeys } from "@/ipc/query-keys";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
@@ -57,6 +66,85 @@ export function useServerTable() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [shareQrContent, setShareQrContent] = useState<string | null>(null);
   const [subscriptionsOpen, setSubscriptionsOpen] = useState(false);
+  const [editingSubscription, setEditingSubscription] =
+    useState<Subscription | null>(null);
+  const [deletingSubscription, setDeletingSubscription] =
+    useState<Subscription | null>(null);
+  const [deletingSubscriptionPending, setDeletingSubscriptionPending] =
+    useState(false);
+  const deletingSubscriptionRef = useRef(false);
+  const [updatingSubscriptions, setUpdatingSubscriptions] = useState<
+    Set<string>
+  >(() => new Set());
+  const updatingRef = useRef(new Set<string>());
+  const subscriptionTriggerRef = useRef<HTMLElement | null>(null);
+  const metadataQuery = useQuery({
+    queryFn: listSubscriptionMetadata,
+    queryKey: queryKeys.subscriptionMetadata,
+  });
+  const subscriptionMetadata = useMemo(
+    () => metadataBySubscriptionId(metadataQuery.data ?? []),
+    [metadataQuery.data],
+  );
+  function openSubscription(
+    subscription: Subscription | null,
+    trigger?: HTMLElement,
+  ) {
+    subscriptionTriggerRef.current =
+      trigger ??
+      (document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null);
+    setEditingSubscription(subscription);
+    setSubscriptionsOpen(true);
+  }
+  async function updateSubscription(id: string) {
+    if (updatingRef.current.has(id)) return;
+    updatingRef.current.add(id);
+    setUpdatingSubscriptions(new Set(updatingRef.current));
+    try {
+      await runOperation(async () => {
+        const result = await updateSubscriptions(id, true, null);
+        if (isSubscriptionUpdateFailure(result))
+          throw new Error(
+            subscriptionUpdateMessages(result) ||
+              t("panes.subscriptions.updateNothingImported"),
+          );
+        setOperationMessage(
+          t("panes.subscriptions.updateResult", {
+            imported: result.imported,
+            updated: result.updated,
+          }),
+        );
+      });
+    } finally {
+      updatingRef.current.delete(id);
+      setUpdatingSubscriptions(new Set(updatingRef.current));
+    }
+  }
+  async function removeSubscription() {
+    if (!deletingSubscription || deletingSubscriptionRef.current) return;
+    deletingSubscriptionRef.current = true;
+    setDeletingSubscriptionPending(true);
+    try {
+      if (
+        await runOperation(() => deleteSubscriptions([deletingSubscription.id]))
+      ) {
+        setDeletingSubscription(null);
+      }
+    } finally {
+      deletingSubscriptionRef.current = false;
+      setDeletingSubscriptionPending(false);
+    }
+  }
+  function confirmSubscriptionDeletion(
+    subscription: Subscription,
+    trigger: HTMLElement,
+  ) {
+    subscriptionTriggerRef.current = trigger;
+    setOperationError(null);
+    setDeletingSubscription(subscription);
+  }
   const { t } = useI18n();
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const detailsTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -65,12 +153,25 @@ export function useServerTable() {
     queryFn: listSubscriptions,
     queryKey: queryKeys.subscriptions,
   });
-  const subscriptionNames = useMemo(() => new Map(
-    (subscriptionsQuery.data ?? []).map((item) => [item.id, item.remarks || t("panes.subscriptions.untitled")]),
-  ), [subscriptionsQuery.data, t]);
-  const speedtestResultsByProfileId = useRuntimeEventStore((state) => state.speedtestResultsByProfileId);
-  const speedtestRunning = useRuntimeEventStore((state) => state.speedtestRunning);
-  const setSpeedtestRunning = useRuntimeEventStore((state) => state.setSpeedtestRunning);
+  const subscriptionNames = useMemo(
+    () =>
+      new Map(
+        (subscriptionsQuery.data ?? []).map((item) => [
+          item.id,
+          item.remarks || t("panes.subscriptions.untitled"),
+        ]),
+      ),
+    [subscriptionsQuery.data, t],
+  );
+  const speedtestResultsByProfileId = useRuntimeEventStore(
+    (state) => state.speedtestResultsByProfileId,
+  );
+  const speedtestRunning = useRuntimeEventStore(
+    (state) => state.speedtestRunning,
+  );
+  const setSpeedtestRunning = useRuntimeEventStore(
+    (state) => state.setSpeedtestRunning,
+  );
   const queryClient = useQueryClient();
   const profilesQuery = useQuery({
     queryFn: () => listProfiles(null, null),
@@ -92,7 +193,24 @@ export function useServerTable() {
   const undecodableProfiles = profilesQuery.data?.undecodableProfiles ?? 0;
 
   const viewportRef = useRef<HTMLDivElement>(null);
-  const rows = useMemo(() => nodeListRows(profiles, nodeGroups.snapshot, nodeGroups.collapsed, t("nodeGroups.unassigned")), [profiles, nodeGroups.snapshot, nodeGroups.collapsed, t]);
+  const rows = useMemo(
+    () =>
+      nodeListRows(
+        profiles,
+        nodeGroups.snapshot,
+        nodeGroups.collapsed,
+        t("nodeGroups.unassigned"),
+        subscriptionsQuery.data,
+        t("panes.subscriptions.untitled"),
+      ),
+    [
+      profiles,
+      nodeGroups.snapshot,
+      nodeGroups.collapsed,
+      subscriptionsQuery.data,
+      t,
+    ],
+  );
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     estimateSize: () => 100,
@@ -102,12 +220,18 @@ export function useServerTable() {
     overscan: 5,
   });
   const visibleRows = rowVirtualizer.getVirtualItems();
-  const renderedRows = visibleRows.length > 0 ? visibleRows : rows.slice(0, 15).map((row, index) => ({
-    index, key: row.key, start: index * 100,
-  }));
+  const renderedRows =
+    visibleRows.length > 0
+      ? visibleRows
+      : rows.slice(0, 15).map((row, index) => ({
+          index,
+          key: row.key,
+          start: index * 100,
+        }));
   function subscriptionName(item: ProfileListEntry) {
     return item.profile.subscriptionId
-      ? subscriptionNames.get(item.profile.subscriptionId) ?? t("panes.subscriptions.untitled")
+      ? (subscriptionNames.get(item.profile.subscriptionId) ??
+          t("panes.subscriptions.untitled"))
       : t("panes.profiles.card.local");
   }
   function openDetails(id: string, trigger: HTMLButtonElement) {
@@ -142,8 +266,12 @@ export function useServerTable() {
   // Opening or closing the editor drops the previous rejection message.
   function setDialogState(next: DialogState) {
     if (next) {
-      profileDialogTriggerRef.current = next.mode === "create" ? addTriggerRef.current
-        : document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      profileDialogTriggerRef.current =
+        next.mode === "create"
+          ? addTriggerRef.current
+          : document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null;
     }
     setSaveError(null);
     setDialogStateInternal(next);
@@ -222,11 +350,18 @@ export function useServerTable() {
       throw new Error(t("panes.profiles.export.clipboardUnavailable"));
     }
     await navigator.clipboard.writeText(result.text);
-    setOperationMessage(t("panes.profiles.export.copied", { count: result.count }));
+    setOperationMessage(
+      t("panes.profiles.export.copied", { count: result.count }),
+    );
     return true;
   }
 
-  async function handleExport(kind: ProfileExportKind, indexIds: string[], showQr = false, saveFile = false) {
+  async function handleExport(
+    kind: ProfileExportKind,
+    indexIds: string[],
+    showQr = false,
+    saveFile = false,
+  ) {
     setOperationError(null);
     setOperationMessage(null);
     if (indexIds.length === 0) {
@@ -241,7 +376,11 @@ export function useServerTable() {
     }
   }
 
-  async function handleBulkExport(kind: ProfileExportKind, showQr = false, saveFile = false) {
+  async function handleBulkExport(
+    kind: ProfileExportKind,
+    showQr = false,
+    saveFile = false,
+  ) {
     setOperationError(null);
     setOperationMessage(null);
     try {
@@ -252,29 +391,72 @@ export function useServerTable() {
     }
   }
 
-  async function performBatchExport(kind: ProfileExportKind, entries: ProfileListEntry[], showQr: boolean, saveFile: boolean) {
+  async function performBatchExport(
+    kind: ProfileExportKind,
+    entries: ProfileListEntry[],
+    showQr: boolean,
+    saveFile: boolean,
+  ) {
     const exportable = isShareLinkExport(kind)
-      ? entries.filter((item) => supportsShareLinkExport(item.profile.protocol.kind))
+      ? entries.filter((item) =>
+          supportsShareLinkExport(item.profile.protocol.kind),
+        )
       : entries;
     if (!exportable.length) {
       setOperationError(t("panes.profiles.export.noProfiles"));
       return;
     }
-    const completed = await performExport(kind, exportable.map((item) => item.profile.id), showQr, saveFile);
+    const completed = await performExport(
+      kind,
+      exportable.map((item) => item.profile.id),
+      showQr,
+      saveFile,
+    );
     const skipped = entries.length - exportable.length;
-    if (completed && skipped > 0) setOperationMessage(t("panes.profiles.export.skippedUnsupported", { count: skipped }));
+    if (completed && skipped > 0)
+      setOperationMessage(
+        t("panes.profiles.export.skippedUnsupported", { count: skipped }),
+      );
   }
 
-  async function handleGroupExport(groupId: string | null, kind: ProfileExportKind, showQr = false, saveFile = false) {
+  async function handleGroupExport(
+    groupKey: string,
+    kind: ProfileExportKind,
+    showQr = false,
+    saveFile = false,
+  ) {
     setOperationError(null);
     setOperationMessage(null);
     try {
-      const [listing, snapshot] = await Promise.all([listProfiles(null, null), listNodeGroups()]);
-      if (groupId !== null && !snapshot.groups.some((group) => group.id === groupId)) {
+      const [listing, snapshot] = await Promise.all([
+        listProfiles(null, null),
+        listNodeGroups(),
+      ]);
+      if (groupKey.startsWith("subscription:")) {
+        await performBatchExport(
+          kind,
+          listing.entries.filter(
+            (entry) => entry.profile.subscriptionId === groupKey.slice(13),
+          ),
+          showQr,
+          saveFile,
+        );
+        return;
+      }
+      const groupId = groupKey.startsWith("manual:") ? groupKey.slice(7) : null;
+      if (
+        groupId !== null &&
+        !snapshot.groups.some((group) => group.id === groupId)
+      ) {
         setOperationError(t("nodeGroups.notFound"));
         return;
       }
-      await performBatchExport(kind, profilesByNodeGroup(listing.entries, snapshot).get(groupId) ?? [], showQr, saveFile);
+      await performBatchExport(
+        kind,
+        profilesByNodeGroup(listing.entries, snapshot).get(groupId) ?? [],
+        showQr,
+        saveFile,
+      );
     } catch (error) {
       setOperationError(getErrorMessage(error));
     }
@@ -284,9 +466,11 @@ export function useServerTable() {
     if (useRuntimeEventStore.getState().speedtestRunning) return;
     setSpeedtestRunning(true);
     try {
-      await runOperation(() => runSpeedtest({
-        target,
-      }));
+      await runOperation(() =>
+        runSpeedtest({
+          target,
+        }),
+      );
     } finally {
       setSpeedtestRunning(false);
     }
@@ -300,6 +484,19 @@ export function useServerTable() {
   }
 
   return {
+    editingSubscription,
+    deletingSubscription,
+    deletingSubscriptionPending,
+    setDeletingSubscription,
+    removeSubscription,
+    confirmSubscriptionDeletion,
+    openSubscription,
+    updateSubscription,
+    updatingSubscriptions,
+    subscriptionTriggerRef,
+    metadataQuery,
+    subscriptionsQuery,
+    subscriptionMetadata,
     nodeGroups,
     rows,
     activation,

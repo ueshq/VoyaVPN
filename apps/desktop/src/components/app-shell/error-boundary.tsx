@@ -75,7 +75,7 @@ function AppErrorFallback({ onRetry }: { onRetry: () => void }) {
       data-testid="app-error-fallback"
       role="alert"
     >
-      <TriangleAlert aria-hidden="true" className="size-8 text-destructive" />
+      <TriangleAlert aria-hidden="true" className="size-8 text-danger" />
       <p className="font-display text-base font-semibold">{t("status.screenErrorTitle")}</p>
       <p className="max-w-md text-sm text-muted-foreground">{t("status.screenErrorDescription")}</p>
       <div className="flex items-center gap-2">

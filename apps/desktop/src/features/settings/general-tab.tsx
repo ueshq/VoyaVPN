@@ -6,11 +6,7 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
 import type { ThemeMode } from "@/stores/preferences-store";
 
-import {
-  SettingsCheckbox,
-  SettingsGroup,
-  SettingsRow,
-} from "./settings-form";
+import { SettingsCheckbox, SettingsGroup, SettingsRow } from "./settings-form";
 import type { AppSettingsFormController } from "./use-app-settings";
 
 const themeOptions: Array<{
@@ -26,11 +22,17 @@ const themeOptions: Array<{
 const selectedOptionClass =
   "border border-primary bg-accent-blue-light text-brand hover:bg-accent-blue-light hover:text-brand";
 
-export function GeneralTab({ controller }: { controller: AppSettingsFormController }) {
+export function GeneralTab({
+  controller,
+}: {
+  controller: AppSettingsFormController;
+}) {
   const { language, localeOptions, t } = useI18n();
   const { settings, setAppearance, update, working } = controller;
 
-  const selectedLanguage = localeOptions.some((locale) => locale.code === settings.appearance.language)
+  const selectedLanguage = localeOptions.some(
+    (locale) => locale.code === settings.appearance.language,
+  )
     ? settings.appearance.language
     : language;
 
@@ -46,10 +48,16 @@ export function GeneralTab({ controller }: { controller: AppSettingsFormControll
                 <Button
                   key={option.value}
                   aria-pressed={selected}
-                  className={cn("h-8 min-w-0 px-3", selected && selectedOptionClass)}
+                  className={cn(
+                    "h-8 min-w-0 px-3",
+                    selected && selectedOptionClass,
+                  )}
                   disabled={working}
                   onClick={() =>
-                    setAppearance({ ...settings.appearance, theme: option.value })
+                    setAppearance({
+                      ...settings.appearance,
+                      theme: option.value,
+                    })
                   }
                   type="button"
                   variant={selected ? "secondary" : "outline"}
@@ -70,15 +78,21 @@ export function GeneralTab({ controller }: { controller: AppSettingsFormControll
                 <Button
                   key={locale.code}
                   aria-pressed={selected}
-                  className={cn("h-8 min-w-12 px-2 text-xs", selected && selectedOptionClass)}
+                  className={cn(
+                    "h-8 min-w-12 px-2 text-xs",
+                    selected && selectedOptionClass,
+                  )}
                   disabled={working}
                   onClick={() =>
-                    setAppearance({ ...settings.appearance, language: locale.code })
+                    setAppearance({
+                      ...settings.appearance,
+                      language: locale.code,
+                    })
                   }
                   type="button"
                   variant={selected ? "secondary" : "outline"}
                 >
-                  {locale.label}
+                  {locale.nativeName}
                 </Button>
               );
             })}

@@ -10,7 +10,10 @@ import {
 
 import { Toolbar, ToolbarGroup } from "@/components/app-shell/toolbar";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
-import { PageHeader, PageHeaderActions } from "@/components/app-shell/page-section";
+import {
+  PageHeader,
+  PageHeaderActions,
+} from "@/components/app-shell/page-section";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import {
@@ -22,12 +25,15 @@ import {
 } from "@voya/ui/components/menubar";
 import { getErrorMessage } from "@voya/utils/error";
 
-
 import { IMPORT_METHODS } from "./import-methods";
 import { ExportMenuItems, SpeedtestButton } from "./server-table-menus";
 import type { ServerTableController } from "./use-server-table";
 
-export function ServerTableToolbar({ controller }: { controller: ServerTableController }) {
+export function ServerTableToolbar({
+  controller,
+}: {
+  controller: ServerTableController;
+}) {
   const {
     nodeGroups,
     handleBulkExport,
@@ -41,7 +47,7 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
     profilesQuery,
     setDialogState,
     setImportMethod,
-    setSubscriptionsOpen,
+    openSubscription,
     speedtestRunning,
     t,
     undecodableProfiles,
@@ -59,42 +65,69 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
     <>
       <PageHeader className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Badge className="h-6 bg-background tabular-nums text-muted-foreground" variant="outline">
-            {t("panes.profiles.toolbar.rows", { rows: profiles.length.toLocaleString() })}
+          <Badge
+            className="h-6 bg-background tabular-nums text-muted-foreground"
+            variant="outline"
+          >
+            {t("panes.profiles.toolbar.rows", {
+              rows: profiles.length.toLocaleString(),
+            })}
           </Badge>
-          <Badge className="h-6 bg-background tabular-nums text-muted-foreground" variant="outline">
-            {t("nodeGroups.groupCount", { count: nodeGroups.snapshot.groups.length })}
+          <Badge
+            className="h-6 bg-background tabular-nums text-muted-foreground"
+            variant="outline"
+          >
+            {t("nodeGroups.groupCount", {
+              count: controller.rows.filter((row) => row.kind === "group").length,
+            })}
           </Badge>
         </div>
 
         <PageHeaderActions className="min-w-0 max-w-full">
           <Toolbar className="min-w-0 max-w-full justify-end">
             <ToolbarGroup className="min-w-0 flex-wrap justify-end gap-y-2">
+              <Button
+                size="sm"
+                onClick={(event) => openSubscription(null, event.currentTarget)}
+              >
+                <Rss aria-hidden="true" className="size-4" />
+                {t("home.subscriptionCard.add")}
+              </Button>
               <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
                 <MenubarMenu>
                   <MenubarTrigger asChild className="h-8">
-                    <Button ref={addTriggerRef} size="sm" type="button">
+                    <Button
+                      ref={addTriggerRef}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
                       <FilePlus2 className="size-4" aria-hidden="true" />
                       {t("panes.profiles.toolbar.add")}
                       <ChevronDown className="size-3" aria-hidden="true" />
                     </Button>
                   </MenubarTrigger>
                   <MenubarContent onCloseAutoFocus={handleMenuClose}>
-                    <MenubarItem onSelect={() => {
-                      openingDialogRef.current = true;
-                      setDialogState({ mode: "create" });
-                    }}>
+                    <MenubarItem
+                      onSelect={() => {
+                        openingDialogRef.current = true;
+                        setDialogState({ mode: "create" });
+                      }}
+                    >
                       <FilePlus2 aria-hidden="true" />
                       {t("panes.profiles.dialog.addTitle")}
                     </MenubarItem>
-                    <MenubarItem onSelect={() => {
-                      openingDialogRef.current = true;
-                      setSubscriptionsOpen(true);
-                    }}>
-                      <Rss aria-hidden="true" />
-                      {t("home.subscriptionCard.add")}
+                    <MenubarItem
+                      onSelect={() => {
+                        openingDialogRef.current = true;
+                        nodeGroups.open(
+                          { kind: "name", group: null },
+                          addTriggerRef.current,
+                        );
+                      }}
+                    >
+                      {t("nodeGroups.create")}
                     </MenubarItem>
-                    <MenubarItem onSelect={() => { openingDialogRef.current = true; nodeGroups.open({ kind: "name", group: null }, addTriggerRef.current); }}>{t("nodeGroups.create")}</MenubarItem>
                   </MenubarContent>
                 </MenubarMenu>
               </Menubar>
@@ -108,7 +141,12 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
               <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
                 <MenubarMenu>
                   <MenubarTrigger asChild className="h-8">
-                    <Button disabled={batchActionsDisabled} size="sm" type="button" variant="outline">
+                    <Button
+                      disabled={batchActionsDisabled}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
                       <Share2 className="size-4" aria-hidden="true" />
                       {t("panes.profiles.toolbar.bulkExport")}
                     </Button>
@@ -116,7 +154,9 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
                   <MenubarContent align="start">
                     <ExportMenuItems
                       onExport={(kind) => void handleBulkExport(kind)}
-                      onSave={(kind) => void handleBulkExport(kind, false, true)}
+                      onSave={(kind) =>
+                        void handleBulkExport(kind, false, true)
+                      }
                       onShowQr={() => void handleBulkExport("shareLinks", true)}
                       t={t}
                     />
@@ -129,7 +169,12 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
               <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
                 <MenubarMenu>
                   <MenubarTrigger asChild className="h-8">
-                    <Button ref={importTriggerRef} size="sm" type="button" variant="outline">
+                    <Button
+                      ref={importTriggerRef}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
                       <Upload className="size-4" aria-hidden="true" />
                       {t("panes.profiles.toolbar.import")}
                       <ChevronDown className="size-3" aria-hidden="true" />
@@ -137,10 +182,13 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
                   </MenubarTrigger>
                   <MenubarContent onCloseAutoFocus={handleMenuClose}>
                     {IMPORT_METHODS.map(({ method, icon: Icon, labelKey }) => (
-                      <MenubarItem key={method} onSelect={() => {
-                        openingDialogRef.current = true;
-                        setImportMethod(method);
-                      }}>
+                      <MenubarItem
+                        key={method}
+                        onSelect={() => {
+                          openingDialogRef.current = true;
+                          setImportMethod(method);
+                        }}
+                      >
                         <Icon aria-hidden="true" />
                         {t(labelKey)}
                       </MenubarItem>
@@ -153,12 +201,26 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
         </PageHeaderActions>
       </PageHeader>
 
-      {nodeGroups.query.error ? <InlinePageError>{getErrorMessage(nodeGroups.query.error)}</InlinePageError> : null}
-      {!nodeGroups.dialog && nodeGroups.error ? <InlinePageError>{nodeGroups.error}</InlinePageError> : null}
-      {operationError ? <InlinePageError>{operationError}</InlinePageError> : null}
-      {profilesQuery.isError ? <InlinePageError>{getErrorMessage(profilesQuery.error)}</InlinePageError> : null}
+      {nodeGroups.query.error ? (
+        <InlinePageError>
+          {getErrorMessage(nodeGroups.query.error)}
+        </InlinePageError>
+      ) : null}
+      {!nodeGroups.dialog && nodeGroups.error ? (
+        <InlinePageError>{nodeGroups.error}</InlinePageError>
+      ) : null}
+      {operationError ? (
+        <InlinePageError>{operationError}</InlinePageError>
+      ) : null}
+      {profilesQuery.isError ? (
+        <InlinePageError>
+          {getErrorMessage(profilesQuery.error)}
+        </InlinePageError>
+      ) : null}
       {operationMessage ? (
-        <div className="border-b bg-connected/10 px-4 py-2 text-sm text-connected">{operationMessage}</div>
+        <div className="border-b bg-connected/10 px-4 py-2 text-sm text-success">
+          {operationMessage}
+        </div>
       ) : null}
       {/*
         Stored profiles this build could not decode are skipped by persistence so
@@ -175,7 +237,9 @@ export function ServerTableToolbar({ controller }: { controller: ServerTableCont
         >
           <FileWarning aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <span>
-            {t("panes.profiles.undecodable", { count: undecodableProfiles.toLocaleString() })}
+            {t("panes.profiles.undecodable", {
+              count: undecodableProfiles.toLocaleString(),
+            })}
           </span>
         </div>
       ) : null}

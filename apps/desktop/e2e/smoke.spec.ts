@@ -6,7 +6,10 @@ import { savedNodeFixture } from "./fixtures/saved-node";
 
 import { installTauriSmokeMock } from "./fixtures/tauri-mock";
 
-const importFixture = readFileSync(new URL("./fixtures/vless-share-link.txt", import.meta.url), "utf8").trim();
+const importFixture = readFileSync(
+  new URL("./fixtures/vless-share-link.txt", import.meta.url),
+  "utf8",
+).trim();
 
 type SmokeCall = { args: Record<string, unknown>; command: string };
 
@@ -35,22 +38,32 @@ async function connectFakeCore(page: Page) {
   // wait for it before emitting or it can overwrite the connected state right
   // after the poll observed it.
   await expect
-    .poll(async () => (await smokeCalls(page)).some((call) => call.command === "runtime_status"))
+    .poll(async () =>
+      (await smokeCalls(page)).some(
+        (call) => call.command === "runtime_status",
+      ),
+    )
     .toBe(true);
 
   await expect
     .poll(async () => {
       await page.evaluate(() => {
-        const state = window.__VOYA_SMOKE__.state as { runtime: import("../src/ipc/bindings").RuntimeStatusResponse };
+        const state = window.__VOYA_SMOKE__.state as {
+          runtime: import("../src/ipc/bindings").RuntimeStatusResponse;
+        };
         state.runtime = {
           activeProfileId: null,
           mainPid: 4242,
-          prePid: null, connectedDurationMs: null,
+          prePid: null,
+          connectedDurationMs: null,
           activeTunBackend: null,
           runningCoreType: "singBox",
           state: "connected",
         };
-        window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "coreState", payload: state.runtime });
+        window.__VOYA_SMOKE__.emit("transient-stream-event", {
+          kind: "coreState",
+          payload: state.runtime,
+        });
       });
       return coreStateBadge(page, "Connected").count();
     })
@@ -74,33 +87,56 @@ test.afterEach(async ({ page }) => {
 });
 
 test("loads the app shell and opens in-shell settings", async ({ page }) => {
-  await expect(page.getByRole("heading", { name: "Not protected" })).toBeVisible();
-  await expect(page.getByTestId("sidebar-footer")).toContainText("Disconnected");
+  await expect(
+    page.getByRole("heading", { name: "Not protected" }),
+  ).toBeVisible();
+  await expect(page.getByTestId("sidebar-footer")).toContainText(
+    "Disconnected",
+  );
   await expect(page.getByTestId("sidebar-footer")).toContainText("Up 0 B/s");
-  await expect(page.getByRole("tab", { name: "Home" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("button", { exact: true, name: "QR" })).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Home" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(
+    page.getByRole("button", { exact: true, name: "QR" }),
+  ).toHaveCount(0);
 
   await page.getByRole("tab", { name: "Settings" }).click();
 
   await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
   const settings = page.getByRole("region", { name: "Settings" });
   await expect(settings.getByRole("tab")).toHaveText([
-    "General", "Core", "Network", "DNS", "Tests", "Updates",
+    "General",
+    "Core",
+    "Network",
+    "DNS",
+    "Tests",
+    "Updates",
   ]);
-  await expect(settings.getByRole("button", { name: "Import configuration template" })).toHaveCount(0);
+  await expect(
+    settings.getByRole("button", { name: "Import configuration template" }),
+  ).toHaveCount(0);
   // Settings render inside the main shell: no window plugin call may be made to
   // spawn or drive a second window. (Counting a command that no longer exists in
   // bindings.ts, as this test used to, could never fail.)
   const calls = await smokeCalls(page);
-  expect(calls.filter((call) => call.command.startsWith("plugin:window|"))).toEqual([]);
+  expect(
+    calls.filter((call) => call.command.startsWith("plugin:window|")),
+  ).toEqual([]);
 });
 
-test("automatically saves autostart and freely leaves settings", async ({ page }) => {
+test("automatically saves autostart and freely leaves settings", async ({
+  page,
+}) => {
   await page.getByRole("tab", { name: "Settings" }).click();
 
   const settings = page.getByRole("region", { name: "Settings" });
   await expect(settings).toBeVisible();
-  await expect(settings.getByRole("tab", { name: "General" })).toHaveAttribute("aria-selected", "true");
+  await expect(settings.getByRole("tab", { name: "General" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await expect(settings.getByText("Autostart", { exact: true })).toBeVisible();
 
   const autostart = settings.getByRole("checkbox", { name: "Autostart" });
@@ -110,63 +146,127 @@ test("automatically saves autostart and freely leaves settings", async ({ page }
 
   await page.getByRole("tab", { name: "Home" }).click();
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
-  await expect.poll(async () => (await smokeCalls(page)).filter((call) => call.command === "save_app_settings").at(-1)?.args)
+  await expect
+    .poll(
+      async () =>
+        (await smokeCalls(page))
+          .filter((call) => call.command === "save_app_settings")
+          .at(-1)?.args,
+    )
     .toMatchObject({ settings: { behavior: { autostart: true } } });
-  await expect(page.getByRole("region", { name: "Connection home" })).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Connection home" }),
+  ).toBeVisible();
   await expect(page.getByRole("region", { name: "Settings" })).toHaveCount(0);
 });
 
-test("commits settings input on Enter and flushes numeric input on imperative navigation", async ({ page }) => {
+test("commits settings input on Enter and flushes numeric input on imperative navigation", async ({
+  page,
+}) => {
   await page.getByRole("tab", { name: "Settings", exact: true }).click();
   const settings = page.getByRole("region", { name: "Settings", exact: true });
   await settings.getByRole("tab", { name: "Core", exact: true }).click();
+  await settings.getByText("Advanced options", { exact: true }).click();
   const agent = settings.getByLabel("User-Agent");
   await agent.fill("browser-autosave-agent");
-  expect((await smokeCalls(page)).filter((call) => call.command === "save_app_settings")).toHaveLength(0);
+  expect(
+    (await smokeCalls(page)).filter(
+      (call) => call.command === "save_app_settings",
+    ),
+  ).toHaveLength(0);
   await agent.press("Enter");
-  await expect.poll(async () => (await smokeCalls(page)).filter((call) => call.command === "save_app_settings").at(-1)?.args)
-    .toMatchObject({ settings: { core: { defaultUserAgent: "browser-autosave-agent" } } });
+  await expect
+    .poll(
+      async () =>
+        (await smokeCalls(page))
+          .filter((call) => call.command === "save_app_settings")
+          .at(-1)?.args,
+    )
+    .toMatchObject({
+      settings: { core: { defaultUserAgent: "browser-autosave-agent" } },
+    });
   await agent.blur();
-  expect((await smokeCalls(page)).filter((call) => call.command === "save_app_settings")).toHaveLength(1);
+  expect(
+    (await smokeCalls(page)).filter(
+      (call) => call.command === "save_app_settings",
+    ),
+  ).toHaveLength(1);
 
   await settings.getByRole("tab", { name: "Network", exact: true }).click();
+  await settings.getByRole("tabpanel").getByText("Advanced options", { exact: true }).first().click();
   const mtu = settings.getByLabel("MTU", { exact: true });
   await mtu.fill("");
   await mtu.blur();
   await expect(mtu).toHaveAttribute("aria-invalid", "true");
-  expect((await smokeCalls(page)).filter((call) => call.command === "save_app_settings")).toHaveLength(1);
+  expect(
+    (await smokeCalls(page)).filter(
+      (call) => call.command === "save_app_settings",
+    ),
+  ).toHaveLength(1);
   await mtu.fill("9000");
-  await page.evaluate(() => window.__VOYA_SMOKE__.emit("app-event", { kind: "selectTab", payload: "profiles" }));
-  await expect(page.getByRole("heading", { level: 1, name: "Nodes", exact: true })).toBeVisible();
+  await page.evaluate(() =>
+    window.__VOYA_SMOKE__.emit("app-event", {
+      kind: "selectTab",
+      payload: "profiles",
+    }),
+  );
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Nodes", exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
-  await expect.poll(async () => (await smokeCalls(page)).filter((call) => call.command === "save_app_settings").at(-1)?.args)
+  await expect
+    .poll(
+      async () =>
+        (await smokeCalls(page))
+          .filter((call) => call.command === "save_app_settings")
+          .at(-1)?.args,
+    )
     .toMatchObject({ settings: { network: { tun: { mtu: 9000 } } } });
 });
 
-test("node menus defer actions until a method is chosen and restore keyboard focus", async ({ page }, testInfo) => {
-  await page.getByRole("tablist", { name: "Main sections" }).getByRole("tab", { name: "Nodes" }).click();
+test("node menus defer actions until a method is chosen and restore keyboard focus", async ({
+  page,
+}, testInfo) => {
+  await page
+    .getByRole("tablist", { name: "Main sections" })
+    .getByRole("tab", { name: "Nodes" })
+    .click();
   const add = page.getByRole("menuitem", { name: "Add", exact: true });
   await add.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveCount(3);
-  await page.screenshot({ animations: "disabled", path: testInfo.outputPath("nodes-add-menu.png") });
+  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveCount(2);
+  await page.screenshot({
+    animations: "disabled",
+    path: testInfo.outputPath("nodes-add-menu.png"),
+  });
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(add).toBeFocused();
-  await add.click();
-  await page.getByRole("menuitem", { name: "Add subscription", exact: true }).click();
-  const subscriptions = page.getByRole("dialog", { name: "Subscriptions" });
-  await subscriptions.getByLabel("Remarks", { exact: true }).fill("Unsaved source");
+  await page
+    .getByRole("button", { name: "Add subscription", exact: true })
+    .click();
+  const subscriptions = page.getByRole("dialog", { name: "Add subscription" });
+  await subscriptions
+    .getByLabel("Remarks", { exact: true })
+    .fill("Unsaved source");
   await page.keyboard.press("Escape");
-  await expect(add).toBeFocused();
-  await add.click();
-  await page.getByRole("menuitem", { name: "Add subscription", exact: true }).click();
-  await expect(subscriptions.getByLabel("Remarks", { exact: true })).toHaveValue("");
+  await expect(
+    page.getByRole("button", { name: "Add subscription" }),
+  ).toBeFocused();
+  await page
+    .getByRole("button", { name: "Add subscription", exact: true })
+    .click();
+  await expect(
+    subscriptions.getByLabel("Remarks", { exact: true }),
+  ).toHaveValue("");
   await page.keyboard.press("Escape");
 
-  const importTrigger = page.getByRole("menuitem", { name: "Import", exact: true });
+  const importTrigger = page.getByRole("menuitem", {
+    name: "Import",
+    exact: true,
+  });
   for (const [method, action] of [
     ["Import from clipboard", "Paste"],
     ["Import from text", null],
@@ -178,23 +278,54 @@ test("node menus defer actions until a method is chosen and restore keyboard foc
     await importTrigger.click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByRole("menu").getByRole("menuitem")).toHaveCount(6);
-    if (method === "Import from text") await page.screenshot({ animations: "disabled", path: testInfo.outputPath("nodes-import-menu.png") });
+    if (method === "Import from text")
+      await page.screenshot({
+        animations: "disabled",
+        path: testInfo.outputPath("nodes-import-menu.png"),
+      });
     await page.getByRole("menuitem", { name: method, exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Import Nodes" });
     await expect(dialog).toBeVisible();
-    if (method === "Import from clipboard") await page.screenshot({ animations: "disabled", path: testInfo.outputPath("nodes-clipboard-dialog.png") });
-    await expect(dialog.getByRole("textbox", { name: "Import payload" })).toHaveValue("");
-    for (const name of ["Paste", "File", "Scan image", "Clipboard image", "Screen"]) {
-      await expect(dialog.getByRole("button", { name, exact: true })).toHaveCount(name === action ? 1 : 0);
+    if (method === "Import from clipboard")
+      await page.screenshot({
+        animations: "disabled",
+        path: testInfo.outputPath("nodes-clipboard-dialog.png"),
+      });
+    await expect(
+      dialog.getByRole("textbox", { name: "Import payload" }),
+    ).toHaveValue("");
+    for (const name of [
+      "Paste",
+      "File",
+      "Scan image",
+      "Clipboard image",
+      "Screen",
+    ]) {
+      await expect(
+        dialog.getByRole("button", { name, exact: true }),
+      ).toHaveCount(name === action ? 1 : 0);
     }
     await page.keyboard.press("Escape");
     await expect(importTrigger).toBeFocused();
   }
-  expect((await smokeCalls(page)).filter(({ command }) => ["import_profiles_from_text", "scan_screen_qr", "save_subscription"].includes(command))).toHaveLength(0);
+  expect(
+    (await smokeCalls(page)).filter(({ command }) =>
+      [
+        "import_profiles_from_text",
+        "scan_screen_qr",
+        "save_subscription",
+      ].includes(command),
+    ),
+  ).toHaveLength(0);
 });
 
-test("adds and imports profiles, activates one, and connects through the fake runtime", async ({ page }) => {
-  await page.getByRole("tablist", { name: "Main sections" }).getByRole("tab", { name: "Nodes" }).click();
+test("adds and imports profiles, activates one, and connects through the fake runtime", async ({
+  page,
+}) => {
+  await page
+    .getByRole("tablist", { name: "Main sections" })
+    .getByRole("tab", { name: "Nodes" })
+    .click();
   await page.getByRole("menuitem", { exact: true, name: "Add" }).click();
   await page.getByRole("menuitem", { exact: true, name: "Add node" }).click();
   await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
@@ -203,6 +334,8 @@ test("adds and imports profiles, activates one, and connects through the fake ru
   await page.getByLabel("Remarks").fill("Smoke Manual VLESS");
   await page.getByLabel("Address").fill("manual.example.test");
   await page.getByLabel("UUID").fill("00000000-0000-4000-8000-000000000001");
+  await page.getByRole("combobox", { name: "TLS mode" }).click();
+  await page.getByRole("option", { name: "TLS", exact: true }).click();
   await page.getByLabel("SNI").fill("manual.example.test");
   await page.getByRole("button", { name: "Save" }).click();
 
@@ -210,7 +343,9 @@ test("adds and imports profiles, activates one, and connects through the fake ru
   await expect(page.getByText("manual.example.test")).toBeVisible();
 
   await page.getByRole("menuitem", { exact: true, name: "Import" }).click();
-  await page.getByRole("menuitem", { exact: true, name: "Scan QR image" }).click();
+  await page
+    .getByRole("menuitem", { exact: true, name: "Scan QR image" })
+    .click();
   const importDialog = page.getByRole("dialog", { name: "Import Nodes" });
   await importDialog.getByLabel("Scan image").setInputFiles({
     buffer: Buffer.from(
@@ -221,75 +356,128 @@ test("adds and imports profiles, activates one, and connects through the fake ru
     name: "not-a-qr-code.png",
   });
   await expect(importDialog.getByText("No QR code found.")).toBeVisible();
-  await importDialog.getByRole("textbox", { name: "Import payload" }).fill(importFixture);
-  await importDialog.getByRole("button", { exact: true, name: "Import payload" }).click();
+  await importDialog
+    .getByRole("textbox", { name: "Import payload" })
+    .fill(importFixture);
+  await importDialog
+    .getByRole("button", { exact: true, name: "Import" })
+    .click();
   await expect(page.getByText("Smoke Imported VLESS")).toBeVisible();
 
-  const importedProfileRow = page.getByTestId("server-row").filter({ hasText: "Smoke Imported VLESS" });
+  const importedProfileRow = page
+    .getByTestId("server-row")
+    .filter({ hasText: "Smoke Imported VLESS" });
   await importedProfileRow.click({ button: "right" });
-  const profileMenu = page.getByRole("menu", { name: "Actions for Smoke Imported VLESS" });
+  const profileMenu = page.getByRole("menu", {
+    name: "Actions for Smoke Imported VLESS",
+  });
   const exportMenu = profileMenu.getByRole("menuitem", { name: "Export" });
   await exportMenu.focus();
   await page.keyboard.press("ArrowRight");
   await page.getByRole("menuitem", { name: "Show QR" }).click();
   const shareQrDialog = page.getByRole("dialog", { name: "Show QR" });
   await expect(shareQrDialog).toBeVisible();
-  await expect(shareQrDialog.getByLabel("Content")).toHaveValue(/Smoke%20Imported%20VLESS/u);
+  await expect(shareQrDialog.getByLabel("Content")).toHaveValue(
+    /Smoke%20Imported%20VLESS/u,
+  );
   await expect(shareQrDialog.getByAltText("Generated QR code")).toBeVisible();
   await shareQrDialog.getByRole("button", { name: "Close" }).first().click();
 
   await page.getByRole("tab", { name: "Home" }).click();
-  await expect(page.getByRole("switch", { name: "TUN mode", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("switch", { name: "TUN mode", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Switch node" }).click();
-  await expect(page.getByTestId("home-subscription-card")).toBeVisible();
-  const importedNode = page.getByRole("option", { name: /Smoke Imported VLESS/ });
-  await importedNode.dblclick();
-  await expect(page.getByRole("dialog", { name: "Switch node" })).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Nodes", exact: true })).toBeFocused();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByTestId("server-row").filter({ hasText: "Smoke Imported VLESS" }).getByRole("button", { name: "Use node", exact: true }).click();
+  await expect(page.getByRole("button", { name: "In use", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Home", exact: true }).click();
   const connectButton = page.getByTestId("home-connect-button");
   await expect(connectButton).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Details" }).click();
-  await expect(page.getByRole("dialog", { name: "Connection details" })).toContainText("4242");
+  await expect(
+    page.getByRole("dialog", { name: "Connection details" }),
+  ).toContainText("4242");
   await page.keyboard.press("Escape");
   await expect(coreStateBadge(page, "Connected")).toHaveCount(1);
 
   await connectButton.click();
   await expect(connectButton).toHaveAttribute("aria-pressed", "false");
-  await expect(page.getByTestId("sidebar-footer")).toContainText("Disconnected");
+  await expect(page.getByTestId("sidebar-footer")).toContainText(
+    "Disconnected",
+  );
 });
 
-test("uses traffic modes and connections through the proxy runtime IPC", async ({ page }) => {
+test("uses traffic modes and connections through the proxy runtime IPC", async ({
+  page,
+}) => {
   await page.getByRole("tab", { name: "Home", exact: true }).click();
   await expect(page.getByText("Applies on the next connection")).toHaveCount(0);
   await page.getByRole("button", { name: "Global", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Global", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.getByRole("button", { name: "Global", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await connectFakeCore(page);
-  const oldConnection = await page.evaluate(() => (window.__VOYA_SMOKE__.state as {
-    connections: import("../src/ipc/bindings").ProxyConnectionsSnapshot;
-  }).connections.connections[0]!);
+  const oldConnection = await page.evaluate(
+    () =>
+      (
+        window.__VOYA_SMOKE__.state as {
+          connections: import("../src/ipc/bindings").ProxyConnectionsSnapshot;
+        }
+      ).connections.connections[0]!,
+  );
   await page.getByRole("button", { exact: true, name: "Direct" }).click();
-  await expect(page.getByRole("button", { exact: true, name: "Direct" })).toHaveAttribute("aria-pressed", "true");
-  expect(await page.evaluate(() => (window.__VOYA_SMOKE__.state as {
-    connections: import("../src/ipc/bindings").ProxyConnectionsSnapshot;
-  }).connections.connections)).toEqual([]);
+  await expect(
+    page.getByRole("button", { exact: true, name: "Direct" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          window.__VOYA_SMOKE__.state as {
+            connections: import("../src/ipc/bindings").ProxyConnectionsSnapshot;
+          }
+        ).connections.connections,
+    ),
+  ).toEqual([]);
   // A client reconnects under the new mode; it can still be inspected/closed.
   await page.evaluate((connection) => {
-    const state = window.__VOYA_SMOKE__.state as { connections: import("../src/ipc/bindings").ProxyConnectionsSnapshot };
-    state.connections.connections = [{ ...connection, id: "smoke-reconnected", chains: ["direct"] }];
+    const state = window.__VOYA_SMOKE__.state as {
+      connections: import("../src/ipc/bindings").ProxyConnectionsSnapshot;
+    };
+    state.connections.connections = [
+      { ...connection, id: "smoke-reconnected", chains: ["direct"] },
+    ];
   }, oldConnection);
-  await page.getByRole("tab", { name: "Network activity", exact: true }).click();
-  await expect(page.getByRole("heading", { exact: true, name: "Network activity" })).toBeVisible();
-  await expect(page.getByText("smoke.example.test:443", { exact: true })).toBeVisible();
+  await page
+    .getByRole("tab", { name: "Network activity", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { exact: true, name: "Network activity" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("smoke.example.test:443", { exact: true }),
+  ).toBeVisible();
   await page.getByText("smoke.example.test:443", { exact: true }).click();
-  await page.getByRole("button", { exact: true, name: "Disconnect this connection" }).click();
+  await page
+    .getByRole("button", { exact: true, name: "Disconnect this connection" })
+    .click();
   await expect(page.getByText("Ended", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByText("No active connections", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("No active connections", { exact: true }),
+  ).toBeVisible();
 
-  const connectionsPage = page.getByRole("region", { name: "Network activity" });
+  const connectionsPage = page.getByRole("region", {
+    name: "Network activity",
+  });
   await connectionsPage.getByRole("tab", { name: "Runtime logs" }).click();
   await expect(page.getByText("No log lines", { exact: true })).toBeVisible();
   await connectionsPage.getByRole("tab", { name: "Live connections" }).click();
-  await expect(page.getByText("No active connections", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("No active connections", { exact: true }),
+  ).toBeVisible();
 
   const calls = await smokeCalls(page);
 
@@ -303,17 +491,28 @@ test("uses traffic modes and connections through the proxy runtime IPC", async (
   );
 });
 
-test("keeps the simplified navigation usable at desktop and minimum sizes", async ({ page }, testInfo) => {
+test("keeps the simplified navigation usable at desktop and minimum sizes", async ({
+  page,
+}, testInfo) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.evaluate((profile) => {
-    const state = window.__VOYA_SMOKE__.state as { profiles: import("../src/ipc/bindings").ProfileListEntry[] };
+    const state = window.__VOYA_SMOKE__.state as {
+      profiles: import("../src/ipc/bindings").ProfileListEntry[];
+    };
     state.profiles = [profile];
-    window.__VOYA_SMOKE__.emit("invalidate-event", { keys: [{ scope: { kind: "profiles" } }] });
+    window.__VOYA_SMOKE__.emit("invalidate-event", {
+      keys: [{ scope: { kind: "profiles" } }],
+    });
   }, savedNodeFixture);
   const mainNav = page.getByRole("tablist", { name: "Main sections" });
   await expect(mainNav.getByRole("tab")).toHaveCount(5);
-  await expect(mainNav.getByRole("tab", { name: "Proxies", exact: true })).toHaveCount(0);
-  for (const viewport of [{ width: 1180, height: 760 }, { width: 960, height: 640 }]) {
+  await expect(
+    mainNav.getByRole("tab", { name: "Proxies", exact: true }),
+  ).toHaveCount(0);
+  for (const viewport of [
+    { width: 1180, height: 760 },
+    { width: 960, height: 640 },
+  ]) {
     await page.setViewportSize(viewport);
     for (const colorScheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme });
@@ -322,40 +521,71 @@ test("keeps the simplified navigation usable at desktop and minimum sizes", asyn
       await expect(modes).toBeInViewport();
       await expect(modes.getByRole("button", { name: "Global" })).toBeEnabled();
       if (colorScheme === "dark") {
-        await expect(modes.getByRole("button", { name: "Global" })).toHaveCSS("color", "rgb(228, 235, 245)");
+        await expect(modes.getByRole("button", { name: "Global" })).toHaveCSS(
+          "color",
+          "rgb(240, 246, 252)",
+        );
       }
-      await page.screenshot({ path: testInfo.outputPath(`home-${viewport.width}-${colorScheme}.png`) });
+      await page.screenshot({
+        path: testInfo.outputPath(`home-${viewport.width}-${colorScheme}.png`),
+      });
       await mainNav.getByRole("tab", { name: "Nodes", exact: true }).click();
-      await expect(page.getByRole("tablist", { name: "Node views" })).toHaveCount(0);
+      await expect(
+        page.getByRole("tablist", { name: "Node views" }),
+      ).toHaveCount(0);
       await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-      await expect(page.getByRole("button", { name: "Unassigned", exact: true })).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Unassigned", exact: true }),
+      ).toBeVisible();
       await expect(page.getByTestId("server-row").first()).toBeVisible();
-      await page.screenshot({ path: testInfo.outputPath(`nodes-${viewport.width}-${colorScheme}.png`) });
+      await page.screenshot({
+        path: testInfo.outputPath(`nodes-${viewport.width}-${colorScheme}.png`),
+      });
       await mainNav.getByRole("tab", { name: "Home", exact: true }).click();
       await mainNav.getByRole("tab", { name: "Nodes", exact: true }).click();
-      await expect(page.getByRole("heading", { name: "Nodes", exact: true })).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "Nodes", exact: true }),
+      ).toBeVisible();
     }
   }
-  await page.evaluate(() => window.__VOYA_SMOKE__.emit("app-event", { kind: "selectTab", payload: "profiles" }));
-  await expect(mainNav.getByRole("tab", { name: "Nodes", exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.evaluate(() =>
+    window.__VOYA_SMOKE__.emit("app-event", {
+      kind: "selectTab",
+      payload: "profiles",
+    }),
+  );
+  await expect(
+    mainNav.getByRole("tab", { name: "Nodes", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
 });
 
-test("edits routing and DNS settings without network or OS side effects", async ({ page }) => {
+test("edits routing and DNS settings without network or OS side effects", async ({
+  page,
+}) => {
   await page.getByRole("tab", { name: "Rules" }).click();
-  await expect(page.getByRole("heading", { exact: true, name: "Rules" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Default routing" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { exact: true, name: "Rules" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Default routing" }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Routing profile" }).click();
   await page.getByLabel("Remarks").fill("Smoke routing");
   await page.getByLabel("Source URL").fill("https://rules.example.test/smoke");
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("heading", { name: "Smoke routing" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Smoke routing" }),
+  ).toBeVisible();
 
   await page.getByRole("button", { exact: true, name: "Rule" }).click();
   await page.getByLabel("Remarks").fill("Smoke direct rule");
   await page.getByLabel("Outbound").fill("direct");
   await page.getByLabel("Domain").fill("domain:example.test");
-  await page.getByRole("dialog").getByRole("textbox", { name: /^network$/i }).fill("tcp");
+  await page
+    .getByRole("dialog")
+    .getByRole("textbox", { name: /^network$/i })
+    .fill("tcp");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("Smoke direct rule")).toBeVisible();
   await expect(page.getByText("domain:example.test")).toBeVisible();
@@ -363,7 +593,9 @@ test("edits routing and DNS settings without network or OS side effects", async 
   await page.getByRole("tab", { name: "Settings" }).click();
   const settings = page.getByRole("region", { name: "Settings" });
   await settings.getByRole("tab", { name: "DNS" }).click();
-  await expect(settings.getByRole("heading", { name: "DNS servers and strategies" })).toBeVisible();
+  await expect(
+    settings.getByRole("heading", { name: "DNS servers and strategies" }),
+  ).toBeVisible();
   await settings.getByRole("checkbox", { exact: true, name: "FakeIP" }).check();
   await settings.getByLabel("Remote DNS").fill("https://dns.google/dns-query");
   await settings.getByLabel("Remote DNS").blur();
@@ -371,10 +603,19 @@ test("edits routing and DNS settings without network or OS side effects", async 
   // Asserting the static "FakeIP" label proves nothing about the save; read the
   // recorded payload instead.
   await expect
-    .poll(async () => (await smokeCalls(page)).filter((call) => call.command === "save_dns_settings").at(-1)?.args)
-    .toMatchObject({ settings: { fakeIp: true, remote: "https://dns.google/dns-query" } });
+    .poll(
+      async () =>
+        (await smokeCalls(page))
+          .filter((call) => call.command === "save_dns_settings")
+          .at(-1)?.args,
+    )
+    .toMatchObject({
+      settings: { fakeIp: true, remote: "https://dns.google/dns-query" },
+    });
 
-  const dnsCall = (await smokeCalls(page)).filter((call) => call.command === "save_dns_settings").at(-1);
+  const dnsCall = (await smokeCalls(page))
+    .filter((call) => call.command === "save_dns_settings")
+    .at(-1);
   expect(dnsCall?.args).toMatchObject({
     settings: { fakeIp: true, remote: "https://dns.google/dns-query" },
   });
@@ -403,7 +644,9 @@ test("routes the three IPC event channels into the shell", async ({ page }) => {
 
   await expect(coreStateBadge(page, "Disconnected")).toHaveCount(0);
   await expect(page.getByTestId("sidebar-footer")).toContainText("Up 2.0 KB/s");
-  await expect(page.getByTestId("sidebar-footer")).toContainText("Down 4.0 KB/s");
+  await expect(page.getByTestId("sidebar-footer")).toContainText(
+    "Down 4.0 KB/s",
+  );
 
   // Imperative app event: a notice becomes a toast. Delivery is per event name,
   // so this payload must not reach the invalidate/transient handlers.
@@ -419,14 +662,25 @@ test("routes the three IPC event channels into the shell", async ({ page }) => {
       },
     });
   });
-  await expect(page.getByText("Smoke notice detail", { exact: true })).toBeVisible();
-  await expect(page.getByText("Tray refresh failed", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Smoke notice detail", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Tray refresh failed", { exact: true }),
+  ).toBeVisible();
   await expect(coreStateBadge(page, "Connected")).toBeVisible();
 
   // Invalidation: the profiles query refetches.
-  await page.getByRole("tablist", { name: "Main sections" }).getByRole("tab", { name: "Nodes" }).click();
-  await expect(page.getByRole("menuitem", { exact: true, name: "Add" })).toBeVisible();
-  const before = (await smokeCalls(page)).filter((call) => call.command === "list_profiles").length;
+  await page
+    .getByRole("tablist", { name: "Main sections" })
+    .getByRole("tab", { name: "Nodes" })
+    .click();
+  await expect(
+    page.getByRole("menuitem", { exact: true, name: "Add" }),
+  ).toBeVisible();
+  const before = (await smokeCalls(page)).filter(
+    (call) => call.command === "list_profiles",
+  ).length;
 
   await page.evaluate(() => {
     window.__VOYA_SMOKE__.emit("invalidate-event", {
@@ -435,15 +689,27 @@ test("routes the three IPC event channels into the shell", async ({ page }) => {
   });
 
   await expect
-    .poll(async () => (await smokeCalls(page)).filter((call) => call.command === "list_profiles").length)
+    .poll(
+      async () =>
+        (await smokeCalls(page)).filter(
+          (call) => call.command === "list_profiles",
+        ).length,
+    )
     .toBeGreaterThan(before);
 });
 
-test("keeps traffic modes independent of the existing PAC and TUN choices", async ({ page }) => {
+test("keeps traffic modes independent of the existing PAC and TUN choices", async ({
+  page,
+}) => {
   const tun = page.getByRole("switch", { name: "TUN mode", exact: true });
-  const smart = page.getByRole("button", { name: "Smart routing", exact: true });
+  const smart = page.getByRole("button", {
+    name: "Smart routing",
+    exact: true,
+  });
   await expect(tun).not.toBeChecked();
-  await expect(page.getByRole("button", { name: /^(Proxy only|System proxy|VPN)$/ })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: /^(Proxy only|System proxy|VPN)$/ }),
+  ).toHaveCount(0);
   await page.evaluate(() => {
     const state = window.__VOYA_SMOKE__.state as {
       sysProxy: import("../src/ipc/bindings").SystemProxyStatusResponse;
@@ -452,43 +718,81 @@ test("keeps traffic modes independent of the existing PAC and TUN choices", asyn
     state.sysProxy.pacAvailable = true;
     state.sysProxy.requestedMode = "pac";
     state.settings.network.systemProxy.mode = "pac";
-    window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "sysProxyChanged", payload: state.sysProxy });
+    window.__VOYA_SMOKE__.emit("transient-stream-event", {
+      kind: "sysProxyChanged",
+      payload: state.sysProxy,
+    });
   });
   await smart.click();
   await expect(smart).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("group", { name: "Traffic mode" }).getByRole("button")).toHaveCount(3);
-  await expect(page.getByRole("switch", { name: "Smart mode (PAC)" })).toHaveCount(0);
+  await expect(
+    page.getByRole("group", { name: "Traffic mode" }).getByRole("button"),
+  ).toHaveCount(3);
+  await expect(
+    page.getByRole("switch", { name: "Smart mode (PAC)" }),
+  ).toHaveCount(0);
   await page.getByText("TUN mode", { exact: true }).click();
   await expect(tun).toBeChecked();
   await expect(tun).toBeEnabled();
   await expect(smart).toHaveAttribute("aria-pressed", "true");
-  await page.screenshot({ path: test.info().outputPath("home-tun-on.png"), animations: "disabled" });
+  await page.screenshot({
+    path: test.info().outputPath("home-tun-on.png"),
+    animations: "disabled",
+  });
   await tun.focus();
   await page.keyboard.press("Space");
   await expect(tun).not.toBeChecked();
   await expect(tun).toBeEnabled();
   await expect(smart).toHaveAttribute("aria-pressed", "true");
-  await page.screenshot({ path: test.info().outputPath("home-tun-off.png"), animations: "disabled" });
-  expect((await smokeCalls(page)).filter((call) => call.command === "set_connection_mode")).toEqual([
+  await page.screenshot({
+    path: test.info().outputPath("home-tun-off.png"),
+    animations: "disabled",
+  });
+  expect(
+    (await smokeCalls(page)).filter(
+      (call) => call.command === "set_connection_mode",
+    ),
+  ).toEqual([
     { command: "set_connection_mode", args: { mode: "vpn", pacEnabled: null } },
-    { command: "set_connection_mode", args: { mode: "systemProxy", pacEnabled: null } },
+    {
+      command: "set_connection_mode",
+      args: { mode: "systemProxy", pacEnabled: null },
+    },
   ]);
-  const savedProxyMode = () => page.evaluate(() => (window.__VOYA_SMOKE__.state as {
-    settings: import("../src/ipc/bindings").AppSettingsV1;
-  }).settings.network.systemProxy.mode);
+  const savedProxyMode = () =>
+    page.evaluate(
+      () =>
+        (
+          window.__VOYA_SMOKE__.state as {
+            settings: import("../src/ipc/bindings").AppSettingsV1;
+          }
+        ).settings.network.systemProxy.mode,
+    );
   await expect.poll(savedProxyMode).toBe("pac");
   for (const name of ["Global", "Direct"]) {
     await page.getByRole("button", { name, exact: true }).click();
-    await expect(page.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      page.getByRole("button", { name, exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
     await expect.poll(savedProxyMode).toBe("pac");
   }
   await smart.click();
   await expect.poll(savedProxyMode).toBe("pac");
-  expect((await smokeCalls(page)).filter((call) => ["connect_active_profile", "restart_core", "set_system_proxy_mode"].includes(call.command))).toEqual([]);
+  expect(
+    (await smokeCalls(page)).filter((call) =>
+      [
+        "connect_active_profile",
+        "restart_core",
+        "set_system_proxy_mode",
+      ].includes(call.command),
+    ),
+  ).toEqual([]);
 });
 
 for (const proxyMode of ["forcedChange", "pac"] as const) {
-  test(`keeps manual ${proxyMode} setup in network settings through mode changes and disconnect`, async ({ page }) => {
+  test(`keeps manual ${proxyMode} setup in network settings through mode changes and disconnect`, async ({
+    page,
+  }) => {
     await expect(page.getByTestId("home-connect-button")).toBeVisible();
     await page.evaluate((mode) => {
       const state = window.__VOYA_SMOKE__.state as {
@@ -496,31 +800,61 @@ for (const proxyMode of ["forcedChange", "pac"] as const) {
         settings: import("../src/ipc/bindings").AppSettingsV1;
       };
       state.sysProxy = {
-        ...state.sysProxy, management: "manual", observation: "unknown", manualCleanupRequired: true,
-        requestedMode: mode, pacAvailable: true, effectiveMode: "unchanged", exceptions: "localhost,127.0.0.0/8",
+        ...state.sysProxy,
+        management: "manual",
+        observation: "unknown",
+        manualCleanupRequired: true,
+        requestedMode: mode,
+        pacAvailable: true,
+        effectiveMode: "unchanged",
+        exceptions: "localhost,127.0.0.0/8",
       };
       state.settings.network.systemProxy.mode = mode;
-      window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "sysProxyChanged", payload: state.sysProxy });
+      window.__VOYA_SMOKE__.emit("transient-stream-event", {
+        kind: "sysProxyChanged",
+        payload: state.sysProxy,
+      });
     }, proxyMode);
+    await page.evaluate((profile) => {
+      (window.__VOYA_SMOKE__.state as { profiles: import("../src/ipc/bindings").ProfileListEntry[] }).profiles = [profile];
+      window.__VOYA_SMOKE__.emit("invalidate-event", { keys: [{ reason: "seed", scope: { kind: "profiles" } }] });
+    }, savedNodeFixture);
+    await expect(page.getByTestId("home-connect-button")).toHaveAccessibleName("Connect");
     await page.getByTestId("home-connect-button").click();
-    await expect(page.getByTestId("home-status-card")).toContainText("Local proxy ready");
-    await expect(page.getByText("Manual proxy setup", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("Configure your system proxy manually to use the local listener.")).toHaveCount(0);
+    await expect(page.getByTestId("home-status-card")).toContainText(
+      "Local proxy ready",
+    );
+    await expect(
+      page.getByText("Manual proxy setup", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByText(
+        "Configure your system proxy manually to use the local listener.",
+      ),
+    ).toHaveCount(0);
     for (const name of ["Global", "Direct", "Smart routing"]) {
       await page.getByRole("button", { name, exact: true }).click();
-      await expect(page.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "true");
+      await expect(
+        page.getByRole("button", { name, exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
     }
     await page.getByRole("tab", { name: "Settings", exact: true }).click();
     await page.getByRole("tab", { name: "Network", exact: true }).click();
     const panel = page.getByTestId("manual-proxy-panel");
-    await expect(panel).toContainText(proxyMode === "pac" ? "http://127.0.0.1:10811/pac?t=smoke" : "127.0.0.1:10808");
+    await expect(panel).toContainText(
+      proxyMode === "pac"
+        ? "http://127.0.0.1:10811/pac?t=smoke"
+        : "127.0.0.1:10808",
+    );
     await expect(panel).toContainText("unknown");
     await panel.getByRole("button", { name: "Check again" }).click();
     await expect(panel).toContainText("unknown");
     await panel.getByRole("button", { name: "Open Network settings" }).click();
-    expect((await smokeCalls(page)).filter((call) => call.command === "open_network_settings")).toEqual([
-      { command: "open_network_settings", args: {} },
-    ]);
+    expect(
+      (await smokeCalls(page)).filter(
+        (call) => call.command === "open_network_settings",
+      ),
+    ).toEqual([{ command: "open_network_settings", args: {} }]);
     // A tray/runtime disconnect updates the open settings panel immediately.
     await page.evaluate(async () => {
       await window.__TAURI_INTERNALS__.invoke("disconnect_core");
@@ -528,45 +862,87 @@ for (const proxyMode of ["forcedChange", "pac"] as const) {
         runtime: import("../src/ipc/bindings").RuntimeStatusResponse;
         sysProxy: import("../src/ipc/bindings").SystemProxyStatusResponse;
       };
-      window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "coreState", payload: state.runtime });
-      window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "sysProxyChanged", payload: state.sysProxy });
+      window.__VOYA_SMOKE__.emit("transient-stream-event", {
+        kind: "coreState",
+        payload: state.runtime,
+      });
+      window.__VOYA_SMOKE__.emit("transient-stream-event", {
+        kind: "sysProxyChanged",
+        payload: state.sysProxy,
+      });
     });
-    await expect(panel.getByRole("button", { name: "Copy address" })).toHaveCount(0);
+    await expect(
+      panel.getByRole("button", { name: "Copy address" }),
+    ).toHaveCount(0);
     await expect(panel).toContainText("cannot restore it automatically");
     await page.evaluate(() => {
-      const state = window.__VOYA_SMOKE__.state as { sysProxy: { observation: string } };
+      const state = window.__VOYA_SMOKE__.state as {
+        sysProxy: { observation: string };
+      };
       state.sysProxy.observation = "clear";
     });
     await panel.getByRole("button", { name: "Check again" }).click();
     await expect(panel).toContainText("No enabled system proxy was found.");
-    expect(await page.evaluate(() => (window.__VOYA_SMOKE__.state as {
-      sysProxy: { manualCleanupRequired: boolean; requestedMode: string };
-    }).sysProxy)).toMatchObject({ manualCleanupRequired: false, requestedMode: proxyMode });
+    expect(
+      await page.evaluate(
+        () =>
+          (
+            window.__VOYA_SMOKE__.state as {
+              sysProxy: {
+                manualCleanupRequired: boolean;
+                requestedMode: string;
+              };
+            }
+          ).sysProxy,
+      ),
+    ).toMatchObject({ manualCleanupRequired: false, requestedMode: proxyMode });
   });
 }
 
 for (const failure of ["apply", "close"] as const) {
-  test(`reports a live ${failure} failure, keeps the preference, and retries the same mode`, async ({ page }) => {
+  test(`reports a live ${failure} failure, keeps the preference, and retries the same mode`, async ({
+    page,
+  }) => {
     await connectFakeCore(page);
     await page.evaluate((stage) => {
-      (window.__VOYA_SMOKE__.state as { trafficModeFailure: string }).trafficModeFailure = stage;
+      (
+        window.__VOYA_SMOKE__.state as { trafficModeFailure: string }
+      ).trafficModeFailure = stage;
     }, failure);
     const global = page.getByRole("button", { name: "Global", exact: true });
     await global.click();
-    await expect(page.locator('[data-slot="toast-description"]').filter({ hasText: failure === "apply"
-      ? /was saved but could not be applied/
-      : /was applied, but existing connections could not be closed/ })).toBeVisible();
+    await expect(
+      page
+        .locator('[data-slot="toast-description"]')
+        .filter({
+          hasText:
+            failure === "apply"
+              ? /was saved but could not be applied/
+              : /was applied, but existing connections could not be closed/,
+        }),
+    ).toBeVisible();
     await expect(global).toHaveAttribute("aria-pressed", "true");
-    const modeState = () => page.evaluate(() => {
-      const state = window.__VOYA_SMOKE__.state as {
-        appliedTrafficMode: string; connections: { connections: unknown[] };
-      };
-      return { mode: state.appliedTrafficMode, count: state.connections.connections.length };
-    });
-    await expect.poll(modeState).toEqual({ mode: failure === "apply" ? "rule" : "global", count: 1 });
+    const modeState = () =>
+      page.evaluate(() => {
+        const state = window.__VOYA_SMOKE__.state as {
+          appliedTrafficMode: string;
+          connections: { connections: unknown[] };
+        };
+        return {
+          mode: state.appliedTrafficMode,
+          count: state.connections.connections.length,
+        };
+      });
+    await expect
+      .poll(modeState)
+      .toEqual({ mode: failure === "apply" ? "rule" : "global", count: 1 });
     await global.click();
     await expect.poll(modeState).toEqual({ mode: "global", count: 0 });
     await expect(global).toBeEnabled();
-    expect((await smokeCalls(page)).filter((call) => call.command === "proxy_set_traffic_mode")).toHaveLength(2);
+    expect(
+      (await smokeCalls(page)).filter(
+        (call) => call.command === "proxy_set_traffic_mode",
+      ),
+    ).toHaveLength(2);
   });
 }

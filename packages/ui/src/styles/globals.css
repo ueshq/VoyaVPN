@@ -12,6 +12,21 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 
+  --type-page-size: 24px;
+  --type-page-line: 32px;
+  --type-dialog-size: 20px;
+  --type-dialog-line: 28px;
+  --type-section-size: 16px;
+  --type-section-line: 24px;
+  --type-body-size: 14px;
+  --type-body-line: 20px;
+  --type-caption-size: 12px;
+  --type-caption-line: 16px;
+  --control-height: 36px;
+  --control-height-compact: 32px;
+  --control-height-large: 40px;
+  --page-inset: 24px;
+  --dialog-inset: 24px;
   --radius: 6px;
   --background: #ffffff;
   --foreground: #1f2328;
@@ -43,7 +58,8 @@
   /* Connected state — Primer success emphasis for the VPN connected/affirmative semantics. */
   --connected: #1f883d;
   --connected-foreground: #ffffff;
-  --connected-glow: 0 0 0 1px rgb(31 136 61 / 0.4), 0 0 12px -2px rgb(31 136 61 / 0.3);
+  --connected-glow:
+    0 0 0 1px rgb(31 136 61 / 0.4), 0 0 12px -2px rgb(31 136 61 / 0.3);
 
   /* Safe Passage — brand accents. signal/glow re-point to --connected (names preserved).
      Use sparingly: connected state / primary connect glow / active node. */
@@ -54,9 +70,12 @@
   --beacon-foreground: #ffffff;
 
   /* Depth ladder + connection glow */
-  --shadow-sm: 0 1px 2px 0 rgb(31 35 40 / 0.06), 0 1px 3px 0 rgb(31 35 40 / 0.1);
-  --shadow-md: 0 2px 4px -1px rgb(31 35 40 / 0.08), 0 4px 12px -2px rgb(31 35 40 / 0.12);
-  --shadow-lg: 0 8px 16px -4px rgb(31 35 40 / 0.1), 0 16px 32px -8px rgb(31 35 40 / 0.16);
+  --shadow-sm:
+    0 1px 2px 0 rgb(31 35 40 / 0.06), 0 1px 3px 0 rgb(31 35 40 / 0.1);
+  --shadow-md:
+    0 2px 4px -1px rgb(31 35 40 / 0.08), 0 4px 12px -2px rgb(31 35 40 / 0.12);
+  --shadow-lg:
+    0 8px 16px -4px rgb(31 35 40 / 0.1), 0 16px 32px -8px rgb(31 35 40 / 0.16);
   --glow-signal: var(--connected-glow);
 
   /* Primer surface ladder — base rungs alias existing semantics; interaction rungs use
@@ -95,9 +114,12 @@
 
   /* Primer elevation — resting/overlay shadow families (light ink rgb(31 35 40)).
      Named --shadow-raised/-overlay/-overflow indirection is registered in @theme inline. */
-  --elevation-raised: 0px 1px 1px rgb(31 35 40 / 0.04), 0px 0px 1px rgb(31 35 40 / 0.12);
-  --elevation-overlay: 0px 8px 24px rgb(140 149 159 / 0.2), 0px 0px 1px rgb(31 35 40 / 0.12);
-  --elevation-overflow: 0px 0px 8px rgb(140 149 159 / 0.2), 0px 0px 1px rgb(31 35 40 / 0.1);
+  --elevation-raised:
+    0px 1px 1px rgb(31 35 40 / 0.04), 0px 0px 1px rgb(31 35 40 / 0.12);
+  --elevation-overlay:
+    0px 8px 24px rgb(140 149 159 / 0.2), 0px 0px 1px rgb(31 35 40 / 0.12);
+  --elevation-overflow:
+    0px 0px 8px rgb(140 149 159 / 0.2), 0px 0px 1px rgb(31 35 40 / 0.1);
 
   /* nicenote motion — named durations (consumed by the @utility duration-* blocks below).
      Theme-agnostic; ADS easings live in @theme inline. */
@@ -194,7 +216,8 @@
      signal/glow inherit via the :root indirection. */
   --connected: #238636;
   --connected-foreground: #ffffff;
-  --connected-glow: 0 0 0 1px rgb(63 185 80 / 0.4), 0 0 14px -2px rgb(63 185 80 / 0.35);
+  --connected-glow:
+    0 0 0 1px rgb(63 185 80 / 0.4), 0 0 14px -2px rgb(63 185 80 / 0.35);
 
   /* Safe Passage — brand accents (signal/glow re-point to --connected above).
      Beacon → Primer severe emphasis (dark). */
@@ -203,8 +226,10 @@
 
   /* Depth ladder + connection glow (deeper shadows on the dark canvas) */
   --shadow-sm: 0 1px 2px 0 rgb(1 4 9 / 0.4), 0 1px 3px 0 rgb(1 4 9 / 0.5);
-  --shadow-md: 0 2px 4px -1px rgb(1 4 9 / 0.45), 0 4px 12px -2px rgb(1 4 9 / 0.55);
-  --shadow-lg: 0 8px 16px -4px rgb(1 4 9 / 0.5), 0 16px 32px -8px rgb(1 4 9 / 0.6);
+  --shadow-md:
+    0 2px 4px -1px rgb(1 4 9 / 0.45), 0 4px 12px -2px rgb(1 4 9 / 0.55);
+  --shadow-lg:
+    0 8px 16px -4px rgb(1 4 9 / 0.5), 0 16px 32px -8px rgb(1 4 9 / 0.6);
 
   /* Primer surface ladder — GitHub dark separates by borders; muted tints elevate. */
   --surface: var(--background);
@@ -241,9 +266,11 @@
 
   /* Primer elevation — deep shadows gain a 1px border ring on the dark canvas. */
   --elevation-raised:
-    0px 0px 0px 1px rgb(1 4 9 / 0), 0px 1px 1px rgb(1 4 9 / 0.45), 0px 0px 1px rgb(1 4 9 / 0.5);
+    0px 0px 0px 1px rgb(1 4 9 / 0), 0px 1px 1px rgb(1 4 9 / 0.45),
+    0px 0px 1px rgb(1 4 9 / 0.5);
   --elevation-overlay:
-    0px 0px 0px 1px #3d444d, 0px 8px 24px rgb(1 4 9 / 0.85), 0px 0px 1px 1px rgb(1 4 9 / 0.4);
+    0px 0px 0px 1px #3d444d, 0px 8px 24px rgb(1 4 9 / 0.85),
+    0px 0px 1px 1px rgb(1 4 9 / 0.4);
   --elevation-overflow: 0px 0px 12px rgb(1 4 9 / 0.85), 0px 0px 1px #3d444d;
 
   /* Primer semantic families (dark) */
@@ -336,12 +363,29 @@ html.voyavpn-acrylic.dark body {
 }
 
 @theme inline {
+  --text-page: var(--type-page-size);
+  --text-page--line-height: var(--type-page-line);
+  --text-dialog: var(--type-dialog-size);
+  --text-dialog--line-height: var(--type-dialog-line);
+  --text-section: var(--type-section-size);
+  --text-section--line-height: var(--type-section-line);
+  --text-body: var(--type-body-size);
+  --text-body--line-height: var(--type-body-line);
+  --text-caption: var(--type-caption-size);
+  --text-caption--line-height: var(--type-caption-line);
+  --spacing-control: var(--control-height);
+  --spacing-control-compact: var(--control-height-compact);
+  --spacing-control-large: var(--control-height-large);
+  --spacing-page: var(--page-inset);
+  --spacing-dialog: var(--dialog-inset);
   /* Safe Passage typography roles. Display uses the GitHub system stack;
      mono is reserved for logs, connections, editors, and data cells. */
   --font-display:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
 
   --radius-xs: 2px;
   --radius-sm: 3px;
@@ -495,9 +539,10 @@ html.voyavpn-acrylic.dark body {
     @apply min-h-svh w-full bg-background text-foreground;
     font-family:
       -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "PingFang SC",
-      "Hiragino Sans GB", "Microsoft YaHei", Helvetica, Arial, sans-serif, "Apple Color Emoji",
-      "Segoe UI Emoji";
-    font-size: 14px;
+      "Hiragino Sans GB", "Microsoft YaHei", Helvetica, Arial, sans-serif,
+      "Apple Color Emoji", "Segoe UI Emoji";
+    font-size: var(--type-body-size);
+    line-height: var(--type-body-line);
     letter-spacing: 0;
     margin: 0;
   }
