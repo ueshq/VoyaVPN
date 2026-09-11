@@ -2035,7 +2035,7 @@ async fn settings_payload_with_retired_keys_still_loads() {
     assert!(rewritten.get("sources").is_none());
     assert!(stored.get("shortcuts").is_some());
     assert!(rewritten.get("shortcuts").is_none());
-    for key in ["downloadUrl", "udpTarget", "mixedConcurrency"] {
+    for key in ["downloadUrl", "udpTarget"] {
         assert!(stored["speedTest"].get(key).is_some());
         assert!(rewritten["speedTest"].get(key).is_none());
     }

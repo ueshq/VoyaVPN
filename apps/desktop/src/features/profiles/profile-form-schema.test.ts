@@ -33,6 +33,51 @@ describe("profile form contract transformations", () => {
     expect(prepareProfileForSave(normalizeProfileForForm(original))).toEqual(original);
   });
 
+  it.each(["socks", "http", "naive"] as const)("saves an unauthenticated %s proxy with omitted credentials", (configType) => {
+    const saved = prepareProfileForSave(profileFormSchema.parse({
+      configType,
+      remarks: "Local proxy",
+      address: "127.0.0.1",
+      port: 1080,
+    }));
+
+    expect(saved).toMatchObject({
+      id: "",
+      subscriptionId: null,
+      displayLog: true,
+      protocol: {
+        kind: configType,
+        server: { address: "127.0.0.1", port: 1080 },
+        username: "",
+        password: "",
+      },
+      transport: { kind: "tcp", header: null, host: null, path: null },
+      tls: null,
+    });
+    expect(prepareProfileForSave(normalizeProfileForForm(saved))).toEqual(saved);
+  });
+
+  it("preserves TLS when every optional field is unset", () => {
+    const tls: TlsSettings = {
+      mode: "tls",
+      serverName: null,
+      alpn: [],
+      realityPublicKey: null,
+      realityShortId: null,
+      realitySpiderX: null,
+      mldsa65Verify: null,
+      certificatePem: null,
+      certificateSha256: [],
+      echConfig: [],
+      finalMask: null,
+    };
+    const original = { ...profile(vmessProtocol(), tcpTransport()), tls };
+    const form = normalizeProfileForForm(original);
+
+    expect(form).toMatchObject({ streamSecurity: "tls", sni: "", publicKey: "", cert: "" });
+    expect(prepareProfileForSave(form)).toEqual(original);
+  });
+
   it("round-trips every TLS field and canonicalizes comma-separated lists", () => {
     const tls: TlsSettings = {
       alpn: ["h2", "http/1.1"],

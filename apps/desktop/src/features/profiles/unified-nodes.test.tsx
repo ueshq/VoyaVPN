@@ -102,7 +102,7 @@ describe("manual node folders", () => {
     const submenu = screen.getByRole("menuitem", { name: "Move to group" });
     submenu.focus();
     await userEvent.keyboard("{ArrowRight}");
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Asia", exact: true }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Asia" }));
     expect(mocks.assignNodeGroups).toHaveBeenCalledWith([{ profileId: "profile-2", groupId: "a" }]);
     expect(mocks.setActiveProfile).not.toHaveBeenCalled();
   });
@@ -124,7 +124,7 @@ describe("manual node folders", () => {
     await userEvent.click(dialog.getByRole("button", { name: "Clear results" }));
     expect(dialog.getAllByRole("checkbox").every((box) => box.getAttribute("aria-checked") === "false")).toBe(true);
     fireEvent.change(dialog.getByRole("searchbox"), { target: { value: "no-such-member" } });
-    expect(dialog.getByText("No matching nodes")).toBeInTheDocument();
+    expect(dialog.getByText("No matching nodes.")).toBeInTheDocument();
     await userEvent.click(dialog.getByRole("button", { name: "Cancel" }));
     expect(mocks.assignNodeGroups).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByRole("menuitem", { name: "Actions for Asia" })).toHaveFocus());

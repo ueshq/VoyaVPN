@@ -780,7 +780,6 @@ mod tests {
             SnapshotCoreGenData {
                 profiles: vec![profile.clone()],
                 routings: vec![routing],
-                ..SnapshotCoreGenData::default()
             },
         );
 
