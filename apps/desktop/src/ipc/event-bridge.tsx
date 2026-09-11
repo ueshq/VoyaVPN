@@ -9,7 +9,7 @@ import type {
   TransientStreamEvent,
 } from "@/ipc/bindings";
 import { noticeText } from "@/ipc/messages";
-import { invalidationQueryKey } from "@/ipc/query-keys";
+import { invalidationQueryKey, queryKeys } from "@/ipc/query-keys";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationFunction } from "@voya/i18n";
@@ -51,6 +51,7 @@ export function EventBridge() {
 
     const generation = ++listenerGenerationRef.current;
     const unlisteners: RegisteredUnlisten[] = [];
+    let countryRefresh: ReturnType<typeof setTimeout> | undefined;
 
     const listenerRegistrations = [
       registerEventListener("invalidateEvent", () =>
@@ -66,6 +67,17 @@ export function EventBridge() {
       registerEventListener("transientStreamEvent", () =>
         events.transientStreamEvent.listen((event) => {
           routeTransientStream(event.payload);
+          // Country flags use persisted query data, never a long-lived event
+          // overlay: an old event must not resurrect a flag after a profile
+          // edit. Coalesce batch results into at most one refresh per second.
+          if (event.payload.kind === "speedtestResult"
+            && !["waiting", "testing"].includes(event.payload.payload.outcome)
+            && countryRefresh === undefined) {
+            countryRefresh = setTimeout(() => {
+              countryRefresh = undefined;
+              void queryClient.invalidateQueries({ queryKey: queryKeys.profiles });
+            }, 1000);
+          }
         }),
       ),
     ];
@@ -97,6 +109,7 @@ export function EventBridge() {
     }
 
     return () => {
+      clearTimeout(countryRefresh);
       listenerGenerationRef.current += 1;
       drainUnlisteners(unlisteners);
     };
@@ -137,10 +150,15 @@ function routeInvalidation(event: InvalidateEvent, queryClient: ReturnType<typeo
   // A renderer restored during a test has no pending run promise of its own.
   // Refresh from the backend when profile results are invalidated on completion.
   const runtime = useRuntimeEventStore.getState();
-  if (runtime.speedtestRunning && event.keys.some((item) => item.scope.kind === "profiles")) {
-    void runtime.refreshSpeedtestStatus().catch((error: unknown) => {
-      reportEventBridgeError("failed to refresh speedtest status", error);
-    });
+  if (event.keys.some((item) => item.scope.kind === "profiles")) {
+    // Saved profiles supersede old measurements, including pending markers
+    // from a test whose connection snapshot became obsolete during an edit.
+    runtime.clearSpeedtestResults();
+    if (runtime.speedtestRunning) {
+      void runtime.refreshSpeedtestStatus().catch((error: unknown) => {
+        reportEventBridgeError("failed to refresh speedtest status", error);
+      });
+    }
   }
   event.keys.forEach((item) => {
     // `null` only for a scope this build cannot map, which `check:bindings`

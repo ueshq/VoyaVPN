@@ -156,7 +156,7 @@ impl SpeedtestManager {
         let batch = self
             .prepare_speedtest_items(database, config, items)
             .await?;
-        let mut results = record_item_failures(database, batch.failures, on_result).await?;
+        let mut results = record_item_failures(database, batch.failures, items, on_result).await?;
         for (core_type, group) in group_prepared_items(batch.prepared) {
             if is_cancelled(&cancel) {
                 break;
@@ -191,7 +191,9 @@ impl SpeedtestManager {
                                 )
                             })
                             .collect::<Vec<_>>();
-                        results.extend(record_item_failures(database, failures, on_result).await?);
+                        results.extend(
+                            record_item_failures(database, failures, items, on_result).await?,
+                        );
                         continue;
                     }
                 };
@@ -202,8 +204,10 @@ impl SpeedtestManager {
                     let result = self
                         .run_realping(database, config, prepared.item.clone(), Arc::clone(&cancel))
                         .await?;
-                    on_result(result.clone());
-                    results.push(result);
+                    if let Some(result) = result {
+                        on_result(result.clone());
+                        results.push(result);
+                    }
                 }
                 session.close().await;
                 if batch_index + 1 < batch_count && !is_cancelled(&cancel) {
@@ -272,7 +276,7 @@ impl SpeedtestManager {
         config: &AppConfig,
         item: ServerTestItem,
         cancel: CancellationFlag,
-    ) -> Result<SpeedtestResult> {
+    ) -> Result<Option<SpeedtestResult>> {
         let index_id = item.index_id.clone();
         let result = match self
             .probe
@@ -285,6 +289,7 @@ impl SpeedtestManager {
                 outcome: measured_outcome(realping.delay),
                 detail: None,
                 ip_info: realping.ip_info,
+                country_code: realping.country_code,
             },
             Err(error) => {
                 tracing::warn!(index_id = %index_id, ?error, "speedtest realping failed");
@@ -297,12 +302,13 @@ impl SpeedtestManager {
                     // "Skipped" into the IP-info column, which is neither IP
                     // information nor translatable.
                     ip_info: None,
+                    country_code: None,
                 }
             }
         };
-        persist_speedtest_result_with_retry(database, &result).await?;
+        let saved = persist_speedtest_result_with_retry(database, &result, &item.profile).await?;
 
-        Ok(result)
+        Ok(saved.then_some(result))
     }
 
     fn begin_job(&self) -> Result<CancellationFlag> {
@@ -340,6 +346,7 @@ impl SpeedtestManager {
 async fn record_item_failures<F>(
     database: &Database,
     failures: Vec<SpeedtestItemFailure>,
+    selected: &[ServerTestItem],
     on_result: &F,
 ) -> Result<Vec<SpeedtestResult>>
 where
@@ -348,9 +355,16 @@ where
     let mut results = Vec::with_capacity(failures.len());
     for failure in failures {
         let result = make_failure_result(failure.index_id, failure.outcome, failure.detail);
-        persist_speedtest_result_with_retry(database, &result).await?;
-        on_result(result.clone());
-        results.push(result);
+        let Some(item) = selected
+            .iter()
+            .find(|item| item.index_id == result.index_id)
+        else {
+            continue;
+        };
+        if persist_speedtest_result_with_retry(database, &result, &item.profile).await? {
+            on_result(result.clone());
+            results.push(result);
+        }
     }
 
     Ok(results)
@@ -384,7 +398,7 @@ where
         .map(|item| SpeedtestItemFailure::new(item.index_id.clone(), outcome))
         .collect::<Vec<_>>();
 
-    record_item_failures(database, untested, on_result).await
+    record_item_failures(database, untested, selected, on_result).await
 }
 
 /// Longest a contended write is retried before the result is given up on.
@@ -403,10 +417,11 @@ const PERSIST_RETRY_INITIAL_DELAY: Duration = Duration::from_millis(20);
 async fn persist_speedtest_result_with_retry(
     database: &Database,
     result: &SpeedtestResult,
-) -> Result<()> {
+    profile: &ProfileItem,
+) -> Result<bool> {
     let mut delay = PERSIST_RETRY_INITIAL_DELAY;
     for attempt in 1..PERSIST_RETRY_MAX_ATTEMPTS {
-        match persist_speedtest_result(database, result).await {
+        match persist_speedtest_result(database, result, profile).await {
             Err(error) if is_database_contention(&error) => {
                 tracing::debug!(
                     index_id = %result.index_id,
@@ -420,7 +435,7 @@ async fn persist_speedtest_result_with_retry(
         }
     }
 
-    persist_speedtest_result(database, result).await
+    persist_speedtest_result(database, result, profile).await
 }
 
 /// Whether a persistence failure is SQLite telling us to come back later.
@@ -494,7 +509,14 @@ mod tests {
                 outcome: SpeedtestOutcome::Completed,
                 detail: None,
                 ip_info: None,
+                country_code: None,
             },
+            &database
+                .profiles()
+                .get("active")
+                .await
+                .expect("load profile")
+                .expect("profile exists"),
         )
         .await
         .expect("speedtest test operation should succeed");

@@ -648,6 +648,8 @@ pub struct ProfileExItem {
     pub message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ip_info: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub country_code: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]

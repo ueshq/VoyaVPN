@@ -66,6 +66,7 @@ describe("runtime event store", () => {
       indexId: "profile-a",
       detail: null,
       ipInfo: "US",
+      countryCode: null,
       outcome: "completed",
     };
 
@@ -80,6 +81,10 @@ describe("runtime event store", () => {
     });
     expect(useRuntimeEventStore.getState().speedtestRunning).toBe(true);
     expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("speedtestResult");
+
+    useRuntimeEventStore.getState().clearSpeedtestResults();
+    expect(useRuntimeEventStore.getState().speedtestResultsByProfileId).toEqual({});
+    expect(useRuntimeEventStore.getState().speedtestRunning).toBe(true);
   });
 
   it("sets proxy monitor lifecycle state through store actions", () => {

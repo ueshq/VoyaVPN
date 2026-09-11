@@ -75,6 +75,7 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
   function makeState(): RuntimeEventState {
     const nextState = {
       clearLogs: vi.fn(),
+      clearSpeedtestResults: vi.fn(),
       proxyConnections: null,
       proxyMonitorStatus: initialMonitorStatus,
       coreState: null,

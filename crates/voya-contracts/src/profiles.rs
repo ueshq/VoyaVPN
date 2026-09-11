@@ -213,6 +213,7 @@ pub struct ProfileMetrics {
     /// column. `None` means the profile has never been tested.
     pub outcome: Option<SpeedtestOutcome>,
     pub ip_info: Option<String>,
+    pub country_code: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]

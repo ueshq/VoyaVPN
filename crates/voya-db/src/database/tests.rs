@@ -15,6 +15,8 @@ use crate::{blob, AppStateRecord};
 
 use super::*;
 
+mod country;
+
 /// The stored shape of every value voya-db writes into a SQLite `TEXT` column.
 ///
 /// These blobs are the raw serde shape of the voya-core domain types and carry
@@ -2466,6 +2468,7 @@ async fn profile_listings_filter_by_subscription_and_join_missing_extensions() {
                 sort: 5,
                 message: Some("measured".to_string()),
                 ip_info: Some("JP".to_string()),
+                country_code: None,
             },
         )
         .await
@@ -2620,6 +2623,7 @@ async fn profile_ex_set_sort_upserts_without_disturbing_measurements() {
             sort: 7,
             message: Some("measured".to_string()),
             ip_info: Some("JP".to_string()),
+            country_code: None,
         })
         .await
         .expect("speedtest results should persist");
@@ -2745,6 +2749,7 @@ async fn seeded_sortable_database() -> Database {
             sort: 99,
             message: Some("measured".to_string()),
             ip_info: Some("JP".to_string()),
+            country_code: None,
         })
         .await
         .expect("speedtest results should persist");

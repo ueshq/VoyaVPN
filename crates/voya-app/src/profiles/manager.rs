@@ -121,6 +121,18 @@ impl<'db> ProfileManager<'db> {
         } else {
             let mut existing = self.profile_ex().ensure(&profile.index_id).await?;
             existing.index_id.clone_from(&profile.index_id);
+            if self
+                .database
+                .profiles()
+                .get(&profile.index_id)
+                .await?
+                .is_some_and(|previous| !voya_core::profile_items_match(&previous, &profile, false))
+            {
+                existing.country_code = None;
+                existing.delay = 0;
+                existing.message = None;
+                existing.ip_info = None;
+            }
             existing
         };
 

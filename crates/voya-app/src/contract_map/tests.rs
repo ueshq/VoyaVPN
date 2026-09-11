@@ -618,6 +618,7 @@ fn profile_list_entry_keeps_metrics_and_traffic_in_their_own_fields() {
             sort: 333,
             message: Some("timedOut".to_string()),
             ip_info: Some("metrics-ip-info".to_string()),
+            country_code: None,
         },
         server_stat: ServerStatItem {
             index_id: "profile-index-id".to_string(),

@@ -1,5 +1,6 @@
 use sqlx::{sqlite::SqliteRow, Row, SqliteConnection};
-use voya_core::ProfileExItem;
+use voya_contracts::{SpeedtestOutcome, SpeedtestResult};
+use voya_core::{ProfileExItem, ProfileItem};
 
 use crate::{
     executor::{repository_constructors, run_query, RepositoryExecutor},
@@ -35,24 +36,69 @@ impl<'executor> ProfileExRepository<'executor> {
             sqlx::query(
                 r#"
             INSERT INTO profile_ex_items (
-                index_id, delay, sort, message, ip_info
-            ) VALUES (?, ?, ?, ?, ?)
+                index_id, delay, sort, message, ip_info, country_code
+            ) VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(index_id) DO UPDATE SET
                 delay = excluded.delay,
                 sort = excluded.sort,
                 message = excluded.message,
-                ip_info = excluded.ip_info
+                ip_info = excluded.ip_info,
+                country_code = excluded.country_code
             "#,
             )
             .bind(&item.index_id)
             .bind(item.delay)
             .bind(item.sort)
             .bind(&item.message)
-            .bind(&item.ip_info),
+            .bind(&item.ip_info)
+            .bind(&item.country_code),
             execute
         )?;
 
         Ok(())
+    }
+
+    /// Commit only results for the exact connection that was tested. The
+    /// comparison and write are one SQLite statement, so an edit or deletion
+    /// cannot race a read-then-write check and restore an obsolete country.
+    pub async fn set_probe_result(
+        &self,
+        profile: &ProfileItem,
+        result: &SpeedtestResult,
+    ) -> Result<bool> {
+        let protocol = crate::blob::profile_protocol_to_text(&profile.protocol)?;
+        let transport = profile
+            .transport
+            .as_ref()
+            .map(crate::blob::profile_transport_to_text)
+            .transpose()?;
+        let tls = profile
+            .tls
+            .as_ref()
+            .map(crate::blob::tls_settings_to_text)
+            .transpose()?;
+        let pending = matches!(
+            result.outcome,
+            SpeedtestOutcome::Waiting | SpeedtestOutcome::Testing
+        );
+        let updated = run_query!(self.executor, sqlx::query(r#"
+            INSERT INTO profile_ex_items (index_id, delay, message, ip_info, country_code)
+            SELECT index_id, COALESCE(?, 0), ?, ?, ? FROM profile_items
+            WHERE index_id = ? AND protocol = ? AND transport IS ? AND tls IS ?
+            ON CONFLICT(index_id) DO UPDATE SET
+                delay = COALESCE(?, profile_ex_items.delay),
+                message = excluded.message,
+                ip_info = COALESCE(excluded.ip_info, profile_ex_items.ip_info),
+                country_code = CASE WHEN ? THEN profile_ex_items.country_code ELSE excluded.country_code END
+        "#)
+            .bind(result.delay)
+            .bind(result.outcome.as_stored())
+            .bind(&result.ip_info)
+            .bind(&result.country_code)
+            .bind(&profile.index_id)
+            .bind(protocol).bind(transport).bind(tls)
+            .bind(result.delay).bind(pending), execute)?;
+        Ok(updated.rows_affected() != 0)
     }
 
     pub async fn get(&self, index_id: &str) -> Result<Option<ProfileExItem>> {
@@ -193,5 +239,6 @@ fn row_to_profile_ex(row: SqliteRow) -> Result<ProfileExItem> {
         sort: row.try_get("sort")?,
         message: row.try_get("message")?,
         ip_info: row.try_get("ip_info")?,
+        country_code: row.try_get("country_code")?,
     })
 }

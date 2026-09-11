@@ -38,6 +38,8 @@ export function applyLiveUpdates(
       ...withStats,
       metrics: {
         ...withStats.metrics,
+        // countryCode deliberately stays on the authoritative query snapshot.
+        // EventBridge refreshes it after results; cached events may outlive edits.
         delayMs: speedtestResult.delay ?? withStats.metrics.delayMs,
         ipInfo: speedtestResult.ipInfo ?? withStats.metrics.ipInfo,
         outcome: speedtestResult.outcome,

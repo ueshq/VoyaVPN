@@ -656,6 +656,7 @@ export type ProfileMetrics = {
 	 */
 	outcome: SpeedtestOutcome | null,
 	ipInfo: string | null,
+	countryCode: string | null,
 };
 
 export type ProfileProtocol = { kind: "vmess"; server: ServerEndpoint; uuid: string; cipher: string | null } | { kind: "shadowsocks"; server: ServerEndpoint; password: string; method: string; udpOverTcp: boolean } | { kind: "socks"; server: ServerEndpoint; username: string; password: string } | { kind: "vless"; server: ServerEndpoint; uuid: string; flow: string | null; encryption: string | null } | { kind: "trojan"; server: ServerEndpoint; password: string } | { kind: "hysteria2"; server: ServerEndpoint; password: string; portHops: string | null; obfuscationPassword: string | null } | { kind: "tuic"; server: ServerEndpoint; uuid: string; password: string; congestionControl: string | null } | { kind: "wireGuard"; server: ServerEndpoint; privateKey: string; peerPublicKey: string | null; presharedKey: string | null; interfaceAddress: string | null; allowedIps: string | null; reserved: string | null; mtu: number | null } | { kind: "http"; server: ServerEndpoint; username: string; password: string } | { kind: "anytls"; server: ServerEndpoint; password: string } | { kind: "naive"; server: ServerEndpoint; username: string; password: string; quic: boolean; congestionControl: string | null; insecureConcurrency: number | null; udpOverTcp: boolean };
@@ -891,6 +892,7 @@ export type SpeedtestResult = {
 	outcome: SpeedtestOutcome,
 	detail: string | null,
 	ipInfo: string | null,
+	countryCode: string | null,
 };
 
 export type SpeedtestRunResult = {

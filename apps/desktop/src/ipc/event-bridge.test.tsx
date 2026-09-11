@@ -28,6 +28,7 @@ const bridgeMocks = vi.hoisted(() => {
     speedtestRunning: false,
     pushToast: vi.fn(),
     pushTransientEvent: vi.fn(),
+    clearSpeedtestResults: vi.fn(),
     refreshSpeedtestStatus: vi.fn(() => Promise.resolve()),
     setActiveTab: vi.fn(),
     setConnectionsView: vi.fn(),
@@ -48,6 +49,7 @@ vi.mock("@/ipc/runtime-event-store", () => ({
     getState: () => ({
       speedtestRunning: bridgeMocks.speedtestRunning,
       pushTransientEvent: bridgeMocks.pushTransientEvent,
+      clearSpeedtestResults: bridgeMocks.clearSpeedtestResults,
       refreshSpeedtestStatus: bridgeMocks.refreshSpeedtestStatus,
     }),
   },
@@ -83,7 +85,33 @@ describe("EventBridge", () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  });
+
+  it("coalesces country refreshes and never overlays persisted flags with old events", async () => {
+    const queryClient = new QueryClient();
+    const snapshot = { entries: [{ profile: { id: "node" }, metrics: { countryCode: null } }] };
+    queryClient.setQueryData(["profiles"], snapshot);
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const { unmount } = render(<QueryClientProvider client={queryClient}><EventBridge /></QueryClientProvider>);
+    await waitFor(() => expect(bridgeMocks.transientStreamEventListen).toHaveBeenCalledOnce());
+    vi.useFakeTimers();
+    const emit = (outcome: string) => bridgeMocks.listeners.transientStreamEvent[0]?.({ payload: {
+      kind: "speedtestResult", payload: { indexId: "node", delay: 42, ipInfo: null, countryCode: "US", detail: null, outcome },
+    } });
+    act(() => { emit("testing"); emit("waiting"); });
+    expect(vi.getTimerCount()).toBe(0);
+    act(() => { emit("completed"); emit("failed"); emit("completed"); });
+    expect(invalidate).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(invalidate).toHaveBeenCalledExactlyOnceWith({ queryKey: ["profiles"] });
+    expect(queryClient.getQueryData(["profiles"])).toEqual(snapshot);
+    act(() => { emit("completed"); });
+    unmount();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(invalidate).toHaveBeenCalledOnce();
+    queryClient.clear();
   });
 
   it("routes invalidations and notices to the query cache and toast store", async () => {
@@ -147,12 +175,14 @@ describe("EventBridge", () => {
       });
     });
     expect(bridgeMocks.refreshSpeedtestStatus).not.toHaveBeenCalled();
+    expect(bridgeMocks.clearSpeedtestResults).not.toHaveBeenCalled();
     act(() => {
       bridgeMocks.listeners.invalidateEvent[0]?.({
         payload: { keys: [{ scope: { kind: "profiles" }, reason: "updated" }] },
       });
     });
     await waitFor(() => expect(bridgeMocks.refreshSpeedtestStatus).toHaveBeenCalledOnce());
+    expect(bridgeMocks.clearSpeedtestResults).toHaveBeenCalledOnce();
   });
 
   it("routes transient streams and tab selection through the shell store", async () => {

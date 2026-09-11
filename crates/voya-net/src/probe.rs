@@ -11,6 +11,9 @@ use tokio::{net::TcpStream, time};
 
 const LOOPBACK_ADDR: &str = "127.0.0.1";
 
+mod country;
+pub use country::{IpLookupResult, DEFAULT_IP_LOOKUP_URL};
+
 pub type CancellationFlag = Arc<AtomicBool>;
 pub type Result<T> = std::result::Result<T, NetworkProbeError>;
 
@@ -92,11 +95,15 @@ pub async fn tcp_port_is_open(host: &str, port: u16) -> bool {
 }
 
 fn check_cancelled(cancel: &CancellationFlag) -> Result<()> {
-    if cancel.load(Ordering::SeqCst) {
+    if is_cancelled(cancel) {
         Err(NetworkProbeError::Cancelled)
     } else {
         Ok(())
     }
+}
+
+fn is_cancelled(cancel: &CancellationFlag) -> bool {
+    cancel.load(Ordering::SeqCst)
 }
 
 fn millis_i32(duration: Duration) -> i32 {
@@ -284,5 +291,123 @@ mod tests {
                 .await,
             None
         );
+    }
+
+    // A SOCKS server that answers for a deliberately unresolvable host. Each
+    // instance represents a different exit; a direct/local-DNS request fails.
+    async fn country_exit(
+        body: &'static str,
+        status: &'static str,
+        stall: bool,
+    ) -> (u16, tokio::task::JoinHandle<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind exit");
+        let port = listener.local_addr().expect("exit address").port();
+        let task = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("accept SOCKS");
+            let mut greeting = [0; 2];
+            socket.read_exact(&mut greeting).await.expect("greeting");
+            let mut methods = vec![0; usize::from(greeting[1])];
+            socket.read_exact(&mut methods).await.expect("methods");
+            socket.write_all(&[5, 0]).await.expect("no auth");
+            let mut header = [0; 4];
+            socket.read_exact(&mut header).await.expect("connect");
+            assert_eq!(header[3], 3, "hostname must be resolved by the proxy");
+            let target = read_socks5_target(&mut socket, header[3])
+                .await
+                .expect("target");
+            socket
+                .write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0])
+                .await
+                .expect("connected");
+            let mut request = [0; 4096];
+            let bytes_read = socket.read(&mut request).await.expect("HTTP request");
+            assert!(bytes_read > 0, "the proxy must receive an HTTP request");
+            if stall {
+                // Wait for cancellation/timeout to close the client socket.
+                let mut rest = Vec::new();
+                socket.read_to_end(&mut rest).await.expect("client closed");
+            } else {
+                let response = format!(
+                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                socket
+                    .write_all(response.as_bytes())
+                    .await
+                    .expect("response");
+            }
+            target
+        });
+        (port, task)
+    }
+
+    #[tokio::test]
+    async fn country_lookup_uses_each_exit_and_remote_dns() {
+        for (body, expected) in [
+            (r#"{"success":true,"country_code":"US"}"#, "US"),
+            ("JP", "JP"),
+        ] {
+            let (port, server) = country_exit(body, "200 OK", false).await;
+            let result = SocksHttpProbe::new(port)
+                .expect("probe")
+                .lookup_country(
+                    "http://geo.invalid/location",
+                    PROBE_TIMEOUT,
+                    &not_cancelled(),
+                )
+                .await
+                .expect("lookup");
+            assert_eq!(result.country_code.as_deref(), Some(expected));
+            assert_eq!(result.text, body, "keep custom IP information intact");
+            assert_eq!(server.await.expect("server"), "geo.invalid:80");
+        }
+    }
+
+    #[tokio::test]
+    async fn country_lookup_handles_rate_limits_timeouts_and_cancellation() {
+        let (port, server) = country_exit("limited", "429 Too Many Requests", false).await;
+        assert!(SocksHttpProbe::new(port)
+            .expect("probe")
+            .lookup_country("http://geo.invalid/", PROBE_TIMEOUT, &not_cancelled())
+            .await
+            .is_none());
+        server.await.expect("one request, no retry");
+
+        let (port, server) = country_exit("", "200 OK", true).await;
+        assert!(SocksHttpProbe::new(port)
+            .expect("probe")
+            .lookup_country(
+                "http://geo.invalid/",
+                Duration::from_millis(50),
+                &not_cancelled()
+            )
+            .await
+            .is_none());
+        time::timeout(Duration::from_secs(1), server)
+            .await
+            .expect("timeout closes socket")
+            .expect("server");
+
+        let (port, server) = country_exit("", "200 OK", true).await;
+        let cancel = not_cancelled();
+        let signal = cancel.clone();
+        let cancel_task = tokio::spawn(async move {
+            time::sleep(Duration::from_millis(100)).await;
+            signal.store(true, Ordering::SeqCst);
+        });
+        let probe = SocksHttpProbe::new(port).expect("probe");
+        assert!(time::timeout(
+            Duration::from_secs(1),
+            probe.lookup_country("http://geo.invalid/", PROBE_TIMEOUT, &cancel)
+        )
+        .await
+        .expect("cancel promptly")
+        .is_none());
+        cancel_task.await.expect("cancel task");
+        server.await.expect("cancel closes socket");
+        assert!(probe
+            .lookup_country("", PROBE_TIMEOUT, &cancel)
+            .await
+            .is_none());
     }
 }

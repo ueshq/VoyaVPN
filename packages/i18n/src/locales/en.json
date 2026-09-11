@@ -601,6 +601,7 @@
     "tabUpdates": "Updates",
     "tests": {
       "ipApiUrl": "Current connection info test URL",
+      "ipApiUrlHint": "Leave blank to use ipwho.is during latency tests. Custom services should return JSON with country_code (and success: false on failure), or a two-letter country code. Unknown locations use the globe icon.",
       "pingUrl": "Speed Ping Test URL",
       "timeout": "Speed Test Single Timeout Value"
     },

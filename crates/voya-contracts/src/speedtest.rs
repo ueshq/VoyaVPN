@@ -159,6 +159,7 @@ pub struct SpeedtestResult {
     pub outcome: SpeedtestOutcome,
     pub detail: Option<String>,
     pub ip_info: Option<String>,
+    pub country_code: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Type)]

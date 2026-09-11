@@ -94,6 +94,7 @@
 .home-traffic-mode-options { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; padding: 3px; border: 1px solid var(--home-border); border-radius: 10px; background: var(--home-card); }
 .node-card-surface { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 88px; padding: 12px 24px; border: 1px solid var(--home-border); border-radius: 16px; background: var(--home-card); box-shadow: 0 3px 10px rgb(31 41 55 / 3%); }
 .home-node-icon, .node-card-icon { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border: 1px solid var(--home-border); border-radius: 12px; background: var(--home-canvas); font-size: 24px; color: var(--home-muted); }
+.node-country-flag.fi { width: 32px; height: 24px; line-height: 24px; }
 .home-node-content, .node-card-content { flex: 1; min-width: 0; }
 .home-node-label, .node-card-label { font-size: 12px; color: var(--home-subtle); line-height: 1.4; }
 .home-node-name, .node-card-name { color: var(--home-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 18px; line-height: 1.4; font-weight: 600; }

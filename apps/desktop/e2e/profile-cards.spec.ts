@@ -10,7 +10,7 @@ const profiles: ProfileListEntry[] = Array.from({ length: 5000 }, (_, index) => 
     displayLog: true, subscriptionId: null, tls: null, transport: null,
     protocol: { kind: "vmess", server: { address: `node-${index}.example.test`, port: 443 }, cipher: "auto", uuid: `uuid-${index}` },
   },
-  metrics: { delayMs: index % 2 === 0 ? 40 + index : 0, ipInfo: null, outcome: null, sort: index },
+  metrics: { delayMs: index % 2 === 0 ? 40 + index : 0, ipInfo: null, countryCode: index === 0 ? "US" : null, outcome: null, sort: index },
   traffic: { date: 1, todayUpload: 0, todayDownload: 0, totalUpload: 0, totalDownload: 0 },
 }));
 
@@ -33,6 +33,19 @@ test("profile cards stay usable across themes, window sizes and a 5k node list",
   await expect(toolbar.getByRole("menuitem", { name: "更多操作" })).toHaveCount(0);
   await expect(toolbar.getByRole("button", { name: "更多操作" })).toHaveCount(0);
   await expect(cards.first()).toContainText("A very long server name");
+  const flag = cards.first().locator(".node-country-flag");
+  await expect(flag).toHaveClass(/fi-us/); // Actual exit wins over the JP name emoji.
+  await expect(flag).toHaveCSS("width", "32px");
+  await expect(flag).toHaveCSS("height", "24px");
+  await expect(cards.nth(1).locator(".node-card-icon svg")).toBeVisible();
+  const source = await flag.evaluate((element) => getComputedStyle(element).backgroundImage.slice(5, -2));
+  expect(source.startsWith("data:image/svg+xml") || new URL(source).origin === new URL(page.url()).origin).toBe(true);
+  expect(await flag.evaluate(async (element) => {
+    const img = new Image();
+    img.src = getComputedStyle(element).backgroundImage.slice(5, -2);
+    await img.decode();
+    return img.naturalWidth > 0;
+  })).toBe(true);
   await expect(page.getByRole("menuitem", { name: "列", exact: true })).toHaveCount(0);
   await expect(page.getByRole("table")).toHaveCount(0);
   expect(await cards.count()).toBeLessThan(40);
@@ -120,4 +133,38 @@ test("profile list shows its empty state when no saved nodes exist", async ({ pa
   await expect(page.getByRole("searchbox")).toHaveCount(0);
   await expect(page.getByText("No nodes", { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("cards-empty.png") });
+});
+
+test("measured flags refresh on both screens and old events cannot restore cleared flags", async ({ page }) => {
+  await installTauriSmokeMock(page);
+  await page.addInitScript((profile) => {
+    (window.__VOYA_SMOKE__.state as { profiles: ProfileListEntry[] }).profiles = [{ ...profile, metrics: { ...profile.metrics, countryCode: null } }];
+  }, profiles[0]!);
+  await page.goto("/");
+  await expect(page.locator(".home-node-icon svg")).toBeVisible();
+  await page.getByRole("tab", { name: "Nodes", exact: true }).click();
+  await expect(page.locator(".node-card-icon svg")).toBeVisible();
+  await page.evaluate(() => {
+    const entry = (window.__VOYA_SMOKE__.state as { profiles: ProfileListEntry[] }).profiles[0]!;
+    entry.metrics.countryCode = "US";
+    window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "speedtestResult", payload: {
+      indexId: entry.profile.id, delay: 42, outcome: "completed", detail: null, ipInfo: null, countryCode: "US",
+    } });
+  });
+  await expect(page.locator(".node-card-icon .fi-us")).toBeVisible();
+  await page.getByRole("tab", { name: "Home", exact: true }).click();
+  await expect(page.locator(".home-node-icon .fi-us")).toBeVisible();
+  await page.evaluate(() => {
+    const entry = (window.__VOYA_SMOKE__.state as { profiles: ProfileListEntry[] }).profiles[0]!;
+    entry.metrics.countryCode = null;
+    entry.profile.protocol.server.address = "changed.example.test";
+    window.__VOYA_SMOKE__.emit("invalidate-event", { keys: [{ reason: "profile-saved", scope: { kind: "profiles" } }] });
+    window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "speedtestResult", payload: {
+      indexId: entry.profile.id, delay: 42, outcome: "completed", detail: null, ipInfo: null, countryCode: "US",
+    } });
+  });
+  await expect(page.locator(".home-node-icon svg")).toBeVisible();
+  await page.getByRole("tab", { name: "Nodes", exact: true }).click();
+  await expect(page.locator(".node-card-icon svg")).toBeVisible();
+  await expect(page.locator(".node-card-icon .fi")).toHaveCount(0);
 });

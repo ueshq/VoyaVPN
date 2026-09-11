@@ -653,6 +653,7 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
         metrics: {
           delayMs: existing?.metrics.delayMs ?? -1,
           ipInfo: existing?.metrics.ipInfo ?? null,
+          countryCode: null,
           outcome: existing?.metrics.outcome ?? null,
           sort: existing?.metrics.sort ?? state.profiles.length,
         },

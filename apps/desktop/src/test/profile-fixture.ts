@@ -20,6 +20,7 @@ export function makeProfileFixture(
     metrics: {
       delayMs: index % 2 === 0 ? 40 + index : 0,
       ipInfo: index % 2 === 0 ? "US" : null,
+      countryCode: null,
       outcome: null,
       sort: index * 10,
     },

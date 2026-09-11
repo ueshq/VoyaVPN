@@ -46,6 +46,7 @@ export type StoredLogLine = LogLineEvent & { receivedAt: number };
  */
 export type RuntimeEventState = {
   clearLogs: () => void;
+  clearSpeedtestResults: () => void;
   proxyConnections: ProxyConnectionsSnapshot | null;
   proxyMonitorStatus: RuntimeProxyMonitorStatus;
   coreState: RuntimeStatusResponse | null;
@@ -260,6 +261,7 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
     set({ coreState, coreStateReceivedAt: performance.now() });
   },
   setSpeedtestRunning: (speedtestRunning) => set({ speedtestRunning }),
+  clearSpeedtestResults: () => set({ speedtestResultsByProfileId: {} }),
   setSpeedtestStatus: (status) => set({ speedtestRunning: status.running }),
   setSysProxy: (sysProxy) => {
     markRuntimeUpdate("sysProxy");

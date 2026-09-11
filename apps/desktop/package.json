@@ -24,6 +24,7 @@
     "@voya/ui": "workspace:*",
     "@voya/utils": "workspace:*",
     "@zxing/browser": "^0.2.0",
+    "flag-icons": "7.5.0",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",

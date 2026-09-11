@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { ChevronRight, ChevronsUpDown, Globe2 } from "lucide-react";
+import { ChevronRight, ChevronsUpDown } from "lucide-react";
+import { NodeCountryIcon } from "@/components/node-country-icon";
 
 import worldMap from "@/assets/world-map.svg";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -66,7 +67,7 @@ export function HomeScreen() {
         </div>
 
         <div className="node-card-surface home-node-card">
-          <div aria-hidden="true" className="home-node-icon">{flag || <Globe2 className="size-6" strokeWidth={1.5} />}</div>
+          <div aria-hidden="true" className="home-node-icon"><NodeCountryIcon countryCode={home.nodeEntry?.metrics.countryCode} /></div>
           <div className="home-node-content">
             <p className="home-node-label">{t(home.connected ? "home.currentNodeLabel" : "home.selectedNodeLabel")}</p>
             <h2 className="home-node-name" title={name}>{name}</h2>

@@ -23,7 +23,7 @@ export function TestsTab({ controller }: { controller: AppSettingsFormController
 
       <SettingsGroup title={t("settings.sections.testAddresses")}>
         <TextField field="speedTest.latencyUrl" id="rt-speedtest-ping-url" label={t("settings.tests.pingUrl")} onChange={(latencyUrl) => patchTests({ latencyUrl })} value={settings.speedTest.latencyUrl} />
-        <TextField field="speedTest.ipLookupUrl" id="rt-speedtest-ipapi-url" label={t("settings.tests.ipApiUrl")} onChange={(ipLookupUrl) => patchTests({ ipLookupUrl })} value={settings.speedTest.ipLookupUrl} />
+        <TextField description={t("settings.tests.ipApiUrlHint")} field="speedTest.ipLookupUrl" id="rt-speedtest-ipapi-url" label={t("settings.tests.ipApiUrl")} onChange={(ipLookupUrl) => patchTests({ ipLookupUrl })} value={settings.speedTest.ipLookupUrl} />
       </SettingsGroup>
     </div>
   );

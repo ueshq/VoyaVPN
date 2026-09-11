@@ -1,5 +1,6 @@
 import { navigateVirtualList } from "./virtual-list-keyboard";
-import { ChevronRight, Globe2, Inbox, LoaderCircle } from "lucide-react";
+import { ChevronRight, Inbox, LoaderCircle } from "lucide-react";
+import { NodeCountryIcon } from "@/components/node-country-icon";
 
 import { EmptyState } from "@voya/ui/components/empty-state";
 import { Skeleton } from "@voya/ui/components/skeleton";
@@ -60,7 +61,7 @@ export function ProfileCardList({ controller }: { controller: ServerTableControl
                 <li key={row.key} {...rowProps}>
                   <ProfileRowContextMenu controller={controller} item={item}>
                     <article className={cn("node-card-surface node-group-surface profile-node-card", selected && "profile-node-card-selected")} data-testid="server-row" data-selected={selected} onClick={() => selectOnly(id)}>
-                      <div aria-hidden="true" className="node-card-icon">{flag || <Globe2 className="size-6" strokeWidth={1.5} />}</div>
+                      <div aria-hidden="true" className="node-card-icon"><NodeCountryIcon countryCode={item.metrics.countryCode} /></div>
                       <div className="node-card-content">
                         <button aria-label={t("panes.profiles.card.select", { name: rawName })} aria-pressed={selected} data-row-focus className="node-card-select" onClick={() => selectOnly(id)} type="button">
                           <span className="node-card-label">

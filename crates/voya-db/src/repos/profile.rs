@@ -19,7 +19,8 @@ const PROFILE_LIST_QUERY: &str = r#"
         COALESCE(e.delay, 0) AS ex_delay,
         COALESCE(e.sort, 0) AS ex_sort,
         e.message AS ex_message,
-        e.ip_info AS ex_ip_info
+        e.ip_info AS ex_ip_info,
+        e.country_code AS ex_country_code
     FROM profile_items p
     LEFT JOIN profile_ex_items e ON p.index_id = e.index_id
     WHERE (? IS NULL OR p.subscription_id = ?)
@@ -98,9 +99,20 @@ impl<'executor> ProfileRepository<'executor> {
         item: &ProfileItem,
         profile_ex: &ProfileExItem,
     ) -> Result<()> {
+        let mut profile_ex = profile_ex.clone();
+        if self
+            .get(&item.index_id)
+            .await?
+            .is_some_and(|previous| !voya_core::profile_items_match(&previous, item, false))
+        {
+            profile_ex.country_code = None;
+            profile_ex.delay = 0;
+            profile_ex.message = None;
+            profile_ex.ip_info = None;
+        }
         self.upsert(item).await?;
         ProfileExRepository::from_executor(self.executor)
-            .upsert(profile_ex)
+            .upsert(&profile_ex)
             .await
     }
 
@@ -314,5 +326,6 @@ fn row_to_profile_ex_joined(row: &SqliteRow) -> Result<ProfileExItem> {
         sort: row.try_get("ex_sort")?,
         message: row.try_get("ex_message")?,
         ip_info: row.try_get("ex_ip_info")?,
+        country_code: row.try_get("ex_country_code")?,
     })
 }

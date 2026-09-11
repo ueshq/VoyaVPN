@@ -601,6 +601,7 @@
     "tabUpdates": "更新",
     "tests": {
       "ipApiUrl": "当前连接信息测试地址",
+      "ipApiUrlHint": "留空时，延迟测试通过 ipwho.is 查询出口所在地。自定义服务需返回含 country_code 的 JSON（失败时 success 为 false），或两字母国家代码。无法识别时显示地球图标。",
       "pingUrl": "真连接测试地址",
       "timeout": "测速单个超时值"
     },

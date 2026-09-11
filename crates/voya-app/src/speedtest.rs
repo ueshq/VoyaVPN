@@ -27,7 +27,6 @@ use voya_platform::{
     process::{ProcessError, ProcessHandle, ProcessRole, ProcessRunner, ProcessSpawn},
 };
 
-use crate::profiles::ProfileExManager;
 use crate::redaction::redact_urls;
 use crate::runtime::{core_launch_plan, load_runtime_core_gen_env};
 
@@ -90,6 +89,7 @@ pub struct ServerTestItem {
 pub struct RealPingProbeResult {
     pub delay: i32,
     pub ip_info: Option<String>,
+    pub country_code: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -164,15 +164,16 @@ impl SpeedtestProbe for ReqwestSpeedtestProbe {
             );
             let delay = client.best_latency(url, timeout, 2, &cancel).await?;
 
-            let ip_info = if speed_test_item.ipapi_url.trim().is_empty() {
-                None
-            } else {
-                client
-                    .optional_text(speed_test_item.ipapi_url.as_str(), Duration::from_secs(5))
-                    .await
-            };
-
-            Ok(RealPingProbeResult { delay, ip_info })
+            let lookup = client
+                .lookup_country(&speed_test_item.ipapi_url, Duration::from_secs(5), &cancel)
+                .await;
+            Ok(RealPingProbeResult {
+                delay,
+                country_code: lookup
+                    .as_ref()
+                    .and_then(|result| result.country_code.clone()),
+                ip_info: lookup.map(|result| result.text),
+            })
         })
     }
 }
@@ -381,11 +382,9 @@ fn speedtest_detail(error: &SpeedtestError) -> Option<String> {
 
 /// Marks the whole selection as pending before the first probe starts.
 ///
-/// The two writes per profile run inside a single transaction: every
-/// `ProfileExManager` update is otherwise its own autocommit round trip, so a
-/// 1000-profile selection paid thousands of journalled commits before any core
-/// even launched. Callbacks fire after the commit so nothing is announced that
-/// is not yet durable.
+/// Conditional writes share one transaction so large selections do not pay
+/// for a journalled commit per profile. Callbacks fire after commit, and only
+/// for connections whose configuration still matches the selected snapshot.
 async fn clear_previous_results<F>(
     database: &Database,
 
@@ -396,19 +395,20 @@ where
     F: Fn(SpeedtestResult) + Send + Sync,
 {
     let unit_of_work = database.begin().await?;
-    {
-        let profile_ex = ProfileExManager::new_in(&unit_of_work);
-        for item in selected {
-            profile_ex.set_test_delay(&item.index_id, 0).await?;
-            profile_ex
-                .set_test_message(&item.index_id, SpeedtestOutcome::Testing.as_stored())
-                .await?;
+    let mut pending = Vec::new();
+    for item in selected {
+        let result = make_pending_result(item.index_id.clone());
+        if unit_of_work
+            .profile_exs()
+            .set_probe_result(&item.profile, &result)
+            .await?
+        {
+            pending.push(result);
         }
     }
     unit_of_work.commit().await?;
-
-    for item in selected {
-        on_result(make_pending_result(item.index_id.clone()));
+    for result in pending {
+        on_result(result);
     }
 
     Ok(())
@@ -421,6 +421,7 @@ fn make_pending_result(index_id: String) -> SpeedtestResult {
         outcome: SpeedtestOutcome::Testing,
         detail: None,
         ip_info: None,
+        country_code: None,
     }
 }
 
@@ -439,28 +440,19 @@ fn make_failure_result(
         outcome,
         detail,
         ip_info: None,
+        country_code: None,
     }
 }
 
-async fn persist_speedtest_result(database: &Database, result: &SpeedtestResult) -> Result<()> {
-    let profile_ex = ProfileExManager::new(database);
-    if let Some(delay) = result.delay {
-        profile_ex.set_test_delay(&result.index_id, delay).await?;
-    }
-
-    // Only the code is persisted. `detail` stays on the event: it is a
-    // transient diagnostic, and storing prose in this column is exactly what
-    // froze the user's language at the moment the test ran.
-    profile_ex
-        .set_test_message(&result.index_id, result.outcome.as_stored())
-        .await?;
-    if let Some(ip_info) = result.ip_info.as_ref() {
-        profile_ex
-            .set_test_ip_info(&result.index_id, ip_info.clone())
-            .await?;
-    }
-
-    Ok(())
+async fn persist_speedtest_result(
+    database: &Database,
+    result: &SpeedtestResult,
+    profile: &ProfileItem,
+) -> Result<bool> {
+    Ok(database
+        .profile_exs()
+        .set_probe_result(profile, result)
+        .await?)
 }
 
 fn check_cancelled(cancel: &CancellationFlag) -> Result<()> {
@@ -533,6 +525,7 @@ mod tests {
                 Ok(RealPingProbeResult {
                     delay: 44,
                     ip_info: Some("US".to_string()),
+                    country_code: Some("US".to_string()),
                 })
             })
         }
@@ -621,6 +614,83 @@ mod tests {
 
     impl SpeedtestCoreSession for RecordingCoreSession {}
 
+    struct EditingProbe {
+        database: Database,
+        delete: bool,
+    }
+
+    impl SpeedtestProbe for EditingProbe {
+        fn realping(
+            &self,
+            _: u16,
+            _: SpeedTestItem,
+            _: CancellationFlag,
+        ) -> BoxFuture<'static, Result<RealPingProbeResult>> {
+            let database = self.database.clone();
+            let delete = self.delete;
+            Box::pin(async move {
+                if delete {
+                    database.profiles().delete("a").await?;
+                    database.profile_exs().delete_orphans().await?;
+                } else {
+                    let mut profile = database.profiles().get("a").await?.expect("test profile");
+                    profile.transport = Some(voya_core::ProfileTransport::Websocket {
+                        host: None,
+                        path: Some("/changed".into()),
+                    });
+                    database.profiles().upsert(&profile).await?;
+                }
+                Ok(RealPingProbeResult {
+                    delay: 44,
+                    ip_info: None,
+                    country_code: Some("US".into()),
+                })
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn speedtest_discards_results_for_nodes_edited_or_deleted_during_the_probe() {
+        for delete in [false, true] {
+            let database = Database::connect_in_memory().await.expect("database");
+            insert_profile(&database, "a", 443).await;
+            let backend = Arc::new(RecordingCoreBackend::default());
+            let manager = SpeedtestManager::with_probe_and_backend(
+                test_paths(),
+                Arc::new(EditingProbe {
+                    database: database.clone(),
+                    delete,
+                }),
+                backend.clone(),
+            );
+            let events = StdMutex::new(Vec::new());
+            let run = manager
+                .run_with_callback(
+                    &database,
+                    &AppConfig::default(),
+                    vec!["a".into()],
+                    |result| events.lock().expect("events").push(result),
+                )
+                .await
+                .expect("run");
+            assert!(run.results.is_empty());
+            assert!(events
+                .lock()
+                .expect("events")
+                .iter()
+                .all(|result| result.country_code.is_none()));
+            let stored = database.profile_exs().get("a").await.expect("read");
+            assert!(stored.as_ref().is_none_or(|row| row.country_code.is_none()));
+            if let Some(row) = stored {
+                assert_eq!(
+                    row.message, None,
+                    "an edited node cannot remain stuck testing"
+                );
+            }
+            assert_eq!(backend.active.load(Ordering::SeqCst), 0);
+        }
+    }
+
     #[tokio::test]
     async fn speedtest_manager_realping_persists_latency_and_ip_info() {
         let database = Database::connect_in_memory()
@@ -653,6 +723,8 @@ mod tests {
             .expect("speedtest test operation should succeed");
         assert_eq!(profile_ex.delay, 44);
         assert_eq!(profile_ex.ip_info.as_deref(), Some("US"));
+        assert_eq!(profile_ex.country_code.as_deref(), Some("US"));
+        assert_eq!(run.results[0].country_code.as_deref(), Some("US"));
     }
 
     #[tokio::test]

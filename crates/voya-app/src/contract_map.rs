@@ -215,6 +215,7 @@ pub fn profile_list_to_contract(item: ProfileListItem) -> ProfileListEntry {
                 .as_deref()
                 .and_then(SpeedtestOutcome::from_stored),
             ip_info: item.profile_ex.ip_info,
+            country_code: item.profile_ex.country_code,
         },
         traffic: ProfileTraffic {
             total_upload: item.server_stat.total_up,
