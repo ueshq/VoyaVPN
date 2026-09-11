@@ -8,14 +8,8 @@ import type {
 } from "@/ipc/bindings";
 
 import { profileValidationMessage } from "./profile-form-utils";
-import {
-  createDefaultProfile,
-  activeProfileFormValues,
-  normalizeProfileForForm,
-  prepareProfileForSave,
-  profileFormSchema,
-  PROFILE_VALIDATION_CODES,
-} from "./profile-form-schema";
+import { activeProfileFormValues, profileFormSchema, PROFILE_VALIDATION_CODES } from "./profile-form-schema";
+import { createDefaultProfile, normalizeProfileForForm, prepareProfileForSave } from "./profile-form-values";
 
 const endpoint = { address: "node.example.test", port: 443 };
 

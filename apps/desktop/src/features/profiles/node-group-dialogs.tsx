@@ -15,12 +15,12 @@ import {
 } from "@voya/ui/components/dialog";
 import type { NodeGroup, NodeGroupAssignment } from "@/ipc/bindings";
 
-import type { ServerTableController } from "./use-server-table";
+import type { NodeGroupDialogsController } from "./node-controller-types";
 
 export function NodeGroupDialogs({
   controller,
 }: {
-  controller: ServerTableController;
+  controller: NodeGroupDialogsController;
 }) {
   const { nodeGroups, t, viewportRef } = controller;
   const dialog = nodeGroups.dialog;
@@ -85,7 +85,7 @@ export function NodeGroupDialogs({
   );
 }
 
-function GroupError({ controller }: { controller: ServerTableController }) {
+function GroupError({ controller }: { controller: NodeGroupDialogsController }) {
   return controller.nodeGroups.error ? (
     <p className="text-sm text-danger" role="alert">
       {controller.nodeGroups.error}
@@ -97,7 +97,7 @@ function GroupNameForm({
   controller,
   group,
 }: {
-  controller: ServerTableController;
+  controller: NodeGroupDialogsController;
   group: NodeGroup | null;
 }) {
   const { nodeGroups, t } = controller;
@@ -160,7 +160,7 @@ function GroupEditForm({
   controller,
   group,
 }: {
-  controller: ServerTableController;
+  controller: NodeGroupDialogsController;
   group: NodeGroup;
 }) {
   const { profiles, nodeGroups, t } = controller;

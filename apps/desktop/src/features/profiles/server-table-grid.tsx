@@ -12,12 +12,12 @@ import { profileLatency, profileNameWithoutFlag } from "./profile-display";
 import { getProtocolLabel } from "./profile-constants";
 
 import { ProfileCardMenu, ProfileRowContextMenu } from "./server-table-menus";
-import type { ServerTableController } from "./use-server-table";
+import type { NodeListController } from "./node-controller-types";
 
 export function ProfileCardList({
   controller,
 }: {
-  controller: ServerTableController;
+  controller: NodeListController;
 }) {
   const {
     activation,

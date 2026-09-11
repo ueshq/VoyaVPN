@@ -14,14 +14,14 @@ import type { ProfileListEntry } from "@/ipc/bindings";
 
 import { getProtocolLabel } from "./profile-constants";
 import { profileLatency, profileTransportName } from "./profile-display";
-import type { ServerTableController } from "./use-server-table";
+import type { NodeDetailsController } from "./node-controller-types";
 
 // Mounted only while open; the statistics selector watches this node alone.
 export function ProfileDetailsDialog({
   controller,
   item,
 }: {
-  controller: ServerTableController;
+  controller: NodeDetailsController;
   item: ProfileListEntry;
 }) {
   const { t, setDetailsId, restoreDetailsFocus, subscriptionName } = controller;

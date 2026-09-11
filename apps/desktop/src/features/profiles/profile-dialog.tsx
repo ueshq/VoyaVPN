@@ -27,15 +27,8 @@ import {
   TextField,
 } from "./profile-form-fields";
 import { profileValidationMessage } from "./profile-form-utils";
-import {
-  createDefaultProfile,
-  normalizeProfileForForm,
-  prepareProfileForSave,
-  profileFormSchema,
-  activeProfileFormValues,
-  type ParsedProfileFormValues,
-  type ProfileFormValues,
-} from "./profile-form-schema";
+import { profileFormSchema, activeProfileFormValues, type ParsedProfileFormValues, type ProfileFormValues } from "./profile-form-schema";
+import { createDefaultProfile, normalizeProfileForForm, prepareProfileForSave } from "./profile-form-values";
 import { ProtocolPanel } from "./profile-protocol-panel";
 import { SecurityPanel } from "./profile-security-panel";
 import { TransportPanel } from "./profile-transport-panel";

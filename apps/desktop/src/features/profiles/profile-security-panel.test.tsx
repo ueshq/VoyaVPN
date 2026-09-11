@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { useForm } from "react-hook-form";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createDefaultProfile, type ParsedProfileFormValues, type ProfileFormValues } from "./profile-form-schema";
+import { type ParsedProfileFormValues, type ProfileFormValues } from "./profile-form-schema";
+import { createDefaultProfile } from "./profile-form-values";
 import { SecurityPanel } from "./profile-security-panel";
 
 const ipcMocks = vi.hoisted(() => ({

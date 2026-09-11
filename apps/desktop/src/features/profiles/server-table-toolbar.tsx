@@ -27,12 +27,12 @@ import { getErrorMessage } from "@voya/utils/error";
 
 import { IMPORT_METHODS } from "./import-methods";
 import { ExportMenuItems, SpeedtestButton } from "./server-table-menus";
-import type { ServerTableController } from "./use-server-table";
+import type { NodeToolbarController } from "./node-controller-types";
 
 export function ServerTableToolbar({
   controller,
 }: {
-  controller: ServerTableController;
+  controller: NodeToolbarController;
 }) {
   const {
     nodeGroups,

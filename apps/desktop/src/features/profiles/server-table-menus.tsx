@@ -46,7 +46,7 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { MOVE_ACTIONS } from "./profile-constants";
 import type { ProfileExportKind } from "./server-table-actions";
 import type { TranslationFunction as TranslateFn } from "@voya/i18n";
-import type { ServerTableController } from "./use-server-table";
+import type { NodeMenuController } from "./node-controller-types";
 
 // The Menubar and ContextMenu variants of the same list are rendered from one
 // descriptor array through an injected item primitive, so each export kind
@@ -155,7 +155,7 @@ export function ProfileRowContextMenu({
   item,
 }: {
   children: ReactElement;
-  controller: ServerTableController;
+  controller: NodeMenuController;
   item: ProfileListEntry;
 }) {
   return (
@@ -203,7 +203,7 @@ export function ProfileCardMenu({
   controller,
   item,
 }: {
-  controller: ServerTableController;
+  controller: NodeMenuController;
   item: ProfileListEntry;
 }) {
   const label = controller.t("panes.profiles.menu.actionsFor", {
@@ -239,7 +239,7 @@ function ProfileMenuItems({
   item,
   primitives: { Item, Separator, Sub, SubContent, SubTrigger },
 }: {
-  controller: ServerTableController;
+  controller: NodeMenuController;
   item: ProfileListEntry;
   primitives: ActionMenuPrimitives;
 }) {

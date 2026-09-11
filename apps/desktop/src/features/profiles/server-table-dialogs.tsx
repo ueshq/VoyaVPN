@@ -16,12 +16,12 @@ import { ImportProfilesDialog } from "./import-profiles-dialog";
 import { ProfileDetailsDialog } from "./profile-details-dialog";
 import { ProfileDialog } from "./profile-dialog";
 import { ShareQrDialog } from "./share-qr-dialog";
-import type { ServerTableController } from "./use-server-table";
+import type { NodeDialogsController } from "./node-controller-types";
 
 export function ServerTableDialogs({
   controller,
 }: {
-  controller: ServerTableController;
+  controller: NodeDialogsController;
 }) {
   const {
     confirmDelete,

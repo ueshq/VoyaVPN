@@ -30,7 +30,7 @@ import { makeProfileFixture } from "@/test/profile-fixture";
 
 import { MOVE_ACTIONS } from "./profile-constants";
 import { ProfilesScreen } from "./server-table";
-import { applySpeedtestResults } from "./use-server-table";
+import { applySpeedtestResults } from "./use-node-list-data";
 
 const ipcMocks = vi.hoisted(() => ({
   connectActiveProfile: vi.fn(),
