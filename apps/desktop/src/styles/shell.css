@@ -28,7 +28,7 @@
 .app-shell:not([data-window-chrome="none"]):not([data-active-tab="home"]) .shell-panel {
   padding-top: 40px;
 }
-.app-shell[data-window-chrome="macos"] .app-sidebar[data-collapsed="true"] { width: 96px; }
+.app-shell[data-window-chrome="macos"] .app-sidebar { --sidebar-collapsed-width: 96px; }
 .app-shell[data-window-chrome="macos"] .app-sidebar[data-collapsed="true"] .sidebar-toolbar {
   height: 112px;
   padding-top: 56px;

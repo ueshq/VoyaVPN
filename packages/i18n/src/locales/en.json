@@ -192,8 +192,7 @@
     "autostart": "Autostart",
     "loading": "Loading",
     "runtimeCore": "Core",
-    "runtimeNetwork": "Network",
-    "saved": "Saved"
+    "runtimeNetwork": "Network"
   },
   "panes": {
     "dns": {
@@ -607,8 +606,6 @@
     },
     "categories": "Settings categories",
     "autosave": {
-      "automatic": "Changes save automatically",
-      "saving": "Saving…",
       "failed": "Could not save changes",
       "retry": "Retry"
     },

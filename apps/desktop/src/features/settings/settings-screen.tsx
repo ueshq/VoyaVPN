@@ -1,8 +1,8 @@
 import { useState, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, LoaderCircle, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 
-import { PageHeader, PageHeaderActions, PageSection, PageTitle } from "@/components/app-shell/page-section";
+import { PageSection, PageTitle } from "@/components/app-shell/page-section";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
 import { Button } from "@voya/ui/components/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@voya/ui/components/tabs";
@@ -35,12 +35,10 @@ export function SettingsScreen() {
   const controller = useAppSettings();
   const [tab, setTab] = useState<SettingsTab>("general");
   const [visited, setVisited] = useState<ReadonlySet<SettingsTab>>(() => new Set(["general"]));
-  const [editing, setEditing] = useState(false);
   const dns = useDnsSettings(visited.has("dns"));
   const queue = settingsSaveQueue(useQueryClient());
   const saving = useSyncExternalStore(queue.subscribe, queue.isSaving, queue.isSaving);
   const error = controller.error ?? dns.operationError;
-  const saved = !editing && (controller.saved || dns.saved);
 
   function changeTab(value: string) {
     const next = tabs.find((item) => item.value === value)?.value;
@@ -52,34 +50,22 @@ export function SettingsScreen() {
 
   return (
     <PageSection aria-label={t("modal.settings")}>
-      <PageTitle title={t("modal.settings")} />
       <Tabs className="flex min-h-0 flex-1 flex-col gap-0" value={tab} onValueChange={changeTab}>
-        <PageHeader>
-          <div className="min-w-0 max-w-full overflow-x-auto">
+        <PageTitle
+          actions={
             <TabsList aria-label={t("settings.categories")}>
               {tabs.map((item) => <TabsTrigger key={item.value} value={item.value}>{t(item.labelKey)}</TabsTrigger>)}
             </TabsList>
-          </div>
-          <PageHeaderActions>
-            <span aria-live="polite" className="flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
-              {saving ? <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" /> : saved && !error ? <Check aria-hidden="true" className="size-3.5" /> : null}
-              {saving ? t("settings.autosave.saving") : error ? t("settings.autosave.failed") : saved ? t("options.saved") : t("settings.autosave.automatic")}
-            </span>
-          </PageHeaderActions>
-        </PageHeader>
+          }
+          title={t("modal.settings")}
+        />
         {error ? <InlinePageError>
           <span>{error}</span>
           <Button className="ms-auto" disabled={saving} onClick={() => { controller.retry(); dns.retry(); }} size="sm" variant="outline">
             <RotateCcw aria-hidden="true" className="size-3.5" />{t("settings.autosave.retry")}
           </Button>
         </InlinePageError> : null}
-        <div
-          className="min-h-0 flex-1"
-          onFocusCapture={(event) => {
-            if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) setEditing(true);
-          }}
-          onBlurCapture={() => setEditing(false)}
-        >
+        <div className="min-h-0 flex-1">
           <SettingsFields errors={controller.fieldErrors}>
             {tabs.map((item) => <TabsContent key={item.value} className="h-full overflow-y-auto bg-surface-sunken p-4 data-[state=inactive]:hidden" forceMount value={item.value}>
               {visited.has(item.value) ? <div className="mx-auto w-full max-w-5xl">

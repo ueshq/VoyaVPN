@@ -1,5 +1,5 @@
 import type * as React from "react";
-import { Activity, ArrowDown, ArrowUp, Home, PanelLeft, Route, Settings, Shield } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, Home, PanelLeft, PanelRight, Route, Settings, Shield } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { SidebarNavItem } from "@/components/app-shell/sidebar-nav-item";
@@ -39,6 +39,7 @@ export function AppSidebar({ titleBarLayout }: { titleBarLayout: TitleBarLayout 
   const setActiveTab = useShellStore((state) => state.setActiveTab);
   const collapsed = useShellStore((state) => state.sidebarCollapsed);
   const toggleSidebar = useShellStore((state) => state.toggleSidebar);
+  const ToggleIcon = collapsed ? PanelRight : PanelLeft;
 
   // Manual-activation tablist keyboard pattern: arrows move focus between the
   // roving-tabIndex tabs (Enter/Space then activates the native button). The
@@ -76,7 +77,7 @@ export function AppSidebar({ titleBarLayout }: { titleBarLayout: TitleBarLayout 
           onClick={toggleSidebar}
           type="button"
         >
-          <PanelLeft aria-hidden="true" className="size-4" />
+          <ToggleIcon aria-hidden="true" className="size-4" />
         </button>
       </div>
 
@@ -122,17 +123,24 @@ function SidebarFooter() {
   return (
     <div aria-label={t("status.aria")} className="sidebar-footer" data-testid="sidebar-footer">
       <span className="sr-only">{t(CORE_STATE_TRANSLATION_KEYS[state])}</span>
-      <p className="sidebar-traffic-title">{t("sidebar.traffic")}</p>
-      <div className="sidebar-traffic-row" aria-label={t("status.upload", { speed: upload })}>
-        <ArrowUp aria-hidden="true" className="size-4" />
-        <span className="sidebar-traffic-label">{t("sidebar.upload")}{" "}</span>
-        <span className="sidebar-traffic-value">{upload}</span>
-      </div>
-      <div className="sidebar-traffic-row" aria-label={t("status.download", { speed: download })}>
-        <ArrowDown aria-hidden="true" className="size-4" />
-        <span className="sidebar-traffic-label">{t("sidebar.download")}{" "}</span>
-        <span className="sidebar-traffic-value">{download}</span>
-      </div>
+      <span className="sr-only">{t("status.upload", { speed: upload })}</span>
+      <span className="sr-only">{t("status.download", { speed: download })}</span>
+      {/* Overlapping layouts crossfade without moving the footer or duplicating its accessible text. */}
+      {(["expanded", "collapsed"] as const).map((layout) => (
+        <div aria-hidden="true" className={`sidebar-traffic-${layout}`} key={layout}>
+          {layout === "expanded" && <p className="sidebar-traffic-title">{t("sidebar.traffic")}</p>}
+          <div className="sidebar-traffic-row">
+            <ArrowUp aria-hidden="true" className="size-4" />
+            {layout === "expanded" && <span className="sidebar-traffic-label">{t("sidebar.upload")}{" "}</span>}
+            <span className="sidebar-traffic-value">{upload}</span>
+          </div>
+          <div className="sidebar-traffic-row">
+            <ArrowDown aria-hidden="true" className="size-4" />
+            {layout === "expanded" && <span className="sidebar-traffic-label">{t("sidebar.download")}{" "}</span>}
+            <span className="sidebar-traffic-value">{download}</span>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

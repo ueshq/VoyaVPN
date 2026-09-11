@@ -38,7 +38,7 @@ export function SidebarNavItem({
       type="button"
     >
       <Icon className="size-4 shrink-0" aria-hidden="true" />
-      <span className={cn("flex-1 truncate text-start", collapsed && "sr-only")}>{label}</span>
+      <span className="sidebar-nav-label truncate text-start">{label}</span>
     </button>
   );
 }

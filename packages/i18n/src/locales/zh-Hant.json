@@ -192,8 +192,7 @@
     "autostart": "開機自動啟動",
     "loading": "正在載入",
     "runtimeCore": "內核",
-    "runtimeNetwork": "網路",
-    "saved": "已儲存"
+    "runtimeNetwork": "網路"
   },
   "panes": {
     "dns": {
@@ -607,8 +606,6 @@
     },
     "categories": "設定分類",
     "autosave": {
-      "automatic": "修改後自動儲存",
-      "saving": "正在儲存…",
       "failed": "修改儲存失敗",
       "retry": "重試"
     },
