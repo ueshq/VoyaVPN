@@ -331,7 +331,7 @@
       "import": {
         "clipboard": "Import from clipboard",
         "clipboardEmpty": "Clipboard is empty.",
-        "clipboardUnavailable": "Clipboard text read is unavailable in this WebView.",
+        "clipboardUnavailable": "Could not read text from the clipboard.",
         "discardedNodeOverrides": "Discarded {{count}} node-level override(s); global settings will be used.",
         "summary": {
           "deduped": "{{count}} duplicate(s) skipped from payload.",
@@ -545,7 +545,7 @@
   },
   "qr": {
     "clipboardImageMissing": "Clipboard does not contain an image.",
-    "clipboardImageUnavailable": "Clipboard image read is unavailable in this WebView.",
+    "clipboardImageUnavailable": "Could not read an image from the clipboard.",
     "clipboardUnavailable": "Clipboard text read is unavailable in this WebView.",
     "content": "Content",
     "generatedAlt": "Generated QR code",

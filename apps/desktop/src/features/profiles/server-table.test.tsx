@@ -44,6 +44,7 @@ const ipcMocks = vi.hoisted(() => ({
   exportProfileShareLinks: vi.fn(),
   generateQrCode: vi.fn(),
   importProfilesFromText: vi.fn(),
+  readClipboardText: vi.fn(),
   listProfiles: vi.fn(),
   listSubscriptionMetadata: vi.fn(() => Promise.resolve([])),
   listSubscriptions: vi.fn(),
@@ -93,10 +94,6 @@ function mockProfileListOnce(
 }
 
 const queryClients = new Set<QueryClient>();
-const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(
-  navigator,
-  "clipboard",
-);
 
 function renderProfiles() {
   const queryClient = new QueryClient({
@@ -118,34 +115,19 @@ function renderProfiles() {
 afterEach(() => {
   queryClients.forEach((queryClient) => queryClient.clear());
   queryClients.clear();
-  restoreClipboard();
+  ipcMocks.readClipboardText.mockReset();
 });
 
 function mockClipboardReadText(text: string) {
-  const readText = vi.fn<() => Promise<string>>().mockResolvedValue(text);
+  ipcMocks.readClipboardText.mockResolvedValue(text);
 
-  Object.defineProperty(navigator, "clipboard", {
-    configurable: true,
-    value: { readText },
-  });
-
-  return readText;
+  return ipcMocks.readClipboardText;
 }
 
 function mockClipboardUnavailable() {
-  Object.defineProperty(navigator, "clipboard", {
-    configurable: true,
-    value: undefined,
-  });
-}
-
-function restoreClipboard() {
-  if (originalClipboardDescriptor) {
-    Object.defineProperty(navigator, "clipboard", originalClipboardDescriptor);
-    return;
-  }
-
-  Reflect.deleteProperty(navigator, "clipboard");
+  ipcMocks.readClipboardText.mockRejectedValue(
+    new Error("the clipboard is not supported in this session"),
+  );
 }
 
 async function selectComboboxOption(label: string, optionLabel: string) {
@@ -1181,7 +1163,7 @@ describe("ProfilesScreen", () => {
 
     expect(
       await screen.findByText(
-        "Clipboard text read is unavailable in this WebView.",
+        "Could not read text from the clipboard.",
       ),
     ).toBeInTheDocument();
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();

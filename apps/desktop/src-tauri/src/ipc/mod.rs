@@ -13,6 +13,8 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::save_app_settings::<tauri::Wry>,
         commands::generate_qr_code,
         commands::scan_screen_qr,
+        commands::scan_clipboard_qr,
+        commands::read_clipboard_text,
         commands::fetch_certificate,
         commands::calculate_certificate_sha256,
         commands::tun_request_elevation,

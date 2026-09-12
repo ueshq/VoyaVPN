@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { importProfilesFromText, scanScreenQr } from "@/ipc/commands";
+import { importProfilesFromText, readClipboardText, scanScreenQr } from "@/ipc/commands";
 import type { ImportProfilesResult, QrScanFailureReason } from "@/ipc/bindings";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
@@ -12,6 +12,8 @@ const SCREEN_FAILURE_KEYS = {
   captureFailed: "qr.screenCaptureFailed",
   timeout: "qr.screenTimeout",
   busy: "qr.screenBusy",
+  // Only a clipboard scan reports it.
+  noImage: "qr.clipboardImageMissing",
 } satisfies Record<QrScanFailureReason, TranslationKey>;
 
 function emptyResult(): ImportProfilesResult {
@@ -67,8 +69,10 @@ export function useNodeImport(
     try {
       let payloads: string[];
       if (method === "clipboard") {
-        if (!navigator.clipboard?.readText) throw new Error(t("panes.profiles.import.clipboardUnavailable"));
-        const text = (await navigator.clipboard.readText()).trim();
+        // Read natively: WebKit asks the user to confirm "Paste" for every WebView clipboard read.
+        const text = (await readClipboardText().catch(() => {
+          throw new Error(t("panes.profiles.import.clipboardUnavailable"));
+        })).trim();
         if (!text) throw new Error(t("panes.profiles.import.clipboardEmpty"));
         payloads = [text];
       } else {

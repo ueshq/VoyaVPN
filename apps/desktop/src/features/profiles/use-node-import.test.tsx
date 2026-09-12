@@ -1,14 +1,12 @@
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { ImportProfilesResult, QrScanResult } from "@/ipc/bindings";
 import { useNodeImport } from "./use-node-import";
 
-const ipc = vi.hoisted(() => ({ importProfilesFromText: vi.fn(), scanScreenQr: vi.fn() }));
+const ipc = vi.hoisted(() => ({ importProfilesFromText: vi.fn(), readClipboardText: vi.fn(), scanScreenQr: vi.fn() }));
 vi.mock("@/ipc/commands", () => ipc);
-const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
-const readText = vi.fn();
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => { resolve = done; });
@@ -33,14 +31,9 @@ function setup() {
 beforeEach(async () => {
   vi.resetAllMocks();
   await changeLocale("en", { persist: false });
-  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { readText } });
-  readText.mockResolvedValue(" vless://one ");
+  ipc.readClipboardText.mockResolvedValue(" vless://one ");
   ipc.importProfilesFromText.mockResolvedValue(imported(["one"]));
   ipc.scanScreenQr.mockResolvedValue(scan());
-});
-afterEach(() => {
-  if (clipboardDescriptor) Object.defineProperty(navigator, "clipboard", clipboardDescriptor);
-  else Reflect.deleteProperty(navigator, "clipboard");
 });
 
 describe("direct node import", () => {
@@ -48,7 +41,7 @@ describe("direct node import", () => {
     const read = deferred<string>();
     const save = deferred<ImportProfilesResult>();
     const refresh = deferred<void>();
-    readText.mockReturnValueOnce(read.promise);
+    ipc.readClipboardText.mockReturnValueOnce(read.promise);
     ipc.importProfilesFromText.mockReturnValueOnce(save.promise);
     const { result, onImported } = setup();
     onImported.mockReturnValueOnce(refresh.promise);
@@ -63,11 +56,11 @@ describe("direct node import", () => {
     await act(() => result.current.handleDirectImport("clipboard"));
     await act(async () => save.resolve(imported(["one"])));
     await act(() => result.current.handleDirectImport("clipboard"));
-    expect(readText).toHaveBeenCalledOnce();
+    expect(ipc.readClipboardText).toHaveBeenCalledOnce();
     await act(async () => { refresh.resolve(); await running; });
     expect(result.current.directImportPending).toBeNull();
     await act(() => result.current.handleDirectImport("clipboard"));
-    expect(readText).toHaveBeenCalledTimes(2);
+    expect(ipc.readClipboardText).toHaveBeenCalledTimes(2);
   });
 
   it("keeps payload formats separate, deduplicates nodes and continues past invalid codes", async () => {
@@ -91,7 +84,7 @@ describe("direct node import", () => {
   });
 
   it.each(["", "  \n "])("does not import an empty clipboard: %j", async (text) => {
-    readText.mockResolvedValue(text);
+    ipc.readClipboardText.mockResolvedValue(text);
     const { result, operation } = setup();
     await act(() => result.current.handleDirectImport("clipboard"));
     expect(operation.setOperationError).toHaveBeenLastCalledWith("Clipboard is empty.");
@@ -99,18 +92,21 @@ describe("direct node import", () => {
     expect(result.current.directImportPending).toBeNull();
   });
 
-  it("reports unavailable and rejected clipboard reads, then allows retry", async () => {
-    Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
-    const { result, operation } = setup();
-    await act(() => result.current.handleDirectImport("clipboard"));
-    expect(operation.setOperationError).toHaveBeenLastCalledWith("Clipboard text read is unavailable in this WebView.");
-    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { readText } });
-    readText.mockRejectedValueOnce(new Error("Permission denied"));
-    await act(() => result.current.handleDirectImport("clipboard"));
-    expect(operation.setOperationError).toHaveBeenLastCalledWith("Permission denied");
-    expect(ipc.importProfilesFromText).not.toHaveBeenCalled();
-    await act(() => result.current.handleDirectImport("clipboard"));
-    expect(ipc.importProfilesFromText).toHaveBeenCalledOnce();
+  it("reads the clipboard natively and localizes a failed read, then allows retry", async () => {
+    const webViewRead = vi.fn();
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { readText: webViewRead } });
+    try {
+      ipc.readClipboardText.mockRejectedValueOnce(new Error("the clipboard is held by another application"));
+      const { result, operation } = setup();
+      await act(() => result.current.handleDirectImport("clipboard"));
+      expect(operation.setOperationError).toHaveBeenLastCalledWith("Could not read text from the clipboard.");
+      expect(ipc.importProfilesFromText).not.toHaveBeenCalled();
+      await act(() => result.current.handleDirectImport("clipboard"));
+      expect(ipc.importProfilesFromText).toHaveBeenCalledOnce();
+      expect(webViewRead).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it.each([
@@ -149,7 +145,7 @@ describe("direct node import", () => {
 
   it.each(["clipboard", "qrScreen"] as const)("ignores a late %s read after leaving the page", async (method) => {
     const pending = deferred<never>();
-    readText.mockReturnValue(pending.promise);
+    ipc.readClipboardText.mockReturnValue(pending.promise);
     ipc.scanScreenQr.mockReturnValue(pending.promise);
     const { result, unmount, onImported } = setup();
     let running!: Promise<void>;

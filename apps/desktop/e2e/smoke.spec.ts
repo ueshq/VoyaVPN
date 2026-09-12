@@ -298,6 +298,8 @@ test("node menus defer actions until a method is chosen and restore keyboard foc
     (await smokeCalls(page)).filter(({ command }) =>
       [
         "import_profiles_from_text",
+        "read_clipboard_text",
+        "scan_clipboard_qr",
         "scan_screen_qr",
         "save_subscription",
       ].includes(command),

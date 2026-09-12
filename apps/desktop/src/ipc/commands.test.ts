@@ -27,6 +27,8 @@ const wrapperNames = [
   "saveAppSettings",
   "generateQrCode",
   "scanScreenQr",
+  "scanClipboardQr",
+  "readClipboardText",
   "fetchCertificate",
   "calculateCertificateSha256",
   "connectActiveProfile",

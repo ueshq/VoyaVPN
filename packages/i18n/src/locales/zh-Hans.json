@@ -331,7 +331,7 @@
       "import": {
         "clipboard": "从剪贴板导入",
         "clipboardEmpty": "剪贴板为空。",
-        "clipboardUnavailable": "当前 WebView 不支持读取剪贴板文本。",
+        "clipboardUnavailable": "无法读取剪贴板文本。",
         "discardedNodeOverrides": "已丢弃 {{count}} 个节点级覆盖项，将使用全局设置。",
         "summary": {
           "deduped": "已跳过内容中的 {{count}} 个重复项。",
@@ -545,7 +545,7 @@
   },
   "qr": {
     "clipboardImageMissing": "剪贴板中没有图片。",
-    "clipboardImageUnavailable": "当前 WebView 不支持读取剪贴板图片。",
+    "clipboardImageUnavailable": "无法读取剪贴板图片。",
     "clipboardUnavailable": "当前 WebView 不支持读取剪贴板文本。",
     "content": "内容",
     "generatedAlt": "生成的二维码",

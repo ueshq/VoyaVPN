@@ -5,6 +5,7 @@
 
 pub mod apps;
 pub mod autostart;
+pub mod clipboard;
 pub mod coreinfo;
 pub mod elevation;
 pub mod filesystem;

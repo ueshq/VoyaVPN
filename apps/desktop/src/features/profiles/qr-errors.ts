@@ -6,10 +6,7 @@
  * import it statically to map a rejection onto a translated message without
  * dragging the decoder into the main chunk.
  */
-type QrScanErrorCode =
-  | "clipboardImageMissing"
-  | "clipboardImageUnavailable"
-  | "notFound";
+type QrScanErrorCode = "notFound";
 
 /**
  * The scanner throws only this error. `message` carries the code rather than an
@@ -22,7 +19,7 @@ export class QrScanError extends Error {
   constructor(code: QrScanErrorCode, options?: ErrorOptions) {
     super(code, options);
     // Kept for callers (and tests) that recognise the historical name.
-    this.name = code === "notFound" ? "QrNotFoundError" : "QrScanError";
+    this.name = "QrNotFoundError";
     this.code = code;
   }
 }

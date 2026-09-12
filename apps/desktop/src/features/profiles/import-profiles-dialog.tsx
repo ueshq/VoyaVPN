@@ -22,10 +22,11 @@ import {
 } from "@voya/ui/components/dialog";
 import { Label } from "@voya/ui/components/label";
 import { Textarea } from "@voya/ui/components/textarea";
+import type { TranslationKey } from "@voya/i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
-import { importProfilesFromText } from "@/ipc/commands";
-import type { ImportProfilesResult } from "@/ipc/bindings";
+import { importProfilesFromText, scanClipboardQr } from "@/ipc/commands";
+import type { ImportProfilesResult, QrScanResult } from "@/ipc/bindings";
 
 import { IMPORT_METHODS, type DialogImportMethod } from "./import-methods";
 import { qrScanErrorCode } from "./qr-errors";
@@ -43,6 +44,14 @@ type ResultMessage = {
   id: string;
   text: string;
 };
+
+function clipboardScanFailureKey({
+  failureReason,
+  status,
+}: QrScanResult): TranslationKey {
+  if (failureReason === "noImage") return "qr.clipboardImageMissing";
+  return status === "notFound" ? "qr.noQrFound" : "qr.clipboardImageUnavailable";
+}
 
 export function ImportProfilesDialog(props: ImportProfilesDialogProps) {
   // A new opening owns its own draft and async reads, even for the same method.
@@ -163,15 +172,14 @@ function ImportProfilesDialogSession({
 
   async function handleClipboardImage() {
     await readIntoPayload(async () => {
-      if (!navigator.clipboard?.read)
+      // Read natively: WebKit asks the user to confirm "Paste" for every WebView clipboard read.
+      const scanned = await scanClipboardQr().catch(() => {
         throw new Error(t("qr.clipboardImageUnavailable"));
-      const { readClipboardImageBlob, scanQrBlob } =
-        await import("./qr-scanner");
-      if (!activeRef.current) return "";
-      const blob = await readClipboardImageBlob();
-      if (!activeRef.current) return "";
-      return scannedPayload(await scanQrBlob(blob));
-    }, formatQrError);
+      });
+      if (scanned.status !== "found")
+        throw new Error(t(clipboardScanFailureKey(scanned)));
+      return scannedPayload(scanned.texts.join("\n"));
+    });
   }
 
   function scannedPayload(payload: string) {
@@ -188,10 +196,6 @@ function ImportProfilesDialogSession({
 
   function formatQrError(error: unknown) {
     switch (qrScanErrorCode(error)) {
-      case "clipboardImageMissing":
-        return t("qr.clipboardImageMissing");
-      case "clipboardImageUnavailable":
-        return t("qr.clipboardImageUnavailable");
       case "notFound":
         return t("qr.noQrFound");
       default:

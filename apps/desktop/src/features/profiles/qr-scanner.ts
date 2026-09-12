@@ -23,19 +23,3 @@ export async function scanQrBlob(blob: Blob): Promise<string> {
     URL.revokeObjectURL(objectUrl);
   }
 }
-
-export async function readClipboardImageBlob(): Promise<Blob> {
-  if (!navigator.clipboard?.read) {
-    throw new QrScanError("clipboardImageUnavailable");
-  }
-
-  const items = await navigator.clipboard.read();
-  for (const item of items) {
-    const imageType = item.types.find((type) => type.startsWith("image/"));
-    if (imageType) {
-      return item.getType(imageType);
-    }
-  }
-
-  throw new QrScanError("clipboardImageMissing");
-}

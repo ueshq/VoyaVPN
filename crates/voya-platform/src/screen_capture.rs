@@ -60,20 +60,10 @@ impl ScreenCaptureAdapter for NativeScreenCapture {
                         batch.failure = Some(ScreenCaptureFailure::CaptureFailed);
                         continue;
                     }
-                    let luma = image
-                        .pixels()
-                        .map(|pixel| {
-                            ((299 * u32::from(pixel[0])
-                                + 587 * u32::from(pixel[1])
-                                + 114 * u32::from(pixel[2])
-                                + 500)
-                                / 1000) as u8
-                        })
-                        .collect();
                     batch.frames.push(ScreenFrame {
                         width,
                         height,
-                        luma,
+                        luma: rgba_to_luma(image.as_raw()),
                     });
                 }
                 Err(error) => {
@@ -87,6 +77,22 @@ impl ScreenCaptureAdapter for NativeScreenCapture {
         }
         Ok(batch)
     }
+}
+
+/// Rec. 601 greyscale, composited over white so a transparent QR image keeps
+/// its contrast. Opaque pixels (every screen capture) are unaffected.
+pub(crate) fn rgba_to_luma(rgba: &[u8]) -> Vec<u8> {
+    rgba.chunks_exact(4)
+        .map(|pixel| {
+            let luma = (299 * u32::from(pixel[0])
+                + 587 * u32::from(pixel[1])
+                + 114 * u32::from(pixel[2])
+                + 500)
+                / 1000;
+            let alpha = u32::from(pixel[3]);
+            ((luma * alpha + 255 * (255 - alpha) + 127) / 255) as u8
+        })
+        .collect()
 }
 
 fn capture_failure(error: xcap::XCapError) -> ScreenCaptureFailure {
@@ -116,4 +122,21 @@ fn check_permission() -> Result<(), ScreenCaptureFailure> {
 #[cfg(not(target_os = "macos"))]
 fn check_permission() -> Result<(), ScreenCaptureFailure> {
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn greyscale_composites_transparency_over_white() {
+        let rgba = [
+            0, 0, 0, 255, // opaque black
+            255, 255, 255, 255, // opaque white
+            0, 0, 0, 0, // transparent
+            0, 0, 0, 128, // half-transparent black
+            255, 0, 0, 255, // opaque red
+        ];
+        assert_eq!(rgba_to_luma(&rgba), vec![0, 255, 255, 127, 76]);
+    }
 }

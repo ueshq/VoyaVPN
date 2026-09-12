@@ -331,7 +331,7 @@
       "import": {
         "clipboard": "從剪貼簿匯入",
         "clipboardEmpty": "剪貼簿為空。",
-        "clipboardUnavailable": "目前 WebView 不支援讀取剪貼簿文字。",
+        "clipboardUnavailable": "無法讀取剪貼簿文字。",
         "discardedNodeOverrides": "已捨棄 {{count}} 個節點級覆寫項，將使用全域設定。",
         "summary": {
           "deduped": "已略過內容中的 {{count}} 個重複項。",
@@ -545,7 +545,7 @@
   },
   "qr": {
     "clipboardImageMissing": "剪貼簿中沒有圖片。",
-    "clipboardImageUnavailable": "目前 WebView 不支援讀取剪貼簿圖片。",
+    "clipboardImageUnavailable": "無法讀取剪貼簿圖片。",
     "clipboardUnavailable": "目前 WebView 不支援讀取剪貼簿文字。",
     "content": "內容",
     "generatedAlt": "產生的二維碼",

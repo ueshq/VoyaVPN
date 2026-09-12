@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  readClipboardImageBlob,
-  scanQrBlob,
-} from "./qr-scanner";
+import { scanQrBlob } from "./qr-scanner";
 
 const zxingMocks = vi.hoisted(() => ({
   decodeFromImageUrl: vi.fn(),
@@ -15,7 +12,6 @@ vi.mock("@zxing/browser", () => ({
   },
 }));
 
-const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
 const originalCreateObjectUrlDescriptor = Object.getOwnPropertyDescriptor(URL, "createObjectURL");
 const originalRevokeObjectUrlDescriptor = Object.getOwnPropertyDescriptor(URL, "revokeObjectURL");
 
@@ -33,7 +29,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
-  restoreProperty(navigator, "clipboard", originalClipboardDescriptor);
   restoreProperty(URL, "createObjectURL", originalCreateObjectUrlDescriptor);
   restoreProperty(URL, "revokeObjectURL", originalRevokeObjectUrlDescriptor);
 });
@@ -59,24 +54,6 @@ describe("profile QR scanner", () => {
 
     expect(revokeObjectUrl).toHaveBeenCalledWith("blob:voya-qr");
   });
-
-  it("reads the first image from the clipboard", async () => {
-    const image = new Blob(["clipboard-qr"], { type: "image/png" });
-    const getType = vi.fn().mockResolvedValue(image);
-    const read = vi.fn().mockResolvedValue([
-      { getType: vi.fn(), types: ["text/plain"] },
-      { getType, types: ["text/plain", "image/png"] },
-    ]);
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { read },
-    });
-
-    await expect(readClipboardImageBlob()).resolves.toBe(image);
-    expect(getType).toHaveBeenCalledWith("image/png");
-  });
-
-
 });
 
 function restoreProperty(

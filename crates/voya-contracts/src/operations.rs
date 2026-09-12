@@ -66,6 +66,8 @@ pub enum QrScanFailureReason {
     CaptureFailed,
     Timeout,
     Busy,
+    /// The clipboard held no image. Only a clipboard scan reports it.
+    NoImage,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]

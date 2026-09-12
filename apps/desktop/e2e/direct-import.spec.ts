@@ -6,7 +6,8 @@ test("clipboard and screen imports execute without an app dialog or browser scre
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
-      value: { readText: async () => " vless://00000000-0000-0000-0000-000000000002@clipboard.example.test:443#Clipboard%20direct " },
+      // WebKit prompts "Paste" for WebView clipboard reads, so imports must read natively.
+      value: { readText: () => { throw new Error("WebView clipboard must not be read"); } },
     });
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
@@ -34,10 +35,10 @@ test("clipboard and screen imports execute without an app dialog or browser scre
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const evidence = await page.evaluate(() => ({
     observed: (window as unknown as { directImportObserved: { dialogOpened: boolean } }).directImportObserved,
-    calls: (window.__VOYA_SMOKE__.state as { calls: { command: string }[] }).calls.filter(({ command }) => ["scan_screen_qr", "import_profiles_from_text"].includes(command)),
+    calls: (window.__VOYA_SMOKE__.state as { calls: { command: string }[] }).calls.filter(({ command }) => ["read_clipboard_text", "scan_screen_qr", "import_profiles_from_text"].includes(command)),
     unhandled: (window.__VOYA_SMOKE__.state as { unhandled: string[] }).unhandled,
   }));
   expect(evidence.observed.dialogOpened).toBe(false);
-  expect(evidence.calls.map(({ command }) => command)).toEqual(["import_profiles_from_text", "scan_screen_qr", "import_profiles_from_text"]);
+  expect(evidence.calls.map(({ command }) => command)).toEqual(["read_clipboard_text", "import_profiles_from_text", "scan_screen_qr", "import_profiles_from_text"]);
   expect(evidence.unhandled).toEqual([]);
 });

@@ -70,6 +70,7 @@ const IPC_QR_CONTENT_MAX_CHARS: usize = 4096;
 const IPC_LIST_MAX_ITEMS: usize = 1024;
 
 mod app;
+mod clipboard;
 mod connection;
 mod connection_mode;
 mod dns;
@@ -87,6 +88,7 @@ mod tun;
 mod updates;
 
 pub use app::*;
+pub use clipboard::*;
 pub use connection::*;
 pub use dns::*;
 pub use platform::*;

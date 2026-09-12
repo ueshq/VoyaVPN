@@ -20,6 +20,9 @@ export const commands = {
 	saveAppSettings: (settings: AppSettingsV1) => typedError<AppSettingsV1, AppError>(__TAURI_INVOKE("save_app_settings", { settings })),
 	generateQrCode: (content: string) => typedError<QrCodeImage, AppError>(__TAURI_INVOKE("generate_qr_code", { content })),
 	scanScreenQr: () => typedError<QrScanResult, AppError>(__TAURI_INVOKE("scan_screen_qr")),
+	scanClipboardQr: () => typedError<QrScanResult, AppError>(__TAURI_INVOKE("scan_clipboard_qr")),
+	/**  Returns an empty string when the clipboard holds no text. */
+	readClipboardText: () => typedError<string, AppError>(__TAURI_INVOKE("read_clipboard_text")),
 	fetchCertificate: (request: CertificateFetchRequest) => typedError<CertificateFetchResult, AppError>(__TAURI_INVOKE("fetch_certificate", { request })),
 	calculateCertificateSha256: (pem: string) => typedError<string[], AppError>(__TAURI_INVOKE("calculate_certificate_sha256", { pem })),
 	/**
@@ -675,7 +678,9 @@ export type QrCodeImage = {
 	svg: string,
 };
 
-export type QrScanFailureReason = "permissionDenied" | "unsupported" | "captureFailed" | "timeout" | "busy";
+export type QrScanFailureReason = "permissionDenied" | "unsupported" | "captureFailed" | "timeout" | "busy" | 
+/**  The clipboard held no image. Only a clipboard scan reports it. */
+"noImage";
 
 export type QrScanResult = {
 	status: QrScanStatus,

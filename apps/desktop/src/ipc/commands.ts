@@ -24,6 +24,10 @@ export const generateQrCode = wrapCommand(commands.generateQrCode);
 
 export const scanScreenQr = wrapCommand(commands.scanScreenQr);
 
+export const scanClipboardQr = wrapCommand(commands.scanClipboardQr);
+
+export const readClipboardText = wrapCommand(commands.readClipboardText);
+
 export const fetchCertificate = wrapCommand(commands.fetchCertificate);
 
 export const calculateCertificateSha256 = wrapCommand(commands.calculateCertificateSha256);
