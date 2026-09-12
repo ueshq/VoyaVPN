@@ -115,6 +115,7 @@ function SimpleDnsForm({
         </div>
       </SettingsGroup>
       <Disclosure
+        className="border-0 [&>div]:border-0"
         title={t("common.advanced")}
         invalid={!!errors.hosts || !!errors.directExpectedIps}
       >

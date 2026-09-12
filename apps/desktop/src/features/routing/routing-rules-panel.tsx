@@ -113,7 +113,7 @@ export function RoutingRulesPanel({ controller }: { controller: RoutingScreenCon
       >
         {(selectedRouting?.rules ?? []).length > 0 ? (
           <Table className="min-w-[58rem]">
-            <TableHeader className={cn("sticky top-0 z-10", dataTableHeader)}>
+            <TableHeader className={cn("sticky top-0 z-10 [&_tr]:border-0", dataTableHeader)}>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-12 px-3 text-muted-foreground" scope="col">
                   #
@@ -145,7 +145,7 @@ export function RoutingRulesPanel({ controller }: { controller: RoutingScreenCon
               {(selectedRouting?.rules ?? []).map((rule, index) => (
                 <TableRow
                   className={cn(
-                    "cursor-default",
+                    "cursor-default border-0",
                     selectedRule?.id === rule.id
                       ? dataTableRowSelected
                       : cn(index % 2 === 0 ? dataTableRowEven : dataTableRowOdd, dataTableRowHover),

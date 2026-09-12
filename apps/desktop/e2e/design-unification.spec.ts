@@ -212,9 +212,8 @@ test("saving during a connection waits for apply and failed apply remains retrya
   await apply.click();
   await expect(page.getByRole("alert")).toContainText("Simulated failure");
   await page.getByRole("button", { name: "Retry", exact: true }).click();
-  await expect(
-    page.getByText("Connection settings are up to date."),
-  ).toBeVisible();
+  await expect(apply).toHaveCount(0);
+  await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
 for (const viewport of [

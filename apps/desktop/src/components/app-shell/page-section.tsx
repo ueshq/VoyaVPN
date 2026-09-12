@@ -5,12 +5,12 @@ import { cn } from "@voya/ui/lib/utils";
 
 // Page identity and content share one inset. Only the feature's inner viewport
 // scrolls: the page frame must not introduce another scroll container.
-export const pageSurfaceClassName = "rounded-xl border bg-surface-raised";
+export const pageSurfaceClassName = "rounded-xl border-0 bg-surface-raised";
 
 function PageSection({ className, ...props }: React.ComponentProps<"section">) {
   return (
     <section
-      className={cn("flex h-full min-h-0 min-w-0 flex-col bg-surface-sunken", className)}
+      className={cn("flex h-full min-h-0 min-w-0 flex-col bg-background", className)}
       data-slot="page-section"
       {...props}
     />
@@ -87,7 +87,7 @@ function PageHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b bg-surface-raised px-4 py-2",
+        "flex min-h-12 shrink-0 flex-wrap items-center gap-2 bg-surface-raised px-4 py-2",
         className,
       )}
       data-slot="page-header"

@@ -85,7 +85,7 @@ test("adding a same-name subscription creates a separate source group", async ({
   expect(profiles.filter((p) => p.profile.subscriptionId === "sub-3")).toHaveLength(1);
 });
 
-test("long groups and 5000 nodes retain keyboard focus, continuous group borders and virtual scrolling", async ({ page }, testInfo) => {
+test("long groups and 5000 nodes retain keyboard focus, continuous group layout and virtual scrolling", async ({ page }, testInfo) => {
   const groupName = `Work ${"long group name ".repeat(18)}`;
   await seed(page, 5001, groupName);
   const viewport = page.getByTestId("server-table-viewport");

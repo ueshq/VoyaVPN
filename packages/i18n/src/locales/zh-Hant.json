@@ -621,9 +621,7 @@
     "categories": "設定分類",
     "autosave": {
       "failed": "修改儲存失敗",
-      "retry": "重試",
-      "saving": "正在儲存…",
-      "saved": "已儲存"
+      "retry": "重試"
     },
     "sections": {
       "appearance": "外觀",
@@ -643,8 +641,6 @@
       "reconnect": "套用並重新連線",
       "proxy": "套用代理設定",
       "pending": "修改已儲存，等待套用至目前連線。",
-      "nextConnection": "連線相關設定將於下次連線時生效。",
-      "current": "目前連線已使用最新設定。",
       "working": "正在套用設定…"
     },
     "openRules": "前往規則頁"

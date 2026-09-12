@@ -99,6 +99,7 @@ export function CoreTab({
       </SettingsGroup>
 
       <Disclosure
+        className="border-0 [&>div]:border-0"
         title={t("common.advanced")}
         invalid={Object.keys(controller.fieldErrors).length > 0}
       >

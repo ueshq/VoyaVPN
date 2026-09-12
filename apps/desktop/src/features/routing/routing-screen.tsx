@@ -52,7 +52,7 @@ export function RoutingScreen() {
           <InlinePageError>{controller.operationError}</InlinePageError>
         ) : null}
         <PageSurface className="@container/routing flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="border-b p-4 @min-[896px]/routing:hidden">
+          <div className="p-4 @min-[896px]/routing:hidden">
             <Select
               value={controller.selectedRouting?.id ?? ""}
               onValueChange={controller.selectRouting}
@@ -168,7 +168,7 @@ function RoutingProfileList({ controller }: { controller: RoutingScreenControlle
   const { routings, selectRouting, selectedRouting } = controller;
 
   return (
-    <aside className="flex min-h-0 min-w-0 flex-1 flex-col border-e">
+    <aside className="flex min-h-0 min-w-0 flex-1 flex-col">
       <PageHeader className="min-h-14 text-xs font-medium uppercase text-muted-foreground">
         {t("panes.routing.profiles")}
       </PageHeader>

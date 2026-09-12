@@ -621,9 +621,7 @@
     "categories": "设置分类",
     "autosave": {
       "failed": "修改保存失败",
-      "retry": "重试",
-      "saving": "正在保存…",
-      "saved": "已保存"
+      "retry": "重试"
     },
     "sections": {
       "appearance": "外观",
@@ -643,8 +641,6 @@
       "reconnect": "应用并重新连接",
       "proxy": "应用代理设置",
       "pending": "修改已保存，等待应用到当前连接。",
-      "nextConnection": "连接相关设置将在下次连接时生效。",
-      "current": "当前连接已使用最新设置。",
       "working": "正在应用设置…"
     },
     "openRules": "前往规则页"

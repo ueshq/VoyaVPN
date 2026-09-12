@@ -50,7 +50,7 @@ export function SettingsGroup({
         className,
       )}
     >
-      <div className="flex min-h-12 flex-wrap items-center gap-2 border-b px-4 py-3">
+      <div className="flex min-h-12 flex-wrap items-center gap-2 px-4 py-3">
         <h2 className="text-section font-semibold" id={id}>
           {title}
         </h2>

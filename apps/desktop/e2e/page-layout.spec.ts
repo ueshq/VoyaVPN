@@ -23,7 +23,7 @@ async function expectPageGeometry(section: Locator, inset: number) {
     const title = element.querySelector<HTMLElement>("h1")!;
     const actions = element.querySelector<HTMLElement>('[data-slot="page-title"] [data-slot="page-header-actions"]')!;
     const content = element.querySelector<HTMLElement>('[data-slot="page-content"]')!;
-    const firstPanel = content.querySelector<HTMLElement>('[data-slot="page-surface"], .node-group-surface')!;
+    const firstPanel = content.querySelector<HTMLElement>('[data-slot="page-surface"], .node-group-surface, [role="tabpanel"][data-state="active"] section[aria-labelledby]')!;
     const frame = element.getBoundingClientRect();
     const heading = title.getBoundingClientRect();
     const trailing = actions.getBoundingClientRect();
@@ -167,7 +167,7 @@ test("populated pages keep scrolling inside panels and errors inside the page in
   const error = settings.getByRole("alert");
   await expect(error).toBeVisible();
   const errorBox = (await error.boundingBox())!;
-  const surfaceBox = (await settings.locator('[data-slot="page-surface"]').boundingBox())!;
+  const surfaceBox = (await settings.getByRole("tabpanel").boundingBox())!;
   expect(errorBox.x).toBe(surfaceBox.x);
   expect(errorBox.width).toBe(surfaceBox.width);
 });

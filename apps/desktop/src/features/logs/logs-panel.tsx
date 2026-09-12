@@ -271,7 +271,7 @@ export function LogsPanel({
           </Button>
         ) : null}
       </div>
-      <div className="shrink-0 border-t px-4 py-2 text-xs tabular-nums text-muted-foreground">
+      <div className="shrink-0 px-4 py-2 text-xs tabular-nums text-muted-foreground">
         {t("panes.logs.count", {
           count: filtered.length,
           total: logLines.length,

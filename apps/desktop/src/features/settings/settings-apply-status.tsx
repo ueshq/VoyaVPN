@@ -1,7 +1,7 @@
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, LoaderCircle, RotateCcw } from "lucide-react";
+import { LoaderCircle, RotateCcw } from "lucide-react";
 import { Button } from "@voya/ui/components/button";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
@@ -46,32 +46,22 @@ export function SettingsApplyStatus({
     }
   }
   const status = query.data;
+  const needsApply = status?.connected && status.action !== "none";
+  if (!needsApply && !working && !error && !query.error) return null;
+
   return (
     <PageSurface className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-      <span className="inline-flex items-center gap-2 text-sm" role="status">
-        {saving || working ? (
+      {working ? (
+        <span className="inline-flex items-center gap-2 text-sm" role="status">
           <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-        ) : failed ? null : (
-          <Check aria-hidden="true" className="size-4 text-success" />
-        )}
-        {working
-          ? t("settings.apply.working")
-          : saving
-            ? t("settings.autosave.saving")
-            : failed
-              ? t("settings.autosave.failed")
-              : t("settings.autosave.saved")}
-      </span>
-      {status ? (
+          {t("settings.apply.working")}
+        </span>
+      ) : needsApply ? (
         <span className="text-xs text-muted-foreground">
-          {!status.connected
-            ? t("settings.apply.nextConnection")
-            : status.action === "none"
-              ? t("settings.apply.current")
-              : t("settings.apply.pending")}
+          {t("settings.apply.pending")}
         </span>
       ) : null}
-      {status?.connected && status.action !== "none" ? (
+      {needsApply ? (
         <Button
           className="ms-auto"
           size="sm"

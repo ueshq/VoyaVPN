@@ -171,7 +171,7 @@ function ResourceUpdatePanel({
 }) {
   return (
     <SettingsGroup title={controller.t("settings.sections.resources")}>
-      <div className="grid divide-y">
+      <div className="grid">
         <ResourceRow controller={controller} kind="geo" />
         <ResourceRow controller={controller} kind="srs" />
       </div>

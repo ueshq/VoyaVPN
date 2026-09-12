@@ -231,7 +231,7 @@ export function ConnectionsPanel({
           </PageHeader>
           {updateFailed ? (
             <div
-              className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-2 text-sm text-muted-foreground"
+              className="flex shrink-0 items-center justify-between gap-3 px-4 py-2 text-sm text-muted-foreground"
               role="status"
             >
               <span>{t("activity.updateFailed")}</span>
@@ -253,7 +253,7 @@ export function ConnectionsPanel({
             ref={viewportRef}
             data-testid="connections-viewport"
           >
-            <div className={cn(GRID, "sticky top-0 z-10 border-b px-4 py-2", dataTableHeader)}>
+            <div className={cn(GRID, "sticky top-0 z-10 px-4 py-2", dataTableHeader)}>
               {headings.map(({ column, label }) => (
                 <button
                   key={column}
@@ -275,7 +275,7 @@ export function ConnectionsPanel({
             {!hasSnapshot && !updateFailed ? (
               <div aria-label={t("status.loadingScreen")} role="status">
                 {Array.from({ length: 8 }, (_, index) => (
-                  <div key={index} className={cn(GRID, "h-14 items-center border-b px-4")}>
+                  <div key={index} className={cn(GRID, "h-14 items-center px-4")}>
                     {headings.map(({ column }) => (
                       <Skeleton key={column} className="h-4 w-3/4" />
                     ))}
@@ -294,7 +294,7 @@ export function ConnectionsPanel({
                       data-testid="connection-row"
                       className={cn(
                         GRID,
-                        "absolute inset-x-0 top-0 h-14 items-center border-b px-4 text-start text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                        "absolute inset-x-0 top-0 h-14 items-center px-4 text-start text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                         index % 2 === 0 ? dataTableRowEven : dataTableRowOdd,
                         dataTableRowHover,
                       )}
@@ -338,7 +338,7 @@ export function ConnectionsPanel({
           </div>
           {hasSnapshot ? (
             <div
-              className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 border-t px-4 py-2 text-xs tabular-nums text-muted-foreground"
+              className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 px-4 py-2 text-xs tabular-nums text-muted-foreground"
               data-testid="connections-summary"
             >
               <span>

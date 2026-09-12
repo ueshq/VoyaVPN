@@ -30,9 +30,15 @@
   background: inherit;
   user-select: none;
 }
-.app-shell:not([data-window-chrome="none"]):not([data-active-tab="home"])
+.app-shell[data-window-chrome="windows"]:not([data-active-tab="home"])
   .shell-panel {
   padding-top: 40px;
+}
+/* macOS drag space fits inside the page title's existing top inset. */
+.app-shell[data-window-chrome="macos"]:not([data-active-tab="home"])
+  .shell-titlebar {
+  height: 20px;
+  background: transparent;
 }
 .app-shell[data-window-chrome="macos"] .app-sidebar {
   --sidebar-collapsed-width: 96px;

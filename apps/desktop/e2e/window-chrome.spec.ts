@@ -84,7 +84,7 @@ for (const layout of ["macos", "windows"] as const) {
     await toggle.click();
     await expect(sidebar).toHaveCSS("width", "240px");
 
-    // Every destination has its own scroll viewport below the drag strip.
+    // macOS uses the page's top inset for dragging; Windows reserves caption space.
     for (const name of ["Nodes", "Settings", "Network activity", "Rules"]) {
       await page
         .getByRole("tablist", { name: "Main sections" })
@@ -93,8 +93,11 @@ for (const layout of ["macos", "windows"] as const) {
       const panel = page.locator("#shell-tabpanel");
       const heading = panel.locator('[data-slot="page-title"]');
       await expect(heading).toBeVisible();
-      expect((await heading.boundingBox())!.y).toBeGreaterThanOrEqual(40);
-      await expect(panel).toHaveCSS("padding-top", "40px");
+      expect((await heading.boundingBox())!.y).toBe(layout === "macos" ? 0 : 40);
+      await expect(panel).toHaveCSS("padding-top", layout === "macos" ? "0px" : "40px");
+      const dragBounds = (await titlebar.boundingBox())!;
+      expect((await heading.getByRole("heading", { level: 1 }).boundingBox())!.y)
+        .toBeGreaterThanOrEqual(dragBounds.y + dragBounds.height);
       const action = panel
         .getByRole("button")
         .or(panel.getByRole("menuitem"))
@@ -105,9 +108,11 @@ for (const layout of ["macos", "windows"] as const) {
       await action.click({ trial: true });
       await expect(titlebar).toHaveCSS(
         "background-color",
-        await page
-          .locator(".shell-content-column")
-          .evaluate((el) => getComputedStyle(el).backgroundColor),
+        layout === "macos"
+          ? "rgba(0, 0, 0, 0)"
+          : await page
+            .locator(".shell-content-column")
+            .evaluate((el) => getComputedStyle(el).backgroundColor),
       );
     }
     await page.screenshot({

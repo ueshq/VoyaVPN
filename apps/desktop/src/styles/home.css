@@ -145,7 +145,6 @@
   align-items: center;
   flex-wrap: wrap;
   padding: 10px 0;
-  border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   background: var(--card);
 }
@@ -197,10 +196,8 @@
   width: 100%;
   min-height: 80px;
   padding: 12px 24px;
-  border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   background: var(--card);
-  box-shadow: var(--elevation-raised);
 }
 .home-node-icon,
 .node-card-icon {
@@ -509,15 +506,9 @@
   container-type: inline-size;
 }
 .profile-node-card {
-  transition:
-    border-color var(--duration-short),
-    background var(--duration-short);
-}
-.profile-node-card:hover {
-  border-color: var(--muted-foreground);
+  transition: background var(--duration-short);
 }
 .profile-node-card-selected {
-  border-color: var(--text-brand);
   background: color-mix(in srgb, var(--text-brand) 4%, var(--card));
 }
 .profile-node-card .node-card-label {
@@ -587,8 +578,6 @@
    measured row includes the gap before the next group. */
 .node-group-segment .node-group-surface {
   width: 100%;
-  border: 1px solid var(--border);
-  border-bottom: 0;
   border-radius: 0;
   background: var(--card);
   box-shadow: none;
@@ -600,7 +589,6 @@
   padding-bottom: 16px;
 }
 .node-group-end .node-group-surface {
-  border-bottom: 1px solid var(--border);
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
 }
 .node-group-start.node-group-end .node-group-surface {
@@ -635,7 +623,6 @@
 }
 .node-group-empty {
   padding: 20px;
-  border-top: 1px solid var(--border);
   color: var(--muted-foreground);
   font-size: 14px;
   text-align: center;

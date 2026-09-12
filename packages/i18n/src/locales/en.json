@@ -621,9 +621,7 @@
     "categories": "Settings categories",
     "autosave": {
       "failed": "Could not save changes",
-      "retry": "Retry",
-      "saving": "Saving…",
-      "saved": "Saved"
+      "retry": "Retry"
     },
     "sections": {
       "appearance": "Appearance",
@@ -643,8 +641,6 @@
       "reconnect": "Apply and reconnect",
       "proxy": "Apply proxy settings",
       "pending": "Saved changes are waiting to be applied to this connection.",
-      "nextConnection": "Connection settings take effect on the next connection.",
-      "current": "Connection settings are up to date.",
       "working": "Applying settings…"
     },
     "openRules": "Open routing rules"

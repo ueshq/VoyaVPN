@@ -97,6 +97,7 @@ export function NetworkTab({
           />
         </div>
         <Disclosure
+          className="border-0 [&>div]:border-0"
           title={t("common.advanced")}
           invalid={Object.keys(controller.fieldErrors).some((field) =>
             field.startsWith("network.tun"),
@@ -154,6 +155,7 @@ export function NetworkTab({
           value={settings.network.systemProxy.exceptions}
         />
         <Disclosure
+          className="border-0 [&>div]:border-0"
           title={t("common.advanced")}
           invalid={Object.keys(controller.fieldErrors).some((field) =>
             field.startsWith("network.systemProxy"),
