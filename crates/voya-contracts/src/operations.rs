@@ -58,13 +58,25 @@ pub enum QrScanStatus {
     Unavailable,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum QrScanFailureReason {
+    PermissionDenied,
+    Unsupported,
+    CaptureFailed,
+    Timeout,
+    Busy,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct QrScanResult {
     pub status: QrScanStatus,
-    pub text: Option<String>,
+    pub texts: Vec<String>,
     pub source: String,
     pub message: Option<String>,
+    /// Also set on a successful scan when some displays could not be captured.
+    pub failure_reason: Option<QrScanFailureReason>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]

@@ -65,6 +65,7 @@ fn candidate_rank(candidate: &ProcessCandidate) -> u8 {
     source_rank + u8::from(candidate.executable_path.is_some())
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
 fn candidate_from_executable_path(
     path: &str,
     source: ProcessCandidateSource,

@@ -5,6 +5,7 @@ use crate::test_support::RecordingRunner;
 
 use super::*;
 use crate::process::*;
+#[cfg(unix)]
 use std::{fs, path::PathBuf};
 
 #[test]

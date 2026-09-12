@@ -9,12 +9,7 @@
 type QrScanErrorCode =
   | "clipboardImageMissing"
   | "clipboardImageUnavailable"
-  | "notFound"
-  | "screenCaptureUnavailable"
-  | "screenFrameUnavailable"
-  | "screenFrameUnencodable"
-  | "screenFrameUnreadable"
-  | "screenStreamUnavailable";
+  | "notFound";
 
 /**
  * The scanner throws only this error. `message` carries the code rather than an

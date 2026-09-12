@@ -1,14 +1,13 @@
 use std::{
     collections::BTreeMap,
-    fs,
-    io::{self, Write},
+    fs, io,
     path::{Path, PathBuf},
     sync::Arc,
 };
 #[cfg(unix)]
 use std::{
     fs::OpenOptions,
-    io::{Seek, SeekFrom},
+    io::{Seek, SeekFrom, Write},
 };
 
 use thiserror::Error;

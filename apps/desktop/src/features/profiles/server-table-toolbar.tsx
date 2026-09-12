@@ -3,6 +3,8 @@ import {
   ChevronDown,
   FilePlus2,
   FileWarning,
+  Plus,
+  LoaderCircle,
   Rss,
   Share2,
   Upload,
@@ -38,6 +40,8 @@ export function ServerTableToolbar({
     handleBulkExport,
     handleCancelSpeedtest,
     handleSpeedtest,
+    handleDirectImport,
+    directImportPending,
     addTriggerRef,
     importTriggerRef,
     operationError,
@@ -85,22 +89,69 @@ export function ServerTableToolbar({
         <PageHeaderActions className="min-w-0 max-w-full">
           <Toolbar className="min-w-0 max-w-full justify-end">
             <ToolbarGroup className="min-w-0 flex-wrap justify-end gap-y-2">
-              <Button
-                size="sm"
-                onClick={(event) => openSubscription(null, event.currentTarget)}
-              >
-                <Rss aria-hidden="true" className="size-4" />
-                {t("home.subscriptionCard.add")}
-              </Button>
-              <Button
-                ref={addTriggerRef}
-                size="sm"
-                variant="outline"
-                onClick={() => setDialogState({ mode: "create" })}
-              >
-                <FilePlus2 className="size-4" aria-hidden="true" />
-                {t("panes.profiles.toolbar.add")}
-              </Button>
+              <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
+                <MenubarMenu>
+                  <MenubarTrigger asChild className="h-8">
+                    <Button ref={addTriggerRef} size="sm" type="button">
+                      <Plus className="size-4" aria-hidden="true" />
+                      {t("panes.profiles.toolbar.add")}
+                      <ChevronDown className="size-3" aria-hidden="true" />
+                    </Button>
+                  </MenubarTrigger>
+                  <MenubarContent onCloseAutoFocus={handleMenuClose}>
+                    <MenubarItem onSelect={() => {
+                      openingDialogRef.current = true;
+                      setDialogState({ mode: "create" });
+                    }}>
+                      <FilePlus2 aria-hidden="true" />
+                      {t("panes.profiles.toolbar.addNode")}
+                    </MenubarItem>
+                    <MenubarItem onSelect={() => {
+                      openingDialogRef.current = true;
+                      openSubscription(null, addTriggerRef.current ?? undefined);
+                    }}>
+                      <Rss aria-hidden="true" />
+                      {t("home.subscriptionCard.add")}
+                    </MenubarItem>
+                  </MenubarContent>
+                </MenubarMenu>
+              </Menubar>
+              <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
+                <MenubarMenu>
+                  <MenubarTrigger asChild className="h-8">
+                    <Button
+                      ref={importTriggerRef}
+                      disabled={directImportPending !== null}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      <Upload className="size-4" aria-hidden="true" />
+                      {t("panes.profiles.toolbar.import")}
+                      <ChevronDown className="size-3" aria-hidden="true" />
+                    </Button>
+                  </MenubarTrigger>
+                  <MenubarContent onCloseAutoFocus={handleMenuClose}>
+                    {IMPORT_METHODS.map(({ method, icon: Icon, labelKey }) => (
+                      <MenubarItem
+                        key={method}
+                        disabled={directImportPending !== null}
+                        onSelect={() => {
+                          if (method === "clipboard" || method === "qrScreen") {
+                            void handleDirectImport(method);
+                          } else {
+                            openingDialogRef.current = true;
+                            setImportMethod(method);
+                          }
+                        }}
+                      >
+                        <Icon aria-hidden="true" />
+                        {t(labelKey)}
+                      </MenubarItem>
+                    ))}
+                  </MenubarContent>
+                </MenubarMenu>
+              </Menubar>
               <SpeedtestButton
                 disabled={batchActionsDisabled}
                 label={t("panes.profiles.toolbar.bulkSpeedtest")}
@@ -135,44 +186,19 @@ export function ServerTableToolbar({
               </Menubar>
             </ToolbarGroup>
 
-            <ToolbarGroup className="min-w-0 flex-wrap justify-end gap-y-2">
-              <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
-                <MenubarMenu>
-                  <MenubarTrigger asChild className="h-8">
-                    <Button
-                      ref={importTriggerRef}
-                      size="sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      <Upload className="size-4" aria-hidden="true" />
-                      {t("panes.profiles.toolbar.import")}
-                      <ChevronDown className="size-3" aria-hidden="true" />
-                    </Button>
-                  </MenubarTrigger>
-                  <MenubarContent onCloseAutoFocus={handleMenuClose}>
-                    {IMPORT_METHODS.map(({ method, icon: Icon, labelKey }) => (
-                      <MenubarItem
-                        key={method}
-                        onSelect={() => {
-                          openingDialogRef.current = true;
-                          setImportMethod(method);
-                        }}
-                      >
-                        <Icon aria-hidden="true" />
-                        {t(labelKey)}
-                      </MenubarItem>
-                    ))}
-                  </MenubarContent>
-                </MenubarMenu>
-              </Menubar>
-            </ToolbarGroup>
+
           </Toolbar>
         </PageHeaderActions>
       </PageHeader>
 
+      {directImportPending ? (
+        <div className="flex items-center gap-2 border-b px-4 py-2 text-sm text-muted-foreground" role="status" aria-busy="true">
+          <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+          {directImportPending === "qrScreen" ? t("qr.scanningScreen") : directImportPending === "import" ? t("panes.profiles.import.importing") : t("panes.profiles.importDialog.reading")}
+        </div>
+      ) : null}
       {operationError ? (
-        <InlinePageError>{operationError}</InlinePageError>
+        <InlinePageError><span className="whitespace-pre-line">{operationError}</span></InlinePageError>
       ) : null}
       {profilesQuery.isError ? (
         <InlinePageError>
@@ -180,7 +206,7 @@ export function ServerTableToolbar({
         </InlinePageError>
       ) : null}
       {operationMessage ? (
-        <div className="border-b bg-connected/10 px-4 py-2 text-sm text-success">
+        <div role="status" className="border-b bg-connected/10 px-4 py-2 text-sm text-success">
           {operationMessage}
         </div>
       ) : null}

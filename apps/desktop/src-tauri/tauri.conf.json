@@ -84,10 +84,12 @@
     "linux": {
       "deb": {
         "section": "net",
-        "priority": "optional"
+        "priority": "optional",
+        "depends": ["libpipewire-0.3-0", "libxcb1", "libxcb-randr0", "libxrandr2", "libdbus-1-3", "libwayland-client0", "libegl1"]
       },
       "rpm": {
-        "release": "1"
+        "release": "1",
+        "depends": ["pipewire-libs", "libxcb", "libXrandr", "dbus-libs", "libwayland-client", "mesa-libEGL"]
       },
       "appimage": {
         "bundleMediaFramework": false

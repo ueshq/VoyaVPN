@@ -231,26 +231,26 @@ test("node menus defer actions until a method is chosen and restore keyboard foc
     .getByRole("tablist", { name: "Main sections" })
     .getByRole("tab", { name: "Nodes" })
     .click();
-  const add = page.getByRole("button", { name: "Add", exact: true });
+  const add = page.getByRole("menuitem", { name: "Add", exact: true });
   await add.focus();
   await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("menuitem", { name: "Add node", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(add).toBeFocused();
-  await page
-    .getByRole("button", { name: "Add subscription", exact: true })
-    .click();
+  await add.click();
+  await page.getByRole("menuitem", { name: "Add subscription", exact: true }).click();
   const subscriptions = page.getByRole("dialog", { name: "Add subscription" });
   await subscriptions
     .getByLabel("Remarks", { exact: true })
     .fill("Unsaved source");
   await page.keyboard.press("Escape");
   await expect(
-    page.getByRole("button", { name: "Add subscription" }),
+    add,
   ).toBeFocused();
-  await page
-    .getByRole("button", { name: "Add subscription", exact: true })
-    .click();
+  await add.click();
+  await page.getByRole("menuitem", { name: "Add subscription", exact: true }).click();
   await expect(
     subscriptions.getByLabel("Remarks", { exact: true }),
   ).toHaveValue("");
@@ -261,12 +261,10 @@ test("node menus defer actions until a method is chosen and restore keyboard foc
     exact: true,
   });
   for (const [method, action] of [
-    ["Import from clipboard", "Paste"],
     ["Import from text", null],
     ["Import from file", "File"],
     ["Scan QR image", "Scan image"],
     ["Scan clipboard image", "Clipboard image"],
-    ["Scan screen", "Screen"],
   ] as const) {
     await importTrigger.click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -279,11 +277,6 @@ test("node menus defer actions until a method is chosen and restore keyboard foc
     await page.getByRole("menuitem", { name: method, exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Import Nodes" });
     await expect(dialog).toBeVisible();
-    if (method === "Import from clipboard")
-      await page.screenshot({
-        animations: "disabled",
-        path: testInfo.outputPath("nodes-clipboard-dialog.png"),
-      });
     await expect(
       dialog.getByRole("textbox", { name: "Import payload" }),
     ).toHaveValue("");
@@ -319,7 +312,8 @@ test("adds and imports profiles, activates one, and connects through the fake ru
     .getByRole("tablist", { name: "Main sections" })
     .getByRole("tab", { name: "Nodes" })
     .click();
-  await page.getByRole("button", { exact: true, name: "Add" }).click();
+  await page.getByRole("menuitem", { exact: true, name: "Add" }).click();
+  await page.getByRole("menuitem", { name: "Add node", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
   await page.getByRole("combobox", { name: "Protocol" }).click();
   await page.getByRole("option", { name: /VLESS/ }).click();
@@ -671,7 +665,7 @@ test("routes the three IPC event channels into the shell", async ({ page }) => {
     .getByRole("tab", { name: "Nodes" })
     .click();
   await expect(
-    page.getByRole("button", { exact: true, name: "Add" }),
+    page.getByRole("menuitem", { exact: true, name: "Add" }),
   ).toBeVisible();
   const before = (await smokeCalls(page)).filter(
     (call) => call.command === "list_profiles",

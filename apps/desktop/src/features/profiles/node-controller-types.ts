@@ -5,6 +5,7 @@ import type { useNodeListData } from "./use-node-list-data";
 import type { useNodeEditor } from "./use-node-editor";
 import type { useNodeSubscriptions } from "./use-node-subscriptions";
 import type { useNodeExport } from "./use-node-export";
+import type { useNodeImport } from "./use-node-import";
 import type { useNodeSpeedtest } from "./use-node-speedtest";
 
 type NodeListData = ReturnType<typeof useNodeListData>;
@@ -70,7 +71,7 @@ export type NodeDialogsController = Pick<NodeOperation, "operationError"> &
   Pick<NodeExport, "setShareQrContent" | "shareQrContent"> &
   Pick<NodeShared, "t">;
 
-export type NodeToolbarController = Pick<NodeOperation, "operationError" | "operationMessage"> &
+export type NodeToolbarController = ReturnType<typeof useNodeImport> & Pick<NodeOperation, "operationError" | "operationMessage"> &
   Pick<NodeListData, "profiles" | "profilesQuery" | "rows" | "undecodableProfiles"> &
   Pick<NodeEditor, "addTriggerRef" | "importTriggerRef" | "setDialogState" | "setImportMethod"> &
   Pick<NodeSubscriptions, "openSubscription"> &

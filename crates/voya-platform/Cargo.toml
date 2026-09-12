@@ -17,6 +17,7 @@ tracing.workspace = true
 url = "2.5"
 voya-core.workspace = true
 zeroize.workspace = true
+xcap = "=0.9.8"
 
 [build-dependencies]
 cc = "1.2"

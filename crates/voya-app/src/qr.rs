@@ -1,6 +1,10 @@
 use qrcode::{render::svg, EcLevel, QrCode};
 use thiserror::Error;
-pub use voya_contracts::{QrCodeImage, QrScanResult, QrScanStatus};
+pub use voya_contracts::{QrCodeImage, QrScanFailureReason, QrScanResult, QrScanStatus};
+use voya_platform::screen_capture::{ScreenCaptureBatch, ScreenCaptureFailure};
+
+mod screen;
+pub use screen::ScreenQrCapture;
 
 const QR_MIN_DIMENSION: u32 = 256;
 
@@ -29,16 +33,67 @@ impl QrCodeManager {
     }
 
     #[must_use]
-    pub fn scan_screen(&self) -> QrScanResult {
+    pub fn decode_screens(&self, batch: ScreenCaptureBatch) -> QrScanResult {
+        let mut texts = Vec::new();
+        let mut seen = std::collections::BTreeSet::new();
+        let mut failure = batch.failure;
+        for frame in batch.frames {
+            if frame.width == 0
+                || frame.height == 0
+                || frame.width.checked_mul(frame.height) != Some(frame.luma.len())
+            {
+                failure = Some(ScreenCaptureFailure::CaptureFailed);
+                continue;
+            }
+            let mut image =
+                rqrr::PreparedImage::prepare_from_greyscale(frame.width, frame.height, |x, y| {
+                    frame.luma[y * frame.width + x]
+                });
+            for grid in image.detect_grids() {
+                if let Ok((_, text)) = grid.decode() {
+                    let text = text.trim();
+                    if !text.is_empty() && seen.insert(text.to_string()) {
+                        texts.push(text.to_string());
+                    }
+                }
+            }
+        }
+        QrScanResult {
+            status: if texts.is_empty() {
+                if failure.is_some() {
+                    QrScanStatus::Unavailable
+                } else {
+                    QrScanStatus::NotFound
+                }
+            } else {
+                QrScanStatus::Found
+            },
+            texts,
+            source: "screen".to_string(),
+            message: None,
+            failure_reason: failure.map(capture_failure_reason),
+        }
+    }
+
+    #[must_use]
+    pub fn scan_failure(&self, failure: ScreenCaptureFailure) -> QrScanResult {
         QrScanResult {
             status: QrScanStatus::Unavailable,
-            text: None,
+            texts: Vec::new(),
             source: "screen".to_string(),
-            message: Some(
-                "Screen QR capture is not available in this build; use image or clipboard import."
-                    .to_string(),
-            ),
+            message: None,
+            failure_reason: Some(capture_failure_reason(failure)),
         }
+    }
+}
+
+fn capture_failure_reason(failure: ScreenCaptureFailure) -> QrScanFailureReason {
+    match failure {
+        ScreenCaptureFailure::PermissionDenied => QrScanFailureReason::PermissionDenied,
+        ScreenCaptureFailure::Unsupported => QrScanFailureReason::Unsupported,
+        ScreenCaptureFailure::CaptureFailed => QrScanFailureReason::CaptureFailed,
+        ScreenCaptureFailure::Timeout => QrScanFailureReason::Timeout,
+        ScreenCaptureFailure::Busy => QrScanFailureReason::Busy,
     }
 }
 
@@ -90,12 +145,102 @@ mod qr_tests {
         assert!(matches!(error, QrCodeError::EmptyContent));
     }
 
-    #[test]
-    fn screen_scan_reports_unavailable_without_failing_import_paths() {
-        let result = QrCodeManager.scan_screen();
+    fn qr_frame(payloads: &[&str]) -> voya_platform::screen_capture::ScreenFrame {
+        let codes: Vec<_> = payloads
+            .iter()
+            .map(|text| QrCode::new(text.as_bytes()).expect("QR"))
+            .collect();
+        let scale = 5;
+        let side = (codes.iter().map(QrCode::width).max().unwrap_or(21) + 8) * scale;
+        let width = side * codes.len().max(1);
+        let mut frame = voya_platform::screen_capture::ScreenFrame {
+            width,
+            height: side,
+            luma: vec![255; width * side],
+        };
+        for (index, code) in codes.iter().enumerate() {
+            for y in 0..code.width() {
+                for x in 0..code.width() {
+                    if code[(x, y)] == qrcode::Color::Dark {
+                        for dy in 0..scale {
+                            for dx in 0..scale {
+                                frame.luma[((y + 4) * scale + dy) * width
+                                    + index * side
+                                    + (x + 4) * scale
+                                    + dx] = 0;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        frame
+    }
 
+    #[test]
+    fn decodes_all_codes_across_displays_and_deduplicates_payloads() {
+        let a = "vless://one@example.test:443";
+        let b = "trojan://two@example.test:443";
+        let result = QrCodeManager.decode_screens(ScreenCaptureBatch {
+            frames: vec![qr_frame(&[a, b]), qr_frame(&[a])],
+            failure: None,
+        });
+        assert_eq!(result.status, QrScanStatus::Found);
+        assert_eq!(result.texts.len(), 2);
+        assert!(result.texts.contains(&a.to_string()));
+        assert!(result.texts.contains(&b.to_string()));
+        assert_eq!(result.failure_reason, None);
+    }
+
+    #[test]
+    fn blank_screen_and_partial_capture_have_distinct_results() {
+        let blank = QrCodeManager.decode_screens(ScreenCaptureBatch {
+            frames: vec![qr_frame(&[])],
+            failure: None,
+        });
+        assert_eq!(blank.status, QrScanStatus::NotFound);
+        assert!(blank.texts.is_empty());
+        let partial = QrCodeManager.decode_screens(ScreenCaptureBatch {
+            frames: vec![qr_frame(&["vless://node@example.test:443"])],
+            failure: Some(ScreenCaptureFailure::CaptureFailed),
+        });
+        assert_eq!(partial.status, QrScanStatus::Found);
+        assert_eq!(
+            partial.failure_reason,
+            Some(QrScanFailureReason::CaptureFailed)
+        );
+    }
+
+    #[test]
+    fn malformed_frame_and_native_failures_are_typed() {
+        let result = QrCodeManager.decode_screens(ScreenCaptureBatch {
+            frames: vec![voya_platform::screen_capture::ScreenFrame {
+                width: 10,
+                height: 10,
+                luma: vec![0],
+            }],
+            failure: None,
+        });
         assert_eq!(result.status, QrScanStatus::Unavailable);
-        assert_eq!(result.source, "screen");
-        assert!(result.text.is_none());
+        for (failure, reason) in [
+            (
+                ScreenCaptureFailure::PermissionDenied,
+                QrScanFailureReason::PermissionDenied,
+            ),
+            (
+                ScreenCaptureFailure::Unsupported,
+                QrScanFailureReason::Unsupported,
+            ),
+            (
+                ScreenCaptureFailure::CaptureFailed,
+                QrScanFailureReason::CaptureFailed,
+            ),
+            (ScreenCaptureFailure::Timeout, QrScanFailureReason::Timeout),
+            (ScreenCaptureFailure::Busy, QrScanFailureReason::Busy),
+        ] {
+            let result = QrCodeManager.scan_failure(failure);
+            assert_eq!(result.failure_reason, Some(reason));
+            assert!(result.texts.is_empty());
+        }
     }
 }

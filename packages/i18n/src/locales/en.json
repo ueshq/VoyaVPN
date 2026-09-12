@@ -346,7 +346,8 @@
           "skipped": "{{count}} skipped.",
           "target": "Target: {{target}}.",
           "updated": "{{count}} updated."
-        }
+        },
+        "importing": "Importing nodes…"
       },
       "importMethods": {
         "text": "Import from text",
@@ -362,7 +363,6 @@
         "fileAria": "Import payload file",
         "manual": "Manual import",
         "mode": "Mode",
-        "paste": "Paste",
         "payload": "Import payload",
         "subscriptionTarget": "Subscription target",
         "target": "Target",
@@ -409,7 +409,8 @@
         "edit": "Edit",
         "import": "Import",
         "rows": "Nodes: {{rows}}",
-        "subscriptions": "Subscriptions"
+        "subscriptions": "Subscriptions",
+        "addNode": "Add node"
       },
       "undecodable": "{{count}} stored node(s) could not be read by this version and are hidden. They were most likely written by a newer build; updating VoyaVPN should show them again.",
       "untitled": "Untitled",
@@ -559,13 +560,12 @@
     "scan": "Scan",
     "scanClipboardImage": "Clipboard image",
     "scanImage": "Scan image",
-    "scanScreen": "Screen",
-    "screenCaptureUnavailable": "Screen capture is unavailable in this WebView.",
-    "screenFrameUnavailable": "Screen capture did not produce a video frame.",
-    "screenFrameUnencodable": "Unable to encode captured screen frame.",
-    "screenFrameUnreadable": "Unable to read captured screen frame.",
-    "screenStreamUnavailable": "Unable to load captured screen stream.",
-    "screenUnavailable": "Screen QR scanning is unavailable on this platform or permission state."
+    "screenUnavailable": "Screen QR scanning is unavailable on this platform or permission state.",
+    "scanningScreen": "Scanning all displays…",
+    "screenPermissionDenied": "Allow VoyaVPN to record the screen in System Settings, then try again.",
+    "screenCaptureFailed": "Some displays could not be captured. Check screen capture permissions and try again.",
+    "screenTimeout": "Screen capture timed out. Please try again.",
+    "screenBusy": "A screen capture is still running. Please wait and try again."
   },
   "settings": {
     "core": {

@@ -17,6 +17,7 @@ import type {
   ProxyConnectionsSnapshot,
   ProxyMonitorStatus,
   QrCodeImage,
+  QrScanResult,
   ResourceUpdateFile,
   Routing_Serialize,
   RoutingRule,
@@ -735,6 +736,11 @@ export async function installTauriSmokeMock(
             stale: true,
             state: "stopped",
           } satisfies ProxyMonitorStatus);
+        case "scan_screen_qr":
+          return Promise.resolve({
+            texts: ["vless://00000000-0000-0000-0000-000000000001@screen.example.test:443#Screen%20node"],
+            status: "found", source: "screen", message: null, failureReason: null,
+          } satisfies QrScanResult);
         case "generate_qr_code":
           return Promise.resolve({
             mimeType: "image/svg+xml",

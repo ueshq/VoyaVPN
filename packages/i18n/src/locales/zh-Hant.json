@@ -346,7 +346,8 @@
           "skipped": "已略過 {{count}} 個。",
           "target": "目標：{{target}}。",
           "updated": "已更新 {{count}} 個。"
-        }
+        },
+        "importing": "正在匯入節點…"
       },
       "importMethods": {
         "text": "從文字匯入",
@@ -362,7 +363,6 @@
         "fileAria": "節點配置文件",
         "manual": "手動節點",
         "mode": "導入方式",
-        "paste": "粘貼",
         "payload": "節點配置內容",
         "subscriptionTarget": "訂閱來源",
         "target": "導入位置",
@@ -409,7 +409,8 @@
         "edit": "編輯",
         "import": "匯入",
         "rows": "{{rows}} 筆",
-        "subscriptions": "訂閱"
+        "subscriptions": "訂閱",
+        "addNode": "新增節點"
       },
       "undecodable": "有 {{count}} 個已儲存的節點無法由目前版本讀取，已被隱藏。它們很可能由較新的版本寫入；升級 VoyaVPN 後應可重新顯示。",
       "untitled": "未命名",
@@ -559,13 +560,12 @@
     "scan": "掃描",
     "scanClipboardImage": "剪貼簿圖片",
     "scanImage": "掃描圖片",
-    "scanScreen": "螢幕",
-    "screenCaptureUnavailable": "此 WebView 不支援螢幕擷取。",
-    "screenFrameUnavailable": "螢幕擷取未產生視訊畫格。",
-    "screenFrameUnencodable": "無法編碼擷取的螢幕畫面。",
-    "screenFrameUnreadable": "無法讀取擷取的螢幕畫面。",
-    "screenStreamUnavailable": "無法載入擷取的螢幕串流。",
-    "screenUnavailable": "目前平臺或權限狀態不支援螢幕 QR Code 掃描。"
+    "screenUnavailable": "目前平臺或權限狀態不支援螢幕 QR Code 掃描。",
+    "scanningScreen": "正在掃描所有顯示器…",
+    "screenPermissionDenied": "請在系統設定中允許 VoyaVPN 錄製螢幕後重試。",
+    "screenCaptureFailed": "部分顯示器截圖失敗，請檢查螢幕錄製權限後重試。",
+    "screenTimeout": "螢幕截圖逾時，請重試。",
+    "screenBusy": "上一次螢幕截圖仍在進行，請稍後重試。"
   },
   "settings": {
     "core": {

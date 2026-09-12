@@ -58,13 +58,13 @@ export function ServerTableDialogs({
         profile={dialogState?.mode === "edit" ? dialogState.profile : null}
         saveError={saveError}
       />
-      <ImportProfilesDialog
+      {importMethod !== null ? <ImportProfilesDialog
         onImported={handleDialogImport}
-        method={importMethod ?? "text"}
+        method={importMethod}
         onCloseFocus={() => controller.importTriggerRef.current?.focus()}
         onOpenChange={(open) => !open && setImportMethod(null)}
-        open={importMethod !== null}
-      />
+        open
+      /> : null}
       <SubscriptionsDialog
         subscription={controller.editingSubscription}
         onCloseFocus={() =>

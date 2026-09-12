@@ -676,11 +676,15 @@ export type QrCodeImage = {
 	svg: string,
 };
 
+export type QrScanFailureReason = "permissionDenied" | "unsupported" | "captureFailed" | "timeout" | "busy";
+
 export type QrScanResult = {
 	status: QrScanStatus,
-	text: string | null,
+	texts: string[],
 	source: string,
 	message: string | null,
+	/**  Also set on a successful scan when some displays could not be captured. */
+	failureReason: QrScanFailureReason | null,
 };
 
 export type QrScanStatus = "found" | "notFound" | "unavailable";

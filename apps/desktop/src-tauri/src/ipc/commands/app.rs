@@ -127,8 +127,8 @@ pub fn generate_qr_code(content: String) -> Result<QrCodeImage, AppError> {
 // blocking operation that would otherwise freeze the window.
 #[tauri::command]
 #[specta::specta]
-pub async fn scan_screen_qr() -> Result<QrScanResult, AppError> {
-    run_blocking("screen QR scan", || QrCodeManager.scan_screen()).await
+pub async fn scan_screen_qr(window: tauri::WebviewWindow) -> Result<QrScanResult, AppError> {
+    screen_qr::scan(window).await
 }
 
 #[tauri::command]

@@ -78,7 +78,9 @@ pub fn set_window_acrylic(window: tauri::WebviewWindow, dark: bool) -> Result<()
                     .color(color)
                     .build(),
             )
-            .map_err(|error| AppError::State(error.to_string()))?;
+            .map_err(|error| {
+                AppError::internal(voya_contracts::AppErrorSubsystem::App, error.to_string())
+            })?;
     }
     Ok(())
 }

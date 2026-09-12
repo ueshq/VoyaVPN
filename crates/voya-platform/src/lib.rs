@@ -11,6 +11,7 @@ pub mod filesystem;
 pub mod paths;
 pub mod privilege;
 pub mod process;
+pub mod screen_capture;
 pub mod sysproxy;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;

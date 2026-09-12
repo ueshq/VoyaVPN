@@ -13,18 +13,16 @@ import { changeLocale } from "@voya/i18n";
 import type { ImportProfilesResult } from "@/ipc/bindings";
 
 import { ImportProfilesDialog } from "./import-profiles-dialog";
-import type { ImportMethod } from "./import-methods";
+import type { DialogImportMethod } from "./import-methods";
 import { QrScanError } from "./qr-errors";
 
 const ipcMocks = vi.hoisted(() => ({
   importProfilesFromText: vi.fn(),
   listSubscriptions: vi.fn(),
-  scanScreenQr: vi.fn(),
 }));
 
 const scannerMocks = vi.hoisted(() => ({
   readClipboardImageBlob: vi.fn(),
-  scanDisplayMediaQr: vi.fn(),
   scanQrBlob: vi.fn(),
 }));
 
@@ -42,7 +40,7 @@ const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(
 );
 
 function renderDialog(
-  method: ImportMethod = "text",
+  method: DialogImportMethod = "text",
   onImported = vi.fn(),
   onOpenChange = vi.fn(),
 ) {
@@ -139,38 +137,6 @@ describe("ImportProfilesDialog import results", () => {
 });
 
 describe("ImportProfilesDialog sources and lifecycle", () => {
-  it("previews clipboard text, keeps edits on submission failure and retries", async () => {
-    const user = userEvent.setup();
-    const readText = vi.fn().mockResolvedValue("  vless://clipboard  ");
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { readText },
-    });
-    ipcMocks.importProfilesFromText.mockRejectedValueOnce(
-      new Error("Import failed"),
-    );
-    renderDialog("clipboard");
-    expect(readText).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Paste" }));
-    expect(screen.getByLabelText("Import payload")).toHaveValue(
-      "vless://clipboard",
-    );
-    expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByLabelText("Import payload"), {
-      target: { value: "vless://edited" },
-    });
-    await user.click(screen.getByRole("button", { name: "Import" }));
-    expect(await screen.findByText("Import failed")).toBeVisible();
-    expect(screen.getByLabelText("Import payload")).toHaveValue(
-      "vless://edited",
-    );
-    await user.click(screen.getByRole("button", { name: "Import" }));
-    expect(ipcMocks.importProfilesFromText).toHaveBeenLastCalledWith(
-      "vless://edited",
-      null,
-    );
-    expect(ipcMocks.importProfilesFromText).toHaveBeenCalledTimes(2);
-  });
 
   it("reads a file into the preview, allows retrying the same file and importing only to manual nodes", async () => {
     const user = userEvent.setup();
@@ -200,35 +166,6 @@ describe("ImportProfilesDialog sources and lifecycle", () => {
     );
   });
 
-  it("disables duplicate reads and ignores a clipboard result after closing and reopening", async () => {
-    const user = userEvent.setup();
-    let finishRead!: (value: string) => void;
-    const readText = vi.fn().mockReturnValue(
-      new Promise<string>((resolve) => {
-        finishRead = resolve;
-      }),
-    );
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { readText },
-    });
-    const { setOpen } = renderDialog("clipboard");
-    await user.click(screen.getByRole("button", { name: "Paste" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Reading content…");
-    expect(screen.getByRole("button", { name: "Paste" })).toBeDisabled();
-    expect(screen.getByLabelText("Import payload")).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "Paste" }));
-    expect(readText).toHaveBeenCalledOnce();
-    setOpen(false);
-    setOpen(true);
-    fireEvent.change(screen.getByLabelText("Import payload"), {
-      target: { value: "new draft" },
-    });
-    await act(async () => finishRead("old clipboard"));
-    expect(screen.getByLabelText("Import payload")).toHaveValue("new draft");
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-  });
 
   it("clears the previous preview, target and error on each opening", async () => {
     const user = userEvent.setup();
@@ -279,29 +216,7 @@ describe("ImportProfilesDialog sources and lifecycle", () => {
     );
   });
 
-  it("does not start fallback screen capture after the scan window closes", async () => {
-    const user = userEvent.setup();
-    let finishScan!: (value: unknown) => void;
-    ipcMocks.scanScreenQr.mockReturnValue(
-      new Promise((resolve) => {
-        finishScan = resolve;
-      }),
-    );
-    const { setOpen } = renderDialog("qrScreen");
-    await user.click(screen.getByRole("button", { name: "Screen" }));
-    setOpen(false);
-    setOpen(true);
-    await act(async () =>
-      finishScan({
-        status: "notFound",
-        text: null,
-        message: null,
-        source: "native",
-      }),
-    );
-    expect(scannerMocks.scanDisplayMediaQr).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("Import payload")).toHaveValue("");
-  });
+
 });
 
 describe("ImportProfilesDialog QR scanning", () => {
@@ -355,74 +270,8 @@ describe("ImportProfilesDialog QR scanning", () => {
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
   });
 
-  it("uses a successful backend screen scan without opening display capture", async () => {
-    ipcMocks.scanScreenQr.mockResolvedValue({
-      message: null,
-      source: "native",
-      status: "found",
-      text: "vmess://screen.example",
-    });
-    renderDialog("qrScreen");
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Screen" }),
-    );
 
-    await waitFor(() =>
-      expect(screen.getByLabelText("Import payload")).toHaveValue(
-        "vmess://screen.example",
-      ),
-    );
-    expect(scannerMocks.scanDisplayMediaQr).not.toHaveBeenCalled();
-    expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-  });
-
-  it("falls back to display capture when the backend finds no QR code", async () => {
-    ipcMocks.scanScreenQr.mockResolvedValue({
-      message: null,
-      source: "native",
-      status: "notFound",
-      text: null,
-    });
-    scannerMocks.scanDisplayMediaQr.mockResolvedValue("ss://fallback.example");
-    renderDialog("qrScreen");
-
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Screen" }),
-    );
-
-    await waitFor(() =>
-      expect(screen.getByLabelText("Import payload")).toHaveValue(
-        "ss://fallback.example",
-      ),
-    );
-    expect(scannerMocks.scanDisplayMediaQr).toHaveBeenCalledOnce();
-    expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-  });
-
-  it("reports both native and WebView screen scanning as unavailable", async () => {
-    ipcMocks.scanScreenQr.mockResolvedValue({
-      message: null,
-      source: "native",
-      status: "unavailable",
-      text: null,
-    });
-    scannerMocks.scanDisplayMediaQr.mockRejectedValue(
-      new Error("Screen capture is unavailable in this WebView."),
-    );
-    renderDialog("qrScreen");
-
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Screen" }),
-    );
-
-    expect(
-      await screen.findByText(
-        /Screen QR scanning is unavailable.*Screen capture is unavailable/s,
-      ),
-    ).toBeInTheDocument();
-    expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-  });
 
   it("shows the localized no-QR result without changing the payload", async () => {
     scannerMocks.scanQrBlob.mockRejectedValue(new QrScanError("notFound"));

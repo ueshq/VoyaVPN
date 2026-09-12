@@ -5,7 +5,7 @@ import type { ImportProfilesResult, Profile, ProfileListEntry } from "@/ipc/bind
 import { profilesQueryKey } from "@/ipc/query-keys";
 import { useProfileActivation } from "@/features/home/use-profile-activation";
 import { formatImportSummary } from "./server-table-actions";
-import type { ImportMethod } from "./import-methods";
+import type { DialogImportMethod } from "./import-methods";
 import type { TranslationFunction } from "@voya/i18n";
 import type { NodeOperation } from "./use-node-operation";
 type DialogState =
@@ -19,7 +19,7 @@ export function useNodeEditor(
   t: TranslationFunction,
 ) {
   const [dialogState, setDialogStateInternal] = useState<DialogState>(null);
-  const [importMethod, setImportMethod] = useState<ImportMethod | null>(null);
+  const [importMethod, setImportMethod] = useState<DialogImportMethod | null>(null);
   const profileDialogTriggerRef = useRef<HTMLElement | null>(null);
   const addTriggerRef = useRef<HTMLButtonElement>(null);
   const importTriggerRef = useRef<HTMLButtonElement>(null);
@@ -81,7 +81,8 @@ export function useNodeEditor(
     }
   }
 
-  async function handleDialogImport(result: ImportProfilesResult) {
+  async function handleDialogImport(result: ImportProfilesResult, isActive = () => true) {
+    if (!isActive()) return;
     setOperationError(null);
     setOperationMessage(formatImportSummary(result, t));
     const importedIndexIds = result.importedProfileIds;
@@ -90,7 +91,7 @@ export function useNodeEditor(
       // Refresh the complete list after import. `import_profiles_from_text` still emits profiles +
       // subscriptions + subscriptionMetadata for every other cache.
       const refreshedProfiles = await listProfiles(null, null);
-      queryClient.setQueryData(profilesQueryKey(""), refreshedProfiles);
+      if (isActive()) queryClient.setQueryData(profilesQueryKey(""), refreshedProfiles);
     }
   }
 

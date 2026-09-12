@@ -346,7 +346,8 @@
           "skipped": "已跳过 {{count}} 个。",
           "target": "目标：{{target}}。",
           "updated": "已更新 {{count}} 个。"
-        }
+        },
+        "importing": "正在导入节点…"
       },
       "importMethods": {
         "text": "从文本导入",
@@ -362,7 +363,6 @@
         "fileAria": "节点配置文件",
         "manual": "手动节点",
         "mode": "导入方式",
-        "paste": "粘贴",
         "payload": "节点配置内容",
         "subscriptionTarget": "订阅来源",
         "target": "导入位置",
@@ -402,14 +402,15 @@
       },
       "title": "节点",
       "toolbar": {
-        "add": "新增",
+        "add": "添加",
         "bulkExport": "导出",
         "bulkSpeedtest": "全节点测速",
         "delete": "删除",
         "edit": "编辑",
         "import": "导入",
         "rows": "{{rows}} 条",
-        "subscriptions": "订阅"
+        "subscriptions": "订阅",
+        "addNode": "添加节点"
       },
       "undecodable": "有 {{count}} 个已保存的节点无法被当前版本读取，已被隐藏。它们很可能由更新的版本写入；升级 VoyaVPN 后应能重新显示。",
       "untitled": "未命名",
@@ -559,13 +560,12 @@
     "scan": "扫描",
     "scanClipboardImage": "剪贴板图片",
     "scanImage": "扫描图片",
-    "scanScreen": "屏幕",
-    "screenCaptureUnavailable": "此 WebView 不支持屏幕捕获。",
-    "screenFrameUnavailable": "屏幕捕获未生成视频帧。",
-    "screenFrameUnencodable": "无法编码捕获的屏幕画面。",
-    "screenFrameUnreadable": "无法读取捕获的屏幕画面。",
-    "screenStreamUnavailable": "无法加载捕获的屏幕流。",
-    "screenUnavailable": "当前平台或权限状态不支持屏幕二维码扫描。"
+    "screenUnavailable": "当前平台或权限状态不支持屏幕二维码扫描。",
+    "scanningScreen": "正在扫描所有显示器…",
+    "screenPermissionDenied": "请在系统设置中允许 VoyaVPN 录制屏幕后重试。",
+    "screenCaptureFailed": "部分显示器截图失败，请检查屏幕录制权限后重试。",
+    "screenTimeout": "屏幕截图超时，请重试。",
+    "screenBusy": "上一次屏幕截图仍在进行，请稍后重试。"
   },
   "settings": {
     "core": {

@@ -133,13 +133,11 @@ for (const layout of ["none", "macos", "windows"] as const) {
     }
     await page.emulateMedia({ colorScheme: "dark" });
     await expect(page.locator("html")).toHaveClass(/dark/);
-    expect(
-      await page
-        .locator(".home-headline")
-        .evaluate((el) => getComputedStyle(el).color),
-    ).toBe(
-      await page.locator("body").evaluate((el) => getComputedStyle(el).color),
-    );
+    // The theme effect can run between separate evaluate calls. Compare both
+    // colors in one browser frame and wait for the theme to settle.
+    await expect.poll(() => page.locator(".home-headline").evaluate((el) =>
+      getComputedStyle(el).color === getComputedStyle(document.body).color,
+    )).toBe(true);
     await page.screenshot({ path: testInfo.outputPath("home-dark-960.png") });
     await page.getByRole("button", { name: "收起侧栏" }).click();
     await expect(

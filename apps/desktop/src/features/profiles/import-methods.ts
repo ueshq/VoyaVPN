@@ -12,3 +12,6 @@ export const IMPORT_METHODS = [
 ] as const satisfies readonly { method: string; icon: LucideIcon; labelKey: TranslationKey }[];
 
 export type ImportMethod = (typeof IMPORT_METHODS)[number]["method"];
+
+export type DirectImportMethod = Extract<ImportMethod, "clipboard" | "qrScreen">;
+export type DialogImportMethod = Exclude<ImportMethod, DirectImportMethod>;

@@ -1,3 +1,4 @@
+mod screen_qr;
 use std::collections::BTreeSet;
 
 use tauri_plugin_updater::UpdaterExt;

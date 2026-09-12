@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   readClipboardImageBlob,
-  scanDisplayMediaQr,
   scanQrBlob,
 } from "./qr-scanner";
 
@@ -17,7 +16,6 @@ vi.mock("@zxing/browser", () => ({
 }));
 
 const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
-const originalMediaDevicesDescriptor = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
 const originalCreateObjectUrlDescriptor = Object.getOwnPropertyDescriptor(URL, "createObjectURL");
 const originalRevokeObjectUrlDescriptor = Object.getOwnPropertyDescriptor(URL, "revokeObjectURL");
 
@@ -36,7 +34,6 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   restoreProperty(navigator, "clipboard", originalClipboardDescriptor);
-  restoreProperty(navigator, "mediaDevices", originalMediaDevicesDescriptor);
   restoreProperty(URL, "createObjectURL", originalCreateObjectUrlDescriptor);
   restoreProperty(URL, "revokeObjectURL", originalRevokeObjectUrlDescriptor);
 });
@@ -79,59 +76,7 @@ describe("profile QR scanner", () => {
     expect(getType).toHaveBeenCalledWith("image/png");
   });
 
-  it("captures a display frame and releases its stream after decoding", async () => {
-    vi.useFakeTimers();
-    const capturedBlob = new Blob(["screen-qr"], { type: "image/png" });
-    const stop = vi.fn();
-    const stream = { getTracks: () => [{ stop }] } as unknown as MediaStream;
-    const getDisplayMedia = vi.fn().mockResolvedValue(stream);
-    Object.defineProperty(navigator, "mediaDevices", {
-      configurable: true,
-      value: { getDisplayMedia },
-    });
 
-    const video = document.createElement("video");
-    Object.defineProperties(video, {
-      pause: { configurable: true, value: vi.fn() },
-      play: { configurable: true, value: vi.fn().mockResolvedValue(undefined) },
-      srcObject: { configurable: true, value: null, writable: true },
-      videoHeight: { configurable: true, value: 720 },
-      videoWidth: { configurable: true, value: 1280 },
-    });
-    const canvas = document.createElement("canvas");
-    const drawImage = vi.fn();
-    Object.defineProperties(canvas, {
-      getContext: { configurable: true, value: vi.fn(() => ({ drawImage })) },
-      toBlob: {
-        configurable: true,
-        value: vi.fn((callback: BlobCallback) => callback(capturedBlob)),
-      },
-    });
-    const createElement = document.createElement.bind(document);
-    vi.spyOn(document, "createElement").mockImplementation(
-      ((tagName: string, options?: ElementCreationOptions) => {
-        if (tagName === "video") {
-          return video;
-        }
-        if (tagName === "canvas") {
-          return canvas;
-        }
-        return createElement(tagName, options);
-      }) as typeof document.createElement,
-    );
-    zxingMocks.decodeFromImageUrl.mockResolvedValue({ getText: () => "ss://screen" });
-
-    const result = scanDisplayMediaQr();
-    await vi.runAllTimersAsync();
-
-    await expect(result).resolves.toBe("ss://screen");
-    expect(getDisplayMedia).toHaveBeenCalledWith({ audio: false, video: true });
-    expect(drawImage).toHaveBeenCalledWith(video, 0, 0, 1280, 720);
-    expect(stop).toHaveBeenCalledOnce();
-    expect(video.pause).toHaveBeenCalledOnce();
-    expect(video.srcObject).toBeNull();
-    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:voya-qr");
-  });
 });
 
 function restoreProperty(

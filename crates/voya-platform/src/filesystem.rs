@@ -136,8 +136,10 @@ pub fn stage_private_files(work_dir: &Path, files: &[(&Path, &str)]) -> io::Resu
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    #[cfg(unix)]
     use super::*;
 
     #[cfg(unix)]

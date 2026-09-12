@@ -261,7 +261,8 @@ describe("ProfilesScreen", () => {
       message: null,
       source: "screen",
       status: "unavailable",
-      text: null,
+      texts: [],
+      failureReason: null,
     });
     ipcMocks.saveProfile.mockImplementation(async (profile: Profile) =>
       makeProfile(99, profile),
@@ -893,11 +894,11 @@ describe("ProfilesScreen", () => {
     expect(await screen.findByText("profile list failed")).toBeInTheDocument();
   });
 
-  it("offers subscription and node creation directly alongside import", async () => {
+  it("offers subscription and node creation in an Add menu before Import", async () => {
     mockProfileList([]);
     renderProfiles();
     const toolbar = within(screen.getByRole("toolbar"));
-    expect(toolbar.getByRole("button", { name: "Add" })).toBeVisible();
+    expect(toolbar.getByRole("menuitem", { name: "Add" })).toBeVisible();
     expect(toolbar.getByRole("menuitem", { name: "Import" })).toBeVisible();
     for (const name of ["Import from clipboard", "Subscriptions"]) {
       expect(toolbar.queryByRole("button", { name })).not.toBeInTheDocument();
@@ -914,9 +915,8 @@ describe("ProfilesScreen", () => {
     expect(
       screen.queryByRole("menuitem", { name: "Update subs" }),
     ).not.toBeInTheDocument();
-    await userEvent.click(
-      toolbar.getByRole("button", { name: "Add subscription" }),
-    );
+    await userEvent.click(toolbar.getByRole("menuitem", { name: "Add" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Add subscription" }));
     expect(
       await screen.findByRole("dialog", { name: "Add subscription" }),
     ).toBeVisible();
@@ -940,12 +940,10 @@ describe("ProfilesScreen", () => {
   });
 
   it.each([
-    ["Import from clipboard", "Paste"],
     ["Import from text", null],
     ["Import from file", "File"],
     ["Scan QR image", "Scan image"],
     ["Scan clipboard image", "Clipboard image"],
-    ["Scan screen", "Screen"],
   ])(
     "opens only the selected import source: %s",
     async (method, sourceButton) => {
@@ -987,11 +985,13 @@ describe("ProfilesScreen", () => {
     },
   );
 
-  it("opens the node editor directly with the keyboard and restores focus", async () => {
+  it("opens the node editor from the Add menu with the keyboard and restores focus", async () => {
     mockProfileList([]);
     renderProfiles();
-    const trigger = screen.getByRole("button", { name: "Add" });
+    const trigger = screen.getByRole("menuitem", { name: "Add" });
     trigger.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await userEvent.keyboard("{Enter}");
     expect(
       await screen.findByRole("dialog", { name: "Add node" }),
@@ -1004,14 +1004,16 @@ describe("ProfilesScreen", () => {
     mockProfileList([]);
     ipcMocks.listSubscriptions.mockResolvedValue([makeSubscription()]);
     renderProfiles();
-    const trigger = screen.getByRole("button", { name: "Add subscription" });
+    const trigger = screen.getByRole("menuitem", { name: "Add" });
     await userEvent.click(trigger);
+    await userEvent.click(screen.getByRole("menuitem", { name: "Add subscription" }));
     fireEvent.change(screen.getByLabelText("Remarks"), {
       target: { value: "Draft" },
     });
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(trigger).toHaveFocus());
     await userEvent.click(trigger);
+    await userEvent.click(screen.getByRole("menuitem", { name: "Add subscription" }));
     expect(await screen.findByLabelText("Remarks")).toHaveValue("");
     expect(screen.getByLabelText("URL")).toHaveValue("");
     expect(
@@ -1065,7 +1067,8 @@ describe("ProfilesScreen", () => {
       message: null,
       source: "native",
       status: "found",
-      text: "vless://uuid@example.test:443#Scanned",
+      texts: ["vless://uuid@example.test:443#Scanned"],
+      failureReason: null,
     });
     ipcMocks.importProfilesFromText.mockResolvedValue(
       makeImportResult({
@@ -1078,15 +1081,9 @@ describe("ProfilesScreen", () => {
     renderProfiles();
 
     await openImport("Scan screen");
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Screen" }),
-    );
-    expect(await screen.findByLabelText("Import payload")).toHaveValue(
-      "vless://uuid@example.test:443#Scanned",
-    );
-    expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-
-    await userEvent.click(screen.getByRole("button", { name: "Import" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(ipcMocks.scanScreenQr).toHaveBeenCalledOnce();
+    expect(ipcMocks.importProfilesFromText).toHaveBeenCalledWith("vless://uuid@example.test:443#Scanned", null);
 
     expect(await screen.findByText("Scanned node")).toBeInTheDocument();
     expect(screen.getByTestId("server-row")).toHaveAttribute(
@@ -1096,7 +1093,7 @@ describe("ProfilesScreen", () => {
     expect(screen.getByText("Imported 1 node(s).")).toBeInTheDocument();
   });
 
-  it("previews clipboard text before importing and prevents duplicate submission", async () => {
+  it("imports clipboard text directly and prevents duplicate submission", async () => {
     const clipboardText = "vless://uuid@example.test:443#US";
     const readText = mockClipboardReadText(`\n${clipboardText}\n`);
     const importedProfile = makeProfile(1, {
@@ -1130,10 +1127,8 @@ describe("ProfilesScreen", () => {
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
 
     await openImport("Import from clipboard");
-    await userEvent.click(screen.getByRole("button", { name: "Paste" }));
-    expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-    const importButton = screen.getByRole("button", { name: "Import" });
-    await userEvent.click(importButton);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const importButton = screen.getByRole("menuitem", { name: "Import" });
 
     await waitFor(() => expect(readText).toHaveBeenCalledTimes(1));
     await waitFor(() =>
@@ -1170,7 +1165,6 @@ describe("ProfilesScreen", () => {
     renderProfiles();
 
     await openImport("Import from clipboard");
-    await userEvent.click(screen.getByRole("button", { name: "Paste" }));
 
     await waitFor(() => expect(readText).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Clipboard is empty.")).toBeInTheDocument();
@@ -1184,7 +1178,6 @@ describe("ProfilesScreen", () => {
     renderProfiles();
 
     await openImport("Import from clipboard");
-    await userEvent.click(screen.getByRole("button", { name: "Paste" }));
 
     expect(
       await screen.findByText(
@@ -1584,7 +1577,8 @@ describe("ProfilesScreen", () => {
     await withLocale("zh-Hans", async () => {
       renderProfiles();
 
-      await userEvent.click(screen.getByRole("button", { name: "新增" }));
+      await userEvent.click(screen.getByRole("menuitem", { name: "添加" }));
+      await userEvent.click(screen.getByRole("menuitem", { name: "添加节点" }));
       const dialog = await screen.findByRole("dialog", { name: "新增节点" });
       const remarks = within(dialog).getByLabelText("备注");
       const address = within(dialog).getByLabelText("地址");
@@ -1602,7 +1596,8 @@ describe("ProfilesScreen", () => {
     await withLocale("zh-Hans", async () => {
       renderProfiles();
 
-      await userEvent.click(screen.getByRole("button", { name: "新增" }));
+      await userEvent.click(screen.getByRole("menuitem", { name: "添加" }));
+      await userEvent.click(screen.getByRole("menuitem", { name: "添加节点" }));
       fireEvent.click(await screen.findByRole("button", { name: /保存/ }));
 
       // The zod schema carries codes; the visible sentence comes from the locale.
@@ -1617,7 +1612,7 @@ describe("ProfilesScreen", () => {
     mockClipboardReadText("vless://uuid@example.test:443#US");
     mockProfileList([]);
     ipcMocks.importProfilesFromText.mockResolvedValue(
-      makeImportResult({ failed: 2, imported: 3, skipped: 1 }),
+      makeImportResult({ failed: 2, imported: 3, skipped: 1, importedProfileIds: ["a", "b", "c"] }),
     );
 
     await withLocale("zh-Hans", async () => {
@@ -1627,8 +1622,6 @@ describe("ProfilesScreen", () => {
       await userEvent.click(
         await screen.findByRole("menuitem", { name: "从剪贴板导入" }),
       );
-      await userEvent.click(screen.getByRole("button", { name: "粘贴" }));
-      await userEvent.click(screen.getByRole("button", { name: "导入" }));
 
       expect(
         await screen.findByText(
@@ -1724,7 +1717,8 @@ function makeSubscription() {
 }
 
 async function openAddNode() {
-  await userEvent.click(screen.getByRole("button", { name: "Add" }));
+  await userEvent.click(screen.getByRole("menuitem", { name: "Add" }));
+  await userEvent.click(screen.getByRole("menuitem", { name: "Add node" }));
 }
 
 async function openImport(method = "Import from text") {

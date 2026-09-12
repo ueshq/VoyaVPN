@@ -4,7 +4,6 @@ import {
   FileUp,
   ImagePlus,
   LoaderCircle,
-  Monitor,
   Upload,
 } from "lucide-react";
 
@@ -25,15 +24,15 @@ import { Label } from "@voya/ui/components/label";
 import { Textarea } from "@voya/ui/components/textarea";
 import { getErrorMessage } from "@voya/utils/error";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
-import { importProfilesFromText, scanScreenQr } from "@/ipc/commands";
+import { importProfilesFromText } from "@/ipc/commands";
 import type { ImportProfilesResult } from "@/ipc/bindings";
 
-import { IMPORT_METHODS, type ImportMethod } from "./import-methods";
+import { IMPORT_METHODS, type DialogImportMethod } from "./import-methods";
 import { qrScanErrorCode } from "./qr-errors";
 import { formatImportSummary } from "./server-table-actions";
 
 type ImportProfilesDialogProps = {
-  method: ImportMethod;
+  method: DialogImportMethod;
   onCloseFocus?: () => void;
   onImported: (result: ImportProfilesResult) => Promise<void> | void;
   onOpenChange: (open: boolean) => void;
@@ -145,18 +144,6 @@ function ImportProfilesDialogSession({
     }
   }
 
-  async function handlePaste() {
-    await readIntoPayload(async () => {
-      if (!navigator.clipboard?.readText) {
-        throw new Error(t("panes.profiles.import.clipboardUnavailable"));
-      }
-      const payload = await navigator.clipboard.readText();
-      if (!payload.trim())
-        throw new Error(t("panes.profiles.import.clipboardEmpty"));
-      return payload.trim();
-    });
-  }
-
   async function handleFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
@@ -187,35 +174,6 @@ function ImportProfilesDialogSession({
     }, formatQrError);
   }
 
-  async function handleScreenScan() {
-    await readIntoPayload(async () => {
-      const result = await scanScreenQr();
-      if (!activeRef.current) return "";
-      if (result.status === "found" && result.text?.trim())
-        return scannedPayload(result.text);
-      try {
-        const { scanDisplayMediaQr } = await import("./qr-scanner");
-        if (!activeRef.current) return "";
-        return scannedPayload(await scanDisplayMediaQr());
-      } catch (fallbackError) {
-        const backendMessage =
-          result.message?.trim() ||
-          t(
-            result.status === "unavailable"
-              ? "qr.screenUnavailable"
-              : "qr.noQrFound",
-          );
-        const fallbackMessage = formatQrError(fallbackError);
-        throw new Error(
-          fallbackMessage === backendMessage
-            ? backendMessage
-            : `${backendMessage} ${fallbackMessage}`,
-          { cause: fallbackError },
-        );
-      }
-    }, formatQrError);
-  }
-
   function scannedPayload(payload: string) {
     const decoded = payload.trim();
     if (!decoded) throw new Error(t("qr.noQrFound"));
@@ -236,16 +194,6 @@ function ImportProfilesDialogSession({
         return t("qr.clipboardImageUnavailable");
       case "notFound":
         return t("qr.noQrFound");
-      case "screenCaptureUnavailable":
-        return t("qr.screenCaptureUnavailable");
-      case "screenFrameUnavailable":
-        return t("qr.screenFrameUnavailable");
-      case "screenFrameUnencodable":
-        return t("qr.screenFrameUnencodable");
-      case "screenFrameUnreadable":
-        return t("qr.screenFrameUnreadable");
-      case "screenStreamUnavailable":
-        return t("qr.screenStreamUnavailable");
       default:
         return getErrorMessage(error);
     }
@@ -288,17 +236,6 @@ function ImportProfilesDialogSession({
 
               {method !== "text" ? (
                 <div className="flex flex-wrap items-center gap-2">
-                  {method === "clipboard" ? (
-                    <Button
-                      disabled={busy}
-                      onClick={() => void handlePaste()}
-                      type="button"
-                      variant="outline"
-                    >
-                      <ClipboardPaste className="size-4" aria-hidden="true" />
-                      {t("panes.profiles.importDialog.paste")}
-                    </Button>
-                  ) : null}
                   {method === "file" ? (
                     <>
                       <Button
@@ -351,17 +288,6 @@ function ImportProfilesDialogSession({
                     >
                       <ClipboardPaste className="size-4" aria-hidden="true" />
                       {t("qr.scanClipboardImage")}
-                    </Button>
-                  ) : null}
-                  {method === "qrScreen" ? (
-                    <Button
-                      disabled={busy}
-                      onClick={() => void handleScreenScan()}
-                      type="button"
-                      variant="outline"
-                    >
-                      <Monitor className="size-4" aria-hidden="true" />
-                      {t("qr.scanScreen")}
                     </Button>
                   ) : null}
                   {pending === "read" ? (

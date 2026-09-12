@@ -70,7 +70,8 @@ test("source groups retain subscription settings and only Use connects", async (
 
 test("adding a same-name subscription creates a separate source group", async ({ page }) => {
   await seed(page, 3);
-  await page.getByRole("button", { name: "Add subscription", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Add", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Add subscription", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Add subscription" });
   await dialog.getByLabel("Remarks", { exact: true }).fill("Work");
   await dialog.getByLabel("URL", { exact: true }).fill("https://new.example.test/sub");
