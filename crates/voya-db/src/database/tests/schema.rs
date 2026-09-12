@@ -48,6 +48,92 @@ async fn current_baseline_is_the_only_initialization_record() {
 }
 
 #[tokio::test]
+async fn current_direct_preference_is_normalized_once_without_changing_other_settings() {
+    let fixture = TempDatabase::new("direct-mode.sqlite");
+    let database = Database::connect(fixture.path()).await.expect("database");
+    let mut original: serde_json::Value =
+        serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("settings");
+    original["proxy"]["trafficMode"] = serde_json::json!("direct");
+    original["network"]["systemProxy"]["mode"] = serde_json::json!("pac");
+    sqlx::query("INSERT INTO app_settings VALUES (1, 1, ?)")
+        .bind(original.to_string())
+        .execute(database.pool())
+        .await
+        .expect("old preference");
+    database.close().await;
+
+    original["proxy"]["trafficMode"] = serde_json::json!("rule");
+    for _ in 0..2 {
+        let database = Database::connect(fixture.path()).await.expect("reopen");
+        let loaded = database.settings().load().await.expect("current settings");
+        assert_eq!(loaded.proxy.traffic_mode, TrafficMode::Rule);
+        let stored: String = sqlx::query_scalar("SELECT payload FROM app_settings WHERE id = 1")
+            .fetch_one(database.pool())
+            .await
+            .expect("stored settings");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&stored).expect("JSON"),
+            original
+        );
+        // Reopening an already normalized database must not rewrite settings.
+        sqlx::query("CREATE TRIGGER IF NOT EXISTS reject_settings_update BEFORE UPDATE ON app_settings BEGIN SELECT RAISE(ABORT, 'unexpected rewrite'); END")
+            .execute(database.pool()).await.expect("write guard");
+        database.close().await;
+    }
+}
+
+#[tokio::test]
+async fn traffic_mode_normalization_preserves_invalid_and_other_current_settings() {
+    let current: serde_json::Value =
+        serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("settings");
+    let mut direct = current.clone();
+    direct["proxy"]["trafficMode"] = serde_json::json!("direct");
+    let mut future_payload = direct.clone();
+    future_payload["schemaVersion"] = serde_json::json!(CURRENT_SCHEMA_VERSION + 1);
+    let mut retired_key = direct.clone();
+    retired_key["proxy"]["nodeSorting"] = serde_json::json!(true);
+    let mut invalid_mode = current.clone();
+    invalid_mode["proxy"]["trafficMode"] = serde_json::json!("other");
+    let mut global = current.clone();
+    global["proxy"]["trafficMode"] = serde_json::json!("global");
+    let mut unchanged = current.clone();
+    unchanged["proxy"]["trafficMode"] = serde_json::json!("unchanged");
+
+    for (version, original, valid) in [
+        (1, current.to_string(), true),
+        (1, global.to_string(), true),
+        (1, unchanged.to_string(), true),
+        (2, direct.to_string(), false),
+        (1, future_payload.to_string(), false),
+        (1, retired_key.to_string(), false),
+        (1, invalid_mode.to_string(), false),
+        (1, "{malformed".to_string(), false),
+    ] {
+        let fixture = TempDatabase::new("preserve-settings.sqlite");
+        let database = Database::connect(fixture.path()).await.expect("database");
+        sqlx::query("INSERT INTO app_settings VALUES (1, ?, ?)")
+            .bind(version)
+            .bind(&original)
+            .execute(database.pool())
+            .await
+            .expect("fixture");
+        database.close().await;
+        let database = Database::connect(fixture.path()).await.expect("reopen");
+        assert_eq!(
+            database.settings().load().await.is_ok(),
+            valid,
+            "{original}"
+        );
+        let stored: String = sqlx::query_scalar("SELECT payload FROM app_settings WHERE id = 1")
+            .fetch_one(database.pool())
+            .await
+            .expect("stored settings");
+        assert_eq!(stored, original);
+        database.close().await;
+    }
+}
+
+#[tokio::test]
 async fn unsupported_baseline_records_are_rejected_before_any_write() {
     let mutations = [
         "DELETE FROM _sqlx_migrations",

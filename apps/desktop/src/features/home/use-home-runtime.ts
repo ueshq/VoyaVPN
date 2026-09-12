@@ -24,16 +24,14 @@ import { executeRuntimeAction, isRuntimeTransitioning, reportRuntimeActionError 
 /**
  * Runtime controller for the Home screen: connect/disconnect/restart with
  * elevation + missing-core handling, the unified connection-mode switcher,
- * node selection/switching, and the seeded sysproxy/TUN live state.
+ * node selection/switching, and the seeded TUN live state.
  */
 export function useHomeRuntime(t: TranslationFunction) {
   const coreState = useRuntimeEventStore((state) => state.coreState);
-  const sysProxy = useRuntimeEventStore((state) => state.sysProxy);
   const tun = useRuntimeEventStore((state) => state.tun);
   const pushToast = useToastStore((state) => state.pushToast);
   const pending = useRuntimeActionStore(runtimeActionPending);
   const modePending = useRuntimeActionStore((state) => state.modePending);
-  const switchingId = useRuntimeActionStore((state) => state.switchingId);
   // Shares the ProfilesScreen query cache (same key) so resolving the active
   // node's name here costs no extra fetch and stays in sync after a switch.
   const profilesQuery = useQuery({
@@ -48,8 +46,7 @@ export function useHomeRuntime(t: TranslationFunction) {
 
   const activeProfile =
     profilesQuery.data?.entries.find((item) => item.isActive) ?? null;
-  // The green "live" dot follows the node that is actually running, which differs
-  // from the persisted-active node only while disconnected.
+  // Connection details follow the running node rather than the saved selection.
   const runningId = connected ? (coreState?.activeProfileId ?? null) : null;
   const tunEnabled = tun?.enabled ?? false;
   const tunProviderSummary = tun ? tunProviderLabel(tun, t) : null;
@@ -164,13 +161,11 @@ export function useHomeRuntime(t: TranslationFunction) {
   }
 
   return {
-    activeTunBackend: coreState?.activeTunBackend ?? null,
     nodeEntry,
     busy,
     changeTunEnabled,
     connected,
     tunEnabled,
-    sysProxy,
     handlePrimaryAction,
     inProgress,
     mainPid: coreState?.mainPid ?? null,
@@ -181,7 +176,6 @@ export function useHomeRuntime(t: TranslationFunction) {
     restart,
     runningId,
     state,
-    switchingId,
     tunProviderSummary,
     tunIssue: tun?.providerPathMismatch
       ? tunProviderPathMismatchDescription(tun, t)

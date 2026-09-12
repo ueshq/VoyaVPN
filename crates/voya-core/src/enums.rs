@@ -78,7 +78,6 @@ pub enum TrafficMode {
     #[default]
     Rule,
     Global,
-    Direct,
     Unchanged,
 }
 

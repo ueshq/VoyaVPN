@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -48,6 +48,25 @@ afterEach(() => {
 });
 
 describe("home traffic mode", () => {
+  it("offers only smart and global modes and explains both regardless of the selection", async () => {
+    const user = userEvent.setup();
+    renderSwitcher();
+    const group = screen.getByRole("group", { name: "Traffic mode" });
+    expect(within(group).getAllByRole("button")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Direct" })).not.toBeInTheDocument();
+    const hint = "Smart routing: Rules determine which traffic uses the proxy;\nGlobal proxy: All captured traffic uses the selected node;";
+    expect(screen.queryByText(hint)).not.toBeInTheDocument();
+    const info = screen.getByRole("button", { name: "About traffic mode" });
+    await user.hover(info);
+    expect((await screen.findByRole("tooltip")).textContent).toBe(hint);
+    await user.unhover(info);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Global" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Global" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Global" })).toHaveAttribute("aria-pressed", "true"));
+    await user.hover(info);
+    expect((await screen.findByRole("tooltip")).textContent).toBe(hint);
+  });
+
   it("saves a preset while disconnected and updates the shared settings cache", async () => {
     const user = userEvent.setup();
     const { client } = renderSwitcher();
@@ -74,8 +93,8 @@ describe("home traffic mode", () => {
     mocks.save.mockRejectedValue(new Error("database unavailable"));
     const user = userEvent.setup();
     renderSwitcher();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Direct" })).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "Direct" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Global" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Global" }));
     await waitFor(() => expect(useToastStore.getState().toasts.at(-1)?.description).toBe("database unavailable"));
     expect(screen.getByRole("button", { name: "Smart routing" })).toHaveAttribute("aria-pressed", "true");
     expect(runtimeActionPending()).toBe(false);
@@ -115,7 +134,7 @@ describe("home traffic mode", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Global" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: "Global" }));
     expect(runtimeActionPending()).toBe(true);
-    expect(screen.getByRole("button", { name: "Direct" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Smart routing" })).toBeDisabled();
     unmount();
     expect(runtimeActionPending()).toBe(true);
     await act(async () => finish({ mode: "global" }));

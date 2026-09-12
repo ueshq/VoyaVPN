@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, ChevronRight, Power } from "lucide-react";
 
 import type { TranslationFunction } from "@voya/i18n";
@@ -22,11 +21,10 @@ import worldMap from "@/assets/world-map.svg";
 import { NodeCountryIcon } from "@/components/node-country-icon";
 import { getProtocolLabel } from "@/features/profiles/profile-constants";
 import { profileNameWithoutFlag } from "@/features/profiles/profile-display";
-import { loadAppSettings } from "@/ipc/commands";
-import { queryKeys } from "@/ipc/query-keys";
 import { useShellStore } from "@/stores/shell-store";
 
 import { ConnectedInfo } from "./connected-info";
+import { ModeInfo } from "./mode-info";
 import { TrafficModeSwitcher } from "./traffic-mode-switcher";
 import { useHomeRuntime } from "./use-home-runtime";
 
@@ -38,11 +36,6 @@ export function HomeScreen() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const navigateToNodes = () =>
     useShellStore.getState().setActiveTab("profiles", true);
-  const settings = useQuery({
-    queryKey: queryKeys.appSettings,
-    queryFn: loadAppSettings,
-  });
-  const direct = settings.data?.proxy.trafficMode === "direct";
   const runtimeActionAvailable =
     home.connected || home.state === "cleanupPending";
   const noNodes =
@@ -52,41 +45,6 @@ export function HomeScreen() {
     home.profiles.length === 0;
   const needsSelection = !runtimeActionAvailable && !home.nodeEntry && !noNodes;
   const detailsButton = useRef<HTMLButtonElement>(null);
-  const manualProxy = home.sysProxy?.management === "manual";
-  const localReady =
-    home.connected && manualProxy && home.activeTunBackend === null;
-  const protectedConnection =
-    home.connected &&
-    (home.sysProxy?.management === "automatic" ||
-      (manualProxy && home.activeTunBackend === "macosPacketTunnel"));
-  let headline: string;
-  if (home.switchingId) {
-    headline = t("home.switchingNode");
-  } else if (home.state === "cleanupPending") {
-    headline = t("home.cleanupPending");
-  } else if (home.connected && direct) {
-    headline = t("home.directConnection");
-  } else if (localReady) {
-    headline = t("home.localProxyReady");
-  } else if (protectedConnection) {
-    headline = t("status.connected");
-  } else if (home.connected) {
-    headline = t("home.protectionUnknown");
-  } else if (home.state === "connecting") {
-    headline = t("status.connecting");
-  } else if (home.state === "disconnecting") {
-    headline = t("status.disconnecting");
-  } else {
-    headline = t("home.unprotected");
-  }
-  const hint =
-    home.connected && direct
-      ? t("home.directHint")
-      : protectedConnection
-        ? t("home.connectedHint")
-        : home.state === "disconnected"
-          ? t("home.unprotectedHint")
-          : "";
   const profile = home.nodeEntry?.profile;
   const rawName =
     profile?.remarks ||
@@ -133,38 +91,17 @@ export function HomeScreen() {
             t={t}
             cleanupPending={home.state === "cleanupPending"}
           />
-          <div className="home-status" data-testid="home-status-card">
-            <h1 className="home-headline" aria-live="polite">
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "home-status-dot",
-                  protectedConnection && !direct && "home-status-dot-connected",
-                  home.inProgress && "animate-pulse",
-                )}
-              />
-              {headline}
-            </h1>
-            <p className="home-status-hint">
-              {noNodes ? t("home.addFirstNode") : hint || "\u00a0"}
-            </p>
-          </div>
-          {noNodes ? (
-            <div className="home-empty-actions">
-              <Button variant="outline" onClick={navigateToNodes}>
-                {t("panes.profiles.toolbar.import")}
-              </Button>
-            </div>
-          ) : null}
           {!noNodes ? <ConnectedInfo delayMs={delayMs} t={t} /> : null}
-          <ConnectionModeSwitcher
-            tunEnabled={home.tunEnabled}
-            modeBusy={home.busy}
-            modePending={home.modePending}
-            onTunChange={home.changeTunEnabled}
-            t={t}
-          />
-          <TrafficModeSwitcher />
+          <div className="home-mode-panel">
+            <ConnectionModeSwitcher
+              tunEnabled={home.tunEnabled}
+              modeBusy={home.busy}
+              modePending={home.modePending}
+              onTunChange={home.changeTunEnabled}
+              t={t}
+            />
+            <TrafficModeSwitcher />
+          </div>
           {home.tunEnabled && home.tunIssue ? (
             <p className="home-diagnostic" role="status">
               {home.tunIssue}
@@ -321,20 +258,18 @@ function ConnectionModeSwitcher({
   t: TranslationFunction;
 }) {
   return (
-    <div className="home-mode-container">
-      <div className="home-modes">
-        <div className="home-mode">
-          <Label htmlFor="home-tun-switch">{t("home.modeTun")}</Label>
-          <Switch
-            aria-busy={modePending}
-            checked={tunEnabled}
-            disabled={modeBusy}
-            id="home-tun-switch"
-            onCheckedChange={onTunChange}
-          />
-        </div>
+    <div className="home-mode-row">
+      <div className="home-mode-label">
+        <Label htmlFor="home-tun-switch">{t("home.modeTun")}</Label>
+        <ModeInfo label={t("home.tunInfo")} hint={t("home.tunHint")} />
       </div>
-      <p className="home-mode-hint">{t("home.tunHint")}</p>
+      <Switch
+        aria-busy={modePending}
+        checked={tunEnabled}
+        disabled={modeBusy}
+        id="home-tun-switch"
+        onCheckedChange={onTunChange}
+      />
     </div>
   );
 }

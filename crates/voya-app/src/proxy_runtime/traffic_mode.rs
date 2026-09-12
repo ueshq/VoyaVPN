@@ -238,7 +238,6 @@ mod tests {
                 let manager = ProxyRuntimeManager::with_transport(transport.clone());
                 for mode in [
                     TrafficMode::Global,
-                    TrafficMode::Direct,
                     TrafficMode::Rule,
                     TrafficMode::Unchanged,
                 ] {
@@ -315,7 +314,7 @@ mod tests {
             }
             let manager = ProxyRuntimeManager::with_transport(transport.clone());
             let result = manager
-                .change_traffic_mode(&coordinator, &snapshot(true), TrafficMode::Direct)
+                .change_traffic_mode(&coordinator, &snapshot(true), TrafficMode::Global)
                 .await
                 .expect("preference committed");
             let error = result.runtime_result.expect_err("live step failed");
@@ -331,16 +330,16 @@ mod tests {
                     .expect("saved")
                     .proxy
                     .traffic_mode,
-                voya_contracts::TrafficMode::Direct
+                voya_contracts::TrafficMode::Global
             );
             {
                 let mut state = transport.0.lock().expect("transport");
                 assert_eq!(state.requests.len(), if close_failure { 2 } else { 1 });
-                assert_eq!(state.mode == "direct", close_failure);
+                assert_eq!(state.mode == "global", close_failure);
                 state.fail_close = false;
             }
             let retry = manager
-                .change_traffic_mode(&coordinator, &snapshot(true), TrafficMode::Direct)
+                .change_traffic_mode(&coordinator, &snapshot(true), TrafficMode::Global)
                 .await
                 .expect("retry saved mode");
             assert!(!retry.config_changed);
@@ -381,7 +380,7 @@ mod tests {
             .execute(database.pool()).await.expect("failure trigger");
         let transport = ModeTransport::default();
         assert!(ProxyRuntimeManager::with_transport(transport.clone())
-            .change_traffic_mode(&coordinator, &snapshot(true), TrafficMode::Direct)
+            .change_traffic_mode(&coordinator, &snapshot(true), TrafficMode::Global)
             .await
             .is_err());
         assert_eq!(
@@ -456,14 +455,14 @@ mod tests {
         let manager = ProxyRuntimeManager::with_transport(transport.clone());
         let access = access();
         assert!(manager
-            .set_traffic_mode_if_running(&access, TrafficMode::Direct)
+            .set_traffic_mode_if_running(&access, TrafficMode::Global)
             .await
             .is_err());
         manager
-            .set_traffic_mode_if_running(&access, TrafficMode::Direct)
+            .set_traffic_mode_if_running(&access, TrafficMode::Global)
             .await
             .expect("retry same mode");
-        assert_eq!(transport.0.lock().expect("state").mode, "direct");
+        assert_eq!(transport.0.lock().expect("state").mode, "global");
     }
 
     #[tokio::test(start_paused = true)]

@@ -7,7 +7,9 @@ use crate::{
 
 /// Stores the current IPC settings DTO verbatim. Database initialization rejects
 /// historical baselines; this repository strictly reads the current payload and
-/// never converts retired keys. Missing settings use the current defaults.
+/// never converts retired keys. Initialization only normalizes the removed
+/// direct traffic mode in otherwise valid current settings. Missing settings
+/// use the current defaults.
 #[derive(Debug, Clone, Copy)]
 pub struct SettingsRepository<'executor> {
     executor: RepositoryExecutor<'executor>,
@@ -81,6 +83,43 @@ fn payload_error(source: serde_json::Error) -> DbError {
         path: "app_settings.payload".into(),
         source,
     }
+}
+
+/// Runs only after the database baseline has been validated. Keep the narrow
+/// upgrade at the persistence boundary so IPC never accepts the retired mode.
+pub(crate) async fn normalize_retired_traffic_mode(pool: &sqlx::SqlitePool) -> Result<()> {
+    let candidate = sqlx::query_as::<_, (String, String)>(
+        r#"
+        SELECT payload, json_set(payload, '$.proxy.trafficMode', 'rule')
+        FROM app_settings
+        WHERE id = 1 AND schema_version = ?
+          AND CASE WHEN json_valid(payload) THEN
+            json_extract(payload, '$.schemaVersion') = ?
+            AND json_extract(payload, '$.proxy.trafficMode') = 'direct'
+          ELSE 0 END
+        "#,
+    )
+    .bind(i64::from(CURRENT_SCHEMA_VERSION))
+    .bind(i64::from(CURRENT_SCHEMA_VERSION))
+    .fetch_optional(pool)
+    .await?;
+    let Some((original, normalized)) = candidate else {
+        return Ok(());
+    };
+    // Leave malformed or retired settings untouched for the strict loader to
+    // reject. The mode conversion must not silently discard unknown fields.
+    if serde_json::from_str::<AppSettingsV1>(&normalized).is_err() {
+        return Ok(());
+    }
+    sqlx::query(
+        "UPDATE app_settings SET payload = ? WHERE id = 1 AND schema_version = ? AND payload = ?",
+    )
+    .bind(normalized)
+    .bind(i64::from(CURRENT_SCHEMA_VERSION))
+    .bind(original)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 fn validated_payload(settings: &AppSettingsV1) -> Result<String> {

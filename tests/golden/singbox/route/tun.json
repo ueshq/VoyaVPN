@@ -51,10 +51,6 @@
       ]
     },
     {
-      "outbound": "direct",
-      "clash_mode": "Direct"
-    },
-    {
       "outbound": "proxy",
       "clash_mode": "Global"
     },

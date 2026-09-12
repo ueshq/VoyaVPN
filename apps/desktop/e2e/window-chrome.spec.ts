@@ -17,7 +17,7 @@ for (const layout of ["macos", "windows"] as const) {
       layout,
     );
     await expect(
-      page.getByRole("heading", { name: "Not protected" }),
+      page.getByRole("button", { name: "Connect", exact: true }),
     ).toBeVisible();
     expect(await sidebar.boundingBox()).toMatchObject({
       x: 0,

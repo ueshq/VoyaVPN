@@ -303,7 +303,6 @@ pub fn traffic_mode_api_value(mode: TrafficMode) -> Option<&'static str> {
     match mode {
         TrafficMode::Rule => Some("rule"),
         TrafficMode::Global => Some("global"),
-        TrafficMode::Direct => Some("direct"),
         TrafficMode::Unchanged => None,
     }
 }
@@ -487,7 +486,7 @@ mod tests {
         let manager = ProxyRuntimeManager::with_transport(transport.clone());
 
         manager
-            .set_traffic_mode(&access(RUNTIME_PORT), TrafficMode::Direct)
+            .set_traffic_mode(&access(RUNTIME_PORT), TrafficMode::Global)
             .await
             .expect("set traffic mode");
 
@@ -498,7 +497,7 @@ mod tests {
             requests[0].url,
             format!("http://127.0.0.1:{}/configs", DEFAULT_LOCAL_PORT + 5)
         );
-        assert_eq!(requests[0].body, Some(json!({ "mode": "direct" })));
+        assert_eq!(requests[0].body, Some(json!({ "mode": "global" })));
     }
 
     #[tokio::test]
@@ -696,7 +695,7 @@ mod tests {
         manager
             .set_traffic_mode(
                 &ClashApiAccess::new(Some(RUNTIME_PORT), Some(secret.clone())),
-                TrafficMode::Direct,
+                TrafficMode::Global,
             )
             .await
             .expect("set traffic mode");

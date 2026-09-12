@@ -37,10 +37,9 @@ const PINNED_SYSTEM_PROXY_MODES: [(SystemProxyType, &str); 4] = [
 ];
 
 /// Canonical persisted and IPC spellings of each traffic mode.
-const PINNED_TRAFFIC_MODES: [(TrafficMode, &str); 4] = [
+const PINNED_TRAFFIC_MODES: [(TrafficMode, &str); 3] = [
     (TrafficMode::Rule, "rule"),
     (TrafficMode::Global, "global"),
-    (TrafficMode::Direct, "direct"),
     (TrafficMode::Unchanged, "unchanged"),
 ];
 

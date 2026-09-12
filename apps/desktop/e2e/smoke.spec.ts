@@ -88,7 +88,7 @@ test.afterEach(async ({ page }) => {
 
 test("loads the app shell and opens in-shell settings", async ({ page }) => {
   await expect(
-    page.getByRole("heading", { name: "Not protected" }),
+    page.getByRole("button", { name: "Connect", exact: true }),
   ).toBeVisible();
   await expect(page.getByTestId("sidebar-footer")).toContainText(
     "Disconnected",
@@ -398,6 +398,33 @@ test("adds and imports profiles, activates one, and connects through the fake ru
   );
 });
 
+test("shows mode help on hover and keyboard focus without switching modes", async ({ page }) => {
+  const tun = page.getByRole("switch", { name: "TUN mode", exact: true });
+  await expect(tun).toBeEnabled();
+  const tunHint = "TUN captures device traffic and may require system permission";
+  await expect(page.getByText(tunHint)).toHaveCount(0);
+  const info = page.getByRole("button", { name: "About TUN mode" });
+  await info.hover();
+  await expect(page.getByRole("tooltip")).toHaveText(tunHint);
+  await info.click();
+  await expect(tun).not.toBeChecked();
+  await page.keyboard.press("Tab");
+  await expect(tun).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "About traffic mode" })).toBeFocused();
+  await expect(page.getByRole("tooltip")).toHaveText(
+    "Smart routing: Rules determine which traffic uses the proxy;\nGlobal proxy: All captured traffic uses the selected node;",
+  );
+  await page.screenshot({ path: test.info().outputPath("home-traffic-mode-help.png") });
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Traffic mode" }).getByRole("button")).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Direct", exact: true })).toHaveCount(0);
+  expect((await smokeCalls(page)).filter((call) =>
+    ["set_connection_mode", "proxy_set_traffic_mode"].includes(call.command),
+  )).toEqual([]);
+});
+
 test("uses traffic modes and connections through the proxy runtime IPC", async ({
   page,
 }) => {
@@ -416,9 +443,9 @@ test("uses traffic modes and connections through the proxy runtime IPC", async (
         }
       ).connections.connections[0]!,
   );
-  await page.getByRole("button", { exact: true, name: "Direct" }).click();
+  await page.getByRole("button", { exact: true, name: "Smart routing" }).click();
   await expect(
-    page.getByRole("button", { exact: true, name: "Direct" }),
+    page.getByRole("button", { exact: true, name: "Smart routing" }),
   ).toHaveAttribute("aria-pressed", "true");
   expect(
     await page.evaluate(
@@ -716,7 +743,7 @@ test("keeps traffic modes independent of the existing PAC and TUN choices", asyn
   await expect(smart).toHaveAttribute("aria-pressed", "true");
   await expect(
     page.getByRole("group", { name: "Traffic mode" }).getByRole("button"),
-  ).toHaveCount(3);
+  ).toHaveCount(2);
   await expect(
     page.getByRole("switch", { name: "Smart mode (PAC)" }),
   ).toHaveCount(0);
@@ -758,7 +785,7 @@ test("keeps traffic modes independent of the existing PAC and TUN choices", asyn
         ).settings.network.systemProxy.mode,
     );
   await expect.poll(savedProxyMode).toBe("pac");
-  for (const name of ["Global", "Direct"]) {
+  for (const name of ["Global", "Smart routing"]) {
     await page.getByRole("button", { name, exact: true }).click();
     await expect(
       page.getByRole("button", { name, exact: true }),
@@ -810,9 +837,9 @@ for (const proxyMode of ["forcedChange", "pac"] as const) {
     }, savedNodeFixture);
     await expect(page.getByTestId("home-connect-button")).toHaveAccessibleName("Connect");
     await page.getByTestId("home-connect-button").click();
-    await expect(page.getByTestId("home-status-card")).toContainText(
-      "Local proxy ready",
-    );
+    await expect(page.getByTestId("home-connect-button")).toHaveAccessibleName("Disconnect");
+    await expect(page.getByTestId("home-connect-button")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("home-screen").getByRole("heading", { level: 1 })).toHaveCount(0);
     await expect(
       page.getByText("Manual proxy setup", { exact: true }),
     ).toHaveCount(0);
@@ -821,7 +848,7 @@ for (const proxyMode of ["forcedChange", "pac"] as const) {
         "Configure your system proxy manually to use the local listener.",
       ),
     ).toHaveCount(0);
-    for (const name of ["Global", "Direct", "Smart routing"]) {
+    for (const name of ["Global", "Smart routing"]) {
       await page.getByRole("button", { name, exact: true }).click();
       await expect(
         page.getByRole("button", { name, exact: true }),

@@ -336,7 +336,7 @@ async fn startup_mode_failure_warns_and_keeps_the_saved_preference() {
         ..ModeTransport::default()
     };
     let mut config = active_config();
-    config.proxy_ui_item.traffic_mode = voya_core::TrafficMode::Direct;
+    config.proxy_ui_item.traffic_mode = voya_core::TrafficMode::Global;
     let snapshot = harness
         .flow()
         .with_proxy_runtime(ProxyRuntimeManager::with_transport(transport))
@@ -346,7 +346,7 @@ async fn startup_mode_failure_warns_and_keeps_the_saved_preference() {
     assert_eq!(snapshot.state, SupervisorConnectionState::Connected);
     assert_eq!(
         config.proxy_ui_item.traffic_mode,
-        voya_core::TrafficMode::Direct
+        voya_core::TrafficMode::Global
     );
     let events = harness.sink.events();
     let warning = events

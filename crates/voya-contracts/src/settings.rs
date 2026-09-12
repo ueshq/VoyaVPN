@@ -318,8 +318,7 @@ impl Default for HysteriaSettings {
 pub struct ProxySettings {
     /// The persisted Clash traffic mode. Typed for the same reason as
     /// [`SystemProxySettings::mode`]: `rename_all = "camelCase"` emits the very
-    /// strings this field already stores (`rule`, `global`, `direct`,
-    /// `unchanged`).
+    /// canonical strings this field stores (`rule`, `global`, `unchanged`).
     pub traffic_mode: TrafficMode,
 }
 

@@ -12,11 +12,11 @@ import {
   runtimeActionPending,
   useRuntimeActionStore,
 } from "@/stores/runtime-action-store";
+import { ModeInfo } from "./mode-info";
 
 const modes = [
   { value: "rule", labelKey: "home.trafficModeSmart" },
   { value: "global", labelKey: "proxy.trafficModeGlobal" },
-  { value: "direct", labelKey: "proxy.trafficModeDirect" },
 ] as const;
 
 export function TrafficModeSwitcher() {
@@ -64,39 +64,38 @@ export function TrafficModeSwitcher() {
 
   return (
     <div className="home-traffic-mode">
-      <span className="home-traffic-mode-label" id="home-traffic-mode-label">
-        {t("home.trafficMode")}
-      </span>
-      <div
-        aria-labelledby="home-traffic-mode-label"
-        className="home-traffic-mode-options"
-        role="group"
-      >
-        {modes.map(({ value, labelKey }) => (
-          <Button
-            aria-pressed={query.data?.proxy.trafficMode === value}
-            className={cn(
-              "h-8 px-4 text-xs text-foreground",
-              query.data?.proxy.trafficMode === value &&
-                "bg-background text-foreground shadow-sm",
-            )}
-            disabled={disabled}
-            key={value}
-            onClick={() => selectMode(value)}
-            type="button"
-            variant="ghost"
-          >
-            {t(labelKey)}
-          </Button>
-        ))}
+      <div className="home-mode-row">
+        <div className="home-mode-label">
+          <span id="home-traffic-mode-label">{t("home.trafficMode")}</span>
+          <ModeInfo
+            label={t("home.trafficModeInfo")}
+            hint={t("home.trafficModeHint")}
+          />
+        </div>
+        <div
+          aria-labelledby="home-traffic-mode-label"
+          className="home-traffic-mode-options"
+          role="group"
+        >
+          {modes.map(({ value, labelKey }) => (
+            <Button
+              aria-pressed={query.data?.proxy.trafficMode === value}
+              className={cn(
+                "h-8 px-4 text-xs text-foreground",
+                query.data?.proxy.trafficMode === value &&
+                  "bg-background text-foreground shadow-sm",
+              )}
+              disabled={disabled}
+              key={value}
+              onClick={() => selectMode(value)}
+              type="button"
+              variant="ghost"
+            >
+              {t(labelKey)}
+            </Button>
+          ))}
+        </div>
       </div>
-      <p className="home-mode-hint">
-        {query.data?.proxy.trafficMode === "direct"
-          ? t("home.directHint")
-          : query.data?.proxy.trafficMode === "global"
-            ? t("home.globalHint")
-            : t("home.smartHint")}
-      </p>
       {query.error ? (
         <div className="home-mode-hint" role="alert">
           {getErrorMessage(query.error)}

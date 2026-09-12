@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import type {
   AppSettingsV1,
@@ -45,13 +45,52 @@ const tokyo: ProfileListEntry = {
   },
 };
 
-for (const layout of ["none", "macos", "windows"] as const) {
-  test(`home ${layout} layout stays usable across window sizes, themes and sidebar widths`, async ({
+async function expectModePanel(page: Page) {
+  const panel = page.locator(".home-mode-panel");
+  await expect(panel).toBeInViewport({ ratio: 1 });
+  const rows = panel.locator(".home-mode-row");
+  await expect(rows).toHaveCount(2);
+  const geometry = await rows.evaluateAll((elements) => elements.map((element) => {
+    const label = element.firstElementChild!;
+    const control = element.lastElementChild!;
+    const rowRect = element.getBoundingClientRect();
+    const labelRect = label.getBoundingClientRect();
+    const controlRect = control.getBoundingClientRect();
+    const style = getComputedStyle(label);
+    return {
+      height: rowRect.height,
+      labelLeft: labelRect.left,
+      controlRight: controlRect.right,
+      gap: controlRect.left - labelRect.right,
+      fits: element.scrollWidth <= element.clientWidth,
+      typography: [style.fontSize, style.fontWeight, style.lineHeight, style.color],
+    };
+  }));
+  expect(geometry[0]!.labelLeft).toBeCloseTo(geometry[1]!.labelLeft, 1);
+  expect(geometry[0]!.controlRight).toBeCloseTo(geometry[1]!.controlRight, 1);
+  expect(geometry[0]!.typography).toEqual(geometry[1]!.typography);
+  for (const row of geometry) {
+    expect(row.height).toBeGreaterThanOrEqual(56);
+    expect(row.gap).toBeGreaterThanOrEqual(12);
+    expect(row.fits).toBe(true);
+  }
+}
+
+for (const { layout, language } of [
+  { layout: "none", language: "en" },
+  { layout: "none", language: "zh-Hans" },
+  { layout: "macos", language: "zh-Hans" },
+  { layout: "windows", language: "zh-Hans" },
+] as const) {
+  const labels = language === "en"
+    ? { connect: "Connect", disconnect: "Disconnect", collapse: "Collapse sidebar", expand: "Expand sidebar", settings: "Settings", switchNode: "Switch node", nodes: "Nodes", home: "Home", import: "Import" }
+    : { connect: "连接", disconnect: "断开", collapse: "收起侧栏", expand: "展开侧栏", settings: "设置", switchNode: "切换节点", nodes: "节点", home: "主页", import: "导入" };
+  test(`home ${layout} ${language} layout stays usable across window sizes, themes and sidebar widths`, async ({
     page,
   }, testInfo) => {
     await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
     await installTauriSmokeMock(page, layout);
-    await page.addInitScript((profile) => {
+    await page.addInitScript(({ profile, language }) => {
       const state = window.__VOYA_SMOKE__.state as {
         profiles: ProfileListEntry[];
         settings: AppSettingsV1;
@@ -59,7 +98,7 @@ for (const layout of ["none", "macos", "windows"] as const) {
         tun: TunStatus;
       };
       state.profiles = [profile];
-      state.settings.appearance.language = "zh-Hans";
+      state.settings.appearance.language = language;
       state.runtime = {
         activeProfileId: profile.profile.id,
         activeTunBackend: "process",
@@ -75,12 +114,13 @@ for (const layout of ["none", "macos", "windows"] as const) {
         backend: "process",
         providerState: "running",
       };
-    }, tokyo);
+    }, { profile: tokyo, language });
     await page.setViewportSize({ width: 1232, height: 800 });
     await page.goto("/");
-    await expect(
-      page.getByRole("heading", { name: "已连接", exact: true }),
-    ).toBeVisible();
+    const connect = page.getByTestId("home-connect-button");
+    await expect(connect).toHaveAccessibleName(labels.disconnect);
+    await expect(connect).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("home-screen").getByRole("heading", { level: 1 })).toHaveCount(0);
     await expect(
       page.getByRole("heading", { name: "日本 · 东京 01" }),
     ).toBeVisible();
@@ -113,6 +153,7 @@ for (const layout of ["none", "macos", "windows"] as const) {
       [1232, 800],
       [1180, 760],
       [960, 640],
+      [800, 600],
     ]) {
       await page.setViewportSize({ width, height });
       const card = page.locator(".home-node-card");
@@ -127,34 +168,38 @@ for (const layout of ["none", "macos", "windows"] as const) {
         }));
       expect(metrics.scrollWidth).toBe(metrics.width);
       expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.height + 1);
+      await expectModePanel(page);
       await page.screenshot({
         path: testInfo.outputPath(`home-light-${width}.png`),
       });
     }
+    await page.setViewportSize({ width: 960, height: 640 });
     await page.emulateMedia({ colorScheme: "dark" });
     await expect(page.locator("html")).toHaveClass(/dark/);
     // The theme effect can run between separate evaluate calls. Compare both
     // colors in one browser frame and wait for the theme to settle.
-    await expect.poll(() => page.locator(".home-headline").evaluate((el) =>
+    await expect.poll(() => page.locator(".home-node-name").evaluate((el) =>
       getComputedStyle(el).color === getComputedStyle(document.body).color,
     )).toBe(true);
+    await expectModePanel(page);
     await page.screenshot({ path: testInfo.outputPath("home-dark-960.png") });
-    await page.getByRole("button", { name: "收起侧栏" }).click();
+    await page.getByRole("button", { name: labels.collapse }).click();
     await expect(
-      page.getByRole("button", { name: "展开侧栏" }),
+      page.getByRole("button", { name: labels.expand }),
     ).toHaveAttribute("aria-expanded", "false");
     await expect(
-      page.getByRole("tab", { name: "设置", exact: true }),
+      page.getByRole("tab", { name: labels.settings, exact: true }),
     ).toBeVisible();
+    await expectModePanel(page);
     await page.screenshot({
       path: testInfo.outputPath("home-collapsed-960.png"),
     });
-    await page.getByRole("button", { name: "切换节点" }).click();
+    await page.getByRole("button", { name: labels.switchNode }).click();
     await expect(
-      page.getByRole("heading", { name: "节点", exact: true }),
+      page.getByRole("heading", { name: labels.nodes, exact: true }),
     ).toBeFocused();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await page.getByRole("tab", { name: "主页", exact: true }).click();
+    await page.getByRole("tab", { name: labels.home, exact: true }).click();
 
     // A renderer reload restores the existing backend duration rather than starting at zero.
     await page.reload();
@@ -180,7 +225,7 @@ for (const layout of ["none", "macos", "windows"] as const) {
         .locator(".home-node-name")
         .evaluate((element) => element.scrollWidth > element.clientWidth),
     ).toBe(true);
-    await expect(page.getByRole("button", { name: "切换节点" })).toBeInViewport(
+    await expect(page.getByRole("button", { name: labels.switchNode })).toBeInViewport(
       { ratio: 1 },
     );
     await page.screenshot({ path: testInfo.outputPath("home-long-name.png") });
@@ -206,9 +251,14 @@ for (const layout of ["none", "macos", "windows"] as const) {
       });
     });
     await expect(
-      page.getByRole("button", { name: "连接", exact: true }),
+      page.getByRole("button", { name: labels.connect, exact: true }),
     ).toBeVisible();
     await expect(page.getByTestId("home-connection-duration")).toHaveCount(0);
+    const home = page.getByTestId("home-screen");
+    await expect(home.getByRole("heading")).toHaveCount(0);
+    await expect(home.getByRole("button", { name: labels.import, exact: true })).toHaveCount(0);
+    await expect(home.getByText(/Not protected|未受保护|Add a node to connect|添加节点后即可连接/)).toHaveCount(0);
+    await expectModePanel(page);
     await page.screenshot({ path: testInfo.outputPath("home-empty.png") });
     expect(
       await page.evaluate(

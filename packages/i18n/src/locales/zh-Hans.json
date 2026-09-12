@@ -69,10 +69,6 @@
       "updateFailed": "订阅更新失败",
       "updated": "订阅已更新"
     },
-    "unprotected": "未受保护",
-    "unprotectedHint": "连接以安全转发流量。",
-    "protectionUnknown": "保护状态尚未确认",
-    "localProxyReady": "本地代理已就绪",
     "cleanupPending": "隧道尚未清理",
     "retryDisconnect": "重试断开",
     "manualProxy": {
@@ -101,7 +97,6 @@
     },
     "latency": "延迟",
     "duration": "连接时长",
-    "connectedHint": "连接已建立，安心浏览每一程",
     "currentNodeLabel": "当前节点",
     "details": "详情",
     "switchNode": "切换节点",
@@ -114,19 +109,16 @@
     "disconnectLabel": "断开连接",
     "trafficMode": "流量模式",
     "trafficModeSmart": "智能分流",
-    "tunHint": "TUN 接管设备流量，可能需要系统授权。",
-    "directConnection": "直连模式",
-    "directHint": "流量直接访问目标，不经过代理节点。",
-    "globalHint": "由 VoyaVPN 接管的流量均使用所选节点。",
-    "smartHint": "根据规则决定哪些流量使用代理。",
+    "tunHint": "TUN接管设备流量，可能需要系统授权",
     "chooseNode": "选择节点",
-    "addFirstNode": "添加节点后即可连接",
     "missingNodes": {
       "title": "请先添加节点",
       "description": "当前没有可用节点，请先添加节点或订阅后再连接。"
     },
-    "switchingNode": "正在切换节点…",
-    "selectedNodeLabel": "待连接节点"
+    "selectedNodeLabel": "待连接节点",
+    "tunInfo": "TUN模式说明",
+    "trafficModeInfo": "流量模式说明",
+    "trafficModeHint": "智能分流：根据规则决定哪些流量使用代理；\n全局代理：接管的流量均使用所选节点；"
   },
   "logCodes": {
     "connected": "内核守护进程已启动",
@@ -546,7 +538,6 @@
     "monitorStale": "已过期",
     "monitorStarting": "启动中",
     "monitorStopped": "已停止",
-    "trafficModeDirect": "直连",
     "trafficModeFailed": "切换流量模式失败",
     "trafficModeGlobal": "全局",
     "viewTabsAria": "网络活动视图",

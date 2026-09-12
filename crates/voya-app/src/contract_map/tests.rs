@@ -500,7 +500,6 @@ fn every_traffic_mode_round_trips() {
     for mode in [
         voya_core::TrafficMode::Rule,
         voya_core::TrafficMode::Global,
-        voya_core::TrafficMode::Direct,
         voya_core::TrafficMode::Unchanged,
     ] {
         assert_eq!(

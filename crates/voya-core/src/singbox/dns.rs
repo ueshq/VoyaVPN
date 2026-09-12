@@ -143,18 +143,11 @@ fn gen_dns_rules(config: &mut SingboxConfig, context: &CoreConfigContext) {
         });
     }
 
-    // Mirror the route generator: clash_mode wins over the priority-proxy list
-    // so Direct mode resolves these names through the direct resolver too.
+    // Mirror the route generator: Global mode precedes the priority-proxy list.
     rules.push(SingboxRule {
         server: Some(SINGBOX_REMOTE_DNS_TAG.to_string()),
         strategy: domain_strategy4_sbox(simple_dns.strategy4_proxy.as_deref()),
         clash_mode: Some("Global".to_string()),
-        ..SingboxRule::default()
-    });
-    rules.push(SingboxRule {
-        server: Some(SINGBOX_DIRECT_DNS_TAG.to_string()),
-        strategy: domain_strategy4_sbox(simple_dns.strategy4_freedom.as_deref()),
-        clash_mode: Some("Direct".to_string()),
         ..SingboxRule::default()
     });
 

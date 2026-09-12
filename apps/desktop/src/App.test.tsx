@@ -507,14 +507,15 @@ describe("App", () => {
     renderApp();
 
     const hero = await screen.findByRole("region", { name: "Connection home" });
-    // The app name is the Home page's h1 (the sidebar brand is a plain label).
     expect(
-      within(hero).getByRole("heading", { level: 1, name: "Not protected" }),
-    ).toBeInTheDocument();
+      within(hero).queryByRole("heading", { level: 1 }),
+    ).not.toBeInTheDocument();
     expect(
       await within(hero).findByRole("button", { name: "Connect" }),
     ).toBeInTheDocument();
-    expect(within(hero).getByText("Not protected")).toBeInTheDocument();
+    expect(within(hero).queryByText("Not protected")).not.toBeInTheDocument();
+    expect(within(hero).getByRole("switch", { name: "TUN mode" })).toBeInTheDocument();
+    expect(within(hero).getByRole("group", { name: "Traffic mode" })).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-footer")).toHaveTextContent(
       "Disconnected",
     );

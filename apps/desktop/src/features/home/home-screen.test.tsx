@@ -243,16 +243,21 @@ describe("HomeScreen", () => {
     await changeLocale("en", { persist: false });
   });
 
-  it("offers connection guidance and import without empty details", async () => {
+  it("keeps only connection and mode controls when no nodes are available", async () => {
     mockProfileList([]);
     renderHome();
     await waitFor(() => expect(connectButton()).toBeEnabled());
     expect(connectButton()).toHaveAccessibleName("Connect");
-    expect(screen.getByText("Add a node to connect")).toBeInTheDocument();
+    expect(screen.queryByRole("heading")).not.toBeInTheDocument();
+    expect(screen.queryByText("Not protected")).not.toBeInTheDocument();
+    expect(screen.queryByText("Add a node to connect")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Details" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Import" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Import" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("home-connected-info")).not.toBeInTheDocument();
+    expect(tunSwitch()).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Traffic mode" })).toBeInTheDocument();
   });
 
   it("supports keyboard navigation to nodes without starting a connection", async () => {
@@ -277,8 +282,8 @@ describe("HomeScreen", () => {
     const user = userEvent.setup();
     renderHome();
     expect(
-      screen.getByRole("heading", { name: "Connected", level: 1 }),
-    ).toBeInTheDocument();
+      screen.queryByRole("heading", { level: 1 }),
+    ).not.toBeInTheDocument();
     expect(connectButton()).toHaveAttribute("aria-pressed", "true");
     expect(connectButton()).toHaveAccessibleName("Disconnect");
     expect(
@@ -300,7 +305,7 @@ describe("HomeScreen", () => {
     expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
   });
 
-  it("labels a running manual proxy as locally ready and preserves unknown configuration", async () => {
+  it("keeps manual proxy setup in settings and preserves unknown configuration", async () => {
     runtimeMock.state.coreState = connectedStatus;
     runtimeMock.state.sysProxy = {
       ...sysProxyStatus,
@@ -311,8 +316,10 @@ describe("HomeScreen", () => {
       proxy: "127.0.0.1:10808",
     };
     renderHome();
-    expect(screen.getByText("Local proxy ready")).toBeInTheDocument();
+    expect(screen.queryByText("Local proxy ready")).not.toBeInTheDocument();
     expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+    expect(connectButton()).toHaveAccessibleName("Disconnect");
+    expect(connectButton()).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("Manual proxy setup")).not.toBeInTheDocument();
     expect(
       screen.queryByText(
@@ -323,17 +330,18 @@ describe("HomeScreen", () => {
     expect(useToastStore.getState().toasts).toHaveLength(0);
   });
 
-  it("keeps connected status neutral while proxy capabilities are unavailable", () => {
+  it("keeps the disconnect action available while proxy capabilities are unavailable", () => {
     runtimeMock.state.coreState = connectedStatus;
     const view = renderHome();
-    expect(screen.getByText("Protection status unknown")).toBeInTheDocument();
+    expect(screen.queryByText("Protection status unknown")).not.toBeInTheDocument();
     expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+    expect(connectButton()).toHaveAccessibleName("Disconnect");
     expect(ipcMock.systemProxyStatus).not.toHaveBeenCalled();
     view.unmount();
   });
 
   it.each([null, "macosPacketTunnel"] as const)(
-    "uses the running tunnel instead of the saved TUN choice (%s)",
+    "shows the saved TUN choice independently of the running tunnel (%s)",
     (activeTunBackend) => {
       runtimeMock.state.coreState = { ...connectedStatus, activeTunBackend };
       runtimeMock.state.sysProxy = { ...sysProxyStatus, management: "manual" };
@@ -343,11 +351,9 @@ describe("HomeScreen", () => {
         backend: "macosPacketTunnel",
       };
       renderHome();
-      expect(
-        screen.getByText(activeTunBackend ? "Connected" : "Local proxy ready"),
-      ).toBeInTheDocument();
-      if (!activeTunBackend)
-        expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+      expect(tunSwitch()).toBeChecked();
+      expect(connectButton()).toHaveAccessibleName("Disconnect");
+      expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
     },
   );
 
@@ -640,6 +646,36 @@ describe("HomeScreen", () => {
     expect(
       screen.getByRole("group", { name: "Traffic mode" }),
     ).toBeInTheDocument();
+  });
+
+  it.each([
+    ["en", "About TUN mode", "TUN captures device traffic and may require system permission", "About traffic mode", "Smart routing: Rules determine which traffic uses the proxy;\nGlobal proxy: All captured traffic uses the selected node;"],
+    ["zh-Hans", "TUN模式说明", "TUN接管设备流量，可能需要系统授权", "流量模式说明", "智能分流：根据规则决定哪些流量使用代理；\n全局代理：接管的流量均使用所选节点；"],
+    ["zh-Hant", "TUN模式說明", "TUN接管裝置流量，可能需要系統授權", "流量模式說明", "智慧分流：根據規則決定哪些流量使用代理；\n全域代理：接管的流量均使用所選節點；"],
+  ] as const)("shows localized mode help on hover and focus in %s without changing TUN", async (locale, tunLabel, tunHint, trafficLabel, trafficHint) => {
+    await changeLocale(locale, { persist: false });
+    const user = userEvent.setup();
+    renderHome();
+    await waitFor(() => expect(tunSwitch()).toBeEnabled());
+    expect(screen.queryByText(tunHint)).not.toBeInTheDocument();
+    expect(screen.queryByText(trafficHint)).not.toBeInTheDocument();
+
+    const info = screen.getByRole("button", { name: tunLabel });
+    await user.hover(info);
+    expect((await screen.findByRole("tooltip")).textContent).toBe(tunHint);
+    await user.click(info);
+    expect(tunSwitch()).not.toBeChecked();
+    expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
+    await user.unhover(info);
+    await user.tab();
+    expect(tunSwitch()).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: trafficLabel })).toHaveFocus();
+    expect((await screen.findByRole("tooltip")).textContent).toBe(trafficHint);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
+    expect(ipcMock.proxySetTrafficMode).not.toHaveBeenCalled();
   });
 
   it("shows the backend reason and restores controls when mode switching fails", async () => {

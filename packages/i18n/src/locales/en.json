@@ -69,10 +69,6 @@
       "updateFailed": "Subscription update failed",
       "updated": "Subscription updated"
     },
-    "unprotected": "Not protected",
-    "unprotectedHint": "Connect to route your traffic securely.",
-    "protectionUnknown": "Protection status unknown",
-    "localProxyReady": "Local proxy ready",
     "cleanupPending": "Tunnel cleanup pending",
     "retryDisconnect": "Retry disconnect",
     "manualProxy": {
@@ -101,7 +97,6 @@
     },
     "latency": "Latency",
     "duration": "Connection time",
-    "connectedHint": "Connected. Enjoy every step of your journey.",
     "currentNodeLabel": "Current node",
     "details": "Details",
     "switchNode": "Switch node",
@@ -114,19 +109,16 @@
     "disconnectLabel": "Disconnect",
     "trafficMode": "Traffic mode",
     "trafficModeSmart": "Smart routing",
-    "tunHint": "TUN routes device traffic through VoyaVPN. System permissions may be required.",
-    "directConnection": "Direct connection",
-    "directHint": "Traffic connects directly without using a proxy node.",
-    "globalHint": "All traffic handled by VoyaVPN uses the selected node.",
-    "smartHint": "Routing rules choose which traffic uses the proxy.",
+    "tunHint": "TUN captures device traffic and may require system permission",
     "chooseNode": "Choose a node",
-    "addFirstNode": "Add a node to connect",
     "missingNodes": {
       "title": "Add a node first",
       "description": "No nodes are available. Add a node or subscription before connecting."
     },
-    "switchingNode": "Switching node...",
-    "selectedNodeLabel": "Selected node"
+    "selectedNodeLabel": "Selected node",
+    "tunInfo": "About TUN mode",
+    "trafficModeInfo": "About traffic mode",
+    "trafficModeHint": "Smart routing: Rules determine which traffic uses the proxy;\nGlobal proxy: All captured traffic uses the selected node;"
   },
   "logCodes": {
     "connected": "Core supervisor started",
@@ -546,7 +538,6 @@
     "monitorStale": "Stale",
     "monitorStarting": "Starting",
     "monitorStopped": "Stopped",
-    "trafficModeDirect": "Direct",
     "trafficModeFailed": "Failed to change traffic mode",
     "trafficModeGlobal": "Global",
     "viewTabsAria": "Network activity views",

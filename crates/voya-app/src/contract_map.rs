@@ -62,7 +62,6 @@ pub const fn traffic_mode_to_contract(
     match value {
         voya_core::TrafficMode::Rule => voya_contracts::TrafficMode::Rule,
         voya_core::TrafficMode::Global => voya_contracts::TrafficMode::Global,
-        voya_core::TrafficMode::Direct => voya_contracts::TrafficMode::Direct,
         voya_core::TrafficMode::Unchanged => voya_contracts::TrafficMode::Unchanged,
     }
 }
@@ -74,7 +73,6 @@ pub const fn traffic_mode_from_contract(
     match value {
         voya_contracts::TrafficMode::Rule => voya_core::TrafficMode::Rule,
         voya_contracts::TrafficMode::Global => voya_core::TrafficMode::Global,
-        voya_contracts::TrafficMode::Direct => voya_core::TrafficMode::Direct,
         voya_contracts::TrafficMode::Unchanged => voya_core::TrafficMode::Unchanged,
     }
 }

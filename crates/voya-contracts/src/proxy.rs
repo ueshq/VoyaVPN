@@ -7,7 +7,6 @@ pub enum TrafficMode {
     #[default]
     Rule,
     Global,
-    Direct,
     Unchanged,
 }
 
@@ -105,6 +104,7 @@ mod contract_tests {
     fn traffic_mode_rejects_numeric_and_pascal_case_values() {
         assert!(serde_json::from_value::<TrafficMode>(serde_json::json!(0)).is_err());
         assert!(serde_json::from_value::<TrafficMode>(serde_json::json!("Rule")).is_err());
+        assert!(serde_json::from_value::<TrafficMode>(serde_json::json!("direct")).is_err());
         assert_eq!(
             serde_json::from_value::<TrafficMode>(serde_json::json!("rule"))
                 .expect("camelCase string enum should be accepted"),

@@ -143,14 +143,14 @@ mod tests {
         let mut saved = AppConfig::default();
         tracker.core_applied(&saved);
         tracker.proxy_applied(&saved);
-        saved.proxy_ui_item.traffic_mode = voya_core::TrafficMode::Direct;
+        saved.proxy_ui_item.traffic_mode = voya_core::TrafficMode::Global;
         tracker.traffic_mode_applied(saved.proxy_ui_item.traffic_mode);
         assert_eq!(
             tracker.status(&saved, true).action,
             SettingsApplyAction::None
         );
         saved.inbound[0].local_port += 1;
-        saved.proxy_ui_item.traffic_mode = voya_core::TrafficMode::Global;
+        saved.proxy_ui_item.traffic_mode = voya_core::TrafficMode::Rule;
         tracker.traffic_mode_applied(saved.proxy_ui_item.traffic_mode);
         assert_eq!(
             tracker.status(&saved, true).action,

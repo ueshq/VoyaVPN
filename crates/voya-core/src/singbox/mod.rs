@@ -41,13 +41,13 @@ const SINGBOX_FAKEIP_INET6_RANGE: &str = "fc00::/18";
 /// direct produces a broken tool rather than a faster one. The rules are
 /// appended *after* the `clash_mode` rules (see
 /// `crate::singbox::routing::gen_routing` and
-/// `crate::singbox::dns::gen_dns_rules`) so an explicit Direct or Global mode
+/// `crate::singbox::dns::gen_dns_rules`) so an explicit Global mode
 /// still wins; within Rule mode they precede the user's own rules.
 ///
 /// **This overrides user routing intent.** Inside Rule mode a user rule that
 /// sends one of these suffixes direct is generated after the priority rule and
 /// therefore never matches, and the names are always resolved through the
-/// remote DNS server. Switching to Direct mode is the only opt-out today.
+/// remote DNS server. There is no per-domain opt-out today.
 /// Editing the list changes generated JSON; see `docs/adr/0006-priority-proxy-domain-list.md`.
 const PRIORITY_PROXY_DOMAIN_SUFFIXES: &[&str] = &[
     "anthropic.com",

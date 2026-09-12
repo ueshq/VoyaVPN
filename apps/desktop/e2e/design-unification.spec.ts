@@ -271,7 +271,12 @@ for (const viewport of [
           "settings",
         ]) {
           await page.locator(`#shell-tab-${tab}`).click();
-          await expect(page.locator("#shell-tabpanel h1")).toBeVisible();
+          if (tab === "home") {
+            await expect(page.getByTestId("home-connect-button")).toBeVisible();
+            await expect(page.locator("#shell-tabpanel h1")).toHaveCount(0);
+          } else {
+            await expect(page.locator("#shell-tabpanel h1")).toBeVisible();
+          }
           await expect
             .poll(() =>
               page

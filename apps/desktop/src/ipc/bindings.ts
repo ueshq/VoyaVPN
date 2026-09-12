@@ -665,8 +665,7 @@ export type ProxySettings = {
 	/**
 	 *  The persisted Clash traffic mode. Typed for the same reason as
 	 *  [`SystemProxySettings::mode`]: `rename_all = "camelCase"` emits the very
-	 *  strings this field already stores (`rule`, `global`, `direct`,
-	 *  `unchanged`).
+	 *  canonical strings this field stores (`rule`, `global`, `unchanged`).
 	 */
 	trafficMode: TrafficMode,
 };
@@ -988,7 +987,7 @@ export type TlsSettings = {
 	finalMask: string | null,
 };
 
-export type TrafficMode = "rule" | "global" | "direct" | "unchanged";
+export type TrafficMode = "rule" | "global" | "unchanged";
 
 export type TrafficModeResponse = {
 	mode: TrafficMode,

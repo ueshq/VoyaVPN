@@ -1351,15 +1351,15 @@ fn singbox_priority_proxy_domains_follow_clash_mode_and_precede_user_rules() {
         .iter()
         .position(is_priority_proxy_route_rule)
         .expect("priority proxy route rule");
-    let direct_mode_index = generated
+    let global_mode_index = generated
         .route
         .rules
         .iter()
         .position(|rule| {
-            rule.outbound.as_deref() == Some(DIRECT_TAG)
-                && rule.clash_mode.as_deref() == Some("Direct")
+            rule.outbound.as_deref() == Some(PROXY_TAG)
+                && rule.clash_mode.as_deref() == Some("Global")
         })
-        .expect("Direct route mode rule");
+        .expect("Global route mode rule");
     let direct_final_index = generated
         .route
         .rules
@@ -1371,10 +1371,14 @@ fn singbox_priority_proxy_domains_follow_clash_mode_and_precede_user_rules() {
         .expect("direct final route rule");
     assert!(sniff_index < priority_route_index);
     assert!(dns_hijack_index < priority_route_index);
-    // Direct mode must win over the priority list, otherwise a user who chose
-    // "Direct" still tunnels these vendors and loses the mode they asked for.
-    assert!(direct_mode_index < priority_route_index);
+    assert!(global_mode_index < priority_route_index);
     assert!(priority_route_index < direct_final_index);
+
+    assert!(generated
+        .route
+        .rules
+        .iter()
+        .all(|rule| rule.clash_mode.as_deref() != Some("Direct")));
 
     let dns = generated.dns.expect("DNS config should be generated");
     assert_eq!(dns.reverse_mapping, Some(true));
@@ -1388,15 +1392,19 @@ fn singbox_priority_proxy_domains_follow_clash_mode_and_precede_user_rules() {
         .expect("priority proxy DNS rule");
     let priority_dns_rule = &dns.rules[priority_dns_index];
     assert_eq!(priority_dns_rule.strategy.as_deref(), Some("ipv4_only"));
-    let direct_mode_index = dns
+    let global_mode_index = dns
         .rules
         .iter()
         .position(|rule| {
-            rule.server.as_deref() == Some(SINGBOX_DIRECT_DNS_TAG)
-                && rule.clash_mode.as_deref() == Some("Direct")
+            rule.server.as_deref() == Some(SINGBOX_REMOTE_DNS_TAG)
+                && rule.clash_mode.as_deref() == Some("Global")
         })
-        .expect("Direct DNS mode rule");
-    assert!(direct_mode_index < priority_dns_index);
+        .expect("Global DNS mode rule");
+    assert!(global_mode_index < priority_dns_index);
+    assert!(dns
+        .rules
+        .iter()
+        .all(|rule| rule.clash_mode.as_deref() != Some("Direct")));
 }
 
 #[test]

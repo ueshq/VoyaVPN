@@ -11,6 +11,7 @@ pub use profile::{ProfileListing, ProfileRepository};
 pub use profile_ex::ProfileExRepository;
 pub use routing::RoutingRepository;
 pub use server_stat::ServerStatRepository;
+pub(crate) use settings::normalize_retired_traffic_mode;
 pub use settings::SettingsRepository;
 pub use state::{AppStateRecord, AppStateRepository};
 pub use subscription::SubscriptionRepository;
