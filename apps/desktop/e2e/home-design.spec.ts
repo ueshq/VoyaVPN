@@ -206,7 +206,7 @@ for (const layout of ["none", "macos", "windows"] as const) {
       });
     });
     await expect(
-      page.getByRole("button", { name: "添加订阅", exact: true }),
+      page.getByRole("button", { name: "连接", exact: true }),
     ).toBeVisible();
     await expect(page.getByTestId("home-connection-duration")).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("home-empty.png") });

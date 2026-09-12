@@ -11,4 +11,17 @@ describe("shell navigation", () => {
     useShellStore.getState().setActiveTab("connections");
     expect(useShellStore.getState().activeTab).toBe("connections");
   });
+
+  it("clears an Add menu request when ordinary navigation supersedes it", () => {
+    useShellStore.getState().setActiveTab("home", true);
+    useShellStore.getState().openProfilesAddMenu();
+    expect(useShellStore.getState()).toMatchObject({
+      activeTab: "profiles", profilesAddMenuOpen: true, focusPageTitle: false,
+    });
+    useShellStore.getState().setActiveTab("settings");
+    useShellStore.getState().setActiveTab("profiles", true);
+    expect(useShellStore.getState()).toMatchObject({
+      activeTab: "profiles", profilesAddMenuOpen: false, focusPageTitle: true,
+    });
+  });
 });

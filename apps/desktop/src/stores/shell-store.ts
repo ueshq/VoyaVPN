@@ -12,6 +12,8 @@ type ShellState = {
   activeTab: ShellTab;
   setActiveTab: (tab: ShellTab, focusTitle?: boolean) => void;
   focusPageTitle: boolean;
+  profilesAddMenuOpen: boolean;
+  openProfilesAddMenu: () => void;
   settingsTab: "general" | "core" | "network" | "dns" | "tests" | "updates";
   routingPerAppRequested: boolean;
   /** Active sub-view of the Connections page; survives leaving the page. */
@@ -25,10 +27,13 @@ export const useShellStore = create<ShellState>((set) => ({
     set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   activeTab: "home",
   focusPageTitle: false,
+  profilesAddMenuOpen: false,
+  openProfilesAddMenu: () =>
+    set({ activeTab: "profiles", focusPageTitle: false, profilesAddMenuOpen: true }),
   settingsTab: "general",
   routingPerAppRequested: false,
   setActiveTab: (activeTab, focusTitle = false) =>
-    set({ activeTab, focusPageTitle: focusTitle }),
+    set({ activeTab, focusPageTitle: focusTitle, profilesAddMenuOpen: false }),
   connectionsView: "connections",
   setConnectionsView: (connectionsView) => set({ connectionsView }),
 }));

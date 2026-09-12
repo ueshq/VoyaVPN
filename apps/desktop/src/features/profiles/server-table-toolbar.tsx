@@ -26,6 +26,7 @@ import {
   MenubarTrigger,
 } from "@voya/ui/components/menubar";
 import { getErrorMessage } from "@voya/utils/error";
+import { useShellStore } from "@/stores/shell-store";
 
 import { IMPORT_METHODS } from "./import-methods";
 import { ExportMenuItems, SpeedtestButton } from "./server-table-menus";
@@ -55,6 +56,9 @@ export function ServerTableToolbar({
     t,
     undecodableProfiles,
   } = controller;
+  const addMenuOpen = useShellStore((state) => state.profilesAddMenuOpen);
+  const focusFirstAddItemRef = useRef(addMenuOpen);
+  const addNodeItemRef = useRef<HTMLDivElement>(null);
   const openingDialogRef = useRef(false);
   function handleMenuClose(event: Event) {
     if (openingDialogRef.current) {
@@ -89,8 +93,14 @@ export function ServerTableToolbar({
         <PageHeaderActions className="min-w-0 max-w-full">
           <Toolbar className="min-w-0 max-w-full justify-end">
             <ToolbarGroup className="min-w-0 flex-wrap justify-end gap-y-2">
-              <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
-                <MenubarMenu>
+              <Menubar
+                className="h-auto border-0 bg-transparent p-0 shadow-none"
+                value={addMenuOpen ? "add" : ""}
+                onValueChange={(value) => {
+                  useShellStore.setState({ profilesAddMenuOpen: value === "add" });
+                }}
+              >
+                <MenubarMenu value="add">
                   <MenubarTrigger asChild className="h-8">
                     <Button ref={addTriggerRef} size="sm" type="button">
                       <Plus className="size-4" aria-hidden="true" />
@@ -98,8 +108,18 @@ export function ServerTableToolbar({
                       <ChevronDown className="size-3" aria-hidden="true" />
                     </Button>
                   </MenubarTrigger>
-                  <MenubarContent onCloseAutoFocus={handleMenuClose}>
-                    <MenubarItem onSelect={() => {
+                  <MenubarContent
+                    onCloseAutoFocus={handleMenuClose}
+                    onFocus={(event) => {
+                      // Radix focuses the container for a programmatic opening.
+                      // The Home guide should land on the first available action.
+                      if (focusFirstAddItemRef.current && event.target === event.currentTarget) {
+                        focusFirstAddItemRef.current = false;
+                        addNodeItemRef.current?.focus();
+                      }
+                    }}
+                  >
+                    <MenubarItem ref={addNodeItemRef} onSelect={() => {
                       openingDialogRef.current = true;
                       setDialogState({ mode: "create" });
                     }}>

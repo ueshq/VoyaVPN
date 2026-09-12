@@ -120,7 +120,11 @@
     "globalHint": "由 VoyaVPN 接管的流量皆使用所選節點。",
     "smartHint": "依據規則決定哪些流量使用代理。",
     "chooseNode": "選擇節點",
-    "addFirstSubscription": "新增訂閱或匯入節點，即可開始使用。",
+    "addFirstNode": "新增節點後即可連線",
+    "missingNodes": {
+      "title": "請先新增節點",
+      "description": "目前沒有可用節點，請先新增節點或訂閱後再連線。"
+    },
     "switchingNode": "正在切換節點…",
     "selectedNodeLabel": "待連線節點"
   },

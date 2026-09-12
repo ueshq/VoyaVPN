@@ -22,7 +22,6 @@ import worldMap from "@/assets/world-map.svg";
 import { NodeCountryIcon } from "@/components/node-country-icon";
 import { getProtocolLabel } from "@/features/profiles/profile-constants";
 import { profileNameWithoutFlag } from "@/features/profiles/profile-display";
-import { SubscriptionsDialog } from "@/features/subscriptions/subscriptions-dialog";
 import { loadAppSettings } from "@/ipc/commands";
 import { queryKeys } from "@/ipc/query-keys";
 import { useShellStore } from "@/stores/shell-store";
@@ -34,7 +33,8 @@ import { useHomeRuntime } from "./use-home-runtime";
 export function HomeScreen() {
   const { t } = useI18n();
   const home = useHomeRuntime(t);
-  const [subscriptionsOpen, setSubscriptionsOpen] = useState(false);
+  const [addNodesOpen, setAddNodesOpen] = useState(false);
+  const addingNodesRef = useRef(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const navigateToNodes = () =>
     useShellStore.getState().setActiveTab("profiles", true);
@@ -114,13 +114,7 @@ export function HomeScreen() {
       <div className="home-content">
         <div className="home-hero">
           <ConnectButton
-            label={
-              noNodes
-                ? t("home.subscriptionCard.add")
-                : needsSelection
-                  ? t("home.chooseNode")
-                  : undefined
-            }
+            label={needsSelection ? t("home.chooseNode") : undefined}
             busy={
               home.busy || (!runtimeActionAvailable && home.profilesPending)
             }
@@ -128,7 +122,10 @@ export function HomeScreen() {
             inProgress={home.inProgress}
             onPrimaryAction={
               noNodes
-                ? () => setSubscriptionsOpen(true)
+                ? () => {
+                    addingNodesRef.current = false;
+                    setAddNodesOpen(true);
+                  }
                 : needsSelection
                   ? navigateToNodes
                   : home.handlePrimaryAction
@@ -149,7 +146,7 @@ export function HomeScreen() {
               {headline}
             </h1>
             <p className="home-status-hint">
-              {noNodes ? t("home.addFirstSubscription") : hint || "\u00a0"}
+              {noNodes ? t("home.addFirstNode") : hint || "\u00a0"}
             </p>
           </div>
           {noNodes ? (
@@ -234,10 +231,32 @@ export function HomeScreen() {
         onCloseFocus={() => detailsButton.current?.focus()}
         t={t}
       />
-      <SubscriptionsDialog
-        onOpenChange={setSubscriptionsOpen}
-        open={subscriptionsOpen}
-      />
+      <Dialog open={addNodesOpen} onOpenChange={setAddNodesOpen}>
+        <DialogContent
+          closeLabel={t("actions.close")}
+          onCloseAutoFocus={(event) => {
+            // Navigation transfers focus to the Add menu on the next screen.
+            if (addingNodesRef.current) event.preventDefault();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{t("home.missingNodes.title")}</DialogTitle>
+            <DialogDescription>{t("home.missingNodes.description")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddNodesOpen(false)}>
+              {t("actions.cancel")}
+            </Button>
+            <Button onClick={() => {
+              addingNodesRef.current = true;
+              setAddNodesOpen(false);
+              useShellStore.getState().openProfilesAddMenu();
+            }}>
+              {t("panes.profiles.toolbar.addNode")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

@@ -1,5 +1,5 @@
 import { useShellStore } from "@/stores/shell-store";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -72,20 +72,15 @@ const ipcMock = vi.hoisted(() => {
     connectActiveProfile: vi.fn(),
     loadAppSettings: vi.fn(),
     proxySetTrafficMode: vi.fn(),
-    deleteSubscriptions: vi.fn(),
     disconnectCore: vi.fn(),
     listProfiles: vi.fn(),
-    listSubscriptionMetadata: vi.fn(),
-    listSubscriptions: vi.fn(),
     restartCore: vi.fn(),
     runtimeStatus: vi.fn(),
-    saveSubscription: vi.fn(),
     setActiveProfile: vi.fn(),
     setConnectionMode: vi.fn(),
     systemProxyStatus: vi.fn(),
     tunRequestElevation: vi.fn(),
     tunStatus: vi.fn(),
-    updateSubscriptions: vi.fn(),
   };
 });
 
@@ -163,21 +158,16 @@ vi.mock("@/ipc/commands", () => ({
   connectActiveProfile: ipcMock.connectActiveProfile,
   loadAppSettings: ipcMock.loadAppSettings,
   proxySetTrafficMode: ipcMock.proxySetTrafficMode,
-  deleteSubscriptions: ipcMock.deleteSubscriptions,
   disconnectCore: ipcMock.disconnectCore,
   IpcCommandError: ipcMock.IpcCommandError,
   listProfiles: ipcMock.listProfiles,
-  listSubscriptionMetadata: ipcMock.listSubscriptionMetadata,
-  listSubscriptions: ipcMock.listSubscriptions,
   restartCore: ipcMock.restartCore,
   runtimeStatus: ipcMock.runtimeStatus,
-  saveSubscription: ipcMock.saveSubscription,
   setActiveProfile: ipcMock.setActiveProfile,
   setConnectionMode: ipcMock.setConnectionMode,
   systemProxyStatus: ipcMock.systemProxyStatus,
   tunRequestElevation: ipcMock.tunRequestElevation,
   tunStatus: ipcMock.tunStatus,
-  updateSubscriptions: ipcMock.updateSubscriptions,
 }));
 vi.mock("@/ipc/runtime-event-store", () => ({ useRuntimeEventStore: runtimeMock.useRuntimeEventStore }));
 
@@ -212,7 +202,7 @@ function connectButton() {
 
 describe("HomeScreen", () => {
   beforeEach(async () => {
-    useShellStore.setState({ activeTab: "home", focusPageTitle: false });
+    useShellStore.getState().setActiveTab("home");
     useRuntimeActionStore.setState({
       pendingAction: null,
       modePending: false,
@@ -239,8 +229,6 @@ describe("HomeScreen", () => {
     mockProfileList([
       makeActiveProfile({ id: "active", remarks: "Active node" }),
     ]);
-    ipcMock.listSubscriptionMetadata.mockResolvedValue([]);
-    ipcMock.listSubscriptions.mockResolvedValue([]);
     ipcMock.setActiveProfile.mockResolvedValue(makeProfile(0));
     ipcMock.setConnectionMode.mockResolvedValue(connectionModeStatus);
     ipcMock.systemProxyStatus.mockResolvedValue(sysProxyStatus);
@@ -255,12 +243,12 @@ describe("HomeScreen", () => {
     await changeLocale("en", { persist: false });
   });
 
-  it("offers first-use subscription and import actions without empty details", async () => {
+  it("offers connection guidance and import without empty details", async () => {
     mockProfileList([]);
     renderHome();
-    expect(
-      await screen.findByRole("button", { name: "Add subscription" }),
-    ).toBeEnabled();
+    await waitFor(() => expect(connectButton()).toBeEnabled());
+    expect(connectButton()).toHaveAccessibleName("Connect");
+    expect(screen.getByText("Add a node to connect")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Details" }),
     ).not.toBeInTheDocument();
@@ -522,18 +510,68 @@ describe("HomeScreen", () => {
     expect(connectButton()).toBeEnabled();
   });
 
-  it("opens the source editor from the first-use primary action", async () => {
+  it("guides an empty home to the Nodes Add menu without starting a connection", async () => {
     mockProfileList([]);
     renderHome();
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Add subscription" }),
+    await waitFor(() => expect(connectButton()).toBeEnabled());
+    await userEvent.click(connectButton());
+    const dialog = screen.getByRole("dialog", { name: "Add a node first" });
+    expect(dialog).toHaveAccessibleDescription(
+      "No nodes are available. Add a node or subscription before connecting.",
     );
-    expect(
-      screen.getByRole("dialog", { name: "Add subscription" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Add and update" }),
-    ).toBeDisabled();
+    expect(useShellStore.getState().activeTab).toBe("home");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Add node" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(useShellStore.getState()).toMatchObject({
+      activeTab: "profiles", profilesAddMenuOpen: true, focusPageTitle: false,
+    });
+    expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
+    expect(ipcMock.setActiveProfile).not.toHaveBeenCalled();
+  });
+
+  it.each(["Cancel", "Close", "Escape"])("dismisses the node guide with %s and restores focus", async (action) => {
+    mockProfileList([]);
+    renderHome();
+    await waitFor(() => expect(connectButton()).toBeEnabled());
+    await userEvent.click(connectButton());
+    const dialog = screen.getByRole("dialog", { name: "Add a node first" });
+    if (action === "Escape") await userEvent.keyboard("{Escape}");
+    else await userEvent.click(within(dialog).getByRole("button", { name: action }));
+    await waitFor(() => expect(connectButton()).toHaveFocus());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(useShellStore.getState()).toMatchObject({ activeTab: "home", profilesAddMenuOpen: false });
+    expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
+  });
+
+  it("does not offer the empty-node guide while profiles are loading", async () => {
+    ipcMock.listProfiles.mockImplementation(() => new Promise<never>(() => {}));
+    renderHome();
+    expect(connectButton()).toBeDisabled();
+    await userEvent.click(connectButton());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
+  });
+
+  it.each(["query error", "no selection"])("navigates to Nodes without the empty-node guide for %s", async (state) => {
+    if (state === "query error") ipcMock.listProfiles.mockRejectedValue(new Error("Profiles unavailable"));
+    else mockProfileList([{ ...makeActiveProfile({ id: "saved" }), isActive: false }]);
+    renderHome();
+    await waitFor(() => expect(connectButton()).toBeEnabled());
+    expect(connectButton()).toHaveAccessibleName("Choose a node");
+    await userEvent.click(connectButton());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(useShellStore.getState()).toMatchObject({ activeTab: "profiles", profilesAddMenuOpen: false });
+    expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
+  });
+
+  it.each(["connected", "cleanupPending"] as const)("still disconnects an empty profile list while %s", async (state) => {
+    runtimeMock.state.coreState = { ...connectedStatus, state };
+    mockProfileList([]);
+    renderHome();
+    await userEvent.click(connectButton());
+    await waitFor(() => expect(ipcMock.disconnectCore).toHaveBeenCalledOnce());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
   });
 
   it("turns saved TUN off from the keyboard and preserves the system proxy preference", async () => {

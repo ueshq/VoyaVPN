@@ -61,8 +61,11 @@ test("first subscription survives a failed update and owns read-only nodes after
 }) => {
   await installTauriSmokeMock(page);
   await page.goto("/");
-  await page.getByRole("button", { name: "Add subscription" }).click();
-  const dialog = page.getByRole("dialog");
+  await page.getByTestId("home-connect-button").click();
+  await page.getByRole("dialog", { name: "Add a node first" })
+    .getByRole("button", { name: "Add node" }).click();
+  await page.getByRole("menuitem", { name: "Add subscription", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Add subscription" });
   await dialog.getByLabel("Remarks", { exact: true }).fill("Travel");
   await dialog
     .getByLabel("URL", { exact: true })

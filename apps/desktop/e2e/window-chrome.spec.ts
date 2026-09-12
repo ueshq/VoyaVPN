@@ -114,13 +114,13 @@ for (const layout of ["macos", "windows"] as const) {
       path: testInfo.outputPath(`${layout}-rules-960.png`),
     });
     await page.getByRole("tab", { name: "Home", exact: true }).click();
-    await page.getByRole("button", { name: "Add subscription" }).click();
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     await expect(
-      page.getByRole("button", { name: "Add subscription" }),
+      page.getByRole("button", { name: "Connect", exact: true }),
     ).toBeFocused();
     expect(
       await page.evaluate(

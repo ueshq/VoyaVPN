@@ -512,7 +512,7 @@ describe("App", () => {
       within(hero).getByRole("heading", { level: 1, name: "Not protected" }),
     ).toBeInTheDocument();
     expect(
-      await within(hero).findByRole("button", { name: "Add subscription" }),
+      await within(hero).findByRole("button", { name: "Connect" }),
     ).toBeInTheDocument();
     expect(within(hero).getByText("Not protected")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-footer")).toHaveTextContent(

@@ -120,7 +120,11 @@
     "globalHint": "All traffic handled by VoyaVPN uses the selected node.",
     "smartHint": "Routing rules choose which traffic uses the proxy.",
     "chooseNode": "Choose a node",
-    "addFirstSubscription": "Add a subscription or import nodes to get started.",
+    "addFirstNode": "Add a node to connect",
+    "missingNodes": {
+      "title": "Add a node first",
+      "description": "No nodes are available. Add a node or subscription before connecting."
+    },
     "switchingNode": "Switching node...",
     "selectedNodeLabel": "Selected node"
   },
