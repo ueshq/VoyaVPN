@@ -3,7 +3,6 @@ use std::collections::BTreeSet;
 use qrcode::{render::svg, EcLevel, QrCode};
 use thiserror::Error;
 pub use voya_contracts::{QrCodeImage, QrScanFailureReason, QrScanResult, QrScanStatus};
-use voya_platform::clipboard::ClipboardFailure;
 use voya_platform::screen_capture::{ScreenCaptureBatch, ScreenCaptureFailure, ScreenFrame};
 
 mod screen;
@@ -72,49 +71,6 @@ impl QrCodeManager {
             failure_reason: Some(capture_failure_reason(failure)),
         }
     }
-
-    #[must_use]
-    pub fn decode_clipboard_image(
-        &self,
-        image: Result<Option<ScreenFrame>, ClipboardFailure>,
-    ) -> QrScanResult {
-        let (status, texts, failure_reason) = match image {
-            Ok(Some(frame)) => {
-                let mut texts = Vec::new();
-                if decode_frame(&frame, &mut texts, &mut BTreeSet::new()) {
-                    let status = if texts.is_empty() {
-                        QrScanStatus::NotFound
-                    } else {
-                        QrScanStatus::Found
-                    };
-                    (status, texts, None)
-                } else {
-                    (
-                        QrScanStatus::Unavailable,
-                        texts,
-                        Some(QrScanFailureReason::CaptureFailed),
-                    )
-                }
-            }
-            Ok(None) => (
-                QrScanStatus::NotFound,
-                Vec::new(),
-                Some(QrScanFailureReason::NoImage),
-            ),
-            Err(failure) => (
-                QrScanStatus::Unavailable,
-                Vec::new(),
-                Some(clipboard_failure_reason(failure)),
-            ),
-        };
-        QrScanResult {
-            status,
-            texts,
-            source: "clipboard".to_string(),
-            message: None,
-            failure_reason,
-        }
-    }
 }
 
 /// Appends every new payload found in `frame`; `false` when the frame is malformed.
@@ -138,14 +94,6 @@ fn decode_frame(frame: &ScreenFrame, texts: &mut Vec<String>, seen: &mut BTreeSe
         }
     }
     true
-}
-
-fn clipboard_failure_reason(failure: ClipboardFailure) -> QrScanFailureReason {
-    match failure {
-        ClipboardFailure::Unsupported => QrScanFailureReason::Unsupported,
-        ClipboardFailure::Busy => QrScanFailureReason::Busy,
-        ClipboardFailure::ReadFailed => QrScanFailureReason::CaptureFailed,
-    }
 }
 
 fn capture_failure_reason(failure: ScreenCaptureFailure) -> QrScanFailureReason {
@@ -300,41 +248,6 @@ mod qr_tests {
             (ScreenCaptureFailure::Busy, QrScanFailureReason::Busy),
         ] {
             let result = QrCodeManager.scan_failure(failure);
-            assert_eq!(result.failure_reason, Some(reason));
-            assert!(result.texts.is_empty());
-        }
-    }
-
-    #[test]
-    fn clipboard_image_results_are_typed() {
-        let payload = "vless://clipboard@example.test:443";
-        let found = QrCodeManager.decode_clipboard_image(Ok(Some(qr_frame(&[payload]))));
-        assert_eq!(found.status, QrScanStatus::Found);
-        assert_eq!(found.texts, vec![payload.to_string()]);
-        assert_eq!(found.source, "clipboard");
-        assert_eq!(found.failure_reason, None);
-
-        let blank = QrCodeManager.decode_clipboard_image(Ok(Some(qr_frame(&[]))));
-        assert_eq!(blank.status, QrScanStatus::NotFound);
-        assert_eq!(blank.failure_reason, None);
-
-        let no_image = QrCodeManager.decode_clipboard_image(Ok(None));
-        assert_eq!(no_image.status, QrScanStatus::NotFound);
-        assert_eq!(no_image.failure_reason, Some(QrScanFailureReason::NoImage));
-
-        for (failure, reason) in [
-            (
-                ClipboardFailure::Unsupported,
-                QrScanFailureReason::Unsupported,
-            ),
-            (ClipboardFailure::Busy, QrScanFailureReason::Busy),
-            (
-                ClipboardFailure::ReadFailed,
-                QrScanFailureReason::CaptureFailed,
-            ),
-        ] {
-            let result = QrCodeManager.decode_clipboard_image(Err(failure));
-            assert_eq!(result.status, QrScanStatus::Unavailable);
             assert_eq!(result.failure_reason, Some(reason));
             assert!(result.texts.is_empty());
         }

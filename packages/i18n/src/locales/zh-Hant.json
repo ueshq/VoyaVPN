@@ -269,13 +269,9 @@
         "export": "匯出",
         "noProfiles": "沒有可匯出的節點。",
         "noSelection": "請至少選擇一個節點再匯出。",
-        "saveShareLinks": "儲存分享連結",
-        "savedFile": "已儲存匯出到 {{path}}。",
-        "shareBase64": "分享連結（Base64）",
         "shareLinks": "分享連結",
         "showQr": "顯示 QR Code",
-        "skippedUnsupported": "已略過 {{count}} 個不支援分享連結的節點。",
-        "voyaBundle": "Voya 節點包"
+        "skippedUnsupported": "已略過 {{count}} 個不支援分享連結的節點。"
       },
       "fields": {
         "address": "位址",
@@ -346,17 +342,12 @@
         "importing": "正在匯入節點…"
       },
       "importMethods": {
-        "text": "從文字匯入",
-        "file": "從檔案匯入",
         "qrImage": "掃描 QR 碼圖片",
-        "qrClipboard": "掃描剪貼簿圖片",
         "qrScreen": "掃描螢幕 QR 碼"
       },
       "importDialog": {
         "reading": "正在讀取內容…",
         "description": "導入分享鏈接或節點配置文本。",
-        "file": "選擇文件",
-        "fileAria": "節點配置文件",
         "manual": "手動節點",
         "mode": "導入方式",
         "payload": "節點配置內容",
@@ -399,8 +390,6 @@
       "title": "節點",
       "toolbar": {
         "add": "新增",
-        "bulkExport": "匯出",
-        "bulkSpeedtest": "全節點測速",
         "delete": "刪除",
         "edit": "編輯",
         "import": "匯入",
@@ -544,14 +533,11 @@
     "moreActions": "更多"
   },
   "qr": {
-    "clipboardImageMissing": "剪貼簿中沒有圖片。",
-    "clipboardImageUnavailable": "無法讀取剪貼簿圖片。",
     "clipboardUnavailable": "目前 WebView 不支援讀取剪貼簿文字。",
     "content": "內容",
     "generatedAlt": "產生的二維碼",
     "noQrFound": "未找到 QR Code。",
     "scan": "掃描",
-    "scanClipboardImage": "剪貼簿圖片",
     "scanImage": "掃描圖片",
     "screenUnavailable": "目前平臺或權限狀態不支援螢幕 QR Code 掃描。",
     "scanningScreen": "正在掃描所有顯示器…",

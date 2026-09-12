@@ -164,45 +164,20 @@ pub fn parse_share_lines(input: &str) -> Vec<Result<ProfileItem, ShareError>> {
         .collect()
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct VoyaProfileBundleV1 {
     schema_version: u32,
     profiles: Vec<VoyaBundleProfile>,
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 enum VoyaBundleProfile {
     Node {
         reference: String,
         share_uri: String,
     },
-}
-
-pub fn export_voya_profile_bundle(items: &[ProfileItem]) -> Result<String, ShareError> {
-    if items.is_empty() {
-        return Err(invalid_voya_bundle("no exportable nodes"));
-    }
-    let profiles = items
-        .iter()
-        .enumerate()
-        .map(|(index, item)| {
-            Ok(VoyaBundleProfile::Node {
-                reference: format!("p{}", index + 1),
-                share_uri: export_share_link(item)?,
-            })
-        })
-        .collect::<Result<Vec<_>, ShareError>>()?;
-    let json = serde_json::to_string(&VoyaProfileBundleV1 {
-        schema_version: 1,
-        profiles,
-    })
-    .map_err(|error| invalid_voya_bundle(error.to_string()))?;
-    let payload = base64_encode(&json, true)
-        .replace('+', "-")
-        .replace('/', "_");
-    Ok(format!("{VOYA_PROFILE_BUNDLE_PREFIX}{payload}"))
 }
 
 pub fn parse_voya_profile_bundle(

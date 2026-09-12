@@ -260,46 +260,35 @@ test("node menus defer actions until a method is chosen and restore keyboard foc
     name: "Import",
     exact: true,
   });
-  for (const [method, action] of [
-    ["Import from text", null],
-    ["Import from file", "File"],
-    ["Scan QR image", "Scan image"],
-    ["Scan clipboard image", "Clipboard image"],
-  ] as const) {
-    await importTrigger.click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.getByRole("menu").getByRole("menuitem")).toHaveCount(6);
-    if (method === "Import from text")
-      await page.screenshot({
-        animations: "disabled",
-        path: testInfo.outputPath("nodes-import-menu.png"),
-      });
-    await page.getByRole("menuitem", { name: method, exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "Import Nodes" });
-    await expect(dialog).toBeVisible();
+  await importTrigger.click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText([
+    "Import from clipboard",
+    "Scan QR image",
+    "Scan screen",
+  ]);
+  await page.screenshot({
+    animations: "disabled",
+    path: testInfo.outputPath("nodes-import-menu.png"),
+  });
+  await page.getByRole("menuitem", { name: "Scan QR image", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Import Nodes" });
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByRole("textbox", { name: "Import payload" }),
+  ).toHaveValue("");
+  for (const name of ["Paste", "File", "Scan image", "Clipboard image", "Screen"]) {
     await expect(
-      dialog.getByRole("textbox", { name: "Import payload" }),
-    ).toHaveValue("");
-    for (const name of [
-      "Paste",
-      "File",
-      "Scan image",
-      "Clipboard image",
-      "Screen",
-    ]) {
-      await expect(
-        dialog.getByRole("button", { name, exact: true }),
-      ).toHaveCount(name === action ? 1 : 0);
-    }
-    await page.keyboard.press("Escape");
-    await expect(importTrigger).toBeFocused();
+      dialog.getByRole("button", { name, exact: true }),
+    ).toHaveCount(name === "Scan image" ? 1 : 0);
   }
+  await page.keyboard.press("Escape");
+  await expect(importTrigger).toBeFocused();
   expect(
     (await smokeCalls(page)).filter(({ command }) =>
       [
         "import_profiles_from_text",
         "read_clipboard_text",
-        "scan_clipboard_qr",
         "scan_screen_qr",
         "save_subscription",
       ].includes(command),

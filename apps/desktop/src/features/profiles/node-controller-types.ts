@@ -77,11 +77,8 @@ export type NodeNoticesController = Pick<ReturnType<typeof useNodeImport>, "dire
   Pick<NodeShared, "t">;
 
 export type NodeToolbarController = Pick<ReturnType<typeof useNodeImport>, "handleDirectImport" | "directImportPending"> &
-  Pick<NodeListData, "profiles" | "profilesQuery"> &
   Pick<NodeEditor, "addTriggerRef" | "importTriggerRef" | "setDialogState" | "setImportMethod"> &
   Pick<NodeSubscriptions, "openSubscription"> &
-  Pick<NodeExport, "handleBulkExport"> &
-  Pick<NodeSpeedtest, "handleCancelSpeedtest" | "handleSpeedtest" | "speedtestRunning"> &
   Pick<NodeShared, "t">;
 
 export type NodeListController = Pick<NodeOperation, "runOperation"> &

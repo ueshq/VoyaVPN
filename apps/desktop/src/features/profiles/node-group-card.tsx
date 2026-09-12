@@ -150,20 +150,14 @@ export function NodeGroupCard({
                 >
                   <Share2 aria-hidden="true" className="size-4" />
                   {t("panes.profiles.export.export")}
+                  <ChevronDown aria-hidden="true" className="size-3" />
                 </Button>
               </MenubarTrigger>
               <MenubarContent align="end">
                 <ExportMenuItems
                   t={t}
-                  onExport={(kind) =>
-                    void handleGroupExport(row.groupKey, kind)
-                  }
-                  onSave={(kind) =>
-                    void handleGroupExport(row.groupKey, kind, "file")
-                  }
-                  onShowQr={() =>
-                    void handleGroupExport(row.groupKey, "shareLinks", "qr")
-                  }
+                  onExport={() => void handleGroupExport(row.groupKey)}
+                  onShowQr={() => void handleGroupExport(row.groupKey, "qr")}
                 />
               </MenubarContent>
             </MenubarMenu>

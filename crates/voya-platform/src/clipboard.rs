@@ -2,11 +2,9 @@
 //!
 //! WebKit shows a "Paste" confirmation for every `navigator.clipboard.read*`
 //! call that is not a user paste gesture, so the renderer reads through the
-//! shell instead. As with screen capture, pixels never cross the IPC boundary.
+//! shell instead.
 
 use thiserror::Error;
-
-use crate::screen_capture::{rgba_to_luma, ScreenFrame};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum ClipboardFailure {
@@ -21,31 +19,6 @@ pub enum ClipboardFailure {
 /// Returns `Ok(None)` when the clipboard holds no text.
 pub fn read_text() -> Result<Option<String>, ClipboardFailure> {
     present(open()?.get_text(), "text")
-}
-
-/// Returns a greyscale copy of the clipboard image, or `Ok(None)` when the
-/// clipboard holds no image.
-pub fn read_image() -> Result<Option<ScreenFrame>, ClipboardFailure> {
-    let Some(image) = present(open()?.get_image(), "image")? else {
-        return Ok(None);
-    };
-    let expected_len = image
-        .width
-        .checked_mul(image.height)
-        .and_then(|pixels| pixels.checked_mul(4));
-    if image.width == 0 || image.height == 0 || expected_len != Some(image.bytes.len()) {
-        tracing::warn!(
-            width = image.width,
-            height = image.height,
-            "clipboard image has an unexpected layout"
-        );
-        return Err(ClipboardFailure::ReadFailed);
-    }
-    Ok(Some(ScreenFrame {
-        width: image.width,
-        height: image.height,
-        luma: rgba_to_luma(&image.bytes),
-    }))
 }
 
 fn open() -> Result<arboard::Clipboard, ClipboardFailure> {

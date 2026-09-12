@@ -4,7 +4,6 @@ import {
   FilePlus2,
   Plus,
   Rss,
-  Share2,
   Upload,
 } from "lucide-react";
 
@@ -20,7 +19,6 @@ import {
 import { useShellStore } from "@/stores/shell-store";
 
 import { IMPORT_METHODS } from "./import-methods";
-import { ExportMenuItems, SpeedtestButton } from "./server-table-menus";
 import type { NodeToolbarController } from "./node-controller-types";
 
 export function ServerTableToolbar({
@@ -29,19 +27,13 @@ export function ServerTableToolbar({
   controller: NodeToolbarController;
 }) {
   const {
-    handleBulkExport,
-    handleCancelSpeedtest,
-    handleSpeedtest,
     handleDirectImport,
     directImportPending,
     addTriggerRef,
     importTriggerRef,
-    profiles,
-    profilesQuery,
     setDialogState,
     setImportMethod,
     openSubscription,
-    speedtestRunning,
     t,
   } = controller;
   const addMenuOpen = useShellStore((state) => state.profilesAddMenuOpen);
@@ -54,7 +46,6 @@ export function ServerTableToolbar({
       openingDialogRef.current = false;
     }
   }
-  const batchActionsDisabled = profilesQuery.isLoading || profiles.length === 0;
 
   return (
     <Toolbar className="min-w-0 max-w-full justify-end">
@@ -134,38 +125,6 @@ export function ServerTableToolbar({
                 {t(labelKey)}
               </MenubarItem>
             ))}
-          </MenubarContent>
-        </MenubarMenu>
-      </Menubar>
-      <SpeedtestButton
-        disabled={batchActionsDisabled}
-        label={t("panes.profiles.toolbar.bulkSpeedtest")}
-        onCancel={handleCancelSpeedtest}
-        onRun={() => handleSpeedtest({ scope: "all" })}
-        running={speedtestRunning}
-      />
-      <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
-        <MenubarMenu>
-          <MenubarTrigger asChild className="h-8">
-            <Button
-              disabled={batchActionsDisabled}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <Share2 className="size-4" aria-hidden="true" />
-              {t("panes.profiles.toolbar.bulkExport")}
-            </Button>
-          </MenubarTrigger>
-          <MenubarContent align="start">
-            <ExportMenuItems
-              onExport={(kind) => void handleBulkExport(kind)}
-              onSave={(kind) =>
-                void handleBulkExport(kind, "file")
-              }
-              onShowQr={() => void handleBulkExport("shareLinks", "qr")}
-              t={t}
-            />
           </MenubarContent>
         </MenubarMenu>
       </Menubar>

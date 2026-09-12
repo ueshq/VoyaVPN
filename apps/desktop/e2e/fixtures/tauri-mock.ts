@@ -741,11 +741,6 @@ export async function installTauriSmokeMock(
             texts: ["vless://00000000-0000-0000-0000-000000000001@screen.example.test:443#Screen%20node"],
             status: "found", source: "screen", message: null, failureReason: null,
           } satisfies QrScanResult);
-        case "scan_clipboard_qr":
-          return Promise.resolve({
-            texts: ["vless://00000000-0000-0000-0000-000000000003@clipboard.example.test:443#Clipboard%20image"],
-            status: "found", source: "clipboard", message: null, failureReason: null,
-          } satisfies QrScanResult);
         case "read_clipboard_text":
           return Promise.resolve(
             " vless://00000000-0000-0000-0000-000000000002@clipboard.example.test:443#Clipboard%20direct ",

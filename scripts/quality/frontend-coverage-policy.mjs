@@ -42,7 +42,6 @@ export const criticalModules = [
   "apps/desktop/src/features/profiles/profile-form-tls.ts",
   "apps/desktop/src/features/profiles/profile-form-text.ts",
   "apps/desktop/src/features/profiles/virtual-list-keyboard.ts",
-  "apps/desktop/src/ipc/file-dialog.ts",
   "apps/desktop/src/features/routing/per-app-proxy-rule.ts",
   "apps/desktop/src/features/routing/routing-form-schema.ts",
   "apps/desktop/src/features/routing/routing-form-values.ts",
@@ -68,7 +67,8 @@ export const runtimeModules = [
   // Proxy-monitor lifecycle.
   { path: "apps/desktop/src/components/app-shell/app-shell.tsx", lines: 75, branches: 55 },
   { path: "apps/desktop/src/features/profiles/use-server-table.ts", lines: 75, branches: 55 },
-  { path: "apps/desktop/src/features/profiles/server-table-actions.ts", lines: 55, branches: 45 },
+  // Share-link-only export: 83/78 when the Base64, bundle and file-save paths were removed.
+  { path: "apps/desktop/src/features/profiles/server-table-actions.ts", lines: 75, branches: 65 },
   { path: "apps/desktop/src/features/profiles/use-node-groups.ts", lines: 80, branches: 65 },
   { path: "apps/desktop/src/features/profiles/node-list-rows.ts", lines: 80, branches: 65 },
   // Page composition keeps the old floor; each extracted capability has its own floor.

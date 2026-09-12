@@ -269,13 +269,9 @@
         "export": "导出",
         "noProfiles": "没有可导出的节点。",
         "noSelection": "请至少选择一个节点再导出。",
-        "saveShareLinks": "保存分享链接",
-        "savedFile": "已保存导出到 {{path}}。",
-        "shareBase64": "分享链接（Base64）",
         "shareLinks": "分享链接",
         "showQr": "显示二维码",
-        "skippedUnsupported": "已跳过 {{count}} 个不支持分享链接的节点。",
-        "voyaBundle": "Voya 节点包"
+        "skippedUnsupported": "已跳过 {{count}} 个不支持分享链接的节点。"
       },
       "fields": {
         "address": "地址",
@@ -346,17 +342,12 @@
         "importing": "正在导入节点…"
       },
       "importMethods": {
-        "text": "从文本导入",
-        "file": "从文件导入",
         "qrImage": "扫描二维码图片",
-        "qrClipboard": "扫描剪贴板图片",
         "qrScreen": "扫描屏幕二维码"
       },
       "importDialog": {
         "reading": "正在读取内容…",
         "description": "导入分享链接或节点配置文本。",
-        "file": "选择文件",
-        "fileAria": "节点配置文件",
         "manual": "手动节点",
         "mode": "导入方式",
         "payload": "节点配置内容",
@@ -399,8 +390,6 @@
       "title": "节点",
       "toolbar": {
         "add": "添加",
-        "bulkExport": "导出",
-        "bulkSpeedtest": "全节点测速",
         "delete": "删除",
         "edit": "编辑",
         "import": "导入",
@@ -544,14 +533,11 @@
     "moreActions": "更多"
   },
   "qr": {
-    "clipboardImageMissing": "剪贴板中没有图片。",
-    "clipboardImageUnavailable": "无法读取剪贴板图片。",
     "clipboardUnavailable": "当前 WebView 不支持读取剪贴板文本。",
     "content": "内容",
     "generatedAlt": "生成的二维码",
     "noQrFound": "未找到二维码。",
     "scan": "扫描",
-    "scanClipboardImage": "剪贴板图片",
     "scanImage": "扫描图片",
     "screenUnavailable": "当前平台或权限状态不支持屏幕二维码扫描。",
     "scanningScreen": "正在扫描所有显示器…",

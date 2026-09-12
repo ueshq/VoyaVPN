@@ -87,24 +87,6 @@ pub async fn export_profile_share_links(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn export_profile_share_links_base64(
-    state: tauri::State<'_, AppState>,
-    index_ids: Vec<String>,
-) -> Result<ExportProfilesResult, AppError> {
-    export_profiles_result(&state, index_ids, ExportProfilesFormat::ShareLinksBase64).await
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn export_profile_voya_bundle(
-    state: tauri::State<'_, AppState>,
-    index_ids: Vec<String>,
-) -> Result<ExportProfilesResult, AppError> {
-    export_profiles_result(&state, index_ids, ExportProfilesFormat::VoyaBundle).await
-}
-
-#[tauri::command]
-#[specta::specta]
 pub async fn set_active_profile<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,

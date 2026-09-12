@@ -20,7 +20,6 @@ export const commands = {
 	saveAppSettings: (settings: AppSettingsV1) => typedError<AppSettingsV1, AppError>(__TAURI_INVOKE("save_app_settings", { settings })),
 	generateQrCode: (content: string) => typedError<QrCodeImage, AppError>(__TAURI_INVOKE("generate_qr_code", { content })),
 	scanScreenQr: () => typedError<QrScanResult, AppError>(__TAURI_INVOKE("scan_screen_qr")),
-	scanClipboardQr: () => typedError<QrScanResult, AppError>(__TAURI_INVOKE("scan_clipboard_qr")),
 	/**  Returns an empty string when the clipboard holds no text. */
 	readClipboardText: () => typedError<string, AppError>(__TAURI_INVOKE("read_clipboard_text")),
 	fetchCertificate: (request: CertificateFetchRequest) => typedError<CertificateFetchResult, AppError>(__TAURI_INVOKE("fetch_certificate", { request })),
@@ -65,8 +64,6 @@ export const commands = {
 	saveProfile: (profile: Profile) => typedError<ProfileListEntry, AppError>(__TAURI_INVOKE("save_profile", { profile })),
 	deleteProfiles: (indexIds: string[]) => typedError<number, AppError>(__TAURI_INVOKE("delete_profiles", { indexIds })),
 	exportProfileShareLinks: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_share_links", { indexIds })),
-	exportProfileShareLinksBase64: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_share_links_base64", { indexIds })),
-	exportProfileVoyaBundle: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_voya_bundle", { indexIds })),
 	setActiveProfile: (indexId: string) => typedError<ProfileListEntry, AppError>(__TAURI_INVOKE("set_active_profile", { indexId })),
 	moveProfile: (subscriptionId: string | null, indexId: string, action: MoveAction, position: number | null) => typedError<ProfileListEntry[], AppError>(__TAURI_INVOKE("move_profile", { subscriptionId, indexId, action, position })),
 	listSubscriptions: () => typedError<Subscription[], AppError>(__TAURI_INVOKE("list_subscriptions")),
@@ -380,7 +377,7 @@ export type DnsSettings = {
 	directExpectedIps: string | null,
 };
 
-export type ExportProfilesFormat = "shareLinks" | "shareLinksBase64" | "voyaBundle";
+export type ExportProfilesFormat = "shareLinks";
 
 export type ExportProfilesRequest = {
 	indexIds: string[],
@@ -678,9 +675,7 @@ export type QrCodeImage = {
 	svg: string,
 };
 
-export type QrScanFailureReason = "permissionDenied" | "unsupported" | "captureFailed" | "timeout" | "busy" | 
-/**  The clipboard held no image. Only a clipboard scan reports it. */
-"noImage";
+export type QrScanFailureReason = "permissionDenied" | "unsupported" | "captureFailed" | "timeout" | "busy";
 
 export type QrScanResult = {
 	status: QrScanStatus,
@@ -882,7 +877,7 @@ export type SpeedtestStatus = {
 	running: boolean,
 };
 
-export type SpeedtestTarget = { scope: "all" } | { scope: "profiles"; profileIds: string[] };
+export type SpeedtestTarget = { scope: "profiles"; profileIds: string[] };
 
 export type StatisticsSnapshot = {
 	activeProfileId: string | null,

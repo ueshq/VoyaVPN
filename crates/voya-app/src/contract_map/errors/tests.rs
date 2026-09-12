@@ -519,6 +519,16 @@ fn export_failures_are_classified() {
 }
 
 #[test]
+fn empty_speedtest_selection_is_a_validation_failure() {
+    assert_kinds(vec![(
+        "empty selection",
+        SpeedtestError::EmptySelection,
+        "validation",
+        AppErrorSubsystem::Speedtest,
+    )]);
+}
+
+#[test]
 fn tun_and_system_proxy_failures_are_classified() {
     assert_kinds(vec![
         (
@@ -713,6 +723,7 @@ mod guards {
             | SpeedtestError::NoAvailablePort(_)
             | SpeedtestError::InvalidSocksPort(_)
             | SpeedtestError::JobLockPoisoned
+            | SpeedtestError::EmptySelection
             | SpeedtestError::BackgroundTask(_) => (),
         }
     }

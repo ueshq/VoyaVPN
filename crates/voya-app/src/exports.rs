@@ -1,9 +1,7 @@
-use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use thiserror::Error;
 pub use voya_contracts::{ExportProfilesFormat, ExportProfilesRequest, ExportProfilesResult};
 use voya_core::{
-    export_share_link_with_options, export_voya_profile_bundle, AppConfig, ProfileItem, ShareError,
-    ShareLinkOptions,
+    export_share_link_with_options, AppConfig, ProfileItem, ShareError, ShareLinkOptions,
 };
 use voya_db::{Database, DbError};
 
@@ -39,10 +37,6 @@ impl<'db> ExportManager<'db> {
         let profiles = self.load_profiles(&request.index_ids).await?;
         let text = match request.format {
             ExportProfilesFormat::ShareLinks => export_share_links(&profiles, config)?,
-            ExportProfilesFormat::ShareLinksBase64 => {
-                BASE64_STANDARD.encode(export_share_links(&profiles, config)?)
-            }
-            ExportProfilesFormat::VoyaBundle => export_voya_profile_bundle(&profiles)?,
         };
 
         Ok(ExportProfilesResult {

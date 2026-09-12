@@ -12,8 +12,6 @@ const SCREEN_FAILURE_KEYS = {
   captureFailed: "qr.screenCaptureFailed",
   timeout: "qr.screenTimeout",
   busy: "qr.screenBusy",
-  // Only a clipboard scan reports it.
-  noImage: "qr.clipboardImageMissing",
 } satisfies Record<QrScanFailureReason, TranslationKey>;
 
 function emptyResult(): ImportProfilesResult {

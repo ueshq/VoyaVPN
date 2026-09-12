@@ -76,6 +76,8 @@ pub enum SpeedtestError {
     JobLockPoisoned,
     #[error("speedtest background task failed: {0}")]
     BackgroundTask(String),
+    #[error("select at least one node to test")]
+    EmptySelection,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -330,6 +332,7 @@ fn speedtest_outcome(error: &SpeedtestError) -> SpeedtestOutcome {
         SpeedtestError::Database(_)
         | SpeedtestError::Profile(_)
         | SpeedtestError::JobLockPoisoned
+        | SpeedtestError::EmptySelection
         | SpeedtestError::BackgroundTask(_) => SpeedtestOutcome::Failed,
     }
 }

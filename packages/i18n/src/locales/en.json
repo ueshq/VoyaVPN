@@ -269,13 +269,9 @@
         "export": "Export",
         "noProfiles": "There are no nodes to export.",
         "noSelection": "Select at least one node to export.",
-        "saveShareLinks": "Save share links",
-        "savedFile": "Saved export to {{path}}.",
-        "shareBase64": "Share links (Base64)",
         "shareLinks": "Share links",
         "showQr": "Show QR",
-        "skippedUnsupported": "Skipped {{count}} node(s) without a share link.",
-        "voyaBundle": "Voya node bundle"
+        "skippedUnsupported": "Skipped {{count}} node(s) without a share link."
       },
       "fields": {
         "address": "Address",
@@ -346,17 +342,12 @@
         "importing": "Importing nodes…"
       },
       "importMethods": {
-        "text": "Import from text",
-        "file": "Import from file",
         "qrImage": "Scan QR image",
-        "qrClipboard": "Scan clipboard image",
         "qrScreen": "Scan screen"
       },
       "importDialog": {
         "reading": "Reading content…",
         "description": "Import share links, subscription URLs, or JSON payloads.",
-        "file": "File",
-        "fileAria": "Import payload file",
         "manual": "Manual import",
         "mode": "Mode",
         "payload": "Import payload",
@@ -399,8 +390,6 @@
       "title": "Nodes",
       "toolbar": {
         "add": "Add",
-        "bulkExport": "Export",
-        "bulkSpeedtest": "Ping all",
         "delete": "Delete",
         "edit": "Edit",
         "import": "Import",
@@ -544,14 +533,11 @@
     "moreActions": "More"
   },
   "qr": {
-    "clipboardImageMissing": "Clipboard does not contain an image.",
-    "clipboardImageUnavailable": "Could not read an image from the clipboard.",
     "clipboardUnavailable": "Clipboard text read is unavailable in this WebView.",
     "content": "Content",
     "generatedAlt": "Generated QR code",
     "noQrFound": "No QR code found.",
     "scan": "Scan",
-    "scanClipboardImage": "Clipboard image",
     "scanImage": "Scan image",
     "screenUnavailable": "Screen QR scanning is unavailable on this platform or permission state.",
     "scanningScreen": "Scanning all displays…",

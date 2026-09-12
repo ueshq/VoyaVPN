@@ -9,7 +9,6 @@ use specta::Type;
     deny_unknown_fields
 )]
 pub enum SpeedtestTarget {
-    All,
     Profiles { profile_ids: Vec<String> },
 }
 
@@ -141,19 +140,28 @@ mod tests {
 
     #[test]
     fn requests_no_longer_accept_a_probe_kind() {
+        let target = serde_json::json!({ "scope": "profiles", "profileIds": ["node-1"] });
         for kind in ["tcpConnect", "latency", "udp", "download", "mixed"] {
             assert!(
                 serde_json::from_value::<SpeedtestRequest>(serde_json::json!({
-                    "kind": kind, "target": { "scope": "all" }
+                    "kind": kind, "target": target
                 }))
                 .is_err()
             );
         }
+        assert!(serde_json::from_value::<SpeedtestRequest>(
+            serde_json::json!({ "target": target })
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn requests_can_no_longer_target_every_node() {
         assert!(
             serde_json::from_value::<SpeedtestRequest>(serde_json::json!({
                 "target": { "scope": "all" }
             }))
-            .is_ok()
+            .is_err()
         );
     }
 

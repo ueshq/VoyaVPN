@@ -10,16 +10,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
-import type { ImportProfilesResult, QrScanResult } from "@/ipc/bindings";
+import type { ImportProfilesResult } from "@/ipc/bindings";
 
 import { ImportProfilesDialog } from "./import-profiles-dialog";
-import type { DialogImportMethod } from "./import-methods";
 import { QrScanError } from "./qr-errors";
 
 const ipcMocks = vi.hoisted(() => ({
   importProfilesFromText: vi.fn(),
   listSubscriptions: vi.fn(),
-  scanClipboardQr: vi.fn(),
 }));
 
 const scannerMocks = vi.hoisted(() => ({
@@ -35,20 +33,15 @@ vi.mock("./qr-scanner", async (importOriginal) => {
 
 const queryClients = new Set<QueryClient>();
 
-function renderDialog(
-  method: DialogImportMethod = "text",
-  onImported = vi.fn(),
-  onOpenChange = vi.fn(),
-) {
+function renderDialog(onImported = vi.fn(), onOpenChange = vi.fn()) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { gcTime: 0, retry: false } },
   });
   queryClients.add(queryClient);
 
-  const ui = (open: boolean, nextMethod = method) => (
+  const ui = (open: boolean) => (
     <QueryClientProvider client={queryClient}>
       <ImportProfilesDialog
-        method={nextMethod}
         onImported={onImported}
         onOpenChange={onOpenChange}
         open={open}
@@ -58,8 +51,7 @@ function renderDialog(
   const result = render(ui(true));
   return {
     ...result,
-    setOpen: (open: boolean, nextMethod = method) =>
-      result.rerender(ui(open, nextMethod)),
+    setOpen: (open: boolean) => result.rerender(ui(open)),
     onImported,
     onOpenChange,
   };
@@ -83,17 +75,6 @@ afterEach(() => {
   queryClients.forEach((queryClient) => queryClient.clear());
   queryClients.clear();
 });
-
-function clipboardScan(overrides: Partial<QrScanResult> = {}): QrScanResult {
-  return {
-    failureReason: null,
-    message: null,
-    source: "clipboard",
-    status: "found",
-    texts: ["trojan://clipboard.example"],
-    ...overrides,
-  };
-}
 
 describe("ImportProfilesDialog import results", () => {
   it("keeps the dialog open with a localized summary when nothing was imported", async () => {
@@ -139,35 +120,6 @@ describe("ImportProfilesDialog import results", () => {
 });
 
 describe("ImportProfilesDialog sources and lifecycle", () => {
-
-  it("reads a file into the preview, allows retrying the same file and importing only to manual nodes", async () => {
-    const user = userEvent.setup();
-    ipcMocks.listSubscriptions.mockResolvedValue([
-      { id: "sub-target", remarks: "Target subscription" },
-    ]);
-    renderDialog("file");
-    const file = new File(["vless://file"], "nodes.txt", {
-      type: "text/plain",
-    });
-    const read = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("File unreadable"))
-      .mockResolvedValue("vless://file");
-    Object.defineProperty(file, "text", { value: read });
-    const input = screen.getByLabelText("Import payload file");
-    await user.upload(input, file);
-    expect(await screen.findByText("File unreadable")).toBeVisible();
-    await user.upload(input, file);
-    expect(screen.getByLabelText("Import payload")).toHaveValue("vless://file");
-    expect(read).toHaveBeenCalledTimes(2);
-    expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Import" }));
-    expect(ipcMocks.importProfilesFromText).toHaveBeenCalledWith(
-      "vless://file",
-      null,
-    );
-  });
-
 
   it("clears the previous preview, target and error on each opening", async () => {
     const user = userEvent.setup();
@@ -225,7 +177,7 @@ describe("ImportProfilesDialog QR scanning", () => {
   it("fills the editable payload from an image and waits for explicit import", async () => {
     const user = userEvent.setup();
     scannerMocks.scanQrBlob.mockResolvedValue("  vless://image.example  ");
-    renderDialog("qrImage");
+    renderDialog();
 
     fireEvent.change(await screen.findByLabelText("Scan image"), {
       target: {
@@ -249,32 +201,9 @@ describe("ImportProfilesDialog QR scanning", () => {
     );
   });
 
-  it("fills the payload from a natively scanned clipboard image without importing it", async () => {
-    ipcMocks.scanClipboardQr.mockResolvedValue(
-      clipboardScan({ texts: [" trojan://clipboard.example", "vless://b "] }),
-    );
-    renderDialog("qrClipboard");
-
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Clipboard image" }),
-    );
-
-    await waitFor(() =>
-      expect(screen.getByLabelText("Import payload")).toHaveValue(
-        "trojan://clipboard.example\nvless://b",
-      ),
-    );
-    expect(ipcMocks.scanClipboardQr).toHaveBeenCalledOnce();
-    expect(scannerMocks.scanQrBlob).not.toHaveBeenCalled();
-    expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-  });
-
-
-
-
   it("shows the localized no-QR result without changing the payload", async () => {
     scannerMocks.scanQrBlob.mockRejectedValue(new QrScanError("notFound"));
-    renderDialog("qrImage");
+    renderDialog();
 
     fireEvent.change(await screen.findByLabelText("Scan image"), {
       target: {
@@ -287,43 +216,6 @@ describe("ImportProfilesDialog QR scanning", () => {
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
   });
 
-  it.each([
-    [
-      clipboardScan({ failureReason: "noImage", status: "notFound", texts: [] }),
-      "Clipboard does not contain an image.",
-    ],
-    [clipboardScan({ status: "notFound", texts: [] }), "No QR code found."],
-    [
-      clipboardScan({
-        failureReason: "busy",
-        status: "unavailable",
-        texts: [],
-      }),
-      "Could not read an image from the clipboard.",
-    ],
-    [
-      new Error("the clipboard could not be read"),
-      "Could not read an image from the clipboard.",
-    ],
-  ])(
-    "translates native clipboard scan result %#",
-    async (response, message) => {
-      if (response instanceof Error)
-        ipcMocks.scanClipboardQr.mockRejectedValue(response);
-      else ipcMocks.scanClipboardQr.mockResolvedValue(response);
-      renderDialog("qrClipboard");
-
-      await userEvent.click(
-        await screen.findByRole("button", { name: "Clipboard image" }),
-      );
-
-      expect(await screen.findByText(message)).toBeInTheDocument();
-      expect(screen.getByLabelText("Import payload")).toHaveValue("");
-      expect(
-        screen.queryByText("the clipboard could not be read"),
-      ).not.toBeInTheDocument();
-    },
-  );
 });
 
 // Full `ImportProfilesResult` shape; a partial one is what let the dialog paper

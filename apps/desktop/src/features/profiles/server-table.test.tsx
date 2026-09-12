@@ -414,17 +414,17 @@ describe("ProfilesScreen", () => {
 
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
 
-    const speedButton = screen.getByRole("button", { name: "Ping all" });
+    const speedButton = screen.getByRole("button", { name: "Test group" });
     await userEvent.click(speedButton);
 
     await waitFor(() => expect(speedButton).toHaveAccessibleName("Stop"));
     expect(ipcMocks.runSpeedtest).toHaveBeenCalledWith({
-      target: { scope: "all" },
+      target: { scope: "profiles", profileIds: ["profile-0"] },
     });
 
     rejectSpeedtest(new Error("boom"));
 
-    await waitFor(() => expect(speedButton).toHaveAccessibleName("Ping all"));
+    await waitFor(() => expect(speedButton).toHaveAccessibleName("Test group"));
     expect(speedButton).toBeEnabled();
   });
 
@@ -442,7 +442,7 @@ describe("ProfilesScreen", () => {
     });
   });
 
-  it("tests all profiles and always displays latency despite old column preferences", async () => {
+  it("always displays latency despite old column preferences", async () => {
     window.localStorage.setItem(
       "voyavpn.profileColumns",
       JSON.stringify({
@@ -458,10 +458,6 @@ describe("ProfilesScreen", () => {
     expect(
       screen.queryByRole("menuitem", { name: "Columns" }),
     ).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Ping all" }));
-    expect(ipcMocks.runSpeedtest).toHaveBeenCalledWith({
-      target: { scope: "all" },
-    });
   });
 
   it("offers Stop for an existing run and disables the row action", async () => {
@@ -490,7 +486,7 @@ describe("ProfilesScreen", () => {
     mockProfileList(makeProfiles(1));
     renderProfiles();
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Ping all" }));
+    await userEvent.click(screen.getByRole("button", { name: "Test group" }));
     await userEvent.click(
       (await screen.findAllByRole("button", { name: "Stop" }))[0]!,
     );
@@ -506,7 +502,7 @@ describe("ProfilesScreen", () => {
       results: [],
     });
     expect(
-      await screen.findByRole("button", { name: "Ping all" }),
+      await screen.findByRole("button", { name: "Test group" }),
     ).toBeEnabled();
   });
 
@@ -897,6 +893,11 @@ describe("ProfilesScreen", () => {
     expect(
       screen.queryByRole("menuitem", { name: "Update subs" }),
     ).not.toBeInTheDocument();
+    // The page toolbar carries only the Add and Import menus.
+    expect(
+      toolbar.getAllByRole("menuitem").map((item) => item.textContent),
+    ).toEqual(["Add", "Import"]);
+    expect(toolbar.queryAllByRole("button")).toHaveLength(0);
     await userEvent.click(toolbar.getByRole("menuitem", { name: "Add" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Add subscription" }));
     expect(
@@ -921,51 +922,41 @@ describe("ProfilesScreen", () => {
     expect(ipcMocks.updateSubscriptions).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ["Import from text", null],
-    ["Import from file", "File"],
-    ["Scan QR image", "Scan image"],
-    ["Scan clipboard image", "Clipboard image"],
-  ])(
-    "opens only the selected import source: %s",
-    async (method, sourceButton) => {
-      const readText = mockClipboardReadText("vless://preview");
-      mockProfileList([]);
-      renderProfiles();
-      const trigger = screen.getByRole("menuitem", { name: "Import" });
-      await userEvent.click(trigger);
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      expect(readText).not.toHaveBeenCalled();
-      expect(ipcMocks.scanScreenQr).not.toHaveBeenCalled();
-      expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
+  it("opens the QR image source only after the import method is chosen", async () => {
+    const readText = mockClipboardReadText("vless://preview");
+    mockProfileList([]);
+    renderProfiles();
+    const trigger = screen.getByRole("menuitem", { name: "Import" });
+    await userEvent.click(trigger);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(readText).not.toHaveBeenCalled();
+    expect(ipcMocks.scanScreenQr).not.toHaveBeenCalled();
+    expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
+    expect(
+      within(screen.getByRole("menu"))
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Import from clipboard", "Scan QR image", "Scan screen"]);
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: "Scan QR image" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Import Nodes",
+    });
+    expect(
+      within(dialog).getByRole("button", { name: "Scan image" }),
+    ).toBeVisible();
+    for (const name of ["Paste", "File", "Clipboard image", "Screen"]) {
       expect(
-        within(screen.getByRole("menu")).getAllByRole("menuitem"),
-      ).toHaveLength(6);
-      await userEvent.click(screen.getByRole("menuitem", { name: method! }));
-      const dialog = await screen.findByRole("dialog", {
-        name: "Import Nodes",
-      });
-      for (const name of [
-        "Paste",
-        "File",
-        "Scan image",
-        "Clipboard image",
-        "Screen",
-      ]) {
-        if (name === sourceButton)
-          expect(within(dialog).getByRole("button", { name })).toBeVisible();
-        else
-          expect(
-            within(dialog).queryByRole("button", { name }),
-          ).not.toBeInTheDocument();
-      }
-      expect(readText).not.toHaveBeenCalled();
-      expect(ipcMocks.scanScreenQr).not.toHaveBeenCalled();
-      expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-      await userEvent.keyboard("{Escape}");
-      await waitFor(() => expect(trigger).toHaveFocus());
-    },
-  );
+        within(dialog).queryByRole("button", { name }),
+      ).not.toBeInTheDocument();
+    }
+    expect(readText).not.toHaveBeenCalled();
+    expect(ipcMocks.scanScreenQr).not.toHaveBeenCalled();
+    expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
 
   it("opens the node editor from the Add menu with the keyboard and restores focus", async () => {
     mockProfileList([]);
@@ -1167,45 +1158,6 @@ describe("ProfilesScreen", () => {
       ),
     ).toBeInTheDocument();
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-  });
-
-  it("exports every profile from the global toolbar", async () => {
-    const profiles = makeProfiles(2);
-    ipcMocks.listProfiles.mockImplementation(
-      async (_subscriptionId: string | null, filter: string | null) =>
-        listing(filter ? [profiles[1]!] : profiles),
-    );
-
-    renderProfiles();
-
-    expect(await screen.findByText("Server 0")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("menuitem", { name: "Export" }));
-    await userEvent.click(
-      await screen.findByRole("menuitem", { name: "Show QR" }),
-    );
-
-    const expectedContent =
-      "vless://profile-0@example.test:443\nvless://profile-1@example.test:443";
-    expect(ipcMocks.exportProfileShareLinks).toHaveBeenCalledWith([
-      "profile-0",
-      "profile-1",
-    ]);
-    expect(ipcMocks.listProfiles).toHaveBeenLastCalledWith(null, null);
-    await waitFor(() =>
-      expect(ipcMocks.generateQrCode).toHaveBeenCalledWith(expectedContent),
-    );
-
-    const dialog = await screen.findByRole("dialog", { name: "Show QR" });
-    expect(within(dialog).getByLabelText("Content")).toHaveValue(
-      expectedContent,
-    );
-    expect(within(dialog).getByLabelText("Content")).toHaveAttribute(
-      "readonly",
-    );
-    expect(
-      within(dialog).getByAltText("Generated QR code"),
-    ).toBeInTheDocument();
   });
 
   it("keeps the QR dialog closed when share link export fails", async () => {
@@ -1636,19 +1588,12 @@ describe("ProfilesScreen", () => {
     const menu = await openRowContextMenu();
     const exportMenu = await openContextSubmenu(menu, "Export");
 
-    // Both menus map the same descriptor list, so the row menu must carry every
-    // export kind the toolbar offers.
+    // The row menu and the group card map the same descriptor list.
     expect(
       within(exportMenu)
         .getAllByRole("menuitem")
         .map((item) => item.textContent),
-    ).toEqual([
-      "Share links",
-      "Share links (Base64)",
-      "Voya node bundle",
-      "Show QR",
-      "Save share links",
-    ]);
+    ).toEqual(["Share links", "Show QR"]);
   });
 });
 
@@ -1703,7 +1648,7 @@ async function openAddNode() {
   await userEvent.click(screen.getByRole("menuitem", { name: "Add node" }));
 }
 
-async function openImport(method = "Import from text") {
+async function openImport(method = "Scan QR image") {
   await userEvent.click(screen.getByRole("menuitem", { name: "Import" }));
   await userEvent.click(await screen.findByRole("menuitem", { name: method }));
 }

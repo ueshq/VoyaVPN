@@ -164,6 +164,11 @@ impl AppServices {
     where
         F: Fn(SpeedtestResult) + Send + Sync,
     {
+        // The manager reads an empty list as every stored node. The app only
+        // tests explicit selections, so an empty one is rejected here.
+        if profile_ids.is_empty() {
+            return Err(crate::speedtest::SpeedtestError::EmptySelection);
+        }
         manager
             .run_with_callback(&self.database, config, profile_ids, on_result)
             .await

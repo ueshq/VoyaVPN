@@ -7,10 +7,9 @@ pub async fn run_speedtest<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     request: voya_contracts::SpeedtestRequest,
 ) -> Result<SpeedtestRunResult, AppError> {
-    let index_ids = match request.target {
-        voya_contracts::SpeedtestTarget::All => Vec::new(),
-        voya_contracts::SpeedtestTarget::Profiles { profile_ids } => profile_ids,
-    };
+    let voya_contracts::SpeedtestTarget::Profiles {
+        profile_ids: index_ids,
+    } = request.target;
     validate_ipc_text_list(
         &index_ids,
         "node id",

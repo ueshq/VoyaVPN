@@ -279,6 +279,7 @@ impl From<SpeedtestError> for AppError {
                 not_found(Sub::Speedtest, AppErrorEntity::CoreInfo, None, &error)
             }
             SpeedtestError::Validation { .. } => invalid(Sub::Speedtest, "profile", &error),
+            SpeedtestError::EmptySelection => invalid(Sub::Speedtest, "profileIds", &error),
             SpeedtestError::SingboxConfig(ref source) => internal(Sub::Speedtest, source),
             SpeedtestError::Cancelled
             | SpeedtestError::NoAvailablePort(_)

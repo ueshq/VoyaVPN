@@ -24,9 +24,6 @@ import { nodeListRows, LOCAL_GROUP_KEY } from "./node-list-rows";
 
 const mocks = vi.hoisted(() => ({
   exportProfileShareLinks: vi.fn(),
-  exportProfileShareLinksBase64: vi.fn(),
-  exportProfileVoyaBundle: vi.fn(),
-  saveTextFile: vi.fn(),
   generateQrCode: vi.fn(),
   listProfiles: vi.fn(),
   listSubscriptions: vi.fn(),
@@ -40,7 +37,6 @@ vi.mock("@/ipc/commands", async (original) => ({
   ...(await original<typeof import("@/ipc/commands")>()),
   ...mocks,
 }));
-vi.mock("@/ipc/file-dialog", () => ({ saveTextFile: mocks.saveTextFile }));
 
 const profiles = [
   makeProfileFixture(0, { remarks: "Tokyo", subscriptionId: "a" }),
@@ -118,17 +114,11 @@ beforeEach(() => {
   mocks.listSubscriptions.mockResolvedValue(subscriptions);
   mocks.listSubscriptionMetadata.mockResolvedValue([]);
   mocks.runSpeedtest.mockResolvedValue(null);
-  for (const [exporter, format] of [
-    [mocks.exportProfileShareLinks, "shareLinks"],
-    [mocks.exportProfileShareLinksBase64, "shareLinksBase64"],
-    [mocks.exportProfileVoyaBundle, "voyaBundle"],
-  ] as const)
-    exporter.mockImplementation(async (ids: string[]) => ({
-      text: ids.join("\n"),
-      count: ids.length,
-      format,
-    }));
-  mocks.saveTextFile.mockResolvedValue("/tmp/nodes.txt");
+  mocks.exportProfileShareLinks.mockImplementation(async (ids: string[]) => ({
+    text: ids.join("\n"),
+    count: ids.length,
+    format: "shareLinks",
+  }));
   mocks.generateQrCode.mockResolvedValue({
     mimeType: "image/svg+xml",
     svg: "<svg></svg>",
@@ -269,30 +259,23 @@ describe("group panels and scoped export", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: action }));
   }
 
-  it.each([
-    ["Share links", "exportProfileShareLinks"],
-    ["Share links (Base64)", "exportProfileShareLinksBase64"],
-    ["Voya node bundle", "exportProfileVoyaBundle"],
-  ] as const)(
-    "exports fresh complete membership as %s while collapsed",
-    async (label, command) => {
-      renderScreen();
-      await screen.findByRole("button", { name: "Asia" });
-      await userEvent.click(screen.getByRole("button", { name: "Asia" }));
-      mocks.listProfiles.mockResolvedValue({ entries: profiles.map((p) => p.profile.id === "profile-2" ? { ...p, profile: { ...p.profile, subscriptionId: "a" } } : p), undecodableProfiles: 0 });
-      await exportGroup("Asia", label);
-      await waitFor(() =>
-        expect(mocks[command]).toHaveBeenCalledWith([
-          "profile-0",
-          "profile-2",
-          "profile-3",
-        ]),
-      );
-      expect(writeText).toHaveBeenCalledWith("profile-0\nprofile-2\nprofile-3");
-      expect(mocks.setActiveProfile).not.toHaveBeenCalled();
-      expect(mocks.connectActiveProfile).not.toHaveBeenCalled();
-    },
-  );
+  it("exports fresh complete membership as share links while collapsed", async () => {
+    renderScreen();
+    await screen.findByRole("button", { name: "Asia" });
+    await userEvent.click(screen.getByRole("button", { name: "Asia" }));
+    mocks.listProfiles.mockResolvedValue({ entries: profiles.map((p) => p.profile.id === "profile-2" ? { ...p, profile: { ...p.profile, subscriptionId: "a" } } : p), undecodableProfiles: 0 });
+    await exportGroup("Asia", "Share links");
+    await waitFor(() =>
+      expect(mocks.exportProfileShareLinks).toHaveBeenCalledWith([
+        "profile-0",
+        "profile-2",
+        "profile-3",
+      ]),
+    );
+    expect(writeText).toHaveBeenCalledWith("profile-0\nprofile-2\nprofile-3");
+    expect(mocks.setActiveProfile).not.toHaveBeenCalled();
+    expect(mocks.connectActiveProfile).not.toHaveBeenCalled();
+  });
 
   it("exports only local nodes and keeps removed export formats absent", async () => {
     renderScreen();
@@ -301,45 +284,16 @@ describe("group panels and scoped export", () => {
       screen.getByRole("menuitem", { name: "Export Local nodes" }),
     );
     expect(
-      screen
+      within(screen.getByRole("menu"))
         .getAllByRole("menuitem")
-        .map((item) => item.textContent)
-        .filter(
-          (text) =>
-            text?.includes("Client config") ||
-            text?.includes("Save client config"),
-        ),
-    ).toEqual([]);
+        .map((item) => item.textContent),
+    ).toEqual(["Share links", "Show QR"]);
     await userEvent.click(
       screen.getByRole("menuitem", { name: "Share links" }),
     );
     await waitFor(() =>
       expect(mocks.exportProfileShareLinks).toHaveBeenCalledWith(["profile-2"]),
     );
-  });
-
-  it("saves group share links through the existing file dialog", async () => {
-    renderScreen();
-    await screen.findByRole("button", { name: "Asia" });
-    await exportGroup("Asia", "Save share links");
-    await waitFor(() =>
-      expect(mocks.saveTextFile).toHaveBeenCalledWith({
-        defaultPath: "voyavpn-share-links.txt",
-        filters: [{ extensions: ["txt"], name: "Text" }],
-        text: "profile-0\nprofile-3",
-      }),
-    );
-    expect(writeText).not.toHaveBeenCalled();
-    expect(await screen.findByText(/\/tmp\/nodes.txt/)).toBeInTheDocument();
-  });
-
-  it("does not report success when saving is cancelled", async () => {
-    mocks.saveTextFile.mockResolvedValue(null);
-    renderScreen();
-    await screen.findByRole("button", { name: "Asia" });
-    await exportGroup("Asia", "Save share links");
-    await waitFor(() => expect(mocks.saveTextFile).toHaveBeenCalledOnce());
-    expect(screen.queryByText(/Saved to/)).not.toBeInTheDocument();
   });
 
   it("shows group QR export and retains text if the QR is too large", async () => {
@@ -372,7 +326,7 @@ describe("group panels and scoped export", () => {
     },
   );
 
-  it("skips unsupported share protocols but includes them in a Voya bundle", async () => {
+  it("skips unsupported share protocols in a group export", async () => {
     const http = makeProfileFixture(4, {
       subscriptionId: "a",
       protocol: {
@@ -394,14 +348,6 @@ describe("group panels and scoped export", () => {
       "profile-0",
       "profile-3",
     ]);
-    await exportGroup("Asia", "Voya node bundle");
-    await waitFor(() =>
-      expect(mocks.exportProfileVoyaBundle).toHaveBeenCalledWith([
-        "profile-0",
-        "profile-3",
-        "profile-4",
-      ]),
-    );
   });
 
 });

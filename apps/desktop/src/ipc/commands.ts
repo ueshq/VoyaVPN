@@ -24,8 +24,6 @@ export const generateQrCode = wrapCommand(commands.generateQrCode);
 
 export const scanScreenQr = wrapCommand(commands.scanScreenQr);
 
-export const scanClipboardQr = wrapCommand(commands.scanClipboardQr);
-
 export const readClipboardText = wrapCommand(commands.readClipboardText);
 
 export const fetchCertificate = wrapCommand(commands.fetchCertificate);
@@ -62,10 +60,6 @@ export const saveProfile = wrapCommand(commands.saveProfile);
 export const deleteProfiles = wrapCommand(commands.deleteProfiles);
 
 export const exportProfileShareLinks = wrapCommand(commands.exportProfileShareLinks);
-
-export const exportProfileShareLinksBase64 = wrapCommand(commands.exportProfileShareLinksBase64);
-
-export const exportProfileVoyaBundle = wrapCommand(commands.exportProfileVoyaBundle);
 
 export const setActiveProfile = wrapCommand(commands.setActiveProfile);
 

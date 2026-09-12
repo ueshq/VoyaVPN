@@ -69,8 +69,8 @@ use common::*;
 use uri::*;
 
 pub use entry::{
-    export_share_link, export_share_link_with_options, export_voya_profile_bundle,
-    parse_share_lines, parse_share_link, parse_voya_profile_bundle, ShareLinkOptions,
+    export_share_link, export_share_link_with_options, parse_share_lines, parse_share_link,
+    parse_voya_profile_bundle, ShareLinkOptions,
 };
 pub use shadowsocks::parse_ss_sip008;
 pub use wireguard::parse_wireguard_config;

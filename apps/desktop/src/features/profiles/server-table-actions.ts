@@ -1,15 +1,8 @@
-import {
-  exportProfileVoyaBundle,
-  exportProfileShareLinks,
-  exportProfileShareLinksBase64,
-} from "@/ipc/commands";
-import type { ExportProfilesResult, ImportProfilesResult, ProfileKind } from "@/ipc/bindings";
+import type { ImportProfilesResult, ProfileKind } from "@/ipc/bindings";
 import { CONFIG_TYPES } from "./profile-constants";
 import type { TranslationFunction as TranslateFn } from "@voya/i18n";
 
-export type ProfileExportDestination = "clipboard" | "file" | "qr";
-
-export type ProfileExportKind = "shareBase64" | "shareLinks" | "voyaBundle";
+export type ProfileExportDestination = "clipboard" | "qr";
 
 // `export_share_link` (crates/voya-core/src/fmt/entry.rs) only knows these node
 // protocols and returns `WrongConfigType` for anything else; the backend
@@ -28,40 +21,8 @@ const SHARE_LINK_KINDS: readonly ProfileKind[] = [
   CONFIG_TYPES.Naive,
 ];
 
-export function isShareLinkExport(kind: ProfileExportKind) {
-  return kind === "shareLinks" || kind === "shareBase64";
-}
-
 export function supportsShareLinkExport(kind: ProfileKind) {
   return SHARE_LINK_KINDS.includes(kind);
-}
-
-export function runProfileExport(kind: ProfileExportKind, indexIds: string[]): Promise<ExportProfilesResult> {
-  switch (kind) {
-    case "voyaBundle":
-      return exportProfileVoyaBundle(indexIds);
-    case "shareBase64":
-      return exportProfileShareLinksBase64(indexIds);
-    case "shareLinks":
-      return exportProfileShareLinks(indexIds);
-  }
-}
-
-export function exportFileName(kind: ProfileExportKind) {
-  switch (kind) {
-    case "voyaBundle":
-      return "voyavpn-node-bundle.voya";
-    case "shareBase64":
-      return "voyavpn-share-links-base64.txt";
-    case "shareLinks":
-      return "voyavpn-share-links.txt";
-  }
-}
-
-export function exportFileFilter(kind: ProfileExportKind, t: TranslateFn) {
-  return kind === "voyaBundle"
-      ? { extensions: ["voya"], name: t("panes.profiles.export.voyaBundle") }
-      : { extensions: ["txt"], name: "Text" };
 }
 
 /**

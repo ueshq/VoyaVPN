@@ -24,8 +24,6 @@ pub struct AutostartStatus {
 #[serde(rename_all = "camelCase")]
 pub enum ExportProfilesFormat {
     ShareLinks,
-    ShareLinksBase64,
-    VoyaBundle,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Type)]
@@ -66,8 +64,6 @@ pub enum QrScanFailureReason {
     CaptureFailed,
     Timeout,
     Busy,
-    /// The clipboard held no image. Only a clipboard scan reports it.
-    NoImage,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]

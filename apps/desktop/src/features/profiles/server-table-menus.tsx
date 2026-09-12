@@ -3,7 +3,6 @@ import {
   ArrowUp,
   ChevronsDown,
   ChevronsUp,
-  Download,
   Link,
   MoreHorizontal,
   Pencil,
@@ -44,7 +43,6 @@ import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
 import { MOVE_ACTIONS } from "./profile-constants";
-import type { ProfileExportKind } from "./server-table-actions";
 import type { TranslationFunction as TranslateFn } from "@voya/i18n";
 import type { NodeMenuController } from "./node-controller-types";
 
@@ -76,43 +74,15 @@ const CONTEXT_MENU_PRIMITIVES: MenuPrimitives = {
   Separator: ContextMenuSeparator,
 };
 
-type ExportMenuEntry =
-  | {
-      icon: LucideIcon;
-      kind: ProfileExportKind;
-      labelKey: TranslationKey;
-      mode: "export" | "save";
-    }
-  | { icon: LucideIcon; labelKey: TranslationKey; mode: "qr" }
-  | { mode: "separator" };
+type ExportMenuEntry = {
+  icon: LucideIcon;
+  labelKey: TranslationKey;
+  mode: "export" | "qr";
+};
 
 const EXPORT_MENU_ENTRIES: readonly ExportMenuEntry[] = [
-  {
-    icon: Link,
-    kind: "shareLinks",
-    labelKey: "panes.profiles.export.shareLinks",
-    mode: "export",
-  },
-  {
-    icon: Share2,
-    kind: "shareBase64",
-    labelKey: "panes.profiles.export.shareBase64",
-    mode: "export",
-  },
-  {
-    icon: Link,
-    kind: "voyaBundle",
-    labelKey: "panes.profiles.export.voyaBundle",
-    mode: "export",
-  },
-  { mode: "separator" },
+  { icon: Link, labelKey: "panes.profiles.export.shareLinks", mode: "export" },
   { icon: QrCode, labelKey: "panes.profiles.export.showQr", mode: "qr" },
-  {
-    icon: Download,
-    kind: "shareLinks",
-    labelKey: "panes.profiles.export.saveShareLinks",
-    mode: "save",
-  },
 ];
 
 export function SpeedtestButton({
@@ -332,10 +302,9 @@ function ProfileMenuItems({
         </SubTrigger>
         <SubContent>
           <ExportMenuItems
-            onExport={(kind) => void handleExport(kind, [indexId])}
-            onSave={(kind) => void handleExport(kind, [indexId], "file")}
-            onShowQr={() => void handleExport("shareLinks", [indexId], "qr")}
-            primitives={{ Item, Separator }}
+            onExport={() => void handleExport([indexId])}
+            onShowQr={() => void handleExport([indexId], "qr")}
+            primitives={{ Item }}
             t={t}
           />
         </SubContent>
@@ -355,41 +324,25 @@ function ProfileMenuItems({
 
 export function ExportMenuItems({
   onExport,
-  onSave,
   onShowQr,
-  // The toolbar renders inside a Menubar; the row menu passes the ContextMenu
-  // primitives so both surfaces map the same descriptor list.
-  primitives: { Item, Separator } = MENUBAR_PRIMITIVES,
+  // The group card renders inside a Menubar; the row menu passes its own item
+  // primitive so both surfaces map the same descriptor list.
+  primitives: { Item } = MENUBAR_PRIMITIVES,
   t,
 }: {
-  onExport: (kind: ProfileExportKind) => void;
-  onSave: (kind: ProfileExportKind) => void;
+  onExport: () => void;
   onShowQr: () => void;
-  primitives?: MenuPrimitives;
+  primitives?: Pick<MenuPrimitives, "Item">;
   t: TranslateFn;
 }) {
   return (
     <>
-      {EXPORT_MENU_ENTRIES.map((entry, index) => {
-        if (entry.mode === "separator") {
-          return <Separator key={`export-separator-${index}`} />;
-        }
-
-        const Icon = entry.icon;
-        const onSelect =
-          entry.mode === "qr"
-            ? onShowQr
-            : entry.mode === "save"
-              ? () => onSave(entry.kind)
-              : () => onExport(entry.kind);
-
-        return (
-          <Item key={entry.labelKey} onSelect={onSelect}>
-            <Icon className="size-4" aria-hidden="true" />
-            {t(entry.labelKey)}
-          </Item>
-        );
-      })}
+      {EXPORT_MENU_ENTRIES.map(({ icon: Icon, labelKey, mode }) => (
+        <Item key={labelKey} onSelect={mode === "qr" ? onShowQr : onExport}>
+          <Icon className="size-4" aria-hidden="true" />
+          {t(labelKey)}
+        </Item>
+      ))}
     </>
   );
 }
