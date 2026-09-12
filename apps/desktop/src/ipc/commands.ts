@@ -1,5 +1,5 @@
 import { commands } from "@/ipc/bindings";
-import type { AppError, ConnectionMode, MoveAction } from "@/ipc/bindings";
+import type { AppError, MoveAction } from "@/ipc/bindings";
 
 type CommandResult<T> =
   { status: "ok"; data: T } | { status: "error"; error: AppError };
@@ -95,10 +95,7 @@ export const listSubscriptionMetadata = wrapCommand(commands.listSubscriptionMet
 
 export const connectionModeStatus = wrapCommand(commands.connectionModeStatus);
 
-export const setConnectionMode = wrapCommand(
-  (mode: ConnectionMode, pacEnabled: boolean | null = null) =>
-    commands.setConnectionMode(mode, pacEnabled),
-);
+export const setConnectionMode = wrapCommand(commands.setConnectionMode);
 
 export const listProcessCandidates = wrapCommand(commands.listProcessCandidates);
 

@@ -4,7 +4,7 @@ use std::{
 };
 
 use thiserror::Error;
-use voya_core::{AppConfig, MoveAction, RoutingItem, RulesItem, DEFAULT_DOMAIN_STRATEGY};
+use voya_core::{AppConfig, MoveAction, RoutingItem, RulesItem};
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 
 const DEFAULT_ROUTING_SORT_STEP: i32 = 10;
@@ -248,9 +248,6 @@ fn normalize_routing_item(item: &mut RoutingItem) {
     }
     if item.remarks.trim().is_empty() {
         item.remarks = "Routing".to_string();
-    }
-    if item.domain_strategy.trim().is_empty() {
-        item.domain_strategy = DEFAULT_DOMAIN_STRATEGY.to_string();
     }
     for rule in &mut item.rule_set {
         normalize_rule(rule);

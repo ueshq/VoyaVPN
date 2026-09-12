@@ -23,7 +23,6 @@ pub struct AppSettingsV1 {
     // stays as it is.
     pub speed_test: SpeedtestSettings,
     pub multiplexing: MultiplexingSettings,
-    pub grpc: GrpcSettings,
     pub hysteria: HysteriaSettings,
     pub proxy: ProxySettings,
 }
@@ -40,7 +39,6 @@ impl Default for AppSettingsV1 {
             dns: DnsSettings::default(),
             speed_test: SpeedtestSettings::default(),
             multiplexing: MultiplexingSettings::default(),
-            grpc: GrpcSettings::default(),
             hysteria: HysteriaSettings::default(),
             proxy: ProxySettings::default(),
         }
@@ -76,8 +74,6 @@ impl Default for AppearanceSettings {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BehaviorSettings {
     pub autostart: bool,
-    pub statistics: bool,
-    pub realtime_speed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
@@ -160,7 +156,6 @@ impl Default for TunSettings {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InboundSettings {
     pub local_port: i32,
-    pub protocol: String,
     pub sniffing_enabled: bool,
     pub lan_connections_allowed: bool,
     pub separate_lan_port: bool,
@@ -173,7 +168,6 @@ impl Default for InboundSettings {
     fn default() -> Self {
         Self {
             local_port: 10_808,
-            protocol: "socks".to_string(),
             sniffing_enabled: true,
             lan_connections_allowed: false,
             separate_lan_port: false,
@@ -188,15 +182,12 @@ impl Default for InboundSettings {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SystemProxySettings {
     /// The persisted OS-proxy mode. Typed rather than a `String`: the enum's
-    /// `rename_all = "camelCase"` emits exactly the four values this field has
-    /// always stored (`forcedClear`, `forcedChange`, `unchanged`, `pac`), so the
-    /// stored payload is unchanged and `voya-db` pins that with a value test.
+    /// `rename_all = "camelCase"` emits exactly the values this field stores
+    /// (`forcedClear`, `forcedChange`, `unchanged`), and `voya-db` pins that
+    /// with a value test. The retired `pac` value is normalized at startup.
     pub mode: SystemProxyType,
     pub exceptions: String,
     pub bypass_local: bool,
-    pub advanced_protocol: String,
-    pub custom_pac_path: Option<String>,
-    pub custom_script_path: Option<String>,
 }
 
 /// Loopback and link-local destinations that never belong on a proxy. Mirrors
@@ -214,9 +205,6 @@ impl Default for SystemProxySettings {
             mode: SystemProxyType::ForcedChange,
             exceptions: DEFAULT_SYSTEM_PROXY_EXCEPTIONS.to_string(),
             bypass_local: true,
-            advanced_protocol: String::new(),
-            custom_pac_path: None,
-            custom_script_path: None,
         }
     }
 }
@@ -225,14 +213,12 @@ impl Default for SystemProxySettings {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RoutingSettings {
     pub domain_strategy: String,
-    pub singbox_domain_strategy: String,
 }
 
 impl Default for RoutingSettings {
     fn default() -> Self {
         Self {
             domain_strategy: "AsIs".to_string(),
-            singbox_domain_strategy: String::new(),
         }
     }
 }
@@ -273,24 +259,6 @@ impl Default for MultiplexingSettings {
             protocol: "h2mux".to_string(),
             max_connections: 8,
             padding: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct GrpcSettings {
-    pub idle_timeout_seconds: Option<i32>,
-    pub health_check_timeout_seconds: Option<i32>,
-    pub permit_without_stream: Option<bool>,
-}
-
-impl Default for GrpcSettings {
-    fn default() -> Self {
-        Self {
-            idle_timeout_seconds: Some(60),
-            health_check_timeout_seconds: Some(20),
-            permit_without_stream: Some(false),
         }
     }
 }

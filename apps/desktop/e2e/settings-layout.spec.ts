@@ -103,10 +103,9 @@ for (const locale of ["en", "zh-Hans"] as const) {
         state.sysProxy = {
           ...state.sysProxy,
           management: "manual",
-          requestedMode: "pac",
-          pacAvailable: true,
+          requestedMode: "forcedChange",
           proxy: "127.0.0.1:10808",
-          pacUrl: `http://127.0.0.1:10811/pac?t=${"long-address".repeat(12)}`,
+          exceptions: `localhost,${"long-exception.example.test,".repeat(12)}127.0.0.0/8`,
         };
         state.runtime = {
           ...state.runtime,
@@ -141,7 +140,7 @@ for (const locale of ["en", "zh-Hans"] as const) {
         .click();
       const panel = page.getByTestId("manual-proxy-panel");
       await expect(panel).toBeVisible();
-      await expect(panel).toContainText("http://127.0.0.1:10811/pac");
+      await expect(panel).toContainText("127.0.0.1:10808");
       const content = page.getByRole("tabpanel").last();
       await expect
         .poll(() =>

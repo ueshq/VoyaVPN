@@ -119,8 +119,6 @@ export async function installTauriSmokeMock(
         manualCleanupRequired: false,
         effectiveMode: "forcedClear",
         exceptions: "",
-        pacAvailable: false,
-        pacUrl: null as string | null,
         proxy: null as string | null,
         requestedMode: "forcedChange",
       },
@@ -156,8 +154,6 @@ export async function installTauriSmokeMock(
 
       return {
         mode,
-        pacAvailable: state.sysProxy.pacAvailable,
-        pacEnabled: state.sysProxy.requestedMode === "pac",
         processRulesEffective: mode === "vpn",
         vpnAvailable: true,
       };
@@ -168,10 +164,6 @@ export async function installTauriSmokeMock(
       const serving = state.runtime.state === "connected" && !state.tun.enabled;
       state.sysProxy.effectiveMode = "unchanged";
       state.sysProxy.proxy = serving ? "127.0.0.1:10808" : null;
-      state.sysProxy.pacUrl =
-        serving && state.sysProxy.requestedMode === "pac"
-          ? (state.sysProxy.pacUrl ?? "http://127.0.0.1:10811/pac?t=smoke")
-          : null;
     }
 
     const profileScopes = ["profiles"];
@@ -442,19 +434,14 @@ export async function installTauriSmokeMock(
           return Promise.resolve(connectionModeStatus());
         case "set_connection_mode": {
           const mode = String(args.mode ?? "systemProxy");
-          const pacEnabled =
-            args.pacEnabled == null
-              ? state.sysProxy.requestedMode === "pac"
-              : args.pacEnabled === true;
           if (mode === "vpn") {
             state.tun = { ...state.tun, enabled: true };
           } else {
             state.tun = { ...state.tun, enabled: false };
-            const requestedMode = pacEnabled ? "pac" : "forcedChange";
             state.sysProxy = {
               ...state.sysProxy,
-              effectiveMode: requestedMode,
-              requestedMode,
+              effectiveMode: "forcedChange",
+              requestedMode: "forcedChange",
             };
           }
           settleManualProxy();
@@ -965,9 +952,6 @@ export async function installTauriSmokeMock(
         singboxRulesetPath: String(
           input.singboxRulesetPath ?? existing?.singboxRulesetPath ?? "",
         ),
-        domainStrategy: String(
-          input.domainStrategy ?? existing?.domainStrategy ?? "AsIs",
-        ),
         singboxDomainStrategy: String(
           input.singboxDomainStrategy ?? existing?.singboxDomainStrategy ?? "",
         ),
@@ -978,7 +962,6 @@ export async function installTauriSmokeMock(
         remarks: String(input.remarks ?? existing?.remarks ?? "Smoke routing"),
         rules: existing?.rules ?? [],
         sort: Number(input.sort ?? existing?.sort ?? state.routings.length),
-        sourceUrl: String(input.sourceUrl ?? existing?.sourceUrl ?? ""),
       };
 
       if (existingIndex >= 0) {
@@ -1016,7 +999,6 @@ export async function installTauriSmokeMock(
       return {
         icon: "",
         singboxRulesetPath: "",
-        domainStrategy: "AsIs",
         singboxDomainStrategy: "",
         enabled: true,
         id,
@@ -1025,7 +1007,6 @@ export async function installTauriSmokeMock(
         remarks,
         rules: [],
         sort: 0,
-        sourceUrl: "",
       };
     }
 
@@ -1033,7 +1014,7 @@ export async function installTauriSmokeMock(
       return {
         schemaVersion: 1,
         appearance: { language: "en", theme: "system" },
-        behavior: { autostart: false, realtimeSpeed: false, statistics: false },
+        behavior: { autostart: false },
         core: {
           bindInterface: null as string | null,
           cacheFileEnabled: true,
@@ -1052,7 +1033,6 @@ export async function installTauriSmokeMock(
               lanConnectionsAllowed: false,
               localPort: 10808,
               password: "",
-              protocol: "socks",
               secondaryPortEnabled: false,
               separateLanPort: false,
               sniffingEnabled: true,
@@ -1060,10 +1040,7 @@ export async function installTauriSmokeMock(
             },
           ],
           systemProxy: {
-            advancedProtocol: "",
             bypassLocal: true,
-            customPacPath: null as string | null,
-            customScriptPath: null as string | null,
             exceptions: "",
             mode: "forcedChange",
           },
@@ -1077,7 +1054,7 @@ export async function installTauriSmokeMock(
             strictRoute: false,
           },
         },
-        routing: { domainStrategy: "AsIs", singboxDomainStrategy: "" },
+        routing: { domainStrategy: "AsIs" },
         dns: {
           addCommonHosts: null,
           blockBindingQuery: null,
@@ -1099,11 +1076,6 @@ export async function installTauriSmokeMock(
           timeoutSeconds: 10,
         },
         multiplexing: { maxConnections: 4, padding: false, protocol: "h2mux" },
-        grpc: {
-          healthCheckTimeoutSeconds: 20,
-          idleTimeoutSeconds: 60,
-          permitWithoutStream: false,
-        },
         hysteria: {
           downloadMbps: 100,
           hopIntervalSeconds: 30,

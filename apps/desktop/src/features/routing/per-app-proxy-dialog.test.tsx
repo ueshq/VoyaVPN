@@ -35,7 +35,6 @@ function renderDialog(onOpenChange: (open: boolean) => void = vi.fn()) {
 
 function routing(rules: RoutingRule[] = [], isActive = true): Routing_Serialize {
   return {
-    domainStrategy: "",
     enabled: true,
     icon: "",
     id: "routing-1",
@@ -46,7 +45,6 @@ function routing(rules: RoutingRule[] = [], isActive = true): Routing_Serialize 
     singboxDomainStrategy: "",
     singboxRulesetPath: "",
     sort: 0,
-    sourceUrl: "",
   };
 }
 
@@ -92,8 +90,6 @@ describe("PerAppProxyDialog", () => {
     Object.values(ipcMocks).forEach((mock) => mock.mockReset());
     ipcMocks.connectionModeStatus.mockResolvedValue({
       mode: "vpn",
-      pacAvailable: false,
-      pacEnabled: false,
       processRulesEffective: true,
       vpnAvailable: true,
     });
@@ -200,8 +196,6 @@ describe("PerAppProxyDialog", () => {
   it("makes the TUN-only hint prominent when the mode is not TUN", async () => {
     ipcMocks.connectionModeStatus.mockResolvedValue({
       mode: "systemProxy",
-      pacAvailable: true,
-      pacEnabled: false,
       processRulesEffective: false,
       vpnAvailable: true,
     });

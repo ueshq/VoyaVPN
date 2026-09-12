@@ -39,7 +39,6 @@ pub const fn sysproxy_type_to_contract(
         voya_core::SysProxyType::ForcedClear => voya_contracts::SystemProxyType::ForcedClear,
         voya_core::SysProxyType::ForcedChange => voya_contracts::SystemProxyType::ForcedChange,
         voya_core::SysProxyType::Unchanged => voya_contracts::SystemProxyType::Unchanged,
-        voya_core::SysProxyType::Pac => voya_contracts::SystemProxyType::Pac,
     }
 }
 
@@ -51,7 +50,6 @@ pub const fn sysproxy_type_from_contract(
         voya_contracts::SystemProxyType::ForcedClear => voya_core::SysProxyType::ForcedClear,
         voya_contracts::SystemProxyType::ForcedChange => voya_core::SysProxyType::ForcedChange,
         voya_contracts::SystemProxyType::Unchanged => voya_core::SysProxyType::Unchanged,
-        voya_contracts::SystemProxyType::Pac => voya_core::SysProxyType::Pac,
     }
 }
 

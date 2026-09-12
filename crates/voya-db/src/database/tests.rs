@@ -29,11 +29,10 @@ const PINNED_BLOB_SHAPES: &str = include_str!("../../fixtures/profile_blobs_v1.j
 const PINNED_SETTINGS_PAYLOAD: &str = include_str!("../../fixtures/app_settings_v1.json");
 
 /// Canonical persisted and IPC spellings of each system-proxy mode.
-const PINNED_SYSTEM_PROXY_MODES: [(SystemProxyType, &str); 4] = [
+const PINNED_SYSTEM_PROXY_MODES: [(SystemProxyType, &str); 3] = [
     (SystemProxyType::ForcedClear, "forcedClear"),
     (SystemProxyType::ForcedChange, "forcedChange"),
     (SystemProxyType::Unchanged, "unchanged"),
-    (SystemProxyType::Pac, "pac"),
 ];
 
 /// Canonical persisted and IPC spellings of each traffic mode.
@@ -656,7 +655,6 @@ async fn routing_repository_serializes_rules_and_enforces_active_selection() {
         id: "routing-a".to_string(),
         remarks: "A".to_string(),
         sort: 20,
-        domain_strategy: "AsIs".to_string(),
         rule_set: vec![RulesItem {
             id: "rule-a".to_string(),
             outbound_tag: Some("direct".to_string()),

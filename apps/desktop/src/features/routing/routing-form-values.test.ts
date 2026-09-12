@@ -7,19 +7,16 @@ import { formToRule, routingToForm, ruleToForm } from "./routing-form-values";
 describe("routing form transformations", () => {
   it("creates a clean Voya routing draft", () => {
     expect(routingToForm(null)).toEqual({
-      domainStrategy: "AsIs",
       enabled: true,
       remarks: "",
       rules: [],
       singboxDomainStrategy: "",
       singboxRulesetPath: "",
-      sourceUrl: "",
     });
   });
 
   it("preserves every semantic routing field", () => {
     const routing: Routing_Serialize = {
-      domainStrategy: "",
       enabled: false,
       icon: "route",
       id: "routing-a",
@@ -30,13 +27,9 @@ describe("routing form transformations", () => {
       singboxDomainStrategy: "ipv4_only",
       singboxRulesetPath: "/rules",
       sort: 4,
-      sourceUrl: "https://routing.example.test/bundle.json",
     };
 
-    expect(routingToForm(routing)).toEqual({
-      ...routing,
-      domainStrategy: "AsIs",
-    });
+    expect(routingToForm(routing)).toEqual(routing);
   });
 
   it("creates rule defaults and projects nullable values to editable text", () => {

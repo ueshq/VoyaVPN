@@ -85,7 +85,6 @@ describe("useRoutingScreen", () => {
     await waitFor(() => expect(result.current.selectedRouting).not.toBeNull());
     const payload = {
       ...routing("new-route", false),
-      domainStrategy: "AsIs" as const,
       singboxDomainStrategy: "" as const,
     };
     ipcMocks.saveRouting.mockResolvedValueOnce(payload);
@@ -183,7 +182,6 @@ function renderController() {
 
 function routing(id: string, isActive: boolean): Routing_Serialize {
   return {
-    domainStrategy: "AsIs",
     enabled: true,
     icon: "",
     id,
@@ -194,7 +192,6 @@ function routing(id: string, isActive: boolean): Routing_Serialize {
     singboxDomainStrategy: "",
     singboxRulesetPath: "",
     sort: 0,
-    sourceUrl: "",
   };
 }
 

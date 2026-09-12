@@ -160,7 +160,7 @@ function forwardingCases(): Array<[WrapperName, unknown[], unknown[]]> {
     ["updateSubscriptions", [], [null, true, null]],
     ["updateSubscriptions", ["sub-1", false, "http://proxy.test"], ["sub-1", false, "http://proxy.test"]],
     ["importProfilesFromText", ["vmess://link"], ["vmess://link", null]],
-    ["setConnectionMode", ["vpn"], ["vpn", null]],
+    ["setConnectionMode", ["vpn"], ["vpn"]],
     // Same-typed positional parameters: a transposition here is invisible to tsc.
     ["moveProfile", ["sub-1", "index-1", "up"], ["sub-1", "index-1", "up", null]],
     ["moveProfile", ["sub-1", "index-1", "position", 3], ["sub-1", "index-1", "position", 3]],

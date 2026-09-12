@@ -1,33 +1,17 @@
 use super::*;
 
-fn custom_script_path(item: &SystemProxyItem) -> Option<PathBuf> {
-    item.custom_system_proxy_script_path
-        .as_deref()
-        .filter(|path| !path.trim().is_empty())
-        .map(PathBuf::from)
-        .filter(|path| path.exists())
-}
-
 pub(super) fn linux_script_invocation(
     request: &SystemProxyRequest,
     mode: &str,
     manual: Option<(&str, i32, &str)>,
 ) -> ScriptInvocation {
-    let (executable, generated_script) =
-        if let Some(custom_script) = custom_script_path(&request.item) {
-            (custom_script, None)
-        } else {
-            let executable = request.script_dir.join(LINUX_PROXY_SCRIPT_NAME);
-            (
-                executable.clone(),
-                Some(GeneratedScript::new(
-                    request.script_dir.clone(),
-                    executable,
-                    LINUX_PROXY_SCRIPT,
-                    true,
-                )),
-            )
-        };
+    let executable = request.script_dir.join(LINUX_PROXY_SCRIPT_NAME);
+    let generated_script = Some(GeneratedScript::new(
+        request.script_dir.clone(),
+        executable.clone(),
+        LINUX_PROXY_SCRIPT,
+        true,
+    ));
     let mut arguments = vec![mode.to_string()];
     if let Some((host, port, exceptions)) = manual {
         arguments.push(host.to_string());
@@ -92,12 +76,6 @@ fn windows_registry_commands(settings: &WindowsProxySettings) -> Vec<ProcessSpaw
             registry_set_string("ProxyServer", &settings.proxy),
             registry_set_string("ProxyOverride", &settings.exceptions),
             registry_set_string("AutoConfigURL", ""),
-        ],
-        WindowsProxyOption::PacUrl => vec![
-            registry_set_dword("ProxyEnable", 0),
-            registry_set_string("ProxyServer", ""),
-            registry_set_string("ProxyOverride", ""),
-            registry_set_string("AutoConfigURL", &settings.proxy),
         ],
     }
 }
@@ -176,93 +154,6 @@ fn ensure_success(output: ProcessOutput, context: &'static str) -> Result<(), Sy
             stderr: output.stderr,
         })
     }
-}
-
-pub(super) fn pac_http_response(config: &PacStartConfig) -> Result<Vec<u8>, SystemProxyError> {
-    let pac_text = load_pac_text(config)?.replace(
-        "__PROXY__",
-        &format!("PROXY {LOOPBACK}:{};DIRECT;", config.http_port),
-    );
-    let mut response = String::new();
-    response.push_str("HTTP/1.0 200 OK\r\n");
-    response.push_str("Content-type:application/x-ns-proxy-autoconfig\r\n");
-    response.push_str("Connection:close\r\n");
-    response.push_str(&format!("Content-Length:{}\r\n", pac_text.len()));
-    response.push_str("\r\n");
-    response.push_str(&pac_text);
-
-    Ok(response.into_bytes())
-}
-
-fn load_pac_text(config: &PacStartConfig) -> Result<String, SystemProxyError> {
-    if let Some(custom) = config
-        .custom_pac_path
-        .as_deref()
-        .filter(|path| !path.trim().is_empty())
-        .map(PathBuf::from)
-        .filter(|path| path.exists())
-    {
-        return fs::read_to_string(&custom).map_err(|source| SystemProxyError::PacRead {
-            path: custom,
-            source,
-        });
-    }
-
-    fs::create_dir_all(&config.config_dir).map_err(|source| SystemProxyError::PacWrite {
-        path: config.config_dir.clone(),
-        source,
-    })?;
-    let path = config.config_dir.join(PAC_FILE_NAME);
-    if !path.exists() {
-        fs::write(&path, DEFAULT_PAC_TEMPLATE).map_err(|source| SystemProxyError::PacWrite {
-            path: path.clone(),
-            source,
-        })?;
-    }
-
-    fs::read_to_string(&path).map_err(|source| SystemProxyError::PacRead { path, source })
-}
-
-pub(super) fn write_pac_response(mut stream: TcpStream, content: &[u8]) {
-    drain_pac_request(&mut stream);
-    let _ = stream.write_all(content);
-    let _ = stream.flush();
-}
-
-/// Read the request head before replying.
-///
-/// Closing a socket that still has unread data queued makes the kernel send an
-/// RST, which can discard the response the client has not read yet.
-fn drain_pac_request(stream: &mut TcpStream) {
-    use std::io::Read;
-
-    const MAX_REQUEST_BYTES: usize = 8 * 1024;
-    const REQUEST_READ_TIMEOUT: Duration = Duration::from_millis(100);
-
-    if stream.set_read_timeout(Some(REQUEST_READ_TIMEOUT)).is_err() {
-        return;
-    }
-
-    let mut request = Vec::new();
-    let mut chunk = [0_u8; 1024];
-    while request.len() < MAX_REQUEST_BYTES {
-        match stream.read(&mut chunk) {
-            Ok(0) => break,
-            Ok(read) => {
-                request.extend_from_slice(&chunk[..read]);
-                if request.windows(4).any(|window| window == b"\r\n\r\n") {
-                    break;
-                }
-            }
-            Err(_) => break,
-        }
-    }
-
-    let _ = stream.set_read_timeout(None);
-}
-
-pub(super) fn to_u16_port(port: i32) -> Result<u16, SystemProxyError> {
-    u16::try_from(port).map_err(|_| SystemProxyError::InvalidPort(port))
 }
 
 pub(super) const LINUX_PROXY_SCRIPT: &str = r#"#!/bin/sh

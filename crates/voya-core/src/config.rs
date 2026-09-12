@@ -17,7 +17,6 @@ pub struct AppConfig {
     pub index_id: String,
     pub core_basic_item: CoreBasicItem,
     pub tun_mode_item: TunModeItem,
-    pub grpc_item: GrpcItem,
     pub routing_basic_item: RoutingBasicItem,
     pub gui_item: GuiItem,
     pub ui_item: UiItem,
@@ -36,7 +35,6 @@ impl Default for AppConfig {
             index_id: String::new(),
             core_basic_item: CoreBasicItem::default(),
             tun_mode_item: TunModeItem::default(),
-            grpc_item: GrpcItem::default(),
             routing_basic_item: RoutingBasicItem::default(),
             gui_item: GuiItem::default(),
             ui_item: UiItem::default(),
@@ -85,7 +83,6 @@ impl Default for CoreBasicItem {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InItem {
     pub local_port: i32,
-    pub protocol: String,
     pub sniffing_enabled: bool,
     pub allow_lan_conn: bool,
     pub new_port4_lan: bool,
@@ -98,7 +95,6 @@ impl Default for InItem {
     fn default() -> Self {
         Self {
             local_port: DEFAULT_LOCAL_PORT,
-            protocol: "socks".to_string(),
             sniffing_enabled: true,
             allow_lan_conn: false,
             new_port4_lan: false,
@@ -109,28 +105,9 @@ impl Default for InItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GrpcItem {
-    pub idle_timeout: Option<i32>,
-    pub health_check_timeout: Option<i32>,
-    pub permit_without_stream: Option<bool>,
-}
-
-impl Default for GrpcItem {
-    fn default() -> Self {
-        Self {
-            idle_timeout: Some(60),
-            health_check_timeout: Some(20),
-            permit_without_stream: Some(false),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct GuiItem {
     pub auto_run: bool,
-    pub enable_statistics: bool,
-    pub display_real_time_speed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -172,7 +149,6 @@ impl Default for SpeedTestItem {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoutingBasicItem {
     pub domain_strategy: String,
-    pub domain_strategy4_singbox: String,
     pub routing_index_id: String,
 }
 
@@ -180,7 +156,6 @@ impl Default for RoutingBasicItem {
     fn default() -> Self {
         Self {
             domain_strategy: DEFAULT_DOMAIN_STRATEGY.to_string(),
-            domain_strategy4_singbox: String::new(),
             routing_index_id: String::new(),
         }
     }
@@ -238,9 +213,6 @@ pub struct SystemProxyItem {
     pub sys_proxy_type: SysProxyType,
     pub system_proxy_exceptions: String,
     pub not_proxy_local_address: bool,
-    pub system_proxy_advanced_protocol: String,
-    pub custom_system_proxy_pac_path: Option<String>,
-    pub custom_system_proxy_script_path: Option<String>,
 }
 
 impl Default for SystemProxyItem {
@@ -249,9 +221,6 @@ impl Default for SystemProxyItem {
             sys_proxy_type: SysProxyType::ForcedChange,
             system_proxy_exceptions: DEFAULT_SYSTEM_PROXY_EXCEPTIONS.to_string(),
             not_proxy_local_address: true,
-            system_proxy_advanced_protocol: String::new(),
-            custom_system_proxy_pac_path: None,
-            custom_system_proxy_script_path: None,
         }
     }
 }
@@ -332,7 +301,6 @@ mod tests {
         let config = AppConfig::default();
 
         assert_eq!(config.inbound.len(), 1);
-        assert_eq!(config.inbound[0].protocol, "socks");
         assert_eq!(config.inbound[0].local_port, 10808);
         assert!(config.inbound[0].sniffing_enabled);
         assert_eq!(config.core_basic_item.loglevel, "warn");

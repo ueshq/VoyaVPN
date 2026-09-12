@@ -1,7 +1,7 @@
 use thiserror::Error;
 use voya_contracts as contracts;
 use voya_core::{
-    AppConfig, CoreBasicItem, GrpcItem, GuiItem, HysteriaItem, InItem, Mux4SboxItem, ProxyUiItem,
+    AppConfig, CoreBasicItem, GuiItem, HysteriaItem, InItem, Mux4SboxItem, ProxyUiItem,
     RoutingBasicItem, SpeedTestItem, SystemProxyItem, TunModeItem, UiItem,
 };
 use voya_db::AppStateRecord;
@@ -135,7 +135,6 @@ pub fn saved_config_requires_runtime_restart(original: &AppConfig, updated: &App
     original.index_id != updated.index_id
         || original.core_basic_item != updated.core_basic_item
         || original.tun_mode_item != updated.tun_mode_item
-        || original.grpc_item != updated.grpc_item
         || original.routing_basic_item != updated.routing_basic_item
         || original.mux4_sbox_item != updated.mux4_sbox_item
         || original.hysteria_item != updated.hysteria_item
@@ -178,8 +177,6 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
         },
         behavior: contracts::BehaviorSettings {
             autostart: config.gui_item.auto_run,
-            statistics: config.gui_item.enable_statistics,
-            realtime_speed: config.gui_item.display_real_time_speed,
         },
         core: contracts::CoreSettings {
             log_enabled: config.core_basic_item.log_enabled,
@@ -207,25 +204,12 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
                 mode: sysproxy_type_to_contract(config.system_proxy_item.sys_proxy_type),
                 exceptions: config.system_proxy_item.system_proxy_exceptions.clone(),
                 bypass_local: config.system_proxy_item.not_proxy_local_address,
-                advanced_protocol: config
-                    .system_proxy_item
-                    .system_proxy_advanced_protocol
-                    .clone(),
-                custom_pac_path: config
-                    .system_proxy_item
-                    .custom_system_proxy_pac_path
-                    .clone(),
-                custom_script_path: config
-                    .system_proxy_item
-                    .custom_system_proxy_script_path
-                    .clone(),
             },
             inbounds: config
                 .inbound
                 .iter()
                 .map(|item| contracts::InboundSettings {
                     local_port: item.local_port,
-                    protocol: item.protocol.clone(),
                     sniffing_enabled: item.sniffing_enabled,
                     lan_connections_allowed: item.allow_lan_conn,
                     separate_lan_port: item.new_port4_lan,
@@ -237,7 +221,6 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
         },
         routing: contracts::RoutingSettings {
             domain_strategy: config.routing_basic_item.domain_strategy.clone(),
-            singbox_domain_strategy: config.routing_basic_item.domain_strategy4_singbox.clone(),
         },
         dns: simple_dns_to_contract(config.simple_dns_item.clone()),
         speed_test: contracts::SpeedtestSettings {
@@ -251,11 +234,6 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
             protocol: config.mux4_sbox_item.protocol.clone(),
             max_connections: config.mux4_sbox_item.max_connections,
             padding: config.mux4_sbox_item.padding,
-        },
-        grpc: contracts::GrpcSettings {
-            idle_timeout_seconds: config.grpc_item.idle_timeout,
-            health_check_timeout_seconds: config.grpc_item.health_check_timeout,
-            permit_without_stream: config.grpc_item.permit_without_stream,
         },
         hysteria: contracts::HysteriaSettings {
             upload_mbps: config.hysteria_item.up_mbps,
@@ -313,20 +291,12 @@ pub fn app_config_from_settings(
             enable_ipv6_address: settings.network.tun.ipv6_enabled,
             icmp_routing: settings.network.tun.icmp_routing.clone(),
         },
-        grpc_item: GrpcItem {
-            idle_timeout: settings.grpc.idle_timeout_seconds,
-            health_check_timeout: settings.grpc.health_check_timeout_seconds,
-            permit_without_stream: settings.grpc.permit_without_stream,
-        },
         routing_basic_item: RoutingBasicItem {
             domain_strategy: settings.routing.domain_strategy.clone(),
-            domain_strategy4_singbox: settings.routing.singbox_domain_strategy.clone(),
             routing_index_id: state.active_routing_id.clone().unwrap_or_default(),
         },
         gui_item: GuiItem {
             auto_run: settings.behavior.autostart,
-            enable_statistics: settings.behavior.statistics,
-            display_real_time_speed: settings.behavior.realtime_speed,
         },
         ui_item: UiItem {
             current_theme: theme_to_config(settings.appearance.theme).map(str::to_string),
@@ -356,13 +326,6 @@ pub fn app_config_from_settings(
             sys_proxy_type: sysproxy_type_from_contract(settings.network.system_proxy.mode),
             system_proxy_exceptions: settings.network.system_proxy.exceptions.clone(),
             not_proxy_local_address: settings.network.system_proxy.bypass_local,
-            system_proxy_advanced_protocol: settings.network.system_proxy.advanced_protocol.clone(),
-            custom_system_proxy_pac_path: settings.network.system_proxy.custom_pac_path.clone(),
-            custom_system_proxy_script_path: settings
-                .network
-                .system_proxy
-                .custom_script_path
-                .clone(),
         },
         inbound: settings
             .network
@@ -370,7 +333,6 @@ pub fn app_config_from_settings(
             .iter()
             .map(|item| InItem {
                 local_port: item.local_port,
-                protocol: item.protocol.clone(),
                 sniffing_enabled: item.sniffing_enabled,
                 allow_lan_conn: item.lan_connections_allowed,
                 new_port4_lan: item.separate_lan_port,
@@ -501,8 +463,7 @@ mod tests {
 
     /// Every scalar and string in `AppConfig` gets a distinct value, so a
     /// same-typed neighbour swap in either mapper (`up_mbps`/`down_mbps`,
-    /// `idle_timeout`/`health_check_timeout`, `direct`/`remote`/`bootstrap`
-    /// DNS, `custom_pac_path`/`custom_script_path`, …) fails here instead of
+    /// `direct`/`remote`/`bootstrap` DNS, `user`/`pass`, …) fails here instead of
     /// silently shipping. Struct literals guarantee that every field is
     /// assigned; nothing but distinct values proves it is assigned correctly.
     fn distinctly_valued_config() -> AppConfig {
@@ -529,21 +490,11 @@ mod tests {
                 enable_ipv6_address: true,
                 icmp_routing: "icmp-routing-value".to_string(),
             },
-            grpc_item: GrpcItem {
-                idle_timeout: Some(11),
-                health_check_timeout: Some(12),
-                permit_without_stream: Some(true),
-            },
             routing_basic_item: RoutingBasicItem {
                 domain_strategy: "domain-strategy-value".to_string(),
-                domain_strategy4_singbox: "singbox-domain-strategy-value".to_string(),
                 routing_index_id: "active-routing-id".to_string(),
             },
-            gui_item: GuiItem {
-                auto_run: true,
-                enable_statistics: false,
-                display_real_time_speed: true,
-            },
+            gui_item: GuiItem { auto_run: true },
             ui_item: UiItem {
                 current_theme: Some("Dark".to_string()),
                 current_language: "zh-Hans".to_string(),
@@ -569,16 +520,12 @@ mod tests {
                 traffic_mode: TrafficMode::Global,
             },
             system_proxy_item: SystemProxyItem {
-                sys_proxy_type: SysProxyType::Pac,
+                sys_proxy_type: SysProxyType::Unchanged,
                 system_proxy_exceptions: "exceptions-value".to_string(),
                 not_proxy_local_address: false,
-                system_proxy_advanced_protocol: "advanced-protocol-value".to_string(),
-                custom_system_proxy_pac_path: Some("/tmp/custom-pac-path".to_string()),
-                custom_system_proxy_script_path: Some("/tmp/custom-script-path".to_string()),
             },
             inbound: vec![InItem {
                 local_port: 61,
-                protocol: "inbound-protocol".to_string(),
                 sniffing_enabled: false,
                 allow_lan_conn: true,
                 new_port4_lan: false,

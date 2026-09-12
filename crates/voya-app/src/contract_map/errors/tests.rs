@@ -548,9 +548,12 @@ fn tun_and_system_proxy_failures_are_classified() {
         ),
     ]);
     assert_kinds(vec![(
-        "pac unavailable",
-        SystemProxyManagerError::PacUnavailable(voya_platform::coreinfo::TargetOs::Linux),
-        "validation",
+        "dirty marker write",
+        SystemProxyManagerError::DirtyMarkerWrite {
+            path: "proxy-dirty".into(),
+            source: io::Error::other("read-only"),
+        },
+        "io",
         AppErrorSubsystem::SysProxy,
     )]);
 }
@@ -793,8 +796,7 @@ mod guards {
 
     const fn system_proxy(error: &SystemProxyManagerError) {
         match error {
-            SystemProxyManagerError::PacUnavailable(_)
-            | SystemProxyManagerError::Path(_)
+            SystemProxyManagerError::Path(_)
             | SystemProxyManagerError::SystemProxy(_)
             | SystemProxyManagerError::DirtyMarkerInspect { .. }
             | SystemProxyManagerError::DirtyMarkerWrite { .. }

@@ -33,7 +33,6 @@ pub enum SystemProxyType {
     ForcedClear,
     ForcedChange,
     Unchanged,
-    Pac,
 }
 
 /// Top-level connection mode. A derived view over the two
@@ -41,7 +40,7 @@ pub enum SystemProxyType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ConnectionMode {
-    /// Local inbound for system proxy use (optionally PAC); macOS setup is manual.
+    /// Local inbound for system proxy use; macOS setup is manual.
     SystemProxy,
     /// TUN mode; all traffic is routed through the virtual interface.
     Vpn,
@@ -51,8 +50,6 @@ pub enum ConnectionMode {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ConnectionModeStatus {
     pub mode: ConnectionMode,
-    pub pac_enabled: bool,
-    pub pac_available: bool,
     pub vpn_available: bool,
     /// sing-box process rules only match traffic entering through TUN, so
     /// per-app rules are effective only while `mode` is `Vpn`.

@@ -26,24 +26,14 @@ describe("routing editor dialogs", () => {
     await user.type(screen.getByLabelText("remarks"), "Work route");
     await chooseOption(user, "Domain strategy", "prefer_ipv4");
     await user.type(screen.getByLabelText("Ruleset path"), "/rules/work.srs");
-    await user.type(screen.getByLabelText("Source URL"), "http://example.test/routes.json");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(await screen.findByText("The URL must use https://")).toBeInTheDocument();
-    expect(onSubmit).not.toHaveBeenCalled();
-
-    await user.clear(screen.getByLabelText("Source URL"));
-    await user.type(screen.getByLabelText("Source URL"), "https://example.test/routes.json");
     await user.click(screen.getByLabelText("Enabled"));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
-      domainStrategy: "AsIs",
       enabled: false,
       remarks: "Work route",
       singboxDomainStrategy: "prefer_ipv4",
       singboxRulesetPath: "/rules/work.srs",
-      sourceUrl: "https://example.test/routes.json",
     })));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -64,7 +54,7 @@ describe("routing editor dialogs", () => {
 
     expect(screen.getByRole("heading", { name: "Edit routing profile" })).toBeInTheDocument();
     expect(screen.getByLabelText("remarks")).toHaveValue("Existing route");
-    expect(screen.getByLabelText("Source URL")).toHaveValue("https://example.test/existing.json");
+    expect(screen.getByLabelText("Ruleset path")).toHaveValue("/rules/existing.srs");
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ id: "route-1" })));
   });
@@ -103,7 +93,7 @@ describe("routing editor dialogs", () => {
         onOpenChange={vi.fn()}
         onSubmit={onSubmit}
         open
-        routing={{ ...routing(), domainStrategy: "NotAStrategy" }}
+        routing={{ ...routing(), sort: 1.5 }}
       />,
     );
 
@@ -198,7 +188,6 @@ async function chooseOption(user: ReturnType<typeof userEvent.setup>, label: str
 
 function routing(): Routing_Serialize {
   return {
-    domainStrategy: "AsIs",
     enabled: true,
     icon: "",
     id: "route-1",
@@ -209,7 +198,6 @@ function routing(): Routing_Serialize {
     singboxDomainStrategy: "ipv4_only",
     singboxRulesetPath: "/rules/existing.srs",
     sort: 1,
-    sourceUrl: "https://example.test/existing.json",
   };
 }
 

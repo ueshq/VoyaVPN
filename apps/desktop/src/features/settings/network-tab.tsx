@@ -1,4 +1,3 @@
-import { nullableText } from "./settings-values";
 import {
   SettingsCheckbox,
   NumberField,
@@ -154,43 +153,6 @@ export function NetworkTab({
           onChange={(exceptions) => patchSystemProxy({ exceptions })}
           value={settings.network.systemProxy.exceptions}
         />
-        <Disclosure
-          className="border-0 [&>div]:border-0"
-          title={t("common.advanced")}
-          invalid={Object.keys(controller.fieldErrors).some((field) =>
-            field.startsWith("network.systemProxy"),
-          )}
-        >
-          <TextField
-            field="network.systemProxy.advancedProtocol"
-            id="rt-sysproxy-advanced-protocol"
-            label={t("settings.network.systemProxyProtocol")}
-            onChange={(advancedProtocol) =>
-              patchSystemProxy({ advancedProtocol })
-            }
-            value={settings.network.systemProxy.advancedProtocol}
-          />
-          <TextField
-            field="network.systemProxy.customPacPath"
-            id="rt-sysproxy-pac-path"
-            label={t("settings.network.customPacPath")}
-            onChange={(value) =>
-              patchSystemProxy({ customPacPath: nullableText(value) })
-            }
-            value={settings.network.systemProxy.customPacPath ?? ""}
-          />
-          {sysProxy?.management === "automatic" ? (
-            <TextField
-              field="network.systemProxy.customScriptPath"
-              id="rt-sysproxy-script-path"
-              label={t("settings.network.customScriptPath")}
-              onChange={(value) =>
-                patchSystemProxy({ customScriptPath: nullableText(value) })
-              }
-              value={settings.network.systemProxy.customScriptPath ?? ""}
-            />
-          ) : null}
-        </Disclosure>
       </SettingsGroup>
 
       {/* Explicit action: the

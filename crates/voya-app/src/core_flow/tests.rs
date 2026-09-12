@@ -16,7 +16,7 @@ use voya_platform::{
     coreinfo::{core_type_dir_name, executable_name_for_current_os, get_core_info, TargetOs},
     paths::AppPaths,
     privilege::ElevationState,
-    sysproxy::{PacManager, PacStartConfig, SystemProxyError, SystemProxyService},
+    sysproxy::SystemProxyService,
     test_support::RecordingRunner,
     tun::{
         NativeTunController, NativeTunError, NativeTunProviderState, NativeTunStartRequest,
@@ -106,24 +106,6 @@ fn code_tag(code: &impl serde::Serialize) -> String {
         tag
     } else {
         format!("{tag}({})", params.join(","))
-    }
-}
-
-#[derive(Default)]
-struct SilentPac;
-
-impl PacManager for SilentPac {
-    fn start(&self, _config: PacStartConfig) -> Result<(), SystemProxyError> {
-        Ok(())
-    }
-
-    fn stop(&self) {}
-
-    fn is_supported(&self) -> bool {
-        false
-    }
-    fn is_running(&self) -> bool {
-        true
     }
 }
 
@@ -230,7 +212,7 @@ impl Harness {
 
     fn flow_with_proxy_runner(&self, runner: RecordingRunner) -> CoreFlow<'_, ModeTransport> {
         let system_proxy = SystemProxyManager::with_target_os(
-            SystemProxyService::new(Arc::new(runner), Arc::new(SilentPac)),
+            SystemProxyService::new(Arc::new(runner)),
             self.paths.clone(),
             TargetOs::Linux,
         );
@@ -714,31 +696,6 @@ async fn restart_if_connected_restarts_a_running_core() {
     assert!(events.iter().filter(|event| *event == "sysproxy").count() >= 2);
 }
 
-#[derive(Default)]
-struct FaultPac {
-    fail: std::sync::atomic::AtomicBool,
-    running: std::sync::atomic::AtomicBool,
-}
-
-impl PacManager for FaultPac {
-    fn start(&self, _config: PacStartConfig) -> Result<(), SystemProxyError> {
-        if self.fail.load(Ordering::SeqCst) {
-            return Err(SystemProxyError::InvalidPort(0));
-        }
-        self.running.store(true, Ordering::SeqCst);
-        Ok(())
-    }
-    fn stop(&self) {
-        self.running.store(false, Ordering::SeqCst);
-    }
-    fn is_supported(&self) -> bool {
-        true
-    }
-    fn is_running(&self) -> bool {
-        self.running.load(Ordering::SeqCst)
-    }
-}
-
 struct ClearObserver;
 impl voya_platform::sysproxy::SystemProxyObserver for ClearObserver {
     fn observe(&self) -> voya_platform::sysproxy::SystemProxyObservation {
@@ -746,35 +703,37 @@ impl voya_platform::sysproxy::SystemProxyObserver for ClearObserver {
     }
 }
 
-fn manual_manager(harness: &Harness, pac: Arc<FaultPac>) -> SystemProxyManager {
+fn manual_manager(harness: &Harness) -> SystemProxyManager {
     SystemProxyManager::with_target_os(
-        SystemProxyService::new(Arc::new(RecordingRunner::default()), pac)
+        SystemProxyService::new(Arc::new(RecordingRunner::default()))
             .with_observer(Arc::new(ClearObserver)),
         harness.paths.clone(),
         TargetOs::Macos,
     )
 }
 
+fn last_published_proxy(harness: &Harness) -> Option<String> {
+    harness
+        .sink
+        .1
+        .lock()
+        .expect("statuses")
+        .last()
+        .expect("published")
+        .proxy
+        .clone()
+}
+
 #[tokio::test]
-async fn manual_pac_failure_retires_a_previously_published_url_on_every_start_path() {
+async fn manual_proxy_failure_retires_the_published_endpoint_on_every_start_path() {
     for action in ["connect", "restart", "save", "background"] {
         let harness = Harness::new().await;
-        let pac = Arc::new(FaultPac::default());
-        let manager = manual_manager(&harness, pac.clone());
-        let flow = harness.flow_with_proxy_manager(manager.clone());
+        let flow = harness.flow_with_proxy_manager(manual_manager(&harness));
         let mut config = active_config();
-        config.system_proxy_item.sys_proxy_type = voya_core::SysProxyType::Pac;
         flow.connect(&config).await.expect("initial connection");
-        assert!(harness
-            .sink
-            .1
-            .lock()
-            .expect("statuses")
-            .last()
-            .expect("published")
-            .pac_url
-            .is_some());
-        pac.fail.store(true, Ordering::SeqCst);
+        assert!(last_published_proxy(&harness).is_some());
+        // An exception list the planner rejects makes every later apply fail.
+        config.system_proxy_item.system_proxy_exceptions = "bad host".into();
         let before = harness.sink.events().len();
         match action {
             "connect" => {
@@ -804,16 +763,7 @@ async fn manual_pac_failure_retires_a_previously_published_url_on_every_start_pa
                 .await;
             }
         }
-        {
-            let statuses = harness.sink.1.lock().expect("statuses");
-            let last = statuses.last().expect("failure status");
-            assert!(last.pac_url.is_none(), "{action}");
-            assert!(!pac.is_running(), "{action}");
-            assert_eq!(
-                last.observation,
-                voya_platform::sysproxy::SystemProxyObservation::Clear
-            );
-        }
+        assert!(last_published_proxy(&harness).is_none(), "{action}");
         let events = harness.sink.events();
         assert_eq!(
             events[before..]
@@ -838,42 +788,22 @@ async fn manual_pac_failure_retires_a_previously_published_url_on_every_start_pa
 }
 
 #[tokio::test]
-async fn a_rejected_restart_observes_the_surviving_pac_without_reapplying_it() {
+async fn a_rejected_restart_observes_the_surviving_endpoint_without_reapplying_it() {
     let harness = Harness::new().await;
-    let pac = Arc::new(FaultPac::default());
-    let flow = harness.flow_with_proxy_manager(manual_manager(&harness, pac.clone()));
+    let flow = harness.flow_with_proxy_manager(manual_manager(&harness));
     let mut config = active_config();
-    config.system_proxy_item.sys_proxy_type = voya_core::SysProxyType::Pac;
     flow.connect(&config).await.expect("initial connection");
-    let original_url = harness
-        .sink
-        .1
-        .lock()
-        .expect("statuses")
-        .last()
-        .expect("initial")
-        .pac_url
-        .clone();
-    assert!(original_url.is_some());
-    pac.fail.store(true, Ordering::SeqCst);
+    let original_proxy = last_published_proxy(&harness);
+    assert!(original_proxy.is_some());
+    // A re-apply would advertise the new port; observing keeps the old one.
+    config.inbound[0].local_port += 100;
     config.index_id = "deleted-profile".into();
     let before = harness.sink.events().len();
     assert!(matches!(
         flow.restart(&config).await,
         Err(RuntimeError::ActiveProfileNotFound(_))
     ));
-    assert!(pac.is_running());
-    assert_eq!(
-        harness
-            .sink
-            .1
-            .lock()
-            .expect("statuses")
-            .last()
-            .expect("refreshed")
-            .pac_url,
-        original_url
-    );
+    assert_eq!(last_published_proxy(&harness), original_proxy);
     let events = harness.sink.events();
     let tail = &events[before..];
     assert!(
@@ -913,7 +843,7 @@ impl NativeTunController for CleanupFailure {
 }
 
 #[tokio::test]
-async fn pending_native_cleanup_publishes_retired_pac_before_the_pending_state() {
+async fn pending_native_cleanup_publishes_the_retired_endpoint_before_the_pending_state() {
     let mut harness = Harness::new().await;
     harness.supervisor = CoreSupervisor::spawn(
         SupervisorDeps::new(
@@ -923,11 +853,11 @@ async fn pending_native_cleanup_publishes_retired_pac_before_the_pending_state()
         .with_target_os(TargetOs::Macos)
         .with_native_tun_controller(Arc::new(CleanupFailure)),
     );
-    let pac = Arc::new(FaultPac::default());
-    let manager = manual_manager(&harness, pac.clone());
+    let manager = manual_manager(&harness);
     let mut config = active_config();
-    config.system_proxy_item.sys_proxy_type = voya_core::SysProxyType::Pac;
-    manager.apply_runtime_config(&config).expect("old PAC");
+    manager
+        .apply_runtime_config(&config)
+        .expect("previous endpoint");
     config.tun_mode_item.enable_tun = true;
     let error = harness
         .flow_with_proxy_manager(manager)
@@ -938,8 +868,7 @@ async fn pending_native_cleanup_publishes_retired_pac_before_the_pending_state()
     assert!(error.to_string().contains("stop failed"));
     let statuses = harness.sink.1.lock().expect("statuses");
     let last = statuses.last().expect("retired state");
-    assert!(last.pac_url.is_none() && last.proxy.is_none());
-    assert!(!pac.is_running());
+    assert!(last.proxy.is_none());
     drop(statuses);
     let events = harness.sink.events();
     let proxy = events

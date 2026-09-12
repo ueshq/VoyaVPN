@@ -5,9 +5,7 @@
     "theme": "system"
   },
   "behavior": {
-    "autostart": false,
-    "statistics": false,
-    "realtimeSpeed": false
+    "autostart": false
   },
   "core": {
     "logEnabled": false,
@@ -34,15 +32,11 @@
     "systemProxy": {
       "mode": "forcedClear",
       "exceptions": "localhost,127.0.0.0/8,::1",
-      "bypassLocal": true,
-      "advancedProtocol": "",
-      "customPacPath": null,
-      "customScriptPath": null
+      "bypassLocal": true
     },
     "inbounds": [
       {
         "localPort": 10808,
-        "protocol": "socks",
         "sniffingEnabled": true,
         "lanConnectionsAllowed": false,
         "separateLanPort": false,
@@ -53,8 +47,7 @@
     ]
   },
   "routing": {
-    "domainStrategy": "AsIs",
-    "singboxDomainStrategy": ""
+    "domainStrategy": "AsIs"
   },
   "dns": {
     "addCommonHosts": null,
@@ -80,11 +73,6 @@
     "protocol": "h2mux",
     "maxConnections": 8,
     "padding": null
-  },
-  "grpc": {
-    "idleTimeoutSeconds": 60,
-    "healthCheckTimeoutSeconds": 20,
-    "permitWithoutStream": false
   },
   "hysteria": {
     "uploadMbps": 100,

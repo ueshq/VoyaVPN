@@ -241,10 +241,8 @@ pub struct SystemProxyStatusResponse {
     pub requested_mode: SystemProxyType,
     /// The app's applied policy; always Unchanged on manual platforms.
     pub effective_mode: SystemProxyType,
-    pub pac_available: bool,
     pub proxy: Option<String>,
     pub exceptions: String,
-    pub pac_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]

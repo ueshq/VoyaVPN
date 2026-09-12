@@ -39,7 +39,6 @@ pub enum InboundProtocol {
     socks,
     socks2,
     socks3,
-    pac,
     api,
     api2,
     mixed,
@@ -53,7 +52,8 @@ impl InboundProtocol {
             Self::socks => 0,
             Self::socks2 => 1,
             Self::socks3 => 2,
-            Self::pac => 3,
+            // Offset 3 belonged to the retired local PAC listener. The remaining
+            // offsets keep their values so generated ports stay stable.
             Self::api => 4,
             Self::api2 => 5,
             Self::mixed => 6,
@@ -99,5 +99,4 @@ pub enum SysProxyType {
     ForcedClear,
     ForcedChange,
     Unchanged,
-    Pac,
 }

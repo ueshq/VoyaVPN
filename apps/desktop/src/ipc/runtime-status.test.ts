@@ -13,8 +13,8 @@ const core: RuntimeStatusResponse = {
 };
 const proxy: SystemProxyStatusResponse = {
   management: "manual", observation: "clear", manualCleanupRequired: false,
-  requestedMode: "pac", effectiveMode: "unchanged", pacAvailable: true, proxy: "127.0.0.1:10808",
-  exceptions: "", pacUrl: "http://127.0.0.1:10811/pac?t=1",
+  requestedMode: "forcedChange", effectiveMode: "unchanged", proxy: "127.0.0.1:10808",
+  exceptions: "",
 };
 const tun: TunStatus = {
   backend: "macosPacketTunnel", enabled: false, allowEnableTun: true, nativeComponentReady: true,
@@ -63,7 +63,7 @@ describe("runtime status reconciliation", () => {
     commands.systemProxyStatus.mockReturnValue(oldProxy.promise);
     commands.tunStatus.mockReturnValue(oldTun.promise);
     const refresh = refreshRuntimeStatus();
-    const latest = { ...proxy, pacUrl: null };
+    const latest = { ...proxy, proxy: null };
     const store = useRuntimeEventStore.getState();
     store.pushTransientEvent({ kind: "coreState", payload: core });
     store.pushTransientEvent({ kind: "sysProxyChanged", payload: latest });

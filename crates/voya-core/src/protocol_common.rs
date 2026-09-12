@@ -246,7 +246,6 @@ pub(crate) fn inbound_protocol_tag(protocol: InboundProtocol) -> &'static str {
         InboundProtocol::socks => "socks",
         InboundProtocol::socks2 => "socks2",
         InboundProtocol::socks3 => "socks3",
-        InboundProtocol::pac => "pac",
         InboundProtocol::api => "api",
         InboundProtocol::api2 => "api2",
         InboundProtocol::mixed => "mixed",
@@ -257,10 +256,7 @@ pub(crate) fn inbound_protocol_tag(protocol: InboundProtocol) -> &'static str {
 pub(crate) fn inbound_port(app_config: &AppConfig, protocol: InboundProtocol) -> i32 {
     app_config
         .inbound
-        .iter()
-        .find(|item| item.protocol == inbound_protocol_tag(InboundProtocol::socks))
-        .map(|item| item.local_port)
-        .or_else(|| app_config.inbound.first().map(|item| item.local_port))
-        .unwrap_or(DEFAULT_LOCAL_PORT)
+        .first()
+        .map_or(DEFAULT_LOCAL_PORT, |item| item.local_port)
         + protocol.port_offset()
 }

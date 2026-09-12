@@ -1,11 +1,7 @@
-use std::{
-    io,
-    path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{io, path::PathBuf};
 
 use thiserror::Error;
-use voya_core::{AppConfig, InboundProtocol, SysProxyType};
+use voya_core::{AppConfig, SysProxyType};
 use voya_platform::{
     coreinfo::TargetOs,
     filesystem,
@@ -168,8 +164,10 @@ impl SystemProxyManager {
         voya_platform::sysproxy::open_network_settings().map_err(Into::into)
     }
 
-    pub fn stop_pac(&self) {
-        self.service.stop_pac();
+    /// Forget the endpoint advertised on manual platforms after a failure or a
+    /// pending native cleanup, so the UI never offers an address nothing serves.
+    pub fn clear_manual_state(&self) {
+        self.service.clear_manual_state();
     }
 
     /// A failed operation/read cannot advertise an endpoint or claim the OS
@@ -183,10 +181,8 @@ impl SystemProxyManager {
             requested_type: config.system_proxy_item.sys_proxy_type,
             effective_type: SysProxyType::Unchanged,
             target_os: self.target_os,
-            pac_available: voya_platform::sysproxy::pac_available(self.target_os),
             proxy: None,
             exceptions: String::new(),
-            pac_url: None,
         }
     }
 
@@ -200,17 +196,13 @@ impl SystemProxyManager {
             .inbound
             .first()
             .map_or(voya_core::DEFAULT_LOCAL_PORT, |inbound| inbound.local_port);
-        let pac_port = socks_port + InboundProtocol::pac.port_offset();
 
         Ok(SystemProxyRequest {
             target_os: self.target_os,
             item: config.system_proxy_item.clone(),
             force_disable,
             socks_port,
-            pac_port,
-            config_dir: self.paths.config_dir().to_path_buf(),
             script_dir: self.paths.temp_dir().join(SYSPROXY_SCRIPT_DIR_NAME),
-            pac_url_nonce: current_tick_string(),
         })
     }
 
@@ -240,8 +232,6 @@ impl SystemProxyManager {
 
 #[derive(Debug, Error)]
 pub enum SystemProxyManagerError {
-    #[error("PAC mode is only available on Windows or macOS, not {0:?}")]
-    PacUnavailable(TargetOs),
     #[error(transparent)]
     Path(#[from] PathError),
     #[error(transparent)]
@@ -327,13 +317,6 @@ pub fn runtime_default_proxy_url(config: &AppConfig, target_os: TargetOs) -> Opt
         .then(|| format!("http://127.0.0.1:{port}"))
 }
 
-fn current_tick_string() -> String {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_nanos())
-        .to_string()
-}
-
 fn request_sets_local_proxy(request: &SystemProxyRequest) -> bool {
     if request.force_disable
         || system_proxy_management(request.target_os) != SystemProxyManagement::Automatic
@@ -341,13 +324,11 @@ fn request_sets_local_proxy(request: &SystemProxyRequest) -> bool {
         return false;
     }
 
-    matches!(
-        (request.item.sys_proxy_type, request.target_os),
-        (
-            SysProxyType::ForcedChange,
+    request.item.sys_proxy_type == SysProxyType::ForcedChange
+        && matches!(
+            request.target_os,
             TargetOs::Windows | TargetOs::Linux | TargetOs::Macos
-        ) | (SysProxyType::Pac, TargetOs::Windows | TargetOs::Macos)
-    )
+        )
 }
 
 #[cfg(test)]
@@ -358,10 +339,7 @@ mod tests {
         sync::{Arc, Mutex},
     };
 
-    use voya_platform::{
-        sysproxy::{PacManager, PacStartConfig},
-        test_support::RecordingRunner,
-    };
+    use voya_platform::test_support::RecordingRunner;
 
     use super::*;
 
@@ -389,8 +367,7 @@ mod tests {
             for legacy_marker in [false, true] {
                 let app_dir = unique_app_dir("exit-recheck");
                 let runner = Arc::new(RecordingRunner::default());
-                let pac = Arc::new(RecordingPac::default());
-                let service = SystemProxyService::new(runner.clone(), pac.clone())
+                let service = SystemProxyService::new(runner.clone())
                     .with_observer(Arc::new(TestObserver(observation)));
                 let manager = SystemProxyManager::with_target_os(
                     service,
@@ -408,11 +385,9 @@ mod tests {
                     "{observation:?}, legacy marker: {legacy_marker}",
                 );
                 assert_eq!(manager.dirty_marker_path().exists(), legacy_marker,);
-                // Checking before confirmation must keep the connection and
-                // PAC running and must never write system network settings.
+                // Checking before confirmation must keep the connection
+                // running and must never write system network settings.
                 assert!(runner.oneshots().is_empty());
-                assert_eq!(*pac.starts.lock().expect("starts"), 0);
-                assert_eq!(*pac.stops.lock().expect("stops"), 0);
                 let _ = fs::remove_dir_all(app_dir);
             }
         }
@@ -430,11 +405,8 @@ mod tests {
         let observer = Arc::new(MutableObserver(Mutex::new(
             SystemProxyObservation::LocalProxy,
         )));
-        let service = SystemProxyService::new(
-            Arc::new(RecordingRunner::default()),
-            Arc::new(RecordingPac::default()),
-        )
-        .with_observer(observer.clone());
+        let service = SystemProxyService::new(Arc::new(RecordingRunner::default()))
+            .with_observer(observer.clone());
         let manager = SystemProxyManager::with_target_os(
             service,
             AppPaths::new(app_dir.clone()),
@@ -461,9 +433,8 @@ mod tests {
         ] {
             let app_dir = unique_app_dir("manual-recheck");
             let runner = Arc::new(RecordingRunner::default());
-            let service =
-                SystemProxyService::new(runner.clone(), Arc::new(RecordingPac::default()))
-                    .with_observer(Arc::new(TestObserver(observation)));
+            let service = SystemProxyService::new(runner.clone())
+                .with_observer(Arc::new(TestObserver(observation)));
             let manager = SystemProxyManager::with_target_os(
                 service,
                 AppPaths::new(app_dir.clone()),
@@ -493,45 +464,16 @@ mod tests {
         }
     }
 
-    #[derive(Default)]
-    struct RecordingPac {
-        starts: Mutex<u32>,
-        stops: Mutex<u32>,
-    }
-
-    impl PacManager for RecordingPac {
-        fn start(&self, _config: PacStartConfig) -> Result<(), SystemProxyError> {
-            *self.starts.lock().expect("starts") += 1;
-            Ok(())
-        }
-
-        fn stop(&self) {
-            *self.stops.lock().expect("stops") += 1;
-        }
-
-        fn is_supported(&self) -> bool {
-            true
-        }
-        fn is_running(&self) -> bool {
-            true
-        }
-    }
-
-    fn manager(
-        target_os: TargetOs,
-        runner: Arc<RecordingRunner>,
-        pac: Arc<RecordingPac>,
-    ) -> SystemProxyManager {
-        manager_with_app_dir(target_os, runner, pac, unique_app_dir("default"))
+    fn manager(target_os: TargetOs, runner: Arc<RecordingRunner>) -> SystemProxyManager {
+        manager_with_app_dir(target_os, runner, unique_app_dir("default"))
     }
 
     fn manager_with_app_dir(
         target_os: TargetOs,
         runner: Arc<RecordingRunner>,
-        pac: Arc<RecordingPac>,
         app_dir: PathBuf,
     ) -> SystemProxyManager {
-        let service = SystemProxyService::new(runner, pac)
+        let service = SystemProxyService::new(runner)
             .with_observer(Arc::new(TestObserver(SystemProxyObservation::Unknown)));
         SystemProxyManager::with_target_os(service, AppPaths::new(app_dir), target_os)
     }
@@ -540,34 +482,16 @@ mod tests {
         std::env::temp_dir().join(format!(
             "voya-app-sysproxy-{name}-{}-{}",
             std::process::id(),
-            current_tick_string()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |duration| duration.as_nanos())
         ))
-    }
-
-    #[test]
-    fn sysproxy_manager_accepts_macos_pac_without_writing_dirty_marker() {
-        let app_dir = unique_app_dir("macos-pac-dirty");
-        let runner = Arc::new(RecordingRunner::default());
-        let pac = Arc::new(RecordingPac::default());
-        let manager =
-            manager_with_app_dir(TargetOs::Macos, runner, Arc::clone(&pac), app_dir.clone());
-        let mut config = AppConfig::default();
-        config.system_proxy_item.sys_proxy_type = SysProxyType::Pac;
-
-        let status = manager.apply_config(&config, false).expect("macos pac");
-
-        assert_eq!(status.requested_type, SysProxyType::Pac);
-        assert_eq!(status.effective_type, SysProxyType::Unchanged);
-        assert!(!manager.dirty_marker_path().is_file());
-        assert_eq!(*pac.starts.lock().expect("starts"), 1);
-        let _ = fs::remove_dir_all(app_dir);
     }
 
     #[test]
     fn sysproxy_manager_restore_forces_clear_without_changing_requested_mode() {
         let runner = Arc::new(RecordingRunner::default());
-        let pac = Arc::new(RecordingPac::default());
-        let manager = manager(TargetOs::Windows, runner, pac);
+        let manager = manager(TargetOs::Windows, runner);
         let mut config = AppConfig::default();
         config.system_proxy_item.sys_proxy_type = SysProxyType::ForcedChange;
 
@@ -585,8 +509,7 @@ mod tests {
     fn sysproxy_manager_apply_sets_dirty_marker_for_local_proxy() {
         let app_dir = unique_app_dir("apply-dirty");
         let runner = Arc::new(RecordingRunner::default());
-        let pac = Arc::new(RecordingPac::default());
-        let manager = manager_with_app_dir(TargetOs::Windows, runner, pac, app_dir.clone());
+        let manager = manager_with_app_dir(TargetOs::Windows, runner, app_dir.clone());
         let mut config = AppConfig::default();
         config.system_proxy_item.sys_proxy_type = SysProxyType::ForcedChange;
 
@@ -600,8 +523,7 @@ mod tests {
     fn sysproxy_manager_restore_clears_dirty_marker() {
         let app_dir = unique_app_dir("restore-clean");
         let runner = Arc::new(RecordingRunner::default());
-        let pac = Arc::new(RecordingPac::default());
-        let manager = manager_with_app_dir(TargetOs::Windows, runner, pac, app_dir.clone());
+        let manager = manager_with_app_dir(TargetOs::Windows, runner, app_dir.clone());
         let mut config = AppConfig::default();
         config.system_proxy_item.sys_proxy_type = SysProxyType::ForcedChange;
 
@@ -616,9 +538,7 @@ mod tests {
     fn sysproxy_manager_startup_recovery_forces_clear_when_marker_exists() {
         let app_dir = unique_app_dir("startup-recover");
         let runner = Arc::new(RecordingRunner::default());
-        let pac = Arc::new(RecordingPac::default());
-        let manager =
-            manager_with_app_dir(TargetOs::Windows, Arc::clone(&runner), pac, app_dir.clone());
+        let manager = manager_with_app_dir(TargetOs::Windows, Arc::clone(&runner), app_dir.clone());
         let mut config = AppConfig::default();
         config.system_proxy_item.sys_proxy_type = SysProxyType::Unchanged;
         manager.write_dirty_marker().expect("dirty marker");
@@ -637,9 +557,7 @@ mod tests {
     fn sysproxy_manager_startup_recovery_noops_without_marker() {
         let app_dir = unique_app_dir("startup-clean");
         let runner = Arc::new(RecordingRunner::default());
-        let pac = Arc::new(RecordingPac::default());
-        let manager =
-            manager_with_app_dir(TargetOs::Windows, Arc::clone(&runner), pac, app_dir.clone());
+        let manager = manager_with_app_dir(TargetOs::Windows, Arc::clone(&runner), app_dir.clone());
         let config = AppConfig::default();
 
         let restored = manager

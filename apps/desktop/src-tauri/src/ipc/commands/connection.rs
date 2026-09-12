@@ -14,7 +14,6 @@ pub async fn connection_mode_status(
     Ok(voya_app::connection_mode::connection_mode_status(
         &config,
         &tun_status,
-        TargetOs::current(),
     ))
 }
 
@@ -31,11 +30,10 @@ pub async fn set_connection_mode<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
     mode: ConnectionMode,
-    pac_enabled: Option<bool>,
 ) -> Result<ConnectionModeStatus, AppError> {
     let connected = supervisor_connection_state(&state).await?;
     let outcome = connection_mode_manager(&app, &state)
-        .set_connection_mode(state.config_mutations(), mode, pac_enabled, connected)
+        .set_connection_mode(state.config_mutations(), mode, connected)
         .await
         .map_err(AppError::from)?;
 

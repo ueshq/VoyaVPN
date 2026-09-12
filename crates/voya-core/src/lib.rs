@@ -84,7 +84,6 @@ mod tests {
         RoutingItem {
             id: "routing".to_string(),
             remarks: "Split".to_string(),
-            domain_strategy: "AsIs".to_string(),
             rule_set: vec![
                 RulesItem {
                     id: "direct".to_string(),

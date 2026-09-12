@@ -260,10 +260,8 @@ pub(super) fn system_proxy_status_response(status: SystemProxyStatus) -> SystemP
         manual_cleanup_required: status.manual_cleanup_required,
         requested_mode: voya_app::contract_map::sysproxy_type_to_contract(status.requested_type),
         effective_mode: voya_app::contract_map::sysproxy_type_to_contract(status.effective_type),
-        pac_available: status.pac_available,
         proxy: status.proxy,
         exceptions: status.exceptions,
-        pac_url: status.pac_url,
     }
 }
 

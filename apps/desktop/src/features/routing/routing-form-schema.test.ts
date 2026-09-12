@@ -9,15 +9,13 @@ import {
 } from "./routing-form-schema";
 
 describe("strict routing schemas", () => {
-  it("accepts canonical HTTPS sources and rule expressions", () => {
+  it("accepts canonical profile fields and rule expressions", () => {
     expect(routingProfileSchema.parse({
-      domainStrategy: "AsIs",
       enabled: true,
       remarks: " Voya routing ",
       rules: [{ ...baseRule(), network: "tcp,udp", port: "53, 80-443" }],
       singboxDomainStrategy: "",
       singboxRulesetPath: " rules/default.srs ",
-      sourceUrl: "https://routing.example.test/bundle.json",
     })).toMatchObject({
       id: "",
       locked: false,
@@ -26,34 +24,13 @@ describe("strict routing schemas", () => {
     });
   });
 
-  // Messages are translation keys, not display strings (see lib/zod-errors.ts).
-  it.each([
-    ["not a url", "validation.urlInvalid"],
-    ["http://routing.example.test/bundle.json", "validation.urlHttps"],
-    ["https://user:secret@routing.example.test/bundle.json", "validation.urlCredentials"],
-  ])("rejects source %s", (sourceUrl, message) => {
-    const result = routingProfileSchema.safeParse({
-      domainStrategy: "AsIs",
-      enabled: true,
-      remarks: "routing",
-      rules: [],
-      singboxDomainStrategy: "",
-      singboxRulesetPath: "",
-      sourceUrl,
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) expect(result.error.issues[0]?.message).toBe(message);
-  });
-
-  it("allows an empty local source", () => {
+  it("accepts a disabled profile with a sing-box resolve strategy", () => {
     expect(routingProfileSchema.safeParse({
-      domainStrategy: "IPIfNonMatch",
       enabled: false,
       remarks: "",
       rules: [],
       singboxDomainStrategy: "prefer_ipv4",
       singboxRulesetPath: "",
-      sourceUrl: "",
     }).success).toBe(true);
   });
 
@@ -80,10 +57,9 @@ describe("strict routing schemas", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(zodIssuesToErrorMap(result.error)).toMatchObject({
-        domainStrategy: expect.any(String),
         enabled: expect.any(String),
         rules: expect.any(String),
-        sourceUrl: expect.any(String),
+        singboxDomainStrategy: expect.any(String),
       });
     }
   });
@@ -93,22 +69,18 @@ describe("strict routing schemas", () => {
     // profile dialog's Save a silent no-op; only profile fields are validated.
     const brokenRule = { ...baseRule(), port: "not-a-port" };
     expect(routingProfileSchema.safeParse({
-      domainStrategy: "AsIs",
       enabled: true,
       remarks: "routing",
       rules: [brokenRule],
       singboxDomainStrategy: "",
       singboxRulesetPath: "",
-      sourceUrl: "",
     }).success).toBe(false);
 
     expect(routingProfileFieldsSchema.safeParse({
-      domainStrategy: "AsIs",
       enabled: true,
       remarks: "routing",
       singboxDomainStrategy: "",
       singboxRulesetPath: "",
-      sourceUrl: "",
     }).success).toBe(true);
   });
 });

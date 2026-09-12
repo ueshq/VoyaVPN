@@ -2,8 +2,8 @@
 //!
 //! Struct literals guarantee that every field is *assigned*; nothing but
 //! distinct values proves it is assigned to the *right* field. Every
-//! same-typed neighbour here (`url`/`more_url`, `domain_strategy`/
-//! `domain_strategy4_singbox`, `ip`/`domain`/`protocol`/`process`,
+//! same-typed neighbour here (`url`/`more_url`, `custom_icon`/
+//! `custom_ruleset_path4_singbox`, `ip`/`domain`/`protocol`/`process`,
 //! `direct`/`remote`/`bootstrap`, `total_up`/`total_down`/`today_up`/
 //! `today_down`, `delay`/`sort`) would swap silently otherwise: the compiler
 //! cannot tell two `String`s or two `i64`s apart.
@@ -45,13 +45,11 @@ fn distinct_routing() -> RoutingItem {
     RoutingItem {
         id: "routing-id".to_string(),
         remarks: "routing-remarks".to_string(),
-        url: "https://routing.test/source".to_string(),
         rule_set: vec![distinct_rule()],
         enabled: true,
         locked: false,
         custom_icon: "custom-icon".to_string(),
         custom_ruleset_path4_singbox: "/tmp/custom-ruleset".to_string(),
-        domain_strategy: "domain-strategy".to_string(),
         domain_strategy4_singbox: "singbox-domain-strategy".to_string(),
         sort: 7,
         is_active: true,
@@ -485,7 +483,6 @@ fn every_system_proxy_mode_round_trips() {
         voya_core::SysProxyType::ForcedClear,
         voya_core::SysProxyType::ForcedChange,
         voya_core::SysProxyType::Unchanged,
-        voya_core::SysProxyType::Pac,
     ] {
         assert_eq!(
             sysproxy_type_from_contract(sysproxy_type_to_contract(mode)),

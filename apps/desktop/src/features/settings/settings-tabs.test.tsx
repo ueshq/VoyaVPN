@@ -31,21 +31,16 @@ describe("semantic settings tabs", () => {
         manualCleanupRequired: false,
         requestedMode: "forcedClear",
         effectiveMode: "forcedClear",
-        pacAvailable: true,
         proxy: null,
-        pacUrl: null,
         exceptions: "",
       });
   });
-  it("hides custom scripts when system proxy management is manual", () => {
+  it("shows manual setup without a copy action while disconnected", () => {
     const status = useRuntimeEventStore.getState().sysProxy!;
     useRuntimeEventStore
       .getState()
       .setSysProxy({ ...status, management: "manual" });
-    const { container } = render(<TabHarness Component={NetworkTab} />);
-    expect(
-      container.querySelector("#rt-sysproxy-script-path"),
-    ).not.toBeInTheDocument();
+    render(<TabHarness Component={NetworkTab} />);
     expect(screen.getByText("Manual proxy setup")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Copy address" }),
@@ -56,9 +51,8 @@ describe("semantic settings tabs", () => {
     useRuntimeEventStore.getState().setSysProxy({
       ...useRuntimeEventStore.getState().sysProxy!,
       management: "manual",
-      requestedMode: "pac",
+      requestedMode: "forcedChange",
       proxy: "127.0.0.1:10808",
-      pacUrl: "http://127.0.0.1:10811/pac?t=test",
     });
     render(<TabHarness Component={NetworkTab} />);
     expect(
@@ -76,7 +70,7 @@ describe("semantic settings tabs", () => {
       }),
     );
     expect(
-      screen.getByText("PAC: http://127.0.0.1:10811/pac?t=test"),
+      screen.getByText(/HTTP \/ HTTPS \/ SOCKS: 127\.0\.0\.1:10808/),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy address" })).toBeEnabled();
     act(() =>
@@ -124,7 +118,7 @@ describe("semantic settings tabs", () => {
     expect(container.querySelector("#rt-hysteria-up")).toHaveValue("12");
   });
 
-  it("updates TUN and system proxy controls including nullable paths", async () => {
+  it("updates TUN and system proxy controls", async () => {
     const user = userEvent.setup();
     const { container } = render(<TabHarness Component={NetworkTab} />);
 
@@ -140,10 +134,7 @@ describe("semantic settings tabs", () => {
     }
 
     expect(container.querySelector("#rt-tun-mtu")).toHaveValue("1500");
-    expect(container.querySelector("#rt-sysproxy-pac-path")).toHaveValue(
-      " value ",
-    );
-    expect(container.querySelector("#rt-sysproxy-script-path")).toHaveValue(
+    expect(container.querySelector("#rt-sysproxy-exceptions")).toHaveValue(
       " value ",
     );
   });

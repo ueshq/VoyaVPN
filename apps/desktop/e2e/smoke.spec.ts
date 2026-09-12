@@ -579,7 +579,6 @@ test("edits routing and DNS settings without network or OS side effects", async 
 
   await page.getByRole("button", { name: "Routing profile" }).click();
   await page.getByLabel("Remarks").fill("Smoke routing");
-  await page.getByLabel("Source URL").fill("https://rules.example.test/smoke");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(
     page.getByRole("heading", { name: "Smoke routing" }),
@@ -705,7 +704,7 @@ test("routes the three IPC event channels into the shell", async ({ page }) => {
     .toBeGreaterThan(before);
 });
 
-test("keeps traffic modes independent of the existing PAC and TUN choices", async ({
+test("keeps traffic modes independent of the saved system proxy and TUN choices", async ({
   page,
 }) => {
   const tun = page.getByRole("switch", { name: "TUN mode", exact: true });
@@ -722,9 +721,8 @@ test("keeps traffic modes independent of the existing PAC and TUN choices", asyn
       sysProxy: import("../src/ipc/bindings").SystemProxyStatusResponse;
       settings: import("../src/ipc/bindings").AppSettingsV1;
     };
-    state.sysProxy.pacAvailable = true;
-    state.sysProxy.requestedMode = "pac";
-    state.settings.network.systemProxy.mode = "pac";
+    state.sysProxy.requestedMode = "unchanged";
+    state.settings.network.systemProxy.mode = "unchanged";
     window.__VOYA_SMOKE__.emit("transient-stream-event", {
       kind: "sysProxyChanged",
       payload: state.sysProxy,
@@ -735,9 +733,6 @@ test("keeps traffic modes independent of the existing PAC and TUN choices", asyn
   await expect(
     page.getByRole("group", { name: "Traffic mode" }).getByRole("button"),
   ).toHaveCount(2);
-  await expect(
-    page.getByRole("switch", { name: "Smart mode (PAC)" }),
-  ).toHaveCount(0);
   await page.getByText("TUN mode", { exact: true }).click();
   await expect(tun).toBeChecked();
   await expect(tun).toBeEnabled();
@@ -760,11 +755,8 @@ test("keeps traffic modes independent of the existing PAC and TUN choices", asyn
       (call) => call.command === "set_connection_mode",
     ),
   ).toEqual([
-    { command: "set_connection_mode", args: { mode: "vpn", pacEnabled: null } },
-    {
-      command: "set_connection_mode",
-      args: { mode: "systemProxy", pacEnabled: null },
-    },
+    { command: "set_connection_mode", args: { mode: "vpn" } },
+    { command: "set_connection_mode", args: { mode: "systemProxy" } },
   ]);
   const savedProxyMode = () =>
     page.evaluate(
@@ -775,16 +767,16 @@ test("keeps traffic modes independent of the existing PAC and TUN choices", asyn
           }
         ).settings.network.systemProxy.mode,
     );
-  await expect.poll(savedProxyMode).toBe("pac");
+  await expect.poll(savedProxyMode).toBe("unchanged");
   for (const name of ["Global", "Smart routing"]) {
     await page.getByRole("button", { name, exact: true }).click();
     await expect(
       page.getByRole("button", { name, exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
-    await expect.poll(savedProxyMode).toBe("pac");
+    await expect.poll(savedProxyMode).toBe("unchanged");
   }
   await smart.click();
-  await expect.poll(savedProxyMode).toBe("pac");
+  await expect.poll(savedProxyMode).toBe("unchanged");
   expect(
     (await smokeCalls(page)).filter((call) =>
       [
@@ -796,115 +788,110 @@ test("keeps traffic modes independent of the existing PAC and TUN choices", asyn
   ).toEqual([]);
 });
 
-for (const proxyMode of ["forcedChange", "pac"] as const) {
-  test(`keeps manual ${proxyMode} setup in network settings through mode changes and disconnect`, async ({
-    page,
-  }) => {
-    await expect(page.getByTestId("home-connect-button")).toBeVisible();
-    await page.evaluate((mode) => {
-      const state = window.__VOYA_SMOKE__.state as {
-        sysProxy: import("../src/ipc/bindings").SystemProxyStatusResponse;
-        settings: import("../src/ipc/bindings").AppSettingsV1;
-      };
-      state.sysProxy = {
-        ...state.sysProxy,
-        management: "manual",
-        observation: "unknown",
-        manualCleanupRequired: true,
-        requestedMode: mode,
-        pacAvailable: true,
-        effectiveMode: "unchanged",
-        exceptions: "localhost,127.0.0.0/8",
-      };
-      state.settings.network.systemProxy.mode = mode;
-      window.__VOYA_SMOKE__.emit("transient-stream-event", {
-        kind: "sysProxyChanged",
-        payload: state.sysProxy,
-      });
-    }, proxyMode);
-    await page.evaluate((profile) => {
-      (window.__VOYA_SMOKE__.state as { profiles: import("../src/ipc/bindings").ProfileListEntry[] }).profiles = [profile];
-      window.__VOYA_SMOKE__.emit("invalidate-event", { keys: [{ reason: "seed", scope: { kind: "profiles" } }] });
-    }, savedNodeFixture);
-    await expect(page.getByTestId("home-connect-button")).toHaveAccessibleName("Connect");
-    await page.getByTestId("home-connect-button").click();
-    await expect(page.getByTestId("home-connect-button")).toHaveAccessibleName("Disconnect");
-    await expect(page.getByTestId("home-connect-button")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByTestId("home-screen").getByRole("heading", { level: 1 })).toHaveCount(0);
-    await expect(
-      page.getByText("Manual proxy setup", { exact: true }),
-    ).toHaveCount(0);
-    await expect(
-      page.getByText(
-        "Configure your system proxy manually to use the local listener.",
-      ),
-    ).toHaveCount(0);
-    for (const name of ["Global", "Smart routing"]) {
-      await page.getByRole("button", { name, exact: true }).click();
-      await expect(
-        page.getByRole("button", { name, exact: true }),
-      ).toHaveAttribute("aria-pressed", "true");
-    }
-    await page.getByRole("tab", { name: "Settings", exact: true }).click();
-    await page.getByRole("tab", { name: "Network", exact: true }).click();
-    const panel = page.getByTestId("manual-proxy-panel");
-    await expect(panel).toContainText(
-      proxyMode === "pac"
-        ? "http://127.0.0.1:10811/pac?t=smoke"
-        : "127.0.0.1:10808",
-    );
-    await expect(panel).toContainText("unknown");
-    await panel.getByRole("button", { name: "Check again" }).click();
-    await expect(panel).toContainText("unknown");
-    await panel.getByRole("button", { name: "Open Network settings" }).click();
-    expect(
-      (await smokeCalls(page)).filter(
-        (call) => call.command === "open_network_settings",
-      ),
-    ).toEqual([{ command: "open_network_settings", args: {} }]);
-    // A tray/runtime disconnect updates the open settings panel immediately.
-    await page.evaluate(async () => {
-      await window.__TAURI_INTERNALS__.invoke("disconnect_core");
-      const state = window.__VOYA_SMOKE__.state as {
-        runtime: import("../src/ipc/bindings").RuntimeStatusResponse;
-        sysProxy: import("../src/ipc/bindings").SystemProxyStatusResponse;
-      };
-      window.__VOYA_SMOKE__.emit("transient-stream-event", {
-        kind: "coreState",
-        payload: state.runtime,
-      });
-      window.__VOYA_SMOKE__.emit("transient-stream-event", {
-        kind: "sysProxyChanged",
-        payload: state.sysProxy,
-      });
+test("keeps manual proxy setup in network settings through mode changes and disconnect", async ({
+  page,
+}) => {
+  await expect(page.getByTestId("home-connect-button")).toBeVisible();
+  await page.evaluate(() => {
+    const state = window.__VOYA_SMOKE__.state as {
+      sysProxy: import("../src/ipc/bindings").SystemProxyStatusResponse;
+      settings: import("../src/ipc/bindings").AppSettingsV1;
+    };
+    state.sysProxy = {
+      ...state.sysProxy,
+      management: "manual",
+      observation: "unknown",
+      manualCleanupRequired: true,
+      requestedMode: "forcedChange",
+      effectiveMode: "unchanged",
+      exceptions: "localhost,127.0.0.0/8",
+    };
+    state.settings.network.systemProxy.mode = "forcedChange";
+    window.__VOYA_SMOKE__.emit("transient-stream-event", {
+      kind: "sysProxyChanged",
+      payload: state.sysProxy,
     });
-    await expect(
-      panel.getByRole("button", { name: "Copy address" }),
-    ).toHaveCount(0);
-    await expect(panel).toContainText("cannot restore it automatically");
-    await page.evaluate(() => {
-      const state = window.__VOYA_SMOKE__.state as {
-        sysProxy: { observation: string };
-      };
-      state.sysProxy.observation = "clear";
-    });
-    await panel.getByRole("button", { name: "Check again" }).click();
-    await expect(panel).toContainText("No enabled system proxy was found.");
-    expect(
-      await page.evaluate(
-        () =>
-          (
-            window.__VOYA_SMOKE__.state as {
-              sysProxy: {
-                manualCleanupRequired: boolean;
-                requestedMode: string;
-              };
-            }
-          ).sysProxy,
-      ),
-    ).toMatchObject({ manualCleanupRequired: false, requestedMode: proxyMode });
   });
-}
+  await page.evaluate((profile) => {
+    (window.__VOYA_SMOKE__.state as { profiles: import("../src/ipc/bindings").ProfileListEntry[] }).profiles = [profile];
+    window.__VOYA_SMOKE__.emit("invalidate-event", { keys: [{ reason: "seed", scope: { kind: "profiles" } }] });
+  }, savedNodeFixture);
+  await expect(page.getByTestId("home-connect-button")).toHaveAccessibleName("Connect");
+  await page.getByTestId("home-connect-button").click();
+  await expect(page.getByTestId("home-connect-button")).toHaveAccessibleName("Disconnect");
+  await expect(page.getByTestId("home-connect-button")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("home-screen").getByRole("heading", { level: 1 })).toHaveCount(0);
+  await expect(
+    page.getByText("Manual proxy setup", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText(
+      "Configure your system proxy manually to use the local listener.",
+    ),
+  ).toHaveCount(0);
+  for (const name of ["Global", "Smart routing"]) {
+    await page.getByRole("button", { name, exact: true }).click();
+    await expect(
+      page.getByRole("button", { name, exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+  }
+  await page.getByRole("tab", { name: "Settings", exact: true }).click();
+  await page.getByRole("tab", { name: "Network", exact: true }).click();
+  const panel = page.getByTestId("manual-proxy-panel");
+  await expect(panel).toContainText(
+    "127.0.0.1:10808",
+  );
+  await expect(panel).toContainText("unknown");
+  await panel.getByRole("button", { name: "Check again" }).click();
+  await expect(panel).toContainText("unknown");
+  await panel.getByRole("button", { name: "Open Network settings" }).click();
+  expect(
+    (await smokeCalls(page)).filter(
+      (call) => call.command === "open_network_settings",
+    ),
+  ).toEqual([{ command: "open_network_settings", args: {} }]);
+  // A tray/runtime disconnect updates the open settings panel immediately.
+  await page.evaluate(async () => {
+    await window.__TAURI_INTERNALS__.invoke("disconnect_core");
+    const state = window.__VOYA_SMOKE__.state as {
+      runtime: import("../src/ipc/bindings").RuntimeStatusResponse;
+      sysProxy: import("../src/ipc/bindings").SystemProxyStatusResponse;
+    };
+    window.__VOYA_SMOKE__.emit("transient-stream-event", {
+      kind: "coreState",
+      payload: state.runtime,
+    });
+    window.__VOYA_SMOKE__.emit("transient-stream-event", {
+      kind: "sysProxyChanged",
+      payload: state.sysProxy,
+    });
+  });
+  await expect(
+    panel.getByRole("button", { name: "Copy address" }),
+  ).toHaveCount(0);
+  await expect(panel).toContainText("cannot restore it automatically");
+  await page.evaluate(() => {
+    const state = window.__VOYA_SMOKE__.state as {
+      sysProxy: { observation: string };
+    };
+    state.sysProxy.observation = "clear";
+  });
+  await panel.getByRole("button", { name: "Check again" }).click();
+  await expect(panel).toContainText("No enabled system proxy was found.");
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          window.__VOYA_SMOKE__.state as {
+            sysProxy: {
+              manualCleanupRequired: boolean;
+              requestedMode: string;
+            };
+          }
+        ).sysProxy,
+    ),
+  ).toMatchObject({ manualCleanupRequired: false, requestedMode: "forcedChange" });
+});
 
 for (const failure of ["apply", "close"] as const) {
   test(`reports a live ${failure} failure, keeps the preference, and retries the same mode`, async ({

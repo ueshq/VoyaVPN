@@ -548,13 +548,11 @@ pub struct SubscriptionUpdateResult {
 pub struct RoutingItem {
     pub id: String,
     pub remarks: String,
-    pub url: String,
     pub rule_set: Vec<RulesItem>,
     pub enabled: bool,
     pub locked: bool,
     pub custom_icon: String,
     pub custom_ruleset_path4_singbox: String,
-    pub domain_strategy: String,
     pub domain_strategy4_singbox: String,
     pub sort: i32,
     #[serde(default, skip_deserializing)]
@@ -566,13 +564,11 @@ impl Default for RoutingItem {
         Self {
             id: String::new(),
             remarks: String::new(),
-            url: String::new(),
             rule_set: Vec::new(),
             enabled: true,
             locked: false,
             custom_icon: String::new(),
             custom_ruleset_path4_singbox: String::new(),
-            domain_strategy: String::new(),
             domain_strategy4_singbox: String::new(),
             sort: 0,
             is_active: false,

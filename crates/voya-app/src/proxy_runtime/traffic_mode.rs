@@ -225,13 +225,12 @@ mod tests {
     #[tokio::test]
     async fn explicit_modes_only_save_while_offline_and_preserve_proxy_and_tun_preferences() {
         for proxy in [
-            voya_core::SysProxyType::Pac,
+            voya_core::SysProxyType::Unchanged,
             voya_core::SysProxyType::ForcedChange,
         ] {
             for tun in [false, true] {
                 let mut config = AppConfig::default();
                 config.system_proxy_item.sys_proxy_type = proxy;
-                config.system_proxy_item.custom_system_proxy_pac_path = Some("custom.pac".into());
                 config.tun_mode_item.enable_tun = tun;
                 let (database, coordinator) = coordinator(config.clone()).await;
                 let transport = ModeTransport::default();

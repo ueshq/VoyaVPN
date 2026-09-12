@@ -78,7 +78,6 @@ fn restore_system_proxy_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     if let Err(error) = state.system_proxy_manager().restore(&config) {
         tracing::warn!(?error, "failed to restore system proxy on exit");
     }
-    state.system_proxy_manager().stop_pac();
     state.statistics_manager().close();
     if let Err(error) = state.proxy_monitor_controller().stop() {
         tracing::warn!(?error, "failed to stop proxy monitor on exit");

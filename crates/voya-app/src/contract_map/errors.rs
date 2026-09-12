@@ -398,14 +398,6 @@ impl From<SystemProxyManagerError> for AppError {
 /// message, and the error is not `Clone`.
 fn sysproxy_kind(error: &SystemProxyManagerError) -> AppErrorKind {
     match error {
-        // Asking for PAC where the OS has no PAC support is a rejected request,
-        // and the mode is a settings field.
-        SystemProxyManagerError::PacUnavailable(_) => AppErrorKind::Validation {
-            issues: vec![ValidationIssue::untranslated(
-                "network.systemProxy.mode",
-                error.to_string(),
-            )],
-        },
         SystemProxyManagerError::Path(_)
         | SystemProxyManagerError::SystemProxy(_)
         | SystemProxyManagerError::DirtyMarkerInspect { .. }

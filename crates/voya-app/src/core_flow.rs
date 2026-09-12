@@ -15,8 +15,8 @@
 //! * On failure the supervisor is asked what actually happened. If the previous
 //!   core survived (the failure happened before the supervisor was touched) the
 //!   UI is told `Connected` and the OS proxy is left alone. Otherwise the UI is
-//!   told `Disconnected` and automatic proxies are restored. macOS stops only
-//!   its local PAC service and reports the settings requiring manual cleanup.
+//!   told `Disconnected` and automatic proxies are restored. macOS forgets the
+//!   endpoint it advertised and reports the settings requiring manual cleanup.
 //!   A native tunnel whose cleanup failed remains `CleanupPending`.
 //! * Emission is best effort. The sink returns nothing, so a webview that is
 //!   tearing down can never rewrite a `MissingCore` error into an emit error.
@@ -63,7 +63,7 @@ pub enum CoreFlowState {
 enum ProxyAction {
     Apply,
     Restore,
-    StopPac,
+    ClearManualState,
     Observe,
 }
 
@@ -394,8 +394,8 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
         active_profile_id: Option<String>,
         snapshot: Option<&SupervisorSnapshot>,
     ) {
-        // Always retire app-owned proxy/PAC state. On macOS restore only stops
-        // the PAC service and observes the OS; it never changes OS settings.
+        // Always retire app-owned proxy state. On macOS restore only forgets the
+        // advertised endpoint and observes the OS; it never changes OS settings.
         let _ = self
             .settle_system_proxy(
                 config,
@@ -416,7 +416,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
                 let _ = self
                     .settle_system_proxy(
                         config,
-                        ProxyAction::StopPac,
+                        ProxyAction::ClearManualState,
                         NoticeCode::SystemProxyRestoreFailed,
                     )
                     .await;
@@ -477,7 +477,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
     }
 
     /// Every proxy side effect publishes its settled state, including failure.
-    /// Keep scripts, SystemConfiguration reads and PAC thread joins off Tokio.
+    /// Keep scripts and SystemConfiguration reads off Tokio.
     async fn settle_system_proxy(
         &self,
         config: &AppConfig,
@@ -491,12 +491,9 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
                 ProxyAction::Apply => manager.apply_runtime_config(&config_copy),
                 ProxyAction::Restore => manager.restore(&config_copy),
                 ProxyAction::Observe => manager.runtime_status(&config_copy),
-                ProxyAction::StopPac => {
-                    manager.stop_pac();
-                    manager.runtime_status(&config_copy).map(|mut status| {
-                        status.pac_url = None;
-                        status
-                    })
+                ProxyAction::ClearManualState => {
+                    manager.clear_manual_state();
+                    manager.runtime_status(&config_copy)
                 }
             };
             match result {
@@ -504,9 +501,9 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
                 Err(error) => {
                     let changed = !matches!(action, ProxyAction::Observe);
                     if changed {
-                        manager.stop_pac();
+                        manager.clear_manual_state();
                     }
-                    // Manual status observes the OS and the now-retired PAC.
+                    // Manual status observes the OS and the retired endpoint.
                     // Automatic status is only a plan, so it cannot prove that
                     // a failed apply/restore changed the machine.
                     let fallback = manager.unavailable_status(&config_copy);

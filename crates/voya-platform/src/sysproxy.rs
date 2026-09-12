@@ -1,14 +1,7 @@
 use std::{
-    fs, io,
-    io::Write,
-    net::{IpAddr, TcpListener, TcpStream},
+    net::IpAddr,
     path::PathBuf,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
-    },
-    thread::{self, JoinHandle},
-    time::Duration,
+    sync::{Arc, Mutex},
 };
 
 use thiserror::Error;
@@ -22,21 +15,10 @@ use crate::{
 };
 
 pub const LOOPBACK: &str = "127.0.0.1";
-pub const PAC_FILE_NAME: &str = "pac.txt";
-pub const DEFAULT_PAC_TEMPLATE: &str = r#"var proxy = '__PROXY__';
-function FindProxyForURL(url, host) {
-  if (isPlainHostName(host) || shExpMatch(host, "localhost")) {
-    return "DIRECT";
-  }
-  return proxy;
-}
-"#;
 
 const LOCAL_EXCEPTIONS: &str = "<local>";
 const WINDOWS_INTERNET_SETTINGS_REG_PATH: &str =
     r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings";
-const PAC_ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(10);
-const PAC_ACCEPT_ERROR_BACKOFF: Duration = Duration::from_millis(50);
 const LINUX_PROXY_SCRIPT_NAME: &str = "proxy_set_linux.sh";
 mod manual;
 pub use manual::*;
@@ -47,10 +29,7 @@ pub struct SystemProxyRequest {
     pub item: SystemProxyItem,
     pub force_disable: bool,
     pub socks_port: i32,
-    pub pac_port: i32,
-    pub config_dir: PathBuf,
     pub script_dir: PathBuf,
-    pub pac_url_nonce: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,10 +40,8 @@ pub struct SystemProxyStatus {
     pub requested_type: SysProxyType,
     pub effective_type: SysProxyType,
     pub target_os: TargetOs,
-    pub pac_available: bool,
     pub proxy: Option<String>,
     pub exceptions: String,
-    pub pac_url: Option<String>,
 }
 
 impl SystemProxyStatus {
@@ -80,10 +57,8 @@ impl SystemProxyStatus {
             requested_type: request.item.sys_proxy_type,
             effective_type,
             target_os: request.target_os,
-            pac_available: pac_available(request.target_os),
             proxy: None,
             exceptions,
-            pac_url: None,
         }
     }
 }
@@ -99,7 +74,6 @@ pub struct WindowsProxySettings {
 pub enum WindowsProxyOption {
     Direct = 1,
     NamedProxy = 2,
-    PacUrl = 4,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,9 +81,6 @@ pub enum SystemProxyAction {
     Noop,
     WindowsSetProxy(WindowsProxySettings),
     WindowsClear,
-    WindowsSetPac {
-        pac_url: String,
-    },
     LinuxSet {
         script: ScriptInvocation,
         host: String,
@@ -119,7 +90,6 @@ pub enum SystemProxyAction {
     LinuxClear {
         script: ScriptInvocation,
     },
-    UnsupportedPac,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -140,15 +110,13 @@ pub struct SystemProxyService {
     observer: Arc<dyn SystemProxyObserver>,
     manual_runtime: Arc<Mutex<ManualRuntime>>,
     runner: Arc<dyn ProcessRunner>,
-    pac_manager: Arc<dyn PacManager>,
 }
 
 impl SystemProxyService {
     #[must_use]
-    pub fn new(runner: Arc<dyn ProcessRunner>, pac_manager: Arc<dyn PacManager>) -> Self {
+    pub fn new(runner: Arc<dyn ProcessRunner>) -> Self {
         Self {
             runner,
-            pac_manager,
             observer: Arc::new(PlatformSystemProxyObserver),
             manual_runtime: Arc::default(),
         }
@@ -163,33 +131,13 @@ impl SystemProxyService {
         }
         let plan = plan_system_proxy(request)?;
 
-        if plan.status.effective_type != SysProxyType::Pac {
-            self.pac_manager.stop();
-        }
-
         match &plan.action {
-            SystemProxyAction::Noop | SystemProxyAction::UnsupportedPac => {}
+            SystemProxyAction::Noop => {}
             SystemProxyAction::WindowsSetProxy(settings) => {
                 apply_windows_proxy(&*self.runner, settings)?;
             }
             SystemProxyAction::WindowsClear => {
                 apply_windows_clear(&*self.runner)?;
-            }
-            SystemProxyAction::WindowsSetPac { pac_url } => {
-                self.pac_manager.start(PacStartConfig {
-                    http_port: request.socks_port,
-                    pac_port: request.pac_port,
-                    config_dir: request.config_dir.clone(),
-                    custom_pac_path: request.item.custom_system_proxy_pac_path.clone(),
-                })?;
-                apply_windows_proxy(
-                    &*self.runner,
-                    &WindowsProxySettings {
-                        proxy: pac_url.clone(),
-                        exceptions: String::new(),
-                        option_type: WindowsProxyOption::PacUrl,
-                    },
-                )?;
             }
             SystemProxyAction::LinuxSet { script, .. }
             | SystemProxyAction::LinuxClear { script } => {
@@ -200,199 +148,11 @@ impl SystemProxyService {
         Ok(plan.status)
     }
 
-    pub fn stop_pac(&self) {
+    /// Forget the endpoint a manual platform advertises. Automatic platforms
+    /// keep no runtime state, so this only affects manual management.
+    pub fn clear_manual_state(&self) {
         self.clear_manual_runtime();
-        self.pac_manager.stop();
     }
-}
-
-#[must_use]
-pub fn platform_pac_manager() -> Arc<dyn PacManager> {
-    #[cfg(any(windows, target_os = "macos"))]
-    {
-        Arc::new(LocalPacManager::default())
-    }
-    #[cfg(not(any(windows, target_os = "macos")))]
-    {
-        Arc::new(UnsupportedPacManager)
-    }
-}
-
-pub trait PacManager: Send + Sync {
-    fn start(&self, config: PacStartConfig) -> Result<(), SystemProxyError>;
-    fn stop(&self);
-    fn is_supported(&self) -> bool;
-    fn is_running(&self) -> bool;
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PacStartConfig {
-    pub http_port: i32,
-    pub pac_port: i32,
-    pub config_dir: PathBuf,
-    pub custom_pac_path: Option<String>,
-}
-
-#[derive(Debug, Default, Clone, Copy)]
-pub struct UnsupportedPacManager;
-
-impl PacManager for UnsupportedPacManager {
-    fn start(&self, _config: PacStartConfig) -> Result<(), SystemProxyError> {
-        Err(SystemProxyError::PacUnsupported(TargetOs::current()))
-    }
-
-    fn stop(&self) {}
-
-    fn is_supported(&self) -> bool {
-        false
-    }
-    fn is_running(&self) -> bool {
-        false
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct LocalPacManager {
-    state: Mutex<Option<RunningPacServer>>,
-}
-
-impl PacManager for LocalPacManager {
-    fn start(&self, config: PacStartConfig) -> Result<(), SystemProxyError> {
-        let mut guard = self
-            .state
-            .lock()
-            .map_err(|_| SystemProxyError::LockPoisoned("pac manager"))?;
-
-        // A server whose accept loop has exited leaves the OS pointing at a
-        // closed port, so a finished thread must restart even on the same ports.
-        let needs_restart = guard.as_ref().is_none_or(|running| {
-            running.http_port != config.http_port
-                || running.pac_port != config.pac_port
-                || !running.is_alive()
-        });
-        if !needs_restart {
-            return Ok(());
-        }
-
-        if let Some(mut running) = guard.take() {
-            running.stop();
-        }
-
-        let content = pac_http_response(&config)?;
-        let listener =
-            TcpListener::bind((LOOPBACK, to_u16_port(config.pac_port)?)).map_err(|source| {
-                SystemProxyError::PacListen {
-                    port: config.pac_port,
-                    source,
-                }
-            })?;
-        listener
-            .set_nonblocking(true)
-            .map_err(SystemProxyError::PacSetNonblocking)?;
-
-        let running = RunningPacServer::spawn(config.http_port, config.pac_port, listener, content);
-        *guard = Some(running);
-
-        Ok(())
-    }
-
-    fn stop(&self) {
-        if let Ok(mut guard) = self.state.lock() {
-            if let Some(mut running) = guard.take() {
-                running.stop();
-            }
-        }
-    }
-
-    fn is_supported(&self) -> bool {
-        cfg!(any(windows, target_os = "macos"))
-    }
-    fn is_running(&self) -> bool {
-        self.state
-            .lock()
-            .is_ok_and(|state| state.as_ref().is_some_and(RunningPacServer::is_alive))
-    }
-}
-
-#[derive(Debug)]
-struct RunningPacServer {
-    http_port: i32,
-    pac_port: i32,
-    running: Arc<AtomicBool>,
-    thread: Option<JoinHandle<()>>,
-}
-
-impl RunningPacServer {
-    fn spawn(http_port: i32, pac_port: i32, listener: TcpListener, content: Vec<u8>) -> Self {
-        let running = Arc::new(AtomicBool::new(true));
-        let thread_running = Arc::clone(&running);
-        let thread = thread::spawn(move || {
-            let mut reported_error = false;
-            while thread_running.load(Ordering::Relaxed) {
-                match listener.accept() {
-                    Ok((stream, _)) => write_pac_response(stream, &content),
-                    Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                        thread::sleep(PAC_ACCEPT_POLL_INTERVAL);
-                    }
-                    // A client that resets before it is accepted is routine
-                    // (WSAECONNRESET on Windows, ECONNABORTED on macOS).
-                    Err(error)
-                        if matches!(
-                            error.kind(),
-                            io::ErrorKind::ConnectionReset
-                                | io::ErrorKind::ConnectionAborted
-                                | io::ErrorKind::Interrupted
-                        ) => {}
-                    Err(error) => {
-                        // Never drop the listener while the OS still points at
-                        // this PAC URL: every client would silently fall back to
-                        // DIRECT while the app reports PAC mode as active.
-                        if !reported_error {
-                            reported_error = true;
-                            tracing::warn!(
-                                ?error,
-                                port = pac_port,
-                                "PAC listener accept failed; retrying"
-                            );
-                        }
-                        thread::sleep(PAC_ACCEPT_ERROR_BACKOFF);
-                    }
-                }
-            }
-        });
-
-        Self {
-            http_port,
-            pac_port,
-            running,
-            thread: Some(thread),
-        }
-    }
-
-    /// Whether the accept loop is still running.
-    fn is_alive(&self) -> bool {
-        self.thread
-            .as_ref()
-            .is_some_and(|thread| !thread.is_finished())
-    }
-
-    fn stop(&mut self) {
-        self.running.store(false, Ordering::Relaxed);
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
-        }
-    }
-}
-
-impl Drop for RunningPacServer {
-    fn drop(&mut self) {
-        self.stop();
-    }
-}
-
-#[must_use]
-pub const fn pac_available(target_os: TargetOs) -> bool {
-    matches!(target_os, TargetOs::Windows | TargetOs::Macos)
 }
 
 pub fn plan_system_proxy(
@@ -400,9 +160,6 @@ pub fn plan_system_proxy(
 ) -> Result<SystemProxyPlan, SystemProxyError> {
     if request.socks_port <= 0 {
         return Err(SystemProxyError::InvalidPort(request.socks_port));
-    }
-    if request.pac_port <= 0 {
-        return Err(SystemProxyError::InvalidPort(request.pac_port));
     }
 
     let exception_entries = validated_proxy_exceptions(&request.item.system_proxy_exceptions)?;
@@ -456,30 +213,9 @@ pub fn plan_system_proxy(
             return Err(SystemProxyError::UnsupportedPlatform(TargetOs::Other));
         }
         (SysProxyType::Unchanged, _) => SystemProxyAction::Noop,
-        (SysProxyType::Pac, TargetOs::Windows) => {
-            let pac_url = pac_url(request);
-            status.proxy = Some(pac_url.clone());
-            status.pac_url = Some(pac_url.clone());
-            status.exceptions.clear();
-            SystemProxyAction::WindowsSetPac { pac_url }
-        }
-        (SysProxyType::Pac, TargetOs::Other) => {
-            return Err(SystemProxyError::UnsupportedPlatform(TargetOs::Other));
-        }
-        (SysProxyType::Pac, _) => {
-            status.effective_type = SysProxyType::Unchanged;
-            SystemProxyAction::UnsupportedPac
-        }
     };
 
     Ok(SystemProxyPlan { action, status })
-}
-
-fn pac_url(request: &SystemProxyRequest) -> String {
-    format!(
-        "http://{}:{}/pac?t={}",
-        LOOPBACK, request.pac_port, request.pac_url_nonce
-    )
 }
 
 fn build_windows_proxy_settings_with_exceptions(
@@ -487,19 +223,9 @@ fn build_windows_proxy_settings_with_exceptions(
     port: i32,
     exception_entries: &[String],
 ) -> WindowsProxySettings {
-    let exceptions = windows_exceptions(item, exception_entries);
-    let proxy = if item.system_proxy_advanced_protocol.trim().is_empty() {
-        format!("{LOOPBACK}:{port}")
-    } else {
-        item.system_proxy_advanced_protocol
-            .replace("{ip}", LOOPBACK)
-            .replace("{http_port}", &port.to_string())
-            .replace("{socks_port}", &port.to_string())
-    };
-
     WindowsProxySettings {
-        proxy,
-        exceptions,
+        proxy: format!("{LOOPBACK}:{port}"),
+        exceptions: windows_exceptions(item, exception_entries),
         option_type: WindowsProxyOption::NamedProxy,
     }
 }
@@ -689,8 +415,6 @@ pub enum SystemProxyError {
     UnsupportedPlatform(TargetOs),
     #[error("invalid system proxy exception {value:?}: {reason}")]
     InvalidProxyException { value: String, reason: &'static str },
-    #[error("PAC mode is only supported on Windows or macOS, not {0:?}")]
-    PacUnsupported(TargetOs),
     #[error(transparent)]
     Process(#[from] ProcessError),
     #[error("{context} failed with status {status_code:?}: {stderr}")]
@@ -699,51 +423,19 @@ pub enum SystemProxyError {
         status_code: Option<i32>,
         stderr: String,
     },
-    #[error("failed to listen for PAC requests on port {port}: {source}")]
-    PacListen { port: i32, source: io::Error },
-    #[error("failed to set PAC listener to nonblocking mode: {0}")]
-    PacSetNonblocking(io::Error),
-    #[error("failed to read PAC file {path}: {source}")]
-    PacRead { path: PathBuf, source: io::Error },
-    #[error("failed to write PAC file {path}: {source}")]
-    PacWrite { path: PathBuf, source: io::Error },
     #[error("lock poisoned: {0}")]
     LockPoisoned(&'static str),
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
+    use std::fs;
 
     use voya_core::DEFAULT_SYSTEM_PROXY_EXCEPTIONS;
 
     use crate::test_support::RecordingRunner;
 
     use super::*;
-
-    #[derive(Default)]
-    struct FakePacManager {
-        starts: Mutex<Vec<PacStartConfig>>,
-        stops: Mutex<u32>,
-    }
-
-    impl PacManager for FakePacManager {
-        fn start(&self, config: PacStartConfig) -> Result<(), SystemProxyError> {
-            self.starts.lock().expect("starts").push(config);
-            Ok(())
-        }
-
-        fn stop(&self) {
-            *self.stops.lock().expect("stops") += 1;
-        }
-
-        fn is_supported(&self) -> bool {
-            true
-        }
-        fn is_running(&self) -> bool {
-            true
-        }
-    }
 
     fn request(target_os: TargetOs, proxy_type: SysProxyType) -> SystemProxyRequest {
         SystemProxyRequest {
@@ -752,24 +444,18 @@ mod tests {
                 sys_proxy_type: proxy_type,
                 system_proxy_exceptions: DEFAULT_SYSTEM_PROXY_EXCEPTIONS.to_string(),
                 not_proxy_local_address: true,
-                ..SystemProxyItem::default()
             },
             force_disable: false,
             socks_port: 10808,
-            pac_port: 10811,
-            config_dir: "/tmp/voya/config".into(),
             script_dir: "/tmp/voya/scripts".into(),
-            pac_url_nonce: "123".to_string(),
         }
     }
 
     #[test]
-    fn sysproxy_windows_advanced_template_uses_socks_port_and_local_exceptions() {
+    fn sysproxy_windows_proxy_uses_socks_port_and_local_exceptions() {
         let item = SystemProxyItem {
             system_proxy_exceptions: "localhost, 10.0.0.0/8".to_string(),
             not_proxy_local_address: true,
-            system_proxy_advanced_protocol:
-                "http={ip}:{http_port};https={ip}:{http_port};socks={ip}:{socks_port}".to_string(),
             ..SystemProxyItem::default()
         };
 
@@ -782,10 +468,7 @@ mod tests {
             panic!("expected Windows proxy settings");
         };
 
-        assert_eq!(
-            settings.proxy,
-            "http=127.0.0.1:2080;https=127.0.0.1:2080;socks=127.0.0.1:2080"
-        );
+        assert_eq!(settings.proxy, "127.0.0.1:2080");
         assert_eq!(settings.exceptions, "<local>;localhost;10.0.0.0/8");
     }
 
@@ -854,8 +537,7 @@ mod tests {
         }
 
         let runner = Arc::new(RecordingRunner::default());
-        let pac = Arc::new(FakePacManager::default());
-        let service = SystemProxyService::new(runner.clone(), pac);
+        let service = SystemProxyService::new(runner.clone());
         let error = service
             .apply(&request(TargetOs::Other, SysProxyType::ForcedChange))
             .expect_err("unsupported platform apply should fail");
@@ -886,45 +568,6 @@ mod tests {
             SysProxyType::Unchanged
         );
         assert!(matches!(unchanged_plan.action, SystemProxyAction::Noop));
-    }
-
-    #[test]
-    fn sysproxy_pac_availability_matches_supported_platforms() {
-        assert!(pac_available(TargetOs::Windows));
-        assert!(pac_available(TargetOs::Macos));
-        assert!(!pac_available(TargetOs::Linux));
-        assert!(!pac_available(TargetOs::Other));
-    }
-
-    #[test]
-    fn sysproxy_pac_is_windows_and_macos_only_and_stops_when_switching_away() {
-        let linux_pac = plan_system_proxy(&request(TargetOs::Linux, SysProxyType::Pac))
-            .expect("linux pac plan");
-        assert_eq!(linux_pac.status.effective_type, SysProxyType::Unchanged);
-        assert!(matches!(
-            linux_pac.action,
-            SystemProxyAction::UnsupportedPac
-        ));
-
-        let macos_pac =
-            plan_system_proxy(&request(TargetOs::Macos, SysProxyType::Pac)).expect("manual plan");
-        assert_eq!(macos_pac.status.effective_type, SysProxyType::Unchanged);
-        assert_eq!(macos_pac.status.pac_url, None);
-        assert!(matches!(macos_pac.action, SystemProxyAction::Noop));
-
-        let runner = Arc::new(RecordingRunner::default());
-        let pac = Arc::new(FakePacManager::default());
-        let service = SystemProxyService::new(runner, pac.clone());
-        service
-            .apply(&request(TargetOs::Macos, SysProxyType::ForcedClear))
-            .expect("macos clear");
-        service
-            .apply(&request(TargetOs::Macos, SysProxyType::ForcedChange))
-            .expect("macos set");
-        service
-            .apply(&request(TargetOs::Macos, SysProxyType::Unchanged))
-            .expect("macos unchanged");
-        assert_eq!(*pac.stops.lock().expect("stops"), 3);
     }
 
     #[test]
@@ -963,159 +606,6 @@ mod tests {
         assert!(generated.executable);
 
         let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn sysproxy_custom_script_path_is_not_rewritten_as_managed_script() {
-        let root = unique_temp_root("sysproxy-custom-script");
-        fs::create_dir_all(&root).expect("create script directory");
-        let custom_script = root.join("custom.sh");
-        fs::write(&custom_script, "#!/bin/sh\n").expect("write custom script");
-
-        let mut request = request(TargetOs::Linux, SysProxyType::ForcedChange);
-        request.item.custom_system_proxy_script_path =
-            Some(custom_script.to_string_lossy().into_owned());
-        let plan = plan_system_proxy(&request).expect("linux plan");
-        let SystemProxyAction::LinuxSet { script, .. } = plan.action else {
-            panic!("expected linux set");
-        };
-
-        assert_eq!(script.executable, custom_script);
-        assert!(script.generated_script.is_none());
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn sysproxy_service_starts_windows_pac_and_sets_autoconfig_url() {
-        let runner = Arc::new(RecordingRunner::default());
-        let pac = Arc::new(FakePacManager::default());
-        let service = SystemProxyService::new(runner.clone(), pac.clone());
-
-        let status = service
-            .apply(&request(TargetOs::Windows, SysProxyType::Pac))
-            .expect("pac");
-
-        assert_eq!(status.effective_type, SysProxyType::Pac);
-        assert_eq!(
-            status.pac_url.as_deref(),
-            Some("http://127.0.0.1:10811/pac?t=123")
-        );
-        assert_eq!(pac.starts.lock().expect("starts").len(), 1);
-        assert!(runner
-            .oneshots()
-            .iter()
-            .any(|spawn| spawn.arguments.iter().any(|arg| arg == "AutoConfigURL")));
-    }
-
-    #[test]
-    fn sysproxy_pac_manager_respawns_a_server_whose_accept_loop_stopped() {
-        let root = unique_temp_root("pac-respawn");
-        fs::create_dir_all(&root).expect("create pac config directory");
-        let manager = LocalPacManager::default();
-        let config = PacStartConfig {
-            http_port: 10808,
-            pac_port: free_local_port(),
-            config_dir: root.clone(),
-            custom_pac_path: None,
-        };
-
-        manager.start(config.clone()).expect("start pac server");
-        assert!(fetch_pac(config.pac_port).contains("FindProxyForURL"));
-
-        {
-            let mut guard = manager.state.lock().expect("pac state");
-            let running = guard.as_mut().expect("running pac server");
-            running.running.store(false, Ordering::Relaxed);
-            if let Some(thread) = running.thread.take() {
-                let _ = thread.join();
-            }
-        }
-
-        manager.start(config.clone()).expect("restart pac server");
-
-        assert!(
-            fetch_pac(config.pac_port).contains("FindProxyForURL"),
-            "a stopped accept loop must be respawned instead of leaving the PAC url dead"
-        );
-
-        manager.stop();
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn sysproxy_pac_server_keeps_serving_after_a_client_reset() {
-        let root = unique_temp_root("pac-reset");
-        fs::create_dir_all(&root).expect("create pac config directory");
-        let manager = LocalPacManager::default();
-        let config = PacStartConfig {
-            http_port: 10808,
-            pac_port: free_local_port(),
-            config_dir: root.clone(),
-            custom_pac_path: None,
-        };
-        manager.start(config.clone()).expect("start pac server");
-
-        reset_client_connection(config.pac_port);
-
-        assert!(
-            fetch_pac(config.pac_port).contains("FindProxyForURL"),
-            "an aborted connection must not take the PAC listener down"
-        );
-
-        manager.stop();
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[cfg(unix)]
-    fn reset_client_connection(port: i32) {
-        use std::os::fd::AsRawFd;
-
-        let stream = TcpStream::connect((LOOPBACK, u16::try_from(port).expect("pac port")))
-            .expect("connect to pac server");
-        let linger = libc::linger {
-            l_onoff: 1,
-            l_linger: 0,
-        };
-        // SAFETY: `setsockopt` reads `size_of::<libc::linger>()` bytes from the
-        // pointer, which points at the live local `linger` value, and `stream`
-        // owns the descriptor for the whole call.
-        let result = unsafe {
-            libc::setsockopt(
-                stream.as_raw_fd(),
-                libc::SOL_SOCKET,
-                libc::SO_LINGER,
-                std::ptr::addr_of!(linger).cast(),
-                size_of::<libc::linger>() as libc::socklen_t,
-            )
-        };
-
-        assert_eq!(result, 0, "failed to arm SO_LINGER for the aborted client");
-        drop(stream);
-    }
-
-    fn fetch_pac(port: i32) -> String {
-        use std::io::Read;
-
-        let mut stream = TcpStream::connect((LOOPBACK, u16::try_from(port).expect("pac port")))
-            .expect("connect to pac server");
-        stream
-            .set_read_timeout(Some(Duration::from_secs(5)))
-            .expect("set read timeout");
-        stream
-            .write_all(b"GET /pac HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n")
-            .expect("send pac request");
-        let mut response = String::new();
-        let _ = stream.read_to_string(&mut response);
-        response
-    }
-
-    fn free_local_port() -> i32 {
-        let listener = TcpListener::bind((LOOPBACK, 0)).expect("bind an ephemeral port");
-        let port = listener.local_addr().expect("local address").port();
-        drop(listener);
-        i32::from(port)
     }
 
     fn unique_temp_root(name: &str) -> PathBuf {

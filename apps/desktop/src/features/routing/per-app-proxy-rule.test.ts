@@ -32,7 +32,6 @@ function rule(overrides: Partial<RoutingRule> = {}): RoutingRule {
 
 function routing(rules: RoutingRule[]): Routing_Serialize {
   return {
-    domainStrategy: "",
     enabled: true,
     icon: "",
     id: "routing-1",
@@ -43,7 +42,6 @@ function routing(rules: RoutingRule[]): Routing_Serialize {
     singboxDomainStrategy: "",
     singboxRulesetPath: "",
     sort: 0,
-    sourceUrl: "",
   };
 }
 

@@ -19,9 +19,7 @@ export function ManualProxyPanel({ status, connected, tunEnabled }: {
   const [copied, setCopied] = useState(false);
   const mounted = useMountedRef();
   const setSysProxy = useRuntimeEventStore((state) => state.setSysProxy);
-  const endpoint = connected && !tunEnabled ? status.proxy : null;
-  const pacUrl = connected && !tunEnabled ? status.pacUrl : null;
-  const address = status.requestedMode === "pac" ? pacUrl : endpoint;
+  const address = connected && !tunEnabled ? status.proxy : null;
   const observation = status.observation === "clear" ? t("home.manualProxy.clear")
     : status.observation === "localProxy" ? t("home.manualProxy.localProxy")
       : status.observation === "otherProxy" ? t("home.manualProxy.otherProxy")
@@ -48,12 +46,10 @@ export function ManualProxyPanel({ status, connected, tunEnabled }: {
       <p role="status">{observation}</p>
       {address ? (
         <p className="break-all font-mono text-xs">
-          {pacUrl && status.requestedMode === "pac"
-            ? t("home.manualProxy.pac", { address })
-            : t("home.manualProxy.endpoint", { address })}
+          {t("home.manualProxy.endpoint", { address })}
         </p>
       ) : <p className="text-muted-foreground">{t("home.manualProxy.inactive")}</p>}
-      {endpoint && status.exceptions ? <p className="break-words text-xs">{t("home.manualProxy.bypass", { exceptions: status.exceptions })}</p> : null}
+      {address && status.exceptions ? <p className="break-words text-xs">{t("home.manualProxy.bypass", { exceptions: status.exceptions })}</p> : null}
       {status.manualCleanupRequired || tunEnabled ? (
         <p className="text-amber-700 dark:text-amber-400">{t("home.manualProxy.cleanup")}</p>
       ) : <p className="text-xs text-muted-foreground">{t("home.manualProxy.cleanup")}</p>}

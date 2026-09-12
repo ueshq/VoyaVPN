@@ -55,17 +55,9 @@ pub(crate) fn fill_outbound_transport(
         Some(ProfileTransport::Grpc { service_name, .. }) => {
             transport.r#type = Some("grpc".to_string());
             transport.service_name = Some(service_name.clone().unwrap_or_default());
-            transport.idle_timeout = context
-                .app_config
-                .grpc_item
-                .idle_timeout
-                .map(|value| format!("{value}s"));
-            transport.ping_timeout = context
-                .app_config
-                .grpc_item
-                .health_check_timeout
-                .map(|value| format!("{value}s"));
-            transport.permit_without_stream = context.app_config.grpc_item.permit_without_stream;
+            transport.idle_timeout = Some(GRPC_IDLE_TIMEOUT.to_string());
+            transport.ping_timeout = Some(GRPC_PING_TIMEOUT.to_string());
+            transport.permit_without_stream = Some(GRPC_PERMIT_WITHOUT_STREAM);
         }
         Some(ProfileTransport::Http2 { host, path }) => {
             transport.r#type = Some("http".to_string());

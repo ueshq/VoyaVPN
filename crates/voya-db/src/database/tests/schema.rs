@@ -48,13 +48,26 @@ async fn current_baseline_is_the_only_initialization_record() {
 }
 
 #[tokio::test]
-async fn current_direct_preference_is_normalized_once_without_changing_other_settings() {
-    let fixture = TempDatabase::new("direct-mode.sqlite");
+async fn retired_settings_are_normalized_once_without_changing_other_settings() {
+    let fixture = TempDatabase::new("retired-settings.sqlite");
     let database = Database::connect(fixture.path()).await.expect("database");
     let mut original: serde_json::Value =
         serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("settings");
     original["proxy"]["trafficMode"] = serde_json::json!("direct");
     original["network"]["systemProxy"]["mode"] = serde_json::json!("pac");
+    original["network"]["systemProxy"]["advancedProtocol"] = serde_json::json!("");
+    original["network"]["systemProxy"]["customPacPath"] = serde_json::json!("/tmp/proxy.pac");
+    original["network"]["systemProxy"]["customScriptPath"] = serde_json::json!(null);
+    original["network"]["inbounds"][0]["protocol"] = serde_json::json!("socks");
+    original["behavior"]["statistics"] = serde_json::json!(true);
+    original["behavior"]["realtimeSpeed"] = serde_json::json!(false);
+    original["routing"]["singboxDomainStrategy"] = serde_json::json!("prefer_ipv4");
+    original["grpc"] = serde_json::json!({
+        "idleTimeoutSeconds": 60,
+        "healthCheckTimeoutSeconds": 20,
+        "permitWithoutStream": false
+    });
+    original["hysteria"]["uploadMbps"] = serde_json::json!(55);
     sqlx::query("INSERT INTO app_settings VALUES (1, 1, ?)")
         .bind(original.to_string())
         .execute(database.pool())
@@ -62,11 +75,16 @@ async fn current_direct_preference_is_normalized_once_without_changing_other_set
         .expect("old preference");
     database.close().await;
 
-    original["proxy"]["trafficMode"] = serde_json::json!("rule");
+    let mut expected: serde_json::Value =
+        serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("settings");
+    expected["network"]["systemProxy"]["mode"] = serde_json::json!("forcedChange");
+    expected["hysteria"]["uploadMbps"] = serde_json::json!(55);
+    let original = expected;
     for _ in 0..2 {
         let database = Database::connect(fixture.path()).await.expect("reopen");
         let loaded = database.settings().load().await.expect("current settings");
         assert_eq!(loaded.proxy.traffic_mode, TrafficMode::Rule);
+        assert_eq!(loaded.hysteria.upload_mbps, 55);
         let stored: String = sqlx::query_scalar("SELECT payload FROM app_settings WHERE id = 1")
             .fetch_one(database.pool())
             .await

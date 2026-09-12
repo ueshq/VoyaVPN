@@ -11,7 +11,7 @@
 //!   the user pressed Connect, because nothing was listening on that port. The
 //!   rule this module enforces instead is the one the rest of the app already
 //!   follows on automatic platforms: **the OS proxy follows the connected core**.
-//!   On macOS only the local PAC listener follows the core; OS proxies are manual. The mode is always
+//!   On macOS the OS proxies are configured by hand. The mode is always
 //!   persisted; the OS is only touched while the supervisor reports
 //!   `Connected`, and otherwise the caller gets the *planned* status so the UI
 //!   and the tray still show what was chosen.
@@ -31,10 +31,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use voya_contracts::{ConnectionMode, ConnectionModeStatus};
 use voya_core::{AppConfig, SysProxyType};
-use voya_platform::{
-    coreinfo::TargetOs,
-    sysproxy::{pac_available, SystemProxyStatus},
-};
+use voya_platform::sysproxy::SystemProxyStatus;
 
 use crate::{
     config_mutation::{ConfigMutationCoordinator, ConfigMutationError},
@@ -43,29 +40,25 @@ use crate::{
     tun::{TunManager, TunManagerError, TunStatus},
 };
 
-/// Derives the current connection mode and whether PAC is the selected system
-/// proxy flavor. TUN wins over everything; all non-TUN states use system proxy.
+/// Derives the current connection mode. TUN wins over everything; every other
+/// state uses the system proxy.
 #[must_use]
-pub fn derive_connection_mode(config: &AppConfig) -> (ConnectionMode, bool) {
-    let pac_enabled = matches!(config.system_proxy_item.sys_proxy_type, SysProxyType::Pac);
+pub fn derive_connection_mode(config: &AppConfig) -> ConnectionMode {
     if config.tun_mode_item.enable_tun {
-        return (ConnectionMode::Vpn, pac_enabled);
+        ConnectionMode::Vpn
+    } else {
+        ConnectionMode::SystemProxy
     }
-    (ConnectionMode::SystemProxy, pac_enabled)
 }
 
 /// Applies a connection mode onto the config primitives. Entering `Vpn` keeps
 /// the stored system proxy type untouched (runtime interplay rules already
 /// force-disable or fall back per platform); leaving it turns TUN off.
-pub fn apply_connection_mode(config: &mut AppConfig, mode: ConnectionMode, pac_enabled: bool) {
+pub fn apply_connection_mode(config: &mut AppConfig, mode: ConnectionMode) {
     match mode {
         ConnectionMode::SystemProxy => {
             config.tun_mode_item.enable_tun = false;
-            config.system_proxy_item.sys_proxy_type = if pac_enabled {
-                SysProxyType::Pac
-            } else {
-                SysProxyType::ForcedChange
-            };
+            config.system_proxy_item.sys_proxy_type = SysProxyType::ForcedChange;
         }
         ConnectionMode::Vpn => {
             config.tun_mode_item.enable_tun = true;
@@ -73,20 +66,13 @@ pub fn apply_connection_mode(config: &mut AppConfig, mode: ConnectionMode, pac_e
     }
 }
 
-/// The mode snapshot the UI renders. `pac_available` comes from the platform's
-/// single source of truth so adding a PAC platform stays a one-line change.
+/// The mode snapshot the UI renders.
 #[must_use]
-pub fn connection_mode_status(
-    config: &AppConfig,
-    tun_status: &TunStatus,
-    target_os: TargetOs,
-) -> ConnectionModeStatus {
-    let (mode, pac_enabled) = derive_connection_mode(config);
+pub fn connection_mode_status(config: &AppConfig, tun_status: &TunStatus) -> ConnectionModeStatus {
+    let mode = derive_connection_mode(config);
 
     ConnectionModeStatus {
         mode,
-        pac_enabled,
-        pac_available: pac_available(target_os),
         vpn_available: tun_status.allow_enable_tun || tun_status.enabled,
         process_rules_effective: mode == ConnectionMode::Vpn,
     }
@@ -150,7 +136,6 @@ pub struct ConnectionModeManager {
     system_proxy: SystemProxyManager,
     tun: TunManager,
     sink: Arc<dyn ConnectionModeSink>,
-    target_os: TargetOs,
 }
 
 impl ConnectionModeManager {
@@ -160,42 +145,24 @@ impl ConnectionModeManager {
         tun: TunManager,
         sink: Arc<dyn ConnectionModeSink>,
     ) -> Self {
-        Self::with_target_os(system_proxy, tun, sink, TargetOs::current())
-    }
-
-    #[must_use]
-    pub fn with_target_os(
-        system_proxy: SystemProxyManager,
-        tun: TunManager,
-        sink: Arc<dyn ConnectionModeSink>,
-        target_os: TargetOs,
-    ) -> Self {
         Self {
             system_proxy,
             tun,
             sink,
-            target_os,
         }
     }
 
     /// Switch the app between system proxy and TUN mode.
     ///
-    /// `pac_enabled` of `None` keeps whatever PAC flavor is already stored.
     /// `connected` is the supervisor state the caller observed: it decides
     /// whether the machine's proxy settings are touched at all.
     pub async fn set_connection_mode(
         &self,
         coordinator: &ConfigMutationCoordinator,
         mode: ConnectionMode,
-        pac_enabled: Option<bool>,
         connected: SupervisorConnectionState,
     ) -> Result<ConnectionModeOutcome, ConnectionModeError> {
         let snapshot = coordinator.current_config();
-        let (_, current_pac) = derive_connection_mode(&snapshot);
-        let pac_enabled = pac_enabled.unwrap_or(current_pac);
-        if mode == ConnectionMode::SystemProxy && pac_enabled && !pac_available(self.target_os) {
-            return Err(SystemProxyManagerError::PacUnavailable(self.target_os).into());
-        }
 
         // Entering VPN must clear the elevation / native-provider preflight
         // before anything is written. The probe forks OS helpers, so it runs on
@@ -206,7 +173,7 @@ impl ConnectionModeManager {
 
         let (original, committed) = self
             .commit(coordinator, |config| {
-                apply_connection_mode(config, mode, pac_enabled);
+                apply_connection_mode(config, mode);
             })
             .await?;
         let tun_flag_changed =
@@ -221,7 +188,7 @@ impl ConnectionModeManager {
         self.sink.tray_refresh();
 
         Ok(ConnectionModeOutcome {
-            status: connection_mode_status(&committed, &tun_status, self.target_os),
+            status: connection_mode_status(&committed, &tun_status),
             config: committed,
             system_proxy_status,
             system_proxy_applied,
@@ -237,10 +204,6 @@ impl ConnectionModeManager {
         mode: SysProxyType,
         connected: SupervisorConnectionState,
     ) -> Result<SystemProxyStatus, ConnectionModeError> {
-        if mode == SysProxyType::Pac && !pac_available(self.target_os) {
-            return Err(SystemProxyManagerError::PacUnavailable(self.target_os).into());
-        }
-
         let (original, committed) = self
             .commit(coordinator, |config| {
                 config.system_proxy_item.sys_proxy_type = mode;

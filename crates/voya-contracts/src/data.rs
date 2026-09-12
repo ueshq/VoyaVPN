@@ -151,13 +151,11 @@ impl Default for RoutingRule {
 pub struct Routing {
     pub id: String,
     pub remarks: String,
-    pub source_url: String,
     pub rules: Vec<RoutingRule>,
     pub enabled: bool,
     pub locked: bool,
     pub icon: String,
     pub singbox_ruleset_path: String,
-    pub domain_strategy: String,
     pub singbox_domain_strategy: String,
     pub sort: i32,
     #[serde(default, skip_deserializing)]
@@ -169,13 +167,11 @@ impl Default for Routing {
         Self {
             id: String::new(),
             remarks: String::new(),
-            source_url: String::new(),
             rules: Vec::new(),
             enabled: true,
             locked: false,
             icon: String::new(),
             singbox_ruleset_path: String::new(),
-            domain_strategy: String::new(),
             singbox_domain_strategy: String::new(),
             sort: 0,
             is_active: false,

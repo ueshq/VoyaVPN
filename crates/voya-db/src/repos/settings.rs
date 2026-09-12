@@ -7,9 +7,9 @@ use crate::{
 
 /// Stores the current IPC settings DTO verbatim. Database initialization rejects
 /// historical baselines; this repository strictly reads the current payload and
-/// never converts retired keys. Initialization only normalizes the removed
-/// direct traffic mode in otherwise valid current settings. Missing settings
-/// use the current defaults.
+/// never converts retired keys. Initialization only normalizes the documented
+/// retired keys and values (see [`normalize_retired_settings_value`]) in
+/// otherwise valid current settings. Missing settings use the current defaults.
 #[derive(Debug, Clone, Copy)]
 pub struct SettingsRepository<'executor> {
     executor: RepositoryExecutor<'executor>,
@@ -85,32 +85,56 @@ fn payload_error(source: serde_json::Error) -> DbError {
     }
 }
 
+/// Keys retired from the settings payload, as JSON object paths.
+const RETIRED_SETTINGS_KEYS: &[&[&str]] = &[
+    &["behavior", "statistics"],
+    &["behavior", "realtimeSpeed"],
+    &["network", "systemProxy", "advancedProtocol"],
+    &["network", "systemProxy", "customPacPath"],
+    &["network", "systemProxy", "customScriptPath"],
+    &["routing", "singboxDomainStrategy"],
+    &["grpc"],
+];
+
+/// Keys retired from every element of a settings array: (array path, key).
+const RETIRED_SETTINGS_ELEMENT_KEYS: &[(&[&str], &str)] = &[(&["network", "inbounds"], "protocol")];
+
+/// Retired enum values and the current value each one maps onto.
+const RETIRED_SETTINGS_VALUES: &[(&[&str], &str, &str)] = &[
+    (&["proxy", "trafficMode"], "direct", "rule"),
+    (&["network", "systemProxy", "mode"], "pac", "forcedChange"),
+];
+
 /// Runs only after the database baseline has been validated. Keep the narrow
-/// upgrade at the persistence boundary so IPC never accepts the retired mode.
-pub(crate) async fn normalize_retired_traffic_mode(pool: &sqlx::SqlitePool) -> Result<()> {
-    let candidate = sqlx::query_as::<_, (String, String)>(
-        r#"
-        SELECT payload, json_set(payload, '$.proxy.trafficMode', 'rule')
-        FROM app_settings
-        WHERE id = 1 AND schema_version = ?
-          AND CASE WHEN json_valid(payload) THEN
-            json_extract(payload, '$.schemaVersion') = ?
-            AND json_extract(payload, '$.proxy.trafficMode') = 'direct'
-          ELSE 0 END
-        "#,
+/// upgrade at the persistence boundary so IPC never accepts retired settings.
+pub(crate) async fn normalize_retired_settings(pool: &sqlx::SqlitePool) -> Result<()> {
+    let candidate = sqlx::query_as::<_, (String,)>(
+        "SELECT payload FROM app_settings WHERE id = 1 AND schema_version = ?",
     )
-    .bind(i64::from(CURRENT_SCHEMA_VERSION))
     .bind(i64::from(CURRENT_SCHEMA_VERSION))
     .fetch_optional(pool)
     .await?;
-    let Some((original, normalized)) = candidate else {
+    let Some((original,)) = candidate else {
         return Ok(());
     };
-    // Leave malformed or retired settings untouched for the strict loader to
-    // reject. The mode conversion must not silently discard unknown fields.
-    if serde_json::from_str::<AppSettingsV1>(&normalized).is_err() {
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&original) else {
+        return Ok(());
+    };
+    if value
+        .get("schemaVersion")
+        .and_then(serde_json::Value::as_u64)
+        != Some(u64::from(CURRENT_SCHEMA_VERSION))
+        || !normalize_retired_settings_value(&mut value)
+    {
         return Ok(());
     }
+    // Leave malformed or otherwise unknown settings untouched for the strict
+    // loader to reject: the conversion must never silently discard fields it
+    // does not know about.
+    let Ok(settings) = serde_json::from_value::<AppSettingsV1>(value) else {
+        return Ok(());
+    };
+    let normalized = serde_json::to_string(&settings).map_err(payload_error)?;
     sqlx::query(
         "UPDATE app_settings SET payload = ? WHERE id = 1 AND schema_version = ? AND payload = ?",
     )
@@ -120,6 +144,47 @@ pub(crate) async fn normalize_retired_traffic_mode(pool: &sqlx::SqlitePool) -> R
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Applies every retired-key and retired-value conversion to a settings
+/// payload. Returns whether anything changed.
+pub(crate) fn normalize_retired_settings_value(value: &mut serde_json::Value) -> bool {
+    let mut changed = false;
+    for path in RETIRED_SETTINGS_KEYS {
+        if let Some((key, parents)) = path.split_last() {
+            if let Some(object) = json_at(value, parents).and_then(serde_json::Value::as_object_mut)
+            {
+                changed |= object.remove(*key).is_some();
+            }
+        }
+    }
+    for (array_path, key) in RETIRED_SETTINGS_ELEMENT_KEYS {
+        if let Some(elements) = json_at(value, array_path).and_then(serde_json::Value::as_array_mut)
+        {
+            for element in elements {
+                if let Some(object) = element.as_object_mut() {
+                    changed |= object.remove(*key).is_some();
+                }
+            }
+        }
+    }
+    for (path, retired, current) in RETIRED_SETTINGS_VALUES {
+        if let Some(slot) = json_at(value, path) {
+            if slot.as_str() == Some(retired) {
+                *slot = serde_json::Value::String((*current).to_string());
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
+fn json_at<'value>(
+    value: &'value mut serde_json::Value,
+    path: &[&str],
+) -> Option<&'value mut serde_json::Value> {
+    path.iter()
+        .try_fold(value, |current, key| current.get_mut(*key))
 }
 
 fn validated_payload(settings: &AppSettingsV1) -> Result<String> {

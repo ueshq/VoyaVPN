@@ -25,6 +25,11 @@ use crate::{
 const USER_AGENT_HEADER: &str = "Sec-WebSocket-Protocol";
 const DEFAULT_HYSTERIA2_HOP_INTERVAL: i32 = 30;
 const DEFAULT_TUN_STACK: &str = "gvisor";
+/// gRPC keepalive values. They used to be settings nobody could reach from the
+/// UI; the generated output is byte-identical to those settings' defaults.
+const GRPC_IDLE_TIMEOUT: &str = "60s";
+const GRPC_PING_TIMEOUT: &str = "20s";
+const GRPC_PERMIT_WITHOUT_STREAM: bool = false;
 const MACOS_TUN_SAFE_MTU: i32 = 1500;
 const SINGBOX_TUN_INBOUND_TAG: &str = "tun";
 const SINGBOX_DIRECT_DNS_TAG: &str = "direct_dns";

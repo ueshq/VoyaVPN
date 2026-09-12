@@ -288,8 +288,6 @@ vi.mock("@/ipc/commands", () => ({
   setConnectionMode: vi.fn(() =>
     Promise.resolve({
       mode: "systemProxy",
-      pacAvailable: false,
-      pacEnabled: false,
       processRulesEffective: false,
       vpnAvailable: true,
     }),
@@ -304,8 +302,6 @@ vi.mock("@/ipc/commands", () => ({
       manualCleanupRequired: false,
       effectiveMode: "forcedClear",
       exceptions: "",
-      pacAvailable: false,
-      pacUrl: null,
       proxy: null,
       requestedMode: "forcedClear",
     }),

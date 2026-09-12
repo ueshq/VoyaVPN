@@ -110,16 +110,12 @@ const sysProxyStatus: SystemProxyStatusResponse = {
   manualCleanupRequired: false,
   effectiveMode: "forcedClear",
   exceptions: "",
-  pacAvailable: false,
-  pacUrl: null,
   proxy: null,
   requestedMode: "forcedChange",
 };
 
 const connectionModeStatus: ConnectionModeStatus = {
   mode: "systemProxy",
-  pacAvailable: false,
-  pacEnabled: false,
   processRulesEffective: false,
   vpnAvailable: true,
 };
@@ -584,33 +580,23 @@ describe("HomeScreen", () => {
     runtimeMock.state.tun = { ...tunStatusResponse, enabled: true };
     runtimeMock.state.sysProxy = {
       ...sysProxyStatus,
-      requestedMode: "pac",
-      pacAvailable: true,
+      requestedMode: "forcedChange",
     };
     ipcMock.systemProxyStatus.mockResolvedValue(runtimeMock.state.sysProxy);
     const user = userEvent.setup();
     renderHome();
 
     expect(tunSwitch()).toBeChecked();
-    expect(
-      screen.queryByRole("switch", { name: "Smart mode (PAC)" }),
-    ).not.toBeInTheDocument();
     tunSwitch().focus();
     await user.keyboard(" ");
     await waitFor(() =>
-      expect(ipcMock.setConnectionMode).toHaveBeenCalledWith(
-        "systemProxy",
-        null,
-      ),
+      expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("systemProxy"),
     );
     await waitFor(() => expect(tunSwitch()).not.toBeChecked());
-    expect(
-      screen.queryByRole("switch", { name: "Smart mode (PAC)" }),
-    ).not.toBeInTheDocument();
     expect(ipcMock.tunRequestElevation).not.toHaveBeenCalled();
   });
 
-  it("shows a backend-confirmed TUN change and hides PAC", async () => {
+  it("shows a backend-confirmed TUN change", async () => {
     ipcMock.setConnectionMode.mockImplementation(async () => {
       ipcMock.tunStatus.mockResolvedValue({
         ...tunStatusResponse,
@@ -622,22 +608,12 @@ describe("HomeScreen", () => {
     renderHome();
     await user.click(tunSwitch());
     await waitFor(() => expect(tunSwitch()).toBeChecked());
-    expect(
-      screen.queryByRole("switch", { name: "Smart mode (PAC)" }),
-    ).not.toBeInTheDocument();
   });
 
-  it("offers one traffic mode control on platforms without PAC support", async () => {
+  it("offers one traffic mode control", async () => {
     runtimeMock.state.coreState = disconnectedStatus;
-    runtimeMock.state.sysProxy = { ...sysProxyStatus, pacAvailable: false };
     renderHome();
 
-    expect(
-      screen.queryByRole("switch", { name: "Smart mode (PAC)" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Smart proxy is not supported on this platform."),
-    ).not.toBeInTheDocument();
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: "Smart routing" }),
@@ -799,7 +775,7 @@ describe("HomeScreen", () => {
     await user.click(tunSwitch());
 
     await waitFor(() =>
-      expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("vpn", null),
+      expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("vpn"),
     );
     await waitFor(() => {
       const titles = useToastStore
@@ -831,7 +807,7 @@ describe("HomeScreen", () => {
       expect(ipcMock.tunRequestElevation).toHaveBeenCalledTimes(1),
     );
     await waitFor(() =>
-      expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("vpn", null),
+      expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("vpn"),
     );
   });
 
@@ -919,7 +895,7 @@ describe("HomeScreen", () => {
     await user.click(tunSwitch());
 
     await waitFor(() =>
-      expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("vpn", null),
+      expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("vpn"),
     );
     expect(ipcMock.tunRequestElevation).not.toHaveBeenCalled();
     expect(useToastStore.getState().toasts).toEqual([]);

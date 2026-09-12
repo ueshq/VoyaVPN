@@ -249,7 +249,6 @@ mod tests {
             SystemProxyType::ForcedClear,
             SystemProxyType::Unchanged,
             SystemProxyType::ForcedChange,
-            SystemProxyType::Pac,
         ] {
             for tun_enabled in [false, true] {
                 let app_dir = std::env::temp_dir()

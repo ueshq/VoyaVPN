@@ -107,8 +107,6 @@ impl StatisticsSnapshot {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StatisticsConfigSnapshot {
-    pub enable_statistics: bool,
-    pub display_real_time_speed: bool,
     pub active_profile_id: Option<String>,
 }
 
@@ -116,15 +114,8 @@ impl StatisticsConfigSnapshot {
     #[must_use]
     pub fn from_app_config(config: &AppConfig) -> Self {
         Self {
-            enable_statistics: config.gui_item.enable_statistics,
-            display_real_time_speed: config.gui_item.display_real_time_speed,
             active_profile_id: nonempty(config.index_id.clone()),
         }
-    }
-
-    #[must_use]
-    pub const fn enabled(&self) -> bool {
-        self.enable_statistics || self.display_real_time_speed
     }
 }
 
@@ -182,13 +173,12 @@ impl StatisticsManager {
         let handles = vec![
             tokio::spawn(run_statistics_aggregator(
                 database,
-                Arc::clone(&config_source),
+                config_source,
                 event_sink,
                 sample_rx,
                 shutdown_rx.clone(),
             )),
             tokio::spawn(run_singbox_statistics_service(
-                config_source,
                 supervisor,
                 sample_tx,
                 shutdown_rx,
@@ -317,16 +307,10 @@ async fn record_statistics_tick(
     sample: ServerSpeedSample,
     date_now: i64,
     flush_due: bool,
-) -> Result<Option<StatisticsSnapshot>> {
-    if !config.enabled() {
-        // Statistics were switched off mid-run; the bytes already measured
-        // still belong in the database.
-        flush_traffic_buffer(database, buffer).await?;
-        return Ok(None);
-    }
+) -> Result<StatisticsSnapshot> {
     let Some(index_id) = config.active_profile_id.clone() else {
         flush_traffic_buffer(database, buffer).await?;
-        return Ok(Some(snapshot_from_sample(config, sample, None)));
+        return Ok(snapshot_from_sample(config, sample, None));
     };
     if !buffer.targets(&index_id, date_now) {
         flush_traffic_buffer(database, buffer).await?;
@@ -342,11 +326,7 @@ async fn record_statistics_tick(
         flush_traffic_buffer(database, buffer).await?;
     }
 
-    Ok(Some(snapshot_from_sample(
-        config,
-        sample,
-        buffer.projected(),
-    )))
+    Ok(snapshot_from_sample(config, sample, buffer.projected()))
 }
 
 impl From<ClashTraffic> for ServerSpeedSample {
@@ -429,13 +409,12 @@ async fn run_statistics_aggregator(
                 )
                 .await
                 {
-                    Ok(Some(snapshot)) => {
+                    Ok(snapshot) => {
                         if should_emit_statistics(sample.has_traffic(), emitted_traffic) {
                             emitted_traffic = sample.has_traffic();
                             event_sink.emit_statistics(snapshot);
                         }
                     }
-                    Ok(None) => emitted_traffic = false,
                     Err(error) => tracing::warn!(?error, "failed to apply statistics sample"),
                 }
             }
@@ -451,7 +430,6 @@ async fn run_statistics_aggregator(
 }
 
 async fn run_singbox_statistics_service(
-    config_source: Arc<dyn StatisticsConfigSource>,
     supervisor: CoreSupervisor,
     sample_tx: mpsc::Sender<ServerSpeedSample>,
     mut shutdown: watch::Receiver<bool>,
@@ -477,15 +455,6 @@ async fn run_singbox_statistics_service(
             break;
         }
 
-        let config = config_source.snapshot();
-        if !config.enabled() {
-            active_identity = None;
-            reconnect_backoff.reset();
-            if sleep_or_shutdown(SINGBOX_RECONNECT_INITIAL_DELAY, &mut shutdown).await {
-                break;
-            }
-            continue;
-        }
         let snapshot = supervisor.status().await.ok();
         // The supervisor reports the port the running main config actually
         // listens on, and the bearer token that config demands. Recomputing the
@@ -699,7 +668,6 @@ mod tests {
         let base = AppConfig {
             inbound: vec![InItem {
                 local_port: 12000,
-                protocol: "socks".to_string(),
                 ..InItem::default()
             }],
             tun_mode_item: TunModeItem {
@@ -770,8 +738,6 @@ mod tests {
             .await
             .expect("statistics test operation should succeed");
         let config = StatisticsConfigSnapshot {
-            enable_statistics: true,
-            display_real_time_speed: true,
             active_profile_id: Some("active".to_string()),
         };
 
@@ -789,8 +755,7 @@ mod tests {
             true,
         )
         .await
-        .expect("statistics test operation should succeed")
-        .expect("snapshot");
+        .expect("statistics test operation should succeed");
 
         assert_eq!(snapshot.upload_bytes_per_second, 1300.0);
         assert_eq!(snapshot.download_bytes_per_second, 2400.0);
@@ -837,8 +802,6 @@ mod tests {
             .await
             .expect("statistics test operation should succeed");
         let config = StatisticsConfigSnapshot {
-            enable_statistics: true,
-            display_real_time_speed: true,
             active_profile_id: Some("active".to_string()),
         };
 
@@ -852,7 +815,6 @@ mod tests {
             true,
         )
         .await
-        .expect("statistics test operation should succeed")
         .expect("an idle tick still reports a zero snapshot");
 
         assert_eq!(snapshot.upload_bytes_per_second, 0.0);
@@ -907,8 +869,6 @@ mod tests {
             .await
             .expect("statistics test operation should succeed");
         let config = StatisticsConfigSnapshot {
-            enable_statistics: true,
-            display_real_time_speed: false,
             active_profile_id: Some("active".to_string()),
         };
 
@@ -926,8 +886,7 @@ mod tests {
             true,
         )
         .await
-        .expect("statistics test operation should succeed")
-        .expect("snapshot");
+        .expect("statistics test operation should succeed");
         let stat = snapshot
             .server_stat
             .expect("statistics test operation should succeed");
@@ -1108,8 +1067,6 @@ mod tests {
 
     fn enabled_config(active_profile_id: &str) -> StatisticsConfigSnapshot {
         StatisticsConfigSnapshot {
-            enable_statistics: true,
-            display_real_time_speed: true,
             active_profile_id: Some(active_profile_id.to_string()),
         }
     }
@@ -1124,7 +1081,6 @@ mod tests {
         record_statistics_tick(database, config, buffer, sample, 10, flush_due)
             .await
             .expect("statistics test operation should succeed")
-            .expect("an enabled config always reports a snapshot")
     }
 
     async fn stat_row(database: &Database, index_id: &str) -> ServerStatItem {

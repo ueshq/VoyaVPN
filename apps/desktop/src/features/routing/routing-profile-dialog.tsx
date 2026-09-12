@@ -38,7 +38,6 @@ const RENDERED_FIELDS = new Set([
   "remarks",
   "singboxDomainStrategy",
   "singboxRulesetPath",
-  "sourceUrl",
 ]);
 
 export function RoutingProfileDialog({
@@ -139,14 +138,6 @@ export function RoutingProfileDialog({
                 }))
               }
               value={form.singboxRulesetPath}
-            />
-            <TextField
-              error={errors.sourceUrl}
-              label={t("panes.routing.sourceUrl")}
-              onChange={(value) =>
-                setForm((current) => ({ ...current, sourceUrl: value }))
-              }
-              value={form.sourceUrl}
             />
             <CheckboxField
               checked={form.enabled}

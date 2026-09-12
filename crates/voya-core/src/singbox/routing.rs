@@ -104,16 +104,7 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
 
     let routing = context.routing_item.as_ref();
     let domain_strategy = routing
-        .and_then(|routing| nonempty_string(Some(routing.domain_strategy4_singbox.as_str())))
-        .or_else(|| {
-            nonempty_string(Some(
-                context
-                    .app_config
-                    .routing_basic_item
-                    .domain_strategy4_singbox
-                    .as_str(),
-            ))
-        });
+        .and_then(|routing| nonempty_string(Some(routing.domain_strategy4_singbox.as_str())));
     let resolve_rule = SingboxRule {
         action: Some("resolve".to_string()),
         strategy: domain_strategy,

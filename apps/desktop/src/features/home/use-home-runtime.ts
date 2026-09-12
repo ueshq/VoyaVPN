@@ -135,7 +135,7 @@ export function useHomeRuntime(t: TranslationFunction) {
       if (enabled && !(await ensureTunPreconditions())) {
         return;
       }
-      await setConnectionMode(enabled ? "vpn" : "systemProxy", null);
+      await setConnectionMode(enabled ? "vpn" : "systemProxy");
     } catch (error) {
       pushToast({
         description: getErrorMessage(error),

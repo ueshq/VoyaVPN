@@ -54,7 +54,7 @@ export const commands = {
 	 *  listening on would black-hole every request. Only a TUN flag change needs a
 	 *  running core to be restarted.
 	 */
-	setConnectionMode: (mode: ConnectionMode, pacEnabled: boolean | null) => typedError<ConnectionModeStatus, AppError>(__TAURI_INVOKE("set_connection_mode", { mode, pacEnabled })),
+	setConnectionMode: (mode: ConnectionMode) => typedError<ConnectionModeStatus, AppError>(__TAURI_INVOKE("set_connection_mode", { mode })),
 	tunStatus: () => typedError<TunStatus, AppError>(__TAURI_INVOKE("tun_status")),
 	tunProviderDiagnostics: () => typedError<TunProviderDiagnostics, AppError>(__TAURI_INVOKE("tun_provider_diagnostics")),
 	setTunEnabled: (enabled: boolean) => typedError<TunStatus, AppError>(__TAURI_INVOKE("set_tun_enabled", { enabled })),
@@ -234,7 +234,6 @@ export type AppSettingsV1 = {
 	dns: DnsSettings,
 	speedTest: SpeedtestSettings,
 	multiplexing: MultiplexingSettings,
-	grpc: GrpcSettings,
 	hysteria: HysteriaSettings,
 	proxy: ProxySettings,
 };
@@ -264,8 +263,6 @@ export type AutostartStatus = {
 
 export type BehaviorSettings = {
 	autostart: boolean,
-	statistics: boolean,
-	realtimeSpeed: boolean,
 };
 
 export type CertificateFetchRequest = {
@@ -288,15 +285,13 @@ export type CertificateFetchResult = {
  *  persisted primitives (system proxy type + TUN flag), never stored itself.
  */
 export type ConnectionMode = 
-/**  Local inbound for system proxy use (optionally PAC); macOS setup is manual. */
+/**  Local inbound for system proxy use; macOS setup is manual. */
 "systemProxy" | 
 /**  TUN mode; all traffic is routed through the virtual interface. */
 "vpn";
 
 export type ConnectionModeStatus = {
 	mode: ConnectionMode,
-	pacEnabled: boolean,
-	pacAvailable: boolean,
 	vpnAvailable: boolean,
 	/**
 	 *  sing-box process rules only match traffic entering through TUN, so
@@ -390,12 +385,6 @@ export type ExportProfilesResult = {
 	format: ExportProfilesFormat,
 };
 
-export type GrpcSettings = {
-	idleTimeoutSeconds: number | null,
-	healthCheckTimeoutSeconds: number | null,
-	permitWithoutStream: boolean | null,
-};
-
 export type HysteriaSettings = {
 	uploadMbps: number,
 	downloadMbps: number,
@@ -421,7 +410,6 @@ export type ImportProfilesResult = {
 
 export type InboundSettings = {
 	localPort: number,
-	protocol: string,
 	sniffingEnabled: boolean,
 	lanConnectionsAllowed: boolean,
 	separateLanPort: boolean,
@@ -728,19 +716,16 @@ export type RoutingRuleScope = "all" | "routing" | "dns";
 
 export type RoutingSettings = {
 	domainStrategy: string,
-	singboxDomainStrategy: string,
 };
 
 export type Routing_Deserialize = {
 	id: string,
 	remarks: string,
-	sourceUrl: string,
 	rules: RoutingRule[],
 	enabled: boolean,
 	locked: boolean,
 	icon: string,
 	singboxRulesetPath: string,
-	domainStrategy: string,
 	singboxDomainStrategy: string,
 	sort: number,
 };
@@ -748,13 +733,11 @@ export type Routing_Deserialize = {
 export type Routing_Serialize = {
 	id: string,
 	remarks: string,
-	sourceUrl: string,
 	rules: RoutingRule[],
 	enabled: boolean,
 	locked: boolean,
 	icon: string,
 	singboxRulesetPath: string,
-	domainStrategy: string,
 	singboxDomainStrategy: string,
 	sort: number,
 	isActive: boolean,
@@ -932,16 +915,13 @@ export type SystemProxyObservation = "unknown" | "clear" | "localProxy" | "other
 export type SystemProxySettings = {
 	/**
 	 *  The persisted OS-proxy mode. Typed rather than a `String`: the enum's
-	 *  `rename_all = "camelCase"` emits exactly the four values this field has
-	 *  always stored (`forcedClear`, `forcedChange`, `unchanged`, `pac`), so the
-	 *  stored payload is unchanged and `voya-db` pins that with a value test.
+	 *  `rename_all = "camelCase"` emits exactly the values this field stores
+	 *  (`forcedClear`, `forcedChange`, `unchanged`), and `voya-db` pins that
+	 *  with a value test. The retired `pac` value is normalized at startup.
 	 */
 	mode: SystemProxyType,
 	exceptions: string,
 	bypassLocal: boolean,
-	advancedProtocol: string,
-	customPacPath: string | null,
-	customScriptPath: string | null,
 };
 
 /**
@@ -959,13 +939,11 @@ export type SystemProxyStatusResponse = {
 	requestedMode: SystemProxyType,
 	/**  The app's applied policy; always Unchanged on manual platforms. */
 	effectiveMode: SystemProxyType,
-	pacAvailable: boolean,
 	proxy: string | null,
 	exceptions: string,
-	pacUrl: string | null,
 };
 
-export type SystemProxyType = "forcedClear" | "forcedChange" | "unchanged" | "pac";
+export type SystemProxyType = "forcedClear" | "forcedChange" | "unchanged";
 
 export type ThemeMode = "system" | "light" | "dark";
 

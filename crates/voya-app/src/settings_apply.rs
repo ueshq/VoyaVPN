@@ -124,7 +124,7 @@ mod tests {
             SettingsApplyAction::Reconnect
         );
         tracker.core_applied(&latest);
-        latest.system_proxy_item.custom_system_proxy_pac_path = Some("proxy.pac".into());
+        latest.system_proxy_item.system_proxy_exceptions = "localhost".into();
         assert_eq!(
             tracker.status(&latest, true).action,
             SettingsApplyAction::ReapplyProxy

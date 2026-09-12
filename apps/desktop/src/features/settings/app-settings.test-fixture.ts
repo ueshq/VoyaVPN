@@ -8,7 +8,7 @@ export function makeAppSettings({
   return {
     schemaVersion: 1,
     appearance: { language: "en", theme: "system" },
-    behavior: { autostart: false, realtimeSpeed: true, statistics: true },
+    behavior: { autostart: false },
     core: {
       bindInterface: null,
       cacheFileEnabled: true,
@@ -27,7 +27,6 @@ export function makeAppSettings({
           lanConnectionsAllowed: false,
           localPort: 10_808,
           password: "",
-          protocol: "socks",
           secondaryPortEnabled: false,
           separateLanPort: false,
           sniffingEnabled: true,
@@ -35,10 +34,7 @@ export function makeAppSettings({
         },
       ],
       systemProxy: {
-        advancedProtocol: "",
         bypassLocal: true,
-        customPacPath: null,
-        customScriptPath: null,
         exceptions: "",
         mode: "forcedClear",
       },
@@ -52,7 +48,7 @@ export function makeAppSettings({
         strictRoute: true,
       },
     },
-    routing: { domainStrategy: "AsIs", singboxDomainStrategy: "" },
+    routing: { domainStrategy: "AsIs" },
     dns: {
       addCommonHosts: null,
       blockBindingQuery: null,
@@ -74,11 +70,6 @@ export function makeAppSettings({
       timeoutSeconds: 10,
     },
     multiplexing: { maxConnections: 4, padding: false, protocol: "h2mux" },
-    grpc: {
-      healthCheckTimeoutSeconds: 20,
-      idleTimeoutSeconds: 60,
-      permitWithoutStream: false,
-    },
     hysteria: { downloadMbps: 100, hopIntervalSeconds: 30, uploadMbps: 100 },
     proxy: { trafficMode: "rule" },
   };

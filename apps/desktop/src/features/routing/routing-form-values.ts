@@ -22,7 +22,6 @@ export type RoutingFormState = {
   id?: string;
   icon?: string;
   singboxRulesetPath: string;
-  domainStrategy: string;
   singboxDomainStrategy: string;
   enabled: boolean;
   isActive?: boolean;
@@ -30,16 +29,10 @@ export type RoutingFormState = {
   remarks: string;
   rules: RoutingRule[];
   sort?: number;
-  sourceUrl: string;
 };
 
 export function routingToForm(routing: Routing_Serialize | null): RoutingFormState {
-  return routing
-    ? {
-        ...routing,
-        domainStrategy: routing.domainStrategy || "AsIs",
-      }
-    : createDefaultRouting();
+  return routing ? { ...routing } : createDefaultRouting();
 }
 
 export function ruleToForm(rule: RoutingRule | null): RuleFormState {
@@ -81,12 +74,10 @@ export function formToRule(form: RuleFormState): RoutingRule {
 function createDefaultRouting(): RoutingFormState {
   return {
     singboxRulesetPath: "",
-    domainStrategy: "AsIs",
     singboxDomainStrategy: "",
     enabled: true,
     remarks: "",
     rules: [],
-    sourceUrl: "",
   };
 }
 

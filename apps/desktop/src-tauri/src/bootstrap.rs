@@ -27,7 +27,7 @@ use voya_platform::{
     coreinfo::{copy_seed_core_assets, TargetOs},
     paths::{core_seed_resources_dir, AppPaths},
     process::{JobAssignedRunner, PlatformProcessJobFactory, ProcessRunner, StdProcessRunner},
-    sysproxy::{platform_pac_manager, SystemProxyService},
+    sysproxy::SystemProxyService,
 };
 
 /// Everything the app needs before it can serve a single command.
@@ -57,7 +57,7 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     ))?;
     let config = tauri::async_runtime::block_on(services.load_config())?;
     let system_proxy_manager = SystemProxyManager::new(
-        SystemProxyService::new(Arc::new(StdProcessRunner::new()), platform_pac_manager()),
+        SystemProxyService::new(Arc::new(StdProcessRunner::new())),
         runtime_paths.clone(),
     );
     // Startup only *undoes* a proxy a crashed run left behind. The

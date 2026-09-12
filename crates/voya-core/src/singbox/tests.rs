@@ -442,6 +442,11 @@ fn singbox_transport_hosts_use_first_authority() {
             .and_then(|tls| tls.server_name.as_deref()),
         Some("grpc-one.example")
     );
+    // The keepalive values are fixed constants now; pin their generated form.
+    let grpc = outbound.transport.as_ref().expect("gRPC transport");
+    assert_eq!(grpc.idle_timeout.as_deref(), Some("60s"));
+    assert_eq!(grpc.ping_timeout.as_deref(), Some("20s"));
+    assert_eq!(grpc.permit_without_stream, Some(false));
 
     let node = ProfileItem {
         protocol: ProfileProtocol::Shadowsocks {

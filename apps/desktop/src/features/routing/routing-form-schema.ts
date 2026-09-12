@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { DOMAIN_STRATEGIES, RULE_TYPES, SINGBOX_DOMAIN_STRATEGIES } from "./routing-constants";
+import { RULE_TYPES, SINGBOX_DOMAIN_STRATEGIES } from "./routing-constants";
 
 // Issue messages are translation keys, not display strings: the dialogs render
 // them through `t` (see lib/zod-errors.ts). A literal English message here would
@@ -25,20 +25,16 @@ export const routingRuleSchema = z.object({
   scope: z.union([z.literal(RULE_TYPES.All), z.literal(RULE_TYPES.Routing), z.literal(RULE_TYPES.Dns)]).nullable(),
 });
 
-const optionalHttpsUrl = z.string().trim().superRefine(validateHttpsUrl);
-
 export const routingProfileSchema = z.object({
   id: z.string().trim().default(""),
   icon: z.string().default(""),
   singboxRulesetPath: z.string().trim(),
-  domainStrategy: z.enum(DOMAIN_STRATEGIES),
   singboxDomainStrategy: z.enum(SINGBOX_DOMAIN_STRATEGIES),
   enabled: z.boolean(),
   locked: z.boolean().default(false),
   remarks: z.string().trim().max(256, "validation.remarksLength"),
   rules: z.array(routingRuleSchema),
   sort: z.number().int().default(0),
-  sourceUrl: optionalHttpsUrl,
 });
 
 /**
@@ -51,30 +47,6 @@ export const routingProfileFieldsSchema = routingProfileSchema.omit({ rules: tru
 
 export type RoutingFormPayload = z.output<typeof routingProfileSchema>;
 export type RoutingRulePayload = z.output<typeof routingRuleSchema>;
-
-function validateHttpsUrl(value: string, context: z.RefinementCtx) {
-  if (value === "") {
-    return;
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    context.addIssue({ code: "custom", message: "validation.urlInvalid" });
-    return;
-  }
-
-  if (parsed.protocol !== "https:") {
-    context.addIssue({ code: "custom", message: "validation.urlHttps" });
-  }
-  if (!parsed.hostname) {
-    context.addIssue({ code: "custom", message: "validation.urlHost" });
-  }
-  if (parsed.username || parsed.password) {
-    context.addIssue({ code: "custom", message: "validation.urlCredentials" });
-  }
-}
 
 function validatePortExpression(value: string | null | undefined, context: z.RefinementCtx) {
   if (!value) {

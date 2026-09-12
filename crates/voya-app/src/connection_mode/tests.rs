@@ -9,10 +9,11 @@ use std::{
 
 use voya_db::Database;
 use voya_platform::{
+    coreinfo::TargetOs,
     paths::AppPaths,
     privilege::ElevationState,
     process::ProcessOutput,
-    sysproxy::{PacManager, PacStartConfig, SystemProxyError, SystemProxyService},
+    sysproxy::SystemProxyService,
     test_support::RecordingRunner,
     tun::{
         NativeTunController, NativeTunError, NativeTunProviderState, NativeTunStartRequest,
@@ -33,48 +34,35 @@ fn config_with(sys_proxy: SysProxyType, tun: bool) -> AppConfig {
 
 #[test]
 fn derivation_covers_every_primitive_combination() {
-    for (sys_proxy, tun, expected_mode, expected_pac) in [
+    for (sys_proxy, tun, expected) in [
         (
             SysProxyType::ForcedClear,
             false,
             ConnectionMode::SystemProxy,
-            false,
         ),
-        (
-            SysProxyType::Unchanged,
-            false,
-            ConnectionMode::SystemProxy,
-            false,
-        ),
+        (SysProxyType::Unchanged, false, ConnectionMode::SystemProxy),
         (
             SysProxyType::ForcedChange,
             false,
             ConnectionMode::SystemProxy,
-            false,
         ),
-        (SysProxyType::Pac, false, ConnectionMode::SystemProxy, true),
-        (SysProxyType::ForcedClear, true, ConnectionMode::Vpn, false),
-        (SysProxyType::Unchanged, true, ConnectionMode::Vpn, false),
-        (SysProxyType::ForcedChange, true, ConnectionMode::Vpn, false),
-        (SysProxyType::Pac, true, ConnectionMode::Vpn, true),
+        (SysProxyType::ForcedClear, true, ConnectionMode::Vpn),
+        (SysProxyType::Unchanged, true, ConnectionMode::Vpn),
+        (SysProxyType::ForcedChange, true, ConnectionMode::Vpn),
     ] {
-        let (mode, pac) = derive_connection_mode(&config_with(sys_proxy, tun));
         assert_eq!(
-            (mode, pac),
-            (expected_mode, expected_pac),
+            derive_connection_mode(&config_with(sys_proxy, tun)),
+            expected,
             "{sys_proxy:?} tun={tun}"
         );
     }
 }
 
 #[test]
-fn apply_system_proxy_selects_pac_flavor() {
+fn apply_system_proxy_selects_forced_change() {
     let mut config = config_with(SysProxyType::ForcedClear, true);
-    apply_connection_mode(&mut config, ConnectionMode::SystemProxy, true);
+    apply_connection_mode(&mut config, ConnectionMode::SystemProxy);
     assert!(!config.tun_mode_item.enable_tun);
-    assert_eq!(config.system_proxy_item.sys_proxy_type, SysProxyType::Pac);
-
-    apply_connection_mode(&mut config, ConnectionMode::SystemProxy, false);
     assert_eq!(
         config.system_proxy_item.sys_proxy_type,
         SysProxyType::ForcedChange
@@ -84,7 +72,7 @@ fn apply_system_proxy_selects_pac_flavor() {
 #[test]
 fn apply_vpn_preserves_stored_system_proxy_type() {
     let mut config = config_with(SysProxyType::ForcedChange, false);
-    apply_connection_mode(&mut config, ConnectionMode::Vpn, false);
+    apply_connection_mode(&mut config, ConnectionMode::Vpn);
     assert!(config.tun_mode_item.enable_tun);
     assert_eq!(
         config.system_proxy_item.sys_proxy_type,
@@ -94,34 +82,21 @@ fn apply_vpn_preserves_stored_system_proxy_type() {
 
 #[test]
 fn round_trip_apply_then_derive_is_stable() {
-    for (mode, pac) in [
-        (ConnectionMode::SystemProxy, false),
-        (ConnectionMode::SystemProxy, true),
-        (ConnectionMode::Vpn, false),
-    ] {
+    for mode in [ConnectionMode::SystemProxy, ConnectionMode::Vpn] {
         let mut config = AppConfig::default();
-        apply_connection_mode(&mut config, mode, pac);
-        let (derived_mode, derived_pac) = derive_connection_mode(&config);
-        assert_eq!(derived_mode, mode);
-        if mode == ConnectionMode::SystemProxy {
-            assert_eq!(derived_pac, pac);
-        }
+        apply_connection_mode(&mut config, mode);
+        assert_eq!(derive_connection_mode(&config), mode);
     }
 }
 
 #[test]
-fn status_reports_platform_pac_availability_from_the_platform_rule() {
+fn status_reports_the_derived_mode_and_process_rule_effect() {
     let config = config_with(SysProxyType::ForcedChange, false);
     let tun = disabled_tun_status();
 
-    assert!(!connection_mode_status(&config, &tun, TargetOs::Linux).pac_available);
-    assert!(connection_mode_status(&config, &tun, TargetOs::Macos).pac_available);
-    assert!(connection_mode_status(&config, &tun, TargetOs::Windows).pac_available);
-    assert_eq!(
-        connection_mode_status(&config, &tun, TargetOs::Linux).mode,
-        ConnectionMode::SystemProxy
-    );
-    assert!(!connection_mode_status(&config, &tun, TargetOs::Linux).process_rules_effective);
+    let status = connection_mode_status(&config, &tun);
+    assert_eq!(status.mode, ConnectionMode::SystemProxy);
+    assert!(!status.process_rules_effective);
 }
 
 #[tokio::test]
@@ -133,7 +108,6 @@ async fn a_disconnected_mode_switch_persists_the_mode_without_touching_the_machi
         .set_connection_mode(
             &harness.coordinator,
             ConnectionMode::SystemProxy,
-            None,
             SupervisorConnectionState::Disconnected,
         )
         .await
@@ -179,7 +153,6 @@ async fn a_connected_mode_switch_applies_the_machine_proxy() {
         .set_connection_mode(
             &harness.coordinator,
             ConnectionMode::SystemProxy,
-            None,
             SupervisorConnectionState::Connected,
         )
         .await
@@ -193,37 +166,6 @@ async fn a_connected_mode_switch_applies_the_machine_proxy() {
 }
 
 #[tokio::test]
-async fn pac_on_a_platform_without_pac_is_rejected_before_anything_is_written() {
-    let harness = Harness::new().await;
-
-    let error = harness
-        .manager()
-        .set_connection_mode(
-            &harness.coordinator,
-            ConnectionMode::SystemProxy,
-            Some(true),
-            SupervisorConnectionState::Connected,
-        )
-        .await
-        .expect_err("PAC is Windows/macOS only");
-
-    assert!(matches!(
-        error,
-        ConnectionModeError::SystemProxy(SystemProxyManagerError::PacUnavailable(TargetOs::Linux))
-    ));
-    assert_eq!(
-        harness
-            .coordinator
-            .current_config()
-            .system_proxy_item
-            .sys_proxy_type,
-        SysProxyType::ForcedClear
-    );
-    assert!(harness.runner.oneshots().is_empty());
-    assert!(harness.sink.events().is_empty());
-}
-
-#[tokio::test]
 async fn entering_vpn_without_authorization_leaves_the_configuration_alone() {
     let harness = Harness::new().await;
 
@@ -232,7 +174,6 @@ async fn entering_vpn_without_authorization_leaves_the_configuration_alone() {
         .set_connection_mode(
             &harness.coordinator,
             ConnectionMode::Vpn,
-            None,
             SupervisorConnectionState::Connected,
         )
         .await
@@ -263,7 +204,6 @@ async fn entering_vpn_reports_the_tun_flag_change_that_forces_a_restart() {
         .set_connection_mode(
             &harness.coordinator,
             ConnectionMode::Vpn,
-            None,
             SupervisorConnectionState::Disconnected,
         )
         .await
@@ -298,7 +238,6 @@ async fn a_failed_apply_rolls_the_persisted_mode_back() {
         .set_connection_mode(
             &harness.coordinator,
             ConnectionMode::SystemProxy,
-            None,
             SupervisorConnectionState::Connected,
         )
         .await
@@ -358,34 +297,6 @@ async fn setting_only_the_system_proxy_flavor_persists_while_disconnected() {
     assert_eq!(harness.sink.events(), ["sysproxy:ForcedChange", "tray"]);
 }
 
-#[tokio::test]
-async fn setting_pac_as_the_system_proxy_flavor_is_rejected_off_platform() {
-    let harness = Harness::new().await;
-
-    let error = harness
-        .manager()
-        .set_system_proxy_mode(
-            &harness.coordinator,
-            SysProxyType::Pac,
-            SupervisorConnectionState::Connected,
-        )
-        .await
-        .expect_err("PAC is Windows/macOS only");
-
-    assert!(matches!(
-        error,
-        ConnectionModeError::SystemProxy(SystemProxyManagerError::PacUnavailable(TargetOs::Linux))
-    ));
-    assert_eq!(
-        harness
-            .coordinator
-            .current_config()
-            .system_proxy_item
-            .sys_proxy_type,
-        SysProxyType::ForcedClear
-    );
-}
-
 struct Harness {
     coordinator: ConfigMutationCoordinator,
     elevation: Arc<ElevationState>,
@@ -419,9 +330,9 @@ impl Harness {
     }
 
     fn manager(&self) -> ConnectionModeManager {
-        ConnectionModeManager::with_target_os(
+        ConnectionModeManager::new(
             SystemProxyManager::with_target_os(
-                SystemProxyService::new(Arc::clone(&self.runner) as Arc<_>, Arc::new(SilentPac)),
+                SystemProxyService::new(Arc::clone(&self.runner) as Arc<_>),
                 self.paths.clone(),
                 TargetOs::Linux,
             ),
@@ -431,7 +342,6 @@ impl Harness {
                 Arc::new(StoppedNativeTun),
             ),
             Arc::new(self.sink.clone()),
-            TargetOs::Linux,
         )
     }
 }
@@ -469,23 +379,6 @@ impl ConnectionModeSink for RecordingSink {
 
     fn tray_refresh(&self) {
         self.push("tray");
-    }
-}
-
-struct SilentPac;
-
-impl PacManager for SilentPac {
-    fn start(&self, _config: PacStartConfig) -> Result<(), SystemProxyError> {
-        Ok(())
-    }
-
-    fn stop(&self) {}
-
-    fn is_supported(&self) -> bool {
-        false
-    }
-    fn is_running(&self) -> bool {
-        true
     }
 }
 

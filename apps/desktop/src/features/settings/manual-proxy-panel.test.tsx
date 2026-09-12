@@ -10,8 +10,8 @@ vi.mock("@/ipc/commands", () => commands);
 
 const status: SystemProxyStatusResponse = {
   management: "manual", observation: "unknown", manualCleanupRequired: true,
-  requestedMode: "forcedChange", effectiveMode: "unchanged", pacAvailable: true,
-  proxy: "127.0.0.1:10808", pacUrl: null, exceptions: "localhost,127.0.0.0/8",
+  requestedMode: "forcedChange", effectiveMode: "unchanged",
+  proxy: "127.0.0.1:10808", exceptions: "localhost,127.0.0.0/8",
 };
 
 afterEach(cleanup);
@@ -27,7 +27,7 @@ describe("manual system proxy", () => {
   });
 
   it("does not offer stale addresses while disconnected or in TUN mode", () => {
-    const view = render(<ManualProxyPanel status={{ ...status, requestedMode: "pac", pacUrl: "http://127.0.0.1:10811/pac" }} connected={false} tunEnabled={false} />);
+    const view = render(<ManualProxyPanel status={status} connected={false} tunEnabled={false} />);
     expect(screen.queryByRole("button", { name: "Copy address" })).not.toBeInTheDocument();
     view.rerender(<ManualProxyPanel status={status} connected tunEnabled />);
     expect(screen.queryByRole("button", { name: "Copy address" })).not.toBeInTheDocument();
@@ -45,14 +45,14 @@ describe("manual system proxy", () => {
     expect(screen.getByText(/System Settings → Network/)).toBeInTheDocument();
   });
 
-  it("copies the running PAC address and leaves a failed PAC without a copy action", async () => {
+  it("copies the running endpoint and offers no copy action once it is retired", async () => {
     const user = userEvent.setup();
     const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
-    const view = render(<ManualProxyPanel status={{ ...status, observation: "localProxy", requestedMode: "pac", pacUrl: "http://127.0.0.1:10811/pac?t=1" }} connected tunEnabled={false} />);
+    const view = render(<ManualProxyPanel status={{ ...status, observation: "localProxy" }} connected tunEnabled={false} />);
     await user.click(screen.getByRole("button", { name: "Copy address" }));
-    expect(write).toHaveBeenCalledWith("http://127.0.0.1:10811/pac?t=1");
+    expect(write).toHaveBeenCalledWith("127.0.0.1:10808");
     expect(await screen.findByText("Address copied")).toBeInTheDocument();
-    view.rerender(<ManualProxyPanel status={{ ...status, observation: "otherProxy", requestedMode: "pac", pacUrl: null }} connected tunEnabled={false} />);
+    view.rerender(<ManualProxyPanel status={{ ...status, observation: "otherProxy", proxy: null }} connected tunEnabled={false} />);
     expect(screen.queryByRole("button", { name: "Copy address" })).not.toBeInTheDocument();
     expect(screen.getByText("A different system proxy is configured.")).toBeInTheDocument();
   });

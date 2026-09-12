@@ -46,7 +46,6 @@ impl SystemProxyObserver for PlatformSystemProxyObserver {
 #[derive(Default)]
 pub(super) struct ManualRuntime {
     port: Option<i32>,
-    pac_url: Option<String>,
 }
 
 impl SystemProxyService {
@@ -68,16 +67,6 @@ impl SystemProxyService {
                 .lock()
                 .map_err(|_| SystemProxyError::ManualState)?;
             status.proxy = runtime.port.map(|port| format!("{LOOPBACK}:{port}"));
-            status.pac_url = runtime
-                .pac_url
-                .as_ref()
-                .filter(|_| self.pac_manager.is_running())
-                .cloned();
-        } else if status.pac_url.is_some() && !self.pac_manager.is_running() {
-            // A later status query must not resurrect the planned Windows PAC
-            // URL after the failure path has retired its listener.
-            status.pac_url = None;
-            status.proxy = None;
         }
         Ok(status)
     }
@@ -86,7 +75,7 @@ impl SystemProxyService {
         &self,
         request: &SystemProxyRequest,
     ) -> Result<SystemProxyStatus, SystemProxyError> {
-        // Validate before touching even the app-owned PAC listener.
+        // Validate before recording the endpoint the UI will advertise.
         plan_system_proxy(request)?;
         {
             let mut runtime = self
@@ -94,32 +83,9 @@ impl SystemProxyService {
                 .lock()
                 .map_err(|_| SystemProxyError::ManualState)?;
             if request.force_disable {
-                self.pac_manager.stop();
                 *runtime = ManualRuntime::default();
             } else {
                 runtime.port = Some(request.socks_port);
-                if request.item.sys_proxy_type == SysProxyType::Pac {
-                    if let Err(error) = self.pac_manager.start(PacStartConfig {
-                        http_port: request.socks_port,
-                        pac_port: request.pac_port,
-                        config_dir: request.config_dir.clone(),
-                        custom_pac_path: request.item.custom_system_proxy_pac_path.clone(),
-                    }) {
-                        runtime.pac_url = None;
-                        return Err(error);
-                    }
-                    let prefix = format!("http://{LOOPBACK}:{}/pac?", request.pac_port);
-                    if !runtime
-                        .pac_url
-                        .as_ref()
-                        .is_some_and(|url| url.starts_with(&prefix))
-                    {
-                        runtime.pac_url = Some(pac_url(request));
-                    }
-                } else {
-                    self.pac_manager.stop();
-                    runtime.pac_url = None;
-                }
             }
         }
         self.status(request)
