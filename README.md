@@ -47,6 +47,13 @@ Run the full Tauri app in development:
 pnpm dev
 ```
 
+Development runs keep their database, settings, logs, and runtime files in the
+`dev/` subdirectory of Tauri's app config directory. On macOS this is
+`~/Library/Application Support/app.voyavpn.desktop/dev/`. The first run starts
+with fresh settings, so an incompatible database from an installed or older
+build does not prevent development startup. Existing data is preserved in the
+parent directory; packaged builds (including debug packages) use that parent.
+
 Run the frontend-only Vite dev server:
 
 ```sh

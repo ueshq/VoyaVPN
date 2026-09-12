@@ -38,6 +38,14 @@ use voya_platform::{
 /// explanation, including user-actionable database schema failures.
 pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     let app_config_dir = app.path().app_config_dir()?;
+    // Development builds can use a different database baseline than the
+    // installed app. Keep their database and runtime files together in a
+    // separate directory; packaged debug builds still use the installed path.
+    let app_config_dir = if tauri::is_dev() {
+        app_config_dir.join("dev")
+    } else {
+        app_config_dir
+    };
     let runtime_paths = AppPaths::new(&app_config_dir);
     runtime_paths.ensure_dirs()?;
     // Installed before the first `tracing::warn!` below so the startup
