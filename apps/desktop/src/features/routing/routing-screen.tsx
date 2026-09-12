@@ -1,7 +1,6 @@
-import { AppWindow, CheckCircle2, Pencil, Play, Plus, Route, Trash2, TriangleAlert } from "lucide-react";
+import { AppWindow, CheckCircle2, Pencil, Play, Plus, Route, Trash2 } from "lucide-react";
 
 import { useI18n } from "@voya/i18n/use-i18n";
-import { Alert, AlertDescription } from "@voya/ui/components/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,7 +26,9 @@ import {
 import { cn } from "@voya/ui/lib/utils";
 
 import { dataTableRowSelected } from "@/components/app-shell/data-table-surface";
-import { PageHeader, PageSection, PageTitle } from "@/components/app-shell/page-section";
+import { PageContent, PageHeader, PageSection, PageSurface, PageTitle } from "@/components/app-shell/page-section";
+import { InlinePageError } from "@/components/app-shell/inline-page-error";
+import { Toolbar } from "@/components/app-shell/toolbar";
 import { useShellStore } from "@/stores/shell-store";
 
 import { PerAppProxyDialog } from "./per-app-proxy-dialog";
@@ -41,46 +42,45 @@ export function RoutingScreen() {
   const controller = useRoutingScreen();
 
   return (
-    <PageSection className="@container/routing" aria-label={t("tabs.rules")}>
-      <PageTitle title={t("tabs.rules")} />
-      <RoutingToolbar controller={controller} />
-
-      {controller.operationError ? (
-        <div className="border-b px-4 py-2">
-          <Alert className="py-2" variant="destructive">
-            <TriangleAlert aria-hidden="true" />
-            <AlertDescription>{controller.operationError}</AlertDescription>
-          </Alert>
-        </div>
-      ) : null}
-
-      <div className="border-b p-4 @min-[896px]/routing:hidden">
-        <Select
-          value={controller.selectedRouting?.id ?? ""}
-          onValueChange={controller.selectRouting}
-        >
-          <SelectTrigger
-            className="w-full"
-            aria-label={t("panes.routing.chooseProfile")}
-          >
-            <SelectValue placeholder={t("panes.routing.chooseProfile")} />
-          </SelectTrigger>
-          <SelectContent>
-            {controller.routings.map((routing) => (
-              <SelectItem key={routing.id} value={routing.id}>
-                {routing.remarks || t("panes.routing.untitled")}
-                {routing.isActive ? ` · ${t("panes.routing.active")}` : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="grid min-h-0 flex-1 grid-cols-1 @min-[896px]/routing:grid-cols-[18rem_minmax(0,1fr)]">
-        <div className="hidden min-h-0 @min-[896px]/routing:flex">
-          <RoutingProfileList controller={controller} />
-        </div>
-        <RoutingRulesPanel controller={controller} />
-      </div>
+    <PageSection aria-label={t("tabs.rules")}>
+      <PageTitle
+        title={t("tabs.rules")}
+        actions={<RoutingToolbar controller={controller} />}
+      />
+      <PageContent>
+        {controller.operationError ? (
+          <InlinePageError>{controller.operationError}</InlinePageError>
+        ) : null}
+        <PageSurface className="@container/routing flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="border-b p-4 @min-[896px]/routing:hidden">
+            <Select
+              value={controller.selectedRouting?.id ?? ""}
+              onValueChange={controller.selectRouting}
+            >
+              <SelectTrigger
+                className="w-full"
+                aria-label={t("panes.routing.chooseProfile")}
+              >
+                <SelectValue placeholder={t("panes.routing.chooseProfile")} />
+              </SelectTrigger>
+              <SelectContent>
+                {controller.routings.map((routing) => (
+                  <SelectItem key={routing.id} value={routing.id}>
+                    {routing.remarks || t("panes.routing.untitled")}
+                    {routing.isActive ? ` · ${t("panes.routing.active")}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid min-h-0 flex-1 grid-cols-1 @min-[896px]/routing:grid-cols-[18rem_minmax(0,1fr)]">
+            <div className="hidden min-h-0 min-w-0 @min-[896px]/routing:flex">
+              <RoutingProfileList controller={controller} />
+            </div>
+            <RoutingRulesPanel controller={controller} />
+          </div>
+        </PageSurface>
+      </PageContent>
 
       <RoutingDialogs controller={controller} />
     </PageSection>
@@ -99,19 +99,13 @@ function RoutingToolbar({
   const {
     activateSelectedRouting,
     requestDeleteRouting,
-    routings,
     selectedRouting,
     setRoutingDialog,
   } = controller;
 
   return (
-    <PageHeader>
-      <Badge variant="outline">
-        {t("panes.routing.profileCount", { count: routings.length })}
-      </Badge>
-
+    <Toolbar className="justify-end">
       <Button
-        className="ms-auto"
         onClick={() => setRoutingDialog({ mode: "create" })}
         size="sm"
         type="button"
@@ -165,7 +159,7 @@ function RoutingToolbar({
       {perAppOpen ? (
         <PerAppProxyDialog onOpenChange={setPerAppOpen} open={perAppOpen} />
       ) : null}
-    </PageHeader>
+    </Toolbar>
   );
 }
 
@@ -174,11 +168,11 @@ function RoutingProfileList({ controller }: { controller: RoutingScreenControlle
   const { routings, selectRouting, selectedRouting } = controller;
 
   return (
-    <aside className="min-h-0 border-b lg:border-b-0 lg:border-e">
-      <div className="h-10 border-b px-4 py-2 text-xs font-medium uppercase text-muted-foreground">
+    <aside className="flex min-h-0 min-w-0 flex-1 flex-col border-e">
+      <PageHeader className="min-h-14 text-xs font-medium uppercase text-muted-foreground">
         {t("panes.routing.profiles")}
-      </div>
-      <ScrollArea className="h-[18rem] lg:h-full">
+      </PageHeader>
+      <ScrollArea className="min-h-0 flex-1">
         {routings.length > 0 ? (
           <div className="p-2">
             {routings.map((routing) => (

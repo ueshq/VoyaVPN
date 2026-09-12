@@ -71,8 +71,13 @@ export type NodeDialogsController = Pick<NodeOperation, "operationError"> &
   Pick<NodeExport, "setShareQrContent" | "shareQrContent"> &
   Pick<NodeShared, "t">;
 
-export type NodeToolbarController = ReturnType<typeof useNodeImport> & Pick<NodeOperation, "operationError" | "operationMessage"> &
-  Pick<NodeListData, "profiles" | "profilesQuery" | "rows" | "undecodableProfiles"> &
+export type NodeNoticesController = Pick<ReturnType<typeof useNodeImport>, "directImportPending"> &
+  Pick<NodeOperation, "operationError" | "operationMessage"> &
+  Pick<NodeListData, "profilesQuery" | "undecodableProfiles"> &
+  Pick<NodeShared, "t">;
+
+export type NodeToolbarController = Pick<ReturnType<typeof useNodeImport>, "handleDirectImport" | "directImportPending"> &
+  Pick<NodeListData, "profiles" | "profilesQuery"> &
   Pick<NodeEditor, "addTriggerRef" | "importTriggerRef" | "setDialogState" | "setImportMethod"> &
   Pick<NodeSubscriptions, "openSubscription"> &
   Pick<NodeExport, "handleBulkExport"> &

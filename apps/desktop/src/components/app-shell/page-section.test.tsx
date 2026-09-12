@@ -14,23 +14,22 @@ describe("PageSection primitives", () => {
     const section = getByTestId("section");
     expect(section.dataset.slot).toBe("page-section");
     // The full-height, min-h-0 flex column that every screen previously hand-wrote.
-    expect(section.className).toContain("flex h-full min-h-0 flex-col");
+    expect(section.className).toContain("flex h-full min-h-0 min-w-0 flex-col");
     expect(section.getAttribute("aria-label")).toBe("Logs");
 
     const header = getByTestId("header");
     expect(header.dataset.slot).toBe("page-header");
-    // The canonical header spacing scale: 56px tall, px-4 py-2 padding, gap-2 items.
-    expect(header.className).toContain("min-h-14");
+    // Panel tools use the same compact row and local padding.
+    expect(header.className).toContain("min-h-12");
     expect(header.className).toContain("px-4");
     expect(header.className).toContain("py-2");
     expect(header.className).toContain("gap-2");
   });
 
-  it("renders the large page identity as the page's single h1 with count and actions", () => {
-    const { getByRole, getByTestId, getByText } = render(
+  it("renders the large page identity as the page's single h1 with actions", () => {
+    const { getByRole, getByTestId } = render(
       <PageTitle
         actions={<button type="button">New</button>}
-        count="12"
         data-testid="title"
         title="Nodes"
       />,
@@ -42,7 +41,6 @@ describe("PageSection primitives", () => {
 
     const heading = getByRole("heading", { level: 1, name: "Nodes" });
     expect(heading.className).toContain("text-page");
-    expect(getByText("12")).toBeInTheDocument();
     // Actions park at the trailing edge via the logical ms-auto push.
     expect(
       getByRole("button", { name: "New" }).parentElement?.className,

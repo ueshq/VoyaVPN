@@ -412,7 +412,6 @@
         "delete": "刪除",
         "edit": "編輯",
         "import": "匯入",
-        "rows": "{{rows}} 筆",
         "subscriptions": "訂閱",
         "addNode": "新增節點"
       },
@@ -492,7 +491,6 @@
       "port": "端口",
       "process": "應用進程",
       "profile": "路由設定檔",
-      "profileCount": "{{count}} 個路由設定檔",
       "profiles": "路由設定檔",
       "protocol": "協議",
       "remarks": "名稱",
@@ -832,7 +830,6 @@
   },
   "nodeGroups": {
     "local": "本地節點",
-    "groupCount": "{{count}} 個分組",
     "membersCount": "{{count}} 個節點",
     "test": "測試本組",
     "exportFor": "匯出「{{name}}」",

@@ -41,6 +41,7 @@ import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { StoredLogLine } from "@/ipc/runtime-event-store";
 import type { LogLevel } from "@/ipc/bindings";
 import { cn } from "@voya/ui/lib/utils";
+import { PageHeader } from "@/components/app-shell/page-section";
 
 export type LogFilter = "standard" | "issues" | "all";
 const ROW_HEIGHT = 36;
@@ -137,7 +138,7 @@ export function LogsPanel({
       aria-label={t("tabs.logs")}
       className="flex h-full min-h-0 min-w-0 flex-col"
     >
-      <div className="flex min-h-12 shrink-0 items-center gap-3 border-b bg-surface-raised px-4 py-2">
+      <PageHeader>
         <div className="relative min-w-0 flex-1 sm:max-w-sm">
           <Search
             className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -188,7 +189,7 @@ export function LogsPanel({
             </MenubarContent>
           </MenubarMenu>
         </Menubar>
-      </div>
+      </PageHeader>
       <div className="relative min-h-0 flex-1">
         <div
           className="h-full overflow-y-auto bg-surface-sunken"

@@ -15,6 +15,7 @@ import {
 import { cn } from "@voya/ui/lib/utils";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { useToastStore } from "@/stores/toast-store";
+import { pageSurfaceClassName } from "@/components/app-shell/page-section";
 
 const FieldErrors = createContext<Record<string, string>>({});
 
@@ -44,7 +45,8 @@ export function SettingsGroup({
     <section
       aria-labelledby={id}
       className={cn(
-        "@container rounded-xl border bg-surface-raised shadow-raised",
+        pageSurfaceClassName,
+        "@container",
         className,
       )}
     >

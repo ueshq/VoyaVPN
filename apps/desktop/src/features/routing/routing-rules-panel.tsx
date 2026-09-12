@@ -21,6 +21,7 @@ import {
 } from "@voya/ui/components/table";
 import { cn } from "@voya/ui/lib/utils";
 import { MOVE_ACTIONS } from "@/features/profiles/profile-constants";
+import { PageHeader, PageHeaderActions } from "@/components/app-shell/page-section";
 import type { RoutingRuleScope } from "@/ipc/bindings";
 import { useI18n } from "@voya/i18n/use-i18n";
 
@@ -39,8 +40,8 @@ export function RoutingRulesPanel({ controller }: { controller: RoutingScreenCon
   } = controller;
 
   return (
-    <div className="flex min-h-0 flex-col">
-      <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2">
+    <div className="flex min-h-0 min-w-0 flex-col">
+      <PageHeader className="min-h-14">
         <div className="min-w-0">
           <h3 className="truncate text-sm font-semibold">
             {selectedRouting?.remarks ?? t("panes.routing.noProfile")}
@@ -54,7 +55,7 @@ export function RoutingRulesPanel({ controller }: { controller: RoutingScreenCon
               : ""}
           </p>
         </div>
-        <div className="ms-auto flex items-center gap-2">
+        <PageHeaderActions>
           <Button disabled={!selectedRouting} onClick={() => setRuleDialog({ mode: "create" })} size="sm" type="button">
             <Plus className="size-4" aria-hidden="true" />
             {t("panes.routing.rule")}
@@ -99,10 +100,17 @@ export function RoutingRulesPanel({ controller }: { controller: RoutingScreenCon
             <Trash2 className="size-4" aria-hidden="true" />
             {t("actions.delete")}
           </Button>
-        </div>
-      </div>
+        </PageHeaderActions>
+      </PageHeader>
 
-      <ScrollArea className="min-h-0 flex-1 bg-surface-sunken">
+      {/* Radix's intrinsic-width wrapper must not expand the grid to the table's
+          minimum width. The table keeps its own horizontal scroll container. */}
+      <ScrollArea
+        className={cn(
+          "min-h-0 min-w-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:block! [&_[data-slot=scroll-area-viewport]>div]:h-full",
+          selectedRouting?.rules.length ? "bg-surface-sunken" : "",
+        )}
+      >
         {(selectedRouting?.rules ?? []).length > 0 ? (
           <Table className="min-w-[58rem]">
             <TableHeader className={cn("sticky top-0 z-10", dataTableHeader)}>

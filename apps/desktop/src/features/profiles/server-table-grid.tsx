@@ -1,6 +1,7 @@
 import { navigateVirtualList } from "./virtual-list-keyboard";
 import { ChevronRight, Inbox, LoaderCircle } from "lucide-react";
 import { NodeCountryIcon } from "@/components/node-country-icon";
+import { PageSurface } from "@/components/app-shell/page-section";
 
 import { EmptyState } from "@voya/ui/components/empty-state";
 import { Skeleton } from "@voya/ui/components/skeleton";
@@ -32,7 +33,7 @@ export function ProfileCardList({
     viewportRef,
   } = controller;
   return (
-    <div className="min-h-0 flex-1 p-4 min-[1100px]:p-page">
+    <div className="min-h-0 min-w-0 flex-1">
       <div
         aria-label={t("panes.profiles.title")}
         className="profile-card-list h-full overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -69,12 +70,14 @@ export function ProfileCardList({
             ))}
           </div>
         ) : rows.length === 0 ? (
-          <EmptyState
-            className="min-h-[18rem] content-center"
-            description={t("panes.profiles.emptyDescription")}
-            icon={Inbox}
-            title={t("panes.profiles.empty")}
-          />
+          <PageSurface className="h-full">
+            <EmptyState
+              className="h-full content-center"
+              description={t("panes.profiles.emptyDescription")}
+              icon={Inbox}
+              title={t("panes.profiles.empty")}
+            />
+          </PageSurface>
         ) : (
           <ul
             aria-label={t("panes.profiles.title")}

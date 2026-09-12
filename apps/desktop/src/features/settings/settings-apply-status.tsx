@@ -7,6 +7,7 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import { applyPendingSettings, getSettingsApplyStatus } from "@/ipc/commands";
 import { queryKeys } from "@/ipc/query-keys";
+import { PageSurface } from "@/components/app-shell/page-section";
 
 export function SettingsApplyStatus({
   saving,
@@ -46,7 +47,7 @@ export function SettingsApplyStatus({
   }
   const status = query.data;
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b bg-surface-raised px-4 py-3 min-[1100px]:px-page">
+    <PageSurface className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
       <span className="inline-flex items-center gap-2 text-sm" role="status">
         {saving || working ? (
           <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
@@ -103,6 +104,6 @@ export function SettingsApplyStatus({
           </Button>
         </div>
       ) : null}
-    </div>
+    </PageSurface>
   );
 }

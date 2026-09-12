@@ -2,21 +2,13 @@ import { useRef } from "react";
 import {
   ChevronDown,
   FilePlus2,
-  FileWarning,
   Plus,
-  LoaderCircle,
   Rss,
   Share2,
   Upload,
 } from "lucide-react";
 
-import { Toolbar, ToolbarGroup } from "@/components/app-shell/toolbar";
-import { InlinePageError } from "@/components/app-shell/inline-page-error";
-import {
-  PageHeader,
-  PageHeaderActions,
-} from "@/components/app-shell/page-section";
-import { Badge } from "@voya/ui/components/badge";
+import { Toolbar } from "@/components/app-shell/toolbar";
 import { Button } from "@voya/ui/components/button";
 import {
   Menubar,
@@ -25,7 +17,6 @@ import {
   MenubarItem,
   MenubarTrigger,
 } from "@voya/ui/components/menubar";
-import { getErrorMessage } from "@voya/utils/error";
 import { useShellStore } from "@/stores/shell-store";
 
 import { IMPORT_METHODS } from "./import-methods";
@@ -45,8 +36,6 @@ export function ServerTableToolbar({
     directImportPending,
     addTriggerRef,
     importTriggerRef,
-    operationError,
-    operationMessage,
     profiles,
     profilesQuery,
     setDialogState,
@@ -54,7 +43,6 @@ export function ServerTableToolbar({
     openSubscription,
     speedtestRunning,
     t,
-    undecodableProfiles,
   } = controller;
   const addMenuOpen = useShellStore((state) => state.profilesAddMenuOpen);
   const focusFirstAddItemRef = useRef(addMenuOpen);
@@ -69,188 +57,118 @@ export function ServerTableToolbar({
   const batchActionsDisabled = profilesQuery.isLoading || profiles.length === 0;
 
   return (
-    <>
-      <PageHeader className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Badge
-            className="h-6 bg-background tabular-nums text-muted-foreground"
-            variant="outline"
+    <Toolbar className="min-w-0 max-w-full justify-end">
+      <Menubar
+        className="h-auto border-0 bg-transparent p-0 shadow-none"
+        value={addMenuOpen ? "add" : ""}
+        onValueChange={(value) => {
+          useShellStore.setState({ profilesAddMenuOpen: value === "add" });
+        }}
+      >
+        <MenubarMenu value="add">
+          <MenubarTrigger asChild className="h-8">
+            <Button ref={addTriggerRef} size="sm" type="button">
+              <Plus className="size-4" aria-hidden="true" />
+              {t("panes.profiles.toolbar.add")}
+              <ChevronDown className="size-3" aria-hidden="true" />
+            </Button>
+          </MenubarTrigger>
+          <MenubarContent
+            onCloseAutoFocus={handleMenuClose}
+            onFocus={(event) => {
+              // Radix focuses the container for a programmatic opening.
+              // The Home guide should land on the first available action.
+              if (focusFirstAddItemRef.current && event.target === event.currentTarget) {
+                focusFirstAddItemRef.current = false;
+                addNodeItemRef.current?.focus();
+              }
+            }}
           >
-            {t("panes.profiles.toolbar.rows", {
-              rows: profiles.length.toLocaleString(),
-            })}
-          </Badge>
-          <Badge
-            className="h-6 bg-background tabular-nums text-muted-foreground"
-            variant="outline"
-          >
-            {t("nodeGroups.groupCount", {
-              count: controller.rows.filter((row) => row.kind === "group").length,
-            })}
-          </Badge>
-        </div>
-
-        <PageHeaderActions className="min-w-0 max-w-full">
-          <Toolbar className="min-w-0 max-w-full justify-end">
-            <ToolbarGroup className="min-w-0 flex-wrap justify-end gap-y-2">
-              <Menubar
-                className="h-auto border-0 bg-transparent p-0 shadow-none"
-                value={addMenuOpen ? "add" : ""}
-                onValueChange={(value) => {
-                  useShellStore.setState({ profilesAddMenuOpen: value === "add" });
+            <MenubarItem ref={addNodeItemRef} onSelect={() => {
+              openingDialogRef.current = true;
+              setDialogState({ mode: "create" });
+            }}>
+              <FilePlus2 aria-hidden="true" />
+              {t("panes.profiles.toolbar.addNode")}
+            </MenubarItem>
+            <MenubarItem onSelect={() => {
+              openingDialogRef.current = true;
+              openSubscription(null, addTriggerRef.current ?? undefined);
+            }}>
+              <Rss aria-hidden="true" />
+              {t("home.subscriptionCard.add")}
+            </MenubarItem>
+          </MenubarContent>
+        </MenubarMenu>
+      </Menubar>
+      <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
+        <MenubarMenu>
+          <MenubarTrigger asChild className="h-8">
+            <Button
+              ref={importTriggerRef}
+              disabled={directImportPending !== null}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Upload className="size-4" aria-hidden="true" />
+              {t("panes.profiles.toolbar.import")}
+              <ChevronDown className="size-3" aria-hidden="true" />
+            </Button>
+          </MenubarTrigger>
+          <MenubarContent onCloseAutoFocus={handleMenuClose}>
+            {IMPORT_METHODS.map(({ method, icon: Icon, labelKey }) => (
+              <MenubarItem
+                key={method}
+                disabled={directImportPending !== null}
+                onSelect={() => {
+                  if (method === "clipboard" || method === "qrScreen") {
+                    void handleDirectImport(method);
+                  } else {
+                    openingDialogRef.current = true;
+                    setImportMethod(method);
+                  }
                 }}
               >
-                <MenubarMenu value="add">
-                  <MenubarTrigger asChild className="h-8">
-                    <Button ref={addTriggerRef} size="sm" type="button">
-                      <Plus className="size-4" aria-hidden="true" />
-                      {t("panes.profiles.toolbar.add")}
-                      <ChevronDown className="size-3" aria-hidden="true" />
-                    </Button>
-                  </MenubarTrigger>
-                  <MenubarContent
-                    onCloseAutoFocus={handleMenuClose}
-                    onFocus={(event) => {
-                      // Radix focuses the container for a programmatic opening.
-                      // The Home guide should land on the first available action.
-                      if (focusFirstAddItemRef.current && event.target === event.currentTarget) {
-                        focusFirstAddItemRef.current = false;
-                        addNodeItemRef.current?.focus();
-                      }
-                    }}
-                  >
-                    <MenubarItem ref={addNodeItemRef} onSelect={() => {
-                      openingDialogRef.current = true;
-                      setDialogState({ mode: "create" });
-                    }}>
-                      <FilePlus2 aria-hidden="true" />
-                      {t("panes.profiles.toolbar.addNode")}
-                    </MenubarItem>
-                    <MenubarItem onSelect={() => {
-                      openingDialogRef.current = true;
-                      openSubscription(null, addTriggerRef.current ?? undefined);
-                    }}>
-                      <Rss aria-hidden="true" />
-                      {t("home.subscriptionCard.add")}
-                    </MenubarItem>
-                  </MenubarContent>
-                </MenubarMenu>
-              </Menubar>
-              <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
-                <MenubarMenu>
-                  <MenubarTrigger asChild className="h-8">
-                    <Button
-                      ref={importTriggerRef}
-                      disabled={directImportPending !== null}
-                      size="sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      <Upload className="size-4" aria-hidden="true" />
-                      {t("panes.profiles.toolbar.import")}
-                      <ChevronDown className="size-3" aria-hidden="true" />
-                    </Button>
-                  </MenubarTrigger>
-                  <MenubarContent onCloseAutoFocus={handleMenuClose}>
-                    {IMPORT_METHODS.map(({ method, icon: Icon, labelKey }) => (
-                      <MenubarItem
-                        key={method}
-                        disabled={directImportPending !== null}
-                        onSelect={() => {
-                          if (method === "clipboard" || method === "qrScreen") {
-                            void handleDirectImport(method);
-                          } else {
-                            openingDialogRef.current = true;
-                            setImportMethod(method);
-                          }
-                        }}
-                      >
-                        <Icon aria-hidden="true" />
-                        {t(labelKey)}
-                      </MenubarItem>
-                    ))}
-                  </MenubarContent>
-                </MenubarMenu>
-              </Menubar>
-              <SpeedtestButton
-                disabled={batchActionsDisabled}
-                label={t("panes.profiles.toolbar.bulkSpeedtest")}
-                onCancel={handleCancelSpeedtest}
-                onRun={() => handleSpeedtest({ scope: "all" })}
-                running={speedtestRunning}
-              />
-              <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
-                <MenubarMenu>
-                  <MenubarTrigger asChild className="h-8">
-                    <Button
-                      disabled={batchActionsDisabled}
-                      size="sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      <Share2 className="size-4" aria-hidden="true" />
-                      {t("panes.profiles.toolbar.bulkExport")}
-                    </Button>
-                  </MenubarTrigger>
-                  <MenubarContent align="start">
-                    <ExportMenuItems
-                      onExport={(kind) => void handleBulkExport(kind)}
-                      onSave={(kind) =>
-                        void handleBulkExport(kind, "file")
-                      }
-                      onShowQr={() => void handleBulkExport("shareLinks", "qr")}
-                      t={t}
-                    />
-                  </MenubarContent>
-                </MenubarMenu>
-              </Menubar>
-            </ToolbarGroup>
-
-
-          </Toolbar>
-        </PageHeaderActions>
-      </PageHeader>
-
-      {directImportPending ? (
-        <div className="flex items-center gap-2 border-b px-4 py-2 text-sm text-muted-foreground" role="status" aria-busy="true">
-          <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-          {directImportPending === "qrScreen" ? t("qr.scanningScreen") : directImportPending === "import" ? t("panes.profiles.import.importing") : t("panes.profiles.importDialog.reading")}
-        </div>
-      ) : null}
-      {operationError ? (
-        <InlinePageError><span className="whitespace-pre-line">{operationError}</span></InlinePageError>
-      ) : null}
-      {profilesQuery.isError ? (
-        <InlinePageError>
-          {getErrorMessage(profilesQuery.error)}
-        </InlinePageError>
-      ) : null}
-      {operationMessage ? (
-        <div role="status" className="border-b bg-connected/10 px-4 py-2 text-sm text-success">
-          {operationMessage}
-        </div>
-      ) : null}
-      {/*
-        Stored profiles this build could not decode are skipped by persistence so
-        that one of them cannot hide every other server. This band is the only
-        place the user hears about it: a toast would fire on every refetch of the
-        list, so the shortfall is stated calmly next to the rows instead, and it
-        stays until the profiles become readable again.
-      */}
-      {undecodableProfiles > 0 ? (
-        <div
-          className="flex items-start gap-2 border-b bg-muted/40 px-4 py-2 text-sm text-muted-foreground"
-          data-slot="profiles-undecodable-notice"
-          role="status"
-        >
-          <FileWarning aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          <span>
-            {t("panes.profiles.undecodable", {
-              count: undecodableProfiles.toLocaleString(),
-            })}
-          </span>
-        </div>
-      ) : null}
-    </>
+                <Icon aria-hidden="true" />
+                {t(labelKey)}
+              </MenubarItem>
+            ))}
+          </MenubarContent>
+        </MenubarMenu>
+      </Menubar>
+      <SpeedtestButton
+        disabled={batchActionsDisabled}
+        label={t("panes.profiles.toolbar.bulkSpeedtest")}
+        onCancel={handleCancelSpeedtest}
+        onRun={() => handleSpeedtest({ scope: "all" })}
+        running={speedtestRunning}
+      />
+      <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
+        <MenubarMenu>
+          <MenubarTrigger asChild className="h-8">
+            <Button
+              disabled={batchActionsDisabled}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Share2 className="size-4" aria-hidden="true" />
+              {t("panes.profiles.toolbar.bulkExport")}
+            </Button>
+          </MenubarTrigger>
+          <MenubarContent align="start">
+            <ExportMenuItems
+              onExport={(kind) => void handleBulkExport(kind)}
+              onSave={(kind) =>
+                void handleBulkExport(kind, "file")
+              }
+              onShowQr={() => void handleBulkExport("shareLinks", "qr")}
+              t={t}
+            />
+          </MenubarContent>
+        </MenubarMenu>
+      </Menubar>
+    </Toolbar>
   );
 }

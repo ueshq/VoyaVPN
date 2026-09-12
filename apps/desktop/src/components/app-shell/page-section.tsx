@@ -1,40 +1,30 @@
 import * as React from "react";
 import { useShellStore } from "@/stores/shell-store";
 
-import { Badge } from "@voya/ui/components/badge";
 import { cn } from "@voya/ui/lib/utils";
 
-// Shared page-shell primitives. Every feature screen used to hand-write the same
-// `flex h-full min-h-0 flex-col` section wrapped around a 56px header bar, and the
-// spacing scale (gap / padding / min height) drifted between screens. Centralising
-// the geometry here makes that scale canonical: the header is `min-h-14` tall with
-// `px-4 py-2` padding and `gap-2` between toolbar items on a raised surface, and the
-// title cluster is a `gap-2` row of icon + heading + optional count badge. Screens
-// compose toolbar controls as children, parked to the trailing edge via
-// `PageHeaderActions` so the `ms-auto` push is canonical rather than hand-rolled.
+// Page identity and content share one inset. Only the feature's inner viewport
+// scrolls: the page frame must not introduce another scroll container.
+export const pageSurfaceClassName = "rounded-xl border bg-surface-raised";
 
 function PageSection({ className, ...props }: React.ComponentProps<"section">) {
   return (
     <section
-      className={cn("flex h-full min-h-0 flex-col", className)}
+      className={cn("flex h-full min-h-0 min-w-0 flex-col bg-surface-sunken", className)}
       data-slot="page-section"
       {...props}
     />
   );
 }
 
-// Hiddify-style large page identity: the page's single `<h1>` above the toolbar
-// strip. Screens keep `PageHeader` as a pure toolbar row; embedded/secondary
-// surfaces render their own small `<h2>` underneath this h1.
+// One h1 and its page-level actions; panel-specific tools use PageHeader below.
 function PageTitle({
   actions,
   className,
-  count,
   title,
   ...props
 }: React.ComponentProps<"div"> & {
   actions?: React.ReactNode;
-  count?: React.ReactNode;
   title: React.ReactNode;
 }) {
   const titleRef = React.useRef<HTMLHeadingElement>(null);
@@ -48,7 +38,7 @@ function PageTitle({
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center gap-3 px-4 min-[1100px]:px-page pt-5 pb-3",
+        "flex min-w-0 shrink-0 items-center gap-3 px-4 pt-5 pb-4 min-[1100px]:px-page",
         className,
       )}
       data-slot="page-title"
@@ -57,30 +47,47 @@ function PageTitle({
       <h1
         ref={titleRef}
         tabIndex={-1}
-        className="min-w-0 truncate text-page font-semibold tracking-tight outline-none"
+        className="min-w-0 shrink-0 text-page font-semibold tracking-tight outline-none"
       >
         {title}
       </h1>
-      {count == null ? null : (
-        <Badge
-          className="h-6 bg-background tabular-nums text-muted-foreground"
-          variant="outline"
-        >
-          {count}
-        </Badge>
-      )}
       {actions ? (
-        <div className="ms-auto flex items-center gap-2">{actions}</div>
+        <PageHeaderActions className="min-h-9">{actions}</PageHeaderActions>
       ) : null}
     </div>
   );
 }
 
+function PageContent({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      className={cn(
+        "flex min-h-0 min-w-0 flex-1 flex-col gap-4 px-4 pb-4 min-[1100px]:px-page min-[1100px]:pb-page",
+        className,
+      )}
+      data-slot="page-content"
+      {...props}
+    />
+  );
+}
+
+function PageSurface({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      className={cn(pageSurfaceClassName, "min-h-0 min-w-0", className)}
+      data-slot="page-surface"
+      {...props}
+    />
+  );
+}
+
+// A toolbar inside a content panel: padding stays local to the panel rather
+// than growing with the page inset at wider window sizes.
 function PageHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b bg-surface-raised px-4 min-[1100px]:px-page py-2",
+        "flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b bg-surface-raised px-4 py-2",
         className,
       )}
       data-slot="page-header"
@@ -97,11 +104,11 @@ function PageHeaderActions({
 }: React.ComponentProps<"div">) {
   return (
     <div
-      className={cn("ms-auto flex items-center gap-2", className)}
+      className={cn("ms-auto flex min-w-0 flex-wrap items-center justify-end gap-2", className)}
       data-slot="page-header-actions"
       {...props}
     />
   );
 }
 
-export { PageHeader, PageHeaderActions, PageSection, PageTitle };
+export { PageContent, PageHeader, PageHeaderActions, PageSection, PageSurface, PageTitle };

@@ -4,13 +4,10 @@ import type { LucideIcon } from "lucide-react";
 
 import { Alert, AlertDescription } from "@voya/ui/components/alert";
 import { cn } from "@voya/ui/lib/utils";
+import { pageSurfaceClassName } from "./page-section";
 
-// The destructive banner that four screens (Profiles, Routing, Proxy Groups,
-// proxy connections) each hand-rolled below their page header to surface an
-// operation/query error. It spans the content edge-to-edge — no outer rounding,
-// only a bottom rule — so it reads as a band stacked under the header rather
-// than a floating card. `role="alert"` and the destructive styling come from the
-// underlying Alert primitive. Pass `icon={null}` to omit the leading glyph.
+// Errors occupy the same inset and rounded surface as other page content.
+// Alert supplies the accessible role and destructive foreground.
 function InlinePageError({
   children,
   className,
@@ -21,7 +18,7 @@ function InlinePageError({
 }) {
   return (
     <Alert
-      className={cn("rounded-none border-x-0 border-t-0 px-4 py-2", className)}
+      className={cn(pageSurfaceClassName, "shrink-0 px-4 py-2", className)}
       data-slot="inline-page-error"
       variant="destructive"
       {...props}

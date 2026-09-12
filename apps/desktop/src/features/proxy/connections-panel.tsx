@@ -28,6 +28,7 @@ import type { ProxyConnectionItem, ProxyConnectionsSnapshot } from "@/ipc/bindin
 import { queryKeys } from "@/ipc/query-keys";
 import { cn } from "@voya/ui/lib/utils";
 import { useShellStore } from "@/stores/shell-store";
+import { PageHeader } from "@/components/app-shell/page-section";
 import { ConnectionDetails } from "./connection-details";
 import { connectionBytes, connectionKey } from "./connection-display";
 
@@ -182,7 +183,7 @@ export function ConnectionsPanel({
         />
       ) : (
         <>
-          <div className="flex min-h-12 shrink-0 items-center gap-3 border-b bg-surface-raised px-4 py-2">
+          <PageHeader>
             <div className="relative min-w-0 flex-1 sm:max-w-sm">
               <Search
                 className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -227,7 +228,7 @@ export function ConnectionsPanel({
                 </MenubarContent>
               </MenubarMenu>
             </Menubar>
-          </div>
+          </PageHeader>
           {updateFailed ? (
             <div
               className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-2 text-sm text-muted-foreground"

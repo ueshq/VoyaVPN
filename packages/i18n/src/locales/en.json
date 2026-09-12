@@ -412,7 +412,6 @@
         "delete": "Delete",
         "edit": "Edit",
         "import": "Import",
-        "rows": "Nodes: {{rows}}",
         "subscriptions": "Subscriptions",
         "addNode": "Add node"
       },
@@ -492,7 +491,6 @@
       "port": "port",
       "process": "Process",
       "profile": "Routing profile",
-      "profileCount": "{{count}} routing profiles",
       "profiles": "Routing profiles",
       "protocol": "Protocol",
       "remarks": "remarks",
@@ -832,7 +830,6 @@
   },
   "nodeGroups": {
     "local": "Local nodes",
-    "groupCount": "{{count}} groups",
     "membersCount": "{{count}} nodes",
     "test": "Test group",
     "exportFor": "Export {{name}}",

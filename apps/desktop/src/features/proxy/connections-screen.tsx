@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PageSection, PageTitle } from "@/components/app-shell/page-section";
+import { PageContent, PageSection, PageSurface, PageTitle } from "@/components/app-shell/page-section";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@voya/ui/components/tabs";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { useShellStore } from "@/stores/shell-store";
@@ -41,17 +41,21 @@ export function ConnectionsScreen() {
           }
           title={t("tabs.connections")}
         />
-        <TabsContent className="min-h-0 flex-1" value="connections">
-          <ConnectionsPanel filter={connectionSearch} onFilterChange={setConnectionSearch} />
-        </TabsContent>
-        <TabsContent className="min-h-0 flex-1" value="logs">
-          <LogsPanel
-            search={logSearch}
-            onSearchChange={setLogSearch}
-            filter={logFilter}
-            onFilterChange={setLogFilter}
-          />
-        </TabsContent>
+        <PageContent>
+          <PageSurface className="flex flex-1 flex-col overflow-hidden">
+            <TabsContent className="min-h-0 min-w-0 flex-1" value="connections">
+              <ConnectionsPanel filter={connectionSearch} onFilterChange={setConnectionSearch} />
+            </TabsContent>
+            <TabsContent className="min-h-0 min-w-0 flex-1" value="logs">
+              <LogsPanel
+                search={logSearch}
+                onSearchChange={setLogSearch}
+                filter={logFilter}
+                onFilterChange={setLogFilter}
+              />
+            </TabsContent>
+          </PageSurface>
+        </PageContent>
       </Tabs>
     </PageSection>
   );

@@ -4,7 +4,7 @@ import { useState, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 
-import { PageSection, PageTitle } from "@/components/app-shell/page-section";
+import { PageContent, PageSection, PageTitle } from "@/components/app-shell/page-section";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
 import { Button } from "@voya/ui/components/button";
 import {
@@ -84,50 +84,52 @@ export function SettingsScreen() {
           }
           title={t("modal.settings")}
         />
-        <SettingsApplyStatus saving={saving} failed={!!error} />
-        {error ? (
-          <InlinePageError>
-            <span>{error}</span>
-            <Button
-              className="ms-auto"
-              disabled={saving}
-              onClick={() => {
-                controller.retry();
-                dns.retry();
-              }}
-              size="sm"
-              variant="outline"
-            >
-              <RotateCcw aria-hidden="true" className="size-3.5" />
-              {t("settings.autosave.retry")}
-            </Button>
-          </InlinePageError>
-        ) : null}
-        <div className="min-h-0 flex-1">
-          <SettingsFields errors={controller.fieldErrors}>
-            {tabs.map((item) => (
-              <TabsContent
-                key={item.value}
-                className="h-full overflow-y-auto bg-surface-sunken p-4 min-[1100px]:p-page data-[state=inactive]:hidden"
-                forceMount
-                value={item.value}
+        <PageContent>
+          <SettingsApplyStatus saving={saving} failed={!!error} />
+          {error ? (
+            <InlinePageError>
+              <span>{error}</span>
+              <Button
+                className="ms-auto"
+                disabled={saving}
+                onClick={() => {
+                  controller.retry();
+                  dns.retry();
+                }}
+                size="sm"
+                variant="outline"
               >
-                {visited.has(item.value) ? (
-                  <div className="mx-auto w-full max-w-5xl">
-                    {item.value !== "dns" && item.value !== "updates" ? (
-                      <AppSettingsPane
-                        controller={controller}
-                        tab={item.value}
-                      />
-                    ) : null}
-                    {item.value === "dns" ? <DnsPane controller={dns} /> : null}
-                    {item.value === "updates" ? <UpdatesPanel /> : null}
-                  </div>
-                ) : null}
-              </TabsContent>
-            ))}
-          </SettingsFields>
-        </div>
+                <RotateCcw aria-hidden="true" className="size-3.5" />
+                {t("settings.autosave.retry")}
+              </Button>
+            </InlinePageError>
+          ) : null}
+          <div className="min-h-0 min-w-0 flex-1">
+            <SettingsFields errors={controller.fieldErrors}>
+              {tabs.map((item) => (
+                <TabsContent
+                  key={item.value}
+                  className="h-full overflow-y-auto data-[state=inactive]:hidden"
+                  forceMount
+                  value={item.value}
+                >
+                  {visited.has(item.value) ? (
+                    <>
+                      {item.value !== "dns" && item.value !== "updates" ? (
+                        <AppSettingsPane
+                          controller={controller}
+                          tab={item.value}
+                        />
+                      ) : null}
+                      {item.value === "dns" ? <DnsPane controller={dns} /> : null}
+                      {item.value === "updates" ? <UpdatesPanel /> : null}
+                    </>
+                  ) : null}
+                </TabsContent>
+              ))}
+            </SettingsFields>
+          </div>
+        </PageContent>
       </Tabs>
     </PageSection>
   );

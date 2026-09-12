@@ -505,9 +505,6 @@
   max-width: 672px;
   margin-top: auto;
 }
-.profile-cards-screen {
-  background: var(--background);
-}
 .profile-card-list {
   container-type: inline-size;
 }
@@ -600,7 +597,7 @@
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
 }
 .node-group-end {
-  padding-bottom: 12px;
+  padding-bottom: 16px;
 }
 .node-group-end .node-group-surface {
   border-bottom: 1px solid var(--border);
