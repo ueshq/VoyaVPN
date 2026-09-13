@@ -143,19 +143,13 @@ fn gen_dns_rules(config: &mut SingboxConfig, context: &CoreConfigContext) {
         });
     }
 
-    // Mirror the route generator: Global mode precedes the priority-proxy list.
+    // Mirror the route generator: Global mode precedes the user's rules.
     rules.push(SingboxRule {
         server: Some(SINGBOX_REMOTE_DNS_TAG.to_string()),
         strategy: domain_strategy4_sbox(simple_dns.strategy4_proxy.as_deref()),
         clash_mode: Some("Global".to_string()),
         ..SingboxRule::default()
     });
-
-    append_priority_proxy_dns_rules(
-        &mut rules,
-        SINGBOX_REMOTE_DNS_TAG,
-        priority_proxy_dns_strategy(context),
-    );
 
     for (host, addresses) in parse_hosts_to_dictionary(simple_dns.hosts.as_deref()) {
         let Some(predefined) = addresses.first() else {
@@ -223,30 +217,6 @@ fn gen_dns_rules(config: &mut SingboxConfig, context: &CoreConfigContext) {
 
     append_dns_routing_rules(&mut rules, context);
     config.dns.get_or_insert_with(SingboxDns::default).rules = rules;
-}
-
-fn append_priority_proxy_dns_rules(
-    rules: &mut Vec<SingboxRule>,
-    server: &str,
-    strategy: Option<String>,
-) {
-    rules.push(priority_proxy_dns_rule(server, strategy));
-}
-
-fn priority_proxy_dns_rule(server: &str, strategy: Option<String>) -> SingboxRule {
-    SingboxRule {
-        server: Some(server.to_string()),
-        strategy,
-        domain_suffix: Some(priority_proxy_domain_suffixes()),
-        ..SingboxRule::default()
-    }
-}
-
-fn priority_proxy_dns_strategy(context: &CoreConfigContext) -> Option<String> {
-    if context.is_tun_enabled && !context.app_config.tun_mode_item.enable_ipv6_address {
-        return Some("ipv4_only".to_string());
-    }
-    domain_strategy4_sbox(context.simple_dns_item.strategy4_proxy.as_deref())
 }
 
 fn apply_tun_dns_reverse_mapping(dns: &mut SingboxDns, context: &CoreConfigContext) {

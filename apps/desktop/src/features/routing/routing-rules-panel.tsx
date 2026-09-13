@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Pencil, Plus, Route, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Pencil, Plus, RotateCcw, Route, Trash2 } from "lucide-react";
 
 import {
   dataTableHeader,
@@ -26,6 +26,7 @@ import type { RoutingRuleScope } from "@/ipc/bindings";
 import { useI18n } from "@voya/i18n/use-i18n";
 
 import { RULE_TYPES } from "./routing-constants";
+import { sentinelLabelKey } from "./sentinel-rules";
 import type { RoutingScreenController } from "./use-routing-screen";
 
 export function RoutingRulesPanel({ controller }: { controller: RoutingScreenController }) {
@@ -33,6 +34,7 @@ export function RoutingRulesPanel({ controller }: { controller: RoutingScreenCon
   const {
     moveSelectedRule,
     requestDeleteRule,
+    requestResetRules,
     selectedRouting,
     selectedRule,
     setRuleDialog,
@@ -100,6 +102,16 @@ export function RoutingRulesPanel({ controller }: { controller: RoutingScreenCon
             <Trash2 className="size-4" aria-hidden="true" />
             {t("actions.delete")}
           </Button>
+          <Button
+            disabled={!selectedRouting}
+            onClick={requestResetRules}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <RotateCcw className="size-4" aria-hidden="true" />
+            {t("panes.routing.resetRules")}
+          </Button>
         </PageHeaderActions>
       </PageHeader>
 
@@ -155,7 +167,9 @@ export function RoutingRulesPanel({ controller }: { controller: RoutingScreenCon
                   onClick={() => setSelectedRuleId(rule.id)}
                 >
                   <TableCell className="px-3 py-2 tabular-nums text-muted-foreground">{index + 1}</TableCell>
-                  <TableCell className="max-w-52 truncate px-3 py-2 font-medium">{rule.remarks ?? ""}</TableCell>
+                  <TableCell className="max-w-64 truncate px-3 py-2 font-medium">
+                    <RuleRemarks remarks={rule.remarks} />
+                  </TableCell>
                   <TableCell className="px-3 py-2">{rule.outbound ?? ""}</TableCell>
                   <TableCell className="px-3 py-2">
                     <RuleTypeBadge scope={rule.scope} />
@@ -173,6 +187,23 @@ export function RoutingRulesPanel({ controller }: { controller: RoutingScreenCon
         )}
       </ScrollArea>
     </div>
+  );
+}
+
+function RuleRemarks({ remarks }: { remarks: string | null | undefined }) {
+  const { t } = useI18n();
+  const labelKey = sentinelLabelKey(remarks);
+  if (!labelKey) {
+    return <>{remarks ?? ""}</>;
+  }
+
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <span className="truncate">{t(labelKey)}</span>
+      <Badge className="shrink-0 bg-background" variant="outline">
+        {t("panes.routing.managedRule")}
+      </Badge>
+    </span>
   );
 }
 

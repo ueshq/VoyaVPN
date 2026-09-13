@@ -78,6 +78,11 @@ export const commands = {
 	deleteRoutingRules: (routingId: string, ruleIds: string[]) => typedError<Routing_Serialize, AppError>(__TAURI_INVOKE("delete_routing_rules", { routingId, ruleIds })),
 	moveRoutingRule: (routingId: string, ruleId: string, action: MoveAction, position: number | null) => typedError<Routing_Serialize, AppError>(__TAURI_INVOKE("move_routing_rule", { routingId, ruleId, action, position })),
 	/**
+	 *  Replaces a routing profile's rules with the default set, keeping its
+	 *  per-app proxy rule.
+	 */
+	resetRoutingRules: (routingId: string) => typedError<Routing_Serialize, AppError>(__TAURI_INVOKE("reset_routing_rules", { routingId })),
+	/**
 	 *  Enumerates running processes (and installed applications where the OS
 	 *  makes that cheap) for the per-app proxy picker. Blocking OS enumeration
 	 *  runs off the async runtime.
@@ -540,7 +545,7 @@ export type NetworkSettings = {
  *  parts: a notice is a whole sentence in every locale, and languages do not
  *  agree on how to build one out of a subject and a verb.
  */
-export type NoticeCode = { code: "profileRefreshFailed" } | { code: "subscriptionRefreshFailed" } | { code: "routingRefreshFailed" } | { code: "dnsRefreshFailed" } | { code: "proxyViewRefreshFailed" } | { code: "connectionModeRefreshFailed" } | { code: "settingsRefreshFailed" } | { code: "routingSavedRestartFailed" } | { code: "routingDeletedRestartFailed" } | { code: "routingSelectedRestartFailed" } | { code: "routingRuleSavedRestartFailed" } | { code: "routingRulesDeletedRestartFailed" } | { code: "routingRuleMovedRestartFailed" } | { code: "dnsSavedRestartFailed" } | { code: "tunSavedRestartFailed" } | { code: "connectionModeSavedRestartFailed" } | { code: "settingsSavedRuntimeUpdateFailed" } | { code: "proxyModeSavedRuntimeUpdateFailed" } | { code: "settingsSavedSystemProxyUpdateFailed" } | { code: "systemProxyStatusRefreshFailed" } | { code: "tunStatusRefreshFailed" } | { code: "trayRefreshFailed" } | { code: "coreStopped" } | { code: "nativeTunStopped" } | { code: "coreStartedSystemProxyFailed" } | { code: "systemProxyRestoreFailed" } | { code: "subscriptionAutoUpdateFailed"; remarks: string };
+export type NoticeCode = { code: "profileRefreshFailed" } | { code: "subscriptionRefreshFailed" } | { code: "routingRefreshFailed" } | { code: "dnsRefreshFailed" } | { code: "proxyViewRefreshFailed" } | { code: "connectionModeRefreshFailed" } | { code: "settingsRefreshFailed" } | { code: "routingSavedRestartFailed" } | { code: "routingDeletedRestartFailed" } | { code: "routingSelectedRestartFailed" } | { code: "routingRuleSavedRestartFailed" } | { code: "routingRulesDeletedRestartFailed" } | { code: "routingRuleMovedRestartFailed" } | { code: "routingRulesResetRestartFailed" } | { code: "dnsSavedRestartFailed" } | { code: "tunSavedRestartFailed" } | { code: "connectionModeSavedRestartFailed" } | { code: "settingsSavedRuntimeUpdateFailed" } | { code: "proxyModeSavedRuntimeUpdateFailed" } | { code: "settingsSavedSystemProxyUpdateFailed" } | { code: "systemProxyStatusRefreshFailed" } | { code: "tunStatusRefreshFailed" } | { code: "trayRefreshFailed" } | { code: "coreStopped" } | { code: "nativeTunStopped" } | { code: "coreStartedSystemProxyFailed" } | { code: "systemProxyRestoreFailed" } | { code: "subscriptionAutoUpdateFailed"; remarks: string };
 
 /**
  *  A running process or installed application offered by the per-app proxy

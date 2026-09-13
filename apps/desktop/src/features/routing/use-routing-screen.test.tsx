@@ -13,6 +13,7 @@ const ipcMocks = vi.hoisted(() => ({
   deleteRoutings: vi.fn(),
   listRoutings: vi.fn(),
   moveRoutingRule: vi.fn(),
+  resetRoutingRules: vi.fn(),
   saveRouting: vi.fn(),
   saveRoutingRule: vi.fn(),
   setActiveRouting: vi.fn(),
@@ -78,6 +79,20 @@ describe("useRoutingScreen", () => {
 
     expect(ipcMocks.deleteRoutings).not.toHaveBeenCalled();
     expect(ipcMocks.deleteRoutingRules).not.toHaveBeenCalled();
+  });
+
+  it("restores the selected routing's default rules only after confirmation", async () => {
+    ipcMocks.resetRoutingRules.mockResolvedValue(routing("route-a", true));
+    const { result } = renderController();
+    await waitFor(() => expect(result.current.selectedRouting?.id).toBe("route-a"));
+
+    act(() => result.current.requestResetRules());
+    expect(result.current.pendingDelete).toBe("reset");
+    expect(ipcMocks.resetRoutingRules).not.toHaveBeenCalled();
+
+    act(() => result.current.confirmDelete());
+    await waitFor(() => expect(ipcMocks.resetRoutingRules).toHaveBeenCalledWith("route-a"));
+    expect(result.current.pendingDelete).toBeNull();
   });
 
   it("creates and edits routings while keeping a failed editor open", async () => {

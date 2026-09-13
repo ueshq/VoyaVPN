@@ -47,6 +47,7 @@ export const NOTICE_KEYS: Record<NoticeCode["code"], TranslationKey> = {
   routingRuleMovedRestartFailed: "notices.routingRuleMovedRestartFailed",
   routingRuleSavedRestartFailed: "notices.routingRuleSavedRestartFailed",
   routingRulesDeletedRestartFailed: "notices.routingRulesDeletedRestartFailed",
+  routingRulesResetRestartFailed: "notices.routingRulesResetRestartFailed",
   routingSavedRestartFailed: "notices.routingSavedRestartFailed",
   routingSelectedRestartFailed: "notices.routingSelectedRestartFailed",
   settingsRefreshFailed: "notices.settingsRefreshFailed",

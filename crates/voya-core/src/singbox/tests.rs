@@ -1321,7 +1321,7 @@ fn singbox_macos_tun_inbound_lets_singbox_allocate_utun() {
 }
 
 #[test]
-fn singbox_priority_proxy_domains_follow_clash_mode_and_precede_user_rules() {
+fn singbox_global_mode_precedes_user_rules_and_no_domain_list_is_injected() {
     let mut app_config = AppConfig::default();
     app_config.tun_mode_item.enable_tun = true;
     app_config.tun_mode_item.enable_ipv6_address = false;
@@ -1338,78 +1338,44 @@ fn singbox_priority_proxy_domains_follow_clash_mode_and_precede_user_rules() {
     });
 
     let generated = generate_singbox_config(&context).expect("sing-box config should generate");
-    let sniff_index = generated
-        .route
-        .rules
-        .iter()
-        .position(|rule| rule.action.as_deref() == Some("sniff"))
-        .expect("sniff route rule");
-    let dns_hijack_index = generated
-        .route
-        .rules
-        .iter()
-        .position(|rule| rule.action.as_deref() == Some("hijack-dns"))
-        .expect("DNS hijack route rule");
-    let priority_route_index = generated
-        .route
-        .rules
-        .iter()
-        .position(is_priority_proxy_route_rule)
-        .expect("priority proxy route rule");
-    let global_mode_index = generated
-        .route
-        .rules
-        .iter()
-        .position(|rule| {
-            rule.outbound.as_deref() == Some(PROXY_TAG)
-                && rule.clash_mode.as_deref() == Some("Global")
-        })
-        .expect("Global route mode rule");
-    let direct_final_index = generated
-        .route
-        .rules
-        .iter()
-        .position(|rule| {
-            rule.outbound.as_deref() == Some(DIRECT_TAG)
-                && rule.port_range.as_ref() == Some(&vec!["0:65535".to_string()])
-        })
-        .expect("direct final route rule");
-    assert!(sniff_index < priority_route_index);
-    assert!(dns_hijack_index < priority_route_index);
-    assert!(global_mode_index < priority_route_index);
-    assert!(priority_route_index < direct_final_index);
-
+    let route_index = |label: &str, matches: fn(&SingboxRule) -> bool| {
+        generated
+            .route
+            .rules
+            .iter()
+            .position(matches)
+            .unwrap_or_else(|| panic!("missing {label} route rule"))
+    };
+    let sniff_index = route_index("sniff", |rule| rule.action.as_deref() == Some("sniff"));
+    let dns_hijack_index = route_index("DNS hijack", |rule| {
+        rule.action.as_deref() == Some("hijack-dns")
+    });
+    let global_mode_index = route_index("Global mode", |rule| {
+        rule.outbound.as_deref() == Some(PROXY_TAG) && rule.clash_mode.as_deref() == Some("Global")
+    });
+    let direct_final_index = route_index("direct final", |rule| {
+        rule.outbound.as_deref() == Some(DIRECT_TAG)
+            && rule.port_range.as_ref() == Some(&vec!["0:65535".to_string()])
+    });
+    assert!(sniff_index < global_mode_index);
+    assert!(dns_hijack_index < global_mode_index);
+    assert!(global_mode_index < direct_final_index);
     assert!(generated
         .route
         .rules
         .iter()
-        .all(|rule| rule.clash_mode.as_deref() != Some("Direct")));
+        .all(|rule| rule.clash_mode.as_deref() != Some("Direct") && !names_ai_service(rule)));
 
     let dns = generated.dns.expect("DNS config should be generated");
     assert_eq!(dns.reverse_mapping, Some(true));
-    let priority_dns_index = dns
-        .rules
-        .iter()
-        .position(|rule| {
-            rule.server.as_deref() == Some(SINGBOX_REMOTE_DNS_TAG)
-                && is_priority_proxy_domain_suffix(rule)
-        })
-        .expect("priority proxy DNS rule");
-    let priority_dns_rule = &dns.rules[priority_dns_index];
-    assert_eq!(priority_dns_rule.strategy.as_deref(), Some("ipv4_only"));
-    let global_mode_index = dns
-        .rules
-        .iter()
-        .position(|rule| {
-            rule.server.as_deref() == Some(SINGBOX_REMOTE_DNS_TAG)
-                && rule.clash_mode.as_deref() == Some("Global")
-        })
-        .expect("Global DNS mode rule");
-    assert!(global_mode_index < priority_dns_index);
+    assert!(dns.rules.iter().any(|rule| {
+        rule.server.as_deref() == Some(SINGBOX_REMOTE_DNS_TAG)
+            && rule.clash_mode.as_deref() == Some("Global")
+    }));
     assert!(dns
         .rules
         .iter()
-        .all(|rule| rule.clash_mode.as_deref() != Some("Direct")));
+        .all(|rule| rule.clash_mode.as_deref() != Some("Direct") && !names_ai_service(rule)));
 }
 
 #[test]
@@ -1510,12 +1476,11 @@ fn singbox_default_log_level_is_generated_as_warn() {
     // `none` is the only level that disables logging, so the default must not.
     assert_eq!(value.pointer("/log/disabled"), None);
 }
-fn is_priority_proxy_route_rule(rule: &SingboxRule) -> bool {
-    rule.outbound.as_deref() == Some(PROXY_TAG) && is_priority_proxy_domain_suffix(rule)
-}
-
-fn is_priority_proxy_domain_suffix(rule: &SingboxRule) -> bool {
-    rule.domain_suffix.as_ref() == Some(&priority_proxy_domain_suffixes())
+/// The AI service list is ordinary routing data now; nothing injects it.
+fn names_ai_service(rule: &SingboxRule) -> bool {
+    rule.domain_suffix
+        .as_ref()
+        .is_some_and(|suffixes| suffixes.iter().any(|suffix| suffix == "anthropic.com"))
 }
 
 fn singbox_routing_dns_snapshot_contexts() -> (CoreConfigContext, CoreConfigContext) {

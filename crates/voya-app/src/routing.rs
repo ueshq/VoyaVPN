@@ -88,6 +88,39 @@ impl<'db> RoutingManager<'db> {
             .ok_or_else(|| RoutingManagerError::RoutingNotFound(item.id))
     }
 
+    /// Seeds the default routing profile when the database has none, and
+    /// activates it. Returns `None` when a profile already existed.
+    pub async fn ensure_default_routing(
+        &self,
+        config: &mut AppConfig,
+        language: &str,
+    ) -> Result<Option<RoutingItem>> {
+        if self.database.routings().first().await?.is_some() {
+            return Ok(None);
+        }
+        let seed = voya_core::default_routing_item(voya_core::seed_routing_remarks(language));
+        self.save_routing(config, seed).await.map(Some)
+    }
+
+    /// Replaces a profile's rules with the default set. The per-app proxy rule
+    /// is user data rather than part of the default, so it stays first.
+    pub async fn reset_rules_to_default(&self, routing_id: &str) -> Result<RoutingItem> {
+        let mut routing = self.load_routing(routing_id).await?;
+        let per_app = routing
+            .rule_set
+            .iter()
+            .find(|rule| rule.remarks.as_deref() == Some(voya_core::SENTINEL_PER_APP_PROXY))
+            .cloned();
+        routing.rule_set = per_app
+            .into_iter()
+            .chain(voya_core::default_rule_set())
+            .collect();
+        normalize_routing_item(&mut routing);
+        self.database.routings().upsert(&routing).await?;
+
+        Ok(routing)
+    }
+
     pub async fn delete_routings(&self, config: &mut AppConfig, ids: &[String]) -> Result<u32> {
         let deleted = self.database.routings().delete_many(ids).await?;
         self.ensure_active_routing(config).await?;
@@ -379,5 +412,127 @@ mod tests {
             .await
             .expect("routing manager test operation should succeed");
         assert_eq!(moved.rule_set[0].remarks.as_deref(), Some("C"));
+    }
+
+    #[tokio::test]
+    async fn a_fresh_database_is_seeded_once_with_an_active_default_routing() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("routing manager test operation should succeed");
+        let manager = RoutingManager::new(&database);
+        let mut config = AppConfig::default();
+
+        let seeded = manager
+            .ensure_default_routing(&mut config, "zh-Hans")
+            .await
+            .expect("seed")
+            .expect("a fresh database is seeded");
+        assert_eq!(seeded.remarks, "智能分流");
+        assert!(seeded.is_active);
+        assert_eq!(config.routing_basic_item.routing_index_id, seeded.id);
+        assert_eq!(seeded.rule_set.len(), voya_core::default_rule_set().len());
+        assert!(seeded.rule_set.iter().all(|rule| !rule.id.is_empty()));
+
+        assert!(manager
+            .ensure_default_routing(&mut config, "en")
+            .await
+            .expect("second call")
+            .is_none());
+        assert_eq!(manager.list_routings().await.expect("routings").len(), 1);
+    }
+
+    #[tokio::test]
+    async fn an_existing_routing_profile_is_never_replaced_by_the_seed() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("routing manager test operation should succeed");
+        let manager = RoutingManager::new(&database);
+        let mut config = AppConfig::default();
+        manager
+            .save_routing(
+                &mut config,
+                RoutingItem {
+                    remarks: "Mine".to_string(),
+                    ..RoutingItem::default()
+                },
+            )
+            .await
+            .expect("custom routing");
+
+        assert!(manager
+            .ensure_default_routing(&mut config, "en")
+            .await
+            .expect("seed check")
+            .is_none());
+        let routings = manager.list_routings().await.expect("routings");
+        assert_eq!(routings.len(), 1);
+        assert_eq!(routings[0].remarks, "Mine");
+    }
+
+    #[tokio::test]
+    async fn resetting_rules_restores_the_default_set_and_keeps_the_per_app_rule_first() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("routing manager test operation should succeed");
+        let manager = RoutingManager::new(&database);
+        let mut config = AppConfig::default();
+        let seeded = manager
+            .ensure_default_routing(&mut config, "en")
+            .await
+            .expect("seed")
+            .expect("seeded");
+        manager
+            .save_rule(
+                &seeded.id,
+                RulesItem {
+                    remarks: Some("Custom".to_string()),
+                    outbound_tag: Some(BLOCK_TAG.to_string()),
+                    domain: Some(vec!["full:custom.example".to_string()]),
+                    ..RulesItem::default()
+                },
+            )
+            .await
+            .expect("custom rule");
+        let with_per_app = manager
+            .save_rule(
+                &seeded.id,
+                RulesItem {
+                    remarks: Some(voya_core::SENTINEL_PER_APP_PROXY.to_string()),
+                    outbound_tag: Some(PROXY_TAG.to_string()),
+                    process: Some(vec!["curl".to_string()]),
+                    ..RulesItem::default()
+                },
+            )
+            .await
+            .expect("per-app rule");
+        let bypass_lan = with_per_app
+            .rule_set
+            .iter()
+            .find(|rule| rule.remarks.as_deref() == Some(voya_core::SENTINEL_BYPASS_LAN))
+            .expect("seeded LAN rule")
+            .id
+            .clone();
+        manager
+            .delete_rules(&seeded.id, &[bypass_lan])
+            .await
+            .expect("delete LAN rule");
+
+        let reset = manager
+            .reset_rules_to_default(&seeded.id)
+            .await
+            .expect("reset");
+        let remarks = reset
+            .rule_set
+            .iter()
+            .map(|rule| rule.remarks.clone().unwrap_or_default())
+            .collect::<Vec<_>>();
+        let mut expected = vec![voya_core::SENTINEL_PER_APP_PROXY.to_string()];
+        expected.extend(
+            voya_core::default_rule_set()
+                .into_iter()
+                .map(|rule| rule.remarks.unwrap_or_default()),
+        );
+        assert_eq!(remarks, expected);
+        assert_eq!(reset.rule_set[0].process, Some(vec!["curl".to_string()]));
     }
 }

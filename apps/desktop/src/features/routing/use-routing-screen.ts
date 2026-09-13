@@ -6,6 +6,7 @@ import {
   deleteRoutings,
   listRoutings,
   moveRoutingRule,
+  resetRoutingRules,
   saveRouting,
   saveRoutingRule,
   setActiveRouting,
@@ -32,7 +33,7 @@ type RuleDialogState =
  * selection falls back to the active routing / its first rule). The screen
  * therefore gates both on an explicit confirmation, exactly like profiles.
  */
-type PendingRoutingDelete = "routing" | "rule" | null;
+type PendingRoutingDelete = "routing" | "rule" | "reset" | null;
 
 export function useRoutingScreen() {
   const [operationError, setOperationError] = useState<string | null>(null);
@@ -118,6 +119,12 @@ export function useRoutingScreen() {
     }
   }
 
+  function requestResetRules() {
+    if (selectedRouting) {
+      setPendingDelete("reset");
+    }
+  }
+
   function requestDeleteRule() {
     if (selectedRouting && selectedRule) {
       setPendingDelete("rule");
@@ -128,6 +135,11 @@ export function useRoutingScreen() {
     const pending = pendingDelete;
     setPendingDelete(null);
     if (!pending || !selectedRouting) {
+      return;
+    }
+
+    if (pending === "reset") {
+      void runOperation(() => resetRoutingRules(selectedRouting.id));
       return;
     }
 
@@ -155,7 +167,9 @@ export function useRoutingScreen() {
     pendingDelete,
     requestDeleteRouting,
     requestDeleteRule,
+    requestResetRules,
     routings,
+    runOperation,
     routingDialog,
     ruleDialog,
     selectRouting,

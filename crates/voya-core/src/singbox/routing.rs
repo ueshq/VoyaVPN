@@ -92,15 +92,12 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
         config.route.rules.push(hosts_resolve_rule);
     }
 
-    // Global mode overrides the priority-proxy list and user rules. Inside
-    // Rule mode, the priority list still precedes the user's own rules.
+    // Global mode sends everything through the proxy ahead of the user's rules.
     config.route.rules.push(SingboxRule {
         outbound: Some(PROXY_TAG.to_string()),
         clash_mode: Some("Global".to_string()),
         ..SingboxRule::default()
     });
-
-    append_priority_proxy_route_rules(&mut config.route.rules);
 
     let routing = context.routing_item.as_ref();
     let domain_strategy = routing
@@ -134,21 +131,6 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
             gen_routing_user_rule(config, context, item);
         }
     }
-}
-
-fn append_priority_proxy_route_rules(rules: &mut Vec<SingboxRule>) {
-    rules.push(SingboxRule {
-        outbound: Some(PROXY_TAG.to_string()),
-        domain_suffix: Some(priority_proxy_domain_suffixes()),
-        ..SingboxRule::default()
-    });
-}
-
-pub(super) fn priority_proxy_domain_suffixes() -> Vec<String> {
-    PRIORITY_PROXY_DOMAIN_SUFFIXES
-        .iter()
-        .map(|domain| (*domain).to_string())
-        .collect()
 }
 
 fn tun_route_rules() -> Vec<SingboxRule> {

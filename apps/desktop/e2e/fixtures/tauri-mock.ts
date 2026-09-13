@@ -183,6 +183,7 @@ export async function installTauriSmokeMock(
       import_profiles_from_text: [...subscriptionScopes, ...profileScopes],
       move_profile: profileScopes,
       move_routing_rule: routingScopes,
+      reset_routing_rules: routingScopes,
       proxy_close_connection: proxyRuntimeScopes,
       proxy_set_traffic_mode: [...proxyRuntimeScopes, "appSettings"],
       run_speedtest: profileScopes,
@@ -666,6 +667,18 @@ export async function installTauriSmokeMock(
             state.routings[0];
           return Promise.resolve(clone(routing));
         }
+        case "reset_routing_rules": {
+          const routing =
+            state.routings.find((item) => item.id === args.routingId) ??
+            state.routings[0];
+          routing.rules = [
+            ...routing.rules.filter(
+              (rule) => rule.remarks === "voya:per-app-proxy",
+            ),
+            ...defaultSeedRules(),
+          ];
+          return Promise.resolve(clone(routing));
+        }
         case "load_dns_settings":
           return Promise.resolve(clone(state.dns));
         case "save_dns_settings":
@@ -985,6 +998,17 @@ export async function installTauriSmokeMock(
         scope: (input.scope ?? "routing") as Rule["scope"],
         kind: nullableString(input.kind),
       };
+    }
+
+    // Mirrors `voya_core::default_rule_set`, trimmed to what the renderer reads.
+    function defaultSeedRules(): Rule[] {
+      return [
+        { remarks: "voya:ai-services", outbound: "proxy", scope: "all", domain: ["domain:openai.com"] },
+        { remarks: "voya:block-quic", outbound: "block", scope: "routing", network: "udp", port: "443" },
+        { remarks: "voya:cn-dns", outbound: "direct", scope: "all", ip: ["119.29.29.29"] },
+        { remarks: "voya:bypass-lan", outbound: "direct", scope: "all", ip: ["geoip:private"], domain: ["geosite:private"] },
+        { remarks: "voya:cn-direct", outbound: "direct", scope: "all", ip: ["geoip:cn"], domain: ["geosite:cn"] },
+      ].map((rule) => normalizeRule(rule));
     }
 
     function makeRouting(

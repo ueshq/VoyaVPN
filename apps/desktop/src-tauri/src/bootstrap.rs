@@ -77,6 +77,13 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     }
     let shared_config = Arc::new(RwLock::new(config.clone()));
     let config_mutations = Arc::new(services.config_mutations(Arc::clone(&shared_config)));
+    // A fresh install starts with the default routing profile rather than an
+    // empty Rules page. A failure only costs the seed, never startup.
+    if let Err(error) =
+        tauri::async_runtime::block_on(services.ensure_default_routing(&config_mutations))
+    {
+        tracing::warn!(?error, "failed to seed the default routing profile");
+    }
     tauri::async_runtime::block_on(services.initialize_profile_metrics())?;
     let core_seed_resource_dir = Some(core_seed_resources_dir(app.path().resource_dir()?));
     match (TargetOs::current(), core_seed_resource_dir.as_ref()) {

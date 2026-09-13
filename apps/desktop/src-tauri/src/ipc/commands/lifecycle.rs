@@ -185,6 +185,8 @@ impl ConfigChange {
         Self::routing(NoticeCode::RoutingRulesDeletedRestartFailed);
     pub(super) const ROUTING_RULE_MOVED: Self =
         Self::routing(NoticeCode::RoutingRuleMovedRestartFailed);
+    pub(super) const ROUTING_RULES_RESET: Self =
+        Self::routing(NoticeCode::RoutingRulesResetRestartFailed);
     pub(super) const TUN: Self = Self {
         reason: CoreFlowReason::TunChanged,
         restart_failed_code: NoticeCode::TunSavedRestartFailed,

@@ -118,6 +118,7 @@ pub(crate) fn generated_value_for_case(case: &GoldenCase) -> Value {
         "singbox.inbounds.tun" => singbox_tun_inbounds(),
         "singbox.inbounds.tun_macos" => singbox_tun_inbounds_macos(),
         "singbox.route.tun" => singbox_tun_route(),
+        "singbox.route.default_seed" => singbox_default_seed_snapshot(),
         "singbox.outbound.tuic_tls" => singbox_tuic_tls_outbound(),
         "singbox.outbound.anytls_tls" => singbox_anytls_tls_outbound(),
         "singbox.outbound.naive_quic_tls" => singbox_naive_quic_tls_outbound(),
@@ -609,6 +610,27 @@ fn singbox_tun_route() -> Value {
     serde_json::to_value(generated.route).expect("sing-box route serializes")
 }
 
+fn singbox_default_seed_context() -> CoreConfigContext {
+    let mut context = singbox_context(AppConfig::default(), singbox_socks_node("active", "Active"));
+    context.routing_item = Some(crate::default_routing_item("Smart routing"));
+    context
+}
+
+fn singbox_default_seed_snapshot() -> Value {
+    let config = generate_singbox_config_value(&singbox_default_seed_context())
+        .expect("default seed config should generate");
+    serde_json::json!({
+        "route": {
+            "rules": config["route"]["rules"],
+            "rule_set": config["route"]["rule_set"],
+            "final": config["route"]["final"],
+        },
+        "dns": {
+            "rules": config["dns"]["rules"],
+        },
+    })
+}
+
 fn singbox_pre_socks_configs() -> Vec<Value> {
     let mut config = AppConfig::default();
     config.tun_mode_item.enable_tun = true;
@@ -963,6 +985,12 @@ fn acceptance_configs_for_case(case: &GoldenCase) -> Vec<Value> {
             ]
         }
         "singbox.runtime.pre_socks" => singbox_pre_socks_configs(),
+        "singbox.route.default_seed" => {
+            vec![
+                generate_singbox_config_value(&singbox_default_seed_context())
+                    .expect("default seed acceptance config should generate"),
+            ]
+        }
         "singbox.routing.per_rule_outbound" => vec![singbox_per_rule_outbound_config()],
         "singbox.runtime.logs_and_api" => vec![singbox_logs_and_api_config()],
         "singbox.outbound.hysteria2_minimal" => {

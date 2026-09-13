@@ -39,50 +39,6 @@ const SINGBOX_HOSTS_DNS_TAG: &str = "hosts_dns";
 const SINGBOX_FAKE_DNS_TAG: &str = "fake_dns";
 const SINGBOX_FAKEIP_INET4_RANGE: &str = "198.18.0.0/15";
 const SINGBOX_FAKEIP_INET6_RANGE: &str = "fc00::/18";
-/// Vendors whose endpoints VoyaVPN forces through the proxy in Rule mode.
-///
-/// These hosts geo-block or hard-fail on a direct connection from the regions
-/// this app targets, so a "Rule" routing table that would otherwise send them
-/// direct produces a broken tool rather than a faster one. The rules are
-/// appended *after* the `clash_mode` rules (see
-/// `crate::singbox::routing::gen_routing` and
-/// `crate::singbox::dns::gen_dns_rules`) so an explicit Global mode
-/// still wins; within Rule mode they precede the user's own rules.
-///
-/// **This overrides user routing intent.** Inside Rule mode a user rule that
-/// sends one of these suffixes direct is generated after the priority rule and
-/// therefore never matches, and the names are always resolved through the
-/// remote DNS server. There is no per-domain opt-out today.
-/// Editing the list changes generated JSON; see `docs/adr/0006-priority-proxy-domain-list.md`.
-const PRIORITY_PROXY_DOMAIN_SUFFIXES: &[&str] = &[
-    "anthropic.com",
-    "claude.ai",
-    "claudeusercontent.com",
-    "openai.com",
-    "chatgpt.com",
-    "oaistatic.com",
-    "oaiusercontent.com",
-    "openai.azure.com",
-    "githubcopilot.com",
-    "copilot-proxy.githubusercontent.com",
-    "copilot-telemetry.githubusercontent.com",
-    "cursor.com",
-    "cursor.sh",
-    "codeium.com",
-    "windsurf.com",
-    "sourcegraph.com",
-    "perplexity.ai",
-    "generativelanguage.googleapis.com",
-    "aistudio.google.com",
-    "gemini.google.com",
-    "ai.google.dev",
-    "poe.com",
-    "x.ai",
-    "grok.com",
-    "cohere.ai",
-    "mistral.ai",
-    "huggingface.co",
-];
 const SINGBOX_RULESET_URL: &str =
     "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-{0}/{1}.srs";
 const GEOIP_PREFIX: &str = "geoip:";

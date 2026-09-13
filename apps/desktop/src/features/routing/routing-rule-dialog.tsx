@@ -32,6 +32,7 @@ import {
   type RoutingRulePayload,
 } from "./routing-form-schema";
 import { formToRule, ruleToForm } from "./routing-form-values";
+import { sentinelLabelKey } from "./sentinel-rules";
 
 export function RoutingRuleDialog({
   mode,
@@ -86,6 +87,9 @@ export function RoutingRuleDialog({
           >
             <div className="grid gap-3 sm:grid-cols-[1fr_10rem_10rem]">
               <TextField
+                // Managed rules are found by their reserved remarks; renaming
+                // one would silently detach it from its quick setting.
+                disabled={sentinelLabelKey(rule?.remarks) !== null}
                 error={errors.remarks}
                 label={t("panes.routing.remarks")}
                 onChange={(value) =>

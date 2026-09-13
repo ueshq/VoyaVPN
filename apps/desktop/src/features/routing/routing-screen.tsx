@@ -33,6 +33,7 @@ import { useShellStore } from "@/stores/shell-store";
 
 import { PerAppProxyDialog } from "./per-app-proxy-dialog";
 import { RoutingProfileDialog } from "./routing-profile-dialog";
+import { RoutingQuickSettings } from "./routing-quick-settings";
 import { RoutingRuleDialog } from "./routing-rule-dialog";
 import { RoutingRulesPanel } from "./routing-rules-panel";
 import { useRoutingScreen, type RoutingScreenController } from "./use-routing-screen";
@@ -51,6 +52,7 @@ export function RoutingScreen() {
         {controller.operationError ? (
           <InlinePageError>{controller.operationError}</InlinePageError>
         ) : null}
+        <RoutingQuickSettings controller={controller} />
         <PageSurface className="@container/routing flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="p-4 @min-[896px]/routing:hidden">
             <Select
@@ -228,6 +230,8 @@ function RoutingDialogs({ controller }: { controller: RoutingScreenController })
     setRuleDialog,
   } = controller;
   const deletingRouting = pendingDelete === "routing";
+  const resettingRules = pendingDelete === "reset";
+  const routingName = selectedRouting?.remarks || t("panes.routing.untitled");
 
   return (
     <>
@@ -254,21 +258,31 @@ function RoutingDialogs({ controller }: { controller: RoutingScreenController })
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {deletingRouting ? t("confirm.deleteRoutingTitle") : t("confirm.deleteRoutingRuleTitle")}
+              {resettingRules
+                ? t("confirm.resetRoutingRulesTitle")
+                : deletingRouting
+                  ? t("confirm.deleteRoutingTitle")
+                  : t("confirm.deleteRoutingRuleTitle")}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {deletingRouting
-                ? t("confirm.deleteRoutingDescription", {
-                    count: selectedRouting?.rules.length ?? 0,
-                    name: selectedRouting?.remarks || t("panes.routing.untitled"),
-                  })
-                : t("confirm.deleteRoutingRuleDescription")}
+              {resettingRules
+                ? t("confirm.resetRoutingRulesDescription", { name: routingName })
+                : deletingRouting
+                  ? t("confirm.deleteRoutingDescription", {
+                      count: selectedRouting?.rules.length ?? 0,
+                      name: routingName,
+                    })
+                  : t("confirm.deleteRoutingRuleDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
             <AlertDialogAction className={buttonVariants({ variant: "destructive" })} onClick={confirmDelete}>
-              {deletingRouting ? t("confirm.deleteRoutingConfirm") : t("confirm.deleteRoutingRuleConfirm")}
+              {resettingRules
+                ? t("confirm.resetRoutingRulesConfirm")
+                : deletingRouting
+                  ? t("confirm.deleteRoutingConfirm")
+                  : t("confirm.deleteRoutingRuleConfirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

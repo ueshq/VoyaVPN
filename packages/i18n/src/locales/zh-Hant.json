@@ -36,7 +36,10 @@
     "deleteRoutingTitle": "刪除路由設定檔？",
     "deleteSubscriptionConfirm": "刪除",
     "deleteSubscriptionDescription": "「{{name}}」及其匯入的所有節點將被永久刪除。此操作無法復原。",
-    "deleteSubscriptionTitle": "刪除訂閱？"
+    "deleteSubscriptionTitle": "刪除訂閱？",
+    "resetRoutingRulesTitle": "還原預設規則？",
+    "resetRoutingRulesDescription": "{{name}} 的規則將替換為預設規則，分應用代理規則會保留。",
+    "resetRoutingRulesConfirm": "還原"
   },
   "coreFlowReason": {
     "connect": "連線",
@@ -184,7 +187,8 @@
     "systemProxyStatusRefreshFailed": "重新整理系統代理狀態失敗",
     "trayRefreshFailed": "重新整理系統匣圖示失敗",
     "tunSavedRestartFailed": "TUN 已儲存；重新啟動核心失敗",
-    "tunStatusRefreshFailed": "重新整理 TUN 狀態失敗"
+    "tunStatusRefreshFailed": "重新整理 TUN 狀態失敗",
+    "routingRulesResetRestartFailed": "已還原預設規則；重新啟動核心失敗"
   },
   "options": {
     "autostart": "開機自動啟動",
@@ -471,7 +475,28 @@
       "title": "規則",
       "type": "類型",
       "untitled": "未命名",
-      "chooseProfile": "選擇規則設定"
+      "chooseProfile": "選擇規則設定",
+      "quickRules": "快捷規則",
+      "blockAds": "攔截廣告",
+      "blockAdsHint": "在目前啟用的路由方案中攔截廣告網域。",
+      "bypassLan": "略過區域網路",
+      "bypassLanHint": "區域網路與鏈路本機位址直接連線。",
+      "resolveStrategy": "規則 IP 解析",
+      "resolveAsIs": "僅比對網域",
+      "resolveIpIfNonMatch": "未命中網域規則時解析 IP",
+      "resolveIpOnDemand": "比對前先解析 IP",
+      "resetRules": "還原預設規則",
+      "managedRule": "託管",
+      "noActiveRouting": "啟用一個路由方案後即可使用快捷規則。",
+      "sentinel": {
+        "perApp": "分應用代理",
+        "aiServices": "AI 服務走代理",
+        "blockQuic": "阻斷 QUIC（UDP 443）",
+        "cnDns": "中國公共 DNS 直連",
+        "bypassLan": "略過區域網路",
+        "blockAds": "攔截廣告",
+        "cnDirect": "中國網站直連"
+      }
     },
     "subscriptions": {
       "additionalUrl": "備用地址",

@@ -81,6 +81,24 @@ impl AppServices {
         RoutingManager::new(&self.database)
     }
 
+    /// Seeds the default routing profile on a database that has none. Returns
+    /// whether a profile was created.
+    pub async fn ensure_default_routing(
+        &self,
+        coordinator: &ConfigMutationCoordinator,
+    ) -> Result<bool, voya_contracts::AppError> {
+        let committed = coordinator
+            .mutate(async |unit_of_work, config| {
+                let language = config.ui_item.current_language.clone();
+                let seeded = RoutingManager::new_in(unit_of_work)
+                    .ensure_default_routing(config, &language)
+                    .await?;
+                Ok::<bool, voya_contracts::AppError>(seeded.is_some())
+            })
+            .await?;
+        Ok(committed.value)
+    }
+
     #[must_use]
     pub fn dns(&self) -> DnsManager<'_> {
         DnsManager::new(&self.database)

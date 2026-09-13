@@ -49,6 +49,7 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::save_routing_rule::<tauri::Wry>,
         commands::delete_routing_rules::<tauri::Wry>,
         commands::move_routing_rule::<tauri::Wry>,
+        commands::reset_routing_rules::<tauri::Wry>,
         commands::list_process_candidates,
         commands::proxy_list_connections,
         commands::proxy_close_connection::<tauri::Wry>,

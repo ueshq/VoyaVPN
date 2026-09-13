@@ -180,6 +180,23 @@
       "volatile_fields": []
     },
     {
+      "id": "singbox-route-default-seed",
+      "core": "sing-box",
+      "fixture": "singbox/route/default_seed.json",
+      "generated": "singbox.route.default_seed",
+      "summary": "The routing profile a fresh install is seeded with: AI services via proxy, QUIC blocked, China DNS, LAN and China sites direct, as route and DNS rules.",
+      "hotspots": [
+        "routing",
+        "dns",
+        "ruleset"
+      ],
+      "reference_paths": [
+        "crates/voya-core/src/routing_seed.rs"
+      ],
+      "core_acceptance": true,
+      "volatile_fields": []
+    },
+    {
       "id": "singbox-runtime-pre-socks",
       "core": "sing-box",
       "fixture": "singbox/runtime/pre_socks.json",

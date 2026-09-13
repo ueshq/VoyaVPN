@@ -36,7 +36,10 @@
     "deleteRoutingTitle": "删除路由配置？",
     "deleteSubscriptionConfirm": "删除",
     "deleteSubscriptionDescription": "“{{name}}”及其导入的所有节点将被永久删除。此操作无法撤销。",
-    "deleteSubscriptionTitle": "删除订阅？"
+    "deleteSubscriptionTitle": "删除订阅？",
+    "resetRoutingRulesTitle": "恢复默认规则？",
+    "resetRoutingRulesDescription": "{{name}} 的规则将替换为默认规则，分应用代理规则会保留。",
+    "resetRoutingRulesConfirm": "恢复"
   },
   "coreFlowReason": {
     "connect": "连接",
@@ -184,7 +187,8 @@
     "systemProxyStatusRefreshFailed": "刷新系统代理状态失败",
     "trayRefreshFailed": "刷新托盘失败",
     "tunSavedRestartFailed": "TUN 已保存；重启内核失败",
-    "tunStatusRefreshFailed": "刷新 TUN 状态失败"
+    "tunStatusRefreshFailed": "刷新 TUN 状态失败",
+    "routingRulesResetRestartFailed": "已恢复默认规则；重启内核失败"
   },
   "options": {
     "autostart": "开机自启",
@@ -471,7 +475,28 @@
       "title": "规则",
       "type": "类型",
       "untitled": "未命名",
-      "chooseProfile": "选择规则配置"
+      "chooseProfile": "选择规则配置",
+      "quickRules": "快捷规则",
+      "blockAds": "拦截广告",
+      "blockAdsHint": "在当前启用的路由方案中拦截广告域名。",
+      "bypassLan": "绕过局域网",
+      "bypassLanHint": "局域网与链路本地地址直接连接。",
+      "resolveStrategy": "规则 IP 解析",
+      "resolveAsIs": "仅匹配域名",
+      "resolveIpIfNonMatch": "未命中域名规则时解析 IP",
+      "resolveIpOnDemand": "匹配前先解析 IP",
+      "resetRules": "恢复默认规则",
+      "managedRule": "托管",
+      "noActiveRouting": "启用一个路由方案后即可使用快捷规则。",
+      "sentinel": {
+        "perApp": "分应用代理",
+        "aiServices": "AI 服务走代理",
+        "blockQuic": "阻断 QUIC（UDP 443）",
+        "cnDns": "国内公共 DNS 直连",
+        "bypassLan": "绕过局域网",
+        "blockAds": "拦截广告",
+        "cnDirect": "国内网站直连"
+      }
     },
     "subscriptions": {
       "additionalUrl": "备用地址",

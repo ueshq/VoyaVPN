@@ -1,11 +1,13 @@
 import type { RoutingRule, Routing_Serialize } from "@/ipc/bindings";
 
+import { SENTINELS } from "./sentinel-rules";
+
 /**
  * Reserved remarks marking the managed per-app rule inside the active routing
  * set. Data, not visible UI text; the visual editor owns rules carrying it and
  * leaves every other rule alone.
  */
-const PER_APP_RULE_SENTINEL = "voya:per-app-proxy";
+const PER_APP_RULE_SENTINEL = SENTINELS.perApp;
 
 /**
  * `include`: the listed apps always go through the proxy (ahead of other

@@ -200,3 +200,37 @@ pub async fn move_routing_rule<R: tauri::Runtime>(
 
     Ok(routing_to_contract(saved.value))
 }
+
+/// Replaces a routing profile's rules with the default set, keeping its
+/// per-app proxy rule.
+#[tauri::command]
+#[specta::specta]
+pub async fn reset_routing_rules<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    routing_id: String,
+) -> Result<RoutingContract, AppError> {
+    validate_required_ipc_text(
+        &routing_id,
+        "routing id",
+        IPC_ID_MAX_CHARS,
+        AppErrorSubsystem::Routing,
+    )?;
+    let saved = mutate_config(&state, async |unit_of_work, _config| {
+        Ok(RoutingManager::new_in(unit_of_work)
+            .reset_rules_to_default(&routing_id)
+            .await?)
+    })
+    .await?;
+
+    emit_routing_invalidation(&app, "routing-rules-reset", false);
+    restart_after_config_change(
+        &app,
+        &state,
+        &saved.config,
+        ConfigChange::ROUTING_RULES_RESET,
+    )
+    .await;
+
+    Ok(routing_to_contract(saved.value))
+}

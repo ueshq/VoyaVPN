@@ -107,6 +107,8 @@ export const saveRoutingRule = wrapCommand(commands.saveRoutingRule);
 
 export const deleteRoutingRules = wrapCommand(commands.deleteRoutingRules);
 
+export const resetRoutingRules = wrapCommand(commands.resetRoutingRules);
+
 export const moveRoutingRule = wrapCommand(
   (
     routingId: string,

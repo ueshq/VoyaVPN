@@ -54,6 +54,7 @@ pub enum NoticeCode {
     RoutingRuleSavedRestartFailed,
     RoutingRulesDeletedRestartFailed,
     RoutingRuleMovedRestartFailed,
+    RoutingRulesResetRestartFailed,
     DnsSavedRestartFailed,
     TunSavedRestartFailed,
     ConnectionModeSavedRestartFailed,

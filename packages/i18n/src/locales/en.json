@@ -36,7 +36,10 @@
     "deleteRoutingTitle": "Delete routing profile?",
     "deleteSubscriptionConfirm": "Delete",
     "deleteSubscriptionDescription": "“{{name}}” and every node imported from it will be permanently deleted. This action cannot be undone.",
-    "deleteSubscriptionTitle": "Delete subscription?"
+    "deleteSubscriptionTitle": "Delete subscription?",
+    "resetRoutingRulesTitle": "Restore default rules?",
+    "resetRoutingRulesDescription": "The rules of {{name}} will be replaced with the default set. The per-app proxy rule is kept.",
+    "resetRoutingRulesConfirm": "Restore"
   },
   "coreFlowReason": {
     "connect": "Connection",
@@ -184,7 +187,8 @@
     "systemProxyStatusRefreshFailed": "System proxy status refresh failed",
     "trayRefreshFailed": "Tray refresh failed",
     "tunSavedRestartFailed": "TUN saved; core restart failed",
-    "tunStatusRefreshFailed": "TUN status refresh failed"
+    "tunStatusRefreshFailed": "TUN status refresh failed",
+    "routingRulesResetRestartFailed": "Default rules restored; core restart failed"
   },
   "options": {
     "autostart": "Autostart",
@@ -471,7 +475,28 @@
       "title": "Routing",
       "type": "type",
       "untitled": "Untitled",
-      "chooseProfile": "Select a configuration"
+      "chooseProfile": "Select a configuration",
+      "quickRules": "Quick rules",
+      "blockAds": "Block ads",
+      "blockAdsHint": "Blocks advertising domains in the active routing profile.",
+      "bypassLan": "Bypass LAN",
+      "bypassLanHint": "Sends private and link-local destinations directly.",
+      "resolveStrategy": "IP resolution for rules",
+      "resolveAsIs": "Match domains only",
+      "resolveIpIfNonMatch": "Resolve when no domain rule matches",
+      "resolveIpOnDemand": "Resolve before matching",
+      "resetRules": "Restore defaults",
+      "managedRule": "Managed",
+      "noActiveRouting": "Activate a routing profile to use quick rules.",
+      "sentinel": {
+        "perApp": "Per-app proxy",
+        "aiServices": "AI services via proxy",
+        "blockQuic": "Block QUIC (UDP 443)",
+        "cnDns": "China public DNS direct",
+        "bypassLan": "Bypass LAN",
+        "blockAds": "Block ads",
+        "cnDirect": "China sites direct"
+      }
     },
     "subscriptions": {
       "additionalUrl": "More URL",
