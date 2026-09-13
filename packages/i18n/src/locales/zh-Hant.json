@@ -536,7 +536,6 @@
       "bindInterface": "綁定網路介面",
       "cacheFileEnabled": "啟用 sing-box（規則集檔案）的快取檔案",
       "fingerprint": "預設 TLS 指紋 (fingerprint)",
-      "fragmentEnabled": "啟用分片（Fragment）",
       "hysteriaBandwidth": "Hysteria 最大頻寬 (Up/Dw)",
       "hysteriaHopInterval": "連接埠跳轉間隔",
       "logEnabled": "啟用日誌",
@@ -544,7 +543,12 @@
       "muxEnabled": "開啟 Mux 多路復用",
       "muxProtocol": "sing-box Mux 多路復用協定",
       "sendThrough": "本機出站位址 (SendThrough)",
-      "userAgent": "使用者代理 (User-Agent)"
+      "userAgent": "使用者代理 (User-Agent)",
+      "tlsFragment": "TLS 分片",
+      "tlsFragmentOff": "關閉",
+      "tlsFragmentHello": "分片 ClientHello",
+      "tlsFragmentRecord": "分片 TLS 記錄",
+      "fragmentFallbackDelay": "分片回退延遲（毫秒）"
     },
     "fields": {
       "hysteriaDownMbps": "Hysteria 最大下行頻寬 (Mbps)",
@@ -734,7 +738,8 @@
     "unsupportedSettingsSchema": "不支援的設定版本 {{found}}；目前版本需要 {{expected}}",
     "unsupportedShadowsocksNetwork": "sing-box 不支援在 {{network}} 上使用 Shadowsocks",
     "subscriptionReadOnly": "訂閱節點不可手動修改，請更新或編輯訂閱來源。",
-    "integer": "請輸入整數"
+    "integer": "請輸入整數",
+    "fragmentFallbackDelayOutOfRange": "TLS 分片回退延遲必須介於 {{min}} 到 {{max}} 毫秒之間"
   },
   "window": {
     "close": "關閉",

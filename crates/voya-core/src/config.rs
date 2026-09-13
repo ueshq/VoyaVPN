@@ -1,7 +1,8 @@
-use crate::{SysProxyType, TrafficMode};
+use crate::{SysProxyType, TlsFragmentMode, TrafficMode};
 
 pub const DEFAULT_LOCAL_PORT: i32 = 10808;
 pub const DEFAULT_LOG_LEVEL: &str = "warn";
+pub const DEFAULT_FRAGMENT_FALLBACK_DELAY_MS: i32 = 500;
 pub const DEFAULT_DOMAIN_STRATEGY: &str = "AsIs";
 pub const DEFAULT_TUN_ICMP_ROUTING: &str = "rule";
 pub const DEFAULT_LANGUAGE: &str = "en";
@@ -59,7 +60,8 @@ pub struct CoreBasicItem {
     pub def_user_agent: String,
     pub send_through: Option<String>,
     pub bind_interface: Option<String>,
-    pub enable_fragment: bool,
+    pub tls_fragment: TlsFragmentMode,
+    pub fragment_fallback_delay_ms: i32,
     pub enable_cache_file4_sbox: bool,
 }
 
@@ -74,7 +76,8 @@ impl Default for CoreBasicItem {
             def_user_agent: String::new(),
             send_through: None,
             bind_interface: None,
-            enable_fragment: false,
+            tls_fragment: TlsFragmentMode::Off,
+            fragment_fallback_delay_ms: DEFAULT_FRAGMENT_FALLBACK_DELAY_MS,
             enable_cache_file4_sbox: true,
         }
     }

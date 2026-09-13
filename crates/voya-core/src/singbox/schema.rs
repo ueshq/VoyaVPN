@@ -530,6 +530,10 @@ pub struct SingboxTls {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reality: Option<SingboxReality>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub fragment: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fragment_fallback_delay: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub record_fragment: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub certificate: Option<Vec<String>>,
@@ -546,6 +550,8 @@ impl Default for SingboxTls {
             alpn: None,
             utls: None,
             reality: None,
+            fragment: None,
+            fragment_fallback_delay: None,
             record_fragment: None,
             certificate: None,
             ech: None,

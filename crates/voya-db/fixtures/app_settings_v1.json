@@ -16,7 +16,8 @@
     "defaultUserAgent": "",
     "sendThrough": null,
     "bindInterface": null,
-    "fragmentEnabled": false,
+    "tlsFragment": "off",
+    "fragmentFallbackDelayMs": 500,
     "cacheFileEnabled": true
   },
   "network": {

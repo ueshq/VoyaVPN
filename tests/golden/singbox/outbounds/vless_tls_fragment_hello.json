@@ -1,0 +1,15 @@
+{
+  "type": "vless",
+  "tag": "proxy",
+  "server": "server.example",
+  "server_port": 443,
+  "uuid": "00000000-0000-0000-0000-000000000012",
+  "packet_encoding": "xudp",
+  "tls": {
+    "enabled": true,
+    "server_name": "tls.example",
+    "insecure": false,
+    "fragment": true,
+    "fragment_fallback_delay": "800ms"
+  }
+}

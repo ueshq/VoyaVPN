@@ -6,7 +6,7 @@ use crate::{golden, CoreGenPlatform, CoreType, RoutingItem, ServerEndpoint, TlsS
 #[test]
 fn singbox_outbound_vless_ws_tls_mux_matches_golden() {
     let mut config = AppConfig::default();
-    config.core_basic_item.enable_fragment = true;
+    config.core_basic_item.tls_fragment = crate::TlsFragmentMode::Record;
     config.core_basic_item.mux_enabled = true;
     config.core_basic_item.def_fingerprint = "firefox".to_string();
     config.core_basic_item.def_user_agent = "chrome".to_string();

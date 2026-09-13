@@ -54,6 +54,28 @@ pub const fn sysproxy_type_from_contract(
 }
 
 #[must_use]
+pub const fn tls_fragment_mode_to_contract(
+    value: voya_core::TlsFragmentMode,
+) -> voya_contracts::TlsFragmentMode {
+    match value {
+        voya_core::TlsFragmentMode::Off => voya_contracts::TlsFragmentMode::Off,
+        voya_core::TlsFragmentMode::TlsHello => voya_contracts::TlsFragmentMode::TlsHello,
+        voya_core::TlsFragmentMode::Record => voya_contracts::TlsFragmentMode::Record,
+    }
+}
+
+#[must_use]
+pub const fn tls_fragment_mode_from_contract(
+    value: voya_contracts::TlsFragmentMode,
+) -> voya_core::TlsFragmentMode {
+    match value {
+        voya_contracts::TlsFragmentMode::Off => voya_core::TlsFragmentMode::Off,
+        voya_contracts::TlsFragmentMode::TlsHello => voya_core::TlsFragmentMode::TlsHello,
+        voya_contracts::TlsFragmentMode::Record => voya_core::TlsFragmentMode::Record,
+    }
+}
+
+#[must_use]
 pub const fn traffic_mode_to_contract(
     value: voya_core::TrafficMode,
 ) -> voya_contracts::TrafficMode {

@@ -118,6 +118,22 @@ describe("semantic settings tabs", () => {
     expect(container.querySelector("#rt-hysteria-up")).toHaveValue("12");
   });
 
+  it("reveals the fallback delay only for ClientHello fragmentation", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<TabHarness Component={CoreTab} />);
+
+    expect(
+      container.querySelector("#rt-fragment-fallback-delay"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "TLS fragmentation" }));
+    await user.click(
+      await screen.findByRole("option", { name: "Split ClientHello" }),
+    );
+    expect(container.querySelector("#rt-fragment-fallback-delay")).toHaveValue(
+      "500",
+    );
+  });
+
   it("updates TUN and system proxy controls", async () => {
     const user = userEvent.setup();
     const { container } = render(<TabHarness Component={NetworkTab} />);

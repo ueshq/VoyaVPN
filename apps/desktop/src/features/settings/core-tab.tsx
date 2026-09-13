@@ -8,9 +8,20 @@ import {
   SettingsGroup,
   SettingsRow,
 } from "./settings-form";
+import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
+import type { TlsFragmentMode } from "@/ipc/bindings";
+
 import type { AppSettingsFormController } from "./use-app-settings";
+
+const TLS_FRAGMENT_MODES = ["off", "tlsHello", "record"] as const satisfies readonly TlsFragmentMode[];
+const TLS_FRAGMENT_LABELS: Record<TlsFragmentMode, TranslationKey> = {
+  off: "settings.core.tlsFragmentOff",
+  record: "settings.core.tlsFragmentRecord",
+  tlsHello: "settings.core.tlsFragmentHello",
+};
+const DEFAULT_FRAGMENT_FALLBACK_DELAY_MS = 500;
 
 export function CoreTab({
   controller,
@@ -65,14 +76,6 @@ export function CoreTab({
             }
           />
           <SettingsCheckbox
-            field="core.fragmentEnabled"
-            checked={settings.core.fragmentEnabled}
-            label={t("settings.core.fragmentEnabled")}
-            onCheckedChange={(fragmentEnabled) =>
-              patchCore({ fragmentEnabled: fragmentEnabled === true })
-            }
-          />
-          <SettingsCheckbox
             field="core.cacheFileEnabled"
             checked={settings.core.cacheFileEnabled}
             label={t("settings.core.cacheFileEnabled")}
@@ -96,6 +99,31 @@ export function CoreTab({
           ]}
           value={settings.core.logLevel}
         />
+        <SelectField
+          field="core.tlsFragment"
+          id="rt-tls-fragment"
+          label={t("settings.core.tlsFragment")}
+          onChange={(tlsFragment) =>
+            patchCore({ tlsFragment: tlsFragment as TlsFragmentMode })
+          }
+          optionLabel={(mode) => t(TLS_FRAGMENT_LABELS[mode as TlsFragmentMode])}
+          options={TLS_FRAGMENT_MODES}
+          value={settings.core.tlsFragment}
+        />
+        {settings.core.tlsFragment === "tlsHello" ? (
+          <NumberField
+            field="core.fragmentFallbackDelayMs"
+            id="rt-fragment-fallback-delay"
+            label={t("settings.core.fragmentFallbackDelay")}
+            onChange={(delay) =>
+              patchCore({
+                fragmentFallbackDelayMs:
+                  delay ?? DEFAULT_FRAGMENT_FALLBACK_DELAY_MS,
+              })
+            }
+            value={settings.core.fragmentFallbackDelayMs}
+          />
+        ) : null}
       </SettingsGroup>
 
       <Disclosure

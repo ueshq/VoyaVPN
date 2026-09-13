@@ -536,7 +536,6 @@
       "bindInterface": "绑定网口",
       "cacheFileEnabled": "启用 sing-box (规则集文件) 的缓存文件",
       "fingerprint": "默认 TLS 指纹 (fingerprint)",
-      "fragmentEnabled": "启用分片 (Fragment)",
       "hysteriaBandwidth": "Hysteria 最大带宽 (上传/下载)",
       "hysteriaHopInterval": "端口跳跃间隔",
       "logEnabled": "启用日志",
@@ -544,7 +543,12 @@
       "muxEnabled": "开启 Mux 多路复用",
       "muxProtocol": "sing-box Mux 多路复用协议",
       "sendThrough": "本地出站地址 (SendThrough)",
-      "userAgent": "用户代理 (User-Agent)"
+      "userAgent": "用户代理 (User-Agent)",
+      "tlsFragment": "TLS 分片",
+      "tlsFragmentOff": "关闭",
+      "tlsFragmentHello": "分片 ClientHello",
+      "tlsFragmentRecord": "分片 TLS 记录",
+      "fragmentFallbackDelay": "分片回退延迟（毫秒）"
     },
     "fields": {
       "hysteriaDownMbps": "Hysteria 最大下行带宽 (Mbps)",
@@ -734,7 +738,8 @@
     "unsupportedSettingsSchema": "不支持的设置版本 {{found}}；当前版本需要 {{expected}}",
     "unsupportedShadowsocksNetwork": "sing-box 不支持在 {{network}} 上使用 Shadowsocks",
     "subscriptionReadOnly": "订阅节点不可手动修改，请更新或编辑订阅源。",
-    "integer": "请输入整数"
+    "integer": "请输入整数",
+    "fragmentFallbackDelayOutOfRange": "TLS 分片回退延迟必须在 {{min}} 到 {{max}} 毫秒之间"
   },
   "window": {
     "close": "关闭",

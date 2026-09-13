@@ -168,6 +168,22 @@ pub(crate) fn normalize_retired_settings_value(value: &mut serde_json::Value) ->
             }
         }
     }
+    // The boolean fragment switch became a mode: enabled meant TLS record
+    // fragmentation, which is what the generator emitted for it.
+    if let Some(core) = json_at(value, &["core"]).and_then(serde_json::Value::as_object_mut) {
+        if let Some(enabled) = core.remove("fragmentEnabled") {
+            let mode = if enabled.as_bool() == Some(true) {
+                "record"
+            } else {
+                "off"
+            };
+            core.entry("tlsFragment")
+                .or_insert_with(|| serde_json::Value::String(mode.to_string()));
+            core.entry("fragmentFallbackDelayMs")
+                .or_insert_with(|| serde_json::Value::from(500));
+            changed = true;
+        }
+    }
     for (path, retired, current) in RETIRED_SETTINGS_VALUES {
         if let Some(slot) = json_at(value, path) {
             if slot.as_str() == Some(retired) {

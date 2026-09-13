@@ -68,6 +68,10 @@ async fn retired_settings_are_normalized_once_without_changing_other_settings() 
         "permitWithoutStream": false
     });
     original["hysteria"]["uploadMbps"] = serde_json::json!(55);
+    let core = original["core"].as_object_mut().expect("core settings");
+    core.remove("tlsFragment");
+    core.remove("fragmentFallbackDelayMs");
+    core.insert("fragmentEnabled".to_string(), serde_json::json!(true));
     sqlx::query("INSERT INTO app_settings VALUES (1, 1, ?)")
         .bind(original.to_string())
         .execute(database.pool())
@@ -79,6 +83,7 @@ async fn retired_settings_are_normalized_once_without_changing_other_settings() 
         serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("settings");
     expected["network"]["systemProxy"]["mode"] = serde_json::json!("forcedChange");
     expected["hysteria"]["uploadMbps"] = serde_json::json!(55);
+    expected["core"]["tlsFragment"] = serde_json::json!("record");
     let original = expected;
     for _ in 0..2 {
         let database = Database::connect(fixture.path()).await.expect("reopen");

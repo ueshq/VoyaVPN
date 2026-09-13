@@ -247,6 +247,10 @@ pub enum ValidationCode {
     HysteriaHopIntervalTooShort {
         minimum_seconds: u32,
     },
+    FragmentFallbackDelayOutOfRange {
+        min: u32,
+        max: u32,
+    },
     /// A rejection this contract has no code for. The English `message` is the
     /// failing manager's own diagnostic and is rendered verbatim.
     Untranslated {

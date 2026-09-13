@@ -102,6 +102,7 @@ export const VALIDATION_KEYS: Record<ValidationCode["code"], TranslationKey> = {
   dnsAddressPort: "validation.dnsAddressPort",
   dnsExpectedIps: "validation.expectedIps",
   dnsHostsLine: "validation.dnsHostsLine",
+  fragmentFallbackDelayOutOfRange: "validation.fragmentFallbackDelayOutOfRange",
   hysteriaHopIntervalTooShort: "validation.hysteriaHopIntervalTooShort",
   invalidAddress: "validation.invalidAddress",
   invalidFlow: "validation.invalidFlow",

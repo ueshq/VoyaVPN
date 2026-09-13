@@ -112,6 +112,7 @@ pub(crate) fn canonicalize(value: &Value) -> Value {
 pub(crate) fn generated_value_for_case(case: &GoldenCase) -> Value {
     match case.generated.as_str() {
         "singbox.outbound.vless_ws_tls_mux" => singbox_vless_ws_tls_mux_outbound(),
+        "singbox.outbound.vless_tls_fragment_hello" => singbox_vless_tls_fragment_hello_outbound(),
         "singbox.dns.fakeip_typed" => singbox_fakeip_typed_dns(),
         "singbox.route.rulesets_from_dns" => singbox_rulesets_from_dns(),
         "singbox.inbounds.tun" => singbox_tun_inbounds(),
@@ -259,7 +260,7 @@ fn singbox_vless_ws_tls_mux_outbound() -> Value {
 
 fn singbox_vless_ws_tls_mux_context() -> CoreConfigContext {
     let mut config = AppConfig::default();
-    config.core_basic_item.enable_fragment = true;
+    config.core_basic_item.tls_fragment = crate::TlsFragmentMode::Record;
     config.core_basic_item.mux_enabled = true;
     config.core_basic_item.def_fingerprint = "firefox".to_string();
     config.core_basic_item.def_user_agent = "chrome".to_string();
@@ -285,6 +286,41 @@ fn singbox_vless_ws_tls_mux_context() -> CoreConfigContext {
                 "https://dns.example/dns-query".to_string(),
             ],
         )),
+        ..ProfileItem::default()
+    };
+
+    singbox_context(config, node)
+}
+
+fn singbox_vless_tls_fragment_hello_outbound() -> Value {
+    let generated = generate_singbox_config(&singbox_vless_tls_fragment_hello_context())
+        .expect("sing-box config should generate");
+    serde_json::to_value(
+        generated
+            .outbounds
+            .iter()
+            .find(|outbound| outbound.tag == PROXY_TAG)
+            .expect("proxy outbound"),
+    )
+    .expect("sing-box outbound serializes")
+}
+
+fn singbox_vless_tls_fragment_hello_context() -> CoreConfigContext {
+    let mut config = AppConfig::default();
+    config.core_basic_item.tls_fragment = crate::TlsFragmentMode::TlsHello;
+    config.core_basic_item.fragment_fallback_delay_ms = 800;
+
+    let node = ProfileItem {
+        index_id: "n-vless-fragment".to_string(),
+        remarks: "vless-fragment".to_string(),
+        protocol: ProfileProtocol::Vless {
+            server: endpoint("server.example", 443),
+            uuid: "00000000-0000-0000-0000-000000000012".to_string(),
+            flow: None,
+            encryption: Some("none".to_string()),
+        },
+        transport: Some(raw_transport()),
+        tls: Some(tls_settings("tls.example", &[], Vec::new())),
         ..ProfileItem::default()
     };
 
@@ -918,6 +954,12 @@ fn acceptance_configs_for_case(case: &GoldenCase) -> Vec<Value> {
             vec![
                 generate_singbox_config_value(&singbox_vless_ws_tls_mux_context())
                     .expect("VLESS acceptance config should generate"),
+            ]
+        }
+        "singbox.outbound.vless_tls_fragment_hello" => {
+            vec![
+                generate_singbox_config_value(&singbox_vless_tls_fragment_hello_context())
+                    .expect("VLESS fragment acceptance config should generate"),
             ]
         }
         "singbox.runtime.pre_socks" => singbox_pre_socks_configs(),

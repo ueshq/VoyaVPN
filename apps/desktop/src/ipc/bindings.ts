@@ -309,7 +309,8 @@ export type CoreSettings = {
 	defaultUserAgent: string,
 	sendThrough: string | null,
 	bindInterface: string | null,
-	fragmentEnabled: boolean,
+	tlsFragment: TlsFragmentMode,
+	fragmentFallbackDelayMs: number,
 	cacheFileEnabled: boolean,
 };
 
@@ -947,6 +948,16 @@ export type ThemeMode = "system" | "light" | "dark";
 
 export type TitleBarLayout = "macos" | "windows" | "none";
 
+/**
+ *  How TLS handshakes are split to get past filters that match on the
+ *  ClientHello.
+ */
+export type TlsFragmentMode = "off" | 
+/**  sing-box `tls.fragment`: the ClientHello is split into TCP segments. */
+"tlsHello" | 
+/**  sing-box `tls.record_fragment`: the ClientHello is split into TLS records. */
+"record";
+
 export type TlsMode = "tls" | "reality";
 
 export type TlsSettings = {
@@ -1046,7 +1057,7 @@ export type TunStatus = {
  *  greppable, it shows the English diagnostic verbatim, and adding a code for
  *  one is a purely additive change.
  */
-export type ValidationCode = { code: "subscriptionReadOnly"; subscriptionId: string } | { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "unsupportedProtocol"; protocol: string } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | 
+export type ValidationCode = { code: "subscriptionReadOnly"; subscriptionId: string } | { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "unsupportedProtocol"; protocol: string } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | { code: "fragmentFallbackDelayOutOfRange"; min: number; max: number } | 
 /**
  *  A rejection this contract has no code for. The English `message` is the
  *  failing manager's own diagnostic and is rendered verbatim.

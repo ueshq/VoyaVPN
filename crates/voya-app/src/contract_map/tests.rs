@@ -472,6 +472,21 @@ fn every_system_proxy_mode_round_trips() {
 }
 
 #[test]
+fn every_tls_fragment_mode_round_trips() {
+    for mode in [
+        voya_core::TlsFragmentMode::Off,
+        voya_core::TlsFragmentMode::TlsHello,
+        voya_core::TlsFragmentMode::Record,
+    ] {
+        assert_eq!(
+            tls_fragment_mode_from_contract(tls_fragment_mode_to_contract(mode)),
+            mode,
+            "{mode:?}"
+        );
+    }
+}
+
+#[test]
 fn every_traffic_mode_round_trips() {
     for mode in [
         voya_core::TrafficMode::Rule,

@@ -536,7 +536,6 @@
       "bindInterface": "Bind Interface",
       "cacheFileEnabled": "Enable cache file for sing-box (ruleset files)",
       "fingerprint": "Default TLS fingerprint",
-      "fragmentEnabled": "Enable fragment",
       "hysteriaBandwidth": "Hysteria Max bandwidth (Up/Down)",
       "hysteriaHopInterval": "Port hopping interval",
       "logEnabled": "Enable Log",
@@ -544,7 +543,12 @@
       "muxEnabled": "Turn on Mux Multiplexing",
       "muxProtocol": "sing-box Mux Protocol",
       "sendThrough": "Local outbound address (SendThrough)",
-      "userAgent": "User-Agent"
+      "userAgent": "User-Agent",
+      "tlsFragment": "TLS fragmentation",
+      "tlsFragmentOff": "Off",
+      "tlsFragmentHello": "Split ClientHello",
+      "tlsFragmentRecord": "Split TLS records",
+      "fragmentFallbackDelay": "Fragment fallback delay (ms)"
     },
     "fields": {
       "hysteriaDownMbps": "Hysteria max download bandwidth (Mbps)",
@@ -734,7 +738,8 @@
     "unsupportedSettingsSchema": "Unsupported settings version {{found}}; this build expects {{expected}}",
     "unsupportedShadowsocksNetwork": "sing-box does not support Shadowsocks over {{network}}",
     "subscriptionReadOnly": "Subscription nodes are read-only. Update or edit the subscription source instead.",
-    "integer": "Enter a whole number"
+    "integer": "Enter a whole number",
+    "fragmentFallbackDelayOutOfRange": "The TLS fragment fallback delay must be between {{min}} and {{max}} ms"
   },
   "window": {
     "close": "Close",

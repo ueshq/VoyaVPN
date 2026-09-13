@@ -87,8 +87,26 @@ pub struct CoreSettings {
     pub default_user_agent: String,
     pub send_through: Option<String>,
     pub bind_interface: Option<String>,
-    pub fragment_enabled: bool,
+    pub tls_fragment: TlsFragmentMode,
+    pub fragment_fallback_delay_ms: i32,
     pub cache_file_enabled: bool,
+}
+
+/// How TLS handshakes are split to get past filters that match on the
+/// ClientHello.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum TlsFragmentMode {
+    #[default]
+    Off,
+    /// sing-box `tls.fragment`: the ClientHello is split into TCP segments.
+    TlsHello,
+    /// sing-box `tls.record_fragment`: the ClientHello is split into TLS records.
+    Record,
+}
+
+const fn default_fragment_fallback_delay_ms() -> i32 {
+    500
 }
 
 impl Default for CoreSettings {
@@ -102,7 +120,8 @@ impl Default for CoreSettings {
             default_user_agent: String::new(),
             send_through: None,
             bind_interface: None,
-            fragment_enabled: false,
+            tls_fragment: TlsFragmentMode::Off,
+            fragment_fallback_delay_ms: default_fragment_fallback_delay_ms(),
             cache_file_enabled: true,
         }
     }

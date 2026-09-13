@@ -100,3 +100,13 @@ pub enum SysProxyType {
     ForcedChange,
     Unchanged,
 }
+
+/// How TLS handshakes are split; see `voya_contracts::TlsFragmentMode`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TlsFragmentMode {
+    #[default]
+    Off,
+    TlsHello,
+    Record,
+}

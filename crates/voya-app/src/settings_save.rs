@@ -9,7 +9,8 @@ use voya_db::AppStateRecord;
 use crate::{
     contract_map::{
         simple_dns_from_contract, simple_dns_to_contract, sysproxy_type_from_contract,
-        sysproxy_type_to_contract, traffic_mode_from_contract, traffic_mode_to_contract,
+        sysproxy_type_to_contract, tls_fragment_mode_from_contract, tls_fragment_mode_to_contract,
+        traffic_mode_from_contract, traffic_mode_to_contract,
     },
     input_safety,
 };
@@ -37,6 +38,8 @@ pub enum AppSettingsValidationError {
     NegativeHysteriaBandwidth { field: &'static str },
     #[error("Hysteria hop interval must be at least 5 seconds")]
     InvalidHysteriaHopInterval,
+    #[error("TLS fragment fallback delay must be between 1 and 10000 ms")]
+    InvalidFragmentFallbackDelay,
 }
 
 impl AppSettingsValidationError {
@@ -45,6 +48,7 @@ impl AppSettingsValidationError {
     pub const fn field(&self) -> &'static str {
         match self {
             Self::UnsupportedSchema { .. } => "schemaVersion",
+            Self::InvalidFragmentFallbackDelay => "core.fragmentFallbackDelayMs",
             Self::InvalidText { field, .. } | Self::NegativeHysteriaBandwidth { field } => field,
             Self::InvalidTunMtu => "network.tun.mtu",
             Self::InvalidHysteriaHopInterval => "hysteria.hopIntervalSeconds",
@@ -73,6 +77,12 @@ impl AppSettingsValidationError {
             Self::NegativeHysteriaBandwidth { .. } => {
                 contracts::ValidationCode::NegativeHysteriaBandwidth
             }
+            Self::InvalidFragmentFallbackDelay => {
+                contracts::ValidationCode::FragmentFallbackDelayOutOfRange {
+                    min: FRAGMENT_FALLBACK_DELAY_RANGE_MS.0,
+                    max: FRAGMENT_FALLBACK_DELAY_RANGE_MS.1,
+                }
+            }
             Self::InvalidHysteriaHopInterval => {
                 contracts::ValidationCode::HysteriaHopIntervalTooShort {
                     minimum_seconds: MIN_HYSTERIA_HOP_INTERVAL_SECONDS,
@@ -86,6 +96,7 @@ impl AppSettingsValidationError {
 /// cannot drift.
 const TUN_MTU_RANGE: (u32, u32) = (576, 65_535);
 const MIN_HYSTERIA_HOP_INTERVAL_SECONDS: u32 = 5;
+const FRAGMENT_FALLBACK_DELAY_RANGE_MS: (u32, u32) = (1, 10_000);
 
 pub fn validate_app_settings(
     settings: &contracts::AppSettingsV1,
@@ -123,6 +134,12 @@ pub fn validate_app_settings(
         < i32::try_from(MIN_HYSTERIA_HOP_INTERVAL_SECONDS).unwrap_or(i32::MAX)
     {
         return Err(AppSettingsValidationError::InvalidHysteriaHopInterval);
+    }
+    if !(i32::try_from(FRAGMENT_FALLBACK_DELAY_RANGE_MS.0).unwrap_or(i32::MAX)
+        ..=i32::try_from(FRAGMENT_FALLBACK_DELAY_RANGE_MS.1).unwrap_or(i32::MAX))
+        .contains(&settings.core.fragment_fallback_delay_ms)
+    {
+        return Err(AppSettingsValidationError::InvalidFragmentFallbackDelay);
     }
     Ok(())
 }
@@ -187,7 +204,8 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
             default_user_agent: config.core_basic_item.def_user_agent.clone(),
             send_through: config.core_basic_item.send_through.clone(),
             bind_interface: config.core_basic_item.bind_interface.clone(),
-            fragment_enabled: config.core_basic_item.enable_fragment,
+            tls_fragment: tls_fragment_mode_to_contract(config.core_basic_item.tls_fragment),
+            fragment_fallback_delay_ms: config.core_basic_item.fragment_fallback_delay_ms,
             cache_file_enabled: config.core_basic_item.enable_cache_file4_sbox,
         },
         network: contracts::NetworkSettings {
@@ -279,7 +297,8 @@ pub fn app_config_from_settings(
             def_user_agent: settings.core.default_user_agent.clone(),
             send_through: settings.core.send_through.clone(),
             bind_interface: settings.core.bind_interface.clone(),
-            enable_fragment: settings.core.fragment_enabled,
+            tls_fragment: tls_fragment_mode_from_contract(settings.core.tls_fragment),
+            fragment_fallback_delay_ms: settings.core.fragment_fallback_delay_ms,
             enable_cache_file4_sbox: settings.core.cache_file_enabled,
         },
         tun_mode_item: TunModeItem {
@@ -478,7 +497,8 @@ mod tests {
                 def_user_agent: "user-agent-value".to_string(),
                 send_through: Some("send-through-value".to_string()),
                 bind_interface: Some("bind-interface-value".to_string()),
-                enable_fragment: true,
+                tls_fragment: voya_core::TlsFragmentMode::TlsHello,
+                fragment_fallback_delay_ms: 51,
                 enable_cache_file4_sbox: false,
             },
             tun_mode_item: TunModeItem {
@@ -740,7 +760,7 @@ mod tests {
     /// message uses, which no form can key off.
     #[test]
     fn every_settings_rejection_names_the_contract_path_it_is_about() {
-        let cases: [(contracts::AppSettingsV1, &str); 5] = [
+        let cases: [(contracts::AppSettingsV1, &str); 6] = [
             (
                 contracts::AppSettingsV1 {
                     schema_version: contracts::CURRENT_SCHEMA_VERSION + 1,
@@ -763,6 +783,10 @@ mod tests {
             (
                 settings_with(|settings| settings.hysteria.hop_interval_seconds = 1),
                 "hysteria.hopIntervalSeconds",
+            ),
+            (
+                settings_with(|settings| settings.core.fragment_fallback_delay_ms = 0),
+                "core.fragmentFallbackDelayMs",
             ),
         ];
 

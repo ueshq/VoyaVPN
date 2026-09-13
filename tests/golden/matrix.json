@@ -21,6 +21,22 @@
       "volatile_fields": []
     },
     {
+      "id": "singbox-outbound-vless-tls-fragment-hello",
+      "core": "sing-box",
+      "fixture": "singbox/outbounds/vless_tls_fragment_hello.json",
+      "generated": "singbox.outbound.vless_tls_fragment_hello",
+      "summary": "sing-box VLESS with TLS ClientHello fragmentation and an explicit fallback delay.",
+      "hotspots": [
+        "security",
+        "serialization"
+      ],
+      "reference_paths": [
+        "crates/voya-core/src/singbox/outbounds/stream.rs"
+      ],
+      "core_acceptance": true,
+      "volatile_fields": []
+    },
+    {
       "id": "singbox-outbound-tuic-tls",
       "core": "sing-box",
       "fixture": "singbox/outbounds/tuic_tls.json",

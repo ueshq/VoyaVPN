@@ -158,16 +158,17 @@ fn apply_outbound_tls(
                 .find(|item| !item.is_empty())
         })
     });
+    let core = &context.app_config.core_basic_item;
+    let split_hello = core.tls_fragment == crate::TlsFragmentMode::TlsHello;
     let mut tls = SingboxTls {
         enabled: true,
         server_name,
         insecure: Some(allow_insecure(context)),
         alpn: (!domain_tls.alpn.is_empty()).then(|| domain_tls.alpn.clone()),
-        record_fragment: context
-            .app_config
-            .core_basic_item
-            .enable_fragment
-            .then_some(true),
+        fragment: split_hello.then_some(true),
+        fragment_fallback_delay: split_hello
+            .then(|| format!("{}ms", core.fragment_fallback_delay_ms.max(1))),
+        record_fragment: (core.tls_fragment == crate::TlsFragmentMode::Record).then_some(true),
         ech: parse_ech(&domain_tls.ech_config),
         ..SingboxTls::default()
     };
