@@ -22,7 +22,6 @@ export function useNodeEditor(
   const [importMethod, setImportMethod] = useState<DialogImportMethod | null>(null);
   const profileDialogTriggerRef = useRef<HTMLElement | null>(null);
   const addTriggerRef = useRef<HTMLButtonElement>(null);
-  const importTriggerRef = useRef<HTMLButtonElement>(null);
   const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -107,7 +106,6 @@ export function useNodeEditor(
     importMethod,
     setImportMethod,
     addTriggerRef,
-    importTriggerRef,
     pendingDelete,
     setPendingDelete,
     saveError,

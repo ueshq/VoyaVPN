@@ -50,7 +50,10 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     ))?;
     // A fresh install starts in the platform's native VPN mode where it has one,
     // and macOS never loads in a system proxy mode it does not offer.
-    let config = tauri::async_runtime::block_on(services.load_config_for(TargetOs::current()))?;
+    let system_locale = voya_platform::locale::system_locale();
+    let config = tauri::async_runtime::block_on(
+        services.load_config_for(TargetOs::current(), system_locale.as_deref()),
+    )?;
     let system_proxy_manager = SystemProxyManager::new(
         SystemProxyService::new(Arc::new(StdProcessRunner::new())),
         runtime_paths.clone(),
@@ -185,10 +188,13 @@ pub(super) fn database_path(app: &tauri::App) -> Result<PathBuf, Box<dyn Error>>
     Ok(app_data_dir(app)?.join(voya_app::startup::DATABASE_NAME))
 }
 
-const STARTUP_FAILED_TITLE: &str = "VoyaVPN could not start";
-const RESET_DATABASE_LABEL: &str = "Reset Database";
-const QUIT_LABEL: &str = "Quit";
-const DATABASE_RESET_EXPLANATION: &str = "Reset Database moves this database to a backup in the same folder and restarts VoyaVPN with no nodes, subscriptions or custom rules, and default settings.";
+/// The startup failure dialog in the system language: the settings that would
+/// name the chosen language may be exactly what failed to load.
+fn failure_text() -> voya_app::startup::StartupFailureText {
+    voya_app::startup::startup_failure_text(
+        &voya_platform::locale::system_locale().unwrap_or_default(),
+    )
+}
 
 /// A fatal startup failure waiting for an event loop to show it on.
 struct StartupFailure {
@@ -229,10 +235,11 @@ pub(super) fn report_startup_failure<R: tauri::Runtime>(app: &tauri::AppHandle<R
     }
 
     let handle = app.clone();
+    let text = failure_text();
     let Some(database) = failure.resettable_database else {
         app.dialog()
             .message(failure.message)
-            .title(STARTUP_FAILED_TITLE)
+            .title(text.title.clone())
             .kind(MessageDialogKind::Error)
             .show(move |_| handle.exit(1));
         return;
@@ -240,15 +247,12 @@ pub(super) fn report_startup_failure<R: tauri::Runtime>(app: &tauri::AppHandle<R
     // The database fails the same way on every launch, so the dialog offers the
     // one remedy: move it aside and start again with a fresh one.
     app.dialog()
-        .message(format!(
-            "{}\n\n{DATABASE_RESET_EXPLANATION}",
-            failure.message
-        ))
-        .title(STARTUP_FAILED_TITLE)
+        .message(format!("{}\n\n{}", failure.message, text.reset_explanation))
+        .title(text.title.clone())
         .kind(MessageDialogKind::Error)
         .buttons(MessageDialogButtons::OkCancelCustom(
-            RESET_DATABASE_LABEL.to_string(),
-            QUIT_LABEL.to_string(),
+            text.reset_database.clone(),
+            text.quit.clone(),
         ))
         .show(move |reset| {
             if reset {
@@ -280,7 +284,7 @@ fn reset_database_and_restart<R: tauri::Runtime>(app: &tauri::AppHandle<R>, data
                     "Could not move the database aside: {error}\n\nTo reset it by hand, run:\n{}",
                     voya_app::startup::manual_database_reset_command(database)
                 ))
-                .title(STARTUP_FAILED_TITLE)
+                .title(failure_text().title)
                 .kind(MessageDialogKind::Error)
                 .show(move |_| handle.exit(1));
         }

@@ -1,4 +1,5 @@
 import type { TranslationFunction } from "@voya/i18n";
+import type { ImportProfilesResult } from "@/ipc/bindings";
 import type { useNodeGroups } from "./use-node-groups";
 import type { NodeOperation } from "./use-node-operation";
 import type { useNodeListData } from "./use-node-list-data";
@@ -46,10 +47,9 @@ export type NodeDialogsController = Pick<NodeOperation, "operationError"> &
     | "confirmDelete"
     | "detailsId"
     | "dialogState"
-    | "handleDialogImport"
     | "handleSave"
+    | "addTriggerRef"
     | "importMethod"
-    | "importTriggerRef"
     | "pendingDelete"
     | "restoreDetailsFocus"
     | "restoreProfileDialogFocus"
@@ -71,7 +71,10 @@ export type NodeDialogsController = Pick<NodeOperation, "operationError"> &
     | "subscriptionsOpen"
   > &
   Pick<NodeExport, "setShareQrContent" | "shareQrContent"> &
-  Pick<NodeShared, "t">;
+  Pick<NodeShared, "t"> & {
+    /** Refreshes the list, then updates any subscriptions the import created. */
+    handleImported: (result: ImportProfilesResult, isActive?: () => boolean) => Promise<void>;
+  };
 
 export type NodeNoticesController = Pick<ReturnType<typeof useNodeImport>, "directImportPending"> &
   Pick<NodeOperation, "operationError" | "operationMessage"> &
@@ -79,7 +82,7 @@ export type NodeNoticesController = Pick<ReturnType<typeof useNodeImport>, "dire
   Pick<NodeShared, "t">;
 
 export type NodeToolbarController = Pick<ReturnType<typeof useNodeImport>, "handleDirectImport" | "directImportPending"> &
-  Pick<NodeEditor, "addTriggerRef" | "importTriggerRef" | "setDialogState" | "setImportMethod"> &
+  Pick<NodeEditor, "addTriggerRef" | "setDialogState" | "setImportMethod"> &
   Pick<NodeSubscriptions, "openSubscription" | "updateAllSubscriptions" | "updatingAllSubscriptions"> &
   Pick<PolicyGroups, "openGroupEditor"> &
   Pick<NodeShared, "t">;

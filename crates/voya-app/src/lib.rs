@@ -16,6 +16,7 @@ pub mod elevation;
 pub mod exports;
 pub mod input_safety;
 pub mod invalidation;
+pub mod language;
 pub mod logging;
 pub mod policy_groups;
 pub mod profiles;

@@ -103,7 +103,7 @@ describe("ImportProfilesDialog import results", () => {
         "Imported 0 node(s). 1 skipped. 2 failed to parse. Target: Manual import.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("Line 3 was skipped: unsupported scheme")).toBeInTheDocument();
+    expect(screen.getByText("Line 3 was skipped: the link is not in a format VoyaVPN can read.")).toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 
@@ -173,6 +173,26 @@ describe("ImportProfilesDialog sources and lifecycle", () => {
   });
 
 
+
+  it("closes once the text only added subscriptions, leaving their update to the page", async () => {
+    ipcMocks.importProfilesFromText.mockResolvedValue(
+      makeImportResult({
+        addedSubscriptionIds: ["sub-1"],
+        lineIssues: [{ line: 1, code: { code: "subscriptionSourceAdded" } }],
+      }),
+    );
+    const { onImported, onOpenChange } = renderDialog();
+
+    fireEvent.change(screen.getByLabelText("Import payload"), {
+      target: { value: "https://example.test/subscribe" },
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Import" }));
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(onImported).toHaveBeenCalledWith(
+      expect.objectContaining({ addedSubscriptionIds: ["sub-1"] }),
+    );
+  });
 });
 
 describe("ImportProfilesDialog QR scanning", () => {
@@ -218,6 +238,23 @@ describe("ImportProfilesDialog QR scanning", () => {
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
   });
 
+  it("adds a scanned link below the links already typed", async () => {
+    scannerMocks.scanQrBlob.mockResolvedValue("vless://image.example");
+    renderDialog();
+
+    fireEvent.change(screen.getByLabelText("Import payload"), {
+      target: { value: "trojan://typed.example" },
+    });
+    fireEvent.change(await screen.findByLabelText("Scan image"), {
+      target: { files: [new File(["qr"], "profile.png", { type: "image/png" })] },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Import payload")).toHaveValue(
+        "trojan://typed.example\nvless://image.example",
+      ),
+    );
+  });
 });
 
 // Full `ImportProfilesResult` shape; a partial one is what let the dialog paper
@@ -233,6 +270,7 @@ function makeImportResult(
     imported: 0,
     importedProfileIds: [],
     lineIssues: [],
+    addedSubscriptionIds: [],
     parsed: 0,
     removedDuplicates: 0,
     removedExisting: 0,

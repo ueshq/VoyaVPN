@@ -37,7 +37,8 @@
     "deleteSubscriptionTitle": "刪除訂閱？",
     "resetRoutingRulesTitle": "還原預設規則？",
     "resetRoutingRulesDescription": "所有規則（包括你新增的規則）將替換為預設規則，分應用代理設定會保留。",
-    "resetRoutingRulesConfirm": "還原"
+    "resetRoutingRulesConfirm": "還原",
+    "deleteActiveProfileHint": "其中包含正在使用的節點，刪除後連線會中斷。"
   },
   "coreFlowReason": {
     "connect": "連線",
@@ -86,10 +87,6 @@
     "disconnectLabel": "中斷連線",
     "trafficMode": "流量模式",
     "chooseNode": "選擇節點",
-    "missingNodes": {
-      "title": "請先新增節點",
-      "description": "目前沒有可用節點，請先新增節點或訂閱後再連線。"
-    },
     "selectedNodeLabel": "待連線節點",
     "trafficModeInfo": "流量模式說明",
     "trafficModeHint": "規則：根據規則決定哪些流量使用代理；\n全域：接管的流量均使用所選節點；",
@@ -102,7 +99,15 @@
     "selectedGroupLabel": "已選策略群組",
     "groupVia": "經由 {{node}}",
     "trafficModeRule": "規則",
-    "vpnPermissionHint": "macOS 會請求新增 VPN 設定，請點選「允許」後連線。"
+    "vpnPermissionHint": "macOS 會請求新增 VPN 設定，請點選「允許」後連線。",
+    "noSelection": "尚未選擇節點",
+    "viewLogs": "檢視日誌",
+    "profilesFailed": "無法讀取節點清單：{{message}}",
+    "actionFailed": {
+      "connect": "連線失敗：{{message}}",
+      "disconnect": "中斷連線失敗：{{message}}",
+      "restart": "重新啟動失敗：{{message}}"
+    }
   },
   "logCodes": {
     "connected": "核心守護程序已啟動",
@@ -175,7 +180,8 @@
     "activeProfileRestartFailed": "已切換節點，但核心重新啟動失敗",
     "policyGroupRefreshFailed": "重新整理策略群組失敗",
     "policyGroupSavedRestartFailed": "策略群組已儲存，但核心重新啟動失敗",
-    "policyGroupSelectionRuntimeUpdateFailed": "已儲存選擇，但執行中的核心未能切換"
+    "policyGroupSelectionRuntimeUpdateFailed": "已儲存選擇，但執行中的核心未能切換",
+    "activeSelectionRemoved": "正在使用的節點或策略群組已被刪除，連線已中斷。"
   },
   "options": {
     "autostart": "開機自動啟動",
@@ -317,24 +323,28 @@
         },
         "importing": "正在匯入節點…",
         "line": {
-          "subscriptionSourceAdded": "第 {{line}} 行已新增為訂閱來源；更新該訂閱即可匯入其節點。",
-          "unsupportedTransport": "第 {{line}} 行已略過：不支援 {{transport}} 傳輸方式。",
-          "parseFailed": "第 {{line}} 行已略過：{{detail}}"
+          "subscriptionSourceAdded": "第 {{line}} 行已新增為訂閱，正在更新以匯入節點。",
+          "unsupportedTransport": "第 {{line}} 行已略過：不支援 {{transport}} 傳輸方式，請向服務商改用 WebSocket、gRPC 等傳輸的節點。",
+          "parseFailed": "第 {{line}} 行已略過：無法辨識連結格式。",
+          "unsupportedProtocol": "第 {{line}} 行已略過：不支援這種連結類型。",
+          "missingField": "第 {{line}} 行已略過：{{protocol}} 連結缺少 {{field}}。",
+          "invalidPort": "第 {{line}} 行已略過：{{protocol}} 連結的連接埠 {{port}} 無效。"
         }
       },
       "importMethods": {
-        "qrImage": "掃描 QR 碼圖片",
-        "qrScreen": "掃描螢幕 QR 碼"
+        "qrScreen": "掃描螢幕 QR 碼",
+        "paste": "貼上連結或訂閱網址"
       },
       "importDialog": {
         "reading": "正在讀取內容…",
-        "description": "導入分享鏈接或節點配置文本。",
+        "description": "貼上分享連結或訂閱網址，每行一個；也可以掃描 QR 碼圖片。",
         "manual": "手動節點",
         "mode": "導入方式",
         "payload": "節點配置內容",
         "subscriptionTarget": "訂閱來源",
         "target": "導入位置",
-        "title": "匯入節點"
+        "title": "新增節點或訂閱",
+        "placeholder": "vless://…\nhttps://example.com/subscription"
       },
       "menu": {
         "actionsFor": "{{name}} 的操作",
@@ -376,7 +386,8 @@
         "import": "匯入",
         "subscriptions": "訂閱",
         "addNode": "新增節點",
-        "updateAllSubscriptions": "更新全部訂閱"
+        "updateAllSubscriptions": "更新全部訂閱",
+        "manualNode": "手動填寫節點"
       },
       "undecodable": "有 {{count}} 個已儲存的節點無法由目前版本讀取，已被隱藏。它們很可能由較新的版本寫入；升級 VoyaVPN 後應可重新顯示。",
       "untitled": "未命名",
@@ -895,7 +906,7 @@
     "use": "使用",
     "inUse": "使用中",
     "active": "目前",
-    "delay": "{{ms}} 毫秒",
+    "delay": "{{ms}} ms",
     "name": "名稱",
     "strategyLabel": "策略",
     "strategy": {
@@ -917,5 +928,11 @@
     "testUrl": "測速網址",
     "interval": "測速間隔（秒）",
     "tolerance": "容差（毫秒）"
+  },
+  "startupFailure": {
+    "title": "VoyaVPN 無法啟動",
+    "resetDatabase": "重設資料庫",
+    "quit": "結束",
+    "resetExplanation": "重設資料庫會將目前的資料庫移到同一資料夾中的備份，並以空白的節點、訂閱、自訂規則與預設設定重新啟動 VoyaVPN。"
   }
 }

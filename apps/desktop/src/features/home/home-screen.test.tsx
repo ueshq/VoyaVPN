@@ -1,5 +1,5 @@
 import { useShellStore } from "@/stores/shell-store";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -191,6 +191,7 @@ describe("HomeScreen", () => {
   beforeEach(async () => {
     useShellStore.getState().setActiveTab("home");
     useRuntimeActionStore.setState({
+      lastError: null,
       pendingAction: null,
       modePending: false,
       switchingId: null,
@@ -235,7 +236,7 @@ describe("HomeScreen", () => {
     mockProfileList([]);
     renderHome();
     await waitFor(() => expect(connectButton()).toBeEnabled());
-    expect(connectButton()).toHaveAccessibleName("Connect");
+    expect(connectButton()).toHaveAccessibleName("Add node");
     expect(screen.queryByRole("heading")).not.toBeInTheDocument();
     expect(screen.queryByText("Not protected")).not.toBeInTheDocument();
     expect(screen.queryByText("Add a node to connect")).not.toBeInTheDocument();
@@ -461,12 +462,10 @@ describe("HomeScreen", () => {
     await waitFor(() => expect(connectButton()).toBeEnabled());
     await user.click(connectButton());
 
-    await waitFor(() =>
-      expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
-        description: "sudo helper refused",
-        severity: "error",
-      }),
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not connect: sudo helper refused",
     );
+    expect(useToastStore.getState().toasts).toHaveLength(0);
     expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1);
   });
 
@@ -492,24 +491,26 @@ describe("HomeScreen", () => {
       runningCoreType: "singBox",
       state: "connected",
     });
-    expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
-      description: "sudo kill failed",
-      title: "Disconnect",
-    });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not disconnect: sudo kill failed",
+    );
     expect(connectButton()).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(ipcMock.disconnectCore).toHaveBeenCalledTimes(2));
+    await user.click(await screen.findByRole("button", { name: "View logs" }));
+    expect(useShellStore.getState()).toMatchObject({
+      activeTab: "connections",
+      connectionsView: "logs",
+    });
   });
 
-  it("guides an empty home to the Nodes Add menu without starting a connection", async () => {
+  it("sends an empty home straight to the Nodes Add menu without starting a connection", async () => {
     mockProfileList([]);
     renderHome();
     await waitFor(() => expect(connectButton()).toBeEnabled());
+    expect(connectButton()).toHaveAccessibleName("Add node");
     await userEvent.click(connectButton());
-    const dialog = screen.getByRole("dialog", { name: "Add a node first" });
-    expect(dialog).toHaveAccessibleDescription(
-      "No nodes are available. Add a node or subscription before connecting.",
-    );
-    expect(useShellStore.getState().activeTab).toBe("home");
-    await userEvent.click(within(dialog).getByRole("button", { name: "Add node" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(useShellStore.getState()).toMatchObject({
       activeTab: "profiles", profilesAddMenuOpen: true, focusPageTitle: false,
@@ -518,18 +519,23 @@ describe("HomeScreen", () => {
     expect(ipcMock.setActiveProfile).not.toHaveBeenCalled();
   });
 
-  it.each(["Cancel", "Close", "Escape"])("dismisses the node guide with %s and restores focus", async (action) => {
-    mockProfileList([]);
+  it("explains a node list that could not be read and retries it", async () => {
+    ipcMock.listProfiles.mockRejectedValueOnce(new Error("Profiles unavailable"));
     renderHome();
-    await waitFor(() => expect(connectButton()).toBeEnabled());
-    await userEvent.click(connectButton());
-    const dialog = screen.getByRole("dialog", { name: "Add a node first" });
-    if (action === "Escape") await userEvent.keyboard("{Escape}");
-    else await userEvent.click(within(dialog).getByRole("button", { name: action }));
-    await waitFor(() => expect(connectButton()).toHaveFocus());
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(useShellStore.getState()).toMatchObject({ activeTab: "home", profilesAddMenuOpen: false });
-    expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not read the node list: Profiles unavailable",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("heading", { name: "Active node" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("names a missing selection instead of claiming there are no nodes", async () => {
+    mockProfileList([{ ...makeActiveProfile({ id: "saved" }), isActive: false }]);
+    renderHome();
+
+    expect(await screen.findByRole("heading", { name: "No node selected" })).toBeInTheDocument();
   });
 
   it("does not offer the empty-node guide while profiles are loading", async () => {

@@ -795,6 +795,7 @@ async fn removing_the_running_node_stops_it_without_selecting_another_node() {
     let events = harness.sink.events();
     assert!(events.contains(&"statistics:zero".into()));
     assert!(events.contains(&"sysproxy".into()));
+    assert!(events.contains(&"notice:Warn:activeSelectionRemoved".into()));
     // A repeated notification must not interrupt a newer valid selection.
     config.index_id = "other".into();
     flow.connect(&config).await.expect("select other");

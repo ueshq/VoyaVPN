@@ -108,7 +108,7 @@ export function AppSidebar({ titleBarLayout }: { titleBarLayout: TitleBarLayout 
   );
 }
 
-// Always-mounted footer with the live connection state and up/down rates,
+// Always-mounted footer with the visible connection state and up/down rates,
 // absorbing what the removed bottom status bar used to show. Speeds read the
 // statistics transient stream and render 0 B/s while it is quiet or disabled.
 function SidebarFooter() {
@@ -121,8 +121,17 @@ function SidebarFooter() {
   const download = formatBytesPerSecond(statistics?.downloadBytesPerSecond ?? 0);
 
   return (
-    <div aria-label={t("status.aria")} className="sidebar-footer" data-testid="sidebar-footer">
-      <span className="sr-only">{t(CORE_STATE_TRANSLATION_KEYS[state])}</span>
+    <div
+      aria-label={t("status.aria")}
+      className="sidebar-footer"
+      data-state={state}
+      data-testid="sidebar-footer"
+    >
+      {/* Visible on every page, so being connected never has to be guessed from the rates. */}
+      <p className="sidebar-status">
+        <span aria-hidden="true" className="sidebar-status-dot" />
+        <span className="sidebar-status-label">{t(CORE_STATE_TRANSLATION_KEYS[state])}</span>
+      </p>
       <span className="sr-only">{t("status.upload", { speed: upload })}</span>
       <span className="sr-only">{t("status.download", { speed: download })}</span>
       {/* Overlapping layouts crossfade without moving the footer or duplicating its accessible text. */}

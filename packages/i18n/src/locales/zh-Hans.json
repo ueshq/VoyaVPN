@@ -37,7 +37,8 @@
     "deleteSubscriptionTitle": "删除订阅？",
     "resetRoutingRulesTitle": "恢复默认规则？",
     "resetRoutingRulesDescription": "所有规则（包括你添加的规则）将替换为默认规则，分应用代理设置会保留。",
-    "resetRoutingRulesConfirm": "恢复"
+    "resetRoutingRulesConfirm": "恢复",
+    "deleteActiveProfileHint": "其中包含正在使用的节点，删除后连接会断开。"
   },
   "coreFlowReason": {
     "connect": "连接",
@@ -86,10 +87,6 @@
     "disconnectLabel": "断开连接",
     "trafficMode": "流量模式",
     "chooseNode": "选择节点",
-    "missingNodes": {
-      "title": "请先添加节点",
-      "description": "当前没有可用节点，请先添加节点或订阅后再连接。"
-    },
     "selectedNodeLabel": "待连接节点",
     "trafficModeInfo": "流量模式说明",
     "trafficModeHint": "规则：根据规则决定哪些流量使用代理；\n全局：接管的流量均使用所选节点；",
@@ -102,7 +99,15 @@
     "selectedGroupLabel": "已选策略组",
     "groupVia": "经由 {{node}}",
     "trafficModeRule": "规则",
-    "vpnPermissionHint": "macOS 会请求添加 VPN 配置，请点击“允许”后连接。"
+    "vpnPermissionHint": "macOS 会请求添加 VPN 配置，请点击“允许”后连接。",
+    "noSelection": "尚未选择节点",
+    "viewLogs": "查看日志",
+    "profilesFailed": "无法读取节点列表：{{message}}",
+    "actionFailed": {
+      "connect": "连接失败：{{message}}",
+      "disconnect": "断开失败：{{message}}",
+      "restart": "重启失败：{{message}}"
+    }
   },
   "logCodes": {
     "connected": "内核守护进程已启动",
@@ -175,7 +180,8 @@
     "activeProfileRestartFailed": "已切换节点，但核心重启失败",
     "policyGroupRefreshFailed": "刷新策略组失败",
     "policyGroupSavedRestartFailed": "策略组已保存，但核心重启失败",
-    "policyGroupSelectionRuntimeUpdateFailed": "已保存选择，但运行中的核心未能切换"
+    "policyGroupSelectionRuntimeUpdateFailed": "已保存选择，但运行中的核心未能切换",
+    "activeSelectionRemoved": "正在使用的节点或策略组已被删除，连接已断开。"
   },
   "options": {
     "autostart": "开机自启",
@@ -317,24 +323,28 @@
         },
         "importing": "正在导入节点…",
         "line": {
-          "subscriptionSourceAdded": "第 {{line}} 行已添加为订阅源；更新该订阅即可导入其节点。",
-          "unsupportedTransport": "第 {{line}} 行已跳过：不支持 {{transport}} 传输方式。",
-          "parseFailed": "第 {{line}} 行已跳过：{{detail}}"
+          "subscriptionSourceAdded": "第 {{line}} 行已添加为订阅，正在更新以导入节点。",
+          "unsupportedTransport": "第 {{line}} 行已跳过：不支持 {{transport}} 传输方式，请向服务商换用 WebSocket、gRPC 等传输的节点。",
+          "parseFailed": "第 {{line}} 行已跳过：链接格式无法识别。",
+          "unsupportedProtocol": "第 {{line}} 行已跳过：不支持这种链接类型。",
+          "missingField": "第 {{line}} 行已跳过：{{protocol}} 链接缺少 {{field}}。",
+          "invalidPort": "第 {{line}} 行已跳过：{{protocol}} 链接的端口 {{port}} 无效。"
         }
       },
       "importMethods": {
-        "qrImage": "扫描二维码图片",
-        "qrScreen": "扫描屏幕二维码"
+        "qrScreen": "扫描屏幕二维码",
+        "paste": "粘贴链接或订阅地址"
       },
       "importDialog": {
         "reading": "正在读取内容…",
-        "description": "导入分享链接或节点配置文本。",
+        "description": "粘贴分享链接或订阅地址，每行一个；也可以扫描二维码图片。",
         "manual": "手动节点",
         "mode": "导入方式",
         "payload": "节点配置内容",
         "subscriptionTarget": "订阅来源",
         "target": "导入位置",
-        "title": "导入节点"
+        "title": "添加节点或订阅",
+        "placeholder": "vless://…\nhttps://example.com/subscription"
       },
       "menu": {
         "actionsFor": "{{name}} 的操作",
@@ -376,7 +386,8 @@
         "import": "导入",
         "subscriptions": "订阅",
         "addNode": "添加节点",
-        "updateAllSubscriptions": "更新全部订阅"
+        "updateAllSubscriptions": "更新全部订阅",
+        "manualNode": "手动填写节点"
       },
       "undecodable": "有 {{count}} 个已保存的节点无法被当前版本读取，已被隐藏。它们很可能由更新的版本写入；升级 VoyaVPN 后应能重新显示。",
       "untitled": "未命名",
@@ -895,7 +906,7 @@
     "use": "使用",
     "inUse": "使用中",
     "active": "当前",
-    "delay": "{{ms}} 毫秒",
+    "delay": "{{ms}} ms",
     "name": "名称",
     "strategyLabel": "策略",
     "strategy": {
@@ -917,5 +928,11 @@
     "testUrl": "测速地址",
     "interval": "测速间隔（秒）",
     "tolerance": "容差（毫秒）"
+  },
+  "startupFailure": {
+    "title": "VoyaVPN 无法启动",
+    "resetDatabase": "重置数据库",
+    "quit": "退出",
+    "resetExplanation": "重置数据库会把当前数据库移到同一文件夹中的备份，并以空的节点、订阅、自定义规则和默认设置重新启动 VoyaVPN。"
   }
 }

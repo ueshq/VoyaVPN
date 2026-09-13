@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { ArrowRight, ChevronRight, Power } from "lucide-react";
 
-import type { TranslationFunction } from "@voya/i18n";
+import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Button } from "@voya/ui/components/button";
 import {
@@ -14,12 +14,15 @@ import {
   DialogTitle,
 } from "@voya/ui/components/dialog";
 import { cn } from "@voya/ui/lib/utils";
+import { getErrorMessage } from "@voya/utils/error";
 
 import worldMap from "@/assets/world-map.svg";
+import { InlinePageError } from "@/components/app-shell/inline-page-error";
 import { NodeCountryIcon } from "@/components/node-country-icon";
 import { getProtocolLabel } from "@/features/profiles/profile-constants";
 import { profileNameWithoutFlag } from "@/features/profiles/profile-display";
 import { POLICY_GROUP_STRATEGY_KEYS } from "@/features/profiles/policy-group-labels";
+import { type RuntimeAction } from "@/stores/runtime-action-store";
 import { useShellStore } from "@/stores/shell-store";
 
 import { ConnectedInfo } from "./connected-info";
@@ -27,14 +30,22 @@ import { ExitIpMetric } from "./exit-ip-metric";
 import { TrafficModeSwitcher } from "./traffic-mode-switcher";
 import { useHomeRuntime } from "./use-home-runtime";
 
+const ACTION_FAILED_KEYS = {
+  connect: "home.actionFailed.connect",
+  disconnect: "home.actionFailed.disconnect",
+  restart: "home.actionFailed.restart",
+} as const satisfies Record<RuntimeAction, TranslationKey>;
+
 export function HomeScreen() {
   const { t } = useI18n();
   const home = useHomeRuntime(t);
-  const [addNodesOpen, setAddNodesOpen] = useState(false);
-  const addingNodesRef = useRef(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const navigateToNodes = () =>
     useShellStore.getState().setActiveTab("profiles", true);
+  const openLogs = () => {
+    useShellStore.getState().setConnectionsView("logs");
+    useShellStore.getState().setActiveTab("connections", true);
+  };
   const runtimeActionAvailable =
     home.connected || home.state === "cleanupPending";
   const noNodes =
@@ -62,7 +73,9 @@ export function HomeScreen() {
     profile?.remarks ||
     profile?.id ||
     home.runningId ||
-    t(home.profilesPending ? "status.loadingScreen" : "home.noNodes");
+    (needsSelection && !home.profilesPending && !home.profilesError
+      ? t("home.noSelection")
+      : "—");
   const name = profileNameWithoutFlag(rawName);
   const delayMs = group
     ? (groupNow?.delayMs ?? null)
@@ -85,7 +98,13 @@ export function HomeScreen() {
       <div className="home-content">
         <div className="home-hero">
           <ConnectButton
-            label={needsSelection ? t("home.chooseNode") : undefined}
+            label={
+              noNodes
+                ? t("panes.profiles.toolbar.addNode")
+                : needsSelection
+                  ? t("home.chooseNode")
+                  : undefined
+            }
             busy={
               home.busy || (!runtimeActionAvailable && home.profilesPending)
             }
@@ -93,10 +112,7 @@ export function HomeScreen() {
             inProgress={home.inProgress}
             onPrimaryAction={
               noNodes
-                ? () => {
-                    addingNodesRef.current = false;
-                    setAddNodesOpen(true);
-                  }
+                ? () => useShellStore.getState().openProfilesAddMenu()
                 : needsSelection
                   ? navigateToNodes
                   : home.handlePrimaryAction
@@ -116,6 +132,37 @@ export function HomeScreen() {
             <p className="home-diagnostic" role="status">
               {home.tunIssue}
             </p>
+          ) : null}
+          {home.lastError ? (
+            <InlinePageError className="home-error">
+              <p>
+                {t(ACTION_FAILED_KEYS[home.lastError.action], {
+                  message: home.lastError.message,
+                })}
+              </p>
+              <div className="home-error-actions">
+                <Button onClick={home.retryLastAction} size="sm" type="button" variant="outline">
+                  {t("actions.retry")}
+                </Button>
+                <Button onClick={openLogs} size="sm" type="button" variant="ghost">
+                  {t("home.viewLogs")}
+                </Button>
+              </div>
+            </InlinePageError>
+          ) : null}
+          {home.profilesError ? (
+            <InlinePageError className="home-error">
+              <p>
+                {t("home.profilesFailed", {
+                  message: getErrorMessage(home.profilesError),
+                })}
+              </p>
+              <div className="home-error-actions">
+                <Button onClick={home.retryProfiles} size="sm" type="button" variant="outline">
+                  {t("actions.retry")}
+                </Button>
+              </div>
+            </InlinePageError>
           ) : null}
         </div>
 
@@ -199,32 +246,6 @@ export function HomeScreen() {
         onCloseFocus={() => detailsButton.current?.focus()}
         t={t}
       />
-      <Dialog open={addNodesOpen} onOpenChange={setAddNodesOpen}>
-        <DialogContent
-          closeLabel={t("actions.close")}
-          onCloseAutoFocus={(event) => {
-            // Navigation transfers focus to the Add menu on the next screen.
-            if (addingNodesRef.current) event.preventDefault();
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>{t("home.missingNodes.title")}</DialogTitle>
-            <DialogDescription>{t("home.missingNodes.description")}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddNodesOpen(false)}>
-              {t("actions.cancel")}
-            </Button>
-            <Button onClick={() => {
-              addingNodesRef.current = true;
-              setAddNodesOpen(false);
-              useShellStore.getState().openProfilesAddMenu();
-            }}>
-              {t("panes.profiles.toolbar.addNode")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </section>
   );
 }

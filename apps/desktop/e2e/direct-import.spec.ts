@@ -23,7 +23,7 @@ test("clipboard and screen imports execute without an app dialog or browser scre
       if (document.querySelector('[role="dialog"]')) observed.dialogOpened = true;
     }).observe(document.body, { childList: true, subtree: true });
   });
-  const trigger = page.getByRole("menuitem", { name: "Import", exact: true });
+  const trigger = page.getByRole("menuitem", { name: "Add", exact: true });
   await trigger.click();
   await page.getByRole("menuitem", { name: "Import from clipboard", exact: true }).click();
   await expect(page.getByTestId("server-row").filter({ hasText: "Clipboard direct" })).toHaveAttribute("data-selected", "true");

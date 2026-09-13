@@ -5,7 +5,7 @@ import type { RuntimeStatusResponse } from "@/ipc/bindings";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { beginRuntimeRead } from "@/ipc/runtime-state-version";
 import { useModalStore, type MissingCorePayload } from "@/stores/modal-store";
-import type { RuntimeAction } from "@/stores/runtime-action-store";
+import { type RuntimeAction, useRuntimeActionStore } from "@/stores/runtime-action-store";
 import { useToastStore } from "@/stores/toast-store";
 
 /** Apply a command response only while no newer read or event has superseded it. */
@@ -18,10 +18,23 @@ export async function executeRuntimeAction(action: RuntimeAction) {
   return status;
 }
 
-export function reportRuntimeActionError(error: unknown, action: RuntimeAction, t: TranslationFunction) {
+/**
+ * Surface a failed runtime action. Home keeps it inline next to the button, with
+ * a retry; other screens use a toast because the button is not on screen.
+ */
+export function reportRuntimeActionError(
+  error: unknown,
+  action: RuntimeAction,
+  t: TranslationFunction,
+  { inline = false }: { inline?: boolean } = {},
+) {
   const missingCore = missingCorePayload(error);
   if (missingCore) {
     useModalStore.getState().openModal("missingCore", { missingCore });
+  } else if (inline) {
+    useRuntimeActionStore.setState({
+      lastError: { action, message: getErrorMessage(error) },
+    });
   } else {
     useToastStore.getState().pushToast({
       description: getErrorMessage(error),

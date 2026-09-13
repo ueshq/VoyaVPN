@@ -20,6 +20,7 @@ function emptyResult(): ImportProfilesResult {
     imported: 0, updated: 0, skipped: 0, parsed: 0, filtered: 0, deduped: 0,
     failed: 0, removedExisting: 0, removedDuplicates: 0, discardedNodeOverrides: 0,
     subscriptionId: null, importedProfileIds: [], updatedProfileIds: [], lineIssues: [],
+    addedSubscriptionIds: [],
   };
 }
 
@@ -42,6 +43,9 @@ function mergeResult(total: ImportProfilesResult, next: ImportProfilesResult) {
   total.removedDuplicates += next.removedDuplicates;
   total.discardedNodeOverrides += next.discardedNodeOverrides;
   total.lineIssues.push(...next.lineIssues);
+  total.addedSubscriptionIds = [
+    ...new Set([...total.addedSubscriptionIds, ...next.addedSubscriptionIds]),
+  ];
 }
 
 export function useNodeImport(

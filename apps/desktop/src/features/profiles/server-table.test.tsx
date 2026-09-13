@@ -880,33 +880,32 @@ describe("ProfilesScreen", () => {
     expect(await screen.findByText("profile list failed")).toBeInTheDocument();
   });
 
-  it("offers subscription and node creation in an Add menu before Import", async () => {
+  it("gathers adding and importing in one Add menu next to Update all subscriptions", async () => {
     mockProfileList([]);
     renderProfiles();
     const toolbar = within(screen.getByRole("toolbar"));
-    expect(toolbar.getByRole("menuitem", { name: "Add" })).toBeVisible();
-    expect(toolbar.getByRole("menuitem", { name: "Import" })).toBeVisible();
-    for (const name of ["Import from clipboard", "Subscriptions"]) {
-      expect(toolbar.queryByRole("button", { name })).not.toBeInTheDocument();
-    }
-    expect(
-      toolbar.queryByRole("menuitem", { name: "More actions" }),
-    ).not.toBeInTheDocument();
-    expect(
-      toolbar.queryByRole("button", { name: "More actions" }),
-    ).not.toBeInTheDocument();
-    expect(
-      toolbar.queryByRole("button", { name: "Update subs" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("menuitem", { name: "Update subs" }),
-    ).not.toBeInTheDocument();
-    // The page toolbar carries only the Add and Import menus.
     expect(
       toolbar.getAllByRole("menuitem").map((item) => item.textContent),
-    ).toEqual(["Add", "Import"]);
-    expect(toolbar.queryAllByRole("button")).toHaveLength(0);
+    ).toEqual(["Add"]);
+    expect(
+      toolbar.getAllByRole("button").map((button) => button.textContent),
+    ).toEqual(["Update all subscriptions"]);
+    for (const name of ["Import", "More actions", "Subscriptions"]) {
+      expect(toolbar.queryByRole("menuitem", { name })).not.toBeInTheDocument();
+    }
     await userEvent.click(toolbar.getByRole("menuitem", { name: "Add" }));
+    expect(
+      within(screen.getByRole("menu"))
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual([
+      "Paste links or subscription URLs",
+      "Import from clipboard",
+      "Scan screen",
+      "Add subscription",
+      "Enter a node manually",
+      "New policy group",
+    ]);
     await userEvent.click(screen.getByRole("menuitem", { name: "Add subscription" }));
     expect(
       await screen.findByRole("dialog", { name: "Add subscription" }),
@@ -930,37 +929,59 @@ describe("ProfilesScreen", () => {
     expect(ipcMocks.updateSubscriptions).not.toHaveBeenCalled();
   });
 
-  it("opens the QR image source only after the import method is chosen", async () => {
+  it("updates a subscription pasted as a link right after importing it", async () => {
+    mockProfileList([]);
+    ipcMocks.importProfilesFromText.mockResolvedValue(
+      makeImportResult({
+        addedSubscriptionIds: ["sub-new"],
+        lineIssues: [{ line: 1, code: { code: "subscriptionSourceAdded" } }],
+      }),
+    );
+    ipcMocks.updateSubscriptions.mockResolvedValue({
+      imported: 4,
+      messages: [],
+      skipped: 0,
+      updated: 1,
+    });
+    renderProfiles();
+
+    await openImport();
+    fireEvent.change(screen.getByLabelText("Import payload"), {
+      target: { value: "https://example.test/subscribe" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+
+    await waitFor(() =>
+      expect(ipcMocks.updateSubscriptions).toHaveBeenCalledWith("sub-new", true, null),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("opens the paste dialog only after the method is chosen", async () => {
     const readText = mockClipboardReadText("vless://preview");
     mockProfileList([]);
     renderProfiles();
-    const trigger = screen.getByRole("menuitem", { name: "Import" });
+    const trigger = screen.getByRole("menuitem", { name: "Add" });
     await userEvent.click(trigger);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(readText).not.toHaveBeenCalled();
     expect(ipcMocks.scanScreenQr).not.toHaveBeenCalled();
-    expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
-    expect(
-      within(screen.getByRole("menu"))
-        .getAllByRole("menuitem")
-        .map((item) => item.textContent),
-    ).toEqual(["Import from clipboard", "Scan QR image", "Scan screen"]);
     await userEvent.click(
-      screen.getByRole("menuitem", { name: "Scan QR image" }),
+      screen.getByRole("menuitem", { name: "Paste links or subscription URLs" }),
     );
     const dialog = await screen.findByRole("dialog", {
-      name: "Import Nodes",
+      name: "Add nodes or subscriptions",
     });
     expect(
       within(dialog).getByRole("button", { name: "Scan image" }),
     ).toBeVisible();
-    for (const name of ["Paste", "File", "Clipboard image", "Screen"]) {
-      expect(
-        within(dialog).queryByRole("button", { name }),
-      ).not.toBeInTheDocument();
-    }
+    expect(within(dialog).getByLabelText("Import payload")).toHaveAttribute(
+      "placeholder",
+      "vless://…\nhttps://example.com/subscription",
+    );
     expect(readText).not.toHaveBeenCalled();
-    expect(ipcMocks.scanScreenQr).not.toHaveBeenCalled();
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(trigger).toHaveFocus());
@@ -973,6 +994,8 @@ describe("ProfilesScreen", () => {
     trigger.focus();
     await userEvent.keyboard("{Enter}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const manual = screen.getByRole("menuitem", { name: "Enter a node manually" });
+    manual.focus();
     await userEvent.keyboard("{Enter}");
     expect(
       await screen.findByRole("dialog", { name: "Add node" }),
@@ -1109,7 +1132,6 @@ describe("ProfilesScreen", () => {
 
     await openImport("Import from clipboard");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    const importButton = screen.getByRole("menuitem", { name: "Import" });
 
     await waitFor(() => expect(readText).toHaveBeenCalledTimes(1));
     await waitFor(() =>
@@ -1118,9 +1140,14 @@ describe("ProfilesScreen", () => {
         null,
       ),
     );
-    expect(importButton).toBeDisabled();
-    await userEvent.click(importButton);
+    await userEvent.click(screen.getByRole("menuitem", { name: "Add" }));
+    const clipboardItem = await screen.findByRole("menuitem", {
+      name: "Import from clipboard",
+    });
+    expect(clipboardItem).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(clipboardItem);
     expect(ipcMocks.importProfilesFromText).toHaveBeenCalledTimes(1);
+    await userEvent.keyboard("{Escape}");
     await act(async () => {
       finishImport();
     });
@@ -1520,7 +1547,7 @@ describe("ProfilesScreen", () => {
       renderProfiles();
 
       await userEvent.click(screen.getByRole("menuitem", { name: "添加" }));
-      await userEvent.click(screen.getByRole("menuitem", { name: "添加节点" }));
+      await userEvent.click(screen.getByRole("menuitem", { name: "手动填写节点" }));
       const dialog = await screen.findByRole("dialog", { name: "新增节点" });
       const remarks = within(dialog).getByLabelText("备注");
       const address = within(dialog).getByLabelText("地址");
@@ -1539,7 +1566,7 @@ describe("ProfilesScreen", () => {
       renderProfiles();
 
       await userEvent.click(screen.getByRole("menuitem", { name: "添加" }));
-      await userEvent.click(screen.getByRole("menuitem", { name: "添加节点" }));
+      await userEvent.click(screen.getByRole("menuitem", { name: "手动填写节点" }));
       fireEvent.click(await screen.findByRole("button", { name: /保存/ }));
 
       // The zod schema carries codes; the visible sentence comes from the locale.
@@ -1560,7 +1587,7 @@ describe("ProfilesScreen", () => {
     await withLocale("zh-Hans", async () => {
       renderProfiles();
 
-      await userEvent.click(screen.getByRole("menuitem", { name: "导入" }));
+      await userEvent.click(screen.getByRole("menuitem", { name: "添加" }));
       await userEvent.click(
         await screen.findByRole("menuitem", { name: "从剪贴板导入" }),
       );
@@ -1618,6 +1645,7 @@ function makeImportResult(
     imported: 0,
     importedProfileIds: [],
     lineIssues: [],
+    addedSubscriptionIds: [],
     parsed: 0,
     removedDuplicates: 0,
     removedExisting: 0,
@@ -1653,10 +1681,10 @@ function makeSubscription() {
 
 async function openAddNode() {
   await userEvent.click(screen.getByRole("menuitem", { name: "Add" }));
-  await userEvent.click(screen.getByRole("menuitem", { name: "Add node" }));
+  await userEvent.click(screen.getByRole("menuitem", { name: "Enter a node manually" }));
 }
 
-async function openImport(method = "Scan QR image") {
-  await userEvent.click(screen.getByRole("menuitem", { name: "Import" }));
+async function openImport(method = "Paste links or subscription URLs") {
+  await userEvent.click(screen.getByRole("menuitem", { name: "Add" }));
   await userEvent.click(await screen.findByRole("menuitem", { name: method }));
 }

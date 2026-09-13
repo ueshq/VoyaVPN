@@ -463,7 +463,16 @@ export type ImportLineCode =
 { code: "subscriptionSourceAdded" } | 
 /**  The share link names a transport sing-box cannot carry. */
 { code: "unsupportedTransport"; transport: string } | 
-/**  Any other share-link parse failure, with its untranslated diagnostic. */
+/**  The line uses a share-link scheme this build does not read. */
+{ code: "unsupportedProtocol" } | 
+/**  The share link lacks a field its protocol requires. */
+{ code: "missingField"; protocol: string; field: string } | 
+/**  The share link's port is not a valid port. */
+{ code: "invalidPort"; protocol: string; port: string } | 
+/**
+ *  Any other malformed share link. `detail` is an untranslated diagnostic
+ *  for logs; the interface does not show it.
+ */
 { code: "parseFailed"; detail: string };
 
 /**  One reported line of an import, numbered from 1. */
@@ -487,6 +496,11 @@ export type ImportProfilesResult = {
 	importedProfileIds: string[],
 	updatedProfileIds: string[],
 	lineIssues: ImportLineIssue[],
+	/**
+	 *  Subscriptions created from subscription URLs in the text. Their nodes
+	 *  arrive only once they are updated.
+	 */
+	addedSubscriptionIds: string[],
 };
 
 export type InboundSettings = {
@@ -626,7 +640,9 @@ export type NetworkSettings = {
  *  parts: a notice is a whole sentence in every locale, and languages do not
  *  agree on how to build one out of a subject and a verb.
  */
-export type NoticeCode = { code: "profileRefreshFailed" } | { code: "policyGroupRefreshFailed" } | { code: "subscriptionRefreshFailed" } | { code: "routingRefreshFailed" } | { code: "dnsRefreshFailed" } | { code: "proxyViewRefreshFailed" } | { code: "connectionModeRefreshFailed" } | { code: "settingsRefreshFailed" } | { code: "routingSavedRestartFailed" } | { code: "routingDeletedRestartFailed" } | { code: "routingSelectedRestartFailed" } | { code: "routingRuleSavedRestartFailed" } | { code: "routingRulesDeletedRestartFailed" } | { code: "routingRuleMovedRestartFailed" } | { code: "routingRulesResetRestartFailed" } | { code: "dnsSavedRestartFailed" } | { code: "tunSavedRestartFailed" } | { code: "connectionModeSavedRestartFailed" } | { code: "activeProfileRestartFailed" } | { code: "policyGroupSavedRestartFailed" } | { code: "settingsSavedRuntimeUpdateFailed" } | { code: "proxyModeSavedRuntimeUpdateFailed" } | { code: "policyGroupSelectionRuntimeUpdateFailed" } | { code: "settingsSavedSystemProxyUpdateFailed" } | { code: "systemProxyStatusRefreshFailed" } | { code: "tunStatusRefreshFailed" } | { code: "trayRefreshFailed" } | { code: "trayActionFailed" } | { code: "coreStopped" } | { code: "nativeTunStopped" } | { code: "coreStartedSystemProxyFailed" } | { code: "systemProxyRestoreFailed" } | { code: "subscriptionAutoUpdateFailed"; remarks: string };
+export type NoticeCode = { code: "profileRefreshFailed" } | { code: "policyGroupRefreshFailed" } | { code: "subscriptionRefreshFailed" } | { code: "routingRefreshFailed" } | { code: "dnsRefreshFailed" } | { code: "proxyViewRefreshFailed" } | { code: "connectionModeRefreshFailed" } | { code: "settingsRefreshFailed" } | { code: "routingSavedRestartFailed" } | { code: "routingDeletedRestartFailed" } | { code: "routingSelectedRestartFailed" } | { code: "routingRuleSavedRestartFailed" } | { code: "routingRulesDeletedRestartFailed" } | { code: "routingRuleMovedRestartFailed" } | { code: "routingRulesResetRestartFailed" } | { code: "dnsSavedRestartFailed" } | { code: "tunSavedRestartFailed" } | { code: "connectionModeSavedRestartFailed" } | { code: "activeProfileRestartFailed" } | { code: "policyGroupSavedRestartFailed" } | { code: "settingsSavedRuntimeUpdateFailed" } | { code: "proxyModeSavedRuntimeUpdateFailed" } | { code: "policyGroupSelectionRuntimeUpdateFailed" } | { code: "settingsSavedSystemProxyUpdateFailed" } | { code: "systemProxyStatusRefreshFailed" } | { code: "tunStatusRefreshFailed" } | { code: "trayRefreshFailed" } | { code: "trayActionFailed" } | 
+/**  The running node or policy group was deleted, so the connection stopped. */
+{ code: "activeSelectionRemoved" } | { code: "coreStopped" } | { code: "nativeTunStopped" } | { code: "coreStartedSystemProxyFailed" } | { code: "systemProxyRestoreFailed" } | { code: "subscriptionAutoUpdateFailed"; remarks: string };
 
 /**  A stored group as the editor reads and writes it. */
 export type PolicyGroup = {

@@ -59,15 +59,24 @@ impl AppServices {
     }
 
     /// [`Self::load_config`] for the platform the app runs on: a fresh install
-    /// starts in the native VPN mode where the platform has one, and macOS
-    /// always loads in VPN mode.
-    pub async fn load_config_for(&self, target_os: TargetOs) -> Result<AppConfig, DbError> {
+    /// starts in the native VPN mode where the platform has one and in the
+    /// shipped language closest to `system_locale`, and macOS always loads in
+    /// VPN mode.
+    pub async fn load_config_for(
+        &self,
+        target_os: TargetOs,
+        system_locale: Option<&str>,
+    ) -> Result<AppConfig, DbError> {
         let stored = self.database.settings().load_stored().await?;
         let fresh = stored.is_none();
         let state = self.database.app_state().load().await?;
         let mut config = app_config_from_settings(&stored.unwrap_or_default(), &state);
         if fresh {
             seed_platform_connection_defaults(&mut config, target_os);
+            if let Some(locale) = system_locale {
+                config.ui_item.current_language =
+                    crate::language::ui_language_for_locale(locale).to_string();
+            }
         }
         enforce_platform_connection_mode(&mut config, target_os);
         Ok(config)
@@ -300,7 +309,10 @@ mod tests {
             .await
             .expect("test database");
 
-            let fresh = services.load_config_for(target_os).await.expect("fresh");
+            let fresh = services
+                .load_config_for(target_os, None)
+                .await
+                .expect("fresh");
             assert_eq!(fresh.tun_mode_item.enable_tun, fresh_tun, "{target_os:?}");
 
             let mut stored = AppSettingsV1::default();
@@ -312,7 +324,10 @@ mod tests {
                 .save(&stored)
                 .await
                 .expect("settings");
-            let loaded = services.load_config_for(target_os).await.expect("stored");
+            let loaded = services
+                .load_config_for(target_os, None)
+                .await
+                .expect("stored");
             assert_eq!(
                 loaded.tun_mode_item.enable_tun,
                 target_os == TargetOs::Macos,
@@ -322,6 +337,48 @@ mod tests {
             services.database.close().await;
             std::fs::remove_dir_all(app_dir).expect("remove test database");
         }
+    }
+
+    #[tokio::test]
+    async fn a_fresh_install_speaks_the_system_language_until_one_is_saved() {
+        let app_dir = std::env::temp_dir().join(format!(
+            "voyavpn-language-load-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let services = AppServices::connect(
+            &app_dir.join(voya_db::DATABASE_NAME),
+            AppPaths::new(&app_dir),
+        )
+        .await
+        .expect("test database");
+
+        let fresh = services
+            .load_config_for(TargetOs::Linux, Some("zh-Hant-TW"))
+            .await
+            .expect("fresh");
+        assert_eq!(fresh.ui_item.current_language, "zh-Hant");
+        let unknown = services
+            .load_config_for(TargetOs::Linux, None)
+            .await
+            .expect("no locale");
+        assert_eq!(unknown.ui_item.current_language, "en");
+
+        let mut stored = AppSettingsV1::default();
+        stored.appearance.language = "en".to_string();
+        services
+            .database
+            .settings()
+            .save(&stored)
+            .await
+            .expect("settings");
+        let chosen = services
+            .load_config_for(TargetOs::Linux, Some("zh-CN"))
+            .await
+            .expect("stored");
+        assert_eq!(chosen.ui_item.current_language, "en", "a saved choice wins");
+
+        services.database.close().await;
+        std::fs::remove_dir_all(app_dir).expect("remove test database");
     }
 
     #[tokio::test]

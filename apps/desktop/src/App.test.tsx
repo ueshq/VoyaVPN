@@ -509,7 +509,7 @@ describe("App", () => {
       within(hero).queryByRole("heading", { level: 1 }),
     ).not.toBeInTheDocument();
     expect(
-      await within(hero).findByRole("button", { name: "Connect" }),
+      await within(hero).findByRole("button", { name: "Add node" }),
     ).toBeInTheDocument();
     expect(within(hero).queryByText("Not protected")).not.toBeInTheDocument();
     expect(within(hero).queryByRole("switch")).not.toBeInTheDocument();

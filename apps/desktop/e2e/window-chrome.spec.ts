@@ -16,9 +16,8 @@ for (const layout of ["macos", "windows"] as const) {
       "data-window-chrome",
       layout,
     );
-    await expect(
-      page.getByRole("button", { name: "Connect", exact: true }),
-    ).toBeVisible();
+    // The primary Home action reads "Add node" until a node exists.
+    await expect(page.getByTestId("home-connect-button")).toBeVisible();
     expect(await sidebar.boundingBox()).toMatchObject({
       x: 0,
       y: 0,
@@ -119,14 +118,19 @@ for (const layout of ["macos", "windows"] as const) {
       path: testInfo.outputPath(`${layout}-rules-960.png`),
     });
     await page.getByRole("tab", { name: "Home", exact: true }).click();
-    await page.getByRole("button", { name: "Connect", exact: true }).click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
-    await expect(dialog).toHaveCount(0);
-    await expect(
-      page.getByRole("button", { name: "Connect", exact: true }),
-    ).toBeFocused();
+    // With no nodes the primary Home action opens the Nodes Add menu, which has
+    // to stay reachable under the window chrome and hand focus back on Escape.
+    await page.getByTestId("home-connect-button").click();
+    const add = page.getByRole("menuitem", { name: "Add", exact: true });
+    await expect(add).toHaveAttribute("aria-expanded", "true");
+    const menu = page.getByRole("menu");
+    // Every action is reachable; the menu's shadow may overhang by a subpixel.
+    for (const item of await menu.getByRole("menuitem").all()) {
+      await expect(item).toBeInViewport({ ratio: 1 });
+    }
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(add).toBeFocused();
     expect(
       await page.evaluate(
         () =>

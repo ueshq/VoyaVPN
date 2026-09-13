@@ -9,6 +9,7 @@ pub mod clipboard;
 pub mod coreinfo;
 pub mod elevation;
 pub mod filesystem;
+pub mod locale;
 pub mod paths;
 pub mod privilege;
 pub mod process;

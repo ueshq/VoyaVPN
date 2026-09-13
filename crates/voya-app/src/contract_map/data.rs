@@ -77,6 +77,7 @@ pub fn import_profiles_to_contract(result: ImportProfilesResult) -> ImportProfil
             .into_iter()
             .map(import_line_issue_to_contract)
             .collect(),
+        added_subscription_ids: result.added_subscription_ids,
     }
 }
 
@@ -91,6 +92,15 @@ fn import_line_issue_to_contract(
             }
             voya_core::ImportLineCode::UnsupportedTransport { transport } => {
                 voya_contracts::ImportLineCode::UnsupportedTransport { transport }
+            }
+            voya_core::ImportLineCode::UnsupportedProtocol => {
+                voya_contracts::ImportLineCode::UnsupportedProtocol
+            }
+            voya_core::ImportLineCode::MissingField { protocol, field } => {
+                voya_contracts::ImportLineCode::MissingField { protocol, field }
+            }
+            voya_core::ImportLineCode::InvalidPort { protocol, port } => {
+                voya_contracts::ImportLineCode::InvalidPort { protocol, port }
             }
             voya_core::ImportLineCode::ParseFailed { detail } => {
                 voya_contracts::ImportLineCode::ParseFailed { detail }

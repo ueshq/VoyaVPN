@@ -238,6 +238,10 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
             Ok(Some(snapshot)) => {
                 self.sink
                     .log(CoreFlowLevel::Info, LogCode::Disconnected, None);
+                // Deleting a node, a group or a subscription can take the
+                // connection down; say so instead of letting it just drop.
+                self.sink
+                    .notice(CoreFlowLevel::Warn, NoticeCode::ActiveSelectionRemoved, "");
                 self.settle_disconnected(config, None, Some(&snapshot))
                     .await;
                 Ok(())

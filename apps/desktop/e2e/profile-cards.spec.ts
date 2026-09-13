@@ -55,17 +55,18 @@ test("profile cards stay usable across themes, window sizes and a 5k node list",
       await page.setViewportSize({ width, height });
       await expect.poll(() => toolbar.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0);
       await expect(toolbar.getByRole("menuitem", { name: "添加", exact: true })).toBeInViewport({ ratio: 1 });
-      await expect(toolbar.getByRole("menuitem", { name: "导入", exact: true })).toBeInViewport({ ratio: 1 });
+      await expect(toolbar.getByRole("button", { name: "更新全部订阅", exact: true })).toBeInViewport({ ratio: 1 });
       const addBox = await toolbar.getByRole("menuitem", { name: "添加", exact: true }).boundingBox();
-      const importBox = await toolbar.getByRole("menuitem", { name: "导入", exact: true }).boundingBox();
-      expect(importBox!.x).toBeGreaterThan(addBox!.x + addBox!.width);
-      expect(importBox!.y).toBe(addBox!.y);
-      await toolbar.getByRole("menuitem", { name: "导入", exact: true }).click();
+      const updateBox = await toolbar.getByRole("button", { name: "更新全部订阅", exact: true }).boundingBox();
+      // Add is the primary action, so it sits last, after Update all subscriptions.
+      expect(addBox!.x).toBeGreaterThan(updateBox!.x + updateBox!.width);
+      expect(updateBox!.y).toBe(addBox!.y);
+      await toolbar.getByRole("menuitem", { name: "添加", exact: true }).click();
       for (const item of await page.getByRole("menu").getByRole("menuitem").all()) {
         await expect(item).toBeInViewport({ ratio: 1 });
       }
       await page.keyboard.press("Escape");
-      await expect(toolbar.getByRole("menuitem", { name: "导入", exact: true })).toBeFocused();
+      await expect(toolbar.getByRole("menuitem", { name: "添加", exact: true })).toBeFocused();
       await expect(cards.first()).toBeInViewport({ ratio: 1 });
       await expect.poll(() => viewport.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0);
       await expect.poll(() => cards.evaluateAll((elements) => {
@@ -119,7 +120,7 @@ test("profile cards show a loading skeleton while the profile query is pending",
       await page.setViewportSize({ width, height });
       await expect.poll(() => toolbar.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0);
       await expect(toolbar.getByRole("menuitem", { name: "Add", exact: true })).toBeInViewport({ ratio: 1 });
-      await expect(toolbar.getByRole("menuitem", { name: "Import", exact: true })).toBeInViewport({ ratio: 1 });
+      await expect(toolbar.getByRole("button", { name: "Update all subscriptions", exact: true })).toBeInViewport({ ratio: 1 });
       await page.screenshot({ path: testInfo.outputPath(`cards-loading-${colorScheme}-${width}.png`) });
     }
   }

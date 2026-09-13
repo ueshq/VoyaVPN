@@ -10,6 +10,7 @@ import {
 } from "@voya/ui/components/alert-dialog";
 import { buttonVariants } from "@voya/ui/components/button-variants";
 import { SubscriptionsDialog } from "@/features/subscriptions/subscriptions-dialog";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 
 import { ImportProfilesDialog } from "./import-profiles-dialog";
 import { ProfileDetailsDialog } from "./profile-details-dialog";
@@ -25,7 +26,6 @@ export function ServerTableDialogs({
   const {
     confirmDelete,
     dialogState,
-    handleDialogImport,
     handleSave,
     importMethod,
     pendingDelete,
@@ -39,6 +39,13 @@ export function ServerTableDialogs({
     subscriptionsOpen,
     t,
   } = controller;
+
+  // Deleting the node the core is running stops the connection; say so first.
+  const runningNodeId = useRuntimeEventStore((state) =>
+    state.coreState?.state === "connected" ? state.coreState.activeProfileId : null,
+  );
+  const deletingRunningNode =
+    runningNodeId !== null && (pendingDelete ?? []).includes(runningNodeId);
 
   const detailsItem = controller.profiles.find(
     (item) => item.profile.id === controller.detailsId,
@@ -59,8 +66,8 @@ export function ServerTableDialogs({
         saveError={saveError}
       />
       {importMethod !== null ? <ImportProfilesDialog
-        onImported={handleDialogImport}
-        onCloseFocus={() => controller.importTriggerRef.current?.focus()}
+        onImported={controller.handleImported}
+        onCloseFocus={() => controller.addTriggerRef.current?.focus()}
         onOpenChange={(open) => !open && setImportMethod(null)}
         open
       /> : null}
@@ -150,6 +157,11 @@ export function ServerTableDialogs({
               {t("confirm.deleteProfilesDescription", {
                 count: pendingDelete?.length ?? 0,
               })}
+              {deletingRunningNode ? (
+                <span className="mt-2 block font-medium text-warning">
+                  {t("confirm.deleteActiveProfileHint")}
+                </span>
+              ) : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

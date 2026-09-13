@@ -1,4 +1,5 @@
 import { useI18n } from "@voya/i18n/use-i18n";
+import type { ImportProfilesResult } from "@/ipc/bindings";
 import { useNodeGroups } from "./use-node-groups";
 import { useNodeOperation } from "./use-node-operation";
 import { useNodeListData } from "./use-node-list-data";
@@ -18,7 +19,19 @@ export function useServerTable() {
   const editor = useNodeEditor(operation, data.viewportRef, t);
   const subscriptions = useNodeSubscriptions(operation, t);
   const exports = useNodeExport(operation, t);
-  const imports = useNodeImport(operation, editor.handleDialogImport, t);
+  // A subscription URL only creates the source; updating it straight away is
+  // what brings its nodes in, so the user never meets an empty group.
+  async function handleImported(
+    result: ImportProfilesResult,
+    isActive: () => boolean = () => true,
+  ) {
+    await editor.handleDialogImport(result, isActive);
+    for (const id of result.addedSubscriptionIds) {
+      if (!isActive()) return;
+      await subscriptions.updateSubscription(id);
+    }
+  }
+  const imports = useNodeImport(operation, handleImported, t);
   const speedtest = useNodeSpeedtest(operation);
   const policyGroups = usePolicyGroups(operation, t);
   return {
@@ -32,5 +45,6 @@ export function useServerTable() {
     ...speedtest,
     ...imports,
     ...policyGroups,
+    handleImported,
   };
 }

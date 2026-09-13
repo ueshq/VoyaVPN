@@ -537,6 +537,7 @@ export async function installTauriSmokeMock(
             imported: 1,
             importedProfileIds: [String(row.profile.id)],
             lineIssues: [],
+            addedSubscriptionIds: [],
             parsed: 1,
             removedDuplicates: 0,
             removedExisting: 0,

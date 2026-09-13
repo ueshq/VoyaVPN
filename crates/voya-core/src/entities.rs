@@ -503,6 +503,9 @@ pub struct ImportProfilesResult {
     pub imported_index_ids: Vec<String>,
     pub updated_index_ids: Vec<String>,
     pub line_issues: Vec<ImportLineIssue>,
+    /// Subscriptions created from subscription URLs in the text. Their nodes
+    /// arrive only once they are updated.
+    pub added_subscription_ids: Vec<String>,
 }
 
 /// Why one line of imported text did not simply become a node. A code rather
@@ -519,7 +522,14 @@ pub enum ImportLineCode {
     SubscriptionSourceAdded,
     /// The share link names a transport sing-box cannot carry.
     UnsupportedTransport { transport: String },
-    /// Any other share-link parse failure, with its untranslated diagnostic.
+    /// The line uses a share-link scheme this build does not read.
+    UnsupportedProtocol,
+    /// The share link lacks a field its protocol requires.
+    MissingField { protocol: String, field: String },
+    /// The share link's port is not a valid port.
+    InvalidPort { protocol: String, port: String },
+    /// Any other malformed share link. `detail` is an untranslated diagnostic
+    /// for logs; the interface does not show it.
     ParseFailed { detail: String },
 }
 

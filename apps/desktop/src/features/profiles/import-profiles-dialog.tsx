@@ -84,11 +84,16 @@ function ImportProfilesDialogSession({
       const result = await importProfilesFromText(text, null);
       await onImported(result);
       if (!activeRef.current) return;
+      // Subscription URLs are not problems: they are updated right after, and
+      // the page banner reports how that went.
+      const onlyAddedSubscriptions = result.lineIssues.every(
+        (issue) => issue.code.code === "subscriptionSourceAdded",
+      );
       if (
-        result.imported > 0 &&
+        (result.imported > 0 || result.addedSubscriptionIds.length > 0) &&
         result.failed === 0 &&
         result.skipped === 0 &&
-        result.lineIssues.length === 0
+        onlyAddedSubscriptions
       ) {
         // The profiles banner owns the summary once the dialog closes.
         onOpenChange(false);
@@ -121,7 +126,10 @@ function ImportProfilesDialogSession({
     clearFeedback();
     try {
       const payload = await read();
-      if (activeRef.current) setText(payload);
+      // A scan adds to what is already there instead of replacing typed links.
+      if (activeRef.current) {
+        setText((current) => (current.trim() ? `${current.trimEnd()}\n${payload}` : payload));
+      }
     } catch (error) {
       if (activeRef.current) setError(formatError(error));
     } finally {
@@ -184,7 +192,7 @@ function ImportProfilesDialogSession({
             {t("panes.profiles.importDialog.title")}
           </DialogTitle>
           <DialogDescription>
-            {t("panes.profiles.importMethods.qrImage")}
+            {t("panes.profiles.importDialog.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -239,6 +247,7 @@ function ImportProfilesDialogSession({
                   className="min-h-40 resize-y bg-card font-mono text-xs"
                   disabled={busy}
                   id="import-payload"
+                  placeholder={t("panes.profiles.importDialog.placeholder")}
                   onChange={(event) => {
                     setResultMessages([]);
                     setResultText(null);

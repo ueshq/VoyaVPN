@@ -88,7 +88,7 @@ test.afterEach(async ({ page }) => {
 
 test("loads the app shell and opens in-shell settings", async ({ page }) => {
   await expect(
-    page.getByRole("button", { name: "Connect", exact: true }),
+    page.getByRole("button", { name: "Add node", exact: true }),
   ).toBeVisible();
   await expect(page.getByTestId("sidebar-footer")).toContainText(
     "Disconnected",
@@ -235,7 +235,19 @@ test("node menus defer actions until a method is chosen and restore keyboard foc
   await add.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.getByRole("menuitem", { name: "Add node", exact: true }).click();
+  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText([
+    "Paste links or subscription URLs",
+    "Import from clipboard",
+    "Scan screen",
+    "Add subscription",
+    "Enter a node manually",
+    "New policy group",
+  ]);
+  await page.screenshot({
+    animations: "disabled",
+    path: testInfo.outputPath("nodes-add-menu.png"),
+  });
+  await page.getByRole("menuitem", { name: "Enter a node manually", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(add).toBeFocused();
@@ -246,9 +258,7 @@ test("node menus defer actions until a method is chosen and restore keyboard foc
     .getByLabel("Remarks", { exact: true })
     .fill("Unsaved source");
   await page.keyboard.press("Escape");
-  await expect(
-    add,
-  ).toBeFocused();
+  await expect(add).toBeFocused();
   await add.click();
   await page.getByRole("menuitem", { name: "Add subscription", exact: true }).click();
   await expect(
@@ -256,23 +266,11 @@ test("node menus defer actions until a method is chosen and restore keyboard foc
   ).toHaveValue("");
   await page.keyboard.press("Escape");
 
-  const importTrigger = page.getByRole("menuitem", {
-    name: "Import",
-    exact: true,
-  });
-  await importTrigger.click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText([
-    "Import from clipboard",
-    "Scan QR image",
-    "Scan screen",
-  ]);
-  await page.screenshot({
-    animations: "disabled",
-    path: testInfo.outputPath("nodes-import-menu.png"),
-  });
-  await page.getByRole("menuitem", { name: "Scan QR image", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Import Nodes" });
+  await add.click();
+  await page
+    .getByRole("menuitem", { name: "Paste links or subscription URLs", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Add nodes or subscriptions" });
   await expect(dialog).toBeVisible();
   await expect(
     dialog.getByRole("textbox", { name: "Import payload" }),
@@ -283,7 +281,7 @@ test("node menus defer actions until a method is chosen and restore keyboard foc
     ).toHaveCount(name === "Scan image" ? 1 : 0);
   }
   await page.keyboard.press("Escape");
-  await expect(importTrigger).toBeFocused();
+  await expect(add).toBeFocused();
   expect(
     (await smokeCalls(page)).filter(({ command }) =>
       [
@@ -304,7 +302,7 @@ test("adds and imports profiles, activates one, and connects through the fake ru
     .getByRole("tab", { name: "Nodes" })
     .click();
   await page.getByRole("menuitem", { exact: true, name: "Add" }).click();
-  await page.getByRole("menuitem", { name: "Add node", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Enter a node manually", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
   await page.getByRole("combobox", { name: "Protocol" }).click();
   await page.getByRole("option", { name: /VLESS/ }).click();
@@ -321,11 +319,11 @@ test("adds and imports profiles, activates one, and connects through the fake ru
   await expect(page.getByRole("button", { name: "Local nodes", exact: true })).toBeVisible();
   await expect(page.locator('[data-group-key="local"]').filter({ hasText: "Smoke Manual VLESS" })).toHaveCount(1);
 
-  await page.getByRole("menuitem", { exact: true, name: "Import" }).click();
+  await page.getByRole("menuitem", { exact: true, name: "Add" }).click();
   await page
-    .getByRole("menuitem", { exact: true, name: "Scan QR image" })
+    .getByRole("menuitem", { exact: true, name: "Paste links or subscription URLs" })
     .click();
-  const importDialog = page.getByRole("dialog", { name: "Import Nodes" });
+  const importDialog = page.getByRole("dialog", { name: "Add nodes or subscriptions" });
   await importDialog.getByLabel("Scan image").setInputFiles({
     buffer: Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",

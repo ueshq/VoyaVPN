@@ -67,13 +67,8 @@ pub(super) async fn prepare_subscription_snapshot(
             result.skipped = result.skipped.saturating_add(1);
             continue;
         }
-        if !item.enabled {
-            result.skipped = result.skipped.saturating_add(1);
-            result
-                .messages
-                .push(format!("{}->subscription update skipped", item.remarks));
-            continue;
-        }
+        // `enabled` only switches automatic updates, which the scheduler checks
+        // itself; an update the user asks for always runs.
 
         let source = SubscriptionFetchSource {
             url: item.url.clone(),

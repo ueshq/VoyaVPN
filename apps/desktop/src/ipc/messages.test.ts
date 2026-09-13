@@ -66,13 +66,23 @@ describe("backend message codes", () => {
       { line: 2, code: { code: "subscriptionSourceAdded" } },
       { line: 3, code: { code: "unsupportedTransport", transport: "xhttp" } },
       { line: 4, code: { code: "parseFailed", detail: "invalid vless URI" } },
+      { line: 5, code: { code: "unsupportedProtocol" } },
+      { line: 6, code: { code: "missingField", protocol: "vless", field: "id" } },
+      { line: 7, code: { code: "invalidPort", protocol: "trojan", port: "99999" } },
     ];
     expect(issues.map((issue) => importLineText(en, issue))).toEqual([
-      "Line 2 was added as a subscription source; update the subscription to import its nodes.",
-      "Line 3 was skipped: the xhttp transport is not supported.",
-      "Line 4 was skipped: invalid vless URI",
+      "Line 2 was added as a subscription; it is being updated to import its nodes.",
+      "Line 3 was skipped: the xhttp transport is not supported. Ask your provider for a WebSocket or gRPC node.",
+      "Line 4 was skipped: the link is not in a format VoyaVPN can read.",
+      "Line 5 was skipped: this kind of link is not supported.",
+      "Line 6 was skipped: the vless link is missing id.",
+      "Line 7 was skipped: 99999 is not a valid port in the trojan link.",
     ]);
-    expect(importLineText(zh, issues[1]!)).toBe("第 3 行已跳过：不支持 xhttp 传输方式。");
+    // The untranslated diagnostic never reaches the reader.
+    expect(importLineText(zh, issues[2]!)).toBe("第 4 行已跳过：链接格式无法识别。");
+    expect(importLineText(zh, issues[1]!)).toBe(
+      "第 3 行已跳过：不支持 xhttp 传输方式，请向服务商换用 WebSocket、gRPC 等传输的节点。",
+    );
   });
 
   it("renders every notice code, and translates it outside English", () => {

@@ -6,7 +6,6 @@ import {
   Plus,
   RefreshCw,
   Rss,
-  Upload,
 } from "lucide-react";
 
 import { Toolbar } from "@/components/app-shell/toolbar";
@@ -16,8 +15,10 @@ import {
   MenubarContent,
   MenubarMenu,
   MenubarItem,
+  MenubarSeparator,
   MenubarTrigger,
 } from "@voya/ui/components/menubar";
+import { cn } from "@voya/ui/lib/utils";
 import { useShellStore } from "@/stores/shell-store";
 
 import { IMPORT_METHODS } from "./import-methods";
@@ -32,7 +33,6 @@ export function ServerTableToolbar({
     handleDirectImport,
     directImportPending,
     addTriggerRef,
-    importTriggerRef,
     setDialogState,
     setImportMethod,
     openGroupEditor,
@@ -43,7 +43,7 @@ export function ServerTableToolbar({
   } = controller;
   const addMenuOpen = useShellStore((state) => state.profilesAddMenuOpen);
   const focusFirstAddItemRef = useRef(addMenuOpen);
-  const addNodeItemRef = useRef<HTMLDivElement>(null);
+  const firstAddItemRef = useRef<HTMLDivElement>(null);
   const openingDialogRef = useRef(false);
   function handleMenuClose(event: Event) {
     if (openingDialogRef.current) {
@@ -54,6 +54,19 @@ export function ServerTableToolbar({
 
   return (
     <Toolbar className="min-w-0 max-w-full justify-end">
+      <Button
+        disabled={updatingAllSubscriptions}
+        onClick={() => void updateAllSubscriptions()}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        <RefreshCw
+          aria-hidden="true"
+          className={cn("size-4", updatingAllSubscriptions && "animate-spin")}
+        />
+        {t("panes.profiles.toolbar.updateAllSubscriptions")}
+      </Button>
       <Menubar
         className="h-auto border-0 bg-transparent p-0 shadow-none"
         value={addMenuOpen ? "add" : ""}
@@ -76,61 +89,15 @@ export function ServerTableToolbar({
               // The Home guide should land on the first available action.
               if (focusFirstAddItemRef.current && event.target === event.currentTarget) {
                 focusFirstAddItemRef.current = false;
-                addNodeItemRef.current?.focus();
+                firstAddItemRef.current?.focus();
               }
             }}
           >
-            <MenubarItem ref={addNodeItemRef} onSelect={() => {
-              openingDialogRef.current = true;
-              setDialogState({ mode: "create" });
-            }}>
-              <FilePlus2 aria-hidden="true" />
-              {t("panes.profiles.toolbar.addNode")}
-            </MenubarItem>
-            <MenubarItem onSelect={() => {
-              openingDialogRef.current = true;
-              openSubscription(null, addTriggerRef.current ?? undefined);
-            }}>
-              <Rss aria-hidden="true" />
-              {t("home.subscriptionCard.add")}
-            </MenubarItem>
-            <MenubarItem onSelect={() => {
-              openingDialogRef.current = true;
-              openGroupEditor(null);
-            }}>
-              <Layers aria-hidden="true" />
-              {t("policyGroups.new")}
-            </MenubarItem>
-            <MenubarItem
-              disabled={updatingAllSubscriptions}
-              onSelect={() => void updateAllSubscriptions()}
-            >
-              <RefreshCw aria-hidden="true" />
-              {t("panes.profiles.toolbar.updateAllSubscriptions")}
-            </MenubarItem>
-          </MenubarContent>
-        </MenubarMenu>
-      </Menubar>
-      <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
-        <MenubarMenu>
-          <MenubarTrigger asChild className="h-8">
-            <Button
-              ref={importTriggerRef}
-              disabled={directImportPending !== null}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <Upload className="size-4" aria-hidden="true" />
-              {t("panes.profiles.toolbar.import")}
-              <ChevronDown className="size-3" aria-hidden="true" />
-            </Button>
-          </MenubarTrigger>
-          <MenubarContent onCloseAutoFocus={handleMenuClose}>
-            {IMPORT_METHODS.map(({ method, icon: Icon, labelKey }) => (
+            {IMPORT_METHODS.map(({ method, icon: Icon, labelKey }, index) => (
               <MenubarItem
                 key={method}
                 disabled={directImportPending !== null}
+                ref={index === 0 ? firstAddItemRef : undefined}
                 onSelect={() => {
                   if (method === "clipboard" || method === "qrScreen") {
                     void handleDirectImport(method);
@@ -144,6 +111,28 @@ export function ServerTableToolbar({
                 {t(labelKey)}
               </MenubarItem>
             ))}
+            <MenubarSeparator />
+            <MenubarItem onSelect={() => {
+              openingDialogRef.current = true;
+              openSubscription(null, addTriggerRef.current ?? undefined);
+            }}>
+              <Rss aria-hidden="true" />
+              {t("home.subscriptionCard.add")}
+            </MenubarItem>
+            <MenubarItem onSelect={() => {
+              openingDialogRef.current = true;
+              setDialogState({ mode: "create" });
+            }}>
+              <FilePlus2 aria-hidden="true" />
+              {t("panes.profiles.toolbar.manualNode")}
+            </MenubarItem>
+            <MenubarItem onSelect={() => {
+              openingDialogRef.current = true;
+              openGroupEditor(null);
+            }}>
+              <Layers aria-hidden="true" />
+              {t("policyGroups.new")}
+            </MenubarItem>
           </MenubarContent>
         </MenubarMenu>
       </Menubar>

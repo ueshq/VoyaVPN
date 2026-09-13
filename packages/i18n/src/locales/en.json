@@ -37,7 +37,8 @@
     "deleteSubscriptionTitle": "Delete subscription?",
     "resetRoutingRulesTitle": "Restore default rules?",
     "resetRoutingRulesDescription": "Every rule, including the ones you added, will be replaced with the default set. The per-app proxy setting is kept.",
-    "resetRoutingRulesConfirm": "Restore"
+    "resetRoutingRulesConfirm": "Restore",
+    "deleteActiveProfileHint": "The node in use is among them; deleting it stops the connection."
   },
   "coreFlowReason": {
     "connect": "Connection",
@@ -86,10 +87,6 @@
     "disconnectLabel": "Disconnect",
     "trafficMode": "Traffic mode",
     "chooseNode": "Choose a node",
-    "missingNodes": {
-      "title": "Add a node first",
-      "description": "No nodes are available. Add a node or subscription before connecting."
-    },
     "selectedNodeLabel": "Selected node",
     "trafficModeInfo": "About traffic mode",
     "trafficModeHint": "Rule: Rules decide which traffic uses the proxy;\nGlobal: All captured traffic uses the selected node;",
@@ -102,7 +99,15 @@
     "selectedGroupLabel": "Selected policy group",
     "groupVia": "Via {{node}}",
     "trafficModeRule": "Rule",
-    "vpnPermissionHint": "macOS will ask to add a VPN configuration. Choose Allow to connect."
+    "vpnPermissionHint": "macOS will ask to add a VPN configuration. Choose Allow to connect.",
+    "noSelection": "No node selected",
+    "viewLogs": "View logs",
+    "profilesFailed": "Could not read the node list: {{message}}",
+    "actionFailed": {
+      "connect": "Could not connect: {{message}}",
+      "disconnect": "Could not disconnect: {{message}}",
+      "restart": "Could not restart: {{message}}"
+    }
   },
   "logCodes": {
     "connected": "Core supervisor started",
@@ -175,7 +180,8 @@
     "activeProfileRestartFailed": "Node switched; core restart failed",
     "policyGroupRefreshFailed": "Policy group refresh failed",
     "policyGroupSavedRestartFailed": "Policy group saved; core restart failed",
-    "policyGroupSelectionRuntimeUpdateFailed": "Selection saved; the running core could not switch"
+    "policyGroupSelectionRuntimeUpdateFailed": "Selection saved; the running core could not switch",
+    "activeSelectionRemoved": "The node or policy group in use was deleted, so the connection stopped."
   },
   "options": {
     "autostart": "Autostart",
@@ -317,24 +323,28 @@
         },
         "importing": "Importing nodes…",
         "line": {
-          "subscriptionSourceAdded": "Line {{line}} was added as a subscription source; update the subscription to import its nodes.",
-          "unsupportedTransport": "Line {{line}} was skipped: the {{transport}} transport is not supported.",
-          "parseFailed": "Line {{line}} was skipped: {{detail}}"
+          "subscriptionSourceAdded": "Line {{line}} was added as a subscription; it is being updated to import its nodes.",
+          "unsupportedTransport": "Line {{line}} was skipped: the {{transport}} transport is not supported. Ask your provider for a WebSocket or gRPC node.",
+          "parseFailed": "Line {{line}} was skipped: the link is not in a format VoyaVPN can read.",
+          "unsupportedProtocol": "Line {{line}} was skipped: this kind of link is not supported.",
+          "missingField": "Line {{line}} was skipped: the {{protocol}} link is missing {{field}}.",
+          "invalidPort": "Line {{line}} was skipped: {{port}} is not a valid port in the {{protocol}} link."
         }
       },
       "importMethods": {
-        "qrImage": "Scan QR image",
-        "qrScreen": "Scan screen"
+        "qrScreen": "Scan screen",
+        "paste": "Paste links or subscription URLs"
       },
       "importDialog": {
         "reading": "Reading content…",
-        "description": "Import share links, subscription URLs, or JSON payloads.",
+        "description": "Paste share links or subscription URLs, one per line, or scan a QR image.",
         "manual": "Manual import",
         "mode": "Mode",
         "payload": "Import payload",
         "subscriptionTarget": "Subscription target",
         "target": "Target",
-        "title": "Import Nodes"
+        "title": "Add nodes or subscriptions",
+        "placeholder": "vless://…\nhttps://example.com/subscription"
       },
       "menu": {
         "actionsFor": "Actions for {{name}}",
@@ -376,7 +386,8 @@
         "import": "Import",
         "subscriptions": "Subscriptions",
         "addNode": "Add node",
-        "updateAllSubscriptions": "Update all subscriptions"
+        "updateAllSubscriptions": "Update all subscriptions",
+        "manualNode": "Enter a node manually"
       },
       "undecodable": "{{count}} stored node(s) could not be read by this version and are hidden. They were most likely written by a newer build; updating VoyaVPN should show them again.",
       "untitled": "Untitled",
@@ -917,5 +928,11 @@
     "testUrl": "Test URL",
     "interval": "Probe interval (seconds)",
     "tolerance": "Tolerance (ms)"
+  },
+  "startupFailure": {
+    "title": "VoyaVPN could not start",
+    "resetDatabase": "Reset Database",
+    "quit": "Quit",
+    "resetExplanation": "Reset Database moves this database to a backup in the same folder and restarts VoyaVPN with no nodes, subscriptions or custom rules, and default settings."
   }
 }

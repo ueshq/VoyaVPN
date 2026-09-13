@@ -241,7 +241,7 @@ fn report_tray_failure<R: tauri::Runtime>(app: &tauri::AppHandle<R>, error: &App
     report_post_commit_error(
         app,
         NoticeCode::TrayActionFailed,
-        &format!("{error:?}"),
+        &error.message,
         AppNoticeLevel::Warning,
     );
 }

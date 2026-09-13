@@ -94,6 +94,15 @@ fn import_line_code(error: ShareError) -> ImportLineCode {
         ShareError::UnsupportedTransport { transport } => {
             ImportLineCode::UnsupportedTransport { transport }
         }
+        ShareError::UnsupportedProtocol => ImportLineCode::UnsupportedProtocol,
+        ShareError::MissingField { protocol, field } => ImportLineCode::MissingField {
+            protocol: protocol.to_string(),
+            field: field.to_string(),
+        },
+        ShareError::InvalidPort { protocol, port } => ImportLineCode::InvalidPort {
+            protocol: protocol.to_string(),
+            port,
+        },
         other => ImportLineCode::ParseFailed {
             detail: other.to_string(),
         },

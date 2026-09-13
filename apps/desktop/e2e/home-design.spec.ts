@@ -75,8 +75,8 @@ for (const { layout, language } of [
   { layout: "windows", language: "zh-Hans" },
 ] as const) {
   const labels = language === "en"
-    ? { connect: "Connect", disconnect: "Disconnect", collapse: "Collapse sidebar", expand: "Expand sidebar", settings: "Settings", switchNode: "Switch node", nodes: "Nodes", home: "Home", import: "Import" }
-    : { connect: "连接", disconnect: "断开", collapse: "收起侧栏", expand: "展开侧栏", settings: "设置", switchNode: "切换节点", nodes: "节点", home: "主页", import: "导入" };
+    ? { addNode: "Add node", connect: "Connect", disconnect: "Disconnect", collapse: "Collapse sidebar", expand: "Expand sidebar", settings: "Settings", switchNode: "Switch node", nodes: "Nodes", home: "Home", import: "Import" }
+    : { addNode: "添加节点", connect: "连接", disconnect: "断开", collapse: "收起侧栏", expand: "展开侧栏", settings: "设置", switchNode: "切换节点", nodes: "节点", home: "主页", import: "导入" };
   test(`home ${layout} ${language} layout stays usable across window sizes, themes and sidebar widths`, async ({
     page,
   }, testInfo) => {
@@ -242,8 +242,9 @@ for (const { layout, language } of [
         payload: state.runtime,
       });
     });
+    // An empty home offers adding a node instead of a Connect that cannot connect.
     await expect(
-      page.getByRole("button", { name: labels.connect, exact: true }),
+      page.getByRole("button", { name: labels.addNode, exact: true }),
     ).toBeVisible();
     await expect(page.getByTestId("home-connection-duration")).toHaveCount(0);
     const home = page.getByTestId("home-screen");

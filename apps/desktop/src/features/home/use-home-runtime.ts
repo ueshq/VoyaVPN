@@ -28,6 +28,7 @@ export function useHomeRuntime(t: TranslationFunction) {
   const tun = useRuntimeEventStore((state) => state.tun);
   const pending = useRuntimeActionStore(runtimeActionPending);
   const modePending = useRuntimeActionStore((state) => state.modePending);
+  const lastError = useRuntimeActionStore((state) => state.lastError);
   // Shares the ProfilesScreen query cache (same key) so resolving the active
   // node's name here costs no extra fetch and stays in sync after a switch.
   const profilesQuery = useQuery({
@@ -76,11 +77,11 @@ export function useHomeRuntime(t: TranslationFunction) {
       return;
     }
 
-    useRuntimeActionStore.setState({ pendingAction: action });
+    useRuntimeActionStore.setState({ pendingAction: action, lastError: null });
     try {
       await executeRuntimeAction(action);
     } catch (error) {
-      reportRuntimeActionError(error, action, t);
+      reportRuntimeActionError(error, action, t, { inline: true });
     } finally {
       try {
         await refreshRuntimeStatusAndReport(t);
@@ -103,6 +104,11 @@ export function useHomeRuntime(t: TranslationFunction) {
     void runRuntimeAction("restart");
   }
 
+  function retryLastAction() {
+    const failed = useRuntimeActionStore.getState().lastError;
+    if (failed) void runRuntimeAction(failed.action);
+  }
+
   return {
     activeGroup,
     groupRuntime,
@@ -112,12 +118,15 @@ export function useHomeRuntime(t: TranslationFunction) {
     tunEnabled,
     handlePrimaryAction,
     inProgress,
+    lastError,
     mainPid: coreState?.mainPid ?? null,
     modePending,
     profiles: profilesQuery.data?.entries ?? [],
     profilesPending: profilesQuery.isPending,
     profilesError: profilesQuery.error,
     restart,
+    retryLastAction,
+    retryProfiles: () => void profilesQuery.refetch(),
     runningId,
     state,
     tunProviderSummary,

@@ -55,8 +55,12 @@ impl SubscriptionManager<'_> {
         };
 
         let parsed_import = parse_import_text(text, subscription_id.unwrap_or_default())?;
+        let mut added_subscription_ids: Vec<String> = Vec::new();
         for url in &parsed_import.subscription_urls {
-            self.add_subscription_from_url(url).await?;
+            let subscription = self.add_subscription_from_url(url).await?;
+            if !added_subscription_ids.contains(&subscription.id) {
+                added_subscription_ids.push(subscription.id);
+            }
         }
         let mut profiles = parsed_import.profiles;
         let parsed = profiles.len();
@@ -97,6 +101,7 @@ impl SubscriptionManager<'_> {
                 imported_index_ids: Vec::new(),
                 updated_index_ids: Vec::new(),
                 line_issues: parsed_import.line_issues,
+                added_subscription_ids,
             });
         }
 
@@ -220,6 +225,7 @@ impl SubscriptionManager<'_> {
             imported_index_ids,
             updated_index_ids,
             line_issues,
+            added_subscription_ids,
         })
     }
 }

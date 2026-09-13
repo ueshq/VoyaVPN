@@ -71,12 +71,16 @@ pub enum NoticeCode {
     TrayRefreshFailed,
     TrayActionFailed,
     // ---- the core or the tunnel stopped on its own ----
+    /// The running node or policy group was deleted, so the connection stopped.
+    ActiveSelectionRemoved,
     CoreStopped,
     NativeTunStopped,
     CoreStartedSystemProxyFailed,
     SystemProxyRestoreFailed,
     // ---- background work ----
-    SubscriptionAutoUpdateFailed { remarks: String },
+    SubscriptionAutoUpdateFailed {
+        remarks: String,
+    },
 }
 
 /// Which core operation a log line is about.
@@ -354,7 +358,14 @@ pub enum ImportLineCode {
     SubscriptionSourceAdded,
     /// The share link names a transport sing-box cannot carry.
     UnsupportedTransport { transport: String },
-    /// Any other share-link parse failure, with its untranslated diagnostic.
+    /// The line uses a share-link scheme this build does not read.
+    UnsupportedProtocol,
+    /// The share link lacks a field its protocol requires.
+    MissingField { protocol: String, field: String },
+    /// The share link's port is not a valid port.
+    InvalidPort { protocol: String, port: String },
+    /// Any other malformed share link. `detail` is an untranslated diagnostic
+    /// for logs; the interface does not show it.
     ParseFailed { detail: String },
 }
 

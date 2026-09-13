@@ -38,6 +38,7 @@ export const NOTICE_KEYS: Record<NoticeCode["code"], TranslationKey> = {
   connectionModeRefreshFailed: "notices.connectionModeRefreshFailed",
   connectionModeSavedRestartFailed: "notices.connectionModeSavedRestartFailed",
   coreStartedSystemProxyFailed: "notices.coreStartedSystemProxyFailed",
+  activeSelectionRemoved: "notices.activeSelectionRemoved",
   coreStopped: "notices.coreStopped",
   dnsRefreshFailed: "notices.dnsRefreshFailed",
   dnsSavedRestartFailed: "notices.dnsSavedRestartFailed",
@@ -169,8 +170,11 @@ export const SPEEDTEST_OUTCOME_KEYS: Record<SpeedtestOutcome, TranslationKey> =
   };
 
 export const IMPORT_LINE_KEYS: Record<ImportLineCode["code"], TranslationKey> = {
+  invalidPort: "panes.profiles.import.line.invalidPort",
+  missingField: "panes.profiles.import.line.missingField",
   parseFailed: "panes.profiles.import.line.parseFailed",
   subscriptionSourceAdded: "panes.profiles.import.line.subscriptionSourceAdded",
+  unsupportedProtocol: "panes.profiles.import.line.unsupportedProtocol",
   unsupportedTransport: "panes.profiles.import.line.unsupportedTransport",
 };
 

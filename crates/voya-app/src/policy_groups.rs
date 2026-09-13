@@ -229,11 +229,14 @@ impl<'db> PolicyGroupManager<'db> {
         let Some(subscription) = self.database.subscriptions().get(subscription_id).await? else {
             return Ok(None);
         };
-        let name = auto_group_name(if subscription.remarks.trim().is_empty() {
-            &subscription.id
-        } else {
-            &subscription.remarks
-        });
+        let name = auto_group_name(
+            if subscription.remarks.trim().is_empty() {
+                &subscription.id
+            } else {
+                &subscription.remarks
+            },
+            &config.ui_item.current_language,
+        );
         let group = PolicyGroupItem {
             id: uuid::Uuid::new_v4().simple().to_string(),
             name,
@@ -295,16 +298,22 @@ pub fn group_test_url(group: &PolicyGroupItem) -> &str {
         .unwrap_or(voya_core::DEFAULT_GROUP_TEST_URL)
 }
 
-/// `"{subscription} · Auto"`, kept within the editor's name limit.
-fn auto_group_name(subscription: &str) -> String {
-    let budget = GROUP_NAME_MAX_CHARS - AUTO_GROUP_SUFFIX.chars().count();
+/// `"{subscription} · Auto"` in the interface language, kept within the
+/// editor's name limit.
+fn auto_group_name(subscription: &str, language: &str) -> String {
+    let suffix = match crate::language::ui_language_for_locale(language) {
+        "zh-Hant" => " · 自動",
+        "zh-Hans" => " · 自动",
+        _ => AUTO_GROUP_SUFFIX,
+    };
+    let budget = GROUP_NAME_MAX_CHARS - suffix.chars().count();
     let base: String = subscription
         .trim()
         .chars()
         .filter(|character| !character.is_control())
         .take(budget)
         .collect();
-    format!("{}{AUTO_GROUP_SUFFIX}", base.trim_end())
+    format!("{}{suffix}", base.trim_end())
 }
 
 fn normalized(mut group: PolicyGroupItem) -> PolicyGroupItem {
@@ -458,12 +467,19 @@ mod tests {
     }
 
     #[test]
+    fn auto_group_names_follow_the_interface_language() {
+        assert_eq!(auto_group_name("Work", "en"), "Work · Auto");
+        assert_eq!(auto_group_name("机场", "zh-Hans"), "机场 · 自动");
+        assert_eq!(auto_group_name("機場", "zh-Hant"), "機場 · 自動");
+    }
+
+    #[test]
     fn auto_group_names_stay_within_the_limit() {
         let long = "界".repeat(GROUP_NAME_MAX_CHARS * 2);
-        let name = auto_group_name(&long);
+        let name = auto_group_name(&long, "en");
         assert_eq!(name.chars().count(), GROUP_NAME_MAX_CHARS);
         assert!(name.ends_with(AUTO_GROUP_SUFFIX));
-        assert_eq!(auto_group_name(" Work\n "), "Work · Auto");
+        assert_eq!(auto_group_name(" Work\n ", "en"), "Work · Auto");
     }
 
     #[tokio::test]

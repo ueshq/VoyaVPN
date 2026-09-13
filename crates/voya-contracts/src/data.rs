@@ -52,6 +52,9 @@ pub struct ImportProfilesResult {
     pub imported_profile_ids: Vec<String>,
     pub updated_profile_ids: Vec<String>,
     pub line_issues: Vec<crate::ImportLineIssue>,
+    /// Subscriptions created from subscription URLs in the text. Their nodes
+    /// arrive only once they are updated.
+    pub added_subscription_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
