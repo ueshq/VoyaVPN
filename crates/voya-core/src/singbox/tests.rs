@@ -1849,3 +1849,157 @@ fn assert_no_nulls(value: &Value) {
         Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
     }
 }
+
+struct RuleGroupEnv {
+    group: Option<crate::ContextPolicyGroup>,
+    rule_outbound: &'static str,
+}
+
+impl crate::CoreGenEnv for RuleGroupEnv {
+    fn platform(&self) -> CoreGenPlatform {
+        CoreGenPlatform::Linux
+    }
+
+    fn get_profile_by_remarks(&self, _remarks: &str) -> Option<ProfileItem> {
+        None
+    }
+
+    fn get_default_routing(&self, _config: &AppConfig) -> Option<RoutingItem> {
+        Some(RoutingItem {
+            rule_set: vec![RulesItem {
+                remarks: Some("Work sites".to_string()),
+                outbound_tag: Some(self.rule_outbound.to_string()),
+                domain: Some(vec!["domain:example.com".to_string()]),
+                enabled: true,
+                ..RulesItem::default()
+            }],
+            ..RoutingItem::default()
+        })
+    }
+
+    fn get_local_port(&self, _protocol: InboundProtocol) -> i32 {
+        crate::DEFAULT_LOCAL_PORT
+    }
+
+    fn get_policy_group(&self, id: &str) -> Option<crate::ContextPolicyGroup> {
+        self.group.clone().filter(|group| group.group.id == id)
+    }
+}
+
+fn work_group() -> crate::ContextPolicyGroup {
+    crate::ContextPolicyGroup {
+        group: crate::PolicyGroupItem {
+            id: "work".to_string(),
+            name: "Work".to_string(),
+            strategy: crate::GroupStrategy::UrlTest,
+            ..crate::PolicyGroupItem::default()
+        },
+        members: vec![
+            group_member("tokyo", "Tokyo", 1080),
+            group_member("osaka", "Osaka", 1081),
+        ],
+    }
+}
+
+#[test]
+fn a_rule_sends_traffic_through_a_policy_group_other_than_the_active_one() {
+    let env = RuleGroupEnv {
+        group: Some(work_group()),
+        rule_outbound: "group:work",
+    };
+    let result = crate::CoreConfigContextBuilder::new(&env)
+        .build(&AppConfig::default(), &group_member("main", "Main", 1082));
+    assert!(result.success(), "{:?}", result.validator_result);
+
+    let value = generate_singbox_config_value(&result.context).expect("config");
+    let outbounds = value["outbounds"].as_array().expect("outbounds");
+    let group = outbounds
+        .iter()
+        .find(|outbound| outbound["tag"] == "Work [work]")
+        .expect("the named group has its own outbound");
+    assert_eq!(group["type"], "urltest");
+    // Member tags live under the group, apart from the main proxy's.
+    assert_eq!(
+        group["outbounds"],
+        serde_json::json!(["Work [work] / Tokyo [tokyo]", "Work [work] / Osaka [osaka]"])
+    );
+    for member in ["Work [work] / Tokyo [tokyo]", "Work [work] / Osaka [osaka]"] {
+        assert!(
+            outbounds.iter().any(|outbound| outbound["tag"] == member),
+            "{member}"
+        );
+    }
+    let rules = value["route"]["rules"].as_array().expect("rules");
+    assert!(rules.iter().any(|rule| rule["outbound"] == "Work [work]"));
+}
+
+#[test]
+fn a_rule_naming_the_active_group_uses_the_main_proxy() {
+    let env = RuleGroupEnv {
+        group: Some(work_group()),
+        rule_outbound: "group:work",
+    };
+    let active = work_group();
+    let result = crate::CoreConfigContextBuilder::new(&env).build_for_group(
+        &AppConfig::default(),
+        &active.group,
+        &active.members,
+    );
+    assert!(result.success(), "{:?}", result.validator_result);
+
+    let value = generate_singbox_config_value(&result.context).expect("config");
+    let rules = value["route"]["rules"].as_array().expect("rules");
+    assert!(rules
+        .iter()
+        .any(|rule| rule["outbound"] == PROXY_TAG && rule["domain_suffix"].is_array()));
+    assert!(!value["outbounds"]
+        .as_array()
+        .expect("outbounds")
+        .iter()
+        .any(|outbound| outbound["tag"] == "Work [work]"));
+}
+
+#[test]
+fn a_rule_naming_a_missing_policy_group_fails_the_build() {
+    let env = RuleGroupEnv {
+        group: None,
+        rule_outbound: "group:gone",
+    };
+    let result = crate::CoreConfigContextBuilder::new(&env)
+        .build(&AppConfig::default(), &group_member("main", "Main", 1082));
+
+    assert!(!result.success());
+    assert!(result.validator_result.errors.iter().any(|error| matches!(
+        &error.code,
+        crate::ValidationCode::RoutingRuleOutboundNotFound { outbound, .. } if outbound == "group:gone"
+    )));
+}
+
+#[test]
+fn singbox_macos_leaves_out_app_conditions_the_network_extension_cannot_match() {
+    let routing = RoutingItem {
+        rule_set: vec![RulesItem {
+            remarks: Some("Apps".to_string()),
+            outbound_tag: Some(DIRECT_TAG.to_string()),
+            process: Some(vec!["curl".to_string()]),
+            domain: Some(vec!["domain:example.com".to_string()]),
+            enabled: true,
+            ..RulesItem::default()
+        }],
+        ..RoutingItem::default()
+    };
+    let mut linux = test_context(AppConfig::default(), base_remote_node());
+    linux.routing_item = Some(routing);
+    let mut macos = linux.clone();
+    macos.platform = CoreGenPlatform::MacOS;
+
+    let has_app_rule = |context: &CoreConfigContext| {
+        generate_singbox_config_value(context).expect("config")["route"]["rules"]
+            .as_array()
+            .expect("rules")
+            .iter()
+            .any(|rule| rule.get("process_name").is_some() || rule.get("process_path").is_some())
+    };
+    assert!(has_app_rule(&linux));
+    assert!(!has_app_rule(&macos));
+}

@@ -291,7 +291,10 @@ fn gen_routing_user_rule(
             has_domain_ip_process = true;
         }
     }
-    if let Some(processes) = &user_rule.process {
+    // The macOS NetworkExtension tunnel cannot tell which app a packet came
+    // from, so an app condition there would never match; leave it out rather
+    // than emit a rule sing-box rejects or silently ignores.
+    if let Some(processes) = user_rule.process.as_ref().filter(|_| !context.is_macos()) {
         let mut process_name_rule = rule.clone();
         let mut process_path_rule = rule.clone();
         for process in processes {
@@ -381,6 +384,39 @@ fn route_ip_rule_has_matcher(rule: &SingboxRule) -> bool {
         || rule.ip_is_private == Some(true)
 }
 
+/// A rule that names a policy group. The active group already is the `proxy`
+/// outbound; any other group gets its own outbound, added once.
+fn gen_rule_group_outbound(
+    config: &mut SingboxConfig,
+    context: &CoreConfigContext,
+    group_id: &str,
+) -> String {
+    if context
+        .policy_group
+        .as_ref()
+        .is_some_and(|active| active.group.id == group_id)
+    {
+        return PROXY_TAG.to_string();
+    }
+    // Resolution already failed the build for a group that is not here.
+    let Some(group) = context
+        .rule_policy_groups
+        .iter()
+        .find(|group| group.group.id == group_id)
+    else {
+        return PROXY_TAG.to_string();
+    };
+    let tag = rule_group_tag(&group.group);
+    if config.outbounds.iter().any(|outbound| outbound.tag == tag) {
+        return tag;
+    }
+    append_servers(
+        config,
+        build_policy_group_servers(context, group, &tag, Some(&tag)),
+    );
+    tag
+}
+
 fn gen_routing_user_rule_outbound(
     config: &mut SingboxConfig,
     context: &CoreConfigContext,
@@ -388,6 +424,9 @@ fn gen_routing_user_rule_outbound(
 ) -> String {
     if [PROXY_TAG, DIRECT_TAG, BLOCK_TAG].contains(&outbound_tag) {
         return outbound_tag.to_string();
+    }
+    if let Some(group_id) = outbound_tag.strip_prefix(crate::GROUP_OUTBOUND_PREFIX) {
+        return gen_rule_group_outbound(config, context, group_id);
     }
 
     let Some(node) = context

@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
 use voya_core::{
-    AppConfig, CoreGenEnv, CoreGenPlatform, InboundProtocol, ProfileItem, RoutingItem,
+    AppConfig, ContextPolicyGroup, CoreGenEnv, CoreGenPlatform, InboundProtocol, PolicyGroupItem,
+    ProfileItem, RoutingItem,
 };
 
 use crate::supervisor::ClashApiSecret;
@@ -12,6 +13,7 @@ pub(crate) struct SnapshotCoreGenEnv {
     platform: CoreGenPlatform,
     profiles: Vec<ProfileItem>,
     routings: Vec<RoutingItem>,
+    policy_groups: Vec<PolicyGroupItem>,
     singbox_ruleset_paths: BTreeMap<String, String>,
     clash_api_secret: Option<String>,
 }
@@ -36,9 +38,16 @@ impl SnapshotCoreGenEnv {
             platform,
             profiles,
             routings,
+            policy_groups: Vec::new(),
             singbox_ruleset_paths: BTreeMap::new(),
             clash_api_secret: None,
         }
+    }
+
+    /// The policy groups routing rules can name.
+    pub(crate) fn with_policy_groups(mut self, policy_groups: Vec<PolicyGroupItem>) -> Self {
+        self.policy_groups = policy_groups;
+        self
     }
 
     pub(crate) fn with_singbox_ruleset_paths(
@@ -72,6 +81,17 @@ impl CoreGenEnv for SnapshotCoreGenEnv {
             .find(|profile| profile.remarks == remarks)
             .cloned()
     }
+    fn get_policy_group(&self, id: &str) -> Option<ContextPolicyGroup> {
+        let group = self.policy_groups.iter().find(|group| group.id == id)?;
+        Some(ContextPolicyGroup {
+            members: voya_core::resolve_group_members(group, &self.profiles)
+                .into_iter()
+                .cloned()
+                .collect(),
+            group: group.clone(),
+        })
+    }
+
     fn get_default_routing(&self, config: &AppConfig) -> Option<RoutingItem> {
         self.routings
             .iter()

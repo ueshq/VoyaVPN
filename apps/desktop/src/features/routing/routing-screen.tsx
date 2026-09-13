@@ -27,6 +27,7 @@ import {
   PageSurface,
   PageTitle,
 } from "@/components/app-shell/page-section";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
 
 import { PerAppProxyDialog } from "./per-app-proxy-dialog";
@@ -43,6 +44,8 @@ export function RoutingScreen() {
   const controller = useRoutingScreen();
   const perAppOpen = useShellStore((state) => state.routingPerAppRequested);
   const processRulesSupported = useProcessRulesSupported();
+  // Rules apply by restarting the core, which drops connections for a moment.
+  const connected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
   const { activeRouting, ruleDialog } = controller;
   const error = controller.operationError ?? controller.loadError;
 
@@ -72,9 +75,12 @@ export function RoutingScreen() {
         />
         <PageSurface className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <PageHeader className="min-h-14">
-            <p className="min-w-0 flex-1 text-sm text-muted-foreground">
-              {t("panes.routing.ruleOrderHint")}
-            </p>
+            <div className="grid min-w-0 flex-1 gap-0.5">
+              <p className="text-sm text-muted-foreground">{t("panes.routing.ruleOrderHint")}</p>
+              {connected ? (
+                <p className="text-xs text-muted-foreground">{t("panes.routing.reconnectHint")}</p>
+              ) : null}
+            </div>
             <PageHeaderActions>
               <Button
                 disabled={!activeRouting}
@@ -106,6 +112,7 @@ export function RoutingScreen() {
             ? `rule-${ruleDialog.rule.id}`
             : `rule-${ruleDialog?.mode ?? "closed"}`
         }
+        groupOutbounds={controller.groupOutbounds}
         mode={ruleDialog?.mode ?? "create"}
         nodeNames={controller.nodeNames}
         onOpenChange={(open) => {
@@ -152,7 +159,9 @@ function RulesBody({
 
   return (
     <RoutingRuleList
+      groupOutbounds={controller.groupOutbounds}
       nodeNames={controller.nodeNames}
+      onFixOutbound={controller.fixOutbound}
       onDelete={controller.requestDeleteRule}
       onEdit={controller.editRule}
       onMove={controller.moveRule}

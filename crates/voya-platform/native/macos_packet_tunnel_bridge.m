@@ -453,7 +453,7 @@ char *voya_macos_packet_tunnel_status(void) {
     }
 }
 
-char *voya_macos_packet_tunnel_start(const char *config_path, const char *profile_id, int64_t timeout_ms) {
+char *voya_macos_packet_tunnel_start(const char *config_path, const char *profile_id, int64_t timeout_ms, int32_t include_all_networks) {
     @autoreleasepool {
         if (config_path == NULL) {
             return VoyaCopyCString(@"error:missing config path");
@@ -488,6 +488,14 @@ char *voya_macos_packet_tunnel_start(const char *config_path, const char *profil
         }
         if (manager == nil) {
             return VoyaCopyCString(@"error:VoyaVPN PacketTunnel manager is unavailable.");
+        }
+
+        // Kill switch: send every network through the tunnel so nothing leaves
+        // outside the VPN, while the local network stays reachable.
+        if ([manager.protocolConfiguration isKindOfClass:[NETunnelProviderProtocol class]]) {
+            NETunnelProviderProtocol *proto = (NETunnelProviderProtocol *)manager.protocolConfiguration;
+            proto.includeAllNetworks = include_all_networks != 0;
+            proto.excludeLocalNetworks = YES;
         }
 
         manager.enabled = YES;

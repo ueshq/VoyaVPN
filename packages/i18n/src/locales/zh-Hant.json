@@ -463,7 +463,7 @@
       "title": "規則",
       "untitled": "未命名",
       "resetRules": "還原預設規則",
-      "managedRule": "託管",
+      "managedRule": "內建",
       "noActiveRouting": "目前沒有生效的規則集。",
       "addRule": "新增規則",
       "ruleOrderHint": "規則由上而下比對，未命中任何規則的流量走代理。",
@@ -499,7 +499,7 @@
       "protocolHelp": "嗅探到的協議，每行一個，如 http、tls、quic、bittorrent。",
       "matchNothing": "未設定比對條件，此規則不會生效",
       "matchMore": "+{{count}}",
-      "managedRuleHint": "內建規則，可編輯、關閉或移動；「還原預設規則」可復原。",
+      "managedRuleHint": "內建規則，可編輯、關閉或移動；「恢復預設規則」可還原。",
       "emptyRulesHint": "所有流量都走代理。可新增規則，或還原預設規則。",
       "globalModeBanner": "目前為全局代理：所有接管的流量都走代理，以下規則暫不生效。",
       "globalModeSwitchBack": "切換到規則模式",
@@ -513,7 +513,20 @@
         "blockAds": "攔截廣告",
         "cnDirect": "中國網站直連"
       },
-      "processUnsupported": "此平台不支援應用程式條件，該條件不會生效。"
+      "processUnsupported": "此平台不支援應用程式條件，該條件不會生效。",
+      "outboundGroup": "策略群組：{{name}}",
+      "outboundGroupMissing": "策略群組已刪除",
+      "fixOutbound": "改為代理",
+      "reconnectHint": "已連線：儲存規則後會短暫重新連線。",
+      "perAppNeedsApps": "請至少選擇一個應用程式，或關閉分應用代理。",
+      "presets": {
+        "label": "常用：",
+        "cnSites": "國內網站",
+        "google": "Google",
+        "ads": "廣告",
+        "cnIps": "國內 IP",
+        "lanIps": "區域網路 IP"
+      }
     },
     "subscriptions": {
       "additionalUrl": "備用地址",

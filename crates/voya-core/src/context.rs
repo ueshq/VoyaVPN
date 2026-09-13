@@ -175,9 +175,16 @@ pub struct CoreConfigContext {
     /// The active policy group with its usable members in order; `node` is
     /// then the first member. `None` while a single node is active.
     pub policy_group: Option<ContextPolicyGroup>,
+    /// Policy groups that routing rules send traffic to, each with its usable
+    /// members in order. A rule naming the active group uses `proxy` instead.
+    pub rule_policy_groups: Vec<ContextPolicyGroup>,
 }
 
-/// An active policy group as the generator sees it.
+/// How a routing rule names a policy group as its outbound: this prefix and
+/// the group id. Nodes are named by their remarks.
+pub const GROUP_OUTBOUND_PREFIX: &str = "group:";
+
+/// A policy group as the generator sees it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ContextPolicyGroup {
     pub group: crate::PolicyGroupItem,
@@ -207,6 +214,7 @@ impl Default for CoreConfigContext {
             singbox_ruleset_paths: BTreeMap::new(),
             clash_api_secret: None,
             policy_group: None,
+            rule_policy_groups: Vec::new(),
         }
     }
 }
@@ -311,6 +319,11 @@ pub trait CoreGenEnv {
     }
 
     fn get_profile_by_remarks(&self, remarks: &str) -> Option<ProfileItem>;
+    /// A policy group a routing rule names, with its members resolved against
+    /// the current node list. `None` when no such group exists.
+    fn get_policy_group(&self, _id: &str) -> Option<ContextPolicyGroup> {
+        None
+    }
     fn get_default_routing(&self, config: &AppConfig) -> Option<RoutingItem>;
     fn get_local_port(&self, protocol: InboundProtocol) -> i32;
     fn get_singbox_ruleset_paths(&self) -> BTreeMap<String, String> {
@@ -349,6 +362,7 @@ where
             singbox_ruleset_paths: self.env.get_singbox_ruleset_paths(),
             clash_api_secret: self.env.get_clash_api_secret(),
             policy_group: None,
+            rule_policy_groups: Vec::new(),
         };
 
         let (active_node, node_result) = self.resolve_node(&mut context, node);
@@ -539,6 +553,11 @@ where
             return;
         };
 
+        if let Some(group_id) = outbound_tag.strip_prefix(GROUP_OUTBOUND_PREFIX) {
+            self.resolve_rule_group(context, validator_result, rule_name, outbound_tag, group_id);
+            return;
+        }
+
         // A rule that names an outbound node must not fall back to the active
         // node: routing.rs would silently retarget it to the main proxy.
         let Some(rule_outbound_node) = self.env.get_profile_by_remarks(outbound_tag) else {
@@ -562,6 +581,65 @@ where
         context
             .all_proxies_map
             .insert(format!("remark:{outbound_tag}"), active_rule_node);
+    }
+
+    /// A rule that sends traffic through a policy group. Members the generator
+    /// cannot use are left out with a member-scoped warning, exactly as for the
+    /// active group; a group that is gone or has no usable member is an error,
+    /// because falling back to the main proxy would route somewhere the user
+    /// did not choose.
+    fn resolve_rule_group(
+        &self,
+        context: &mut CoreConfigContext,
+        validator_result: &mut NodeValidatorResult,
+        rule_name: &str,
+        outbound_tag: &str,
+        group_id: &str,
+    ) {
+        if context
+            .rule_policy_groups
+            .iter()
+            .any(|group| group.group.id == group_id)
+        {
+            return;
+        }
+        let Some(group) = self.env.get_policy_group(group_id) else {
+            validator_result.push_error(ValidationCode::RoutingRuleOutboundNotFound {
+                rule: rule_name.to_string(),
+                outbound: outbound_tag.to_string(),
+            });
+            return;
+        };
+        let mut usable = Vec::new();
+        for member in &group.members {
+            let scope = ValidationScope::PolicyGroupMember {
+                group: group.group.name.clone(),
+                member: member.remarks.clone(),
+            };
+            let member_result = register_single_node(context, member);
+            if member_result.success() {
+                usable.push(member.clone());
+                validator_result.extend_scoped(&scope, &member_result);
+            } else {
+                validator_result.warnings.extend(
+                    member_result
+                        .errors
+                        .iter()
+                        .chain(&member_result.warnings)
+                        .map(|finding| finding.clone().within(scope.clone())),
+                );
+            }
+        }
+        if usable.is_empty() {
+            validator_result.push_error(ValidationCode::PolicyGroupWithoutValidMembers {
+                group: group.group.name.clone(),
+            });
+            return;
+        }
+        context.rule_policy_groups.push(ContextPolicyGroup {
+            group: group.group,
+            members: usable,
+        });
     }
 }
 

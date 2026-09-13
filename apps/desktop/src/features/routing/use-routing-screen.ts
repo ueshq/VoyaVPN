@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   deleteRoutingRules,
+  listPolicyGroups,
   listProfiles,
   listRoutings,
   moveRoutingRule,
@@ -14,7 +15,7 @@ import { profilesQueryKey, queryKeys } from "@/ipc/query-keys";
 import { useShellStore } from "@/stores/shell-store";
 import { getErrorMessage } from "@voya/utils/error";
 
-import { nodeOutboundNames } from "./rule-outbound";
+import { nodeOutboundNames, type RuleGroupOutbound } from "./rule-outbound";
 import type { RoutingRulePayload } from "./routing-form-schema";
 import { PER_APP_SENTINEL } from "./sentinel-rules";
 
@@ -54,6 +55,10 @@ export function useRoutingScreen() {
     queryFn: () => listProfiles(null, null),
     queryKey: profilesQueryKey(""),
   });
+  const policyGroupsQuery = useQuery({
+    queryFn: listPolicyGroups,
+    queryKey: queryKeys.policyGroups,
+  });
 
   const activeRouting = routingsQuery.data?.find((routing) => routing.isActive) ?? null;
   // The per-app dialog keeps its rule first so it matches ahead of everything
@@ -68,6 +73,11 @@ export function useRoutingScreen() {
   const nodeNames = useMemo(
     () => (profileEntries ? nodeOutboundNames(profileEntries) : null),
     [profileEntries],
+  );
+  const groupEntries = policyGroupsQuery.data?.entries;
+  const groupOutbounds = useMemo<RuleGroupOutbound[] | null>(
+    () => groupEntries?.map(({ group }) => ({ id: group.id, name: group.name })) ?? null,
+    [groupEntries],
   );
 
   function primeRouting(saved: Routing_Serialize) {
@@ -121,6 +131,11 @@ export function useRoutingScreen() {
     }
   }
 
+  /** Points a rule whose node or group is gone back at the proxy. */
+  function fixOutbound(rule: RoutingRule) {
+    void runOperation((routingId) => saveRoutingRule(routingId, { ...rule, outbound: "proxy" }));
+  }
+
   function moveRule(rule: RoutingRule, action: RuleMoveAction) {
     void runOperation((routingId) =>
       // A plain "top" would lift the rule above the pinned per-app rule.
@@ -165,6 +180,8 @@ export function useRoutingScreen() {
     activeRouting,
     confirmPending,
     editRule,
+    fixOutbound,
+    groupOutbounds,
     loadError: routingsQuery.error ? getErrorMessage(routingsQuery.error) : null,
     loading: routingsQuery.isPending,
     moveRule,

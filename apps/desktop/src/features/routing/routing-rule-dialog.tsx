@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import type * as React from "react";
 import { Route, Save } from "lucide-react";
 
+import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Alert, AlertDescription } from "@voya/ui/components/alert";
 import { Button } from "@voya/ui/components/button";
@@ -30,7 +31,7 @@ import {
   type FieldErrorMap,
 } from "@/lib/zod-errors";
 
-import { OUTBOUND_LABEL_KEYS } from "./rule-outbound";
+import { OUTBOUND_LABEL_KEYS, type RuleGroupOutbound, appendMatcherLine, describeOutbound, groupOutboundValue } from "./rule-outbound";
 import { RULE_SCOPE_LABEL_KEYS } from "./routing-constants";
 import { routingRuleSchema, type RoutingRulePayload } from "./routing-form-schema";
 import { formToRule, ruleToForm, type RuleFormState } from "./routing-form-values";
@@ -56,8 +57,11 @@ export function RoutingRuleDialog({
   onSubmit,
   open,
   processRulesSupported = true,
+  groupOutbounds = [],
   rule,
 }: {
+  /** Policy groups a rule can target; `null` while the list loads. */
+  groupOutbounds?: readonly RuleGroupOutbound[] | null;
   mode: "create" | "edit";
   /** Node remarks a rule can target; `null` while the node list loads. */
   nodeNames: readonly string[] | null;
@@ -101,16 +105,24 @@ export function RoutingRuleDialog({
       label: t(labelKey),
       value,
     })),
+    ...(groupOutbounds ?? []).map(({ id, name }) => ({
+      label: t("panes.routing.outboundGroup", { name }),
+      value: groupOutboundValue(id),
+    })),
     ...(nodeNames ?? []).map((name) => ({ label: name, value: name })),
   ];
   if (!outboundOptions.some((option) => option.value === form.outbound)) {
-    // A node the rule names stays selectable even when it no longer exists, so
-    // opening the editor never retargets the rule behind the user's back.
+    // A node or group the rule names stays selectable even when it no longer
+    // exists, so opening the editor never retargets the rule behind the
+    // user's back.
+    const target = describeOutbound(form.outbound, nodeNames, groupOutbounds);
     outboundOptions.push({
       label:
-        nodeNames === null
-          ? form.outbound
-          : t("panes.routing.outboundMissing", { name: form.outbound }),
+        target.kind === "missingGroup"
+          ? t("panes.routing.outboundGroupMissing")
+          : target.kind === "missing"
+            ? t("panes.routing.outboundMissing", { name: form.outbound })
+            : form.outbound,
       value: form.outbound,
     });
   }
@@ -147,12 +159,22 @@ export function RoutingRuleDialog({
                 value={form.outbound}
               />
             </div>
+            <MatcherPresets
+              onAdd={(line) => update("domain", appendMatcherLine(form.domain, line))}
+              presets={DOMAIN_PRESETS}
+              value={form.domain}
+            />
             <TextAreaField
               description={t("panes.routing.domainHelp")}
               error={errors.domain}
               label={t("panes.routing.domain")}
               onChange={(value) => update("domain", value)}
               value={form.domain}
+            />
+            <MatcherPresets
+              onAdd={(line) => update("ip", appendMatcherLine(form.ip, line))}
+              presets={IP_PRESETS}
+              value={form.ip}
             />
             <TextAreaField
               description={t("panes.routing.ipHelp")}
@@ -242,3 +264,49 @@ export function RoutingRuleDialog({
     </Dialog>
   );
 }
+
+/** The rule sets shipped with the app, offered as one-click matchers. */
+const DOMAIN_PRESETS = [
+  { labelKey: "panes.routing.presets.cnSites", line: "geosite:cn" },
+  { labelKey: "panes.routing.presets.google", line: "geosite:google" },
+  { labelKey: "panes.routing.presets.ads", line: "geosite:category-ads-all" },
+] as const satisfies ReadonlyArray<{ labelKey: TranslationKey; line: string }>;
+
+const IP_PRESETS = [
+  { labelKey: "panes.routing.presets.cnIps", line: "geoip:cn" },
+  { labelKey: "panes.routing.presets.lanIps", line: "geoip:private" },
+] as const satisfies ReadonlyArray<{ labelKey: TranslationKey; line: string }>;
+
+function MatcherPresets({
+  onAdd,
+  presets,
+  value,
+}: {
+  onAdd: (line: string) => void;
+  presets: ReadonlyArray<{ labelKey: TranslationKey; line: string }>;
+  value: string;
+}) {
+  const { t } = useI18n();
+  const lines = new Set(value.split(/\r?\n/).map((line) => line.trim()));
+  return (
+    <div className="-mb-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+      <span>{t("panes.routing.presets.label")}</span>
+      {presets.map(({ labelKey, line }) => (
+        <Button
+          aria-pressed={lines.has(line)}
+          className="h-6 px-2 text-xs"
+          disabled={lines.has(line)}
+          key={line}
+          onClick={() => onAdd(line)}
+          size="sm"
+          title={line}
+          type="button"
+          variant="outline"
+        >
+          {t(labelKey)}
+        </Button>
+      ))}
+    </div>
+  );
+}
+

@@ -119,6 +119,8 @@ pub struct RoutingRule {
     pub port: Option<String>,
     pub network: Option<String>,
     pub inbound_tags: Option<Vec<String>>,
+    /// `proxy`, `direct`, `block`, a node's remarks, or `group:<id>` for a
+    /// policy group.
     pub outbound: Option<String>,
     pub ip: Option<Vec<String>>,
     pub domain: Option<Vec<String>>,

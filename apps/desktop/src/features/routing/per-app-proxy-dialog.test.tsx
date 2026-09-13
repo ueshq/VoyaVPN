@@ -217,4 +217,14 @@ describe("PerAppProxyDialog", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
+  it("will not save a per-app rule without any app", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.click(await screen.findByRole("button", { name: "Proxy these apps" }));
+    expect(screen.getByText("Choose at least one app, or turn per-app proxy off.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(ipcMocks.deleteRoutingRules).not.toHaveBeenCalled();
+    expect(ipcMocks.saveRoutingRule).not.toHaveBeenCalled();
+  });
 });

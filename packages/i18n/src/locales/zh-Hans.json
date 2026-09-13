@@ -463,7 +463,7 @@
       "title": "规则",
       "untitled": "未命名",
       "resetRules": "恢复默认规则",
-      "managedRule": "托管",
+      "managedRule": "内置",
       "noActiveRouting": "当前没有生效的规则集。",
       "addRule": "添加规则",
       "ruleOrderHint": "规则自上而下匹配，未命中任何规则的流量走代理。",
@@ -513,7 +513,20 @@
         "blockAds": "拦截广告",
         "cnDirect": "国内网站直连"
       },
-      "processUnsupported": "此平台不支持应用进程条件，该条件不会生效。"
+      "processUnsupported": "此平台不支持应用进程条件，该条件不会生效。",
+      "outboundGroup": "策略组：{{name}}",
+      "outboundGroupMissing": "策略组已删除",
+      "fixOutbound": "改为代理",
+      "reconnectHint": "已连接：保存规则后会短暂重新连接。",
+      "perAppNeedsApps": "请至少选择一个应用，或关闭分应用代理。",
+      "presets": {
+        "label": "常用：",
+        "cnSites": "国内网站",
+        "google": "Google",
+        "ads": "广告",
+        "cnIps": "国内 IP",
+        "lanIps": "局域网 IP"
+      }
     },
     "subscriptions": {
       "additionalUrl": "备用地址",

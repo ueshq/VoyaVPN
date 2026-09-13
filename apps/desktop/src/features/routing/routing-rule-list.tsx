@@ -24,6 +24,7 @@ import {
   Globe,
   GripVertical,
   Layers,
+  LoaderCircle,
   Network,
   Plug,
   TriangleAlert,
@@ -32,6 +33,7 @@ import {
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Badge } from "@voya/ui/components/badge";
+import { Button } from "@voya/ui/components/button";
 import { Switch } from "@voya/ui/components/switch";
 import {
   Table,
@@ -51,7 +53,7 @@ import {
 } from "@/components/app-shell/data-table-surface";
 import type { RoutingRule } from "@/ipc/bindings";
 
-import { OUTBOUND_LABEL_KEYS, describeOutbound } from "./rule-outbound";
+import { OUTBOUND_LABEL_KEYS, describeOutbound, type RuleGroupOutbound } from "./rule-outbound";
 import {
   ruleHasMatcher,
   ruleMatchChips,
@@ -64,8 +66,12 @@ import { ruleDisplayName, sentinelLabelKey } from "./sentinel-rules";
 import type { RuleMoveAction } from "./use-routing-screen";
 
 type RoutingRuleListProps = {
+  /** Policy groups a rule can target; `null` while the list loads. */
+  groupOutbounds?: readonly RuleGroupOutbound[] | null;
   /** Node remarks a rule can target; `null` while the node list loads. */
   nodeNames: readonly string[] | null;
+  /** Points a rule whose node or group is gone back at the proxy. */
+  onFixOutbound?: (rule: RoutingRule) => void;
   onDelete: (rule: RoutingRule) => void;
   onEdit: (rule: RoutingRule) => void;
   onMove: (rule: RoutingRule, action: RuleMoveAction) => void;
@@ -100,7 +106,9 @@ function stopDoubleClick(event: MouseEvent) {
  * and switch on and off in place.
  */
 export function RoutingRuleList({
+  groupOutbounds = [],
   nodeNames,
+  onFixOutbound,
   onDelete,
   onEdit,
   onMove,
@@ -202,8 +210,10 @@ export function RoutingRuleList({
               <SortableRuleRow
                 canMoveDown={!reordering && index < visible.length - 1}
                 canMoveUp={!reordering && index > 0}
+                groupOutbounds={groupOutbounds}
                 key={rule.id}
                 nodeNames={nodeNames}
+                onFixOutbound={onFixOutbound}
                 onDelete={onDelete}
                 onEdit={onEdit}
                 onMove={onMove}
@@ -235,7 +245,12 @@ function SortableRuleRow({
   reordering,
   rule,
   striped,
-}: Pick<RoutingRuleListProps, "nodeNames" | "onDelete" | "onEdit" | "onMove" | "onToggle"> & {
+  groupOutbounds,
+  onFixOutbound,
+}: Pick<
+  RoutingRuleListProps,
+  "groupOutbounds" | "nodeNames" | "onDelete" | "onEdit" | "onFixOutbound" | "onMove" | "onToggle"
+> & {
   canMoveDown: boolean;
   canMoveUp: boolean;
   pendingEnabled: boolean | undefined;
@@ -298,12 +313,18 @@ function SortableRuleRow({
           </button>
         </TableCell>
         <TableCell className="px-2 py-1.5" onDoubleClick={stopDoubleClick}>
-          <Switch
-            aria-label={t("panes.routing.toggleRule", { name })}
-            checked={enabled}
-            disabled={pendingEnabled !== undefined}
-            onCheckedChange={(checked) => onToggle(rule, checked)}
-          />
+          <span className="flex items-center gap-1.5">
+            <Switch
+              aria-busy={pendingEnabled !== undefined}
+              aria-label={t("panes.routing.toggleRule", { name })}
+              checked={enabled}
+              disabled={pendingEnabled !== undefined}
+              onCheckedChange={(checked) => onToggle(rule, checked)}
+            />
+            {pendingEnabled !== undefined ? (
+              <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin text-muted-foreground" />
+            ) : null}
+          </span>
         </TableCell>
         <TableCell className={cn("overflow-hidden px-3 py-1.5", muted)}>
           <span className="flex min-w-0 items-center gap-2">
@@ -325,7 +346,12 @@ function SortableRuleRow({
           <RuleMatch processRulesSupported={processRulesSupported} rule={rule} />
         </TableCell>
         <TableCell className={cn("overflow-hidden px-3 py-1.5", muted)}>
-          <OutboundBadge nodeNames={nodeNames} outbound={rule.outbound} />
+          <OutboundBadge
+            groupOutbounds={groupOutbounds}
+            nodeNames={nodeNames}
+            onFix={onFixOutbound ? () => onFixOutbound(rule) : undefined}
+            outbound={rule.outbound}
+          />
         </TableCell>
         <TableCell className="px-2 py-1.5" onDoubleClick={stopDoubleClick}>
           <RuleRowMenuButton actions={actions} label={menuLabel} />
@@ -430,19 +456,41 @@ function matchFieldTitle(field: MatchListField, t: TranslationFunction) {
 }
 
 function OutboundBadge({
+  groupOutbounds,
   nodeNames,
+  onFix,
   outbound,
-}: Pick<RoutingRuleListProps, "nodeNames"> & { outbound: string | null }) {
+}: Pick<RoutingRuleListProps, "groupOutbounds" | "nodeNames"> & {
+  onFix?: () => void;
+  outbound: string | null;
+}) {
   const { t } = useI18n();
-  const target = describeOutbound(outbound, nodeNames);
+  const target = describeOutbound(outbound, nodeNames, groupOutbounds);
   switch (target.kind) {
     case "missing":
+    case "missingGroup":
       return (
-        <Badge className="max-w-full bg-warning-bg text-warning" variant="outline">
-          <TriangleAlert aria-hidden="true" />
-          <span className="truncate">
-            {t("panes.routing.outboundMissing", { name: target.name })}
-          </span>
+        <span className="flex min-w-0 flex-col items-start gap-1">
+          <Badge className="max-w-full bg-warning-bg text-warning" variant="outline">
+            <TriangleAlert aria-hidden="true" />
+            <span className="truncate">
+              {target.kind === "missingGroup"
+                ? t("panes.routing.outboundGroupMissing")
+                : t("panes.routing.outboundMissing", { name: target.name })}
+            </span>
+          </Badge>
+          {onFix ? (
+            <Button className="h-6 px-2 text-xs" onClick={onFix} size="sm" type="button" variant="ghost">
+              {t("panes.routing.fixOutbound")}
+            </Button>
+          ) : null}
+        </span>
+      );
+    case "group":
+      return (
+        <Badge className="max-w-full bg-background" title={target.name} variant="outline">
+          <Layers aria-hidden="true" />
+          <span className="truncate">{target.name}</span>
         </Badge>
       );
     case "node":

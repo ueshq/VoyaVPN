@@ -132,6 +132,10 @@ pub struct SupervisorStartRequest {
     pub main: CoreProcessSpec,
     pub pre: Option<CoreProcessSpec>,
     pub tun_enabled: bool,
+    /// Keep traffic from leaving outside the tunnel. sing-box enforces it
+    /// through the generated `strict_route` on Windows and Linux; the macOS
+    /// PacketTunnel applies it to the VPN configuration instead.
+    pub kill_switch: bool,
     pub sudo_script_dir: PathBuf,
     pub restart_on_crash: bool,
     /// Clash API port of the *main* generated config.

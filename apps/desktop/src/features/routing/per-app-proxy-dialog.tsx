@@ -155,7 +155,7 @@ export function PerAppProxyDialog({
     try {
       const existing = findPerAppRule(activeRouting);
       const processes = normalizeProcessNames(selected);
-      if (mode === "off" || processes.length === 0) {
+      if (mode === "off") {
         if (existing) {
           await deleteRoutingRules(activeRouting.id, [existing.id]);
         }
@@ -185,6 +185,8 @@ export function PerAppProxyDialog({
 
   const vpnHintProminent =
     modeStatusQuery.data?.processRulesEffective === false;
+  // Turning the rule on without any app would save nothing; say so instead.
+  const missingApps = mode !== "off" && normalizeProcessNames(selected).length === 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -388,6 +390,11 @@ export function PerAppProxyDialog({
                 </>
               ) : null}
 
+              {missingApps ? (
+                <p className="text-sm text-warning" role="status">
+                  {t("panes.routing.perAppNeedsApps")}
+                </p>
+              ) : null}
               {error ? (
                 <Alert variant="destructive">
                   <AlertDescription>{error}</AlertDescription>
@@ -405,7 +412,7 @@ export function PerAppProxyDialog({
             {t("actions.cancel")}
           </Button>
           <Button
-            disabled={activeRouting == null || saving}
+            disabled={activeRouting == null || saving || missingApps}
             onClick={() => void handleSave()}
             type="button"
           >

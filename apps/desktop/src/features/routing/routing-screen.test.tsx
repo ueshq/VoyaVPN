@@ -13,6 +13,7 @@ import { RoutingScreen } from "./routing-screen";
 const ipc = vi.hoisted(() => ({
   connectionModeStatus: vi.fn(),
   deleteRoutingRules: vi.fn(),
+  listPolicyGroups: vi.fn(),
   listProcessCandidates: vi.fn(),
   listProfiles: vi.fn(),
   listRoutings: vi.fn(),
@@ -38,6 +39,7 @@ describe("RoutingScreen", () => {
     runtime.state = "disconnected";
     ipc.listRoutings.mockResolvedValue([activeRouting(), otherRouting()]);
     ipc.listProfiles.mockResolvedValue({ entries: [], undecodableProfiles: 0 });
+    ipc.listPolicyGroups.mockResolvedValue({ entries: [] });
     ipc.connectionModeStatus.mockResolvedValue({
       mode: "systemProxy",
       processRulesEffective: false,
@@ -192,6 +194,18 @@ describe("RoutingScreen", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("database locked");
     expect(screen.queryByText("No rule set is active.")).not.toBeInTheDocument();
+  });
+
+  it("says saving a rule reconnects only while connected", async () => {
+    runtime.state = "connected";
+    const view = renderScreen();
+    expect(await screen.findByText("Connected: saving a rule reconnects briefly.")).toBeInTheDocument();
+    view.unmount();
+
+    runtime.state = "disconnected";
+    renderScreen();
+    await screen.findByText("Office");
+    expect(screen.queryByText("Connected: saving a rule reconnects briefly.")).not.toBeInTheDocument();
   });
 });
 

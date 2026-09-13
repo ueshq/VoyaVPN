@@ -1,4 +1,5 @@
-//! The active policy group as sing-box outbounds.
+//! Policy groups as sing-box outbounds: the active one, and the ones routing
+//! rules name.
 
 use super::*;
 use crate::{
@@ -7,20 +8,30 @@ use crate::{
     GROUP_INTERVAL_SECONDS_RANGE, GROUP_TOLERANCE_MS_RANGE,
 };
 
-/// The group as the `proxy` outbound, followed by one outbound per member.
+/// The group as the `group_tag` outbound, followed by one outbound per member.
 ///
-/// Everything else in the config (the route final, the DNS detour, rule-set
-/// downloads) keeps pointing at `proxy`, so activating a group changes nothing
-/// outside the outbound list.
-pub(super) fn build_policy_group_servers(
+/// The active group is the `proxy` outbound, so everything else in the config
+/// (the route final, the DNS detour, rule-set downloads) keeps pointing at
+/// `proxy` and activating a group changes nothing outside the outbound list. A
+/// group a rule names gets its own tag, and `member_prefix` keeps its member
+/// tags apart from the active group's when both contain the same node.
+pub(in crate::singbox) fn build_policy_group_servers(
     context: &CoreConfigContext,
     active: &ContextPolicyGroup,
+    group_tag: &str,
+    member_prefix: Option<&str>,
 ) -> Vec<SingboxServer> {
     let members: Vec<&ProfileItem> = active.members.iter().collect();
-    let tags = unique_member_tags(&members);
+    let tags: Vec<String> = unique_member_tags(&members)
+        .into_iter()
+        .map(|tag| match member_prefix {
+            Some(prefix) => format!("{prefix} / {tag}"),
+            None => tag,
+        })
+        .collect();
     let group = &active.group;
     let mut outbound = SingboxOutbound {
-        tag: PROXY_TAG.to_string(),
+        tag: group_tag.to_string(),
         outbounds: Some(tags.clone()),
         ..SingboxOutbound::default()
     };
@@ -75,4 +86,16 @@ pub(super) fn build_policy_group_servers(
             .filter_map(|(member, tag)| build_proxy_server(context, member, tag)),
     );
     servers
+}
+
+/// The outbound tag of a policy group a routing rule names: its name and the
+/// start of its id, so two groups with one name stay distinct.
+pub(in crate::singbox) fn rule_group_tag(group: &crate::PolicyGroupItem) -> String {
+    let id: String = group.id.chars().take(8).collect();
+    let name = group.name.trim();
+    if name.is_empty() {
+        format!("[{id}]")
+    } else {
+        format!("{name} [{id}]")
+    }
 }

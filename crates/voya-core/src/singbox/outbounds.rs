@@ -4,6 +4,8 @@ mod groups;
 mod protocols;
 mod stream;
 
+pub(super) use groups::{build_policy_group_servers, rule_group_tag};
+
 pub(super) use protocols::*;
 pub(super) use stream::*;
 
@@ -15,7 +17,7 @@ pub(crate) enum SingboxServer {
 
 pub(super) fn gen_outbounds(config: &mut SingboxConfig, context: &CoreConfigContext) {
     let servers = match &context.policy_group {
-        Some(active) => groups::build_policy_group_servers(context, active),
+        Some(active) => build_policy_group_servers(context, active, PROXY_TAG, None),
         None => build_proxy_servers(context, &context.node, PROXY_TAG),
     };
     prepend_servers(config, servers);

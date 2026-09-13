@@ -11,6 +11,7 @@ import { useRoutingScreen } from "./use-routing-screen";
 
 const ipcMocks = vi.hoisted(() => ({
   deleteRoutingRules: vi.fn(),
+  listPolicyGroups: vi.fn(),
   listProfiles: vi.fn(),
   listRoutings: vi.fn(),
   moveRoutingRule: vi.fn(),
@@ -30,7 +31,28 @@ describe("useRoutingScreen", () => {
       entries: [entry("Tokyo"), entry("Tokyo"), entry("Osaka")],
       undecodableProfiles: 0,
     });
+    ipcMocks.listPolicyGroups.mockResolvedValue({ entries: [] });
     useShellStore.setState({ routingPerAppRequested: false });
+  });
+
+  it("offers policy groups as outbounds and points a broken outbound back at the proxy", async () => {
+    ipcMocks.listPolicyGroups.mockResolvedValue({
+      entries: [{ group: { id: "work", name: "Work" }, isActive: false, members: [] }],
+    });
+    ipcMocks.saveRoutingRule.mockResolvedValue(active());
+    const { result } = renderController();
+
+    await waitFor(() =>
+      expect(result.current.groupOutbounds).toEqual([{ id: "work", name: "Work" }]),
+    );
+    const target = result.current.rules[0]!;
+    act(() => result.current.fixOutbound(target));
+    await waitFor(() =>
+      expect(ipcMocks.saveRoutingRule).toHaveBeenCalledWith(
+        "route-active",
+        expect.objectContaining({ id: target.id, outbound: "proxy" }),
+      ),
+    );
   });
 
   afterEach(() => {

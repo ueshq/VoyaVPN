@@ -254,6 +254,10 @@ impl NativeTunDiagnostics {
 pub struct NativeTunStartRequest {
     pub backend: TunBackend,
     pub active_profile_id: Option<String>,
+    /// Keep traffic from leaving outside the tunnel. The macOS PacketTunnel
+    /// routes every network through the VPN; the Windows service relies on the
+    /// generated `strict_route`.
+    pub kill_switch: bool,
     pub main_launch: CoreLaunch,
     pub pre_launch: Option<CoreLaunch>,
     pub main_config_path: PathBuf,

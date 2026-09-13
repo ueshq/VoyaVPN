@@ -272,6 +272,7 @@ impl<'runtime> RuntimeManager<'runtime> {
             main: main_spec,
             pre,
             tun_enabled: config.tun_mode_item.enable_tun,
+            kill_switch: config.tun_mode_item.strict_route,
             sudo_script_dir: self.paths.temp_dir().join(SUDO_SCRIPT_DIR_NAME),
             restart_on_crash: true,
             // Taken from the generated main context, not from the TUN setting:
@@ -489,6 +490,7 @@ pub(crate) async fn load_runtime_core_gen_env(
         database.profiles().list().await?,
         database.routings().list().await?,
     )
+    .with_policy_groups(database.policy_groups().list().await?)
     .with_singbox_ruleset_paths(local_singbox_ruleset_paths(paths)))
 }
 

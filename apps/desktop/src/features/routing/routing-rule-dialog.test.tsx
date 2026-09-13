@@ -165,6 +165,41 @@ describe("RoutingRuleDialog", () => {
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ process: ["curl"] })),
     );
   });
+
+  it("offers policy groups as outbounds and one-click rule sets", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderDialog({ groupOutbounds: [{ id: "work", name: "Work" }], onSubmit });
+
+    await user.type(screen.getByLabelText("Name"), "Work sites");
+    await chooseOption(user, "Outbound", "Group: Work");
+    await user.click(screen.getByRole("button", { name: "China sites" }));
+    expect(screen.getByRole("button", { name: "China sites" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "LAN IPs" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          domain: ["geosite:cn"],
+          ip: ["geoip:private"],
+          outbound: "group:work",
+        }),
+      ),
+    );
+  });
+
+  it("keeps a deleted group selectable and says it is gone", async () => {
+    const user = userEvent.setup();
+    renderDialog({
+      groupOutbounds: [],
+      mode: "edit",
+      rule: rule({ outbound: "group:gone", remarks: "Office" }),
+    });
+
+    await user.click(screen.getByRole("combobox", { name: "Outbound" }));
+    expect(await screen.findByRole("option", { name: "Group deleted" })).toBeInTheDocument();
+  });
 });
 
 function renderDialog(props: Partial<ComponentProps<typeof RoutingRuleDialog>> = {}) {

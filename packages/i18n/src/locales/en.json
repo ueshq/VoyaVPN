@@ -463,7 +463,7 @@
       "title": "Routing",
       "untitled": "Untitled",
       "resetRules": "Restore defaults",
-      "managedRule": "Managed",
+      "managedRule": "Built-in",
       "noActiveRouting": "No rule set is active.",
       "addRule": "Add rule",
       "ruleOrderHint": "Rules match from top to bottom; traffic that matches none goes through the proxy.",
@@ -499,7 +499,7 @@
       "protocolHelp": "Sniffed protocols, one per line, such as http, tls, quic or bittorrent.",
       "matchNothing": "No conditions, so this rule never matches",
       "matchMore": "+{{count}}",
-      "managedRuleHint": "Built-in rule. You can edit, turn off or move it; Restore defaults brings back the original.",
+      "managedRuleHint": "Built-in rule: you can edit, turn off or move it; Restore default rules brings it back.",
       "emptyRulesHint": "All traffic goes through the proxy. Add a rule, or restore the default rules.",
       "globalModeBanner": "Global mode is on: all captured traffic goes through the proxy and these rules are skipped.",
       "globalModeSwitchBack": "Switch to rule mode",
@@ -513,7 +513,20 @@
         "blockAds": "Block ads",
         "cnDirect": "China sites direct"
       },
-      "processUnsupported": "App conditions are not supported on this platform and are skipped."
+      "processUnsupported": "App conditions are not supported on this platform and are skipped.",
+      "outboundGroup": "Group: {{name}}",
+      "outboundGroupMissing": "Group deleted",
+      "fixOutbound": "Use proxy instead",
+      "reconnectHint": "Connected: saving a rule reconnects briefly.",
+      "perAppNeedsApps": "Choose at least one app, or turn per-app proxy off.",
+      "presets": {
+        "label": "Common:",
+        "cnSites": "China sites",
+        "google": "Google",
+        "ads": "Ads",
+        "cnIps": "China IPs",
+        "lanIps": "LAN IPs"
+      }
     },
     "subscriptions": {
       "additionalUrl": "More URL",

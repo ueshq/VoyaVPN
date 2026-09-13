@@ -865,6 +865,10 @@ export type RoutingRule = {
 	port: string | null,
 	network: string | null,
 	inboundTags: string[] | null,
+	/**
+	 *  `proxy`, `direct`, `block`, a node's remarks, or `group:<id>` for a
+	 *  policy group.
+	 */
 	outbound: string | null,
 	ip: string[] | null,
 	domain: string[] | null,

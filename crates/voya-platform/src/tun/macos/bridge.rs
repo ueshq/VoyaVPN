@@ -33,6 +33,7 @@ mod macos_packet_tunnel_bridge {
             config_path: *const c_char,
             profile_id: *const c_char,
             timeout_ms: i64,
+            include_all_networks: i32,
         ) -> *mut c_char;
         fn voya_macos_packet_tunnel_stop() -> *mut c_char;
         fn voya_macos_packet_tunnel_last_error() -> *mut c_char;
@@ -52,6 +53,7 @@ mod macos_packet_tunnel_bridge {
         config_path: &str,
         profile_id: Option<&str>,
         timeout_ms: i64,
+        include_all_networks: bool,
     ) -> Result<String, NativeTunError> {
         let config_path = c_string(config_path, "main config path")?;
         let profile_id = match profile_id {
@@ -68,6 +70,7 @@ mod macos_packet_tunnel_bridge {
                         .as_ref()
                         .map_or(std::ptr::null(), |profile_id| profile_id.as_ptr()),
                     timeout_ms,
+                    i32::from(include_all_networks),
                 )
             }
         })
@@ -149,8 +152,9 @@ pub(super) fn macos_packet_tunnel_bridge_start(
     config_path: &str,
     profile_id: Option<&str>,
     timeout_ms: i64,
+    include_all_networks: bool,
 ) -> Result<String, NativeTunError> {
-    macos_packet_tunnel_bridge::start(config_path, profile_id, timeout_ms)
+    macos_packet_tunnel_bridge::start(config_path, profile_id, timeout_ms, include_all_networks)
 }
 
 #[cfg(target_os = "macos")]

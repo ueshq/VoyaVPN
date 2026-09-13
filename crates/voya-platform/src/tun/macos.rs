@@ -741,6 +741,7 @@ fn start_macos_packet_tunnel_with_bridge(
         config_path,
         request.active_profile_id.as_deref(),
         MACOS_PACKET_TUNNEL_START_TIMEOUT_MS,
+        request.kill_switch,
     )?;
     parse_bridge_start_output(&output)
 }

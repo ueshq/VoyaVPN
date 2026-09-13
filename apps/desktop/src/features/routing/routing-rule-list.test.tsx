@@ -52,7 +52,7 @@ describe("RoutingRuleList", () => {
       "Empty",
     ]);
     const [ai, quic, office, untitled, empty] = bodyRows();
-    expect(within(ai).getByText("Managed")).toHaveAttribute("title", expect.stringMatching(/^Built-in rule/));
+    expect(within(ai).getByText("Built-in")).toHaveAttribute("title", expect.stringMatching(/^Built-in rule/));
     expect(within(ai).getByText("domain:openai.com")).toBeInTheDocument();
     expect(within(ai).getByText("+1")).toBeInTheDocument();
     expect(within(ai).getByText("Proxy")).toBeInTheDocument();
@@ -61,7 +61,7 @@ describe("RoutingRuleList", () => {
     expect(within(quic).getByText("Block")).toBeInTheDocument();
     expect(within(office).getByTitle("IP")).toHaveTextContent("10.0.0.0/8");
     expect(within(office).getByText("Tokyo")).toBeInTheDocument();
-    expect(within(office).queryByText("Managed")).not.toBeInTheDocument();
+    expect(within(office).queryByText("Built-in")).not.toBeInTheDocument();
     expect(within(untitled).getByTitle("Process")).toHaveTextContent("curl");
     expect(within(untitled).getByTitle("Protocol")).toHaveTextContent("quic");
     expect(within(untitled).getByTitle("Network")).toHaveTextContent("TCP");
@@ -231,6 +231,31 @@ describe("RoutingRuleList", () => {
       ),
     ).toHaveTextContent("curl");
     expect(within(bodyRows()[2]).getByTitle("IP")).toHaveTextContent("10.0.0.0/8");
+  });
+
+  it("shows group outbounds and offers to point a broken outbound back at the proxy", async () => {
+    const user = userEvent.setup();
+    const onFixOutbound = vi.fn();
+    renderList({
+      groupOutbounds: [{ id: "work", name: "Work" }],
+      onFixOutbound,
+      rules: [
+        rule("rule-group", { domain: ["geosite:cn"], outbound: "group:work", remarks: "Group" }),
+        rule("rule-gone", { domain: ["geosite:cn"], outbound: "group:gone", remarks: "Gone" }),
+      ],
+    });
+
+    const [grouped, gone] = bodyRows();
+    expect(within(grouped).getByText("Work")).toBeInTheDocument();
+    expect(within(gone).getByText("Group deleted")).toBeInTheDocument();
+    await user.click(within(gone).getByRole("button", { name: "Use proxy instead" }));
+    expect(onFixOutbound).toHaveBeenCalledWith(expect.objectContaining({ id: "rule-gone" }));
+  });
+
+  it("marks a rule whose save is in flight as busy", () => {
+    renderList({ pendingToggles: new Map([["rule-office", true]]) });
+
+    expect(screen.getByRole("switch", { name: "Enable Office" })).toHaveAttribute("aria-busy", "true");
   });
 });
 
