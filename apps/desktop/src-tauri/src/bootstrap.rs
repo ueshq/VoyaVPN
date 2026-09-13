@@ -10,10 +10,11 @@ use crate::{
 };
 use std::{
     error::Error,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
 };
 use tauri::Manager;
-use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use voya_app::{
     elevation::ElevationManager,
     proxy_runtime::{ProxyMonitorController, ProxyRuntimeManager},
@@ -37,22 +38,14 @@ use voya_platform::{
 /// Windows, a bundle on macOS) that made the process vanish with no
 /// explanation, including user-actionable database schema failures.
 pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
-    let app_config_dir = app.path().app_config_dir()?;
-    // Development builds can use a different database baseline than the
-    // installed app. Keep their database and runtime files together in a
-    // separate directory; packaged debug builds still use the installed path.
-    let app_config_dir = if tauri::is_dev() {
-        app_config_dir.join("dev")
-    } else {
-        app_config_dir
-    };
+    let app_config_dir = app_data_dir(app)?;
     let runtime_paths = AppPaths::new(&app_config_dir);
     runtime_paths.ensure_dirs()?;
     // Installed before the first `tracing::warn!` below so the startup
     // recovery paths are captured too.
     logging::install(app.handle().clone(), runtime_paths.log_dir());
     let services = tauri::async_runtime::block_on(AppServices::connect(
-        &app_config_dir.join("voyavpn.sqlite"),
+        &database_path(app)?,
         runtime_paths.clone(),
     ))?;
     let config = tauri::async_runtime::block_on(services.load_config())?;
@@ -167,12 +160,45 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// A fatal startup failure waiting for an event loop to show it on.
-static STARTUP_FAILURE: Mutex<Option<String>> = Mutex::new(None);
+/// Where this launch keeps its database and runtime files.
+///
+/// Development builds can use a different database baseline than the installed
+/// app, so they keep their files together in a separate directory; packaged
+/// debug builds still use the installed path.
+fn app_data_dir(app: &tauri::App) -> Result<PathBuf, Box<dyn Error>> {
+    let app_config_dir = app.path().app_config_dir()?;
+    Ok(if tauri::is_dev() {
+        app_config_dir.join("dev")
+    } else {
+        app_config_dir
+    })
+}
 
-pub(super) fn record_startup_failure(message: String) {
+/// The database file this launch opens.
+pub(super) fn database_path(app: &tauri::App) -> Result<PathBuf, Box<dyn Error>> {
+    Ok(app_data_dir(app)?.join(voya_app::startup::DATABASE_NAME))
+}
+
+const STARTUP_FAILED_TITLE: &str = "VoyaVPN could not start";
+const RESET_DATABASE_LABEL: &str = "Reset Database";
+const QUIT_LABEL: &str = "Quit";
+const DATABASE_RESET_EXPLANATION: &str = "Reset Database moves this database to a backup in the same folder and restarts VoyaVPN with no nodes, subscriptions or custom rules, and default settings.";
+
+/// A fatal startup failure waiting for an event loop to show it on.
+struct StartupFailure {
+    message: String,
+    /// Set when moving this database aside would let the next launch start.
+    resettable_database: Option<PathBuf>,
+}
+
+static STARTUP_FAILURE: Mutex<Option<StartupFailure>> = Mutex::new(None);
+
+pub(super) fn record_startup_failure(message: String, resettable_database: Option<PathBuf>) {
     if let Ok(mut failure) = STARTUP_FAILURE.lock() {
-        *failure = Some(message);
+        *failure = Some(StartupFailure {
+            message,
+            resettable_database,
+        });
     }
 }
 
@@ -182,7 +208,7 @@ pub(super) fn record_startup_failure(message: String) {
 /// the main thread, and the dialog itself has to be dispatched to that same
 /// thread, so waiting for it here would deadlock the event loop it needs.
 pub(super) fn report_startup_failure<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    let Some(message) = STARTUP_FAILURE.lock().ok().and_then(|mut slot| slot.take()) else {
+    let Some(failure) = STARTUP_FAILURE.lock().ok().and_then(|mut slot| slot.take()) else {
         return;
     };
     // The window is live but unusable — no `AppState` was ever managed — so it
@@ -197,9 +223,60 @@ pub(super) fn report_startup_failure<R: tauri::Runtime>(app: &tauri::AppHandle<R
     }
 
     let handle = app.clone();
+    let Some(database) = failure.resettable_database else {
+        app.dialog()
+            .message(failure.message)
+            .title(STARTUP_FAILED_TITLE)
+            .kind(MessageDialogKind::Error)
+            .show(move |_| handle.exit(1));
+        return;
+    };
+    // The database fails the same way on every launch, so the dialog offers the
+    // one remedy: move it aside and start again with a fresh one.
     app.dialog()
-        .message(message)
-        .title("VoyaVPN could not start")
+        .message(format!(
+            "{}\n\n{DATABASE_RESET_EXPLANATION}",
+            failure.message
+        ))
+        .title(STARTUP_FAILED_TITLE)
         .kind(MessageDialogKind::Error)
-        .show(move |_| handle.exit(1));
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            RESET_DATABASE_LABEL.to_string(),
+            QUIT_LABEL.to_string(),
+        ))
+        .show(move |reset| {
+            if reset {
+                reset_database_and_restart(&handle, &database);
+            } else {
+                handle.exit(1);
+            }
+        });
+}
+
+/// Moves the database aside and relaunches; a failed move is reported and the
+/// app quits, leaving the original database where it was.
+fn reset_database_and_restart<R: tauri::Runtime>(app: &tauri::AppHandle<R>, database: &Path) {
+    match voya_app::startup::reset_database(database) {
+        Ok(backup) => {
+            if let Some(backup) = backup {
+                tracing::warn!(
+                    backup = %backup.database.display(),
+                    "moved the unusable database aside"
+                );
+            }
+            app.request_restart();
+        }
+        Err(error) => {
+            tracing::error!(%error, "failed to move the unusable database aside");
+            let handle = app.clone();
+            app.dialog()
+                .message(format!(
+                    "Could not move the database aside: {error}\n\nTo reset it by hand, run:\n{}",
+                    voya_app::startup::manual_database_reset_command(database)
+                ))
+                .title(STARTUP_FAILED_TITLE)
+                .kind(MessageDialogKind::Error)
+                .show(move |_| handle.exit(1));
+        }
+    }
 }

@@ -326,7 +326,7 @@ fn latest_migration_version() -> i64 {
 /// The write-ahead log and shared-memory sidecars have to go with the database
 /// file: SQLite would otherwise recover the old contents from a leftover `-wal`.
 #[cfg(windows)]
-fn manual_database_reset_command(path: &Path) -> String {
+pub fn manual_database_reset_command(path: &Path) -> String {
     let database = path.display();
     format!("Remove-Item -LiteralPath '{database}','{database}-wal','{database}-shm' -ErrorAction SilentlyContinue")
 }
@@ -334,7 +334,7 @@ fn manual_database_reset_command(path: &Path) -> String {
 /// The write-ahead log and shared-memory sidecars have to go with the database
 /// file: SQLite would otherwise recover the old contents from a leftover `-wal`.
 #[cfg(not(windows))]
-fn manual_database_reset_command(path: &Path) -> String {
+pub fn manual_database_reset_command(path: &Path) -> String {
     let database = path.display();
     format!("rm -f -- '{database}' '{database}-wal' '{database}-shm'")
 }

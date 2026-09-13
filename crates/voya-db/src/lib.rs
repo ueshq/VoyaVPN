@@ -7,7 +7,11 @@ mod database;
 mod error;
 mod executor;
 mod repos;
+mod reset;
 
-pub use database::{Database, DatabaseSession, UnitOfWork, DATABASE_NAME};
+pub use database::{
+    manual_database_reset_command, Database, DatabaseSession, UnitOfWork, DATABASE_NAME,
+};
 pub use error::{blob, DbError, Result};
 pub use repos::*;
+pub use reset::{move_database_aside, DatabaseBackup};

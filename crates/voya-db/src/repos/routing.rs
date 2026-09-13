@@ -21,9 +21,6 @@ repository_constructors!(RoutingRepository);
 impl<'executor> RoutingRepository<'executor> {
     pub async fn upsert(&self, item: &RoutingItem) -> Result<()> {
         let rule_set = blob::rules_to_text(&item.rule_set)?;
-        // `url` and `domain_strategy` are retired columns. The checksum-pinned
-        // baseline still declares them (with defaults), but nothing reads or
-        // writes them any more.
         run_query!(
             self.executor,
             sqlx::query(

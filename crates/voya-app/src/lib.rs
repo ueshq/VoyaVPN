@@ -31,6 +31,7 @@ pub mod settings_flow;
 pub mod settings_save;
 pub mod shutdown;
 pub mod speedtest;
+pub mod startup;
 pub mod statistics;
 pub mod subscriptions;
 pub mod supervisor;
