@@ -125,6 +125,7 @@ pub enum AppErrorSubsystem {
     Config,
     Dns,
     Export,
+    PolicyGroup,
     Profile,
     ProxyRuntime,
     Qr,
@@ -142,6 +143,7 @@ pub enum AppErrorSubsystem {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum AppErrorEntity {
+    PolicyGroup,
     Profile,
     Routing,
     RoutingRule,

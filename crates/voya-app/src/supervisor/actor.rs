@@ -173,6 +173,7 @@ impl SupervisorActor {
         let mut partial = RunningCore {
             connected_since: None,
             active_profile_id: request.active_profile_id.clone(),
+            active_group_id: request.active_group_id.clone(),
             main: None,
             pre: None,
             native_tun: None,
@@ -250,6 +251,7 @@ impl SupervisorActor {
         self.running = RunningCore {
             connected_since: result.is_ok().then(|| self.deps.clock.now()),
             active_profile_id: request.active_profile_id.clone(),
+            active_group_id: request.active_group_id.clone(),
             main: None,
             pre: None,
             native_tun: Some(RunningNativeTun {

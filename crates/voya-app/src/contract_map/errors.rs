@@ -153,6 +153,69 @@ impl From<crate::connection_ip::ConnectionIpError> for AppError {
     }
 }
 
+impl From<crate::policy_groups::PolicyGroupManagerError> for AppError {
+    fn from(error: crate::policy_groups::PolicyGroupManagerError) -> Self {
+        use crate::policy_groups::PolicyGroupManagerError as E;
+        use voya_contracts::ValidationCode as Code;
+
+        let rejected = |field: &str, code: Code| {
+            AppError::validation(
+                Sub::PolicyGroup,
+                error.to_string(),
+                vec![ValidationIssue {
+                    scope: vec![],
+                    field: field.to_string(),
+                    code,
+                }],
+            )
+        };
+        match &error {
+            E::Database(source) => database_error(source, Sub::PolicyGroup),
+            E::GroupNotFound(id) => not_found(
+                Sub::PolicyGroup,
+                AppErrorEntity::PolicyGroup,
+                Some(id.clone()),
+                &error,
+            ),
+            E::MemberNotFound(id) | E::NotAMember { profile_id: id, .. } => not_found(
+                Sub::PolicyGroup,
+                AppErrorEntity::Profile,
+                Some(id.clone()),
+                &error,
+            ),
+            E::SubscriptionNotFound(id) => not_found(
+                Sub::PolicyGroup,
+                AppErrorEntity::Subscription,
+                Some(id.clone()),
+                &error,
+            ),
+            E::NameRequired => rejected("name", Code::TextRequired),
+            E::NameTooLong { .. } => rejected("name", Code::TextTooLong),
+            E::NameControlCharacters => rejected("name", Code::TextControlCharacters),
+            E::WithoutMembers => rejected("memberIds", Code::PolicyGroupWithoutMembers),
+            E::IntervalOutOfRange { min, max } => rejected(
+                "intervalSeconds",
+                Code::PolicyGroupIntervalOutOfRange {
+                    min: range_bound(*min),
+                    max: range_bound(*max),
+                },
+            ),
+            E::ToleranceOutOfRange { min, max } => rejected(
+                "toleranceMs",
+                Code::PolicyGroupToleranceOutOfRange {
+                    min: range_bound(*min),
+                    max: range_bound(*max),
+                },
+            ),
+            E::TestUrlInvalid => rejected("testUrl", Code::PolicyGroupTestUrlInvalid),
+        }
+    }
+}
+
+fn range_bound(value: i32) -> u32 {
+    u32::try_from(value).unwrap_or_default()
+}
+
 impl From<ProfileManagerError> for AppError {
     fn from(error: ProfileManagerError) -> Self {
         match &error {
@@ -295,6 +358,9 @@ impl From<ProxyRuntimeError> for AppError {
         match error {
             ProxyRuntimeError::Api(ref source) => network(Sub::ProxyRuntime, source),
             ProxyRuntimeError::InvalidTrafficMode(_) => invalid(Sub::ProxyRuntime, "mode", &error),
+            ProxyRuntimeError::UnknownGroupMember(_) => {
+                invalid(Sub::ProxyRuntime, "profileId", &error)
+            }
             ProxyRuntimeError::MonitorLockPoisoned
             | ProxyRuntimeError::MonitorRuntimeUnavailable
             | ProxyRuntimeError::InvalidStatePort => internal(Sub::ProxyRuntime, &error),
@@ -327,6 +393,12 @@ impl From<RuntimeError> for AppError {
             RuntimeError::ActiveProfileNotFound(ref id) => not_found(
                 Sub::Runtime,
                 AppErrorEntity::Profile,
+                Some(id.clone()),
+                &error,
+            ),
+            RuntimeError::ActivePolicyGroupNotFound(ref id) => not_found(
+                Sub::Runtime,
+                AppErrorEntity::PolicyGroup,
                 Some(id.clone()),
                 &error,
             ),

@@ -17,6 +17,7 @@ pub mod exports;
 pub mod input_safety;
 pub mod invalidation;
 pub mod logging;
+pub mod policy_groups;
 pub mod profiles;
 pub mod proxy_runtime;
 pub mod qr;

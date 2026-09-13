@@ -216,7 +216,7 @@ impl<'db> ProfileManager<'db> {
             .get(index_id)
             .await?
             .unwrap_or_else(|| empty_server_stat(index_id));
-        config.index_id = index_id.to_string();
+        config.set_active_node(index_id);
 
         Ok(to_list_item(
             profile,
@@ -333,6 +333,20 @@ impl<'db> ProfileManager<'db> {
     }
 
     pub async fn ensure_active_profile(&self, config: &mut AppConfig) -> Result<bool> {
+        // An active group stands in for the node; only a group that no longer
+        // exists is cleared, and no node is picked in its place.
+        if !config.active_group_id.is_empty() {
+            if self
+                .database
+                .policy_groups()
+                .exists(&config.active_group_id)
+                .await?
+            {
+                return Ok(false);
+            }
+            config.active_group_id.clear();
+            return Ok(true);
+        }
         if !config.index_id.is_empty() && self.database.profiles().exists(&config.index_id).await? {
             return Ok(false);
         }

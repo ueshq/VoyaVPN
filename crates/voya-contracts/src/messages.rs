@@ -229,6 +229,16 @@ pub enum ValidationCode {
     PolicyGroupWithoutValidMembers {
         group: String,
     },
+    PolicyGroupWithoutMembers,
+    PolicyGroupIntervalOutOfRange {
+        min: u32,
+        max: u32,
+    },
+    PolicyGroupToleranceOutOfRange {
+        min: u32,
+        max: u32,
+    },
+    PolicyGroupTestUrlInvalid,
     // ---- DNS ----
     DnsAddressEmpty,
     DnsAddressPort {

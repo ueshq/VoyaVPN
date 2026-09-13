@@ -713,7 +713,8 @@ mod guards {
             | ProxyRuntimeError::InvalidTrafficMode(_)
             | ProxyRuntimeError::MonitorLockPoisoned
             | ProxyRuntimeError::MonitorRuntimeUnavailable
-            | ProxyRuntimeError::InvalidStatePort => (),
+            | ProxyRuntimeError::InvalidStatePort
+            | ProxyRuntimeError::UnknownGroupMember(_) => (),
         }
     }
 
@@ -721,6 +722,7 @@ mod guards {
         match error {
             RuntimeError::MissingActiveProfileId
             | RuntimeError::ActiveProfileNotFound(_)
+            | RuntimeError::ActivePolicyGroupNotFound(_)
             | RuntimeError::Validation { .. }
             | RuntimeError::MissingCoreInfo(_)
             | RuntimeError::CreateConfigDir { .. }

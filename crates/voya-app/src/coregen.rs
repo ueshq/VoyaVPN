@@ -17,6 +17,11 @@ pub(crate) struct SnapshotCoreGenEnv {
 }
 
 impl SnapshotCoreGenEnv {
+    /// Every node this snapshot was taken with.
+    pub(crate) fn profiles(&self) -> &[ProfileItem] {
+        &self.profiles
+    }
+
     pub(crate) fn new(
         config: &AppConfig,
         platform: CoreGenPlatform,

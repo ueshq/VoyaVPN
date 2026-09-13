@@ -158,10 +158,16 @@ impl<'runtime> RuntimeManager<'runtime> {
     ) -> Result<Option<SupervisorSnapshot>, RuntimeError> {
         let _guard = self.operation_lock.lock().await;
         let status = self.supervisor.status().await?;
-        let Some(id) = status.active_profile_id.as_deref() else {
-            return Ok(None);
+        // The running node or group was deleted out from under the core.
+        let still_exists = match (
+            status.active_profile_id.as_deref(),
+            status.active_group_id.as_deref(),
+        ) {
+            (Some(id), _) => self.database.profiles().exists(id).await?,
+            (None, Some(id)) => self.database.policy_groups().exists(id).await?,
+            (None, None) => return Ok(None),
         };
-        if self.database.profiles().exists(id).await? {
+        if still_exists {
             return Ok(None);
         }
         let snapshot = self.supervisor.stop().await?;
@@ -179,17 +185,29 @@ impl<'runtime> RuntimeManager<'runtime> {
     async fn start_core(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
         self.paths.ensure_dirs()?;
 
-        let active_profile_id = config.index_id.trim();
-        if active_profile_id.is_empty() {
-            return Err(RuntimeError::MissingActiveProfileId);
+        enum LaunchTarget {
+            Node(Box<voya_core::ProfileItem>),
+            Group(voya_core::PolicyGroupItem),
         }
-
-        let active_profile = self
-            .database
-            .profiles()
-            .get(active_profile_id)
-            .await?
-            .ok_or_else(|| RuntimeError::ActiveProfileNotFound(active_profile_id.to_string()))?;
+        // A node and a group are never active together; which one this launch
+        // uses decides the generated outbounds and what the snapshot reports.
+        let target = match config.active_target() {
+            voya_core::ActiveTarget::None => return Err(RuntimeError::MissingActiveProfileId),
+            voya_core::ActiveTarget::Node(id) => LaunchTarget::Node(Box::new(
+                self.database
+                    .profiles()
+                    .get(id)
+                    .await?
+                    .ok_or_else(|| RuntimeError::ActiveProfileNotFound(id.to_string()))?,
+            )),
+            voya_core::ActiveTarget::Group(id) => LaunchTarget::Group(
+                self.database
+                    .policy_groups()
+                    .get(id)
+                    .await?
+                    .ok_or_else(|| RuntimeError::ActivePolicyGroupNotFound(id.to_string()))?,
+            ),
+        };
 
         // Minted per launch and never persisted: the core it authenticates dies
         // with this request, so a leaked token from an earlier run is useless.
@@ -197,7 +215,23 @@ impl<'runtime> RuntimeManager<'runtime> {
         let env = load_runtime_core_gen_env(self.database, &self.paths, config, self.target_os)
             .await?
             .with_clash_api_secret(clash_api_secret.clone());
-        let contexts = runtime_config_contexts(&env, config, &active_profile, self.target_os);
+        let contexts = match &target {
+            LaunchTarget::Node(profile) => {
+                runtime_config_contexts(&env, config, profile, self.target_os)
+            }
+            LaunchTarget::Group(group) => {
+                let members: Vec<voya_core::ProfileItem> =
+                    voya_core::resolve_group_members(group, env.profiles())
+                        .into_iter()
+                        .cloned()
+                        .collect();
+                CoreConfigContextBuilder::new(&env).build_all_for_group(config, group, &members)
+            }
+        };
+        let (active_profile_id, active_group_id) = match &target {
+            LaunchTarget::Node(profile) => (Some(profile.index_id.clone()), None),
+            LaunchTarget::Group(group) => (None, Some(group.id.clone())),
+        };
         let validation = contexts.combined_validator_result();
         if !contexts.success() {
             return Err(RuntimeError::Validation {
@@ -211,7 +245,8 @@ impl<'runtime> RuntimeManager<'runtime> {
         // user rather than only the file log.
         for warning in &validation.warnings {
             tracing::warn!(
-                profile = %active_profile.index_id,
+                profile = ?active_profile_id,
+                group = ?active_group_id,
                 "core config generation warning: {warning:?}"
             );
         }
@@ -232,7 +267,8 @@ impl<'runtime> RuntimeManager<'runtime> {
         };
 
         let request = SupervisorStartRequest {
-            active_profile_id: Some(active_profile.index_id.clone()),
+            active_profile_id,
+            active_group_id,
             main: main_spec,
             pre,
             tun_enabled: config.tun_mode_item.enable_tun,
@@ -414,6 +450,8 @@ pub enum RuntimeError {
     MissingActiveProfileId,
     #[error("active node {0} was not found")]
     ActiveProfileNotFound(String),
+    #[error("active policy group {0} was not found")]
+    ActivePolicyGroupNotFound(String),
     #[error("runtime validation failed: {errors:?}; warnings: {warnings:?}")]
     Validation {
         errors: Vec<ValidationMessage>,

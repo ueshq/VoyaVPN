@@ -802,7 +802,11 @@
     "inboundPortOutOfRange": "The local proxy port must be between {{min}} and {{max}}",
     "inboundCredentialsIncomplete": "Enter both a username and a password, or leave both empty",
     "inboundRequired": "A local proxy inbound is required",
-    "policyGroupWithoutValidMembers": "Policy group {{group}} has no node that can be used"
+    "policyGroupWithoutValidMembers": "Policy group {{group}} has no node that can be used",
+    "policyGroupIntervalOutOfRange": "Probe interval must be between {{min}} and {{max}} seconds",
+    "policyGroupTestUrlInvalid": "Test URL must start with http:// or https://",
+    "policyGroupToleranceOutOfRange": "Tolerance must be between {{min}} and {{max}} ms",
+    "policyGroupWithoutMembers": "Add at least one node or choose a subscription"
   },
   "window": {
     "close": "Close",

@@ -692,6 +692,7 @@ mod tests {
             active_tun_backend: None,
             state: SupervisorConnectionState::Connected,
             active_profile_id: Some("profile-a".to_string()),
+            active_group_id: None,
             main_pid: Some(100),
             pre_pid: None,
             running_core_type: Some(CoreType::sing_box),

@@ -401,6 +401,7 @@ async fn supervisor_stop_teardown_order_is_sudo_kill_main_pre() {
     let snapshot = supervisor
         .start(SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
+            active_group_id: None,
             main: CoreProcessSpec::new(
                 CoreType::sing_box,
                 launch("/tmp/sing-box-main", "run -c config.json --disable-color"),
@@ -447,6 +448,7 @@ async fn supervisor_sudo_kill_passes_expected_core_name_for_pid_validation() {
     supervisor
         .start(SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
+            active_group_id: None,
             main: CoreProcessSpec::new(
                 CoreType::sing_box,
                 launch(
@@ -506,6 +508,7 @@ async fn supervisor_sudo_kill_nonzero_status_is_typed_error() {
     supervisor
         .start(SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
+            active_group_id: None,
             main: CoreProcessSpec::new(
                 CoreType::sing_box,
                 launch("/tmp/sing-box", "run -c config.json --disable-color"),
@@ -557,6 +560,7 @@ fn supervisor_actor_drop_stops_running_core_with_sudo_kill() {
         actor
             .start(SupervisorStartRequest {
                 active_profile_id: Some("active".to_string()),
+                active_group_id: None,
                 main: CoreProcessSpec::new(
                     CoreType::sing_box,
                     launch("/tmp/sing-box", "run -c config.json --disable-color"),
@@ -588,6 +592,7 @@ async fn supervisor_elevation_grant_gates_elevated_spawn() {
     let supervisor = supervisor_with(&events, TargetOs::Linux, Arc::clone(&elevation));
     let request = SupervisorStartRequest {
         active_profile_id: Some("active".to_string()),
+        active_group_id: None,
         main: CoreProcessSpec::new(
             CoreType::sing_box,
             launch("/tmp/sing-box", "run -c config.json --disable-color"),
@@ -625,6 +630,7 @@ async fn supervisor_crash_restarts_serialized_lifecycle() {
 
     let request = SupervisorStartRequest {
         active_profile_id: Some("active".to_string()),
+        active_group_id: None,
         main: CoreProcessSpec::new(
             CoreType::sing_box,
             launch("/tmp/sing-box", "run -c config.json --disable-color"),
@@ -701,6 +707,7 @@ sleep 30
     let snapshot = supervisor
         .start(SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
+            active_group_id: None,
             main: CoreProcessSpec::new(
                 CoreType::sing_box,
                 CoreLaunch {
@@ -761,6 +768,7 @@ async fn supervisor_windows_non_tun_process_start_assigns_job() {
     supervisor
         .start(SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
+            active_group_id: None,
             main: CoreProcessSpec::new(
                 CoreType::sing_box,
                 launch("/tmp/sing-box", "run -c config.json --disable-color"),
@@ -804,6 +812,7 @@ async fn supervisor_windows_tun_uses_native_service_backend_without_process_spaw
     let snapshot = supervisor
         .start(SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
+            active_group_id: None,
             main: CoreProcessSpec::new(
                 CoreType::sing_box,
                 launch("/tmp/sing-box", "run -c config.json --disable-color"),
@@ -863,6 +872,7 @@ async fn supervisor_native_tun_health_disconnects_once_without_restart() {
     let snapshot = supervisor
         .start(SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
+            active_group_id: None,
             main: CoreProcessSpec::new(
                 CoreType::sing_box,
                 launch("/tmp/sing-box", "run -c config.json --disable-color"),
@@ -921,6 +931,7 @@ async fn supervisor_tun_sudo_wraps_singbox() {
     supervisor
         .start(SupervisorStartRequest {
             active_profile_id: Some("singbox".to_string()),
+            active_group_id: None,
             main: CoreProcessSpec::new(
                 CoreType::sing_box,
                 launch("/tmp/sing-box", "run -c config.json --disable-color"),
@@ -953,6 +964,7 @@ async fn supervisor_tun_partial_start_failure_kills_elevated_main_before_returni
     let error = supervisor
         .start(SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
+            active_group_id: None,
             main: CoreProcessSpec::new(
                 CoreType::sing_box,
                 launch("/tmp/sing-box", "run -c config.json --disable-color"),
@@ -992,6 +1004,7 @@ async fn supervisor_tun_partial_start_failure_kills_elevated_main_before_returni
 fn crash_test_request() -> SupervisorStartRequest {
     SupervisorStartRequest {
         active_profile_id: Some("active".to_string()),
+        active_group_id: None,
         main: CoreProcessSpec::new(
             CoreType::sing_box,
             launch("/tmp/sing-box", "run -c config.json --disable-color"),
@@ -1374,6 +1387,7 @@ async fn supervisor_start_precondition_failure_keeps_the_running_core() {
     let supervisor = supervisor_with(&events, TargetOs::Linux, Arc::clone(&elevation));
     let request = SupervisorStartRequest {
         active_profile_id: Some("active".to_string()),
+        active_group_id: None,
         main: CoreProcessSpec::new(
             CoreType::sing_box,
             launch("/tmp/sing-box", "run -c config.json --disable-color"),
@@ -1588,6 +1602,7 @@ async fn supervisor_start_keeps_the_running_core_when_the_sudo_kill_fails() {
     let supervisor = CoreSupervisor::spawn(deps);
     let request = SupervisorStartRequest {
         active_profile_id: Some("active".to_string()),
+        active_group_id: None,
         main: CoreProcessSpec::new(
             CoreType::sing_box,
             launch("/tmp/sing-box", "run -c config.json --disable-color"),
@@ -1730,6 +1745,7 @@ async fn active_tun_backend_tracks_the_running_request_and_clears_after_stop() {
 fn native_tun_test_request() -> SupervisorStartRequest {
     SupervisorStartRequest {
         active_profile_id: Some("active".to_string()),
+        active_group_id: None,
         main: CoreProcessSpec::new(
             CoreType::sing_box,
             launch("/tmp/sing-box", "run -c config.json --disable-color"),

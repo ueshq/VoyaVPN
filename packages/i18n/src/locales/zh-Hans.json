@@ -802,7 +802,11 @@
     "inboundPortOutOfRange": "本地代理端口必须在 {{min}} 到 {{max}} 之间",
     "inboundCredentialsIncomplete": "请同时填写用户名和密码，或都留空",
     "inboundRequired": "必须保留一个本地代理入站",
-    "policyGroupWithoutValidMembers": "策略组 {{group}} 没有可用的节点"
+    "policyGroupWithoutValidMembers": "策略组 {{group}} 没有可用的节点",
+    "policyGroupIntervalOutOfRange": "测速间隔需在 {{min}} 到 {{max}} 秒之间",
+    "policyGroupTestUrlInvalid": "测速地址需以 http:// 或 https:// 开头",
+    "policyGroupToleranceOutOfRange": "容差需在 {{min}} 到 {{max}} 毫秒之间",
+    "policyGroupWithoutMembers": "请至少添加一个节点或选择一个订阅"
   },
   "window": {
     "close": "关闭",

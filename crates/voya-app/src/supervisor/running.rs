@@ -12,6 +12,7 @@ use voya_platform::{
 pub(super) struct RunningCore {
     pub(super) connected_since: Option<Instant>,
     pub(super) active_profile_id: Option<String>,
+    pub(super) active_group_id: Option<String>,
     pub(super) main: Option<ProcessHandle>,
     pub(super) pre: Option<ProcessHandle>,
     pub(super) native_tun: Option<RunningNativeTun>,
@@ -32,6 +33,7 @@ impl RunningCore {
         Self {
             connected_since: None,
             active_profile_id: None,
+            active_group_id: None,
             main: None,
             pre: None,
             native_tun: None,
@@ -88,6 +90,7 @@ impl RunningCore {
                 SupervisorConnectionState::Disconnected
             },
             active_profile_id: self.active_profile_id.clone(),
+            active_group_id: self.active_group_id.clone(),
             active_tun_backend: live_request.filter(|request| request.tun_enabled).map(|_| {
                 self.native_tun
                     .as_ref()

@@ -205,6 +205,7 @@ mod tests {
             },
             active_tun_backend: None,
             active_profile_id: None,
+            active_group_id: None,
             main_pid: None,
             pre_pid: None,
             running_core_type: None,

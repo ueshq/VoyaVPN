@@ -601,6 +601,7 @@ async fn a_restarted_core_refreshes_proxy_state_before_the_snapshot() {
                         state: SupervisorConnectionState::Connected,
                         active_tun_backend: None,
                         active_profile_id: Some("active".to_string()),
+                        active_group_id: None,
                         main_pid: Some(12),
                         pre_pid: None,
                         running_core_type: Some(CoreType::sing_box),

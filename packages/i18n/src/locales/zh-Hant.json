@@ -802,7 +802,11 @@
     "inboundPortOutOfRange": "本機代理連接埠必須介於 {{min}} 到 {{max}} 之間",
     "inboundCredentialsIncomplete": "請同時填寫使用者名稱和密碼，或都留空",
     "inboundRequired": "必須保留一個本機代理入站",
-    "policyGroupWithoutValidMembers": "策略群組 {{group}} 沒有可用的節點"
+    "policyGroupWithoutValidMembers": "策略群組 {{group}} 沒有可用的節點",
+    "policyGroupIntervalOutOfRange": "測速間隔需介於 {{min}} 到 {{max}} 秒",
+    "policyGroupTestUrlInvalid": "測速網址需以 http:// 或 https:// 開頭",
+    "policyGroupToleranceOutOfRange": "容差需介於 {{min}} 到 {{max}} 毫秒",
+    "policyGroupWithoutMembers": "請至少加入一個節點或選擇一個訂閱"
   },
   "window": {
     "close": "關閉",

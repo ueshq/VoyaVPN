@@ -22,7 +22,9 @@ use crate::{
     supervisor::ClashApiAccess,
 };
 
+mod groups;
 mod traffic_mode;
+pub use groups::{RuntimeGroupMember, RuntimeGroupState};
 pub use traffic_mode::{TrafficModeChangeError, TrafficModeChangeOutcome};
 
 const PROXY_WS_RECONNECT_INITIAL_DELAY: Duration = Duration::from_secs(1);
@@ -42,6 +44,8 @@ pub enum ProxyRuntimeError {
     MonitorRuntimeUnavailable,
     #[error("proxy runtime API state port is unavailable")]
     InvalidStatePort,
+    #[error("node {0} is not a member of the running policy group")]
+    UnknownGroupMember(String),
 }
 
 pub trait ProxyRuntimeEventSink: Send + Sync {
@@ -846,5 +850,72 @@ mod tests {
             ProxyMonitorStatus::stopped()
         );
         assert!(monitor_handle_is_none(&clone));
+    }
+
+    #[tokio::test]
+    async fn group_state_selection_and_delays_speak_in_node_ids() {
+        let transport = MockTransport::default();
+        let port = u16::try_from(DEFAULT_LOCAL_PORT + 5).expect("state port");
+        transport.respond(
+            "/proxies",
+            json!({ "proxies": {
+                "proxy": { "name": "proxy", "type": "Selector", "all": ["Tokyo [tokyo]", "Osaka [osaka]"], "now": "Osaka [osaka]" },
+                "Tokyo [tokyo]": { "name": "Tokyo [tokyo]", "type": "Socks", "history": [{ "time": "t", "delay": 95 }] },
+                "Osaka [osaka]": { "name": "Osaka [osaka]", "type": "Socks", "history": [{ "time": "t", "delay": 0 }] }
+            }}),
+        );
+        transport.respond("/proxies/proxy", Value::Null);
+        transport.respond(
+            "/group/proxy/delay?url=https%3A%2F%2Fprobe.example%2F&timeout=3000",
+            json!({ "Osaka [osaka]": 120 }),
+        );
+        let manager = ProxyRuntimeManager::with_transport(transport.clone());
+        let members = vec![
+            voya_core::ProfileItem {
+                index_id: "tokyo".to_string(),
+                remarks: "Tokyo".to_string(),
+                ..voya_core::ProfileItem::default()
+            },
+            voya_core::ProfileItem {
+                index_id: "osaka".to_string(),
+                remarks: "Osaka".to_string(),
+                ..voya_core::ProfileItem::default()
+            },
+        ];
+
+        let state = manager
+            .group_state(&access(port), &members)
+            .await
+            .expect("group state");
+        assert_eq!(state.now_profile_id.as_deref(), Some("osaka"));
+        assert_eq!(
+            state
+                .members
+                .iter()
+                .map(|member| member.delay_ms)
+                .collect::<Vec<_>>(),
+            [Some(95), None]
+        );
+
+        manager
+            .select_group_member(&access(port), &members, "tokyo")
+            .await
+            .expect("select");
+        assert!(matches!(
+            manager
+                .select_group_member(&access(port), &members, "nope")
+                .await,
+            Err(ProxyRuntimeError::UnknownGroupMember(_))
+        ));
+        let delays = manager
+            .test_group_delay(&access(port), &members, "https://probe.example/", 3_000)
+            .await
+            .expect("group delay");
+        assert_eq!(delays.get("osaka"), Some(&120));
+        assert!(transport
+            .requests()
+            .iter()
+            .any(|request| request.method == ClashHttpMethod::Put
+                && request.body == Some(json!({ "name": "Tokyo [tokyo]" }))));
     }
 }
