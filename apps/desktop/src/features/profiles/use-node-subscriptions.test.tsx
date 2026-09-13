@@ -92,3 +92,18 @@ it("guards deletion against a second click before the first one resolves", async
   expect(result.current.deletingSubscriptionPending).toBe(false);
   expect(result.current.deletingSubscription).toBeNull();
 });
+
+it("updates every subscription at once and ignores a second request while running", async () => {
+  let finish!: (value: SubscriptionUpdateResult) => void;
+  vi.mocked(updateSubscriptions).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  const { result } = setup();
+  let pending!: Promise<void>;
+  act(() => { pending = result.current.updateAllSubscriptions(); });
+  expect(result.current.updatingAllSubscriptions).toBe(true);
+  await act(() => result.current.updateAllSubscriptions());
+  expect(updateSubscriptions).toHaveBeenCalledOnce();
+  expect(updateSubscriptions).toHaveBeenCalledWith(null, true, null);
+  await act(async () => { finish(success); await pending; });
+  expect(result.current.updatingAllSubscriptions).toBe(false);
+  expect(result.current.operationMessage).toBeTruthy();
+});

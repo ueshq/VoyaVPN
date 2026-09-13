@@ -257,6 +257,7 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
         },
         behavior: contracts::BehaviorSettings {
             autostart: config.gui_item.auto_run,
+            auto_check_ip: config.gui_item.auto_check_ip,
         },
         core: contracts::CoreSettings {
             log_enabled: config.core_basic_item.log_enabled,
@@ -379,6 +380,7 @@ pub fn app_config_from_settings(
         },
         gui_item: GuiItem {
             auto_run: settings.behavior.autostart,
+            auto_check_ip: settings.behavior.auto_check_ip,
         },
         ui_item: UiItem {
             current_theme: theme_to_config(settings.appearance.theme).map(str::to_string),
@@ -577,7 +579,10 @@ mod tests {
                 domain_strategy: "domain-strategy-value".to_string(),
                 routing_index_id: "active-routing-id".to_string(),
             },
-            gui_item: GuiItem { auto_run: true },
+            gui_item: GuiItem {
+                auto_run: true,
+                auto_check_ip: false,
+            },
             ui_item: UiItem {
                 current_theme: Some("Dark".to_string()),
                 current_language: "zh-Hans".to_string(),

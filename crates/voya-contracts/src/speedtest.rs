@@ -120,6 +120,14 @@ pub struct SpeedtestStatus {
     pub running: bool,
 }
 
+/// The public address the running connection exits from.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ConnectionIpResult {
+    pub ip: Option<String>,
+    pub country_code: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -23,13 +23,15 @@ import type { InvalidationScope } from "./bindings";
  * parameterised key built from it — that is how one `profiles` scope reaches
  * all of {@link profilesQueryKey}'s filter slices.
  *
- * `processCandidates` and `profileShareQr` deliberately have no
+ * `processCandidates`, `profileShareQr` and `connectionIp` deliberately have no
  * `InvalidationScope`: nothing the backend commits changes a running-process
- * enumeration or a QR rendering, so no emitter could ever name them.
+ * enumeration, a QR rendering or a past exit-address lookup, so no emitter
+ * could ever name them.
  */
 export const queryKeys = {
   appSettings: ["app-settings"],
   settingsApply: ["app-settings", "apply-status"],
+  connectionIp: ["connection-ip"],
   connectionMode: ["connection-mode"],
   dns: ["dns"],
   processCandidates: ["process-candidates"],
@@ -47,6 +49,11 @@ export type QueryKeyRoot = (typeof queryKeys)[keyof typeof queryKeys];
 /** One filter slice of the profile list. */
 export function profilesQueryKey(filter: string) {
   return [...queryKeys.profiles, { filter }] as const;
+}
+
+/** The exit address of one connection (active node plus core process). */
+export function connectionIpQueryKey(connection: string | null) {
+  return [...queryKeys.connectionIp, connection] as const;
 }
 
 /** The rendered QR for one share link. */

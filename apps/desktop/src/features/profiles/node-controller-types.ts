@@ -78,7 +78,7 @@ export type NodeNoticesController = Pick<ReturnType<typeof useNodeImport>, "dire
 
 export type NodeToolbarController = Pick<ReturnType<typeof useNodeImport>, "handleDirectImport" | "directImportPending"> &
   Pick<NodeEditor, "addTriggerRef" | "importTriggerRef" | "setDialogState" | "setImportMethod"> &
-  Pick<NodeSubscriptions, "openSubscription"> &
+  Pick<NodeSubscriptions, "openSubscription" | "updateAllSubscriptions" | "updatingAllSubscriptions"> &
   Pick<NodeShared, "t">;
 
 export type NodeListController = Pick<NodeOperation, "runOperation"> &

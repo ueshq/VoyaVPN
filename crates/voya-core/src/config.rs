@@ -111,6 +111,7 @@ impl Default for InItem {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct GuiItem {
     pub auto_run: bool,
+    pub auto_check_ip: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

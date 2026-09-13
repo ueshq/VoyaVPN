@@ -53,6 +53,8 @@ export const commands = {
 	 *  running core to be restarted.
 	 */
 	setConnectionMode: (mode: ConnectionMode) => typedError<ConnectionModeStatus, AppError>(__TAURI_INVOKE("set_connection_mode", { mode })),
+	/**  Looks up the exit address of the running connection through its local proxy. */
+	checkConnectionIp: () => typedError<ConnectionIpResult, AppError>(__TAURI_INVOKE("check_connection_ip")),
 	tunStatus: () => typedError<TunStatus, AppError>(__TAURI_INVOKE("tun_status")),
 	tunProviderDiagnostics: () => typedError<TunProviderDiagnostics, AppError>(__TAURI_INVOKE("tun_provider_diagnostics")),
 	setTunEnabled: (enabled: boolean) => typedError<TunStatus, AppError>(__TAURI_INVOKE("set_tun_enabled", { enabled })),
@@ -266,6 +268,14 @@ export type AutostartStatus = {
 
 export type BehaviorSettings = {
 	autostart: boolean,
+	/**  Look up the exit IP each time a connection is established. */
+	autoCheckIp: boolean,
+};
+
+/**  The public address the running connection exits from. */
+export type ConnectionIpResult = {
+	ip: string | null,
+	countryCode: string | null,
 };
 
 /**

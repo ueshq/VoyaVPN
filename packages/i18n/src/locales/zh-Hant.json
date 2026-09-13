@@ -120,7 +120,12 @@
     "selectedNodeLabel": "待連線節點",
     "tunInfo": "TUN模式說明",
     "trafficModeInfo": "流量模式說明",
-    "trafficModeHint": "智慧分流：根據規則決定哪些流量使用代理；\n全域代理：接管的流量均使用所選節點；"
+    "trafficModeHint": "智慧分流：根據規則決定哪些流量使用代理；\n全域代理：接管的流量均使用所選節點；",
+    "exitIp": "出口 IP",
+    "checkIp": "檢測出口 IP",
+    "checkIpChecking": "檢測中…",
+    "checkIpFailed": "檢測失敗",
+    "checkIpUnknown": "未知"
   },
   "logCodes": {
     "connected": "核心守護程序已啟動",
@@ -194,7 +199,8 @@
     "autostart": "開機自動啟動",
     "loading": "正在載入",
     "runtimeCore": "內核",
-    "runtimeNetwork": "網路"
+    "runtimeNetwork": "網路",
+    "autoCheckIp": "連線後自動檢測出口 IP"
   },
   "panes": {
     "dns": {
@@ -383,7 +389,8 @@
         "edit": "編輯",
         "import": "匯入",
         "subscriptions": "訂閱",
-        "addNode": "新增節點"
+        "addNode": "新增節點",
+        "updateAllSubscriptions": "更新全部訂閱"
       },
       "undecodable": "有 {{count}} 個已儲存的節點無法由目前版本讀取，已被隱藏。它們很可能由較新的版本寫入；升級 VoyaVPN 後應可重新顯示。",
       "untitled": "未命名",
@@ -635,7 +642,8 @@
       "dnsServers": "DNS 伺服器與策略",
       "dnsHosts": "Hosts 與預期 IP",
       "resources": "規則資源",
-      "localProxy": "本機代理"
+      "localProxy": "本機代理",
+      "connection": "連線"
     },
     "apply": {
       "reconnect": "套用並重新連線",

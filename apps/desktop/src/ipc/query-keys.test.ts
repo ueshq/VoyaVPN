@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { InvalidationScope } from "@/ipc/bindings";
 import {
+  connectionIpQueryKey,
   invalidationQueryKey,
   profileShareQrQueryKey,
   profilesQueryKey,
@@ -46,6 +47,7 @@ const productionSources = Object.entries(sources).filter(
 
 /** Parameterised keys, mapped back to the root a scope can invalidate. */
 const keyFactories = {
+  connectionIpQueryKey: () => connectionIpQueryKey("profile:1"),
   profileShareQrQueryKey: () => profileShareQrQueryKey("share-link"),
   profilesQueryKey: () => profilesQueryKey(""),
 };
@@ -163,6 +165,7 @@ describe("query key registry", () => {
     expect(profilesQueryKey("us")[0]).toBe(queryKeys.profiles[0]);
     expect(profilesQueryKey("us")[1]).toEqual({ filter: "us" });
     expect(profileShareQrQueryKey("vmess://x")).toEqual([queryKeys.profileShareQr[0], "vmess://x"]);
+    expect(connectionIpQueryKey("tokyo:42")).toEqual([queryKeys.connectionIp[0], "tokyo:42"]);
   });
 
   it("returns null for a scope this build cannot map", () => {

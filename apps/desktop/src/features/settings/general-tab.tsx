@@ -114,6 +114,21 @@ export function GeneralTab({
           }
         />
       </SettingsGroup>
+
+      <SettingsGroup title={t("settings.sections.connection")}>
+        <SettingsCheckbox
+          field="behavior.autoCheckIp"
+          checked={settings.behavior.autoCheckIp}
+          disabled={working}
+          label={t("options.autoCheckIp")}
+          onCheckedChange={(checked) =>
+            update((current) => ({
+              ...current,
+              behavior: { ...current.behavior, autoCheckIp: checked === true },
+            }))
+          }
+        />
+      </SettingsGroup>
     </div>
   );
 }

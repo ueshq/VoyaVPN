@@ -36,6 +36,7 @@ const wrapperNames = [
   "recheckSystemProxy",
   "connectionModeStatus",
   "setConnectionMode",
+  "checkConnectionIp",
   "tunStatus",
   "tunProviderDiagnostics",
   "tunRequestElevation",

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { formatDelay } from "@voya/utils/formatting";
@@ -14,7 +14,15 @@ function formatConnectionDuration(milliseconds: number | null) {
 }
 
 /** The backend owns elapsed time; the renderer only interpolates between samples. */
-export function ConnectedInfo({ delayMs, t }: { delayMs: number | null; t: TranslationFunction }) {
+export function ConnectedInfo({
+  children,
+  delayMs,
+  t,
+}: {
+  children?: ReactNode;
+  delayMs: number | null;
+  t: TranslationFunction;
+}) {
   const status = useRuntimeEventStore((state) => state.coreState);
   const receivedAt = useRuntimeEventStore((state) => state.coreStateReceivedAt);
   const [now, setNow] = useState(() => performance.now());
@@ -32,6 +40,7 @@ export function ConnectedInfo({ delayMs, t }: { delayMs: number | null; t: Trans
     <dl className="home-metrics" data-testid="home-connected-info">
       <div><dt>{t("home.latency")}</dt><dd>{delayMs == null ? "—" : formatDelay(delayMs)}</dd></div>
       <div><dt>{t("home.duration")}</dt><dd data-testid="home-connection-duration">{formatConnectionDuration(elapsed)}</dd></div>
+      {children}
     </dl>
   );
 }

@@ -5,7 +5,8 @@
     "theme": "system"
   },
   "behavior": {
-    "autostart": false
+    "autostart": false,
+    "autoCheckIp": false
   },
   "core": {
     "logEnabled": false,

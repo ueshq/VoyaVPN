@@ -139,6 +139,20 @@ fn missing_core_candidates(candidates: &str) -> Vec<String> {
         .collect()
 }
 
+impl From<crate::connection_ip::ConnectionIpError> for AppError {
+    fn from(error: crate::connection_ip::ConnectionIpError) -> Self {
+        use crate::connection_ip::ConnectionIpError;
+        match &error {
+            ConnectionIpError::InvalidPort(_) => {
+                invalid(Sub::Runtime, "network.inbounds.0.localPort", &error)
+            }
+            ConnectionIpError::NotConnected
+            | ConnectionIpError::Probe(_)
+            | ConnectionIpError::NoResponse => network(Sub::Runtime, &error),
+        }
+    }
+}
+
 impl From<ProfileManagerError> for AppError {
     fn from(error: ProfileManagerError) -> Self {
         match &error {

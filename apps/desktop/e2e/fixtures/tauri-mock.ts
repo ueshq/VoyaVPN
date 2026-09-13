@@ -9,6 +9,7 @@ import type {
   AppError,
   AppSettingsV1,
   AppUpdaterStatus,
+  ConnectionIpResult,
   ConnectionModeStatus,
   DnsSettings,
   ExportProfilesResult,
@@ -559,49 +560,50 @@ export async function installTauriSmokeMock(
           } satisfies ImportProfilesResult);
         }
         case "update_subscriptions": {
-          const source = state.subscriptions.find(
-            (item) => item.id === args.subscriptionId,
+          // A null id is "update all", exactly as the backend reads it.
+          const sources = state.subscriptions.filter(
+            (item) =>
+              args.subscriptionId == null || item.id === args.subscriptionId,
           );
-          if (!source)
-            return Promise.resolve({
-              imported: 0,
-              messages: [],
-              removedExisting: 0,
-              skipped: 0,
-              updated: 0,
-            } satisfies SubscriptionUpdateResult);
-          const previous = state.profiles.find(
-            (row) => row.profile.subscriptionId === source.id,
-          );
-          if (!previous)
-            upsertProfile({
-              ...importedProfile(
-                "trojan://secret@source.test:443#Subscription%20node",
+          for (const source of sources) {
+            const previous = state.profiles.find(
+              (row) => row.profile.subscriptionId === source.id,
+            );
+            if (!previous)
+              upsertProfile({
+                ...importedProfile(
+                  "trojan://secret@source.test:443#Subscription%20node",
+                ),
+                subscriptionId: source.id,
+              });
+            state.subscriptionMetadata = [
+              ...state.subscriptionMetadata.filter(
+                (item) => item.subscriptionId !== source.id,
               ),
-              subscriptionId: source.id,
-            });
-          state.subscriptionMetadata = [
-            ...state.subscriptionMetadata.filter(
-              (item) => item.subscriptionId !== source.id,
-            ),
-            {
-              subscriptionId: source.id,
-              lastUpdateAt: Math.floor(Date.now() / 1000),
-              uploadBytes: null,
-              downloadBytes: null,
-              totalBytes: null,
-              expireAt: null,
-              profileTitle: null,
-            },
-          ];
+              {
+                subscriptionId: source.id,
+                lastUpdateAt: Math.floor(Date.now() / 1000),
+                uploadBytes: null,
+                downloadBytes: null,
+                totalBytes: null,
+                expireAt: null,
+                profileTitle: null,
+              },
+            ];
+          }
           return Promise.resolve({
-            imported: 1,
+            imported: sources.length,
             messages: [],
             removedExisting: 0,
             skipped: 0,
-            updated: 1,
+            updated: sources.length,
           } satisfies SubscriptionUpdateResult);
         }
+        case "check_connection_ip":
+          return Promise.resolve({
+            countryCode: "JP",
+            ip: "203.0.113.9",
+          } satisfies ConnectionIpResult);
         case "run_speedtest":
           return Promise.resolve({
             cancelled: false,
@@ -1034,7 +1036,7 @@ export async function installTauriSmokeMock(
       return {
         schemaVersion: 1,
         appearance: { language: "en", theme: "system" },
-        behavior: { autostart: false },
+        behavior: { autoCheckIp: false, autostart: false },
         core: {
           bindInterface: null as string | null,
           cacheFileEnabled: true,

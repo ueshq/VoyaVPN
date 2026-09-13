@@ -99,6 +99,11 @@ const RETIRED_SETTINGS_KEYS: &[&[&str]] = &[
 /// Keys retired from every element of a settings array: (array path, key).
 const RETIRED_SETTINGS_ELEMENT_KEYS: &[(&[&str], &str)] = &[(&["network", "inbounds"], "protocol")];
 
+/// Keys added after the baseline: (parent path, key, JSON value an older
+/// payload implies). Inserted only when absent.
+const ADDED_SETTINGS_DEFAULTS: &[(&[&str], &str, &str)] =
+    &[(&["behavior"], "autoCheckIp", "false")];
+
 /// Retired enum values and the current value each one maps onto.
 const RETIRED_SETTINGS_VALUES: &[(&[&str], &str, &str)] = &[
     (&["proxy", "trafficMode"], "direct", "rule"),
@@ -182,6 +187,16 @@ pub(crate) fn normalize_retired_settings_value(value: &mut serde_json::Value) ->
             core.entry("fragmentFallbackDelayMs")
                 .or_insert_with(|| serde_json::Value::from(500));
             changed = true;
+        }
+    }
+    for (parents, key, default) in ADDED_SETTINGS_DEFAULTS {
+        if let Some(object) = json_at(value, parents).and_then(serde_json::Value::as_object_mut) {
+            if !object.contains_key(*key) {
+                if let Ok(default) = serde_json::from_str::<serde_json::Value>(default) {
+                    object.insert((*key).to_string(), default);
+                    changed = true;
+                }
+            }
         }
     }
     for (path, retired, current) in RETIRED_SETTINGS_VALUES {

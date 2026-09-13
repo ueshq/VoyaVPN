@@ -6,6 +6,7 @@
 pub mod autostart;
 mod backoff;
 pub mod config_mutation;
+pub mod connection_ip;
 pub mod connection_mode;
 pub mod contract_map;
 pub mod core_flow;

@@ -24,6 +24,8 @@ export function useNodeSubscriptions(
     Set<string>
   >(() => new Set());
   const updatingRef = useRef(new Set<string>());
+  const [updatingAllSubscriptions, setUpdatingAllSubscriptions] = useState(false);
+  const updatingAllRef = useRef(false);
   const subscriptionTriggerRef = useRef<HTMLElement | null>(null);
   function openSubscription(
     subscription: Subscription | null,
@@ -61,6 +63,30 @@ export function useNodeSubscriptions(
       setUpdatingSubscriptions(new Set(updatingRef.current));
     }
   }
+  async function updateAllSubscriptions() {
+    if (updatingAllRef.current) return;
+    updatingAllRef.current = true;
+    setUpdatingAllSubscriptions(true);
+    try {
+      await runOperation(async () => {
+        const result = await updateSubscriptions(null, true, null);
+        if (isSubscriptionUpdateFailure(result))
+          throw new Error(
+            subscriptionUpdateMessages(result) ||
+              t("panes.subscriptions.updateNothingImported"),
+          );
+        setOperationMessage(
+          t("panes.subscriptions.updateResult", {
+            imported: result.imported,
+            updated: result.updated,
+          }),
+        );
+      });
+    } finally {
+      updatingAllRef.current = false;
+      setUpdatingAllSubscriptions(false);
+    }
+  }
   async function removeSubscription() {
     if (!deletingSubscription || deletingSubscriptionRef.current) return;
     deletingSubscriptionRef.current = true;
@@ -95,7 +121,9 @@ export function useNodeSubscriptions(
     removeSubscription,
     confirmSubscriptionDeletion,
     openSubscription,
+    updateAllSubscriptions,
     updateSubscription,
+    updatingAllSubscriptions,
     updatingSubscriptions,
     subscriptionTriggerRef,
   };

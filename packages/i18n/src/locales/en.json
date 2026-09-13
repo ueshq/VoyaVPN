@@ -120,7 +120,12 @@
     "selectedNodeLabel": "Selected node",
     "tunInfo": "About TUN mode",
     "trafficModeInfo": "About traffic mode",
-    "trafficModeHint": "Smart routing: Rules determine which traffic uses the proxy;\nGlobal proxy: All captured traffic uses the selected node;"
+    "trafficModeHint": "Smart routing: Rules determine which traffic uses the proxy;\nGlobal proxy: All captured traffic uses the selected node;",
+    "exitIp": "Exit IP",
+    "checkIp": "Check exit IP",
+    "checkIpChecking": "Checking…",
+    "checkIpFailed": "Check failed",
+    "checkIpUnknown": "Unknown"
   },
   "logCodes": {
     "connected": "Core supervisor started",
@@ -194,7 +199,8 @@
     "autostart": "Autostart",
     "loading": "Loading",
     "runtimeCore": "Core",
-    "runtimeNetwork": "Network"
+    "runtimeNetwork": "Network",
+    "autoCheckIp": "Check the exit IP after connecting"
   },
   "panes": {
     "dns": {
@@ -383,7 +389,8 @@
         "edit": "Edit",
         "import": "Import",
         "subscriptions": "Subscriptions",
-        "addNode": "Add node"
+        "addNode": "Add node",
+        "updateAllSubscriptions": "Update all subscriptions"
       },
       "undecodable": "{{count}} stored node(s) could not be read by this version and are hidden. They were most likely written by a newer build; updating VoyaVPN should show them again.",
       "untitled": "Untitled",
@@ -635,7 +642,8 @@
       "dnsServers": "DNS servers and strategies",
       "dnsHosts": "Hosts and expected IPs",
       "resources": "Rule resources",
-      "localProxy": "Local proxy"
+      "localProxy": "Local proxy",
+      "connection": "Connection"
     },
     "apply": {
       "reconnect": "Apply and reconnect",

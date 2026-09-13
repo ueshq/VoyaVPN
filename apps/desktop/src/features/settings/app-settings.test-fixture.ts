@@ -8,7 +8,7 @@ export function makeAppSettings({
   return {
     schemaVersion: 1,
     appearance: { language: "en", theme: "system" },
-    behavior: { autostart: false },
+    behavior: { autoCheckIp: false, autostart: false },
     core: {
       bindInterface: null,
       cacheFileEnabled: true,

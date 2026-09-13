@@ -3,18 +3,20 @@ use serde::Deserialize;
 use super::{is_cancelled, CancellationFlag, SocksHttpProbe};
 use std::time::Duration;
 
-pub const DEFAULT_IP_LOOKUP_URL: &str = "https://ipwho.is/?fields=success,country_code";
+pub const DEFAULT_IP_LOOKUP_URL: &str = "https://ipwho.is/?fields=success,ip,country_code";
 
 /// The custom endpoint's text remains available independently of country parsing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IpLookupResult {
     pub text: String,
+    pub ip: Option<String>,
     pub country_code: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct CountryResponse {
     success: Option<bool>,
+    ip: Option<String>,
     country_code: Option<String>,
 }
 
@@ -44,8 +46,32 @@ impl SocksHttpProbe {
             } => return None,
         };
         let country_code = parse_country_code(&text);
-        Some(IpLookupResult { text, country_code })
+        let ip = parse_ip(&text);
+        Some(IpLookupResult {
+            text,
+            ip,
+            country_code,
+        })
     }
+}
+
+/// The address an endpoint reports: a JSON `ip` field or a bare address line.
+fn parse_ip(text: &str) -> Option<String> {
+    let text = text.trim();
+    let candidate = if text.starts_with('{') {
+        let response: CountryResponse = serde_json::from_str(text).ok()?;
+        if response.success == Some(false) {
+            return None;
+        }
+        response.ip?
+    } else {
+        text.to_owned()
+    };
+    candidate
+        .trim()
+        .parse::<std::net::IpAddr>()
+        .ok()
+        .map(|address| address.to_string())
 }
 
 fn parse_country_code(text: &str) -> Option<String> {
@@ -94,6 +120,24 @@ mod tests {
             ("", None),
         ] {
             assert_eq!(parse_country_code(text).as_deref(), expected, "{text}");
+        }
+    }
+
+    #[test]
+    fn addresses_come_from_json_or_a_bare_line() {
+        for (text, expected) in [
+            (
+                r#"{"success":true,"ip":"203.0.113.9","country_code":"JP"}"#,
+                Some("203.0.113.9"),
+            ),
+            (r#"{"ip":"2001:db8::1"}"#, Some("2001:db8::1")),
+            (" 198.51.100.7\n", Some("198.51.100.7")),
+            (r#"{"success":false,"ip":"203.0.113.9"}"#, None),
+            (r#"{"ip":"not an address"}"#, None),
+            ("JP", None),
+            ("{broken", None),
+        ] {
+            assert_eq!(parse_ip(text).as_deref(), expected, "{text}");
         }
     }
 }

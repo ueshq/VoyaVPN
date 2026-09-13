@@ -3,6 +3,7 @@ import {
   ChevronDown,
   FilePlus2,
   Plus,
+  RefreshCw,
   Rss,
   Upload,
 } from "lucide-react";
@@ -35,6 +36,8 @@ export function ServerTableToolbar({
     setImportMethod,
     openSubscription,
     t,
+    updateAllSubscriptions,
+    updatingAllSubscriptions,
   } = controller;
   const addMenuOpen = useShellStore((state) => state.profilesAddMenuOpen);
   const focusFirstAddItemRef = useRef(addMenuOpen);
@@ -88,6 +91,13 @@ export function ServerTableToolbar({
             }}>
               <Rss aria-hidden="true" />
               {t("home.subscriptionCard.add")}
+            </MenubarItem>
+            <MenubarItem
+              disabled={updatingAllSubscriptions}
+              onSelect={() => void updateAllSubscriptions()}
+            >
+              <RefreshCw aria-hidden="true" />
+              {t("panes.profiles.toolbar.updateAllSubscriptions")}
             </MenubarItem>
           </MenubarContent>
         </MenubarMenu>

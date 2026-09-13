@@ -93,6 +93,8 @@ export const connectionModeStatus = wrapCommand(commands.connectionModeStatus);
 
 export const setConnectionMode = wrapCommand(commands.setConnectionMode);
 
+export const checkConnectionIp = wrapCommand(commands.checkConnectionIp);
+
 export const listProcessCandidates = wrapCommand(commands.listProcessCandidates);
 
 export const listRoutings = wrapCommand(commands.listRoutings);

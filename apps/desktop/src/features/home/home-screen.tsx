@@ -24,6 +24,7 @@ import { profileNameWithoutFlag } from "@/features/profiles/profile-display";
 import { useShellStore } from "@/stores/shell-store";
 
 import { ConnectedInfo } from "./connected-info";
+import { ExitIpMetric } from "./exit-ip-metric";
 import { ModeInfo } from "./mode-info";
 import { TrafficModeSwitcher } from "./traffic-mode-switcher";
 import { useHomeRuntime } from "./use-home-runtime";
@@ -91,7 +92,11 @@ export function HomeScreen() {
             t={t}
             cleanupPending={home.state === "cleanupPending"}
           />
-          {!noNodes ? <ConnectedInfo delayMs={delayMs} t={t} /> : null}
+          {!noNodes ? (
+            <ConnectedInfo delayMs={delayMs} t={t}>
+              <ExitIpMetric t={t} />
+            </ConnectedInfo>
+          ) : null}
           <div className="home-mode-panel">
             <ConnectionModeSwitcher
               tunEnabled={home.tunEnabled}

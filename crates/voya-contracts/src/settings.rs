@@ -74,6 +74,8 @@ impl Default for AppearanceSettings {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BehaviorSettings {
     pub autostart: bool,
+    /// Look up the exit IP each time a connection is established.
+    pub auto_check_ip: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]

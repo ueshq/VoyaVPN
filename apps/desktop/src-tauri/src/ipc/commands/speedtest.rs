@@ -62,3 +62,21 @@ pub fn cancel_speedtest<R: tauri::Runtime>(
 pub fn speedtest_status(state: tauri::State<'_, AppState>) -> Result<SpeedtestStatus, AppError> {
     speedtest_manager(&state).status().map_err(AppError::from)
 }
+
+/// Looks up the exit address of the running connection through its local proxy.
+#[tauri::command]
+#[specta::specta]
+pub async fn check_connection_ip(
+    state: tauri::State<'_, AppState>,
+) -> Result<voya_contracts::ConnectionIpResult, AppError> {
+    let config = current_config(&state);
+    let snapshot = state.supervisor().status().await.map_err(AppError::from)?;
+    let exit = voya_app::connection_ip::check_connection_ip(&config, &snapshot)
+        .await
+        .map_err(AppError::from)?;
+
+    Ok(voya_contracts::ConnectionIpResult {
+        ip: exit.ip,
+        country_code: exit.country_code,
+    })
+}
