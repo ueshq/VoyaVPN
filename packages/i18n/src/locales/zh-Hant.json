@@ -79,14 +79,7 @@
     "latency": "延遲",
     "duration": "連線時長",
     "currentNodeLabel": "目前節點",
-    "details": "詳情",
     "switchNode": "切換節點",
-    "connectionDetails": "連線詳情",
-    "serverAddress": "伺服器位址",
-    "serverPort": "連接埠",
-    "protocol": "協定",
-    "processId": "程序 ID",
-    "tunDiagnostics": "TUN 診斷",
     "disconnectLabel": "中斷連線",
     "trafficMode": "流量模式",
     "chooseNode": "選擇節點",
@@ -102,7 +95,7 @@
     "selectedGroupLabel": "已選策略群組",
     "groupVia": "經由 {{node}}",
     "trafficModeRule": "規則",
-    "vpnPermissionHint": "macOS 會請求新增 VPN 設定，請點選「允許」後連線。",
+    "vpnPermissionHint": "連線時 macOS 會請求新增 VPN 設定，請選擇「允許」。如果先前選了「不允許」，請到「系統設定 → VPN」中允許 VoyaVPN。",
     "noSelection": "尚未選擇節點",
     "viewLogs": "檢視日誌",
     "profilesFailed": "無法讀取節點清單：{{message}}",
@@ -110,7 +103,9 @@
       "connect": "連線失敗：{{message}}",
       "disconnect": "中斷連線失敗：{{message}}",
       "restart": "重新啟動失敗：{{message}}"
-    }
+    },
+    "reconnect": "重新連線",
+    "authorizationDeclined": "未取得系統授權，無法連線。請重試，並在系統彈窗中允許。"
   },
   "logCodes": {
     "connected": "核心守護程序已啟動",
@@ -139,11 +134,11 @@
     "themeSystem": "跟隨系統"
   },
   "missingCore": {
-    "description": "缺少 {{core}} 核心執行檔。請先安裝後再連線。",
-    "install": "安裝核心",
-    "installing": "正在安裝…",
-    "seedMissingHint": "沒有可用的內建 sing-box 核心。請重新安裝應用，或使用包含 sing-box seed 的安裝包。",
-    "title": "核心未安裝"
+    "description": "VoyaVPN 缺少連線所需的元件（{{core}}），修復後即可連線。",
+    "install": "修復",
+    "installing": "正在修復…",
+    "seedMissingHint": "沒有可用於修復的內建元件，請重新安裝 VoyaVPN。",
+    "title": "缺少必要元件"
   },
   "modal": {
     "language": "語言",
@@ -693,7 +688,7 @@
       "dnsBehavior": "DNS 解析行為",
       "dnsServers": "DNS 伺服器與策略",
       "dnsHosts": "Hosts 與預期 IP",
-      "resources": "規則資源",
+      "resources": "規則庫",
       "localProxy": "本機代理",
       "connection": "連線",
       "window": "視窗",
@@ -826,8 +821,8 @@
       "unsupported": "不支援"
     },
     "checkApp": "檢查應用程式",
-    "geoDescription": "使用內建來源和執行階段代理策略立即更新 Geo 資源。",
-    "geoTitle": "Geo 資源",
+    "geoDescription": "立即下載規則識別地區和網站所用的最新資料。",
+    "geoTitle": "IP 與網域資料",
     "installApp": "安裝應用程式",
     "noAppUpdate": "應用程式已是最新",
     "redactedUrl": "[已隱藏的 URL]",
@@ -835,8 +830,8 @@
     "resourceUpdated": "已更新 {{count}} 個檔案",
     "restartApp": "重新啟動應用程式",
     "restartRequired": "重新啟動 VoyaVPN 以完成更新。",
-    "srsDescription": "使用內建來源和執行階段代理策略立即更新 SRS 規則集。",
-    "srsTitle": "SRS 資源",
+    "srsDescription": "立即下載規則頁使用的最新規則集。",
+    "srsTitle": "規則集",
     "title": "檢查更新",
     "updateNow": "立即更新",
     "waiting": "等待"

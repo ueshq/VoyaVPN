@@ -74,10 +74,10 @@ describe("ModalHost", () => {
     openMissingCoreModal();
     renderModalHost();
 
-    expect(await screen.findByText("Core not installed")).toBeInTheDocument();
-    expect(screen.getByText(/sing-box core executable is missing/)).toBeInTheDocument();
+    expect(await screen.findByText("A required component is missing")).toBeInTheDocument();
+    expect(screen.getByText(/missing a component it needs to connect \(sing-box\)/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Install core" }));
+    await user.click(screen.getByRole("button", { name: "Repair" }));
 
     await waitFor(() => expect(useModalStore.getState().stack).toHaveLength(0));
     expect(ipcMocks.installCoreSeed).toHaveBeenCalledWith("singBox");
@@ -90,10 +90,10 @@ describe("ModalHost", () => {
     openMissingCoreModal();
     renderModalHost();
 
-    await user.click(await screen.findByRole("button", { name: "Install core" }));
+    await user.click(await screen.findByRole("button", { name: "Repair" }));
 
-    expect(await screen.findByText(/No bundled sing-box core is available/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Install core" })).not.toBeInTheDocument();
+    expect(await screen.findByText(/No bundled component is available to repair with/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Repair" })).not.toBeInTheDocument();
     expect(ipcMocks.connectActiveProfile).not.toHaveBeenCalled();
     expect(useModalStore.getState().stack).toHaveLength(1);
   });
@@ -104,11 +104,11 @@ describe("ModalHost", () => {
     openMissingCoreModal();
     renderModalHost();
 
-    const install = await screen.findByRole("button", { name: "Install core" });
+    const install = await screen.findByRole("button", { name: "Repair" });
     await user.click(install);
 
     expect(await screen.findByText("download failed")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Install core" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Repair" })).toBeEnabled();
     expect(useModalStore.getState().stack).toHaveLength(1);
   });
 });

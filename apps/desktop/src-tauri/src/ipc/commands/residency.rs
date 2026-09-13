@@ -6,7 +6,7 @@
 use tauri::Manager;
 use voya_app::services::TrafficMode;
 use voya_app::tray::{TrayGroup, TrayMenuInput, TrayNode};
-use voya_contracts::CloseRequestAction;
+use voya_contracts::{AppErrorKind, CloseRequestAction};
 
 use super::{lifecycle::*, support::*, *};
 
@@ -153,8 +153,24 @@ pub(crate) async fn tray_connect<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
         return;
     };
     let config = current_config(&state);
-    if let Err(error) = core_flow(app, &state).connect(&config).await {
-        report_tray_failure(app, &AppError::from(error));
+    let mut result = core_flow(app, &state)
+        .connect(&config)
+        .await
+        .map_err(AppError::from);
+    // The window asks for one-time authorization and tries again; so does the tray.
+    if matches!(&result, Err(error) if error.kind == AppErrorKind::ElevationRequired) {
+        let elevation = state.elevation_manager().clone();
+        result = match run_blocking("elevation request", move || elevation.request()).await {
+            Ok(Ok(())) => core_flow(app, &state)
+                .connect(&config)
+                .await
+                .map_err(AppError::from),
+            Ok(Err(error)) => Err(AppError::from(error)),
+            Err(error) => Err(error),
+        };
+    }
+    if let Err(error) = result {
+        report_tray_failure(app, &error);
     }
 }
 
@@ -238,6 +254,8 @@ pub(crate) async fn tray_activate_group<R: tauri::Runtime>(
 }
 
 fn report_tray_failure<R: tauri::Runtime>(app: &tauri::AppHandle<R>, error: &AppError) {
+    // The window may be hidden in the tray; bring it forward so the notice is seen.
+    crate::residency::show_main_window(app);
     report_post_commit_error(
         app,
         NoticeCode::TrayActionFailed,

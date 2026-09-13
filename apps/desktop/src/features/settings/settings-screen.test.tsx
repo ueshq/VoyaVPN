@@ -94,7 +94,7 @@ describe("redesigned automatic settings", () => {
     for (const name of ["Connection", "Advanced", "Updates"])
       await user.click(screen.getByRole("tab", { name }));
     expect(
-      await screen.findByRole("heading", { name: "Rule resources" }),
+      await screen.findByRole("heading", { name: "Rule library" }),
     ).toBeVisible();
   });
 

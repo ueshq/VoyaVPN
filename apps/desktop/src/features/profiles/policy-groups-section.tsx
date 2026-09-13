@@ -171,6 +171,7 @@ function PolicyGroupCard({
               {t("nodeGroups.test")}
             </Button>
           ) : null}
+          <span title={members.length === 0 ? t("nodeGroups.empty") : undefined}>
           <Button
             disabled={inUse || switchingPolicyGroupId !== null || members.length === 0}
             onClick={() => void activatePolicyGroup(group.id)}
@@ -185,6 +186,7 @@ function PolicyGroupCard({
             )}
             {t(inUse ? "policyGroups.inUse" : "policyGroups.use")}
           </Button>
+          </span>
           <Button
             aria-label={t("policyGroups.editNamed", { name: group.name })}
             onClick={() => openGroupEditor(group)}

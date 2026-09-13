@@ -315,13 +315,9 @@ describe("HomeScreen", () => {
     expect(
       await screen.findByRole("heading", { name: "Tokyo Edge" }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Details" }));
-    expect(
-      screen.getByRole("dialog", { name: "Connection details" }),
-    ).toHaveTextContent("4242");
-    expect(screen.getByRole("button", { name: "Restart" })).toBeEnabled();
-    await user.keyboard("{Escape}");
-    expect(screen.getByRole("button", { name: "Details" })).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Details" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Reconnect" }));
+    await waitFor(() => expect(ipcMock.restartCore).toHaveBeenCalledOnce());
     await user.click(screen.getByRole("button", { name: "Switch node" }));
     expect(useShellStore.getState()).toMatchObject({
       activeTab: "profiles",
@@ -440,7 +436,7 @@ describe("HomeScreen", () => {
     expect(useModalStore.getState().stack).toHaveLength(0);
   });
 
-  it("keeps the original failure when the authorization dialog is declined", async () => {
+  it("explains a declined authorization dialog instead of the raw failure", async () => {
     mockProfileList([
       makeActiveProfile({ id: "tokyo", remarks: "Tokyo Edge" }),
     ]);
@@ -462,9 +458,11 @@ describe("HomeScreen", () => {
     await waitFor(() => expect(connectButton()).toBeEnabled());
     await user.click(connectButton());
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Could not connect: sudo helper refused",
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Could not connect: System authorization was not granted, so VoyaVPN could not connect.",
     );
+    expect(alert).not.toHaveTextContent("sudo helper refused");
     expect(useToastStore.getState().toasts).toHaveLength(0);
     expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1);
   });
@@ -664,7 +662,7 @@ describe("HomeScreen", () => {
 
     expect(
       await screen.findByText(
-        "macOS will ask to add a VPN configuration. Choose Allow to connect.",
+        "macOS asks to add a VPN configuration when you connect. Choose Allow. If you chose Don't Allow before, allow VoyaVPN in System Settings → VPN.",
       ),
     ).toHaveAttribute("role", "status");
   });

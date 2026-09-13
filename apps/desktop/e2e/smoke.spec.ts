@@ -371,11 +371,9 @@ test("adds and imports profiles, activates one, and connects through the fake ru
   await page.getByRole("tab", { name: "Home", exact: true }).click();
   const connectButton = page.getByTestId("home-connect-button");
   await expect(connectButton).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Details" }).click();
   await expect(
-    page.getByRole("dialog", { name: "Connection details" }),
-  ).toContainText("4242");
-  await page.keyboard.press("Escape");
+    page.getByRole("button", { name: "Reconnect", exact: true }),
+  ).toBeEnabled();
   await expect(coreStateBadge(page, "Connected")).toHaveCount(1);
 
   await connectButton.click();

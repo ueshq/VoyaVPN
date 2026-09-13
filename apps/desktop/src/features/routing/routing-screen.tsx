@@ -53,16 +53,18 @@ export function RoutingScreen() {
     <PageSection aria-label={t("tabs.rules")}>
       <PageTitle
         actions={
-          <Button
-            disabled={!activeRouting}
-            onClick={controller.requestResetRules}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <RotateCcw className="size-4" aria-hidden="true" />
-            {t("panes.routing.resetRules")}
-          </Button>
+          <span title={activeRouting ? undefined : t("panes.routing.noActiveRouting")}>
+            <Button
+              disabled={!activeRouting}
+              onClick={controller.requestResetRules}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <RotateCcw className="size-4" aria-hidden="true" />
+              {t("panes.routing.resetRules")}
+            </Button>
+          </span>
         }
         title={t("tabs.rules")}
       />
@@ -82,15 +84,18 @@ export function RoutingScreen() {
               ) : null}
             </div>
             <PageHeaderActions>
-              <Button
-                disabled={!activeRouting}
-                onClick={controller.openCreateRule}
-                size="sm"
-                type="button"
-              >
-                <Plus className="size-4" aria-hidden="true" />
-                {t("panes.routing.addRule")}
-              </Button>
+              {/* A disabled button shows no tooltip of its own. */}
+              <span title={activeRouting ? undefined : t("panes.routing.noActiveRouting")}>
+                <Button
+                  disabled={!activeRouting}
+                  onClick={controller.openCreateRule}
+                  size="sm"
+                  type="button"
+                >
+                  <Plus className="size-4" aria-hidden="true" />
+                  {t("panes.routing.addRule")}
+                </Button>
+              </span>
             </PageHeaderActions>
           </PageHeader>
           {/* Radix's intrinsic-width wrapper must not expand the panel to the

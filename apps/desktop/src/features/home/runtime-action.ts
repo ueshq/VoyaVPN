@@ -33,11 +33,11 @@ export function reportRuntimeActionError(
     useModalStore.getState().openModal("missingCore", { missingCore });
   } else if (inline) {
     useRuntimeActionStore.setState({
-      lastError: { action, message: getErrorMessage(error) },
+      lastError: { action, message: runtimeActionMessage(error, t) },
     });
   } else {
     useToastStore.getState().pushToast({
-      description: getErrorMessage(error),
+      description: runtimeActionMessage(error, t),
       severity: "error",
       title: {
         connect: t("actions.connect"),
@@ -46,6 +46,16 @@ export function reportRuntimeActionError(
       }[action],
     });
   }
+}
+
+/**
+ * An authorization error that survives `runWithElevation` means the system
+ * prompt was declined: the user's choice, which deserves words, not a code.
+ */
+function runtimeActionMessage(error: unknown, t: TranslationFunction) {
+  return error instanceof IpcCommandError && error.appError.kind.type === "elevationRequired"
+    ? t("home.authorizationDeclined")
+    : getErrorMessage(error);
 }
 
 export function isRuntimeTransitioning(state: RuntimeStatusResponse["state"]) {

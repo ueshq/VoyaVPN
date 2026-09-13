@@ -79,14 +79,7 @@
     "latency": "Latency",
     "duration": "Connection time",
     "currentNodeLabel": "Current node",
-    "details": "Details",
     "switchNode": "Switch node",
-    "connectionDetails": "Connection details",
-    "serverAddress": "Server address",
-    "serverPort": "Port",
-    "protocol": "Protocol",
-    "processId": "Process ID",
-    "tunDiagnostics": "TUN diagnostics",
     "disconnectLabel": "Disconnect",
     "trafficMode": "Traffic mode",
     "chooseNode": "Choose a node",
@@ -102,7 +95,7 @@
     "selectedGroupLabel": "Selected policy group",
     "groupVia": "Via {{node}}",
     "trafficModeRule": "Rule",
-    "vpnPermissionHint": "macOS will ask to add a VPN configuration. Choose Allow to connect.",
+    "vpnPermissionHint": "macOS asks to add a VPN configuration when you connect. Choose Allow. If you chose Don't Allow before, allow VoyaVPN in System Settings → VPN.",
     "noSelection": "No node selected",
     "viewLogs": "View logs",
     "profilesFailed": "Could not read the node list: {{message}}",
@@ -110,7 +103,9 @@
       "connect": "Could not connect: {{message}}",
       "disconnect": "Could not disconnect: {{message}}",
       "restart": "Could not restart: {{message}}"
-    }
+    },
+    "reconnect": "Reconnect",
+    "authorizationDeclined": "System authorization was not granted, so VoyaVPN could not connect. Try again and allow it in the system prompt."
   },
   "logCodes": {
     "connected": "Core supervisor started",
@@ -139,11 +134,11 @@
     "themeSystem": "Follow system"
   },
   "missingCore": {
-    "description": "The {{core}} core executable is missing. Install it to connect.",
-    "install": "Install core",
-    "installing": "Installing…",
-    "seedMissingHint": "No bundled sing-box core is available. Reinstall the app or rebuild the package with the sing-box seed.",
-    "title": "Core not installed"
+    "description": "VoyaVPN is missing a component it needs to connect ({{core}}). Repair it to connect.",
+    "install": "Repair",
+    "installing": "Repairing…",
+    "seedMissingHint": "No bundled component is available to repair with. Reinstall VoyaVPN.",
+    "title": "A required component is missing"
   },
   "modal": {
     "language": "Language",
@@ -693,7 +688,7 @@
       "dnsBehavior": "DNS behavior",
       "dnsServers": "DNS servers and strategies",
       "dnsHosts": "Hosts and expected IPs",
-      "resources": "Rule resources",
+      "resources": "Rule library",
       "localProxy": "Local proxy",
       "connection": "Connection",
       "window": "Window",
@@ -826,8 +821,8 @@
       "unsupported": "Unsupported"
     },
     "checkApp": "Check app",
-    "geoDescription": "Update Geo resources now using the built-in sources and runtime proxy policy.",
-    "geoTitle": "Geo assets",
+    "geoDescription": "Download the latest data rules use to recognize regions and sites.",
+    "geoTitle": "IP and domain data",
     "installApp": "Install app",
     "noAppUpdate": "App is up to date",
     "redactedUrl": "[redacted URL]",
@@ -835,8 +830,8 @@
     "resourceUpdated": "Updated {{count}} files",
     "restartApp": "Restart app",
     "restartRequired": "Restart VoyaVPN to finish applying the update.",
-    "srsDescription": "Update SRS rulesets now using the built-in source and runtime proxy policy.",
-    "srsTitle": "SRS assets",
+    "srsDescription": "Download the latest rule sets the Rules page uses.",
+    "srsTitle": "Rule sets",
     "title": "Check Updates",
     "updateNow": "Update now",
     "waiting": "Waiting"

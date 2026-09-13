@@ -82,7 +82,7 @@ describe("UpdatesPanel", () => {
 
     render(<QueryClientProvider client={new QueryClient()}><UpdatesPanel /></QueryClientProvider>);
 
-    const geo = await screen.findByRole("region", { name: "Geo assets" });
+    const geo = await screen.findByRole("region", { name: "IP and domain data" });
     await user.click(within(geo).getByRole("button", { name: "Update now" }));
 
     await waitFor(() => expect(ipcMocks.updateGeoAssets).toHaveBeenCalledTimes(1));
@@ -99,7 +99,7 @@ describe("UpdatesPanel", () => {
 
     render(<QueryClientProvider client={new QueryClient()}><UpdatesPanel /></QueryClientProvider>);
 
-    const srs = await screen.findByRole("region", { name: "SRS assets" });
+    const srs = await screen.findByRole("region", { name: "Rule sets" });
     await user.click(within(srs).getByRole("button", { name: "Update now" }));
 
     await waitFor(() => expect(ipcMocks.updateSrsAssets).toHaveBeenCalledTimes(1));
