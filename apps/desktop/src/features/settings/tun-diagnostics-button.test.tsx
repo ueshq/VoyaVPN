@@ -56,7 +56,7 @@ describe("TunDiagnosticsButton", () => {
 
     render(<TunDiagnosticsButton />);
 
-    await user.click(screen.getByRole("button", { name: "Copy TUN diagnostics" }));
+    await user.click(screen.getByRole("button", { name: "Copy VPN diagnostics" }));
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
     const payload = JSON.parse(String(writeText.mock.calls[0]?.[0]));
@@ -79,8 +79,8 @@ describe("TunDiagnosticsButton", () => {
     expect(payload.providerLogTail).toEqual(["2026-07-08T10:00:00Z failed: The VPN session failed."]);
     expect(payload.hostLogTail).toEqual(["nesessionmanager: Validation failed - no audit tokens"]);
     expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
-      description: "TUN diagnostics copied to clipboard.",
-      title: "Copy TUN diagnostics",
+      description: "VPN diagnostics copied to clipboard.",
+      title: "Copy VPN diagnostics",
     });
   });
 
@@ -90,12 +90,12 @@ describe("TunDiagnosticsButton", () => {
 
     render(<TunDiagnosticsButton />);
 
-    await user.click(screen.getByRole("button", { name: "Copy TUN diagnostics" }));
+    await user.click(screen.getByRole("button", { name: "Copy VPN diagnostics" }));
 
     await waitFor(() =>
       expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
         description: "Clipboard write is unavailable in this context.",
-        title: "Failed to copy TUN diagnostics",
+        title: "Failed to copy VPN diagnostics",
       }),
     );
     expect(ipcMocks.tunProviderDiagnostics).not.toHaveBeenCalled();
@@ -108,15 +108,15 @@ describe("TunDiagnosticsButton", () => {
 
     render(<TunDiagnosticsButton />);
 
-    await user.click(screen.getByRole("button", { name: "Copy TUN diagnostics" }));
+    await user.click(screen.getByRole("button", { name: "Copy VPN diagnostics" }));
 
     await waitFor(() =>
       expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
         description: "diagnostics unavailable",
-        title: "Failed to copy TUN diagnostics",
+        title: "Failed to copy VPN diagnostics",
       }),
     );
-    expect(screen.getByRole("button", { name: "Copy TUN diagnostics" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Copy VPN diagnostics" })).toBeEnabled();
   });
 });
 

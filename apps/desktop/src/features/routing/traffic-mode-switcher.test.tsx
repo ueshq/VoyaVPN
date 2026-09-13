@@ -199,6 +199,11 @@ describe("rules traffic mode", () => {
     renderSwitcher();
     expect(screen.getByRole("button", { name: "Rule" })).toBeDisabled();
     expect(await screen.findByRole("alert")).toHaveTextContent("read failed");
+    // The disabled buttons cannot say why, so their group does.
+    expect(screen.getByRole("group", { name: "Traffic mode" })).toHaveAttribute(
+      "title",
+      "The current mode could not be read",
+    );
     await user.click(screen.getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Rule" })).toBeEnabled());
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();

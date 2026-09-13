@@ -15,7 +15,7 @@
     "refreshRuntimeState": "Refresh runtime state",
     "reload": "Reload",
     "reloadCoreConfig": "Reload core configuration",
-    "restart": "Restart",
+    "restart": "Reconnect",
     "retry": "Try again",
     "save": "Save",
     "settings": "Settings"
@@ -48,10 +48,10 @@
     "connectionModeChanged": "Connection mode change",
     "disconnect": "Disconnection",
     "dnsChanged": "DNS change",
-    "restart": "Restart",
+    "restart": "Reconnect",
     "routingChanged": "Routing change",
     "settingsSaved": "Settings save",
-    "tunChanged": "TUN change",
+    "tunChanged": "VPN settings change",
     "activeProfileChanged": "Node switch",
     "policyGroupChanged": "Policy group change"
   },
@@ -73,18 +73,18 @@
     "retryDisconnect": "Retry disconnect",
     "latency": "Latency",
     "duration": "Connection time",
-    "currentNodeLabel": "Current node",
+    "currentNodeLabel": "In use",
     "switchNode": "Switch node",
     "disconnectLabel": "Disconnect",
     "chooseNode": "Choose a node",
-    "selectedNodeLabel": "Selected node",
+    "selectedNodeLabel": "Selected",
     "exitIp": "Exit IP",
     "checkIp": "Check exit IP",
     "checkIpChecking": "Checking…",
     "checkIpFailed": "Check failed",
     "checkIpUnknown": "Unknown",
-    "currentGroupLabel": "Current policy group",
-    "selectedGroupLabel": "Selected policy group",
+    "currentGroupLabel": "In use · Policy group",
+    "selectedGroupLabel": "Selected · Policy group",
     "groupVia": "Via {{node}}",
     "vpnPermissionHint": "macOS asks to add a VPN configuration when you connect. Choose Allow. If you chose Don't Allow before, allow VoyaVPN in System Settings → VPN.",
     "noSelection": "No node selected",
@@ -93,11 +93,13 @@
     "actionFailed": {
       "connect": "Could not connect: {{message}}",
       "disconnect": "Could not disconnect: {{message}}",
-      "restart": "Could not restart: {{message}}"
+      "restart": "Could not reconnect: {{message}}"
     },
     "reconnect": "Reconnect",
     "authorizationDeclined": "System authorization was not granted, so VoyaVPN could not connect. Try again and allow it in the system prompt.",
-    "globalModeChip": "Global proxy"
+    "globalModeChip": "Global proxy",
+    "modePendingReason": "Switching modes, please wait",
+    "checkIpNeedsConnection": "Connect to check the exit IP"
   },
   "logCodes": {
     "connected": "Core supervisor started",
@@ -139,38 +141,38 @@
   },
   "notices": {
     "connectionModeRefreshFailed": "Connection mode refresh failed",
-    "connectionModeSavedRestartFailed": "Connection mode saved; core restart failed",
-    "coreStartedSystemProxyFailed": "Core started; system proxy update failed",
-    "coreStopped": "Core stopped",
+    "connectionModeSavedRestartFailed": "Capture mode saved, but reconnecting failed",
+    "coreStartedSystemProxyFailed": "Connected, but setting the system proxy failed",
+    "coreStopped": "The connection stopped unexpectedly",
     "dnsRefreshFailed": "DNS refresh failed",
-    "dnsSavedRestartFailed": "DNS saved; core restart failed",
-    "nativeTunStopped": "Native TUN stopped",
+    "dnsSavedRestartFailed": "DNS saved, but reconnecting failed",
+    "nativeTunStopped": "The VPN stopped",
     "profileRefreshFailed": "Node list refresh failed",
-    "proxyModeSavedRuntimeUpdateFailed": "Proxy mode saved; runtime update failed",
+    "proxyModeSavedRuntimeUpdateFailed": "Proxy mode saved, but it could not be applied to the current connection",
     "proxyViewRefreshFailed": "Proxy view refresh failed",
-    "routingDeletedRestartFailed": "Routing deleted; core restart failed",
+    "routingDeletedRestartFailed": "Rule set deleted, but reconnecting failed",
     "routingRefreshFailed": "Routing refresh failed",
-    "routingRuleMovedRestartFailed": "Routing rule moved; core restart failed",
-    "routingRuleSavedRestartFailed": "Routing rule saved; core restart failed",
-    "routingRulesDeletedRestartFailed": "Routing rules deleted; core restart failed",
-    "routingSavedRestartFailed": "Routing saved; core restart failed",
-    "routingSelectedRestartFailed": "Routing selected; core restart failed",
+    "routingRuleMovedRestartFailed": "Rule order saved, but reconnecting failed",
+    "routingRuleSavedRestartFailed": "Rule saved, but reconnecting failed",
+    "routingRulesDeletedRestartFailed": "Rules deleted, but reconnecting failed",
+    "routingSavedRestartFailed": "Rule set saved, but reconnecting failed",
+    "routingSelectedRestartFailed": "Rule set switched, but reconnecting failed",
     "settingsRefreshFailed": "Settings refresh failed",
-    "settingsSavedRuntimeUpdateFailed": "Settings saved; runtime update failed",
-    "settingsSavedSystemProxyUpdateFailed": "Settings saved; system proxy update failed",
+    "settingsSavedRuntimeUpdateFailed": "Settings saved, but they could not be applied to the current connection",
+    "settingsSavedSystemProxyUpdateFailed": "Settings saved, but updating the system proxy failed",
     "subscriptionAutoUpdateFailed": "Automatic subscription update failed: {{remarks}}",
     "subscriptionRefreshFailed": "Subscription refresh failed",
     "systemProxyRestoreFailed": "System proxy restore failed",
     "systemProxyStatusRefreshFailed": "System proxy status refresh failed",
     "trayRefreshFailed": "Tray refresh failed",
-    "tunSavedRestartFailed": "TUN saved; core restart failed",
-    "tunStatusRefreshFailed": "TUN status refresh failed",
-    "routingRulesResetRestartFailed": "Default rules restored; core restart failed",
+    "tunSavedRestartFailed": "VPN settings saved, but reconnecting failed",
+    "tunStatusRefreshFailed": "VPN status refresh failed",
+    "routingRulesResetRestartFailed": "Default rules restored, but reconnecting failed",
     "trayActionFailed": "Tray action failed",
-    "activeProfileRestartFailed": "Node switched; core restart failed",
+    "activeProfileRestartFailed": "Node switched, but reconnecting failed",
     "policyGroupRefreshFailed": "Policy group refresh failed",
-    "policyGroupSavedRestartFailed": "Policy group saved; core restart failed",
-    "policyGroupSelectionRuntimeUpdateFailed": "Selection saved; the running core could not switch",
+    "policyGroupSavedRestartFailed": "Policy group saved, but reconnecting failed",
+    "policyGroupSelectionRuntimeUpdateFailed": "Selection saved, but the current connection could not switch",
     "activeSelectionRemoved": "The node or policy group in use was deleted, so the connection stopped."
   },
   "options": {
@@ -200,7 +202,7 @@
       "remoteDns": "Remote DNS",
       "standard": "Standard",
       "title": "DNS",
-      "strategyHint": "Prefer IPv4 or IPv6 when resolving a hostname. Empty uses the core default.",
+      "strategyHint": "Prefer IPv4 or IPv6 when resolving a hostname.",
       "expectedHint": "For direct DNS: use these IP ranges to check whether a response should be accepted.",
       "strategyIpv4": "Prefer IPv4",
       "strategyIpv6": "Prefer IPv6",
@@ -214,7 +216,11 @@
         "google": "Google",
         "dnspod": "DNSPod (Tencent)",
         "aliyun": "Alibaba Cloud"
-      }
+      },
+      "fakeIpHint": "Hands out placeholder IPs for hostnames, so connections start faster and domain rules match more reliably.",
+      "bootstrapHint": "Resolves the DNS servers' own addresses; use an IP address.",
+      "commonHostsHint": "Presets the addresses of well-known DNS servers, so those servers need no lookup of their own.",
+      "blockBindingQueryHint": "Answers HTTPS/SVCB lookups with nothing, so browsers cannot use them to get around the proxy."
     },
     "logs": {
       "empty": "No log lines",
@@ -380,7 +386,8 @@
         "testAll": "Test all",
         "stopProgress": "Stop ({{done}}/{{total}})",
         "settings": "Speed test settings",
-        "settingsDescription": "These apply to every latency test."
+        "settingsDescription": "These apply to every latency test.",
+        "nothingToTest": "There are no nodes to test"
       },
       "title": "Nodes",
       "toolbar": {
@@ -430,7 +437,8 @@
         "label": "View",
         "sortByLatency": "Sort by latency",
         "hideUnreachable": "Hide unreachable nodes"
-      }
+      },
+      "loadingNodes": "Loading nodes"
     },
     "proxyConnections": {
       "empty": "No active connections"
@@ -441,7 +449,7 @@
       "domain": "Domain",
       "editRule": "Edit rule",
       "emptyRules": "No rules",
-      "enabled": "Enabled",
+      "enabled": "On",
       "moveRuleDown": "Move down",
       "moveRuleUp": "Move up",
       "network": "Network",
@@ -462,7 +470,7 @@
       "perAppRemove": "Remove {{process}}",
       "perAppRunningApps": "Running apps and installed applications",
       "perAppTitle": "Per-app proxy",
-      "perAppTunOnlyHint": "App-based rules only take effect in TUN mode.",
+      "perAppTunOnlyHint": "App-based rules only take effect in VPN mode.",
       "port": "Port",
       "process": "Process",
       "protocol": "Protocol",
@@ -472,7 +480,7 @@
       "title": "Routing",
       "untitled": "Untitled",
       "resetRules": "Restore defaults",
-      "managedRule": "Built-in",
+      "managedRule": "Default",
       "noActiveRouting": "No rule set is active.",
       "addRule": "Add rule",
       "ruleOrderHint": "Rules match from top to bottom; traffic that matches none goes through the proxy.",
@@ -504,11 +512,11 @@
       "ipHelp": "One per line: an address or CIDR such as 10.0.0.0/8, or a rule set such as geoip:cn.",
       "portHelp": "Comma-separated ports or ranges, such as 443 or 1000-2000.",
       "networkHelp": "Leave both unchecked to match TCP and UDP.",
-      "processHelp": "One per line: a process name such as chrome.exe, or a full path. Only takes effect in TUN mode.",
+      "processHelp": "One per line: a process name such as chrome.exe, or a full path. Only takes effect in VPN mode.",
       "protocolHelp": "Sniffed protocols, one per line, such as http, tls, quic or bittorrent.",
       "matchNothing": "No conditions, so this rule never matches",
       "matchMore": "+{{count}}",
-      "managedRuleHint": "Built-in rule: you can edit, turn off or move it; Restore default rules brings it back.",
+      "managedRuleHint": "Default rule: you can edit, turn off or move it; Restore default rules brings it back.",
       "emptyRulesHint": "All traffic goes through the proxy. Add a rule, or restore the default rules.",
       "globalModeBanner": "Global mode is on: all captured traffic goes through the proxy and these rules are skipped.",
       "rulesLocked": "Rules don't apply in global mode. Switch to Rule to edit them.",
@@ -539,7 +547,8 @@
         "ads": "Ads",
         "cnIps": "China IPs",
         "lanIps": "LAN IPs"
-      }
+      },
+      "trafficModeUnavailable": "The current mode could not be read"
     },
     "subscriptions": {
       "additionalUrl": "More URL",
@@ -571,7 +580,7 @@
     }
   },
   "proxy": {
-    "closeConnectionFailed": "Failed to close the connection",
+    "closeConnectionFailed": "Could not disconnect the connection",
     "cumulativeDownload": "Cumulative download {{total}}",
     "cumulativeUpload": "Cumulative upload {{total}}",
     "filterConnections": "Search domains, IPs or applications",
@@ -589,7 +598,8 @@
       "connectToView": "Connect to see which node your policy group uses.",
       "noActiveGroup": "This connection uses a single node. Use a policy group on the Nodes page to see it here.",
       "openNodes": "Open nodes",
-      "actionFailed": "Policy group action failed"
+      "actionFailed": "Policy group action failed",
+      "autoMemberHint": "An automatic strategy picks the node itself, so it cannot be switched here."
     }
   },
   "qr": {
@@ -613,7 +623,7 @@
       "fingerprint": "Default TLS fingerprint",
       "hysteriaBandwidth": "Hysteria bandwidth",
       "hysteriaHopInterval": "Port hopping interval (seconds)",
-      "logEnabled": "Record core log",
+      "logEnabled": "Record detailed connection log",
       "logLevel": "Log level",
       "muxEnabled": "Multiplexing (Mux)",
       "muxProtocol": "Multiplexing protocol",
@@ -625,7 +635,9 @@
       "tlsFragmentRecord": "Split TLS records",
       "fragmentFallbackDelay": "Fragment fallback delay (ms)",
       "allowInsecureHint": "Risky: connects even when a server's certificate is invalid, so traffic can be intercepted. Only turn on if your provider requires it.",
-      "cacheFileHint": "Keeps downloaded rule sets and other state on disk so reconnecting is faster."
+      "cacheFileHint": "Keeps downloaded rule sets and other state on disk so reconnecting is faster.",
+      "muxEnabledHint": "Carries several requests over one connection, which can cut latency when the node supports it.",
+      "muxProtocolHint": "Must match the node's server setting."
     },
     "fields": {
       "hysteriaDownMbps": "Download bandwidth (Mbps)",
@@ -654,7 +666,23 @@
       "separateLanPort": "Separate LAN port",
       "separateLanPortHint": "LAN devices connect to port {{port}}, which can require a username and password.",
       "lanUsername": "LAN username",
-      "lanPassword": "LAN password"
+      "lanPassword": "LAN password",
+      "tunStackOptions": {
+        "system": "System stack",
+        "gvisor": "gVisor (most compatible)",
+        "mixed": "Mixed"
+      },
+      "tunStackHint": "How the VPN handles packets. Try another one if connections misbehave.",
+      "icmpOptions": {
+        "rule": "Follow the rules",
+        "direct": "Let through directly",
+        "unreachable": "Reply unreachable",
+        "drop": "Drop silently",
+        "reply": "Answer locally"
+      },
+      "icmpHint": "Where ping and other ICMP traffic goes.",
+      "tunAutoRouteHint": "Sends system traffic into the VPN automatically; usually keep this on.",
+      "enableIpv6Hint": "Gives the VPN an IPv6 address; turn this on only if your node supports IPv6."
     },
     "startup": "Startup",
     "tabGeneral": "General",
@@ -672,10 +700,10 @@
     },
     "sections": {
       "appearance": "Appearance",
-      "coreBasics": "Core and logging",
+      "coreBasics": "Connection engine and logs",
       "outbound": "Outbound settings",
       "multiplexing": "Multiplexing",
-      "tun": "TUN",
+      "tun": "VPN mode settings",
       "systemProxy": "System proxy",
       "testExecution": "Test execution",
       "testAddresses": "Test addresses",
@@ -733,14 +761,14 @@
       "vpnOnly": "Only works in VPN mode. Choose it under Advanced → Traffic capture."
     },
     "logs": {
-      "coreLogOff": "Core logging is off, so only VoyaVPN's own messages appear here. Turn on “Record core log” above for connection details."
+      "coreLogOff": "Detailed connection logging is off, so only VoyaVPN's own messages appear here. Turn on “Record detailed connection log” above for connection details."
     }
   },
   "speedtest": {
     "outcome": {
       "cancelled": "Cancelled",
       "completed": "Completed",
-      "coreUnavailable": "The test core could not be started",
+      "coreUnavailable": "The speed test component could not start",
       "failed": "Test failed",
       "invalidProfile": "The node is not valid",
       "noAvailablePort": "No free local port",
@@ -759,10 +787,10 @@
     "connected": "Connected",
     "connecting": "Connecting",
     "connectionModeChangeFailed": "Failed to change connection mode",
-    "copyTunDiagnostics": "Copy TUN diagnostics",
+    "copyTunDiagnostics": "Copy VPN diagnostics",
     "copyTunDiagnosticsClipboardUnavailable": "Clipboard write is unavailable in this context.",
-    "copyTunDiagnosticsCopied": "TUN diagnostics copied to clipboard.",
-    "copyTunDiagnosticsFailed": "Failed to copy TUN diagnostics",
+    "copyTunDiagnosticsCopied": "VPN diagnostics copied to clipboard.",
+    "copyTunDiagnosticsFailed": "Failed to copy VPN diagnostics",
     "disconnected": "Disconnected",
     "disconnecting": "Disconnecting",
     "download": "Down {{speed}}",
@@ -779,10 +807,10 @@
     "screenErrorTitle": "Something went wrong",
     "sysProxyStatusFailed": "Failed to read system proxy status",
     "tunBackendMacos": "macOS PacketTunnel",
-    "tunBackendProcess": "Process TUN",
-    "tunBackendUnsupported": "Unsupported TUN",
+    "tunBackendProcess": "VPN process",
+    "tunBackendUnsupported": "VPN unsupported",
     "tunBackendWindows": "Windows Service",
-    "tunEnableFailed": "Failed to enable TUN",
+    "tunEnableFailed": "Failed to enable the VPN",
     "tunProviderError": "Error",
     "tunProviderMissingComponent": "Missing component",
     "tunProviderNotApplicable": "Not applicable",
@@ -791,7 +819,7 @@
     "tunProviderRunning": "Running",
     "tunProviderStarting": "Starting",
     "tunProviderStopped": "Stopped",
-    "tunStatusFailed": "Failed to read TUN status",
+    "tunStatusFailed": "Failed to read the VPN status",
     "upload": "Up {{speed}}"
   },
   "tabs": {
@@ -828,7 +856,8 @@
     "srsTitle": "Rule sets",
     "title": "Check Updates",
     "updateNow": "Update now",
-    "waiting": "Waiting"
+    "waiting": "Waiting",
+    "busyReason": "Wait for the current update step to finish"
   },
   "validation": {
     "dnsAddressEmpty": "The DNS address must not be empty",
@@ -848,7 +877,7 @@
     "listItem": "List items cannot be empty",
     "negativeHysteriaBandwidth": "Hysteria bandwidth cannot be negative",
     "port": "Port must be a comma-separated list of ports or ranges",
-    "portRange": "Port values must be between 0 and 65535 and ranges must ascend",
+    "portRange": "Port values must be between 1 and 65535 and ranges must ascend",
     "remarksLength": "Remarks must be 256 characters or fewer",
     "routingRuleOutboundNotFound": "Routing rule {{rule}} points at the missing outbound {{outbound}}",
     "routingRuleWithoutOutbound": "Routing rule {{rule}} has no outbound",
@@ -860,7 +889,7 @@
     "textRequired": "This value is required",
     "textTooLong": "This value is too long",
     "tooManyItems": "Too many items",
-    "tunMtuOutOfRange": "The TUN MTU must be between {{min}} and {{max}}",
+    "tunMtuOutOfRange": "The VPN MTU must be between {{min}} and {{max}}",
     "unsupportedProtocol": "sing-box does not support the {{protocol}} protocol",
     "unsupportedProtocolNetwork": "sing-box does not support {{protocol}} over {{network}}",
     "unsupportedSettingsSchema": "Unsupported settings version {{found}}; this build expects {{expected}}",
@@ -917,7 +946,9 @@
     "connectionCount": "{{count}} connections",
     "filteredConnections": "{{count}} of {{total}} connections",
     "disconnectRow": "Disconnect {{target}}",
-    "ruleFinal": "No rule matched (default route)"
+    "ruleFinal": "No rule matched (default route)",
+    "statusLoading": "Reading the connection state…",
+    "loadingConnections": "Loading connections"
   },
   "nodeGroups": {
     "local": "Local nodes",
@@ -929,7 +960,8 @@
   "common": {
     "advanced": "Advanced options",
     "none": "None",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "waitForConnection": "Wait for the connection to settle, then try again"
   },
   "subscriptions": {
     "edit": "Subscription settings",

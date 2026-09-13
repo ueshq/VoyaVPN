@@ -13,6 +13,7 @@ import {
 
 import { Toolbar } from "@/components/app-shell/toolbar";
 import { Button } from "@voya/ui/components/button";
+import { DisabledReason } from "@/components/disabled-reason";
 import {
   Menubar,
   MenubarContent,
@@ -66,19 +67,23 @@ export function ServerTableToolbar({
 
   return (
     <Toolbar className="min-w-0 max-w-full justify-end">
-      <SpeedtestButton
-        disabled={!profiles.length}
-        label={t("panes.profiles.speedtest.testAll")}
-        onCancel={handleCancelSpeedtest}
-        onRun={() =>
-          handleSpeedtest({
-            profileIds: profiles.map((item) => item.profile.id),
-            scope: "profiles",
-          })
-        }
-        progress={speedtestProgress}
-        running={speedtestRunning}
-      />
+      <DisabledReason
+        reason={profiles.length ? undefined : t("panes.profiles.speedtest.nothingToTest")}
+      >
+        <SpeedtestButton
+          disabled={!profiles.length}
+          label={t("panes.profiles.speedtest.testAll")}
+          onCancel={handleCancelSpeedtest}
+          onRun={() =>
+            handleSpeedtest({
+              profileIds: profiles.map((item) => item.profile.id),
+              scope: "profiles",
+            })
+          }
+          progress={speedtestProgress}
+          running={speedtestRunning}
+        />
+      </DisabledReason>
       <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
         <MenubarMenu>
           <MenubarTrigger asChild className="h-8">

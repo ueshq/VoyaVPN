@@ -29,7 +29,7 @@ describe("PerAppSummaryCard", () => {
     expect(screen.getByText("steam")).toBeInTheDocument();
     expect(screen.getByText("Applied before every rule below.")).toBeInTheDocument();
     await screen.findByText("steam");
-    expect(screen.queryByText("App-based rules only take effect in TUN mode.")).not.toBeInTheDocument();
+    expect(screen.queryByText("App-based rules only take effect in VPN mode.")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Edit" }));
     expect(onEdit).toHaveBeenCalledOnce();
   });

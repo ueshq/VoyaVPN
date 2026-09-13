@@ -50,7 +50,8 @@ function validatePortExpression(value: string | null | undefined, context: z.Ref
 
     const start = Number(match[1]);
     const end = match[2] ? Number(match[2]) : start;
-    if (start > 65535 || end > 65535 || start > end) {
+    // Port 0 matches nothing, so a range starts at 1.
+    if (start < 1 || end > 65535 || start > end) {
       context.addIssue({ code: "custom", message: "validation.portRange" });
       return;
     }

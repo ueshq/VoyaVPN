@@ -51,7 +51,7 @@ describe("semantic settings tabs", () => {
     });
     render(<TabHarness Component={AdvancedTab} />);
 
-    expect(screen.getByRole("heading", { name: "TUN" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "VPN mode settings" })).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "Traffic capture" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "System proxy" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Per-app proxy" })).not.toBeInTheDocument();

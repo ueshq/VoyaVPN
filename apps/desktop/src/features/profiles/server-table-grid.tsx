@@ -52,7 +52,7 @@ export function ProfileCardList({
       >
         {profilesQuery.isLoading && !rows.length ? (
           <div
-            aria-label={t("status.loadingScreen")}
+            aria-label={t("panes.profiles.loadingNodes")}
             aria-busy="true"
             className="grid gap-3"
             role="status"

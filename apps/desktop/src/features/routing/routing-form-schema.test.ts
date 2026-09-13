@@ -19,6 +19,7 @@ describe("strict routing rule schema", () => {
   it.each([
     ["abc", "validation.port"],
     ["70000", "validation.portRange"],
+    ["0", "validation.portRange"],
     ["100-10", "validation.portRange"],
   ])("rejects invalid port expression %s", (port, message) => {
     const result = routingRuleSchema.safeParse({ ...baseRule(), port });

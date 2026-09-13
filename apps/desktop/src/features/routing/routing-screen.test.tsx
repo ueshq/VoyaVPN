@@ -72,7 +72,7 @@ describe("RoutingScreen", () => {
     expect(within(card).getByText("Proxy these apps")).toBeInTheDocument();
     expect(within(card).getByText("steam")).toBeInTheDocument();
     expect(within(card).getByText("+1")).toBeInTheDocument();
-    expect(await within(card).findByText("App-based rules only take effect in TUN mode.")).toBeInTheDocument();
+    expect(await within(card).findByText("App-based rules only take effect in VPN mode.")).toBeInTheDocument();
   });
 
   it("adds a rule, then edits one on double click", async () => {

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
+import { DisabledReason } from "@/components/disabled-reason";
 import { cn } from "@voya/ui/lib/utils";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { redactOperationalMessage } from "@voya/utils/operational-redaction";
@@ -107,6 +108,7 @@ function AppUpdatePanel({
         </div>
         <div className="ms-auto flex flex-wrap items-center gap-2">
           {!appInstallResult?.restartRequired ? (
+            <DisabledReason reason={working !== null ? t("updates.busyReason") : undefined}>
             <Button
               disabled={working !== null}
               onClick={() => void onCheck()}
@@ -123,8 +125,10 @@ function AppUpdatePanel({
               />
               {t("updates.checkApp")}
             </Button>
+            </DisabledReason>
           ) : null}
           {update && !appInstallResult?.restartRequired ? (
+            <DisabledReason reason={working !== null ? t("updates.busyReason") : undefined}>
             <Button
               disabled={working !== null || !update}
               onClick={() => void onInstall()}
@@ -140,8 +144,10 @@ function AppUpdatePanel({
               />
               {t("updates.installApp")}
             </Button>
+            </DisabledReason>
           ) : null}
           {appInstallResult?.restartRequired ? (
+            <DisabledReason reason={working !== null ? t("updates.busyReason") : undefined}>
             <Button
               disabled={working !== null}
               onClick={() => void onRestart()}
@@ -157,6 +163,7 @@ function AppUpdatePanel({
               />
               {t("updates.restartApp")}
             </Button>
+            </DisabledReason>
           ) : null}
         </div>
       </div>
@@ -232,6 +239,7 @@ function ResourceRow({
           </p>
         ) : null}
       </div>
+      <DisabledReason reason={working !== null ? t("updates.busyReason") : undefined}>
       <Button
         disabled={working !== null}
         onClick={() => void updateResource(kind)}
@@ -246,6 +254,7 @@ function ResourceRow({
         )}
         {error ? t("settings.autosave.retry") : t("updates.updateNow")}
       </Button>
+      </DisabledReason>
     </section>
   );
 }

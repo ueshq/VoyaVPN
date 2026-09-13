@@ -843,7 +843,7 @@ test("offers macOS only the VPN, without system proxy or per-app settings", asyn
 
   await page.getByRole("tab", { name: "Settings", exact: true }).click();
   await page.getByRole("tab", { name: "Advanced", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "TUN", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "VPN mode settings", exact: true })).toBeVisible();
   await expect(page.getByRole("group", { name: "Traffic capture" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "System proxy", exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Per-app proxy", exact: true })).toHaveCount(0);

@@ -56,6 +56,7 @@ export function CaptureModeSetting() {
         aria-label={t("settings.sections.captureMode")}
         className="grid gap-2 @min-[42rem]:grid-cols-2"
         role="group"
+        title={capture.busy ? t("common.waitForConnection") : undefined}
       >
         {OPTIONS.map(({ hintKey, labelKey, value }) => {
           const selected = capture.mode === value;

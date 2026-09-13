@@ -30,6 +30,17 @@ const LOG_LEVEL_LABELS: Record<(typeof LOG_LEVELS)[number], TranslationKey> = {
   warn: "panes.logs.levels.warn",
   error: "panes.logs.levels.error",
 };
+// sing-box accepts exactly these, and the node's server must use the same one.
+const MUX_PROTOCOLS = ["h2mux", "smux", "yamux"] as const;
+// The contract's default, shown for a stored empty value.
+const DEFAULT_MUX_PROTOCOL = "h2mux";
+
+/** A protocol saved before this became a list stays selectable. */
+function muxProtocolOptions(current: string): readonly string[] {
+  return current && !(MUX_PROTOCOLS as readonly string[]).includes(current)
+    ? [...MUX_PROTOCOLS, current]
+    : MUX_PROTOCOLS;
+}
 // Only these fields live in the collapsed section, so only their errors open it.
 const COLLAPSED_FIELDS = [
   "core.defaultFingerprint",
@@ -88,6 +99,7 @@ export function CoreTab({
           <SettingsCheckbox
             field="core.muxEnabled"
             checked={settings.core.muxEnabled}
+            description={t("settings.core.muxEnabledHint")}
             label={t("settings.core.muxEnabled")}
             onCheckedChange={(muxEnabled) =>
               patchCore({ muxEnabled: muxEnabled === true })
@@ -185,12 +197,14 @@ export function CoreTab({
         </SettingsGroup>
 
         <SettingsGroup title={t("settings.sections.multiplexing")}>
-          <TextField
+          <SelectField
+            description={t("settings.core.muxProtocolHint")}
             field="multiplexing.protocol"
             id="rt-mux-sbox-protocol"
             label={t("settings.core.muxProtocol")}
             onChange={(protocol) => patchMux({ protocol })}
-            value={settings.multiplexing.protocol}
+            options={muxProtocolOptions(settings.multiplexing.protocol)}
+            value={settings.multiplexing.protocol || DEFAULT_MUX_PROTOCOL}
           />
           <NumberField
             defaultValue={SETTING_DEFAULTS.muxMaxConnections}

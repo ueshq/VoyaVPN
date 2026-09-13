@@ -156,7 +156,15 @@ export function PerAppProxyDialog({
       const existing = findPerAppRule(activeRouting);
       const processes = normalizeProcessNames(selected);
       if (mode === "off") {
-        if (existing) {
+        // Turning it off keeps the chosen apps on a disabled rule, so turning
+        // it back on does not mean picking them all again.
+        if (existing && processes.length > 0) {
+          await saveRoutingRule(activeRouting.id, {
+            ...existing,
+            enabled: false,
+            process: processes,
+          });
+        } else if (existing) {
           await deleteRoutingRules(activeRouting.id, [existing.id]);
         }
       } else {

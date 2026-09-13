@@ -136,6 +136,9 @@ export function ProxyGroupsPanel() {
           {t("nodeGroups.test")}
         </Button>
       </div>
+      {group.strategy === "selector" ? null : (
+        <p className="text-xs text-muted-foreground">{t("proxy.groups.autoMemberHint")}</p>
+      )}
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
         {active.members.map((member) => {
           const current = member.profileId === runtime?.nowProfileId;

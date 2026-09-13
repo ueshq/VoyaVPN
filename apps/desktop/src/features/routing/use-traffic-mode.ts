@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { loadAppSettings, proxySetTrafficMode } from "@/ipc/commands";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
@@ -61,6 +62,13 @@ export function useTrafficMode() {
   });
   const ready = state === "connected" || state === "disconnected";
   const disabled = !ready || pending || mode === undefined || error !== null;
+  // A disabled button cannot say why, so the switcher shows this on hover.
+  const disabledReason: TranslationKey | null =
+    error !== null
+      ? "panes.routing.trafficModeUnavailable"
+      : !ready || pending
+        ? "common.waitForConnection"
+        : null;
 
   function selectMode(mode: TrafficMode) {
     if (disabled || runtimeActionPending()) return;
@@ -68,5 +76,5 @@ export function useTrafficMode() {
     mutation.mutate(mode);
   }
 
-  return { disabled, mode, selectMode };
+  return { disabled, disabledReason, mode, selectMode };
 }

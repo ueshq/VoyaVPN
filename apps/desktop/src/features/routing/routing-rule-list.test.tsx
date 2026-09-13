@@ -52,7 +52,7 @@ describe("RoutingRuleList", () => {
       "Empty",
     ]);
     const [ai, quic, office, untitled, empty] = bodyRows();
-    expect(within(ai).getByText("Built-in")).toHaveAttribute("title", expect.stringMatching(/^Built-in rule/));
+    expect(within(ai).getByText("Default")).toHaveAttribute("title", expect.stringMatching(/^Default rule/));
     expect(within(ai).getByText("domain:openai.com")).toBeInTheDocument();
     expect(within(ai).getByText("+1")).toBeInTheDocument();
     expect(within(ai).getByText("Proxy")).toBeInTheDocument();
@@ -61,7 +61,7 @@ describe("RoutingRuleList", () => {
     expect(within(quic).getByText("Block")).toBeInTheDocument();
     expect(within(office).getByTitle("IP")).toHaveTextContent("10.0.0.0/8");
     expect(within(office).getByText("Tokyo")).toBeInTheDocument();
-    expect(within(office).queryByText("Built-in")).not.toBeInTheDocument();
+    expect(within(office).queryByText("Default")).not.toBeInTheDocument();
     expect(within(untitled).getByTitle("Process")).toHaveTextContent("curl");
     expect(within(untitled).getByTitle("Protocol")).toHaveTextContent("quic");
     expect(within(untitled).getByTitle("Network")).toHaveTextContent("TCP");

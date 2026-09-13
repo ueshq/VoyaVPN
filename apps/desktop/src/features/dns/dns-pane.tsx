@@ -101,6 +101,7 @@ function SimpleDnsForm({
         />
         <TextField
           commitOnBlur
+          description={t("panes.dns.bootstrapHint")}
           error={errors.bootstrap}
           label={t("panes.dns.bootstrapDns")}
           layout="row"
@@ -128,11 +129,13 @@ function SimpleDnsForm({
         <div className="grid gap-3 @min-[42rem]:grid-cols-2">
           <CheckboxField
             checked={Boolean(settings.addCommonHosts)}
+            description={t("panes.dns.commonHostsHint")}
             label={t("panes.dns.commonHosts")}
             onChange={(addCommonHosts) => updateSimple({ addCommonHosts })}
           />
           <CheckboxField
             checked={Boolean(settings.blockBindingQuery)}
+            description={t("panes.dns.blockBindingQueryHint")}
             label={t("panes.dns.blockBindingQuery")}
             onChange={(blockBindingQuery) =>
               updateSimple({ blockBindingQuery })
@@ -140,6 +143,7 @@ function SimpleDnsForm({
           />
           <CheckboxField
             checked={Boolean(settings.fakeIp)}
+            description={t("panes.dns.fakeIpHint")}
             label={t("panes.dns.fakeIp")}
             onChange={(fakeIp) => updateSimple({ fakeIp })}
           />

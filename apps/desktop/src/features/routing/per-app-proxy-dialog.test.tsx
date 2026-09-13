@@ -158,7 +158,7 @@ describe("PerAppProxyDialog", () => {
     expect(ipcMocks.moveRoutingRule).not.toHaveBeenCalled();
   });
 
-  it("seeds from an existing managed rule and deletes it when switched off", async () => {
+  it("seeds from an existing managed rule and keeps its apps when switched off", async () => {
     const user = userEvent.setup();
     ipcMocks.listRoutings.mockResolvedValue([
       routing([
@@ -187,6 +187,46 @@ describe("PerAppProxyDialog", () => {
     await user.click(screen.getByRole("button", { name: "Off" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
+    // Off keeps the chosen apps on a disabled rule for next time.
+    await waitFor(() =>
+      expect(ipcMocks.saveRoutingRule).toHaveBeenCalledWith(
+        "routing-1",
+        expect.objectContaining({ enabled: false, id: "rule-9", process: ["steam"] }),
+      ),
+    );
+    expect(ipcMocks.deleteRoutingRules).not.toHaveBeenCalled();
+  });
+
+  it("deletes the managed rule when switched off with no app left", async () => {
+    const user = userEvent.setup();
+    ipcMocks.listRoutings.mockResolvedValue([
+      routing([
+        {
+          domain: null,
+          enabled: true,
+          id: "rule-9",
+          inboundTags: null,
+          ip: null,
+          kind: null,
+          network: null,
+          outbound: "direct",
+          port: null,
+          process: ["steam"],
+          protocol: null,
+          remarks: "voya:per-app-proxy",
+          scope: "routing",
+        },
+      ]),
+    ]);
+    renderDialog();
+
+    const exclude = await screen.findByRole("button", { name: "Bypass these apps" });
+    await waitFor(() => expect(exclude).toHaveAttribute("aria-pressed", "true"));
+
+    await user.click(screen.getByRole("button", { name: "Remove steam" }));
+    await user.click(screen.getByRole("button", { name: "Off" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
     await waitFor(() =>
       expect(ipcMocks.deleteRoutingRules).toHaveBeenCalledWith("routing-1", ["rule-9"]),
     );
@@ -203,7 +243,7 @@ describe("PerAppProxyDialog", () => {
     renderDialog();
 
     expect(
-      await screen.findByText("App-based rules only take effect in TUN mode."),
+      await screen.findByText("App-based rules only take effect in VPN mode."),
     ).toBeInTheDocument();
   });
 

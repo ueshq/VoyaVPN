@@ -16,7 +16,7 @@ const MODES = [
  */
 export function TrafficModeSwitcher() {
   const { t } = useI18n();
-  const { disabled, mode, selectMode } = useTrafficMode();
+  const { disabled, disabledReason, mode, selectMode } = useTrafficMode();
 
   return (
     <div className="flex items-center gap-2">
@@ -31,6 +31,7 @@ export function TrafficModeSwitcher() {
         aria-labelledby="routing-traffic-mode-label"
         className="flex h-8 w-fit items-center rounded-lg bg-muted p-0.5"
         role="group"
+        title={disabled && disabledReason ? t(disabledReason) : undefined}
       >
         {MODES.map(({ value, labelKey }) => (
           <Button

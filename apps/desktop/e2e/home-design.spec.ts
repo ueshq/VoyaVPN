@@ -61,7 +61,7 @@ for (const { layout, language } of [
 ] as const) {
   const labels = language === "en"
     ? { addNode: "Add node", connect: "Connect", disconnect: "Disconnect", collapse: "Collapse sidebar", expand: "Expand sidebar", settings: "Settings", switchNode: "Switch node", nodes: "Nodes", home: "Home", import: "Import" }
-    : { addNode: "添加节点", connect: "连接", disconnect: "断开", collapse: "收起侧栏", expand: "展开侧栏", settings: "设置", switchNode: "切换节点", nodes: "节点", home: "主页", import: "导入" };
+    : { addNode: "添加节点", connect: "连接", disconnect: "断开连接", collapse: "收起侧栏", expand: "展开侧栏", settings: "设置", switchNode: "切换节点", nodes: "节点", home: "主页", import: "导入" };
   test(`home ${layout} ${language} layout stays usable across window sizes, themes and sidebar widths`, async ({
     page,
   }, testInfo) => {

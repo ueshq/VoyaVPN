@@ -305,7 +305,7 @@ describe("HomeScreen", () => {
 
     expect(await screen.findByRole("heading", { name: "Asia" })).toBeInTheDocument();
     expect(await screen.findByText("Via Tokyo")).toBeInTheDocument();
-    expect(screen.getByText("Current policy group")).toBeInTheDocument();
+    expect(screen.getByText("In use · Policy group")).toBeInTheDocument();
     expect(screen.getByText("Lowest latency")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Details" })).not.toBeInTheDocument();
   });

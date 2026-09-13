@@ -18,7 +18,8 @@ export function ModeInfo({ label, hint }: { label: string; hint: string }) {
           <Info aria-hidden="true" className="size-3.5" />
         </button>
       </TooltipTrigger>
-      <TooltipContent>{hint}</TooltipContent>
+      {/* Hints put each mode on its own line. */}
+      <TooltipContent className="whitespace-pre-line">{hint}</TooltipContent>
     </Tooltip>
   );
 }

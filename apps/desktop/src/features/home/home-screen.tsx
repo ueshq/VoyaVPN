@@ -1,4 +1,4 @@
-import { ArrowRight, Globe, Power, RotateCcw } from "lucide-react";
+import { ArrowRight, Globe, Layers, Power, RotateCcw } from "lucide-react";
 
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -8,6 +8,7 @@ import { getErrorMessage } from "@voya/utils/error";
 
 import worldMap from "@/assets/world-map.svg";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
+import { DisabledReason } from "@/components/disabled-reason";
 import { NodeCountryIcon } from "@/components/node-country-icon";
 import { getProtocolLabel } from "@/features/profiles/profile-constants";
 import { profileNameWithoutFlag } from "@/features/profiles/profile-display";
@@ -86,6 +87,10 @@ export function HomeScreen() {
       />
       <div className="home-content">
         <div className="home-hero">
+          {/* The spinner explains a connect in progress; a mode switch needs words. */}
+          <DisabledReason
+            reason={home.modePending && !home.inProgress ? t("home.modePendingReason") : undefined}
+          >
           <ConnectButton
             label={
               noNodes
@@ -109,6 +114,7 @@ export function HomeScreen() {
             t={t}
             cleanupPending={home.state === "cleanupPending"}
           />
+          </DisabledReason>
           {!noNodes ? (
             <ConnectedInfo delayMs={delayMs} t={t}>
               <ExitIpMetric t={t} />
@@ -155,11 +161,12 @@ export function HomeScreen() {
         {!noNodes ? (
           <div className="node-card-surface home-node-card">
             <div aria-hidden="true" className="home-node-icon">
-              <NodeCountryIcon
-                countryCode={
-                  group ? undefined : home.nodeEntry?.metrics.countryCode
-                }
-              />
+              {/* A group has no country, so its icon says it is a group. */}
+              {group ? (
+                <Layers className="size-5" />
+              ) : (
+                <NodeCountryIcon countryCode={home.nodeEntry?.metrics.countryCode} />
+              )}
             </div>
             <div className="home-node-content">
               <p className="home-node-label home-node-label-row">

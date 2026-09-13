@@ -4,6 +4,7 @@ import { LoaderCircle, RefreshCw } from "lucide-react";
 import type { TranslationFunction } from "@voya/i18n";
 import { Button } from "@voya/ui/components/button";
 
+import { DisabledReason } from "@/components/disabled-reason";
 import { checkConnectionIp, loadAppSettings } from "@/ipc/commands";
 import { connectionIpQueryKey, queryKeys } from "@/ipc/query-keys";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
@@ -52,6 +53,9 @@ export function ExitIpMetric({ t }: { t: TranslationFunction }) {
       <dt>{t("home.exitIp")}</dt>
       <dd className="flex items-center gap-1" data-testid="home-exit-ip">
         <span className="truncate">{value}</span>
+        <DisabledReason
+          reason={connectionKey === null ? t("home.checkIpNeedsConnection") : undefined}
+        >
         <Button
           aria-label={t("home.checkIp")}
           className="size-6"
@@ -68,6 +72,7 @@ export function ExitIpMetric({ t }: { t: TranslationFunction }) {
             <RefreshCw aria-hidden="true" className="size-3.5" />
           )}
         </Button>
+        </DisabledReason>
       </dd>
     </div>
   );

@@ -173,7 +173,7 @@ export function ConnectionsPanel({
   ];
   const disconnected = coreState?.state === "disconnected";
   const waitingLabel = !coreState
-    ? t("status.loadingScreen")
+    ? t("activity.statusLoading")
     : coreState.state === "connecting"
       ? t("status.connecting")
       : coreState.state === "cleanupPending"
@@ -290,7 +290,7 @@ export function ConnectionsPanel({
               <span aria-hidden="true" className={ACTION_SLOT} />
             </div>
             {!hasSnapshot && !updateFailed ? (
-              <div aria-label={t("status.loadingScreen")} role="status">
+              <div aria-label={t("activity.loadingConnections")} role="status">
                 {Array.from({ length: 8 }, (_, index) => (
                   <div key={index} className={cn(GRID, "h-14 items-center px-4")}>
                     {headings.map(({ column }) => (

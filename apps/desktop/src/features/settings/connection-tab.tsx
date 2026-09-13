@@ -46,9 +46,11 @@ export function ConnectionTab({
     <div className="grid gap-4">
       <SettingsGroup title={t("settings.sections.killSwitch")}>
         {/* The tunnel's strict route is what keeps traffic from leaving
-            around it, on every platform. */}
+            around it, on every platform. Outside VPN mode there is nothing
+            to protect, so it cannot be changed there. */}
         <SettingsCheckbox
           checked={settings.network.tun.strictRoute}
+          disabled={systemProxyMode}
           description={t(
             systemProxyMode
               ? "settings.killSwitch.vpnOnly"

@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { Disclosure } from "@voya/ui/components/disclosure";
+import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { LogsPanel, type LogFilter } from "@/features/logs/logs-panel";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
@@ -29,6 +30,18 @@ const TUN_ICMP_ROUTING = ["rule", "direct", "unreachable", "drop", "reply"];
 // keeps the control honest about what the core will actually use.
 const DEFAULT_TUN_STACK = "gvisor";
 const DEFAULT_TUN_ICMP_ROUTING = "rule";
+const TUN_STACK_LABELS: Record<string, TranslationKey> = {
+  gvisor: "settings.network.tunStackOptions.gvisor",
+  mixed: "settings.network.tunStackOptions.mixed",
+  system: "settings.network.tunStackOptions.system",
+};
+const TUN_ICMP_LABELS: Record<string, TranslationKey> = {
+  direct: "settings.network.icmpOptions.direct",
+  drop: "settings.network.icmpOptions.drop",
+  reply: "settings.network.icmpOptions.reply",
+  rule: "settings.network.icmpOptions.rule",
+  unreachable: "settings.network.icmpOptions.unreachable",
+};
 
 /**
  * Everything that needs networking knowledge: how traffic is captured, the
@@ -79,6 +92,7 @@ export function AdvancedTab({
           <SettingsCheckbox
             field="network.tun.autoRoute"
             checked={settings.network.tun.autoRoute}
+            description={t("settings.network.tunAutoRouteHint")}
             label={t("settings.network.tunAutoRoute")}
             onCheckedChange={(autoRoute) =>
               patchTun({ autoRoute: autoRoute === true })
@@ -87,6 +101,7 @@ export function AdvancedTab({
           <SettingsCheckbox
             field="network.tun.ipv6Enabled"
             checked={settings.network.tun.ipv6Enabled}
+            description={t("settings.network.enableIpv6Hint")}
             label={t("settings.network.enableIpv6Address")}
             onCheckedChange={(ipv6Enabled) =>
               patchTun({ ipv6Enabled: ipv6Enabled === true })
@@ -101,10 +116,15 @@ export function AdvancedTab({
           )}
         >
           <SelectField
+            description={t("settings.network.tunStackHint")}
             field="network.tun.stack"
             id="rt-tun-stack"
             label={t("settings.network.tunStack")}
             onChange={(stack) => patchTun({ stack })}
+            optionLabel={(stack) => {
+              const key = TUN_STACK_LABELS[stack];
+              return key ? t(key) : stack;
+            }}
             options={TUN_STACKS}
             value={settings.network.tun.stack || DEFAULT_TUN_STACK}
           />
@@ -117,10 +137,15 @@ export function AdvancedTab({
             value={settings.network.tun.mtu}
           />
           <SelectField
+            description={t("settings.network.icmpHint")}
             field="network.tun.icmpRouting"
             id="rt-tun-icmp-routing"
             label={t("settings.network.icmpRoutingPolicy")}
             onChange={(icmpRouting) => patchTun({ icmpRouting })}
+            optionLabel={(policy) => {
+              const key = TUN_ICMP_LABELS[policy];
+              return key ? t(key) : policy;
+            }}
             options={TUN_ICMP_ROUTING}
             value={settings.network.tun.icmpRouting || DEFAULT_TUN_ICMP_ROUTING}
           />
