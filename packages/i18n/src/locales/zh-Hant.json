@@ -784,7 +784,8 @@
     "routingRuleOutboundNotFound": "路由規則 {{rule}} 指向不存在的出站 {{outbound}}",
     "routingRuleWithoutOutbound": "路由規則 {{rule}} 沒有出站",
     "scope": {
-      "routingRuleOutbound": "規則 {{rule}} → {{outbound}}"
+      "routingRuleOutbound": "規則 {{rule}} → {{outbound}}",
+      "policyGroupMember": "策略群組 {{group}} → {{member}}"
     },
     "textControlCharacters": "不允許使用控制字元",
     "textRequired": "此項為必填",
@@ -800,7 +801,8 @@
     "fragmentFallbackDelayOutOfRange": "TLS 分片回退延遲必須介於 {{min}} 到 {{max}} 毫秒之間",
     "inboundPortOutOfRange": "本機代理連接埠必須介於 {{min}} 到 {{max}} 之間",
     "inboundCredentialsIncomplete": "請同時填寫使用者名稱和密碼，或都留空",
-    "inboundRequired": "必須保留一個本機代理入站"
+    "inboundRequired": "必須保留一個本機代理入站",
+    "policyGroupWithoutValidMembers": "策略群組 {{group}} 沒有可用的節點"
   },
   "window": {
     "close": "關閉",

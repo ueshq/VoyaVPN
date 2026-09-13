@@ -1093,7 +1093,7 @@ export type TunStatus = {
  *  greppable, it shows the English diagnostic verbatim, and adding a code for
  *  one is a purely additive change.
  */
-export type ValidationCode = { code: "subscriptionReadOnly"; subscriptionId: string } | { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "unsupportedProtocol"; protocol: string } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | { code: "fragmentFallbackDelayOutOfRange"; min: number; max: number } | { code: "inboundPortOutOfRange"; min: number; max: number } | { code: "inboundCredentialsIncomplete" } | { code: "inboundRequired" } | 
+export type ValidationCode = { code: "subscriptionReadOnly"; subscriptionId: string } | { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "unsupportedProtocol"; protocol: string } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "policyGroupWithoutValidMembers"; group: string } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | { code: "fragmentFallbackDelayOutOfRange"; min: number; max: number } | { code: "inboundPortOutOfRange"; min: number; max: number } | { code: "inboundCredentialsIncomplete" } | { code: "inboundRequired" } | 
 /**
  *  A rejection this contract has no code for. The English `message` is the
  *  failing manager's own diagnostic and is rendered verbatim.
@@ -1123,7 +1123,7 @@ export type ValidationIssue = {
  *  untranslatable. The frontend renders the breadcrumb from these entries and
  *  the translated message after it.
  */
-export type ValidationScope = { kind: "routingRuleOutbound"; rule: string; outbound: string };
+export type ValidationScope = { kind: "routingRuleOutbound"; rule: string; outbound: string } | { kind: "policyGroupMember"; group: string; member: string };
 
 export type WindowChromeConfig = {
 	titleBarLayout: TitleBarLayout,

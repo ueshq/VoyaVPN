@@ -332,6 +332,23 @@
         "ServiceLib/Services/CoreConfig/Singbox/SingboxOutboundService.cs"
       ],
       "core_acceptance": true
+    },
+    {
+      "id": "singbox-outbound-policy-groups",
+      "core": "sing-box",
+      "fixture": "singbox/outbounds/policy_groups.json",
+      "generated": "singbox.outbound.policy_groups",
+      "summary": "The active policy group as the proxy outbound for each strategy: a selector starting on the saved member, a urltest with interval and tolerance, and fallback as a urltest whose tolerance keeps the first reachable member; members sharing a name still get distinct tags.",
+      "hotspots": [
+        "outbounds",
+        "policy-groups"
+      ],
+      "reference_paths": [
+        "crates/voya-core/src/singbox/outbounds/groups.rs",
+        "crates/voya-core/src/groups.rs"
+      ],
+      "core_acceptance": true,
+      "volatile_fields": []
     }
   ]
 }

@@ -1528,6 +1528,156 @@ fn singbox_routing_dns_snapshot_contexts() -> (CoreConfigContext, CoreConfigCont
     (dns_context, tun_context)
 }
 
+struct GroupTestEnv;
+
+impl crate::CoreGenEnv for GroupTestEnv {
+    fn platform(&self) -> CoreGenPlatform {
+        CoreGenPlatform::Linux
+    }
+
+    fn get_profile_by_remarks(&self, _remarks: &str) -> Option<ProfileItem> {
+        None
+    }
+
+    fn get_default_routing(&self, _config: &AppConfig) -> Option<RoutingItem> {
+        None
+    }
+
+    fn get_local_port(&self, _protocol: InboundProtocol) -> i32 {
+        crate::DEFAULT_LOCAL_PORT
+    }
+}
+
+fn group_member(index_id: &str, remarks: &str, port: i32) -> ProfileItem {
+    ProfileItem {
+        index_id: index_id.to_string(),
+        remarks: remarks.to_string(),
+        protocol: ProfileProtocol::Socks {
+            server: endpoint("198.51.100.10", port),
+            username: String::new(),
+            password: String::new(),
+        },
+        transport: Some(raw_transport()),
+        ..ProfileItem::default()
+    }
+}
+
+#[test]
+fn a_group_context_leaves_out_broken_members_and_keeps_the_rest_in_order() {
+    let group = crate::PolicyGroupItem {
+        id: "g".to_string(),
+        name: "Asia".to_string(),
+        strategy: crate::GroupStrategy::UrlTest,
+        ..crate::PolicyGroupItem::default()
+    };
+    let members = vec![
+        group_member("broken", "Broken", 0),
+        group_member("tokyo", "Tokyo", 1080),
+        group_member("osaka", "Osaka", 1081),
+    ];
+    let result = crate::CoreConfigContextBuilder::new(&GroupTestEnv).build_all_for_group(
+        &AppConfig::default(),
+        &group,
+        &members,
+    );
+
+    assert!(result.success());
+    let context = &result.main_result.context;
+    assert_eq!(context.node.index_id, "tokyo");
+    let ids: Vec<&str> = context
+        .active_outbound_nodes()
+        .iter()
+        .map(|node| node.index_id.as_str())
+        .collect();
+    assert_eq!(ids, ["tokyo", "osaka"]);
+    assert!(result
+        .main_result
+        .validator_result
+        .warnings
+        .iter()
+        .any(|warning| warning.scope
+            == [crate::ValidationScope::PolicyGroupMember {
+                group: "Asia".to_string(),
+                member: "Broken".to_string(),
+            }]));
+}
+
+#[test]
+fn a_group_with_no_usable_member_is_rejected_by_name() {
+    let group = crate::PolicyGroupItem {
+        name: "Empty".to_string(),
+        ..crate::PolicyGroupItem::default()
+    };
+    let result = crate::CoreConfigContextBuilder::new(&GroupTestEnv).build_for_group(
+        &AppConfig::default(),
+        &group,
+        &[group_member("broken", "Broken", 0)],
+    );
+
+    assert!(!result.success());
+    assert_eq!(
+        result
+            .validator_result
+            .errors
+            .last()
+            .map(|error| &error.code),
+        Some(&crate::ValidationCode::PolicyGroupWithoutValidMembers {
+            group: "Empty".to_string(),
+        })
+    );
+    assert!(result.context.policy_group.is_none());
+}
+
+#[test]
+fn group_outbounds_clamp_their_timing_and_start_on_the_first_member() {
+    let members = vec![
+        group_member("tokyo", "Tokyo", 1080),
+        group_member("osaka", "Osaka", 1081),
+    ];
+    let mut group = crate::PolicyGroupItem {
+        name: "Asia".to_string(),
+        selected_profile_id: Some("gone".to_string()),
+        ..crate::PolicyGroupItem::default()
+    };
+    let mut context = test_context(AppConfig::default(), members[0].clone());
+    context.policy_group = Some(crate::ContextPolicyGroup {
+        group: group.clone(),
+        members: members.clone(),
+    });
+    let config = generate_singbox_config(&context).expect("selector config");
+    let proxy = config
+        .outbounds
+        .iter()
+        .find(|outbound| outbound.tag == PROXY_TAG)
+        .expect("proxy outbound");
+    assert_eq!(proxy.r#type, "selector");
+    assert_eq!(proxy.default.as_deref(), Some("Tokyo [tokyo]"));
+    assert_eq!(
+        proxy.outbounds.as_deref(),
+        Some(&["Tokyo [tokyo]".to_string(), "Osaka [osaka]".to_string()][..])
+    );
+
+    group.strategy = crate::GroupStrategy::UrlTest;
+    group.interval_seconds = Some(1);
+    group.tolerance_ms = Some(999_999);
+    group.test_url = Some("  ".to_string());
+    context.policy_group = Some(crate::ContextPolicyGroup { group, members });
+    let config = generate_singbox_config(&context).expect("urltest config");
+    let proxy = config
+        .outbounds
+        .iter()
+        .find(|outbound| outbound.tag == PROXY_TAG)
+        .expect("proxy outbound");
+    assert_eq!(proxy.r#type, "urltest");
+    assert_eq!(proxy.interval.as_deref(), Some("30s"));
+    assert_eq!(proxy.tolerance, Some(5_000));
+    assert_eq!(proxy.url.as_deref(), Some(crate::DEFAULT_GROUP_TEST_URL));
+    assert!(config
+        .outbounds
+        .iter()
+        .any(|outbound| outbound.tag == "Osaka [osaka]"));
+}
+
 fn test_context(app_config: AppConfig, node: ProfileItem) -> CoreConfigContext {
     let mut all_proxies_map = BTreeMap::new();
     all_proxies_map.insert(node.index_id.clone(), node.clone());

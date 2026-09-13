@@ -57,6 +57,9 @@ pub fn validation_code_to_contract(code: CoreValidationCode) -> ValidationCode {
         CoreValidationCode::RoutingRuleOutboundNotFound { rule, outbound } => {
             ValidationCode::RoutingRuleOutboundNotFound { rule, outbound }
         }
+        CoreValidationCode::PolicyGroupWithoutValidMembers { group } => {
+            ValidationCode::PolicyGroupWithoutValidMembers { group }
+        }
     }
 }
 
@@ -65,6 +68,9 @@ pub fn validation_scope_to_contract(scope: CoreValidationScope) -> ValidationSco
     match scope {
         CoreValidationScope::RoutingRuleOutbound { rule, outbound } => {
             ValidationScope::RoutingRuleOutbound { rule, outbound }
+        }
+        CoreValidationScope::PolicyGroupMember { group, member } => {
+            ValidationScope::PolicyGroupMember { group, member }
         }
     }
 }

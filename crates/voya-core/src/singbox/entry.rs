@@ -104,18 +104,24 @@ fn speedtest_proxy_tag(port: i32) -> String {
 }
 
 fn validate_active_wireguard(context: &CoreConfigContext) -> Result<(), SingboxConfigError> {
-    if context.node.config_type() == ConfigType::WireGuard
-        && wireguard_public_key(&context.node.protocol).is_none()
-    {
-        return Err(SingboxConfigError::MissingWireGuardPublicKey {
-            remarks: context.node.remarks.clone(),
-        });
+    for node in context.active_outbound_nodes() {
+        if node.config_type() == ConfigType::WireGuard
+            && wireguard_public_key(&node.protocol).is_none()
+        {
+            return Err(SingboxConfigError::MissingWireGuardPublicKey {
+                remarks: node.remarks.clone(),
+            });
+        }
     }
     Ok(())
 }
 
 fn validate_proxy_ports(context: &CoreConfigContext) -> Result<(), SingboxConfigError> {
-    let mut pending = vec![context.node.clone()];
+    let mut pending: Vec<ProfileItem> = context
+        .active_outbound_nodes()
+        .into_iter()
+        .cloned()
+        .collect();
     let mut seen = BTreeSet::new();
 
     while let Some(node) = pending.pop() {

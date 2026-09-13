@@ -69,6 +69,7 @@ Any `volatile_fields` entry must include a concrete reason and should be rare. I
 The golden corpus should grow around these case groups:
 
 - Basic single-node sing-box output for each supported protocol, with no selector/urltest or user-chain outbounds.
+- Policy groups: the active group as the single `proxy` selector or urltest outbound (fallback as a urltest), with distinct member tags and no user chains.
 - Transport and security combinations: raw, ws, grpc, h2, httpupgrade, quic; none, tls, reality, ech; mux on and off.
 - DNS: simple DNS, raw DNS override, fakeip, hosts, expected IPs, bootstrap, final DNS direct/proxy detection, TUN DNS.
 - TUN and pre-socks: sing-box TUN inbound/rules, main/pre context split, loopback pre-socks behavior.

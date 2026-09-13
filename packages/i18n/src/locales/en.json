@@ -784,7 +784,8 @@
     "routingRuleOutboundNotFound": "Routing rule {{rule}} points at the missing outbound {{outbound}}",
     "routingRuleWithoutOutbound": "Routing rule {{rule}} has no outbound",
     "scope": {
-      "routingRuleOutbound": "Rule {{rule}} → {{outbound}}"
+      "routingRuleOutbound": "Rule {{rule}} → {{outbound}}",
+      "policyGroupMember": "Group {{group}} → {{member}}"
     },
     "textControlCharacters": "Control characters are not allowed",
     "textRequired": "This value is required",
@@ -800,7 +801,8 @@
     "fragmentFallbackDelayOutOfRange": "The TLS fragment fallback delay must be between {{min}} and {{max}} ms",
     "inboundPortOutOfRange": "The local proxy port must be between {{min}} and {{max}}",
     "inboundCredentialsIncomplete": "Enter both a username and a password, or leave both empty",
-    "inboundRequired": "A local proxy inbound is required"
+    "inboundRequired": "A local proxy inbound is required",
+    "policyGroupWithoutValidMembers": "Policy group {{group}} has no node that can be used"
   },
   "window": {
     "close": "Close",

@@ -8,8 +8,10 @@ pub(super) fn gen_inbounds(config: &mut SingboxConfig, context: &CoreConfigConte
         .cloned()
         .unwrap_or_default();
     let listen_port = inbound_port(&context.app_config, InboundProtocol::socks);
-    let is_using_local_mixed_port =
-        context.node.address() == LOOPBACK && context.node.port() == listen_port;
+    let is_using_local_mixed_port = context
+        .active_outbound_nodes()
+        .iter()
+        .any(|node| node.address() == LOOPBACK && node.port() == listen_port);
     let mixed_inbound_available = !context.is_tun_enabled || !is_using_local_mixed_port;
 
     config.inbounds.clear();

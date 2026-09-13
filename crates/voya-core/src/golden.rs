@@ -9,10 +9,10 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 
 use crate::{
-    generate_singbox_config, generate_singbox_config_value, AppConfig, CoreConfigContext,
-    CoreGenPlatform, CoreType, ProfileItem, ProfileProtocol, ProfileTransport, RoutingItem,
-    RuleType, RulesItem, ServerEndpoint, TlsMode, TlsSettings, BLOCK_TAG, DIRECT_TAG, LOOPBACK,
-    PROXY_TAG,
+    generate_singbox_config, generate_singbox_config_value, AppConfig, ContextPolicyGroup,
+    CoreConfigContext, CoreGenPlatform, CoreType, GroupStrategy, PolicyGroupItem, ProfileItem,
+    ProfileProtocol, ProfileTransport, RoutingItem, RuleType, RulesItem, ServerEndpoint, TlsMode,
+    TlsSettings, BLOCK_TAG, DIRECT_TAG, LOOPBACK, PROXY_TAG,
 };
 
 #[derive(Debug, Deserialize)]
@@ -119,6 +119,7 @@ pub(crate) fn generated_value_for_case(case: &GoldenCase) -> Value {
         "singbox.inbounds.tun_macos" => singbox_tun_inbounds_macos(),
         "singbox.route.tun" => singbox_tun_route(),
         "singbox.route.default_seed" => singbox_default_seed_snapshot(),
+        "singbox.outbound.policy_groups" => singbox_policy_groups_snapshot(),
         "singbox.outbound.tuic_tls" => singbox_tuic_tls_outbound(),
         "singbox.outbound.anytls_tls" => singbox_anytls_tls_outbound(),
         "singbox.outbound.naive_quic_tls" => singbox_naive_quic_tls_outbound(),
@@ -631,6 +632,62 @@ fn singbox_default_seed_snapshot() -> Value {
     })
 }
 
+const POLICY_GROUP_STRATEGIES: [GroupStrategy; 3] = [
+    GroupStrategy::Selector,
+    GroupStrategy::UrlTest,
+    GroupStrategy::Fallback,
+];
+
+fn singbox_policy_group_context(strategy: GroupStrategy) -> CoreConfigContext {
+    // Two members share a name and their first eight id characters, so their
+    // tags have to fall back to the full id to stay distinct.
+    let members = vec![
+        singbox_socks_node("a1b2c3d4e5", "Tokyo"),
+        singbox_socks_node("f6a7b8c9d0", "Osaka"),
+        singbox_socks_node("a1b2c3d4ff", "Tokyo"),
+    ];
+    let group = PolicyGroupItem {
+        id: format!("group-{}", strategy.as_db_str()),
+        name: "Asia".to_string(),
+        strategy,
+        selected_profile_id: Some("f6a7b8c9d0".to_string()),
+        interval_seconds: Some(300),
+        tolerance_ms: Some(80),
+        member_ids: members
+            .iter()
+            .map(|member| member.index_id.clone())
+            .collect(),
+        ..PolicyGroupItem::default()
+    };
+    let mut context = singbox_context(AppConfig::default(), members[0].clone());
+    for member in &members {
+        context
+            .all_proxies_map
+            .insert(member.index_id.clone(), member.clone());
+    }
+    context.policy_group = Some(ContextPolicyGroup { group, members });
+    context
+}
+
+fn singbox_policy_group_configs() -> Vec<Value> {
+    POLICY_GROUP_STRATEGIES
+        .into_iter()
+        .map(|strategy| {
+            generate_singbox_config_value(&singbox_policy_group_context(strategy))
+                .expect("policy group config should generate")
+        })
+        .collect()
+}
+
+fn singbox_policy_groups_snapshot() -> Value {
+    let [selector, urltest, fallback] = POLICY_GROUP_STRATEGIES.map(|strategy| {
+        generate_singbox_config_value(&singbox_policy_group_context(strategy))
+            .expect("policy group config should generate")["outbounds"]
+            .clone()
+    });
+    serde_json::json!({ "selector": selector, "urltest": urltest, "fallback": fallback })
+}
+
 fn singbox_pre_socks_configs() -> Vec<Value> {
     let mut config = AppConfig::default();
     config.tun_mode_item.enable_tun = true;
@@ -991,6 +1048,7 @@ fn acceptance_configs_for_case(case: &GoldenCase) -> Vec<Value> {
                     .expect("default seed acceptance config should generate"),
             ]
         }
+        "singbox.outbound.policy_groups" => singbox_policy_group_configs(),
         "singbox.routing.per_rule_outbound" => vec![singbox_per_rule_outbound_config()],
         "singbox.runtime.logs_and_api" => vec![singbox_logs_and_api_config()],
         "singbox.outbound.hysteria2_minimal" => {
@@ -1113,9 +1171,13 @@ fn generated_configs_only_have_ordinary_nodes_and_platform_forwarding() {
     let mut checked = 0;
     for case in load_matrix().cases {
         for config in acceptance_configs_for_case(&case) {
+            // Only the policy group case carries a group, and only as the single
+            // `proxy` outbound; no case ever chains outbounds.
+            let group_case = case.generated == "singbox.outbound.policy_groups";
             for outbound in config["outbounds"].as_array().expect("outbounds") {
                 assert!(
-                    !matches!(outbound["type"].as_str(), Some("selector" | "urltest")),
+                    !matches!(outbound["type"].as_str(), Some("selector" | "urltest"))
+                        || (group_case && outbound["tag"] == PROXY_TAG),
                     "{}: {outbound}",
                     case.id
                 );

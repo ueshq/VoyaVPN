@@ -33,6 +33,8 @@ pub enum ValidationCode {
     // ---- routing rules ----
     RoutingRuleWithoutOutbound { rule: String },
     RoutingRuleOutboundNotFound { rule: String, outbound: String },
+    // ---- policy groups ----
+    PolicyGroupWithoutValidMembers { group: String },
 }
 
 /// One hop of the path a validator walked to reach a finding.
@@ -46,6 +48,7 @@ pub enum ValidationCode {
 )]
 pub enum ValidationScope {
     RoutingRuleOutbound { rule: String, outbound: String },
+    PolicyGroupMember { group: String, member: String },
 }
 
 /// One finding: what went wrong, and where the validator was when it did.

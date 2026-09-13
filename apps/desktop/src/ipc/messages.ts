@@ -118,6 +118,7 @@ export const VALIDATION_KEYS: Record<ValidationCode["code"], TranslationKey> = {
   invalidRealityPublicKey: "validation.invalidRealityPublicKey",
   invalidShadowsocksMethod: "validation.invalidShadowsocksMethod",
   negativeHysteriaBandwidth: "validation.negativeHysteriaBandwidth",
+  policyGroupWithoutValidMembers: "validation.policyGroupWithoutValidMembers",
   routingRuleOutboundNotFound: "validation.routingRuleOutboundNotFound",
   routingRuleWithoutOutbound: "validation.routingRuleWithoutOutbound",
   textControlCharacters: "validation.textControlCharacters",
@@ -137,6 +138,7 @@ export const VALIDATION_SCOPE_KEYS: Record<
   ValidationScope["kind"],
   TranslationKey
 > = {
+  policyGroupMember: "validation.scope.policyGroupMember",
   routingRuleOutbound: "validation.scope.routingRuleOutbound",
 };
 

@@ -225,6 +225,10 @@ pub enum ValidationCode {
         rule: String,
         outbound: String,
     },
+    // ---- policy groups ----
+    PolicyGroupWithoutValidMembers {
+        group: String,
+    },
     // ---- DNS ----
     DnsAddressEmpty,
     DnsAddressPort {
@@ -284,6 +288,7 @@ pub enum ValidationCode {
 )]
 pub enum ValidationScope {
     RoutingRuleOutbound { rule: String, outbound: String },
+    PolicyGroupMember { group: String, member: String },
 }
 
 /// One rejected value.

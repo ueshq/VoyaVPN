@@ -1,0 +1,135 @@
+{
+  "fallback": [
+    {
+      "interval": "300s",
+      "outbounds": [
+        "Tokyo [a1b2c3d4e5]",
+        "Osaka [f6a7b8c9]",
+        "Tokyo [a1b2c3d4ff]"
+      ],
+      "tag": "proxy",
+      "tolerance": 30000,
+      "type": "urltest",
+      "url": "https://www.google.com/generate_204"
+    },
+    {
+      "password": "pass",
+      "server": "127.0.0.1",
+      "server_port": 1080,
+      "tag": "Tokyo [a1b2c3d4e5]",
+      "type": "socks",
+      "username": "user",
+      "version": "5"
+    },
+    {
+      "password": "pass",
+      "server": "127.0.0.1",
+      "server_port": 1080,
+      "tag": "Osaka [f6a7b8c9]",
+      "type": "socks",
+      "username": "user",
+      "version": "5"
+    },
+    {
+      "password": "pass",
+      "server": "127.0.0.1",
+      "server_port": 1080,
+      "tag": "Tokyo [a1b2c3d4ff]",
+      "type": "socks",
+      "username": "user",
+      "version": "5"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    }
+  ],
+  "selector": [
+    {
+      "default": "Osaka [f6a7b8c9]",
+      "outbounds": [
+        "Tokyo [a1b2c3d4e5]",
+        "Osaka [f6a7b8c9]",
+        "Tokyo [a1b2c3d4ff]"
+      ],
+      "tag": "proxy",
+      "type": "selector"
+    },
+    {
+      "password": "pass",
+      "server": "127.0.0.1",
+      "server_port": 1080,
+      "tag": "Tokyo [a1b2c3d4e5]",
+      "type": "socks",
+      "username": "user",
+      "version": "5"
+    },
+    {
+      "password": "pass",
+      "server": "127.0.0.1",
+      "server_port": 1080,
+      "tag": "Osaka [f6a7b8c9]",
+      "type": "socks",
+      "username": "user",
+      "version": "5"
+    },
+    {
+      "password": "pass",
+      "server": "127.0.0.1",
+      "server_port": 1080,
+      "tag": "Tokyo [a1b2c3d4ff]",
+      "type": "socks",
+      "username": "user",
+      "version": "5"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    }
+  ],
+  "urltest": [
+    {
+      "interval": "300s",
+      "outbounds": [
+        "Tokyo [a1b2c3d4e5]",
+        "Osaka [f6a7b8c9]",
+        "Tokyo [a1b2c3d4ff]"
+      ],
+      "tag": "proxy",
+      "tolerance": 80,
+      "type": "urltest",
+      "url": "https://www.google.com/generate_204"
+    },
+    {
+      "password": "pass",
+      "server": "127.0.0.1",
+      "server_port": 1080,
+      "tag": "Tokyo [a1b2c3d4e5]",
+      "type": "socks",
+      "username": "user",
+      "version": "5"
+    },
+    {
+      "password": "pass",
+      "server": "127.0.0.1",
+      "server_port": 1080,
+      "tag": "Osaka [f6a7b8c9]",
+      "type": "socks",
+      "username": "user",
+      "version": "5"
+    },
+    {
+      "password": "pass",
+      "server": "127.0.0.1",
+      "server_port": 1080,
+      "tag": "Tokyo [a1b2c3d4ff]",
+      "type": "socks",
+      "username": "user",
+      "version": "5"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    }
+  ]
+}

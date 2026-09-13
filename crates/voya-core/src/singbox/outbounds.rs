@@ -1,5 +1,6 @@
 use super::*;
 
+mod groups;
 mod protocols;
 mod stream;
 
@@ -13,7 +14,10 @@ pub(crate) enum SingboxServer {
 }
 
 pub(super) fn gen_outbounds(config: &mut SingboxConfig, context: &CoreConfigContext) {
-    let servers = build_proxy_servers(context, &context.node, PROXY_TAG);
+    let servers = match &context.policy_group {
+        Some(active) => groups::build_policy_group_servers(context, active),
+        None => build_proxy_servers(context, &context.node, PROXY_TAG),
+    };
     prepend_servers(config, servers);
 }
 

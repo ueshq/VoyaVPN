@@ -402,6 +402,19 @@ pub struct SingboxOutbound {
     pub transport: Option<SingboxTransport>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub obfs: Option<SingboxHyObfs>,
+    /// Member tags of a `selector` or `urltest` group.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outbounds: Option<Vec<String>>,
+    /// The member a `selector` starts on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
+    /// The probe URL of a `urltest`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interval: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tolerance: Option<u16>,
 }
 
 impl Default for SingboxOutbound {
@@ -437,6 +450,11 @@ impl Default for SingboxOutbound {
             multiplex: None,
             transport: None,
             obfs: None,
+            outbounds: None,
+            default: None,
+            url: None,
+            interval: None,
+            tolerance: None,
         }
     }
 }

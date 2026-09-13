@@ -172,6 +172,16 @@ pub struct CoreConfigContext {
     /// `voya-core` stays deterministic; `None` emits no `secret`, which is what
     /// golden fixtures and previews use.
     pub clash_api_secret: Option<String>,
+    /// The active policy group with its usable members in order; `node` is
+    /// then the first member. `None` while a single node is active.
+    pub policy_group: Option<ContextPolicyGroup>,
+}
+
+/// An active policy group as the generator sees it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContextPolicyGroup {
+    pub group: crate::PolicyGroupItem,
+    pub members: Vec<ProfileItem>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -196,11 +206,21 @@ impl Default for CoreConfigContext {
             platform: CoreGenPlatform::Linux,
             singbox_ruleset_paths: BTreeMap::new(),
             clash_api_secret: None,
+            policy_group: None,
         }
     }
 }
 
 impl CoreConfigContext {
+    /// Every node the main proxy can send traffic through: the group's members
+    /// while a group is active, otherwise the single active node.
+    #[must_use]
+    pub fn active_outbound_nodes(&self) -> Vec<&ProfileItem> {
+        self.policy_group
+            .as_ref()
+            .map_or_else(|| vec![&self.node], |group| group.members.iter().collect())
+    }
+
     #[must_use]
     pub fn is_windows(&self) -> bool {
         self.platform.is_windows()
@@ -328,6 +348,7 @@ where
             platform: self.env.platform(),
             singbox_ruleset_paths: self.env.get_singbox_ruleset_paths(),
             clash_api_secret: self.env.get_clash_api_secret(),
+            policy_group: None,
         };
 
         let (active_node, node_result) = self.resolve_node(&mut context, node);
@@ -355,7 +376,81 @@ where
         config: &AppConfig,
         node: &ProfileItem,
     ) -> CoreConfigContextBuilderAllResult {
-        let main_result = self.build(config, node);
+        self.with_pre_socks(self.build(config, node))
+    }
+
+    /// [`Self::build_for_group`] plus the platform pre-socks config, added
+    /// exactly as [`Self::build_all`] adds it for a single node.
+    #[must_use]
+    pub fn build_all_for_group(
+        &self,
+        config: &AppConfig,
+        group: &crate::PolicyGroupItem,
+        members: &[ProfileItem],
+    ) -> CoreConfigContextBuilderAllResult {
+        self.with_pre_socks(self.build_for_group(config, group, members))
+    }
+
+    /// Builds the context for an active policy group from its resolved members.
+    ///
+    /// A member that fails validation is left out and reported as a warning
+    /// scoped to that member, so one broken node cannot keep the rest of the
+    /// group offline. A group with no usable member is an error: sing-box
+    /// rejects an empty group, and quietly using some other node would send
+    /// traffic somewhere the user did not choose.
+    #[must_use]
+    pub fn build_for_group(
+        &self,
+        config: &AppConfig,
+        group: &crate::PolicyGroupItem,
+        members: &[ProfileItem],
+    ) -> CoreConfigContextBuilderResult {
+        let mut result = self.build(config, &ProfileItem::default());
+        if !result.success() {
+            return result;
+        }
+        let mut usable = Vec::new();
+        for member in members {
+            let scope = ValidationScope::PolicyGroupMember {
+                group: group.name.clone(),
+                member: member.remarks.clone(),
+            };
+            let member_result = register_single_node(&mut result.context, member);
+            if member_result.success() {
+                usable.push(member.clone());
+                result
+                    .validator_result
+                    .extend_scoped(&scope, &member_result);
+            } else {
+                result.validator_result.warnings.extend(
+                    member_result
+                        .errors
+                        .iter()
+                        .chain(&member_result.warnings)
+                        .map(|finding| finding.clone().within(scope.clone())),
+                );
+            }
+        }
+        let Some(first) = usable.first().cloned() else {
+            result
+                .validator_result
+                .push_error(ValidationCode::PolicyGroupWithoutValidMembers {
+                    group: group.name.clone(),
+                });
+            return result;
+        };
+        result.context.node = first;
+        result.context.policy_group = Some(ContextPolicyGroup {
+            group: group.clone(),
+            members: usable,
+        });
+        result
+    }
+
+    fn with_pre_socks(
+        &self,
+        main_result: CoreConfigContextBuilderResult,
+    ) -> CoreConfigContextBuilderAllResult {
         if !main_result.success() {
             return CoreConfigContextBuilderAllResult {
                 main_result,
