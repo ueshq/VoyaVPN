@@ -91,6 +91,9 @@ pub enum AppErrorKind {
     /// signal that may open a privilege prompt: TUN and the elevated
     /// supervisor spawn both raise it, and no message text can substitute.
     ElevationRequired,
+    /// The action is not offered on this platform, such as leaving VPN mode on
+    /// macOS. The UI hides the control, so reaching this is a stale view.
+    Unsupported,
     /// The core executable is not installed where the app looks for it.
     MissingCore {
         core_type: CoreType,
@@ -236,11 +239,9 @@ pub struct AppUpdaterStatus {
 #[serde(rename_all = "camelCase")]
 pub struct SystemProxyStatusResponse {
     pub management: SystemProxyManagement,
-    /// Read-only OS observation. Unknown must never be presented as restored.
-    pub observation: SystemProxyObservation,
-    pub manual_cleanup_required: bool,
     pub requested_mode: SystemProxyType,
-    /// The app's applied policy; always Unchanged on manual platforms.
+    /// The app's applied policy; always Unchanged where the system proxy is
+    /// unsupported.
     pub effective_mode: SystemProxyType,
     pub proxy: Option<String>,
     pub exceptions: String,
@@ -250,15 +251,5 @@ pub struct SystemProxyStatusResponse {
 #[serde(rename_all = "camelCase")]
 pub enum SystemProxyManagement {
     Automatic,
-    Manual,
     Unsupported,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub enum SystemProxyObservation {
-    Unknown,
-    Clear,
-    LocalProxy,
-    OtherProxy,
 }

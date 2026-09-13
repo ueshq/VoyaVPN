@@ -12,10 +12,11 @@ import { AppWindow } from "lucide-react";
 
 import { Button } from "@voya/ui/components/button";
 import { useI18n } from "@voya/i18n/use-i18n";
+import { useProcessRulesSupported } from "@/features/routing/use-process-rules-supported";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 
+import { CaptureModeSetting } from "./capture-mode-setting";
 import { TunDiagnosticsButton } from "./tun-diagnostics-button";
-import { ManualProxyPanel } from "./manual-proxy-panel";
 import type { AppSettingsFormController } from "./use-app-settings";
 
 // Both are closed sets in sing-box, and neither is validated on save: an unknown
@@ -38,13 +39,12 @@ export function NetworkTab({
 }) {
   const { t } = useI18n();
   const { settings, update } = controller;
-  const sysProxy = useRuntimeEventStore((state) => state.sysProxy);
-  const connected = useRuntimeEventStore(
-    (state) => state.coreState?.state === "connected",
+  // macOS has no system proxy mode, and its NetworkExtension tunnel cannot
+  // match apps, so neither group is offered there.
+  const systemProxyManaged = useRuntimeEventStore(
+    (state) => state.sysProxy?.management === "automatic",
   );
-  const tunEnabled = useRuntimeEventStore(
-    (state) => state.tun?.enabled ?? false,
-  );
+  const processRulesSupported = useProcessRulesSupported();
 
   const inbound = settings.network.inbounds[0];
   const patchInbound = (
@@ -80,6 +80,7 @@ export function NetworkTab({
 
   return (
     <div className="grid gap-4">
+      <CaptureModeSetting />
       {inbound ? (
         <SettingsGroup title={t("settings.sections.localProxy")}>
           <NumberField
@@ -228,54 +229,51 @@ export function NetworkTab({
         </Disclosure>
       </SettingsGroup>
 
-      <SettingsGroup title={t("settings.sections.systemProxy")}>
-        {sysProxy?.management === "manual" ? (
-          <ManualProxyPanel
-            status={sysProxy}
-            connected={connected}
-            tunEnabled={tunEnabled}
+      {systemProxyManaged ? (
+        <SettingsGroup title={t("settings.sections.systemProxy")}>
+          <SettingsRow>
+            <SettingsCheckbox
+              field="network.systemProxy.bypassLocal"
+              checked={settings.network.systemProxy.bypassLocal}
+              label={t("settings.network.bypassLocalAddress")}
+              onCheckedChange={(bypassLocal) =>
+                patchSystemProxy({ bypassLocal: bypassLocal === true })
+              }
+            />
+          </SettingsRow>
+          <TextField
+            field="network.systemProxy.exceptions"
+            id="rt-sysproxy-exceptions"
+            label={t("settings.network.systemProxyExceptions")}
+            onChange={(exceptions) => patchSystemProxy({ exceptions })}
+            value={settings.network.systemProxy.exceptions}
           />
-        ) : null}
-        <SettingsRow>
-          <SettingsCheckbox
-            field="network.systemProxy.bypassLocal"
-            checked={settings.network.systemProxy.bypassLocal}
-            label={t("settings.network.bypassLocalAddress")}
-            onCheckedChange={(bypassLocal) =>
-              patchSystemProxy({ bypassLocal: bypassLocal === true })
-            }
-          />
-        </SettingsRow>
-        <TextField
-          field="network.systemProxy.exceptions"
-          id="rt-sysproxy-exceptions"
-          label={t("settings.network.systemProxyExceptions")}
-          onChange={(exceptions) => patchSystemProxy({ exceptions })}
-          value={settings.network.systemProxy.exceptions}
-        />
-      </SettingsGroup>
+        </SettingsGroup>
+      ) : null}
 
       {/* Explicit action: the
           editor writes routing rules directly through its own dialog. */}
-      <SettingsGroup title={t("settings.perAppProxy")}>
-        <SettingsRow
-          description={t("panes.routing.perAppDescription")}
-          label={t("settings.perAppProxy")}
-        >
-          <Button
-            onClick={() => {
-              useShellStore.setState({ routingPerAppRequested: true });
-              useShellStore.getState().setActiveTab("rules", true);
-            }}
-            size="sm"
-            type="button"
-            variant="outline"
+      {processRulesSupported ? (
+        <SettingsGroup title={t("settings.perAppProxy")}>
+          <SettingsRow
+            description={t("panes.routing.perAppDescription")}
+            label={t("settings.perAppProxy")}
           >
-            <AppWindow aria-hidden="true" className="size-4" />
-            {t("settings.openRules")}
-          </Button>
-        </SettingsRow>
-      </SettingsGroup>
+            <Button
+              onClick={() => {
+                useShellStore.setState({ routingPerAppRequested: true });
+                useShellStore.getState().setActiveTab("rules", true);
+              }}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <AppWindow aria-hidden="true" className="size-4" />
+              {t("settings.openRules")}
+            </Button>
+          </SettingsRow>
+        </SettingsGroup>
+      ) : null}
     </div>
   );
 }

@@ -48,7 +48,9 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         &database_path(app)?,
         runtime_paths.clone(),
     ))?;
-    let config = tauri::async_runtime::block_on(services.load_config())?;
+    // A fresh install starts in the platform's native VPN mode where it has one,
+    // and macOS never loads in a system proxy mode it does not offer.
+    let config = tauri::async_runtime::block_on(services.load_config_for(TargetOs::current()))?;
     let system_proxy_manager = SystemProxyManager::new(
         SystemProxyService::new(Arc::new(StdProcessRunner::new())),
         runtime_paths.clone(),
@@ -69,7 +71,11 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         ),
     }
     let shared_config = Arc::new(RwLock::new(config.clone()));
-    let config_mutations = Arc::new(services.config_mutations(Arc::clone(&shared_config)));
+    let config_mutations = Arc::new(
+        services
+            .config_mutations(Arc::clone(&shared_config))
+            .with_target_os(TargetOs::current()),
+    );
     // A fresh install starts with the default routing profile rather than an
     // empty Rules page. A failure only costs the seed, never startup.
     if let Err(error) =

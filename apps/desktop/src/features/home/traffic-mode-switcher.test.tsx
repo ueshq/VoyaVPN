@@ -48,13 +48,13 @@ afterEach(() => {
 });
 
 describe("home traffic mode", () => {
-  it("offers only smart and global modes and explains both regardless of the selection", async () => {
+  it("offers only rule and global modes and explains both regardless of the selection", async () => {
     const user = userEvent.setup();
     renderSwitcher();
     const group = screen.getByRole("group", { name: "Traffic mode" });
     expect(within(group).getAllByRole("button")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "Direct" })).not.toBeInTheDocument();
-    const hint = "Smart routing: Rules determine which traffic uses the proxy;\nGlobal proxy: All captured traffic uses the selected node;";
+    const hint = "Rule: Rules decide which traffic uses the proxy;\nGlobal: All captured traffic uses the selected node;";
     expect(screen.queryByText(hint)).not.toBeInTheDocument();
     const info = screen.getByRole("button", { name: "About traffic mode" });
     await user.hover(info);
@@ -83,9 +83,9 @@ describe("home traffic mode", () => {
     mocks.state = "connected";
     const user = userEvent.setup();
     renderSwitcher();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Smart routing" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Rule" })).toBeEnabled());
     expect(screen.queryByText("Applies on the next connection")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Smart routing" }));
+    await user.click(screen.getByRole("button", { name: "Rule" }));
     await waitFor(() => expect(mocks.save).toHaveBeenCalledOnce());
   });
 
@@ -96,7 +96,7 @@ describe("home traffic mode", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Global" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: "Global" }));
     await waitFor(() => expect(useToastStore.getState().toasts.at(-1)?.description).toBe("database unavailable"));
-    expect(screen.getByRole("button", { name: "Smart routing" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Rule" })).toHaveAttribute("aria-pressed", "true");
     expect(runtimeActionPending()).toBe(false);
   });
 
@@ -134,7 +134,7 @@ describe("home traffic mode", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Global" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: "Global" }));
     expect(runtimeActionPending()).toBe(true);
-    expect(screen.getByRole("button", { name: "Smart routing" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Rule" })).toBeDisabled();
     unmount();
     expect(runtimeActionPending()).toBe(true);
     await act(async () => finish({ mode: "global" }));
@@ -153,9 +153,9 @@ describe("home traffic mode", () => {
     mocks.load.mockRejectedValueOnce(new Error("read failed"));
     const user = userEvent.setup();
     renderSwitcher();
-    expect(screen.getByRole("button", { name: "Smart routing" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Rule" })).toBeDisabled();
     expect(await screen.findByRole("alert")).toHaveTextContent("read failed");
     await user.click(screen.getByRole("button", { name: "Try again" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Smart routing" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Rule" })).toBeEnabled());
   });
 });

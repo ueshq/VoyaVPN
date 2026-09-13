@@ -452,6 +452,9 @@ impl From<TunManagerError> for AppError {
             TunManagerError::ElevationRequired => {
                 AppError::new(Sub::Tun, AppErrorKind::ElevationRequired, error.to_string())
             }
+            TunManagerError::VpnRequired => {
+                AppError::new(Sub::Tun, AppErrorKind::Unsupported, error.to_string())
+            }
             TunManagerError::UnsupportedPlatform | TunManagerError::ProviderPathMismatch { .. } => {
                 internal(Sub::Tun, &error)
             }

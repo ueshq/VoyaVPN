@@ -63,7 +63,6 @@ pub enum CoreFlowState {
 enum ProxyAction {
     Apply,
     Restore,
-    ClearManualState,
     Observe,
 }
 
@@ -394,8 +393,8 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
         active_profile_id: Option<String>,
         snapshot: Option<&SupervisorSnapshot>,
     ) {
-        // Always retire app-owned proxy state. On macOS restore only forgets the
-        // advertised endpoint and observes the OS; it never changes OS settings.
+        // Always retire app-owned proxy state. Where the system proxy is
+        // unsupported (macOS) restore only reports the plan.
         let _ = self
             .settle_system_proxy(
                 config,
@@ -416,8 +415,8 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
                 let _ = self
                     .settle_system_proxy(
                         config,
-                        ProxyAction::ClearManualState,
-                        NoticeCode::SystemProxyRestoreFailed,
+                        ProxyAction::Observe,
+                        NoticeCode::SystemProxyStatusRefreshFailed,
                     )
                     .await;
                 self.sink
@@ -491,32 +490,15 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
                 ProxyAction::Apply => manager.apply_runtime_config(&config_copy),
                 ProxyAction::Restore => manager.restore(&config_copy),
                 ProxyAction::Observe => manager.runtime_status(&config_copy),
-                ProxyAction::ClearManualState => {
-                    manager.clear_manual_state();
-                    manager.runtime_status(&config_copy)
-                }
             };
             match result {
                 Ok(status) => (status, None),
-                Err(error) => {
-                    let changed = !matches!(action, ProxyAction::Observe);
-                    if changed {
-                        manager.clear_manual_state();
-                    }
-                    // Manual status observes the OS and the retired endpoint.
-                    // Automatic status is only a plan, so it cannot prove that
-                    // a failed apply/restore changed the machine.
-                    let fallback = manager.unavailable_status(&config_copy);
-                    let status = if changed
-                        && fallback.management
-                            == voya_platform::sysproxy::SystemProxyManagement::Manual
-                    {
-                        manager.runtime_status(&config_copy).unwrap_or(fallback)
-                    } else {
-                        fallback
-                    };
-                    (status, Some(error.to_string()))
-                }
+                // Status is only a plan, so it cannot prove that a failed
+                // apply/restore changed the machine.
+                Err(error) => (
+                    manager.unavailable_status(&config_copy),
+                    Some(error.to_string()),
+                ),
             }
         })
         .await;

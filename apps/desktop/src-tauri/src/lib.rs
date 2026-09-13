@@ -5,7 +5,6 @@ use tauri::RunEvent;
 mod app_state;
 mod bootstrap;
 mod event_sinks;
-mod exit_prompt;
 mod ipc;
 mod lifecycle;
 mod logging;
@@ -90,11 +89,7 @@ pub fn run() {
                 ipc::window::install_native_caption_inset(app);
                 report_startup_failure(app);
             }
-            RunEvent::ExitRequested { api, code, .. } => {
-                if !exit_prompt::defer_for_manual_proxy(app, &api, code) {
-                    shutdown_for_exit(app);
-                }
-            }
+            RunEvent::ExitRequested { .. } => shutdown_for_exit(app),
             RunEvent::Exit => shutdown_for_exit(app),
             // The dock icon brings back a window hidden into the tray.
             #[cfg(target_os = "macos")]

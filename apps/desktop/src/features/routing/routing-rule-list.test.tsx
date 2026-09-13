@@ -220,6 +220,18 @@ describe("RoutingRuleList", () => {
       y: 30,
     });
   });
+
+  it("marks app conditions the platform cannot match", () => {
+    renderList({ processRulesSupported: false });
+
+    const untitled = bodyRows()[3];
+    expect(
+      within(untitled).getByTitle(
+        "App conditions are not supported on this platform and are skipped.",
+      ),
+    ).toHaveTextContent("curl");
+    expect(within(bodyRows()[2]).getByTitle("IP")).toHaveTextContent("10.0.0.0/8");
+  });
 });
 
 function listProps(): ComponentProps<typeof RoutingRuleList> {

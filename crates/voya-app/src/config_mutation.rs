@@ -8,8 +8,10 @@ use voya_core::AppConfig;
 /// is the only persistence boundary a shell is allowed to see.
 pub use voya_db::UnitOfWork;
 use voya_db::{Database, DbError};
+use voya_platform::coreinfo::TargetOs;
 
 use crate::{
+    connection_mode::enforce_platform_connection_mode,
     dns::DnsManager,
     profiles::ProfileManager,
     routing::RoutingManager,
@@ -30,6 +32,8 @@ pub struct ConfigMutationCoordinator {
     database: Database,
     config: SharedAppConfig,
     mutation_lock: Mutex<()>,
+    /// The platform every commit is kept within; unset in unit tests.
+    platform: Option<TargetOs>,
 }
 
 impl ConfigMutationCoordinator {
@@ -39,7 +43,16 @@ impl ConfigMutationCoordinator {
             database,
             config,
             mutation_lock: Mutex::new(()),
+            platform: None,
         }
+    }
+
+    /// Keep every committed configuration within what `target_os` offers, so
+    /// no command can persist a capture mode the platform does not have.
+    #[must_use]
+    pub fn with_target_os(mut self, target_os: TargetOs) -> Self {
+        self.platform = Some(target_os);
+        self
     }
 
     #[must_use]
@@ -167,7 +180,10 @@ impl ConfigMutationGuard<'_> {
         DnsManager::new_in(&self.unit_of_work)
     }
 
-    pub async fn commit(self) -> Result<AppConfig, ConfigMutationError> {
+    pub async fn commit(mut self) -> Result<AppConfig, ConfigMutationError> {
+        if let Some(target_os) = self.coordinator.platform {
+            enforce_platform_connection_mode(&mut self.working_config, target_os);
+        }
         let settings = settings_from_app_config(&self.working_config);
         let state = state_from_app_config(&self.working_config);
         self.unit_of_work
@@ -198,6 +214,21 @@ fn publish_config(config: &RwLock<AppConfig>, updated: &AppConfig) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn a_macos_coordinator_never_commits_a_system_proxy_mode() {
+        let database = Database::connect_in_memory().await.expect("database");
+        let shared = Arc::new(RwLock::new(AppConfig::default()));
+        let coordinator = ConfigMutationCoordinator::new(database, Arc::clone(&shared))
+            .with_target_os(TargetOs::Macos);
+
+        let mut mutation = coordinator.begin().await.expect("begin");
+        mutation.config_mut().tun_mode_item.enable_tun = false;
+        let committed = mutation.commit().await.expect("commit");
+
+        assert!(committed.tun_mode_item.enable_tun);
+        assert!(read_config(&shared).tun_mode_item.enable_tun);
+    }
     use tokio::sync::Barrier;
 
     #[tokio::test]

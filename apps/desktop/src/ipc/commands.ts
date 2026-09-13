@@ -174,11 +174,7 @@ function unwrapCommandResult<T>(result: CommandResult<T>): T {
   return result.data;
 }
 
-export const recheckSystemProxy = wrapCommand(commands.recheckSystemProxy);
 
-export async function openNetworkSettings(): Promise<void> {
-  unwrapCommandResult(await commands.openNetworkSettings());
-}
 
 
 

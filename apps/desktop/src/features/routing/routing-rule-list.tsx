@@ -74,6 +74,8 @@ type RoutingRuleListProps = {
   onToggle: (rule: RoutingRule, enabled: boolean) => void;
   /** The state each rule is switching to while its save is in flight. */
   pendingToggles: ReadonlyMap<string, boolean>;
+  /** Whether the platform's tunnel can match apps; macOS cannot. */
+  processRulesSupported?: boolean;
   rules: readonly RoutingRule[];
 };
 
@@ -105,6 +107,7 @@ export function RoutingRuleList({
   onReorder,
   onToggle,
   pendingToggles,
+  processRulesSupported = true,
   rules,
 }: RoutingRuleListProps) {
   const { t } = useI18n();
@@ -206,6 +209,7 @@ export function RoutingRuleList({
                 onMove={onMove}
                 onToggle={onToggle}
                 pendingEnabled={pendingToggles.get(rule.id)}
+                processRulesSupported={processRulesSupported}
                 reordering={reordering}
                 rule={rule}
                 striped={index % 2 === 0}
@@ -227,6 +231,7 @@ function SortableRuleRow({
   onMove,
   onToggle,
   pendingEnabled,
+  processRulesSupported,
   reordering,
   rule,
   striped,
@@ -234,6 +239,7 @@ function SortableRuleRow({
   canMoveDown: boolean;
   canMoveUp: boolean;
   pendingEnabled: boolean | undefined;
+  processRulesSupported: boolean;
   reordering: boolean;
   rule: RoutingRule;
   striped: boolean;
@@ -316,7 +322,7 @@ function SortableRuleRow({
           </span>
         </TableCell>
         <TableCell className={cn("overflow-hidden px-3 py-1.5", muted)}>
-          <RuleMatch rule={rule} />
+          <RuleMatch processRulesSupported={processRulesSupported} rule={rule} />
         </TableCell>
         <TableCell className={cn("overflow-hidden px-3 py-1.5", muted)}>
           <OutboundBadge nodeNames={nodeNames} outbound={rule.outbound} />
@@ -329,7 +335,13 @@ function SortableRuleRow({
   );
 }
 
-function RuleMatch({ rule }: { rule: RoutingRule }) {
+function RuleMatch({
+  processRulesSupported,
+  rule,
+}: {
+  processRulesSupported: boolean;
+  rule: RoutingRule;
+}) {
   const { t } = useI18n();
   if (!ruleHasMatcher(rule)) {
     return (
@@ -343,13 +355,23 @@ function RuleMatch({ rule }: { rule: RoutingRule }) {
   return (
     <span className="flex min-w-0 items-center gap-1.5">
       {ruleMatchChips(rule).map((chip) => (
-        <MatchChipView chip={chip} key={chip.kind === "list" ? chip.field : chip.kind} />
+        <MatchChipView
+          chip={chip}
+          key={chip.kind === "list" ? chip.field : chip.kind}
+          processRulesSupported={processRulesSupported}
+        />
       ))}
     </span>
   );
 }
 
-function MatchChipView({ chip }: { chip: MatchChip }) {
+function MatchChipView({
+  chip,
+  processRulesSupported,
+}: {
+  chip: MatchChip;
+  processRulesSupported: boolean;
+}) {
   const { t } = useI18n();
   switch (chip.kind) {
     case "scope":
@@ -370,8 +392,17 @@ function MatchChipView({ chip }: { chip: MatchChip }) {
       );
     case "list": {
       const Icon = LIST_ICONS[chip.field];
+      // A stored app condition is skipped where the tunnel cannot match apps.
+      const unsupported = chip.field === "process" && !processRulesSupported;
       return (
-        <span className={CHIP_CLASS} title={matchFieldTitle(chip.field, t)}>
+        <span
+          className={cn(CHIP_CLASS, unsupported && "text-warning line-through")}
+          title={
+            unsupported
+              ? t("panes.routing.processUnsupported")
+              : matchFieldTitle(chip.field, t)
+          }
+        >
           <Icon aria-hidden="true" className="size-3 shrink-0" />
           <span className="truncate">{chip.first}</span>
           {chip.more > 0 ? (

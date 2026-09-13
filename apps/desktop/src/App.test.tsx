@@ -291,6 +291,8 @@ vi.mock("@/ipc/commands", () => ({
     Promise.resolve({
       mode: "systemProxy",
       processRulesEffective: false,
+      processRulesSupported: true,
+      systemProxyAvailable: true,
       vpnAvailable: true,
     }),
   ),
@@ -300,8 +302,6 @@ vi.mock("@/ipc/commands", () => ({
   systemProxyStatus: vi.fn(() =>
     Promise.resolve({
       management: "automatic",
-      observation: "unknown",
-      manualCleanupRequired: false,
       effectiveMode: "forcedClear",
       exceptions: "",
       proxy: null,
@@ -512,7 +512,8 @@ describe("App", () => {
       await within(hero).findByRole("button", { name: "Connect" }),
     ).toBeInTheDocument();
     expect(within(hero).queryByText("Not protected")).not.toBeInTheDocument();
-    expect(within(hero).getByRole("switch", { name: "TUN mode" })).toBeInTheDocument();
+    expect(within(hero).queryByRole("switch")).not.toBeInTheDocument();
+    expect(within(hero).getByRole("group", { name: "Traffic mode" })).toBeInTheDocument();
     expect(within(hero).getByRole("group", { name: "Traffic mode" })).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-footer")).toHaveTextContent(
       "Disconnected",

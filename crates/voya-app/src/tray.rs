@@ -361,58 +361,6 @@ fn node_label(remarks: &str) -> String {
     label
 }
 
-pub struct ManualProxyExitText {
-    pub title: String,
-    pub message: String,
-    pub open_settings: String,
-    pub settings_error: String,
-    pub quit: String,
-    pub cancel: String,
-}
-
-/// Native exit reminders share the renderer's maintained locale source.
-#[must_use]
-pub fn manual_proxy_exit_text(
-    language: &str,
-    warning: crate::sysproxy::ManualProxyExitWarning,
-) -> ManualProxyExitText {
-    let language = language.trim().to_ascii_lowercase();
-    let source = if language.starts_with("zh-hant") {
-        include_str!("../../../packages/i18n/src/locales/zh-Hant.json")
-    } else if language.starts_with("zh") {
-        include_str!("../../../packages/i18n/src/locales/zh-Hans.json")
-    } else {
-        include_str!("../../../packages/i18n/src/locales/en.json")
-    };
-    // The i18n gate validates these JSON sources; still avoid panicking at exit.
-    let locale: serde_json::Value = serde_json::from_str(source).unwrap_or_default();
-    let text = |path: &str| {
-        locale
-            .pointer(path)
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default()
-            .to_string()
-    };
-    let (title, message) = match warning {
-        crate::sysproxy::ManualProxyExitWarning::LocalProxy => (
-            "/home/manualProxy/exit/localTitle",
-            "/home/manualProxy/exit/localMessage",
-        ),
-        crate::sysproxy::ManualProxyExitWarning::Unknown => (
-            "/home/manualProxy/exit/unknownTitle",
-            "/home/manualProxy/exit/unknownMessage",
-        ),
-    };
-    ManualProxyExitText {
-        title: text(title),
-        message: text(message),
-        open_settings: text("/home/manualProxy/openSettings"),
-        settings_error: text("/home/manualProxy/exit/settingsError"),
-        quit: text("/home/manualProxy/exit/quitAnyway"),
-        cancel: text("/confirm/cancel"),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -638,39 +586,6 @@ mod tests {
     }
 
     #[test]
-    fn manual_proxy_exit_reminders_use_every_shipped_locale() {
-        for language in SHIPPED_LOCALES {
-            let local = manual_proxy_exit_text(
-                language,
-                crate::sysproxy::ManualProxyExitWarning::LocalProxy,
-            );
-            let unknown =
-                manual_proxy_exit_text(language, crate::sysproxy::ManualProxyExitWarning::Unknown);
-            assert_ne!(local.title, unknown.title, "{language}");
-            assert_ne!(local.message, unknown.message, "{language}");
-            for text in [local, unknown] {
-                for value in [
-                    text.title,
-                    text.message,
-                    text.open_settings.clone(),
-                    text.settings_error,
-                    text.quit.clone(),
-                    text.cancel.clone(),
-                ] {
-                    assert!(!value.is_empty(), "{language}");
-                }
-                // Native custom-button results are matched by their labels.
-                assert_ne!(text.open_settings, text.quit, "{language}");
-                assert_ne!(text.cancel, text.quit, "{language}");
-                assert_ne!(text.cancel, text.open_settings, "{language}");
-                if language.starts_with("zh") {
-                    assert_eq!(text.cancel, "取消");
-                }
-            }
-        }
-    }
-
-    #[test]
     fn every_locale_has_its_own_wording() {
         // A copy-pasted row would ship English under another language's name.
         let quits = TRAY_LABELS
@@ -699,18 +614,9 @@ mod tests {
     }
 
     #[test]
-    fn removed_languages_fall_back_to_english_in_native_menus_and_prompts() {
-        let warning = crate::sysproxy::ManualProxyExitWarning::Unknown;
-        let english = manual_proxy_exit_text("en", warning);
+    fn removed_languages_fall_back_to_english_in_native_menus() {
         for language in ["de", "fa", "fr", "hu", "ru", "fr-CA"] {
             assert_eq!(tray_labels(language), FALLBACK);
-            let text = manual_proxy_exit_text(language, warning);
-            assert_eq!(text.title, english.title);
-            assert_eq!(text.message, english.message);
-            assert_eq!(text.quit, english.quit);
-            assert_eq!(text.cancel, english.cancel);
-            assert_eq!(text.open_settings, english.open_settings);
-            assert_eq!(text.settings_error, english.settings_error);
         }
     }
 }

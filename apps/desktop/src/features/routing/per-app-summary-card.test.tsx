@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { RoutingRule, Routing_Serialize } from "@/ipc/bindings";
+import type { RoutingRule, Routing_Serialize, TunStatus } from "@/ipc/bindings";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 
 import { PerAppSummaryCard } from "./per-app-summary-card";
 
@@ -42,7 +43,35 @@ describe("PerAppSummaryCard", () => {
       screen.getByText("Route specific applications through or around the proxy."),
     ).toBeInTheDocument();
   });
+
+  it("is not offered where the tunnel cannot match apps", () => {
+    useRuntimeEventStore.setState({ tun: macosTun });
+    try {
+      const { container } = renderCard(routing({ process: ["steam"] }), vi.fn());
+      expect(container).toBeEmptyDOMElement();
+    } finally {
+      useRuntimeEventStore.setState({ tun: null });
+    }
+  });
 });
+
+const macosTun: TunStatus = {
+  allowEnableTun: true,
+  backend: "macosPacketTunnel",
+  elevationGranted: false,
+  enabled: true,
+  expectedProviderPath: null,
+  lastProviderError: null,
+  nativeComponentReady: true,
+  needsServiceInstall: false,
+  needsVpnPermission: false,
+  preflight: { notes: [], platform: "macos", routeRestoreNote: "", state: "ready", windowsCleanupDevices: [] },
+  providerPathMismatch: false,
+  providerState: "stopped",
+  requiresElevation: false,
+  resolvedProviderPath: null,
+  restoreOnDisconnect: true,
+};
 
 function renderCard(value: Routing_Serialize, onEdit: () => void) {
   const client = new QueryClient({ defaultOptions: { queries: { gcTime: 0, retry: false } } });

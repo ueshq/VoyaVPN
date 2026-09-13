@@ -31,7 +31,6 @@ import type {
   Subscription,
   SubscriptionMetadata,
   SubscriptionUpdateResult,
-  SystemProxyType,
   SystemProxyStatusResponse,
   TrafficMode,
   TrafficModeResponse,
@@ -126,8 +125,6 @@ export async function installTauriSmokeMock(
       settings: makeAppSettings(),
       sysProxy: {
         management: "automatic",
-        observation: "unknown",
-        manualCleanupRequired: false,
         effectiveMode: "forcedClear",
         exceptions: "",
         proxy: null as string | null,
@@ -162,19 +159,17 @@ export async function installTauriSmokeMock(
 
     function connectionModeStatus(): ConnectionModeStatus {
       const mode = state.tun.enabled ? "vpn" : "systemProxy";
+      // The macOS PacketTunnel is the only capture path there, and it cannot
+      // match traffic by process.
+      const packetTunnel = state.tun.backend === "macosPacketTunnel";
 
       return {
         mode,
-        processRulesEffective: mode === "vpn",
+        processRulesEffective: !packetTunnel && mode === "vpn",
+        processRulesSupported: !packetTunnel,
+        systemProxyAvailable: !packetTunnel,
         vpnAvailable: true,
       };
-    }
-
-    function settleManualProxy() {
-      if (state.sysProxy.management !== "manual") return;
-      const serving = state.runtime.state === "connected" && !state.tun.enabled;
-      state.sysProxy.effectiveMode = "unchanged";
-      state.sysProxy.proxy = serving ? "127.0.0.1:10808" : null;
     }
 
     const profileScopes = ["profiles"];
@@ -213,7 +208,6 @@ export async function installTauriSmokeMock(
       set_active_profile: [...profileScopes, "appSettings"],
       set_active_routing: [...routingScopes, "appSettings"],
       set_connection_mode: connectionModeScopes,
-      set_system_proxy_mode: connectionModeScopes,
       set_tun_enabled: connectionModeScopes,
       update_subscriptions: [...subscriptionScopes, ...profileScopes],
       delete_policy_groups: ["policyGroups"],
@@ -391,7 +385,6 @@ export async function installTauriSmokeMock(
             runningCoreType: "singBox",
             state: "connected",
           };
-          settleManualProxy();
           return Promise.resolve(clone(state.runtime));
         }
         case "disconnect_core":
@@ -404,7 +397,6 @@ export async function installTauriSmokeMock(
             runningCoreType: null,
             state: "disconnected",
           };
-          settleManualProxy();
           return Promise.resolve(clone(state.runtime));
         case "restart_core":
           state.runtime = {
@@ -415,25 +407,6 @@ export async function installTauriSmokeMock(
           };
           return Promise.resolve(clone(state.runtime));
         case "system_proxy_status":
-          return Promise.resolve(clone(state.sysProxy));
-        case "open_network_settings":
-          return Promise.resolve(null);
-        case "recheck_system_proxy":
-          if (["clear", "otherProxy"].includes(state.sysProxy.observation)) {
-            state.sysProxy.manualCleanupRequired = false;
-          }
-          return Promise.resolve(clone(state.sysProxy));
-        case "set_system_proxy_mode":
-          state.sysProxy = {
-            ...state.sysProxy,
-            effectiveMode: String(
-              args.mode ?? "forcedClear",
-            ) as SystemProxyType,
-            requestedMode: String(
-              args.mode ?? "forcedClear",
-            ) as SystemProxyType,
-          };
-          settleManualProxy();
           return Promise.resolve(clone(state.sysProxy));
         case "tun_status":
           return Promise.resolve(clone(state.tun));
@@ -461,7 +434,6 @@ export async function installTauriSmokeMock(
               requestedMode: "forcedChange",
             };
           }
-          settleManualProxy();
           return Promise.resolve(connectionModeStatus());
         }
         case "list_profiles":

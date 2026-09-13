@@ -169,6 +169,11 @@ impl TunManager {
         config: &AppConfig,
         enabled: bool,
     ) -> Result<TunStatus, TunManagerError> {
+        // macOS has no other capture path, so TUN stays on there. Refuse before
+        // probing: nothing about the machine can change the answer.
+        if !enabled && self.platform_backend() == PlatformTunBackend::MacosPacketTunnel {
+            return Err(TunManagerError::VpnRequired);
+        }
         // Always re-probe here: this is the gate that refuses to enable TUN when
         // PlugInKit elected another bundle's provider, so it must never decide
         // on a memo taken before the user fixed (or broke) the installation.
@@ -439,6 +444,10 @@ pub enum TunManagerError {
     #[error("TUN mode is not supported on this platform")]
     UnsupportedPlatform,
     #[error(
+        "macOS captures traffic only through its PacketTunnel VPN, so TUN cannot be turned off"
+    )]
+    VpnRequired,
+    #[error(
         "macOS PacketTunnel provider path mismatch: expected {expected}, PlugInKit elected {resolved}"
     )]
     ProviderPathMismatch { expected: String, resolved: String },
@@ -617,11 +626,24 @@ mod tests {
     fn tun_disable_does_not_require_elevation() {
         let mut config = AppConfig::default();
         config.tun_mode_item.enable_tun = true;
-        let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Macos);
+        let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Linux);
 
         let status = manager.set_enabled(&mut config, false).expect("disable");
         assert!(!status.enabled);
         assert!(!config.tun_mode_item.enable_tun);
+    }
+
+    #[test]
+    fn macos_refuses_to_leave_vpn_mode() {
+        let mut config = AppConfig::default();
+        config.tun_mode_item.enable_tun = true;
+        let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Macos);
+
+        assert!(matches!(
+            manager.set_enabled(&mut config, false),
+            Err(TunManagerError::VpnRequired)
+        ));
+        assert!(config.tun_mode_item.enable_tun);
     }
 
     /// The status probe forks OS helpers, so command handlers run it off the

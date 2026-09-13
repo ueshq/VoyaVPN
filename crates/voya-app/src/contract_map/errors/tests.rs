@@ -29,6 +29,7 @@ fn kind_name(kind: &AppErrorKind) -> &'static str {
         AppErrorKind::Validation { .. } => "validation",
         AppErrorKind::NotFound { .. } => "notFound",
         AppErrorKind::ElevationRequired => "elevationRequired",
+        AppErrorKind::Unsupported => "unsupported",
         AppErrorKind::MissingCore { .. } => "missingCore",
         AppErrorKind::Network => "network",
         AppErrorKind::Io => "io",
@@ -163,6 +164,15 @@ fn both_elevation_paths_produce_the_same_kind() {
     for error in [tun, supervisor, through_runtime, through_connection_mode] {
         assert_eq!(error.kind, AppErrorKind::ElevationRequired, "{error:?}");
     }
+}
+
+/// Leaving VPN mode on macOS is a platform limit, not a bug, so it must not be
+/// reported as an internal error.
+#[test]
+fn leaving_vpn_mode_on_macos_is_unsupported() {
+    let error: AppError = ConnectionModeError::Tun(TunManagerError::VpnRequired).into();
+    assert_eq!(error.kind, AppErrorKind::Unsupported);
+    assert_eq!(error.subsystem, AppErrorSubsystem::Tun);
 }
 
 /// A cancelled or failed *answer* to the prompt must not read as "ask again":
@@ -767,6 +777,7 @@ mod guards {
     const fn tun(error: &TunManagerError) {
         match error {
             TunManagerError::ElevationRequired
+            | TunManagerError::VpnRequired
             | TunManagerError::UnsupportedPlatform
             | TunManagerError::ProviderPathMismatch { .. } => (),
         }
@@ -826,6 +837,7 @@ mod guards {
             AppErrorKind::Validation { .. }
             | AppErrorKind::NotFound { .. }
             | AppErrorKind::ElevationRequired
+            | AppErrorKind::Unsupported
             | AppErrorKind::MissingCore { .. }
             | AppErrorKind::Network
             | AppErrorKind::Io

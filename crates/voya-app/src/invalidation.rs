@@ -87,9 +87,9 @@ pub fn settings_bundle_scopes() -> Vec<InvalidationScope> {
     ]
 }
 
-/// `set_connection_mode`, `set_system_proxy_mode` and `set_tun_enabled`.
+/// `set_connection_mode` and `set_tun_enabled`.
 ///
-/// All three persist `tun.enabled` / `systemProxy.mode`, which the settings
+/// Both persist `tun.enabled` / `systemProxy.mode`, which the settings
 /// bundle mirrors — the round-trip that used to let a stale bundle rewrite
 /// `enable_tun` back to its old value on the next Save-all.
 pub fn connection_mode_scopes() -> Vec<InvalidationScope> {

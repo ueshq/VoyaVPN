@@ -55,6 +55,7 @@ export function RoutingRuleDialog({
   onOpenChange,
   onSubmit,
   open,
+  processRulesSupported = true,
   rule,
 }: {
   mode: "create" | "edit";
@@ -63,6 +64,11 @@ export function RoutingRuleDialog({
   onOpenChange: (open: boolean) => void;
   onSubmit: (rule: RoutingRulePayload) => Promise<void>;
   open: boolean;
+  /**
+   * The macOS NetworkExtension tunnel cannot match apps, so the field is hidden
+   * there. A stored value is carried through unchanged.
+   */
+  processRulesSupported?: boolean;
   rule: RoutingRule | null;
 }) {
   const { t } = useI18n();
@@ -184,13 +190,15 @@ export function RoutingRuleDialog({
                 </div>
               </FieldLayout>
             </div>
-            <TextAreaField
-              description={t("panes.routing.processHelp")}
-              error={errors.process}
-              label={t("panes.routing.process")}
-              onChange={(value) => update("process", value)}
-              value={form.process}
-            />
+            {processRulesSupported ? (
+              <TextAreaField
+                description={t("panes.routing.processHelp")}
+                error={errors.process}
+                label={t("panes.routing.process")}
+                onChange={(value) => update("process", value)}
+                value={form.process}
+              />
+            ) : null}
             <Disclosure
               invalid={Boolean(errors.scope ?? errors.protocol)}
               title={t("panes.routing.advanced")}

@@ -19,6 +19,11 @@ repository_constructors!(SettingsRepository);
 
 impl<'executor> SettingsRepository<'executor> {
     pub async fn load(&self) -> Result<AppSettingsV1> {
+        Ok(self.load_stored().await?.unwrap_or_default())
+    }
+
+    /// The stored settings, or `None` on a database that never saved any.
+    pub async fn load_stored(&self) -> Result<Option<AppSettingsV1>> {
         let row = run_query!(
             self.executor,
             sqlx::query_as::<_, (i64, String)>(
@@ -27,7 +32,7 @@ impl<'executor> SettingsRepository<'executor> {
             fetch_optional
         )?;
         let Some((version, payload)) = row else {
-            return Ok(AppSettingsV1::default());
+            return Ok(None);
         };
         if version != i64::from(CURRENT_SCHEMA_VERSION) {
             return Err(DbError::UnsupportedDatabaseSchema {
@@ -46,7 +51,7 @@ impl<'executor> SettingsRepository<'executor> {
                 manual_reset_command: settings_reset_command(),
             });
         }
-        Ok(settings)
+        Ok(Some(settings))
     }
 
     pub async fn save(&self, settings: &AppSettingsV1) -> Result<()> {

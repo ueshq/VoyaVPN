@@ -54,8 +54,6 @@
   "home": {
     "aria": "Connection home",
     "currentNode": "Current node: {{node}}",
-    "modeSystemProxy": "System proxy",
-    "modeTun": "TUN mode",
     "noNodes": "No nodes available",
     "nodes": "Nodes",
     "protected": "Protected",
@@ -74,29 +72,6 @@
     },
     "cleanupPending": "Tunnel cleanup pending",
     "retryDisconnect": "Retry disconnect",
-    "manualProxy": {
-      "instructions": "System Settings → Network → your network service → Details → Proxies. Configure HTTP, HTTPS and SOCKS with the address below.",
-      "endpoint": "HTTP / HTTPS / SOCKS: {{address}}",
-      "bypass": "Bypass: {{exceptions}}",
-      "inactive": "Connect the local proxy to see its address. TUN mode does not require manual proxy setup.",
-      "openSettings": "Open Network settings",
-      "recheck": "Check again",
-      "unknown": "System proxy state is unknown. Nothing has been confirmed cleared or restored.",
-      "clear": "No enabled system proxy was found.",
-      "localProxy": "A local system proxy is configured; traffic forwarding has not been verified.",
-      "otherProxy": "A different system proxy is configured.",
-      "cleanup": "Before changing TUN mode, disconnecting or quitting, manually turn off any system proxy you configured for VoyaVPN. The app cannot restore it automatically.",
-      "exit": {
-        "localTitle": "Check system proxy before quitting",
-        "localMessage": "A system proxy still points to this Mac. If it is used by VoyaVPN, quitting may interrupt internet access.\n\nOpen Network settings, then Details → Proxies for the relevant network. Turn off the proxies you set up for VoyaVPN, then quit. Leave other apps’ proxies unchanged.",
-        "unknownTitle": "Unable to confirm system proxy settings",
-        "unknownMessage": "VoyaVPN could not confirm your system proxy settings. This does not mean your network has a problem.\n\nIf you manually set up a proxy for VoyaVPN, turn it off in Network settings → Details → Proxies before quitting. If you did not, you can quit now.",
-        "quitAnyway": "Quit anyway",
-        "settingsError": "Network settings could not be opened. VoyaVPN is still running. Go to System Settings → Network → relevant network → Details → Proxies, turn off the proxies you set up for VoyaVPN, then quit."
-      },
-      "copy": "Copy address",
-      "copied": "Address copied"
-    },
     "latency": "Latency",
     "duration": "Connection time",
     "currentNodeLabel": "Current node",
@@ -110,17 +85,14 @@
     "tunDiagnostics": "TUN diagnostics",
     "disconnectLabel": "Disconnect",
     "trafficMode": "Traffic mode",
-    "trafficModeSmart": "Smart routing",
-    "tunHint": "TUN captures device traffic and may require system permission",
     "chooseNode": "Choose a node",
     "missingNodes": {
       "title": "Add a node first",
       "description": "No nodes are available. Add a node or subscription before connecting."
     },
     "selectedNodeLabel": "Selected node",
-    "tunInfo": "About TUN mode",
     "trafficModeInfo": "About traffic mode",
-    "trafficModeHint": "Smart routing: Rules determine which traffic uses the proxy;\nGlobal proxy: All captured traffic uses the selected node;",
+    "trafficModeHint": "Rule: Rules decide which traffic uses the proxy;\nGlobal: All captured traffic uses the selected node;",
     "exitIp": "Exit IP",
     "checkIp": "Check exit IP",
     "checkIpChecking": "Checking…",
@@ -128,7 +100,9 @@
     "checkIpUnknown": "Unknown",
     "currentGroupLabel": "Current policy group",
     "selectedGroupLabel": "Selected policy group",
-    "groupVia": "Via {{node}}"
+    "groupVia": "Via {{node}}",
+    "trafficModeRule": "Rule",
+    "vpnPermissionHint": "macOS will ask to add a VPN configuration. Choose Allow to connect."
   },
   "logCodes": {
     "connected": "Core supervisor started",
@@ -517,7 +491,7 @@
       "managedRuleHint": "Built-in rule. You can edit, turn off or move it; Restore defaults brings back the original.",
       "emptyRulesHint": "All traffic goes through the proxy. Add a rule, or restore the default rules.",
       "globalModeBanner": "Global mode is on: all captured traffic goes through the proxy and these rules are skipped.",
-      "globalModeSwitchBack": "Switch to smart routing",
+      "globalModeSwitchBack": "Switch to rule mode",
       "perAppPinnedHint": "Applied before every rule below.",
       "sentinel": {
         "perApp": "Per-app proxy",
@@ -527,7 +501,8 @@
         "bypassLan": "Bypass LAN",
         "blockAds": "Block ads",
         "cnDirect": "China sites direct"
-      }
+      },
+      "processUnsupported": "App conditions are not supported on this platform and are skipped."
     },
     "subscriptions": {
       "additionalUrl": "More URL",
@@ -630,7 +605,6 @@
       "tunAutoRoute": "Auto Route",
       "tunStack": "Stack",
       "tunStrictRoute": "Strict Route",
-      "manualProxySetup": "Manual proxy setup",
       "localPort": "Mixed port",
       "localPortHint": "HTTP and SOCKS on 127.0.0.1. The second port is {{second}} and the LAN port is {{lan}}.",
       "sniffing": "Sniff traffic",
@@ -675,7 +649,8 @@
       "resources": "Rule resources",
       "localProxy": "Local proxy",
       "connection": "Connection",
-      "window": "Window"
+      "window": "Window",
+      "captureMode": "Traffic capture"
     },
     "apply": {
       "reconnect": "Apply and reconnect",
@@ -689,6 +664,13 @@
       "minimizeToTray": "Keep running in the tray",
       "ask": "Ask every time",
       "quit": "Quit VoyaVPN"
+    },
+    "captureMode": {
+      "vpn": "VPN mode",
+      "vpnHint": "Captures all system traffic. Recommended.",
+      "systemProxy": "System proxy",
+      "systemProxyHint": "Compatibility mode: only apps that follow the system proxy are proxied.",
+      "authorizationDeclined": "System authorization was not granted, so the capture mode was not changed."
     }
   },
   "speedtest": {
@@ -723,7 +705,7 @@
     "download": "Down {{speed}}",
     "loadingScreen": "Loading screen",
     "macosTunnelMissing": "The running copy of VoyaVPN is missing its VPN extension. Quit and open the fully installed app from Applications. If the extension is still missing, reinstall VoyaVPN.",
-    "nativeTunnelMissing": "Native tunnel component is not installed.",
+    "nativeTunnelMissing": "The tunnel service is missing. Run the VoyaVPN installer again.",
     "noPid": "No PID",
     "operationFailed": "Operation failed",
     "proxyMonitorStartFailed": "Unable to start proxy monitor.",

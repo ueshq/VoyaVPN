@@ -11,6 +11,7 @@ use voya_platform::{coreinfo::TargetOs, paths::AppPaths, process::ProcessRunner}
 
 use crate::{
     config_mutation::{ConfigMutationCoordinator, SharedAppConfig},
+    connection_mode::{enforce_platform_connection_mode, seed_platform_connection_defaults},
     dns::DnsManager,
     exports::ExportManager,
     profiles::ProfileManager,
@@ -55,6 +56,21 @@ impl AppServices {
         let settings = self.database.settings().load().await?;
         let state = self.database.app_state().load().await?;
         Ok(app_config_from_settings(&settings, &state))
+    }
+
+    /// [`Self::load_config`] for the platform the app runs on: a fresh install
+    /// starts in the native VPN mode where the platform has one, and macOS
+    /// always loads in VPN mode.
+    pub async fn load_config_for(&self, target_os: TargetOs) -> Result<AppConfig, DbError> {
+        let stored = self.database.settings().load_stored().await?;
+        let fresh = stored.is_none();
+        let state = self.database.app_state().load().await?;
+        let mut config = app_config_from_settings(&stored.unwrap_or_default(), &state);
+        if fresh {
+            seed_platform_connection_defaults(&mut config, target_os);
+        }
+        enforce_platform_connection_mode(&mut config, target_os);
+        Ok(config)
     }
 
     #[must_use]
@@ -264,6 +280,48 @@ mod tests {
         reopened.database.close().await;
 
         std::fs::remove_dir_all(&app_dir).expect("test database directory should be removable");
+    }
+
+    #[tokio::test]
+    async fn platform_loading_seeds_fresh_installs_and_keeps_macos_in_vpn_mode() {
+        for (target_os, fresh_tun) in [
+            (TargetOs::Windows, true),
+            (TargetOs::Macos, true),
+            (TargetOs::Linux, false),
+        ] {
+            let app_dir = std::env::temp_dir().join(format!(
+                "voyavpn-platform-load-test-{}",
+                uuid::Uuid::new_v4()
+            ));
+            let services = AppServices::connect(
+                &app_dir.join(voya_db::DATABASE_NAME),
+                AppPaths::new(&app_dir),
+            )
+            .await
+            .expect("test database");
+
+            let fresh = services.load_config_for(target_os).await.expect("fresh");
+            assert_eq!(fresh.tun_mode_item.enable_tun, fresh_tun, "{target_os:?}");
+
+            let mut stored = AppSettingsV1::default();
+            stored.network.tun.enabled = false;
+            stored.network.system_proxy.mode = SystemProxyType::ForcedChange;
+            services
+                .database
+                .settings()
+                .save(&stored)
+                .await
+                .expect("settings");
+            let loaded = services.load_config_for(target_os).await.expect("stored");
+            assert_eq!(
+                loaded.tun_mode_item.enable_tun,
+                target_os == TargetOs::Macos,
+                "a saved choice wins except where the platform has no system proxy: {target_os:?}"
+            );
+
+            services.database.close().await;
+            std::fs::remove_dir_all(app_dir).expect("remove test database");
+        }
     }
 
     #[tokio::test]

@@ -32,16 +32,6 @@ export const commands = {
 	restartCore: () => typedError<RuntimeStatusResponse, AppError>(__TAURI_INVOKE("restart_core")),
 	runtimeStatus: () => typedError<RuntimeStatusResponse, AppError>(__TAURI_INVOKE("runtime_status")),
 	systemProxyStatus: () => typedError<SystemProxyStatusResponse, AppError>(__TAURI_INVOKE("system_proxy_status")),
-	/**  Refresh the observed system proxy state and notify the renderer. */
-	recheckSystemProxy: () => typedError<SystemProxyStatusResponse, AppError>(__TAURI_INVOKE("recheck_system_proxy")),
-	/**  Fixed destination; renderer input cannot turn this into an arbitrary opener. */
-	openNetworkSettings: () => typedError<null, AppError>(__TAURI_INVOKE("open_network_settings")),
-	/**
-	 *  Changes only the system proxy flavor. Same transaction as
-	 *  `set_connection_mode`: the mode is persisted always, the machine is only
-	 *  touched while a core is running.
-	 */
-	setSystemProxyMode: (mode: SystemProxyType) => typedError<SystemProxyStatusResponse, AppError>(__TAURI_INVOKE("set_system_proxy_mode", { mode })),
 	connectionModeStatus: () => typedError<ConnectionModeStatus, AppError>(__TAURI_INVOKE("connection_mode_status")),
 	/**
 	 *  Switches the app between system proxy and TUN mode.
@@ -223,6 +213,11 @@ export type AppErrorKind =
  *  supervisor spawn both raise it, and no message text can substitute.
  */
 { type: "elevationRequired" } | 
+/**
+ *  The action is not offered on this platform, such as leaving VPN mode on
+ *  macOS. The UI hides the control, so reaching this is a stale view.
+ */
+{ type: "unsupported" } | 
 /**  The core executable is not installed where the app looks for it. */
 { type: "missingCore"; coreType: CoreType; searchDir: string; candidates: string[]; downloadUrl: string } | 
 /**  A download, subscription fetch or Clash API call failed. Retryable. */
@@ -339,11 +334,12 @@ export type ConnectionIpResult = {
 };
 
 /**
- *  Top-level connection mode. A derived view over the two
- *  persisted primitives (system proxy type + TUN flag), never stored itself.
+ *  How traffic is captured. A derived view over the two persisted primitives
+ *  (system proxy type + TUN flag), never stored itself. It is independent of
+ *  the traffic mode, which decides where captured traffic goes.
  */
 export type ConnectionMode = 
-/**  Local inbound for system proxy use; macOS setup is manual. */
+/**  Local inbound for system proxy use. Windows and Linux only. */
 "systemProxy" | 
 /**  TUN mode; all traffic is routed through the virtual interface. */
 "vpn";
@@ -352,8 +348,19 @@ export type ConnectionModeStatus = {
 	mode: ConnectionMode,
 	vpnAvailable: boolean,
 	/**
+	 *  Whether the platform offers the system proxy mode at all. macOS only
+	 *  captures traffic through its PacketTunnel VPN.
+	 */
+	systemProxyAvailable: boolean,
+	/**
+	 *  Whether the platform's tunnel can match traffic by process. The macOS
+	 *  NetworkExtension tunnel cannot, so per-app rules are not offered there.
+	 */
+	processRulesSupported: boolean,
+	/**
 	 *  sing-box process rules only match traffic entering through TUN, so
-	 *  per-app rules are effective only while `mode` is `Vpn`.
+	 *  per-app rules are effective only while they are supported and `mode` is
+	 *  `Vpn`.
 	 */
 	processRulesEffective: boolean,
 };
@@ -1048,9 +1055,7 @@ export type SubscriptionUpdateResult = {
 	messages: string[],
 };
 
-export type SystemProxyManagement = "automatic" | "manual" | "unsupported";
-
-export type SystemProxyObservation = "unknown" | "clear" | "localProxy" | "otherProxy";
+export type SystemProxyManagement = "automatic" | "unsupported";
 
 export type SystemProxySettings = {
 	/**
@@ -1073,11 +1078,11 @@ export type SystemProxySettings = {
  */
 export type SystemProxyStatusResponse = {
 	management: SystemProxyManagement,
-	/**  Read-only OS observation. Unknown must never be presented as restored. */
-	observation: SystemProxyObservation,
-	manualCleanupRequired: boolean,
 	requestedMode: SystemProxyType,
-	/**  The app's applied policy; always Unchanged on manual platforms. */
+	/**
+	 *  The app's applied policy; always Unchanged where the system proxy is
+	 *  unsupported.
+	 */
 	effectiveMode: SystemProxyType,
 	proxy: string | null,
 	exceptions: string,

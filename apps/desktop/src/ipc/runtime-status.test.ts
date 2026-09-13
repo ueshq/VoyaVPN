@@ -12,7 +12,7 @@ const core: RuntimeStatusResponse = {
   state: "connected", activeTunBackend: null, activeProfileId: "node", mainPid: 1, prePid: null, connectedDurationMs: null, runningCoreType: "singBox",
 };
 const proxy: SystemProxyStatusResponse = {
-  management: "manual", observation: "clear", manualCleanupRequired: false,
+  management: "automatic",
   requestedMode: "forcedChange", effectiveMode: "unchanged", proxy: "127.0.0.1:10808",
   exceptions: "",
 };

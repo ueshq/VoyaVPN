@@ -48,32 +48,24 @@ const tokyo: ProfileListEntry = {
 async function expectModePanel(page: Page) {
   const panel = page.locator(".home-mode-panel");
   await expect(panel).toBeInViewport({ ratio: 1 });
+  // Home carries only the traffic mode; how traffic is captured lives in Settings.
   const rows = panel.locator(".home-mode-row");
-  await expect(rows).toHaveCount(2);
-  const geometry = await rows.evaluateAll((elements) => elements.map((element) => {
+  await expect(rows).toHaveCount(1);
+  await expect(panel.getByRole("switch")).toHaveCount(0);
+  const row = await rows.first().evaluate((element) => {
     const label = element.firstElementChild!;
     const control = element.lastElementChild!;
-    const rowRect = element.getBoundingClientRect();
     const labelRect = label.getBoundingClientRect();
     const controlRect = control.getBoundingClientRect();
-    const style = getComputedStyle(label);
     return {
-      height: rowRect.height,
-      labelLeft: labelRect.left,
-      controlRight: controlRect.right,
+      height: element.getBoundingClientRect().height,
       gap: controlRect.left - labelRect.right,
       fits: element.scrollWidth <= element.clientWidth,
-      typography: [style.fontSize, style.fontWeight, style.lineHeight, style.color],
     };
-  }));
-  expect(geometry[0]!.labelLeft).toBeCloseTo(geometry[1]!.labelLeft, 1);
-  expect(geometry[0]!.controlRight).toBeCloseTo(geometry[1]!.controlRight, 1);
-  expect(geometry[0]!.typography).toEqual(geometry[1]!.typography);
-  for (const row of geometry) {
-    expect(row.height).toBeGreaterThanOrEqual(56);
-    expect(row.gap).toBeGreaterThanOrEqual(12);
-    expect(row.fits).toBe(true);
-  }
+  });
+  expect(row.height).toBeGreaterThanOrEqual(56);
+  expect(row.gap).toBeGreaterThanOrEqual(12);
+  expect(row.fits).toBe(true);
 }
 
 for (const { layout, language } of [

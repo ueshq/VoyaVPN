@@ -7,8 +7,8 @@ use voya_platform::{
     filesystem,
     paths::{AppPaths, PathError},
     sysproxy::{
-        system_proxy_management, SystemProxyError, SystemProxyManagement, SystemProxyObservation,
-        SystemProxyRequest, SystemProxyService, SystemProxyStatus,
+        system_proxy_management, SystemProxyError, SystemProxyManagement, SystemProxyRequest,
+        SystemProxyService, SystemProxyStatus,
     },
     tun::{tun_backend, TunBackend},
 };
@@ -16,12 +16,6 @@ use voya_platform::{
 const SYSPROXY_SCRIPT_DIR_NAME: &str = "sysproxy";
 const SYSPROXY_DIRTY_MARKER_FILE_NAME: &str = "proxy-dirty";
 const SYSPROXY_DIRTY_MARKER_CONTENTS: &[u8] = b"dirty\n";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ManualProxyExitWarning {
-    LocalProxy,
-    Unknown,
-}
 
 #[derive(Clone)]
 pub struct SystemProxyManager {
@@ -77,9 +71,7 @@ impl SystemProxyManager {
         force_disable: bool,
     ) -> Result<SystemProxyStatus, SystemProxyManagerError> {
         let request = self.request(config, force_disable)?;
-        let mut status = self.service.status(&request)?;
-        Self::decorate_manual_status(&mut status);
-        Ok(status)
+        Ok(self.service.status(&request)?)
     }
 
     pub fn apply_config(
@@ -93,8 +85,7 @@ impl SystemProxyManager {
             self.write_dirty_marker()?;
         }
 
-        let mut status = self.service.apply(&request)?;
-        Self::decorate_manual_status(&mut status);
+        let status = self.service.apply(&request)?;
         if status.management == SystemProxyManagement::Automatic
             && status.effective_type == SysProxyType::ForcedClear
         {
@@ -115,7 +106,7 @@ impl SystemProxyManager {
         &self,
         config: &AppConfig,
     ) -> Result<bool, SystemProxyManagerError> {
-        if system_proxy_management(self.target_os) == SystemProxyManagement::Manual {
+        if system_proxy_management(self.target_os) != SystemProxyManagement::Automatic {
             return Ok(false);
         }
         if !self.dirty_marker_exists()? {
@@ -124,60 +115,19 @@ impl SystemProxyManager {
 
         let mut request = self.request(config, false)?;
         request.item.sys_proxy_type = SysProxyType::ForcedClear;
-        let mut status = self.service.apply(&request)?;
-        Self::decorate_manual_status(&mut status);
-        if status.management == SystemProxyManagement::Automatic
-            && status.effective_type == SysProxyType::ForcedClear
-        {
+        let status = self.service.apply(&request)?;
+        if status.effective_type == SysProxyType::ForcedClear {
             self.clear_dirty_marker()?;
         }
 
         Ok(true)
     }
 
-    fn decorate_manual_status(status: &mut SystemProxyStatus) {
-        if status.management == SystemProxyManagement::Manual {
-            status.manual_cleanup_required = matches!(
-                status.observation,
-                SystemProxyObservation::LocalProxy | SystemProxyObservation::Unknown
-            );
-        }
-    }
-
-    /// Every exit request observes current system settings before prompting.
-    pub fn manual_exit_warning(
-        &self,
-        config: &AppConfig,
-    ) -> Result<Option<ManualProxyExitWarning>, SystemProxyManagerError> {
-        let status = self.status(config)?;
-        if status.management != SystemProxyManagement::Manual {
-            return Ok(None);
-        }
-        Ok(match status.observation {
-            SystemProxyObservation::LocalProxy => Some(ManualProxyExitWarning::LocalProxy),
-            SystemProxyObservation::Unknown => Some(ManualProxyExitWarning::Unknown),
-            SystemProxyObservation::Clear | SystemProxyObservation::OtherProxy => None,
-        })
-    }
-
-    pub fn open_network_settings(&self) -> Result<(), SystemProxyManagerError> {
-        voya_platform::sysproxy::open_network_settings().map_err(Into::into)
-    }
-
-    /// Forget the endpoint advertised on manual platforms after a failure or a
-    /// pending native cleanup, so the UI never offers an address nothing serves.
-    pub fn clear_manual_state(&self) {
-        self.service.clear_manual_state();
-    }
-
     /// A failed operation/read cannot advertise an endpoint or claim the OS
     /// proxy was restored. This fallback itself performs no fallible I/O.
     pub fn unavailable_status(&self, config: &AppConfig) -> SystemProxyStatus {
-        let management = system_proxy_management(self.target_os);
         SystemProxyStatus {
-            management,
-            observation: SystemProxyObservation::Unknown,
-            manual_cleanup_required: management == SystemProxyManagement::Manual,
+            management: system_proxy_management(self.target_os),
             requested_type: config.system_proxy_item.sys_proxy_type,
             effective_type: SysProxyType::Unchanged,
             target_os: self.target_os,
@@ -333,136 +283,11 @@ fn request_sets_local_proxy(request: &SystemProxyRequest) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs,
-        path::PathBuf,
-        sync::{Arc, Mutex},
-    };
+    use std::{fs, path::PathBuf, sync::Arc};
 
     use voya_platform::test_support::RecordingRunner;
 
     use super::*;
-
-    struct TestObserver(SystemProxyObservation);
-    impl voya_platform::sysproxy::SystemProxyObserver for TestObserver {
-        fn observe(&self) -> SystemProxyObservation {
-            self.0
-        }
-    }
-
-    #[test]
-    fn exit_recheck_warns_only_for_local_or_unverified_proxy_settings() {
-        for (observation, warning) in [
-            (SystemProxyObservation::Clear, None),
-            (SystemProxyObservation::OtherProxy, None),
-            (
-                SystemProxyObservation::LocalProxy,
-                Some(ManualProxyExitWarning::LocalProxy),
-            ),
-            (
-                SystemProxyObservation::Unknown,
-                Some(ManualProxyExitWarning::Unknown),
-            ),
-        ] {
-            for legacy_marker in [false, true] {
-                let app_dir = unique_app_dir("exit-recheck");
-                let runner = Arc::new(RecordingRunner::default());
-                let service = SystemProxyService::new(runner.clone())
-                    .with_observer(Arc::new(TestObserver(observation)));
-                let manager = SystemProxyManager::with_target_os(
-                    service,
-                    AppPaths::new(app_dir.clone()),
-                    TargetOs::Macos,
-                );
-                if legacy_marker {
-                    manager.write_dirty_marker().expect("legacy marker");
-                }
-                assert_eq!(
-                    manager
-                        .manual_exit_warning(&AppConfig::default())
-                        .expect("exit recheck"),
-                    warning,
-                    "{observation:?}, legacy marker: {legacy_marker}",
-                );
-                assert_eq!(manager.dirty_marker_path().exists(), legacy_marker,);
-                // Checking before confirmation must keep the connection
-                // running and must never write system network settings.
-                assert!(runner.oneshots().is_empty());
-                let _ = fs::remove_dir_all(app_dir);
-            }
-        }
-    }
-
-    #[test]
-    fn exit_rechecks_settings_again_after_the_user_returns_from_network_settings() {
-        struct MutableObserver(Mutex<SystemProxyObservation>);
-        impl voya_platform::sysproxy::SystemProxyObserver for MutableObserver {
-            fn observe(&self) -> SystemProxyObservation {
-                *self.0.lock().expect("observation")
-            }
-        }
-        let app_dir = unique_app_dir("exit-retry");
-        let observer = Arc::new(MutableObserver(Mutex::new(
-            SystemProxyObservation::LocalProxy,
-        )));
-        let service = SystemProxyService::new(Arc::new(RecordingRunner::default()))
-            .with_observer(observer.clone());
-        let manager = SystemProxyManager::with_target_os(
-            service,
-            AppPaths::new(app_dir.clone()),
-            TargetOs::Macos,
-        );
-        let config = AppConfig::default();
-        assert_eq!(
-            manager.manual_exit_warning(&config).expect("first exit"),
-            Some(ManualProxyExitWarning::LocalProxy),
-        );
-        *observer.0.lock().expect("observation") = SystemProxyObservation::Clear;
-        assert_eq!(manager.manual_exit_warning(&config).expect("retry"), None);
-        assert!(!manager.dirty_marker_path().exists());
-        let _ = fs::remove_dir_all(app_dir);
-    }
-
-    #[test]
-    fn manual_proxy_status_ignores_historical_markers() {
-        for observation in [
-            SystemProxyObservation::Unknown,
-            SystemProxyObservation::LocalProxy,
-            SystemProxyObservation::Clear,
-            SystemProxyObservation::OtherProxy,
-        ] {
-            let app_dir = unique_app_dir("manual-recheck");
-            let runner = Arc::new(RecordingRunner::default());
-            let service = SystemProxyService::new(runner.clone())
-                .with_observer(Arc::new(TestObserver(observation)));
-            let manager = SystemProxyManager::with_target_os(
-                service,
-                AppPaths::new(app_dir.clone()),
-                TargetOs::Macos,
-            );
-            let config = AppConfig::default();
-            manager.write_dirty_marker().expect("legacy marker");
-            assert!(!manager
-                .restore_dirty_proxy_if_needed(&config)
-                .expect("startup"));
-            let pending = matches!(
-                observation,
-                SystemProxyObservation::Unknown | SystemProxyObservation::LocalProxy
-            );
-            for status in [manager.restore(&config), manager.status(&config)] {
-                assert_eq!(
-                    status.expect("observation").manual_cleanup_required,
-                    pending
-                );
-            }
-            assert_eq!(
-                fs::read(manager.dirty_marker_path()).expect("untouched marker"),
-                SYSPROXY_DIRTY_MARKER_CONTENTS
-            );
-            assert!(runner.oneshots().is_empty());
-            let _ = fs::remove_dir_all(app_dir);
-        }
-    }
 
     fn manager(target_os: TargetOs, runner: Arc<RecordingRunner>) -> SystemProxyManager {
         manager_with_app_dir(target_os, runner, unique_app_dir("default"))
@@ -473,8 +298,7 @@ mod tests {
         runner: Arc<RecordingRunner>,
         app_dir: PathBuf,
     ) -> SystemProxyManager {
-        let service = SystemProxyService::new(runner)
-            .with_observer(Arc::new(TestObserver(SystemProxyObservation::Unknown)));
+        let service = SystemProxyService::new(runner);
         SystemProxyManager::with_target_os(service, AppPaths::new(app_dir), target_os)
     }
 
@@ -577,6 +401,11 @@ mod tests {
         let native = runtime_system_proxy_config(&config, false, TargetOs::Macos);
         assert!(native.force_disable);
         assert!(runtime_default_proxy_url(&config, TargetOs::Macos).is_none());
+        assert!(
+            !manager(TargetOs::Macos, Arc::new(RecordingRunner::default()))
+                .restore_dirty_proxy_if_needed(&AppConfig::default())
+                .expect("macOS has no system proxy to recover")
+        );
 
         let process = runtime_system_proxy_config(&config, false, TargetOs::Linux);
         assert!(!process.force_disable);

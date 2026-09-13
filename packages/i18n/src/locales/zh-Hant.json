@@ -54,8 +54,6 @@
   "home": {
     "aria": "連線主頁",
     "currentNode": "目前節點：{{node}}",
-    "modeSystemProxy": "系統代理",
-    "modeTun": "TUN模式",
     "noNodes": "沒有可用節點",
     "nodes": "節點",
     "protected": "已受保護",
@@ -74,29 +72,6 @@
     },
     "cleanupPending": "通道尚未清理",
     "retryDisconnect": "重試中斷連線",
-    "manualProxy": {
-      "instructions": "系統設定 → 網路 → 目前網路服務 → 詳細資訊 → 代理伺服器。使用下方位址設定 HTTP、HTTPS 和 SOCKS。",
-      "endpoint": "HTTP / HTTPS / SOCKS：{{address}}",
-      "bypass": "略過清單：{{exceptions}}",
-      "inactive": "連接本機代理後顯示位址；TUN模式無需手動設定代理。",
-      "openSettings": "開啟網路設定",
-      "recheck": "重新檢查",
-      "unknown": "無法讀取系統代理狀態；尚未確認已清除或還原。",
-      "clear": "未發現已啟用的系統代理。",
-      "localProxy": "偵測到本機系統代理；這不代表流量轉送已驗證成功。",
-      "otherProxy": "偵測到其他系統代理。",
-      "cleanup": "切換 TUN 模式、中斷連線或結束前，請手動關閉為 VoyaVPN 設定的系統代理；應用程式無法自動還原。",
-      "exit": {
-        "localTitle": "結束前檢查系統代理",
-        "localMessage": "偵測到系統代理仍指向本機。若它用於 VoyaVPN，結束後可能無法上網。\n\n請開啟網路設定，在對應網路的「詳細資訊 → 代理伺服器」中關閉為 VoyaVPN 設定的代理，再結束應用程式。請保留其他應用程式的代理。",
-        "unknownTitle": "無法確認系統代理狀態",
-        "unknownMessage": "VoyaVPN 未能確認系統代理設定，這不代表網路發生故障。\n\n若曾為 VoyaVPN 手動設定代理，請在網路設定的「詳細資訊 → 代理伺服器」中關閉後再結束；若沒有設定，可直接結束。",
-        "quitAnyway": "仍然結束",
-        "settingsError": "無法開啟網路設定，VoyaVPN 已保持執行。請手動前往「系統設定 → 網路 → 對應網路 → 詳細資訊 → 代理伺服器」，關閉為 VoyaVPN 設定的代理後再結束。"
-      },
-      "copy": "複製位址",
-      "copied": "位址已複製"
-    },
     "latency": "延遲",
     "duration": "連線時長",
     "currentNodeLabel": "目前節點",
@@ -110,17 +85,14 @@
     "tunDiagnostics": "TUN 診斷",
     "disconnectLabel": "中斷連線",
     "trafficMode": "流量模式",
-    "trafficModeSmart": "智慧分流",
-    "tunHint": "TUN接管裝置流量，可能需要系統授權",
     "chooseNode": "選擇節點",
     "missingNodes": {
       "title": "請先新增節點",
       "description": "目前沒有可用節點，請先新增節點或訂閱後再連線。"
     },
     "selectedNodeLabel": "待連線節點",
-    "tunInfo": "TUN模式說明",
     "trafficModeInfo": "流量模式說明",
-    "trafficModeHint": "智慧分流：根據規則決定哪些流量使用代理；\n全域代理：接管的流量均使用所選節點；",
+    "trafficModeHint": "規則：根據規則決定哪些流量使用代理；\n全域：接管的流量均使用所選節點；",
     "exitIp": "出口 IP",
     "checkIp": "檢測出口 IP",
     "checkIpChecking": "檢測中…",
@@ -128,7 +100,9 @@
     "checkIpUnknown": "未知",
     "currentGroupLabel": "目前策略群組",
     "selectedGroupLabel": "已選策略群組",
-    "groupVia": "經由 {{node}}"
+    "groupVia": "經由 {{node}}",
+    "trafficModeRule": "規則",
+    "vpnPermissionHint": "macOS 會請求新增 VPN 設定，請點選「允許」後連線。"
   },
   "logCodes": {
     "connected": "核心守護程序已啟動",
@@ -517,7 +491,7 @@
       "managedRuleHint": "內建規則，可編輯、關閉或移動；「還原預設規則」可復原。",
       "emptyRulesHint": "所有流量都走代理。可新增規則，或還原預設規則。",
       "globalModeBanner": "目前為全局代理：所有接管的流量都走代理，以下規則暫不生效。",
-      "globalModeSwitchBack": "切換到智慧分流",
+      "globalModeSwitchBack": "切換到規則模式",
       "perAppPinnedHint": "優先於下方所有規則生效。",
       "sentinel": {
         "perApp": "分應用代理",
@@ -527,7 +501,8 @@
         "bypassLan": "略過區域網路",
         "blockAds": "攔截廣告",
         "cnDirect": "中國網站直連"
-      }
+      },
+      "processUnsupported": "此平台不支援應用程式條件，該條件不會生效。"
     },
     "subscriptions": {
       "additionalUrl": "備用地址",
@@ -630,7 +605,6 @@
       "tunAutoRoute": "自動路由",
       "tunStack": "協定堆疊",
       "tunStrictRoute": "嚴格路由",
-      "manualProxySetup": "手動代理設定",
       "localPort": "混合連接埠",
       "localPortHint": "127.0.0.1 上的 HTTP 與 SOCKS 連接埠。第二連接埠為 {{second}}，區域網路連接埠為 {{lan}}。",
       "sniffing": "流量嗅探",
@@ -675,7 +649,8 @@
       "resources": "規則資源",
       "localProxy": "本機代理",
       "connection": "連線",
-      "window": "視窗"
+      "window": "視窗",
+      "captureMode": "網路接管方式"
     },
     "apply": {
       "reconnect": "套用並重新連線",
@@ -689,6 +664,13 @@
       "minimizeToTray": "在系統匣中繼續執行",
       "ask": "每次詢問",
       "quit": "結束 VoyaVPN"
+    },
+    "captureMode": {
+      "vpn": "VPN 模式",
+      "vpnHint": "接管整個系統的網路流量，建議使用。",
+      "systemProxy": "系統代理",
+      "systemProxyHint": "相容模式：只代理支援系統代理的應用程式。",
+      "authorizationDeclined": "未取得系統授權，接管方式未變更。"
     }
   },
   "speedtest": {
@@ -723,7 +705,7 @@
     "download": "下行 {{speed}}",
     "loadingScreen": "正在加載頁面",
     "macosTunnelMissing": "目前執行的 VoyaVPN 缺少 VPN 延伸功能。請結束後從「應用程式」開啟完整安裝版；若仍提示缺少，請重新安裝。",
-    "nativeTunnelMissing": "尚未安裝原生通道元件。",
+    "nativeTunnelMissing": "缺少通道服務，請重新執行 VoyaVPN 安裝程式。",
     "noPid": "無 PID",
     "operationFailed": "操作失敗",
     "proxyMonitorStartFailed": "無法開始監控網絡活動。",

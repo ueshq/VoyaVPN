@@ -41,7 +41,7 @@ use voya_contracts::{
     RuntimeStatusResponse, SpeedtestResult, SpeedtestRunResult, SpeedtestStatus,
     Subscription as SubscriptionContract, SubscriptionMetadata as SubscriptionMetadataContract,
     SubscriptionUpdateResult as SubscriptionUpdateContract, SystemProxyStatusResponse,
-    SystemProxyType, TunProviderDiagnostics, TunStatus,
+    TunProviderDiagnostics, TunStatus,
 };
 use voya_platform::{
     coreinfo::{

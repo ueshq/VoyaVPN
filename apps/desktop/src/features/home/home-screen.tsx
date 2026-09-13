@@ -13,8 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@voya/ui/components/dialog";
-import { Label } from "@voya/ui/components/label";
-import { Switch } from "@voya/ui/components/switch";
 import { cn } from "@voya/ui/lib/utils";
 
 import worldMap from "@/assets/world-map.svg";
@@ -26,7 +24,6 @@ import { useShellStore } from "@/stores/shell-store";
 
 import { ConnectedInfo } from "./connected-info";
 import { ExitIpMetric } from "./exit-ip-metric";
-import { ModeInfo } from "./mode-info";
 import { TrafficModeSwitcher } from "./traffic-mode-switcher";
 import { useHomeRuntime } from "./use-home-runtime";
 
@@ -113,13 +110,6 @@ export function HomeScreen() {
             </ConnectedInfo>
           ) : null}
           <div className="home-mode-panel">
-            <ConnectionModeSwitcher
-              tunEnabled={home.tunEnabled}
-              modeBusy={home.busy}
-              modePending={home.modePending}
-              onTunChange={home.changeTunEnabled}
-              t={t}
-            />
             <TrafficModeSwitcher />
           </div>
           {home.tunEnabled && home.tunIssue ? (
@@ -282,36 +272,6 @@ function ConnectButton({
         {connected && !cleanupPending ? t("home.disconnectLabel") : action}
       </span>
     </button>
-  );
-}
-
-function ConnectionModeSwitcher({
-  tunEnabled,
-  modeBusy,
-  modePending,
-  onTunChange,
-  t,
-}: {
-  tunEnabled: boolean;
-  modeBusy: boolean;
-  modePending: boolean;
-  onTunChange: (enabled: boolean) => void;
-  t: TranslationFunction;
-}) {
-  return (
-    <div className="home-mode-row">
-      <div className="home-mode-label">
-        <Label htmlFor="home-tun-switch">{t("home.modeTun")}</Label>
-        <ModeInfo label={t("home.tunInfo")} hint={t("home.tunHint")} />
-      </div>
-      <Switch
-        aria-busy={modePending}
-        checked={tunEnabled}
-        disabled={modeBusy}
-        id="home-tun-switch"
-        onCheckedChange={onTunChange}
-      />
-    </div>
   );
 }
 

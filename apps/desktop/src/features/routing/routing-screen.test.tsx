@@ -134,7 +134,7 @@ describe("RoutingScreen", () => {
         "Global mode is on: all captured traffic goes through the proxy and these rules are skipped.",
       ),
     ).toBeInTheDocument();
-    const switchBack = screen.getByRole("button", { name: "Switch to smart routing" });
+    const switchBack = screen.getByRole("button", { name: "Switch to rule mode" });
     await waitFor(() => expect(switchBack).toBeEnabled());
     await user.click(switchBack);
 

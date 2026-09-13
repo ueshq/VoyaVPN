@@ -35,12 +35,13 @@ pub enum SystemProxyType {
     Unchanged,
 }
 
-/// Top-level connection mode. A derived view over the two
-/// persisted primitives (system proxy type + TUN flag), never stored itself.
+/// How traffic is captured. A derived view over the two persisted primitives
+/// (system proxy type + TUN flag), never stored itself. It is independent of
+/// the traffic mode, which decides where captured traffic goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ConnectionMode {
-    /// Local inbound for system proxy use; macOS setup is manual.
+    /// Local inbound for system proxy use. Windows and Linux only.
     SystemProxy,
     /// TUN mode; all traffic is routed through the virtual interface.
     Vpn,
@@ -51,8 +52,15 @@ pub enum ConnectionMode {
 pub struct ConnectionModeStatus {
     pub mode: ConnectionMode,
     pub vpn_available: bool,
+    /// Whether the platform offers the system proxy mode at all. macOS only
+    /// captures traffic through its PacketTunnel VPN.
+    pub system_proxy_available: bool,
+    /// Whether the platform's tunnel can match traffic by process. The macOS
+    /// NetworkExtension tunnel cannot, so per-app rules are not offered there.
+    pub process_rules_supported: bool,
     /// sing-box process rules only match traffic entering through TUN, so
-    /// per-app rules are effective only while `mode` is `Vpn`.
+    /// per-app rules are effective only while they are supported and `mode` is
+    /// `Vpn`.
     pub process_rules_effective: bool,
 }
 

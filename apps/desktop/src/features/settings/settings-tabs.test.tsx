@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import type { AppSettingsV1, AppearanceSettings } from "@/ipc/bindings";
+import type { AppSettingsV1, AppearanceSettings, TunStatus } from "@/ipc/bindings";
 
 import { makeAppSettings } from "./app-settings.test-fixture";
 import { CoreTab } from "./core-tab";
@@ -27,76 +27,34 @@ describe("semantic settings tabs", () => {
       .getState()
       .setSysProxy({
         management: "automatic",
-        observation: "unknown",
-        manualCleanupRequired: false,
         requestedMode: "forcedClear",
         effectiveMode: "forcedClear",
         proxy: null,
         exceptions: "",
       });
   });
-  it("shows manual setup without a copy action while disconnected", () => {
-    const status = useRuntimeEventStore.getState().sysProxy!;
-    useRuntimeEventStore
-      .getState()
-      .setSysProxy({ ...status, management: "manual" });
-    render(<TabHarness Component={NetworkTab} />);
-    expect(screen.getByText("Manual proxy setup")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Copy address" }),
-    ).not.toBeInTheDocument();
-  });
+  it("offers capture mode, system proxy and per-app proxy only where the platform has them", () => {
+    const { unmount } = render(<TabHarness Component={NetworkTab} />);
+    expect(screen.getByRole("group", { name: "Traffic capture" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "System proxy" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Per-app proxy" })).toBeInTheDocument();
+    unmount();
 
-  it("keeps manual proxy addresses and observations live while the network tab is open", () => {
-    useRuntimeEventStore.getState().setSysProxy({
-      ...useRuntimeEventStore.getState().sysProxy!,
-      management: "manual",
-      requestedMode: "forcedChange",
-      proxy: "127.0.0.1:10808",
-    });
-    render(<TabHarness Component={NetworkTab} />);
-    expect(
-      screen.queryByRole("button", { name: "Copy address" }),
-    ).not.toBeInTheDocument();
-    act(() =>
-      useRuntimeEventStore.getState().setCoreState({
-        activeProfileId: "node",
-        activeTunBackend: null,
-        connectedDurationMs: 0,
-        mainPid: 42,
-        prePid: null,
-        runningCoreType: "singBox",
-        state: "connected",
-      }),
-    );
-    expect(
-      screen.getByText(/HTTP \/ HTTPS \/ SOCKS: 127\.0\.0\.1:10808/),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Copy address" })).toBeEnabled();
-    act(() =>
+    act(() => {
       useRuntimeEventStore.getState().setSysProxy({
         ...useRuntimeEventStore.getState().sysProxy!,
-        observation: "clear",
-      }),
-    );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "No enabled system proxy was found.",
-    );
-    act(() =>
-      useRuntimeEventStore.getState().setCoreState({
-        ...useRuntimeEventStore.getState().coreState!,
-        state: "disconnected",
-      }),
-    );
-    expect(
-      screen.queryByRole("button", { name: "Copy address" }),
-    ).not.toBeInTheDocument();
+        management: "unsupported",
+      });
+      useRuntimeEventStore.setState({ tun: macosTun });
+    });
+    render(<TabHarness Component={NetworkTab} />);
+
+    expect(screen.getByRole("heading", { name: "TUN" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Traffic capture" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "System proxy" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Per-app proxy" })).not.toBeInTheDocument();
   });
 
-  it("hides manual setup on automatically managed platforms", () => {
-    render(<TabHarness Component={NetworkTab} />);
-    expect(screen.queryByTestId("manual-proxy-panel")).not.toBeInTheDocument();
-  });
   it("updates all core, multiplexing, and Hysteria controls", async () => {
     const user = userEvent.setup();
     const { container } = render(<TabHarness Component={CoreTab} />);
@@ -240,6 +198,24 @@ describe("semantic settings tabs", () => {
     expect(autostart).toBeChecked();
   });
 });
+
+const macosTun: TunStatus = {
+  allowEnableTun: true,
+  backend: "macosPacketTunnel",
+  elevationGranted: false,
+  enabled: true,
+  expectedProviderPath: null,
+  lastProviderError: null,
+  nativeComponentReady: true,
+  needsServiceInstall: false,
+  needsVpnPermission: false,
+  preflight: { notes: [], platform: "macos", routeRestoreNote: "", state: "ready", windowsCleanupDevices: [] },
+  providerPathMismatch: false,
+  providerState: "stopped",
+  requiresElevation: false,
+  resolvedProviderPath: null,
+  restoreOnDisconnect: true,
+};
 
 function TabHarness({ Component }: { Component: SettingsTab }) {
   const [settings, setSettings] = useState(makeAppSettings());

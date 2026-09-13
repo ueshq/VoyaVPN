@@ -6,7 +6,7 @@ import { ModeInfo } from "./mode-info";
 import { useTrafficMode } from "./use-traffic-mode";
 
 const modes = [
-  { value: "rule", labelKey: "home.trafficModeSmart" },
+  { value: "rule", labelKey: "home.trafficModeRule" },
   { value: "global", labelKey: "proxy.trafficModeGlobal" },
 ] as const;
 

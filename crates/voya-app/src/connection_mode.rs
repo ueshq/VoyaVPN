@@ -11,7 +11,8 @@
 //!   the user pressed Connect, because nothing was listening on that port. The
 //!   rule this module enforces instead is the one the rest of the app already
 //!   follows on automatic platforms: **the OS proxy follows the connected core**.
-//!   On macOS the OS proxies are configured by hand. The mode is always
+//!   macOS has no system proxy mode: it captures traffic only through its
+//!   PacketTunnel VPN, so leaving VPN mode is refused there. The mode is always
 //!   persisted; the OS is only touched while the supervisor reports
 //!   `Connected`, and otherwise the caller gets the *planned* status so the UI
 //!   and the tray still show what was chosen.
@@ -31,13 +32,17 @@ use std::sync::Arc;
 use thiserror::Error;
 use voya_contracts::{ConnectionMode, ConnectionModeStatus};
 use voya_core::{AppConfig, SysProxyType};
-use voya_platform::sysproxy::SystemProxyStatus;
+use voya_platform::{
+    coreinfo::TargetOs,
+    sysproxy::SystemProxyStatus,
+    tun::{tun_backend, TunBackend as PlatformTunBackend},
+};
 
 use crate::{
     config_mutation::{ConfigMutationCoordinator, ConfigMutationError},
     supervisor::SupervisorConnectionState,
     sysproxy::{SystemProxyManager, SystemProxyManagerError},
-    tun::{TunManager, TunManagerError, TunStatus},
+    tun::{TunBackend, TunManager, TunManagerError, TunStatus},
 };
 
 /// Derives the current connection mode. TUN wins over everything; every other
@@ -70,12 +75,47 @@ pub fn apply_connection_mode(config: &mut AppConfig, mode: ConnectionMode) {
 #[must_use]
 pub fn connection_mode_status(config: &AppConfig, tun_status: &TunStatus) -> ConnectionModeStatus {
     let mode = derive_connection_mode(config);
+    // The macOS NetworkExtension tunnel is the only capture path there, and it
+    // cannot match traffic by process.
+    let packet_tunnel = tun_status.backend == TunBackend::MacosPacketTunnel;
 
     ConnectionModeStatus {
         mode,
         vpn_available: tun_status.allow_enable_tun || tun_status.enabled,
-        process_rules_effective: mode == ConnectionMode::Vpn,
+        system_proxy_available: !packet_tunnel,
+        process_rules_supported: !packet_tunnel,
+        process_rules_effective: !packet_tunnel && mode == ConnectionMode::Vpn,
     }
+}
+
+/// Whether `target_os` offers the system proxy mode. macOS only captures
+/// traffic through its PacketTunnel VPN.
+#[must_use]
+pub fn system_proxy_mode_available(target_os: TargetOs) -> bool {
+    tun_backend(target_os) != PlatformTunBackend::MacosPacketTunnel
+}
+
+/// The capture mode a fresh install starts in: the native VPN where the app
+/// ships one (the Windows service, the macOS PacketTunnel). Linux keeps the
+/// system proxy, because its process TUN needs a root launcher installed first.
+pub fn seed_platform_connection_defaults(config: &mut AppConfig, target_os: TargetOs) {
+    if tun_backend(target_os).is_native() {
+        config.tun_mode_item.enable_tun = true;
+    }
+}
+
+/// Keep a configuration within what the platform offers. On macOS that is VPN
+/// mode with the OS proxy left alone, whatever an older build or a stale
+/// settings view saved. Returns whether anything changed.
+pub fn enforce_platform_connection_mode(config: &mut AppConfig, target_os: TargetOs) -> bool {
+    if system_proxy_mode_available(target_os) {
+        return false;
+    }
+    let changed = !config.tun_mode_item.enable_tun
+        || config.system_proxy_item.sys_proxy_type != SysProxyType::Unchanged;
+    config.tun_mode_item.enable_tun = true;
+    config.system_proxy_item.sys_proxy_type = SysProxyType::Unchanged;
+    changed
 }
 
 /// Everything the transaction tells the outside world once the configuration is
@@ -195,28 +235,6 @@ impl ConnectionModeManager {
             tun_status,
             tun_flag_changed,
         })
-    }
-
-    /// Change only the system proxy flavor, leaving TUN alone.
-    pub async fn set_system_proxy_mode(
-        &self,
-        coordinator: &ConfigMutationCoordinator,
-        mode: SysProxyType,
-        connected: SupervisorConnectionState,
-    ) -> Result<SystemProxyStatus, ConnectionModeError> {
-        let (original, committed) = self
-            .commit(coordinator, |config| {
-                config.system_proxy_item.sys_proxy_type = mode;
-            })
-            .await?;
-        let (status, _) = self
-            .settle_system_proxy(coordinator, &original, &committed, connected)
-            .await?;
-
-        self.sink.system_proxy_changed(&status);
-        self.sink.tray_refresh();
-
-        Ok(status)
     }
 
     /// The guard's whole lifetime: read, mutate, write. No OS call, no process

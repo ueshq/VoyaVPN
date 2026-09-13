@@ -226,28 +226,10 @@ pub(super) fn system_proxy_status_response(status: SystemProxyStatus) -> SystemP
             voya_platform::sysproxy::SystemProxyManagement::Automatic => {
                 voya_contracts::SystemProxyManagement::Automatic
             }
-            voya_platform::sysproxy::SystemProxyManagement::Manual => {
-                voya_contracts::SystemProxyManagement::Manual
-            }
             voya_platform::sysproxy::SystemProxyManagement::Unsupported => {
                 voya_contracts::SystemProxyManagement::Unsupported
             }
         },
-        observation: match status.observation {
-            voya_platform::sysproxy::SystemProxyObservation::Unknown => {
-                voya_contracts::SystemProxyObservation::Unknown
-            }
-            voya_platform::sysproxy::SystemProxyObservation::Clear => {
-                voya_contracts::SystemProxyObservation::Clear
-            }
-            voya_platform::sysproxy::SystemProxyObservation::LocalProxy => {
-                voya_contracts::SystemProxyObservation::LocalProxy
-            }
-            voya_platform::sysproxy::SystemProxyObservation::OtherProxy => {
-                voya_contracts::SystemProxyObservation::OtherProxy
-            }
-        },
-        manual_cleanup_required: status.manual_cleanup_required,
         requested_mode: voya_app::contract_map::sysproxy_type_to_contract(status.requested_type),
         effective_mode: voya_app::contract_map::sysproxy_type_to_contract(status.effective_type),
         proxy: status.proxy,

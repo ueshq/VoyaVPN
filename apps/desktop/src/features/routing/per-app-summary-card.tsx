@@ -11,6 +11,7 @@ import { connectionModeStatus } from "@/ipc/commands";
 import { queryKeys } from "@/ipc/query-keys";
 
 import { PER_APP_MODE_LABEL_KEYS, readPerAppRule } from "./per-app-proxy-rule";
+import { useProcessRulesSupported } from "./use-process-rules-supported";
 
 const VISIBLE_APPS = 4;
 
@@ -32,6 +33,8 @@ export function PerAppSummaryCard({
     queryFn: connectionModeStatus,
     queryKey: queryKeys.connectionMode,
   });
+  const processRulesSupported = useProcessRulesSupported();
+  if (!processRulesSupported) return null;
   const on = mode !== "off";
   const shown = processes.slice(0, VISIBLE_APPS);
   const hidden = processes.length - shown.length;

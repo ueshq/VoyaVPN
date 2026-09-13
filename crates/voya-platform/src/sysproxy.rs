@@ -1,8 +1,4 @@
-use std::{
-    net::IpAddr,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use std::{net::IpAddr, path::PathBuf, sync::Arc};
 
 use thiserror::Error;
 use voya_core::{SysProxyType, SystemProxyItem};
@@ -20,8 +16,22 @@ const LOCAL_EXCEPTIONS: &str = "<local>";
 const WINDOWS_INTERNET_SETTINGS_REG_PATH: &str =
     r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings";
 const LINUX_PROXY_SCRIPT_NAME: &str = "proxy_set_linux.sh";
-mod manual;
-pub use manual::*;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SystemProxyManagement {
+    Automatic,
+    Unsupported,
+}
+
+/// Whether the app drives the OS proxy on this platform. macOS captures traffic
+/// only through its PacketTunnel VPN, so it has no system-proxy mode at all.
+#[must_use]
+pub const fn system_proxy_management(os: TargetOs) -> SystemProxyManagement {
+    match os {
+        TargetOs::Windows | TargetOs::Linux => SystemProxyManagement::Automatic,
+        TargetOs::Macos | TargetOs::Other => SystemProxyManagement::Unsupported,
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SystemProxyRequest {
@@ -35,8 +45,6 @@ pub struct SystemProxyRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SystemProxyStatus {
     pub management: SystemProxyManagement,
-    pub observation: SystemProxyObservation,
-    pub manual_cleanup_required: bool,
     pub requested_type: SysProxyType,
     pub effective_type: SysProxyType,
     pub target_os: TargetOs,
@@ -52,8 +60,6 @@ impl SystemProxyStatus {
     ) -> Self {
         Self {
             management: system_proxy_management(request.target_os),
-            observation: SystemProxyObservation::Unknown,
-            manual_cleanup_required: false,
             requested_type: request.item.sys_proxy_type,
             effective_type,
             target_os: request.target_os,
@@ -107,28 +113,19 @@ pub struct SystemProxyPlan {
 
 #[derive(Clone)]
 pub struct SystemProxyService {
-    observer: Arc<dyn SystemProxyObserver>,
-    manual_runtime: Arc<Mutex<ManualRuntime>>,
     runner: Arc<dyn ProcessRunner>,
 }
 
 impl SystemProxyService {
     #[must_use]
     pub fn new(runner: Arc<dyn ProcessRunner>) -> Self {
-        Self {
-            runner,
-            observer: Arc::new(PlatformSystemProxyObserver),
-            manual_runtime: Arc::default(),
-        }
+        Self { runner }
     }
 
     pub fn apply(
         &self,
         request: &SystemProxyRequest,
     ) -> Result<SystemProxyStatus, SystemProxyError> {
-        if system_proxy_management(request.target_os) == SystemProxyManagement::Manual {
-            return self.apply_manual(request);
-        }
         let plan = plan_system_proxy(request)?;
 
         match &plan.action {
@@ -148,10 +145,12 @@ impl SystemProxyService {
         Ok(plan.status)
     }
 
-    /// Forget the endpoint a manual platform advertises. Automatic platforms
-    /// keep no runtime state, so this only affects manual management.
-    pub fn clear_manual_state(&self) {
-        self.clear_manual_runtime();
+    /// The plan for a request, without touching the OS.
+    pub fn status(
+        &self,
+        request: &SystemProxyRequest,
+    ) -> Result<SystemProxyStatus, SystemProxyError> {
+        plan_system_proxy(request).map(|plan| plan.status)
     }
 }
 
@@ -170,7 +169,8 @@ pub fn plan_system_proxy(
         effective_type,
         normalized_exceptions.clone(),
     );
-    if status.management == SystemProxyManagement::Manual {
+    if request.target_os == TargetOs::Macos {
+        // No mode to apply: the PacketTunnel VPN is the only capture path.
         status.effective_type = SysProxyType::Unchanged;
         return Ok(SystemProxyPlan {
             action: SystemProxyAction::Noop,
@@ -405,10 +405,6 @@ mod backend;
 use backend::*;
 #[derive(Debug, Error)]
 pub enum SystemProxyError {
-    #[error("manual proxy runtime state is unavailable")]
-    ManualState,
-    #[error("could not open macOS Network settings")]
-    OpenNetworkSettings,
     #[error("invalid system proxy port {0}")]
     InvalidPort(i32),
     #[error("system proxy is not supported on {0:?}")]

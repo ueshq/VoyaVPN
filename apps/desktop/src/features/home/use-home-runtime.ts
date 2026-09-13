@@ -1,32 +1,24 @@
 import { useQuery } from "@tanstack/react-query";
 
 import type { TranslationFunction } from "@voya/i18n";
-import {
-  listPolicyGroups,
-  listProfiles,
-  policyGroupRuntime,
-  setConnectionMode,
-  tunRequestElevation,
-  tunStatus,
-} from "@/ipc/commands";
+import { listPolicyGroups, listProfiles, policyGroupRuntime } from "@/ipc/commands";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { TunStatus } from "@/ipc/bindings";
 import { refreshRuntimeStatusAndReport } from "@/ipc/runtime-status";
 import { profilesQueryKey, queryKeys } from "@/ipc/query-keys";
-import { getErrorMessage } from "@voya/utils/error";
 import {
   runtimeActionPending,
   type RuntimeAction,
   useRuntimeActionStore,
 } from "@/stores/runtime-action-store";
-import { useToastStore } from "@/stores/toast-store";
 
 import { executeRuntimeAction, isRuntimeTransitioning, reportRuntimeActionError } from "./runtime-action";
+import { tunProviderLabel, tunProviderPathMismatchDescription } from "./tun-provider-text";
 
 /**
  * Runtime controller for the Home screen: connect/disconnect/restart with
- * elevation + missing-core handling, the unified connection-mode switcher,
- * node selection/switching, and the seeded TUN live state.
+ * elevation + missing-core handling, node selection/switching, and the seeded
+ * TUN live state. How traffic is captured is chosen in Settings, never here.
  */
 /** How often the running group's current member is read again. */
 const GROUP_RUNTIME_REFRESH_MS = 5_000;
@@ -34,7 +26,6 @@ const GROUP_RUNTIME_REFRESH_MS = 5_000;
 export function useHomeRuntime(t: TranslationFunction) {
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const tun = useRuntimeEventStore((state) => state.tun);
-  const pushToast = useToastStore((state) => state.pushToast);
   const pending = useRuntimeActionStore(runtimeActionPending);
   const modePending = useRuntimeActionStore((state) => state.modePending);
   // Shares the ProfilesScreen query cache (same key) so resolving the active
@@ -108,76 +99,6 @@ export function useHomeRuntime(t: TranslationFunction) {
     void runRuntimeAction("connect");
   }
 
-  /**
-   * TUN preflight: native component + provider
-   * path checks, then on-demand elevation (one native prompt, no stored
-   * password). Returns false when TUN cannot (or should not) be enabled.
-   */
-  async function ensureTunPreconditions(): Promise<boolean> {
-    const current = await tunStatus();
-    if (current.backend !== "process" && !current.nativeComponentReady) {
-      pushToast({
-        description:
-          tunProviderErrorDescription(current, t) ??
-          t("status.nativeTunnelMissing"),
-        severity: "error",
-        title: t("status.tunEnableFailed"),
-      });
-      return false;
-    }
-    if (current.providerPathMismatch) {
-      pushToast({
-        description: tunProviderPathMismatchDescription(current, t),
-        severity: "error",
-        title: t("status.tunEnableFailed"),
-      });
-      return false;
-    }
-    if (current.requiresElevation && !current.elevationGranted) {
-      const granted = await tunRequestElevation();
-      if (!granted.elevationGranted) {
-        // User cancelled the native dialog — leave the mode unchanged.
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  async function runTunChange(enabled: boolean) {
-    // `busy` also covers a pending connect/disconnect/restart: flipping TUN
-    // while the core is still starting persists the flag but cannot restart the
-    // not-yet-connected core, leaving the UI claiming TUN over a non-TUN core.
-    if (busy || runtimeActionPending() || enabled === tunEnabled) {
-      return;
-    }
-
-    useRuntimeActionStore.setState({ modePending: true });
-    try {
-      if (enabled && !(await ensureTunPreconditions())) {
-        return;
-      }
-      await setConnectionMode(enabled ? "vpn" : "systemProxy");
-    } catch (error) {
-      pushToast({
-        description: getErrorMessage(error),
-        severity: "error",
-        title: t("status.connectionModeChangeFailed"),
-      });
-      return;
-    } finally {
-      try {
-        await refreshRuntimeStatusAndReport(t);
-      } finally {
-        useRuntimeActionStore.setState({ modePending: false });
-      }
-    }
-  }
-
-  function changeTunEnabled(enabled: boolean) {
-    void runTunChange(enabled);
-  }
-
   function restart() {
     void runRuntimeAction("restart");
   }
@@ -187,7 +108,6 @@ export function useHomeRuntime(t: TranslationFunction) {
     groupRuntime,
     nodeEntry,
     busy,
-    changeTunEnabled,
     connected,
     tunEnabled,
     handlePrimaryAction,
@@ -201,80 +121,24 @@ export function useHomeRuntime(t: TranslationFunction) {
     runningId,
     state,
     tunProviderSummary,
-    tunIssue: tun?.providerPathMismatch
-      ? tunProviderPathMismatchDescription(tun, t)
-      : tun &&
-          (["error", "permissionRequired", "missingComponent"].includes(
-            tun.providerState,
-          ) ||
-            tun.lastProviderError)
-        ? tunProviderSummary
-        : null,
+    tunIssue: homeTunIssue(tun, tunProviderSummary, t),
   };
 }
 
-function tunProviderLabel(tun: TunStatus, t: TranslationFunction) {
-  const backend = tunBackendLabel(tun.backend, t);
-  const providerState = tunProviderStateLabel(tun.providerState, t);
-  const description = tunProviderErrorDescription(tun, t);
-  if (description) {
-    return `${backend}: ${providerState}: ${description}`;
-  }
-
-  return `${backend}: ${providerState}`;
-}
-
-function tunProviderErrorDescription(tun: TunStatus, t: TranslationFunction) {
-  if (
-    tun.backend === "macosPacketTunnel" &&
-    tun.providerState === "missingComponent"
-  ) {
-    return t("status.macosTunnelMissing");
-  }
-
-  return tun.lastProviderError;
-}
-
-function tunProviderPathMismatchDescription(status: TunStatus, t: TranslationFunction) {
-  return t("status.tunProviderPathMismatch", {
-    expected: status.expectedProviderPath ?? "—",
-    resolved: status.resolvedProviderPath ?? "—",
-  });
-}
-
-function tunBackendLabel(backend: TunStatus["backend"], t: TranslationFunction) {
-  switch (backend) {
-    case "macosPacketTunnel":
-      return t("status.tunBackendMacos");
-    case "windowsService":
-      return t("status.tunBackendWindows");
-    case "process":
-      return t("status.tunBackendProcess");
-    case "unsupported":
-    default:
-      return t("status.tunBackendUnsupported");
-  }
-}
-
-function tunProviderStateLabel(
-  state: TunStatus["providerState"],
+/** A line under the mode card when the tunnel needs attention, or `null`. */
+function homeTunIssue(
+  tun: TunStatus | null,
+  summary: string | null,
   t: TranslationFunction,
 ) {
-  switch (state) {
-    case "running":
-      return t("status.tunProviderRunning");
-    case "starting":
-      return t("status.tunProviderStarting");
-    case "stopped":
-      return t("status.tunProviderStopped");
-    case "permissionRequired":
-      return t("status.tunProviderPermissionRequired");
-    case "missingComponent":
-      return t("status.tunProviderMissingComponent");
-    case "error":
-      return t("status.tunProviderError");
-    case "notApplicable":
-    default:
-      return t("status.tunProviderNotApplicable");
+  if (!tun) return null;
+  if (tun.providerPathMismatch) return tunProviderPathMismatchDescription(tun, t);
+  // The first connection on macOS asks to add a VPN configuration.
+  if (tun.backend === "macosPacketTunnel" && tun.providerState === "permissionRequired") {
+    return t("home.vpnPermissionHint");
   }
+  const needsAttention =
+    ["error", "permissionRequired", "missingComponent"].includes(tun.providerState) ||
+    tun.lastProviderError;
+  return needsAttention ? summary : null;
 }

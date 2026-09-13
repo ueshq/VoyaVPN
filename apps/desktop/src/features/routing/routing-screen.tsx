@@ -35,12 +35,14 @@ import { RoutingRuleDialog } from "./routing-rule-dialog";
 import { RoutingRuleList } from "./routing-rule-list";
 import { ruleDisplayName } from "./sentinel-rules";
 import { TrafficModeBanner } from "./traffic-mode-banner";
+import { useProcessRulesSupported } from "./use-process-rules-supported";
 import { useRoutingScreen, type RoutingScreenController } from "./use-routing-screen";
 
 export function RoutingScreen() {
   const { t } = useI18n();
   const controller = useRoutingScreen();
   const perAppOpen = useShellStore((state) => state.routingPerAppRequested);
+  const processRulesSupported = useProcessRulesSupported();
   const { activeRouting, ruleDialog } = controller;
   const error = controller.operationError ?? controller.loadError;
 
@@ -93,7 +95,7 @@ export function RoutingScreen() {
               controller.rules.length > 0 && "bg-surface-sunken",
             )}
           >
-            <RulesBody controller={controller} />
+            <RulesBody controller={controller} processRulesSupported={processRulesSupported} />
           </ScrollArea>
         </PageSurface>
       </PageContent>
@@ -111,15 +113,22 @@ export function RoutingScreen() {
         }}
         onSubmit={controller.saveRule}
         open={ruleDialog !== null}
+        processRulesSupported={processRulesSupported}
         rule={ruleDialog?.mode === "edit" ? ruleDialog.rule : null}
       />
       <ConfirmDialog controller={controller} />
-      {perAppOpen ? <PerAppProxyDialog onOpenChange={controller.setPerAppOpen} open /> : null}
+      {perAppOpen && processRulesSupported ? <PerAppProxyDialog onOpenChange={controller.setPerAppOpen} open /> : null}
     </PageSection>
   );
 }
 
-function RulesBody({ controller }: { controller: RoutingScreenController }) {
+function RulesBody({
+  controller,
+  processRulesSupported,
+}: {
+  controller: RoutingScreenController;
+  processRulesSupported: boolean;
+}) {
   const { t } = useI18n();
   if (!controller.activeRouting) {
     return controller.loading || controller.loadError ? null : (
@@ -150,6 +159,7 @@ function RulesBody({ controller }: { controller: RoutingScreenController }) {
       onReorder={controller.reorderRule}
       onToggle={(rule, enabled) => void controller.toggleRule(rule, enabled)}
       pendingToggles={controller.pendingToggles}
+      processRulesSupported={processRulesSupported}
       rules={controller.rules}
     />
   );

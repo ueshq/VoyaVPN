@@ -33,7 +33,6 @@ const wrapperNames = [
   "restartCore",
   "runtimeStatus",
   "systemProxyStatus",
-  "recheckSystemProxy",
   "connectionModeStatus",
   "setConnectionMode",
   "checkConnectionIp",
@@ -86,19 +85,9 @@ const wrapperNames = [
 
 describe("typed IPC command facade", () => {
   beforeEach(() => {
-    for (const name of [...wrapperNames, "openNetworkSettings"]) {
+    for (const name of wrapperNames) {
       commandMocks[name].mockReset();
     }
-  });
-
-  it("opens only the fixed network settings destination and propagates failures", async () => {
-    commandMocks.openNetworkSettings.mockResolvedValueOnce({ data: null, status: "ok" });
-    await expect(ipc.openNetworkSettings()).resolves.toBeUndefined();
-    expect(commandMocks.openNetworkSettings).toHaveBeenCalledWith();
-    commandMocks.openNetworkSettings.mockResolvedValueOnce({ status: "error", error: {
-      kind: { type: "internal" }, message: "Settings unavailable", subsystem: "sysproxy",
-    } });
-    await expect(ipc.openNetworkSettings()).rejects.toThrow("Settings unavailable");
   });
 
   it("unwraps every generated command through the public facade", async () => {
@@ -129,7 +118,7 @@ describe("typed IPC command facade", () => {
     },
   );
 
-  it.each([...wrapperNames, "openNetworkSettings"] as const)(
+  it.each(wrapperNames)(
     "propagates an underlying rejection from %s unchanged",
     async (name) => {
       const failure = new Error("IPC transport unavailable");

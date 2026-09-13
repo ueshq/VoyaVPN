@@ -697,128 +697,6 @@ async fn restart_if_connected_restarts_a_running_core() {
     assert!(events.iter().filter(|event| *event == "sysproxy").count() >= 2);
 }
 
-struct ClearObserver;
-impl voya_platform::sysproxy::SystemProxyObserver for ClearObserver {
-    fn observe(&self) -> voya_platform::sysproxy::SystemProxyObservation {
-        voya_platform::sysproxy::SystemProxyObservation::Clear
-    }
-}
-
-fn manual_manager(harness: &Harness) -> SystemProxyManager {
-    SystemProxyManager::with_target_os(
-        SystemProxyService::new(Arc::new(RecordingRunner::default()))
-            .with_observer(Arc::new(ClearObserver)),
-        harness.paths.clone(),
-        TargetOs::Macos,
-    )
-}
-
-fn last_published_proxy(harness: &Harness) -> Option<String> {
-    harness
-        .sink
-        .1
-        .lock()
-        .expect("statuses")
-        .last()
-        .expect("published")
-        .proxy
-        .clone()
-}
-
-#[tokio::test]
-async fn manual_proxy_failure_retires_the_published_endpoint_on_every_start_path() {
-    for action in ["connect", "restart", "save", "background"] {
-        let harness = Harness::new().await;
-        let flow = harness.flow_with_proxy_manager(manual_manager(&harness));
-        let mut config = active_config();
-        flow.connect(&config).await.expect("initial connection");
-        assert!(last_published_proxy(&harness).is_some());
-        // An exception list the planner rejects makes every later apply fail.
-        config.system_proxy_item.system_proxy_exceptions = "bad host".into();
-        let before = harness.sink.events().len();
-        match action {
-            "connect" => {
-                flow.connect(&config).await.expect("core still connects");
-            }
-            "restart" => {
-                flow.restart(&config).await.expect("core still restarts");
-            }
-            "save" => {
-                flow.reapply_system_proxy_if_connected(&config)
-                    .await
-                    .expect_err("explicit apply reports failure");
-            }
-            _ => {
-                flow.handle_core_exit(
-                    &config,
-                    CoreExitEvent {
-                        active_profile_id: Some("active".into()),
-                        process_id: 1,
-                        exit_code: Some(1),
-                        outcome: CoreExitOutcome::Restarted {
-                            attempt: 1,
-                            snapshot: harness.supervisor.status().await.expect("status"),
-                        },
-                    },
-                )
-                .await;
-            }
-        }
-        assert!(last_published_proxy(&harness).is_none(), "{action}");
-        let events = harness.sink.events();
-        assert_eq!(
-            events[before..]
-                .iter()
-                .filter(|event| *event == "sysproxy")
-                .count(),
-            1
-        );
-        assert!(events[before..]
-            .iter()
-            .any(|event| event.starts_with("notice:Warn:")));
-        assert_eq!(
-            harness
-                .supervisor
-                .status()
-                .await
-                .expect("still serving")
-                .state,
-            SupervisorConnectionState::Connected
-        );
-    }
-}
-
-#[tokio::test]
-async fn a_rejected_restart_observes_the_surviving_endpoint_without_reapplying_it() {
-    let harness = Harness::new().await;
-    let flow = harness.flow_with_proxy_manager(manual_manager(&harness));
-    let mut config = active_config();
-    flow.connect(&config).await.expect("initial connection");
-    let original_proxy = last_published_proxy(&harness);
-    assert!(original_proxy.is_some());
-    // A re-apply would advertise the new port; observing keeps the old one.
-    config.inbound[0].local_port += 100;
-    config.index_id = "deleted-profile".into();
-    let before = harness.sink.events().len();
-    assert!(matches!(
-        flow.restart(&config).await,
-        Err(RuntimeError::ActiveProfileNotFound(_))
-    ));
-    assert_eq!(last_published_proxy(&harness), original_proxy);
-    let events = harness.sink.events();
-    let tail = &events[before..];
-    assert!(
-        tail.iter()
-            .position(|event| event == "sysproxy")
-            .expect("proxy snapshot")
-            < tail
-                .iter()
-                .position(|event| event.starts_with("state:Connected"))
-                .expect("connected")
-    );
-    assert!(!tail.iter().any(|event| event.starts_with("notice:")));
-}
-
 struct CleanupFailure;
 impl NativeTunController for CleanupFailure {
     fn status(&self, backend: TunBackend) -> NativeTunStatus {
@@ -844,7 +722,7 @@ impl NativeTunController for CleanupFailure {
 }
 
 #[tokio::test]
-async fn pending_native_cleanup_publishes_the_retired_endpoint_before_the_pending_state() {
+async fn pending_native_cleanup_publishes_the_proxy_state_before_the_pending_state() {
     let mut harness = Harness::new().await;
     harness.supervisor = CoreSupervisor::spawn(
         SupervisorDeps::new(
@@ -854,11 +732,12 @@ async fn pending_native_cleanup_publishes_the_retired_endpoint_before_the_pendin
         .with_target_os(TargetOs::Macos)
         .with_native_tun_controller(Arc::new(CleanupFailure)),
     );
-    let manager = manual_manager(&harness);
+    let manager = SystemProxyManager::with_target_os(
+        SystemProxyService::new(Arc::new(RecordingRunner::default())),
+        harness.paths.clone(),
+        TargetOs::Macos,
+    );
     let mut config = active_config();
-    manager
-        .apply_runtime_config(&config)
-        .expect("previous endpoint");
     config.tun_mode_item.enable_tun = true;
     let error = harness
         .flow_with_proxy_manager(manager)

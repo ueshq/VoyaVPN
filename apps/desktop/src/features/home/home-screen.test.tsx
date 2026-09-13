@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale } from "@voya/i18n";
 import type {
   AppError,
-  ConnectionModeStatus,
   ProfileListEntry,
   RuntimeStatusResponse,
   StatisticsSnapshot,
@@ -108,18 +107,10 @@ const connectedStatus: RuntimeStatusResponse = {
 
 const sysProxyStatus: SystemProxyStatusResponse = {
   management: "automatic",
-  observation: "unknown",
-  manualCleanupRequired: false,
   effectiveMode: "forcedClear",
   exceptions: "",
   proxy: null,
   requestedMode: "forcedChange",
-};
-
-const connectionModeStatus: ConnectionModeStatus = {
-  mode: "systemProxy",
-  processRulesEffective: false,
-  vpnAvailable: true,
 };
 
 const tunStatusResponse: TunStatus = {
@@ -192,10 +183,6 @@ function renderHome() {
   };
 }
 
-function tunSwitch() {
-  return screen.getByRole("switch", { name: /^(TUN mode|TUN模式)$/ });
-}
-
 function connectButton() {
   return screen.getByTestId("home-connect-button");
 }
@@ -232,7 +219,6 @@ describe("HomeScreen", () => {
       makeActiveProfile({ id: "active", remarks: "Active node" }),
     ]);
     ipcMock.setActiveProfile.mockResolvedValue(makeProfile(0));
-    ipcMock.setConnectionMode.mockResolvedValue(connectionModeStatus);
     ipcMock.systemProxyStatus.mockResolvedValue(sysProxyStatus);
     ipcMock.tunRequestElevation.mockResolvedValue(tunStatusResponse);
     ipcMock.tunStatus.mockResolvedValue(tunStatusResponse);
@@ -258,7 +244,7 @@ describe("HomeScreen", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Import" })).not.toBeInTheDocument();
     expect(screen.queryByTestId("home-connected-info")).not.toBeInTheDocument();
-    expect(tunSwitch()).toBeInTheDocument();
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Traffic mode" })).toBeInTheDocument();
   });
 
@@ -344,31 +330,6 @@ describe("HomeScreen", () => {
     expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
   });
 
-  it("keeps manual proxy setup in settings and preserves unknown configuration", async () => {
-    runtimeMock.state.coreState = connectedStatus;
-    runtimeMock.state.sysProxy = {
-      ...sysProxyStatus,
-      management: "manual",
-      observation: "unknown",
-      requestedMode: "forcedChange",
-      effectiveMode: "unchanged",
-      proxy: "127.0.0.1:10808",
-    };
-    renderHome();
-    expect(screen.queryByText("Local proxy ready")).not.toBeInTheDocument();
-    expect(screen.queryByText("Connected")).not.toBeInTheDocument();
-    expect(connectButton()).toHaveAccessibleName("Disconnect");
-    expect(connectButton()).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByText("Manual proxy setup")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText(
-        "Configure your system proxy manually to use the local listener.",
-      ),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByTestId("manual-proxy-panel")).not.toBeInTheDocument();
-    expect(useToastStore.getState().toasts).toHaveLength(0);
-  });
-
   it("keeps the disconnect action available while proxy capabilities are unavailable", () => {
     runtimeMock.state.coreState = connectedStatus;
     const view = renderHome();
@@ -378,23 +339,6 @@ describe("HomeScreen", () => {
     expect(ipcMock.systemProxyStatus).not.toHaveBeenCalled();
     view.unmount();
   });
-
-  it.each([null, "macosPacketTunnel"] as const)(
-    "shows the saved TUN choice independently of the running tunnel (%s)",
-    (activeTunBackend) => {
-      runtimeMock.state.coreState = { ...connectedStatus, activeTunBackend };
-      runtimeMock.state.sysProxy = { ...sysProxyStatus, management: "manual" };
-      runtimeMock.state.tun = {
-        ...tunStatusResponse,
-        enabled: true,
-        backend: "macosPacketTunnel",
-      };
-      renderHome();
-      expect(tunSwitch()).toBeChecked();
-      expect(connectButton()).toHaveAccessibleName("Disconnect");
-      expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
-    },
-  );
 
   it("offers a retry when native tunnel cleanup is pending and refreshes TUN after failure", async () => {
     const pending = { ...connectedStatus, state: "cleanupPending" as const };
@@ -619,173 +563,6 @@ describe("HomeScreen", () => {
     expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
   });
 
-  it("turns saved TUN off from the keyboard and preserves the system proxy preference", async () => {
-    runtimeMock.state.tun = { ...tunStatusResponse, enabled: true };
-    runtimeMock.state.sysProxy = {
-      ...sysProxyStatus,
-      requestedMode: "forcedChange",
-    };
-    ipcMock.systemProxyStatus.mockResolvedValue(runtimeMock.state.sysProxy);
-    const user = userEvent.setup();
-    renderHome();
-
-    expect(tunSwitch()).toBeChecked();
-    tunSwitch().focus();
-    await user.keyboard(" ");
-    await waitFor(() =>
-      expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("systemProxy"),
-    );
-    await waitFor(() => expect(tunSwitch()).not.toBeChecked());
-    expect(ipcMock.tunRequestElevation).not.toHaveBeenCalled();
-  });
-
-  it("shows a backend-confirmed TUN change", async () => {
-    ipcMock.setConnectionMode.mockImplementation(async () => {
-      ipcMock.tunStatus.mockResolvedValue({
-        ...tunStatusResponse,
-        enabled: true,
-      });
-      return { ...connectionModeStatus, mode: "vpn" };
-    });
-    const user = userEvent.setup();
-    renderHome();
-    await user.click(tunSwitch());
-    await waitFor(() => expect(tunSwitch()).toBeChecked());
-  });
-
-  it("offers one traffic mode control", async () => {
-    runtimeMock.state.coreState = disconnectedStatus;
-    renderHome();
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Smart routing" }),
-      ).toBeEnabled(),
-    );
-    expect(
-      screen.getByRole("group", { name: "Traffic mode" }),
-    ).toBeInTheDocument();
-  });
-
-  it.each([
-    ["en", "About TUN mode", "TUN captures device traffic and may require system permission", "About traffic mode", "Smart routing: Rules determine which traffic uses the proxy;\nGlobal proxy: All captured traffic uses the selected node;"],
-    ["zh-Hans", "TUN模式说明", "TUN接管设备流量，可能需要系统授权", "流量模式说明", "智能分流：根据规则决定哪些流量使用代理；\n全局代理：接管的流量均使用所选节点；"],
-    ["zh-Hant", "TUN模式說明", "TUN接管裝置流量，可能需要系統授權", "流量模式說明", "智慧分流：根據規則決定哪些流量使用代理；\n全域代理：接管的流量均使用所選節點；"],
-  ] as const)("shows localized mode help on hover and focus in %s without changing TUN", async (locale, tunLabel, tunHint, trafficLabel, trafficHint) => {
-    await changeLocale(locale, { persist: false });
-    const user = userEvent.setup();
-    renderHome();
-    await waitFor(() => expect(tunSwitch()).toBeEnabled());
-    expect(screen.queryByText(tunHint)).not.toBeInTheDocument();
-    expect(screen.queryByText(trafficHint)).not.toBeInTheDocument();
-
-    const info = screen.getByRole("button", { name: tunLabel });
-    await user.hover(info);
-    expect((await screen.findByRole("tooltip")).textContent).toBe(tunHint);
-    await user.click(info);
-    expect(tunSwitch()).not.toBeChecked();
-    expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
-    await user.unhover(info);
-    await user.tab();
-    expect(tunSwitch()).toHaveFocus();
-    await user.tab();
-    expect(screen.getByRole("button", { name: trafficLabel })).toHaveFocus();
-    expect((await screen.findByRole("tooltip")).textContent).toBe(trafficHint);
-    await user.keyboard("{Escape}");
-    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
-    expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
-    expect(ipcMock.proxySetTrafficMode).not.toHaveBeenCalled();
-  });
-
-  it("shows the backend reason and restores controls when mode switching fails", async () => {
-    const user = userEvent.setup();
-    ipcMock.setConnectionMode.mockRejectedValue(
-      new Error("desktop policy rejected the mode"),
-    );
-
-    renderHome();
-    const toggle = tunSwitch();
-    await user.click(toggle);
-
-    await waitFor(() =>
-      expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
-        description: "desktop policy rejected the mode",
-        severity: "error",
-        title: "Failed to change connection mode",
-      }),
-    );
-    expect(toggle).toBeEnabled();
-    expect(toggle).not.toBeChecked();
-  });
-
-  it("prevents duplicate mode submissions while one is pending", async () => {
-    const user = userEvent.setup();
-    let resolveMode: ((status: ConnectionModeStatus) => void) | undefined;
-    ipcMock.setConnectionMode.mockImplementation(
-      () =>
-        new Promise<ConnectionModeStatus>((resolve) => {
-          resolveMode = resolve;
-        }),
-    );
-
-    renderHome();
-    const toggle = tunSwitch();
-    await user.click(toggle);
-    expect(toggle).toBeDisabled();
-    await user.click(toggle);
-    await waitFor(() =>
-      expect(ipcMock.setConnectionMode).toHaveBeenCalledTimes(1),
-    );
-
-    resolveMode?.({ ...connectionModeStatus, mode: "vpn" });
-    await waitFor(() => expect(toggle).toBeEnabled());
-  });
-
-  it("refuses a mode switch while a connect is still in flight", async () => {
-    const user = userEvent.setup();
-    // Flipping TUN mid-connect persists the flag but cannot restart a core that
-    // is not Connected yet, so the UI would claim TUN over a non-TUN core.
-    let resolveConnect: ((status: RuntimeStatusResponse) => void) | undefined;
-    ipcMock.connectActiveProfile.mockImplementation(
-      () =>
-        new Promise<RuntimeStatusResponse>((resolve) => {
-          resolveConnect = resolve;
-        }),
-    );
-
-    renderHome();
-    await waitFor(() => expect(connectButton()).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "Connect" }));
-
-    const toggle = tunSwitch();
-    expect(toggle).toBeDisabled();
-    await user.click(toggle);
-    expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
-
-    resolveConnect?.(connectedStatus);
-    await waitFor(() =>
-      expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(1),
-    );
-  });
-
-  it("prevents connecting during a pending mode transaction", async () => {
-    let resolveMode: ((status: ConnectionModeStatus) => void) | undefined;
-    ipcMock.setConnectionMode.mockImplementation(
-      () =>
-        new Promise<ConnectionModeStatus>((resolve) => {
-          resolveMode = resolve;
-        }),
-    );
-    const user = userEvent.setup();
-    renderHome();
-    await user.click(tunSwitch());
-    expect(connectButton()).toBeDisabled();
-    await user.click(connectButton());
-    expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
-    resolveMode?.(connectionModeStatus);
-    await waitFor(() => expect(connectButton()).toBeEnabled());
-  });
-
   it("keeps the current node honest when the running profile differs from the saved selection", async () => {
     runtimeMock.state.coreState = connectedStatus;
     mockProfileList([
@@ -805,93 +582,6 @@ describe("HomeScreen", () => {
     expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
     expect(ipcMock.restartCore).not.toHaveBeenCalled();
   });
-
-  it("keeps a committed mode change successful when only the status refresh fails", async () => {
-    const user = userEvent.setup();
-    // The backend already persisted and emitted its post-commit events, so a
-    // failing follow-up read must not be reported as a failed mode change.
-    ipcMock.systemProxyStatus.mockRejectedValue(
-      new Error("status read failed"),
-    );
-
-    renderHome();
-    await user.click(tunSwitch());
-
-    await waitFor(() =>
-      expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("vpn"),
-    );
-    await waitFor(() => {
-      const titles = useToastStore
-        .getState()
-        .toasts.map((toast) => toast.title);
-      expect(titles).toContain("Failed to read system proxy status");
-      expect(titles).not.toContain("Failed to change connection mode");
-    });
-  });
-
-  it("requests system authorization on demand before entering TUN mode", async () => {
-    const user = userEvent.setup();
-    ipcMock.tunStatus.mockResolvedValue({
-      ...tunStatusResponse,
-      requiresElevation: true,
-      elevationGranted: false,
-    });
-    ipcMock.tunRequestElevation.mockResolvedValue({
-      ...tunStatusResponse,
-      requiresElevation: true,
-      elevationGranted: true,
-    });
-
-    renderHome();
-
-    await user.click(tunSwitch());
-
-    await waitFor(() =>
-      expect(ipcMock.tunRequestElevation).toHaveBeenCalledTimes(1),
-    );
-    await waitFor(() =>
-      expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("vpn"),
-    );
-  });
-
-  it.each([
-    {
-      locale: "en",
-      lastProviderError: "PacketTunnel extension is not bundled in this build",
-    },
-    { locale: "zh-Hans", lastProviderError: "A different backend diagnostic" },
-    { locale: "en", lastProviderError: null },
-  ] as const)(
-    "explains how to restore the missing macOS extension in $locale ($lastProviderError)",
-    async ({ locale, lastProviderError }) => {
-      await changeLocale(locale, { persist: false });
-      const user = userEvent.setup();
-      ipcMock.tunStatus.mockResolvedValue({
-        ...tunStatusResponse,
-        backend: "macosPacketTunnel",
-        lastProviderError,
-        nativeComponentReady: false,
-        providerState: "missingComponent",
-        requiresElevation: true,
-        elevationGranted: false,
-      });
-
-      renderHome();
-
-      await user.click(tunSwitch());
-
-      await waitFor(() =>
-        expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
-          description: missingTunnelMessages[locale],
-          severity: "error",
-          title: locale === "en" ? "Failed to enable TUN" : "启用 TUN 失败",
-        }),
-      );
-      expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
-      expect(ipcMock.tunRequestElevation).not.toHaveBeenCalled();
-      expect(tunSwitch()).toHaveAttribute("aria-checked", "false");
-    },
-  );
 
   it.each(["en", "zh-Hans"] as const)(
     "shows the same recovery advice in the persisted TUN status in %s",
@@ -926,22 +616,51 @@ describe("HomeScreen", () => {
     },
   );
 
-  it("allows TUN mode when the macOS extension is present", async () => {
-    const user = userEvent.setup();
-    ipcMock.tunStatus.mockResolvedValue({
-      ...tunStatusResponse,
-      backend: "macosPacketTunnel",
-      providerState: "stopped",
-    });
 
+  it("offers only the traffic mode, never a capture mode switch", async () => {
+    runtimeMock.state.coreState = disconnectedStatus;
+    runtimeMock.state.tun = { ...tunStatusResponse, enabled: true };
     renderHome();
-    await user.click(tunSwitch());
 
     await waitFor(() =>
-      expect(ipcMock.setConnectionMode).toHaveBeenCalledWith("vpn"),
+      expect(screen.getByRole("button", { name: "Rule" })).toBeEnabled(),
     );
-    expect(ipcMock.tunRequestElevation).not.toHaveBeenCalled();
-    expect(useToastStore.getState().toasts).toEqual([]);
+    expect(screen.getByRole("button", { name: "Global" })).toBeInTheDocument();
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(screen.queryByText("TUN mode")).not.toBeInTheDocument();
+    expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["en", "About traffic mode", "Rule: Rules decide which traffic uses the proxy;\nGlobal: All captured traffic uses the selected node;"],
+    ["zh-Hans", "流量模式说明", "规则：根据规则决定哪些流量使用代理；\n全局：接管的流量均使用所选节点；"],
+    ["zh-Hant", "流量模式說明", "規則：根據規則決定哪些流量使用代理；\n全域：接管的流量均使用所選節點；"],
+  ] as const)("shows localized traffic mode help in %s without changing the mode", async (locale, label, hint) => {
+    await changeLocale(locale, { persist: false });
+    const user = userEvent.setup();
+    renderHome();
+    expect(screen.queryByText(hint)).not.toBeInTheDocument();
+
+    await user.hover(screen.getByRole("button", { name: label }));
+    expect((await screen.findByRole("tooltip")).textContent).toBe(hint);
+    await user.keyboard("{Escape}");
+    expect(ipcMock.proxySetTrafficMode).not.toHaveBeenCalled();
+  });
+
+  it("asks macOS users to allow the VPN configuration", async () => {
+    runtimeMock.state.tun = {
+      ...tunStatusResponse,
+      backend: "macosPacketTunnel",
+      enabled: true,
+      providerState: "permissionRequired",
+    };
+    renderHome();
+
+    expect(
+      await screen.findByText(
+        "macOS will ask to add a VPN configuration. Choose Allow to connect.",
+      ),
+    ).toHaveAttribute("role", "status");
   });
 
   it.each([
@@ -953,109 +672,34 @@ describe("HomeScreen", () => {
     {
       backend: "windowsService",
       providerState: "missingComponent",
-      message: "PacketTunnel extension is not bundled in this build",
+      message: "Tunnel service is not installed",
     },
   ] as const)(
-    "preserves other $backend diagnostics in notifications and status",
+    "keeps $backend diagnostics visible under the mode card",
     async ({ backend, providerState, message }) => {
-      const user = userEvent.setup();
-      const status: TunStatus = {
+      runtimeMock.state.tun = {
         ...tunStatusResponse,
         backend,
-        providerState,
-        nativeComponentReady: false,
+        enabled: true,
         lastProviderError: message,
+        nativeComponentReady: false,
+        providerState,
       };
-      ipcMock.tunStatus.mockResolvedValue(status);
-      const { queryClient, rerender } = renderHome();
+      renderHome();
 
-      await user.click(tunSwitch());
-      await waitFor(() =>
-        expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
-          description: message,
-        }),
-      );
-      expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
-
-      runtimeMock.state.tun = { ...status, enabled: true };
-      rerender(
-        <QueryClientProvider client={queryClient}>
-          <HomeScreen />
-        </QueryClientProvider>,
-      );
       expect(
         await screen.findByText((text) => text.endsWith(message)),
       ).toBeInTheDocument();
     },
   );
 
-  it("localizes the generic missing-component fallback", async () => {
-    await changeLocale("zh-Hans", { persist: false });
-    const user = userEvent.setup();
-    ipcMock.tunStatus.mockResolvedValue({
-      ...tunStatusResponse,
-      backend: "windowsService",
-      providerState: "missingComponent",
-      nativeComponentReady: false,
-    });
-
-    renderHome();
-    await user.click(tunSwitch());
-    await waitFor(() =>
-      expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
-        description: "尚未安装原生隧道组件。",
-      }),
-    );
-    expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
-  });
-
-  it("blocks TUN mode when PlugInKit elected a stale provider path", async () => {
-    const user = userEvent.setup();
-    ipcMock.tunStatus.mockResolvedValue({
-      ...tunStatusResponse,
-      backend: "macosPacketTunnel",
-      expectedProviderPath:
-        "/Applications/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex",
-      providerPathMismatch: true,
-      resolvedProviderPath:
-        "/Users/afu/Dev/VoyaVPN/target/native/macos/runtime-kill-tests/profile-only.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex",
-    });
-
+  it("prevents connecting while a capture mode change is pending", async () => {
+    useRuntimeActionStore.setState({ modePending: true });
     renderHome();
 
-    await user.click(tunSwitch());
-
-    await waitFor(() => expect(ipcMock.tunStatus).toHaveBeenCalled());
-    expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
-    expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
-      description: expect.stringContaining("pnpm native:macos:ne:doctor --fix"),
-      title: "Failed to enable TUN",
-    });
-  });
-
-  it("leaves the mode unchanged when the authorization dialog is cancelled", async () => {
-    const user = userEvent.setup();
-    ipcMock.tunStatus.mockResolvedValue({
-      ...tunStatusResponse,
-      requiresElevation: true,
-      elevationGranted: false,
-    });
-    ipcMock.tunRequestElevation.mockResolvedValue({
-      ...tunStatusResponse,
-      requiresElevation: true,
-      elevationGranted: false,
-    });
-
-    renderHome();
-
-    await user.click(tunSwitch());
-
-    await waitFor(() =>
-      expect(ipcMock.tunRequestElevation).toHaveBeenCalledTimes(1),
-    );
-    expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
-    await waitFor(() => expect(tunSwitch()).toBeEnabled());
-    expect(tunSwitch()).not.toBeChecked();
+    expect(connectButton()).toBeDisabled();
+    await userEvent.click(connectButton());
+    expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
   });
 });
 

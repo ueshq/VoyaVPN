@@ -148,6 +148,23 @@ describe("RoutingRuleDialog", () => {
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
+
+  it("hides the app condition where the tunnel cannot match apps but keeps a stored one", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderDialog({
+      mode: "edit",
+      onSubmit,
+      processRulesSupported: false,
+      rule: rule({ domain: ["example.test"], process: ["curl"], remarks: "Office" }),
+    });
+
+    expect(screen.queryByLabelText("Process")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ process: ["curl"] })),
+    );
+  });
 });
 
 function renderDialog(props: Partial<ComponentProps<typeof RoutingRuleDialog>> = {}) {

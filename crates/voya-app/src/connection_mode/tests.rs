@@ -262,39 +262,96 @@ async fn a_failed_apply_rolls_the_persisted_mode_back() {
     );
 }
 
+#[test]
+fn macos_offers_neither_the_system_proxy_nor_process_rules() {
+    let config = config_with(SysProxyType::Unchanged, true);
+    let macos = TunStatus {
+        backend: crate::tun::TunBackend::MacosPacketTunnel,
+        enabled: true,
+        ..disabled_tun_status()
+    };
+
+    let status = connection_mode_status(&config, &macos);
+    assert_eq!(status.mode, ConnectionMode::Vpn);
+    assert!(!status.system_proxy_available);
+    assert!(!status.process_rules_supported);
+    assert!(
+        !status.process_rules_effective,
+        "the NetworkExtension tunnel cannot match processes even in VPN mode"
+    );
+
+    let linux = connection_mode_status(&config, &disabled_tun_status());
+    assert!(linux.system_proxy_available);
+    assert!(linux.process_rules_supported);
+    assert!(linux.process_rules_effective);
+}
+
+#[test]
+fn fresh_installs_start_in_the_native_vpn_where_one_ships() {
+    for (target_os, expected) in [
+        (TargetOs::Windows, true),
+        (TargetOs::Macos, true),
+        (TargetOs::Linux, false),
+    ] {
+        let mut config = AppConfig::default();
+        seed_platform_connection_defaults(&mut config, target_os);
+        assert_eq!(config.tun_mode_item.enable_tun, expected, "{target_os:?}");
+    }
+}
+
+#[test]
+fn macos_configurations_always_load_in_vpn_mode() {
+    let mut config = config_with(SysProxyType::ForcedChange, false);
+    assert!(enforce_platform_connection_mode(
+        &mut config,
+        TargetOs::Macos
+    ));
+    assert!(config.tun_mode_item.enable_tun);
+    assert_eq!(
+        config.system_proxy_item.sys_proxy_type,
+        SysProxyType::Unchanged
+    );
+    assert!(!enforce_platform_connection_mode(
+        &mut config,
+        TargetOs::Macos
+    ));
+
+    for target_os in [TargetOs::Windows, TargetOs::Linux] {
+        let mut config = config_with(SysProxyType::ForcedChange, false);
+        assert!(!enforce_platform_connection_mode(&mut config, target_os));
+        assert!(!config.tun_mode_item.enable_tun, "{target_os:?}");
+    }
+}
+
 #[tokio::test]
-async fn setting_only_the_system_proxy_flavor_persists_while_disconnected() {
+async fn leaving_vpn_mode_is_refused_on_macos_without_touching_anything() {
     let harness = Harness::new().await;
 
-    let status = harness
-        .manager()
-        .set_system_proxy_mode(
+    let error = harness
+        .manager_for(TargetOs::Macos)
+        .set_connection_mode(
             &harness.coordinator,
-            SysProxyType::ForcedChange,
-            SupervisorConnectionState::Disconnected,
+            ConnectionMode::SystemProxy,
+            SupervisorConnectionState::Connected,
         )
         .await
-        .expect("system proxy mode");
+        .expect_err("macOS has no system proxy mode");
 
-    assert_eq!(status.requested_type, SysProxyType::ForcedChange);
+    assert!(matches!(
+        error,
+        ConnectionModeError::Tun(TunManagerError::VpnRequired)
+    ));
     assert_eq!(
         harness
             .coordinator
             .current_config()
             .system_proxy_item
             .sys_proxy_type,
-        SysProxyType::ForcedChange
+        SysProxyType::ForcedClear,
+        "a refused mode must not be persisted"
     );
     assert!(harness.runner.oneshots().is_empty());
-    assert!(
-        !harness
-            .coordinator
-            .current_config()
-            .tun_mode_item
-            .enable_tun,
-        "the system proxy flavor never touches TUN"
-    );
-    assert_eq!(harness.sink.events(), ["sysproxy:ForcedChange", "tray"]);
+    assert!(harness.sink.events().is_empty());
 }
 
 struct Harness {
@@ -330,15 +387,19 @@ impl Harness {
     }
 
     fn manager(&self) -> ConnectionModeManager {
+        self.manager_for(TargetOs::Linux)
+    }
+
+    fn manager_for(&self, target_os: TargetOs) -> ConnectionModeManager {
         ConnectionModeManager::new(
             SystemProxyManager::with_target_os(
                 SystemProxyService::new(Arc::clone(&self.runner) as Arc<_>),
                 self.paths.clone(),
-                TargetOs::Linux,
+                target_os,
             ),
             TunManager::with_target_os_and_native_tun(
                 Arc::clone(&self.elevation),
-                TargetOs::Linux,
+                target_os,
                 Arc::new(StoppedNativeTun),
             ),
             Arc::new(self.sink.clone()),
