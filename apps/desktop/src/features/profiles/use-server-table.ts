@@ -7,6 +7,7 @@ import { useNodeSubscriptions } from "./use-node-subscriptions";
 import { useNodeExport } from "./use-node-export";
 import { useNodeImport } from "./use-node-import";
 import { useNodeSpeedtest } from "./use-node-speedtest";
+import { usePolicyGroups } from "./use-policy-groups";
 
 /** Compose page capabilities; individual components consume only their own facet. */
 export function useServerTable() {
@@ -19,6 +20,7 @@ export function useServerTable() {
   const exports = useNodeExport(operation, t);
   const imports = useNodeImport(operation, editor.handleDialogImport, t);
   const speedtest = useNodeSpeedtest(operation);
+  const policyGroups = usePolicyGroups(operation, t);
   return {
     t,
     nodeGroups,
@@ -29,5 +31,6 @@ export function useServerTable() {
     ...exports,
     ...speedtest,
     ...imports,
+    ...policyGroups,
   };
 }

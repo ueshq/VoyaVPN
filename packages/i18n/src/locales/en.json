@@ -50,7 +50,8 @@
     "routingChanged": "Routing change",
     "settingsSaved": "Settings save",
     "tunChanged": "TUN change",
-    "activeProfileChanged": "Node switch"
+    "activeProfileChanged": "Node switch",
+    "policyGroupChanged": "Policy group change"
   },
   "home": {
     "aria": "Connection home",
@@ -196,7 +197,10 @@
     "tunStatusRefreshFailed": "TUN status refresh failed",
     "routingRulesResetRestartFailed": "Default rules restored; core restart failed",
     "trayActionFailed": "Tray action failed",
-    "activeProfileRestartFailed": "Node switched; core restart failed"
+    "activeProfileRestartFailed": "Node switched; core restart failed",
+    "policyGroupRefreshFailed": "Policy group refresh failed",
+    "policyGroupSavedRestartFailed": "Policy group saved; core restart failed",
+    "policyGroupSelectionRuntimeUpdateFailed": "Selection saved; the running core could not switch"
   },
   "options": {
     "autostart": "Autostart",
@@ -875,5 +879,39 @@
     "minimize": "Keep running in tray",
     "quit": "Quit",
     "remember": "Remember my choice"
+  },
+  "policyGroups": {
+    "title": "Policy groups",
+    "new": "New policy group",
+    "edit": "Edit policy group",
+    "editNamed": "Edit {{name}}",
+    "deleteNamed": "Delete {{name}}",
+    "deleteTitle": "Delete policy group {{name}}?",
+    "deleteHint": "The nodes in this group are kept.",
+    "use": "Use",
+    "inUse": "In use",
+    "active": "Active",
+    "delay": "{{ms}} ms",
+    "name": "Name",
+    "strategyLabel": "Strategy",
+    "strategy": {
+      "selector": "Manual select",
+      "urlTest": "Lowest latency",
+      "fallback": "Failover"
+    },
+    "strategyHint": {
+      "selector": "You pick the node; the group remembers your choice.",
+      "urlTest": "Traffic uses the member with the lowest measured latency.",
+      "fallback": "Traffic uses the first reachable member, in the order below."
+    },
+    "subscription": "Include a subscription",
+    "subscriptionNone": "None",
+    "subscriptionHint": "Every node of the subscription joins after the nodes selected below.",
+    "members": "Nodes",
+    "membersSelected": "{{count}} selected",
+    "filterNodes": "Filter nodes",
+    "testUrl": "Test URL",
+    "interval": "Probe interval (seconds)",
+    "tolerance": "Tolerance (ms)"
   }
 }

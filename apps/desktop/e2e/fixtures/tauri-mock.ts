@@ -14,6 +14,9 @@ import type {
   DnsSettings,
   ExportProfilesResult,
   ImportProfilesResult,
+  PolicyGroup,
+  PolicyGroupListing,
+  PolicyGroupRuntime,
   ProcessCandidate,
   ProxyConnectionsSnapshot,
   ProxyMonitorStatus,
@@ -59,6 +62,9 @@ export async function installTauriSmokeMock(
     type MockState = {
       calls: Array<{ command: string; args: CommandArgs }>;
       dns: DnsSettings;
+      policyGroups: PolicyGroup[];
+      activePolicyGroupId: string | null;
+      policyGroupDelaysTested: boolean;
       profiles: ProfileRow[];
       subscriptions: Subscription[];
       subscriptionMetadata: SubscriptionMetadata[];
@@ -87,6 +93,7 @@ export async function installTauriSmokeMock(
     let nextProfileId = 1;
     let nextRoutingId = 1;
     let nextRuleId = 1;
+    let nextPolicyGroupId = 1;
     let windowMaximized = false;
 
     const state: MockState = {
@@ -95,6 +102,9 @@ export async function installTauriSmokeMock(
       appliedTrafficMode: "rule",
       calls: [] as Array<{ command: string; args: CommandArgs }>,
       dns: makeDnsSettings(),
+      policyGroups: [],
+      activePolicyGroupId: null,
+      policyGroupDelaysTested: false,
       profiles: [] as ProfileRow[],
       subscriptions: [],
       subscriptionMetadata: [],
@@ -206,6 +216,11 @@ export async function installTauriSmokeMock(
       set_system_proxy_mode: connectionModeScopes,
       set_tun_enabled: connectionModeScopes,
       update_subscriptions: [...subscriptionScopes, ...profileScopes],
+      delete_policy_groups: ["policyGroups"],
+      save_policy_group: ["policyGroups"],
+      select_policy_group_member: ["policyGroups", "policyGroupRuntime"],
+      set_active_policy_group: ["policyGroups", "profiles", "appSettings"],
+      test_policy_group_delay: ["policyGroups", "policyGroupRuntime"],
     };
 
     function invoke(command: string, args: CommandArgs = {}) {
@@ -599,6 +614,59 @@ export async function installTauriSmokeMock(
             updated: sources.length,
           } satisfies SubscriptionUpdateResult);
         }
+        case "list_policy_groups":
+          return Promise.resolve({
+            entries: state.policyGroups.map((group) => ({
+              group: clone(group),
+              isActive: state.activePolicyGroupId === group.id,
+              members: policyGroupMembers(group),
+            })),
+          } satisfies PolicyGroupListing);
+        case "save_policy_group": {
+          const input = readRecord(args, "group") as unknown as PolicyGroup;
+          const saved: PolicyGroup = {
+            ...input,
+            id: input.id || `policy-group-smoke-${nextPolicyGroupId++}`,
+          };
+          state.policyGroups = [
+            ...state.policyGroups.filter((group) => group.id !== saved.id),
+            saved,
+          ];
+          return Promise.resolve(clone(saved));
+        }
+        case "delete_policy_groups": {
+          const ids = readStringArray(args, "ids");
+          const before = state.policyGroups.length;
+          state.policyGroups = state.policyGroups.filter(
+            (group) => !ids.includes(group.id),
+          );
+          if (state.activePolicyGroupId && ids.includes(state.activePolicyGroupId))
+            state.activePolicyGroupId = null;
+          return Promise.resolve(before - state.policyGroups.length);
+        }
+        case "set_active_policy_group": {
+          const group = state.policyGroups.find((item) => item.id === args.id);
+          if (!group)
+            return Promise.reject(new Error(`Unknown policy group ${String(args.id)}`));
+          state.activePolicyGroupId = group.id;
+          state.policyGroupDelaysTested = false;
+          setActiveProfile("");
+          return Promise.resolve(clone(group));
+        }
+        case "select_policy_group_member": {
+          const group = state.policyGroups.find((item) => item.id === args.groupId);
+          if (!group)
+            return Promise.reject(
+              new Error(`Unknown policy group ${String(args.groupId)}`),
+            );
+          group.selectedProfileId = String(args.profileId ?? "");
+          return Promise.resolve(clone(group));
+        }
+        case "policy_group_runtime":
+          return Promise.resolve(runningPolicyGroup(state.policyGroupDelaysTested));
+        case "test_policy_group_delay":
+          state.policyGroupDelaysTested = true;
+          return Promise.resolve(runningPolicyGroup(true));
         case "resolve_close_request":
           return Promise.resolve(null);
         case "check_connection_ip":
@@ -849,6 +917,34 @@ export async function installTauriSmokeMock(
       }
 
       return row;
+    }
+
+    function policyGroupMembers(group: PolicyGroup) {
+      const bound = group.sourceSubscriptionId
+        ? state.profiles
+            .filter((row) => row.profile.subscriptionId === group.sourceSubscriptionId)
+            .map((row) => String(row.profile.id))
+        : [];
+      return [...new Set([...group.memberIds, ...bound])].flatMap((id) => {
+        const row = state.profiles.find((item) => item.profile.id === id);
+        return row ? [{ profileId: id, remarks: String(row.profile.remarks ?? "") }] : [];
+      });
+    }
+
+    function runningPolicyGroup(tested: boolean): PolicyGroupRuntime | null {
+      const group = state.policyGroups.find(
+        (item) => item.id === state.activePolicyGroupId,
+      );
+      if (!group || state.runtime.state !== "connected") return null;
+      const members = policyGroupMembers(group);
+      return {
+        groupId: group.id,
+        members: members.map((member, index) => ({
+          ...member,
+          delayMs: tested ? 80 + index * 10 : null,
+        })),
+        nowProfileId: group.selectedProfileId ?? members[0]?.profileId ?? null,
+      };
     }
 
     function setActiveProfile(indexId: string) {

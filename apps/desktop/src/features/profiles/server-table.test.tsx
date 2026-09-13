@@ -46,6 +46,13 @@ const ipcMocks = vi.hoisted(() => ({
   importProfilesFromText: vi.fn(),
   readClipboardText: vi.fn(),
   listProfiles: vi.fn(),
+  listPolicyGroups: vi.fn(),
+  policyGroupRuntime: vi.fn(),
+  deletePolicyGroups: vi.fn(),
+  savePolicyGroup: vi.fn(),
+  selectPolicyGroupMember: vi.fn(),
+  setActivePolicyGroup: vi.fn(),
+  testPolicyGroupDelay: vi.fn(),
   listSubscriptionMetadata: vi.fn(() => Promise.resolve([])),
   listSubscriptions: vi.fn(),
   moveProfile: vi.fn(),
@@ -190,6 +197,7 @@ describe("ProfilesScreen", () => {
         mock.mockReset();
       }
     });
+    ipcMocks.listPolicyGroups.mockResolvedValue({ entries: [] });
     window.localStorage.removeItem("voyavpn.profileColumns");
     useToastStore.setState({ toasts: [] });
     useModalStore.setState({ stack: [] });

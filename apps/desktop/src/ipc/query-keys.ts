@@ -33,6 +33,10 @@ export const queryKeys = {
   settingsApply: ["app-settings", "apply-status"],
   connectionIp: ["connection-ip"],
   connectionMode: ["connection-mode"],
+  // Under the profiles root: groups resolve their members from the node list,
+  // so every node change refreshes them too.
+  policyGroups: ["profiles", "policy-groups"],
+  policyGroupRuntime: ["policy-group-runtime"],
   dns: ["dns"],
   processCandidates: ["process-candidates"],
   profileShareQr: ["profile-share-qr"],
@@ -83,6 +87,10 @@ export function invalidationQueryKey(
       return queryKeys.profiles;
     case "proxyConnections":
       return queryKeys.proxyConnections;
+    case "policyGroups":
+      return queryKeys.policyGroups;
+    case "policyGroupRuntime":
+      return queryKeys.policyGroupRuntime;
     case "routings":
       return queryKeys.routings;
     case "subscriptionMetadata":

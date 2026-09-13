@@ -59,6 +59,20 @@ export const exportProfileShareLinks = wrapCommand(commands.exportProfileShareLi
 
 export const setActiveProfile = wrapCommand(commands.setActiveProfile);
 
+export const listPolicyGroups = wrapCommand(commands.listPolicyGroups);
+
+export const savePolicyGroup = wrapCommand(commands.savePolicyGroup);
+
+export const deletePolicyGroups = wrapCommand(commands.deletePolicyGroups);
+
+export const setActivePolicyGroup = wrapCommand(commands.setActivePolicyGroup);
+
+export const selectPolicyGroupMember = wrapCommand(commands.selectPolicyGroupMember);
+
+export const policyGroupRuntime = wrapCommand(commands.policyGroupRuntime);
+
+export const testPolicyGroupDelay = wrapCommand(commands.testPolicyGroupDelay);
+
 export const moveProfile = wrapCommand(
   (
     subscriptionId: string | null,

@@ -71,6 +71,40 @@ export const commands = {
 	exportProfileShareLinks: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_share_links", { indexIds })),
 	setActiveProfile: (indexId: string) => typedError<ProfileListEntry, AppError>(__TAURI_INVOKE("set_active_profile", { indexId })),
 	moveProfile: (subscriptionId: string | null, indexId: string, action: MoveAction, position: number | null) => typedError<ProfileListEntry[], AppError>(__TAURI_INVOKE("move_profile", { subscriptionId, indexId, action, position })),
+	listPolicyGroups: () => typedError<PolicyGroupListing, AppError>(__TAURI_INVOKE("list_policy_groups")),
+	/**
+	 *  Saves a group. Editing the group a running core uses restarts the core so
+	 *  the change takes effect.
+	 */
+	savePolicyGroup: (group: PolicyGroup) => typedError<PolicyGroup, AppError>(__TAURI_INVOKE("save_policy_group", { group })),
+	deletePolicyGroups: (ids: string[]) => typedError<number, AppError>(__TAURI_INVOKE("delete_policy_groups", { ids })),
+	/**
+	 *  Makes a group what connecting uses. Connecting or restarting is the
+	 *  caller's next step, exactly as after choosing a node.
+	 */
+	setActivePolicyGroup: (id: string) => typedError<PolicyGroup, AppError>(__TAURI_INVOKE("set_active_policy_group", { id })),
+	/**
+	 *  Stores a selector's member and, when that group is running, switches the
+	 *  core to it live. The choice is kept even if the live switch fails.
+	 */
+	selectPolicyGroupMember: (groupId: string, profileId: string) => typedError<PolicyGroup, AppError>(__TAURI_INVOKE("select_policy_group_member", { groupId, profileId })),
+	/**  The running group's current member and delays; `None` while no group runs. */
+	policyGroupRuntime: () => typedError<{
+	groupId: string,
+	/**  The member traffic goes through right now. */
+	nowProfileId: string | null,
+	members: PolicyGroupRuntimeMember[],
+} | null, AppError>(__TAURI_INVOKE("policy_group_runtime")),
+	/**
+	 *  Probes every member of the running group through the core and returns the
+	 *  group with those delays; `None` while no group runs.
+	 */
+	testPolicyGroupDelay: () => typedError<{
+	groupId: string,
+	/**  The member traffic goes through right now. */
+	nowProfileId: string | null,
+	members: PolicyGroupRuntimeMember[],
+} | null, AppError>(__TAURI_INVOKE("test_policy_group_delay")),
 	listSubscriptions: () => typedError<Subscription[], AppError>(__TAURI_INVOKE("list_subscriptions")),
 	listSubscriptionMetadata: () => typedError<SubscriptionMetadata[], AppError>(__TAURI_INVOKE("list_subscription_metadata")),
 	saveSubscription: (item: Subscription) => typedError<Subscription, AppError>(__TAURI_INVOKE("save_subscription", { item })),
@@ -326,7 +360,7 @@ export type ConnectionModeStatus = {
  *  changed") into its log sentences; the fragment is a code now so the whole
  *  sentence can be assembled in the reader's language.
  */
-export type CoreFlowReason = "connect" | "restart" | "disconnect" | "routingChanged" | "dnsChanged" | "tunChanged" | "connectionModeChanged" | "activeProfileChanged" | "settingsSaved";
+export type CoreFlowReason = "connect" | "restart" | "disconnect" | "routingChanged" | "dnsChanged" | "tunChanged" | "connectionModeChanged" | "activeProfileChanged" | "policyGroupChanged" | "settingsSaved";
 
 export type CoreSeedInstallResult = {
 	coreType: CoreType,
@@ -490,7 +524,11 @@ export type InvalidationScope =
 /**  `["connection-mode"]` — TUN / system-proxy mode and its availability. */
 { kind: "connectionMode" } | 
 /**  `["proxy-connections"]` */
-{ kind: "proxyConnections" };
+{ kind: "proxyConnections" } | 
+/**  `["profiles", "policy-groups"]` — stored groups and their resolved members. */
+{ kind: "policyGroups" } | 
+/**  `["policy-group-runtime"]` — the running group's current member and delays. */
+{ kind: "policyGroupRuntime" };
 
 /**
  *  A log line the **app** wrote, named by code.
@@ -576,7 +614,69 @@ export type NetworkSettings = {
  *  parts: a notice is a whole sentence in every locale, and languages do not
  *  agree on how to build one out of a subject and a verb.
  */
-export type NoticeCode = { code: "profileRefreshFailed" } | { code: "subscriptionRefreshFailed" } | { code: "routingRefreshFailed" } | { code: "dnsRefreshFailed" } | { code: "proxyViewRefreshFailed" } | { code: "connectionModeRefreshFailed" } | { code: "settingsRefreshFailed" } | { code: "routingSavedRestartFailed" } | { code: "routingDeletedRestartFailed" } | { code: "routingSelectedRestartFailed" } | { code: "routingRuleSavedRestartFailed" } | { code: "routingRulesDeletedRestartFailed" } | { code: "routingRuleMovedRestartFailed" } | { code: "routingRulesResetRestartFailed" } | { code: "dnsSavedRestartFailed" } | { code: "tunSavedRestartFailed" } | { code: "connectionModeSavedRestartFailed" } | { code: "activeProfileRestartFailed" } | { code: "settingsSavedRuntimeUpdateFailed" } | { code: "proxyModeSavedRuntimeUpdateFailed" } | { code: "settingsSavedSystemProxyUpdateFailed" } | { code: "systemProxyStatusRefreshFailed" } | { code: "tunStatusRefreshFailed" } | { code: "trayRefreshFailed" } | { code: "trayActionFailed" } | { code: "coreStopped" } | { code: "nativeTunStopped" } | { code: "coreStartedSystemProxyFailed" } | { code: "systemProxyRestoreFailed" } | { code: "subscriptionAutoUpdateFailed"; remarks: string };
+export type NoticeCode = { code: "profileRefreshFailed" } | { code: "policyGroupRefreshFailed" } | { code: "subscriptionRefreshFailed" } | { code: "routingRefreshFailed" } | { code: "dnsRefreshFailed" } | { code: "proxyViewRefreshFailed" } | { code: "connectionModeRefreshFailed" } | { code: "settingsRefreshFailed" } | { code: "routingSavedRestartFailed" } | { code: "routingDeletedRestartFailed" } | { code: "routingSelectedRestartFailed" } | { code: "routingRuleSavedRestartFailed" } | { code: "routingRulesDeletedRestartFailed" } | { code: "routingRuleMovedRestartFailed" } | { code: "routingRulesResetRestartFailed" } | { code: "dnsSavedRestartFailed" } | { code: "tunSavedRestartFailed" } | { code: "connectionModeSavedRestartFailed" } | { code: "activeProfileRestartFailed" } | { code: "policyGroupSavedRestartFailed" } | { code: "settingsSavedRuntimeUpdateFailed" } | { code: "proxyModeSavedRuntimeUpdateFailed" } | { code: "policyGroupSelectionRuntimeUpdateFailed" } | { code: "settingsSavedSystemProxyUpdateFailed" } | { code: "systemProxyStatusRefreshFailed" } | { code: "tunStatusRefreshFailed" } | { code: "trayRefreshFailed" } | { code: "trayActionFailed" } | { code: "coreStopped" } | { code: "nativeTunStopped" } | { code: "coreStartedSystemProxyFailed" } | { code: "systemProxyRestoreFailed" } | { code: "subscriptionAutoUpdateFailed"; remarks: string };
+
+/**  A stored group as the editor reads and writes it. */
+export type PolicyGroup = {
+	/**  Empty when creating a group. */
+	id: string,
+	name: string,
+	strategy: PolicyGroupStrategy,
+	/**  Every node of this subscription joins after the explicit members. */
+	sourceSubscriptionId: string | null,
+	/**  Created by a subscription import rather than by the user. */
+	autoCreated: boolean,
+	/**  The member a selector uses; `None` means the first member. */
+	selectedProfileId: string | null,
+	testUrl: string | null,
+	intervalSeconds: number | null,
+	toleranceMs: number | null,
+	/**  Explicit members, in order. */
+	memberIds: string[],
+};
+
+export type PolicyGroupEntry = {
+	group: PolicyGroup,
+	/**  Members resolved against the current node list, in connection order. */
+	members: PolicyGroupMember[],
+	/**  Whether connecting uses this group. */
+	isActive: boolean,
+};
+
+export type PolicyGroupListing = {
+	entries: PolicyGroupEntry[],
+};
+
+/**  One resolved member of a group. */
+export type PolicyGroupMember = {
+	profileId: string,
+	remarks: string,
+};
+
+/**  The running group as the core reports it. */
+export type PolicyGroupRuntime = {
+	groupId: string,
+	/**  The member traffic goes through right now. */
+	nowProfileId: string | null,
+	members: PolicyGroupRuntimeMember[],
+};
+
+/**  One member of the running group, with the core's last measurement. */
+export type PolicyGroupRuntimeMember = {
+	profileId: string,
+	remarks: string,
+	/**  `None` before a probe, or after a failed one. */
+	delayMs: number | null,
+};
+
+/**  How a group picks the member traffic goes through. */
+export type PolicyGroupStrategy = 
+/**  The user picks the member. */
+"selector" | 
+/**  The member with the lowest measured delay, within a tolerance. */
+"urlTest" | 
+/**  The first reachable member, in list order. */
+"fallback";
 
 /**
  *  A running process or installed application offered by the per-app proxy

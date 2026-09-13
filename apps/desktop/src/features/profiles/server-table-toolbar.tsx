@@ -2,6 +2,7 @@ import { useRef } from "react";
 import {
   ChevronDown,
   FilePlus2,
+  Layers,
   Plus,
   RefreshCw,
   Rss,
@@ -34,6 +35,7 @@ export function ServerTableToolbar({
     importTriggerRef,
     setDialogState,
     setImportMethod,
+    openGroupEditor,
     openSubscription,
     t,
     updateAllSubscriptions,
@@ -91,6 +93,13 @@ export function ServerTableToolbar({
             }}>
               <Rss aria-hidden="true" />
               {t("home.subscriptionCard.add")}
+            </MenubarItem>
+            <MenubarItem onSelect={() => {
+              openingDialogRef.current = true;
+              openGroupEditor(null);
+            }}>
+              <Layers aria-hidden="true" />
+              {t("policyGroups.new")}
             </MenubarItem>
             <MenubarItem
               disabled={updatingAllSubscriptions}

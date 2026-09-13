@@ -37,6 +37,10 @@ pub enum InvalidationScope {
     ConnectionMode,
     /// `["proxy-connections"]`
     ProxyConnections,
+    /// `["profiles", "policy-groups"]` — stored groups and their resolved members.
+    PolicyGroups,
+    /// `["policy-group-runtime"]` — the running group's current member and delays.
+    PolicyGroupRuntime,
 }
 
 /// One invalidated cache plus the change that invalidated it.

@@ -205,6 +205,15 @@ impl<'db> PolicyGroupManager<'db> {
     }
 }
 
+/// The URL a urltest or fallback group probes with.
+#[must_use]
+pub fn group_test_url(group: &PolicyGroupItem) -> &str {
+    group
+        .test_url
+        .as_deref()
+        .unwrap_or(voya_core::DEFAULT_GROUP_TEST_URL)
+}
+
 fn normalized(mut group: PolicyGroupItem) -> PolicyGroupItem {
     let trimmed = |value: Option<String>| {
         value

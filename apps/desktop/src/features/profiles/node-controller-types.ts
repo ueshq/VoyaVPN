@@ -7,12 +7,14 @@ import type { useNodeSubscriptions } from "./use-node-subscriptions";
 import type { useNodeExport } from "./use-node-export";
 import type { useNodeImport } from "./use-node-import";
 import type { useNodeSpeedtest } from "./use-node-speedtest";
+import type { usePolicyGroups } from "./use-policy-groups";
 
 type NodeListData = ReturnType<typeof useNodeListData>;
 type NodeEditor = ReturnType<typeof useNodeEditor>;
 type NodeSubscriptions = ReturnType<typeof useNodeSubscriptions>;
 type NodeExport = ReturnType<typeof useNodeExport>;
 type NodeSpeedtest = ReturnType<typeof useNodeSpeedtest>;
+type PolicyGroups = ReturnType<typeof usePolicyGroups>;
 type NodeShared = { t: TranslationFunction; nodeGroups: ReturnType<typeof useNodeGroups> };
 
 export type NodeMenuController = Pick<NodeOperation, "runOperation"> &
@@ -79,6 +81,7 @@ export type NodeNoticesController = Pick<ReturnType<typeof useNodeImport>, "dire
 export type NodeToolbarController = Pick<ReturnType<typeof useNodeImport>, "handleDirectImport" | "directImportPending"> &
   Pick<NodeEditor, "addTriggerRef" | "importTriggerRef" | "setDialogState" | "setImportMethod"> &
   Pick<NodeSubscriptions, "openSubscription" | "updateAllSubscriptions" | "updatingAllSubscriptions"> &
+  Pick<PolicyGroups, "openGroupEditor"> &
   Pick<NodeShared, "t">;
 
 export type NodeListController = Pick<NodeOperation, "runOperation"> &
@@ -110,3 +113,8 @@ export type NodeListController = Pick<NodeOperation, "runOperation"> &
   Pick<NodeExport, "handleExport" | "handleGroupExport"> &
   Pick<NodeSpeedtest, "handleCancelSpeedtest" | "handleSpeedtest" | "speedtestRunning"> &
   Pick<NodeShared, "nodeGroups" | "t">;
+
+export type PolicyGroupsController = PolicyGroups &
+  Pick<NodeListData, "profiles"> &
+  Pick<NodeOperation, "operationError"> &
+  Pick<NodeShared, "t">;

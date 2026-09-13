@@ -41,6 +41,7 @@ use specta::Type;
 pub enum NoticeCode {
     // ---- a committed change could not be broadcast to the query caches ----
     ProfileRefreshFailed,
+    PolicyGroupRefreshFailed,
     SubscriptionRefreshFailed,
     RoutingRefreshFailed,
     DnsRefreshFailed,
@@ -59,8 +60,10 @@ pub enum NoticeCode {
     TunSavedRestartFailed,
     ConnectionModeSavedRestartFailed,
     ActiveProfileRestartFailed,
+    PolicyGroupSavedRestartFailed,
     SettingsSavedRuntimeUpdateFailed,
     ProxyModeSavedRuntimeUpdateFailed,
+    PolicyGroupSelectionRuntimeUpdateFailed,
     // ---- the change was saved but a follow-up side effect failed ----
     SettingsSavedSystemProxyUpdateFailed,
     SystemProxyStatusRefreshFailed,
@@ -92,6 +95,7 @@ pub enum CoreFlowReason {
     TunChanged,
     ConnectionModeChanged,
     ActiveProfileChanged,
+    PolicyGroupChanged,
     SettingsSaved,
 }
 

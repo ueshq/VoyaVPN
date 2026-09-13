@@ -99,6 +99,26 @@ pub fn connection_mode_scopes() -> Vec<InvalidationScope> {
     ]
 }
 
+/// Policy group mutations. Activating a group, or deleting the active one,
+/// rewrites the persisted config and changes which node the profile list marks
+/// active, so both follow `config_changed`.
+pub fn policy_group_scopes(config_changed: bool) -> Vec<InvalidationScope> {
+    let mut scopes = vec![InvalidationScope::PolicyGroups];
+    if config_changed {
+        scopes.push(InvalidationScope::Profiles);
+    }
+    push_config_scopes(&mut scopes, config_changed);
+    scopes
+}
+
+/// A live change to the running group: its selected member or fresh delays.
+pub fn policy_group_runtime_scopes() -> Vec<InvalidationScope> {
+    vec![
+        InvalidationScope::PolicyGroups,
+        InvalidationScope::PolicyGroupRuntime,
+    ]
+}
+
 fn push_config_scopes(scopes: &mut Vec<InvalidationScope>, config_changed: bool) {
     if config_changed {
         scopes.push(InvalidationScope::AppSettings);
@@ -227,5 +247,28 @@ mod tests {
             deduped.dedup();
             assert_eq!(deduped.len(), list.len(), "duplicate scope in {list:?}");
         }
+    }
+
+    #[test]
+    fn policy_group_scopes_follow_config_and_runtime_changes() {
+        assert_eq!(
+            policy_group_scopes(false),
+            vec![InvalidationScope::PolicyGroups]
+        );
+        assert_eq!(
+            policy_group_scopes(true),
+            vec![
+                InvalidationScope::PolicyGroups,
+                InvalidationScope::Profiles,
+                InvalidationScope::AppSettings,
+            ]
+        );
+        assert_eq!(
+            policy_group_runtime_scopes(),
+            vec![
+                InvalidationScope::PolicyGroups,
+                InvalidationScope::PolicyGroupRuntime,
+            ]
+        );
     }
 }

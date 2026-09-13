@@ -6,11 +6,16 @@
 mod data;
 pub mod errors;
 mod messages;
+mod policy_groups;
 mod profiles;
 
 pub use data::*;
 pub use errors::{core_info_error, database_error, input_text_error};
 pub use messages::validation_issue_to_contract;
+pub use policy_groups::{
+    policy_group_entry_to_contract, policy_group_from_contract, policy_group_runtime_to_contract,
+    policy_group_to_contract,
+};
 pub use profiles::{profile_from_contract, profile_to_contract};
 
 use voya_contracts::{

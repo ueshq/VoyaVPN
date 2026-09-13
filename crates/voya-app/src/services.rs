@@ -72,6 +72,11 @@ impl AppServices {
     }
 
     #[must_use]
+    pub fn policy_groups(&self) -> crate::policy_groups::PolicyGroupManager<'_> {
+        crate::policy_groups::PolicyGroupManager::new(&self.database)
+    }
+
+    #[must_use]
     pub fn subscriptions(&self) -> SubscriptionManager<'_> {
         SubscriptionManager::new(&self.database)
     }

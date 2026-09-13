@@ -2,6 +2,7 @@ import { PageContent, PageSection, PageTitle } from "@/components/app-shell/page
 import { useI18n } from "@voya/i18n/use-i18n";
 
 import { ServerTableDialogs } from "./server-table-dialogs";
+import { PolicyGroupsSection } from "./policy-groups-section";
 import { ProfileCardList } from "./server-table-grid";
 import { ServerTableToolbar } from "./server-table-toolbar";
 import { ServerTableNotices } from "./server-table-notices";
@@ -18,6 +19,7 @@ export function ProfilesScreen() {
       />
       <PageContent>
         <ServerTableNotices controller={controller} />
+        <PolicyGroupsSection controller={controller} />
         <ProfileCardList controller={controller} />
       </PageContent>
       <ServerTableDialogs controller={controller} />

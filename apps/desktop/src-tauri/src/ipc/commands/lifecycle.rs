@@ -62,6 +62,21 @@ pub(super) fn emit_profile_invalidation<R>(
     );
 }
 
+pub(super) fn emit_policy_group_invalidation<R>(
+    app: &tauri::AppHandle<R>,
+    reason: &str,
+    config_changed: bool,
+) where
+    R: tauri::Runtime,
+{
+    emit_invalidation(
+        app,
+        NoticeCode::PolicyGroupRefreshFailed,
+        reason,
+        invalidation::policy_group_scopes(config_changed),
+    );
+}
+
 pub(crate) fn emit_subscription_invalidation<R>(
     app: &tauri::AppHandle<R>,
     reason: &str,
@@ -203,6 +218,10 @@ impl ConfigChange {
     pub(super) const ACTIVE_PROFILE: Self = Self {
         reason: CoreFlowReason::ActiveProfileChanged,
         restart_failed_code: NoticeCode::ActiveProfileRestartFailed,
+    };
+    pub(super) const POLICY_GROUP: Self = Self {
+        reason: CoreFlowReason::PolicyGroupChanged,
+        restart_failed_code: NoticeCode::PolicyGroupSavedRestartFailed,
     };
 }
 

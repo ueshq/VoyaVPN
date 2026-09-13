@@ -50,7 +50,8 @@
     "routingChanged": "路由變更",
     "settingsSaved": "設定儲存",
     "tunChanged": "TUN 變更",
-    "activeProfileChanged": "切換節點"
+    "activeProfileChanged": "切換節點",
+    "policyGroupChanged": "策略群組變更"
   },
   "home": {
     "aria": "連線主頁",
@@ -196,7 +197,10 @@
     "tunStatusRefreshFailed": "重新整理 TUN 狀態失敗",
     "routingRulesResetRestartFailed": "已還原預設規則；重新啟動核心失敗",
     "trayActionFailed": "系統匣操作失敗",
-    "activeProfileRestartFailed": "已切換節點，但核心重新啟動失敗"
+    "activeProfileRestartFailed": "已切換節點，但核心重新啟動失敗",
+    "policyGroupRefreshFailed": "重新整理策略群組失敗",
+    "policyGroupSavedRestartFailed": "策略群組已儲存，但核心重新啟動失敗",
+    "policyGroupSelectionRuntimeUpdateFailed": "已儲存選擇，但執行中的核心未能切換"
   },
   "options": {
     "autostart": "開機自動啟動",
@@ -875,5 +879,39 @@
     "minimize": "在系統匣中繼續執行",
     "quit": "結束",
     "remember": "記住我的選擇"
+  },
+  "policyGroups": {
+    "title": "策略群組",
+    "new": "新增策略群組",
+    "edit": "編輯策略群組",
+    "editNamed": "編輯 {{name}}",
+    "deleteNamed": "刪除 {{name}}",
+    "deleteTitle": "刪除策略群組 {{name}}？",
+    "deleteHint": "群組內的節點會保留。",
+    "use": "使用",
+    "inUse": "使用中",
+    "active": "目前",
+    "delay": "{{ms}} 毫秒",
+    "name": "名稱",
+    "strategyLabel": "策略",
+    "strategy": {
+      "selector": "手動選擇",
+      "urlTest": "延遲最低",
+      "fallback": "故障轉移"
+    },
+    "strategyHint": {
+      "selector": "由你選擇節點，策略群組會記住選擇。",
+      "urlTest": "流量使用測得延遲最低的成員。",
+      "fallback": "流量依下方順序使用第一個可用的成員。"
+    },
+    "subscription": "包含訂閱",
+    "subscriptionNone": "不包含",
+    "subscriptionHint": "該訂閱的所有節點會排在下方所選節點之後。",
+    "members": "節點",
+    "membersSelected": "已選 {{count}} 個",
+    "filterNodes": "篩選節點",
+    "testUrl": "測速網址",
+    "interval": "測速間隔（秒）",
+    "tolerance": "容差（毫秒）"
   }
 }
