@@ -33,7 +33,8 @@ describe("settings form", () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
-  it("clears nullable numbers and reports invalid numbers on leaving", () => {
+  it("clears nullable numbers and keeps a typing mistake out of the toasts", () => {
+    useToastStore.setState({ toasts: [] });
     const onChange = vi.fn();
     const { unmount } = render(<NumberField field="pageSize" label="Batch size" nullable value={10} onChange={onChange} />);
     fireEvent.change(screen.getByLabelText("Batch size"), { target: { value: "" } });
@@ -41,6 +42,17 @@ describe("settings form", () => {
     expect(onChange).toHaveBeenCalledWith(null);
     fireEvent.change(screen.getByLabelText("Batch size"), { target: { value: "invalid" } });
     unmount();
-    expect(useToastStore.getState().toasts.at(-1)?.severity).toBe("error");
+    expect(useToastStore.getState().toasts).toHaveLength(0);
+  });
+
+  it("restores the default when a number that has one is cleared", () => {
+    const onChange = vi.fn();
+    render(<NumberField defaultValue={1500} field="mtu" label="MTU" value={9000} onChange={onChange} />);
+    const input = screen.getByLabelText("MTU");
+    expect(input).toHaveAccessibleDescription("Default: 1500");
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith(1500);
+    expect(input).not.toHaveAttribute("aria-invalid");
   });
 });

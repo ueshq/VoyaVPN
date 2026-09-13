@@ -8,6 +8,8 @@ import { installTauriSmokeMock } from "./fixtures/tauri-mock";
 
 const english = {
   page: "Network activity",
+  settings: "Settings",
+  advanced: "Advanced",
   live: "Live connections",
   logs: "Runtime logs",
   details: "Connection details",
@@ -25,6 +27,8 @@ const english = {
 };
 const chinese: typeof english = {
   page: "网络活动",
+  settings: "设置",
+  advanced: "高级",
   live: "实时连接",
   logs: "运行日志",
   details: "连接详情",
@@ -176,9 +180,16 @@ for (const viewport of [
         });
         await page.keyboard.press("Escape");
         await expect(row).toBeFocused();
-        await region
-          .getByRole("tab", { name: labels.logs, exact: true })
+        // The runtime log lives under Settings → Advanced.
+        await page
+          .getByRole("tab", { name: labels.settings, exact: true })
           .click();
+        await page
+          .getByRole("tab", { name: labels.advanced, exact: true })
+          .click();
+        const logs = page
+          .getByRole("region", { name: labels.logs, exact: true })
+          .first();
         await emit(page, {
           kind: "logLine",
           payload: {
@@ -196,12 +207,12 @@ for (const viewport of [
           },
         });
         await expect(page.getByTestId("log-line")).toHaveCount(2);
-        await region.getByRole("combobox").click();
+        await logs.getByRole("combobox").click();
         await page
           .getByRole("option", { name: labels.issues, exact: true })
           .click();
         await expect(page.getByTestId("log-line")).toHaveCount(1);
-        await noHorizontalScroll(region);
+        await noHorizontalScroll(logs);
         await noHorizontalScroll(page.getByTestId("logs-viewport"));
         await page.screenshot({
           path: testInfo.outputPath("logs.png"),
@@ -231,7 +242,7 @@ for (const viewport of [
         });
         await page.keyboard.press("Escape");
         await expect(logRow).toBeFocused();
-        await region
+        await logs
           .getByRole("menuitem", { name: labels.more, exact: true })
           .click();
         await page
@@ -319,8 +330,8 @@ test("logs follow new entries at the 500-line cap and stop following while readi
 }) => {
   await installTauriSmokeMock(page);
   await page.goto("/");
-  await page.getByRole("tab", { name: english.page, exact: true }).click();
-  await page.getByRole("tab", { name: english.logs, exact: true }).click();
+  await page.getByRole("tab", { name: english.settings, exact: true }).click();
+  await page.getByRole("tab", { name: english.advanced, exact: true }).click();
   async function pushLines(from: number, count: number) {
     await page.evaluate(
       ({ from, count }) => {

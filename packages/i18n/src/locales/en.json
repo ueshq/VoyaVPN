@@ -186,13 +186,12 @@
   "options": {
     "autostart": "Autostart",
     "loading": "Loading",
-    "runtimeCore": "Core",
-    "runtimeNetwork": "Network",
     "autoCheckIp": "Check the exit IP after connecting",
     "autoCreateSubscriptionGroup": "Create a lowest-latency group for new subscriptions",
     "autoCreateSubscriptionGroupHint": "A subscription's first import adds a “name · Auto” policy group. It is never selected for you.",
     "startMinimized": "Start hidden in the tray when launched at login",
-    "startMinimizedHint": "Opening VoyaVPN yourself always shows the window."
+    "startMinimizedHint": "Opening VoyaVPN yourself always shows the window.",
+    "startMinimizedNeedsAutostart": "Turn on Autostart first."
   },
   "panes": {
     "dns": {
@@ -213,12 +212,19 @@
       "title": "DNS",
       "strategyHint": "Prefer IPv4 or IPv6 when resolving a hostname. Empty uses the core default.",
       "expectedHint": "For direct DNS: use these IP ranges to check whether a response should be accepted.",
-      "strategyAutomatic": "Automatic",
       "strategyIpv4": "Prefer IPv4",
       "strategyIpv6": "Prefer IPv6",
       "strategyOnlyIpv4": "IPv4 only",
       "strategyOnlyIpv6": "IPv6 only",
-      "globalFakeIpHint": "Requires FakeIP. Also use FakeIP in global traffic mode."
+      "globalFakeIpHint": "Requires FakeIP. Also use FakeIP in global traffic mode.",
+      "presetsDirect": "Common direct DNS",
+      "presetsRemote": "Common remote DNS",
+      "presets": {
+        "cloudflare": "Cloudflare",
+        "google": "Google",
+        "dnspod": "DNSPod (Tencent)",
+        "aliyun": "Alibaba Cloud"
+      }
     },
     "logs": {
       "empty": "No log lines",
@@ -239,7 +245,13 @@
         "info": "Info",
         "warn": "Warning",
         "error": "Error"
-      }
+      },
+      "copy": "Copy shown logs",
+      "copied": "Copied {{count}} log entries.",
+      "copyFailed": "Could not copy logs",
+      "export": "Export shown logs…",
+      "exported": "Logs saved.",
+      "exportFailed": "Could not export logs"
     },
     "profiles": {
       "aria": {
@@ -594,64 +606,63 @@
   },
   "settings": {
     "core": {
-      "allowInsecure": "Allow Insecure",
-      "bindInterface": "Bind Interface",
-      "cacheFileEnabled": "Enable cache file for sing-box (ruleset files)",
+      "allowInsecure": "Skip certificate verification by default",
+      "bindInterface": "Bind to network interface",
+      "cacheFileEnabled": "Cache rule sets on disk",
       "fingerprint": "Default TLS fingerprint",
-      "hysteriaBandwidth": "Hysteria Max bandwidth (Up/Down)",
-      "hysteriaHopInterval": "Port hopping interval",
-      "logEnabled": "Enable Log",
-      "logLevel": "Log Level",
-      "muxEnabled": "Turn on Mux Multiplexing",
-      "muxProtocol": "sing-box Mux Protocol",
-      "sendThrough": "Local outbound address (SendThrough)",
+      "hysteriaBandwidth": "Hysteria bandwidth",
+      "hysteriaHopInterval": "Port hopping interval (seconds)",
+      "logEnabled": "Record core log",
+      "logLevel": "Log level",
+      "muxEnabled": "Multiplexing (Mux)",
+      "muxProtocol": "Multiplexing protocol",
+      "sendThrough": "Local address for outbound traffic",
       "userAgent": "User-Agent",
       "tlsFragment": "TLS fragmentation",
       "tlsFragmentOff": "Off",
       "tlsFragmentHello": "Split ClientHello",
       "tlsFragmentRecord": "Split TLS records",
-      "fragmentFallbackDelay": "Fragment fallback delay (ms)"
+      "fragmentFallbackDelay": "Fragment fallback delay (ms)",
+      "allowInsecureHint": "Risky: connects even when a server's certificate is invalid, so traffic can be intercepted. Only turn on if your provider requires it.",
+      "cacheFileHint": "Keeps downloaded rule sets and other state on disk so reconnecting is faster."
     },
     "fields": {
-      "hysteriaDownMbps": "Hysteria max download bandwidth (Mbps)",
-      "hysteriaUpMbps": "Hysteria max upload bandwidth (Mbps)",
-      "muxMaxConnections": "sing-box Mux max connections",
-      "muxPadding": "sing-box Mux padding",
+      "hysteriaDownMbps": "Download bandwidth (Mbps)",
+      "hysteriaUpMbps": "Upload bandwidth (Mbps)",
+      "muxMaxConnections": "Maximum multiplexed connections",
+      "muxPadding": "Multiplexing padding",
       "speedTestDelayInterval": "Delay between speed test batches (seconds)",
       "speedTestPageSize": "Nodes per speed test batch"
     },
     "network": {
-      "bypassLocalAddress": "Do not use proxy servers for local (intranet) addresses",
-      "enableIpv6Address": "Enable IPv6 Address",
-      "icmpRoutingPolicy": "ICMP routing policy",
+      "bypassLocalAddress": "Don't proxy local network addresses",
+      "enableIpv6Address": "Enable IPv6",
+      "icmpRoutingPolicy": "ICMP (ping) handling",
       "mtu": "MTU",
-      "systemProxyExceptions": "Exception",
-      "tunAutoRoute": "Auto Route",
-      "tunStack": "Stack",
-      "tunStrictRoute": "Strict Route",
-      "localPort": "Mixed port",
+      "systemProxyExceptions": "Addresses that skip the proxy",
+      "tunAutoRoute": "Configure routes automatically",
+      "tunStack": "Network stack",
+      "localPort": "Local proxy port",
       "localPortHint": "HTTP and SOCKS on 127.0.0.1. The second port is {{second}} and the LAN port is {{lan}}.",
       "sniffing": "Sniff traffic",
       "sniffingHint": "Recovers domain names from TLS and HTTP traffic so domain rules match.",
       "secondPort": "Second local port",
       "secondPortHint": "Also listens on 127.0.0.1:{{port}}.",
       "allowLan": "Allow connections from the LAN",
-      "allowLanHint": "Other devices on your network can use this proxy. Without a separate LAN port it accepts them without a password.",
+      "allowLanHint": "Other devices on your network can use this proxy. Without a separate LAN port they need no password, so only turn this on for a network you trust.",
       "separateLanPort": "Separate LAN port",
       "separateLanPortHint": "LAN devices connect to port {{port}}, which can require a username and password.",
       "lanUsername": "LAN username",
       "lanPassword": "LAN password"
     },
-    "perAppProxy": "Per-app proxy",
     "startup": "Startup",
     "tabGeneral": "General",
-    "tabTests": "Tests",
     "tabUpdates": "Updates",
     "tests": {
-      "ipApiUrl": "Current connection info test URL",
+      "ipApiUrl": "Exit location lookup URL",
       "ipApiUrlHint": "Leave blank to use ipwho.is during latency tests. Custom services should return JSON with country_code (and success: false on failure), or a two-letter country code. Unknown locations use the globe icon.",
-      "pingUrl": "Speed Ping Test URL",
-      "timeout": "Speed Test Single Timeout Value"
+      "pingUrl": "Latency test URL",
+      "timeout": "Timeout per node (seconds)"
     },
     "categories": "Settings categories",
     "autosave": {
@@ -674,7 +685,8 @@
       "localProxy": "Local proxy",
       "connection": "Connection",
       "window": "Window",
-      "captureMode": "Traffic capture"
+      "captureMode": "Traffic capture",
+      "killSwitch": "Kill switch"
     },
     "apply": {
       "reconnect": "Apply and reconnect",
@@ -682,7 +694,6 @@
       "pending": "Saved changes are waiting to be applied to this connection.",
       "working": "Applying settings…"
     },
-    "openRules": "Open routing rules",
     "closeAction": "When the window is closed",
     "closeActionOptions": {
       "minimizeToTray": "Keep running in the tray",
@@ -694,7 +705,34 @@
       "vpnHint": "Captures all system traffic. Recommended.",
       "systemProxy": "System proxy",
       "systemProxyHint": "Compatibility mode: only apps that follow the system proxy are proxied.",
-      "authorizationDeclined": "System authorization was not granted, so the capture mode was not changed."
+      "authorizationDeclined": "System authorization was not granted, so the capture mode was not changed.",
+      "status": {
+        "disconnected": "Not connected. Traffic is captured this way once you connect.",
+        "vpnActive": "The VPN is capturing system traffic.",
+        "vpnInactive": "This connection started without the VPN. Reconnect to use it.",
+        "proxyActive": "The system proxy is set.",
+        "proxyInactive": "The system proxy is not set, so apps are not being proxied."
+      }
+    },
+    "tabConnection": "Connection",
+    "tabAdvanced": "Advanced",
+    "defaultValue": "Default: {{value}}",
+    "saveStatus": {
+      "saving": "Saving…",
+      "saved": "All changes saved.",
+      "savedOffline": "All changes saved. Connection changes take effect the next time you connect."
+    },
+    "appearanceReverted": {
+      "title": "Appearance not saved",
+      "description": "The theme or language could not be saved, so the previous one is back."
+    },
+    "killSwitch": {
+      "label": "Block traffic outside the VPN",
+      "hint": "While the VPN is on, apps cannot reach the internet around it, so a tunnel problem never exposes your real IP address.",
+      "vpnOnly": "Only works in VPN mode. Choose it under Advanced → Traffic capture."
+    },
+    "logs": {
+      "coreLogOff": "Core logging is off, so only VoyaVPN's own messages appear here. Turn on “Record core log” above for connection details."
     }
   },
   "speedtest": {
@@ -758,7 +796,6 @@
   "tabs": {
     "aria": "Main sections",
     "connections": "Network activity",
-    "dns": "DNS",
     "home": "Home",
     "logs": "Runtime logs",
     "profiles": "Nodes",

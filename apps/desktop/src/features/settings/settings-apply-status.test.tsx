@@ -87,3 +87,27 @@ it("hides the banner when disconnected and prevents apply while saving", async (
     await screen.findByRole("button", { name: "Apply and reconnect" }),
   ).toBeDisabled();
 });
+it("says when changes are being saved and once they are saved", async () => {
+  ipc.getSettingsApplyStatus.mockResolvedValue({
+    connected: false,
+    action: "none",
+  });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  const status = (props: { saving: boolean; saved?: boolean; failed?: boolean }) => (
+    <QueryClientProvider client={client}>
+      <SettingsApplyStatus failed={props.failed ?? false} saved={props.saved} saving={props.saving} />
+    </QueryClientProvider>
+  );
+  const view = render(status({ saving: true }));
+  expect(await screen.findByRole("status")).toHaveTextContent("Saving…");
+  view.rerender(status({ saved: true, saving: false }));
+  expect(
+    await screen.findByText(
+      "All changes saved. Connection changes take effect the next time you connect.",
+    ),
+  ).toBeInTheDocument();
+  view.rerender(status({ failed: true, saved: true, saving: false }));
+  expect(view.container).toBeEmptyDOMElement();
+});

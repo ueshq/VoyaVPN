@@ -628,7 +628,7 @@ describe("App", () => {
     expect(proxyListConnections).not.toHaveBeenCalled();
   });
 
-  it("keeps the proxy monitor running while viewing the logs sub-tab", async () => {
+  it("keeps the proxy monitor running while viewing the policy group sub-tab", async () => {
     vi.useFakeTimers();
     (
       window as typeof window & { __TAURI_INTERNALS__?: unknown }
@@ -644,14 +644,14 @@ describe("App", () => {
     expect(proxyStartMonitor).toHaveBeenCalledTimes(1);
 
     const page = screen.getByRole("region", { name: "Network activity" });
-    const logsTab = within(page).getByRole("tab", { name: "Runtime logs" });
+    const groupsTab = within(page).getByRole("tab", { name: "Policy groups" });
     await act(async () => {
-      fireEvent.mouseDown(logsTab);
-      fireEvent.click(logsTab);
+      fireEvent.mouseDown(groupsTab);
+      fireEvent.click(groupsTab);
       await Promise.resolve();
     });
 
-    expect(screen.getByText("No log lines")).toBeInTheDocument();
+    expect(groupsTab).toHaveAttribute("data-state", "active");
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
@@ -769,7 +769,7 @@ describe("App", () => {
     expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe("failed");
   });
 
-  it("keeps search and log filters between sub-tabs and resets them after leaving the page", async () => {
+  it("keeps the connection search between sub-tabs and resets it after leaving the page", async () => {
     const user = userEvent.setup();
     runtimeStoreMock.getState().coreState = connectedCore();
     runtimeStoreMock.getState().setProxyMonitorRunning();
@@ -782,28 +782,19 @@ describe("App", () => {
     await user.click(mainNavTab(/Network activity/));
     const page = screen.getByRole("region", { name: "Network activity" });
     await user.type(within(page).getByRole("searchbox"), "bulk-1");
-    await user.click(within(page).getByRole("tab", { name: "Runtime logs" }));
-    await user.type(within(page).getByRole("searchbox"), "dns");
-    await user.click(within(page).getByRole("combobox"));
-    await user.click(screen.getByRole("option", { name: "Warnings & errors" }));
+    await user.click(within(page).getByRole("tab", { name: "Policy groups" }));
     await user.click(
       within(page).getByRole("tab", { name: "Live connections" }),
     );
     expect(within(page).getByRole("searchbox")).toHaveValue("bulk-1");
-    await user.click(within(page).getByRole("tab", { name: "Runtime logs" }));
-    expect(within(page).getByRole("searchbox")).toHaveValue("dns");
-    expect(within(page).getByRole("combobox")).toHaveTextContent(
-      "Warnings & errors",
-    );
+    await user.click(within(page).getByRole("tab", { name: "Policy groups" }));
     await user.click(mainNavTab(/Nodes/));
     await user.click(mainNavTab(/Network activity/));
     expect(
       within(
         screen.getByRole("region", { name: "Network activity" }),
-      ).getByRole("tab", { name: "Runtime logs" }),
+      ).getByRole("tab", { name: "Policy groups" }),
     ).toHaveAttribute("data-state", "active");
-    expect(screen.getByRole("searchbox")).toHaveValue("");
-    expect(screen.getByRole("combobox")).toHaveTextContent("Standard");
     await user.click(screen.getByRole("tab", { name: "Live connections" }));
     expect(screen.getByRole("searchbox")).toHaveValue("");
   });

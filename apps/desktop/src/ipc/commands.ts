@@ -26,6 +26,9 @@ export const scanScreenQr = wrapCommand(commands.scanScreenQr);
 
 export const readClipboardText = wrapCommand(commands.readClipboardText);
 
+/** Asks where to save log text; `false` when the save dialog is cancelled. */
+export const exportLogs = wrapCommand(commands.exportLogs);
+
 export const connectActiveProfile = wrapCommand(commands.connectActiveProfile);
 
 export const disconnectCore = wrapCommand(commands.disconnectCore);

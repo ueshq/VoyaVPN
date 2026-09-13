@@ -14,6 +14,7 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::generate_qr_code,
         commands::scan_screen_qr,
         commands::read_clipboard_text,
+        commands::export_logs::<tauri::Wry>,
         commands::tun_request_elevation,
         commands::connect_active_profile::<tauri::Wry>,
         commands::disconnect_core::<tauri::Wry>,

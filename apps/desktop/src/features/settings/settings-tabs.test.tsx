@@ -9,7 +9,8 @@ import type { AppSettingsV1, AppearanceSettings, TunStatus } from "@/ipc/binding
 import { makeAppSettings } from "./app-settings.test-fixture";
 import { CoreTab } from "./core-tab";
 import { GeneralTab } from "./general-tab";
-import { NetworkTab } from "./network-tab";
+import { AdvancedTab } from "./advanced-tab";
+import { ConnectionTab } from "./connection-tab";
 import { TestsTab } from "./tests-tab";
 import type {
   AppSettingsController,
@@ -33,11 +34,12 @@ describe("semantic settings tabs", () => {
         exceptions: "",
       });
   });
-  it("offers capture mode, system proxy and per-app proxy only where the platform has them", () => {
-    const { unmount } = render(<TabHarness Component={NetworkTab} />);
+  it("offers capture mode and the system proxy only where the platform has them", () => {
+    const { unmount } = render(<TabHarness Component={AdvancedTab} />);
     expect(screen.getByRole("group", { name: "Traffic capture" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "System proxy" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Per-app proxy" })).toBeInTheDocument();
+    // Per-app rules are edited on the Rules page, not reached from Settings.
+    expect(screen.queryByRole("heading", { name: "Per-app proxy" })).not.toBeInTheDocument();
     unmount();
 
     act(() => {
@@ -47,7 +49,7 @@ describe("semantic settings tabs", () => {
       });
       useRuntimeEventStore.setState({ tun: macosTun });
     });
-    render(<TabHarness Component={NetworkTab} />);
+    render(<TabHarness Component={AdvancedTab} />);
 
     expect(screen.getByRole("heading", { name: "TUN" })).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "Traffic capture" })).not.toBeInTheDocument();
@@ -94,7 +96,7 @@ describe("semantic settings tabs", () => {
 
   it("updates TUN and system proxy controls", async () => {
     const user = userEvent.setup();
-    const { container } = render(<TabHarness Component={NetworkTab} />);
+    const { container } = render(<TabHarness Component={AdvancedTab} />);
 
     for (const checkbox of screen.getAllByRole("checkbox"))
       await user.click(checkbox);
@@ -108,15 +110,36 @@ describe("semantic settings tabs", () => {
     }
 
     expect(container.querySelector("#rt-tun-mtu")).toHaveValue("1500");
-    expect(container.querySelector("#rt-inbound-port")).toHaveValue("1500");
     expect(container.querySelector("#rt-sysproxy-exceptions")).toHaveValue(
       " value ",
     );
   });
 
+  it("turns the kill switch on and restores a cleared port to its default", async () => {
+    const user = userEvent.setup();
+    const initial = makeAppSettings().network.tun.strictRoute;
+    const { container } = render(<TabHarness Component={ConnectionTab} />);
+
+    await user.click(
+      screen.getByRole("checkbox", { name: "Block traffic outside the VPN" }),
+    );
+    expect(
+      screen.getByRole("checkbox", {
+        checked: !initial,
+        name: "Block traffic outside the VPN",
+      }),
+    ).toBeInTheDocument();
+
+    const port = container.querySelector<HTMLInputElement>("#rt-inbound-port")!;
+    fireEvent.change(port, { target: { value: "" } });
+    fireEvent.blur(port);
+    expect(port).toHaveValue("10808");
+    expect(port).toHaveAccessibleDescription(/Default: 10808/);
+  });
+
   it("reveals LAN credentials only behind a separate LAN port", async () => {
     const user = userEvent.setup();
-    const { container } = render(<TabHarness Component={NetworkTab} />);
+    const { container } = render(<TabHarness Component={ConnectionTab} />);
 
     expect(
       screen.queryByRole("checkbox", { name: "Separate LAN port" }),
@@ -149,7 +172,7 @@ describe("semantic settings tabs", () => {
       fireEvent.blur(input);
     }
 
-    expect(screen.getByLabelText("Speed Ping Test URL")).toHaveValue(
+    expect(screen.getByLabelText("Latency test URL")).toHaveValue(
       "https://new.example.test",
     );
     expect(container.querySelector("#rt-speedtest-timeout")).toHaveValue("25");

@@ -500,8 +500,8 @@ describe("HomeScreen", () => {
     await waitFor(() => expect(ipcMock.disconnectCore).toHaveBeenCalledTimes(2));
     await user.click(await screen.findByRole("button", { name: "View logs" }));
     expect(useShellStore.getState()).toMatchObject({
-      activeTab: "connections",
-      connectionsView: "logs",
+      activeTab: "settings",
+      settingsTab: "advanced",
     });
   });
 

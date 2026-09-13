@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { loadAppSettings, saveAppSettings } from "@/ipc/commands";
@@ -8,7 +8,7 @@ import { getErrorMessage } from "@voya/utils/error";
 
 import { applyChanges, changedFields } from "./settings-draft";
 import { useSettingsDraft } from "./use-settings-draft";
-import { applyUiPreferences, endUiPreferencesPreview, previewUiPreferences, reportUiPreferencesError } from "./ui-preferences";
+import { applyUiPreferences, endUiPreferencesPreview, previewUiPreferences, reportUiPreferencesError, reportUiPreferencesReverted } from "./ui-preferences";
 
 export function useAppSettings() {
   const client = useQueryClient();
@@ -44,10 +44,21 @@ export function useAppSettings() {
     }
   }, [appearance, authoritative, previewOwner]);
 
+  const failed = useRef(false);
+  useEffect(() => {
+    failed.current = draft.error !== null;
+  });
+
   useEffect(() => () => {
-    endUiPreferencesPreview(previewOwner);
+    const previewed = endUiPreferencesPreview(previewOwner);
     const saved = client.getQueryData<AppSettingsV1>(queryKeys.appSettings);
-    if (saved) void applyUiPreferences(saved.appearance).catch(reportUiPreferencesError);
+    if (!saved) return;
+    // Leaving drops a preview whose save failed; say so instead of silently
+    // switching the theme or language back.
+    if (failed.current && previewed && changedFields(saved.appearance, previewed).length) {
+      reportUiPreferencesReverted();
+    }
+    void applyUiPreferences(saved.appearance).catch(reportUiPreferencesError);
   }, [client, previewOwner]);
 
   function setAppearance(preferences: AppearanceSettings) {

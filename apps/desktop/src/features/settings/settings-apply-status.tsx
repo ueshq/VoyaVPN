@@ -1,7 +1,7 @@
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { LoaderCircle, RotateCcw } from "lucide-react";
+import { Check, LoaderCircle, RotateCcw } from "lucide-react";
 import { Button } from "@voya/ui/components/button";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
@@ -9,12 +9,18 @@ import { applyPendingSettings, getSettingsApplyStatus } from "@/ipc/commands";
 import { queryKeys } from "@/ipc/query-keys";
 import { PageSurface } from "@/components/app-shell/page-section";
 
+/**
+ * Where the automatic saves stand: saving, saved, or saved but waiting to be
+ * applied to the running connection.
+ */
 export function SettingsApplyStatus({
   saving,
   failed,
+  saved = false,
 }: {
   saving: boolean;
   failed: boolean;
+  saved?: boolean;
 }) {
   const { t } = useI18n();
   const coreState = useRuntimeEventStore((state) => state.coreState?.state);
@@ -47,7 +53,28 @@ export function SettingsApplyStatus({
   }
   const status = query.data;
   const needsApply = status?.connected && status.action !== "none";
-  if (!needsApply && !working && !error && !query.error) return null;
+  if (!needsApply && !working && !error && !query.error) {
+    if (!saving && (!saved || failed)) return null;
+    return (
+      <p
+        className="inline-flex shrink-0 items-center gap-2 px-1 text-xs text-muted-foreground"
+        role="status"
+      >
+        {saving ? (
+          <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+        ) : (
+          <Check aria-hidden="true" className="size-3.5" />
+        )}
+        {saving
+          ? t("settings.saveStatus.saving")
+          : t(
+              status?.connected
+                ? "settings.saveStatus.saved"
+                : "settings.saveStatus.savedOffline",
+            )}
+      </p>
+    );
+  }
 
   return (
     <PageSurface className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">

@@ -35,10 +35,22 @@ export function reportUiPreferencesError(error: unknown) {
   useToastStore.getState().pushToast({ title: i18next.t("status.operationFailed"), description: getErrorMessage(error), severity: "error" });
 }
 
-export function endUiPreferencesPreview(owner: symbol) {
-  if (preview?.owner !== owner) return;
+/** Ends the owner's preview and returns what it was showing, if anything. */
+export function endUiPreferencesPreview(owner: symbol): AppearanceSettings | null {
+  if (preview?.owner !== owner) return null;
+  const ended = preview.preferences;
   preview = null;
   usePreferencesStore.getState().setThemePreview(null);
+  return ended;
+}
+
+/** A previewed theme or language that never saved is being switched back. */
+export function reportUiPreferencesReverted() {
+  useToastStore.getState().pushToast({
+    title: i18next.t("settings.appearanceReverted.title"),
+    description: i18next.t("settings.appearanceReverted.description"),
+    severity: "error",
+  });
 }
 
 export function useUiPreferencesQuery() {

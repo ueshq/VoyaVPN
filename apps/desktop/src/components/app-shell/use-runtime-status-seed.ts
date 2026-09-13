@@ -17,7 +17,10 @@ export function useRuntimeStatusSeed() {
       }
     }
     function resume() {
-      if (document.visibilityState === "visible") void refresh(["coreState"]);
+      // The OS may have changed the proxy or the tunnel while the window was
+      // away, so all three channels are sampled again.
+      if (document.visibilityState === "visible")
+        void refresh(["coreState", "sysProxy", "tun"]);
     }
     void refresh();
     window.addEventListener("focus", resume);

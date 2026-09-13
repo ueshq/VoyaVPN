@@ -4,12 +4,20 @@ import { useShellStore } from "./shell-store";
 describe("shell navigation", () => {
   it("freely navigates while preserving the connection subview and sidebar state", () => {
     useShellStore.setState({ activeTab: "settings", sidebarCollapsed: false, connectionsView: "connections" });
-    useShellStore.getState().setConnectionsView("logs");
+    useShellStore.getState().setConnectionsView("proxies");
     useShellStore.getState().toggleSidebar();
     useShellStore.getState().setActiveTab("profiles");
-    expect(useShellStore.getState()).toMatchObject({ activeTab: "profiles", sidebarCollapsed: true, connectionsView: "logs" });
+    expect(useShellStore.getState()).toMatchObject({ activeTab: "profiles", sidebarCollapsed: true, connectionsView: "proxies" });
     useShellStore.getState().setActiveTab("connections");
     expect(useShellStore.getState().activeTab).toBe("connections");
+  });
+
+  it("opens Settings at a category, as the runtime log deep link does", () => {
+    useShellStore.setState({ activeTab: "home", settingsTab: "general", focusPageTitle: false });
+    useShellStore.getState().openSettings("advanced");
+    expect(useShellStore.getState()).toMatchObject({
+      activeTab: "settings", settingsTab: "advanced", focusPageTitle: true, profilesAddMenuOpen: false,
+    });
   });
 
   it("clears an Add menu request when ordinary navigation supersedes it", () => {

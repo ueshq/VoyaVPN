@@ -25,7 +25,13 @@ export function UpdatesPanel() {
     <div className="grid gap-4">
       <h3 className="sr-only">{t("updates.title")}</h3>
 
-      <AppUpdatePanel controller={controller} />
+      {/* A build without an update feed has nothing to check, so it shows
+          no updater at all rather than a permanent error. */}
+      {controller.appUpdaterError ||
+      (controller.appUpdaterStatus &&
+        controller.appUpdaterStatus.state !== "unconfigured") ? (
+        <AppUpdatePanel controller={controller} />
+      ) : null}
       <ResourceUpdatePanel controller={controller} />
     </div>
   );

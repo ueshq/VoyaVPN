@@ -1,4 +1,5 @@
 import { Badge } from "@voya/ui/components/badge";
+import { Button } from "@voya/ui/components/button";
 import { Disclosure } from "@voya/ui/components/disclosure";
 import {
   CheckboxField,
@@ -6,12 +7,37 @@ import {
   TextAreaField,
   TextField,
 } from "@voya/ui/components/form-fields";
+import { cn } from "@voya/ui/lib/utils";
+import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { SettingsGroup } from "@/features/settings/settings-form";
+import { SettingsGroup, SettingsRow } from "@/features/settings/settings-form";
 import type { DnsSettings } from "@/ipc/bindings";
 
 import { DNS_STRATEGIES } from "./dns-form-schema";
 import type { useDnsSettings } from "./use-dns-settings";
+
+// "AsIs" and "UseIP" generate no strategy at all, exactly like the default, so
+// the list offers the default once and shows either stored value as it.
+const DEFAULT_LIKE_STRATEGIES: readonly string[] = ["AsIs", "UseIP"];
+const STRATEGY_OPTIONS = DNS_STRATEGIES.filter(
+  (value) => !DEFAULT_LIKE_STRATEGIES.includes(value),
+);
+
+function shownStrategy(value: string | null) {
+  return value && !DEFAULT_LIKE_STRATEGIES.includes(value) ? value : "";
+}
+
+type DnsPreset = { labelKey: TranslationKey; value: string };
+
+const DIRECT_PRESETS = [
+  { labelKey: "panes.dns.presets.dnspod", value: "119.29.29.29" },
+  { labelKey: "panes.dns.presets.aliyun", value: "223.5.5.5" },
+] as const satisfies readonly DnsPreset[];
+
+const REMOTE_PRESETS = [
+  { labelKey: "panes.dns.presets.cloudflare", value: "https://cloudflare-dns.com/dns-query" },
+  { labelKey: "panes.dns.presets.google", value: "https://dns.google/dns-query" },
+] as const satisfies readonly DnsPreset[];
 
 export function DnsPane({ controller }: { controller: ReturnType<typeof useDnsSettings> }) {
   const { t } = useI18n();
@@ -37,11 +63,11 @@ function SimpleDnsForm({
   updateSimple: (patch: Partial<DnsSettings>) => void;
 }) {
   const { t } = useI18n();
-  const strategyLabels = {
-    "": t("panes.routing.defaultValue"), AsIs: t("panes.dns.strategyAutomatic"), UseIP: t("panes.dns.strategyAutomatic"),
+  const strategyLabels: Record<string, string> = {
+    "": t("panes.routing.defaultValue"),
     UseIPv4: t("panes.dns.strategyIpv4"), UseIPv6: t("panes.dns.strategyIpv6"), ForceIPv4: t("panes.dns.strategyOnlyIpv4"), ForceIPv6: t("panes.dns.strategyOnlyIpv6"),
   };
-  const strategies = DNS_STRATEGIES.map((value) => ({ value, label: strategyLabels[value] }));
+  const strategies = STRATEGY_OPTIONS.map((value) => ({ value, label: strategyLabels[value] ?? value }));
   return (
     <>
       <SettingsGroup title={t("settings.sections.dnsServers")}>
@@ -53,6 +79,12 @@ function SimpleDnsForm({
           onChange={(direct) => updateSimple({ direct })}
           value={settings.direct ?? ""}
         />
+        <DnsPresetRow
+          current={settings.direct}
+          label={t("panes.dns.presetsDirect")}
+          onPick={(direct) => updateSimple({ direct })}
+          presets={DIRECT_PRESETS}
+        />
         <TextField
           commitOnBlur
           error={errors.remote}
@@ -60,6 +92,12 @@ function SimpleDnsForm({
           layout="row"
           onChange={(remote) => updateSimple({ remote })}
           value={settings.remote ?? ""}
+        />
+        <DnsPresetRow
+          current={settings.remote}
+          label={t("panes.dns.presetsRemote")}
+          onPick={(remote) => updateSimple({ remote })}
+          presets={REMOTE_PRESETS}
         />
         <TextField
           commitOnBlur
@@ -75,7 +113,7 @@ function SimpleDnsForm({
           label={t("panes.dns.directStrategy")}
           layout="row"
           onChange={(value) => updateSimple({ directStrategy: value || null })}
-          value={settings.directStrategy ?? ""}
+          value={shownStrategy(settings.directStrategy)}
         />
         <SelectField
           options={strategies}
@@ -83,7 +121,7 @@ function SimpleDnsForm({
           label={t("panes.dns.proxyStrategy")}
           layout="row"
           onChange={(value) => updateSimple({ proxyStrategy: value || null })}
-          value={settings.proxyStrategy ?? ""}
+          value={shownStrategy(settings.proxyStrategy)}
         />
       </SettingsGroup>
       <SettingsGroup title={t("settings.sections.dnsBehavior")}>
@@ -106,7 +144,7 @@ function SimpleDnsForm({
             onChange={(fakeIp) => updateSimple({ fakeIp })}
           />
           <CheckboxField
-            checked={Boolean(settings.globalFakeIp)}
+            checked={Boolean(settings.fakeIp && settings.globalFakeIp)}
             disabled={!settings.fakeIp}
             label={t("panes.dns.globalFakeIp")}
               description={t("panes.dns.globalFakeIpHint")}
@@ -142,5 +180,46 @@ function SimpleDnsForm({
         </SettingsGroup>
       </Disclosure>
     </>
+  );
+}
+
+/** One-click servers for a DNS field; the field itself stays free text. */
+function DnsPresetRow({
+  current,
+  label,
+  onPick,
+  presets,
+}: {
+  current: string | null;
+  label: string;
+  onPick: (value: string) => void;
+  presets: readonly DnsPreset[];
+}) {
+  const { t } = useI18n();
+  return (
+    <SettingsRow label={label}>
+      <div className="flex flex-wrap gap-2">
+        {presets.map((preset) => {
+          const selected = current?.trim() === preset.value;
+          return (
+            <Button
+              aria-pressed={selected}
+              className={cn(
+                "h-8 px-3",
+                selected &&
+                  "border-primary bg-accent-blue-light text-brand hover:bg-accent-blue-light hover:text-brand",
+              )}
+              key={preset.value}
+              onClick={() => onPick(preset.value)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {t(preset.labelKey)}
+            </Button>
+          );
+        })}
+      </div>
+    </SettingsRow>
   );
 }

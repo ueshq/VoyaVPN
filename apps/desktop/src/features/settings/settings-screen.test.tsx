@@ -71,15 +71,13 @@ function mount() {
 }
 
 describe("redesigned automatic settings", () => {
-  it("uses six compact categories, accessible groups, and no manual save actions", async () => {
+  it("uses four compact categories, accessible groups, and no manual save actions", async () => {
     mount();
     await screen.findByLabelText("Autostart");
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
       "General",
-      "Core",
-      "Network",
-      "DNS",
-      "Tests",
+      "Connection",
+      "Advanced",
       "Updates",
     ]);
     expect(
@@ -93,7 +91,7 @@ describe("redesigned automatic settings", () => {
     ).not.toBeInTheDocument();
     expect(settingsIpc.loadDnsSettings).not.toHaveBeenCalled();
     const user = userEvent.setup();
-    for (const name of ["Core", "Network", "DNS", "Tests", "Updates"])
+    for (const name of ["Connection", "Advanced", "Updates"])
       await user.click(screen.getByRole("tab", { name }));
     expect(
       await screen.findByRole("heading", { name: "Rule resources" }),
@@ -105,7 +103,7 @@ describe("redesigned automatic settings", () => {
     fireEvent.click(await screen.findByLabelText("Autostart"));
     await settle();
     expect(serverSettings().behavior.autostart).toBe(true);
-    await userEvent.click(screen.getByRole("tab", { name: "Core" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Advanced" }));
     const input = await screen.findByLabelText("User-Agent");
     fireEvent.change(input, { target: { value: "new-agent" } });
     expect(serverSettings().core.defaultUserAgent).toBe("agent-before-edit");
@@ -120,20 +118,20 @@ describe("redesigned automatic settings", () => {
   it("preserves local text across categories and commits on category change", async () => {
     const user = userEvent.setup();
     const { settle } = mount();
-    await user.click(screen.getByRole("tab", { name: "Core" }));
+    await user.click(screen.getByRole("tab", { name: "Advanced" }));
     const input = await screen.findByLabelText("User-Agent");
     await user.clear(input);
     await user.type(input, "new-agent");
-    await user.click(screen.getByRole("tab", { name: "Network" }));
+    await user.click(screen.getByRole("tab", { name: "Connection" }));
     await settle();
-    await user.click(screen.getByRole("tab", { name: "Core" }));
+    await user.click(screen.getByRole("tab", { name: "Advanced" }));
     expect(input).toHaveValue("new-agent");
     expect(serverSettings().core.defaultUserAgent).toBe("new-agent");
   });
 
   it("retains a failed input and retries from the single error banner", async () => {
     const { settle } = mount();
-    await userEvent.click(screen.getByRole("tab", { name: "Core" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Advanced" }));
     const input = await screen.findByLabelText("User-Agent");
     settingsIpc.saveAppSettings.mockRejectedValueOnce(
       new Error("write failed"),
@@ -151,7 +149,7 @@ describe("redesigned automatic settings", () => {
 
   it("flushes focused input on imperative navigation and never opens a leave dialog", async () => {
     const { settle } = mount();
-    await userEvent.click(screen.getByRole("tab", { name: "Core" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Advanced" }));
     const input = await screen.findByLabelText("User-Agent");
     fireEvent.change(input, { target: { value: "on-leave" } });
     act(() => useShellStore.getState().setActiveTab("profiles"));
@@ -163,7 +161,7 @@ describe("redesigned automatic settings", () => {
 
   it("allows leaving during a save, reports failure, and retains the rejected draft for retry", async () => {
     const { settle } = mount();
-    await userEvent.click(screen.getByRole("tab", { name: "Core" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Advanced" }));
     const input = await screen.findByLabelText("User-Agent");
     const pending = deferred<AppSettingsV1>();
     settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
@@ -181,7 +179,7 @@ describe("redesigned automatic settings", () => {
       "write failed after leaving",
     );
     fireEvent.click(screen.getByRole("button", { name: "Return" }));
-    await userEvent.click(screen.getByRole("tab", { name: "Core" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Advanced" }));
     expect(await screen.findByLabelText("User-Agent")).toHaveValue(
       "failed-agent",
     );
@@ -193,7 +191,7 @@ describe("redesigned automatic settings", () => {
   it("saves DNS without adding a manual action or dropping its edit on exit", async () => {
     const { settle } = mount();
     await screen.findByLabelText("Autostart");
-    await userEvent.click(screen.getByRole("tab", { name: "DNS" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Connection" }));
     const resolver = await screen.findByLabelText("Remote DNS");
     fireEvent.change(resolver, { target: { value: "1.1.1.1" } });
     act(() => useShellStore.getState().setActiveTab("profiles"));

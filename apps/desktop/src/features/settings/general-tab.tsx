@@ -124,8 +124,12 @@ export function GeneralTab({
         <SettingsCheckbox
           field="behavior.startMinimized"
           checked={settings.behavior.startMinimized}
-          description={t("options.startMinimizedHint")}
-          disabled={working}
+          description={t(
+            settings.behavior.autostart
+              ? "options.startMinimizedHint"
+              : "options.startMinimizedNeedsAutostart",
+          )}
+          disabled={working || !settings.behavior.autostart}
           label={t("options.startMinimized")}
           onCheckedChange={(checked) =>
             update((current) => ({

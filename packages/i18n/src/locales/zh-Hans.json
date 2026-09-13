@@ -186,13 +186,12 @@
   "options": {
     "autostart": "开机自启",
     "loading": "正在加载",
-    "runtimeCore": "内核",
-    "runtimeNetwork": "网络",
     "autoCheckIp": "连接后自动检测出口 IP",
     "autoCreateSubscriptionGroup": "为新订阅自动创建最低延迟策略组",
     "autoCreateSubscriptionGroupHint": "订阅首次导入节点时新增“订阅名 · Auto”策略组，不会自动启用。",
     "startMinimized": "开机启动时隐藏到托盘",
-    "startMinimizedHint": "手动打开 VoyaVPN 时始终显示窗口。"
+    "startMinimizedHint": "手动打开 VoyaVPN 时始终显示窗口。",
+    "startMinimizedNeedsAutostart": "需先开启“开机自启”。"
   },
   "panes": {
     "dns": {
@@ -213,12 +212,19 @@
       "title": "DNS",
       "strategyHint": "解析域名时优先使用 IPv4 或 IPv6；留空使用内核默认策略。",
       "expectedHint": "用于直连 DNS：通过这些 IP 范围判断是否接受解析结果。",
-      "strategyAutomatic": "自动",
       "strategyIpv4": "优先 IPv4",
       "strategyIpv6": "优先 IPv6",
       "strategyOnlyIpv4": "仅 IPv4",
       "strategyOnlyIpv6": "仅 IPv6",
-      "globalFakeIpHint": "需要启用 FakeIP；全局流量模式下也使用 FakeIP。"
+      "globalFakeIpHint": "需要启用 FakeIP；全局流量模式下也使用 FakeIP。",
+      "presetsDirect": "常用直连 DNS",
+      "presetsRemote": "常用远程 DNS",
+      "presets": {
+        "cloudflare": "Cloudflare",
+        "google": "Google",
+        "dnspod": "DNSPod（腾讯）",
+        "aliyun": "阿里云"
+      }
     },
     "logs": {
       "empty": "暂无日志",
@@ -239,7 +245,13 @@
         "info": "信息",
         "warn": "警告",
         "error": "错误"
-      }
+      },
+      "copy": "复制显示的日志",
+      "copied": "已复制 {{count}} 条日志。",
+      "copyFailed": "复制日志失败",
+      "export": "导出显示的日志…",
+      "exported": "日志已保存。",
+      "exportFailed": "导出日志失败"
     },
     "profiles": {
       "aria": {
@@ -594,64 +606,63 @@
   },
   "settings": {
     "core": {
-      "allowInsecure": "默认跳过证书验证 (allowInsecure)",
-      "bindInterface": "绑定网口",
-      "cacheFileEnabled": "启用 sing-box (规则集文件) 的缓存文件",
-      "fingerprint": "默认 TLS 指纹 (fingerprint)",
-      "hysteriaBandwidth": "Hysteria 最大带宽 (上传/下载)",
-      "hysteriaHopInterval": "端口跳跃间隔",
-      "logEnabled": "启用日志",
-      "logLevel": "日志等级",
-      "muxEnabled": "开启 Mux 多路复用",
-      "muxProtocol": "sing-box Mux 多路复用协议",
-      "sendThrough": "本地出站地址 (SendThrough)",
-      "userAgent": "用户代理 (User-Agent)",
+      "allowInsecure": "默认跳过证书验证",
+      "bindInterface": "绑定网卡",
+      "cacheFileEnabled": "在本地缓存规则集",
+      "fingerprint": "默认 TLS 指纹",
+      "hysteriaBandwidth": "Hysteria 带宽",
+      "hysteriaHopInterval": "端口跳跃间隔（秒）",
+      "logEnabled": "记录内核日志",
+      "logLevel": "日志详细程度",
+      "muxEnabled": "多路复用（Mux）",
+      "muxProtocol": "多路复用协议",
+      "sendThrough": "出站使用的本机地址",
+      "userAgent": "User-Agent",
       "tlsFragment": "TLS 分片",
       "tlsFragmentOff": "关闭",
       "tlsFragmentHello": "分片 ClientHello",
       "tlsFragmentRecord": "分片 TLS 记录",
-      "fragmentFallbackDelay": "分片回退延迟（毫秒）"
+      "fragmentFallbackDelay": "分片回退延迟（毫秒）",
+      "allowInsecureHint": "有风险：服务器证书无效时仍然连接，流量可能被窃听。仅在节点提供方要求时开启。",
+      "cacheFileHint": "把下载的规则集等状态保存在本地，重新连接更快。"
     },
     "fields": {
-      "hysteriaDownMbps": "Hysteria 最大下行带宽 (Mbps)",
-      "hysteriaUpMbps": "Hysteria 最大上行带宽 (Mbps)",
-      "muxMaxConnections": "sing-box Mux 最大连接数",
-      "muxPadding": "sing-box Mux 填充 (padding)",
+      "hysteriaDownMbps": "下载带宽（Mbps）",
+      "hysteriaUpMbps": "上传带宽（Mbps）",
+      "muxMaxConnections": "多路复用最大连接数",
+      "muxPadding": "多路复用填充",
       "speedTestDelayInterval": "测速批次间隔 (秒)",
       "speedTestPageSize": "每批测速的节点数量"
     },
     "network": {
-      "bypassLocalAddress": "请勿将代理服务器用于本地 (Intranet) 地址",
+      "bypassLocalAddress": "本地网络地址不走代理",
       "enableIpv6Address": "启用 IPv6",
-      "icmpRoutingPolicy": "ICMP 路由策略",
+      "icmpRoutingPolicy": "ICMP（ping）处理方式",
       "mtu": "MTU",
-      "systemProxyExceptions": "例外",
-      "tunAutoRoute": "自动路由",
-      "tunStack": "协议栈",
-      "tunStrictRoute": "严格路由",
-      "localPort": "混合端口",
+      "systemProxyExceptions": "不走代理的地址",
+      "tunAutoRoute": "自动配置路由",
+      "tunStack": "网络协议栈",
+      "localPort": "本地代理端口",
       "localPortHint": "127.0.0.1 上的 HTTP 与 SOCKS 端口。第二端口为 {{second}}，局域网端口为 {{lan}}。",
       "sniffing": "流量嗅探",
       "sniffingHint": "从 TLS 与 HTTP 流量中识别域名，使域名规则生效。",
       "secondPort": "第二本地端口",
       "secondPortHint": "同时监听 127.0.0.1:{{port}}。",
       "allowLan": "允许来自局域网的连接",
-      "allowLanHint": "局域网内的其他设备可以使用此代理。未启用独立局域网端口时无需密码。",
+      "allowLanHint": "局域网内的其他设备可以使用此代理。未启用独立局域网端口时无需密码，请只在可信网络中开启。",
       "separateLanPort": "独立局域网端口",
       "separateLanPortHint": "局域网设备连接端口 {{port}}，可要求用户名和密码。",
       "lanUsername": "局域网用户名",
       "lanPassword": "局域网密码"
     },
-    "perAppProxy": "分应用代理",
     "startup": "启动",
     "tabGeneral": "通用",
-    "tabTests": "测试",
     "tabUpdates": "更新",
     "tests": {
-      "ipApiUrl": "当前连接信息测试地址",
+      "ipApiUrl": "出口位置查询地址",
       "ipApiUrlHint": "留空时，延迟测试通过 ipwho.is 查询出口所在地。自定义服务需返回含 country_code 的 JSON（失败时 success 为 false），或两字母国家代码。无法识别时显示地球图标。",
-      "pingUrl": "真连接测试地址",
-      "timeout": "测速单个超时值"
+      "pingUrl": "延迟测试地址",
+      "timeout": "单个节点测速超时（秒）"
     },
     "categories": "设置分类",
     "autosave": {
@@ -674,7 +685,8 @@
       "localProxy": "本地代理",
       "connection": "连接",
       "window": "窗口",
-      "captureMode": "网络接管方式"
+      "captureMode": "网络接管方式",
+      "killSwitch": "断网保护"
     },
     "apply": {
       "reconnect": "应用并重新连接",
@@ -682,7 +694,6 @@
       "pending": "修改已保存，等待应用到当前连接。",
       "working": "正在应用设置…"
     },
-    "openRules": "前往规则页",
     "closeAction": "关闭窗口时",
     "closeActionOptions": {
       "minimizeToTray": "在托盘中继续运行",
@@ -694,7 +705,34 @@
       "vpnHint": "接管整个系统的网络流量，推荐。",
       "systemProxy": "系统代理",
       "systemProxyHint": "兼容模式：只代理支持系统代理的应用。",
-      "authorizationDeclined": "未获得系统授权，接管方式未更改。"
+      "authorizationDeclined": "未获得系统授权，接管方式未更改。",
+      "status": {
+        "disconnected": "未连接：连接后按所选方式接管流量。",
+        "vpnActive": "VPN 正在接管系统流量。",
+        "vpnInactive": "当前连接未启用 VPN，重新连接后生效。",
+        "proxyActive": "系统代理已设置。",
+        "proxyInactive": "系统代理未设置，应用流量没有经过代理。"
+      }
+    },
+    "tabConnection": "连接",
+    "tabAdvanced": "高级",
+    "defaultValue": "默认 {{value}}",
+    "saveStatus": {
+      "saving": "正在保存…",
+      "saved": "所有修改已保存。",
+      "savedOffline": "所有修改已保存，连接相关的修改会在下次连接时生效。"
+    },
+    "appearanceReverted": {
+      "title": "外观修改未保存",
+      "description": "主题或语言未能保存，已恢复为之前的设置。"
+    },
+    "killSwitch": {
+      "label": "阻止流量绕过 VPN",
+      "hint": "VPN 开启期间，应用无法绕过隧道直接联网，隧道出问题时也不会暴露真实 IP。",
+      "vpnOnly": "仅在 VPN 模式下生效，可在“高级 → 网络接管方式”中切换。"
+    },
+    "logs": {
+      "coreLogOff": "内核日志未开启，这里只显示 VoyaVPN 自身的记录。开启上方“记录内核日志”可查看连接细节。"
     }
   },
   "speedtest": {
@@ -758,7 +796,6 @@
   "tabs": {
     "aria": "主区域",
     "connections": "网络活动",
-    "dns": "DNS",
     "home": "主页",
     "logs": "运行日志",
     "profiles": "节点",

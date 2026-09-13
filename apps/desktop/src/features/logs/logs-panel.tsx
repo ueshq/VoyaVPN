@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownToLine,
+  ClipboardCopy,
   Ellipsis,
+  FileDown,
   ScrollText,
   Search,
   Trash2,
@@ -36,12 +38,15 @@ import {
 } from "@voya/ui/components/select";
 import { useI18n } from "@voya/i18n/use-i18n";
 
+import { getErrorMessage } from "@voya/utils/error";
+import { exportLogs } from "@/ipc/commands";
 import { logLineText } from "@/ipc/messages";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { StoredLogLine } from "@/ipc/runtime-event-store";
 import type { LogLevel } from "@/ipc/bindings";
 import { cn } from "@voya/ui/lib/utils";
 import { PageHeader } from "@/components/app-shell/page-section";
+import { useToastStore } from "@/stores/toast-store";
 
 export type LogFilter = "standard" | "issues" | "all";
 const ROW_HEIGHT = 36;
@@ -84,6 +89,54 @@ export function LogsPanel({
       }),
     [filter, needle, resolved],
   );
+  const pushToast = useToastStore((state) => state.pushToast);
+  // Copy and export take what the filter and search currently show.
+  const shownText = () =>
+    filtered
+      .map(
+        (line) =>
+          `${formatTimestamp(line.receivedAt)} [${line.level}] ${line.text}`,
+      )
+      .join("\n");
+
+  async function copyShown() {
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+        throw new Error(t("status.copyTunDiagnosticsClipboardUnavailable"));
+      }
+      await navigator.clipboard.writeText(shownText());
+      pushToast({
+        description: t("panes.logs.copied", { count: filtered.length }),
+        severity: "info",
+        title: t("panes.logs.copy"),
+      });
+    } catch (error) {
+      pushToast({
+        description: getErrorMessage(error),
+        severity: "error",
+        title: t("panes.logs.copyFailed"),
+      });
+    }
+  }
+
+  async function exportShown() {
+    try {
+      if (await exportLogs(shownText())) {
+        pushToast({
+          description: t("panes.logs.exported"),
+          severity: "info",
+          title: t("panes.logs.export"),
+        });
+      }
+    } catch (error) {
+      pushToast({
+        description: getErrorMessage(error),
+        severity: "error",
+        title: t("panes.logs.exportFailed"),
+      });
+    }
+  }
+
   const levels: Record<LogLevel, string> = {
     trace: t("panes.logs.levels.trace"),
     debug: t("panes.logs.levels.debug"),
@@ -182,6 +235,20 @@ export function LogsPanel({
               </Button>
             </MenubarTrigger>
             <MenubarContent align="end">
+              <MenubarItem
+                disabled={!filtered.length}
+                onSelect={() => void copyShown()}
+              >
+                <ClipboardCopy className="size-4" aria-hidden="true" />
+                {t("panes.logs.copy")}
+              </MenubarItem>
+              <MenubarItem
+                disabled={!filtered.length}
+                onSelect={() => void exportShown()}
+              >
+                <FileDown className="size-4" aria-hidden="true" />
+                {t("panes.logs.export")}
+              </MenubarItem>
               <MenubarItem disabled={!logLines.length} onSelect={clearLogs}>
                 <Trash2 className="size-4" aria-hidden="true" />
                 {t("panes.logs.clearDisplay")}

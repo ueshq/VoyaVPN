@@ -23,6 +23,11 @@ export const commands = {
 	/**  Returns an empty string when the clipboard holds no text. */
 	readClipboardText: () => typedError<string, AppError>(__TAURI_INVOKE("read_clipboard_text")),
 	/**
+	 *  Asks where to save `contents` and writes it there. Returns `false` when the
+	 *  user cancels the save dialog.
+	 */
+	exportLogs: (contents: string) => typedError<boolean, AppError>(__TAURI_INVOKE("export_logs", { contents })),
+	/**
 	 *  Trigger the one-time native authorization dialog and, on success, install
 	 *  the passwordless elevation launcher. No admin password is stored.
 	 */

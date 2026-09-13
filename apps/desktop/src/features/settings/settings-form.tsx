@@ -14,7 +14,6 @@ import {
 } from "@voya/ui/components/form-fields";
 import { cn } from "@voya/ui/lib/utils";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { useToastStore } from "@/stores/toast-store";
 import { pageSurfaceClassName } from "@/components/app-shell/page-section";
 
 const FieldErrors = createContext<Record<string, string>>({});
@@ -130,34 +129,42 @@ export function TextField({ field, ...props }: TextProps) {
 }
 
 export function NumberField({
+  defaultValue,
+  description,
   nullable = false,
   onChange,
   value,
   ...props
-}: Omit<TextProps, "onChange" | "value"> & {
+}: Omit<TextProps, "description" | "onChange" | "value"> & {
+  /** Restored when the field is cleared, and named under the field. */
+  defaultValue?: number;
+  description?: string;
   nullable?: boolean;
   onChange: (value: number | null) => void;
   value: number | null;
 }) {
   const { t } = useI18n();
+  const hint =
+    defaultValue === undefined
+      ? description
+      : [description, t("settings.defaultValue", { value: defaultValue })]
+          .filter(Boolean)
+          .join(" ");
+  // A typing mistake stays next to the field; it is not a failed save, so it
+  // never raises a toast.
   return (
     <TextField
       {...props}
+      description={hint}
       inputMode="numeric"
-      onChange={(text) => onChange(text.trim() ? Number(text) : null)}
-      onInvalid={(message, leaving) => {
-        if (leaving)
-          useToastStore
-            .getState()
-            .pushToast({
-              title: t("settings.autosave.failed"),
-              description: message,
-              severity: "error",
-            });
-      }}
+      onChange={(text) =>
+        onChange(text.trim() ? Number(text) : (defaultValue ?? null))
+      }
       validate={(text) => {
         if (!text.trim())
-          return nullable ? undefined : t("validation.textRequired");
+          return nullable || defaultValue !== undefined
+            ? undefined
+            : t("validation.textRequired");
         const number = Number(text);
         return Number.isInteger(number) &&
           number >= -2147483648 &&

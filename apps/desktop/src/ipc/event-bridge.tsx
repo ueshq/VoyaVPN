@@ -186,6 +186,11 @@ function routeAppEvent(event: AppEvent, t: TranslationFunction) {
       });
       return;
     case "selectTab": {
+      if (event.payload === "logs") {
+        // The runtime log lives under Settings → Advanced.
+        useShellStore.getState().openSettings("advanced");
+        return;
+      }
       const target = toShellTarget(event.payload);
       // Seed the sub-view before mounting the destination screen.
       if (target.view) {
@@ -200,14 +205,14 @@ function routeAppEvent(event: AppEvent, t: TranslationFunction) {
   }
 }
 
-function toShellTarget(tab: ShellTabTarget): { tab: ShellTab; view?: ConnectionsView } {
+function toShellTarget(
+  tab: Exclude<ShellTabTarget, "logs">,
+): { tab: ShellTab; view?: ConnectionsView } {
   switch (tab) {
     case "profiles":
       return { tab: "profiles" };
     case "proxyConnections":
       return { tab: "connections", view: "connections" };
-    case "logs":
-      return { tab: "connections", view: "logs" };
   }
 }
 

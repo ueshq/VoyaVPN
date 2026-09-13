@@ -155,13 +155,11 @@ test("populated pages keep scrolling inside panels and errors inside the page in
 
   const activity = await openPage(page, "connections");
   await expectInnerScroll(activity.getByTestId("connections-viewport"));
-  await activity.getByRole("tab").last().click();
-  await expectInnerScroll(activity.getByTestId("logs-viewport"));
   await expectPageGeometry(activity, 24);
 
   await page.setViewportSize(sizes[0]);
   const settings = await openPage(page, "settings");
-  await settings.getByRole("tab", { name: "Network", exact: true }).click();
+  await settings.getByRole("tab", { name: "Advanced", exact: true }).click();
   // Opening the advanced TUN options keeps this tab taller than the minimum
   // window no matter how many settings groups it currently has.
   await settings.getByRole("tabpanel").locator("summary", { hasText: "Advanced" }).first().click();
@@ -169,7 +167,7 @@ test("populated pages keep scrolling inside panels and errors inside the page in
   await page.evaluate(() => {
     (window.__VOYA_SMOKE__.state as { failNextCommand: string | null }).failNextCommand = "save_dns_settings";
   });
-  await settings.getByRole("tab", { name: "DNS", exact: true }).click();
+  await settings.getByRole("tab", { name: "Connection", exact: true }).click();
   await settings.getByRole("checkbox", { name: "FakeIP", exact: true }).check();
   const error = settings.getByRole("alert");
   await expect(error).toBeVisible();

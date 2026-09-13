@@ -30,8 +30,8 @@ for (const viewport of [
         );
         const labels =
           locale === "en"
-            ? ["General", "Core", "Network", "DNS", "Tests", "Updates"]
-            : ["通用", "内核", "网络", "DNS", "测试", "更新"];
+            ? ["General", "Connection", "Advanced", "Updates"]
+            : ["通用", "连接", "高级", "更新"];
         const title = settings.getByRole("heading", { level: 1 });
         const titleBox = await title.boundingBox();
         for (const [index, label] of labels.entries()) {

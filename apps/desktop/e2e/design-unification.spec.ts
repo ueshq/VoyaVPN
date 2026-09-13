@@ -185,9 +185,9 @@ test("saving during a connection waits for apply and failed apply remains retrya
   }, savedNodeFixture);
   await page.goto("/");
   await page.locator("#shell-tab-settings").click();
-  await page.getByRole("tab", { name: "Core", exact: true }).click();
+  await page.getByRole("tab", { name: "Advanced", exact: true }).click();
   await page.getByLabel("Log level").click();
-  await page.getByRole("option", { name: "debug", exact: true }).click();
+  await page.getByRole("option", { name: "Debug", exact: true }).click();
   const apply = page.getByRole("button", { name: "Apply and reconnect" });
   await expect(apply).toBeVisible();
   expect(
@@ -200,7 +200,7 @@ test("saving during a connection waits for apply and failed apply remains retrya
   await page.locator("#shell-tab-profiles").click();
   await page.locator("#shell-tab-settings").click();
   await expect(
-    page.getByRole("tab", { name: "Core", exact: true }),
+    page.getByRole("tab", { name: "Advanced", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await page.evaluate(() => {
     (

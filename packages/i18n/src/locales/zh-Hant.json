@@ -186,13 +186,12 @@
   "options": {
     "autostart": "開機自動啟動",
     "loading": "正在載入",
-    "runtimeCore": "內核",
-    "runtimeNetwork": "網路",
     "autoCheckIp": "連線後自動檢測出口 IP",
     "autoCreateSubscriptionGroup": "為新訂閱自動建立最低延遲策略群組",
     "autoCreateSubscriptionGroupHint": "訂閱首次匯入節點時新增「訂閱名稱 · Auto」策略群組，不會自動啟用。",
     "startMinimized": "開機啟動時隱藏到系統匣",
-    "startMinimizedHint": "手動開啟 VoyaVPN 時一律顯示視窗。"
+    "startMinimizedHint": "手動開啟 VoyaVPN 時一律顯示視窗。",
+    "startMinimizedNeedsAutostart": "需先開啟「開機自啟」。"
   },
   "panes": {
     "dns": {
@@ -213,12 +212,19 @@
       "title": "DNS",
       "strategyHint": "解析網域時優先使用 IPv4 或 IPv6；留空使用核心預設策略。",
       "expectedHint": "用於直連 DNS：透過這些 IP 範圍判斷是否接受解析結果。",
-      "strategyAutomatic": "自動",
       "strategyIpv4": "優先 IPv4",
       "strategyIpv6": "優先 IPv6",
       "strategyOnlyIpv4": "僅 IPv4",
       "strategyOnlyIpv6": "僅 IPv6",
-      "globalFakeIpHint": "需要啟用 FakeIP；全域流量模式下也使用 FakeIP。"
+      "globalFakeIpHint": "需要啟用 FakeIP；全域流量模式下也使用 FakeIP。",
+      "presetsDirect": "常用直連 DNS",
+      "presetsRemote": "常用遠端 DNS",
+      "presets": {
+        "cloudflare": "Cloudflare",
+        "google": "Google",
+        "dnspod": "DNSPod（騰訊）",
+        "aliyun": "阿里雲"
+      }
     },
     "logs": {
       "empty": "尚無日誌",
@@ -239,7 +245,13 @@
         "info": "資訊",
         "warn": "警告",
         "error": "錯誤"
-      }
+      },
+      "copy": "複製顯示的日誌",
+      "copied": "已複製 {{count}} 筆日誌。",
+      "copyFailed": "複製日誌失敗",
+      "export": "匯出顯示的日誌…",
+      "exported": "日誌已儲存。",
+      "exportFailed": "匯出日誌失敗"
     },
     "profiles": {
       "aria": {
@@ -594,64 +606,63 @@
   },
   "settings": {
     "core": {
-      "allowInsecure": "預設跳過憑證驗證 (allowinsecure)",
-      "bindInterface": "綁定網路介面",
-      "cacheFileEnabled": "啟用 sing-box（規則集檔案）的快取檔案",
-      "fingerprint": "預設 TLS 指紋 (fingerprint)",
-      "hysteriaBandwidth": "Hysteria 最大頻寬 (Up/Dw)",
-      "hysteriaHopInterval": "連接埠跳轉間隔",
-      "logEnabled": "啟用日誌",
-      "logLevel": "日誌等級",
-      "muxEnabled": "開啟 Mux 多路復用",
-      "muxProtocol": "sing-box Mux 多路復用協定",
-      "sendThrough": "本機出站位址 (SendThrough)",
-      "userAgent": "使用者代理 (User-Agent)",
+      "allowInsecure": "預設略過憑證驗證",
+      "bindInterface": "繫結網路介面",
+      "cacheFileEnabled": "在本機快取規則集",
+      "fingerprint": "預設 TLS 指紋",
+      "hysteriaBandwidth": "Hysteria 頻寬",
+      "hysteriaHopInterval": "連接埠跳躍間隔（秒）",
+      "logEnabled": "記錄核心日誌",
+      "logLevel": "日誌詳細程度",
+      "muxEnabled": "多工（Mux）",
+      "muxProtocol": "多工協定",
+      "sendThrough": "出站使用的本機位址",
+      "userAgent": "User-Agent",
       "tlsFragment": "TLS 分片",
       "tlsFragmentOff": "關閉",
       "tlsFragmentHello": "分片 ClientHello",
       "tlsFragmentRecord": "分片 TLS 記錄",
-      "fragmentFallbackDelay": "分片回退延遲（毫秒）"
+      "fragmentFallbackDelay": "分片回退延遲（毫秒）",
+      "allowInsecureHint": "有風險：伺服器憑證無效時仍然連線，流量可能被竊聽。僅在節點提供方要求時開啟。",
+      "cacheFileHint": "把下載的規則集等狀態保存在本機，重新連線更快。"
     },
     "fields": {
-      "hysteriaDownMbps": "Hysteria 最大下行頻寬 (Mbps)",
-      "hysteriaUpMbps": "Hysteria 最大上行頻寬 (Mbps)",
-      "muxMaxConnections": "sing-box Mux 最大連線數",
-      "muxPadding": "sing-box Mux 填充 (padding)",
+      "hysteriaDownMbps": "下載頻寬（Mbps）",
+      "hysteriaUpMbps": "上傳頻寬（Mbps）",
+      "muxMaxConnections": "多工最大連線數",
+      "muxPadding": "多工填充",
       "speedTestDelayInterval": "測速批次間隔 (秒)",
       "speedTestPageSize": "每批測速的節點數量"
     },
     "network": {
-      "bypassLocalAddress": "請勿將代理伺服器用於本機（Intranet）位址",
+      "bypassLocalAddress": "區域網路位址不走代理",
       "enableIpv6Address": "啟用 IPv6",
-      "icmpRoutingPolicy": "ICMP 路由策略",
+      "icmpRoutingPolicy": "ICMP（ping）處理方式",
       "mtu": "MTU",
-      "systemProxyExceptions": "例外",
-      "tunAutoRoute": "自動路由",
-      "tunStack": "協定堆疊",
-      "tunStrictRoute": "嚴格路由",
-      "localPort": "混合連接埠",
+      "systemProxyExceptions": "不走代理的位址",
+      "tunAutoRoute": "自動設定路由",
+      "tunStack": "網路協定堆疊",
+      "localPort": "本機代理連接埠",
       "localPortHint": "127.0.0.1 上的 HTTP 與 SOCKS 連接埠。第二連接埠為 {{second}}，區域網路連接埠為 {{lan}}。",
       "sniffing": "流量嗅探",
       "sniffingHint": "從 TLS 與 HTTP 流量中識別網域，使網域規則生效。",
       "secondPort": "第二本機連接埠",
       "secondPortHint": "同時監聽 127.0.0.1:{{port}}。",
       "allowLan": "允許來自區域網路的連線",
-      "allowLanHint": "區域網路內的其他裝置可以使用此代理。未啟用獨立區域網路連接埠時無需密碼。",
+      "allowLanHint": "區域網路內的其他裝置可以使用此代理。未啟用獨立區域網路連接埠時無需密碼，請只在可信網路中開啟。",
       "separateLanPort": "獨立區域網路連接埠",
       "separateLanPortHint": "區域網路裝置連線至連接埠 {{port}}，可要求使用者名稱和密碼。",
       "lanUsername": "區域網路使用者名稱",
       "lanPassword": "區域網路密碼"
     },
-    "perAppProxy": "分應用代理",
     "startup": "啟動",
     "tabGeneral": "通用",
-    "tabTests": "測試",
     "tabUpdates": "更新",
     "tests": {
-      "ipApiUrl": "目前連接資訊測試地址",
+      "ipApiUrl": "出口位置查詢位址",
       "ipApiUrlHint": "留空時，延遲測試透過 ipwho.is 查詢出口所在地。自訂服務需回傳含 country_code 的 JSON（失敗時 success 為 false），或兩字母國家代碼。無法辨識時顯示地球圖示。",
-      "pingUrl": "真連線測試位址",
-      "timeout": "測速單個超時值"
+      "pingUrl": "延遲測試位址",
+      "timeout": "單一節點測速逾時（秒）"
     },
     "categories": "設定分類",
     "autosave": {
@@ -674,7 +685,8 @@
       "localProxy": "本機代理",
       "connection": "連線",
       "window": "視窗",
-      "captureMode": "網路接管方式"
+      "captureMode": "網路接管方式",
+      "killSwitch": "斷網保護"
     },
     "apply": {
       "reconnect": "套用並重新連線",
@@ -682,7 +694,6 @@
       "pending": "修改已儲存，等待套用至目前連線。",
       "working": "正在套用設定…"
     },
-    "openRules": "前往規則頁",
     "closeAction": "關閉視窗時",
     "closeActionOptions": {
       "minimizeToTray": "在系統匣中繼續執行",
@@ -694,7 +705,34 @@
       "vpnHint": "接管整個系統的網路流量，建議使用。",
       "systemProxy": "系統代理",
       "systemProxyHint": "相容模式：只代理支援系統代理的應用程式。",
-      "authorizationDeclined": "未取得系統授權，接管方式未變更。"
+      "authorizationDeclined": "未取得系統授權，接管方式未變更。",
+      "status": {
+        "disconnected": "未連線：連線後按所選方式接管流量。",
+        "vpnActive": "VPN 正在接管系統流量。",
+        "vpnInactive": "目前連線未啟用 VPN，重新連線後生效。",
+        "proxyActive": "系統代理已設定。",
+        "proxyInactive": "系統代理未設定，應用程式流量沒有經過代理。"
+      }
+    },
+    "tabConnection": "連線",
+    "tabAdvanced": "進階",
+    "defaultValue": "預設 {{value}}",
+    "saveStatus": {
+      "saving": "正在儲存…",
+      "saved": "所有修改已儲存。",
+      "savedOffline": "所有修改已儲存，連線相關的修改會在下次連線時生效。"
+    },
+    "appearanceReverted": {
+      "title": "外觀修改未儲存",
+      "description": "主題或語言未能儲存，已恢復為先前的設定。"
+    },
+    "killSwitch": {
+      "label": "阻止流量繞過 VPN",
+      "hint": "VPN 開啟期間，應用程式無法繞過隧道直接連網，隧道出問題時也不會暴露真實 IP。",
+      "vpnOnly": "僅在 VPN 模式下生效，可在「進階 → 網路接管方式」中切換。"
+    },
+    "logs": {
+      "coreLogOff": "核心日誌未開啟，這裡只顯示 VoyaVPN 自身的記錄。開啟上方「記錄核心日誌」可查看連線細節。"
     }
   },
   "speedtest": {
@@ -758,7 +796,6 @@
   "tabs": {
     "aria": "主要區域",
     "connections": "網路活動",
-    "dns": "DNS",
     "home": "主頁",
     "logs": "執行日誌",
     "profiles": "節點",

@@ -5,6 +5,7 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { cn } from "@voya/ui/lib/utils";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
 import type { ConnectionMode } from "@/ipc/bindings";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 
 import { SettingsGroup } from "./settings-form";
 import { useCaptureMode } from "./use-capture-mode";
@@ -35,6 +36,18 @@ export function CaptureModeSetting() {
   const { t } = useI18n();
   const id = useId();
   const capture = useCaptureMode(t);
+  // The saved choice above, and here what the running connection really does.
+  const statusKey = useRuntimeEventStore((state): TranslationKey => {
+    if (state.coreState?.state !== "connected")
+      return "settings.captureMode.status.disconnected";
+    if (state.tun?.enabled)
+      return state.coreState.activeTunBackend
+        ? "settings.captureMode.status.vpnActive"
+        : "settings.captureMode.status.vpnInactive";
+    return state.sysProxy?.effectiveMode === "forcedChange"
+      ? "settings.captureMode.status.proxyActive"
+      : "settings.captureMode.status.proxyInactive";
+  });
   if (!capture.available) return null;
 
   return (
@@ -69,6 +82,9 @@ export function CaptureModeSetting() {
           );
         })}
       </div>
+      <p className="text-xs text-muted-foreground" role="status">
+        {t(statusKey)}
+      </p>
       {capture.error ? <InlinePageError>{capture.error}</InlinePageError> : null}
     </SettingsGroup>
   );

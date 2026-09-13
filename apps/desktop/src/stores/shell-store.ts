@@ -4,10 +4,13 @@ export type ShellTab =
   "home" | "profiles" | "settings" | "connections" | "rules";
 
 /**
- * Sub-view of the Connections page: the live connection table, the running
- * policy group, or the log tail.
+ * Sub-view of the Connections page: the live connection table or the running
+ * policy group.
  */
-export type ConnectionsView = "connections" | "proxies" | "logs";
+export type ConnectionsView = "connections" | "proxies";
+
+/** Settings categories: everyday choices first, networking detail under Advanced. */
+export type SettingsTab = "general" | "connection" | "advanced" | "updates";
 
 type ShellState = {
   sidebarCollapsed: boolean;
@@ -17,7 +20,9 @@ type ShellState = {
   focusPageTitle: boolean;
   profilesAddMenuOpen: boolean;
   openProfilesAddMenu: () => void;
-  settingsTab: "general" | "core" | "network" | "dns" | "tests" | "updates";
+  settingsTab: SettingsTab;
+  /** Opens Settings at one category, as a deep link does. */
+  openSettings: (tab: SettingsTab) => void;
   routingPerAppRequested: boolean;
   /** Active sub-view of the Connections page; survives leaving the page. */
   connectionsView: ConnectionsView;
@@ -37,6 +42,13 @@ export const useShellStore = create<ShellState>((set) => ({
   openProfilesAddMenu: () =>
     set({ activeTab: "profiles", focusPageTitle: false, profilesAddMenuOpen: true }),
   settingsTab: "general",
+  openSettings: (settingsTab) =>
+    set({
+      activeTab: "settings",
+      focusPageTitle: true,
+      profilesAddMenuOpen: false,
+      settingsTab,
+    }),
   routingPerAppRequested: false,
   setActiveTab: (activeTab, focusTitle = false) =>
     set({ activeTab, focusPageTitle: focusTitle, profilesAddMenuOpen: false }),

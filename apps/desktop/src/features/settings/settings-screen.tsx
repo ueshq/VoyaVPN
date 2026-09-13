@@ -1,5 +1,3 @@
-import { useShellStore } from "@/stores/shell-store";
-import { SettingsApplyStatus } from "./settings-apply-status";
 import { useState, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
@@ -18,24 +16,24 @@ import type { TranslationKey } from "@voya/i18n";
 import { DnsPane } from "@/features/dns/dns-pane";
 import { useDnsSettings } from "@/features/dns/use-dns-settings";
 import { UpdatesPanel } from "@/features/updates/updates-panel";
+import { useShellStore, type SettingsTab } from "@/stores/shell-store";
 
-import { CoreTab } from "./core-tab";
+import { AdvancedTab } from "./advanced-tab";
+import { ConnectionTab } from "./connection-tab";
 import { GeneralTab } from "./general-tab";
-import { NetworkTab } from "./network-tab";
-import { TestsTab } from "./tests-tab";
+import { SettingsApplyStatus } from "./settings-apply-status";
 import { SettingsFields } from "./settings-form";
 import { settingsSaveQueue } from "./settings-save-queue";
 import { useAppSettings, type AppSettingsController } from "./use-app-settings";
 
+// Everyday choices first; anything that needs networking knowledge waits under
+// Advanced.
 const tabs = [
   { labelKey: "settings.tabGeneral", value: "general" },
-  { labelKey: "options.runtimeCore", value: "core" },
-  { labelKey: "options.runtimeNetwork", value: "network" },
-  { labelKey: "tabs.dns", value: "dns" },
-  { labelKey: "settings.tabTests", value: "tests" },
+  { labelKey: "settings.tabConnection", value: "connection" },
+  { labelKey: "settings.tabAdvanced", value: "advanced" },
   { labelKey: "settings.tabUpdates", value: "updates" },
-] as const satisfies readonly { labelKey: TranslationKey; value: string }[];
-type SettingsTab = (typeof tabs)[number]["value"];
+] as const satisfies readonly { labelKey: TranslationKey; value: SettingsTab }[];
 
 export function SettingsScreen() {
   const { t } = useI18n();
@@ -44,7 +42,7 @@ export function SettingsScreen() {
   const [visited, setVisited] = useState<ReadonlySet<SettingsTab>>(
     () => new Set([tab]),
   );
-  const dns = useDnsSettings(visited.has("dns"));
+  const dns = useDnsSettings(visited.has("connection"));
   const queue = settingsSaveQueue(useQueryClient());
   const saving = useSyncExternalStore(
     queue.subscribe,
@@ -85,7 +83,11 @@ export function SettingsScreen() {
           title={t("modal.settings")}
         />
         <PageContent>
-          <SettingsApplyStatus saving={saving} failed={!!error} />
+          <SettingsApplyStatus
+            failed={!!error}
+            saved={controller.saved || dns.saved}
+            saving={saving}
+          />
           {error ? (
             <InlinePageError>
               <span>{error}</span>
@@ -113,18 +115,15 @@ export function SettingsScreen() {
                   forceMount
                   value={item.value}
                 >
-                  {visited.has(item.value) ? (
-                    <>
-                      {item.value !== "dns" && item.value !== "updates" ? (
-                        <AppSettingsPane
-                          controller={controller}
-                          tab={item.value}
-                        />
-                      ) : null}
-                      {item.value === "dns" ? <DnsPane controller={dns} /> : null}
-                      {item.value === "updates" ? <UpdatesPanel /> : null}
-                    </>
-                  ) : null}
+                  {!visited.has(item.value) ? null : item.value === "updates" ? (
+                    <UpdatesPanel />
+                  ) : (
+                    <AppSettingsPane
+                      controller={controller}
+                      dns={dns}
+                      tab={item.value}
+                    />
+                  )}
                 </TabsContent>
               ))}
             </SettingsFields>
@@ -137,10 +136,12 @@ export function SettingsScreen() {
 
 function AppSettingsPane({
   controller,
+  dns,
   tab,
 }: {
   controller: AppSettingsController;
-  tab: Exclude<SettingsTab, "dns" | "updates">;
+  dns: ReturnType<typeof useDnsSettings>;
+  tab: Exclude<SettingsTab, "updates">;
 }) {
   const { t } = useI18n();
   if (!controller.settings)
@@ -153,11 +154,14 @@ function AppSettingsPane({
   switch (tab) {
     case "general":
       return <GeneralTab controller={ready} />;
-    case "core":
-      return <CoreTab controller={ready} />;
-    case "network":
-      return <NetworkTab controller={ready} />;
-    case "tests":
-      return <TestsTab controller={ready} />;
+    case "connection":
+      return (
+        <div className="grid gap-4">
+          <ConnectionTab controller={ready} />
+          <DnsPane controller={dns} />
+        </div>
+      );
+    case "advanced":
+      return <AdvancedTab controller={ready} />;
   }
 }

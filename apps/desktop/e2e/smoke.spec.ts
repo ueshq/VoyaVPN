@@ -108,10 +108,8 @@ test("loads the app shell and opens in-shell settings", async ({ page }) => {
   const settings = page.getByRole("region", { name: "Settings" });
   await expect(settings.getByRole("tab")).toHaveText([
     "General",
-    "Core",
-    "Network",
-    "DNS",
-    "Tests",
+    "Connection",
+    "Advanced",
     "Updates",
   ]);
   await expect(
@@ -165,8 +163,9 @@ test("commits settings input on Enter and flushes numeric input on imperative na
 }) => {
   await page.getByRole("tab", { name: "Settings", exact: true }).click();
   const settings = page.getByRole("region", { name: "Settings", exact: true });
-  await settings.getByRole("tab", { name: "Core", exact: true }).click();
-  await settings.getByText("Advanced options", { exact: true }).click();
+  await settings.getByRole("tab", { name: "Advanced", exact: true }).click();
+  // The tunnel's collapsed options come first; the core's are second.
+  await settings.getByText("Advanced options", { exact: true }).nth(1).click();
   const agent = settings.getByLabel("User-Agent");
   await agent.fill("browser-autosave-agent");
   expect(
@@ -192,10 +191,10 @@ test("commits settings input on Enter and flushes numeric input on imperative na
     ),
   ).toHaveLength(1);
 
-  await settings.getByRole("tab", { name: "Network", exact: true }).click();
   await settings.getByRole("tabpanel").getByText("Advanced options", { exact: true }).first().click();
   const mtu = settings.getByLabel("MTU", { exact: true });
-  await mtu.fill("");
+  // A cleared MTU restores its default, so a malformed one is what stays unsaved.
+  await mtu.fill("abc");
   await mtu.blur();
   await expect(mtu).toHaveAttribute("aria-invalid", "true");
   expect(
@@ -472,8 +471,12 @@ test("uses traffic modes and connections through the proxy runtime IPC", async (
   const connectionsPage = page.getByRole("region", {
     name: "Network activity",
   });
-  await connectionsPage.getByRole("tab", { name: "Runtime logs" }).click();
-  await expect(page.getByText("No log lines", { exact: true })).toBeVisible();
+  // The runtime log moved to Settings → Advanced; the other sub-view here is
+  // the running policy group.
+  await connectionsPage.getByRole("tab", { name: "Policy groups" }).click();
+  await expect(
+    connectionsPage.getByRole("tab", { name: "Policy groups" }),
+  ).toHaveAttribute("aria-selected", "true");
   await connectionsPage.getByRole("tab", { name: "Live connections" }).click();
   await expect(
     page.getByText("No active connections", { exact: true }),
@@ -621,13 +624,13 @@ test("edits routing and DNS settings without network or OS side effects", async 
 
   await page.getByRole("tab", { name: "Settings" }).click();
   const settings = page.getByRole("region", { name: "Settings" });
-  await settings.getByRole("tab", { name: "DNS" }).click();
+  await settings.getByRole("tab", { name: "Connection" }).click();
   await expect(
     settings.getByRole("heading", { name: "DNS servers and strategies" }),
   ).toBeVisible();
   await settings.getByRole("checkbox", { exact: true, name: "FakeIP" }).check();
-  await settings.getByLabel("Remote DNS").fill("https://dns.google/dns-query");
-  await settings.getByLabel("Remote DNS").blur();
+  await settings.getByLabel("Remote DNS", { exact: true }).fill("https://dns.google/dns-query");
+  await settings.getByLabel("Remote DNS", { exact: true }).blur();
 
   // Asserting the static "FakeIP" label proves nothing about the save; read the
   // recorded payload instead.
@@ -751,7 +754,7 @@ test("keeps traffic modes independent of the capture mode chosen in settings", a
   ).toHaveCount(2);
 
   await page.getByRole("tab", { name: "Settings", exact: true }).click();
-  await page.getByRole("tab", { name: "Network", exact: true }).click();
+  await page.getByRole("tab", { name: "Advanced", exact: true }).click();
   const capture = page.getByRole("group", { name: "Traffic capture" });
   const vpn = capture.getByRole("button", { name: "VPN mode", exact: true });
   const systemProxy = capture.getByRole("button", { name: "System proxy", exact: true });
@@ -827,7 +830,7 @@ test("offers macOS only the VPN, without system proxy or per-app settings", asyn
   await expect(page.getByRole("switch")).toHaveCount(0);
 
   await page.getByRole("tab", { name: "Settings", exact: true }).click();
-  await page.getByRole("tab", { name: "Network", exact: true }).click();
+  await page.getByRole("tab", { name: "Advanced", exact: true }).click();
   await expect(page.getByRole("heading", { name: "TUN", exact: true })).toBeVisible();
   await expect(page.getByRole("group", { name: "Traffic capture" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "System proxy", exact: true })).toHaveCount(0);

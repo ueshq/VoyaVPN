@@ -1,6 +1,7 @@
 import { NumberField, TextField, SettingsGroup } from "./settings-form";
 import { useI18n } from "@voya/i18n/use-i18n";
 
+import { SETTING_DEFAULTS } from "./settings-values";
 import type { AppSettingsFormController } from "./use-app-settings";
 
 export function TestsTab({ controller }: { controller: AppSettingsFormController }) {
@@ -16,7 +17,7 @@ export function TestsTab({ controller }: { controller: AppSettingsFormController
   return (
     <div className="grid gap-4">
       <SettingsGroup title={t("settings.sections.testExecution")}>
-        <NumberField field="speedTest.timeoutSeconds" id="rt-speedtest-timeout" label={t("settings.tests.timeout")} onChange={(timeoutSeconds) => patchTests({ timeoutSeconds: timeoutSeconds ?? 0 })} value={settings.speedTest.timeoutSeconds} />
+        <NumberField defaultValue={SETTING_DEFAULTS.speedTestTimeoutSeconds} field="speedTest.timeoutSeconds" id="rt-speedtest-timeout" label={t("settings.tests.timeout")} onChange={(timeoutSeconds) => patchTests({ timeoutSeconds: timeoutSeconds ?? SETTING_DEFAULTS.speedTestTimeoutSeconds })} value={settings.speedTest.timeoutSeconds} />
         <NumberField nullable field="speedTest.pageSize" id="rt-speedtest-page-size" label={t("settings.fields.speedTestPageSize")} onChange={(pageSize) => patchTests({ pageSize })} value={settings.speedTest.pageSize} />
         <NumberField nullable field="speedTest.delayIntervalSeconds" id="rt-speedtest-delay-interval" label={t("settings.fields.speedTestDelayInterval")} onChange={(delayIntervalSeconds) => patchTests({ delayIntervalSeconds })} value={settings.speedTest.delayIntervalSeconds} />
       </SettingsGroup>

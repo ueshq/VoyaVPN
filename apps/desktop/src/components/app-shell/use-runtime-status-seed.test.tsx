@@ -18,7 +18,7 @@ describe("runtime status hydration and resume", () => {
     await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
     expect(refresh).toHaveBeenLastCalledWith(expect.any(Function), undefined, expect.any(Function));
     await act(async () => window.dispatchEvent(new Event("focus")));
-    expect(refresh).toHaveBeenLastCalledWith(expect.any(Function), ["coreState"], expect.any(Function));
+    expect(refresh).toHaveBeenLastCalledWith(expect.any(Function), ["coreState", "sysProxy", "tun"], expect.any(Function));
     const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
     await act(async () => document.dispatchEvent(new Event("visibilitychange")));
     expect(refresh).toHaveBeenCalledTimes(2);

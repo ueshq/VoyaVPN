@@ -802,6 +802,8 @@ export async function installTauriSmokeMock(
             texts: ["vless://00000000-0000-0000-0000-000000000001@screen.example.test:443#Screen%20node"],
             status: "found", source: "screen", message: null, failureReason: null,
           } satisfies QrScanResult);
+        case "export_logs":
+          return Promise.resolve(true);
         case "read_clipboard_text":
           return Promise.resolve(
             " vless://00000000-0000-0000-0000-000000000002@clipboard.example.test:443#Clipboard%20direct ",

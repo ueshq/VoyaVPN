@@ -42,10 +42,7 @@ export function HomeScreen() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const navigateToNodes = () =>
     useShellStore.getState().setActiveTab("profiles", true);
-  const openLogs = () => {
-    useShellStore.getState().setConnectionsView("logs");
-    useShellStore.getState().setActiveTab("connections", true);
-  };
+  const openLogs = () => useShellStore.getState().openSettings("advanced");
   const runtimeActionAvailable =
     home.connected || home.state === "cleanupPending";
   const noNodes =

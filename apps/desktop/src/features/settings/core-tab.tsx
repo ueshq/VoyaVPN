@@ -1,5 +1,5 @@
 import { Disclosure } from "@voya/ui/components/disclosure";
-import { nullableText } from "./settings-values";
+import { nullableText, SETTING_DEFAULTS } from "./settings-values";
 import {
   SettingsCheckbox,
   NumberField,
@@ -21,7 +21,24 @@ const TLS_FRAGMENT_LABELS: Record<TlsFragmentMode, TranslationKey> = {
   record: "settings.core.tlsFragmentRecord",
   tlsHello: "settings.core.tlsFragmentHello",
 };
-const DEFAULT_FRAGMENT_FALLBACK_DELAY_MS = 500;
+const LOG_LEVELS = ["none", "trace", "debug", "info", "warn", "error"] as const;
+const LOG_LEVEL_LABELS: Record<(typeof LOG_LEVELS)[number], TranslationKey> = {
+  none: "common.none",
+  trace: "panes.logs.levels.trace",
+  debug: "panes.logs.levels.debug",
+  info: "panes.logs.levels.info",
+  warn: "panes.logs.levels.warn",
+  error: "panes.logs.levels.error",
+};
+// Only these fields live in the collapsed section, so only their errors open it.
+const COLLAPSED_FIELDS = [
+  "core.defaultFingerprint",
+  "core.defaultUserAgent",
+  "core.sendThrough",
+  "core.bindInterface",
+  "multiplexing.",
+  "hysteria.",
+];
 
 export function CoreTab({
   controller,
@@ -62,6 +79,7 @@ export function CoreTab({
           <SettingsCheckbox
             field="core.defaultAllowInsecure"
             checked={settings.core.defaultAllowInsecure}
+            description={t("settings.core.allowInsecureHint")}
             label={t("settings.core.allowInsecure")}
             onCheckedChange={(defaultAllowInsecure) =>
               patchCore({ defaultAllowInsecure: defaultAllowInsecure === true })
@@ -78,6 +96,7 @@ export function CoreTab({
           <SettingsCheckbox
             field="core.cacheFileEnabled"
             checked={settings.core.cacheFileEnabled}
+            description={t("settings.core.cacheFileHint")}
             label={t("settings.core.cacheFileEnabled")}
             onCheckedChange={(cacheFileEnabled) =>
               patchCore({ cacheFileEnabled: cacheFileEnabled === true })
@@ -89,14 +108,10 @@ export function CoreTab({
           id="rt-loglevel"
           label={t("settings.core.logLevel")}
           onChange={(logLevel) => patchCore({ logLevel })}
-          options={[
-            "none",
-            "trace",
-            "debug",
-            "info",
-            "warn",
-            "error",
-          ]}
+          optionLabel={(level) =>
+            t(LOG_LEVEL_LABELS[level as (typeof LOG_LEVELS)[number]])
+          }
+          options={LOG_LEVELS}
           value={settings.core.logLevel}
         />
         <SelectField
@@ -112,13 +127,14 @@ export function CoreTab({
         />
         {settings.core.tlsFragment === "tlsHello" ? (
           <NumberField
+            defaultValue={SETTING_DEFAULTS.fragmentFallbackDelayMs}
             field="core.fragmentFallbackDelayMs"
             id="rt-fragment-fallback-delay"
             label={t("settings.core.fragmentFallbackDelay")}
             onChange={(delay) =>
               patchCore({
                 fragmentFallbackDelayMs:
-                  delay ?? DEFAULT_FRAGMENT_FALLBACK_DELAY_MS,
+                  delay ?? SETTING_DEFAULTS.fragmentFallbackDelayMs,
               })
             }
             value={settings.core.fragmentFallbackDelayMs}
@@ -129,7 +145,9 @@ export function CoreTab({
       <Disclosure
         className="border-0 [&>div]:border-0"
         title={t("common.advanced")}
-        invalid={Object.keys(controller.fieldErrors).length > 0}
+        invalid={Object.keys(controller.fieldErrors).some((field) =>
+          COLLAPSED_FIELDS.some((prefix) => field.startsWith(prefix)),
+        )}
       >
         <SettingsGroup title={t("settings.sections.outbound")}>
           <TextField
@@ -175,11 +193,15 @@ export function CoreTab({
             value={settings.multiplexing.protocol}
           />
           <NumberField
+            defaultValue={SETTING_DEFAULTS.muxMaxConnections}
             field="multiplexing.maxConnections"
             id="rt-mux-sbox-max-connections"
             label={t("settings.fields.muxMaxConnections")}
             onChange={(maxConnections) =>
-              patchMux({ maxConnections: maxConnections ?? 0 })
+              patchMux({
+                maxConnections:
+                  maxConnections ?? SETTING_DEFAULTS.muxMaxConnections,
+              })
             }
             value={settings.multiplexing.maxConnections}
           />
@@ -197,29 +219,40 @@ export function CoreTab({
 
         <SettingsGroup title={t("settings.core.hysteriaBandwidth")}>
           <NumberField
+            defaultValue={SETTING_DEFAULTS.hysteriaMbps}
             field="hysteria.uploadMbps"
             id="rt-hysteria-up"
             label={t("settings.fields.hysteriaUpMbps")}
             onChange={(uploadMbps) =>
-              patchHysteria({ uploadMbps: uploadMbps ?? 0 })
+              patchHysteria({
+                uploadMbps: uploadMbps ?? SETTING_DEFAULTS.hysteriaMbps,
+              })
             }
             value={settings.hysteria.uploadMbps}
           />
           <NumberField
+            defaultValue={SETTING_DEFAULTS.hysteriaMbps}
             field="hysteria.downloadMbps"
             id="rt-hysteria-down"
             label={t("settings.fields.hysteriaDownMbps")}
             onChange={(downloadMbps) =>
-              patchHysteria({ downloadMbps: downloadMbps ?? 0 })
+              patchHysteria({
+                downloadMbps: downloadMbps ?? SETTING_DEFAULTS.hysteriaMbps,
+              })
             }
             value={settings.hysteria.downloadMbps}
           />
           <NumberField
+            defaultValue={SETTING_DEFAULTS.hysteriaHopIntervalSeconds}
             field="hysteria.hopIntervalSeconds"
             id="rt-hysteria-hop-interval"
             label={t("settings.core.hysteriaHopInterval")}
             onChange={(hopIntervalSeconds) =>
-              patchHysteria({ hopIntervalSeconds: hopIntervalSeconds ?? 5 })
+              patchHysteria({
+                hopIntervalSeconds:
+                  hopIntervalSeconds ??
+                  SETTING_DEFAULTS.hysteriaHopIntervalSeconds,
+              })
             }
             value={settings.hysteria.hopIntervalSeconds}
           />
