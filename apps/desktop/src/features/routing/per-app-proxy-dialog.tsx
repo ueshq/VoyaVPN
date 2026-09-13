@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { AppWindow, Info, Plus, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
+import type { TranslationKey } from "@voya/i18n";
+
 import { Alert, AlertDescription } from "@voya/ui/components/alert";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
@@ -36,6 +38,7 @@ import {
   buildPerAppRule,
   findPerAppRule,
   normalizeProcessNames,
+  PER_APP_MODE_LABEL_KEYS,
   readPerAppRule,
   type PerAppProxyMode,
 } from "./per-app-proxy-rule";
@@ -46,6 +49,12 @@ type PerAppProxyDialogProps = {
 };
 
 const MODE_OPTIONS: PerAppProxyMode[] = ["off", "include", "exclude"];
+
+const MODE_HINT_KEYS = {
+  exclude: "panes.routing.perAppModeExcludeHint",
+  include: "panes.routing.perAppModeIncludeHint",
+  off: "panes.routing.perAppModeOffHint",
+} as const satisfies Record<PerAppProxyMode, TranslationKey>;
 
 /**
  * Visual editor for per-app proxy rules. It manages exactly one sentinel rule
@@ -218,12 +227,12 @@ export function PerAppProxyDialog({
                     type="button"
                     variant="ghost"
                   >
-                    {modeLabel(option, t)}
+                    {t(PER_APP_MODE_LABEL_KEYS[option])}
                   </Button>
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">
-                {modeDescription(mode, t)}
+                {t(MODE_HINT_KEYS[mode])}
               </p>
 
               <Alert
@@ -373,7 +382,7 @@ export function PerAppProxyDialog({
                       variant="outline"
                     >
                       <Plus aria-hidden="true" className="size-4" />
-                      {t("actions.apply")}
+                      {t("actions.add")}
                     </Button>
                   </div>
                 </>
@@ -406,30 +415,4 @@ export function PerAppProxyDialog({
       </ScrollableDialogContent>
     </Dialog>
   );
-}
-
-type TranslateFn = ReturnType<typeof useI18n>["t"];
-
-function modeLabel(mode: PerAppProxyMode, t: TranslateFn) {
-  switch (mode) {
-    case "include":
-      return t("panes.routing.perAppModeInclude");
-    case "exclude":
-      return t("panes.routing.perAppModeExclude");
-    case "off":
-    default:
-      return t("panes.routing.perAppModeOff");
-  }
-}
-
-function modeDescription(mode: PerAppProxyMode, t: TranslateFn) {
-  switch (mode) {
-    case "include":
-      return t("panes.routing.perAppModeIncludeHint");
-    case "exclude":
-      return t("panes.routing.perAppModeExcludeHint");
-    case "off":
-    default:
-      return t("panes.routing.perAppModeOffHint");
-  }
 }

@@ -1,18 +1,28 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import type * as React from "react";
 import { Route, Save } from "lucide-react";
-import { useI18n } from "@voya/i18n/use-i18n";
 
+import { useI18n } from "@voya/i18n/use-i18n";
+import { Alert, AlertDescription } from "@voya/ui/components/alert";
 import { Button } from "@voya/ui/components/button";
 import {
   Dialog,
-  DialogDescription,
   DialogBody,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
   ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
+import { Disclosure } from "@voya/ui/components/disclosure";
+import {
+  CheckboxField,
+  FieldLayout,
+  SelectField,
+  TextAreaField,
+  TextField,
+} from "@voya/ui/components/form-fields";
+
 import type { RoutingRule, RoutingRuleScope } from "@/ipc/bindings";
 import {
   translateFieldErrors,
@@ -20,37 +30,54 @@ import {
   type FieldErrorMap,
 } from "@/lib/zod-errors";
 
-import { RULE_TYPES } from "./routing-constants";
-import {
-  CheckboxField,
-  SelectField,
-  TextAreaField,
-  TextField,
-} from "@voya/ui/components/form-fields";
-import {
-  routingRuleSchema,
-  type RoutingRulePayload,
-} from "./routing-form-schema";
-import { formToRule, ruleToForm } from "./routing-form-values";
+import { OUTBOUND_LABEL_KEYS } from "./rule-outbound";
+import { RULE_SCOPE_LABEL_KEYS } from "./routing-constants";
+import { routingRuleSchema, type RoutingRulePayload } from "./routing-form-schema";
+import { formToRule, ruleToForm, type RuleFormState } from "./routing-form-values";
 import { sentinelLabelKey } from "./sentinel-rules";
+
+/** Fields with an inline error slot; any other issue is reported above the footer. */
+const RENDERED_FIELDS = new Set([
+  "domain",
+  "ip",
+  "network",
+  "outbound",
+  "port",
+  "process",
+  "protocol",
+  "remarks",
+  "scope",
+]);
 
 export function RoutingRuleDialog({
   mode,
+  nodeNames,
   onOpenChange,
   onSubmit,
   open,
   rule,
 }: {
   mode: "create" | "edit";
+  /** Node remarks a rule can target; `null` while the node list loads. */
+  nodeNames: readonly string[] | null;
   onOpenChange: (open: boolean) => void;
   onSubmit: (rule: RoutingRulePayload) => Promise<void>;
   open: boolean;
   rule: RoutingRule | null;
 }) {
   const { t } = useI18n();
+  const networkId = useId();
   const [form, setForm] = useState(() => ruleToForm(rule));
   const [fieldErrors, setFieldErrors] = useState<FieldErrorMap>({});
   const errors = translateFieldErrors(t, fieldErrors);
+  const formError = Object.entries(errors).find(([field]) => !RENDERED_FIELDS.has(field))?.[1];
+  // Managed rules are found by their reserved remarks; renaming one would
+  // silently detach it from what the app knows about it.
+  const managedLabel = sentinelLabelKey(rule?.remarks);
+
+  function update<Key extends keyof RuleFormState>(key: Key, value: RuleFormState[Key]) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,21 +90,34 @@ export function RoutingRuleDialog({
     await onSubmit(parsed.data);
   }
 
+  const outboundOptions: Array<{ label: string; value: string }> = [
+    ...Object.entries(OUTBOUND_LABEL_KEYS).map(([value, labelKey]) => ({
+      label: t(labelKey),
+      value,
+    })),
+    ...(nodeNames ?? []).map((name) => ({ label: name, value: name })),
+  ];
+  if (!outboundOptions.some((option) => option.value === form.outbound)) {
+    // A node the rule names stays selectable even when it no longer exists, so
+    // opening the editor never retargets the rule behind the user's back.
+    outboundOptions.push({
+      label:
+        nodeNames === null
+          ? form.outbound
+          : t("panes.routing.outboundMissing", { name: form.outbound }),
+      value: form.outbound,
+    });
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <ScrollableDialogContent closeLabel={t("actions.close")} width="56rem">
+      <ScrollableDialogContent closeLabel={t("actions.close")} width="54rem">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Route className="size-4" aria-hidden="true" />
-            {t(
-              mode === "edit"
-                ? "panes.routing.editRule"
-                : "panes.routing.createRule",
-            )}
+            {t(mode === "edit" ? "panes.routing.editRule" : "panes.routing.createRule")}
           </DialogTitle>
-          <DialogDescription className="sr-only">
-            {t("panes.routing.ruleEditor")}
-          </DialogDescription>
+          <DialogDescription className="sr-only">{t("panes.routing.ruleEditor")}</DialogDescription>
         </DialogHeader>
         <DialogBody>
           <form
@@ -85,132 +125,104 @@ export function RoutingRuleDialog({
             id="routing-rule-form"
             onSubmit={(event) => void submitForm(event)}
           >
-            <div className="grid gap-3 sm:grid-cols-[1fr_10rem_10rem]">
+            <div className="grid gap-3 sm:grid-cols-2">
               <TextField
-                // Managed rules are found by their reserved remarks; renaming
-                // one would silently detach it from its quick setting.
-                disabled={sentinelLabelKey(rule?.remarks) !== null}
+                disabled={managedLabel !== null}
                 error={errors.remarks}
                 label={t("panes.routing.remarks")}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, remarks: value }))
-                }
-                value={form.remarks}
+                onChange={(value) => update("remarks", value)}
+                value={managedLabel ? t(managedLabel) : form.remarks}
               />
               <SelectField
-                error={errors.scope}
-                label={t("panes.routing.ruleScope")}
-                onChange={(value) =>
-                  setForm((current) => ({
-                    ...current,
-                    scope: value as RoutingRuleScope,
-                  }))
-                }
-                options={[
-                  {
-                    label: t("panes.routing.scopeAll"),
-                    value: String(RULE_TYPES.All),
-                  },
-                  {
-                    label: t("panes.routing.scopeRouting"),
-                    value: String(RULE_TYPES.Routing),
-                  },
-                  { label: "DNS", value: String(RULE_TYPES.Dns) },
-                ]}
-                value={String(form.scope)}
-              />
-              <TextField
                 error={errors.outbound}
                 label={t("panes.routing.outbound")}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, outbound: value }))
-                }
+                onChange={(value) => update("outbound", value)}
+                options={outboundOptions}
                 value={form.outbound}
               />
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <TextAreaField
+              description={t("panes.routing.domainHelp")}
+              error={errors.domain}
+              label={t("panes.routing.domain")}
+              onChange={(value) => update("domain", value)}
+              value={form.domain}
+            />
+            <TextAreaField
+              description={t("panes.routing.ipHelp")}
+              error={errors.ip}
+              label="IP"
+              onChange={(value) => update("ip", value)}
+              value={form.ip}
+            />
+            <div className="grid gap-3 sm:grid-cols-2">
               <TextField
+                description={t("panes.routing.portHelp")}
                 error={errors.port}
                 label={t("panes.routing.port")}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, port: value }))
-                }
+                onChange={(value) => update("port", value)}
                 value={form.port}
               />
-              <TextField
+              <FieldLayout
+                description={t("panes.routing.networkHelp")}
                 error={errors.network}
+                group
+                id={networkId}
                 label={t("panes.routing.network")}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, network: value }))
-                }
-                value={form.network}
-              />
-              <TextField
-                error={errors.kind}
-                label={t("panes.routing.type")}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, kind: value }))
-                }
-                value={form.kind}
-              />
+              >
+                <div className="flex h-control items-center gap-5">
+                  <CheckboxField
+                    checked={form.tcp}
+                    label="TCP"
+                    onChange={(checked) => update("tcp", checked)}
+                  />
+                  <CheckboxField
+                    checked={form.udp}
+                    label="UDP"
+                    onChange={(checked) => update("udp", checked)}
+                  />
+                </div>
+              </FieldLayout>
             </div>
-            <div className="grid gap-3 lg:grid-cols-2">
-              <TextAreaField
-                error={errors.domain}
-                label={t("panes.routing.domain")}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, domain: value }))
-                }
-                value={form.domain}
+            <TextAreaField
+              description={t("panes.routing.processHelp")}
+              error={errors.process}
+              label={t("panes.routing.process")}
+              onChange={(value) => update("process", value)}
+              value={form.process}
+            />
+            <Disclosure
+              invalid={Boolean(errors.scope ?? errors.protocol)}
+              title={t("panes.routing.advanced")}
+            >
+              <SelectField
+                description={t("panes.routing.scopeHelp")}
+                error={errors.scope}
+                label={t("panes.routing.ruleScope")}
+                onChange={(value) => update("scope", value as RoutingRuleScope)}
+                options={Object.entries(RULE_SCOPE_LABEL_KEYS).map(([value, labelKey]) => ({
+                  label: t(labelKey),
+                  value,
+                }))}
+                value={form.scope}
               />
               <TextAreaField
-                error={errors.ip}
-                label="IP"
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, ip: value }))
-                }
-                value={form.ip}
-              />
-              <TextAreaField
+                description={t("panes.routing.protocolHelp")}
                 error={errors.protocol}
                 label={t("panes.routing.protocol")}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, protocol: value }))
-                }
+                onChange={(value) => update("protocol", value)}
                 value={form.protocol}
               />
-              <TextAreaField
-                error={errors.process}
-                label={t("panes.routing.process")}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, process: value }))
-                }
-                value={form.process}
-              />
-              <TextAreaField
-                error={errors.inboundTags}
-                label={t("panes.routing.inboundTags")}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, inboundTags: value }))
-                }
-                value={form.inboundTags}
-              />
-            </div>
-            <CheckboxField
-              checked={form.enabled}
-              label={t("panes.routing.enabled")}
-              onChange={(checked) =>
-                setForm((current) => ({ ...current, enabled: checked }))
-              }
-            />
+            </Disclosure>
+            {formError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{formError}</AlertDescription>
+              </Alert>
+            ) : null}
           </form>
         </DialogBody>
         <DialogFooter>
-          <Button
-            onClick={() => onOpenChange(false)}
-            type="button"
-            variant="outline"
-          >
+          <Button onClick={() => onOpenChange(false)} type="button" variant="outline">
             {t("actions.cancel")}
           </Button>
           <Button form="routing-rule-form" type="submit">

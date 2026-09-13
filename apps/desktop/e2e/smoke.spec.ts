@@ -573,28 +573,58 @@ test("edits routing and DNS settings without network or OS side effects", async 
   await expect(
     page.getByRole("heading", { exact: true, name: "Rules" }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Default routing" }),
-  ).toBeVisible();
+  await expect(page.getByText("No rules", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Routing profile" }).click();
-  await page.getByLabel("Remarks").fill("Smoke routing");
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Smoke routing" }),
-  ).toBeVisible();
-
-  await page.getByRole("button", { exact: true, name: "Rule" }).click();
-  await page.getByLabel("Remarks").fill("Smoke direct rule");
-  await page.getByLabel("Outbound").fill("direct");
-  await page.getByLabel("Domain").fill("domain:example.test");
-  await page
-    .getByRole("dialog")
-    .getByRole("textbox", { name: /^network$/i })
-    .fill("tcp");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Add rule" }).click();
+  const ruleDialog = page.getByRole("dialog");
+  await ruleDialog.getByLabel("Name").fill("Smoke direct rule");
+  await ruleDialog.getByRole("combobox", { name: "Outbound" }).click();
+  await page.getByRole("option", { exact: true, name: "Direct" }).click();
+  await ruleDialog.getByLabel("Domain").fill("domain:example.test");
+  await ruleDialog.getByRole("checkbox", { name: "TCP" }).check();
+  await ruleDialog.getByRole("button", { name: "Save" }).click();
+  await expect(ruleDialog).toBeHidden();
   await expect(page.getByText("Smoke direct rule")).toBeVisible();
   await expect(page.getByText("domain:example.test")).toBeVisible();
+
+  // Restoring the defaults lists every managed rule, with ad blocking off.
+  await page.getByRole("button", { name: "Restore defaults" }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Restore" })
+    .click();
+  const blockAds = page.getByRole("switch", { name: "Enable Block ads" });
+  await expect(blockAds).not.toBeChecked();
+  await blockAds.click();
+  await expect(blockAds).toBeChecked();
+
+  // Keyboard drag and drop from the grip handle moves the second rule first.
+  // Each key waits for dnd-kit's own state: an arrow pressed before the drag
+  // has measured the rows moves nothing.
+  const ruleSwitches = page.locator("tbody").getByRole("switch");
+  await expect(ruleSwitches.nth(0)).toHaveAccessibleName(
+    "Enable AI services via proxy",
+  );
+  const quicHandle = page.getByRole("button", {
+    name: "Reorder Block QUIC (UDP 443)",
+  });
+  await quicHandle.focus();
+  await page.keyboard.press("Space");
+  await expect(quicHandle).toHaveAttribute("aria-pressed", "true");
+  await expect(async () => {
+    await page.keyboard.press("ArrowUp");
+    await expect(
+      page.getByText("Block QUIC (UDP 443) is over position 1."),
+    ).toBeAttached({ timeout: 500 });
+  }).toPass();
+  await page.keyboard.press("Space");
+  await expect(quicHandle).not.toHaveAttribute("aria-pressed", "true");
+  await expect(ruleSwitches.nth(0)).toHaveAccessibleName(
+    "Enable Block QUIC (UDP 443)",
+  );
+  await expect(ruleSwitches.nth(1)).toHaveAccessibleName(
+    "Enable AI services via proxy",
+  );
 
   await page.getByRole("tab", { name: "Settings" }).click();
   const settings = page.getByRole("region", { name: "Settings" });

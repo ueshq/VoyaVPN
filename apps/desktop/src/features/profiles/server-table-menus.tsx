@@ -19,8 +19,6 @@ import { Button } from "@voya/ui/components/button";
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
@@ -34,9 +32,12 @@ import {
   MenubarSub,
   MenubarSubTrigger,
   MenubarSubContent,
-  MenubarItem,
-  MenubarSeparator,
 } from "@voya/ui/components/menubar";
+import {
+  CONTEXT_MENU_PRIMITIVES,
+  MENUBAR_PRIMITIVES,
+  type MenuPrimitives,
+} from "@/components/app-shell/menu-primitives";
 import { moveProfile } from "@/ipc/commands";
 import type { ProfileListEntry, SpeedtestTarget } from "@/ipc/bindings";
 import type { TranslationKey } from "@voya/i18n";
@@ -45,34 +46,6 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { MOVE_ACTIONS } from "./profile-constants";
 import type { TranslationFunction as TranslateFn } from "@voya/i18n";
 import type { NodeMenuController } from "./node-controller-types";
-
-// The Menubar and ContextMenu variants of the same list are rendered from one
-// descriptor array through an injected item primitive, so each export kind
-// is added once for both menus.
-type MenuItemProps = {
-  children: ReactNode;
-  disabled?: boolean;
-  onSelect?: () => void;
-  title?: string;
-  variant?: "default" | "destructive";
-};
-
-type MenuItemComponent = (props: MenuItemProps) => ReactNode;
-type MenuSeparatorComponent = (props: { className?: string }) => ReactNode;
-
-type MenuPrimitives = {
-  Item: MenuItemComponent;
-  Separator: MenuSeparatorComponent;
-};
-
-const MENUBAR_PRIMITIVES: MenuPrimitives = {
-  Item: MenubarItem,
-  Separator: MenubarSeparator,
-};
-const CONTEXT_MENU_PRIMITIVES: MenuPrimitives = {
-  Item: ContextMenuItem,
-  Separator: ContextMenuSeparator,
-};
 
 type ExportMenuEntry = {
   icon: LucideIcon;

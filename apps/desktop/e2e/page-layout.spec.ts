@@ -140,13 +140,17 @@ test("populated pages keep scrolling inside panels and errors inside the page in
     await page.setViewportSize(size);
     const rules = await openPage(page, "rules");
     await expect(rules.locator("tbody tr")).toHaveCount(100);
-    await expect(rules.getByText(/\d+ routing profiles/)).toHaveCount(0);
+    // Only the active rule set is listed, whatever else the database holds.
+    await expect(rules.getByText("Routing 1", { exact: true })).toHaveCount(0);
+    // The table scrolls sideways inside its own container when the window is
+    // too narrow for it, instead of widening the page.
     const table = rules.locator('[data-slot="table-container"]');
-    await table.evaluate((element) => { element.scrollLeft = element.scrollWidth; });
-    await expect.poll(() => table.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    if (await table.evaluate((element) => element.scrollWidth > element.clientWidth)) {
+      await table.evaluate((element) => { element.scrollLeft = element.scrollWidth; });
+      await expect.poll(() => table.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    }
     await expectInnerScroll(rules.locator('[data-slot="scroll-area-viewport"]').last());
     await expectPageGeometry(rules, size.width >= 1100 ? 24 : 16);
-    if (size.width === 1440) await expectInnerScroll(rules.locator('aside [data-slot="scroll-area-viewport"]'));
   }
 
   const activity = await openPage(page, "connections");

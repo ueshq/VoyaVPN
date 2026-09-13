@@ -115,12 +115,6 @@ export const listProcessCandidates = wrapCommand(commands.listProcessCandidates)
 
 export const listRoutings = wrapCommand(commands.listRoutings);
 
-export const saveRouting = wrapCommand(commands.saveRouting);
-
-export const deleteRoutings = wrapCommand(commands.deleteRoutings);
-
-export const setActiveRouting = wrapCommand(commands.setActiveRouting);
-
 export const saveRoutingRule = wrapCommand(commands.saveRoutingRule);
 
 export const deleteRoutingRules = wrapCommand(commands.deleteRoutingRules);

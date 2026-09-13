@@ -1,90 +1,89 @@
 import { describe, expect, it } from "vitest";
 
-import type { RoutingRule, Routing_Serialize } from "@/ipc/bindings";
+import type { RoutingRule } from "@/ipc/bindings";
 
-import { formToRule, routingToForm, ruleToForm } from "./routing-form-values";
+import { formToRule, ruleToForm } from "./routing-form-values";
 
-describe("routing form transformations", () => {
-  it("creates a clean Voya routing draft", () => {
-    expect(routingToForm(null)).toEqual({
-      enabled: true,
-      remarks: "",
-      rules: [],
-      singboxDomainStrategy: "",
-      singboxRulesetPath: "",
-    });
-  });
-
-  it("preserves every semantic routing field", () => {
-    const routing: Routing_Serialize = {
-      enabled: false,
-      icon: "route",
-      id: "routing-a",
-      isActive: true,
-      locked: true,
-      remarks: "Routing A",
-      rules: [rule()],
-      singboxDomainStrategy: "ipv4_only",
-      singboxRulesetPath: "/rules",
-      sort: 4,
-    };
-
-    expect(routingToForm(routing)).toEqual(routing);
-  });
-
-  it("creates rule defaults and projects nullable values to editable text", () => {
+describe("routing rule form transformations", () => {
+  it("drafts a new rule that proxies and applies to routing and DNS", () => {
     expect(ruleToForm(null)).toEqual({
       domain: "",
       enabled: true,
-      inboundTags: "",
+      id: "",
+      inboundTags: null,
       ip: "",
-      kind: "",
-      network: "",
+      kind: null,
       outbound: "proxy",
       port: "",
       process: "",
       protocol: "",
       remarks: "",
-      scope: "routing",
-    });
-    expect(ruleToForm(rule())).toMatchObject({
-      domain: "domain:example.test\nexample.org",
-      inboundTags: "mixed-in\ntun-in",
-      ip: "1.1.1.1\n8.8.8.8",
-      process: "curl\nwget",
-      protocol: "dns\nhttp",
+      scope: "all",
+      tcp: false,
+      udp: false,
     });
   });
 
-  it("canonicalizes lists and empty optional values for the strict DTO", () => {
-    expect(formToRule({
-      domain: " example.test,example.org\n ",
-      enabled: true,
-      inboundTags: "",
-      ip: " 1.1.1.1 ",
-      kind: "  field ",
-      network: " tcp,udp ",
-      outbound: " ",
-      port: " 80-90 ",
-      process: "curl,wget",
-      protocol: "dns",
-      remarks: " ",
-      scope: "all",
-    })).toEqual({
+  it("projects a stored rule onto editable text and network switches", () => {
+    expect(ruleToForm(rule())).toEqual({
+      domain: "domain:example.test\nexample.org",
+      enabled: false,
+      id: "rule-a",
+      inboundTags: ["mixed-in"],
+      ip: "1.1.1.1\n8.8.8.8",
+      kind: "field",
+      outbound: "direct",
+      port: "53,80-90",
+      process: "curl\nwget",
+      protocol: "dns\nhttp",
+      remarks: "Direct services",
+      scope: "routing",
+      tcp: true,
+      udp: true,
+    });
+  });
+
+  it("reads a missing outbound as the proxy and a missing scope as both", () => {
+    const form = ruleToForm({ ...rule(), network: " UDP ", outbound: " ", scope: null });
+
+    expect(form).toMatchObject({ outbound: "proxy", scope: "all", tcp: false, udp: true });
+  });
+
+  it("canonicalizes lists, blank values and network switches for the strict DTO", () => {
+    expect(
+      formToRule({
+        ...ruleToForm(null),
+        domain: " example.test,example.org\n ",
+        inboundTags: ["tun-in"],
+        ip: " 1.1.1.1 ",
+        kind: "field",
+        outbound: " ",
+        port: " 80-90 ",
+        process: "curl,wget",
+        protocol: "",
+        remarks: " ",
+        tcp: true,
+      }),
+    ).toEqual({
       domain: ["example.test", "example.org"],
       enabled: true,
       id: "",
-      inboundTags: null,
+      inboundTags: ["tun-in"],
       ip: ["1.1.1.1"],
       kind: "field",
-      network: "tcp,udp",
+      network: "tcp",
       outbound: null,
       port: "80-90",
       process: ["curl", "wget"],
-      protocol: ["dns"],
+      protocol: null,
       remarks: null,
       scope: "all",
     });
+    expect(formToRule(ruleToForm(null)).network).toBeNull();
+  });
+
+  it("round-trips a canonical rule, including the fields the editor does not show", () => {
+    expect(formToRule(ruleToForm(rule()))).toEqual(rule());
   });
 });
 
@@ -93,7 +92,7 @@ function rule(): RoutingRule {
     domain: ["domain:example.test", "example.org"],
     enabled: false,
     id: "rule-a",
-    inboundTags: ["mixed-in", "tun-in"],
+    inboundTags: ["mixed-in"],
     ip: ["1.1.1.1", "8.8.8.8"],
     kind: "field",
     network: "tcp,udp",
@@ -102,6 +101,6 @@ function rule(): RoutingRule {
     process: ["curl", "wget"],
     protocol: ["dns", "http"],
     remarks: "Direct services",
-    scope: "all",
+    scope: "routing",
   };
 }

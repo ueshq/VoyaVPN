@@ -737,6 +737,22 @@ export async function installTauriSmokeMock(
           const routing =
             state.routings.find((item) => item.id === args.routingId) ??
             state.routings[0];
+          // Mirrors `voya_app::routing::moved_index`: the target is an
+          // insertion slot in the list as it was before the move.
+          const index = routing.rules.findIndex((rule) => rule.id === args.ruleId);
+          if (index >= 0) {
+            const count = routing.rules.length;
+            const slots: Record<string, number> = {
+              bottom: count,
+              down: Math.min(index + 2, count),
+              position: Math.min(Math.max(Number(args.position ?? 0), 0), count),
+              top: 0,
+              up: Math.max(index - 1, 0),
+            };
+            const slot = slots[String(args.action)] ?? index;
+            const [moved] = routing.rules.splice(index, 1);
+            routing.rules.splice(slot > index ? slot - 1 : slot, 0, moved);
+          }
           return Promise.resolve(clone(routing));
         }
         case "reset_routing_rules": {
@@ -1105,6 +1121,7 @@ export async function installTauriSmokeMock(
       return [
         { remarks: "voya:ai-services", outbound: "proxy", scope: "all", domain: ["domain:openai.com"] },
         { remarks: "voya:block-quic", outbound: "block", scope: "routing", network: "udp", port: "443" },
+        { remarks: "voya:block-ads", outbound: "block", scope: "all", domain: ["geosite:category-ads-all"], enabled: false },
         { remarks: "voya:cn-dns", outbound: "direct", scope: "all", ip: ["119.29.29.29"] },
         { remarks: "voya:bypass-lan", outbound: "direct", scope: "all", ip: ["geoip:private"], domain: ["geosite:private"] },
         { remarks: "voya:cn-direct", outbound: "direct", scope: "all", ip: ["geoip:cn"], domain: ["geosite:cn"] },

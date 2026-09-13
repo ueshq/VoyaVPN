@@ -1,7 +1,7 @@
 // Shared className vocabulary for the redesign's virtualized data tables. These
 // are plain class strings (no JSX) so each screen keeps its own table markup and
 // virtualizer geometry and only opts into the surface language: a sunken outer
-// well, a calm raised header, and blue selection / hover states. Row heights are
+// well, a calm raised header, and a blue hover state. Row heights are
 // deliberately NOT encoded here — they live with the callers because the
 // virtualizer `estimateSize` and the screen tests assert the exact 38px / 40px
 // rows. Screens compose these with `cn(...)` alongside their own geometry.
@@ -17,9 +17,3 @@ export const dataTableRowOdd = "bg-transparent";
 
 // Hover affordance for an interactive (non-selected) row: a light blue wash.
 export const dataTableRowHover = "hover:bg-accent-blue-light";
-
-// Selected row: blue fill + blue text + an inset blue ring. Intentionally blue
-// so it stays distinct from the green "active node" dot the screens render
-// separately for the live profile/proxy.
-export const dataTableRowSelected =
-  "bg-accent-blue-light text-accent-blue ring-1 ring-inset ring-accent-blue/30";

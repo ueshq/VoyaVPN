@@ -3,20 +3,19 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { RoutingRule, Routing_Serialize } from "@/ipc/bindings";
+import type { ProfileListEntry, RoutingRule, Routing_Serialize } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
+import { useShellStore } from "@/stores/shell-store";
 
 import { useRoutingScreen } from "./use-routing-screen";
 
 const ipcMocks = vi.hoisted(() => ({
   deleteRoutingRules: vi.fn(),
-  deleteRoutings: vi.fn(),
+  listProfiles: vi.fn(),
   listRoutings: vi.fn(),
   moveRoutingRule: vi.fn(),
   resetRoutingRules: vi.fn(),
-  saveRouting: vi.fn(),
   saveRoutingRule: vi.fn(),
-  setActiveRouting: vi.fn(),
 }));
 
 vi.mock("@/ipc/commands", () => ipcMocks);
@@ -25,12 +24,13 @@ const clients = new Set<QueryClient>();
 
 describe("useRoutingScreen", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    ipcMocks.listRoutings.mockResolvedValue([routing("route-a", true), routing("route-b", false)]);
-    ipcMocks.deleteRoutingRules.mockResolvedValue(1);
-    ipcMocks.deleteRoutings.mockResolvedValue(1);
-    ipcMocks.moveRoutingRule.mockResolvedValue(undefined);
-    ipcMocks.setActiveRouting.mockResolvedValue(undefined);
+    Object.values(ipcMocks).forEach((mock) => mock.mockReset());
+    ipcMocks.listRoutings.mockResolvedValue([active(), inactive()]);
+    ipcMocks.listProfiles.mockResolvedValue({
+      entries: [entry("Tokyo"), entry("Tokyo"), entry("Osaka")],
+      undecodableProfiles: 0,
+    });
+    useShellStore.setState({ routingPerAppRequested: false });
   });
 
   afterEach(() => {
@@ -38,151 +38,237 @@ describe("useRoutingScreen", () => {
     clients.clear();
   });
 
-  it("selects routings and executes activate, move, rule delete, and routing delete", async () => {
+  it("edits the active rule set, listing the rules after the pinned per-app rule", async () => {
     const { result } = renderController();
-    await waitFor(() => expect(result.current.selectedRouting?.id).toBe("route-a"));
 
-    act(() => result.current.selectRouting("route-b"));
-    expect(result.current.selectedRouting?.id).toBe("route-b");
-    expect(result.current.selectedRule?.id).toBe("rule-route-b");
-
-    act(() => {
-      result.current.activateSelectedRouting();
-      result.current.moveSelectedRule("down");
-      result.current.requestDeleteRule();
-    });
-    await waitFor(() => expect(ipcMocks.setActiveRouting).toHaveBeenCalledWith("route-b"));
-    expect(ipcMocks.moveRoutingRule).toHaveBeenCalledWith("route-b", "rule-route-b", "down", null);
-    // Both deletes are unrecoverable, so nothing is sent until confirmation.
-    expect(result.current.pendingDelete).toBe("rule");
-    expect(ipcMocks.deleteRoutingRules).not.toHaveBeenCalled();
-
-    act(() => result.current.confirmDelete());
-    await waitFor(() => expect(ipcMocks.deleteRoutingRules).toHaveBeenCalledWith("route-b", ["rule-route-b"]));
-
-    act(() => result.current.requestDeleteRouting());
-    expect(result.current.pendingDelete).toBe("routing");
-    expect(ipcMocks.deleteRoutings).not.toHaveBeenCalled();
-
-    act(() => result.current.confirmDelete());
-    await waitFor(() => expect(ipcMocks.deleteRoutings).toHaveBeenCalledWith(["route-b"]));
-    expect(result.current.pendingDelete).toBeNull();
+    await waitFor(() => expect(result.current.activeRouting?.id).toBe("route-active"));
+    expect(result.current.loading).toBe(false);
+    expect(result.current.rules.map((rule) => rule.id)).toEqual(["rule-a", "rule-b", "rule-c"]);
+    await waitFor(() => expect(result.current.nodeNames).toEqual(["Tokyo", "Osaka"]));
   });
 
-  it("drops a pending delete that is dismissed instead of confirmed", async () => {
+  it("lists a per-app rule that is not pinned first like any other rule", async () => {
+    ipcMocks.listRoutings.mockResolvedValue([{ ...active(), rules: [rule("rule-a"), perApp()] }]);
     const { result } = renderController();
-    await waitFor(() => expect(result.current.selectedRouting?.id).toBe("route-a"));
 
-    act(() => result.current.requestDeleteRouting());
-    act(() => result.current.setPendingDelete(null));
-    act(() => result.current.confirmDelete());
-
-    expect(ipcMocks.deleteRoutings).not.toHaveBeenCalled();
-    expect(ipcMocks.deleteRoutingRules).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(result.current.rules.map((item) => item.id)).toEqual(["rule-a", "rule-per-app"]),
+    );
   });
 
-  it("restores the selected routing's default rules only after confirmation", async () => {
-    ipcMocks.resetRoutingRules.mockResolvedValue(routing("route-a", true));
-    const { result } = renderController();
-    await waitFor(() => expect(result.current.selectedRouting?.id).toBe("route-a"));
-
-    act(() => result.current.requestResetRules());
-    expect(result.current.pendingDelete).toBe("reset");
-    expect(ipcMocks.resetRoutingRules).not.toHaveBeenCalled();
-
-    act(() => result.current.confirmDelete());
-    await waitFor(() => expect(ipcMocks.resetRoutingRules).toHaveBeenCalledWith("route-a"));
-    expect(result.current.pendingDelete).toBeNull();
-  });
-
-  it("creates and edits routings while keeping a failed editor open", async () => {
-    const { result } = renderController();
-    await waitFor(() => expect(result.current.selectedRouting).not.toBeNull());
-    const payload = {
-      ...routing("new-route", false),
-      singboxDomainStrategy: "" as const,
-    };
-    ipcMocks.saveRouting.mockResolvedValueOnce(payload);
-
-    act(() => result.current.setRoutingDialog({ mode: "create" }));
-    await act(() => result.current.handleSaveRouting(payload));
-    expect(ipcMocks.saveRouting).toHaveBeenCalledWith(payload);
-    expect(result.current.routingDialog).toBeNull();
-
-    act(() => result.current.setRoutingDialog({ mode: "edit", routing: payload }));
-    ipcMocks.saveRouting.mockRejectedValueOnce(new Error("routing save failed"));
-    await act(() => result.current.handleSaveRouting(payload));
-    expect(result.current.operationError).toBe("routing save failed");
-    expect(result.current.routingDialog).toEqual({ mode: "edit", routing: payload });
-  });
-
-  it("creates a rule, selects the returned id, and keeps failed rule state recoverable", async () => {
-    // The routing already owns a rule, so selecting the created one cannot be
-    // confused with the fallback to the routing's first rule.
-    const afterCreate = {
-      ...routing("route-a", true),
-      rules: [rule("rule-route-a", "route-a"), rule("created-rule", "Created")],
-    };
-    ipcMocks.listRoutings
-      .mockResolvedValueOnce([routing("route-a", true), routing("route-b", false)])
-      .mockResolvedValue([afterCreate, routing("route-b", false)]);
+  it("switches a rule, showing the requested state until the save settles", async () => {
+    let finish!: (value: Routing_Serialize) => void;
+    ipcMocks.saveRoutingRule.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
     const { client, result } = renderController();
-    await waitFor(() => expect(result.current.selectedRouting?.id).toBe("route-a"));
-    const payload = rule("", "Created");
-    ipcMocks.saveRoutingRule.mockResolvedValueOnce(afterCreate);
+    await waitFor(() => expect(result.current.rules).toHaveLength(3));
+    const target = result.current.rules[0];
 
-    act(() => result.current.setRuleDialog({ mode: "create" }));
-    await act(() => result.current.handleSaveRule(payload));
-    expect(ipcMocks.saveRoutingRule).toHaveBeenCalledWith("route-a", payload);
-    // Stands in for the backend's `routing-rule-saved` invalidation, which the
-    // event bridge routes in the app but not in a bare hook test.
-    await act(() => client.invalidateQueries({ queryKey: queryKeys.routings }));
-    await waitFor(() => expect(result.current.selectedRule?.id).toBe("created-rule"));
+    let toggle!: Promise<void>;
+    act(() => {
+      toggle = result.current.toggleRule(target, false);
+    });
+    expect(result.current.pendingToggles.get("rule-a")).toBe(false);
+    // A second switch of the same rule is ignored while the first is saving.
+    await act(() => result.current.toggleRule(target, true));
+    expect(ipcMocks.saveRoutingRule).toHaveBeenCalledTimes(1);
+    expect(ipcMocks.saveRoutingRule).toHaveBeenCalledWith("route-active", {
+      ...target,
+      enabled: false,
+    });
+
+    const committed: Routing_Serialize = {
+      ...active(),
+      isActive: false,
+      rules: active().rules.map((item) =>
+        item.id === "rule-a" ? { ...item, enabled: false } : item,
+      ),
+    };
+    await act(async () => {
+      finish(committed);
+      await toggle;
+    });
+
+    expect(result.current.pendingToggles.size).toBe(0);
+    // The committed rule set shows at once and keeps the active flag it had.
+    const cached = client.getQueryData<Routing_Serialize[]>(queryKeys.routings);
+    expect(cached?.[0]).toMatchObject({ id: "route-active", isActive: true });
+    expect(cached?.[1].id).toBe("route-other");
+    expect(result.current.rules[0].enabled).toBe(false);
+  });
+
+  it("moves rules by one step or to an end, never above the pinned per-app rule", async () => {
+    ipcMocks.moveRoutingRule.mockResolvedValue(active());
+    const { result } = renderController();
+    await waitFor(() => expect(result.current.rules).toHaveLength(3));
+    const [first, second] = result.current.rules;
+
+    act(() => result.current.moveRule(second, "top"));
+    act(() => result.current.moveRule(second, "up"));
+    act(() => result.current.moveRule(first, "down"));
+    act(() => result.current.moveRule(first, "bottom"));
+
+    await waitFor(() => expect(ipcMocks.moveRoutingRule).toHaveBeenCalledTimes(4));
+    expect(ipcMocks.moveRoutingRule.mock.calls).toEqual([
+      ["route-active", "rule-b", "position", 1],
+      ["route-active", "rule-b", "up", null],
+      ["route-active", "rule-a", "down", null],
+      ["route-active", "rule-a", "bottom", null],
+    ]);
+  });
+
+  it("moves a rule to the very top when no per-app rule is pinned", async () => {
+    ipcMocks.listRoutings.mockResolvedValue([
+      { ...active(), rules: [rule("rule-a"), rule("rule-b")] },
+    ]);
+    ipcMocks.moveRoutingRule.mockResolvedValue(active());
+    const { result } = renderController();
+    await waitFor(() => expect(result.current.rules).toHaveLength(2));
+
+    act(() => result.current.moveRule(result.current.rules[1], "top"));
+
+    await waitFor(() =>
+      expect(ipcMocks.moveRoutingRule).toHaveBeenCalledWith("route-active", "rule-b", "top", null),
+    );
+  });
+
+  it("turns a drag and drop into the backend's insertion slot", async () => {
+    ipcMocks.moveRoutingRule.mockResolvedValue(active());
+    const { result } = renderController();
+    await waitFor(() => expect(result.current.rules).toHaveLength(3));
+
+    let committed = false;
+    await act(async () => {
+      committed = await result.current.reorderRule("rule-a", 0, 2);
+    });
+    expect(committed).toBe(true);
+    // List index 0 → 2 is rule set index 1 → 3; the slot still counts the
+    // moving rule, so it is 4.
+    expect(ipcMocks.moveRoutingRule).toHaveBeenLastCalledWith(
+      "route-active",
+      "rule-a",
+      "position",
+      4,
+    );
+
+    await act(async () => {
+      committed = await result.current.reorderRule("rule-c", 2, 0);
+    });
+    expect(ipcMocks.moveRoutingRule).toHaveBeenLastCalledWith(
+      "route-active",
+      "rule-c",
+      "position",
+      1,
+    );
+
+    ipcMocks.moveRoutingRule.mockRejectedValueOnce(new Error("move failed"));
+    await act(async () => {
+      committed = await result.current.reorderRule("rule-b", 1, 0);
+    });
+    expect(committed).toBe(false);
+    expect(result.current.operationError).toBe("move failed");
+  });
+
+  it("saves a rule and closes the editor only when the backend accepts it", async () => {
+    ipcMocks.saveRoutingRule
+      .mockResolvedValueOnce(active())
+      .mockRejectedValueOnce(new Error("rule save failed"));
+    const { result } = renderController();
+    await waitFor(() => expect(result.current.rules).toHaveLength(3));
+    const payload = rule("rule-new");
+
+    act(() => result.current.openCreateRule());
+    expect(result.current.ruleDialog).toEqual({ mode: "create" });
+    await act(() => result.current.saveRule(payload));
+    expect(ipcMocks.saveRoutingRule).toHaveBeenCalledWith("route-active", payload);
     expect(result.current.ruleDialog).toBeNull();
+    expect(result.current.operationError).toBeNull();
 
-    act(() => result.current.setRuleDialog({ mode: "edit", rule: payload }));
-    ipcMocks.saveRoutingRule.mockRejectedValueOnce(new Error("rule save failed"));
-    await act(() => result.current.handleSaveRule(payload));
+    const existing = result.current.rules[0];
+    act(() => result.current.editRule(existing));
+    expect(result.current.ruleDialog).toEqual({ mode: "edit", rule: existing });
+    await act(() => result.current.saveRule(payload));
     expect(result.current.operationError).toBe("rule save failed");
     expect(result.current.ruleDialog?.mode).toBe("edit");
   });
 
-  it("keeps the edited rule selected when saving an existing rule", async () => {
-    const existing = {
-      ...routing("route-a", true),
-      rules: [rule("rule-route-a", "route-a"), rule("rule-second", "Second")],
-    };
-    ipcMocks.listRoutings.mockResolvedValue([existing, routing("route-b", false)]);
-    ipcMocks.saveRoutingRule.mockResolvedValue(existing);
+  it("edits the per-app rule through its own dialog", async () => {
     const { result } = renderController();
-    await waitFor(() => expect(result.current.selectedRouting?.id).toBe("route-a"));
+    await waitFor(() => expect(result.current.rules).toHaveLength(3));
 
-    const payload = rule("rule-second", "Second");
-    act(() => result.current.setRuleDialog({ mode: "edit", rule: payload }));
-    await act(() => result.current.handleSaveRule(payload));
+    act(() => result.current.editRule(perApp()));
+    expect(useShellStore.getState().routingPerAppRequested).toBe(true);
+    expect(result.current.ruleDialog).toBeNull();
 
-    await waitFor(() => expect(result.current.selectedRule?.id).toBe("rule-second"));
+    act(() => result.current.setPerAppOpen(false));
+    expect(useShellStore.getState().routingPerAppRequested).toBe(false);
   });
 
-  it("does not mutate when no routing or rule is selected", async () => {
-    ipcMocks.listRoutings.mockResolvedValue([]);
+  it("deletes a rule and restores the defaults only after confirmation", async () => {
+    ipcMocks.deleteRoutingRules.mockResolvedValue(active());
+    ipcMocks.resetRoutingRules.mockResolvedValue(active());
     const { result } = renderController();
-    await waitFor(() => expect(result.current.routings).toEqual([]));
+    await waitFor(() => expect(result.current.rules).toHaveLength(3));
+    const target = result.current.rules[1];
 
-    await act(() => result.current.handleSaveRule(rule("new", "New")));
-    act(() => {
-      result.current.activateSelectedRouting();
-      result.current.requestDeleteRouting();
-      result.current.moveSelectedRule("up");
-      result.current.requestDeleteRule();
-    });
-    act(() => result.current.confirmDelete());
-
-    expect(ipcMocks.saveRoutingRule).not.toHaveBeenCalled();
-    expect(ipcMocks.setActiveRouting).not.toHaveBeenCalled();
-    expect(ipcMocks.deleteRoutings).not.toHaveBeenCalled();
-    expect(ipcMocks.moveRoutingRule).not.toHaveBeenCalled();
+    act(() => result.current.requestDeleteRule(target));
+    expect(result.current.pendingConfirm).toEqual({ kind: "deleteRule", rule: target });
     expect(ipcMocks.deleteRoutingRules).not.toHaveBeenCalled();
+    act(() => result.current.confirmPending());
+    await waitFor(() =>
+      expect(ipcMocks.deleteRoutingRules).toHaveBeenCalledWith("route-active", ["rule-b"]),
+    );
+    expect(result.current.pendingConfirm).toBeNull();
+
+    act(() => result.current.requestResetRules());
+    act(() => result.current.setPendingConfirm(null));
+    act(() => result.current.confirmPending());
+    expect(ipcMocks.resetRoutingRules).not.toHaveBeenCalled();
+
+    act(() => result.current.requestResetRules());
+    expect(result.current.pendingConfirm).toEqual({ kind: "resetRules" });
+    act(() => result.current.confirmPending());
+    await waitFor(() => expect(ipcMocks.resetRoutingRules).toHaveBeenCalledWith("route-active"));
+  });
+
+  it("changes nothing while no rule set is active", async () => {
+    ipcMocks.listRoutings.mockResolvedValue([inactive()]);
+    const { result } = renderController();
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.activeRouting).toBeNull();
+    expect(result.current.rules).toEqual([]);
+
+    let committed = true;
+    await act(() => result.current.saveRule(rule("rule-new")));
+    await act(() => result.current.toggleRule(rule("rule-new"), false));
+    await act(async () => {
+      committed = await result.current.reorderRule("rule-new", 0, 1);
+    });
+    act(() => {
+      result.current.moveRule(rule("rule-new"), "up");
+      result.current.requestResetRules();
+    });
+    act(() => result.current.confirmPending());
+
+    expect(committed).toBe(false);
+    for (const mock of [
+      ipcMocks.saveRoutingRule,
+      ipcMocks.moveRoutingRule,
+      ipcMocks.resetRoutingRules,
+    ]) {
+      expect(mock).not.toHaveBeenCalled();
+    }
+  });
+
+  it("reports a rule set that fails to load", async () => {
+    ipcMocks.listRoutings.mockRejectedValue(new Error("database locked"));
+    const { result } = renderController();
+
+    await waitFor(() => expect(result.current.loadError).toBe("database locked"));
+    expect(result.current.activeRouting).toBeNull();
   });
 });
 
@@ -195,7 +281,15 @@ function renderController() {
   return { client, ...renderHook(() => useRoutingScreen(), { wrapper }) };
 }
 
-function routing(id: string, isActive: boolean): Routing_Serialize {
+function active(): Routing_Serialize {
+  return routing("route-active", true, [perApp(), rule("rule-a"), rule("rule-b"), rule("rule-c")]);
+}
+
+function inactive(): Routing_Serialize {
+  return routing("route-other", false, [rule("rule-x")]);
+}
+
+function routing(id: string, isActive: boolean, rules: RoutingRule[]): Routing_Serialize {
   return {
     enabled: true,
     icon: "",
@@ -203,16 +297,20 @@ function routing(id: string, isActive: boolean): Routing_Serialize {
     isActive,
     locked: false,
     remarks: id,
-    rules: [rule(`rule-${id}`, id)],
+    rules,
     singboxDomainStrategy: "",
     singboxRulesetPath: "",
     sort: 0,
   };
 }
 
-function rule(id: string, remarks: string): RoutingRule {
+function perApp(): RoutingRule {
+  return { ...rule("rule-per-app"), process: ["curl"], remarks: "voya:per-app-proxy" };
+}
+
+function rule(id: string): RoutingRule {
   return {
-    domain: null,
+    domain: ["example.test"],
     enabled: true,
     id,
     inboundTags: null,
@@ -223,7 +321,11 @@ function rule(id: string, remarks: string): RoutingRule {
     port: null,
     process: null,
     protocol: null,
-    remarks,
-    scope: "routing",
+    remarks: id,
+    scope: "all",
   };
+}
+
+function entry(remarks: string): ProfileListEntry {
+  return { profile: { remarks } } as ProfileListEntry;
 }

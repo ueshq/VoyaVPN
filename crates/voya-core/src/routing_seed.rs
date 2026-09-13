@@ -17,7 +17,8 @@ pub const SENTINEL_BLOCK_QUIC: &str = "voya:block-quic";
 pub const SENTINEL_CN_DNS: &str = "voya:cn-dns";
 /// Private and link-local destinations, reached directly.
 pub const SENTINEL_BYPASS_LAN: &str = "voya:bypass-lan";
-/// Advertising domains, blocked. Not part of the seed; the Rules page adds it.
+/// Advertising domains, blocked. Seeded disabled, so the Rules page always
+/// lists it and the user opts in with its switch.
 pub const SENTINEL_BLOCK_ADS: &str = "voya:block-ads";
 /// Mainland China domains and addresses, reached directly.
 pub const SENTINEL_CN_DIRECT: &str = "voya:cn-direct";
@@ -120,6 +121,20 @@ pub fn default_rule_set() -> Vec<RulesItem> {
                 ..RulesItem::default()
             },
         ),
+        // Off by default: blocking ads can break sites, so the user opts in.
+        // Disabled rules never reach the generated config.
+        RulesItem {
+            enabled: false,
+            ..sentinel_rule(
+                SENTINEL_BLOCK_ADS,
+                BLOCK_TAG,
+                RuleType::ALL,
+                RulesItem {
+                    domain: Some(vec!["geosite:category-ads-all".to_string()]),
+                    ..RulesItem::default()
+                },
+            )
+        },
         sentinel_rule(
             SENTINEL_CN_DNS,
             DIRECT_TAG,
@@ -226,12 +241,17 @@ mod tests {
             [
                 Some(SENTINEL_AI_SERVICES),
                 Some(SENTINEL_BLOCK_QUIC),
+                Some(SENTINEL_BLOCK_ADS),
                 Some(SENTINEL_CN_DNS),
                 Some(SENTINEL_BYPASS_LAN),
                 Some(SENTINEL_CN_DIRECT),
             ]
         );
-        assert!(rules.iter().all(|rule| rule.enabled));
+        // Blocking ads is opt-in: the rule is listed so its switch has a row,
+        // but it stays out of the generated config until the user enables it.
+        assert!(rules
+            .iter()
+            .all(|rule| rule.enabled == (rule.remarks.as_deref() != Some(SENTINEL_BLOCK_ADS))));
         assert!(rules
             .iter()
             .all(|rule| is_sentinel_remarks(rule.remarks.as_deref())));

@@ -213,7 +213,7 @@ describe("PerAppProxyDialog", () => {
     renderDialog();
 
     expect(
-      await screen.findByText("No active routing profile; create and activate one first."),
+      await screen.findByText("No rule set is active, so per-app rules cannot be saved."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });

@@ -1,18 +1,22 @@
 import { describe, expect, it } from "vitest";
 
-import type { RoutingRule, Routing_Serialize } from "@/ipc/bindings";
+import type { TranslationFunction } from "@voya/i18n";
 
-import {
-  SENTINELS,
-  buildQuickRule,
-  findSentinelRule,
-  isQuickRuleEnabled,
-  sentinelLabelKey,
-} from "./sentinel-rules";
+import { PER_APP_SENTINEL, ruleDisplayName, sentinelLabelKey } from "./sentinel-rules";
+
+const t = ((key: string) => `t(${key})`) as TranslationFunction;
 
 describe("sentinel rules", () => {
   it("labels every managed rule and nothing else", () => {
-    for (const remarks of Object.values(SENTINELS)) {
+    for (const remarks of [
+      "voya:ai-services",
+      "voya:block-ads",
+      "voya:block-quic",
+      "voya:bypass-lan",
+      "voya:cn-direct",
+      "voya:cn-dns",
+      PER_APP_SENTINEL,
+    ]) {
       expect(sentinelLabelKey(remarks)).toMatch(/^panes\.routing\.sentinel\./);
     }
     expect(sentinelLabelKey("voya:unknown")).toBeNull();
@@ -20,42 +24,12 @@ describe("sentinel rules", () => {
     expect(sentinelLabelKey(null)).toBeNull();
   });
 
-  it("reads a quick rule's state from its enabled flag", () => {
-    const route = routing([{ ...buildQuickRule("bypassLan"), enabled: false, id: "lan" }]);
-
-    expect(findSentinelRule(route, SENTINELS.bypassLan)?.id).toBe("lan");
-    expect(isQuickRuleEnabled(route, "bypassLan")).toBe(false);
-    expect(isQuickRuleEnabled(route, "blockAds")).toBe(false);
-    expect(isQuickRuleEnabled(null, "blockAds")).toBe(false);
-  });
-
-  it("builds quick rules in the shapes the seed uses", () => {
-    expect(buildQuickRule("blockAds")).toMatchObject({
-      domain: ["geosite:category-ads-all"],
-      outbound: "block",
-      remarks: SENTINELS.blockAds,
-      scope: "all",
-    });
-    expect(buildQuickRule("bypassLan")).toMatchObject({
-      domain: ["geosite:private"],
-      ip: ["geoip:private"],
-      outbound: "direct",
-      remarks: SENTINELS.bypassLan,
-    });
+  it("names managed rules by label, user rules by remarks, and blank rules as untitled", () => {
+    expect(ruleDisplayName({ remarks: "voya:block-ads" }, t)).toBe(
+      "t(panes.routing.sentinel.blockAds)",
+    );
+    expect(ruleDisplayName({ remarks: "Office" }, t)).toBe("Office");
+    expect(ruleDisplayName({ remarks: "  " }, t)).toBe("t(panes.routing.untitled)");
+    expect(ruleDisplayName({ remarks: null }, t)).toBe("t(panes.routing.untitled)");
   });
 });
-
-function routing(rules: RoutingRule[]): Routing_Serialize {
-  return {
-    enabled: true,
-    icon: "",
-    id: "route",
-    isActive: true,
-    locked: false,
-    remarks: "Route",
-    rules,
-    singboxDomainStrategy: "",
-    singboxRulesetPath: "",
-    sort: 0,
-  };
-}

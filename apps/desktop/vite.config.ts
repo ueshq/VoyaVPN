@@ -42,6 +42,13 @@ export default defineConfig({
               test: /node_modules[\\/]@radix-ui[\\/]/,
             },
             {
+              // Drag-and-drop only serves the Rules page; keeping it out of the
+              // generic vendor chunk keeps it off the startup path.
+              name: "vendor-dnd",
+              priority: 35,
+              test: /node_modules[\\/]@dnd-kit[\\/]/,
+            },
+            {
               name: "vendor-icons",
               priority: 33,
               test: /node_modules[\\/]lucide-react[\\/]/,

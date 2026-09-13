@@ -1,72 +1,39 @@
-import type { TranslationKey } from "@voya/i18n";
+import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 
-import type { RoutingRule, Routing_Serialize } from "@/ipc/bindings";
+import type { RoutingRule } from "@/ipc/bindings";
+
+/** Reserved remarks of the per-app proxy rule, which the per-app dialog owns. */
+export const PER_APP_SENTINEL = "voya:per-app-proxy";
 
 /**
- * Reserved remarks of the rules the Rules page manages. Mirrors
+ * Names of the rules VoyaVPN manages, keyed by their reserved remarks. Mirrors
  * `voya_core::routing_seed`: the remarks are the rule's identity, so the rule
  * editor does not let users rename a managed rule.
  */
-export const SENTINELS = {
-  aiServices: "voya:ai-services",
-  blockAds: "voya:block-ads",
-  blockQuic: "voya:block-quic",
-  bypassLan: "voya:bypass-lan",
-  cnDirect: "voya:cn-direct",
-  cnDns: "voya:cn-dns",
-  perApp: "voya:per-app-proxy",
-} as const;
-
-type Sentinel = (typeof SENTINELS)[keyof typeof SENTINELS];
-
 const SENTINEL_LABEL_KEYS = new Map<string, TranslationKey>([
-  [SENTINELS.aiServices, "panes.routing.sentinel.aiServices"],
-  [SENTINELS.blockAds, "panes.routing.sentinel.blockAds"],
-  [SENTINELS.blockQuic, "panes.routing.sentinel.blockQuic"],
-  [SENTINELS.bypassLan, "panes.routing.sentinel.bypassLan"],
-  [SENTINELS.cnDirect, "panes.routing.sentinel.cnDirect"],
-  [SENTINELS.cnDns, "panes.routing.sentinel.cnDns"],
-  [SENTINELS.perApp, "panes.routing.sentinel.perApp"],
+  ["voya:ai-services", "panes.routing.sentinel.aiServices"],
+  ["voya:block-ads", "panes.routing.sentinel.blockAds"],
+  ["voya:block-quic", "panes.routing.sentinel.blockQuic"],
+  ["voya:bypass-lan", "panes.routing.sentinel.bypassLan"],
+  ["voya:cn-direct", "panes.routing.sentinel.cnDirect"],
+  ["voya:cn-dns", "panes.routing.sentinel.cnDns"],
+  [PER_APP_SENTINEL, "panes.routing.sentinel.perApp"],
 ]);
-
-/** A managed rule the quick settings bar switches on and off. */
-export type QuickRule = "blockAds" | "bypassLan";
 
 /** The translated name of a managed rule, or `null` for a user rule. */
 export function sentinelLabelKey(remarks: string | null | undefined): TranslationKey | null {
   return remarks ? (SENTINEL_LABEL_KEYS.get(remarks) ?? null) : null;
 }
 
-export function findSentinelRule(
-  routing: Routing_Serialize | null | undefined,
-  remarks: Sentinel,
-): RoutingRule | null {
-  return routing?.rules.find((rule) => rule.remarks === remarks) ?? null;
-}
+/** What the page calls a rule: a managed rule's translated name, else its remarks. */
+export function ruleDisplayName(
+  rule: Pick<RoutingRule, "remarks">,
+  t: TranslationFunction,
+): string {
+  const labelKey = sentinelLabelKey(rule.remarks);
+  if (labelKey) {
+    return t(labelKey);
+  }
 
-export function isQuickRuleEnabled(
-  routing: Routing_Serialize | null | undefined,
-  rule: QuickRule,
-): boolean {
-  return findSentinelRule(routing, SENTINELS[rule])?.enabled ?? false;
-}
-
-/** The rule a quick setting creates when the profile has none yet. */
-export function buildQuickRule(rule: QuickRule): RoutingRule {
-  const base = {
-    enabled: true,
-    id: "",
-    inboundTags: null,
-    kind: null,
-    network: null,
-    port: null,
-    process: null,
-    protocol: null,
-    remarks: SENTINELS[rule],
-    scope: "all",
-  } as const;
-
-  return rule === "blockAds"
-    ? { ...base, domain: ["geosite:category-ads-all"], ip: null, outbound: "block" }
-    : { ...base, domain: ["geosite:private"], ip: ["geoip:private"], outbound: "direct" };
+  return rule.remarks?.trim() ? rule.remarks : t("panes.routing.untitled");
 }

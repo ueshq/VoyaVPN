@@ -1,13 +1,8 @@
+import type { TranslationKey } from "@voya/i18n";
+
 import type { RoutingRule, Routing_Serialize } from "@/ipc/bindings";
 
-import { SENTINELS } from "./sentinel-rules";
-
-/**
- * Reserved remarks marking the managed per-app rule inside the active routing
- * set. Data, not visible UI text; the visual editor owns rules carrying it and
- * leaves every other rule alone.
- */
-const PER_APP_RULE_SENTINEL = SENTINELS.perApp;
+import { PER_APP_SENTINEL } from "./sentinel-rules";
 
 /**
  * `include`: the listed apps always go through the proxy (ahead of other
@@ -16,13 +11,19 @@ const PER_APP_RULE_SENTINEL = SENTINELS.perApp;
  */
 export type PerAppProxyMode = "exclude" | "include" | "off";
 
+export const PER_APP_MODE_LABEL_KEYS = {
+  exclude: "panes.routing.perAppModeExclude",
+  include: "panes.routing.perAppModeInclude",
+  off: "panes.routing.perAppModeOff",
+} as const satisfies Record<PerAppProxyMode, TranslationKey>;
+
 export type PerAppProxyState = {
   mode: PerAppProxyMode;
   processes: string[];
 };
 
 export function findPerAppRule(routing: Routing_Serialize | null | undefined): RoutingRule | null {
-  return routing?.rules.find((rule) => rule.remarks === PER_APP_RULE_SENTINEL) ?? null;
+  return routing?.rules.find((rule) => rule.remarks === PER_APP_SENTINEL) ?? null;
 }
 
 export function readPerAppRule(routing: Routing_Serialize | null | undefined): PerAppProxyState {
@@ -56,7 +57,7 @@ export function buildPerAppRule(
     port: null,
     process: normalizeProcessNames(processes),
     protocol: null,
-    remarks: PER_APP_RULE_SENTINEL,
+    remarks: PER_APP_SENTINEL,
     scope: "routing",
   };
 }
