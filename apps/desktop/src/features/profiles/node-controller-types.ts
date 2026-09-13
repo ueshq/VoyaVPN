@@ -37,7 +37,7 @@ export type NodeGroupCardController = Pick<NodeListData, "subscriptionMetadata">
     | "updatingSubscriptions"
   > &
   Pick<NodeExport, "handleGroupExport"> &
-  Pick<NodeSpeedtest, "handleCancelSpeedtest" | "handleSpeedtest" | "speedtestRunning"> &
+  Pick<NodeSpeedtest, "handleCancelSpeedtest" | "handleSpeedtest" | "speedtestProgress" | "speedtestRunning"> &
   Pick<NodeShared, "nodeGroups" | "t">;
 
 export type NodeDialogsController = Pick<NodeOperation, "operationError"> &
@@ -85,7 +85,9 @@ export type NodeToolbarController = Pick<ReturnType<typeof useNodeImport>, "hand
   Pick<NodeEditor, "addTriggerRef" | "setDialogState" | "setImportMethod"> &
   Pick<NodeSubscriptions, "openSubscription" | "updateAllSubscriptions" | "updatingAllSubscriptions"> &
   Pick<PolicyGroups, "openGroupEditor"> &
-  Pick<NodeShared, "t">;
+  Pick<NodeListData, "profiles"> &
+  Pick<NodeSpeedtest, "handleCancelSpeedtest" | "handleSpeedtest" | "speedtestProgress" | "speedtestRunning"> &
+  Pick<NodeShared, "nodeGroups" | "t">;
 
 export type NodeListController = Pick<NodeOperation, "runOperation"> &
   Pick<
@@ -114,7 +116,7 @@ export type NodeListController = Pick<NodeOperation, "runOperation"> &
     | "updatingSubscriptions"
   > &
   Pick<NodeExport, "handleExport" | "handleGroupExport"> &
-  Pick<NodeSpeedtest, "handleCancelSpeedtest" | "handleSpeedtest" | "speedtestRunning"> &
+  Pick<NodeSpeedtest, "handleCancelSpeedtest" | "handleSpeedtest" | "speedtestProgress" | "speedtestRunning"> &
   Pick<NodeShared, "nodeGroups" | "t">;
 
 export type PolicyGroupsController = PolicyGroups &

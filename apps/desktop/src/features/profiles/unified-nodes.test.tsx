@@ -12,6 +12,7 @@ import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAppQueryClient } from "@/components/app-shell/query-client";
 import type {
+  ProfileListEntry,
   Subscription,
   RuntimeStatusResponse,
 } from "@/ipc/bindings";
@@ -350,4 +351,34 @@ describe("group panels and scoped export", () => {
     ]);
   });
 
+
+  it("sorts measured nodes by latency and hides unreachable ones on request", () => {
+    const measured = (id: string, delayMs: number, outcome: NonNullable<ProfileListEntry["metrics"]["outcome"]> | null) =>
+      ({
+        isActive: false,
+        metrics: { countryCode: null, delayMs, ipInfo: null, outcome, sort: 0 },
+        profile: { id, remarks: id, subscriptionId: null },
+      }) as unknown as ProfileListEntry;
+    const nodes = [
+      measured("slow", 300, "completed"),
+      measured("untested", 0, null),
+      measured("down", 0, "timedOut"),
+      measured("fast", 80, "completed"),
+    ];
+    const ids = (view: Parameters<typeof nodeListRows>[5]) =>
+      nodeListRows(nodes, new Set(), "Local nodes", [], "Unknown", view)
+        .filter((row) => row.kind === "profile")
+        .map((row) => row.key);
+
+    expect(ids({ sortByLatency: true })).toEqual([
+      "profile:fast",
+      "profile:slow",
+      "profile:untested",
+      "profile:down",
+    ]);
+    expect(ids({ hideUnreachable: true })).toEqual(["profile:slow", "profile:untested", "profile:fast"]);
+    const [group] = nodeListRows(nodes, new Set(), "Local nodes", [], "Unknown", { hideUnreachable: true });
+    expect(group).toMatchObject({ kind: "group" });
+    expect(group?.kind === "group" ? group.allMembers : []).toHaveLength(4);
+  });
 });

@@ -75,9 +75,8 @@ test("creates, uses, re-selects, tests and deletes a policy group", async ({ pag
   const groupId = (await callsTo(page, "select_policy_group_member"))[0]?.args.groupId;
   expect(groupId).toEqual(expect.any(String));
 
-  await card.getByRole("button", { name: "Use", exact: true }).click();
+  await card.getByRole("button", { name: "Use this group", exact: true }).click();
   await expect(card.getByRole("button", { name: "In use", exact: true })).toBeDisabled();
-  await expect(card.getByText("Active", { exact: true })).toBeVisible();
   expect(await callsTo(page, "set_active_policy_group")).toEqual([
     { command: "set_active_policy_group", args: { id: groupId } },
   ]);

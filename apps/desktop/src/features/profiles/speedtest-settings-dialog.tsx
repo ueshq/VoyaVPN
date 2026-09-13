@@ -1,0 +1,53 @@
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@voya/ui/components/dialog";
+import { useI18n } from "@voya/i18n/use-i18n";
+import { SettingsFields } from "@/features/settings/settings-form";
+import { TestsTab } from "@/features/settings/tests-tab";
+import { useAppSettings } from "@/features/settings/use-app-settings";
+
+/**
+ * The latency test's own settings, next to the tests they change. They save
+ * automatically, like every other setting.
+ */
+export function SpeedtestSettingsDialog({
+  onOpenChange,
+}: {
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { t } = useI18n();
+  const controller = useAppSettings();
+  const { settings } = controller;
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-[640px]" closeLabel={t("actions.close")}>
+        <DialogHeader>
+          <DialogTitle>{t("panes.profiles.speedtest.settings")}</DialogTitle>
+          <DialogDescription>{t("panes.profiles.speedtest.settingsDescription")}</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="grid gap-4">
+          {controller.error ? (
+            <p className="text-sm text-danger" role="alert">
+              {controller.error}
+            </p>
+          ) : null}
+          <SettingsFields errors={controller.fieldErrors}>
+            {settings ? (
+              <TestsTab controller={{ ...controller, settings }} />
+            ) : (
+              <p className="text-sm text-muted-foreground" role="status">
+                {t("options.loading")}
+              </p>
+            )}
+          </SettingsFields>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+}

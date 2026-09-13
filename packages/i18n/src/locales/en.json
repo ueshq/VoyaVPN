@@ -258,7 +258,7 @@
     },
     "profiles": {
       "aria": {
-        "activeProfile": "Active node"
+        "activeProfile": "In use"
       },
       "dialog": {
         "addTitle": "Add node",
@@ -391,7 +391,11 @@
       },
       "speedtest": {
         "cancelTitle": "Cancel ping",
-        "stop": "Stop"
+        "stop": "Stop",
+        "testAll": "Test all",
+        "stopProgress": "Stop ({{done}}/{{total}})",
+        "settings": "Speed test settings",
+        "settingsDescription": "These apply to every latency test."
       },
       "title": "Nodes",
       "toolbar": {
@@ -414,7 +418,7 @@
       },
       "card": {
         "local": "Local node",
-        "default": "Default node",
+        "default": "Selected",
         "using": "In use",
         "use": "Use node",
         "switching": "Switching…",
@@ -436,6 +440,11 @@
         "totalDown": "Total down",
         "totalUp": "Total up",
         "transport": "Transport"
+      },
+      "view": {
+        "label": "View",
+        "sortByLatency": "Sort by latency",
+        "hideUnreachable": "Hide unreachable nodes"
       }
     },
     "proxyConnections": {
@@ -958,9 +967,9 @@
     "deleteNamed": "Delete {{name}}",
     "deleteTitle": "Delete policy group {{name}}?",
     "deleteHint": "The nodes in this group are kept.",
-    "use": "Use",
+    "use": "Use this group",
     "inUse": "In use",
-    "active": "Active",
+    "active": "Selected",
     "delay": "{{ms}} ms",
     "name": "Name",
     "strategyLabel": "Strategy",
@@ -982,7 +991,12 @@
     "filterNodes": "Filter nodes",
     "testUrl": "Test URL",
     "interval": "Probe interval (seconds)",
-    "tolerance": "Tolerance (ms)"
+    "tolerance": "Tolerance (ms)",
+    "autoCreated": "Created automatically",
+    "autoCreatedFrom": "Created for {{name}}",
+    "switchedTitle": "Switched",
+    "replacedByNode": "The policy group “{{group}}” is no longer used; this node is used instead.",
+    "replacedNode": "The node “{{node}}” is no longer used on its own; connections go through this group instead."
   },
   "startupFailure": {
     "title": "VoyaVPN could not start",

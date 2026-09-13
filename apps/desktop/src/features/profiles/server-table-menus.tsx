@@ -63,12 +63,14 @@ export function SpeedtestButton({
   label,
   onCancel,
   onRun,
+  progress = null,
   running,
 }: {
   disabled: boolean;
   label: string;
   onCancel: () => Promise<void>;
   onRun: () => Promise<void>;
+  progress?: { done: number; total: number } | null;
   running: boolean;
 }) {
   const { t } = useI18n();
@@ -87,7 +89,11 @@ export function SpeedtestButton({
       ) : (
         <Zap className="size-4" aria-hidden="true" />
       )}
-      {running ? t("panes.profiles.speedtest.stop") : label}
+      {running
+        ? progress
+          ? t("panes.profiles.speedtest.stopProgress", progress)
+          : t("panes.profiles.speedtest.stop")
+        : label}
     </Button>
   );
 }

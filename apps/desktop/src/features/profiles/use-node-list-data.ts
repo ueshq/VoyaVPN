@@ -66,10 +66,16 @@ export function useNodeListData(
         t("nodeGroups.local"),
         subscriptionsQuery.data,
         t("panes.subscriptions.untitled"),
+        {
+          hideUnreachable: nodeGroups.hideUnreachable,
+          sortByLatency: nodeGroups.sortByLatency,
+        },
       ),
     [
       profiles,
       nodeGroups.collapsed,
+      nodeGroups.hideUnreachable,
+      nodeGroups.sortByLatency,
       subscriptionsQuery.data,
       t,
     ],

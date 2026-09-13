@@ -121,7 +121,8 @@ export function ProfileCardList({
                     <article
                       className={cn(
                         "node-card-surface node-group-surface profile-node-card",
-                        selected && "profile-node-card-selected",
+                        // The highlight marks the node a connection uses.
+                        item.isActive && "profile-node-card-selected",
                       )}
                       data-testid="server-row"
                       data-selected={selected}

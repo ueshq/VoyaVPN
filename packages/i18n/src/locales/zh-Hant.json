@@ -258,7 +258,7 @@
     },
     "profiles": {
       "aria": {
-        "activeProfile": "目前節點"
+        "activeProfile": "使用中"
       },
       "dialog": {
         "addTitle": "新增節點",
@@ -391,7 +391,11 @@
       },
       "speedtest": {
         "cancelTitle": "取消測速",
-        "stop": "停止"
+        "stop": "停止",
+        "testAll": "測試全部",
+        "stopProgress": "停止（{{done}}/{{total}}）",
+        "settings": "測速設定",
+        "settingsDescription": "對所有延遲測試生效。"
       },
       "title": "節點",
       "toolbar": {
@@ -414,7 +418,7 @@
       },
       "card": {
         "local": "本機節點",
-        "default": "預設節點",
+        "default": "已選",
         "using": "使用中",
         "use": "使用節點",
         "switching": "切換中…",
@@ -436,6 +440,11 @@
         "totalDown": "總下行",
         "totalUp": "總上行",
         "transport": "傳輸"
+      },
+      "view": {
+        "label": "顯示",
+        "sortByLatency": "依延遲排序",
+        "hideUnreachable": "隱藏無法使用的節點"
       }
     },
     "proxyConnections": {
@@ -958,9 +967,9 @@
     "deleteNamed": "刪除 {{name}}",
     "deleteTitle": "刪除策略群組 {{name}}？",
     "deleteHint": "群組內的節點會保留。",
-    "use": "使用",
+    "use": "使用此組",
     "inUse": "使用中",
-    "active": "目前",
+    "active": "已選",
     "delay": "{{ms}} ms",
     "name": "名稱",
     "strategyLabel": "策略",
@@ -982,7 +991,12 @@
     "filterNodes": "篩選節點",
     "testUrl": "測速網址",
     "interval": "測速間隔（秒）",
-    "tolerance": "容差（毫秒）"
+    "tolerance": "容差（毫秒）",
+    "autoCreated": "自動建立",
+    "autoCreatedFrom": "由訂閱「{{name}}」自動建立",
+    "switchedTitle": "已切換",
+    "replacedByNode": "已停用策略組「{{group}}」，改為使用這個節點。",
+    "replacedNode": "不再單獨使用節點「{{node}}」，改為透過這個策略組連線。"
   },
   "startupFailure": {
     "title": "VoyaVPN 無法啟動",

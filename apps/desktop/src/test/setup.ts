@@ -1,3 +1,6 @@
+import { beforeEach } from "vitest";
+import { useNodeListStore } from "@/stores/node-list-store";
+
 import "@testing-library/jest-dom/vitest";
 
 class ResizeObserverMock {
@@ -29,3 +32,9 @@ if (!Element.prototype.releasePointerCapture) {
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
+
+
+// The node list view persists across launches; every test starts from none.
+beforeEach(() => {
+  useNodeListStore.setState(useNodeListStore.getInitialState());
+});

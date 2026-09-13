@@ -34,6 +34,7 @@ export function NodeGroupCard({
     handleGroupExport,
     handleSpeedtest,
     handleCancelSpeedtest,
+    speedtestProgress,
     speedtestRunning,
   } = controller;
   const subscription = row.subscription;
@@ -128,15 +129,16 @@ export function NodeGroupCard({
             </>
           ) : null}
           <SpeedtestButton
-            disabled={!row.members.length}
+            disabled={!row.allMembers.length}
             label={t("nodeGroups.test")}
             onCancel={handleCancelSpeedtest}
             onRun={() =>
               handleSpeedtest({
                 scope: "profiles",
-                profileIds: row.members.map((p) => p.profile.id),
+                profileIds: row.allMembers.map((p) => p.profile.id),
               })
             }
+            progress={speedtestProgress}
             running={speedtestRunning}
           />
           <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">

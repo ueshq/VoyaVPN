@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { TranslationFunction } from "@voya/i18n";
-import type { PolicyGroup, PolicyGroupEntry } from "@/ipc/bindings";
+import type { PolicyGroup, PolicyGroupEntry, ProfileListing } from "@/ipc/bindings";
 import {
   deletePolicyGroups,
   listPolicyGroups,
@@ -12,16 +12,18 @@ import {
   setActivePolicyGroup,
   testPolicyGroupDelay,
 } from "@/ipc/commands";
-import { queryKeys } from "@/ipc/query-keys";
+import { profilesQueryKey, queryKeys } from "@/ipc/query-keys";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { refreshRuntimeStatusAndReport } from "@/ipc/runtime-status";
 import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
+import { useToastStore } from "@/stores/toast-store";
 import {
   executeRuntimeAction,
   isRuntimeTransitioning,
   reportRuntimeActionError,
 } from "@/features/home/runtime-action";
 
+import { profileNameWithoutFlag } from "./profile-display";
 import type { NodeOperation } from "./use-node-operation";
 
 /** How often a running group's live member and delays are read again. */
@@ -76,7 +78,22 @@ export function usePolicyGroups(
     useRuntimeActionStore.setState({ switchingId: `${GROUP_SWITCH_PREFIX}${id}` });
     const action = currentState === "connected" ? "restart" : "connect";
     try {
+      // A group replaces a node used on its own; say which one it set aside.
+      const replacedNode = policyGroupEntries.some((entry) => entry.isActive)
+        ? null
+        : queryClient
+            .getQueryData<ProfileListing>(profilesQueryKey(""))
+            ?.entries.find((entry) => entry.isActive)?.profile;
       await setActivePolicyGroup(id);
+      if (replacedNode) {
+        useToastStore.getState().pushToast({
+          description: t("policyGroups.replacedNode", {
+            node: profileNameWithoutFlag(replacedNode.remarks) || replacedNode.id,
+          }),
+          severity: "info",
+          title: t("policyGroups.switchedTitle"),
+        });
+      }
       const status = await executeRuntimeAction(action);
       return status.state === "connected";
     } catch (error) {

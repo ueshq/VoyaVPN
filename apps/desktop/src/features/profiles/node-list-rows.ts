@@ -11,10 +11,43 @@ export type NodeListRow = GroupBoundary &
         key: NodeSourceKey;
         subscription: Subscription | null;
         name: string;
+        /** The members the list shows, after the view's order and filter. */
         members: ProfileListEntry[];
+        /** Every member, so a group test also retries hidden unreachable nodes. */
+        allMembers: ProfileListEntry[];
         expanded: boolean;
       }
   );
+
+export type NodeListView = { hideUnreachable?: boolean; sortByLatency?: boolean };
+
+// Outcomes that mean the node could not be reached when last tested.
+const UNREACHABLE_OUTCOMES: ReadonlySet<string> = new Set([
+  "timedOut",
+  "proxyConnectFailed",
+  "proxyConnectionRefused",
+  "proxyConnectionClosed",
+  "invalidProfile",
+]);
+
+function measuredLatency(item: ProfileListEntry) {
+  return item.metrics.outcome === "completed" && item.metrics.delayMs > 0
+    ? item.metrics.delayMs
+    : Number.POSITIVE_INFINITY;
+}
+
+/** Untested nodes stay visible; sorting puts measured nodes first, fastest first. */
+function arrangeMembers(members: ProfileListEntry[], view: NodeListView) {
+  const shown = view.hideUnreachable
+    ? members.filter((item) => !UNREACHABLE_OUTCOMES.has(item.metrics.outcome ?? ""))
+    : members;
+  if (!view.sortByLatency) return shown;
+  return shown.toSorted((a, b) => {
+    const left = measuredLatency(a);
+    const right = measuredLatency(b);
+    return left === right ? 0 : left - right;
+  });
+}
 
 /** Source ownership is the only grouping authority. Names never identify groups. */
 export function profilesByNodeGroup(profiles: readonly ProfileListEntry[]) {
@@ -36,6 +69,7 @@ export function nodeListRows(
   localName: string,
   subscriptions: readonly Subscription[] = [],
   unknownName: string,
+  view: NodeListView = {},
 ): NodeListRow[] {
   const byGroup = profilesByNodeGroup(profiles);
   const rows: NodeListRow[] = [];
@@ -44,7 +78,8 @@ export function nodeListRows(
     name: string,
     subscription: Subscription | null,
   ) {
-    const members = byGroup.get(groupKey) ?? [];
+    const allMembers = byGroup.get(groupKey) ?? [];
+    const members = arrangeMembers(allMembers, view);
     const expanded = !collapsed.has(groupKey);
     rows.push({
       kind: "group",
@@ -53,6 +88,7 @@ export function nodeListRows(
       subscription,
       name,
       members,
+      allMembers,
       expanded,
       last: !expanded || !members.length,
     });

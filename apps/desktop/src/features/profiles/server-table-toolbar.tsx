@@ -1,11 +1,14 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
+  Check,
   ChevronDown,
   FilePlus2,
   Layers,
   Plus,
   RefreshCw,
   Rss,
+  Settings2,
+  SlidersHorizontal,
 } from "lucide-react";
 
 import { Toolbar } from "@/components/app-shell/toolbar";
@@ -22,6 +25,8 @@ import { cn } from "@voya/ui/lib/utils";
 import { useShellStore } from "@/stores/shell-store";
 
 import { IMPORT_METHODS } from "./import-methods";
+import { SpeedtestButton } from "./server-table-menus";
+import { SpeedtestSettingsDialog } from "./speedtest-settings-dialog";
 import type { NodeToolbarController } from "./node-controller-types";
 
 export function ServerTableToolbar({
@@ -30,8 +35,14 @@ export function ServerTableToolbar({
   controller: NodeToolbarController;
 }) {
   const {
+    handleCancelSpeedtest,
     handleDirectImport,
+    handleSpeedtest,
     directImportPending,
+    nodeGroups,
+    profiles,
+    speedtestProgress,
+    speedtestRunning,
     addTriggerRef,
     setDialogState,
     setImportMethod,
@@ -45,6 +56,7 @@ export function ServerTableToolbar({
   const focusFirstAddItemRef = useRef(addMenuOpen);
   const firstAddItemRef = useRef<HTMLDivElement>(null);
   const openingDialogRef = useRef(false);
+  const [speedtestSettingsOpen, setSpeedtestSettingsOpen] = useState(false);
   function handleMenuClose(event: Event) {
     if (openingDialogRef.current) {
       event.preventDefault();
@@ -54,6 +66,64 @@ export function ServerTableToolbar({
 
   return (
     <Toolbar className="min-w-0 max-w-full justify-end">
+      <SpeedtestButton
+        disabled={!profiles.length}
+        label={t("panes.profiles.speedtest.testAll")}
+        onCancel={handleCancelSpeedtest}
+        onRun={() =>
+          handleSpeedtest({
+            profileIds: profiles.map((item) => item.profile.id),
+            scope: "profiles",
+          })
+        }
+        progress={speedtestProgress}
+        running={speedtestRunning}
+      />
+      <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
+        <MenubarMenu>
+          <MenubarTrigger asChild className="h-8">
+            <Button size="sm" type="button" variant="outline">
+              <SlidersHorizontal className="size-4" aria-hidden="true" />
+              {t("panes.profiles.view.label")}
+              <ChevronDown className="size-3" aria-hidden="true" />
+            </Button>
+          </MenubarTrigger>
+          <MenubarContent align="end" onCloseAutoFocus={handleMenuClose}>
+            <MenubarItem
+              aria-checked={nodeGroups.sortByLatency}
+              onSelect={() => nodeGroups.setSortByLatency(!nodeGroups.sortByLatency)}
+              role="menuitemcheckbox"
+            >
+              <Check
+                aria-hidden="true"
+                className={cn(!nodeGroups.sortByLatency && "invisible")}
+              />
+              {t("panes.profiles.view.sortByLatency")}
+            </MenubarItem>
+            <MenubarItem
+              aria-checked={nodeGroups.hideUnreachable}
+              onSelect={() => nodeGroups.setHideUnreachable(!nodeGroups.hideUnreachable)}
+              role="menuitemcheckbox"
+            >
+              <Check
+                aria-hidden="true"
+                className={cn(!nodeGroups.hideUnreachable && "invisible")}
+              />
+              {t("panes.profiles.view.hideUnreachable")}
+            </MenubarItem>
+            <MenubarSeparator />
+            <MenubarItem
+              onSelect={() => {
+                openingDialogRef.current = true;
+                setSpeedtestSettingsOpen(true);
+              }}
+            >
+              <Settings2 aria-hidden="true" />
+              {t("panes.profiles.speedtest.settings")}
+            </MenubarItem>
+          </MenubarContent>
+        </MenubarMenu>
+      </Menubar>
       <Button
         disabled={updatingAllSubscriptions}
         onClick={() => void updateAllSubscriptions()}
@@ -136,6 +206,9 @@ export function ServerTableToolbar({
           </MenubarContent>
         </MenubarMenu>
       </Menubar>
+      {speedtestSettingsOpen ? (
+        <SpeedtestSettingsDialog onOpenChange={setSpeedtestSettingsOpen} />
+      ) : null}
     </Toolbar>
   );
 }

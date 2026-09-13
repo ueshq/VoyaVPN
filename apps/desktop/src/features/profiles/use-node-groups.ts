@@ -1,14 +1,20 @@
-import { useState } from "react";
+import { useMemo } from "react";
 
+import { useNodeListStore } from "@/stores/node-list-store";
+
+/** Collapsed groups and the list's order and filter, kept across launches. */
 export function useNodeGroups() {
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
-  function toggle(id: string) {
-    setCollapsed((previous) => {
-      const next = new Set(previous);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-  return { collapsed, toggle };
+  const collapsedGroups = useNodeListStore((state) => state.collapsedGroups);
+  const hideUnreachable = useNodeListStore((state) => state.hideUnreachable);
+  const sortByLatency = useNodeListStore((state) => state.sortByLatency);
+  const collapsed = useMemo(() => new Set(collapsedGroups), [collapsedGroups]);
+  const { setHideUnreachable, setSortByLatency, toggleGroup } = useNodeListStore.getState();
+  return {
+    collapsed,
+    hideUnreachable,
+    setHideUnreachable,
+    setSortByLatency,
+    sortByLatency,
+    toggle: toggleGroup,
+  };
 }

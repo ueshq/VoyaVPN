@@ -16,7 +16,6 @@ import {
   TextField,
 } from "./settings-form";
 import { SETTING_DEFAULTS } from "./settings-values";
-import { TestsTab } from "./tests-tab";
 import { TunDiagnosticsButton } from "./tun-diagnostics-button";
 import type { AppSettingsFormController } from "./use-app-settings";
 
@@ -33,7 +32,8 @@ const DEFAULT_TUN_ICMP_ROUTING = "rule";
 
 /**
  * Everything that needs networking knowledge: how traffic is captured, the
- * tunnel, the system proxy, the core, node tests and the runtime log.
+ * tunnel, the system proxy, the core and the runtime log. Speed test settings
+ * sit with the tests on the Nodes page.
  */
 export function AdvancedTab({
   controller,
@@ -150,7 +150,6 @@ export function AdvancedTab({
       ) : null}
 
       <CoreTab controller={controller} />
-      <TestsTab controller={controller} />
       <RuntimeLogGroup coreLogEnabled={settings.core.logEnabled} />
     </div>
   );

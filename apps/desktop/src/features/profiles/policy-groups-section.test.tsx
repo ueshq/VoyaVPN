@@ -99,7 +99,7 @@ describe("PolicyGroupsSection", () => {
     render(<PolicyGroupsSection controller={idle} />);
 
     expect(screen.queryByRole("button", { name: "Test group" })).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Use" }));
+    await user.click(screen.getByRole("button", { name: "Use this group" }));
     await user.click(screen.getByRole("button", { name: "Edit Europe" }));
     await user.click(screen.getByRole("button", { name: "Delete Europe" }));
 
@@ -117,5 +117,21 @@ describe("PolicyGroupsSection", () => {
     expect(screen.getByText("Delete policy group Old?")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Delete" }));
     expect(deleting.removePolicyGroup).toHaveBeenCalledOnce();
+  });
+
+  it("names the subscription an automatic group came from", () => {
+    render(
+      <PolicyGroupsSection
+        controller={controller({
+          policyGroupEntries: [entry({ autoCreated: true, sourceSubscriptionId: "sub-1" }, true)],
+          policyGroupSubscriptions: [
+            { id: "sub-1", remarks: "Airport" } as PolicyGroupsController["policyGroupSubscriptions"][number],
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByText("Created for Airport")).toBeInTheDocument();
+    expect(screen.getByText("Selected")).toBeInTheDocument();
   });
 });

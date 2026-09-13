@@ -425,7 +425,7 @@ describe("ProfilesScreen", () => {
     const speedButton = screen.getByRole("button", { name: "Test group" });
     await userEvent.click(speedButton);
 
-    await waitFor(() => expect(speedButton).toHaveAccessibleName("Stop"));
+    await waitFor(() => expect(speedButton).toHaveAccessibleName(/^Stop/));
     expect(ipcMocks.runSpeedtest).toHaveBeenCalledWith({
       target: { scope: "profiles", profileIds: ["profile-0"] },
     });
@@ -473,7 +473,7 @@ describe("ProfilesScreen", () => {
     useRuntimeEventStore.setState({ speedtestRunning: true });
     renderProfiles();
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Stop" })[0]!).toBeEnabled();
+    expect(screen.getAllByRole("button", { name: /^Stop/ })[0]!).toBeEnabled();
     const menu = await openRowContextMenu();
     expect(
       within(menu).getByRole("menuitem", { name: "Ping" }),
@@ -496,11 +496,11 @@ describe("ProfilesScreen", () => {
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Test group" }));
     await userEvent.click(
-      (await screen.findAllByRole("button", { name: "Stop" }))[0]!,
+      (await screen.findAllByRole("button", { name: /^Stop/ }))[0]!,
     );
     expect(ipcMocks.cancelSpeedtest).toHaveBeenCalledOnce();
     expect(
-      screen.getAllByRole("button", { name: "Stop" })[0]!,
+      screen.getAllByRole("button", { name: /^Stop/ })[0]!,
     ).toBeInTheDocument();
     expect(ipcMocks.runSpeedtest).toHaveBeenCalledOnce();
     finishRun({
@@ -671,7 +671,7 @@ describe("ProfilesScreen", () => {
     expect(
       await screen.findByRole("button", { name: "In use" }),
     ).toBeDisabled();
-    expect(target.getByText("Active node")).toBeInTheDocument();
+    expect(target.getByText("In use", { selector: ".node-card-state" })).toBeInTheDocument();
     expect(ipcMocks.restartCore).not.toHaveBeenCalled();
   });
 
@@ -691,7 +691,7 @@ describe("ProfilesScreen", () => {
     renderProfiles();
     await screen.findByText("Server 0");
     const cards = screen.getAllByTestId("server-row");
-    expect(within(cards[0]!).getByText("Default node")).toBeInTheDocument();
+    expect(within(cards[0]!).getByText("Selected")).toBeInTheDocument();
     expect(
       within(cards[1]!).getByRole("button", { name: "In use" }),
     ).toBeDisabled();
@@ -886,10 +886,10 @@ describe("ProfilesScreen", () => {
     const toolbar = within(screen.getByRole("toolbar"));
     expect(
       toolbar.getAllByRole("menuitem").map((item) => item.textContent),
-    ).toEqual(["Add"]);
+    ).toEqual(["View", "Add"]);
     expect(
       toolbar.getAllByRole("button").map((button) => button.textContent),
-    ).toEqual(["Update all subscriptions"]);
+    ).toEqual(["Test all", "Update all subscriptions"]);
     for (const name of ["Import", "More actions", "Subscriptions"]) {
       expect(toolbar.queryByRole("menuitem", { name })).not.toBeInTheDocument();
     }

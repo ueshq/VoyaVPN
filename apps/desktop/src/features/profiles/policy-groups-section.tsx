@@ -102,6 +102,7 @@ function PolicyGroupCard({
     coreConnected,
     openGroupEditor,
     policyGroupRuntimeState,
+    policyGroupSubscriptions,
     setDeletingPolicyGroup,
     switchingPolicyGroupId,
     t,
@@ -118,6 +119,9 @@ function PolicyGroupCard({
       : null);
   const delays = new Map(live?.members.map((member) => [member.profileId, member.delayMs]) ?? []);
   const inUse = isActive && coreConnected;
+  const source = group.autoCreated
+    ? policyGroupSubscriptions.find((item) => item.id === group.sourceSubscriptionId)
+    : undefined;
 
   return (
     <article
@@ -135,7 +139,15 @@ function PolicyGroupCard({
                 {group.name}
               </span>
               <Badge variant="secondary">{t(POLICY_GROUP_STRATEGY_KEYS[group.strategy])}</Badge>
-              {isActive ? <Badge>{t("policyGroups.active")}</Badge> : null}
+              {group.autoCreated ? (
+                <Badge variant="outline">
+                  {source?.remarks
+                    ? t("policyGroups.autoCreatedFrom", { name: source.remarks })
+                    : t("policyGroups.autoCreated")}
+                </Badge>
+              ) : null}
+              {/* Once connected the button says "In use" instead. */}
+              {isActive && !inUse ? <Badge>{t("policyGroups.active")}</Badge> : null}
             </div>
             <span className="text-xs text-muted-foreground">
               {t("nodeGroups.membersCount", { count: members.length })}
