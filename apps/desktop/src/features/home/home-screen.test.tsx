@@ -70,7 +70,6 @@ const ipcMock = vi.hoisted(() => {
     IpcCommandError: MockIpcCommandError,
     connectActiveProfile: vi.fn(),
     loadAppSettings: vi.fn(),
-    proxySetTrafficMode: vi.fn(),
     disconnectCore: vi.fn(),
     listPolicyGroups: vi.fn(),
     listProfiles: vi.fn(),
@@ -146,7 +145,6 @@ const missingTunnelMessages = {
 vi.mock("@/ipc/commands", () => ({
   connectActiveProfile: ipcMock.connectActiveProfile,
   loadAppSettings: ipcMock.loadAppSettings,
-  proxySetTrafficMode: ipcMock.proxySetTrafficMode,
   disconnectCore: ipcMock.disconnectCore,
   IpcCommandError: ipcMock.IpcCommandError,
   listPolicyGroups: ipcMock.listPolicyGroups,
@@ -210,7 +208,6 @@ describe("HomeScreen", () => {
     });
     ipcMock.connectActiveProfile.mockResolvedValue(connectedStatus);
     ipcMock.loadAppSettings.mockResolvedValue(makeAppSettings());
-    ipcMock.proxySetTrafficMode.mockResolvedValue({ mode: "rule" });
     ipcMock.disconnectCore.mockResolvedValue(disconnectedStatus);
     ipcMock.restartCore.mockResolvedValue(connectedStatus);
     ipcMock.listPolicyGroups.mockResolvedValue({ entries: [] });
@@ -232,7 +229,7 @@ describe("HomeScreen", () => {
     await changeLocale("en", { persist: false });
   });
 
-  it("keeps only connection and mode controls when no nodes are available", async () => {
+  it("keeps only the connection control when no nodes are available", async () => {
     mockProfileList([]);
     renderHome();
     await waitFor(() => expect(connectButton()).toBeEnabled());
@@ -246,7 +243,7 @@ describe("HomeScreen", () => {
     expect(screen.queryByRole("button", { name: "Import" })).not.toBeInTheDocument();
     expect(screen.queryByTestId("home-connected-info")).not.toBeInTheDocument();
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Traffic mode" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Traffic mode" })).not.toBeInTheDocument();
   });
 
   it("shows the active policy group and the member traffic goes through", async () => {
@@ -621,34 +618,18 @@ describe("HomeScreen", () => {
   );
 
 
-  it("offers only the traffic mode, never a capture mode switch", async () => {
+  it("offers no traffic or capture mode controls", async () => {
     runtimeMock.state.coreState = disconnectedStatus;
     runtimeMock.state.tun = { ...tunStatusResponse, enabled: true };
     renderHome();
 
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Rule" })).toBeEnabled(),
-    );
-    expect(screen.getByRole("button", { name: "Global" })).toBeInTheDocument();
+    await waitFor(() => expect(connectButton()).toBeEnabled());
+    // The traffic mode lives on the Rules page, the capture mode in Settings.
+    expect(screen.queryByRole("group", { name: "Traffic mode" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Global" })).not.toBeInTheDocument();
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
     expect(screen.queryByText("TUN mode")).not.toBeInTheDocument();
     expect(ipcMock.setConnectionMode).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ["en", "About traffic mode", "Rule: Rules decide which traffic uses the proxy;\nGlobal: All captured traffic uses the selected node;"],
-    ["zh-Hans", "流量模式说明", "规则：根据规则决定哪些流量使用代理；\n全局：接管的流量均使用所选节点；"],
-    ["zh-Hant", "流量模式說明", "規則：根據規則決定哪些流量使用代理；\n全域：接管的流量均使用所選節點；"],
-  ] as const)("shows localized traffic mode help in %s without changing the mode", async (locale, label, hint) => {
-    await changeLocale(locale, { persist: false });
-    const user = userEvent.setup();
-    renderHome();
-    expect(screen.queryByText(hint)).not.toBeInTheDocument();
-
-    await user.hover(screen.getByRole("button", { name: label }));
-    expect((await screen.findByRole("tooltip")).textContent).toBe(hint);
-    await user.keyboard("{Escape}");
-    expect(ipcMock.proxySetTrafficMode).not.toHaveBeenCalled();
   });
 
   it("asks macOS users to allow the VPN configuration", async () => {

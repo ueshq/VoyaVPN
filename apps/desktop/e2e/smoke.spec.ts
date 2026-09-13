@@ -361,7 +361,9 @@ test("adds and imports profiles, activates one, and connects through the fake ru
   await shareQrDialog.getByRole("button", { name: "Close" }).first().click();
 
   await page.getByRole("tab", { name: "Home" }).click();
-  await expect(page.getByRole("group", { name: "Traffic mode" })).toBeVisible();
+  // Home carries no mode controls: the traffic mode lives on the Rules page.
+  await expect(page.getByTestId("home-screen")).toBeVisible();
+  await expect(page.getByRole("group", { name: "Traffic mode" })).toHaveCount(0);
   await expect(page.getByRole("switch")).toHaveCount(0);
   await page.getByRole("button", { name: "Switch node" }).click();
   await expect(page.getByRole("heading", { name: "Nodes", exact: true })).toBeFocused();
@@ -385,6 +387,7 @@ test("adds and imports profiles, activates one, and connects through the fake ru
 
 test("shows traffic mode help on hover and keyboard focus without switching modes", async ({ page }) => {
   await expect(page.getByRole("switch")).toHaveCount(0);
+  await page.getByRole("tab", { name: "Rules", exact: true }).click();
   const hint =
     "Rule: Rules decide which traffic uses the proxy;\nGlobal: All captured traffic uses the selected node;";
   await expect(page.getByText(hint)).toHaveCount(0);
@@ -396,7 +399,7 @@ test("shows traffic mode help on hover and keyboard focus without switching mode
   await info.blur();
   await info.hover();
   await expect(page.getByRole("tooltip")).toHaveText(hint);
-  await page.screenshot({ path: test.info().outputPath("home-traffic-mode-help.png") });
+  await page.screenshot({ path: test.info().outputPath("rules-traffic-mode-help.png") });
   await page.keyboard.press("Escape");
   await expect(page.getByRole("tooltip")).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Traffic mode" }).getByRole("button")).toHaveCount(2);
@@ -409,12 +412,16 @@ test("shows traffic mode help on hover and keyboard focus without switching mode
 test("uses traffic modes and connections through the proxy runtime IPC", async ({
   page,
 }) => {
-  await page.getByRole("tab", { name: "Home", exact: true }).click();
+  await page.getByRole("tab", { name: "Rules", exact: true }).click();
   await expect(page.getByText("Applies on the next connection")).toHaveCount(0);
+  const addRule = page.getByRole("button", { name: "Add rule", exact: true });
+  await expect(addRule).toBeEnabled();
   await page.getByRole("button", { name: "Global", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Global", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
+  // Global mode routes ahead of every rule, so the rules cannot be edited.
+  await expect(addRule).toBeDisabled();
   await connectFakeCore(page);
   const oldConnection = await page.evaluate(
     () =>
@@ -428,6 +435,7 @@ test("uses traffic modes and connections through the proxy runtime IPC", async (
   await expect(
     page.getByRole("button", { exact: true, name: "Rule" }),
   ).toHaveAttribute("aria-pressed", "true");
+  await expect(addRule).toBeEnabled();
   expect(
     await page.evaluate(
       () =>
@@ -518,6 +526,11 @@ test("keeps the simplified navigation usable at desktop and minimum sizes", asyn
     for (const colorScheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme });
       await mainNav.getByRole("tab", { name: "Home", exact: true }).click();
+      await expect(page.getByTestId("home-connect-button")).toBeInViewport();
+      await page.screenshot({
+        path: testInfo.outputPath(`home-${viewport.width}-${colorScheme}.png`),
+      });
+      await mainNav.getByRole("tab", { name: "Rules", exact: true }).click();
       const modes = page.getByRole("group", { name: "Traffic mode" });
       await expect(modes).toBeInViewport();
       await expect(modes.getByRole("button", { name: "Global" })).toBeEnabled();
@@ -528,7 +541,7 @@ test("keeps the simplified navigation usable at desktop and minimum sizes", asyn
         );
       }
       await page.screenshot({
-        path: testInfo.outputPath(`home-${viewport.width}-${colorScheme}.png`),
+        path: testInfo.outputPath(`rules-${viewport.width}-${colorScheme}.png`),
       });
       await mainNav.getByRole("tab", { name: "Nodes", exact: true }).click();
       await expect(
@@ -745,6 +758,7 @@ test("keeps traffic modes independent of the capture mode chosen in settings", a
       payload: state.sysProxy,
     });
   });
+  await page.getByRole("tab", { name: "Rules", exact: true }).click();
   await rule.click();
   await expect(rule).toHaveAttribute("aria-pressed", "true");
   await expect(
@@ -786,7 +800,7 @@ test("keeps traffic modes independent of the capture mode chosen in settings", a
     );
   await expect.poll(savedProxyMode).toBe("unchanged");
 
-  await page.getByRole("tab", { name: "Home", exact: true }).click();
+  await page.getByRole("tab", { name: "Rules", exact: true }).click();
   for (const name of ["Global", "Rule"]) {
     await page.getByRole("button", { name, exact: true }).click();
     await expect(
@@ -852,6 +866,7 @@ for (const failure of ["apply", "close"] as const) {
         window.__VOYA_SMOKE__.state as { trafficModeFailure: string }
       ).trafficModeFailure = stage;
     }, failure);
+    await page.getByRole("tab", { name: "Rules", exact: true }).click();
     const global = page.getByRole("button", { name: "Global", exact: true });
     await global.click();
     await expect(

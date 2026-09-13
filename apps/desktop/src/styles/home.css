@@ -104,38 +104,6 @@
   font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
-.home-mode-panel {
-  width: 360px;
-  max-width: 100%;
-  margin-top: 24px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  background: var(--card);
-}
-.home-mode-panel > * + * {
-  border-top: 1px solid var(--border);
-}
-.home-mode-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 56px;
-  padding: 8px 16px;
-}
-.home-mode-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.home-mode-label,
-.home-mode-label label {
-  color: var(--muted-foreground);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 20px;
-}
-.home-mode-hint,
 .home-diagnostic {
   margin-top: 10px;
   max-width: 520px;
@@ -143,20 +111,6 @@
   font-size: 12px;
   text-align: center;
   overflow-wrap: anywhere;
-}
-.home-mode-hint {
-  margin: 0;
-  padding: 0 16px 12px;
-  text-align: start;
-}
-.home-traffic-mode-options {
-  display: flex;
-  flex-shrink: 0;
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--card);
 }
 .node-card-surface {
   display: flex;

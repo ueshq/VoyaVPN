@@ -3,12 +3,15 @@ import userEvent from "@testing-library/user-event";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { changeLocale } from "@voya/i18n";
 import { createAppQueryClient } from "@/components/app-shell/query-client";
 import { makeAppSettings } from "@/features/settings/app-settings.test-fixture";
 import type { AppSettingsV1, CoreState, TrafficModeResponse } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
 import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
 import { useToastStore } from "@/stores/toast-store";
+
+import { TrafficModeBanner } from "./traffic-mode-banner";
 import { TrafficModeSwitcher } from "./traffic-mode-switcher";
 
 const mocks = vi.hoisted(() => ({
@@ -22,11 +25,23 @@ vi.mock("@/ipc/commands", () => ({
 }));
 vi.mock("@/ipc/runtime-event-store", () => ({ useRuntimeEventStore: (select: (state: { coreState: { state: CoreState } }) => unknown) => select({ coreState: { state: mocks.state } }) }));
 
+const GLOBAL_BANNER = "Global mode is on: all captured traffic goes through the proxy and these rules are skipped.";
+
 const clients = new Set<ReturnType<typeof createAppQueryClient>>();
+// The switcher sits in the Rules page title; the banner below it reports the
+// global lock and read failures for the same saved mode.
 function renderSwitcher() {
   const client = createAppQueryClient();
   clients.add(client);
-  return { client, ...render(<QueryClientProvider client={client}><TrafficModeSwitcher /></QueryClientProvider>) };
+  return {
+    client,
+    ...render(
+      <QueryClientProvider client={client}>
+        <TrafficModeSwitcher />
+        <TrafficModeBanner />
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 beforeEach(() => {
@@ -41,13 +56,14 @@ beforeEach(() => {
   useRuntimeActionStore.setState({ pendingAction: null, modePending: false, switchingId: null });
   useToastStore.setState({ toasts: [] });
 });
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   clients.forEach((client) => client.clear());
   clients.clear();
+  await changeLocale("en", { persist: false });
 });
 
-describe("home traffic mode", () => {
+describe("rules traffic mode", () => {
   it("offers only rule and global modes and explains both regardless of the selection", async () => {
     const user = userEvent.setup();
     renderSwitcher();
@@ -65,6 +81,34 @@ describe("home traffic mode", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Global" })).toHaveAttribute("aria-pressed", "true"));
     await user.hover(info);
     expect((await screen.findByRole("tooltip")).textContent).toBe(hint);
+  });
+
+  it.each([
+    ["zh-Hans", "流量模式说明", "规则：根据规则决定哪些流量使用代理；\n全局：接管的流量均使用所选节点；"],
+    ["zh-Hant", "流量模式說明", "規則：根據規則決定哪些流量使用代理；\n全域：接管的流量均使用所選節點；"],
+  ] as const)("shows localized traffic mode help in %s without changing the mode", async (locale, label, hint) => {
+    await changeLocale(locale, { persist: false });
+    const user = userEvent.setup();
+    renderSwitcher();
+    expect(screen.queryByText(hint)).not.toBeInTheDocument();
+
+    await user.hover(screen.getByRole("button", { name: label }));
+    expect((await screen.findByRole("tooltip")).textContent).toBe(hint);
+    await user.keyboard("{Escape}");
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it("explains the rule lock only while global mode is saved", async () => {
+    const user = userEvent.setup();
+    renderSwitcher();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Global" })).toBeEnabled());
+    expect(screen.queryByText(GLOBAL_BANNER)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Global" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(GLOBAL_BANNER);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Rule" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Rule" }));
+    await waitFor(() => expect(screen.queryByText(GLOBAL_BANNER)).not.toBeInTheDocument());
   });
 
   it("saves a preset while disconnected and updates the shared settings cache", async () => {
@@ -126,7 +170,7 @@ describe("home traffic mode", () => {
     await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(2));
   });
 
-  it("keeps the global guard until a save finishes even after leaving home", async () => {
+  it("keeps the global guard until a save finishes even after leaving the page", async () => {
     let finish!: (value: TrafficModeResponse) => void;
     mocks.save.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
     const user = userEvent.setup();
@@ -157,5 +201,6 @@ describe("home traffic mode", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("read failed");
     await user.click(screen.getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Rule" })).toBeEnabled());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

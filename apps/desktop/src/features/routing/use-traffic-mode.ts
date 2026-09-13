@@ -11,18 +11,29 @@ import {
 } from "@/stores/runtime-action-store";
 
 /**
- * The saved traffic mode and the one way to change it. Shared by the home
- * switcher and the Rules page, which offers a way back from global mode.
+ * The saved traffic mode. The Rules page locks its rules while it is global,
+ * which routes all captured traffic ahead of every rule.
  */
+export function useSavedTrafficMode() {
+  const query = useQuery({
+    queryKey: queryKeys.appSettings,
+    queryFn: loadAppSettings,
+  });
+
+  return {
+    error: query.error,
+    mode: query.data?.proxy.trafficMode,
+    retry: () => void query.refetch(),
+  };
+}
+
+/** The saved traffic mode and the one way to change it. */
 export function useTrafficMode() {
   const { t } = useI18n();
   const client = useQueryClient();
   const state = useRuntimeEventStore((store) => store.coreState?.state);
   const pending = useRuntimeActionStore(runtimeActionPending);
-  const query = useQuery({
-    queryKey: queryKeys.appSettings,
-    queryFn: loadAppSettings,
-  });
+  const { error, mode } = useSavedTrafficMode();
   const mutation = useMutation({
     mutationFn: proxySetTrafficMode,
     meta: { errorTitle: t("proxy.trafficModeFailed") },
@@ -49,7 +60,7 @@ export function useTrafficMode() {
     },
   });
   const ready = state === "connected" || state === "disconnected";
-  const disabled = !ready || pending || !query.data || query.isError;
+  const disabled = !ready || pending || mode === undefined || error !== null;
 
   function selectMode(mode: TrafficMode) {
     if (disabled || runtimeActionPending()) return;
@@ -57,11 +68,5 @@ export function useTrafficMode() {
     mutation.mutate(mode);
   }
 
-  return {
-    disabled,
-    error: query.error,
-    mode: query.data?.proxy.trafficMode,
-    retry: () => void query.refetch(),
-    selectMode,
-  };
+  return { disabled, mode, selectMode };
 }

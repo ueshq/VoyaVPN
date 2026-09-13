@@ -4,6 +4,7 @@ import { AppWindow, Info, Pencil } from "lucide-react";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
+import { cn } from "@voya/ui/lib/utils";
 
 import { PageSurface } from "@/components/app-shell/page-section";
 import type { Routing_Serialize } from "@/ipc/bindings";
@@ -21,9 +22,12 @@ const VISIBLE_APPS = 4;
  * edits it through its own dialog.
  */
 export function PerAppSummaryCard({
+  locked = false,
   onEdit,
   routing,
 }: {
+  /** Global mode skips every rule, this one included. */
+  locked?: boolean;
   onEdit: () => void;
   routing: Routing_Serialize | null;
 }) {
@@ -42,7 +46,7 @@ export function PerAppSummaryCard({
   return (
     <PageSurface className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3">
       <AppWindow aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-      <div className="grid min-w-0 flex-1 gap-1.5">
+      <div className={cn("grid min-w-0 flex-1 gap-1.5", locked && "opacity-55")}>
         <div className="flex flex-wrap items-baseline gap-x-2">
           <h2 className="text-sm font-semibold">{t("panes.routing.perAppTitle")}</h2>
           <span className="text-sm text-muted-foreground">
@@ -73,10 +77,13 @@ export function PerAppSummaryCard({
           </p>
         ) : null}
       </div>
-      <Button disabled={!routing} onClick={onEdit} size="sm" type="button" variant="outline">
-        <Pencil aria-hidden="true" className="size-4" />
-        {t("actions.edit")}
-      </Button>
+      {/* A disabled button shows no tooltip of its own. */}
+      <span title={locked ? t("panes.routing.rulesLocked") : undefined}>
+        <Button disabled={!routing || locked} onClick={onEdit} size="sm" type="button" variant="outline">
+          <Pencil aria-hidden="true" className="size-4" />
+          {t("actions.edit")}
+        </Button>
+      </span>
     </PageSurface>
   );
 }

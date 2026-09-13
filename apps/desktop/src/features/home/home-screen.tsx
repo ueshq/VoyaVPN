@@ -17,7 +17,6 @@ import { useShellStore } from "@/stores/shell-store";
 
 import { ConnectedInfo } from "./connected-info";
 import { ExitIpMetric } from "./exit-ip-metric";
-import { TrafficModeSwitcher } from "./traffic-mode-switcher";
 import { useHomeRuntime } from "./use-home-runtime";
 
 const ACTION_FAILED_KEYS = {
@@ -110,9 +109,6 @@ export function HomeScreen() {
               <ExitIpMetric t={t} />
             </ConnectedInfo>
           ) : null}
-          <div className="home-mode-panel">
-            <TrafficModeSwitcher />
-          </div>
           {home.tunEnabled && home.tunIssue ? (
             <p className="home-diagnostic" role="status">
               {home.tunIssue}

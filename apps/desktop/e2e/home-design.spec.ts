@@ -45,27 +45,12 @@ const tokyo: ProfileListEntry = {
   },
 };
 
-async function expectModePanel(page: Page) {
-  const panel = page.locator(".home-mode-panel");
-  await expect(panel).toBeInViewport({ ratio: 1 });
-  // Home carries only the traffic mode; how traffic is captured lives in Settings.
-  const rows = panel.locator(".home-mode-row");
-  await expect(rows).toHaveCount(1);
-  await expect(panel.getByRole("switch")).toHaveCount(0);
-  const row = await rows.first().evaluate((element) => {
-    const label = element.firstElementChild!;
-    const control = element.lastElementChild!;
-    const labelRect = label.getBoundingClientRect();
-    const controlRect = control.getBoundingClientRect();
-    return {
-      height: element.getBoundingClientRect().height,
-      gap: controlRect.left - labelRect.right,
-      fits: element.scrollWidth <= element.clientWidth,
-    };
-  });
-  expect(row.height).toBeGreaterThanOrEqual(56);
-  expect(row.gap).toBeGreaterThanOrEqual(12);
-  expect(row.fits).toBe(true);
+async function expectNoModeControls(page: Page) {
+  // Home carries no mode controls: the traffic mode lives on the Rules page and
+  // how traffic is captured lives in Settings.
+  const home = page.getByTestId("home-screen");
+  await expect(home.getByRole("group", { name: /Traffic mode|流量模式/ })).toHaveCount(0);
+  await expect(home.getByRole("switch")).toHaveCount(0);
 }
 
 for (const { layout, language } of [
@@ -160,7 +145,7 @@ for (const { layout, language } of [
         }));
       expect(metrics.scrollWidth).toBe(metrics.width);
       expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.height + 1);
-      await expectModePanel(page);
+      await expectNoModeControls(page);
       await page.screenshot({
         path: testInfo.outputPath(`home-light-${width}.png`),
       });
@@ -173,7 +158,7 @@ for (const { layout, language } of [
     await expect.poll(() => page.locator(".home-node-name").evaluate((el) =>
       getComputedStyle(el).color === getComputedStyle(document.body).color,
     )).toBe(true);
-    await expectModePanel(page);
+    await expectNoModeControls(page);
     await page.screenshot({ path: testInfo.outputPath("home-dark-960.png") });
     await page.getByRole("button", { name: labels.collapse }).click();
     await expect(
@@ -182,7 +167,7 @@ for (const { layout, language } of [
     await expect(
       page.getByRole("tab", { name: labels.settings, exact: true }),
     ).toBeVisible();
-    await expectModePanel(page);
+    await expectNoModeControls(page);
     await page.screenshot({
       path: testInfo.outputPath("home-collapsed-960.png"),
     });
@@ -251,7 +236,7 @@ for (const { layout, language } of [
     await expect(home.getByRole("heading")).toHaveCount(0);
     await expect(home.getByRole("button", { name: labels.import, exact: true })).toHaveCount(0);
     await expect(home.getByText(/Not protected|未受保护|Add a node to connect|添加节点后即可连接/)).toHaveCount(0);
-    await expectModePanel(page);
+    await expectNoModeControls(page);
     await page.screenshot({ path: testInfo.outputPath("home-empty.png") });
     expect(
       await page.evaluate(

@@ -122,13 +122,18 @@ describe("RoutingScreen", () => {
     await waitFor(() => expect(ipc.resetRoutingRules).toHaveBeenCalledWith("route-active"));
   });
 
-  it("offers a way back from global mode", async () => {
+  it("locks every rule control in global mode until switched back from the title", async () => {
     const user = userEvent.setup();
     runtime.state = "connected";
     const settings = makeAppSettings();
     settings.proxy.trafficMode = "global";
     ipc.loadAppSettings.mockResolvedValue(settings);
-    ipc.proxySetTrafficMode.mockResolvedValue({ mode: "rule" });
+    ipc.proxySetTrafficMode.mockImplementation((mode) => {
+      const next = makeAppSettings();
+      next.proxy.trafficMode = mode;
+      ipc.loadAppSettings.mockResolvedValue(next);
+      return Promise.resolve({ mode });
+    });
     renderScreen();
 
     expect(
@@ -136,11 +141,35 @@ describe("RoutingScreen", () => {
         "Global mode is on: all captured traffic goes through the proxy and these rules are skipped.",
       ),
     ).toBeInTheDocument();
-    const switchBack = screen.getByRole("button", { name: "Switch to rule mode" });
-    await waitFor(() => expect(switchBack).toBeEnabled());
-    await user.click(switchBack);
+    expect(screen.queryByRole("button", { name: "Switch to rule mode" })).not.toBeInTheDocument();
+    await screen.findByText("Office");
+    for (const name of ["Add rule", "Restore defaults", "Edit"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button).toBeDisabled();
+      expect(button.parentElement).toHaveAttribute(
+        "title",
+        "Rules don't apply in global mode. Switch to Rule to edit them.",
+      );
+    }
+    expect(screen.getByRole("switch", { name: "Enable Office" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reorder Office" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("menuitem", { name: "Actions for Office" })).toBeDisabled();
+    await user.dblClick(screen.getByText("Office"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    const rule = within(screen.getByRole("group", { name: "Traffic mode" })).getByRole("button", { name: "Rule" });
+    await waitFor(() => expect(rule).toBeEnabled());
+    await user.click(rule);
 
     await waitFor(() => expect(ipc.proxySetTrafficMode).toHaveBeenCalledWith("rule", expect.anything()));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add rule" })).toBeEnabled());
+    expect(screen.getByRole("button", { name: "Add rule" }).parentElement).not.toHaveAttribute("title");
+    expect(screen.getByRole("switch", { name: "Enable Office" })).toBeEnabled();
+    expect(
+      screen.queryByText(
+        "Global mode is on: all captured traffic goes through the proxy and these rules are skipped.",
+      ),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the per-app dialog from its card and from a settings deep link", async () => {

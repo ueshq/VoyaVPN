@@ -34,6 +34,8 @@ import type { RuleMoveAction } from "./use-routing-screen";
 export type RuleMenuActions = {
   canMoveDown: boolean;
   canMoveUp: boolean;
+  /** Global mode skips every rule, so every action is off. */
+  locked: boolean;
   onDelete: () => void;
   onEdit: () => void;
   onMove: (action: RuleMoveAction) => void;
@@ -68,7 +70,7 @@ export function RuleRowMenuButton({
   return (
     <Menubar className="h-auto justify-end border-0 bg-transparent p-0 shadow-none">
       <MenubarMenu>
-        <MenubarTrigger asChild>
+        <MenubarTrigger asChild disabled={actions.locked}>
           <Button aria-label={label} size="icon-sm" type="button" variant="ghost">
             <MoreHorizontal aria-hidden="true" className="size-4" />
           </Button>
@@ -82,7 +84,7 @@ export function RuleRowMenuButton({
 }
 
 function RuleMenuItems({
-  actions: { canMoveDown, canMoveUp, onDelete, onEdit, onMove },
+  actions: { canMoveDown, canMoveUp, locked, onDelete, onEdit, onMove },
   primitives: { Item, Separator },
 }: {
   actions: RuleMenuActions;
@@ -92,7 +94,7 @@ function RuleMenuItems({
 
   return (
     <>
-      <Item onSelect={onEdit}>
+      <Item disabled={locked} onSelect={onEdit}>
         <Pencil aria-hidden="true" className="size-4" />
         {t("actions.edit")}
       </Item>
@@ -114,7 +116,7 @@ function RuleMenuItems({
         {t("panes.routing.moveRuleBottom")}
       </Item>
       <Separator />
-      <Item onSelect={onDelete} variant="destructive">
+      <Item disabled={locked} onSelect={onDelete} variant="destructive">
         <Trash2 aria-hidden="true" className="size-4" />
         {t("actions.delete")}
       </Item>

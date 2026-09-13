@@ -56,9 +56,8 @@ export const runtimeModules = [
   // The single mounted bridge for all three ADR-0002 event channels.
   { path: "apps/desktop/src/ipc/event-bridge.tsx", lines: 65, branches: 45 },
   { path: "apps/desktop/src/ipc/runtime-event-store.ts", lines: 65, branches: 50 },
-  // Connect/disconnect and mode switching on the home screen.
+  // Connect/disconnect on the home screen.
   { path: "apps/desktop/src/features/home/use-home-runtime.ts", lines: 65, branches: 50 },
-  { path: "apps/desktop/src/features/home/traffic-mode-switcher.tsx", lines: 85, branches: 75 },
   { path: "apps/desktop/src/features/home/runtime-action.ts", lines: 50, branches: 25 },
   // Shared activation retains the guards and recovery paths extracted from Home.
   { path: "apps/desktop/src/features/home/use-profile-activation.ts", lines: 80, branches: 75 },
@@ -86,9 +85,11 @@ export const runtimeModules = [
   // Promoted out of `untestedModules` once the typed-contract passes gave them
   // real tests. Measured at promotion: modal-host 92/80, modal-store 86/100.
   { path: "apps/desktop/src/components/app-shell/modal-host.tsx", lines: 82, branches: 70 },
-  // The Rules page: one active rule set, a sortable rule list and its dialogs.
+  // The Rules page: one active rule set, a sortable rule list, its dialogs and
+  // the traffic mode that locks them in global mode.
   { path: "apps/desktop/src/features/routing/routing-rule-list.tsx", lines: 90, branches: 90 },
   { path: "apps/desktop/src/features/routing/routing-screen.tsx", lines: 90, branches: 90 },
+  { path: "apps/desktop/src/features/routing/traffic-mode-switcher.tsx", lines: 85, branches: 75 },
   { path: "apps/desktop/src/stores/modal-store.ts", lines: 75, branches: 90 },
 ];
 

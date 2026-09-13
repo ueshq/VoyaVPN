@@ -68,6 +68,8 @@ import type { RuleMoveAction } from "./use-routing-screen";
 type RoutingRuleListProps = {
   /** Policy groups a rule can target; `null` while the list loads. */
   groupOutbounds?: readonly RuleGroupOutbound[] | null;
+  /** Global mode skips every rule, so nothing in the list can change. */
+  locked?: boolean;
   /** Node remarks a rule can target; `null` while the node list loads. */
   nodeNames: readonly string[] | null;
   /** Points a rule whose node or group is gone back at the proxy. */
@@ -107,6 +109,7 @@ function stopDoubleClick(event: MouseEvent) {
  */
 export function RoutingRuleList({
   groupOutbounds = [],
+  locked = false,
   nodeNames,
   onFixOutbound,
   onDelete,
@@ -208,10 +211,11 @@ export function RoutingRuleList({
           <TableBody>
             {visible.map((rule, index) => (
               <SortableRuleRow
-                canMoveDown={!reordering && index < visible.length - 1}
-                canMoveUp={!reordering && index > 0}
+                canMoveDown={!locked && !reordering && index < visible.length - 1}
+                canMoveUp={!locked && !reordering && index > 0}
                 groupOutbounds={groupOutbounds}
                 key={rule.id}
+                locked={locked}
                 nodeNames={nodeNames}
                 onFixOutbound={onFixOutbound}
                 onDelete={onDelete}
@@ -235,6 +239,7 @@ export function RoutingRuleList({
 function SortableRuleRow({
   canMoveDown,
   canMoveUp,
+  locked,
   nodeNames,
   onDelete,
   onEdit,
@@ -253,6 +258,7 @@ function SortableRuleRow({
 > & {
   canMoveDown: boolean;
   canMoveUp: boolean;
+  locked: boolean;
   pendingEnabled: boolean | undefined;
   processRulesSupported: boolean;
   reordering: boolean;
@@ -272,16 +278,17 @@ function SortableRuleRow({
   } = useSortable({
     attributes: { roleDescription: t("panes.routing.sortableRole") },
     // One move at a time: indices of a second drag would be computed against
-    // an order the backend has not committed yet.
-    disabled: reordering,
+    // an order the backend has not committed yet. Locked rules do not move.
+    disabled: reordering || locked,
     id: rule.id,
   });
   const enabled = pendingEnabled ?? rule.enabled;
-  const muted = enabled ? undefined : "opacity-55";
+  const muted = enabled && !locked ? undefined : "opacity-55";
   const menuLabel = t("panes.routing.ruleActions", { name });
   const actions: RuleMenuActions = {
     canMoveDown,
     canMoveUp,
+    locked,
     onDelete: () => onDelete(rule),
     onEdit: () => onEdit(rule),
     onMove: (action) => onMove(rule, action),
@@ -296,7 +303,7 @@ function SortableRuleRow({
           dataTableRowHover,
           isDragging && "relative z-20 bg-surface-raised shadow-md",
         )}
-        onDoubleClick={() => onEdit(rule)}
+        onDoubleClick={locked ? undefined : () => onEdit(rule)}
         ref={setNodeRef}
         style={{ transform: CSS.Translate.toString(transform), transition }}
       >
@@ -318,7 +325,7 @@ function SortableRuleRow({
               aria-busy={pendingEnabled !== undefined}
               aria-label={t("panes.routing.toggleRule", { name })}
               checked={enabled}
-              disabled={pendingEnabled !== undefined}
+              disabled={locked || pendingEnabled !== undefined}
               onCheckedChange={(checked) => onToggle(rule, checked)}
             />
             {pendingEnabled !== undefined ? (
@@ -348,6 +355,7 @@ function SortableRuleRow({
         <TableCell className={cn("overflow-hidden px-3 py-1.5", muted)}>
           <OutboundBadge
             groupOutbounds={groupOutbounds}
+            locked={locked}
             nodeNames={nodeNames}
             onFix={onFixOutbound ? () => onFixOutbound(rule) : undefined}
             outbound={rule.outbound}
@@ -457,10 +465,12 @@ function matchFieldTitle(field: MatchListField, t: TranslationFunction) {
 
 function OutboundBadge({
   groupOutbounds,
+  locked,
   nodeNames,
   onFix,
   outbound,
 }: Pick<RoutingRuleListProps, "groupOutbounds" | "nodeNames"> & {
+  locked: boolean;
   onFix?: () => void;
   outbound: string | null;
 }) {
@@ -480,7 +490,14 @@ function OutboundBadge({
             </span>
           </Badge>
           {onFix ? (
-            <Button className="h-6 px-2 text-xs" onClick={onFix} size="sm" type="button" variant="ghost">
+            <Button
+              className="h-6 px-2 text-xs"
+              disabled={locked}
+              onClick={onFix}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
               {t("panes.routing.fixOutbound")}
             </Button>
           ) : null}

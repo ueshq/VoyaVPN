@@ -36,8 +36,10 @@ import { RoutingRuleDialog } from "./routing-rule-dialog";
 import { RoutingRuleList } from "./routing-rule-list";
 import { ruleDisplayName } from "./sentinel-rules";
 import { TrafficModeBanner } from "./traffic-mode-banner";
+import { TrafficModeSwitcher } from "./traffic-mode-switcher";
 import { useProcessRulesSupported } from "./use-process-rules-supported";
 import { useRoutingScreen, type RoutingScreenController } from "./use-routing-screen";
+import { useSavedTrafficMode } from "./use-traffic-mode";
 
 export function RoutingScreen() {
   const { t } = useI18n();
@@ -46,25 +48,37 @@ export function RoutingScreen() {
   const processRulesSupported = useProcessRulesSupported();
   // Rules apply by restarting the core, which drops connections for a moment.
   const connected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
+  // Global mode routes all captured traffic ahead of every rule, so none of
+  // them can apply and the page locks them.
+  const rulesLocked = useSavedTrafficMode().mode === "global";
   const { activeRouting, ruleDialog } = controller;
   const error = controller.operationError ?? controller.loadError;
+  // A disabled button shows no tooltip of its own, so its wrapper says why.
+  const editBlockedReason = rulesLocked
+    ? t("panes.routing.rulesLocked")
+    : activeRouting
+      ? undefined
+      : t("panes.routing.noActiveRouting");
 
   return (
     <PageSection aria-label={t("tabs.rules")}>
       <PageTitle
         actions={
-          <span title={activeRouting ? undefined : t("panes.routing.noActiveRouting")}>
-            <Button
-              disabled={!activeRouting}
-              onClick={controller.requestResetRules}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <RotateCcw className="size-4" aria-hidden="true" />
-              {t("panes.routing.resetRules")}
-            </Button>
-          </span>
+          <>
+            <TrafficModeSwitcher />
+            <span title={editBlockedReason}>
+              <Button
+                disabled={editBlockedReason !== undefined}
+                onClick={controller.requestResetRules}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <RotateCcw className="size-4" aria-hidden="true" />
+                {t("panes.routing.resetRules")}
+              </Button>
+            </span>
+          </>
         }
         title={t("tabs.rules")}
       />
@@ -72,6 +86,7 @@ export function RoutingScreen() {
         {error ? <InlinePageError>{error}</InlinePageError> : null}
         <TrafficModeBanner />
         <PerAppSummaryCard
+          locked={rulesLocked}
           onEdit={() => controller.setPerAppOpen(true)}
           routing={activeRouting}
         />
@@ -84,10 +99,9 @@ export function RoutingScreen() {
               ) : null}
             </div>
             <PageHeaderActions>
-              {/* A disabled button shows no tooltip of its own. */}
-              <span title={activeRouting ? undefined : t("panes.routing.noActiveRouting")}>
+              <span title={editBlockedReason}>
                 <Button
-                  disabled={!activeRouting}
+                  disabled={editBlockedReason !== undefined}
                   onClick={controller.openCreateRule}
                   size="sm"
                   type="button"
@@ -106,7 +120,11 @@ export function RoutingScreen() {
               controller.rules.length > 0 && "bg-surface-sunken",
             )}
           >
-            <RulesBody controller={controller} processRulesSupported={processRulesSupported} />
+            <RulesBody
+              controller={controller}
+              locked={rulesLocked}
+              processRulesSupported={processRulesSupported}
+            />
           </ScrollArea>
         </PageSurface>
       </PageContent>
@@ -136,9 +154,11 @@ export function RoutingScreen() {
 
 function RulesBody({
   controller,
+  locked,
   processRulesSupported,
 }: {
   controller: RoutingScreenController;
+  locked: boolean;
   processRulesSupported: boolean;
 }) {
   const { t } = useI18n();
@@ -165,6 +185,7 @@ function RulesBody({
   return (
     <RoutingRuleList
       groupOutbounds={controller.groupOutbounds}
+      locked={locked}
       nodeNames={controller.nodeNames}
       onFixOutbound={controller.fixOutbound}
       onDelete={controller.requestDeleteRule}

@@ -252,6 +252,40 @@ describe("RoutingRuleList", () => {
     expect(onFixOutbound).toHaveBeenCalledWith(expect.objectContaining({ id: "rule-gone" }));
   });
 
+  it("locks every control while global mode skips the rules", async () => {
+    const onFixOutbound = vi.fn();
+    renderList({
+      locked: true,
+      onFixOutbound,
+      rules: [
+        rule("rule-office", { ip: ["10.0.0.0/8"], outbound: "direct", remarks: "Office" }),
+        rule("rule-gone", { domain: ["geosite:cn"], outbound: "group:gone", remarks: "Gone" }),
+      ],
+    });
+
+    const [office, gone] = bodyRows();
+    expect(within(office).getByRole("switch", { name: "Enable Office" })).toBeDisabled();
+    expect(within(office).getByRole("button", { name: "Reorder Office" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(within(office).getByRole("menuitem", { name: "Actions for Office" })).toBeDisabled();
+    expect(within(gone).getByRole("button", { name: "Use proxy instead" })).toBeDisabled();
+    // An enabled rule reads as locked too, not only its controls.
+    expect(within(office).getAllByRole("cell")[2]).toHaveClass("opacity-55");
+
+    fireEvent.doubleClick(within(office).getByText("Office"));
+    expect(handlers.onEdit).not.toHaveBeenCalled();
+
+    // Right click still lists the actions, every one of them off.
+    fireEvent.contextMenu(office);
+    expect(await screen.findByRole("menuitem", { name: "Edit" })).toHaveAttribute("aria-disabled", "true");
+    for (const name of ["Move to top", "Move up", "Move down", "Move to bottom", "Delete"]) {
+      expect(menuItem(name)).toHaveAttribute("aria-disabled", "true");
+    }
+    expect(onFixOutbound).not.toHaveBeenCalled();
+  });
+
   it("marks a rule whose save is in flight as busy", () => {
     renderList({ pendingToggles: new Map([["rule-office", true]]) });
 

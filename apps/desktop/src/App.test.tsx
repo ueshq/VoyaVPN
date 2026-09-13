@@ -513,8 +513,8 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(within(hero).queryByText("Not protected")).not.toBeInTheDocument();
     expect(within(hero).queryByRole("switch")).not.toBeInTheDocument();
-    expect(within(hero).getByRole("group", { name: "Traffic mode" })).toBeInTheDocument();
-    expect(within(hero).getByRole("group", { name: "Traffic mode" })).toBeInTheDocument();
+    // The traffic mode lives on the Rules page.
+    expect(within(hero).queryByRole("group", { name: "Traffic mode" })).not.toBeInTheDocument();
     expect(screen.getByTestId("sidebar-footer")).toHaveTextContent(
       "Disconnected",
     );

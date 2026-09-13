@@ -44,6 +44,17 @@ describe("PerAppSummaryCard", () => {
     ).toBeInTheDocument();
   });
 
+  it("locks editing while global mode skips the rules", () => {
+    renderCard(routing({ outbound: "direct", process: ["steam"] }), vi.fn(), true);
+
+    const edit = screen.getByRole("button", { name: "Edit" });
+    expect(edit).toBeDisabled();
+    expect(edit.parentElement).toHaveAttribute(
+      "title",
+      "Rules don't apply in global mode. Switch to Rule to edit them.",
+    );
+  });
+
   it("is not offered where the tunnel cannot match apps", () => {
     useRuntimeEventStore.setState({ tun: macosTun });
     try {
@@ -73,11 +84,11 @@ const macosTun: TunStatus = {
   restoreOnDisconnect: true,
 };
 
-function renderCard(value: Routing_Serialize, onEdit: () => void) {
+function renderCard(value: Routing_Serialize, onEdit: () => void, locked?: boolean) {
   const client = new QueryClient({ defaultOptions: { queries: { gcTime: 0, retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <PerAppSummaryCard onEdit={onEdit} routing={value} />
+      <PerAppSummaryCard locked={locked} onEdit={onEdit} routing={value} />
     </QueryClientProvider>,
   );
 }
