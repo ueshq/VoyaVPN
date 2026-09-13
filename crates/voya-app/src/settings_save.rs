@@ -8,9 +8,10 @@ use voya_db::AppStateRecord;
 
 use crate::{
     contract_map::{
-        simple_dns_from_contract, simple_dns_to_contract, sysproxy_type_from_contract,
-        sysproxy_type_to_contract, tls_fragment_mode_from_contract, tls_fragment_mode_to_contract,
-        traffic_mode_from_contract, traffic_mode_to_contract,
+        close_action_from_contract, close_action_to_contract, simple_dns_from_contract,
+        simple_dns_to_contract, sysproxy_type_from_contract, sysproxy_type_to_contract,
+        tls_fragment_mode_from_contract, tls_fragment_mode_to_contract, traffic_mode_from_contract,
+        traffic_mode_to_contract,
     },
     input_safety,
 };
@@ -258,6 +259,8 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
         behavior: contracts::BehaviorSettings {
             autostart: config.gui_item.auto_run,
             auto_check_ip: config.gui_item.auto_check_ip,
+            close_action: close_action_to_contract(config.gui_item.close_action),
+            start_minimized: config.gui_item.start_minimized,
         },
         core: contracts::CoreSettings {
             log_enabled: config.core_basic_item.log_enabled,
@@ -381,6 +384,8 @@ pub fn app_config_from_settings(
         gui_item: GuiItem {
             auto_run: settings.behavior.autostart,
             auto_check_ip: settings.behavior.auto_check_ip,
+            close_action: close_action_from_contract(settings.behavior.close_action),
+            start_minimized: settings.behavior.start_minimized,
         },
         ui_item: UiItem {
             current_theme: theme_to_config(settings.appearance.theme).map(str::to_string),
@@ -506,7 +511,13 @@ where
     A: SettingsSideEffectAdapter,
 {
     let mut applied = AppliedSettingsSideEffects::default();
-    if original.gui_item.auto_run != target.gui_item.auto_run {
+    // The login entry carries the launch flag `start_minimized` is read
+    // against, so an entry written before that flag existed is rewritten when
+    // the option changes.
+    let autostart_changed = original.gui_item.auto_run != target.gui_item.auto_run
+        || (target.gui_item.auto_run
+            && original.gui_item.start_minimized != target.gui_item.start_minimized);
+    if autostart_changed {
         applied.autostart_touched = true;
         if let Err(source) = adapter.apply_autostart(target) {
             return Err(SettingsSideEffectFailure {
@@ -582,6 +593,8 @@ mod tests {
             gui_item: GuiItem {
                 auto_run: true,
                 auto_check_ip: false,
+                close_action: voya_core::CloseAction::Ask,
+                start_minimized: true,
             },
             ui_item: UiItem {
                 current_theme: Some("Dark".to_string()),
@@ -713,6 +726,26 @@ mod tests {
         let mut config = AppConfig::default();
         config.gui_item.auto_run = autostart;
         config
+    }
+
+    #[test]
+    fn toggling_start_minimized_rewrites_only_an_enabled_login_entry() {
+        let adapter = FakeSideEffects::default();
+        let original = config(true);
+        let mut target = original.clone();
+        target.gui_item.start_minimized = true;
+        assert!(apply_settings_side_effects(&adapter, &original, &target).is_ok());
+        assert_eq!(
+            *adapter.calls.lock().expect("calls lock"),
+            vec!["autostart:true".to_string()]
+        );
+
+        let adapter = FakeSideEffects::default();
+        let original = config(false);
+        let mut target = original.clone();
+        target.gui_item.start_minimized = true;
+        assert!(apply_settings_side_effects(&adapter, &original, &target).is_ok());
+        assert!(adapter.calls.lock().expect("calls lock").is_empty());
     }
 
     #[test]

@@ -599,6 +599,8 @@ export async function installTauriSmokeMock(
             updated: sources.length,
           } satisfies SubscriptionUpdateResult);
         }
+        case "resolve_close_request":
+          return Promise.resolve(null);
         case "check_connection_ip":
           return Promise.resolve({
             countryCode: "JP",
@@ -1036,7 +1038,12 @@ export async function installTauriSmokeMock(
       return {
         schemaVersion: 1,
         appearance: { language: "en", theme: "system" },
-        behavior: { autoCheckIp: false, autostart: false },
+        behavior: {
+          autoCheckIp: false,
+          autostart: false,
+          closeAction: "minimizeToTray",
+          startMinimized: false,
+        },
         core: {
           bindInterface: null as string | null,
           cacheFileEnabled: true,

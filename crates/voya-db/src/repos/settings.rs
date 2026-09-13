@@ -101,8 +101,11 @@ const RETIRED_SETTINGS_ELEMENT_KEYS: &[(&[&str], &str)] = &[(&["network", "inbou
 
 /// Keys added after the baseline: (parent path, key, JSON value an older
 /// payload implies). Inserted only when absent.
-const ADDED_SETTINGS_DEFAULTS: &[(&[&str], &str, &str)] =
-    &[(&["behavior"], "autoCheckIp", "false")];
+const ADDED_SETTINGS_DEFAULTS: &[(&[&str], &str, &str)] = &[
+    (&["behavior"], "autoCheckIp", "false"),
+    (&["behavior"], "closeAction", "\"minimizeToTray\""),
+    (&["behavior"], "startMinimized", "false"),
+];
 
 /// Retired enum values and the current value each one maps onto.
 const RETIRED_SETTINGS_VALUES: &[(&[&str], &str, &str)] = &[

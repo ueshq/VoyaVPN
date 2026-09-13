@@ -49,7 +49,8 @@
     "restart": "Restart",
     "routingChanged": "Routing change",
     "settingsSaved": "Settings save",
-    "tunChanged": "TUN change"
+    "tunChanged": "TUN change",
+    "activeProfileChanged": "Node switch"
   },
   "home": {
     "aria": "Connection home",
@@ -193,14 +194,18 @@
     "trayRefreshFailed": "Tray refresh failed",
     "tunSavedRestartFailed": "TUN saved; core restart failed",
     "tunStatusRefreshFailed": "TUN status refresh failed",
-    "routingRulesResetRestartFailed": "Default rules restored; core restart failed"
+    "routingRulesResetRestartFailed": "Default rules restored; core restart failed",
+    "trayActionFailed": "Tray action failed",
+    "activeProfileRestartFailed": "Node switched; core restart failed"
   },
   "options": {
     "autostart": "Autostart",
     "loading": "Loading",
     "runtimeCore": "Core",
     "runtimeNetwork": "Network",
-    "autoCheckIp": "Check the exit IP after connecting"
+    "autoCheckIp": "Check the exit IP after connecting",
+    "startMinimized": "Start hidden in the tray when launched at login",
+    "startMinimizedHint": "Opening VoyaVPN yourself always shows the window."
   },
   "panes": {
     "dns": {
@@ -643,7 +648,8 @@
       "dnsHosts": "Hosts and expected IPs",
       "resources": "Rule resources",
       "localProxy": "Local proxy",
-      "connection": "Connection"
+      "connection": "Connection",
+      "window": "Window"
     },
     "apply": {
       "reconnect": "Apply and reconnect",
@@ -651,7 +657,13 @@
       "pending": "Saved changes are waiting to be applied to this connection.",
       "working": "Applying settings…"
     },
-    "openRules": "Open routing rules"
+    "openRules": "Open routing rules",
+    "closeAction": "When the window is closed",
+    "closeActionOptions": {
+      "minimizeToTray": "Keep running in the tray",
+      "ask": "Ask every time",
+      "quit": "Quit VoyaVPN"
+    }
   },
   "speedtest": {
     "outcome": {
@@ -850,5 +862,12 @@
     "deleteTitle": "Delete subscription “{{name}}”?",
     "deleteHint": "This also deletes its {{count}} nodes. If one is in use, the connection will stop and the selection will be cleared.",
     "empty": "No nodes yet. Update this subscription to fetch its nodes."
+  },
+  "closePrompt": {
+    "title": "Close VoyaVPN?",
+    "message": "VoyaVPN can keep running in the tray so your connection stays up.",
+    "minimize": "Keep running in tray",
+    "quit": "Quit",
+    "remember": "Remember my choice"
   }
 }

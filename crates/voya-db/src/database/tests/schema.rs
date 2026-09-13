@@ -72,10 +72,12 @@ async fn retired_settings_are_normalized_once_without_changing_other_settings() 
     core.remove("tlsFragment");
     core.remove("fragmentFallbackDelayMs");
     core.insert("fragmentEnabled".to_string(), serde_json::json!(true));
-    original["behavior"]
+    let behavior = original["behavior"]
         .as_object_mut()
-        .expect("behavior settings")
-        .remove("autoCheckIp");
+        .expect("behavior settings");
+    for key in ["autoCheckIp", "closeAction", "startMinimized"] {
+        behavior.remove(key);
+    }
     sqlx::query("INSERT INTO app_settings VALUES (1, 1, ?)")
         .bind(original.to_string())
         .execute(database.pool())

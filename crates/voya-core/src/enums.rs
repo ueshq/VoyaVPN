@@ -110,3 +110,13 @@ pub enum TlsFragmentMode {
     TlsHello,
     Record,
 }
+
+/// What closing the main window does; see `voya_contracts::CloseAction`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CloseAction {
+    #[default]
+    MinimizeToTray,
+    Quit,
+    Ask,
+}

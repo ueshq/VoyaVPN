@@ -46,4 +46,6 @@ pub enum TransientStreamEvent {
 pub enum AppEvent {
     Notice(AppNotice),
     SelectTab(ShellTabTarget),
+    /// The main window was closed while the close action is "ask".
+    CloseRequested,
 }

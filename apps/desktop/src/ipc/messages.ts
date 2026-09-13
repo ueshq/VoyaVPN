@@ -31,6 +31,7 @@ import type { TranslationFunction, TranslationKey } from "@voya/i18n";
  * second parameter list to keep in step.
  */
 export const NOTICE_KEYS: Record<NoticeCode["code"], TranslationKey> = {
+  activeProfileRestartFailed: "notices.activeProfileRestartFailed",
   connectionModeRefreshFailed: "notices.connectionModeRefreshFailed",
   connectionModeSavedRestartFailed: "notices.connectionModeSavedRestartFailed",
   coreStartedSystemProxyFailed: "notices.coreStartedSystemProxyFailed",
@@ -58,6 +59,7 @@ export const NOTICE_KEYS: Record<NoticeCode["code"], TranslationKey> = {
   subscriptionRefreshFailed: "notices.subscriptionRefreshFailed",
   systemProxyRestoreFailed: "notices.systemProxyRestoreFailed",
   systemProxyStatusRefreshFailed: "notices.systemProxyStatusRefreshFailed",
+  trayActionFailed: "notices.trayActionFailed",
   trayRefreshFailed: "notices.trayRefreshFailed",
   tunSavedRestartFailed: "notices.tunSavedRestartFailed",
   tunStatusRefreshFailed: "notices.tunStatusRefreshFailed",
@@ -87,6 +89,7 @@ export const LOG_KEYS: Record<LogCode["code"], TranslationKey> = {
 
 /** The operation a log sentence is about, interpolated into it as `reason`. */
 export const CORE_FLOW_REASON_KEYS: Record<CoreFlowReason, TranslationKey> = {
+  activeProfileChanged: "coreFlowReason.activeProfileChanged",
   connect: "coreFlowReason.connect",
   connectionModeChanged: "coreFlowReason.connectionModeChanged",
   disconnect: "coreFlowReason.disconnect",

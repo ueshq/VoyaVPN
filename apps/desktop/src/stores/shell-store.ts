@@ -19,6 +19,9 @@ type ShellState = {
   /** Active sub-view of the Connections page; survives leaving the page. */
   connectionsView: ConnectionsView;
   setConnectionsView: (view: ConnectionsView) => void;
+  /** The shell asked how to close the window (close action "ask"). */
+  closeRequestOpen: boolean;
+  setCloseRequestOpen: (open: boolean) => void;
 };
 
 export const useShellStore = create<ShellState>((set) => ({
@@ -36,4 +39,6 @@ export const useShellStore = create<ShellState>((set) => ({
     set({ activeTab, focusPageTitle: focusTitle, profilesAddMenuOpen: false }),
   connectionsView: "connections",
   setConnectionsView: (connectionsView) => set({ connectionsView }),
+  closeRequestOpen: false,
+  setCloseRequestOpen: (closeRequestOpen) => set({ closeRequestOpen }),
 }));

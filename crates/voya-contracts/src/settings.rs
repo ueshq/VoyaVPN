@@ -76,6 +76,31 @@ pub struct BehaviorSettings {
     pub autostart: bool,
     /// Look up the exit IP each time a connection is established.
     pub auto_check_ip: bool,
+    /// What closing the main window does.
+    pub close_action: CloseAction,
+    /// Keep the window hidden when the app is launched at login.
+    pub start_minimized: bool,
+}
+
+/// What closing the main window does.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum CloseAction {
+    /// Hide the window and keep running from the tray.
+    #[default]
+    MinimizeToTray,
+    Quit,
+    /// Ask every time the window is closed.
+    Ask,
+}
+
+/// The user's answer to a close prompt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum CloseRequestAction {
+    MinimizeToTray,
+    Quit,
+    Cancel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]

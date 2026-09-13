@@ -194,6 +194,9 @@ function routeAppEvent(event: AppEvent, t: TranslationFunction) {
       useShellStore.getState().setActiveTab(target.tab);
       return;
     }
+    case "closeRequested":
+      useShellStore.getState().setCloseRequestOpen(true);
+      return;
   }
 }
 

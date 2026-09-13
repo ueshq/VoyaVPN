@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 
 import { AppSidebar, SHELL_PANEL_ID } from "@/components/app-shell/app-sidebar";
+import { CloseRequestDialog } from "@/components/app-shell/close-request-dialog";
 import { AppErrorBoundary } from "@/components/app-shell/error-boundary";
 import { ModalHost } from "@/components/app-shell/modal-host";
 import {
@@ -96,6 +97,7 @@ export function AppShell() {
       </div>
 
       <ModalHost />
+      <CloseRequestDialog />
       <Toaster />
     </main>
   );

@@ -80,7 +80,7 @@ pub(crate) fn defer_for_manual_proxy<R: tauri::Runtime>(
                     handle.exit(exit_code);
                     return;
                 }
-                show_main_window(&handle);
+                crate::residency::show_main_window(&handle);
                 if result != MessageDialogResult::Custom(text.open_settings.clone()) {
                     PENDING.store(false, Ordering::SeqCst);
                     return;
@@ -106,11 +106,4 @@ pub(crate) fn defer_for_manual_proxy<R: tauri::Runtime>(
             });
     });
     true
-}
-
-fn show_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
 }

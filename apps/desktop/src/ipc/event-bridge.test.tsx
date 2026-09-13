@@ -31,6 +31,7 @@ const bridgeMocks = vi.hoisted(() => {
     clearSpeedtestResults: vi.fn(),
     refreshSpeedtestStatus: vi.fn(() => Promise.resolve()),
     setActiveTab: vi.fn(),
+    setCloseRequestOpen: vi.fn(),
     setConnectionsView: vi.fn(),
     transientStreamEventListen: listenFor("transientStreamEvent"),
   };
@@ -59,6 +60,7 @@ vi.mock("@/stores/shell-store", () => ({
   useShellStore: {
     getState: () => ({
       setActiveTab: bridgeMocks.setActiveTab,
+      setCloseRequestOpen: bridgeMocks.setCloseRequestOpen,
       setConnectionsView: bridgeMocks.setConnectionsView,
     }),
   },
@@ -226,5 +228,19 @@ describe("EventBridge", () => {
       act(() => bridgeMocks.listeners.appEvent[0]?.({ payload: { kind: "selectTab", payload: target } }));
       expect(bridgeMocks.setActiveTab).toHaveBeenLastCalledWith("profiles");
     }
+  });
+  it("opens the close prompt when the shell asks how to close", async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <EventBridge />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(bridgeMocks.appEventListen).toHaveBeenCalledOnce());
+    act(() => {
+      bridgeMocks.listeners.appEvent[0]?.({ payload: { kind: "closeRequested" } });
+    });
+
+    expect(bridgeMocks.setCloseRequestOpen).toHaveBeenCalledWith(true);
   });
 });

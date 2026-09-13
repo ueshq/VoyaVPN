@@ -1,6 +1,6 @@
 use specta_typescript::Typescript;
 use std::{error::Error, path::Path};
-use tauri::{Manager, RunEvent};
+use tauri::RunEvent;
 
 mod app_state;
 mod bootstrap;
@@ -9,6 +9,7 @@ mod exit_prompt;
 mod ipc;
 mod lifecycle;
 mod logging;
+mod residency;
 mod tray;
 
 pub(crate) use app_state::AppState;
@@ -41,6 +42,10 @@ pub fn run() {
     }
 
     let app = tauri::Builder::default()
+        // First, so a second launch hands over before anything else starts.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            residency::show_main_window(app);
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -49,7 +54,7 @@ pub fn run() {
             if window.label() == "main" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
-                    window.app_handle().exit(0);
+                    residency::handle_close_requested(window);
                 }
             }
         })
@@ -65,6 +70,8 @@ pub fn run() {
                 // The message is stashed and rendered on `RunEvent::Ready`.
                 tracing::error!(%error, "VoyaVPN failed to start");
                 record_startup_failure(error.to_string());
+            } else {
+                residency::show_after_launch(app.handle());
             }
             Ok(())
         })
@@ -85,6 +92,12 @@ pub fn run() {
                 }
             }
             RunEvent::Exit => shutdown_for_exit(app),
+            // The dock icon brings back a window hidden into the tray.
+            #[cfg(target_os = "macos")]
+            RunEvent::Reopen {
+                has_visible_windows: false,
+                ..
+            } => residency::show_main_window(app),
             _ => {}
         }
     });

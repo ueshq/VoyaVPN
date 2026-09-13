@@ -55,6 +55,11 @@ export const commands = {
 	setConnectionMode: (mode: ConnectionMode) => typedError<ConnectionModeStatus, AppError>(__TAURI_INVOKE("set_connection_mode", { mode })),
 	/**  Looks up the exit address of the running connection through its local proxy. */
 	checkConnectionIp: () => typedError<ConnectionIpResult, AppError>(__TAURI_INVOKE("check_connection_ip")),
+	/**
+	 *  Carries out the user's answer to the close prompt, optionally keeping it
+	 *  as the close action from now on.
+	 */
+	resolveCloseRequest: (action: CloseRequestAction, remember: boolean) => typedError<null, AppError>(__TAURI_INVOKE("resolve_close_request", { action, remember })),
 	tunStatus: () => typedError<TunStatus, AppError>(__TAURI_INVOKE("tun_status")),
 	tunProviderDiagnostics: () => typedError<TunProviderDiagnostics, AppError>(__TAURI_INVOKE("tun_provider_diagnostics")),
 	setTunEnabled: (enabled: boolean) => typedError<TunStatus, AppError>(__TAURI_INVOKE("set_tun_enabled", { enabled })),
@@ -211,7 +216,9 @@ export type AppErrorSubsystem =
 /**  Core lifecycle: config generation, supervisor, connect/disconnect. */
 "runtime" | "speedtest" | "subscription" | "sysProxy" | "tun" | "update";
 
-export type AppEvent = { kind: "notice"; payload: AppNotice } | { kind: "selectTab"; payload: ShellTabTarget };
+export type AppEvent = { kind: "notice"; payload: AppNotice } | { kind: "selectTab"; payload: ShellTabTarget } | 
+/**  The main window was closed while the close action is "ask". */
+{ kind: "closeRequested" };
 
 /**
  *  One toast.
@@ -270,7 +277,21 @@ export type BehaviorSettings = {
 	autostart: boolean,
 	/**  Look up the exit IP each time a connection is established. */
 	autoCheckIp: boolean,
+	/**  What closing the main window does. */
+	closeAction: CloseAction,
+	/**  Keep the window hidden when the app is launched at login. */
+	startMinimized: boolean,
 };
+
+/**  What closing the main window does. */
+export type CloseAction = 
+/**  Hide the window and keep running from the tray. */
+"minimizeToTray" | "quit" | 
+/**  Ask every time the window is closed. */
+"ask";
+
+/**  The user's answer to a close prompt. */
+export type CloseRequestAction = "minimizeToTray" | "quit" | "cancel";
 
 /**  The public address the running connection exits from. */
 export type ConnectionIpResult = {
@@ -305,7 +326,7 @@ export type ConnectionModeStatus = {
  *  changed") into its log sentences; the fragment is a code now so the whole
  *  sentence can be assembled in the reader's language.
  */
-export type CoreFlowReason = "connect" | "restart" | "disconnect" | "routingChanged" | "dnsChanged" | "tunChanged" | "connectionModeChanged" | "settingsSaved";
+export type CoreFlowReason = "connect" | "restart" | "disconnect" | "routingChanged" | "dnsChanged" | "tunChanged" | "connectionModeChanged" | "activeProfileChanged" | "settingsSaved";
 
 export type CoreSeedInstallResult = {
 	coreType: CoreType,
@@ -555,7 +576,7 @@ export type NetworkSettings = {
  *  parts: a notice is a whole sentence in every locale, and languages do not
  *  agree on how to build one out of a subject and a verb.
  */
-export type NoticeCode = { code: "profileRefreshFailed" } | { code: "subscriptionRefreshFailed" } | { code: "routingRefreshFailed" } | { code: "dnsRefreshFailed" } | { code: "proxyViewRefreshFailed" } | { code: "connectionModeRefreshFailed" } | { code: "settingsRefreshFailed" } | { code: "routingSavedRestartFailed" } | { code: "routingDeletedRestartFailed" } | { code: "routingSelectedRestartFailed" } | { code: "routingRuleSavedRestartFailed" } | { code: "routingRulesDeletedRestartFailed" } | { code: "routingRuleMovedRestartFailed" } | { code: "routingRulesResetRestartFailed" } | { code: "dnsSavedRestartFailed" } | { code: "tunSavedRestartFailed" } | { code: "connectionModeSavedRestartFailed" } | { code: "settingsSavedRuntimeUpdateFailed" } | { code: "proxyModeSavedRuntimeUpdateFailed" } | { code: "settingsSavedSystemProxyUpdateFailed" } | { code: "systemProxyStatusRefreshFailed" } | { code: "tunStatusRefreshFailed" } | { code: "trayRefreshFailed" } | { code: "coreStopped" } | { code: "nativeTunStopped" } | { code: "coreStartedSystemProxyFailed" } | { code: "systemProxyRestoreFailed" } | { code: "subscriptionAutoUpdateFailed"; remarks: string };
+export type NoticeCode = { code: "profileRefreshFailed" } | { code: "subscriptionRefreshFailed" } | { code: "routingRefreshFailed" } | { code: "dnsRefreshFailed" } | { code: "proxyViewRefreshFailed" } | { code: "connectionModeRefreshFailed" } | { code: "settingsRefreshFailed" } | { code: "routingSavedRestartFailed" } | { code: "routingDeletedRestartFailed" } | { code: "routingSelectedRestartFailed" } | { code: "routingRuleSavedRestartFailed" } | { code: "routingRulesDeletedRestartFailed" } | { code: "routingRuleMovedRestartFailed" } | { code: "routingRulesResetRestartFailed" } | { code: "dnsSavedRestartFailed" } | { code: "tunSavedRestartFailed" } | { code: "connectionModeSavedRestartFailed" } | { code: "activeProfileRestartFailed" } | { code: "settingsSavedRuntimeUpdateFailed" } | { code: "proxyModeSavedRuntimeUpdateFailed" } | { code: "settingsSavedSystemProxyUpdateFailed" } | { code: "systemProxyStatusRefreshFailed" } | { code: "tunStatusRefreshFailed" } | { code: "trayRefreshFailed" } | { code: "trayActionFailed" } | { code: "coreStopped" } | { code: "nativeTunStopped" } | { code: "coreStartedSystemProxyFailed" } | { code: "systemProxyRestoreFailed" } | { code: "subscriptionAutoUpdateFailed"; remarks: string };
 
 /**
  *  A running process or installed application offered by the per-app proxy

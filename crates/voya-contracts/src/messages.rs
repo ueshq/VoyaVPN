@@ -58,6 +58,7 @@ pub enum NoticeCode {
     DnsSavedRestartFailed,
     TunSavedRestartFailed,
     ConnectionModeSavedRestartFailed,
+    ActiveProfileRestartFailed,
     SettingsSavedRuntimeUpdateFailed,
     ProxyModeSavedRuntimeUpdateFailed,
     // ---- the change was saved but a follow-up side effect failed ----
@@ -65,6 +66,7 @@ pub enum NoticeCode {
     SystemProxyStatusRefreshFailed,
     TunStatusRefreshFailed,
     TrayRefreshFailed,
+    TrayActionFailed,
     // ---- the core or the tunnel stopped on its own ----
     CoreStopped,
     NativeTunStopped,
@@ -89,6 +91,7 @@ pub enum CoreFlowReason {
     DnsChanged,
     TunChanged,
     ConnectionModeChanged,
+    ActiveProfileChanged,
     SettingsSaved,
 }
 

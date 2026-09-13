@@ -26,6 +26,7 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::connection_mode_status,
         commands::set_connection_mode::<tauri::Wry>,
         commands::check_connection_ip,
+        commands::resolve_close_request::<tauri::Wry>,
         commands::tun_status,
         commands::tun_provider_diagnostics,
         commands::set_tun_enabled::<tauri::Wry>,

@@ -112,6 +112,8 @@ impl Default for InItem {
 pub struct GuiItem {
     pub auto_run: bool,
     pub auto_check_ip: bool,
+    pub close_action: crate::CloseAction,
+    pub start_minimized: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -4,9 +4,10 @@ import { Button } from "@voya/ui/components/button";
 import { cn } from "@voya/ui/lib/utils";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
+import type { CloseAction } from "@/ipc/bindings";
 import type { ThemeMode } from "@/stores/preferences-store";
 
-import { SettingsCheckbox, SettingsGroup, SettingsRow } from "./settings-form";
+import { SelectField, SettingsCheckbox, SettingsGroup, SettingsRow } from "./settings-form";
 import type { AppSettingsFormController } from "./use-app-settings";
 
 const themeOptions: Array<{
@@ -18,6 +19,13 @@ const themeOptions: Array<{
   { icon: Sun, labelKey: "menu.themeLight", value: "light" },
   { icon: Moon, labelKey: "menu.themeDark", value: "dark" },
 ];
+
+const CLOSE_ACTIONS = ["minimizeToTray", "ask", "quit"] as const satisfies readonly CloseAction[];
+const CLOSE_ACTION_LABELS: Record<CloseAction, TranslationKey> = {
+  ask: "settings.closeActionOptions.ask",
+  minimizeToTray: "settings.closeActionOptions.minimizeToTray",
+  quit: "settings.closeActionOptions.quit",
+};
 
 const selectedOptionClass =
   "border border-primary bg-accent-blue-light text-brand hover:bg-accent-blue-light hover:text-brand";
@@ -112,6 +120,37 @@ export function GeneralTab({
               behavior: { ...current.behavior, autostart: checked === true },
             }))
           }
+        />
+        <SettingsCheckbox
+          field="behavior.startMinimized"
+          checked={settings.behavior.startMinimized}
+          description={t("options.startMinimizedHint")}
+          disabled={working}
+          label={t("options.startMinimized")}
+          onCheckedChange={(checked) =>
+            update((current) => ({
+              ...current,
+              behavior: { ...current.behavior, startMinimized: checked === true },
+            }))
+          }
+        />
+      </SettingsGroup>
+
+      <SettingsGroup title={t("settings.sections.window")}>
+        <SelectField
+          disabled={working}
+          field="behavior.closeAction"
+          id="rt-close-action"
+          label={t("settings.closeAction")}
+          onChange={(closeAction) =>
+            update((current) => ({
+              ...current,
+              behavior: { ...current.behavior, closeAction: closeAction as CloseAction },
+            }))
+          }
+          optionLabel={(action) => t(CLOSE_ACTION_LABELS[action as CloseAction])}
+          options={CLOSE_ACTIONS}
+          value={settings.behavior.closeAction}
         />
       </SettingsGroup>
 

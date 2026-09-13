@@ -113,6 +113,9 @@ where
         ) {
             tracing::warn!(?error, "failed to emit core state");
         }
+        if let Err(error) = crate::refresh_tray_menu(&self.app) {
+            tracing::warn!(?error, "failed to queue a tray menu refresh");
+        }
     }
 
     fn system_proxy_changed(&self, status: &SystemProxyStatus) {

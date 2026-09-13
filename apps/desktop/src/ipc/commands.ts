@@ -95,6 +95,8 @@ export const setConnectionMode = wrapCommand(commands.setConnectionMode);
 
 export const checkConnectionIp = wrapCommand(commands.checkConnectionIp);
 
+export const resolveCloseRequest = wrapCommand(commands.resolveCloseRequest);
+
 export const listProcessCandidates = wrapCommand(commands.listProcessCandidates);
 
 export const listRoutings = wrapCommand(commands.listRoutings);

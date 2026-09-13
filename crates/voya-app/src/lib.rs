@@ -21,6 +21,7 @@ pub mod profiles;
 pub mod proxy_runtime;
 pub mod qr;
 pub mod redaction;
+pub mod residency;
 pub mod routing;
 pub mod runtime;
 pub mod services;

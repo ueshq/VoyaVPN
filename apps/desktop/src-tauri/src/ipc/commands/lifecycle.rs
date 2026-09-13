@@ -20,6 +20,11 @@ pub(crate) fn emit_invalidation<R, I>(
     I: IntoIterator<Item = InvalidationScope>,
 {
     let scopes: BTreeSet<InvalidationScope> = scopes.into_iter().collect();
+    // Nodes, the active node and the traffic mode all sit behind these scopes,
+    // and the tray shows each of them.
+    if let Err(error) = crate::refresh_tray_menu(app) {
+        tracing::warn!(?error, "failed to queue a tray menu refresh");
+    }
     if let Err(error) = (InvalidateEvent {
         keys: scopes
             .into_iter()
@@ -194,6 +199,10 @@ impl ConfigChange {
     pub(super) const CONNECTION_MODE: Self = Self {
         reason: CoreFlowReason::ConnectionModeChanged,
         restart_failed_code: NoticeCode::ConnectionModeSavedRestartFailed,
+    };
+    pub(super) const ACTIVE_PROFILE: Self = Self {
+        reason: CoreFlowReason::ActiveProfileChanged,
+        restart_failed_code: NoticeCode::ActiveProfileRestartFailed,
     };
 }
 

@@ -12,6 +12,8 @@ use crate::{
 };
 
 pub const AUTOSTART_APP_NAME: &str = "VoyaVPN";
+/// Passed by every login entry, so a launch can tell it was not the user.
+pub const AUTOSTART_ARG: &str = "--autostart";
 pub const WINDOWS_RUN_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
 pub const LINUX_AUTOSTART_DIR: &str = ".config/autostart";
 pub const MACOS_LAUNCH_AGENTS_DIR: &str = "Library/LaunchAgents";
@@ -30,6 +32,19 @@ impl AutostartRequest {
     pub fn artifact(&self) -> Option<AutostartArtifact> {
         autostart_artifact(self)
     }
+}
+
+/// Whether this process was started by a login entry. `args` is the full
+/// argument list, program name first, as `std::env::args_os` yields it.
+#[must_use]
+pub fn launched_by_autostart<I, S>(args: I) -> bool
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<std::ffi::OsStr>,
+{
+    args.into_iter()
+        .skip(1)
+        .any(|argument| argument.as_ref() == AUTOSTART_ARG)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -268,8 +283,9 @@ pub fn windows_value_name(app_name: &str, executable: &Path) -> String {
 #[must_use]
 pub fn linux_desktop_entry(app_name: &str, executable: &Path) -> String {
     format!(
-        "[Desktop Entry]\nType=Application\nExec={}\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nName[en_US]={app_name}\nName={app_name}\nComment[en_US]={app_name}\nComment={app_name}\n",
-        desktop_entry_exec_argument(executable)
+        "[Desktop Entry]\nType=Application\nExec={} {}\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nName[en_US]={app_name}\nName={app_name}\nComment[en_US]={app_name}\nComment={app_name}\n",
+        desktop_entry_exec_argument(executable),
+        AUTOSTART_ARG
     )
 }
 
@@ -317,7 +333,7 @@ pub fn macos_launch_agent_plist(app_name: &str, executable: &Path) -> String {
     <array>
         <string>/bin/sh</string>
         <string>-c</string>
-        <string>if ! pgrep -x {process_name} &gt; /dev/null; then {executable}; fi</string>
+        <string>if ! pgrep -x {process_name} &gt; /dev/null; then {executable} {AUTOSTART_ARG}; fi</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -333,7 +349,7 @@ fn autostart_artifact(request: &AutostartRequest) -> Option<AutostartArtifact> {
         TargetOs::Windows => Some(AutostartArtifact::WindowsRunRegistry {
             key_path: WINDOWS_RUN_KEY.to_string(),
             value_name: windows_value_name(&request.app_name, &request.executable),
-            value: quote_windows_path(&request.executable),
+            value: windows_run_value(&request.executable),
         }),
         TargetOs::Linux => Some(AutostartArtifact::LinuxDesktopFile {
             path: linux_autostart_path(&request.home_dir, &request.app_name),
@@ -352,7 +368,7 @@ fn windows_actions(request: &AutostartRequest) -> Vec<AutostartAction> {
         vec![AutostartAction::SetWindowsRunRegistry {
             key_path: WINDOWS_RUN_KEY.to_string(),
             value_name,
-            value: quote_windows_path(&request.executable),
+            value: windows_run_value(&request.executable),
         }]
     } else {
         vec![AutostartAction::DeleteWindowsRunRegistry {
@@ -433,6 +449,10 @@ fn macos_label(app_name: &str) -> String {
 
 fn quote_windows_path(path: &Path) -> String {
     format!("\"{}\"", path.display())
+}
+
+fn windows_run_value(executable: &Path) -> String {
+    format!("{} {AUTOSTART_ARG}", quote_windows_path(executable))
 }
 
 fn run_checked(
@@ -591,6 +611,19 @@ mod autostart_tests {
     }
 
     #[test]
+    fn only_the_login_flag_after_the_program_name_marks_an_autostart_launch() {
+        assert!(launched_by_autostart(["voyavpn", "--autostart"]));
+        assert!(launched_by_autostart([
+            "voyavpn",
+            "--verbose",
+            "--autostart"
+        ]));
+        assert!(!launched_by_autostart(["voyavpn"]));
+        assert!(!launched_by_autostart(["--autostart"]));
+        assert!(!launched_by_autostart(["voyavpn", "--autostart=1"]));
+    }
+
+    #[test]
     fn autostart_linux_plan_writes_desktop_file() {
         let request = request(TargetOs::Linux, true);
         let plan = plan_autostart(&request);
@@ -605,7 +638,7 @@ mod autostart_tests {
             &plan.actions[..],
             [AutostartAction::WriteFile { path, contents }]
             if path.ends_with("VoyaVPN.desktop")
-                && contents.contains("Exec=\"/opt/VoyaVPN/voyavpn\"")
+                && contents.contains("Exec=\"/opt/VoyaVPN/voyavpn\" --autostart\n")
         ));
     }
 
@@ -675,7 +708,9 @@ mod autostart_tests {
                 && arguments == &string_args(&["unload", "-w", path.as_str()])
         ));
         assert!(
-            contents.contains(&format!("then {quoted_executable}; fi</string>")),
+            contents.contains(&format!(
+                "then {quoted_executable} --autostart; fi</string>"
+            )),
             "plist did not include shell-quoted executable path:\n{contents}"
         );
         assert!(
@@ -714,7 +749,7 @@ mod autostart_tests {
                 value
             }] if key_path == WINDOWS_RUN_KEY
                 && value_name.starts_with("VoyaVPN_")
-                && value == "\"C:\\Program Files\\VoyaVPN\\voyavpn.exe\""
+                && value == "\"C:\\Program Files\\VoyaVPN\\voyavpn.exe\" --autostart"
         ));
     }
 

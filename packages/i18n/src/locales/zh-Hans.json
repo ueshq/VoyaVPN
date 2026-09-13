@@ -49,7 +49,8 @@
     "restart": "重启",
     "routingChanged": "路由变更",
     "settingsSaved": "设置保存",
-    "tunChanged": "TUN 变更"
+    "tunChanged": "TUN 变更",
+    "activeProfileChanged": "切换节点"
   },
   "home": {
     "aria": "连接主页",
@@ -193,14 +194,18 @@
     "trayRefreshFailed": "刷新托盘失败",
     "tunSavedRestartFailed": "TUN 已保存；重启内核失败",
     "tunStatusRefreshFailed": "刷新 TUN 状态失败",
-    "routingRulesResetRestartFailed": "已恢复默认规则；重启内核失败"
+    "routingRulesResetRestartFailed": "已恢复默认规则；重启内核失败",
+    "trayActionFailed": "托盘操作失败",
+    "activeProfileRestartFailed": "已切换节点，但核心重启失败"
   },
   "options": {
     "autostart": "开机自启",
     "loading": "正在加载",
     "runtimeCore": "内核",
     "runtimeNetwork": "网络",
-    "autoCheckIp": "连接后自动检测出口 IP"
+    "autoCheckIp": "连接后自动检测出口 IP",
+    "startMinimized": "开机启动时隐藏到托盘",
+    "startMinimizedHint": "手动打开 VoyaVPN 时始终显示窗口。"
   },
   "panes": {
     "dns": {
@@ -643,7 +648,8 @@
       "dnsHosts": "Hosts 与预期 IP",
       "resources": "规则资源",
       "localProxy": "本地代理",
-      "connection": "连接"
+      "connection": "连接",
+      "window": "窗口"
     },
     "apply": {
       "reconnect": "应用并重新连接",
@@ -651,7 +657,13 @@
       "pending": "修改已保存，等待应用到当前连接。",
       "working": "正在应用设置…"
     },
-    "openRules": "前往规则页"
+    "openRules": "前往规则页",
+    "closeAction": "关闭窗口时",
+    "closeActionOptions": {
+      "minimizeToTray": "在托盘中继续运行",
+      "ask": "每次询问",
+      "quit": "退出 VoyaVPN"
+    }
   },
   "speedtest": {
     "outcome": {
@@ -850,5 +862,12 @@
     "deleteTitle": "删除订阅「{{name}}」？",
     "deleteHint": "同时删除所属的 {{count}} 个节点。如其中有正在使用的节点，将断开连接并清除选择。",
     "empty": "暂无节点。更新此订阅以获取节点。"
+  },
+  "closePrompt": {
+    "title": "关闭 VoyaVPN？",
+    "message": "VoyaVPN 可以在托盘中继续运行，保持当前连接。",
+    "minimize": "在托盘中继续运行",
+    "quit": "退出",
+    "remember": "记住我的选择"
   }
 }

@@ -46,6 +46,15 @@ pub async fn proxy_set_traffic_mode<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     mode: voya_contracts::TrafficMode,
 ) -> Result<voya_contracts::TrafficModeResponse, AppError> {
+    apply_traffic_mode(&app, &state, mode).await
+}
+
+/// The traffic-mode change behind both the command and the tray.
+pub(crate) async fn apply_traffic_mode<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    state: &AppState,
+    mode: voya_contracts::TrafficMode,
+) -> Result<voya_contracts::TrafficModeResponse, AppError> {
     let mode = traffic_mode_from_contract(mode);
     let snapshot = state.supervisor().status().await.map_err(AppError::from)?;
     let outcome = state
@@ -57,7 +66,7 @@ pub async fn proxy_set_traffic_mode<R: tauri::Runtime>(
     state
         .services()
         .acknowledge_traffic_mode(&snapshot, &outcome);
-    emit_proxy_runtime_invalidation(&app, "proxy-traffic-mode-changed", outcome.config_changed);
+    emit_proxy_runtime_invalidation(app, "proxy-traffic-mode-changed", outcome.config_changed);
     outcome.runtime_result.map_err(AppError::from)?;
 
     Ok(voya_contracts::TrafficModeResponse {

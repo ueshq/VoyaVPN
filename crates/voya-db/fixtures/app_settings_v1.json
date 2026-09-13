@@ -6,7 +6,9 @@
   },
   "behavior": {
     "autostart": false,
-    "autoCheckIp": false
+    "autoCheckIp": false,
+    "closeAction": "minimizeToTray",
+    "startMinimized": false
   },
   "core": {
     "logEnabled": false,

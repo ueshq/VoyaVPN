@@ -8,7 +8,12 @@ export function makeAppSettings({
   return {
     schemaVersion: 1,
     appearance: { language: "en", theme: "system" },
-    behavior: { autoCheckIp: false, autostart: false },
+    behavior: {
+      autoCheckIp: false,
+      autostart: false,
+      closeAction: "minimizeToTray",
+      startMinimized: false,
+    },
     core: {
       bindInterface: null,
       cacheFileEnabled: true,

@@ -37,6 +37,7 @@ const wrapperNames = [
   "connectionModeStatus",
   "setConnectionMode",
   "checkConnectionIp",
+  "resolveCloseRequest",
   "tunStatus",
   "tunProviderDiagnostics",
   "tunRequestElevation",

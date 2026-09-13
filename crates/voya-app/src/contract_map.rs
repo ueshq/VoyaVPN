@@ -76,6 +76,28 @@ pub const fn tls_fragment_mode_from_contract(
 }
 
 #[must_use]
+pub const fn close_action_to_contract(
+    value: voya_core::CloseAction,
+) -> voya_contracts::CloseAction {
+    match value {
+        voya_core::CloseAction::MinimizeToTray => voya_contracts::CloseAction::MinimizeToTray,
+        voya_core::CloseAction::Quit => voya_contracts::CloseAction::Quit,
+        voya_core::CloseAction::Ask => voya_contracts::CloseAction::Ask,
+    }
+}
+
+#[must_use]
+pub const fn close_action_from_contract(
+    value: voya_contracts::CloseAction,
+) -> voya_core::CloseAction {
+    match value {
+        voya_contracts::CloseAction::MinimizeToTray => voya_core::CloseAction::MinimizeToTray,
+        voya_contracts::CloseAction::Quit => voya_core::CloseAction::Quit,
+        voya_contracts::CloseAction::Ask => voya_core::CloseAction::Ask,
+    }
+}
+
+#[must_use]
 pub const fn traffic_mode_to_contract(
     value: voya_core::TrafficMode,
 ) -> voya_contracts::TrafficMode {

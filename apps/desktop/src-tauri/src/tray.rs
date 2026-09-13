@@ -1,31 +1,61 @@
-use crate::AppState;
+//! The tray icon and its menu: connection, traffic mode and node controls,
+//! rebuilt whenever the state they show changes.
+//!
+//! The menu itself is modelled and translated in `voya_app::tray`, where it is
+//! tested; this module only turns that model into native items and routes
+//! their clicks.
+
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use tauri::{
-    menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem},
-    tray::TrayIconBuilder,
+    menu::{CheckMenuItem, IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager,
 };
-use voya_app::tray::tray_labels;
+use tauri_specta::Event;
+use voya_app::tray::{tray_menu, tray_tooltip, TrayEntry, TrayItemId};
+use voya_platform::coreinfo::TargetOs;
 
-const TRAY_SHOW: &str = "tray-show";
-const TRAY_HIDE: &str = "tray-hide";
-const TRAY_QUIT: &str = "tray-quit";
+use crate::{
+    ipc::{
+        commands,
+        events::{AppEvent, ShellTabTarget},
+    },
+    residency, AppState,
+};
+
+pub(crate) const TRAY_ID: &str = "main";
+
+/// Set while a rebuild is queued, so a burst of state changes costs one.
+static REFRESH_QUEUED: AtomicBool = AtomicBool::new(false);
+
 pub(super) fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
-    let menu = build_tray_menu(app.handle())?;
+    let snapshot =
+        tauri::async_runtime::block_on(commands::tray_snapshot(&app.state::<AppState>()));
+    let menu = build_menu(app.handle(), &tray_menu(&snapshot.input()))?;
+    // Windows convention: left click opens the window and right click the
+    // menu. Elsewhere the menu opens on any click.
+    let left_click_toggles_window = TargetOs::current() == TargetOs::Windows;
 
-    let mut tray = TrayIconBuilder::with_id("main")
+    let mut tray = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
-        .tooltip("VoyaVPN")
-        .show_menu_on_left_click(true)
-        .on_menu_event(
-            |app, event: tauri::menu::MenuEvent| match event.id().as_ref() {
-                TRAY_SHOW => show_main_window(app),
-                TRAY_HIDE => hide_main_window(app),
-                // `exit` raises ExitRequested and Exit, which is where the
-                // teardown runs; calling it here as well would only repeat it.
-                TRAY_QUIT => app.exit(0),
-                _ => {}
-            },
-        );
+        .tooltip(tray_tooltip(snapshot.connected_node()))
+        .show_menu_on_left_click(!left_click_toggles_window)
+        .on_menu_event(|app, event: MenuEvent| handle_menu_event(app, event.id().as_ref()))
+        .on_tray_icon_event(move |tray, event| {
+            if left_click_toggles_window
+                && matches!(
+                    event,
+                    TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    }
+                )
+            {
+                residency::toggle_main_window(tray.app_handle());
+            }
+        });
 
     if let Some(icon) = app.default_window_icon().cloned() {
         tray = tray.icon(icon);
@@ -36,67 +66,118 @@ pub(super) fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Queues a rebuild of the tray from the app's current state.
+///
+/// The rebuild reads the supervisor and the node list, so it runs on the async
+/// runtime; callers only queue it and never wait on it.
 pub(crate) fn refresh_tray_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
-    let Some(tray) = app.tray_by_id("main") else {
+    if app.tray_by_id(TRAY_ID).is_none() || REFRESH_QUEUED.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        REFRESH_QUEUED.store(false, Ordering::SeqCst);
+        if let Err(error) = rebuild_tray(&app).await {
+            tracing::warn!(?error, "failed to rebuild the tray menu");
+        }
+    });
+
+    Ok(())
+}
+
+async fn rebuild_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
+    let (Some(tray), Some(state)) = (app.tray_by_id(TRAY_ID), app.try_state::<AppState>()) else {
         return Ok(());
     };
-    let menu = build_tray_menu(app)?;
-    tray.set_menu(Some(menu))
+    let snapshot = commands::tray_snapshot(&state).await;
+    tray.set_menu(Some(build_menu(app, &tray_menu(&snapshot.input()))?))?;
+    tray.set_tooltip(Some(tray_tooltip(snapshot.connected_node())))
 }
 
-/// Builds the tray menu in the language the app is set to.
-///
-/// The tray is native, built before any webview exists and rebuilt off the main
-/// thread, so it cannot call `t()`. `voya_app::tray` holds the table; the
-/// language comes from the persisted `ui_item.current_language`, which is the
-/// same value the frontend picks its locale from. Before startup has managed
-/// `AppState` there is no configuration to read and the table's English
-/// fallback applies.
-fn build_tray_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
-    let labels = tray_labels(&current_interface_language(app));
-    let show = MenuItem::with_id(app, TRAY_SHOW, labels.show, true, None::<&str>)?;
-    let hide = MenuItem::with_id(app, TRAY_HIDE, labels.hide, true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, TRAY_QUIT, labels.quit, true, None::<&str>)?;
-    let quit_separator = PredefinedMenuItem::separator(app)?;
-
-    Menu::with_items(
-        app,
-        &[&show as &dyn IsMenuItem<R>, &hide, &quit_separator, &quit],
-    )
+fn build_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    entries: &[TrayEntry],
+) -> tauri::Result<Menu<R>> {
+    let items = native_items(app, entries)?;
+    Menu::with_items(app, &item_refs(&items))
 }
 
-/// The interface language the tray labels itself in.
-///
-/// Read straight from the shared `AppConfig` rather than from a command, so a
-/// tray rebuild triggered off the main thread never has to wait on the runtime.
-fn current_interface_language<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> String {
-    app.try_state::<AppState>()
-        .and_then(|state| {
-            state
-                .config()
-                .read()
-                .ok()
-                .map(|config| config.ui_item.current_language.clone())
+fn native_items<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    entries: &[TrayEntry],
+) -> tauri::Result<Vec<Box<dyn IsMenuItem<R>>>> {
+    entries
+        .iter()
+        .map(|entry| -> tauri::Result<Box<dyn IsMenuItem<R>>> {
+            Ok(match entry {
+                TrayEntry::Item { id, label, enabled } => Box::new(MenuItem::with_id(
+                    app,
+                    id.encode(),
+                    label,
+                    *enabled,
+                    None::<&str>,
+                )?),
+                TrayEntry::Check { id, label, checked } => Box::new(CheckMenuItem::with_id(
+                    app,
+                    id.encode(),
+                    label,
+                    true,
+                    *checked,
+                    None::<&str>,
+                )?),
+                TrayEntry::Separator => Box::new(PredefinedMenuItem::separator(app)?),
+                TrayEntry::Submenu { label, entries } => {
+                    let children = native_items(app, entries)?;
+                    Box::new(Submenu::with_items(
+                        app,
+                        label,
+                        true,
+                        &item_refs(&children),
+                    )?)
+                }
+            })
         })
-        .unwrap_or_default()
+        .collect()
 }
 
-fn show_main_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        if let Err(error) = window.show() {
-            tracing::warn!(?error, "failed to show main window from tray");
-        }
-
-        if let Err(error) = window.set_focus() {
-            tracing::warn!(?error, "failed to focus main window from tray");
-        }
-    }
+fn item_refs<R: tauri::Runtime>(items: &[Box<dyn IsMenuItem<R>>]) -> Vec<&dyn IsMenuItem<R>> {
+    items.iter().map(|item| &**item).collect()
 }
 
-fn hide_main_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        if let Err(error) = window.hide() {
-            tracing::warn!(?error, "failed to hide main window from tray");
+fn handle_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str) {
+    let Some(item) = TrayItemId::parse(id) else {
+        return;
+    };
+    match item {
+        TrayItemId::Show => residency::show_main_window(app),
+        TrayItemId::Hide => residency::hide_main_window(app),
+        // `exit` raises ExitRequested and Exit, which is where the teardown
+        // runs; calling it here as well would only repeat it.
+        TrayItemId::Quit => app.exit(0),
+        TrayItemId::AllNodes => {
+            residency::show_main_window(app);
+            if let Err(error) = AppEvent::SelectTab(ShellTabTarget::Profiles).emit(app) {
+                tracing::warn!(?error, "failed to open the node list from the tray");
+            }
+        }
+        action => {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                match action {
+                    TrayItemId::Connect => commands::tray_connect(&app).await,
+                    TrayItemId::Disconnect => commands::tray_disconnect(&app).await,
+                    TrayItemId::TrafficMode(mode) => {
+                        commands::tray_set_traffic_mode(&app, mode).await;
+                    }
+                    TrayItemId::Node(id) => commands::tray_activate_node(&app, id).await,
+                    _ => {}
+                }
+                // A native check item toggles itself when clicked; the rebuild
+                // puts it back in line with what actually happened.
+                if let Err(error) = refresh_tray_menu(&app) {
+                    tracing::warn!(?error, "failed to queue a tray menu refresh");
+                }
+            });
         }
     }
 }
