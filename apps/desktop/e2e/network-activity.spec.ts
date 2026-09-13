@@ -322,6 +322,10 @@ test("disconnected state, in-place connection, ended details and explicit stale 
   await page
     .getByRole("menuitem", { name: "Disconnect all connections" })
     .click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Disconnect all" })
+    .click();
   await expect(region.getByText("No active connections")).toBeVisible();
 });
 

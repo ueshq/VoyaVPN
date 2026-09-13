@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@voya/ui/components/button";
 import {
   Dialog,
@@ -10,8 +11,11 @@ import {
   DialogTitle,
 } from "@voya/ui/components/dialog";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { connectionBytes } from "./connection-display";
+import { listRoutings } from "@/ipc/commands";
 import type { ProxyConnectionItem } from "@/ipc/bindings";
+import { queryKeys } from "@/ipc/query-keys";
+import { connectionBytes } from "./connection-display";
+import { connectionRuleText } from "./connection-rule";
 
 export function ConnectionDetails({
   connection,
@@ -34,6 +38,13 @@ export function ConnectionDetails({
 }) {
   const { t, language } = useI18n();
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const routingsQuery = useQuery({
+    enabled: connection !== null,
+    queryFn: listRoutings,
+    queryKey: queryKeys.routings,
+  });
+  const activeRules =
+    routingsQuery.data?.find((routing) => routing.isActive)?.rules ?? null;
   const date = connection?.start ? new Date(connection.start) : null;
   const startedAt =
     date && Number.isFinite(date.getTime())
@@ -53,10 +64,7 @@ export function ConnectionDetails({
             .join(" / "),
         ],
         [t("activity.startedAt"), startedAt],
-        [
-          t("activity.rule"),
-          [connection.rule, connection.rulePayload].filter(Boolean).join(" · "),
-        ],
+        [t("activity.rule"), connectionRuleText(connection, activeRules, t)],
         [t("activity.proxyChain"), connection.chains.join(" → ")],
         [t("sidebar.upload"), connectionBytes(connection.upload)],
         [t("sidebar.download"), connectionBytes(connection.download)],

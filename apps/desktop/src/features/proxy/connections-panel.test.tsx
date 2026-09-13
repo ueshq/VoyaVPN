@@ -5,13 +5,17 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createAppQueryClient } from "@/components/app-shell/query-client";
-import type { ProxyConnectionItem, ProxyConnectionsSnapshot, RuntimeStatusResponse } from "@/ipc/bindings";
+import type { ProxyConnectionItem, ProxyConnectionsSnapshot, Routing_Serialize, RuntimeStatusResponse } from "@/ipc/bindings";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
 import { ConnectionsPanel } from "./connections-panel";
 
-const ipc = vi.hoisted(() => ({ proxyCloseConnection: vi.fn(), proxyListConnections: vi.fn() }));
+const ipc = vi.hoisted(() => ({
+  listRoutings: vi.fn(async (): Promise<Routing_Serialize[]> => []),
+  proxyCloseConnection: vi.fn(),
+  proxyListConnections: vi.fn(),
+}));
 vi.mock("@/ipc/commands", () => ipc);
 const core: RuntimeStatusResponse = {
   state: "connected",
@@ -50,6 +54,10 @@ function hosts() {
 async function more(action: string) {
   await userEvent.click(screen.getByRole("menuitem", { name: "More" }));
   await userEvent.click(await screen.findByRole("menuitem", { name: action }));
+}
+async function disconnectAll() {
+  await more("Disconnect all connections");
+  await userEvent.click(await screen.findByRole("button", { name: "Disconnect all" }));
 }
 beforeEach(() => {
   ipc.proxyListConnections
@@ -173,9 +181,61 @@ describe("ConnectionsPanel", () => {
     await waitFor(() => expect(ipc.proxyCloseConnection).toHaveBeenCalledWith("conn-0"));
     expect(await screen.findByText("Ended")).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
-    await more("Disconnect all connections");
+    await disconnectAll();
     await waitFor(() => expect(ipc.proxyCloseConnection).toHaveBeenLastCalledWith(null));
     expect(await screen.findByText("No active connections")).toBeInTheDocument();
+  });
+
+  it("asks before disconnecting everything and disconnects one row in place", async () => {
+    seed([connection(0), connection(1)]);
+    ipc.proxyCloseConnection.mockResolvedValueOnce(snapshot([connection(1)]));
+    renderConnections();
+    await more("Disconnect all connections");
+    const confirm = await screen.findByRole("alertdialog");
+    expect(confirm).toHaveTextContent("2 connections will close");
+    await userEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    expect(ipc.proxyCloseConnection).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Disconnect host-0.example.test" }));
+    await waitFor(() => expect(ipc.proxyCloseConnection).toHaveBeenCalledWith("conn-0"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(await screen.findByText("host-1.example.test")).toBeInTheDocument();
+  });
+
+  it("names the matched rule the way the Rules page does", async () => {
+    ipc.listRoutings.mockResolvedValue([
+      {
+        enabled: true,
+        icon: "",
+        id: "routing-1",
+        isActive: true,
+        locked: false,
+        remarks: "Active",
+        rules: [
+          {
+            domain: ["domain:example.test"],
+            enabled: true,
+            id: "rule-1",
+            inboundTags: null,
+            ip: null,
+            kind: null,
+            network: null,
+            outbound: "direct",
+            port: null,
+            process: null,
+            protocol: null,
+            remarks: "Work sites",
+            scope: "routing",
+          },
+        ],
+        singboxDomainStrategy: "",
+        singboxRulesetPath: "",
+        sort: 0,
+      },
+    ]);
+    seed([connection(0, { rule: "domain_suffix=[example.test] => route(direct)", rulePayload: "" })]);
+    renderConnections();
+    await userEvent.click(screen.getByTestId("connection-row"));
+    expect(await within(screen.getByRole("dialog")).findByText(/Work sites/)).toBeInTheDocument();
   });
 
   it.each(["single", "all"])("reports %s disconnect failures and preserves data", async (mode) => {
@@ -185,7 +245,7 @@ describe("ConnectionsPanel", () => {
     if (mode === "single") {
       await userEvent.click(screen.getByTestId("connection-row"));
       await userEvent.click(screen.getByRole("button", { name: "Disconnect this connection" }));
-    } else await more("Disconnect all connections");
+    } else await disconnectAll();
     await waitFor(() =>
       expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
         description: "operation failed",

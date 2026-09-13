@@ -38,7 +38,10 @@
     "resetRoutingRulesTitle": "恢复默认规则？",
     "resetRoutingRulesDescription": "所有规则（包括你添加的规则）将替换为默认规则，分应用代理设置会保留。",
     "resetRoutingRulesConfirm": "恢复",
-    "deleteActiveProfileHint": "其中包含正在使用的节点，删除后连接会断开。"
+    "deleteActiveProfileHint": "其中包含正在使用的节点，删除后连接会断开。",
+    "disconnectAllTitle": "断开全部连接？",
+    "disconnectAllDescription": "将断开 {{count}} 个连接，正在进行的下载、通话等会中断。",
+    "disconnectAllConfirm": "全部断开"
   },
   "coreFlowReason": {
     "connect": "连接",
@@ -914,7 +917,9 @@
     "updateFailed": "暂时无法更新连接",
     "previousData": "显示上次数据",
     "connectionCount": "{{count}} 个连接",
-    "filteredConnections": "{{count}} / {{total}} 个连接"
+    "filteredConnections": "{{count}} / {{total}} 个连接",
+    "disconnectRow": "断开 {{target}}",
+    "ruleFinal": "未匹配任何规则（默认出站）"
   },
   "nodeGroups": {
     "local": "本地节点",

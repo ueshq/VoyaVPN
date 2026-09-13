@@ -4,6 +4,17 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Activity, ArrowDown, ArrowUp, Ellipsis, Inbox, LoaderCircle, RefreshCw, Search, Unplug } from "lucide-react";
 
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@voya/ui/components/alert-dialog";
+import { buttonVariants } from "@voya/ui/components/button-variants";
+import {
   dataTableHeader,
   dataTableRowEven,
   dataTableRowHover,
@@ -35,6 +46,8 @@ import { connectionBytes, connectionKey } from "./connection-display";
 type SortColumn = "host" | "process" | "traffic";
 type Selection = { connection: ProxyConnectionItem; ended: boolean };
 const GRID = "grid grid-cols-[minmax(0,1fr)_minmax(0,0.6fr)_8rem] gap-4";
+// Room at the end of every row for its own disconnect button.
+const ACTION_SLOT = "w-8 shrink-0";
 const ROW_HEIGHT = 56;
 const emptySnapshot: ProxyConnectionsSnapshot = { connections: [], downloadTotal: null, uploadTotal: null };
 
@@ -53,6 +66,7 @@ export function ConnectionsPanel({
   const setProxyConnections = useRuntimeEventStore((state) => state.setProxyConnections);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [sort, setSort] = useState<{ column: SortColumn; ascending: boolean } | null>(null);
+  const [confirmingDisconnectAll, setConfirmingDisconnectAll] = useState(false);
   const returnFocusRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -220,7 +234,7 @@ export function ConnectionsPanel({
                   <MenubarItem
                     variant="destructive"
                     disabled={!snapshot.connections.length || closeMutation.isPending}
-                    onSelect={() => closeMutation.mutate(null)}
+                    onSelect={() => setConfirmingDisconnectAll(true)}
                   >
                     <Unplug className="size-4" aria-hidden="true" />
                     {t("activity.disconnectAll")}
@@ -253,7 +267,8 @@ export function ConnectionsPanel({
             ref={viewportRef}
             data-testid="connections-viewport"
           >
-            <div className={cn(GRID, "sticky top-0 z-10 px-4 py-2", dataTableHeader)}>
+            <div className={cn("sticky top-0 z-10 flex items-center gap-2 pe-2", dataTableHeader)}>
+              <div className={cn(GRID, "min-w-0 flex-1 px-4 py-2")}>
               {headings.map(({ column, label }) => (
                 <button
                   key={column}
@@ -271,6 +286,8 @@ export function ConnectionsPanel({
                   ) : null}
                 </button>
               ))}
+              </div>
+              <span aria-hidden="true" className={ACTION_SLOT} />
             </div>
             {!hasSnapshot && !updateFailed ? (
               <div aria-label={t("status.loadingScreen")} role="status">
@@ -287,18 +304,25 @@ export function ConnectionsPanel({
                 {renderedRows.map(({ index, start }) => {
                   const connection = rows[index];
                   if (!connection) return null;
+                  const connectionId = connection.id;
+                  const target = connection.host || connection.destination || "—";
                   return (
-                    <button
-                      type="button"
+                    <div
                       key={connectionKey(connection)}
-                      data-testid="connection-row"
                       className={cn(
-                        GRID,
-                        "absolute inset-x-0 top-0 h-14 items-center px-4 text-start text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                        "group absolute inset-x-0 top-0 flex h-14 items-center gap-2 pe-2",
                         index % 2 === 0 ? dataTableRowEven : dataTableRowOdd,
                         dataTableRowHover,
                       )}
                       style={{ transform: `translateY(${start}px)` }}
+                    >
+                    <button
+                      type="button"
+                      data-testid="connection-row"
+                      className={cn(
+                        GRID,
+                        "h-full min-w-0 flex-1 items-center px-4 text-start text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                      )}
                       onClick={(event) => {
                         returnFocusRef.current = event.currentTarget;
                         setSelection({ connection, ended: false });
@@ -319,6 +343,23 @@ export function ConnectionsPanel({
                         </span>
                       </span>
                     </button>
+                    <span className={ACTION_SLOT}>
+                      {connectionId ? (
+                        <Button
+                          aria-label={t("activity.disconnectRow", { target })}
+                          className="size-8 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                          disabled={closeMutation.isPending}
+                          onClick={() => closeMutation.mutate(connectionId)}
+                          size="icon"
+                          title={t("activity.disconnectRow", { target })}
+                          type="button"
+                          variant="ghost"
+                        >
+                          <Unplug aria-hidden="true" className="size-4" />
+                        </Button>
+                      ) : null}
+                    </span>
+                    </div>
                   );
                 })}
               </div>
@@ -353,6 +394,25 @@ export function ConnectionsPanel({
           ) : null}
         </>
       )}
+      <AlertDialog open={confirmingDisconnectAll} onOpenChange={setConfirmingDisconnectAll}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("confirm.disconnectAllTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("confirm.disconnectAllDescription", { count: snapshot.connections.length })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: "destructive" })}
+              onClick={() => closeMutation.mutate(null)}
+            >
+              {t("confirm.disconnectAllConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <ConnectionDetails
         connection={selection?.connection ?? null}
         ended={selection?.ended ?? false}

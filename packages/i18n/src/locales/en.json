@@ -38,7 +38,10 @@
     "resetRoutingRulesTitle": "Restore default rules?",
     "resetRoutingRulesDescription": "Every rule, including the ones you added, will be replaced with the default set. The per-app proxy setting is kept.",
     "resetRoutingRulesConfirm": "Restore",
-    "deleteActiveProfileHint": "The node in use is among them; deleting it stops the connection."
+    "deleteActiveProfileHint": "The node in use is among them; deleting it stops the connection.",
+    "disconnectAllTitle": "Disconnect all connections?",
+    "disconnectAllDescription": "{{count}} connections will close. Downloads, calls and other transfers in progress are interrupted.",
+    "disconnectAllConfirm": "Disconnect all"
   },
   "coreFlowReason": {
     "connect": "Connection",
@@ -914,7 +917,9 @@
     "updateFailed": "Unable to update connections right now",
     "previousData": "Showing previous data",
     "connectionCount": "{{count}} connections",
-    "filteredConnections": "{{count}} of {{total}} connections"
+    "filteredConnections": "{{count}} of {{total}} connections",
+    "disconnectRow": "Disconnect {{target}}",
+    "ruleFinal": "No rule matched (default route)"
   },
   "nodeGroups": {
     "local": "Local nodes",

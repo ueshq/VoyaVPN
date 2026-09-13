@@ -38,7 +38,10 @@
     "resetRoutingRulesTitle": "還原預設規則？",
     "resetRoutingRulesDescription": "所有規則（包括你新增的規則）將替換為預設規則，分應用代理設定會保留。",
     "resetRoutingRulesConfirm": "還原",
-    "deleteActiveProfileHint": "其中包含正在使用的節點，刪除後連線會中斷。"
+    "deleteActiveProfileHint": "其中包含正在使用的節點，刪除後連線會中斷。",
+    "disconnectAllTitle": "中斷全部連線？",
+    "disconnectAllDescription": "將中斷 {{count}} 個連線，正在進行的下載、通話等會中斷。",
+    "disconnectAllConfirm": "全部中斷"
   },
   "coreFlowReason": {
     "connect": "連線",
@@ -914,7 +917,9 @@
     "updateFailed": "暫時無法更新連線",
     "previousData": "顯示上次資料",
     "connectionCount": "{{count}} 個連線",
-    "filteredConnections": "{{count}} / {{total}} 個連線"
+    "filteredConnections": "{{count}} / {{total}} 個連線",
+    "disconnectRow": "中斷 {{target}}",
+    "ruleFinal": "未符合任何規則（預設出站）"
   },
   "nodeGroups": {
     "local": "本地節點",
