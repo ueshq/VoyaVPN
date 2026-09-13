@@ -28,6 +28,8 @@ const TUN_ICMP_ROUTING = ["rule", "direct", "unreachable", "drop", "reply"];
 // keeps the control honest about what the core will actually use.
 const DEFAULT_TUN_STACK = "gvisor";
 const DEFAULT_TUN_ICMP_ROUTING = "rule";
+// The mixed port a fresh install uses; restored when the field is cleared.
+const DEFAULT_LOCAL_PORT = 10_808;
 
 export function NetworkTab({
   controller,
@@ -44,6 +46,19 @@ export function NetworkTab({
     (state) => state.tun?.enabled ?? false,
   );
 
+  const inbound = settings.network.inbounds[0];
+  const patchInbound = (
+    patch: Partial<(typeof settings.network.inbounds)[number]>,
+  ) =>
+    update((current) => ({
+      ...current,
+      network: {
+        ...current.network,
+        inbounds: current.network.inbounds.map((item, index) =>
+          index === 0 ? { ...item, ...patch } : item,
+        ),
+      },
+    }));
   const patchTun = (patch: Partial<typeof settings.network.tun>) =>
     update((current) => ({
       ...current,
@@ -65,6 +80,91 @@ export function NetworkTab({
 
   return (
     <div className="grid gap-4">
+      {inbound ? (
+        <SettingsGroup title={t("settings.sections.localProxy")}>
+          <NumberField
+            description={t("settings.network.localPortHint", {
+              lan: inbound.localPort + 2,
+              second: inbound.localPort + 1,
+            })}
+            field="network.inbounds.0.localPort"
+            id="rt-inbound-port"
+            label={t("settings.network.localPort")}
+            onChange={(localPort) =>
+              patchInbound({ localPort: localPort ?? DEFAULT_LOCAL_PORT })
+            }
+            value={inbound.localPort}
+          />
+          <div className="grid gap-3 @min-[42rem]:grid-cols-2">
+            <SettingsCheckbox
+              checked={inbound.sniffingEnabled}
+              description={t("settings.network.sniffingHint")}
+              field="network.inbounds.0.sniffingEnabled"
+              label={t("settings.network.sniffing")}
+              onCheckedChange={(sniffingEnabled) =>
+                patchInbound({ sniffingEnabled: sniffingEnabled === true })
+              }
+            />
+            <SettingsCheckbox
+              checked={inbound.secondaryPortEnabled}
+              description={t("settings.network.secondPortHint", {
+                port: inbound.localPort + 1,
+              })}
+              field="network.inbounds.0.secondaryPortEnabled"
+              label={t("settings.network.secondPort")}
+              onCheckedChange={(secondaryPortEnabled) =>
+                patchInbound({
+                  secondaryPortEnabled: secondaryPortEnabled === true,
+                })
+              }
+            />
+            <SettingsCheckbox
+              checked={inbound.lanConnectionsAllowed}
+              description={t("settings.network.allowLanHint")}
+              field="network.inbounds.0.lanConnectionsAllowed"
+              label={t("settings.network.allowLan")}
+              onCheckedChange={(lanConnectionsAllowed) =>
+                patchInbound({
+                  lanConnectionsAllowed: lanConnectionsAllowed === true,
+                })
+              }
+            />
+            {inbound.lanConnectionsAllowed ? (
+              <SettingsCheckbox
+                checked={inbound.separateLanPort}
+                description={t("settings.network.separateLanPortHint", {
+                  port: inbound.localPort + 2,
+                })}
+                field="network.inbounds.0.separateLanPort"
+                label={t("settings.network.separateLanPort")}
+                onCheckedChange={(separateLanPort) =>
+                  patchInbound({ separateLanPort: separateLanPort === true })
+                }
+              />
+            ) : null}
+          </div>
+          {inbound.lanConnectionsAllowed && inbound.separateLanPort ? (
+            <>
+              <TextField
+                field="network.inbounds.0.username"
+                id="rt-inbound-username"
+                label={t("settings.network.lanUsername")}
+                onChange={(username) => patchInbound({ username })}
+                value={inbound.username}
+              />
+              <TextField
+                field="network.inbounds.0.password"
+                id="rt-inbound-password"
+                label={t("settings.network.lanPassword")}
+                onChange={(password) => patchInbound({ password })}
+                type="password"
+                value={inbound.password}
+              />
+            </>
+          ) : null}
+        </SettingsGroup>
+      ) : null}
+
       <SettingsGroup
         title={t("settings.sections.tun")}
         actions={<TunDiagnosticsButton />}
@@ -87,7 +187,7 @@ export function NetworkTab({
             }
           />
           <SettingsCheckbox
-            field="network.tun.ipv"
+            field="network.tun.ipv6Enabled"
             checked={settings.network.tun.ipv6Enabled}
             label={t("settings.network.enableIpv6Address")}
             onCheckedChange={(ipv6Enabled) =>

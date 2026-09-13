@@ -592,7 +592,19 @@
       "tunAutoRoute": "自动路由",
       "tunStack": "协议栈",
       "tunStrictRoute": "严格路由",
-      "manualProxySetup": "手动代理配置"
+      "manualProxySetup": "手动代理配置",
+      "localPort": "混合端口",
+      "localPortHint": "127.0.0.1 上的 HTTP 与 SOCKS 端口。第二端口为 {{second}}，局域网端口为 {{lan}}。",
+      "sniffing": "流量嗅探",
+      "sniffingHint": "从 TLS 与 HTTP 流量中识别域名，使域名规则生效。",
+      "secondPort": "第二本地端口",
+      "secondPortHint": "同时监听 127.0.0.1:{{port}}。",
+      "allowLan": "允许来自局域网的连接",
+      "allowLanHint": "局域网内的其他设备可以使用此代理。未启用独立局域网端口时无需密码。",
+      "separateLanPort": "独立局域网端口",
+      "separateLanPortHint": "局域网设备连接端口 {{port}}，可要求用户名和密码。",
+      "lanUsername": "局域网用户名",
+      "lanPassword": "局域网密码"
     },
     "perAppProxy": "分应用代理",
     "startup": "启动",
@@ -622,7 +634,8 @@
       "dnsBehavior": "DNS 解析行为",
       "dnsServers": "DNS 服务器与策略",
       "dnsHosts": "Hosts 与预期 IP",
-      "resources": "规则资源"
+      "resources": "规则资源",
+      "localProxy": "本地代理"
     },
     "apply": {
       "reconnect": "应用并重新连接",
@@ -764,7 +777,10 @@
     "unsupportedShadowsocksNetwork": "sing-box 不支持在 {{network}} 上使用 Shadowsocks",
     "subscriptionReadOnly": "订阅节点不可手动修改，请更新或编辑订阅源。",
     "integer": "请输入整数",
-    "fragmentFallbackDelayOutOfRange": "TLS 分片回退延迟必须在 {{min}} 到 {{max}} 毫秒之间"
+    "fragmentFallbackDelayOutOfRange": "TLS 分片回退延迟必须在 {{min}} 到 {{max}} 毫秒之间",
+    "inboundPortOutOfRange": "本地代理端口必须在 {{min}} 到 {{max}} 之间",
+    "inboundCredentialsIncomplete": "请同时填写用户名和密码，或都留空",
+    "inboundRequired": "必须保留一个本地代理入站"
   },
   "window": {
     "close": "关闭",

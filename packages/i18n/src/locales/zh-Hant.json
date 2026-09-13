@@ -592,7 +592,19 @@
       "tunAutoRoute": "自動路由",
       "tunStack": "協定堆疊",
       "tunStrictRoute": "嚴格路由",
-      "manualProxySetup": "手動代理設定"
+      "manualProxySetup": "手動代理設定",
+      "localPort": "混合連接埠",
+      "localPortHint": "127.0.0.1 上的 HTTP 與 SOCKS 連接埠。第二連接埠為 {{second}}，區域網路連接埠為 {{lan}}。",
+      "sniffing": "流量嗅探",
+      "sniffingHint": "從 TLS 與 HTTP 流量中識別網域，使網域規則生效。",
+      "secondPort": "第二本機連接埠",
+      "secondPortHint": "同時監聽 127.0.0.1:{{port}}。",
+      "allowLan": "允許來自區域網路的連線",
+      "allowLanHint": "區域網路內的其他裝置可以使用此代理。未啟用獨立區域網路連接埠時無需密碼。",
+      "separateLanPort": "獨立區域網路連接埠",
+      "separateLanPortHint": "區域網路裝置連線至連接埠 {{port}}，可要求使用者名稱和密碼。",
+      "lanUsername": "區域網路使用者名稱",
+      "lanPassword": "區域網路密碼"
     },
     "perAppProxy": "分應用代理",
     "startup": "啟動",
@@ -622,7 +634,8 @@
       "dnsBehavior": "DNS 解析行為",
       "dnsServers": "DNS 伺服器與策略",
       "dnsHosts": "Hosts 與預期 IP",
-      "resources": "規則資源"
+      "resources": "規則資源",
+      "localProxy": "本機代理"
     },
     "apply": {
       "reconnect": "套用並重新連線",
@@ -764,7 +777,10 @@
     "unsupportedShadowsocksNetwork": "sing-box 不支援在 {{network}} 上使用 Shadowsocks",
     "subscriptionReadOnly": "訂閱節點不可手動修改，請更新或編輯訂閱來源。",
     "integer": "請輸入整數",
-    "fragmentFallbackDelayOutOfRange": "TLS 分片回退延遲必須介於 {{min}} 到 {{max}} 毫秒之間"
+    "fragmentFallbackDelayOutOfRange": "TLS 分片回退延遲必須介於 {{min}} 到 {{max}} 毫秒之間",
+    "inboundPortOutOfRange": "本機代理連接埠必須介於 {{min}} 到 {{max}} 之間",
+    "inboundCredentialsIncomplete": "請同時填寫使用者名稱和密碼，或都留空",
+    "inboundRequired": "必須保留一個本機代理入站"
   },
   "window": {
     "close": "關閉",

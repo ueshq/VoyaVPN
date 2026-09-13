@@ -40,6 +40,12 @@ pub enum AppSettingsValidationError {
     InvalidHysteriaHopInterval,
     #[error("TLS fragment fallback delay must be between 1 and 10000 ms")]
     InvalidFragmentFallbackDelay,
+    #[error("the settings must keep one local proxy inbound")]
+    InboundRequired,
+    #[error("local proxy port must be between 1024 and 65514")]
+    InvalidInboundPort,
+    #[error("LAN authentication needs both a username and a password")]
+    IncompleteInboundCredentials,
 }
 
 impl AppSettingsValidationError {
@@ -49,6 +55,9 @@ impl AppSettingsValidationError {
         match self {
             Self::UnsupportedSchema { .. } => "schemaVersion",
             Self::InvalidFragmentFallbackDelay => "core.fragmentFallbackDelayMs",
+            Self::InboundRequired => "network.inbounds",
+            Self::InvalidInboundPort => "network.inbounds.0.localPort",
+            Self::IncompleteInboundCredentials => "network.inbounds.0.password",
             Self::InvalidText { field, .. } | Self::NegativeHysteriaBandwidth { field } => field,
             Self::InvalidTunMtu => "network.tun.mtu",
             Self::InvalidHysteriaHopInterval => "hysteria.hopIntervalSeconds",
@@ -83,6 +92,14 @@ impl AppSettingsValidationError {
                     max: FRAGMENT_FALLBACK_DELAY_RANGE_MS.1,
                 }
             }
+            Self::InboundRequired => contracts::ValidationCode::InboundRequired,
+            Self::InvalidInboundPort => contracts::ValidationCode::InboundPortOutOfRange {
+                min: INBOUND_PORT_RANGE.0,
+                max: INBOUND_PORT_RANGE.1,
+            },
+            Self::IncompleteInboundCredentials => {
+                contracts::ValidationCode::InboundCredentialsIncomplete
+            }
             Self::InvalidHysteriaHopInterval => {
                 contracts::ValidationCode::HysteriaHopIntervalTooShort {
                     minimum_seconds: MIN_HYSTERIA_HOP_INTERVAL_SECONDS,
@@ -97,6 +114,10 @@ impl AppSettingsValidationError {
 const TUN_MTU_RANGE: (u32, u32) = (576, 65_535);
 const MIN_HYSTERIA_HOP_INTERVAL_SECONDS: u32 = 5;
 const FRAGMENT_FALLBACK_DELAY_RANGE_MS: (u32, u32) = (1, 10_000);
+/// Accepted mixed port. Every other local port is derived from it, the highest
+/// being the speedtest probes at `+21`, so the ceiling keeps all of them valid.
+const INBOUND_PORT_RANGE: (u32, u32) = (1024, 65_514);
+const INBOUND_CREDENTIAL_MAX_CHARS: usize = 256;
 
 pub fn validate_app_settings(
     settings: &contracts::AppSettingsV1,
@@ -140,6 +161,48 @@ pub fn validate_app_settings(
         .contains(&settings.core.fragment_fallback_delay_ms)
     {
         return Err(AppSettingsValidationError::InvalidFragmentFallbackDelay);
+    }
+    validate_inbound(settings)?;
+    Ok(())
+}
+
+fn validate_inbound(settings: &contracts::AppSettingsV1) -> Result<(), AppSettingsValidationError> {
+    let Some(inbound) = settings.network.inbounds.first() else {
+        return Err(AppSettingsValidationError::InboundRequired);
+    };
+    if !(i32::try_from(INBOUND_PORT_RANGE.0).unwrap_or(i32::MAX)
+        ..=i32::try_from(INBOUND_PORT_RANGE.1).unwrap_or(i32::MAX))
+        .contains(&inbound.local_port)
+    {
+        return Err(AppSettingsValidationError::InvalidInboundPort);
+    }
+    for (field, label, value) in [
+        (
+            "network.inbounds.0.username",
+            "LAN username",
+            &inbound.username,
+        ),
+        (
+            "network.inbounds.0.password",
+            "LAN password",
+            &inbound.password,
+        ),
+    ] {
+        input_safety::validate_text(value, INBOUND_CREDENTIAL_MAX_CHARS).map_err(|error| {
+            AppSettingsValidationError::InvalidText {
+                field,
+                label,
+                reason: input_safety_reason(error),
+            }
+        })?;
+    }
+    // Credentials only guard the separate LAN inbound, and sing-box needs both
+    // halves: a lone username would silently leave that port open.
+    if inbound.lan_connections_allowed
+        && inbound.separate_lan_port
+        && inbound.username.trim().is_empty() != inbound.password.trim().is_empty()
+    {
+        return Err(AppSettingsValidationError::IncompleteInboundCredentials);
     }
     Ok(())
 }
@@ -698,6 +761,12 @@ mod tests {
             validate_app_settings(&settings),
             Err(AppSettingsValidationError::InvalidTunMtu)
         );
+
+        settings.network.tun.mtu = 1500;
+        for (port, accepted) in [(1023, false), (1024, true), (65_514, true), (65_515, false)] {
+            settings.network.inbounds[0].local_port = port;
+            assert_eq!(validate_app_settings(&settings).is_ok(), accepted, "{port}");
+        }
     }
 
     #[test]
@@ -760,7 +829,7 @@ mod tests {
     /// message uses, which no form can key off.
     #[test]
     fn every_settings_rejection_names_the_contract_path_it_is_about() {
-        let cases: [(contracts::AppSettingsV1, &str); 6] = [
+        let cases: [(contracts::AppSettingsV1, &str); 10] = [
             (
                 contracts::AppSettingsV1 {
                     schema_version: contracts::CURRENT_SCHEMA_VERSION + 1,
@@ -787,6 +856,29 @@ mod tests {
             (
                 settings_with(|settings| settings.core.fragment_fallback_delay_ms = 0),
                 "core.fragmentFallbackDelayMs",
+            ),
+            (
+                settings_with(|settings| settings.network.inbounds.clear()),
+                "network.inbounds",
+            ),
+            (
+                settings_with(|settings| settings.network.inbounds[0].local_port = 80),
+                "network.inbounds.0.localPort",
+            ),
+            (
+                settings_with(|settings| {
+                    let inbound = &mut settings.network.inbounds[0];
+                    inbound.lan_connections_allowed = true;
+                    inbound.separate_lan_port = true;
+                    inbound.username = "guest".to_string();
+                }),
+                "network.inbounds.0.password",
+            ),
+            (
+                settings_with(|settings| {
+                    settings.network.inbounds[0].username = "guest\u{7}".to_string();
+                }),
+                "network.inbounds.0.username",
             ),
         ];
 

@@ -150,8 +150,29 @@ describe("semantic settings tabs", () => {
     }
 
     expect(container.querySelector("#rt-tun-mtu")).toHaveValue("1500");
+    expect(container.querySelector("#rt-inbound-port")).toHaveValue("1500");
     expect(container.querySelector("#rt-sysproxy-exceptions")).toHaveValue(
       " value ",
+    );
+  });
+
+  it("reveals LAN credentials only behind a separate LAN port", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<TabHarness Component={NetworkTab} />);
+
+    expect(
+      screen.queryByRole("checkbox", { name: "Separate LAN port" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Allow connections from the LAN" }),
+    );
+    expect(container.querySelector("#rt-inbound-password")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Separate LAN port" }));
+
+    expect(container.querySelector("#rt-inbound-username")).toBeInTheDocument();
+    expect(container.querySelector("#rt-inbound-password")).toHaveAttribute(
+      "type",
+      "password",
     );
   });
 

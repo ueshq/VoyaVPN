@@ -592,7 +592,19 @@
       "tunAutoRoute": "Auto Route",
       "tunStack": "Stack",
       "tunStrictRoute": "Strict Route",
-      "manualProxySetup": "Manual proxy setup"
+      "manualProxySetup": "Manual proxy setup",
+      "localPort": "Mixed port",
+      "localPortHint": "HTTP and SOCKS on 127.0.0.1. The second port is {{second}} and the LAN port is {{lan}}.",
+      "sniffing": "Sniff traffic",
+      "sniffingHint": "Recovers domain names from TLS and HTTP traffic so domain rules match.",
+      "secondPort": "Second local port",
+      "secondPortHint": "Also listens on 127.0.0.1:{{port}}.",
+      "allowLan": "Allow connections from the LAN",
+      "allowLanHint": "Other devices on your network can use this proxy. Without a separate LAN port it accepts them without a password.",
+      "separateLanPort": "Separate LAN port",
+      "separateLanPortHint": "LAN devices connect to port {{port}}, which can require a username and password.",
+      "lanUsername": "LAN username",
+      "lanPassword": "LAN password"
     },
     "perAppProxy": "Per-app proxy",
     "startup": "Startup",
@@ -622,7 +634,8 @@
       "dnsBehavior": "DNS behavior",
       "dnsServers": "DNS servers and strategies",
       "dnsHosts": "Hosts and expected IPs",
-      "resources": "Rule resources"
+      "resources": "Rule resources",
+      "localProxy": "Local proxy"
     },
     "apply": {
       "reconnect": "Apply and reconnect",
@@ -764,7 +777,10 @@
     "unsupportedShadowsocksNetwork": "sing-box does not support Shadowsocks over {{network}}",
     "subscriptionReadOnly": "Subscription nodes are read-only. Update or edit the subscription source instead.",
     "integer": "Enter a whole number",
-    "fragmentFallbackDelayOutOfRange": "The TLS fragment fallback delay must be between {{min}} and {{max}} ms"
+    "fragmentFallbackDelayOutOfRange": "The TLS fragment fallback delay must be between {{min}} and {{max}} ms",
+    "inboundPortOutOfRange": "The local proxy port must be between {{min}} and {{max}}",
+    "inboundCredentialsIncomplete": "Enter both a username and a password, or leave both empty",
+    "inboundRequired": "A local proxy inbound is required"
   },
   "window": {
     "close": "Close",

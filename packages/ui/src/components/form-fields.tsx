@@ -44,6 +44,7 @@ type FieldProps = Omit<FieldLayoutProps, "children" | "id"> & {
 type TextFieldProps = FieldProps & {
   commitOnBlur?: boolean;
   inputMode?: "numeric";
+  type?: "password" | "text";
   validate?: (value: string) => string | undefined;
   onInvalid?: (message: string, leaving: boolean) => void;
 };
@@ -53,7 +54,7 @@ function descriptionIds(id: string, description: ReactNode, error: string | unde
 }
 
 function TextInputField({
-  className, commitOnBlur = false, description, disabled, error, id, inputMode, label, layout, multiline, onChange, onInvalid, validate, value,
+  className, commitOnBlur = false, description, disabled, error, id, inputMode, label, layout, multiline, onChange, onInvalid, type, validate, value,
 }: TextFieldProps & { multiline?: boolean }) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
@@ -73,6 +74,7 @@ function TextInputField({
         id={inputId}
         inputMode={inputMode}
         onChange={(event) => input.onChange(event.target.value)}
+        type={multiline ? undefined : type}
       />
     </FieldLayout>
   );

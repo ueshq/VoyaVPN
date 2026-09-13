@@ -252,6 +252,12 @@ pub enum ValidationCode {
         min: u32,
         max: u32,
     },
+    InboundPortOutOfRange {
+        min: u32,
+        max: u32,
+    },
+    InboundCredentialsIncomplete,
+    InboundRequired,
     /// A rejection this contract has no code for. The English `message` is the
     /// failing manager's own diagnostic and is rendered verbatim.
     Untranslated {
