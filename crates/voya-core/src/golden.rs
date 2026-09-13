@@ -817,12 +817,8 @@ fn tls_settings(server_name: &str, alpn: &[&str], ech_config: Vec<String>) -> Tl
         alpn: alpn.iter().map(|value| (*value).to_string()).collect(),
         reality_public_key: None,
         reality_short_id: None,
-        reality_spider_x: None,
-        mldsa65_verify: None,
         certificate_pem: None,
-        certificate_sha256: Vec::new(),
         ech_config,
-        final_mask: None,
     }
 }
 

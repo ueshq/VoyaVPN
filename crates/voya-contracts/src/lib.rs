@@ -4,7 +4,6 @@
 //! platform, or Tauri dependencies. Contracts are strict and use one canonical
 //! camel-case representation for both serialization and deserialization.
 
-mod certificates;
 mod data;
 mod events;
 mod messages;
@@ -18,7 +17,6 @@ mod shell;
 mod speedtest;
 mod tun;
 
-pub use certificates::*;
 pub use data::*;
 pub use events::*;
 pub use messages::*;

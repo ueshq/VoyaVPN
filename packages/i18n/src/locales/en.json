@@ -243,16 +243,6 @@
       "aria": {
         "activeProfile": "Active node"
       },
-      "certFetch": {
-        "allowInsecure": "Allow insecure fetch",
-        "calculateSha": "Calculate SHA",
-        "fetchCert": "Fetch cert",
-        "fetchChain": "Fetch chain",
-        "fetched": "Fetched {{count}} certificate(s).",
-        "missingEndpoint": "Address and port are required before fetching a certificate.",
-        "missingPem": "Paste or fetch a PEM certificate before calculating SHA-256.",
-        "shaCalculated": "Calculated {{count}} SHA-256 fingerprint(s)."
-      },
       "dialog": {
         "addTitle": "Add node",
         "cancel": "Cancel",
@@ -277,11 +267,9 @@
         "allowedIps": "Allowed IPs",
         "alpn": "ALPN",
         "alterId": "Alter ID",
-        "certSha": "Cert SHA",
         "congestionControl": "Congestion control",
         "echConfigList": "ECH config list",
         "encryption": "Encryption",
-        "finalMask": "Final mask",
         "flow": "Flow",
         "grpcAuthority": "gRPC authority",
         "grpcMode": "gRPC mode",
@@ -289,11 +277,7 @@
         "host": "Host",
         "insecureConcurrency": "Insecure concurrency",
         "interfaceAddress": "Interface address",
-        "kcpHeader": "KCP header",
-        "kcpMtu": "KCP MTU",
-        "kcpSeed": "KCP seed",
         "method": "Method",
-        "mldsaVerify": "ML-DSA verify",
         "mtu": "MTU",
         "network": "Network",
         "password": "Password",
@@ -314,14 +298,11 @@
         "salamanderPassword": "Salamander password",
         "shortId": "Short ID",
         "sni": "SNI",
-        "spiderX": "Spider X",
         "tlsMode": "TLS mode",
         "udpOverTcp": "UDP over TCP",
         "username": "Username",
         "uuid": "UUID",
-        "vmessSecurity": "VMess security",
-        "xhttpExtra": "XHTTP extra JSON",
-        "xhttpMode": "XHTTP mode"
+        "vmessSecurity": "VMess security"
       },
       "import": {
         "clipboard": "Import from clipboard",
@@ -338,7 +319,12 @@
           "target": "Target: {{target}}.",
           "updated": "{{count}} updated."
         },
-        "importing": "Importing nodes…"
+        "importing": "Importing nodes…",
+        "line": {
+          "subscriptionSourceAdded": "Line {{line}} was added as a subscription source; update the subscription to import its nodes.",
+          "unsupportedTransport": "Line {{line}} was skipped: the {{transport}} transport is not supported.",
+          "parseFailed": "Line {{line}} was skipped: {{detail}}"
+        }
       },
       "importMethods": {
         "qrImage": "Scan QR image",
@@ -722,7 +708,6 @@
     "hysteriaHopIntervalTooShort": "The Hysteria hop interval must be at least {{minimumSeconds}} seconds",
     "invalid": "This value is not valid",
     "invalidAddress": "The server address is not valid",
-    "invalidFinalMask": "The final mask must be a JSON object",
     "invalidFlow": "The flow value is not supported",
     "invalidPassword": "The password or user ID is not valid",
     "invalidPort": "The port must be between 1 and 65535",
@@ -744,7 +729,6 @@
     "textTooLong": "This value is too long",
     "tooManyItems": "Too many items",
     "tunMtuOutOfRange": "The TUN MTU must be between {{min}} and {{max}}",
-    "unsupportedNetwork": "sing-box does not support the {{network}} transport",
     "unsupportedProtocol": "sing-box does not support the {{protocol}} protocol",
     "unsupportedProtocolNetwork": "sing-box does not support {{protocol}} over {{network}}",
     "unsupportedSettingsSchema": "Unsupported settings version {{found}}; this build expects {{expected}}",

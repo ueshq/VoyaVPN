@@ -51,13 +51,9 @@ const transportOptionsSchema = z
     header: optionalNullableText,
     host: optionalNullableText,
     path: optionalNullableText,
-    xhttpMode: optionalNullableText,
-    xhttpExtra: optionalNullableText,
     grpcAuthority: optionalNullableText,
     grpcServiceName: optionalNullableText,
     grpcMode: optionalNullableText,
-    kcpSeed: optionalNullableText,
-    kcpMtu: optionalNullableNumber,
   })
   .default({});
 
@@ -80,12 +76,8 @@ const commonProfileSchema = z.object({
   alpn: optionalText,
   publicKey: optionalText,
   shortId: optionalText,
-  spiderX: optionalText,
-  mldsa65Verify: optionalText,
   cert: optionalText,
-  certSha: optionalText,
   echConfigList: optionalText,
-  finalmask: optionalText,
   protocolOptions: protocolOptionsSchema,
   transportOptions: transportOptionsSchema,
 });
@@ -144,13 +136,6 @@ export function activeProfileFormValues(
       insecureConcurrency:
         values.configType === CONFIG_TYPES.Naive
           ? values.protocolOptions?.insecureConcurrency
-          : undefined,
-    },
-    transportOptions: {
-      ...values.transportOptions,
-      kcpMtu:
-        values.configType !== CONFIG_TYPES.WireGuard && values.network === "kcp"
-          ? values.transportOptions?.kcpMtu
           : undefined,
     },
   };

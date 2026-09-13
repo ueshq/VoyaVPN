@@ -67,7 +67,6 @@ fn fmt_share_round_trip_preserves_protocol_transport_and_tls_payloads() {
             Some(TlsSettings {
                 reality_public_key: Some("public-key".to_string()),
                 reality_short_id: Some("shortid".to_string()),
-                reality_spider_x: Some("/spider".to_string()),
                 ..tls(TlsMode::Reality, "reality.example")
             }),
         ),
@@ -143,7 +142,7 @@ fn fmt_shadowsocks_plugin_export_uses_the_shared_option_model() {
 #[test]
 fn fmt_share_round_trip_documents_hysteria2_lossy_exports() {
     // A hysteria2 link is not a lossless carrier: `mport` ranges are rewritten
-    // with `-` separators and only the first certificate pin has a query key.
+    // with `-` separators.
     let source = profile(
         "hy2 lossy",
         ProfileProtocol::Hysteria2 {
@@ -153,10 +152,7 @@ fn fmt_share_round_trip_documents_hysteria2_lossy_exports() {
             obfuscation_password: Some("obfs-pass".to_string()),
         },
         None,
-        Some(TlsSettings {
-            certificate_sha256: vec!["first-pin".to_string(), "second-pin".to_string()],
-            ..tls(TlsMode::Tls, "hy2.example")
-        }),
+        Some(tls(TlsMode::Tls, "hy2.example")),
     );
 
     let uri = export_share_link(&source).expect("export hysteria2 link");
@@ -170,13 +166,6 @@ fn fmt_share_round_trip_documents_hysteria2_lossy_exports() {
             port_hops: Some("1000-2000".to_string()),
             obfuscation_password: Some("obfs-pass".to_string()),
         }
-    );
-    assert_eq!(
-        parsed
-            .tls
-            .as_ref()
-            .map(|tls| tls.certificate_sha256.as_slice()),
-        Some(["first-pin".to_string()].as_slice())
     );
     // TLS-only protocols carry no `type=`, so the parser normalises the missing
     // transport into the raw default rather than leaving it unset.
@@ -252,7 +241,7 @@ fn fmt_share_export_materializes_supported_global_runtime_options() {
 }
 
 #[test]
-fn fmt_base_query_round_trips_transport_security_and_masks() {
+fn fmt_base_query_round_trips_transport_and_security() {
     let source = ProfileItem {
         remarks: "advanced vless".to_string(),
         protocol: ProfileProtocol::Vless {
@@ -261,11 +250,10 @@ fn fmt_base_query_round_trips_transport_security_and_masks() {
             flow: Some("xtls-rprx-vision".to_string()),
             encryption: Some(NONE.to_string()),
         },
-        transport: Some(ProfileTransport::Xhttp {
-            host: Some("cdn.example".to_string()),
-            path: Some("/xhttp".to_string()),
-            mode: Some("stream-one".to_string()),
-            extra: Some(r#"{"downloadSettings":{"address":"cdn2.example"}}"#.to_string()),
+        transport: Some(ProfileTransport::Grpc {
+            authority: Some("cdn.example".to_string()),
+            service_name: Some("svc".to_string()),
+            mode: Some("multi".to_string()),
         }),
         tls: Some(TlsSettings {
             mode: TlsMode::Reality,
@@ -273,51 +261,86 @@ fn fmt_base_query_round_trips_transport_security_and_masks() {
             alpn: Vec::new(),
             reality_public_key: Some("public-key".to_string()),
             reality_short_id: Some("abcd".to_string()),
-            reality_spider_x: Some("/spider".to_string()),
-            mldsa65_verify: Some("pqv-token".to_string()),
             certificate_pem: None,
-            certificate_sha256: vec!["sha256-pin".to_string()],
             ech_config: vec!["https://ech.example/config".to_string()],
-            final_mask: Some(r#"{"tcp":{"fragment":{"packets":"tlshello"}}}"#.to_string()),
         }),
         ..ProfileItem::default()
     };
 
     let uri = export_share_link(&source).expect("export advanced vless");
+    for retired in ["spx=", "pqv=", "pcs=", "fm="] {
+        assert!(
+            !uri.contains(retired),
+            "{retired} must not be exported: {uri}"
+        );
+    }
     let parsed = parse_share_link(&uri).expect("parse advanced vless");
 
     let parsed_tls = parsed.tls.as_ref().expect("TLS settings");
     assert_eq!(parsed_tls.mode, TlsMode::Reality);
-    assert_eq!(parsed_tls.mldsa65_verify.as_deref(), Some("pqv-token"));
+    assert_eq!(parsed_tls.reality_short_id.as_deref(), Some("abcd"));
     assert_eq!(
         parsed_tls.ech_config,
         vec!["https://ech.example/config".to_string()]
     );
-    assert_eq!(parsed_tls.certificate_sha256, vec!["sha256-pin"]);
-    assert!(parsed_tls
-        .final_mask
-        .as_deref()
-        .is_some_and(|value| value.contains("\"fragment\"")));
-    let Some(ProfileTransport::Xhttp { mode, extra, .. }) = parsed.transport.as_ref() else {
-        panic!("expected xhttp transport");
+    let Some(ProfileTransport::Grpc {
+        service_name, mode, ..
+    }) = parsed.transport.as_ref()
+    else {
+        panic!("expected grpc transport");
     };
-    assert_eq!(mode.as_deref(), Some("stream-one"));
-    assert!(extra
-        .as_deref()
-        .is_some_and(|value| value.contains("downloadSettings")));
+    assert_eq!(service_name.as_deref(), Some("svc"));
+    assert_eq!(mode.as_deref(), Some("multi"));
 }
 
 #[test]
 fn fmt_query_parser_preserves_values_containing_equals() {
     let parsed = parse_share_link(
-        "vless://00000000-0000-0000-0000-000000000001@example.com:443?encryption=none&type=xhttp&extra=left=right==#eq",
+        "vless://00000000-0000-0000-0000-000000000001@example.com:443?encryption=none&type=ws&path=/a=b==#eq",
     )
     .expect("parse vless with equals in query value");
 
-    let Some(ProfileTransport::Xhttp { extra, .. }) = parsed.transport else {
-        panic!("expected xhttp transport");
+    let Some(ProfileTransport::Websocket { path, .. }) = parsed.transport else {
+        panic!("expected websocket transport");
     };
-    assert_eq!(extra.as_deref(), Some("left=right=="));
+    assert_eq!(path.as_deref(), Some("/a=b=="));
+}
+
+#[test]
+fn fmt_rejects_retired_transports_in_uri_links() {
+    for transport in ["xhttp", "splithttp", "kcp", "mKCP"] {
+        for link in [
+            format!("vless://00000000-0000-0000-0000-000000000001@example.com:443?encryption=none&type={transport}#retired"),
+            format!("trojan://secret@example.com:443?security=tls&type={transport}#retired"),
+            format!("vmess://00000000-0000-0000-0000-000000000001@example.com:443?type={transport}#retired"),
+        ] {
+            assert_eq!(
+                parse_share_link(&link),
+                Err(ShareError::UnsupportedTransport {
+                    transport: transport.to_string()
+                }),
+                "{link}"
+            );
+        }
+    }
+}
+
+#[test]
+fn fmt_rejects_retired_transports_in_vmess_base64() {
+    for transport in ["xhttp", "kcp"] {
+        let payload = serde_json::json!({
+            "v": "2", "ps": "retired", "add": "example.com", "port": "443",
+            "id": "00000000-0000-0000-0000-000000000001", "net": transport,
+        })
+        .to_string();
+        let link = format!("vmess://{}", STANDARD.encode(payload));
+        assert_eq!(
+            parse_share_link(&link),
+            Err(ShareError::UnsupportedTransport {
+                transport: transport.to_string()
+            })
+        );
+    }
 }
 
 #[test]
@@ -895,10 +918,7 @@ fn sample_profiles() -> Vec<ProfileItem> {
                 obfuscation_password: Some("obfs-pass".to_string()),
             },
             None,
-            Some(TlsSettings {
-                certificate_sha256: vec!["sha-pin".to_string(), "second".to_string()],
-                ..tls(TlsMode::Tls, "hy2.example")
-            }),
+            Some(tls(TlsMode::Tls, "hy2.example")),
         ),
         profile(
             "tuic demo",
@@ -989,12 +1009,8 @@ fn tls(mode: TlsMode, server_name: &str) -> TlsSettings {
         alpn: Vec::new(),
         reality_public_key: None,
         reality_short_id: None,
-        reality_spider_x: None,
-        mldsa65_verify: None,
         certificate_pem: None,
-        certificate_sha256: Vec::new(),
         ech_config: Vec::new(),
-        final_mask: None,
     }
 }
 

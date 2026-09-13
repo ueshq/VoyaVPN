@@ -6,7 +6,7 @@ pub(super) fn parse(input: &str) -> Result<ProfileItem, ShareError> {
     if let ProfileProtocol::Trojan { password, .. } = &mut item.protocol {
         *password = parsed.user_info;
     }
-    resolve_uri_query(&parsed.query, &mut item);
+    resolve_uri_query(&parsed.query, &mut item)?;
     ensure_address_port("trojan", &item)?;
     ensure_nonempty("trojan", "password", item.password())?;
     Ok(item)

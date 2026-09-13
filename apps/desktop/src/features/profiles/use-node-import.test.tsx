@@ -16,7 +16,7 @@ function imported(ids: string[], overrides: Partial<ImportProfilesResult> = {}):
   return {
     imported: ids.length, updated: 0, skipped: 0, parsed: ids.length, filtered: 0,
     deduped: 0, failed: 0, removedExisting: 0, removedDuplicates: 0, discardedNodeOverrides: 0,
-    subscriptionId: null, importedProfileIds: ids, updatedProfileIds: [], messages: [], ...overrides,
+    subscriptionId: null, importedProfileIds: ids, updatedProfileIds: [], lineIssues: [], ...overrides,
   };
 }
 function scan(overrides: Partial<QrScanResult> = {}): QrScanResult {
@@ -71,7 +71,7 @@ describe("direct node import", () => {
       .mockResolvedValueOnce(imported(["one"]))
       .mockResolvedValueOnce(imported(["one", "two"], { updated: 1, updatedProfileIds: ["one"] }))
       .mockRejectedValueOnce(new Error("Unsupported payload"))
-      .mockResolvedValueOnce(imported(["three"], { messages: ["One line was skipped"], skipped: 1 }));
+      .mockResolvedValueOnce(imported(["three"], { lineIssues: [{ line: 1, code: { code: "parseFailed", detail: "bad link" } }], skipped: 1 }));
     const { result, onImported, operation } = setup();
     await act(() => result.current.handleDirectImport("qrScreen"));
     expect(ipc.scanScreenQr).toHaveBeenCalledOnce();
@@ -80,7 +80,7 @@ describe("direct node import", () => {
       imported: 3, updated: 0, deduped: 1, skipped: 2, failed: 1,
       importedProfileIds: ["one", "two", "three"],
     }), expect.any(Function));
-    expect(operation.setOperationError).toHaveBeenLastCalledWith("Unsupported payload\nOne line was skipped");
+    expect(operation.setOperationError).toHaveBeenLastCalledWith("Unsupported payload\nLine 1 was skipped: bad link");
   });
 
   it.each(["", "  \n "])("does not import an empty clipboard: %j", async (text) => {

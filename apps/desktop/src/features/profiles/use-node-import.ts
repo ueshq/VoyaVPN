@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { importProfilesFromText, readClipboardText, scanScreenQr } from "@/ipc/commands";
+import { importLineText } from "@/ipc/messages";
 import type { ImportProfilesResult, QrScanFailureReason } from "@/ipc/bindings";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
@@ -18,7 +19,7 @@ function emptyResult(): ImportProfilesResult {
   return {
     imported: 0, updated: 0, skipped: 0, parsed: 0, filtered: 0, deduped: 0,
     failed: 0, removedExisting: 0, removedDuplicates: 0, discardedNodeOverrides: 0,
-    subscriptionId: null, importedProfileIds: [], updatedProfileIds: [], messages: [],
+    subscriptionId: null, importedProfileIds: [], updatedProfileIds: [], lineIssues: [],
   };
 }
 
@@ -40,7 +41,7 @@ function mergeResult(total: ImportProfilesResult, next: ImportProfilesResult) {
   total.removedExisting += next.removedExisting;
   total.removedDuplicates += next.removedDuplicates;
   total.discardedNodeOverrides += next.discardedNodeOverrides;
-  total.messages.push(...next.messages.map((message) => redactOperationalError(message)));
+  total.lineIssues.push(...next.lineIssues);
 }
 
 export function useNodeImport(
@@ -85,6 +86,7 @@ export function useNodeImport(
       if (!isActive()) return;
       setDirectImportPending("import");
       const total = emptyResult();
+      const messages: string[] = [];
       // Preserve individual JSON/Base64 payload boundaries; persistence handles node identity.
       const uniquePayloads = [...new Set(payloads.map((payload) => payload.trim()).filter(Boolean))];
       if (uniquePayloads.length === 0) throw new Error(t("qr.noQrFound"));
@@ -93,13 +95,16 @@ export function useNodeImport(
         try {
           const result = await importProfilesFromText(payload, null);
           mergeResult(total, result);
+          messages.push(
+            ...result.lineIssues.map((issue) => redactOperationalError(importLineText(t, issue))),
+          );
         } catch (error) {
           total.failed += 1;
-          total.messages.push(redactOperationalError(error));
+          messages.push(redactOperationalError(error));
         }
       }
       if (!isActive()) return;
-      issues.push(...total.messages);
+      issues.push(...messages);
       try {
         await onImported(total, isActive);
       } catch (error) {

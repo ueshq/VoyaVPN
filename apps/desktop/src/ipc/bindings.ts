@@ -22,8 +22,6 @@ export const commands = {
 	scanScreenQr: () => typedError<QrScanResult, AppError>(__TAURI_INVOKE("scan_screen_qr")),
 	/**  Returns an empty string when the clipboard holds no text. */
 	readClipboardText: () => typedError<string, AppError>(__TAURI_INVOKE("read_clipboard_text")),
-	fetchCertificate: (request: CertificateFetchRequest) => typedError<CertificateFetchResult, AppError>(__TAURI_INVOKE("fetch_certificate", { request })),
-	calculateCertificateSha256: (pem: string) => typedError<string[], AppError>(__TAURI_INVOKE("calculate_certificate_sha256", { pem })),
 	/**
 	 *  Trigger the one-time native authorization dialog and, on success, install
 	 *  the passwordless elevation launcher. No admin password is stored.
@@ -200,7 +198,7 @@ export type AppErrorKind =
 /**  Which part of the app produced a failure. Diagnostic grouping only. */
 export type AppErrorSubsystem = 
 /**  The shell itself: window chrome, event emission, background tasks. */
-"app" | "autostart" | "certificate" | 
+"app" | "autostart" | 
 /**  Reading or writing the persisted application configuration. */
 "config" | "dns" | "export" | "profile" | "proxyRuntime" | "qr" | "routing" | 
 /**  Core lifecycle: config generation, supervisor, connect/disconnect. */
@@ -263,21 +261,6 @@ export type AutostartStatus = {
 
 export type BehaviorSettings = {
 	autostart: boolean,
-};
-
-export type CertificateFetchRequest = {
-	address: string,
-	port: number,
-	serverName: string | null,
-	allowInsecure: boolean,
-	includeChain: boolean,
-};
-
-export type CertificateFetchResult = {
-	pem: string,
-	sha256: string[],
-	chainCount: number,
-	warning: string | null,
 };
 
 /**
@@ -391,6 +374,21 @@ export type HysteriaSettings = {
 	hopIntervalSeconds: number,
 };
 
+/**  Why one line of imported text did not simply become a node. */
+export type ImportLineCode = 
+/**  The line was a subscription URL and was added as a source instead. */
+{ code: "subscriptionSourceAdded" } | 
+/**  The share link names a transport sing-box cannot carry. */
+{ code: "unsupportedTransport"; transport: string } | 
+/**  Any other share-link parse failure, with its untranslated diagnostic. */
+{ code: "parseFailed"; detail: string };
+
+/**  One reported line of an import, numbered from 1. */
+export type ImportLineIssue = {
+	line: number,
+	code: ImportLineCode,
+};
+
 export type ImportProfilesResult = {
 	imported: number,
 	updated: number,
@@ -405,7 +403,7 @@ export type ImportProfilesResult = {
 	subscriptionId: string | null,
 	importedProfileIds: string[],
 	updatedProfileIds: string[],
-	messages: string[],
+	lineIssues: ImportLineIssue[],
 };
 
 export type InboundSettings = {
@@ -615,7 +613,7 @@ export type ProfileTraffic = {
 	date: number | null,
 };
 
-export type ProfileTransport = { kind: "tcp"; header: string | null; host: string | null; path: string | null } | { kind: "kcp"; header: string | null; seed: string | null; mtu: number | null } | { kind: "websocket"; host: string | null; path: string | null } | { kind: "httpUpgrade"; host: string | null; path: string | null } | { kind: "xhttp"; host: string | null; path: string | null; mode: string | null; extra: string | null } | { kind: "http2"; host: string | null; path: string | null } | { kind: "grpc"; authority: string | null; serviceName: string | null; mode: string | null } | { kind: "quic"; host: string | null; path: string | null };
+export type ProfileTransport = { kind: "tcp"; header: string | null; host: string | null; path: string | null } | { kind: "websocket"; host: string | null; path: string | null } | { kind: "httpUpgrade"; host: string | null; path: string | null } | { kind: "http2"; host: string | null; path: string | null } | { kind: "grpc"; authority: string | null; serviceName: string | null; mode: string | null } | { kind: "quic"; host: string | null; path: string | null };
 
 export type ProxyConnectionItem = {
 	id: string | null,
@@ -957,12 +955,8 @@ export type TlsSettings = {
 	alpn: string[],
 	realityPublicKey: string | null,
 	realityShortId: string | null,
-	realitySpiderX: string | null,
-	mldsa65Verify: string | null,
 	certificatePem: string | null,
-	certificateSha256: string[],
 	echConfig: string[],
-	finalMask: string | null,
 };
 
 export type TrafficMode = "rule" | "global" | "unchanged";
@@ -1052,7 +1046,7 @@ export type TunStatus = {
  *  greppable, it shows the English diagnostic verbatim, and adding a code for
  *  one is a purely additive change.
  */
-export type ValidationCode = { code: "subscriptionReadOnly"; subscriptionId: string } | { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "invalidFinalMask" } | { code: "unsupportedNetwork"; network: string } | { code: "unsupportedProtocol"; protocol: string } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | 
+export type ValidationCode = { code: "subscriptionReadOnly"; subscriptionId: string } | { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "unsupportedProtocol"; protocol: string } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | 
 /**
  *  A rejection this contract has no code for. The English `message` is the
  *  failing manager's own diagnostic and is rendered verbatim.

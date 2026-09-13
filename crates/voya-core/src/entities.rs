@@ -276,14 +276,6 @@ pub enum ProfileTransport {
         #[serde(default)]
         path: Option<String>,
     },
-    Kcp {
-        #[serde(default)]
-        header: Option<String>,
-        #[serde(default)]
-        seed: Option<String>,
-        #[serde(default)]
-        mtu: Option<i32>,
-    },
     Websocket {
         #[serde(default)]
         host: Option<String>,
@@ -295,16 +287,6 @@ pub enum ProfileTransport {
         host: Option<String>,
         #[serde(default)]
         path: Option<String>,
-    },
-    Xhttp {
-        #[serde(default)]
-        host: Option<String>,
-        #[serde(default)]
-        path: Option<String>,
-        #[serde(default)]
-        mode: Option<String>,
-        #[serde(default)]
-        extra: Option<String>,
     },
     Http2 {
         #[serde(default)]
@@ -335,10 +317,8 @@ impl ProfileTransport {
             // sing-box calls its plain TCP transport `raw`; keep that canonical
             // domain value even though the public tagged-union variant is `tcp`.
             Self::Tcp { .. } => "raw",
-            Self::Kcp { .. } => "kcp",
             Self::Websocket { .. } => "ws",
             Self::HttpUpgrade { .. } => "httpupgrade",
-            Self::Xhttp { .. } => "xhttp",
             Self::Http2 { .. } => "h2",
             Self::Grpc { .. } => "grpc",
             Self::Quic { .. } => "quic",
@@ -351,10 +331,8 @@ impl ProfileTransport {
             Self::Tcp { host, .. }
             | Self::Websocket { host, .. }
             | Self::HttpUpgrade { host, .. }
-            | Self::Xhttp { host, .. }
             | Self::Http2 { host, .. }
             | Self::Quic { host, .. } => host.as_deref(),
-            Self::Kcp { .. } => None,
             Self::Grpc { authority, .. } => authority.as_deref(),
         }
     }
@@ -363,10 +341,8 @@ impl ProfileTransport {
     pub fn path(&self) -> Option<&str> {
         match self {
             Self::Tcp { path, .. } => path.as_deref(),
-            Self::Kcp { seed, .. } => seed.as_deref(),
             Self::Websocket { path, .. }
             | Self::HttpUpgrade { path, .. }
-            | Self::Xhttp { path, .. }
             | Self::Http2 { path, .. }
             | Self::Quic { path, .. } => path.as_deref(),
             Self::Grpc { service_name, .. } => service_name.as_deref(),
@@ -393,12 +369,8 @@ pub struct TlsSettings {
     pub alpn: Vec<String>,
     pub reality_public_key: Option<String>,
     pub reality_short_id: Option<String>,
-    pub reality_spider_x: Option<String>,
-    pub mldsa65_verify: Option<String>,
     pub certificate_pem: Option<String>,
-    pub certificate_sha256: Vec<String>,
     pub ech_config: Vec<String>,
-    pub final_mask: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -530,7 +502,33 @@ pub struct ImportProfilesResult {
     pub subscription_id: Option<String>,
     pub imported_index_ids: Vec<String>,
     pub updated_index_ids: Vec<String>,
-    pub messages: Vec<String>,
+    pub line_issues: Vec<ImportLineIssue>,
+}
+
+/// Why one line of imported text did not simply become a node. A code rather
+/// than an English sentence, so the import dialog can say it in the reader's
+/// language.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(
+    tag = "code",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum ImportLineCode {
+    /// The line was a subscription URL and was added as a source instead.
+    SubscriptionSourceAdded,
+    /// The share link names a transport sing-box cannot carry.
+    UnsupportedTransport { transport: String },
+    /// Any other share-link parse failure, with its untranslated diagnostic.
+    ParseFailed { detail: String },
+}
+
+/// One reported line, numbered from 1 within the imported text.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportLineIssue {
+    pub line: u32,
+    pub code: ImportLineCode,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
@@ -738,12 +736,8 @@ mod tests {
                 alpn: Vec::new(),
                 reality_public_key: None,
                 reality_short_id: None,
-                reality_spider_x: None,
-                mldsa65_verify: None,
                 certificate_pem: None,
-                certificate_sha256: Vec::new(),
                 ech_config: Vec::new(),
-                final_mask: None,
             }),
             ..ProfileItem::default()
         };

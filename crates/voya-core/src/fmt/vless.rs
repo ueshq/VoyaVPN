@@ -14,7 +14,7 @@ pub(super) fn parse(input: &str) -> Result<ProfileItem, ShareError> {
         *encryption = nonempty(parsed.query.value_or("encryption", NONE));
         *flow = nonempty(parsed.query.value_or("flow", ""));
     }
-    resolve_uri_query(&parsed.query, &mut item);
+    resolve_uri_query(&parsed.query, &mut item)?;
     ensure_address_port("vless", &item)?;
     ensure_nonempty("vless", "password", item.password())?;
     Ok(item)

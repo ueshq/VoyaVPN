@@ -1,12 +1,10 @@
 use std::{collections::BTreeMap, net::IpAddr};
 
-use serde_json::Value;
-
 use crate::{
     singbox::support::{singbox_supports_config_type, state_port2},
     validation::{ValidationCode, ValidationMessage, ValidationScope},
-    AppConfig, ConfigType, CoreType, InboundProtocol, ProfileItem, ProfileProtocol,
-    ProfileTransport, RoutingItem, RulesItem, ServerEndpoint, SimpleDnsItem, TlsMode,
+    AppConfig, ConfigType, CoreType, InboundProtocol, ProfileItem, ProfileProtocol, RoutingItem,
+    RulesItem, ServerEndpoint, SimpleDnsItem, TlsMode,
 };
 
 pub const PROXY_TAG: &str = "proxy";
@@ -16,12 +14,9 @@ pub const STREAM_SECURITY_TLS: &str = "tls";
 pub const LOOPBACK: &str = "127.0.0.1";
 pub const DEFAULT_NETWORK: &str = "raw";
 
-const XHTTP: &str = "xhttp";
-const KCP: &str = "kcp";
 const WS: &str = "ws";
 const SHADOWSOCKS_RAW: &str = "raw";
 
-const SINGBOX_UNSUPPORTED_TRANSPORTS: &[&str] = &[KCP, XHTTP];
 const SINGBOX_SHADOWSOCKS_ALLOWED_TRANSPORTS: &[&str] = &[SHADOWSOCKS_RAW, WS];
 const FLOWS: &[&str] = &["", "xtls-rprx-vision", "xtls-rprx-vision-udp443"];
 /// Single source of truth for the Shadowsocks ciphers sing-box accepts.
@@ -524,10 +519,6 @@ fn register_single_node(
         }
     }
 
-    if let Some(download_address) = xhttp_download_settings_address(node) {
-        push_domain_if_needed(&mut context.protect_domain_list, &download_address);
-    }
-
     result
 }
 
@@ -716,15 +707,11 @@ mod tests {
             alpn: Vec::new(),
             reality_public_key: None,
             reality_short_id: None,
-            reality_spider_x: None,
-            mldsa65_verify: None,
             certificate_pem: None,
-            certificate_sha256: Vec::new(),
             ech_config: vec![
                 "ech-query.example.com".to_string(),
                 "https://dns.example/dns-query".to_string(),
             ],
-            final_mask: None,
         });
         let env = MemoryEnv {
             profiles: vec![active.clone()],
@@ -874,12 +861,8 @@ mod tests {
                 alpn: Vec::new(),
                 reality_public_key: None,
                 reality_short_id: None,
-                reality_spider_x: None,
-                mldsa65_verify: None,
                 certificate_pem: None,
-                certificate_sha256: Vec::new(),
                 ech_config: Vec::new(),
-                final_mask: None,
             }),
             ..ProfileItem::default()
         }

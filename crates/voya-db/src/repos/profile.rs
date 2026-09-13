@@ -205,6 +205,74 @@ impl<'executor> ProfileRepository<'executor> {
     }
 }
 
+/// Stored nodes naming a transport removed from the domain. sing-box has no
+/// outbound for them, so none of these rows could ever connect.
+const DELETE_RETIRED_TRANSPORTS: &str = "DELETE FROM profile_items \
+     WHERE transport IS NOT NULL AND json_valid(transport) \
+     AND json_extract(transport, '$.kind') IN ('xhttp', 'kcp')";
+
+/// Cached probe results of every node whose TLS blob still carries a retired key.
+const STASH_RETIRED_TLS_PROBES: &str = "CREATE TEMP TABLE voya_retired_tls_probes AS \
+     SELECT e.index_id, e.delay, e.message, e.ip_info, e.country_code \
+     FROM profile_ex_items e JOIN profile_items p ON p.index_id = e.index_id \
+     WHERE p.tls IS NOT NULL AND json_valid(p.tls) AND (\
+     json_type(p.tls, '$.realitySpiderX') IS NOT NULL \
+     OR json_type(p.tls, '$.mldsa65Verify') IS NOT NULL \
+     OR json_type(p.tls, '$.certificateSha256') IS NOT NULL \
+     OR json_type(p.tls, '$.finalMask') IS NOT NULL)";
+
+const STRIP_RETIRED_TLS_KEYS: &str = "UPDATE profile_items \
+     SET tls = json_remove(tls, '$.realitySpiderX', '$.mldsa65Verify', '$.certificateSha256', '$.finalMask') \
+     WHERE tls IS NOT NULL AND json_valid(tls) AND (\
+     json_type(tls, '$.realitySpiderX') IS NOT NULL \
+     OR json_type(tls, '$.mldsa65Verify') IS NOT NULL \
+     OR json_type(tls, '$.certificateSha256') IS NOT NULL \
+     OR json_type(tls, '$.finalMask') IS NOT NULL)";
+
+/// The baseline trigger clears cached probe results whenever `tls` changes.
+/// Dropping keys nothing ever read does not change the connection, so the
+/// stashed results are put back.
+const RESTORE_RETIRED_TLS_PROBES: &str = "UPDATE profile_ex_items \
+     SET delay = r.delay, message = r.message, ip_info = r.ip_info, country_code = r.country_code \
+     FROM voya_retired_tls_probes r WHERE profile_ex_items.index_id = r.index_id";
+
+const DROP_RETIRED_TLS_PROBES: &str = "DROP TABLE voya_retired_tls_probes";
+
+/// Runs on every database open, after the baseline has been validated, and is
+/// a no-op once nothing retired remains.
+///
+/// Rows naming a retired transport are deleted: they were always rejected at
+/// connect time, and leaving them undecodable would show a permanent "hidden
+/// nodes" notice the user could not clear. Retired TLS keys are stripped in
+/// place without losing the node's cached delay or country.
+pub(crate) async fn normalize_retired_profile_blobs(pool: &sqlx::SqlitePool) -> Result<()> {
+    let mut transaction = pool.begin().await?;
+    let deleted = sqlx::query(DELETE_RETIRED_TRANSPORTS)
+        .execute(&mut *transaction)
+        .await?
+        .rows_affected();
+    if deleted > 0 {
+        tracing::warn!(deleted, "removed stored nodes that use a retired transport");
+    }
+    sqlx::query(STASH_RETIRED_TLS_PROBES)
+        .execute(&mut *transaction)
+        .await?;
+    let stripped = sqlx::query(STRIP_RETIRED_TLS_KEYS)
+        .execute(&mut *transaction)
+        .await?
+        .rows_affected();
+    if stripped > 0 {
+        sqlx::query(RESTORE_RETIRED_TLS_PROBES)
+            .execute(&mut *transaction)
+            .await?;
+    }
+    sqlx::query(DROP_RETIRED_TLS_PROBES)
+        .execute(&mut *transaction)
+        .await?;
+    transaction.commit().await?;
+    Ok(())
+}
+
 /// Decodes a listing's rows, dropping the ones this build cannot read.
 ///
 /// The stored protocol/transport/TLS blobs are strict domain types with no

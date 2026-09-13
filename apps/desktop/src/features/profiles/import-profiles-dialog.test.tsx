@@ -82,7 +82,9 @@ describe("ImportProfilesDialog import results", () => {
     ipcMocks.importProfilesFromText.mockResolvedValue(
       makeImportResult({
         failed: 2,
-        messages: ["line 3: unsupported scheme"],
+        lineIssues: [
+          { line: 3, code: { code: "parseFailed", detail: "unsupported scheme" } },
+        ],
         parsed: 2,
         skipped: 1,
       }),
@@ -101,7 +103,7 @@ describe("ImportProfilesDialog import results", () => {
         "Imported 0 node(s). 1 skipped. 2 failed to parse. Target: Manual import.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("line 3: unsupported scheme")).toBeInTheDocument();
+    expect(screen.getByText("Line 3 was skipped: unsupported scheme")).toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 
@@ -230,7 +232,7 @@ function makeImportResult(
     filtered: 0,
     imported: 0,
     importedProfileIds: [],
-    messages: [],
+    lineIssues: [],
     parsed: 0,
     removedDuplicates: 0,
     removedExisting: 0,

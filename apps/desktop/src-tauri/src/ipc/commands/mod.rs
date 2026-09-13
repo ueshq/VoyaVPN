@@ -4,14 +4,10 @@ use std::collections::BTreeSet;
 use tauri_plugin_updater::UpdaterExt;
 use tauri_specta::Event;
 use voya_app::autostart::AutostartManager;
-use voya_app::certificates::{
-    calculate_certificate_sha256 as calculate_certificate_sha256_impl,
-    fetch_certificate as fetch_certificate_impl,
-};
 use voya_app::config_mutation::{CommittedMutation, UnitOfWork};
 use voya_app::contract_map::{
-    certificate_error, core_info_error, core_seed_install_result, dns_from_contract,
-    dns_to_contract, import_profiles_to_contract, input_text_error, move_action_from_contract,
+    core_info_error, core_seed_install_result, dns_from_contract, dns_to_contract,
+    import_profiles_to_contract, input_text_error, move_action_from_contract,
     profile_from_contract, profile_list_to_contract, profile_listing_to_contract,
     routing_from_contract, routing_to_contract, rule_from_contract, runtime_status_event,
     runtime_status_response, subscription_from_contract, subscription_metadata_to_contract,
@@ -35,16 +31,15 @@ use voya_app::tun::TunManager;
 use voya_app::updates::UpdateManager;
 use voya_contracts::{
     AppError, AppErrorSubsystem, AppNotice, AppNoticeLevel, AppSettingsV1, AppUpdaterState,
-    AppUpdaterStatus, AppearanceSettings, CertificateFetchRequest, CertificateFetchResult,
-    CoreFlowReason, CoreSeedInstallResult, CoreSeedInstallStatus, CoreType as ContractCoreType,
-    DnsSettings as DnsSettingsContract, ExportProfilesFormat, ExportProfilesRequest,
-    ExportProfilesResult, ImportProfilesResult as ImportProfilesContract, InvalidationScope,
-    LogCode, MoveAction as ContractMoveAction, NoticeCode, Profile as ProfileContract,
-    ProfileListEntry, ProfileListing, ProxyConnectionsSnapshot, ProxyMonitorStatus, QrCodeImage,
-    QrScanResult, ResourceUpdateFile, Routing as RoutingContract,
-    RoutingRule as RoutingRuleContract, RuntimeStatusResponse, SpeedtestResult, SpeedtestRunResult,
-    SpeedtestStatus, Subscription as SubscriptionContract,
-    SubscriptionMetadata as SubscriptionMetadataContract,
+    AppUpdaterStatus, AppearanceSettings, CoreFlowReason, CoreSeedInstallResult,
+    CoreSeedInstallStatus, CoreType as ContractCoreType, DnsSettings as DnsSettingsContract,
+    ExportProfilesFormat, ExportProfilesRequest, ExportProfilesResult,
+    ImportProfilesResult as ImportProfilesContract, InvalidationScope, LogCode,
+    MoveAction as ContractMoveAction, NoticeCode, Profile as ProfileContract, ProfileListEntry,
+    ProfileListing, ProxyConnectionsSnapshot, ProxyMonitorStatus, QrCodeImage, QrScanResult,
+    ResourceUpdateFile, Routing as RoutingContract, RoutingRule as RoutingRuleContract,
+    RuntimeStatusResponse, SpeedtestResult, SpeedtestRunResult, SpeedtestStatus,
+    Subscription as SubscriptionContract, SubscriptionMetadata as SubscriptionMetadataContract,
     SubscriptionUpdateResult as SubscriptionUpdateContract, SystemProxyStatusResponse,
     SystemProxyType, TunProviderDiagnostics, TunStatus,
 };
@@ -63,7 +58,6 @@ use super::events::{
 use crate::AppState;
 
 const IPC_ID_MAX_CHARS: usize = 128;
-const IPC_NAME_MAX_CHARS: usize = 256;
 const IPC_FILTER_MAX_CHARS: usize = 256;
 const IPC_PROXY_URL_MAX_CHARS: usize = 2048;
 const IPC_QR_CONTENT_MAX_CHARS: usize = 4096;

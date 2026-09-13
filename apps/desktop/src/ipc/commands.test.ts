@@ -28,8 +28,6 @@ const wrapperNames = [
   "generateQrCode",
   "scanScreenQr",
   "readClipboardText",
-  "fetchCertificate",
-  "calculateCertificateSha256",
   "connectActiveProfile",
   "disconnectCore",
   "restartCore",
@@ -176,7 +174,6 @@ function forwardingCases(): Array<[WrapperName, unknown[], unknown[]]> {
     ["installCoreSeed", ["singBox"], ["singBox"]],
     ["setWindowAcrylic", [true], [true]],
     ["generateQrCode", ["vmess://link"], ["vmess://link"]],
-    ["calculateCertificateSha256", ["-----BEGIN"], ["-----BEGIN"]],
   ];
 }
 

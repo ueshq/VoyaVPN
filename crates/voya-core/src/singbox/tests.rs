@@ -1713,12 +1713,8 @@ fn tls_settings(mode: TlsMode, server_name: Option<&str>) -> TlsSettings {
         alpn: Vec::new(),
         reality_public_key: None,
         reality_short_id: None,
-        reality_spider_x: None,
-        mldsa65_verify: None,
         certificate_pem: None,
-        certificate_sha256: Vec::new(),
         ech_config: Vec::new(),
-        final_mask: None,
     }
 }
 

@@ -5,7 +5,6 @@ mod download;
 pub mod probe;
 mod subscription;
 
-pub mod certificates;
 pub mod clash;
 pub mod ruleset;
 

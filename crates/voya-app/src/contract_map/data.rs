@@ -72,7 +72,30 @@ pub fn import_profiles_to_contract(result: ImportProfilesResult) -> ImportProfil
         subscription_id: result.subscription_id,
         imported_profile_ids: result.imported_index_ids,
         updated_profile_ids: result.updated_index_ids,
-        messages: result.messages,
+        line_issues: result
+            .line_issues
+            .into_iter()
+            .map(import_line_issue_to_contract)
+            .collect(),
+    }
+}
+
+fn import_line_issue_to_contract(
+    issue: voya_core::ImportLineIssue,
+) -> voya_contracts::ImportLineIssue {
+    voya_contracts::ImportLineIssue {
+        line: issue.line,
+        code: match issue.code {
+            voya_core::ImportLineCode::SubscriptionSourceAdded => {
+                voya_contracts::ImportLineCode::SubscriptionSourceAdded
+            }
+            voya_core::ImportLineCode::UnsupportedTransport { transport } => {
+                voya_contracts::ImportLineCode::UnsupportedTransport { transport }
+            }
+            voya_core::ImportLineCode::ParseFailed { detail } => {
+                voya_contracts::ImportLineCode::ParseFailed { detail }
+            }
+        },
     }
 }
 

@@ -14,8 +14,6 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::generate_qr_code,
         commands::scan_screen_qr,
         commands::read_clipboard_text,
-        commands::fetch_certificate,
-        commands::calculate_certificate_sha256,
         commands::tun_request_elevation,
         commands::connect_active_profile::<tauri::Wry>,
         commands::disconnect_core::<tauri::Wry>,
@@ -103,8 +101,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_contracts::QrCodeImage>()
         .typ::<voya_contracts::QrScanResult>()
         .typ::<voya_contracts::QrScanStatus>()
-        .typ::<voya_contracts::CertificateFetchRequest>()
-        .typ::<voya_contracts::CertificateFetchResult>()
         .typ::<voya_contracts::ExportProfilesRequest>()
         .typ::<voya_contracts::ExportProfilesResult>()
         .typ::<voya_contracts::ExportProfilesFormat>()

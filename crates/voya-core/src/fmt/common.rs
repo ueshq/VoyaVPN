@@ -226,18 +226,6 @@ pub(super) fn ipv6_host(address: &str) -> String {
     }
 }
 
-pub(super) fn compact_json_or_self(input: &str) -> String {
-    serde_json::from_str::<Value>(input)
-        .and_then(|value| serde_json::to_string(&value))
-        .unwrap_or_else(|_| input.to_string())
-}
-
-pub(super) fn pretty_json_or_self(input: &str) -> String {
-    serde_json::from_str::<Value>(input)
-        .and_then(|value| serde_json::to_string_pretty(&value))
-        .unwrap_or_else(|_| input.to_string())
-}
-
 pub(super) fn base64_encode(input: &str, remove_padding: bool) -> String {
     let mut encoded = STANDARD.encode(input.as_bytes());
     if remove_padding {

@@ -21,18 +21,16 @@ describe("profile form contract transformations", () => {
       address: "example.test",
       password: "uuid",
       protocolOptions: { wireGuardMtu: 1.5, insecureConcurrency: 2.5 },
-      transportOptions: { kcpMtu: 3.5 },
     };
     expect(
       profileFormSchema.safeParse(activeProfileFormValues(draft)).success,
     ).toBe(true);
     expect(prepareProfileForSave(draft).protocol.kind).toBe("vmess");
     expect(draft.protocolOptions.wireGuardMtu).toBe(1.5);
-    expect(draft.transportOptions.kcpMtu).toBe(3.5);
-    const active = activeProfileFormValues({ ...draft, network: "kcp" });
+    const active = activeProfileFormValues({ ...draft, configType: "naive" as const });
     expect(profileFormSchema.safeParse(active).error?.issues[0].path).toEqual([
-      "transportOptions",
-      "kcpMtu",
+      "protocolOptions",
+      "insecureConcurrency",
     ]);
   });
   it.each(protocols())(
@@ -94,12 +92,8 @@ describe("profile form contract transformations", () => {
       alpn: [],
       realityPublicKey: null,
       realityShortId: null,
-      realitySpiderX: null,
-      mldsa65Verify: null,
       certificatePem: null,
-      certificateSha256: [],
       echConfig: [],
-      finalMask: null,
     };
     const original = { ...profile(vmessProtocol(), tcpTransport()), tls };
     const form = normalizeProfileForForm(original);
@@ -117,14 +111,10 @@ describe("profile form contract transformations", () => {
     const tls: TlsSettings = {
       alpn: ["h2", "http/1.1"],
       certificatePem: "certificate",
-      certificateSha256: ["sha-a", "sha-b"],
       echConfig: ["ech-a", "ech-b"],
-      finalMask: "mask",
-      mldsa65Verify: "mldsa",
       mode: "reality",
       realityPublicKey: "public-key",
       realityShortId: "short-id",
-      realitySpiderX: "/spider",
       serverName: "tls.example.test",
     };
     const original = { ...profile(vmessProtocol(), tcpTransport()), tls };
@@ -355,16 +345,8 @@ function transports(): ProfileTransport[] {
   return [
     tcpTransport(),
     { header: "none", host: null, kind: "tcp", path: null },
-    { header: "srtp", kind: "kcp", mtu: 1350, seed: "seed" },
     { host: "cdn.example.test", kind: "websocket", path: "/ws" },
     { host: "cdn.example.test", kind: "httpUpgrade", path: "/upgrade" },
-    {
-      extra: "{}",
-      host: "cdn.example.test",
-      kind: "xhttp",
-      mode: "auto",
-      path: "/xhttp",
-    },
     { host: "cdn.example.test", kind: "http2", path: "/h2" },
     {
       authority: "authority",

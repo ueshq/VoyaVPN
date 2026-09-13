@@ -10,7 +10,6 @@ import {
   type ProfileFormControl,
   type Register,
 } from "./profile-form-fields";
-import { optionalNumber } from "./profile-form-utils";
 
 type TransportPanelProps = {
   control: ProfileFormControl;
@@ -19,9 +18,8 @@ type TransportPanelProps = {
 
 export function TransportPanel({ control, register }: TransportPanelProps) {
   const { t } = useI18n();
-  // The raw (TCP) and KCP transports share `transportOptions.header`. Mounting
-  // both inputs at once left two DOM nodes fighting over a single
-  // react-hook-form ref, so only the selected network's header is rendered.
+  // Only the selected network's options are rendered, so no two inputs ever
+  // fight over one react-hook-form ref.
   const network = useWatch({ control, name: "network" }) || "tcp";
 
   return (
@@ -33,9 +31,7 @@ export function TransportPanel({ control, register }: TransportPanelProps) {
           name="network"
           options={NETWORK_OPTIONS}
         />
-        {["tcp", "ws", "httpupgrade", "h2", "quic", "xhttp"].includes(
-          network,
-        ) ? (
+        {["tcp", "ws", "httpupgrade", "h2", "quic"].includes(network) ? (
           <>
             <TextField
               label={t("panes.profiles.fields.host")}
@@ -54,18 +50,6 @@ export function TransportPanel({ control, register }: TransportPanelProps) {
             {...register("transportOptions.header")}
           />
         ) : null}
-        {network === "xhttp" ? (
-          <>
-            <TextField
-              label={t("panes.profiles.fields.xhttpMode")}
-              {...register("transportOptions.xhttpMode")}
-            />
-            <TextField
-              label={t("panes.profiles.fields.xhttpExtra")}
-              {...register("transportOptions.xhttpExtra")}
-            />
-          </>
-        ) : null}
         {network === "grpc" ? (
           <>
             <TextField
@@ -79,26 +63,6 @@ export function TransportPanel({ control, register }: TransportPanelProps) {
             <TextField
               label={t("panes.profiles.fields.grpcMode")}
               {...register("transportOptions.grpcMode")}
-            />
-          </>
-        ) : null}
-        {network === "kcp" ? (
-          <>
-            <TextField
-              label={t("panes.profiles.fields.kcpHeader")}
-              {...register("transportOptions.header")}
-            />
-            <TextField
-              label={t("panes.profiles.fields.kcpSeed")}
-              {...register("transportOptions.kcpSeed")}
-            />
-            <TextField
-              inputMode="numeric"
-              label={t("panes.profiles.fields.kcpMtu")}
-              type="number"
-              {...register("transportOptions.kcpMtu", {
-                setValueAs: optionalNumber,
-              })}
             />
           </>
         ) : null}

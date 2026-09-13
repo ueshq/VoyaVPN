@@ -76,12 +76,8 @@ function createBaseProfile(configType: ProfileKind) {
     alpn: "",
     publicKey: "",
     shortId: "",
-    spiderX: "",
-    mldsa65Verify: "",
     cert: "",
-    certSha: "",
     echConfigList: "",
-    finalmask: "",
     protocolOptions: {},
     transportOptions: {},
   };

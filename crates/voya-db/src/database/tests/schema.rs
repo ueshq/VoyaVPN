@@ -293,3 +293,86 @@ async fn retired_settings_are_rejected_without_conversion_or_rewrite() {
         assert_eq!(stored, original);
     }
 }
+
+#[tokio::test]
+async fn retired_profile_transports_and_tls_keys_are_normalized_once() {
+    let fixture = TempDatabase::new("retired-profiles.sqlite");
+    let database = Database::connect(fixture.path()).await.expect("database");
+    for index_id in ["tls-node", "retired-node"] {
+        let mut profile = sample_profile();
+        profile.index_id = index_id.to_string();
+        database.profiles().upsert(&profile).await.expect("profile");
+    }
+    sqlx::query(
+        "UPDATE profile_items SET tls = json_set(tls, '$.realitySpiderX', '/spider', \
+         '$.mldsa65Verify', NULL, '$.certificateSha256', json('[\"aa\"]'), '$.finalMask', NULL) \
+         WHERE index_id = 'tls-node'",
+    )
+    .execute(database.pool())
+    .await
+    .expect("retired TLS keys");
+    sqlx::query(
+        "UPDATE profile_items SET transport = '{\"kind\":\"xhttp\",\"host\":null,\"path\":null,\"mode\":null,\"extra\":null}' \
+         WHERE index_id = 'retired-node'",
+    )
+    .execute(database.pool())
+    .await
+    .expect("retired transport");
+    // Written after the TLS change so the connection-change trigger cannot
+    // have cleared it already.
+    sqlx::query(
+        "INSERT OR REPLACE INTO profile_ex_items (index_id, delay, sort, message, ip_info, country_code) \
+         VALUES ('tls-node', 123, 0, 'ok', '203.0.113.9', 'JP')",
+    )
+    .execute(database.pool())
+    .await
+    .expect("cached probe");
+    database.close().await;
+
+    for _ in 0..2 {
+        let database = Database::connect(fixture.path()).await.expect("reopen");
+        let listing = database
+            .profiles()
+            .list_with_profile_ex(None)
+            .await
+            .expect("listing");
+        assert_eq!(listing.undecodable_rows, 0);
+        assert_eq!(
+            listing
+                .items
+                .iter()
+                .map(|(profile, _)| profile.index_id.as_str())
+                .collect::<Vec<_>>(),
+            ["tls-node"]
+        );
+        let tls: String =
+            sqlx::query_scalar("SELECT tls FROM profile_items WHERE index_id = 'tls-node'")
+                .fetch_one(database.pool())
+                .await
+                .expect("stored TLS");
+        for key in [
+            "realitySpiderX",
+            "mldsa65Verify",
+            "certificateSha256",
+            "finalMask",
+        ] {
+            assert!(!tls.contains(key), "{key} survived in {tls}");
+        }
+        let probe: (i64, Option<String>) = sqlx::query_as(
+            "SELECT delay, country_code FROM profile_ex_items WHERE index_id = 'tls-node'",
+        )
+        .fetch_one(database.pool())
+        .await
+        .expect("cached probe");
+        assert_eq!((probe.0, probe.1.as_deref()), (123, Some("JP")));
+        let triggers: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' \
+             AND name = 'clear_country_on_connection_change'",
+        )
+        .fetch_one(database.pool())
+        .await
+        .expect("trigger");
+        assert_eq!(triggers, 1);
+        database.close().await;
+    }
+}

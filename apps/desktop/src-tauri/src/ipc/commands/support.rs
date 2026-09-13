@@ -107,16 +107,6 @@ pub(super) fn validate_required_ipc_text(
         .map_err(|error| input_text_error(&error, field, subsystem))
 }
 
-pub(super) fn validate_ipc_text(
-    value: &str,
-    field: &str,
-    max_chars: usize,
-    subsystem: AppErrorSubsystem,
-) -> Result<(), AppError> {
-    input_safety::validate_text(value, max_chars)
-        .map_err(|error| input_text_error(&error, field, subsystem))
-}
-
 pub(super) fn validate_ipc_qr_content(
     value: &str,
     field: &str,

@@ -3,14 +3,7 @@ use super::*;
 pub(super) fn parse(input: &str) -> Result<ProfileItem, ShareError> {
     let parsed = parse_uri_with_schemes(input, "hysteria2", &["hysteria2", "hy2"])?;
     let mut item = profile_from_uri(ConfigType::Hysteria2, &parsed);
-    resolve_uri_query_tls_only(&parsed.query, &mut item);
-    let pin = nonempty(parsed.query.value_or("pinSHA256", ""));
-    if let Some(pin) = pin {
-        item.tls
-            .get_or_insert_with(TlsSettings::default)
-            .certificate_sha256
-            .push(pin);
-    }
+    resolve_uri_query_tls_only(&parsed.query, &mut item)?;
     if let ProfileProtocol::Hysteria2 {
         password,
         port_hops,
@@ -49,13 +42,6 @@ pub(super) fn export(item: &ProfileItem) -> Result<String, ShareError> {
     }
     if let Some(ports) = nonempty_option(port_hops) {
         query.push(("mport".to_string(), url_encode(&ports.replace(':', "-"))));
-    }
-    if let Some(sha) = item
-        .tls
-        .as_ref()
-        .and_then(|tls| tls.certificate_sha256.first())
-    {
-        query.push(("pinSHA256".to_string(), url_encode(sha)));
     }
     Ok(format!(
         "{}{}",

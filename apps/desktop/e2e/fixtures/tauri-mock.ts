@@ -547,7 +547,7 @@ export async function installTauriSmokeMock(
             filtered: 0,
             imported: 1,
             importedProfileIds: [String(row.profile.id)],
-            messages: [],
+            lineIssues: [],
             parsed: 1,
             removedDuplicates: 0,
             removedExisting: 0,
@@ -895,14 +895,10 @@ export async function installTauriSmokeMock(
           ? {
               alpn: [],
               certificatePem: null,
-              certificateSha256: [],
               echConfig: [],
-              finalMask: null,
-              mldsa65Verify: null,
               mode: "tls",
               realityPublicKey: null,
               realityShortId: null,
-              realitySpiderX: null,
               serverName: null,
             }
           : null,

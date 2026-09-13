@@ -196,27 +196,10 @@ pub(super) fn to_uri_query(
             "sid",
             tls.reality_short_id.as_deref().unwrap_or_default(),
         );
-        push_encoded_str(
-            query,
-            "spx",
-            tls.reality_spider_x.as_deref().unwrap_or_default(),
-        );
-        push_encoded_str(
-            query,
-            "pqv",
-            tls.mldsa65_verify.as_deref().unwrap_or_default(),
-        );
         if tls.mode == TlsMode::Tls {
             push_encoded_str(query, "alpn", &tls.alpn.join(","));
         }
         push_encoded_str(query, "ech", &tls.ech_config.join(","));
-        push_encoded_str(query, "pcs", &tls.certificate_sha256.join(","));
-        if let Some(final_mask) = nonempty_str(tls.final_mask.as_deref()) {
-            query.push((
-                "fm".to_string(),
-                url_encode(&compact_json_or_self(final_mask)),
-            ));
-        }
     }
 
     let network = item_network(item);
@@ -242,20 +225,6 @@ pub(super) fn to_uri_query(
             push_encoded_opt(query, "host", host);
             push_encoded_opt(query, "path", path);
         }
-        "kcp" => {
-            let (header, seed, mtu) = match item.transport.as_ref() {
-                Some(ProfileTransport::Kcp { header, seed, mtu }) => (header, seed, *mtu),
-                _ => return,
-            };
-            query.push((
-                "headerType".to_string(),
-                nonempty_option(header).unwrap_or(NONE).to_string(),
-            ));
-            push_encoded_opt(query, "seed", seed);
-            if let Some(mtu) = mtu.filter(|value| *value > 0) {
-                query.push(("mtu".to_string(), mtu.to_string()));
-            }
-        }
         "ws" | "httpupgrade" | HTTP2_NETWORK | QUIC_NETWORK => {
             let (host, path) = match item.transport.as_ref() {
                 Some(ProfileTransport::Websocket { host, path })
@@ -266,30 +235,6 @@ pub(super) fn to_uri_query(
             };
             push_encoded_opt(query, "host", host);
             push_encoded_opt(query, "path", path);
-        }
-        "xhttp" => {
-            let (host, path, mode, extra) = match item.transport.as_ref() {
-                Some(ProfileTransport::Xhttp {
-                    host,
-                    path,
-                    mode,
-                    extra,
-                }) => (host, path, mode, extra),
-                _ => return,
-            };
-            push_encoded_opt(query, "host", host);
-            push_encoded_opt(query, "path", path);
-            if let Some(mode) = nonempty_option(mode) {
-                if XHTTP_MODES.contains(&mode) {
-                    query.push(("mode".to_string(), url_encode(mode)));
-                }
-            }
-            if let Some(extra) = nonempty_option(extra) {
-                query.push((
-                    "extra".to_string(),
-                    url_encode(&compact_json_or_self(extra)),
-                ));
-            }
         }
         "grpc" => {
             let (authority, service_name, mode) = match item.transport.as_ref() {
@@ -332,8 +277,8 @@ pub(super) fn to_uri_query_lite(item: &ProfileItem, query: &mut QueryPairs) {
 ///
 /// TLS is derived from `security=` alone: a stray `sni`/`alpn` on a plaintext
 /// link must not silently enable TLS.
-pub(super) fn resolve_uri_query(query: &Query, item: &mut ProfileItem) {
-    resolve_query_into(query, item, false);
+pub(super) fn resolve_uri_query(query: &Query, item: &mut ProfileItem) -> Result<(), ShareError> {
+    resolve_query_into(query, item, false)
 }
 
 /// Same as [`resolve_uri_query`], for protocols that are TLS-only by
@@ -342,13 +287,21 @@ pub(super) fn resolve_uri_query(query: &Query, item: &mut ProfileItem) {
 /// Links for those protocols routinely omit `security=` and every TLS-adjacent
 /// parameter (`hysteria2://pass@203.0.113.5:443/?insecure=1`), so TLS stays
 /// enabled unless the link explicitly asks for REALITY.
-pub(super) fn resolve_uri_query_tls_only(query: &Query, item: &mut ProfileItem) {
-    resolve_query_into(query, item, true);
+pub(super) fn resolve_uri_query_tls_only(
+    query: &Query,
+    item: &mut ProfileItem,
+) -> Result<(), ShareError> {
+    resolve_query_into(query, item, true)
 }
 
-fn resolve_query_into(query: &Query, item: &mut ProfileItem, tls_only_protocol: bool) {
+fn resolve_query_into(
+    query: &Query,
+    item: &mut ProfileItem,
+    tls_only_protocol: bool,
+) -> Result<(), ShareError> {
+    item.transport = Some(resolve_query_transport(query)?);
     item.tls = resolve_query_tls(query, tls_only_protocol);
-    item.transport = Some(resolve_query_transport(query));
+    Ok(())
 }
 
 fn resolve_query_tls(query: &Query, tls_only_protocol: bool) -> Option<TlsSettings> {
@@ -358,24 +311,25 @@ fn resolve_query_tls(query: &Query, tls_only_protocol: bool) -> Option<TlsSettin
         _ if tls_only_protocol => TlsMode::Tls,
         _ => return None,
     };
-    let final_mask = query.value_or("fm", "");
     Some(TlsSettings {
         mode,
         server_name: nonempty(query.value_or("sni", "")),
         alpn: split_csv(&query.value_or("alpn", "")),
         reality_public_key: nonempty(query.value_or("pbk", "")),
         reality_short_id: nonempty(query.value_or("sid", "")),
-        reality_spider_x: nonempty(query.value_or("spx", "")),
-        mldsa65_verify: nonempty(query.value_or("pqv", "")),
         certificate_pem: None,
-        certificate_sha256: split_csv(&query.value_or("pcs", "")),
         ech_config: split_csv(&query.value_or("ech", "")),
-        final_mask: (!final_mask.is_empty()).then(|| pretty_json_or_self(&final_mask)),
     })
 }
 
-fn resolve_query_transport(query: &Query) -> ProfileTransport {
+fn resolve_query_transport(query: &Query) -> Result<ProfileTransport, ShareError> {
     let mut network = query.value_or("type", DEFAULT_NETWORK);
+    if RETIRED_NETWORKS
+        .iter()
+        .any(|retired| retired.eq_ignore_ascii_case(&network))
+    {
+        return Err(ShareError::UnsupportedTransport { transport: network });
+    }
     if network == RAW_NETWORK_ALIAS {
         network = DEFAULT_NETWORK.to_string();
     }
@@ -385,12 +339,7 @@ fn resolve_query_transport(query: &Query) -> ProfileTransport {
     if !NETWORKS.contains(&network.as_str()) {
         network = DEFAULT_NETWORK.to_string();
     }
-    match network.as_str() {
-        "kcp" => ProfileTransport::Kcp {
-            header: nonempty(query.value_or("headerType", NONE)),
-            seed: nonempty(query.value_or("seed", "")),
-            mtu: parse_positive_i32(&query.value_or("mtu", "")),
-        },
+    Ok(match network.as_str() {
         "ws" => ProfileTransport::Websocket {
             host: nonempty(query.value_or("host", "")),
             path: nonempty(query.value_or("path", "/")),
@@ -407,15 +356,6 @@ fn resolve_query_transport(query: &Query) -> ProfileTransport {
             host: nonempty(query.value_or("host", "")),
             path: nonempty(query.value_or("path", "")),
         },
-        "xhttp" => {
-            let xhttp_extra = query.value_or("extra", "");
-            ProfileTransport::Xhttp {
-                host: nonempty(query.value_or("host", "")),
-                path: nonempty(query.value_or("path", "/")),
-                mode: nonempty(query.value_or("mode", "")),
-                extra: (!xhttp_extra.is_empty()).then(|| pretty_json_or_self(&xhttp_extra)),
-            }
-        }
         "grpc" => ProfileTransport::Grpc {
             authority: nonempty(query.value_or("authority", "")),
             service_name: nonempty(query.value_or("serviceName", "")),
@@ -426,5 +366,5 @@ fn resolve_query_transport(query: &Query) -> ProfileTransport {
             host: nonempty(query.value_or("host", "")),
             path: nonempty(query.value_or("path", "")),
         },
-    }
+    })
 }

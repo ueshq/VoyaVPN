@@ -848,9 +848,15 @@ mod tests {
         assert_eq!(result.imported, 0);
         assert_eq!(result.skipped, 1);
         assert_eq!(result.failed, 1);
-        assert_eq!(result.messages.len(), 1);
-        assert!(result.messages[0].contains("Line 1 was skipped"));
-        assert!(!result.messages[0].contains("%%%%"));
+        assert_eq!(result.line_issues.len(), 1);
+        assert_eq!(result.line_issues[0].line, 1);
+        let voya_core::ImportLineCode::ParseFailed { detail } = &result.line_issues[0].code else {
+            panic!(
+                "expected a parse failure, got {:?}",
+                result.line_issues[0].code
+            );
+        };
+        assert!(!detail.contains("%%%%"), "{detail}");
     }
 
     #[tokio::test]
@@ -884,7 +890,7 @@ mod tests {
         assert_eq!(result.failed, 0);
         assert_eq!(result.discarded_node_overrides, 3);
         assert_eq!(result.imported_index_ids.len(), 7);
-        assert!(result.messages.is_empty());
+        assert!(result.line_issues.is_empty());
 
         let profiles = database
             .profiles()

@@ -603,30 +603,6 @@ fn rejected_ipc_text_names_the_argument_that_carried_it() {
 }
 
 #[test]
-fn certificate_failures_split_typed_input_from_the_network() {
-    assert_eq!(
-        kind_name(&certificate_error(&CertificateError::EmptyAddress).kind),
-        "validation"
-    );
-    assert_eq!(
-        kind_name(&certificate_error(&CertificateError::InvalidServerName).kind),
-        "validation"
-    );
-    assert_eq!(
-        kind_name(&certificate_error(&CertificateError::InvalidPem).kind),
-        "validation"
-    );
-    assert_eq!(
-        kind_name(&certificate_error(&CertificateError::Timeout).kind),
-        "network"
-    );
-    assert_eq!(
-        kind_name(&certificate_error(&CertificateError::MissingPeerCertificate).kind),
-        "network"
-    );
-}
-
-#[test]
 fn settings_failures_reach_the_field_and_keep_a_typed_side_effect() {
     let validation: AppError = AppSettingsValidationError::InvalidTunMtu.into();
     let AppErrorKind::Validation { issues } = &validation.kind else {
@@ -832,18 +808,6 @@ mod guards {
     const fn config_mutation(error: &ConfigMutationError) {
         match error {
             ConfigMutationError::Database(_) => (),
-        }
-    }
-
-    const fn certificate(error: &CertificateError) {
-        match error {
-            CertificateError::EmptyAddress
-            | CertificateError::InvalidServerName
-            | CertificateError::Timeout
-            | CertificateError::Tcp(_)
-            | CertificateError::Tls(_)
-            | CertificateError::MissingPeerCertificate
-            | CertificateError::InvalidPem => (),
         }
     }
 

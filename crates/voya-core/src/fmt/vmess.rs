@@ -2,7 +2,12 @@ use super::*;
 
 pub(super) fn parse(input: &str) -> Result<ProfileItem, ShareError> {
     if input.contains('@') {
-        parse_vmess_standard(input).or_else(|_| parse_vmess_base64(input))
+        // A standard URI that names a retired transport is a real answer, not
+        // a reason to retry the input as a base64 payload.
+        parse_vmess_standard(input).or_else(|error| match error {
+            ShareError::UnsupportedTransport { .. } => Err(error),
+            _ => parse_vmess_base64(input),
+        })
     } else {
         parse_vmess_base64(input)
     }
@@ -18,14 +23,11 @@ pub(super) fn export(item: &ProfileItem) -> Result<String, ShareError> {
         });
     };
     let network = item_network(item);
-    let transport_type =
-        match item.transport.as_ref() {
-            Some(ProfileTransport::Tcp { header, .. })
-            | Some(ProfileTransport::Kcp { header, .. }) => option_or(header, NONE),
-            Some(ProfileTransport::Xhttp { mode, .. })
-            | Some(ProfileTransport::Grpc { mode, .. }) => option_or(mode, NONE),
-            _ => NONE.to_string(),
-        };
+    let transport_type = match item.transport.as_ref() {
+        Some(ProfileTransport::Tcp { header, .. }) => option_or(header, NONE),
+        Some(ProfileTransport::Grpc { mode, .. }) => option_or(mode, NONE),
+        _ => NONE.to_string(),
+    };
     let transport_host = item
         .transport
         .as_ref()
@@ -93,7 +95,7 @@ fn parse_vmess_standard(input: &str) -> Result<ProfileItem, ShareError> {
         *uuid = parsed.user_info;
         *cipher = Some(DEFAULT_SECURITY.to_string());
     }
-    resolve_uri_query(&parsed.query, &mut item);
+    resolve_uri_query(&parsed.query, &mut item)?;
     ensure_address_port("vmess", &item)?;
     ensure_nonempty("vmess", "password", item.password())?;
     Ok(item)
@@ -136,15 +138,16 @@ fn parse_vmess_base64(input: &str) -> Result<ProfileItem, ShareError> {
         HTTP2_NETWORK_ALIAS => HTTP2_NETWORK.to_string(),
         network => network.to_string(),
     };
+    if RETIRED_NETWORKS
+        .iter()
+        .any(|retired| retired.eq_ignore_ascii_case(&network))
+    {
+        return Err(ShareError::UnsupportedTransport { transport: network });
+    }
     let vmess_type = value_string(object, "type");
     let host = value_string(object, "host");
     let path = value_string(object, "path");
     item.transport = Some(match network.as_str() {
-        "kcp" => ProfileTransport::Kcp {
-            header: nonempty(vmess_type),
-            seed: nonempty(path),
-            mtu: None,
-        },
         "ws" => ProfileTransport::Websocket {
             host: nonempty(host),
             path: nonempty(path),
@@ -152,12 +155,6 @@ fn parse_vmess_base64(input: &str) -> Result<ProfileItem, ShareError> {
         "httpupgrade" => ProfileTransport::HttpUpgrade {
             host: nonempty(host),
             path: nonempty(path),
-        },
-        "xhttp" => ProfileTransport::Xhttp {
-            host: nonempty(host),
-            path: nonempty(path),
-            mode: nonempty(vmess_type),
-            extra: None,
         },
         "grpc" => ProfileTransport::Grpc {
             authority: nonempty(host),

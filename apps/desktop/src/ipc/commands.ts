@@ -26,10 +26,6 @@ export const scanScreenQr = wrapCommand(commands.scanScreenQr);
 
 export const readClipboardText = wrapCommand(commands.readClipboardText);
 
-export const fetchCertificate = wrapCommand(commands.fetchCertificate);
-
-export const calculateCertificateSha256 = wrapCommand(commands.calculateCertificateSha256);
-
 export const connectActiveProfile = wrapCommand(commands.connectActiveProfile);
 
 export const disconnectCore = wrapCommand(commands.disconnectCore);

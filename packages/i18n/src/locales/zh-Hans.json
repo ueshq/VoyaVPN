@@ -243,16 +243,6 @@
       "aria": {
         "activeProfile": "当前节点"
       },
-      "certFetch": {
-        "allowInsecure": "允许不安全抓取",
-        "calculateSha": "计算 SHA",
-        "fetchCert": "抓取证书",
-        "fetchChain": "抓取证书链",
-        "fetched": "已抓取 {{count}} 张证书。",
-        "missingEndpoint": "抓取证书前需要填写地址和端口。",
-        "missingPem": "请先粘贴或抓取 PEM 证书，再计算 SHA-256。",
-        "shaCalculated": "已计算 {{count}} 个 SHA-256 指纹。"
-      },
       "dialog": {
         "addTitle": "新增节点",
         "cancel": "取消",
@@ -277,11 +267,9 @@
         "allowedIps": "允许的 IP",
         "alpn": "ALPN",
         "alterId": "额外 ID",
-        "certSha": "证书 SHA",
         "congestionControl": "拥塞控制",
         "echConfigList": "ECH 配置列表",
         "encryption": "加密",
-        "finalMask": "最终伪装",
         "flow": "流控",
         "grpcAuthority": "gRPC 授权域",
         "grpcMode": "gRPC 模式",
@@ -289,11 +277,7 @@
         "host": "主机",
         "insecureConcurrency": "Insecure 并发",
         "interfaceAddress": "接口地址",
-        "kcpHeader": "KCP 头部",
-        "kcpMtu": "KCP MTU",
-        "kcpSeed": "KCP 种子",
         "method": "加密方式",
-        "mldsaVerify": "ML-DSA 校验",
         "mtu": "MTU",
         "network": "传输协议",
         "password": "密码",
@@ -314,14 +298,11 @@
         "salamanderPassword": "Salamander 密码",
         "shortId": "短 ID",
         "sni": "SNI",
-        "spiderX": "Spider X",
         "tlsMode": "TLS 模式",
         "udpOverTcp": "UDP over TCP",
         "username": "用户名",
         "uuid": "UUID",
-        "vmessSecurity": "VMess 加密",
-        "xhttpExtra": "XHTTP 额外 JSON",
-        "xhttpMode": "XHTTP 模式"
+        "vmessSecurity": "VMess 加密"
       },
       "import": {
         "clipboard": "从剪贴板导入",
@@ -338,7 +319,12 @@
           "target": "目标：{{target}}。",
           "updated": "已更新 {{count}} 个。"
         },
-        "importing": "正在导入节点…"
+        "importing": "正在导入节点…",
+        "line": {
+          "subscriptionSourceAdded": "第 {{line}} 行已添加为订阅源；更新该订阅即可导入其节点。",
+          "unsupportedTransport": "第 {{line}} 行已跳过：不支持 {{transport}} 传输方式。",
+          "parseFailed": "第 {{line}} 行已跳过：{{detail}}"
+        }
       },
       "importMethods": {
         "qrImage": "扫描二维码图片",
@@ -722,7 +708,6 @@
     "hysteriaHopIntervalTooShort": "Hysteria 端口跳跃间隔至少为 {{minimumSeconds}} 秒",
     "invalid": "该值无效",
     "invalidAddress": "服务器地址无效",
-    "invalidFinalMask": "final 掩码必须是 JSON 对象",
     "invalidFlow": "不支持该 flow 值",
     "invalidPassword": "密码或用户 ID 无效",
     "invalidPort": "端口必须介于 1 到 65535 之间",
@@ -744,7 +729,6 @@
     "textTooLong": "该值过长",
     "tooManyItems": "条目过多",
     "tunMtuOutOfRange": "TUN MTU 必须介于 {{min}} 到 {{max}} 之间",
-    "unsupportedNetwork": "sing-box 不支持 {{network}} 传输方式",
     "unsupportedProtocol": "sing-box 不支持 {{protocol}} 协议",
     "unsupportedProtocolNetwork": "sing-box 不支持在 {{network}} 上使用 {{protocol}}",
     "unsupportedSettingsSchema": "不支持的设置版本 {{found}}；当前版本需要 {{expected}}",

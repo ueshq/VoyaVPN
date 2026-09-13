@@ -473,9 +473,8 @@ fn http_client_builder(
     proxy_url: Option<&str>,
     read_timeout: Duration,
 ) -> std::result::Result<reqwest::ClientBuilder, reqwest::Error> {
-    // Trust policy shared with `certificates::client_config`: the bundled webpki roots plus
-    // the roots the operating system trusts, so self-hosted servers behind a private CA the
-    // OS already trusts work in both paths. Both flags default to true; setting them keeps the
+    // Trust policy: the bundled webpki roots plus the roots the operating system trusts, so
+    // self-hosted servers behind a private CA the OS already trusts work too. Both flags default to true; setting them keeps the
     // policy explicit and fails the build if the reqwest root features are ever dropped.
     let builder = Client::builder()
         .connect_timeout(HTTP_CONNECT_TIMEOUT)

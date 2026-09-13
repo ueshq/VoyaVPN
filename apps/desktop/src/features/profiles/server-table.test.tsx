@@ -1609,7 +1609,7 @@ function makeImportResult(
     filtered: 0,
     imported: 0,
     importedProfileIds: [],
-    messages: [],
+    lineIssues: [],
     parsed: 0,
     removedDuplicates: 0,
     removedExisting: 0,

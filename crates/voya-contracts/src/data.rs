@@ -51,7 +51,7 @@ pub struct ImportProfilesResult {
     pub subscription_id: Option<String>,
     pub imported_profile_ids: Vec<String>,
     pub updated_profile_ids: Vec<String>,
-    pub messages: Vec<String>,
+    pub line_issues: Vec<crate::ImportLineIssue>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, Type)]

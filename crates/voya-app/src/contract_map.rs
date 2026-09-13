@@ -9,7 +9,7 @@ mod messages;
 mod profiles;
 
 pub use data::*;
-pub use errors::{certificate_error, core_info_error, database_error, input_text_error};
+pub use errors::{core_info_error, database_error, input_text_error};
 pub use messages::validation_issue_to_contract;
 pub use profiles::{profile_from_contract, profile_to_contract};
 

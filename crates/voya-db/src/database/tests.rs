@@ -1351,12 +1351,8 @@ fn sample_profile() -> ProfileItem {
             alpn: Vec::new(),
             reality_public_key: None,
             reality_short_id: None,
-            reality_spider_x: None,
-            mldsa65_verify: None,
             certificate_pem: None,
-            certificate_sha256: Vec::new(),
             ech_config: Vec::new(),
-            final_mask: None,
         }),
         ..ProfileItem::default()
     }
@@ -2648,11 +2644,6 @@ fn sample_transports() -> Vec<ProfileTransport> {
             host: Some("tcp.example.com".to_string()),
             path: Some("/tcp".to_string()),
         },
-        ProfileTransport::Kcp {
-            header: Some("none".to_string()),
-            seed: Some("kcp-seed".to_string()),
-            mtu: Some(1350),
-        },
         ProfileTransport::Websocket {
             host: Some("websocket.example.com".to_string()),
             path: Some("/websocket".to_string()),
@@ -2660,12 +2651,6 @@ fn sample_transports() -> Vec<ProfileTransport> {
         ProfileTransport::HttpUpgrade {
             host: Some("httpupgrade.example.com".to_string()),
             path: Some("/httpupgrade".to_string()),
-        },
-        ProfileTransport::Xhttp {
-            host: Some("xhttp.example.com".to_string()),
-            path: Some("/xhttp".to_string()),
-            mode: Some("packet-up".to_string()),
-            extra: Some("{}".to_string()),
         },
         ProfileTransport::Http2 {
             host: Some("http2.example.com".to_string()),
@@ -2687,10 +2672,8 @@ fn sample_transports() -> Vec<ProfileTransport> {
 fn transport_fixture_key(transport: &ProfileTransport) -> &'static str {
     match transport {
         ProfileTransport::Tcp { .. } => "tcp",
-        ProfileTransport::Kcp { .. } => "kcp",
         ProfileTransport::Websocket { .. } => "websocket",
         ProfileTransport::HttpUpgrade { .. } => "httpUpgrade",
-        ProfileTransport::Xhttp { .. } => "xhttp",
         ProfileTransport::Http2 { .. } => "http2",
         ProfileTransport::Grpc { .. } => "grpc",
         ProfileTransport::Quic { .. } => "quic",
@@ -2705,12 +2688,8 @@ fn sample_tls() -> TlsSettings {
         alpn: vec!["h2".to_string(), "http/1.1".to_string()],
         reality_public_key: Some("reality-public-key".to_string()),
         reality_short_id: Some("0123456789abcdef".to_string()),
-        reality_spider_x: Some("/spider".to_string()),
-        mldsa65_verify: Some("mldsa65-verify".to_string()),
         certificate_pem: Some("-----BEGIN CERTIFICATE-----".to_string()),
-        certificate_sha256: vec!["aabbcc".to_string()],
         ech_config: vec!["ech-config".to_string()],
-        final_mask: Some("final-mask".to_string()),
     }
 }
 

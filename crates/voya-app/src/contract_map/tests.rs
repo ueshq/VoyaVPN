@@ -296,14 +296,6 @@ fn every_transport() -> Vec<(&'static str, CoreProfileTransport)> {
             },
         ),
         (
-            "kcp",
-            CoreProfileTransport::Kcp {
-                header: Some("kcp-header".to_string()),
-                seed: Some("kcp-seed".to_string()),
-                mtu: Some(1_350),
-            },
-        ),
-        (
             "websocket",
             CoreProfileTransport::Websocket {
                 host: Some("websocket-host".to_string()),
@@ -315,15 +307,6 @@ fn every_transport() -> Vec<(&'static str, CoreProfileTransport)> {
             CoreProfileTransport::HttpUpgrade {
                 host: Some("http-upgrade-host".to_string()),
                 path: Some("http-upgrade-path".to_string()),
-            },
-        ),
-        (
-            "xhttp",
-            CoreProfileTransport::Xhttp {
-                host: Some("xhttp-host".to_string()),
-                path: Some("xhttp-path".to_string()),
-                mode: Some("xhttp-mode".to_string()),
-                extra: Some("xhttp-extra".to_string()),
             },
         ),
         (
@@ -367,12 +350,8 @@ fn every_tls() -> Vec<(&'static str, CoreTlsSettings)> {
                     alpn: vec!["tls-alpn".to_string()],
                     reality_public_key: Some("tls-reality-public-key".to_string()),
                     reality_short_id: Some("tls-reality-short-id".to_string()),
-                    reality_spider_x: Some("tls-reality-spider-x".to_string()),
-                    mldsa65_verify: Some("tls-mldsa65-verify".to_string()),
                     certificate_pem: Some("tls-certificate-pem".to_string()),
-                    certificate_sha256: vec!["tls-certificate-sha256".to_string()],
                     ech_config: vec!["tls-ech-config".to_string()],
-                    final_mask: Some("tls-final-mask".to_string()),
                 },
             )
         })

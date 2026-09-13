@@ -95,7 +95,7 @@ impl SubscriptionManager<'_> {
                 subscription_id: subscription_id.map(str::to_string),
                 imported_index_ids: Vec::new(),
                 updated_index_ids: Vec::new(),
-                messages: parsed_import.messages,
+                line_issues: parsed_import.line_issues,
             });
         }
 
@@ -187,7 +187,7 @@ impl SubscriptionManager<'_> {
             0
         };
 
-        let messages = parsed_import.messages;
+        let line_issues = parsed_import.line_issues;
         profile_manager.ensure_active_profile(config).await?;
 
         Ok(ImportProfilesResult {
@@ -205,7 +205,7 @@ impl SubscriptionManager<'_> {
             subscription_id: subscription_id.map(str::to_string),
             imported_index_ids,
             updated_index_ids,
-            messages,
+            line_issues,
         })
     }
 }

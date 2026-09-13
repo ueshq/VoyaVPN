@@ -97,10 +97,8 @@ function ProfileDialogForm({
   });
   const {
     formState: { errors, isSubmitting },
-    getValues,
     handleSubmit,
     register,
-    setValue,
   } = form;
   const configType = useWatch({
     control: form.control,
@@ -210,10 +208,8 @@ function ProfileDialogForm({
               ) : null}
               <SecurityPanel
                 control={form.control}
-                getValues={getValues}
                 register={register}
                 security={security}
-                setValue={setValue}
               />
             </div>
           </form>

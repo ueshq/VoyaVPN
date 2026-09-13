@@ -4,7 +4,7 @@ use regex::Regex;
 use std::collections::BTreeSet;
 use voya_core::{
     parse_share_link, parse_ss_sip008, parse_voya_profile_bundle, parse_wireguard_config,
-    ProfileItem,
+    ImportLineCode, ImportLineIssue, ProfileItem, ShareError,
 };
 use voya_net::decode_base64_payload;
 
@@ -14,7 +14,7 @@ pub(super) struct ParsedImportText {
     pub(super) profiles: Vec<ProfileItem>,
     pub(super) failed_lines: usize,
     pub(super) discarded_node_overrides: usize,
-    pub(super) messages: Vec<String>,
+    pub(super) line_issues: Vec<ImportLineIssue>,
 }
 
 pub(super) fn parse_import_text(text: &str, subscription_id: &str) -> Result<ParsedImportText> {
@@ -22,7 +22,7 @@ pub(super) fn parse_import_text(text: &str, subscription_id: &str) -> Result<Par
     let mut subscription_urls = Vec::new();
     let mut failed_lines = 0_usize;
     let mut discarded_node_overrides = 0_usize;
-    let mut messages = Vec::new();
+    let mut line_issues = Vec::new();
     let allow_subscription_import = subscription_id.trim().is_empty();
     let mut contents = Vec::new();
     if let Some(decoded) = decode_base64_payload(text) {
@@ -43,19 +43,23 @@ pub(super) fn parse_import_text(text: &str, subscription_id: &str) -> Result<Par
             if !subscription_id.is_empty() && !lines_seen.insert(line.to_string()) {
                 continue;
             }
+            let line_number = u32::try_from(line_index.saturating_add(1)).unwrap_or(u32::MAX);
             if allow_subscription_import && is_http_url(line) {
                 subscription_urls.push(line.to_string());
-                messages.push(format!(
-                    "Line {} added as a subscription source; run subscription update to import its nodes.",
-                    line_index + 1
-                ));
+                line_issues.push(ImportLineIssue {
+                    line: line_number,
+                    code: ImportLineCode::SubscriptionSourceAdded,
+                });
                 continue;
             }
             match parse_share_link(line) {
                 Ok(profile) => profiles.push(profile),
                 Err(error) if should_report_line_parse_error(line) => {
                     failed_lines = failed_lines.saturating_add(1);
-                    messages.push(format!("Line {} was skipped: {error}", line_index + 1));
+                    line_issues.push(ImportLineIssue {
+                        line: line_number,
+                        code: import_line_code(error),
+                    });
                 }
                 Err(_) => {}
             }
@@ -79,9 +83,20 @@ pub(super) fn parse_import_text(text: &str, subscription_id: &str) -> Result<Par
             subscription_urls,
             failed_lines,
             discarded_node_overrides,
-            messages,
+            line_issues,
             profiles,
         })
+    }
+}
+
+fn import_line_code(error: ShareError) -> ImportLineCode {
+    match error {
+        ShareError::UnsupportedTransport { transport } => {
+            ImportLineCode::UnsupportedTransport { transport }
+        }
+        other => ImportLineCode::ParseFailed {
+            detail: other.to_string(),
+        },
     }
 }
 fn count_discarded_node_overrides(content: &str) -> usize {
@@ -153,7 +168,13 @@ mod tests {
             ]
         );
         assert!(plan.profiles.is_empty());
-        assert_eq!(plan.messages.len(), 3);
+        assert_eq!(
+            plan.line_issues
+                .iter()
+                .map(|issue| (issue.line, issue.code.clone()))
+                .collect::<Vec<_>>(),
+            [1, 2, 3].map(|line| (line, ImportLineCode::SubscriptionSourceAdded))
+        );
     }
 
     #[test]
@@ -170,7 +191,37 @@ mod tests {
             .expect("partial import plan");
         assert_eq!(plan.subscription_urls, ["https://one.test/sub"]);
         assert_eq!(plan.failed_lines, 1);
-        assert!(plan.messages[0].starts_with("Line 1 added"));
-        assert!(plan.messages[1].starts_with("Line 2 was skipped"));
+        assert_eq!(
+            plan.line_issues[0],
+            ImportLineIssue {
+                line: 1,
+                code: ImportLineCode::SubscriptionSourceAdded,
+            }
+        );
+        assert_eq!(plan.line_issues[1].line, 2);
+        assert!(matches!(
+            plan.line_issues[1].code,
+            ImportLineCode::ParseFailed { .. }
+        ));
+    }
+
+    #[test]
+    fn retired_transport_lines_are_counted_and_reported_as_unsupported() {
+        let plan = parse_import_text(
+            "vless://00000000-0000-0000-0000-000000000001@example.com:443?encryption=none&type=xhttp#retired\ntrojan://secret@example.com:443?security=tls&type=ws#kept",
+            "",
+        )
+        .expect("partial import plan");
+        assert_eq!(plan.profiles.len(), 1);
+        assert_eq!(plan.failed_lines, 1);
+        assert_eq!(
+            plan.line_issues,
+            [ImportLineIssue {
+                line: 1,
+                code: ImportLineCode::UnsupportedTransport {
+                    transport: "xhttp".to_string(),
+                },
+            }]
+        );
     }
 }

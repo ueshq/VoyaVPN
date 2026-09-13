@@ -41,15 +41,15 @@ const QUIC_NETWORK: &str = "quic";
 
 const NETWORKS: &[&str] = &[
     "raw",
-    "xhttp",
-    "kcp",
     "grpc",
     "ws",
     "httpupgrade",
     HTTP2_NETWORK,
     QUIC_NETWORK,
 ];
-const XHTTP_MODES: &[&str] = &["auto", "packet-up", "stream-up", "stream-one"];
+/// Transports sing-box cannot carry. A share link naming one is rejected
+/// outright instead of importing a node that could never connect.
+const RETIRED_NETWORKS: &[&str] = &["xhttp", "splithttp", "kcp", "mkcp"];
 
 mod anytls;
 mod common;
@@ -81,6 +81,8 @@ pub enum ShareError {
     EmptyInput,
     #[error("unsupported share protocol")]
     UnsupportedProtocol,
+    #[error("unsupported transport {transport}")]
+    UnsupportedTransport { transport: String },
     #[error("invalid {protocol} URI: {reason}")]
     InvalidUri {
         protocol: &'static str,

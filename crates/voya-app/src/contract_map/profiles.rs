@@ -285,26 +285,12 @@ fn transport_to_contract(transport: CoreProfileTransport) -> ProfileTransport {
         CoreProfileTransport::Tcp { header, host, path } => {
             ProfileTransport::Tcp { header, host, path }
         }
-        CoreProfileTransport::Kcp { header, seed, mtu } => {
-            ProfileTransport::Kcp { header, seed, mtu }
-        }
         CoreProfileTransport::Websocket { host, path } => {
             ProfileTransport::Websocket { host, path }
         }
         CoreProfileTransport::HttpUpgrade { host, path } => {
             ProfileTransport::HttpUpgrade { host, path }
         }
-        CoreProfileTransport::Xhttp {
-            host,
-            path,
-            mode,
-            extra,
-        } => ProfileTransport::Xhttp {
-            host,
-            path,
-            mode,
-            extra,
-        },
         CoreProfileTransport::Http2 { host, path } => ProfileTransport::Http2 { host, path },
         CoreProfileTransport::Grpc {
             authority,
@@ -324,26 +310,12 @@ fn transport_from_contract(transport: ProfileTransport) -> CoreProfileTransport 
         ProfileTransport::Tcp { header, host, path } => {
             CoreProfileTransport::Tcp { header, host, path }
         }
-        ProfileTransport::Kcp { header, seed, mtu } => {
-            CoreProfileTransport::Kcp { header, seed, mtu }
-        }
         ProfileTransport::Websocket { host, path } => {
             CoreProfileTransport::Websocket { host, path }
         }
         ProfileTransport::HttpUpgrade { host, path } => {
             CoreProfileTransport::HttpUpgrade { host, path }
         }
-        ProfileTransport::Xhttp {
-            host,
-            path,
-            mode,
-            extra,
-        } => CoreProfileTransport::Xhttp {
-            host,
-            path,
-            mode,
-            extra,
-        },
         ProfileTransport::Http2 { host, path } => CoreProfileTransport::Http2 { host, path },
         ProfileTransport::Grpc {
             authority,
@@ -368,12 +340,8 @@ fn tls_to_contract(tls: CoreTlsSettings) -> TlsSettings {
         alpn: tls.alpn,
         reality_public_key: tls.reality_public_key,
         reality_short_id: tls.reality_short_id,
-        reality_spider_x: tls.reality_spider_x,
-        mldsa65_verify: tls.mldsa65_verify,
         certificate_pem: tls.certificate_pem,
-        certificate_sha256: tls.certificate_sha256,
         ech_config: tls.ech_config,
-        final_mask: tls.final_mask,
     }
 }
 
@@ -387,12 +355,8 @@ fn tls_from_contract(tls: TlsSettings) -> CoreTlsSettings {
         alpn: tls.alpn,
         reality_public_key: tls.reality_public_key,
         reality_short_id: tls.reality_short_id,
-        reality_spider_x: tls.reality_spider_x,
-        mldsa65_verify: tls.mldsa65_verify,
         certificate_pem: tls.certificate_pem,
-        certificate_sha256: tls.certificate_sha256,
         ech_config: tls.ech_config,
-        final_mask: tls.final_mask,
     }
 }
 

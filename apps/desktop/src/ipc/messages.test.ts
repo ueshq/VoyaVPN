@@ -2,14 +2,16 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { changeLocale, i18next, localeOptions, type Locale, type TranslationFunction } from "@voya/i18n";
 
-import type { LogCode, NoticeCode, SpeedtestOutcome, ValidationCode } from "@/ipc/bindings";
+import type { ImportLineIssue, LogCode, NoticeCode, SpeedtestOutcome, ValidationCode } from "@/ipc/bindings";
 import {
   CORE_FLOW_REASON_KEYS,
+  IMPORT_LINE_KEYS,
   LOG_KEYS,
   NOTICE_KEYS,
   SPEEDTEST_OUTCOME_KEYS,
   VALIDATION_KEYS,
   VALIDATION_SCOPE_KEYS,
+  importLineText,
   logLineText,
   noticeText,
   speedtestOutcomeText,
@@ -44,6 +46,7 @@ describe("backend message codes", () => {
       ...Object.values(VALIDATION_KEYS),
       ...Object.values(VALIDATION_SCOPE_KEYS),
       ...Object.values(SPEEDTEST_OUTCOME_KEYS),
+      ...Object.values(IMPORT_LINE_KEYS),
     ];
 
     expect(keys.length).toBeGreaterThan(0);
@@ -56,6 +59,20 @@ describe("backend message codes", () => {
         expect(text, `${locale}:${key}`).not.toBe(key);
       }
     }
+  });
+
+  it("renders every import line code with its line number", () => {
+    const issues: ImportLineIssue[] = [
+      { line: 2, code: { code: "subscriptionSourceAdded" } },
+      { line: 3, code: { code: "unsupportedTransport", transport: "xhttp" } },
+      { line: 4, code: { code: "parseFailed", detail: "invalid vless URI" } },
+    ];
+    expect(issues.map((issue) => importLineText(en, issue))).toEqual([
+      "Line 2 was added as a subscription source; update the subscription to import its nodes.",
+      "Line 3 was skipped: the xhttp transport is not supported.",
+      "Line 4 was skipped: invalid vless URI",
+    ]);
+    expect(importLineText(zh, issues[1]!)).toBe("第 3 行已跳过：不支持 xhttp 传输方式。");
   });
 
   it("renders every notice code, and translates it outside English", () => {

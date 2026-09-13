@@ -12,11 +12,6 @@ pub fn validate_node(item: &ProfileItem, core_type: CoreType) -> NodeValidatorRe
 
     let network = get_network(item);
     if core_type == CoreType::sing_box {
-        if SINGBOX_UNSUPPORTED_TRANSPORTS.contains(&network.as_str()) {
-            result.push_error(ValidationCode::UnsupportedNetwork {
-                network: network.clone(),
-            });
-        }
         if !singbox_supports_config_type(item.config_type()) {
             result.push_error(ValidationCode::UnsupportedProtocol {
                 protocol: protocol_label(item.config_type()),
@@ -72,17 +67,6 @@ pub fn validate_node(item: &ProfileItem, core_type: CoreType) -> NodeValidatorRe
         result.push_error(ValidationCode::InvalidRealityPublicKey);
     }
 
-    if let Some(final_mask) = item
-        .tls
-        .as_ref()
-        .and_then(|tls| tls.final_mask.as_deref())
-        .filter(|value| !value.trim().is_empty())
-    {
-        if serde_json::from_str::<Value>(final_mask).map_or(true, |value| !value.is_object()) {
-            result.push_error(ValidationCode::InvalidFinalMask);
-        }
-    }
-
     result
 }
 
@@ -127,24 +111,6 @@ fn is_guid_like(value: &str) -> bool {
 
 pub(super) fn is_builtin_outbound(outbound_tag: Option<&str>) -> bool {
     outbound_tag.is_some_and(|tag| matches!(tag, PROXY_TAG | DIRECT_TAG | BLOCK_TAG))
-}
-
-pub(super) fn xhttp_download_settings_address(node: &ProfileItem) -> Option<String> {
-    let ProfileTransport::Xhttp { extra, .. } = node.transport.as_ref()? else {
-        return None;
-    };
-    let extra = extra.as_deref()?.trim();
-    if extra.is_empty() {
-        return None;
-    }
-    let value = serde_json::from_str::<Value>(extra).ok()?;
-    value
-        .get("downloadSettings")
-        .and_then(|settings| settings.get("address"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|address| !address.is_empty())
-        .map(str::to_string)
 }
 
 pub(super) fn push_domain_if_needed(protect_domain_list: &mut Vec<String>, candidate: &str) {
@@ -202,7 +168,7 @@ pub(super) fn nonempty(value: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::TlsSettings;
+    use crate::{ProfileTransport, TlsSettings};
 
     #[test]
     fn validate_node_rejection_table_covers_every_branch() {
@@ -223,35 +189,6 @@ mod tests {
                 "port above range",
                 with_server(vless_node(), "node.example", 65536),
                 &[ValidationCode::InvalidPort],
-            ),
-            (
-                "kcp transport",
-                with_transport(
-                    vless_node(),
-                    ProfileTransport::Kcp {
-                        header: None,
-                        seed: None,
-                        mtu: None,
-                    },
-                ),
-                &[ValidationCode::UnsupportedNetwork {
-                    network: "kcp".to_string(),
-                }],
-            ),
-            (
-                "xhttp transport",
-                with_transport(
-                    vless_node(),
-                    ProfileTransport::Xhttp {
-                        host: None,
-                        path: None,
-                        mode: None,
-                        extra: None,
-                    },
-                ),
-                &[ValidationCode::UnsupportedNetwork {
-                    network: "xhttp".to_string(),
-                }],
             ),
             (
                 "grpc on a protocol without transports",
@@ -309,17 +246,6 @@ mod tests {
                     },
                 ),
                 &[ValidationCode::InvalidRealityPublicKey],
-            ),
-            (
-                "final mask that is not a JSON object",
-                with_tls(
-                    vless_node(),
-                    TlsSettings {
-                        final_mask: Some("[1,2]".to_string()),
-                        ..tls()
-                    },
-                ),
-                &[ValidationCode::InvalidFinalMask],
             ),
         ];
 
@@ -386,12 +312,8 @@ mod tests {
             alpn: Vec::new(),
             reality_public_key: None,
             reality_short_id: None,
-            reality_spider_x: None,
-            mldsa65_verify: None,
             certificate_pem: None,
-            certificate_sha256: Vec::new(),
             ech_config: Vec::new(),
-            final_mask: None,
         }
     }
 

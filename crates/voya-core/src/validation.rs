@@ -27,8 +27,6 @@ pub enum ValidationCode {
     InvalidFlow,
     InvalidShadowsocksMethod,
     InvalidRealityPublicKey,
-    InvalidFinalMask,
-    UnsupportedNetwork { network: String },
     UnsupportedProtocol { protocol: String },
     UnsupportedProtocolNetwork { protocol: String, network: String },
     UnsupportedShadowsocksNetwork { network: String },

@@ -365,12 +365,8 @@ pub(crate) fn normalize_profile(profile: &mut ProfileItem) {
         trim_option(&mut tls.server_name);
         trim_option(&mut tls.reality_public_key);
         trim_option(&mut tls.reality_short_id);
-        trim_option(&mut tls.reality_spider_x);
-        trim_option(&mut tls.mldsa65_verify);
         trim_option(&mut tls.certificate_pem);
-        trim_option(&mut tls.final_mask);
         normalize_values(&mut tls.alpn);
-        normalize_values(&mut tls.certificate_sha256);
         normalize_values(&mut tls.ech_config);
     }
 }
@@ -488,27 +484,12 @@ fn normalize_transport(transport: &mut ProfileTransport) {
             trim_option(host);
             trim_option(path);
         }
-        ProfileTransport::Kcp { header, seed, .. } => {
-            trim_option(header);
-            trim_option(seed);
-        }
         ProfileTransport::Websocket { host, path }
         | ProfileTransport::HttpUpgrade { host, path }
         | ProfileTransport::Http2 { host, path }
         | ProfileTransport::Quic { host, path } => {
             trim_option(host);
             trim_option(path);
-        }
-        ProfileTransport::Xhttp {
-            host,
-            path,
-            mode,
-            extra,
-        } => {
-            trim_option(host);
-            trim_option(path);
-            trim_option(mode);
-            trim_option(extra);
         }
         ProfileTransport::Grpc {
             authority,
@@ -882,12 +863,8 @@ mod tests {
                 alpn: Vec::new(),
                 reality_public_key: None,
                 reality_short_id: None,
-                reality_spider_x: None,
-                mldsa65_verify: None,
                 certificate_pem: None,
-                certificate_sha256: Vec::new(),
                 ech_config: Vec::new(),
-                final_mask: None,
             }),
             ..ProfileItem::default()
         }

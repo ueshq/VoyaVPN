@@ -203,10 +203,6 @@ pub enum ValidationCode {
     InvalidFlow,
     InvalidShadowsocksMethod,
     InvalidRealityPublicKey,
-    InvalidFinalMask,
-    UnsupportedNetwork {
-        network: String,
-    },
     UnsupportedProtocol {
         protocol: String,
     },
@@ -310,6 +306,31 @@ impl ValidationIssue {
             },
         )
     }
+}
+
+/// Why one line of imported text did not simply become a node.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(
+    tag = "code",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum ImportLineCode {
+    /// The line was a subscription URL and was added as a source instead.
+    SubscriptionSourceAdded,
+    /// The share link names a transport sing-box cannot carry.
+    UnsupportedTransport { transport: String },
+    /// Any other share-link parse failure, with its untranslated diagnostic.
+    ParseFailed { detail: String },
+}
+
+/// One reported line of an import, numbered from 1.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImportLineIssue {
+    pub line: u32,
+    pub code: ImportLineCode,
 }
 
 #[cfg(test)]

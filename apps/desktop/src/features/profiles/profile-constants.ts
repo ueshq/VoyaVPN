@@ -77,10 +77,8 @@ const PROFILE_PROTOCOL_LABELS = PROFILE_PROTOCOLS.reduce<Partial<Record<ProfileK
 
 export const NETWORK_OPTIONS = [
   { label: "TCP / Raw", value: "tcp" },
-  { label: "KCP", value: "kcp" },
   { label: "WebSocket", value: "ws" },
   { label: "HTTP Upgrade", value: "httpupgrade" },
-  { label: "XHTTP", value: "xhttp" },
   { label: "HTTP/2", value: "h2" },
   { label: "gRPC", value: "grpc" },
   { label: "QUIC", value: "quic" },

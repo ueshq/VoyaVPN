@@ -1,5 +1,7 @@
 import type {
   CoreFlowReason,
+  ImportLineCode,
+  ImportLineIssue,
   LogCode,
   LogLineBody,
   NoticeCode,
@@ -102,7 +104,6 @@ export const VALIDATION_KEYS: Record<ValidationCode["code"], TranslationKey> = {
   dnsHostsLine: "validation.dnsHostsLine",
   hysteriaHopIntervalTooShort: "validation.hysteriaHopIntervalTooShort",
   invalidAddress: "validation.invalidAddress",
-  invalidFinalMask: "validation.invalidFinalMask",
   invalidFlow: "validation.invalidFlow",
   invalidPassword: "validation.invalidPassword",
   invalidPort: "validation.invalidPort",
@@ -116,7 +117,6 @@ export const VALIDATION_KEYS: Record<ValidationCode["code"], TranslationKey> = {
   textTooLong: "validation.textTooLong",
   tooManyItems: "validation.tooManyItems",
   tunMtuOutOfRange: "validation.tunMtuOutOfRange",
-  unsupportedNetwork: "validation.unsupportedNetwork",
   unsupportedProtocol: "validation.unsupportedProtocol",
   unsupportedProtocolNetwork: "validation.unsupportedProtocolNetwork",
   unsupportedSettingsSchema: "validation.unsupportedSettingsSchema",
@@ -149,6 +149,12 @@ export const SPEEDTEST_OUTCOME_KEYS: Record<SpeedtestOutcome, TranslationKey> =
     unknown: "speedtest.outcome.unknown",
     waiting: "speedtest.outcome.waiting",
   };
+
+export const IMPORT_LINE_KEYS: Record<ImportLineCode["code"], TranslationKey> = {
+  parseFailed: "panes.profiles.import.line.parseFailed",
+  subscriptionSourceAdded: "panes.profiles.import.line.subscriptionSourceAdded",
+  unsupportedTransport: "panes.profiles.import.line.unsupportedTransport",
+};
 
 export function noticeText(t: TranslationFunction, code: NoticeCode) {
   return t(NOTICE_KEYS[code.code], code);
@@ -212,4 +218,12 @@ export function speedtestOutcomeText(
   outcome: SpeedtestOutcome,
 ) {
   return t(SPEEDTEST_OUTCOME_KEYS[outcome]);
+}
+
+/** One reported line of an import, with its 1-based line number. */
+export function importLineText(t: TranslationFunction, issue: ImportLineIssue) {
+  return t(IMPORT_LINE_KEYS[issue.code.code], {
+    ...issue.code,
+    line: issue.line,
+  });
 }

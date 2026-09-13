@@ -26,7 +26,7 @@ use voya_contracts::{AppError, AppErrorEntity, AppErrorKind, AppErrorSubsystem, 
 use super::validation_issue_to_contract;
 use voya_core::CoreType;
 use voya_db::DbError;
-use voya_net::{certificates::CertificateError, ruleset::RulesetGeoError, DownloadError};
+use voya_net::{ruleset::RulesetGeoError, DownloadError};
 use voya_platform::coreinfo::CoreInfoError;
 
 use crate::{
@@ -137,20 +137,6 @@ fn missing_core_candidates(candidates: &str) -> Vec<String> {
         .filter(|candidate| !candidate.is_empty())
         .map(ToString::to_string)
         .collect()
-}
-
-/// TLS certificate probing, driven straight from the profile editor's inputs.
-#[must_use]
-pub fn certificate_error(error: &CertificateError) -> AppError {
-    match error {
-        CertificateError::EmptyAddress => invalid(Sub::Certificate, "address", error),
-        CertificateError::InvalidServerName => invalid(Sub::Certificate, "serverName", error),
-        CertificateError::InvalidPem => invalid(Sub::Certificate, "pem", error),
-        CertificateError::Timeout
-        | CertificateError::Tcp(_)
-        | CertificateError::Tls(_)
-        | CertificateError::MissingPeerCertificate => network(Sub::Certificate, error),
-    }
 }
 
 impl From<ProfileManagerError> for AppError {

@@ -96,7 +96,8 @@ impl Database {
                 validate_existing_schema(&migration_pool, path).await?;
                 enable_write_ahead_logging(&migration_pool).await?;
                 MIGRATOR.run(&migration_pool).await?;
-                crate::repos::normalize_retired_settings(&migration_pool).await
+                crate::repos::normalize_retired_settings(&migration_pool).await?;
+                crate::repos::normalize_retired_profile_blobs(&migration_pool).await
             }
             .await;
             migration_pool.close().await;
@@ -125,6 +126,7 @@ impl Database {
             .await?;
         MIGRATOR.run(&pool).await?;
         crate::repos::normalize_retired_settings(&pool).await?;
+        crate::repos::normalize_retired_profile_blobs(&pool).await?;
 
         Ok(Self { pool, path: None })
     }

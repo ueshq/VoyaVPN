@@ -135,11 +135,6 @@ pub enum ProfileTransport {
         host: Option<String>,
         path: Option<String>,
     },
-    Kcp {
-        header: Option<String>,
-        seed: Option<String>,
-        mtu: Option<i32>,
-    },
     Websocket {
         host: Option<String>,
         path: Option<String>,
@@ -147,12 +142,6 @@ pub enum ProfileTransport {
     HttpUpgrade {
         host: Option<String>,
         path: Option<String>,
-    },
-    Xhttp {
-        host: Option<String>,
-        path: Option<String>,
-        mode: Option<String>,
-        extra: Option<String>,
     },
     Http2 {
         host: Option<String>,
@@ -184,12 +173,8 @@ pub struct TlsSettings {
     pub alpn: Vec<String>,
     pub reality_public_key: Option<String>,
     pub reality_short_id: Option<String>,
-    pub reality_spider_x: Option<String>,
-    pub mldsa65_verify: Option<String>,
     pub certificate_pem: Option<String>,
-    pub certificate_sha256: Vec<String>,
     pub ech_config: Vec<String>,
-    pub final_mask: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
@@ -288,12 +273,8 @@ mod tests {
                 alpn: vec!["h2".to_string()],
                 reality_public_key: None,
                 reality_short_id: None,
-                reality_spider_x: None,
-                mldsa65_verify: None,
                 certificate_pem: None,
-                certificate_sha256: Vec::new(),
                 ech_config: Vec::new(),
-                final_mask: None,
             }),
         };
 

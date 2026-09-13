@@ -19,6 +19,7 @@ import { Textarea } from "@voya/ui/components/textarea";
 import { getErrorMessage } from "@voya/utils/error";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { importProfilesFromText } from "@/ipc/commands";
+import { importLineText } from "@/ipc/messages";
 import type { ImportProfilesResult } from "@/ipc/bindings";
 
 import { qrScanErrorCode } from "./qr-errors";
@@ -87,7 +88,7 @@ function ImportProfilesDialogSession({
         result.imported > 0 &&
         result.failed === 0 &&
         result.skipped === 0 &&
-        result.messages.length === 0
+        result.lineIssues.length === 0
       ) {
         // The profiles banner owns the summary once the dialog closes.
         onOpenChange(false);
@@ -97,9 +98,9 @@ function ImportProfilesDialogSession({
         `${formatImportSummary(result, t)} ${t("panes.profiles.import.summary.target", { target: targetLabel })}`,
       );
       setResultMessages(
-        result.messages.map((message) => ({
+        result.lineIssues.map((issue) => ({
           id: `import-message-${++nextResultMessageIdRef.current}`,
-          text: message,
+          text: importLineText(t, issue),
         })),
       );
     } catch (error) {

@@ -121,7 +121,6 @@ pub enum AppErrorSubsystem {
     /// The shell itself: window chrome, event emission, background tasks.
     App,
     Autostart,
-    Certificate,
     /// Reading or writing the persisted application configuration.
     Config,
     Dns,
