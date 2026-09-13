@@ -11,9 +11,9 @@ use sqlx::{
 use tokio::sync::Mutex;
 
 use crate::{
-    AppStateRepository, DbError, ProfileExRepository, ProfileRepository, Result, RoutingRepository,
-    ServerStatRepository, SettingsRepository, SubscriptionMetadataRepository,
-    SubscriptionRepository,
+    AppStateRepository, DbError, PolicyGroupRepository, ProfileExRepository, ProfileRepository,
+    Result, RoutingRepository, ServerStatRepository, SettingsRepository,
+    SubscriptionMetadataRepository, SubscriptionRepository,
 };
 
 pub const DATABASE_NAME: &str = "voyavpn.sqlite";
@@ -221,6 +221,7 @@ session_accessors! {
     routings => RoutingRepository,
     settings => SettingsRepository,
     app_state => AppStateRepository,
+    policy_groups => PolicyGroupRepository,
 }
 
 /// Switches the database file to write-ahead logging.

@@ -1,3 +1,4 @@
+mod policy_group;
 mod profile;
 mod profile_ex;
 mod routing;
@@ -7,6 +8,7 @@ mod state;
 mod subscription;
 mod subscription_metadata;
 
+pub use policy_group::PolicyGroupRepository;
 pub(crate) use profile::normalize_retired_profile_blobs;
 pub use profile::{ProfileListing, ProfileRepository};
 pub use profile_ex::ProfileExRepository;

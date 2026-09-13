@@ -650,10 +650,6 @@ mod tests {
             .await
             .expect("profile manager test operation should succeed");
 
-        // Current-baseline databases may still contain manual folder rows. They
-        // cannot partition local ordering or affect node identity/selection.
-        sqlx::raw_sql("INSERT INTO node_groups (id, name, sort) VALUES ('old', 'Old', 0); INSERT INTO node_group_memberships (profile_id, group_id) VALUES ('c', 'old')")
-            .execute(database.pool()).await.expect("old folder fixture");
         config.index_id = "a".to_string();
         manager
             .move_profile(&config, None, &c.profile.index_id, MoveAction::Top, None)
@@ -672,13 +668,6 @@ mod tests {
             ["c", "a", "b"]
         );
         assert_eq!(config.index_id, "a");
-        let membership: String = sqlx::query_scalar(
-            "SELECT group_id FROM node_group_memberships WHERE profile_id = 'c'",
-        )
-        .fetch_one(database.pool())
-        .await
-        .expect("old membership retained");
-        assert_eq!(membership, "old");
     }
 
     /// Persisted ownership is authoritative, including mixed batch requests.

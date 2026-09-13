@@ -39,7 +39,7 @@ async fn current_baseline_is_the_only_initialization_record() {
             .await
             .expect("records");
     assert_eq!(records.len(), 1);
-    assert_eq!((records[0].0, records[0].1), (9, 1));
+    assert_eq!((records[0].0, records[0].1), (10, 1));
     assert_eq!(MIGRATOR.iter().count(), 1);
     assert_eq!(
         records[0].2,
@@ -170,13 +170,13 @@ async fn unsupported_baseline_records_are_rejected_before_any_write() {
         "UPDATE _sqlx_migrations SET success = 0",
         "UPDATE _sqlx_migrations SET success = 2",
         "UPDATE _sqlx_migrations SET checksum = X'00'",
-        "UPDATE _sqlx_migrations SET version = 10",
+        "UPDATE _sqlx_migrations SET version = 11",
         "INSERT INTO _sqlx_migrations SELECT 8, description, installed_on, success, checksum, execution_time FROM _sqlx_migrations",
         "ALTER TABLE _sqlx_migrations DROP COLUMN checksum",
         "UPDATE _sqlx_migrations SET version = 'invalid'",
     ];
     let old_versions =
-        (1..=8).map(|version| ("UPDATE _sqlx_migrations SET version = ?", Some(version)));
+        (1..=9).map(|version| ("UPDATE _sqlx_migrations SET version = ?", Some(version)));
     for (mutation, version) in mutations
         .into_iter()
         .map(|sql| (sql, None))
@@ -219,7 +219,7 @@ async fn unsupported_baseline_records_are_rejected_before_any_write() {
         assert!(
             matches!(
                 error,
-                DbError::UnsupportedDatabaseSchema { expected: 9, .. }
+                DbError::UnsupportedDatabaseSchema { expected: 10, .. }
             ),
             "{mutation}: {error}"
         );

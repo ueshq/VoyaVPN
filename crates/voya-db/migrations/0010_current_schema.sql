@@ -10,19 +10,35 @@ CREATE TABLE app_state (
     id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
     active_profile_id TEXT,
     active_routing_id TEXT,
+    active_group_id TEXT,
     FOREIGN KEY (active_profile_id) REFERENCES profile_items(index_id) ON DELETE SET NULL,
-    FOREIGN KEY (active_routing_id) REFERENCES routing_items(id) ON DELETE SET NULL
+    FOREIGN KEY (active_routing_id) REFERENCES routing_items(id) ON DELETE SET NULL,
+    FOREIGN KEY (active_group_id) REFERENCES policy_groups(id) ON DELETE SET NULL,
+    CHECK (active_profile_id IS NULL OR active_group_id IS NULL)
 );
 
-CREATE TABLE node_group_memberships (
-    profile_id TEXT PRIMARY KEY NOT NULL REFERENCES profile_items(index_id) ON DELETE CASCADE,
-    group_id TEXT NOT NULL REFERENCES node_groups(id) ON DELETE CASCADE
+CREATE TABLE policy_group_members (
+    group_id TEXT NOT NULL,
+    profile_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (group_id, profile_id),
+    FOREIGN KEY (group_id) REFERENCES policy_groups(id) ON DELETE CASCADE,
+    FOREIGN KEY (profile_id) REFERENCES profile_items(index_id) ON DELETE CASCADE
 );
 
-CREATE TABLE node_groups (
+CREATE TABLE policy_groups (
     id TEXT PRIMARY KEY NOT NULL,
-    name TEXT NOT NULL UNIQUE CHECK (length(trim(name)) > 0),
-    sort INTEGER NOT NULL
+    name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+    strategy TEXT NOT NULL CHECK (strategy IN ('selector', 'urltest', 'fallback')),
+    source_subscription_id TEXT,
+    auto_created INTEGER NOT NULL DEFAULT 0 CHECK (auto_created IN (0, 1)),
+    selected_profile_id TEXT,
+    test_url TEXT,
+    interval_seconds INTEGER,
+    tolerance_ms INTEGER,
+    sort INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (source_subscription_id) REFERENCES subscriptions(id) ON DELETE SET NULL,
+    FOREIGN KEY (selected_profile_id) REFERENCES profile_items(index_id) ON DELETE SET NULL
 );
 
 CREATE TABLE profile_ex_items (
@@ -50,13 +66,11 @@ CREATE TABLE profile_items (
 CREATE TABLE routing_items (
     id TEXT PRIMARY KEY NOT NULL,
     remarks TEXT NOT NULL DEFAULT '',
-    url TEXT NOT NULL DEFAULT '',
     rule_set TEXT NOT NULL DEFAULT '[]',
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
     locked INTEGER NOT NULL DEFAULT 0 CHECK (locked IN (0, 1)),
     custom_icon TEXT NOT NULL DEFAULT '',
     custom_ruleset_path4_singbox TEXT NOT NULL DEFAULT '',
-    domain_strategy TEXT NOT NULL DEFAULT '',
     domain_strategy4_singbox TEXT NOT NULL DEFAULT '',
     sort INTEGER NOT NULL DEFAULT 0
 );
@@ -100,9 +114,9 @@ CREATE TABLE subscriptions (
     auto_update_interval_minutes INTEGER
 );
 
-CREATE INDEX idx_node_group_memberships_group ON node_group_memberships (group_id);
+CREATE INDEX idx_policy_group_members_profile ON policy_group_members (profile_id);
 
-CREATE INDEX idx_node_groups_sort ON node_groups (sort, id);
+CREATE INDEX idx_policy_groups_sort ON policy_groups (sort, id);
 
 CREATE INDEX idx_profile_items_config_type ON profile_items (config_type);
 
@@ -120,4 +134,4 @@ BEGIN
 END;
 
 INSERT INTO schema_metadata (id, version) VALUES (1, 1);
-INSERT INTO app_state (id, active_profile_id, active_routing_id) VALUES (1, NULL, NULL);
+INSERT INTO app_state (id, active_profile_id, active_routing_id, active_group_id) VALUES (1, NULL, NULL, NULL);

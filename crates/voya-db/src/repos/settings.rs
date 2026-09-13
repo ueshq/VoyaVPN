@@ -271,9 +271,10 @@ async fn save_state_on<'executor, E>(executor: E, state: &AppStateRecord) -> Res
 where
     E: sqlx::Executor<'executor, Database = sqlx::Sqlite>,
 {
-    sqlx::query("UPDATE app_state SET active_profile_id = ?, active_routing_id = ? WHERE id = 1")
+    sqlx::query("UPDATE app_state SET active_profile_id = ?, active_routing_id = ?, active_group_id = ? WHERE id = 1")
         .bind(state.active_profile_id.as_deref())
         .bind(state.active_routing_id.as_deref())
+        .bind(state.active_group_id.as_deref())
         .execute(executor)
         .await?;
     Ok(())

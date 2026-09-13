@@ -16,6 +16,8 @@ pub const DEFAULT_BOOTSTRAP_DNS: &str = "119.29.29.29";
 #[derive(Debug, Clone, PartialEq)]
 pub struct AppConfig {
     pub index_id: String,
+    /// The active policy group; empty when a node, or nothing, is active.
+    pub active_group_id: String,
     pub core_basic_item: CoreBasicItem,
     pub tun_mode_item: TunModeItem,
     pub routing_basic_item: RoutingBasicItem,
@@ -34,6 +36,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             index_id: String::new(),
+            active_group_id: String::new(),
             core_basic_item: CoreBasicItem::default(),
             tun_mode_item: TunModeItem::default(),
             routing_basic_item: RoutingBasicItem::default(),
@@ -47,6 +50,40 @@ impl Default for AppConfig {
             inbound: vec![InItem::default()],
             simple_dns_item: SimpleDnsItem::default(),
         }
+    }
+}
+
+/// What connecting uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActiveTarget<'config> {
+    None,
+    Node(&'config str),
+    Group(&'config str),
+}
+
+impl AppConfig {
+    #[must_use]
+    pub fn active_target(&self) -> ActiveTarget<'_> {
+        if !self.active_group_id.is_empty() {
+            ActiveTarget::Group(&self.active_group_id)
+        } else if !self.index_id.is_empty() {
+            ActiveTarget::Node(&self.index_id)
+        } else {
+            ActiveTarget::None
+        }
+    }
+
+    /// Makes a node the active target. A node and a group are never active
+    /// together, which the `app_state` table enforces as well.
+    pub fn set_active_node(&mut self, index_id: impl Into<String>) {
+        self.index_id = index_id.into();
+        self.active_group_id.clear();
+    }
+
+    /// Makes a policy group the active target, clearing the active node.
+    pub fn set_active_group(&mut self, group_id: impl Into<String>) {
+        self.active_group_id = group_id.into();
+        self.index_id.clear();
     }
 }
 

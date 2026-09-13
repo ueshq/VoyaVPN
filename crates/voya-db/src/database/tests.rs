@@ -15,6 +15,7 @@ use crate::{blob, AppStateRecord};
 use super::*;
 
 mod country;
+mod policy_groups;
 mod schema;
 
 /// The stored shape of every value voya-db writes into a SQLite `TEXT` column.
@@ -125,8 +126,8 @@ async fn fresh_schema_contains_only_current_tables_and_columns() {
         [
             "app_settings",
             "app_state",
-            "node_group_memberships",
-            "node_groups",
+            "policy_group_members",
+            "policy_groups",
             "profile_ex_items",
             "profile_items",
             "routing_items",
@@ -146,8 +147,8 @@ async fn fresh_schema_contains_only_current_tables_and_columns() {
     assert_eq!(
         indexes,
         [
-            "idx_node_group_memberships_group",
-            "idx_node_groups_sort",
+            "idx_policy_group_members_profile",
+            "idx_policy_groups_sort",
             "idx_profile_items_config_type",
             "idx_profile_items_subscription_id",
             "idx_routing_items_sort",
@@ -864,6 +865,7 @@ async fn unit_of_work_commits_business_rows_settings_and_state_together() {
     let state = AppStateRecord {
         active_profile_id: Some(profile.index_id.clone()),
         active_routing_id: None,
+        active_group_id: None,
     };
     let unit_of_work = database.begin().await.expect("transaction should begin");
 
@@ -916,6 +918,7 @@ async fn dropped_unit_of_work_rolls_back_all_staged_rows() {
     let state = AppStateRecord {
         active_profile_id: Some(profile.index_id.clone()),
         active_routing_id: None,
+        active_group_id: None,
     };
     let unit_of_work = database.begin().await.expect("transaction should begin");
     unit_of_work
@@ -1763,6 +1766,7 @@ async fn settings_save_with_state_on_the_pool_is_all_or_nothing() {
             &AppStateRecord {
                 active_profile_id: Some(profile.index_id.clone()),
                 active_routing_id: None,
+                active_group_id: None,
             },
         )
         .await

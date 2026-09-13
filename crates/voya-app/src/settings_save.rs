@@ -345,6 +345,8 @@ pub(crate) fn state_from_app_config(config: &AppConfig) -> AppStateRecord {
         active_profile_id: (!config.index_id.is_empty()).then(|| config.index_id.clone()),
         active_routing_id: (!config.routing_basic_item.routing_index_id.is_empty())
             .then(|| config.routing_basic_item.routing_index_id.clone()),
+        active_group_id: (!config.active_group_id.is_empty())
+            .then(|| config.active_group_id.clone()),
     }
 }
 
@@ -355,6 +357,7 @@ pub fn app_config_from_settings(
 ) -> AppConfig {
     AppConfig {
         index_id: state.active_profile_id.clone().unwrap_or_default(),
+        active_group_id: state.active_group_id.clone().unwrap_or_default(),
         core_basic_item: CoreBasicItem {
             log_enabled: settings.core.log_enabled,
             loglevel: settings.core.log_level.clone(),
@@ -564,6 +567,7 @@ mod tests {
     fn distinctly_valued_config() -> AppConfig {
         AppConfig {
             index_id: "active-profile-id".to_string(),
+            active_group_id: String::new(),
             core_basic_item: CoreBasicItem {
                 log_enabled: true,
                 loglevel: "debug".to_string(),
@@ -656,6 +660,7 @@ mod tests {
         let state = AppStateRecord {
             active_profile_id: Some(config.index_id.clone()),
             active_routing_id: Some(config.routing_basic_item.routing_index_id.clone()),
+            active_group_id: None,
         };
 
         let settings = settings_from_app_config(&config);
@@ -835,6 +840,7 @@ mod tests {
     fn saving_unchanged_settings_never_requires_a_runtime_restart() {
         let mut original = AppConfig {
             index_id: "profile-a".to_string(),
+            active_group_id: String::new(),
             ..AppConfig::default()
         };
         original.routing_basic_item.routing_index_id = "routing-a".to_string();
