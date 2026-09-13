@@ -128,7 +128,8 @@ function SidebarFooter() {
       data-testid="sidebar-footer"
     >
       {/* Visible on every page, so being connected never has to be guessed from the rates. */}
-      <p className="sidebar-status">
+      {/* The collapsed sidebar clips the label, so hovering the dot still says it. */}
+      <p className="sidebar-status" title={t(CORE_STATE_TRANSLATION_KEYS[state])}>
         <span aria-hidden="true" className="sidebar-status-dot" />
         <span className="sidebar-status-label">{t(CORE_STATE_TRANSLATION_KEYS[state])}</span>
       </p>

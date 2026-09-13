@@ -246,6 +246,33 @@ describe("HomeScreen", () => {
     expect(screen.queryByRole("group", { name: "Traffic mode" })).not.toBeInTheDocument();
   });
 
+  it("points at the Rules page while global mode skips every rule", async () => {
+    const user = userEvent.setup();
+    const settings = makeAppSettings();
+    ipcMock.loadAppSettings.mockResolvedValue({
+      ...settings,
+      proxy: { ...settings.proxy, trafficMode: "global" },
+    });
+    renderHome();
+
+    const chip = await screen.findByRole("button", { name: "Global proxy" });
+    expect(chip).toHaveAttribute(
+      "title",
+      "Global mode is on: all captured traffic goes through the proxy and these rules are skipped.",
+    );
+    // A pointer, not a control: Home still offers no way to change the mode.
+    expect(screen.queryByRole("group", { name: "Traffic mode" })).not.toBeInTheDocument();
+    await user.click(chip);
+    expect(useShellStore.getState().activeTab).toBe("rules");
+  });
+
+  it("shows no mode reminder in rule mode", async () => {
+    renderHome();
+    await screen.findByRole("heading", { name: "Active node" });
+    await waitFor(() => expect(ipcMock.loadAppSettings).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "Global proxy" })).not.toBeInTheDocument();
+  });
+
   it("shows the active policy group and the member traffic goes through", async () => {
     runtimeMock.state.coreState = connectedStatus;
     ipcMock.runtimeStatus.mockResolvedValue(connectedStatus);

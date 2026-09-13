@@ -34,6 +34,7 @@ const bridgeMocks = vi.hoisted(() => {
     setCloseRequestOpen: vi.fn(),
     setConnectionsView: vi.fn(),
     openSettings: vi.fn(),
+    notifyWhenHidden: vi.fn(() => Promise.resolve(true)),
     transientStreamEventListen: listenFor("transientStreamEvent"),
   };
 });
@@ -66,6 +67,10 @@ vi.mock("@/stores/shell-store", () => ({
       openSettings: bridgeMocks.openSettings,
     }),
   },
+}));
+
+vi.mock("@/ipc/notifications", () => ({
+  notifyWhenHidden: bridgeMocks.notifyWhenHidden,
 }));
 
 vi.mock("@/stores/toast-store", () => ({
@@ -165,6 +170,28 @@ describe("EventBridge", () => {
       severity: "info",
       title: "Tray refresh failed",
     });
+    // A failed tray refresh is only worth a toast.
+    expect(bridgeMocks.notifyWhenHidden).not.toHaveBeenCalled();
+  });
+
+  it("repeats a notice the user must not miss as an OS notification", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={queryClient}><EventBridge /></QueryClientProvider>);
+    await waitFor(() => expect(bridgeMocks.appEventListen).toHaveBeenCalledOnce());
+
+    act(() => {
+      bridgeMocks.listeners.appEvent[0]?.({
+        payload: {
+          kind: "notice",
+          payload: { code: { code: "activeSelectionRemoved" }, detail: "profile gone", level: "warning" },
+        },
+      });
+    });
+
+    const [toast] = bridgeMocks.pushToast.mock.calls[0] as unknown as [{ title: string }];
+    expect(toast.title).toMatch(/\S/);
+    // Same words as the toast, without the untranslated detail.
+    expect(bridgeMocks.notifyWhenHidden).toHaveBeenCalledExactlyOnceWith(toast.title);
   });
 
   it("refreshes a restored running test when profile results change", async () => {

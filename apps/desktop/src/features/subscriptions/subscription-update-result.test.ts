@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+
+import { changeLocale, i18next } from "@voya/i18n";
 
 import type { SubscriptionUpdateResult } from "@/ipc/bindings";
 
 import {
+  formatSubscriptionUpdateSummary,
   isSubscriptionUpdateFailure,
   subscriptionUpdateMessages,
 } from "./subscription-update-result";
@@ -62,5 +65,22 @@ describe("subscriptionUpdateMessages", () => {
 
   it("returns an empty string when the backend reported no reason", () => {
     expect(subscriptionUpdateMessages(result({ skipped: 1 }))).toBe("");
+  });
+});
+
+describe("formatSubscriptionUpdateSummary", () => {
+  beforeEach(async () => {
+    await changeLocale("en", { persist: false });
+  });
+
+  it("names the nodes a source stopped offering", () => {
+    const t = i18next.t.bind(i18next);
+
+    expect(formatSubscriptionUpdateSummary(result({ imported: 5, updated: 1 }), t)).toBe(
+      "1 updated, 5 nodes imported",
+    );
+    expect(
+      formatSubscriptionUpdateSummary(result({ imported: 5, removedExisting: 2, updated: 1 }), t),
+    ).toBe("1 updated, 5 nodes imported, 2 nodes no longer offered were removed");
   });
 });

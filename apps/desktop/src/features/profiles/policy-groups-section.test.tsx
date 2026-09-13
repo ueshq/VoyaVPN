@@ -10,6 +10,8 @@ import { PolicyGroupsSection } from "./policy-groups-section";
 
 vi.mock("./policy-group-dialog", () => ({ PolicyGroupDialog: () => null }));
 
+const RUNNING_GROUP_WARNING = "This policy group is in use; deleting it stops the connection.";
+
 function entry(overrides: Partial<PolicyGroupEntry["group"]>, isActive: boolean): PolicyGroupEntry {
   return {
     group: {
@@ -117,6 +119,17 @@ describe("PolicyGroupsSection", () => {
     expect(screen.getByText("Delete policy group Old?")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Delete" }));
     expect(deleting.removePolicyGroup).toHaveBeenCalledOnce();
+    expect(screen.queryByText(RUNNING_GROUP_WARNING)).toBeNull();
+  });
+
+  it("warns before deleting the group the connection runs through", () => {
+    render(
+      <PolicyGroupsSection
+        controller={controller({ coreConnected: true, deletingPolicyGroup: entry({ name: "Live" }, true) })}
+      />,
+    );
+
+    expect(screen.getByText(RUNNING_GROUP_WARNING)).toBeInTheDocument();
   });
 
   it("names the subscription an automatic group came from", () => {

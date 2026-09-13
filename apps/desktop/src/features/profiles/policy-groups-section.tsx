@@ -64,7 +64,15 @@ export function PolicyGroupsSection({ controller }: { controller: PolicyGroupsCo
             <AlertDialogTitle>
               {t("policyGroups.deleteTitle", { name: deletingPolicyGroup?.group.name })}
             </AlertDialogTitle>
-            <AlertDialogDescription>{t("policyGroups.deleteHint")}</AlertDialogDescription>
+            <AlertDialogDescription>
+              {t("policyGroups.deleteHint")}
+              {/* Same warning as deleting the node in use: say it before, not after. */}
+              {deletingPolicyGroup?.isActive && controller.coreConnected ? (
+                <span className="mt-2 block font-medium text-warning">
+                  {t("policyGroups.deleteActiveHint")}
+                </span>
+              ) : null}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           {operationError && deletingPolicyGroup ? (
             <p className="text-sm text-danger" role="alert">

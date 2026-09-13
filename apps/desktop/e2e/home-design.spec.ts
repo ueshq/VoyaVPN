@@ -246,3 +246,34 @@ for (const { layout, language } of [
     ).toEqual([]);
   });
 }
+
+test("home points at the Rules page while global mode skips every rule", async ({ page }, testInfo) => {
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  await installTauriSmokeMock(page, "none");
+  await page.addInitScript((profile) => {
+    const state = window.__VOYA_SMOKE__.state as {
+      profiles: ProfileListEntry[];
+      settings: AppSettingsV1;
+    };
+    state.profiles = [profile];
+    state.settings.proxy.trafficMode = "global";
+  }, tokyo);
+  await page.setViewportSize({ width: 1180, height: 760 });
+  await page.goto("/");
+
+  const chip = page.getByTestId("home-screen").getByRole("button", { name: "Global proxy", exact: true });
+  await expect(chip).toBeVisible();
+  await expect(chip).toHaveAttribute(
+    "title",
+    "Global mode is on: all captured traffic goes through the proxy and these rules are skipped.",
+  );
+  // A pointer, not a control.
+  await expectNoModeControls(page);
+  await page.screenshot({ path: testInfo.outputPath("home-global-mode.png") });
+
+  await chip.click();
+  await expect(page.getByRole("heading", { level: 1, name: "Rules" })).toBeVisible();
+  await expect(
+    page.getByRole("group", { name: "Traffic mode" }).getByRole("button", { name: "Global", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+});

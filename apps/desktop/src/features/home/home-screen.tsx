@@ -1,4 +1,4 @@
-import { ArrowRight, Power, RotateCcw } from "lucide-react";
+import { ArrowRight, Globe, Power, RotateCcw } from "lucide-react";
 
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -12,6 +12,7 @@ import { NodeCountryIcon } from "@/components/node-country-icon";
 import { getProtocolLabel } from "@/features/profiles/profile-constants";
 import { profileNameWithoutFlag } from "@/features/profiles/profile-display";
 import { POLICY_GROUP_STRATEGY_KEYS } from "@/features/profiles/policy-group-labels";
+import { useSavedTrafficMode } from "@/features/routing/use-traffic-mode";
 import { type RuntimeAction } from "@/stores/runtime-action-store";
 import { useShellStore } from "@/stores/shell-store";
 
@@ -31,6 +32,10 @@ export function HomeScreen() {
   const navigateToNodes = () =>
     useShellStore.getState().setActiveTab("profiles", true);
   const openLogs = () => useShellStore.getState().openSettings("advanced");
+  const openRules = () => useShellStore.getState().setActiveTab("rules", true);
+  // Global mode skips every rule. Home has no mode control, but it must not
+  // let a user believe their rules still apply.
+  const globalMode = useSavedTrafficMode().mode === "global";
   const runtimeActionAvailable =
     home.connected || home.state === "cleanupPending";
   const noNodes =
@@ -157,14 +162,27 @@ export function HomeScreen() {
               />
             </div>
             <div className="home-node-content">
-              <p className="home-node-label">
-                {group
-                  ? home.connected
-                    ? t("home.currentGroupLabel")
-                    : t("home.selectedGroupLabel")
-                  : home.connected
-                    ? t("home.currentNodeLabel")
-                    : t("home.selectedNodeLabel")}
+              <p className="home-node-label home-node-label-row">
+                <span>
+                  {group
+                    ? home.connected
+                      ? t("home.currentGroupLabel")
+                      : t("home.selectedGroupLabel")
+                    : home.connected
+                      ? t("home.currentNodeLabel")
+                      : t("home.selectedNodeLabel")}
+                </span>
+                {globalMode ? (
+                  <button
+                    className="home-mode-chip"
+                    onClick={openRules}
+                    title={t("panes.routing.globalModeBanner")}
+                    type="button"
+                  >
+                    <Globe aria-hidden="true" className="size-3" />
+                    {t("home.globalModeChip")}
+                  </button>
+                ) : null}
               </p>
               <h2 className="home-node-name" title={name}>
                 {name}

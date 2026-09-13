@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "updater:default",
+    "notification:default",
     "process:allow-restart",
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",

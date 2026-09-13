@@ -5,10 +5,12 @@ import { events } from "@/ipc/bindings";
 import type {
   AppEvent,
   InvalidateEvent,
+  NoticeCode,
   ShellTabTarget,
   TransientStreamEvent,
 } from "@/ipc/bindings";
 import { noticeText } from "@/ipc/messages";
+import { notifyWhenHidden } from "@/ipc/notifications";
 import { invalidationQueryKey, queryKeys } from "@/ipc/query-keys";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -23,6 +25,19 @@ type RegisteredUnlisten = {
   eventName: string;
   unlisten: Unlisten;
 };
+
+/**
+ * Notices a user must not miss even with the window hidden in the tray: the
+ * connection stopping, the node or group in use disappearing, a tray action
+ * failing, a subscription that stopped updating. The rest are only toasts.
+ */
+const BACKGROUND_NOTICE_CODES = new Set<NoticeCode["code"]>([
+  "activeSelectionRemoved",
+  "coreStopped",
+  "nativeTunStopped",
+  "subscriptionAutoUpdateFailed",
+  "trayActionFailed",
+]);
 
 export function EventBridge() {
   const queryClient = useQueryClient();
@@ -176,15 +191,22 @@ function routeTransientStream(event: TransientStreamEvent) {
 
 function routeAppEvent(event: AppEvent, t: TranslationFunction) {
   switch (event.kind) {
-    case "notice":
+    case "notice": {
+      // `detail` is the untranslated diagnostic behind the notice; the title
+      // is resolved from the code against the current locale.
+      const title = noticeText(t, event.payload.code);
       useToastStore.getState().pushToast({
-        // `detail` is the untranslated diagnostic behind the notice; the title
-        // is resolved from the code against the current locale.
         description: event.payload.detail ?? undefined,
         severity: event.payload.level,
-        title: noticeText(t, event.payload.code),
+        title,
       });
+      // A toast reaches nobody while the window is hidden in the tray. The OS
+      // notification carries the title only, because the detail is untranslated.
+      if (BACKGROUND_NOTICE_CODES.has(event.payload.code.code)) {
+        void notifyWhenHidden(title);
+      }
       return;
+    }
     case "selectTab": {
       if (event.payload === "logs") {
         // The runtime log lives under Settings → Advanced.

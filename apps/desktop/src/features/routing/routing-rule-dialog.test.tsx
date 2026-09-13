@@ -244,3 +244,40 @@ function rule(overrides: Partial<RoutingRule> = {}): RoutingRule {
     ...overrides,
   };
 }
+
+describe("RoutingRuleDialog after the backend refused a save", () => {
+  function renderRefused(submitError: ComponentProps<typeof RoutingRuleDialog>["submitError"]) {
+    return render(
+      <RoutingRuleDialog
+        mode="create"
+        nodeNames={[]}
+        onOpenChange={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        open
+        rule={null}
+        submitError={submitError}
+      />,
+    );
+  }
+
+  it("shows the reason inside the editor", () => {
+    renderRefused({ issues: [], message: "rule set is locked" });
+
+    expect(within(screen.getByRole("dialog")).getByText("rule set is locked")).toBeInTheDocument();
+  });
+
+  it("puts a refused value next to its field and the rest above the footer", () => {
+    renderRefused({
+      issues: [
+        { code: { code: "invalidPort" }, field: "port", scope: [] },
+        { code: { code: "untranslated", message: "too many rules" }, field: "rules", scope: [] },
+      ],
+      message: "invalid rule",
+    });
+
+    expect(screen.getByText("The port must be between 1 and 65535")).toBeInTheDocument();
+    expect(screen.getByText("too many rules")).toBeInTheDocument();
+    // The summary message is redundant once the issues are shown.
+    expect(screen.queryByText("invalid rule")).toBeNull();
+  });
+});

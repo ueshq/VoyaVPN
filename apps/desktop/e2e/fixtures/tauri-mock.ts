@@ -306,6 +306,14 @@ export async function installTauriSmokeMock(
           return Promise.resolve(null);
         case "plugin:window|is_maximized":
           return Promise.resolve(windowMaximized);
+        // The renderer only notifies while the window is hidden; the mocked
+        // window is always on screen.
+        case "plugin:window|is_visible":
+          return Promise.resolve(true);
+        case "plugin:notification|is_permission_granted":
+          return Promise.resolve(false);
+        case "plugin:notification|notify":
+          return Promise.resolve(null);
         case "plugin:window|toggle_maximize":
           windowMaximized = !windowMaximized;
           emitEvent("tauri://resize", { width: 1180, height: 760 });

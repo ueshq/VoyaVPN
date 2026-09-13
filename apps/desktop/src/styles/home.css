@@ -151,6 +151,36 @@
   color: var(--muted-foreground);
   line-height: 1.4;
 }
+.home-node-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+/* A reminder, not a control: the traffic mode switch lives on the Rules page. */
+.home-mode-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 9999px;
+  background: var(--accent-blue-bg);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+}
+.home-mode-chip:hover {
+  text-decoration: underline;
+}
+.home-mode-chip:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
 .home-node-name,
 .node-card-name {
   color: var(--foreground);
@@ -318,6 +348,23 @@
 }
 .sidebar-footer[data-state="cleanupPending"] .sidebar-status-dot {
   background: var(--warning);
+}
+/* A transition must not look like "disconnected". */
+.sidebar-footer[data-state="connecting"] .sidebar-status-dot,
+.sidebar-footer[data-state="disconnecting"] .sidebar-status-dot {
+  background: var(--primary);
+  animation: sidebar-status-pulse 1.2s ease-in-out infinite;
+}
+@keyframes sidebar-status-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-footer[data-state="connecting"] .sidebar-status-dot,
+  .sidebar-footer[data-state="disconnecting"] .sidebar-status-dot {
+    animation: none;
+  }
 }
 .sidebar-status-label {
   min-width: 0;

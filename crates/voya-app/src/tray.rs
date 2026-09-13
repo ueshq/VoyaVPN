@@ -28,6 +28,11 @@ pub struct TrayLabels {
     pub no_nodes: &'static str,
     pub all_nodes: &'static str,
     pub groups: &'static str,
+    /// OS notification the first time a close keeps the app in the tray.
+    pub in_tray_title: &'static str,
+    pub in_tray_body: &'static str,
+    /// OS notification when a close quits because no tray icon exists.
+    pub quit_without_tray: &'static str,
 }
 
 /// Every shipped interface language, in `localeOptions` order.
@@ -47,6 +52,9 @@ const TRAY_LABELS: &[(&str, TrayLabels)] = &[
             no_nodes: "No nodes",
             all_nodes: "All Nodes…",
             groups: "Policy Groups",
+            in_tray_title: "VoyaVPN is still running",
+            in_tray_body: "The connection stays on. Click the tray icon to open the window again.",
+            quit_without_tray: "The tray icon is unavailable, so closing the window quit VoyaVPN.",
         },
     ),
     (
@@ -64,6 +72,9 @@ const TRAY_LABELS: &[(&str, TrayLabels)] = &[
             no_nodes: "暂无节点",
             all_nodes: "全部节点…",
             groups: "策略组",
+            in_tray_title: "VoyaVPN 仍在托盘中运行",
+            in_tray_body: "连接会保持。点击托盘图标可重新打开窗口。",
+            quit_without_tray: "托盘图标不可用，关闭窗口已退出 VoyaVPN。",
         },
     ),
     (
@@ -81,6 +92,9 @@ const TRAY_LABELS: &[(&str, TrayLabels)] = &[
             no_nodes: "尚無節點",
             all_nodes: "全部節點…",
             groups: "策略群組",
+            in_tray_title: "VoyaVPN 仍在系統匣中執行",
+            in_tray_body: "連線會保持。點選系統匣圖示可重新開啟視窗。",
+            quit_without_tray: "系統匣圖示無法使用，關閉視窗已結束 VoyaVPN。",
         },
     ),
 ];
@@ -386,6 +400,10 @@ mod tests {
                 labels.nodes,
                 labels.no_nodes,
                 labels.all_nodes,
+                labels.groups,
+                labels.in_tray_title,
+                labels.in_tray_body,
+                labels.quit_without_tray,
             ] {
                 assert!(!label.is_empty(), "{code}");
             }

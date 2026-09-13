@@ -38,6 +38,13 @@ export function formatImportSummary(result: ImportProfilesResult, t: TranslateFn
   if (result.updated > 0) {
     parts.push(t("panes.profiles.import.summary.updated", { count: result.updated.toLocaleString() }));
   }
+  if (result.removedExisting > 0) {
+    parts.push(
+      t("panes.profiles.import.summary.removedExisting", {
+        count: result.removedExisting.toLocaleString(),
+      }),
+    );
+  }
   if (result.removedDuplicates > 0) {
     parts.push(
       t("panes.profiles.import.summary.removedDuplicates", {

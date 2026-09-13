@@ -25,6 +25,7 @@ import {
 } from "@voya/ui/components/form-fields";
 
 import type { RoutingRule, RoutingRuleScope } from "@/ipc/bindings";
+import { validationFieldErrors } from "@/ipc/messages";
 import {
   translateFieldErrors,
   zodIssuesToErrorMap,
@@ -36,6 +37,7 @@ import { RULE_SCOPE_LABEL_KEYS } from "./routing-constants";
 import { routingRuleSchema, type RoutingRulePayload } from "./routing-form-schema";
 import { formToRule, ruleToForm, type RuleFormState } from "./routing-form-values";
 import { sentinelLabelKey } from "./sentinel-rules";
+import type { RuleSaveError } from "./use-routing-screen";
 
 /** Fields with an inline error slot; any other issue is reported above the footer. */
 const RENDERED_FIELDS = new Set([
@@ -59,6 +61,7 @@ export function RoutingRuleDialog({
   processRulesSupported = true,
   groupOutbounds = [],
   rule,
+  submitError = null,
 }: {
   /** Policy groups a rule can target; `null` while the list loads. */
   groupOutbounds?: readonly RuleGroupOutbound[] | null;
@@ -74,13 +77,22 @@ export function RoutingRuleDialog({
    */
   processRulesSupported?: boolean;
   rule: RoutingRule | null;
+  /** The backend's refusal of the last save; the editor stays open to show it. */
+  submitError?: RuleSaveError | null;
 }) {
   const { t } = useI18n();
   const networkId = useId();
   const [form, setForm] = useState(() => ruleToForm(rule));
   const [fieldErrors, setFieldErrors] = useState<FieldErrorMap>({});
-  const errors = translateFieldErrors(t, fieldErrors);
-  const formError = Object.entries(errors).find(([field]) => !RENDERED_FIELDS.has(field))?.[1];
+  const errors = {
+    // A backend refusal shows until the next save; a local check on the same
+    // field takes precedence.
+    ...(submitError ? validationFieldErrors(t, submitError.issues) : {}),
+    ...translateFieldErrors(t, fieldErrors),
+  };
+  const formError =
+    Object.entries(errors).find(([field]) => !RENDERED_FIELDS.has(field))?.[1] ??
+    (submitError?.issues.length === 0 ? submitError.message : undefined);
   // Managed rules are found by their reserved remarks; renaming one would
   // silently detach it from what the app knows about it.
   const managedLabel = sentinelLabelKey(rule?.remarks);

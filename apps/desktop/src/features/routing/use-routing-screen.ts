@@ -10,7 +10,13 @@ import {
   resetRoutingRules,
   saveRoutingRule,
 } from "@/ipc/commands";
-import type { MoveAction, RoutingRule, Routing_Serialize } from "@/ipc/bindings";
+import type {
+  AppError,
+  MoveAction,
+  RoutingRule,
+  Routing_Serialize,
+  ValidationIssue,
+} from "@/ipc/bindings";
 import { profilesQueryKey, queryKeys } from "@/ipc/query-keys";
 import { useShellStore } from "@/stores/shell-store";
 import { getErrorMessage } from "@voya/utils/error";
@@ -24,12 +30,28 @@ export type RuleMoveAction = Extract<MoveAction, "bottom" | "down" | "top" | "up
 type RuleDialogState = { mode: "create" } | { mode: "edit"; rule: RoutingRule } | null;
 
 /**
- * Deleting a rule and restoring the defaults cannot be undone, so both wait
- * for a confirmation that says what is about to change.
+ * Deleting a rule, restoring the defaults and pointing a rule whose node is
+ * gone at the proxy all change what rules do, so each waits for a confirmation
+ * that says what is about to change.
  */
-type PendingConfirm = { kind: "deleteRule"; rule: RoutingRule } | { kind: "resetRules" } | null;
+type PendingConfirm =
+  | { kind: "deleteRule"; rule: RoutingRule }
+  | { kind: "fixOutbound"; rule: RoutingRule }
+  | { kind: "resetRules" }
+  | null;
 
 const NO_RULES: readonly RoutingRule[] = [];
+
+/** Why the backend refused a rule, kept for the editor that is still open. */
+export type RuleSaveError = { issues: readonly ValidationIssue[]; message: string };
+
+function ruleSaveError(error: unknown): RuleSaveError {
+  const kind = (error as { appError?: AppError } | null)?.appError?.kind;
+  return {
+    issues: kind?.type === "validation" ? kind.issues : [],
+    message: getErrorMessage(error),
+  };
+}
 
 function setPerAppOpen(open: boolean) {
   useShellStore.setState({ routingPerAppRequested: open });
@@ -43,6 +65,7 @@ export function useRoutingScreen() {
   const client = useQueryClient();
   const [operationError, setOperationError] = useState<string | null>(null);
   const [ruleDialog, setRuleDialog] = useState<RuleDialogState>(null);
+  const [ruleSaveFailure, setRuleSaveFailure] = useState<RuleSaveError | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
   const [pendingToggles, setPendingToggles] = useState<ReadonlyMap<string, boolean>>(
     () => new Map(),
@@ -93,6 +116,7 @@ export function useRoutingScreen() {
 
   async function runOperation(
     operation: (routingId: string) => Promise<Routing_Serialize>,
+    onError: (error: unknown) => void = (error) => setOperationError(getErrorMessage(error)),
   ): Promise<boolean> {
     if (!activeRouting) {
       return false;
@@ -102,13 +126,25 @@ export function useRoutingScreen() {
       primeRouting(await operation(activeRouting.id));
       return true;
     } catch (error) {
-      setOperationError(getErrorMessage(error));
+      onError(error);
       return false;
     }
   }
 
+  function changeRuleDialog(next: RuleDialogState) {
+    setRuleSaveFailure(null);
+    setRuleDialog(next);
+  }
+
   async function saveRule(rule: RoutingRulePayload) {
-    if (await runOperation((routingId) => saveRoutingRule(routingId, rule))) {
+    setRuleSaveFailure(null);
+    // The editor is still open over the page, so a refusal is reported there;
+    // the page's own error strip would sit behind the modal.
+    const saved = await runOperation(
+      (routingId) => saveRoutingRule(routingId, rule),
+      (error) => setRuleSaveFailure(ruleSaveError(error)),
+    );
+    if (saved) {
       setRuleDialog(null);
     }
   }
@@ -129,11 +165,6 @@ export function useRoutingScreen() {
         return next;
       });
     }
-  }
-
-  /** Points a rule whose node or group is gone back at the proxy. */
-  function fixOutbound(rule: RoutingRule) {
-    void runOperation((routingId) => saveRoutingRule(routingId, { ...rule, outbound: "proxy" }));
   }
 
   function moveRule(rule: RoutingRule, action: RuleMoveAction) {
@@ -160,7 +191,7 @@ export function useRoutingScreen() {
       setPerAppOpen(true);
       return;
     }
-    setRuleDialog({ mode: "edit", rule });
+    changeRuleDialog({ mode: "edit", rule });
   }
 
   function confirmPending() {
@@ -169,36 +200,44 @@ export function useRoutingScreen() {
     if (!pending) {
       return;
     }
-    void runOperation((routingId) =>
-      pending.kind === "resetRules"
-        ? resetRoutingRules(routingId)
-        : deleteRoutingRules(routingId, [pending.rule.id]),
-    );
+    void runOperation((routingId) => {
+      switch (pending.kind) {
+        case "resetRules":
+          return resetRoutingRules(routingId);
+        case "deleteRule":
+          return deleteRoutingRules(routingId, [pending.rule.id]);
+        case "fixOutbound":
+          // The node or group the rule named is gone; the proxy always exists.
+          return saveRoutingRule(routingId, { ...pending.rule, outbound: "proxy" });
+      }
+    });
   }
 
   return {
     activeRouting,
     confirmPending,
     editRule,
-    fixOutbound,
     groupOutbounds,
     loadError: routingsQuery.error ? getErrorMessage(routingsQuery.error) : null,
     loading: routingsQuery.isPending,
     moveRule,
     nodeNames,
-    openCreateRule: () => setRuleDialog({ mode: "create" }),
+    openCreateRule: () => changeRuleDialog({ mode: "create" }),
     operationError,
     pendingConfirm,
     pendingToggles,
     reorderRule,
     requestDeleteRule: (rule: RoutingRule) => setPendingConfirm({ kind: "deleteRule", rule }),
+    /** Points a rule whose node or group is gone back at the proxy, once confirmed. */
+    requestFixOutbound: (rule: RoutingRule) => setPendingConfirm({ kind: "fixOutbound", rule }),
     requestResetRules: () => setPendingConfirm({ kind: "resetRules" }),
     ruleDialog,
+    ruleSaveFailure,
     rules,
     saveRule,
     setPendingConfirm,
     setPerAppOpen,
-    setRuleDialog,
+    setRuleDialog: changeRuleDialog,
     toggleRule,
   };
 }

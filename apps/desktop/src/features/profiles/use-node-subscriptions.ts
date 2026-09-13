@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { updateSubscriptions, deleteSubscriptions } from "@/ipc/commands";
 import type { Subscription } from "@/ipc/bindings";
 import {
+  formatSubscriptionUpdateSummary,
   isSubscriptionUpdateFailure,
   subscriptionUpdateMessages,
 } from "@/features/subscriptions/subscription-update-result";
@@ -51,12 +52,7 @@ export function useNodeSubscriptions(
             subscriptionUpdateMessages(result) ||
               t("panes.subscriptions.updateNothingImported"),
           );
-        setOperationMessage(
-          t("panes.subscriptions.updateResult", {
-            imported: result.imported,
-            updated: result.updated,
-          }),
-        );
+        setOperationMessage(formatSubscriptionUpdateSummary(result, t));
       });
     } finally {
       updatingRef.current.delete(id);
@@ -75,12 +71,7 @@ export function useNodeSubscriptions(
             subscriptionUpdateMessages(result) ||
               t("panes.subscriptions.updateNothingImported"),
           );
-        setOperationMessage(
-          t("panes.subscriptions.updateResult", {
-            imported: result.imported,
-            updated: result.updated,
-          }),
-        );
+        setOperationMessage(formatSubscriptionUpdateSummary(result, t));
       });
     } finally {
       updatingAllRef.current = false;

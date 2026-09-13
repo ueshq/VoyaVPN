@@ -1,4 +1,5 @@
 import type { SubscriptionUpdateResult } from "@/ipc/bindings";
+import type { TranslationFunction } from "@voya/i18n";
 import { redactOperationalMessage } from "@voya/utils/operational-redaction";
 
 /**
@@ -25,4 +26,19 @@ export function isSubscriptionUpdateFailure(result: SubscriptionUpdateResult) {
  */
 export function subscriptionUpdateMessages(result: SubscriptionUpdateResult) {
   return result.messages.map((message) => redactOperationalMessage(message)).join("\n");
+}
+
+/**
+ * The banner line for a finished update. An update deletes the nodes a source
+ * stopped offering, which can include the one in use, so that count is named
+ * rather than folded into "updated".
+ */
+export function formatSubscriptionUpdateSummary(
+  result: SubscriptionUpdateResult,
+  t: TranslationFunction,
+) {
+  const counts = { imported: result.imported, updated: result.updated };
+  return result.removedExisting > 0
+    ? t("panes.subscriptions.updateResultWithRemoved", { ...counts, removed: result.removedExisting })
+    : t("panes.subscriptions.updateResult", counts);
 }

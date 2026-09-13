@@ -18,8 +18,7 @@
     "restart": "重启",
     "retry": "重试",
     "save": "保存",
-    "settings": "设置",
-    "testSelected": "测试所选"
+    "settings": "设置"
   },
   "app": {
     "name": "VoyaVPN"
@@ -33,15 +32,16 @@
     "deleteRoutingRuleDescription": "“{{name}}”将被永久删除。此操作无法撤销。",
     "deleteRoutingRuleTitle": "删除规则？",
     "deleteSubscriptionConfirm": "删除",
-    "deleteSubscriptionDescription": "“{{name}}”及其导入的所有节点将被永久删除。此操作无法撤销。",
-    "deleteSubscriptionTitle": "删除订阅？",
     "resetRoutingRulesTitle": "恢复默认规则？",
     "resetRoutingRulesDescription": "所有规则（包括你添加的规则）将替换为默认规则，分应用代理设置会保留。",
     "resetRoutingRulesConfirm": "恢复",
     "deleteActiveProfileHint": "其中包含正在使用的节点，删除后连接会断开。",
     "disconnectAllTitle": "断开全部连接？",
     "disconnectAllDescription": "将断开 {{count}} 个连接，正在进行的下载、通话等会中断。",
-    "disconnectAllConfirm": "全部断开"
+    "disconnectAllConfirm": "全部断开",
+    "fixOutboundTitle": "把“{{name}}”改为走代理？",
+    "fixOutboundDescription": "这条规则指向的节点或策略组已不存在。改为代理后，匹配这条规则的流量会走代理。",
+    "fixOutboundConfirm": "改为代理"
   },
   "coreFlowReason": {
     "connect": "连接",
@@ -57,11 +57,6 @@
   },
   "home": {
     "aria": "连接主页",
-    "currentNode": "当前节点：{{node}}",
-    "noNodes": "没有可用节点",
-    "nodes": "节点",
-    "protected": "已受保护",
-    "protectedHint": "流量正通过当前节点转发。",
     "subscriptionCard": {
       "add": "添加订阅",
       "expired": "已过期",
@@ -101,7 +96,8 @@
       "restart": "重启失败：{{message}}"
     },
     "reconnect": "重新连接",
-    "authorizationDeclined": "未获得系统授权，无法连接。请重试，并在系统弹窗中允许。"
+    "authorizationDeclined": "未获得系统授权，无法连接。请重试，并在系统弹窗中允许。",
+    "globalModeChip": "全局代理"
   },
   "logCodes": {
     "connected": "内核守护进程已启动",
@@ -325,7 +321,8 @@
           "removedDuplicates": "已移除 {{count}} 个重复项。",
           "skipped": "已跳过 {{count}} 个。",
           "target": "目标：{{target}}。",
-          "updated": "已更新 {{count}} 个。"
+          "updated": "其中 {{count}} 个为已有节点，已刷新。",
+          "removedExisting": "已移除 {{count}} 个已下架节点。"
         },
         "importing": "正在导入节点…",
         "line": {
@@ -345,10 +342,7 @@
         "reading": "正在读取内容…",
         "description": "粘贴分享链接或订阅地址，每行一个；也可以扫描二维码图片。",
         "manual": "手动节点",
-        "mode": "导入方式",
         "payload": "节点配置内容",
-        "subscriptionTarget": "订阅来源",
-        "target": "导入位置",
         "title": "添加节点或订阅",
         "placeholder": "vless://…\nhttps://example.com/subscription"
       },
@@ -572,7 +566,8 @@
       "updateResult": "已更新 {{updated}} 个订阅，导入 {{imported}} 个节点",
       "updateSelected": "更新所选订阅",
       "url": "订阅地址",
-      "userAgent": "客户端标识（User-Agent）"
+      "userAgent": "客户端标识（User-Agent）",
+      "updateResultWithRemoved": "已更新 {{updated}} 个订阅，导入 {{imported}} 个节点，移除 {{removed}} 个已下架节点"
     }
   },
   "proxy": {
@@ -602,7 +597,6 @@
     "content": "内容",
     "generatedAlt": "生成的二维码",
     "noQrFound": "未找到二维码。",
-    "scan": "扫描",
     "scanImage": "扫描图片",
     "screenUnavailable": "当前平台或权限状态不支持屏幕二维码扫描。",
     "scanningScreen": "正在扫描所有显示器…",
@@ -934,7 +928,8 @@
   },
   "common": {
     "advanced": "高级选项",
-    "none": "无"
+    "none": "无",
+    "dismiss": "关闭提示"
   },
   "subscriptions": {
     "edit": "订阅设置",
@@ -991,7 +986,8 @@
     "autoCreatedFrom": "由订阅“{{name}}”自动创建",
     "switchedTitle": "已切换",
     "replacedByNode": "已停用策略组“{{group}}”，改为使用这个节点。",
-    "replacedNode": "不再单独使用节点“{{node}}”，改为通过这个策略组连接。"
+    "replacedNode": "不再单独使用节点“{{node}}”，改为通过这个策略组连接。",
+    "deleteActiveHint": "这个策略组正在使用，删除后连接会断开。"
   },
   "startupFailure": {
     "title": "VoyaVPN 无法启动",

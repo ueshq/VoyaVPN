@@ -46,7 +46,11 @@ describe("useRoutingScreen", () => {
       expect(result.current.groupOutbounds).toEqual([{ id: "work", name: "Work" }]),
     );
     const target = result.current.rules[0]!;
-    act(() => result.current.fixOutbound(target));
+    act(() => result.current.requestFixOutbound(target));
+    // Retargeting a rule waits for the user to confirm it.
+    expect(result.current.pendingConfirm).toEqual({ kind: "fixOutbound", rule: target });
+    expect(ipcMocks.saveRoutingRule).not.toHaveBeenCalled();
+    act(() => result.current.confirmPending());
     await waitFor(() =>
       expect(ipcMocks.saveRoutingRule).toHaveBeenCalledWith(
         "route-active",
@@ -213,8 +217,22 @@ describe("useRoutingScreen", () => {
     act(() => result.current.editRule(existing));
     expect(result.current.ruleDialog).toEqual({ mode: "edit", rule: existing });
     await act(() => result.current.saveRule(payload));
-    expect(result.current.operationError).toBe("rule save failed");
+    // The refusal goes to the editor that is still open, not behind it.
+    expect(result.current.operationError).toBeNull();
+    expect(result.current.ruleSaveFailure).toEqual({ issues: [], message: "rule save failed" });
     expect(result.current.ruleDialog?.mode).toBe("edit");
+
+    const issues = [{ code: { code: "invalidPort" }, field: "port", scope: [] }];
+    ipcMocks.saveRoutingRule.mockRejectedValueOnce(
+      Object.assign(new Error("invalid rule"), {
+        appError: { kind: { issues, type: "validation" }, message: "invalid rule", subsystem: "app" },
+      }),
+    );
+    await act(() => result.current.saveRule(payload));
+    expect(result.current.ruleSaveFailure).toEqual({ issues, message: "invalid rule" });
+
+    act(() => result.current.setRuleDialog(null));
+    expect(result.current.ruleSaveFailure).toBeNull();
   });
 
   it("edits the per-app rule through its own dialog", async () => {

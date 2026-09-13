@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Plus, RotateCcw, Route } from "lucide-react";
 
+import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import {
   AlertDialog,
@@ -145,6 +146,7 @@ export function RoutingScreen() {
         open={ruleDialog !== null}
         processRulesSupported={processRulesSupported}
         rule={ruleDialog?.mode === "edit" ? ruleDialog.rule : null}
+        submitError={controller.ruleSaveFailure}
       />
       <ConfirmDialog controller={controller} />
       {perAppOpen && processRulesSupported ? <PerAppProxyDialog onOpenChange={controller.setPerAppOpen} open /> : null}
@@ -187,7 +189,7 @@ function RulesBody({
       groupOutbounds={controller.groupOutbounds}
       locked={locked}
       nodeNames={controller.nodeNames}
-      onFixOutbound={controller.fixOutbound}
+      onFixOutbound={controller.requestFixOutbound}
       onDelete={controller.requestDeleteRule}
       onEdit={controller.editRule}
       onMove={controller.moveRule}
@@ -208,7 +210,7 @@ function ConfirmDialog({ controller }: { controller: RoutingScreenController }) 
   if (pendingConfirm !== null && pendingConfirm !== shown) {
     setShown(pendingConfirm);
   }
-  const resetting = shown?.kind === "resetRules";
+  const copy = confirmCopy(shown, t);
 
   return (
     <AlertDialog
@@ -219,25 +221,48 @@ function ConfirmDialog({ controller }: { controller: RoutingScreenController }) 
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            {resetting ? t("confirm.resetRoutingRulesTitle") : t("confirm.deleteRoutingRuleTitle")}
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            {shown?.kind === "deleteRule"
-              ? t("confirm.deleteRoutingRuleDescription", { name: ruleDisplayName(shown.rule, t) })
-              : t("confirm.resetRoutingRulesDescription")}
-          </AlertDialogDescription>
+          <AlertDialogTitle>{copy.title}</AlertDialogTitle>
+          <AlertDialogDescription>{copy.description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
           <AlertDialogAction
-            className={buttonVariants({ variant: "destructive" })}
+            className={copy.destructive ? buttonVariants({ variant: "destructive" }) : undefined}
             onClick={confirmPending}
           >
-            {resetting ? t("confirm.resetRoutingRulesConfirm") : t("confirm.deleteRoutingRuleConfirm")}
+            {copy.confirm}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   );
+}
+
+function confirmCopy(pending: RoutingScreenController["pendingConfirm"], t: TranslationFunction) {
+  switch (pending?.kind) {
+    case "fixOutbound":
+      // Repairing a rule loses nothing, so it is not styled as destructive.
+      return {
+        confirm: t("confirm.fixOutboundConfirm"),
+        description: t("confirm.fixOutboundDescription"),
+        destructive: false,
+        title: t("confirm.fixOutboundTitle", { name: ruleDisplayName(pending.rule, t) }),
+      };
+    case "resetRules":
+      return {
+        confirm: t("confirm.resetRoutingRulesConfirm"),
+        description: t("confirm.resetRoutingRulesDescription"),
+        destructive: true,
+        title: t("confirm.resetRoutingRulesTitle"),
+      };
+    default:
+      return {
+        confirm: t("confirm.deleteRoutingRuleConfirm"),
+        description: pending
+          ? t("confirm.deleteRoutingRuleDescription", { name: ruleDisplayName(pending.rule, t) })
+          : "",
+        destructive: true,
+        title: t("confirm.deleteRoutingRuleTitle"),
+      };
+  }
 }

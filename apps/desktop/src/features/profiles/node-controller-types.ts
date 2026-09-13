@@ -77,7 +77,7 @@ export type NodeDialogsController = Pick<NodeOperation, "operationError"> &
   };
 
 export type NodeNoticesController = Pick<ReturnType<typeof useNodeImport>, "directImportPending"> &
-  Pick<NodeOperation, "operationError" | "operationMessage"> &
+  Pick<NodeOperation, "operationError" | "operationMessage" | "setOperationError" | "setOperationMessage"> &
   Pick<NodeListData, "profilesQuery" | "undecodableProfiles"> &
   Pick<NodeShared, "t">;
 

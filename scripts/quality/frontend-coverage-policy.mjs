@@ -34,6 +34,7 @@ export const criticalModules = [
   "apps/desktop/src/ipc/runtime-status.ts",
   "apps/desktop/src/ipc/process.ts",
   "apps/desktop/src/ipc/updater.ts",
+  "apps/desktop/src/ipc/notifications.ts",
   "apps/desktop/src/features/settings/use-app-settings.ts",
   "apps/desktop/src/features/dns/use-dns-settings.ts",
   "apps/desktop/src/features/profiles/profile-form-schema.ts",

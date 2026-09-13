@@ -1161,7 +1161,7 @@ describe("ProfilesScreen", () => {
     );
     expect(
       screen.getByText(
-        "Imported 1 node(s). 1 updated. 2 duplicate(s) removed.",
+        "Imported 1 node(s). 1 existing node(s) refreshed. 2 duplicate(s) removed.",
       ),
     ).toBeInTheDocument();
   });

@@ -18,8 +18,7 @@
     "restart": "Restart",
     "retry": "Try again",
     "save": "Save",
-    "settings": "Settings",
-    "testSelected": "Test selected"
+    "settings": "Settings"
   },
   "app": {
     "name": "VoyaVPN"
@@ -33,15 +32,16 @@
     "deleteRoutingRuleDescription": "“{{name}}” will be permanently deleted. This action cannot be undone.",
     "deleteRoutingRuleTitle": "Delete rule?",
     "deleteSubscriptionConfirm": "Delete",
-    "deleteSubscriptionDescription": "“{{name}}” and every node imported from it will be permanently deleted. This action cannot be undone.",
-    "deleteSubscriptionTitle": "Delete subscription?",
     "resetRoutingRulesTitle": "Restore default rules?",
     "resetRoutingRulesDescription": "Every rule, including the ones you added, will be replaced with the default set. The per-app proxy setting is kept.",
     "resetRoutingRulesConfirm": "Restore",
     "deleteActiveProfileHint": "The node in use is among them; deleting it stops the connection.",
     "disconnectAllTitle": "Disconnect all connections?",
     "disconnectAllDescription": "{{count}} connections will close. Downloads, calls and other transfers in progress are interrupted.",
-    "disconnectAllConfirm": "Disconnect all"
+    "disconnectAllConfirm": "Disconnect all",
+    "fixOutboundTitle": "Send “{{name}}” through the proxy?",
+    "fixOutboundDescription": "The node or policy group this rule pointed at no longer exists. Traffic matching the rule will go through the proxy.",
+    "fixOutboundConfirm": "Use proxy"
   },
   "coreFlowReason": {
     "connect": "Connection",
@@ -57,11 +57,6 @@
   },
   "home": {
     "aria": "Connection home",
-    "currentNode": "Current node: {{node}}",
-    "noNodes": "No nodes available",
-    "nodes": "Nodes",
-    "protected": "Protected",
-    "protectedHint": "Your traffic is routed through the active node.",
     "subscriptionCard": {
       "add": "Add subscription",
       "expired": "Expired",
@@ -101,7 +96,8 @@
       "restart": "Could not restart: {{message}}"
     },
     "reconnect": "Reconnect",
-    "authorizationDeclined": "System authorization was not granted, so VoyaVPN could not connect. Try again and allow it in the system prompt."
+    "authorizationDeclined": "System authorization was not granted, so VoyaVPN could not connect. Try again and allow it in the system prompt.",
+    "globalModeChip": "Global proxy"
   },
   "logCodes": {
     "connected": "Core supervisor started",
@@ -325,7 +321,8 @@
           "removedDuplicates": "{{count}} duplicate(s) removed.",
           "skipped": "{{count}} skipped.",
           "target": "Target: {{target}}.",
-          "updated": "{{count}} updated."
+          "updated": "{{count}} existing node(s) refreshed.",
+          "removedExisting": "{{count}} node(s) no longer offered removed."
         },
         "importing": "Importing nodes…",
         "line": {
@@ -345,10 +342,7 @@
         "reading": "Reading content…",
         "description": "Paste share links or subscription URLs, one per line, or scan a QR image.",
         "manual": "Manual import",
-        "mode": "Mode",
         "payload": "Import payload",
-        "subscriptionTarget": "Subscription target",
-        "target": "Target",
         "title": "Add nodes or subscriptions",
         "placeholder": "vless://…\nhttps://example.com/subscription"
       },
@@ -572,7 +566,8 @@
       "updateResult": "{{updated}} updated, {{imported}} nodes imported",
       "updateSelected": "Update selected",
       "url": "URL",
-      "userAgent": "User agent"
+      "userAgent": "User agent",
+      "updateResultWithRemoved": "{{updated}} updated, {{imported}} nodes imported, {{removed}} nodes no longer offered were removed"
     }
   },
   "proxy": {
@@ -602,7 +597,6 @@
     "content": "Content",
     "generatedAlt": "Generated QR code",
     "noQrFound": "No QR code found.",
-    "scan": "Scan",
     "scanImage": "Scan image",
     "screenUnavailable": "Screen QR scanning is unavailable on this platform or permission state.",
     "scanningScreen": "Scanning all displays…",
@@ -934,7 +928,8 @@
   },
   "common": {
     "advanced": "Advanced options",
-    "none": "None"
+    "none": "None",
+    "dismiss": "Dismiss"
   },
   "subscriptions": {
     "edit": "Subscription settings",
@@ -991,7 +986,8 @@
     "autoCreatedFrom": "Created for {{name}}",
     "switchedTitle": "Switched",
     "replacedByNode": "The policy group “{{group}}” is no longer used; this node is used instead.",
-    "replacedNode": "The node “{{node}}” is no longer used on its own; connections go through this group instead."
+    "replacedNode": "The node “{{node}}” is no longer used on its own; connections go through this group instead.",
+    "deleteActiveHint": "This policy group is in use; deleting it stops the connection."
   },
   "startupFailure": {
     "title": "VoyaVPN could not start",

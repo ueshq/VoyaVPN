@@ -46,6 +46,9 @@ pub fn run() {
             residency::show_main_window(app);
         }))
         .plugin(tauri_plugin_dialog::init())
+        // OS notifications for a user whose window is hidden in the tray; the
+        // renderer decides when to show one (`src/ipc/notifications.ts`).
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(specta_builder.invoke_handler())

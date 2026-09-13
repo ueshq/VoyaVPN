@@ -27,6 +27,11 @@ export function isWindowMaximized(): Promise<boolean> {
   return getCurrentWindow().isMaximized();
 }
 
+/** Whether the window is on screen rather than hidden into the tray. */
+export function isWindowVisible(): Promise<boolean> {
+  return getCurrentWindow().isVisible();
+}
+
 /** Watch for size changes so the title bar can swap the maximize/restore icon. */
 export function onWindowResized(handler: () => void): Promise<WindowUnlisten> {
   return getCurrentWindow().onResized(handler);

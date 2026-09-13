@@ -196,6 +196,47 @@ describe("RoutingScreen", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("save failed");
   });
 
+  it("keeps the rule editor open and says why the backend refused a rule", async () => {
+    const user = userEvent.setup();
+    ipc.saveRoutingRule.mockRejectedValue(new Error("rule set is locked"));
+    renderScreen();
+    await screen.findByText("Office");
+
+    await user.click(screen.getByRole("button", { name: "Add rule" }));
+    const editor = await screen.findByRole("dialog");
+    await user.type(within(editor).getByLabelText("Name"), "Work");
+    await user.type(within(editor).getByLabelText("Domain"), "domain:work.test");
+    await user.click(within(editor).getByRole("button", { name: "Save" }));
+
+    expect(await within(editor).findByText("rule set is locked")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBe(editor);
+  });
+
+  it("confirms before pointing a rule with a missing node at the proxy", async () => {
+    const user = userEvent.setup();
+    ipc.listRoutings.mockResolvedValue([
+      routing("route-active", true, [
+        rule("rule-gone", { domain: ["gone.test"], outbound: "Gone node", remarks: "Gone" }),
+      ]),
+    ]);
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Use proxy instead" }));
+    const confirm = await screen.findByRole("alertdialog");
+    expect(
+      within(confirm).getByRole("heading", { name: "Send “Gone” through the proxy?" }),
+    ).toBeInTheDocument();
+    expect(ipc.saveRoutingRule).not.toHaveBeenCalled();
+    await user.click(within(confirm).getByRole("button", { name: "Use proxy" }));
+
+    await waitFor(() =>
+      expect(ipc.saveRoutingRule).toHaveBeenCalledWith(
+        "route-active",
+        expect.objectContaining({ id: "rule-gone", outbound: "proxy" }),
+      ),
+    );
+  });
+
   it("explains an empty rule set", async () => {
     ipc.listRoutings.mockResolvedValue([{ ...activeRouting(), rules: [] }]);
     renderScreen();
