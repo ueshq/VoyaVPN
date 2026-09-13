@@ -1,4 +1,4 @@
-use std::{fmt, future::Future, pin::Pin};
+use std::{collections::BTreeMap, fmt, future::Future, pin::Pin};
 
 use futures_util::StreamExt;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
@@ -30,6 +30,12 @@ const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b'`')
     .add(b'{')
     .add(b'}');
+/// Query values also escape the characters that would end or split them.
+const QUERY_VALUE_ENCODE_SET: &AsciiSet = &PATH_SEGMENT_ENCODE_SET
+    .add(b':')
+    .add(b'&')
+    .add(b'=')
+    .add(b'+');
 const CLASH_HTTP_RESPONSE_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 
 pub type Result<T> = std::result::Result<T, ClashError>;
@@ -107,6 +113,7 @@ impl ClashApiEndpoint {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClashHttpMethod {
     Get,
+    Put,
     Patch,
     Delete,
 }
@@ -115,6 +122,7 @@ impl From<ClashHttpMethod> for Method {
     fn from(value: ClashHttpMethod) -> Self {
         match value {
             ClashHttpMethod::Get => Self::GET,
+            ClashHttpMethod::Put => Self::PUT,
             ClashHttpMethod::Patch => Self::PATCH,
             ClashHttpMethod::Delete => Self::DELETE,
         }
@@ -282,6 +290,35 @@ where
             .map(drop)
     }
 
+    /// Every outbound and group the running core knows, keyed by tag.
+    pub async fn get_proxies(&self) -> Result<ClashProxiesResponse> {
+        self.request(ClashHttpMethod::Get, "/proxies", None).await
+    }
+
+    /// Switches the selector `group` to its member `member`.
+    pub async fn select_proxy(&self, group: &str, member: &str) -> Result<()> {
+        let path = format!("/proxies/{}", encode_segment(group));
+        self.request_value(ClashHttpMethod::Put, &path, Some(json!({ "name": member })))
+            .await
+            .map(drop)
+    }
+
+    /// Probes every member of `group` through the core. The result maps each
+    /// member tag to its delay; a member whose probe failed is absent.
+    pub async fn group_delay(
+        &self,
+        group: &str,
+        test_url: &str,
+        timeout_ms: u32,
+    ) -> Result<BTreeMap<String, u32>> {
+        let path = format!(
+            "/group/{}/delay?url={}&timeout={timeout_ms}",
+            encode_segment(group),
+            encode_query_value(test_url)
+        );
+        self.request(ClashHttpMethod::Get, &path, None).await
+    }
+
     async fn request<R>(
         &self,
         method: ClashHttpMethod,
@@ -394,6 +431,31 @@ impl ClashWebSocketSession {
             }
         }
     }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ClashProxiesResponse {
+    pub proxies: BTreeMap<String, ClashProxy>,
+}
+
+/// One outbound as the Clash API reports it; groups also carry `all` and `now`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ClashProxy {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub proxy_type: String,
+    pub all: Vec<String>,
+    pub now: Option<String>,
+    pub history: Vec<ClashHistoryItem>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ClashHistoryItem {
+    pub time: String,
+    pub delay: u32,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -632,6 +694,10 @@ fn normalize_path(path_and_query: &str) -> String {
 fn encode_segment(value: &str) -> String {
     utf8_percent_encode(value, PATH_SEGMENT_ENCODE_SET).to_string()
 }
+
+fn encode_query_value(value: &str) -> String {
+    utf8_percent_encode(value, QUERY_VALUE_ENCODE_SET).to_string()
+}
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -681,6 +747,60 @@ mod tests {
                     .ok_or_else(|| ClashError::Request(format!("no response for {}", request.url)))
             })
         }
+    }
+
+    #[tokio::test]
+    async fn clash_group_calls_encode_tags_and_decode_members() {
+        let transport = MockTransport::default();
+        transport.respond(
+            "/proxies",
+            json!({
+                "proxies": {
+                    "proxy": {
+                        "name": "proxy",
+                        "type": "Selector",
+                        "all": ["Tokyo [a1]", "Osaka [b2]"],
+                        "now": "Osaka [b2]",
+                        "history": []
+                    },
+                    "Osaka [b2]": {
+                        "name": "Osaka [b2]",
+                        "type": "Socks",
+                        "history": [{ "time": "2026-09-13T00:00:00Z", "delay": 88 }]
+                    }
+                }
+            }),
+        );
+        transport.respond("/proxies/proxy", Value::Null);
+        transport.respond(
+            "/group/proxy/delay?url=https%3A%2F%2Fprobe.example%2Fgenerate_204%3Fa%3D1%26b%3D2&timeout=5000",
+            json!({ "Tokyo [a1]": 120 }),
+        );
+        let client =
+            ClashRestClient::with_transport(ClashApiEndpoint::loopback(9090), transport.clone());
+
+        let proxies = client.get_proxies().await.expect("proxies");
+        assert_eq!(proxies.proxies["proxy"].all, ["Tokyo [a1]", "Osaka [b2]"]);
+        assert_eq!(proxies.proxies["proxy"].now.as_deref(), Some("Osaka [b2]"));
+        assert_eq!(proxies.proxies["Osaka [b2]"].history[0].delay, 88);
+
+        client
+            .select_proxy("proxy", "Tokyo [a1]")
+            .await
+            .expect("select");
+        let delays = client
+            .group_delay("proxy", "https://probe.example/generate_204?a=1&b=2", 5_000)
+            .await
+            .expect("group delay");
+        assert_eq!(delays.get("Tokyo [a1]"), Some(&120));
+
+        let requests = transport.requests();
+        let select = requests
+            .iter()
+            .find(|request| request.url.ends_with("/proxies/proxy"))
+            .expect("select request");
+        assert_eq!(select.method, ClashHttpMethod::Put);
+        assert_eq!(select.body, Some(json!({ "name": "Tokyo [a1]" })));
     }
 
     #[tokio::test]
