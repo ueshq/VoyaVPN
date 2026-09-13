@@ -122,6 +122,11 @@ impl<'db> SubscriptionManager<'db> {
         config: &mut AppConfig,
         ids: &[String],
     ) -> Result<u32> {
+        // Before the subscriptions go: their foreign key would only null the
+        // binding and leave an import-created group with nothing in it.
+        crate::policy_groups::PolicyGroupManager::from_session(self.database)
+            .delete_auto_groups_for_subscriptions(config, ids)
+            .await?;
         let mut deleted = 0_u32;
         for id in ids {
             if self.database.subscriptions().delete(id).await? {
@@ -830,6 +835,46 @@ mod tests {
             .expect("profiles")
             .is_empty());
         assert!(config.index_id.is_empty());
+    }
+
+    #[tokio::test]
+    async fn only_the_first_subscription_import_creates_its_auto_group() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        database
+            .subscriptions()
+            .upsert(&SubItem {
+                id: "work".to_string(),
+                remarks: "Work".to_string(),
+                url: "https://work.example/sub".to_string(),
+                ..SubItem::default()
+            })
+            .await
+            .expect("subscription");
+        let manager = SubscriptionManager::new(&database);
+        let groups = crate::policy_groups::PolicyGroupManager::new(&database);
+        let mut config = AppConfig::default();
+        let text = "trojan://secret@example.test:443#JP%20node";
+
+        manager
+            .import_subscription_content(&mut config, text, Some("work"))
+            .await
+            .expect("first import");
+        let entries = groups.list(&config).await.expect("groups");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].group.name, "Work · Auto");
+        assert!(config.active_group_id.is_empty());
+
+        groups
+            .delete(&mut config, &[entries[0].group.id.clone()])
+            .await
+            .expect("the user deletes it");
+        manager
+            .import_subscription_content(&mut config, text, Some("work"))
+            .await
+            .expect("update");
+        assert!(groups.list(&config).await.expect("groups").is_empty());
     }
 
     #[tokio::test]

@@ -75,7 +75,12 @@ async fn retired_settings_are_normalized_once_without_changing_other_settings() 
     let behavior = original["behavior"]
         .as_object_mut()
         .expect("behavior settings");
-    for key in ["autoCheckIp", "closeAction", "startMinimized"] {
+    for key in [
+        "autoCheckIp",
+        "closeAction",
+        "startMinimized",
+        "autoCreateSubscriptionGroup",
+    ] {
         behavior.remove(key);
     }
     sqlx::query("INSERT INTO app_settings VALUES (1, 1, ?)")
@@ -275,7 +280,6 @@ async fn retired_settings_are_rejected_without_conversion_or_rewrite() {
         ("speedTest", "downloadUrl"),
         ("speedTest", "udpTarget"),
         ("speedTest", "delayIntervalMs"),
-        ("behavior", "autoCreateSubscriptionGroup"),
         ("proxy", "nodeSorting"),
         ("speedTest", "proxyDelayConcurrency"),
         ("speedTest", "mixedConcurrency"),

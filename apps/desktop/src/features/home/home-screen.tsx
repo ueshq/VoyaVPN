@@ -21,6 +21,7 @@ import worldMap from "@/assets/world-map.svg";
 import { NodeCountryIcon } from "@/components/node-country-icon";
 import { getProtocolLabel } from "@/features/profiles/profile-constants";
 import { profileNameWithoutFlag } from "@/features/profiles/profile-display";
+import { POLICY_GROUP_STRATEGY_KEYS } from "@/features/profiles/policy-group-labels";
 import { useShellStore } from "@/stores/shell-store";
 
 import { ConnectedInfo } from "./connected-info";
@@ -44,17 +45,31 @@ export function HomeScreen() {
     !home.profilesPending &&
     !home.profilesError &&
     home.profiles.length === 0;
-  const needsSelection = !runtimeActionAvailable && !home.nodeEntry && !noNodes;
+  const group = home.activeGroup;
+  const needsSelection =
+    !runtimeActionAvailable && !home.nodeEntry && !group && !noNodes;
   const detailsButton = useRef<HTMLButtonElement>(null);
   const profile = home.nodeEntry?.profile;
+  const groupNow = group
+    ? (home.groupRuntime?.members.find(
+        (member) => member.profileId === home.groupRuntime?.nowProfileId,
+      ) ?? null)
+    : null;
+  const groupVia = groupNow
+    ? t("home.groupVia", {
+        node: profileNameWithoutFlag(groupNow.remarks) || groupNow.profileId,
+      })
+    : null;
   const rawName =
+    group?.group.name ||
     profile?.remarks ||
     profile?.id ||
     home.runningId ||
     t(home.profilesPending ? "status.loadingScreen" : "home.noNodes");
   const name = profileNameWithoutFlag(rawName);
-  const delayMs =
-    home.nodeEntry && home.nodeEntry.metrics.delayMs > 0
+  const delayMs = group
+    ? (groupNow?.delayMs ?? null)
+    : home.nodeEntry && home.nodeEntry.metrics.delayMs > 0
       ? home.nodeEntry.metrics.delayMs
       : null;
 
@@ -118,21 +133,40 @@ export function HomeScreen() {
           <div className="node-card-surface home-node-card">
             <div aria-hidden="true" className="home-node-icon">
               <NodeCountryIcon
-                countryCode={home.nodeEntry?.metrics.countryCode}
+                countryCode={
+                  group ? undefined : home.nodeEntry?.metrics.countryCode
+                }
               />
             </div>
             <div className="home-node-content">
               <p className="home-node-label">
-                {t(
-                  home.connected
-                    ? "home.currentNodeLabel"
-                    : "home.selectedNodeLabel",
-                )}
+                {group
+                  ? home.connected
+                    ? t("home.currentGroupLabel")
+                    : t("home.selectedGroupLabel")
+                  : home.connected
+                    ? t("home.currentNodeLabel")
+                    : t("home.selectedNodeLabel")}
               </p>
               <h2 className="home-node-name" title={name}>
                 {name}
               </h2>
               <div className="home-node-meta">
+                {group ? (
+                  <>
+                    <span
+                      className="home-node-address"
+                      title={groupVia ?? undefined}
+                    >
+                      {groupVia ??
+                        t("nodeGroups.membersCount", {
+                          count: group.members.length,
+                        })}
+                    </span>
+                    <span>{t(POLICY_GROUP_STRATEGY_KEYS[group.group.strategy])}</span>
+                  </>
+                ) : (
+                  <>
                 <span
                   className="home-node-address"
                   title={profile ? profile.protocol.server.address : undefined}
@@ -153,6 +187,8 @@ export function HomeScreen() {
                     <ChevronRight aria-hidden="true" className="size-3" />
                   </button>
                 ) : null}
+                  </>
+                )}
               </div>
             </div>
             <button

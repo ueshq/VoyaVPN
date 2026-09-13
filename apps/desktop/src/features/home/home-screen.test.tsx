@@ -73,7 +73,9 @@ const ipcMock = vi.hoisted(() => {
     loadAppSettings: vi.fn(),
     proxySetTrafficMode: vi.fn(),
     disconnectCore: vi.fn(),
+    listPolicyGroups: vi.fn(),
     listProfiles: vi.fn(),
+    policyGroupRuntime: vi.fn(),
     restartCore: vi.fn(),
     runtimeStatus: vi.fn(),
     setActiveProfile: vi.fn(),
@@ -156,7 +158,9 @@ vi.mock("@/ipc/commands", () => ({
   proxySetTrafficMode: ipcMock.proxySetTrafficMode,
   disconnectCore: ipcMock.disconnectCore,
   IpcCommandError: ipcMock.IpcCommandError,
+  listPolicyGroups: ipcMock.listPolicyGroups,
   listProfiles: ipcMock.listProfiles,
+  policyGroupRuntime: ipcMock.policyGroupRuntime,
   restartCore: ipcMock.restartCore,
   runtimeStatus: ipcMock.runtimeStatus,
   setActiveProfile: ipcMock.setActiveProfile,
@@ -221,6 +225,8 @@ describe("HomeScreen", () => {
     ipcMock.proxySetTrafficMode.mockResolvedValue({ mode: "rule" });
     ipcMock.disconnectCore.mockResolvedValue(disconnectedStatus);
     ipcMock.restartCore.mockResolvedValue(connectedStatus);
+    ipcMock.listPolicyGroups.mockResolvedValue({ entries: [] });
+    ipcMock.policyGroupRuntime.mockResolvedValue(null);
     ipcMock.runtimeStatus.mockResolvedValue(disconnectedStatus);
     mockProfileList([
       makeActiveProfile({ id: "active", remarks: "Active node" }),
@@ -254,6 +260,43 @@ describe("HomeScreen", () => {
     expect(screen.queryByTestId("home-connected-info")).not.toBeInTheDocument();
     expect(tunSwitch()).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Traffic mode" })).toBeInTheDocument();
+  });
+
+  it("shows the active policy group and the member traffic goes through", async () => {
+    runtimeMock.state.coreState = connectedStatus;
+    ipcMock.runtimeStatus.mockResolvedValue(connectedStatus);
+    ipcMock.listPolicyGroups.mockResolvedValue({
+      entries: [
+        {
+          group: {
+            autoCreated: false,
+            id: "g1",
+            intervalSeconds: null,
+            memberIds: ["node-tokyo"],
+            name: "Asia",
+            selectedProfileId: null,
+            sourceSubscriptionId: null,
+            strategy: "urlTest",
+            testUrl: null,
+            toleranceMs: null,
+          },
+          isActive: true,
+          members: [{ profileId: "node-tokyo", remarks: "Tokyo" }],
+        },
+      ],
+    });
+    ipcMock.policyGroupRuntime.mockResolvedValue({
+      groupId: "g1",
+      members: [{ delayMs: 88, profileId: "node-tokyo", remarks: "Tokyo" }],
+      nowProfileId: "node-tokyo",
+    });
+    renderHome();
+
+    expect(await screen.findByRole("heading", { name: "Asia" })).toBeInTheDocument();
+    expect(await screen.findByText("Via Tokyo")).toBeInTheDocument();
+    expect(screen.getByText("Current policy group")).toBeInTheDocument();
+    expect(screen.getByText("Lowest latency")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Details" })).not.toBeInTheDocument();
   });
 
   it("supports keyboard navigation to nodes without starting a connection", async () => {

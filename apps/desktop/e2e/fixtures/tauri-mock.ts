@@ -1136,6 +1136,7 @@ export async function installTauriSmokeMock(
         appearance: { language: "en", theme: "system" },
         behavior: {
           autoCheckIp: false,
+          autoCreateSubscriptionGroup: true,
           autostart: false,
           closeAction: "minimizeToTray",
           startMinimized: false,

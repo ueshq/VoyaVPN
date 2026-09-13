@@ -127,7 +127,10 @@
     "checkIp": "检测出口 IP",
     "checkIpChecking": "检测中…",
     "checkIpFailed": "检测失败",
-    "checkIpUnknown": "未知"
+    "checkIpUnknown": "未知",
+    "currentGroupLabel": "当前策略组",
+    "selectedGroupLabel": "已选策略组",
+    "groupVia": "经由 {{node}}"
   },
   "logCodes": {
     "connected": "内核守护进程已启动",
@@ -208,6 +211,8 @@
     "runtimeCore": "内核",
     "runtimeNetwork": "网络",
     "autoCheckIp": "连接后自动检测出口 IP",
+    "autoCreateSubscriptionGroup": "为新订阅自动创建最低延迟策略组",
+    "autoCreateSubscriptionGroupHint": "订阅首次导入节点时新增“订阅名 · Auto”策略组，不会自动启用。",
     "startMinimized": "开机启动时隐藏到托盘",
     "startMinimizedHint": "手动打开 VoyaVPN 时始终显示窗口。"
   },
@@ -555,7 +560,14 @@
     "trafficModeFailed": "切换流量模式失败",
     "trafficModeGlobal": "全局",
     "viewTabsAria": "网络活动视图",
-    "moreActions": "更多"
+    "moreActions": "更多",
+    "groups": {
+      "tab": "策略组",
+      "connectToView": "连接后可查看策略组当前使用的节点。",
+      "noActiveGroup": "当前连接使用的是单个节点。在节点页使用策略组后可在此查看。",
+      "openNodes": "打开节点页",
+      "actionFailed": "策略组操作失败"
+    }
   },
   "qr": {
     "clipboardUnavailable": "当前 WebView 不支持读取剪贴板文本。",

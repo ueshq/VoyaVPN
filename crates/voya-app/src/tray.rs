@@ -27,6 +27,7 @@ pub struct TrayLabels {
     pub nodes: &'static str,
     pub no_nodes: &'static str,
     pub all_nodes: &'static str,
+    pub groups: &'static str,
 }
 
 /// Every shipped interface language, in `localeOptions` order.
@@ -45,6 +46,7 @@ const TRAY_LABELS: &[(&str, TrayLabels)] = &[
             nodes: "Nodes",
             no_nodes: "No nodes",
             all_nodes: "All Nodes…",
+            groups: "Policy Groups",
         },
     ),
     (
@@ -61,6 +63,7 @@ const TRAY_LABELS: &[(&str, TrayLabels)] = &[
             nodes: "节点",
             no_nodes: "暂无节点",
             all_nodes: "全部节点…",
+            groups: "策略组",
         },
     ),
     (
@@ -77,6 +80,7 @@ const TRAY_LABELS: &[(&str, TrayLabels)] = &[
             nodes: "節點",
             no_nodes: "尚無節點",
             all_nodes: "全部節點…",
+            groups: "策略群組",
         },
     ),
 ];
@@ -126,6 +130,7 @@ fn lookup(language: &str) -> Option<TrayLabels> {
 pub const TRAY_NODE_LIMIT: usize = 20;
 const NODE_LABEL_MAX_CHARS: usize = 48;
 const NODE_ID_PREFIX: &str = "tray-node:";
+const GROUP_ID_PREFIX: &str = "tray-group:";
 
 /// What a tray entry does, round-tripped through the native menu id string.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -136,6 +141,7 @@ pub enum TrayItemId {
     Disconnect,
     TrafficMode(TrafficMode),
     Node(String),
+    Group(String),
     AllNodes,
     Quit,
 }
@@ -152,6 +158,7 @@ impl TrayItemId {
             Self::TrafficMode(TrafficMode::Global) => "tray-mode:global".to_string(),
             Self::TrafficMode(TrafficMode::Unchanged) => "tray-mode:unchanged".to_string(),
             Self::Node(id) => format!("{NODE_ID_PREFIX}{id}"),
+            Self::Group(id) => format!("{GROUP_ID_PREFIX}{id}"),
             Self::AllNodes => "tray-all-nodes".to_string(),
             Self::Quit => "tray-quit".to_string(),
         }
@@ -161,6 +168,9 @@ impl TrayItemId {
     pub fn parse(id: &str) -> Option<Self> {
         if let Some(node) = id.strip_prefix(NODE_ID_PREFIX) {
             return (!node.is_empty()).then(|| Self::Node(node.to_string()));
+        }
+        if let Some(group) = id.strip_prefix(GROUP_ID_PREFIX) {
+            return (!group.is_empty()).then(|| Self::Group(group.to_string()));
         }
         Some(match id {
             "tray-show" => Self::Show,
@@ -202,6 +212,13 @@ pub struct TrayNode {
     pub remarks: String,
 }
 
+/// A policy group as the tray lists it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrayGroup {
+    pub id: String,
+    pub name: String,
+}
+
 /// Everything the tray shows, read from the running app.
 #[derive(Debug, Clone, Copy)]
 pub struct TrayMenuInput<'input> {
@@ -210,6 +227,8 @@ pub struct TrayMenuInput<'input> {
     pub traffic_mode: TrafficMode,
     pub nodes: &'input [TrayNode],
     pub active_node_id: Option<&'input str>,
+    pub groups: &'input [TrayGroup],
+    pub active_group_id: Option<&'input str>,
 }
 
 /// The tray menu for the current app state, top to bottom.
@@ -233,7 +252,7 @@ pub fn tray_menu(input: &TrayMenuInput<'_>) -> Vec<TrayEntry> {
     })
     .collect();
 
-    vec![
+    let mut entries = vec![
         connection,
         TrayEntry::Separator,
         TrayEntry::Submenu {
@@ -244,12 +263,39 @@ pub fn tray_menu(input: &TrayMenuInput<'_>) -> Vec<TrayEntry> {
             label: labels.nodes.to_string(),
             entries: node_entries(input, &labels),
         },
+    ];
+    // Most users never build a group, so the submenu appears only once one exists.
+    if !input.groups.is_empty() {
+        entries.push(TrayEntry::Submenu {
+            label: labels.groups.to_string(),
+            entries: group_entries(input),
+        });
+    }
+    entries.extend([
         TrayEntry::Separator,
         item(TrayItemId::Show, labels.show, true),
         item(TrayItemId::Hide, labels.hide, true),
         TrayEntry::Separator,
         item(TrayItemId::Quit, labels.quit, true),
-    ]
+    ]);
+    entries
+}
+
+/// Every group, checked when connecting uses it.
+fn group_entries(input: &TrayMenuInput<'_>) -> Vec<TrayEntry> {
+    input
+        .groups
+        .iter()
+        .map(|group| TrayEntry::Check {
+            id: TrayItemId::Group(group.id.clone()),
+            label: node_label(if group.name.trim().is_empty() {
+                &group.id
+            } else {
+                group.name.trim()
+            }),
+            checked: input.active_group_id == Some(group.id.as_str()),
+        })
+        .collect()
 }
 
 /// The tray tooltip: the app name, and the node while connected.
@@ -417,6 +463,8 @@ mod tests {
             traffic_mode: TrafficMode::Rule,
             nodes,
             active_node_id: active,
+            groups: &[],
+            active_group_id: None,
         }
     }
 
@@ -443,12 +491,14 @@ mod tests {
             TrayItemId::TrafficMode(TrafficMode::Global),
             TrayItemId::TrafficMode(TrafficMode::Unchanged),
             TrayItemId::Node("abc:def".to_string()),
+            TrayItemId::Group("g:1".to_string()),
             TrayItemId::AllNodes,
             TrayItemId::Quit,
         ] {
             assert_eq!(TrayItemId::parse(&id.encode()), Some(id));
         }
         assert_eq!(TrayItemId::parse("tray-node:"), None);
+        assert_eq!(TrayItemId::parse("tray-group:"), None);
         assert_eq!(TrayItemId::parse("unknown"), None);
     }
 
@@ -490,6 +540,47 @@ mod tests {
             connected.last(),
             Some(&item(TrayItemId::Quit, "Quit", true))
         );
+    }
+
+    #[test]
+    fn policy_groups_get_a_submenu_only_once_one_exists() {
+        let nodes = nodes(1);
+        let without = tray_menu(&input(&nodes, None));
+        assert!(!without.iter().any(|entry| matches!(
+            entry,
+            TrayEntry::Submenu { label, .. } if label == "Policy Groups"
+        )));
+        let groups = vec![
+            TrayGroup {
+                id: "g-1".to_string(),
+                name: "Asia".to_string(),
+            },
+            TrayGroup {
+                id: "g-2".to_string(),
+                name: " ".to_string(),
+            },
+        ];
+        let menu = tray_menu(&TrayMenuInput {
+            groups: &groups,
+            active_group_id: Some("g-2"),
+            ..input(&nodes, None)
+        });
+        assert_eq!(
+            submenu(&menu, "Policy Groups"),
+            &[
+                TrayEntry::Check {
+                    id: TrayItemId::Group("g-1".to_string()),
+                    label: "Asia".to_string(),
+                    checked: false,
+                },
+                TrayEntry::Check {
+                    id: TrayItemId::Group("g-2".to_string()),
+                    label: "g-2".to_string(),
+                    checked: true,
+                },
+            ]
+        );
+        assert_eq!(menu.last(), Some(&item(TrayItemId::Quit, "Quit", true)));
     }
 
     #[test]

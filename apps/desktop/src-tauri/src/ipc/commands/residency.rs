@@ -5,7 +5,7 @@
 
 use tauri::Manager;
 use voya_app::services::TrafficMode;
-use voya_app::tray::{TrayMenuInput, TrayNode};
+use voya_app::tray::{TrayGroup, TrayMenuInput, TrayNode};
 use voya_contracts::CloseRequestAction;
 
 use super::{lifecycle::*, support::*, *};
@@ -45,6 +45,8 @@ pub(crate) struct TraySnapshot {
     traffic_mode: TrafficMode,
     nodes: Vec<TrayNode>,
     active_node_id: Option<String>,
+    groups: Vec<TrayGroup>,
+    active_group_id: Option<String>,
 }
 
 impl TraySnapshot {
@@ -55,12 +57,24 @@ impl TraySnapshot {
             traffic_mode: self.traffic_mode,
             nodes: &self.nodes,
             active_node_id: self.active_node_id.as_deref(),
+            groups: &self.groups,
+            active_group_id: self.active_group_id.as_deref(),
         }
     }
 
-    /// The active node's name while a connection is up.
+    /// The active group's or node's name while a connection is up.
     pub(crate) fn connected_node(&self) -> Option<&str> {
-        let active = self.active_node_id.as_deref().filter(|_| self.connected)?;
+        if !self.connected {
+            return None;
+        }
+        if let Some(group) = self.active_group_id.as_deref() {
+            return self
+                .groups
+                .iter()
+                .find(|item| item.id == group)
+                .map(|item| item.name.as_str());
+        }
+        let active = self.active_node_id.as_deref()?;
         self.nodes
             .iter()
             .find(|node| node.id == active)
@@ -102,12 +116,35 @@ pub(crate) async fn tray_snapshot(state: &AppState) -> TraySnapshot {
         }
     };
 
+    let (groups, active_group_id) = match state.services().policy_groups().list(&config).await {
+        Ok(entries) => {
+            let active = entries
+                .iter()
+                .find(|entry| entry.is_active)
+                .map(|entry| entry.group.id.clone());
+            let groups = entries
+                .into_iter()
+                .map(|entry| TrayGroup {
+                    id: entry.group.id,
+                    name: entry.group.name,
+                })
+                .collect();
+            (groups, active)
+        }
+        Err(error) => {
+            tracing::warn!(?error, "failed to list policy groups for the tray menu");
+            (Vec::new(), None)
+        }
+    };
+
     TraySnapshot {
         language: config.ui_item.current_language.clone(),
         connected,
         traffic_mode: config.proxy_ui_item.traffic_mode,
         nodes,
         active_node_id,
+        groups,
+        active_group_id,
     }
 }
 
@@ -168,6 +205,33 @@ pub(crate) async fn tray_activate_node<R: tauri::Runtime>(
                 ConfigChange::ACTIVE_PROFILE,
             )
             .await;
+        }
+        Err(error) => report_tray_failure(app, &error),
+    }
+}
+
+/// Makes a policy group active and, when connected, restarts onto it: the
+/// same two steps the policy group card takes.
+pub(crate) async fn tray_activate_group<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    group_id: String,
+) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let activated = mutate_config(&state, async |unit_of_work, config| {
+        Ok(
+            voya_app::policy_groups::PolicyGroupManager::new_in(unit_of_work)
+                .set_active(config, &group_id)
+                .await?,
+        )
+    })
+    .await;
+    match activated {
+        Ok(committed) => {
+            emit_policy_group_invalidation(app, "active-policy-group-changed", true);
+            restart_after_config_change(app, &state, &committed.config, ConfigChange::POLICY_GROUP)
+                .await;
         }
         Err(error) => report_tray_failure(app, &error),
     }

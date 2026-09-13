@@ -3,8 +3,11 @@ import { create } from "zustand";
 export type ShellTab =
   "home" | "profiles" | "settings" | "connections" | "rules";
 
-/** Sub-view of the Connections page: the live connection table or the log tail. */
-export type ConnectionsView = "connections" | "logs";
+/**
+ * Sub-view of the Connections page: the live connection table, the running
+ * policy group, or the log tail.
+ */
+export type ConnectionsView = "connections" | "proxies" | "logs";
 
 type ShellState = {
   sidebarCollapsed: boolean;

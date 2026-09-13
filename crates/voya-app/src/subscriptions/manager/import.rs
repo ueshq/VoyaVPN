@@ -1,6 +1,7 @@
 //! Apply a parsed import within the manager's database session.
 use super::parse::parse_import_text;
 use super::{Result, SubscriptionManager, SubscriptionManagerError};
+use crate::policy_groups::PolicyGroupManager;
 use crate::profiles::{normalize_profile, ProfileManager, ProfileManagerError};
 use regex::Regex;
 use std::collections::BTreeSet;
@@ -189,6 +190,19 @@ impl SubscriptionManager<'_> {
 
         let line_issues = parsed_import.line_issues;
         profile_manager.ensure_active_profile(config).await?;
+        if let Some(id) = subscription_id {
+            // Only the first import that brings nodes offers the group, so a
+            // group the user deleted stays deleted across later updates.
+            let first_import = !imported_index_ids.is_empty()
+                && !old_profiles
+                    .iter()
+                    .any(|profile| profile.subscription_id.as_deref() == Some(id));
+            if first_import {
+                PolicyGroupManager::from_session(self.database)
+                    .ensure_subscription_auto_group(config, id)
+                    .await?;
+            }
+        }
 
         Ok(ImportProfilesResult {
             imported: u32::try_from(imported_index_ids.len()).unwrap_or(u32::MAX),

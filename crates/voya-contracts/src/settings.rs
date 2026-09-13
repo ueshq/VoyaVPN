@@ -70,7 +70,7 @@ impl Default for AppearanceSettings {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BehaviorSettings {
     pub autostart: bool,
@@ -80,6 +80,21 @@ pub struct BehaviorSettings {
     pub close_action: CloseAction,
     /// Keep the window hidden when the app is launched at login.
     pub start_minimized: bool,
+    /// Create a lowest-latency policy group the first time a subscription
+    /// imports nodes. The group is never activated automatically.
+    pub auto_create_subscription_group: bool,
+}
+
+impl Default for BehaviorSettings {
+    fn default() -> Self {
+        Self {
+            autostart: false,
+            auto_check_ip: false,
+            close_action: CloseAction::default(),
+            start_minimized: false,
+            auto_create_subscription_group: true,
+        }
+    }
 }
 
 /// What closing the main window does.

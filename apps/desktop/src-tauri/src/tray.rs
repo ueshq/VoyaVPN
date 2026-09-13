@@ -170,6 +170,7 @@ fn handle_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str) {
                         commands::tray_set_traffic_mode(&app, mode).await;
                     }
                     TrayItemId::Node(id) => commands::tray_activate_node(&app, id).await,
+                    TrayItemId::Group(id) => commands::tray_activate_group(&app, id).await,
                     _ => {}
                 }
                 // A native check item toggles itself when clicked; the rebuild

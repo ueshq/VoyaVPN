@@ -103,6 +103,7 @@ const RETIRED_SETTINGS_ELEMENT_KEYS: &[(&[&str], &str)] = &[(&["network", "inbou
 /// payload implies). Inserted only when absent.
 const ADDED_SETTINGS_DEFAULTS: &[(&[&str], &str, &str)] = &[
     (&["behavior"], "autoCheckIp", "false"),
+    (&["behavior"], "autoCreateSubscriptionGroup", "true"),
     (&["behavior"], "closeAction", "\"minimizeToTray\""),
     (&["behavior"], "startMinimized", "false"),
 ];

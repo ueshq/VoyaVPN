@@ -8,8 +8,8 @@ use std::collections::BTreeSet;
 
 use thiserror::Error;
 use voya_core::{
-    resolve_group_members, AppConfig, PolicyGroupItem, ProfileItem, GROUP_INTERVAL_SECONDS_RANGE,
-    GROUP_TOLERANCE_MS_RANGE,
+    resolve_group_members, AppConfig, GroupStrategy, PolicyGroupItem, ProfileItem,
+    GROUP_INTERVAL_SECONDS_RANGE, GROUP_TOLERANCE_MS_RANGE,
 };
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 
@@ -17,6 +17,8 @@ use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 pub const GROUP_NAME_MAX_CHARS: usize = 64;
 const GROUP_TEST_URL_MAX_CHARS: usize = 2048;
 const GROUP_SORT_STEP: i32 = 10;
+/// Appended to a subscription's name for the group its first import creates.
+const AUTO_GROUP_SUFFIX: &str = " · Auto";
 
 pub type Result<T> = std::result::Result<T, PolicyGroupManagerError>;
 
@@ -196,6 +198,85 @@ impl<'db> PolicyGroupManager<'db> {
         Ok(group)
     }
 
+    /// Creates the lowest-latency group for a subscription's nodes.
+    ///
+    /// Callers invoke this only for a subscription's first successful import,
+    /// so a group the user deleted does not come back on the next update.
+    /// Nothing is created when the setting is off, when an import-created
+    /// group for this subscription already exists (even a renamed one), or
+    /// when the subscription has no nodes. The group is never activated.
+    pub async fn ensure_subscription_auto_group(
+        &self,
+        config: &AppConfig,
+        subscription_id: &str,
+    ) -> std::result::Result<Option<PolicyGroupItem>, DbError> {
+        if !config.gui_item.auto_create_subscription_group
+            || self
+                .database
+                .policy_groups()
+                .auto_created_for_subscription(subscription_id)
+                .await?
+                .is_some()
+            || self
+                .database
+                .profiles()
+                .list_by_subscription_id(Some(subscription_id))
+                .await?
+                .is_empty()
+        {
+            return Ok(None);
+        }
+        let Some(subscription) = self.database.subscriptions().get(subscription_id).await? else {
+            return Ok(None);
+        };
+        let name = auto_group_name(if subscription.remarks.trim().is_empty() {
+            &subscription.id
+        } else {
+            &subscription.remarks
+        });
+        let group = PolicyGroupItem {
+            id: uuid::Uuid::new_v4().simple().to_string(),
+            name,
+            strategy: GroupStrategy::UrlTest,
+            source_subscription_id: Some(subscription.id),
+            auto_created: true,
+            sort: self
+                .database
+                .policy_groups()
+                .max_sort()
+                .await?
+                .saturating_add(GROUP_SORT_STEP),
+            ..PolicyGroupItem::default()
+        };
+        self.database.policy_groups().upsert(&group).await?;
+        Ok(Some(group))
+    }
+
+    /// Deletes the import-created groups of these subscriptions before the
+    /// subscriptions themselves go. Groups the user built keep existing and
+    /// only lose their binding. Nothing stays active if one of them was.
+    pub async fn delete_auto_groups_for_subscriptions(
+        &self,
+        config: &mut AppConfig,
+        subscription_ids: &[String],
+    ) -> std::result::Result<u64, DbError> {
+        let deleted = self
+            .database
+            .policy_groups()
+            .delete_auto_created_for_subscriptions(subscription_ids)
+            .await?;
+        if !config.active_group_id.is_empty()
+            && !self
+                .database
+                .policy_groups()
+                .exists(&config.active_group_id)
+                .await?
+        {
+            config.active_group_id.clear();
+        }
+        Ok(deleted)
+    }
+
     async fn get(&self, id: &str) -> Result<PolicyGroupItem> {
         self.database
             .policy_groups()
@@ -212,6 +293,18 @@ pub fn group_test_url(group: &PolicyGroupItem) -> &str {
         .test_url
         .as_deref()
         .unwrap_or(voya_core::DEFAULT_GROUP_TEST_URL)
+}
+
+/// `"{subscription} · Auto"`, kept within the editor's name limit.
+fn auto_group_name(subscription: &str) -> String {
+    let budget = GROUP_NAME_MAX_CHARS - AUTO_GROUP_SUFFIX.chars().count();
+    let base: String = subscription
+        .trim()
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(budget)
+        .collect();
+    format!("{}{AUTO_GROUP_SUFFIX}", base.trim_end())
 }
 
 fn normalized(mut group: PolicyGroupItem) -> PolicyGroupItem {
@@ -286,10 +379,129 @@ fn validate(group: &PolicyGroupItem) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use voya_core::{ActiveTarget, GroupStrategy};
+    use voya_core::{ActiveTarget, SubItem};
 
     use super::*;
     use crate::profiles::ProfileManager;
+    use crate::subscriptions::SubscriptionManager;
+
+    async fn subscription_with_node(database: &Database, id: &str, remarks: &str) {
+        database
+            .subscriptions()
+            .upsert(&SubItem {
+                id: id.to_string(),
+                remarks: remarks.to_string(),
+                url: format!("https://{id}.example/sub"),
+                ..SubItem::default()
+            })
+            .await
+            .expect("subscription");
+        database
+            .profiles()
+            .upsert(&ProfileItem {
+                index_id: format!("{id}-node"),
+                remarks: format!("{remarks} node"),
+                subscription_id: Some(id.to_string()),
+                ..ProfileItem::default()
+            })
+            .await
+            .expect("subscription node");
+    }
+
+    #[tokio::test]
+    async fn an_auto_group_is_created_once_only_when_enabled_and_never_activated() {
+        let database = database_with_nodes(&[]).await;
+        subscription_with_node(&database, "work", "Work").await;
+        database
+            .subscriptions()
+            .upsert(&SubItem {
+                id: "empty".to_string(),
+                remarks: "Empty".to_string(),
+                url: "https://empty.example/sub".to_string(),
+                ..SubItem::default()
+            })
+            .await
+            .expect("empty subscription");
+        let manager = PolicyGroupManager::new(&database);
+        let mut config = AppConfig::default();
+        assert!(config.gui_item.auto_create_subscription_group);
+
+        config.gui_item.auto_create_subscription_group = false;
+        assert!(manager
+            .ensure_subscription_auto_group(&config, "work")
+            .await
+            .expect("disabled")
+            .is_none());
+        config.gui_item.auto_create_subscription_group = true;
+        let created = manager
+            .ensure_subscription_auto_group(&config, "work")
+            .await
+            .expect("enabled")
+            .expect("a group");
+        assert_eq!(created.name, "Work · Auto");
+        assert_eq!(created.strategy, GroupStrategy::UrlTest);
+        assert!(created.auto_created);
+        assert!(config.active_group_id.is_empty());
+        assert!(manager
+            .ensure_subscription_auto_group(&config, "work")
+            .await
+            .expect("again")
+            .is_none());
+        assert!(manager
+            .ensure_subscription_auto_group(&config, "empty")
+            .await
+            .expect("no nodes")
+            .is_none());
+        let entries = manager.list(&config).await.expect("list");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].members.len(), 1);
+    }
+
+    #[test]
+    fn auto_group_names_stay_within_the_limit() {
+        let long = "界".repeat(GROUP_NAME_MAX_CHARS * 2);
+        let name = auto_group_name(&long);
+        assert_eq!(name.chars().count(), GROUP_NAME_MAX_CHARS);
+        assert!(name.ends_with(AUTO_GROUP_SUFFIX));
+        assert_eq!(auto_group_name(" Work\n "), "Work · Auto");
+    }
+
+    #[tokio::test]
+    async fn deleting_a_subscription_removes_only_its_auto_group() {
+        let database = database_with_nodes(&["a"]).await;
+        subscription_with_node(&database, "work", "Work").await;
+        let manager = PolicyGroupManager::new(&database);
+        let mut config = AppConfig::default();
+        let auto = manager
+            .ensure_subscription_auto_group(&config, "work")
+            .await
+            .expect("auto group")
+            .expect("created");
+        let user = manager
+            .save(PolicyGroupItem {
+                source_subscription_id: Some("work".to_string()),
+                ..draft(&["a"])
+            })
+            .await
+            .expect("user group");
+        config.set_active_group(&auto.id);
+
+        SubscriptionManager::new(&database)
+            .delete_subscriptions(&mut config, &["work".to_string()])
+            .await
+            .expect("delete subscription");
+
+        let remaining = manager.list(&config).await.expect("list");
+        assert_eq!(
+            remaining
+                .iter()
+                .map(|entry| entry.group.id.as_str())
+                .collect::<Vec<_>>(),
+            [user.id.as_str()]
+        );
+        assert_eq!(remaining[0].group.source_subscription_id, None);
+        assert!(config.active_group_id.is_empty());
+    }
 
     async fn database_with_nodes(ids: &[&str]) -> Database {
         let database = Database::connect_in_memory().await.expect("database");

@@ -127,7 +127,10 @@
     "checkIp": "Check exit IP",
     "checkIpChecking": "Checking…",
     "checkIpFailed": "Check failed",
-    "checkIpUnknown": "Unknown"
+    "checkIpUnknown": "Unknown",
+    "currentGroupLabel": "Current policy group",
+    "selectedGroupLabel": "Selected policy group",
+    "groupVia": "Via {{node}}"
   },
   "logCodes": {
     "connected": "Core supervisor started",
@@ -208,6 +211,8 @@
     "runtimeCore": "Core",
     "runtimeNetwork": "Network",
     "autoCheckIp": "Check the exit IP after connecting",
+    "autoCreateSubscriptionGroup": "Create a lowest-latency group for new subscriptions",
+    "autoCreateSubscriptionGroupHint": "A subscription's first import adds a “name · Auto” policy group. It is never selected for you.",
     "startMinimized": "Start hidden in the tray when launched at login",
     "startMinimizedHint": "Opening VoyaVPN yourself always shows the window."
   },
@@ -555,7 +560,14 @@
     "trafficModeFailed": "Failed to change traffic mode",
     "trafficModeGlobal": "Global",
     "viewTabsAria": "Network activity views",
-    "moreActions": "More"
+    "moreActions": "More",
+    "groups": {
+      "tab": "Policy groups",
+      "connectToView": "Connect to see which node your policy group uses.",
+      "noActiveGroup": "This connection uses a single node. Use a policy group on the Nodes page to see it here.",
+      "openNodes": "Open nodes",
+      "actionFailed": "Policy group action failed"
+    }
   },
   "qr": {
     "clipboardUnavailable": "Clipboard text read is unavailable in this WebView.",

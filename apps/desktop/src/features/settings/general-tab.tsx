@@ -167,6 +167,22 @@ export function GeneralTab({
             }))
           }
         />
+        <SettingsCheckbox
+          field="behavior.autoCreateSubscriptionGroup"
+          checked={settings.behavior.autoCreateSubscriptionGroup}
+          description={t("options.autoCreateSubscriptionGroupHint")}
+          disabled={working}
+          label={t("options.autoCreateSubscriptionGroup")}
+          onCheckedChange={(checked) =>
+            update((current) => ({
+              ...current,
+              behavior: {
+                ...current.behavior,
+                autoCreateSubscriptionGroup: checked === true,
+              },
+            }))
+          }
+        />
       </SettingsGroup>
     </div>
   );

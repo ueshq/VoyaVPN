@@ -5,11 +5,12 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { useShellStore } from "@/stores/shell-store";
 
 import { ConnectionsPanel } from "./connections-panel";
+import { ProxyGroupsPanel } from "./proxy-groups-panel";
 import { LogsPanel, type LogFilter } from "@/features/logs/logs-panel";
 
 /**
- * The Connections shell destination: one large page title with two sub-views —
- * the live connection table and the log tail. The sub-view lives in the shell
+ * The Connections shell destination: one large page title with three sub-views —
+ * the live connection table, the running policy group, and the log tail. The sub-view lives in the shell
  * store so it survives leaving the page and stays deep-linkable from backend
  * `selectTab` events. Inactive panels unmount (one heavy virtualizer at a time).
  */
@@ -26,7 +27,7 @@ export function ConnectionsScreen() {
       <Tabs
         className="flex min-h-0 flex-1 flex-col gap-0"
         onValueChange={(value) => {
-          if (value === "connections" || value === "logs") {
+          if (value === "connections" || value === "proxies" || value === "logs") {
             setView(value);
           }
         }}
@@ -36,6 +37,7 @@ export function ConnectionsScreen() {
           actions={
             <TabsList aria-label={t("proxy.viewTabsAria")}>
               <TabsTrigger value="connections">{t("activity.liveConnections")}</TabsTrigger>
+              <TabsTrigger value="proxies">{t("proxy.groups.tab")}</TabsTrigger>
               <TabsTrigger value="logs">{t("tabs.logs")}</TabsTrigger>
             </TabsList>
           }
@@ -45,6 +47,9 @@ export function ConnectionsScreen() {
           <PageSurface className="flex flex-1 flex-col overflow-hidden">
             <TabsContent className="min-h-0 min-w-0 flex-1" value="connections">
               <ConnectionsPanel filter={connectionSearch} onFilterChange={setConnectionSearch} />
+            </TabsContent>
+            <TabsContent className="min-h-0 min-w-0 flex-1" value="proxies">
+              <ProxyGroupsPanel />
             </TabsContent>
             <TabsContent className="min-h-0 min-w-0 flex-1" value="logs">
               <LogsPanel

@@ -145,12 +145,27 @@ impl Default for InItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GuiItem {
     pub auto_run: bool,
     pub auto_check_ip: bool,
     pub close_action: crate::CloseAction,
     pub start_minimized: bool,
+    /// Offer a lowest-latency policy group the first time a subscription
+    /// imports nodes.
+    pub auto_create_subscription_group: bool,
+}
+
+impl Default for GuiItem {
+    fn default() -> Self {
+        Self {
+            auto_run: false,
+            auto_check_ip: false,
+            close_action: crate::CloseAction::default(),
+            start_minimized: false,
+            auto_create_subscription_group: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

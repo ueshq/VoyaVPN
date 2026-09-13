@@ -2,7 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { TranslationFunction } from "@voya/i18n";
 import {
+  listPolicyGroups,
   listProfiles,
+  policyGroupRuntime,
   setConnectionMode,
   tunRequestElevation,
   tunStatus,
@@ -10,7 +12,7 @@ import {
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { TunStatus } from "@/ipc/bindings";
 import { refreshRuntimeStatusAndReport } from "@/ipc/runtime-status";
-import { profilesQueryKey } from "@/ipc/query-keys";
+import { profilesQueryKey, queryKeys } from "@/ipc/query-keys";
 import { getErrorMessage } from "@voya/utils/error";
 import {
   runtimeActionPending,
@@ -26,6 +28,9 @@ import { executeRuntimeAction, isRuntimeTransitioning, reportRuntimeActionError 
  * elevation + missing-core handling, the unified connection-mode switcher,
  * node selection/switching, and the seeded TUN live state.
  */
+/** How often the running group's current member is read again. */
+const GROUP_RUNTIME_REFRESH_MS = 5_000;
+
 export function useHomeRuntime(t: TranslationFunction) {
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const tun = useRuntimeEventStore((state) => state.tun);
@@ -57,6 +62,23 @@ export function useHomeRuntime(t: TranslationFunction) {
       ) ?? null)
     : null;
   const nodeEntry = connected ? runningEntry : activeProfile;
+  // Shares the node page's query, so activating a group there shows up here.
+  const policyGroupsQuery = useQuery({
+    queryFn: listPolicyGroups,
+    queryKey: queryKeys.policyGroups,
+  });
+  const activeGroup =
+    policyGroupsQuery.data?.entries.find((entry) => entry.isActive) ?? null;
+  const groupRuntimeQuery = useQuery({
+    enabled: connected && activeGroup !== null,
+    queryFn: policyGroupRuntime,
+    queryKey: queryKeys.policyGroupRuntime,
+    refetchInterval: GROUP_RUNTIME_REFRESH_MS,
+  });
+  const groupRuntime =
+    connected && activeGroup && groupRuntimeQuery.data?.groupId === activeGroup.group.id
+      ? groupRuntimeQuery.data
+      : null;
 
   async function runRuntimeAction(action: RuntimeAction) {
     if (busy || runtimeActionPending()) {
@@ -161,6 +183,8 @@ export function useHomeRuntime(t: TranslationFunction) {
   }
 
   return {
+    activeGroup,
+    groupRuntime,
     nodeEntry,
     busy,
     changeTunEnabled,

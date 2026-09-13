@@ -261,6 +261,7 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
             auto_check_ip: config.gui_item.auto_check_ip,
             close_action: close_action_to_contract(config.gui_item.close_action),
             start_minimized: config.gui_item.start_minimized,
+            auto_create_subscription_group: config.gui_item.auto_create_subscription_group,
         },
         core: contracts::CoreSettings {
             log_enabled: config.core_basic_item.log_enabled,
@@ -389,6 +390,7 @@ pub fn app_config_from_settings(
             auto_check_ip: settings.behavior.auto_check_ip,
             close_action: close_action_from_contract(settings.behavior.close_action),
             start_minimized: settings.behavior.start_minimized,
+            auto_create_subscription_group: settings.behavior.auto_create_subscription_group,
         },
         ui_item: UiItem {
             current_theme: theme_to_config(settings.appearance.theme).map(str::to_string),
@@ -599,6 +601,7 @@ mod tests {
                 auto_check_ip: false,
                 close_action: voya_core::CloseAction::Ask,
                 start_minimized: true,
+                auto_create_subscription_group: false,
             },
             ui_item: UiItem {
                 current_theme: Some("Dark".to_string()),

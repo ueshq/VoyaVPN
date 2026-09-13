@@ -315,6 +315,11 @@ export type BehaviorSettings = {
 	closeAction: CloseAction,
 	/**  Keep the window hidden when the app is launched at login. */
 	startMinimized: boolean,
+	/**
+	 *  Create a lowest-latency policy group the first time a subscription
+	 *  imports nodes. The group is never activated automatically.
+	 */
+	autoCreateSubscriptionGroup: boolean,
 };
 
 /**  What closing the main window does. */
