@@ -1,4 +1,4 @@
-import { ArrowRight, Globe, Layers, Plus, Power, RotateCcw, Server } from "lucide-react";
+import { ArrowRight, Layers, Plus, Power, RotateCcw, Server } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
@@ -15,7 +15,6 @@ import { NodeCountryIcon } from "@/components/node-country-icon";
 import { getProtocolLabel } from "@/features/profiles/profile-constants";
 import { entryCountry, profileMemberName, profileNameWithoutFlag } from "@/features/profiles/profile-display";
 import { POLICY_GROUP_STRATEGY_KEYS } from "@/features/profiles/policy-group-labels";
-import { useSavedTrafficMode } from "@/features/routing/use-traffic-mode";
 import { type RuntimeAction } from "@/stores/runtime-action-store";
 import { useShellStore } from "@/stores/shell-store";
 
@@ -24,6 +23,7 @@ import { ExitIpMetric } from "./exit-ip-metric";
 import { HomeWorldMap, type HomeMapMarker } from "./home-world-map";
 import { useConnectionIp } from "./use-connection-ip";
 import { useHomeRuntime } from "./use-home-runtime";
+import { HomeModeSummary } from "./home-mode-summary";
 
 const ACTION_FAILED_KEYS = {
   connect: "home.actionFailed.connect",
@@ -37,11 +37,7 @@ export function HomeScreen() {
   const { ipQuery } = useConnectionIp();
   const navigateToNodes = () =>
     useShellStore.getState().setActiveTab("profiles", true);
-  const openLogs = () => useShellStore.getState().openSettings("advanced");
-  const openRules = () => useShellStore.getState().setActiveTab("rules", true);
-  // Global mode skips every rule. Home has no mode control, but it must not
-  // let a user believe their rules still apply.
-  const globalMode = useSavedTrafficMode().mode === "global";
+  const openLogs = () => useShellStore.getState().openSettings("advanced", "logs");
   const runtimeActionAvailable =
     home.connected || home.state === "cleanupPending";
   const noNodes =
@@ -103,36 +99,23 @@ export function HomeScreen() {
       <HomeWorldMap marker={marker} />
       <div className="home-content">
         <div className="home-hero">
-          {/* The spinner explains a connect in progress; a mode switch needs words. */}
+          {/* A mode switch needs words as well as a progress indicator. */}
           <DisabledReason
             reason={home.modePending && !home.inProgress ? t("home.modePendingReason") : undefined}
           >
-          <ConnectButton
-            icon={noNodes ? Plus : needsSelection ? Server : Power}
-            label={
-              noNodes
-                ? t("panes.profiles.toolbar.addNode")
-                : needsSelection
-                  ? t("home.chooseNode")
-                  : undefined
-            }
-            busy={
-              home.busy || (!runtimeActionAvailable && home.profilesPending)
-            }
-            connected={home.connected}
-            inProgress={home.inProgress}
-            onPrimaryAction={
-              noNodes
+            <ConnectButton
+              icon={noNodes ? Plus : needsSelection ? Server : Power}
+              label={noNodes ? t("panes.profiles.toolbar.addNode") : needsSelection ? t("home.chooseNode") : undefined}
+              busy={home.busy || (!runtimeActionAvailable && home.profilesPending)}
+              connected={home.connected}
+              inProgress={home.inProgress}
+              onPrimaryAction={noNodes
                 ? () => useShellStore.getState().openProfilesAddMenu()
-                : needsSelection
-                  ? navigateToNodes
-                  : home.handlePrimaryAction
-            }
-            t={t}
-            cleanupPending={home.state === "cleanupPending"}
-          />
+                : needsSelection ? navigateToNodes : home.handlePrimaryAction}
+              t={t}
+              cleanupPending={home.state === "cleanupPending"}
+            />
           </DisabledReason>
-          {/* The button names an action; this line says where the connection stands. */}
           <p
             className="home-status"
             data-state={noNodes ? "empty" : home.state}
@@ -141,11 +124,7 @@ export function HomeScreen() {
           >
             {noNodes ? t("home.emptyGuide") : t(CORE_STATE_TRANSLATION_KEYS[home.state])}
           </p>
-          {!noNodes ? (
-            <ConnectedInfo delayMs={delayMs} t={t}>
-              <ExitIpMetric t={t} />
-            </ConnectedInfo>
-          ) : null}
+          {!noNodes ? <HomeModeSummary /> : null}
           {home.tunEnabled && home.tunIssue ? (
             <p className="home-diagnostic" role="status">
               {home.tunIssue}
@@ -205,17 +184,6 @@ export function HomeScreen() {
                       ? t("home.currentNodeLabel")
                       : t("home.selectedNodeLabel")}
                 </span>
-                {globalMode ? (
-                  <button
-                    className="home-mode-chip"
-                    onClick={openRules}
-                    title={t("panes.routing.globalModeBanner")}
-                    type="button"
-                  >
-                    <Globe aria-hidden="true" className="size-3" />
-                    {t("home.globalModeChip")}
-                  </button>
-                ) : null}
               </p>
               <h2 className="home-node-name" title={name}>
                 {name}
@@ -236,15 +204,15 @@ export function HomeScreen() {
                   </>
                 ) : (
                   <>
-                <span
-                  className="home-node-address"
-                  title={profile ? profile.protocol.server.address : undefined}
-                >
-                  {profile ? profile.protocol.server.address || "—" : "—"}
-                </span>
-                <span>
-                  {profile ? getProtocolLabel(profile.protocol.kind) : "—"}
-                </span>
+                    <span
+                      className="home-node-address"
+                      title={profile ? profile.protocol.server.address : undefined}
+                    >
+                      {profile ? profile.protocol.server.address || "—" : "—"}
+                    </span>
+                    <span>
+                      {profile ? getProtocolLabel(profile.protocol.kind) : "—"}
+                    </span>
                   </>
                 )}
                 {/* Restarting is rare, so it is a quiet link on the card
@@ -272,6 +240,11 @@ export function HomeScreen() {
               <ArrowRight aria-hidden="true" className="size-4" />
             </Button>
           </div>
+        ) : null}
+        {!noNodes ? (
+          <ConnectedInfo delayMs={delayMs} t={t}>
+            <ExitIpMetric t={t} />
+          </ConnectedInfo>
         ) : null}
       </div>
     </section>

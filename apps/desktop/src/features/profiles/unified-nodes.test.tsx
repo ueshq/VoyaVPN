@@ -19,6 +19,7 @@ import type {
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { queryKeys } from "@/ipc/query-keys";
 import { useRuntimeActionStore } from "@/stores/runtime-action-store";
+import { useNodeListStore } from "@/stores/node-list-store";
 import { makeProfileFixture } from "@/test/profile-fixture";
 import { ProfilesScreen } from "./server-table";
 import { nodeListRows, LOCAL_GROUP_KEY } from "./node-list-rows";
@@ -355,6 +356,28 @@ describe("group panels and scoped export", () => {
     ]);
   });
 
+
+  it("searches node names, addresses and subscriptions without changing saved collapse state", async () => {
+    useNodeListStore.setState({ collapsedGroups: ["subscription:a"], hideUnreachable: false });
+    renderScreen();
+    await screen.findByRole("button", { name: "Asia" });
+    const search = screen.getByRole("textbox", { name: "Search node name, address or subscription" });
+    fireEvent.change(search, { target: { value: " osaka " } });
+    expect(screen.getAllByTestId("server-row")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Asia" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("1 of 4 nodes")).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "ASIA" } });
+    expect(screen.getAllByTestId("server-row")).toHaveLength(2);
+    fireEvent.change(search, { target: { value: profiles[2]!.profile.protocol.server.address } });
+    expect(screen.getByText("Paris")).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "missing-node" } });
+    expect(screen.getByText("No matching nodes")).toBeInTheDocument();
+    expect(screen.queryByText("No nodes")).not.toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole("button", { name: "Clear search" })[0]!);
+    expect(search).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Asia" })).toHaveAttribute("aria-expanded", "false");
+    expect(useNodeListStore.getState().collapsedGroups).toEqual(["subscription:a"]);
+  });
 
   it("sorts measured nodes by latency and hides unreachable ones on request", () => {
     const measured = (id: string, delayMs: number, outcome: NonNullable<ProfileListEntry["metrics"]["outcome"]> | null) =>

@@ -15,6 +15,7 @@ import { useAcrylicWindow } from "@/components/app-shell/use-acrylic-window";
 import { useRuntimeStatusSeed } from "@/components/app-shell/use-runtime-status-seed";
 import { useShellShortcuts } from "@/components/app-shell/use-shell-shortcuts";
 import { useWindowChrome } from "@/components/app-shell/use-window-chrome";
+import { WindowChromeContext } from "@/components/app-shell/window-chrome-context";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Skeleton } from "@voya/ui/components/skeleton";
 import { getErrorMessage } from "@voya/utils/error";
@@ -82,25 +83,27 @@ export function AppShell() {
 
   return (
     <main className="bg-surface-canvas text-foreground">
-      <div className="app-shell" data-active-tab={activeTab} data-window-chrome={titleBarLayout}>
-        <AppSidebar titleBarLayout={titleBarLayout} />
+      <WindowChromeContext value={titleBarLayout}>
+        <div className="app-shell" data-active-tab={activeTab} data-window-chrome={titleBarLayout}>
+          <AppSidebar titleBarLayout={titleBarLayout} />
 
-        <div className="shell-content-column">
-          <TitleBar layout={titleBarLayout} />
-          <div
-            aria-labelledby={`shell-tab-${activeTab}`}
-            className="shell-panel outline-none"
-            id={SHELL_PANEL_ID}
-            role="tabpanel"
-            tabIndex={0}
-          >
-            {/* Keep the sidebar and window controls mounted when a screen fails. */}
-            <AppErrorBoundary resetKey={activeTab}>
-              <Suspense fallback={<ScreenFallback />}>{renderActiveScreen(activeTab)}</Suspense>
-            </AppErrorBoundary>
+          <div className="shell-content-column">
+            <TitleBar layout={titleBarLayout} />
+            <div
+              aria-labelledby={`shell-tab-${activeTab}`}
+              className="shell-panel outline-none"
+              id={SHELL_PANEL_ID}
+              role="tabpanel"
+              tabIndex={0}
+            >
+              {/* Keep the sidebar and window controls mounted when a screen fails. */}
+              <AppErrorBoundary resetKey={activeTab}>
+                <Suspense fallback={<ScreenFallback />}>{renderActiveScreen(activeTab)}</Suspense>
+              </AppErrorBoundary>
+            </div>
           </div>
         </div>
-      </div>
+      </WindowChromeContext>
 
       <ModalHost />
       <CloseRequestDialog />

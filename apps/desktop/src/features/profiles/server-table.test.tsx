@@ -628,23 +628,23 @@ describe("ProfilesScreen", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps only the chosen node's action in view and bands latency by speed", async () => {
+  it("keeps connection actions visible and distinguishes slow nodes from failed tests", async () => {
     const [chosen, other] = makeProfiles(2);
     other!.metrics.delayMs = 520;
     mockProfileList([chosen!, other!]);
     renderProfiles();
     await screen.findByText("Server 0");
     const [first, second] = screen.getAllByTestId("server-row");
-    // Every row offering the same button is noise; only the chosen node keeps it in view.
+    // Both nodes keep an explicit connection action.
     expect(
       within(first!).getByRole("button", { name: "Connect" }),
     ).not.toHaveClass("profile-node-action-idle");
     expect(
-      within(second!).getByRole("button", { name: "Use node" }),
-    ).toHaveClass("profile-node-action-idle");
+      within(second!).getByRole("button", { name: "Connect" }),
+    ).not.toHaveClass("profile-node-action-idle");
     expect(second!.querySelector(".profile-node-latency")).toHaveAttribute(
       "data-tone",
-      "poor",
+      "fair",
     );
   });
 
@@ -659,7 +659,7 @@ describe("ProfilesScreen", () => {
     renderProfiles();
     await screen.findByText("Server 0");
     const target = within(screen.getAllByTestId("server-row")[1]!);
-    fireEvent.click(target.getByRole("button", { name: "Use node" }));
+    fireEvent.click(target.getByRole("button", { name: "Connect" }));
     fireEvent.click(target.getByRole("button", { name: "Switching…" }));
     await waitFor(() =>
       expect(ipcMocks.connectActiveProfile).toHaveBeenCalledOnce(),
@@ -711,7 +711,7 @@ describe("ProfilesScreen", () => {
       within(cards[1]!).getByRole("button", { name: "In use" }),
     ).toBeDisabled();
     await userEvent.click(
-      within(cards[0]!).getByRole("button", { name: "Use node" }),
+      within(cards[0]!).getByRole("button", { name: "Switch" }),
     );
     await waitFor(() => expect(ipcMocks.restartCore).toHaveBeenCalledOnce());
     await waitFor(() =>
@@ -1036,9 +1036,9 @@ describe("ProfilesScreen", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: "Add subscription" }));
     expect(await screen.findByLabelText("Remarks")).toHaveValue("");
     expect(screen.getByLabelText("URL")).toHaveValue("");
-    expect(
-      screen.getByRole("button", { name: "Add and update" }),
-    ).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Add and update" }));
+    expect(screen.getByLabelText("Remarks")).toHaveFocus();
+    expect(screen.getByText("Enter a subscription name.")).toBeInTheDocument();
     expect(ipcMocks.deleteSubscriptions).not.toHaveBeenCalled();
   });
 

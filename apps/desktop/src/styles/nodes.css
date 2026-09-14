@@ -115,21 +115,6 @@
 .profile-node-latency[data-tone="poor"] .profile-node-latency-dot {
   background: var(--icon-danger);
 }
-/* The same button on every row is noise: it appears where the pointer or focus
-   is. It keeps its place in the layout, so revealing it never shifts the row. */
-.profile-node-action-idle {
-  opacity: 0;
-  transition: opacity var(--duration-short);
-}
-.profile-node-card:hover .profile-node-action-idle,
-.profile-node-card:focus-within .profile-node-action-idle {
-  opacity: 1;
-}
-@media (hover: none) {
-  .profile-node-action-idle {
-    opacity: 1;
-  }
-}
 /* Button primitives draw their own ring; plain buttons here get the same color and gap. */
 .profile-cards-screen button:not([data-slot="button"]):focus-visible {
   outline: 2px solid var(--ring);

@@ -312,7 +312,7 @@ function SortableRuleRow({
             {...attributes}
             {...listeners}
             aria-label={t("panes.routing.dragHandle", { name })}
-            className="grid size-7 cursor-grab touch-none place-items-center rounded-md text-muted-foreground outline-none hover:bg-surface-hovered focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+            className="grid size-8 cursor-grab touch-none place-items-center rounded-md text-muted-foreground outline-none hover:bg-surface-hovered focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
             ref={setActivatorNodeRef}
             type="button"
           >
@@ -335,9 +335,16 @@ function SortableRuleRow({
         </TableCell>
         <TableCell className={cn("overflow-hidden px-3 py-1.5", muted)}>
           <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate font-medium" title={name}>
+            <button
+              className="min-h-8 truncate rounded-sm text-start font-medium outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+              title={t("panes.routing.editNamedRule", { name })}
+              disabled={locked}
+              onClick={() => onEdit(rule)}
+              onDoubleClick={stopDoubleClick}
+              type="button"
+            >
               {name}
-            </span>
+            </button>
             {sentinelLabelKey(rule.remarks) ? (
               <Badge
                 className="shrink-0 bg-background"

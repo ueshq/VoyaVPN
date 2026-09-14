@@ -5,17 +5,17 @@ import { formatDelay } from "@voya/utils/formatting";
 
 export function profileLatency(item: ProfileListEntry, t: TranslationFunction) {
   const { delayMs, outcome } = item.metrics;
-  return outcome && outcome !== "completed" ? speedtestOutcomeText(t, outcome) : formatDelay(delayMs) || "—";
+  return outcome && outcome !== "completed" ? speedtestOutcomeText(t, outcome) : delayMs > 0 ? formatDelay(delayMs) : t("panes.profiles.card.untested");
 }
 
 export type LatencyTone = "good" | "fair" | "poor" | "unknown";
 
-/** The latency dot's band: under 150 ms good, under 400 ms fair, slower or failed poor. */
+/** Slow but reachable nodes are a warning; only failed tests use danger. */
 export function profileLatencyTone(item: ProfileListEntry): LatencyTone {
   const { delayMs, outcome } = item.metrics;
   if (outcome && outcome !== "completed") return "poor";
   if (!delayMs || delayMs <= 0) return "unknown";
-  return delayMs < 150 ? "good" : delayMs < 400 ? "fair" : "poor";
+  return delayMs < 150 ? "good" : "fair";
 }
 
 export function profileTransportName(transport: ProfileTransport | null) {

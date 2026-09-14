@@ -34,21 +34,17 @@
   .shell-panel {
   padding-top: 40px;
 }
-/* macOS drag space fits inside the page title's existing top inset. */
+/* macOS pages drag from their title row instead, which would sit under the strip. */
 .app-shell[data-window-chrome="macos"]:not([data-active-tab="home"])
   .shell-titlebar {
-  height: 20px;
-  background: transparent;
+  display: none;
+}
+/* The traffic lights (16 px inset) and the sidebar toggle share one row on macOS. */
+.app-shell[data-window-chrome="macos"] {
+  --macos-header-height: 46px;
 }
 .app-shell[data-window-chrome="macos"] .app-sidebar {
   --sidebar-collapsed-width: 96px;
-}
-/* The traffic lights share the toolbar row (tauri.macos.conf.json places them at
-   x 20); the expanded brand starts after them. */
-.app-shell[data-window-chrome="macos"]
-  .app-sidebar:not([data-collapsed="true"])
-  .sidebar-toolbar {
-  padding-inline-start: 84px;
 }
 /* Windows draws its caption buttons in a 40 px band across the window. The
    sidebar toolbar starts below that band too, so its toggle lines up with the
@@ -57,11 +53,24 @@
   height: 120px;
   padding-top: 40px;
 }
+/* Start-aligned in both widths so collapsing slides the toggle instead of
+   jumping it to the trailing edge first. */
+.app-shell[data-window-chrome="macos"] .sidebar-toolbar {
+  justify-content: flex-start;
+}
+/* 88 px starts the toggle just after the zoom button. */
+.app-shell[data-window-chrome="macos"]
+  .app-sidebar:not([data-collapsed="true"])
+  .sidebar-toolbar {
+  height: var(--macos-header-height);
+  padding-inline-start: 88px;
+}
+/* The collapsed rail is too narrow for that row, so the toggle drops below it. */
 .app-shell[data-window-chrome="macos"]
   .app-sidebar[data-collapsed="true"]
   .sidebar-toolbar {
-  height: 112px;
-  padding-top: 56px;
+  height: calc(2 * var(--macos-header-height));
+  padding-top: var(--macos-header-height);
 }
 @media (max-height: 700px) {
   .app-shell:not([data-window-chrome="none"]) .home-content {

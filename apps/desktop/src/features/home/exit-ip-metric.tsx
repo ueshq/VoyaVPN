@@ -13,7 +13,7 @@ export function ExitIpMetric({ t }: { t: TranslationFunction }) {
   const checking = ipQuery.fetchStatus === "fetching";
   const result = ipQuery.data;
 
-  let value = "—";
+  let value = t("home.checkIpNotChecked");
   if (checking) {
     value = t("home.checkIpChecking");
   } else if (ipQuery.isError) {
@@ -45,10 +45,10 @@ export function ExitIpMetric({ t }: { t: TranslationFunction }) {
         >
         <Button
           aria-label={t("home.checkIp")}
-          className="size-6"
+          className={result || checking || ipQuery.isError ? "size-8" : "min-h-8"}
           disabled={connectionKey === null || checking}
           onClick={() => void ipQuery.refetch()}
-          size="icon"
+          size={result || checking || ipQuery.isError ? "icon-sm" : "sm"}
           title={t("home.checkIp")}
           type="button"
           variant="ghost"
@@ -58,6 +58,7 @@ export function ExitIpMetric({ t }: { t: TranslationFunction }) {
           ) : (
             <RefreshCw aria-hidden="true" className="size-3.5" />
           )}
+          {!result && !checking && !ipQuery.isError ? t("home.checkIpAction") : null}
         </Button>
         </DisabledReason>
       </dd>

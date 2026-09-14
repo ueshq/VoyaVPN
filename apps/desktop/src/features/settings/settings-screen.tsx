@@ -41,6 +41,7 @@ export function SettingsScreen() {
   const [visited, setVisited] = useState<ReadonlySet<SettingsTab>>(
     () => new Set([tab]),
   );
+  if (!visited.has(tab)) setVisited(new Set(visited).add(tab));
   const dns = useDnsSettings(visited.has("connection"));
   // App settings and DNS share one save queue, so either controller reports both.
   const saving = controller.saving;

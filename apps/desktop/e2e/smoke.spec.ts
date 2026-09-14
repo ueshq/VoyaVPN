@@ -369,7 +369,7 @@ test("adds and imports profiles, activates one, and connects through the fake ru
   await page.getByRole("button", { name: "Switch node" }).click();
   await expect(page.getByRole("heading", { name: "Nodes", exact: true })).toBeFocused();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.getByTestId("server-row").filter({ hasText: "Smoke Imported VLESS" }).getByRole("button", { name: "Use node", exact: true }).click();
+  await page.getByTestId("server-row").filter({ hasText: "Smoke Imported VLESS" }).getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByRole("button", { name: "In use", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Home", exact: true }).click();
   const connectButton = page.getByTestId("home-connect-button");
@@ -596,7 +596,8 @@ test("edits routing and DNS settings without network or OS side effects", async 
   await expect(page.getByText("domain:example.test")).toBeVisible();
 
   // Restoring the defaults lists every managed rule, with ad blocking off.
-  await page.getByRole("button", { name: "Restore defaults" }).click();
+  await page.getByRole("menuitem", { name: "More", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Restore defaults", exact: true }).click();
   await page
     .getByRole("alertdialog")
     .getByRole("button", { name: "Restore" })
@@ -767,7 +768,7 @@ test("keeps traffic modes independent of the capture mode chosen in settings", a
   ).toHaveCount(2);
 
   await page.getByRole("tab", { name: "Settings", exact: true }).click();
-  await page.getByRole("tab", { name: "Advanced", exact: true }).click();
+  await page.getByRole("tab", { name: "Connection", exact: true }).click();
   const capture = page.getByRole("group", { name: "Traffic capture" });
   const vpn = capture.getByRole("button", { name: "VPN mode", exact: true });
   const systemProxy = capture.getByRole("button", { name: "System proxy", exact: true });

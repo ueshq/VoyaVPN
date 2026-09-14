@@ -35,7 +35,7 @@ describe("profile display projections", () => {
     [{ delayMs: 149, outcome: "completed" }, "good"],
     [{ delayMs: 150, outcome: null }, "fair"],
     [{ delayMs: 399, outcome: null }, "fair"],
-    [{ delayMs: 400, outcome: null }, "poor"],
+    [{ delayMs: 400, outcome: null }, "fair"],
     [{ delayMs: 0, outcome: null }, "unknown"],
     [{ delayMs: 0, outcome: "timeout" }, "poor"],
   ] as Array<[Partial<ProfileListEntry["metrics"]>, string]>)(

@@ -21,9 +21,6 @@
     "settings": "设置",
     "done": "完成"
   },
-  "app": {
-    "name": "VoyaVPN"
-  },
   "confirm": {
     "cancel": "取消",
     "deleteProfilesConfirm": "删除",
@@ -73,7 +70,7 @@
     },
     "cleanupPending": "隧道尚未清理",
     "retryDisconnect": "重试断开",
-    "latency": "延迟",
+    "latency": "最近测试延迟",
     "duration": "连接时长",
     "currentNodeLabel": "正在使用",
     "switchNode": "切换节点",
@@ -104,7 +101,16 @@
     "checkIpNeedsConnection": "连接后可检测出口 IP",
     "checkIpRetry": "检测失败，点击重试",
     "shortcutHint": "快捷键：{{shortcut}}",
-    "emptyGuide": "添加订阅或粘贴链接即可开始使用"
+    "emptyGuide": "添加订阅或粘贴链接即可开始使用",
+    "checkIpNotChecked": "未检测",
+    "checkIpAction": "检测",
+    "mode": {
+      "current": "当前接管：{{mode}}",
+      "next": "下次连接：{{mode}}",
+      "captureInactive": "未接管系统流量",
+      "routing": "分流设置：{{mode}}",
+      "rule": "按规则分流"
+    }
   },
   "logCodes": {
     "connected": "内核守护进程已启动",
@@ -269,7 +275,7 @@
       "empty": "暂无节点",
       "emptyDescription": "新增节点，或从订阅导入一个以开始。",
       "export": {
-        "copied":"已将 {{count}} 个节点的导出内容复制到剪贴板。",
+        "copied": "已将 {{count}} 个节点的导出内容复制到剪贴板。",
         "export": "导出",
         "noProfiles": "没有可导出的节点。",
         "noSelection": "请至少选择一个节点再导出。",
@@ -426,7 +432,9 @@
         "details": "详情",
         "detailsTitle": "节点详情",
         "openDetails": "查看“{{name}}”详情",
-        "connect": "连接"
+        "connect": "连接",
+        "switch": "切换",
+        "untested": "未测试"
       },
       "cardFields": {
         "address": "地址",
@@ -448,7 +456,15 @@
         "sortByLatency": "按延迟排序",
         "hideUnreachable": "隐藏不可用节点"
       },
-      "loadingNodes": "正在加载节点"
+      "loadingNodes": "正在加载节点",
+      "search": {
+        "placeholder": "搜索节点名称、地址或订阅",
+        "clear": "清除搜索",
+        "count": "显示 {{count}} / {{total}} 个节点",
+        "empty": "没有匹配节点",
+        "emptyHint": "尝试其他名称，或清除搜索。",
+        "expanded": "搜索时展开匹配分组。"
+      }
     },
     "proxyConnections": {
       "empty": "暂无活动连接"
@@ -560,14 +576,15 @@
       },
       "trafficModeUnavailable": "暂时无法读取当前模式",
       "reorderFailed": "调整规则顺序失败",
-      "loadingRules": "正在加载规则"
+      "loadingRules": "正在加载规则",
+      "editNamedRule": "编辑“{{name}}”"
     },
     "subscriptions": {
       "additionalUrl": "备用地址",
-      "autoUpdateHint": "0 或留空表示关闭自动更新。",
+      "autoUpdateHint": "VoyaVPN 运行时按此间隔更新。",
       "autoUpdateInterval": "自动更新间隔（小时）",
       "convertTarget": "转换目标",
-      "enabled": "启用自动更新",
+      "enabled": "自动更新",
       "filter": "节点筛选条件",
       "remarks": "订阅名称",
       "untitled": "未命名订阅",
@@ -745,7 +762,8 @@
         "vpnInactive": "当前连接未启用 VPN，重新连接后生效。",
         "proxyActive": "系统代理已设置。",
         "proxyInactive": "系统代理未设置，应用流量没有经过代理。"
-      }
+      },
+      "vpnOnly": "此平台通过 VPN 模式接管系统流量。"
     },
     "tabConnection": "连接",
     "tabAdvanced": "高级",
@@ -762,7 +780,7 @@
     "killSwitch": {
       "label": "阻止流量绕过 VPN",
       "hint": "VPN 开启期间，应用无法绕过隧道直接联网，隧道出问题时也不会暴露真实 IP。",
-      "vpnOnly": "仅在 VPN 模式下生效，可在“高级 → 网络接管方式”中切换。"
+      "vpnOnly": "仅在 VPN 模式下生效，可在“连接 → 网络接管方式”中切换。"
     },
     "logs": {
       "coreLogOff": "详细连接日志未开启，这里只显示 VoyaVPN 自身的记录。开启上方“记录详细连接日志”可查看连接细节。"
@@ -977,7 +995,8 @@
     "clipboardUnavailable": "当前环境不支持写入剪贴板。",
     "none": "无",
     "dismiss": "关闭提示",
-    "waitForConnection": "连接状态变化中，稍后再试"
+    "waitForConnection": "连接状态变化中，稍后再试",
+    "more": "更多"
   },
   "subscriptions": {
     "edit": "订阅设置",
@@ -989,7 +1008,13 @@
     "deleteTitle": "删除订阅「{{name}}」？",
     "deleteHint": "同时删除所属的 {{count}} 个节点。如其中有正在使用的节点，将断开连接并清除选择。",
     "empty": "暂无节点。更新此订阅以获取节点。",
-    "delete": "删除订阅"
+    "delete": "删除订阅",
+    "required": "必填",
+    "validation": {
+      "name": "请输入订阅名称。",
+      "url": "请输入以 https:// 或 http:// 开头的订阅地址。",
+      "interval": "请输入大于 0 小时的更新间隔。"
+    }
   },
   "closePrompt": {
     "title": "关闭 VoyaVPN？",

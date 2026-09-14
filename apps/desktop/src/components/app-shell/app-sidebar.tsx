@@ -9,7 +9,6 @@ import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { TitleBarLayout } from "@/ipc/bindings";
 import { formatBytesPerSecond } from "@voya/utils/formatting";
 import { type ShellTab, useShellStore } from "@/stores/shell-store";
-import { BrandMark } from "@/components/brand-mark";
 
 import { CORE_STATE_TRANSLATION_KEYS } from "./core-state-labels";
 import { pageShortcutAria, pageShortcutLabel } from "./use-shell-shortcuts";
@@ -66,11 +65,6 @@ export function AppSidebar({ titleBarLayout }: { titleBarLayout: TitleBarLayout 
   return (
     <aside className="app-sidebar" data-collapsed={collapsed}>
       <div className="sidebar-toolbar" data-tauri-drag-region={titleBarLayout !== "none" ? true : undefined}>
-        {/* Not interactive: pointer events fall through to the toolbar's drag region. */}
-        <div className="sidebar-brand">
-          <BrandMark />
-          <span className="sidebar-brand-name">{t("app.name")}</span>
-        </div>
         <button
           aria-expanded={!collapsed}
           aria-controls="sidebar-navigation"

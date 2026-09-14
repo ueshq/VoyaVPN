@@ -221,7 +221,7 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
                         aria-label={t("policyGroups.moveUp", { name })}
                         disabled={index === 0}
                         onClick={() => moveMember(index, -1)}
-                        size="icon-xs"
+                        size="icon-sm"
                         type="button"
                         variant="ghost"
                       >
@@ -231,7 +231,7 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
                         aria-label={t("policyGroups.moveDown", { name })}
                         disabled={index === form.memberIds.length - 1}
                         onClick={() => moveMember(index, 1)}
-                        size="icon-xs"
+                        size="icon-sm"
                         type="button"
                         variant="ghost"
                       >

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Disclosure } from "@voya/ui/components/disclosure";
 import type { TranslationKey } from "@voya/i18n";
@@ -6,7 +6,7 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { LogsPanel, type LogFilter } from "@/features/logs/logs-panel";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 
-import { CaptureModeSetting } from "./capture-mode-setting";
+import { useShellStore } from "@/stores/shell-store";
 import { CoreTab } from "./core-tab";
 import {
   NumberField,
@@ -43,8 +43,8 @@ const TUN_ICMP_LABELS: Record<string, TranslationKey> = {
 };
 
 /**
- * Everything that needs networking knowledge: how traffic is captured, the
- * tunnel, the system proxy, the core and the runtime log. Speed test settings
+ * Everything that needs networking knowledge: tunnel parameters, the
+ * system proxy, the core and the runtime log. Speed test settings
  * sit with the tests on the Nodes page.
  */
 export function AdvancedTab({
@@ -81,8 +81,6 @@ export function AdvancedTab({
 
   return (
     <div className="grid gap-4">
-      <CaptureModeSetting />
-
       <SettingsGroup
         title={t("settings.sections.tun")}
         actions={<TunDiagnosticsButton />}
@@ -187,11 +185,25 @@ function RuntimeLogGroup({
 }) {
   const { t } = useI18n();
   const [search, setSearch] = useState("");
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const target = useShellStore((state) => state.settingsTarget);
+  useEffect(() => {
+    if (target !== "logs") return;
+    const frame = requestAnimationFrame(() => {
+      const heading = headingRef.current;
+      if (!heading) return;
+      heading.focus({ preventScroll: true });
+      heading.scrollIntoView({ block: "start" });
+      heading.closest("section")?.setAttribute("data-settings-highlight", "true");
+      useShellStore.getState().consumeSettingsTarget();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [target]);
   const [filter, setFilter] = useState<LogFilter>("standard");
   const levelHint = coreLogEnabled ? logLevelHint(logLevel, filter) : null;
 
   return (
-    <SettingsGroup title={t("tabs.logs")}>
+    <SettingsGroup headingRef={headingRef} title={t("tabs.logs")}>
       {coreLogEnabled ? null : (
         <p className="text-xs text-muted-foreground">
           {t("settings.logs.coreLogOff")}

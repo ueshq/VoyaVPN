@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { listProfiles, listSubscriptions, listSubscriptionMetadata } from "@/ipc/commands";
@@ -58,6 +58,9 @@ export function useNodeListData(
   const undecodableProfiles = profilesQuery.data?.undecodableProfiles ?? 0;
 
   const viewportRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (viewportRef.current) viewportRef.current.scrollTop = 0;
+  }, [nodeGroups.search]);
   const rows = useMemo(
     () =>
       nodeListRows(
@@ -67,6 +70,7 @@ export function useNodeListData(
         subscriptionsQuery.data,
         t("panes.subscriptions.untitled"),
         {
+          search: nodeGroups.search,
           hideUnreachable: nodeGroups.hideUnreachable,
           sortByLatency: nodeGroups.sortByLatency,
         },
@@ -74,6 +78,7 @@ export function useNodeListData(
     [
       profiles,
       nodeGroups.collapsed,
+      nodeGroups.search,
       nodeGroups.hideUnreachable,
       nodeGroups.sortByLatency,
       subscriptionsQuery.data,
@@ -106,6 +111,7 @@ export function useNodeListData(
   }
 
   return {
+    visibleProfileCount: rows.reduce((count, row) => count + (row.kind === "group" ? row.members.length : 0), 0),
     profiles,
     profilesQuery,
     rows,

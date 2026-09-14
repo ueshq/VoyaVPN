@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { LoaderCircle, Rss } from "lucide-react";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Alert, AlertDescription } from "@voya/ui/components/alert";
@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@voya/ui/components/dialog";
 import { Disclosure } from "@voya/ui/components/disclosure";
-import { CheckboxField, TextField } from "@voya/ui/components/form-fields";
+import { SwitchField, TextField } from "@voya/ui/components/form-fields";
 import { saveSubscription, updateSubscriptions } from "@/ipc/commands";
 import type { Subscription } from "@/ipc/bindings";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
@@ -33,7 +33,7 @@ function blankSubscription(): Subscription {
     url: "",
     additionalUrl: "",
     userAgent: "",
-    enabled: true,
+    enabled: false,
     sort: 0,
     filter: null,
     converterTarget: null,
@@ -57,32 +57,46 @@ function SubscriptionEditor({
   open,
 }: Props) {
   const { t } = useI18n();
+  const id = useId();
+  const formRef = useRef<HTMLFormElement>(null);
+  const [touched, setTouched] = useState<ReadonlySet<string>>(() => new Set());
+  const [submitted, setSubmitted] = useState(false);
   const [form, setForm] = useState<Subscription>(
-    () => subscription ?? blankSubscription(),
+    () => subscription
+      ? { ...subscription, enabled: subscription.enabled && (subscription.autoUpdateIntervalMinutes ?? 0) > 0 }
+      : blankSubscription(),
   );
-  const [hours, setHours] = useState(() =>
-    subscription?.autoUpdateIntervalMinutes
-      ? String(subscription.autoUpdateIntervalMinutes / 60)
-      : "",
-  );
+  const [hours, setHours] = useState(() => {
+    const minutes = subscription?.autoUpdateIntervalMinutes ?? 0;
+    return subscription?.enabled && minutes > 0 ? String(minutes / 60) : "1";
+  });
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [needsUpdate, setNeedsUpdate] = useState(false);
   const working = useRef(false);
-  const invalidHours =
-    hours.trim() !== "" &&
-    (!Number.isFinite(Number(hours)) ||
-      Number(hours) < 0 ||
-      Number(hours) * 60 > 2147483647);
-  const canSave =
-    !!form.remarks.trim() &&
-    /^https?:\/\//i.test(form.url.trim()) &&
-    !invalidHours;
+  const fieldErrors = {
+    remarks: form.remarks.trim() ? undefined : t("subscriptions.validation.name"),
+    url: /^https?:\/\/\S+$/i.test(form.url.trim()) ? undefined : t("subscriptions.validation.url"),
+    hours: form.enabled && (!hours.trim() || !Number.isFinite(Number(hours)) || Number(hours) <= 0 || Number(hours) * 60 > 2147483647)
+      ? t("subscriptions.validation.interval") : undefined,
+  };
+  function fieldFeedback(field: keyof typeof fieldErrors) {
+    return submitted || touched.has(field) ? fieldErrors[field] : undefined;
+  }
+  function touch(field: string) {
+    setTouched((current) => new Set(current).add(field));
+  }
   function changeOpen(next: boolean) {
     if (!working.current) onOpenChange(next);
   }
   async function submit() {
-    if (!canSave || working.current) return;
+    if (working.current) return;
+    setSubmitted(true);
+    const invalid = (Object.keys(fieldErrors) as (keyof typeof fieldErrors)[]).find((field) => fieldErrors[field]);
+    if (invalid) {
+      formRef.current?.querySelector<HTMLInputElement>(`[id="${id}-${invalid}"]`)?.focus();
+      return;
+    }
     working.current = true;
     setPending(true);
     setError(null);
@@ -93,14 +107,15 @@ function SubscriptionEditor({
         remarks: form.remarks.trim(),
         url: form.url.trim(),
         autoUpdateIntervalMinutes:
-          Number(hours) > 0
+          form.enabled
             ? Math.max(1, Math.round(Number(hours) * 60))
             : null,
       });
       setForm(saved);
       if (create || needsUpdate) {
         setNeedsUpdate(true);
-        assertSubscriptionUpdated(await updateSubscriptions(saved.id, true, null), t);
+        const result = await updateSubscriptions(saved.id, true, null);
+        assertSubscriptionUpdated(result, t);
         setNeedsUpdate(false);
       }
       onOpenChange(false);
@@ -137,6 +152,7 @@ function SubscriptionEditor({
         </DialogHeader>
         <DialogBody>
           <form
+            ref={formRef}
             id="subscription-form"
             className="grid gap-4"
             onSubmit={(event) => {
@@ -145,6 +161,11 @@ function SubscriptionEditor({
             }}
           >
             <TextField
+              id={`${id}-remarks`}
+              required
+              description={t("subscriptions.required")}
+              error={fieldFeedback("remarks")}
+              onBlur={() => touch("remarks")}
               disabled={pending}
               label={t("panes.subscriptions.remarks")}
               value={form.remarks}
@@ -153,27 +174,34 @@ function SubscriptionEditor({
               }
             />
             <TextField
+              id={`${id}-url`}
+              required
+              description={t("subscriptions.required")}
+              error={fieldFeedback("url")}
+              onBlur={() => touch("url")}
               disabled={pending}
               label={t("panes.subscriptions.url")}
               value={form.url}
               onChange={(url) => setForm((current) => ({ ...current, url }))}
             />
-            <TextField
-              disabled={pending}
-              label={t("panes.subscriptions.autoUpdateInterval")}
-              description={t("panes.subscriptions.autoUpdateHint")}
-              error={invalidHours ? t("validation.invalid") : undefined}
-              value={hours}
-              onChange={setHours}
-            />
-            <CheckboxField
+            <SwitchField
               disabled={pending}
               checked={form.enabled}
               label={t("panes.subscriptions.enabled")}
-              onChange={(enabled) =>
-                setForm((current) => ({ ...current, enabled }))
-              }
+              onChange={(enabled) => setForm((current) => ({ ...current, enabled }))}
             />
+            {form.enabled ? <TextField
+              id={`${id}-hours`}
+              inputClassName="w-36"
+              required
+              disabled={pending}
+              label={t("panes.subscriptions.autoUpdateInterval")}
+              description={t("panes.subscriptions.autoUpdateHint")}
+              error={fieldFeedback("hours")}
+              onBlur={() => touch("hours")}
+              value={hours}
+              onChange={setHours}
+            /> : null}
             <Disclosure title={t("common.advanced")}>
               <TextField
                 disabled={pending}
@@ -234,7 +262,7 @@ function SubscriptionEditor({
           <Button
             form="subscription-form"
             type="submit"
-            disabled={pending || !canSave}
+            disabled={pending}
           >
             {pending ? (
               <LoaderCircle

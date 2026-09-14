@@ -21,9 +21,6 @@
     "settings": "設定",
     "done": "完成"
   },
-  "app": {
-    "name": "VoyaVPN"
-  },
   "confirm": {
     "cancel": "取消",
     "deleteProfilesConfirm": "刪除",
@@ -73,7 +70,7 @@
     },
     "cleanupPending": "通道尚未清理",
     "retryDisconnect": "重試中斷連線",
-    "latency": "延遲",
+    "latency": "最近測試延遲",
     "duration": "連線時長",
     "currentNodeLabel": "正在使用",
     "switchNode": "切換節點",
@@ -104,7 +101,16 @@
     "checkIpNeedsConnection": "連線後可檢測出口 IP",
     "checkIpRetry": "檢測失敗，點擊重試",
     "shortcutHint": "快速鍵：{{shortcut}}",
-    "emptyGuide": "新增訂閱或貼上連結即可開始使用"
+    "emptyGuide": "新增訂閱或貼上連結即可開始使用",
+    "checkIpNotChecked": "未檢測",
+    "checkIpAction": "檢測",
+    "mode": {
+      "current": "目前接管：{{mode}}",
+      "next": "下次連線：{{mode}}",
+      "captureInactive": "未接管系統流量",
+      "routing": "分流設定：{{mode}}",
+      "rule": "依規則分流"
+    }
   },
   "logCodes": {
     "connected": "核心守護程序已啟動",
@@ -269,7 +275,7 @@
       "empty": "尚無節點",
       "emptyDescription": "新增節點，或從訂閱匯入一個以開始。",
       "export": {
-        "copied":"已將 {{count}} 個節點的匯出內容複製到剪貼簿。",
+        "copied": "已將 {{count}} 個節點的匯出內容複製到剪貼簿。",
         "export": "匯出",
         "noProfiles": "沒有可匯出的節點。",
         "noSelection": "請至少選擇一個節點再匯出。",
@@ -426,7 +432,9 @@
         "details": "詳情",
         "detailsTitle": "節點詳情",
         "openDetails": "查看「{{name}}」詳情",
-        "connect": "連線"
+        "connect": "連線",
+        "switch": "切換",
+        "untested": "未測試"
       },
       "cardFields": {
         "address": "位址",
@@ -448,7 +456,15 @@
         "sortByLatency": "依延遲排序",
         "hideUnreachable": "隱藏無法使用的節點"
       },
-      "loadingNodes": "正在載入節點"
+      "loadingNodes": "正在載入節點",
+      "search": {
+        "placeholder": "搜尋節點名稱、位址或訂閱",
+        "clear": "清除搜尋",
+        "count": "顯示 {{count}} / {{total}} 個節點",
+        "empty": "沒有相符的節點",
+        "emptyHint": "嘗試其他名稱，或清除搜尋。",
+        "expanded": "搜尋時展開相符的群組。"
+      }
     },
     "proxyConnections": {
       "empty": "目前沒有活動連線"
@@ -560,14 +576,15 @@
       },
       "trafficModeUnavailable": "暫時無法讀取目前模式",
       "reorderFailed": "調整規則順序失敗",
-      "loadingRules": "正在載入規則"
+      "loadingRules": "正在載入規則",
+      "editNamedRule": "編輯「{{name}」"
     },
     "subscriptions": {
       "additionalUrl": "備用地址",
-      "autoUpdateHint": "0 或留空表示關閉自動更新。",
+      "autoUpdateHint": "VoyaVPN 執行時依此間隔更新。",
       "autoUpdateInterval": "自動更新間隔（小時）",
       "convertTarget": "轉換目標",
-      "enabled": "啟用自動更新",
+      "enabled": "自動更新",
       "filter": "節點篩選條件",
       "remarks": "訂閱名稱",
       "untitled": "未命名訂閱",
@@ -745,7 +762,8 @@
         "vpnInactive": "目前連線未啟用 VPN，重新連線後生效。",
         "proxyActive": "系統代理已設定。",
         "proxyInactive": "系統代理未設定，應用程式流量沒有經過代理。"
-      }
+      },
+      "vpnOnly": "此平台透過 VPN 模式接管系統流量。"
     },
     "tabConnection": "連線",
     "tabAdvanced": "進階",
@@ -762,7 +780,7 @@
     "killSwitch": {
       "label": "阻止流量繞過 VPN",
       "hint": "VPN 開啟期間，應用程式無法繞過隧道直接連網，隧道出問題時也不會暴露真實 IP。",
-      "vpnOnly": "僅在 VPN 模式下生效，可在「進階 → 網路接管方式」中切換。"
+      "vpnOnly": "僅在 VPN 模式下生效，可在「連線 → 網路接管方式」中切換。"
     },
     "logs": {
       "coreLogOff": "詳細連線日誌未開啟，這裡只顯示 VoyaVPN 自身的記錄。開啟上方「記錄詳細連線日誌」可查看連線細節。"
@@ -977,7 +995,8 @@
     "clipboardUnavailable": "目前環境不支援寫入剪貼簿。",
     "none": "無",
     "dismiss": "關閉提示",
-    "waitForConnection": "連線狀態變化中，稍後再試"
+    "waitForConnection": "連線狀態變化中，稍後再試",
+    "more": "更多"
   },
   "subscriptions": {
     "edit": "訂閱設定",
@@ -989,7 +1008,13 @@
     "deleteTitle": "刪除訂閱「{{name}}」？",
     "deleteHint": "同時刪除所屬的 {{count}} 個節點。如其中有正在使用的節點，將中斷連線並清除選擇。",
     "empty": "暫無節點。更新此訂閱以取得節點。",
-    "delete": "刪除訂閱"
+    "delete": "刪除訂閱",
+    "required": "必填",
+    "validation": {
+      "name": "請輸入訂閱名稱。",
+      "url": "請輸入以 https:// 或 http:// 開頭的訂閱位址。",
+      "interval": "請輸入大於 0 小時的更新間隔。"
+    }
   },
   "closePrompt": {
     "title": "關閉 VoyaVPN？",

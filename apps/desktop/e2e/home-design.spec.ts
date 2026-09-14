@@ -268,12 +268,9 @@ test("home points at the Rules page while global mode skips every rule", async (
   await page.setViewportSize({ width: 1180, height: 760 });
   await page.goto("/");
 
-  const chip = page.getByTestId("home-screen").getByRole("button", { name: "Global proxy", exact: true });
+  const chip = page.getByTestId("home-screen").getByRole("button", { name: "Routing setting: Global proxy", exact: true });
   await expect(chip).toBeVisible();
-  await expect(chip).toHaveAttribute(
-    "title",
-    "Global mode is on: all captured traffic goes through the proxy and these rules are skipped.",
-  );
+  await expect(chip).toContainText("Routing setting:");
   // A pointer, not a control.
   await expectNoModeControls(page);
   await page.screenshot({ path: testInfo.outputPath("home-global-mode.png") });

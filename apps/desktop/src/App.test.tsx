@@ -477,8 +477,9 @@ describe("App", () => {
       expect(
         container.querySelector('[data-slot="titlebar-placeholder"]'),
       ).toBeNull();
-      // The brand sits in the sidebar toolbar, never in a separate titlebar row.
-      expect(toolbar).toHaveTextContent("VoyaVPN");
+      // No app name or logo beside the traffic lights, and no titlebar row carrying one.
+      expect(toolbar).not.toHaveTextContent("VoyaVPN");
+      expect(toolbar?.querySelector("svg:not(.lucide)")).toBeNull();
       expect(
         container.querySelector('[data-slot="titlebar"]')?.textContent ?? "",
       ).not.toContain("VoyaVPN");

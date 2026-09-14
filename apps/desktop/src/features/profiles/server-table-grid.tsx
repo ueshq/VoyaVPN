@@ -30,6 +30,7 @@ export function ProfileCardList({
 }) {
   const {
     activation,
+    nodeGroups,
     openDetails,
     profilesQuery,
     rows,
@@ -79,18 +80,18 @@ export function ProfileCardList({
             <EmptyState
               actions={
                 <Button
-                  onClick={() => useShellStore.getState().openProfilesAddMenu()}
+                  onClick={() => nodeGroups.search.trim() ? nodeGroups.clearSearch() : useShellStore.getState().openProfilesAddMenu()}
                   size="sm"
                   type="button"
                 >
-                  <Plus aria-hidden="true" className="size-4" />
-                  {t("panes.profiles.toolbar.addNode")}
+                  {nodeGroups.search.trim() ? null : <Plus aria-hidden="true" className="size-4" />}
+                  {t(nodeGroups.search.trim() ? "panes.profiles.search.clear" : "panes.profiles.toolbar.addNode")}
                 </Button>
               }
               className="h-full content-center"
-              description={t("panes.profiles.emptyDescription")}
+              description={t(nodeGroups.search.trim() ? "panes.profiles.search.emptyHint" : "panes.profiles.emptyDescription")}
               icon={Inbox}
-              title={t("panes.profiles.empty")}
+              title={t(nodeGroups.search.trim() ? "panes.profiles.search.empty" : "panes.profiles.empty")}
             />
           </PageSurface>
         ) : (
@@ -130,9 +131,6 @@ export function ProfileCardList({
               const name = profileNameWithoutFlag(rawName);
               const address = profile.protocol.server.address || "—";
               const tone = profileLatencyTone(item);
-              // The chosen, running or switching node keeps its action in view;
-              // other rows reveal theirs where the pointer or keyboard focus is.
-              const actionPinned = running || switching || item.isActive;
               return (
                 <li key={row.key} {...rowProps}>
                   <ProfileRowContextMenu controller={controller} item={item}>
@@ -155,6 +153,7 @@ export function ProfileCardList({
                             name: rawName,
                           })}
                           data-row-focus
+                          title={t("panes.profiles.card.openDetails", { name: rawName })}
                           className="node-card-select"
                           onClick={(event) => openDetails(id, event.currentTarget)}
                           type="button"
@@ -198,7 +197,6 @@ export function ProfileCardList({
                         </span>
                         <Button
                           aria-busy={switching || undefined}
-                          className={cn(!actionPinned && "profile-node-action-idle")}
                           disabled={activation.busy || running}
                           onClick={() => void activation.activateProfile(id)}
                           size="sm"
@@ -215,10 +213,7 @@ export function ProfileCardList({
                             ? t("panes.profiles.card.switching")
                             : running
                               ? t("panes.profiles.card.using")
-                              : item.isActive && !activation.runningId
-                                ? // The chosen node while disconnected: this button connects.
-                                  t("panes.profiles.card.connect")
-                                : t("panes.profiles.card.use")}
+                              : t(activation.runningId ? "panes.profiles.card.switch" : "panes.profiles.card.connect")}
                         </Button>
                         <ProfileCardMenu controller={controller} item={item} />
                       </div>

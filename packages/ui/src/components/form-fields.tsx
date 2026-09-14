@@ -47,7 +47,10 @@ type FieldProps = Omit<FieldLayoutProps, "children" | "id"> & {
 
 type TextFieldProps = FieldProps & {
   commitOnBlur?: boolean;
+  inputClassName?: string;
   inputMode?: "numeric";
+  onBlur?: () => void;
+  required?: boolean;
   type?: "password" | "text";
   validate?: (value: string) => string | undefined;
   onInvalid?: (message: string, leaving: boolean) => void;
@@ -58,7 +61,7 @@ function descriptionIds(id: string, description: ReactNode, error: string | unde
 }
 
 function TextInputField({
-  addon, className, commitOnBlur = false, description, disabled, error, id, inputMode, label, layout, multiline, onChange, onInvalid, type, validate, value,
+  addon, className, commitOnBlur = false, description, disabled, error, id, inputClassName, inputMode, label, layout, multiline, onBlur, onChange, onInvalid, required, type, validate, value,
 }: TextFieldProps & { multiline?: boolean }) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
@@ -73,11 +76,13 @@ function TextInputField({
         {...inputProps}
         aria-describedby={descriptionIds(inputId, description, message)}
         aria-invalid={message ? true : undefined}
-        className={cn(multiline ? "min-h-24 resize-y" : undefined, layout === "row" && !multiline && "h-8")}
+        aria-required={required || undefined}
+        className={cn(multiline ? "min-h-24 resize-y" : undefined, layout === "row" && !multiline && "h-8", inputClassName)}
         disabled={disabled}
         id={inputId}
         inputMode={inputMode}
         onChange={(event) => input.onChange(event.target.value)}
+        onBlur={() => { input.onBlur(); onBlur?.(); }}
         type={multiline ? undefined : type}
       />
     </FieldLayout>

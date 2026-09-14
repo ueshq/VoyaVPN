@@ -55,6 +55,7 @@ const ipcMock = vi.hoisted(() => {
   return {
     connectActiveProfile: vi.fn(),
     loadAppSettings: vi.fn(),
+    getSettingsApplyStatus: vi.fn(),
     disconnectCore: vi.fn(),
     listPolicyGroups: vi.fn(),
     listProfiles: vi.fn(),
@@ -135,6 +136,7 @@ vi.mock("@/ipc/commands", async (importOriginal) => {
     appErrorOfKind: actual.appErrorOfKind,
     connectActiveProfile: ipcMock.connectActiveProfile,
     loadAppSettings: ipcMock.loadAppSettings,
+    getSettingsApplyStatus: ipcMock.getSettingsApplyStatus,
     disconnectCore: ipcMock.disconnectCore,
     IpcCommandError: actual.IpcCommandError,
     listPolicyGroups: ipcMock.listPolicyGroups,
@@ -199,6 +201,7 @@ describe("HomeScreen", () => {
     });
     ipcMock.connectActiveProfile.mockResolvedValue(connectedStatus);
     ipcMock.loadAppSettings.mockResolvedValue(makeAppSettings());
+    ipcMock.getSettingsApplyStatus.mockResolvedValue({ action: "none", connected: false });
     ipcMock.disconnectCore.mockResolvedValue(disconnectedStatus);
     ipcMock.restartCore.mockResolvedValue(connectedStatus);
     ipcMock.listPolicyGroups.mockResolvedValue({ entries: [] });
@@ -220,11 +223,12 @@ describe("HomeScreen", () => {
     await changeLocale("en", { persist: false });
   });
 
-  it("keeps only the connection control when no nodes are available", async () => {
+  it("offers one add-node action when no nodes are available", async () => {
     mockProfileList([]);
     renderHome();
     await waitFor(() => expect(connectButton()).toBeEnabled());
     expect(connectButton()).toHaveAccessibleName("Add node");
+    expect(screen.getAllByRole("button")).toEqual([connectButton()]);
     expect(screen.queryByRole("heading")).not.toBeInTheDocument();
     expect(screen.queryByText("Not protected")).not.toBeInTheDocument();
     expect(screen.queryByText("Add a node to connect")).not.toBeInTheDocument();
@@ -287,22 +291,42 @@ describe("HomeScreen", () => {
     });
     renderHome();
 
-    const chip = await screen.findByRole("button", { name: "Global proxy" });
-    expect(chip).toHaveAttribute(
-      "title",
-      "Global mode is on: all captured traffic goes through the proxy and these rules are skipped.",
-    );
+    const chip = await screen.findByRole("button", { name: "Routing setting: Global proxy" });
     // A pointer, not a control: Home still offers no way to change the mode.
     expect(screen.queryByRole("group", { name: "Traffic mode" })).not.toBeInTheDocument();
     await user.click(chip);
     expect(useShellStore.getState().activeTab).toBe("rules");
   });
 
-  it("shows no mode reminder in rule mode", async () => {
+  it("names the saved routing setting in rule mode", async () => {
     renderHome();
     await screen.findByRole("heading", { name: "Active node" });
     await waitFor(() => expect(ipcMock.loadAppSettings).toHaveBeenCalled());
-    expect(screen.queryByRole("button", { name: "Global proxy" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Routing setting: Rules" })).toBeInTheDocument();
+  });
+
+  it("separates the actual capture path from saved VPN and routing settings", async () => {
+    runtimeMock.state.coreState = connectedStatus;
+    runtimeMock.state.tun = { ...tunStatusResponse, enabled: true };
+    runtimeMock.state.sysProxy = { ...sysProxyStatus, effectiveMode: "forcedChange" };
+    const settings = makeAppSettings();
+    settings.proxy.trafficMode = "global";
+    ipcMock.loadAppSettings.mockResolvedValue(settings);
+    ipcMock.getSettingsApplyStatus.mockResolvedValue({ connected: true, action: "reconnect" });
+    renderHome();
+    expect(await screen.findByRole("button", { name: "Current capture: System proxy" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Routing setting: Global proxy" })).toBeInTheDocument();
+    expect(await screen.findByText("Saved changes are waiting to be applied to this connection.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Current capture: VPN mode" })).not.toBeInTheDocument();
+  });
+
+  it("confirms a running native VPN from its backend and links to connection settings", async () => {
+    runtimeMock.state.coreState = { ...connectedStatus, activeTunBackend: "macosPacketTunnel" };
+    runtimeMock.state.tun = tunStatusResponse;
+    runtimeMock.state.sysProxy = sysProxyStatus;
+    renderHome();
+    await userEvent.click(await screen.findByRole("button", { name: "Current capture: VPN mode" }));
+    expect(useShellStore.getState()).toMatchObject({ activeTab: "settings", settingsTab: "connection" });
   });
 
   it("shows the active policy group and the member traffic goes through", async () => {
@@ -555,10 +579,11 @@ describe("HomeScreen", () => {
     expect(useShellStore.getState()).toMatchObject({
       activeTab: "settings",
       settingsTab: "advanced",
+      settingsTarget: "logs",
     });
   });
 
-  it("sends an empty home straight to the Nodes Add menu without starting a connection", async () => {
+  it("opens the Nodes add menu without starting a connection", async () => {
     mockProfileList([]);
     renderHome();
     await waitFor(() => expect(connectButton()).toBeEnabled());
@@ -566,7 +591,8 @@ describe("HomeScreen", () => {
     await userEvent.click(connectButton());
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(useShellStore.getState()).toMatchObject({
-      activeTab: "profiles", profilesAddMenuOpen: true, focusPageTitle: false,
+      activeTab: "profiles",
+      profilesAddMenuOpen: true,
     });
     expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
     expect(ipcMock.setActiveProfile).not.toHaveBeenCalled();

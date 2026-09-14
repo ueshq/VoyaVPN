@@ -258,7 +258,7 @@ export function PerAppProxyDialog({
                             // A 16px glyph with a 24px hit area, so the badge keeps its height.
                             className="relative size-4 rounded-full after:absolute after:-inset-1"
                             onClick={() => toggleProcess(process)}
-                            size="icon-xs"
+                            size="icon-sm"
                             type="button"
                             variant="ghost"
                           >

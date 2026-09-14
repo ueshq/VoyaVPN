@@ -71,6 +71,19 @@ function mount() {
 }
 
 describe("redesigned automatic settings", () => {
+  it("opens an unvisited Advanced tab at the running log and consumes the focus request", async () => {
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    mount();
+    await screen.findByLabelText("Autostart");
+    act(() => useShellStore.getState().openSettings("advanced", "logs"));
+    const heading = await screen.findByRole("heading", { name: "Runtime logs" });
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(scroll).toHaveBeenCalledWith({ block: "start" });
+    expect(heading.closest("section")).toHaveAttribute("data-settings-highlight", "true");
+    expect(useShellStore.getState().settingsTarget).toBeNull();
+    scroll.mockRestore();
+  });
+
   it("uses four compact categories, accessible groups, and no manual save actions", async () => {
     mount();
     await screen.findByLabelText("Autostart");

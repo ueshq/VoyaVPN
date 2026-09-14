@@ -19,7 +19,7 @@ export type NodeListRow = GroupBoundary &
       }
   );
 
-export type NodeListView = { hideUnreachable?: boolean; sortByLatency?: boolean };
+export type NodeListView = { hideUnreachable?: boolean; sortByLatency?: boolean; search?: string };
 
 // Outcomes that mean the node could not be reached when last tested.
 const UNREACHABLE_OUTCOMES: ReadonlySet<string> = new Set([
@@ -72,6 +72,7 @@ export function nodeListRows(
   view: NodeListView = {},
 ): NodeListRow[] {
   const byGroup = profilesByNodeGroup(profiles);
+  const needle = view.search?.trim().toLocaleLowerCase() ?? "";
   const rows: NodeListRow[] = [];
   function append(
     groupKey: NodeSourceKey,
@@ -79,8 +80,14 @@ export function nodeListRows(
     subscription: Subscription | null,
   ) {
     const allMembers = byGroup.get(groupKey) ?? [];
-    const members = arrangeMembers(allMembers, view);
-    const expanded = !collapsed.has(groupKey);
+    const matched = needle
+      ? allMembers.filter(({ profile }) => [profile.remarks, profile.protocol.server.address, name]
+        .join(" ").toLocaleLowerCase().includes(needle))
+      : allMembers;
+    const members = arrangeMembers(matched, view);
+    byGroup.delete(groupKey);
+    if (needle && !members.length) return;
+    const expanded = !!needle || !collapsed.has(groupKey);
     rows.push({
       kind: "group",
       key: groupKey,
@@ -102,7 +109,6 @@ export function nodeListRows(
           last: index === members.length - 1,
         }),
       );
-    byGroup.delete(groupKey);
   }
   for (const source of [...subscriptions].sort(
     (a, b) => a.sort - b.sort || a.id.localeCompare(b.id),

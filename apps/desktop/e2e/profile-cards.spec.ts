@@ -89,10 +89,10 @@ test("profile cards stay usable across themes, window sizes and a 5k node list",
   await expect(page.getByRole("dialog", { name: "节点详情" })).toContainText("node-0.example.test");
   await page.keyboard.press("Escape");
   await expect(details).toBeFocused();
-  // Only the chosen node keeps its action in view; other rows reveal theirs on hover.
-  const use = cards.nth(1).getByRole("button", { name: "使用节点", exact: true });
+  // Every row offers an explicit connection action without hovering.
+  const use = cards.nth(1).getByRole("button", { name: "连接", exact: true });
   await page.mouse.move(0, 0);
-  await expect(use).toHaveCSS("opacity", "0");
+  await expect(use).toHaveCSS("opacity", "1");
   await cards.nth(1).hover();
   await expect(use).toHaveCSS("opacity", "1");
   await use.click();
@@ -104,7 +104,7 @@ test("profile cards stay usable across themes, window sizes and a 5k node list",
     await expect(cards.filter({ hasText: "Card node 4999" })).toBeInViewport({ ratio: 1 });
   }).toPass();
   await page.screenshot({ path: testInfo.outputPath("cards-last-node.png") });
-  await expect(page.getByRole("searchbox", { name: "过滤节点" })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "搜索节点名称、地址或订阅" })).toBeVisible();
   expect(await page.evaluate(() => (window.__VOYA_SMOKE__.state as { unhandled: string[] }).unhandled)).toEqual([]);
 });
 
@@ -142,7 +142,7 @@ test("profile list shows its empty state when no saved nodes exist", async ({ pa
   await page.goto("/");
   await page.getByRole("tab", { name: "Nodes", exact: true }).click();
   await expect(page.getByTestId("server-row")).toHaveCount(0);
-  await expect(page.getByRole("searchbox")).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Search node name, address or subscription" })).toHaveCount(0);
   await expect(page.getByText("No nodes", { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("cards-empty.png") });
 });

@@ -30,9 +30,11 @@ type ShellState = {
   openProfilesAddMenu: () => void;
   setProfilesAddMenuOpen: (open: boolean) => void;
   settingsTab: SettingsTab;
+  settingsTarget: "logs" | null;
+  consumeSettingsTarget: () => void;
   setSettingsTab: (tab: SettingsTab) => void;
   /** Opens Settings at one category, as a deep link does. */
-  openSettings: (tab: SettingsTab) => void;
+  openSettings: (tab: SettingsTab, target?: "logs") => void;
   /** Active sub-view of the Connections page; survives leaving the page. */
   connectionsView: ConnectionsView;
   setConnectionsView: (view: ConnectionsView) => void;
@@ -60,16 +62,19 @@ export const useShellStore = create<ShellState>()(
         set({ activeTab: "profiles", focusPageTitle: false, profilesAddMenuOpen: true }),
       setProfilesAddMenuOpen: (profilesAddMenuOpen) => set({ profilesAddMenuOpen }),
       settingsTab: "general",
-      setSettingsTab: (settingsTab) => set({ settingsTab }),
-      openSettings: (settingsTab) =>
+      settingsTarget: null,
+      consumeSettingsTarget: () => set({ settingsTarget: null }),
+      setSettingsTab: (settingsTab) => set({ settingsTab, settingsTarget: null }),
+      openSettings: (settingsTab, target) =>
         set({
           activeTab: "settings",
-          focusPageTitle: true,
+          focusPageTitle: !target,
           profilesAddMenuOpen: false,
           settingsTab,
+          settingsTarget: target ?? null,
         }),
       setActiveTab: (activeTab, focusTitle = false) =>
-        set({ activeTab, focusPageTitle: focusTitle, profilesAddMenuOpen: false }),
+        set({ activeTab, focusPageTitle: focusTitle, profilesAddMenuOpen: false, settingsTarget: null }),
       connectionsView: "connections",
       setConnectionsView: (connectionsView) => set({ connectionsView }),
       connectionSearch: "",

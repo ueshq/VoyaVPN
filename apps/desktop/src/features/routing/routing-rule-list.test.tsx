@@ -113,7 +113,7 @@ describe("RoutingRuleList", () => {
     expect(handlers.onDelete).toHaveBeenCalledWith(rules()[2]);
   });
 
-  it("opens the same actions on right click and edits on double click", async () => {
+  it("opens the same actions on right click and edits by clicking the name", async () => {
     const user = userEvent.setup();
     renderList();
     const office = bodyRows()[2];
@@ -127,7 +127,7 @@ describe("RoutingRuleList", () => {
     fireEvent.doubleClick(within(office).getByRole("button", { name: "Reorder Office" }));
     fireEvent.doubleClick(within(office).getByRole("menuitem", { name: "Actions for Office" }));
     expect(handlers.onEdit).not.toHaveBeenCalled();
-    fireEvent.doubleClick(within(office).getByText("Office"));
+    fireEvent.click(within(office).getByRole("button", { name: "Office" }));
     expect(handlers.onEdit).toHaveBeenCalledWith(rules()[2]);
   });
 
@@ -274,7 +274,7 @@ describe("RoutingRuleList", () => {
     // An enabled rule reads as locked too, not only its controls.
     expect(within(office).getAllByRole("cell")[2]).toHaveClass("opacity-55");
 
-    fireEvent.doubleClick(within(office).getByText("Office"));
+    fireEvent.click(within(office).getByRole("button", { name: "Office" }));
     expect(handlers.onEdit).not.toHaveBeenCalled();
 
     // Right click still lists the actions, every one of them off.

@@ -16,7 +16,7 @@ for (const layout of ["macos", "windows"] as const) {
       "data-window-chrome",
       layout,
     );
-    // The primary Home action reads "Add node" until a node exists.
+    // The primary Home action offers adding a node until one exists.
     await expect(page.getByTestId("home-connect-button")).toBeVisible();
     expect(await sidebar.boundingBox()).toMatchObject({
       x: 0,
@@ -40,9 +40,14 @@ for (const layout of ["macos", "windows"] as const) {
     await expect(page.locator(".sidebar-toolbar")).toHaveAttribute(
       "data-tauri-drag-region",
     );
-    await expect(
-      page.getByRole("button", { name: "Collapse sidebar" }),
-    ).not.toHaveAttribute("data-tauri-drag-region");
+    const collapse = page.getByRole("button", { name: "Collapse sidebar" });
+    await expect(collapse).not.toHaveAttribute("data-tauri-drag-region");
+    // On macOS the toggle follows the traffic lights in their 46 px row.
+    expect(await collapse.boundingBox()).toMatchObject(
+      layout === "macos"
+        ? { x: 88, y: 9, width: 28, height: 28 }
+        : { width: 28, height: 28 },
+    );
 
     if (layout === "windows") {
       await page.getByRole("button", { name: "Minimize" }).click();
@@ -69,21 +74,26 @@ for (const layout of ["macos", "windows"] as const) {
     }
 
     await page.setViewportSize({ width: 960, height: 640 });
-    await page.getByRole("button", { name: "Collapse sidebar" }).click();
+    await collapse.click();
     await expect(sidebar).toHaveCSS(
       "width",
       layout === "macos" ? "96px" : "72px",
     );
     const toggle = page.getByRole("button", { name: "Expand sidebar" });
     const toggleBounds = await toggle.boundingBox();
+    // The collapsed toggle drops below the traffic-light row or caption band.
     expect(toggleBounds!.y).toBeGreaterThanOrEqual(
-      layout === "macos" ? 60 : 20,
+      layout === "macos" ? 46 : 20,
     );
+    if (layout === "macos") {
+      expect(toggleBounds!.x).toBeCloseTo(33.5, 0);
+    }
     await expect(toggle).toBeInViewport({ ratio: 1 });
     await toggle.click();
     await expect(sidebar).toHaveCSS("width", "240px");
 
-    // macOS uses the page's top inset for dragging; Windows reserves caption space.
+    // macOS pages drag from the title row; Windows reserves caption space above
+    // the page. Either way the title sits as far below the top as above the content.
     for (const name of ["Nodes", "Settings", "Network activity", "Rules"]) {
       await page
         .getByRole("tablist", { name: "Main sections" })
@@ -92,11 +102,26 @@ for (const layout of ["macos", "windows"] as const) {
       const panel = page.locator("#shell-tabpanel");
       const heading = panel.locator('[data-slot="page-title"]');
       await expect(heading).toBeVisible();
-      expect((await heading.boundingBox())!.y).toBe(layout === "macos" ? 0 : 40);
-      await expect(panel).toHaveCSS("padding-top", layout === "macos" ? "0px" : "40px");
-      const dragBounds = (await titlebar.boundingBox())!;
-      expect((await heading.getByRole("heading", { level: 1 }).boundingBox())!.y)
-        .toBeGreaterThanOrEqual(dragBounds.y + dragBounds.height);
+      const top = layout === "macos" ? 0 : 40;
+      expect((await heading.boundingBox())!.y).toBe(top);
+      await expect(panel).toHaveCSS("padding-top", `${top}px`);
+      const title = (await heading.getByRole("heading", { level: 1 }).boundingBox())!;
+      const content = (await panel.locator('[data-slot="page-content"]').boundingBox())!;
+      expect(title.y - top).toBeCloseTo(content.y - (title.y + title.height), 0);
+      if (layout === "macos") {
+        await expect(titlebar).toBeHidden();
+        await expect(heading).toHaveAttribute("data-tauri-drag-region", "deep");
+      } else {
+        await expect(heading).not.toHaveAttribute("data-tauri-drag-region");
+        const dragBounds = (await titlebar.boundingBox())!;
+        expect(title.y).toBeGreaterThanOrEqual(dragBounds.y + dragBounds.height);
+        await expect(titlebar).toHaveCSS(
+          "background-color",
+          await page
+            .locator(".shell-content-column")
+            .evaluate((el) => getComputedStyle(el).backgroundColor),
+        );
+      }
       const action = panel
         .getByRole("button")
         .or(panel.getByRole("menuitem"))
@@ -105,26 +130,17 @@ for (const layout of ["macos", "windows"] as const) {
         .first();
       await expect(action).toBeVisible();
       await action.click({ trial: true });
-      await expect(titlebar).toHaveCSS(
-        "background-color",
-        layout === "macos"
-          ? "rgba(0, 0, 0, 0)"
-          : await page
-            .locator(".shell-content-column")
-            .evaluate((el) => getComputedStyle(el).backgroundColor),
-      );
     }
     await page.screenshot({
       path: testInfo.outputPath(`${layout}-rules-960.png`),
     });
     await page.getByRole("tab", { name: "Home", exact: true }).click();
-    // With no nodes the primary Home action opens the Nodes Add menu, which has
-    // to stay reachable under the window chrome and hand focus back on Escape.
+    // Home opens the Nodes add menu, whose actions remain reachable under
+    // either window chrome. Escape returns focus to the Nodes add trigger.
     await page.getByTestId("home-connect-button").click();
     const add = page.getByRole("menuitem", { name: "Add", exact: true });
     await expect(add).toHaveAttribute("aria-expanded", "true");
     const menu = page.getByRole("menu");
-    // Every action is reachable; the menu's shadow may overhang by a subpixel.
     for (const item of await menu.getByRole("menuitem").all()) {
       await expect(item).toBeInViewport({ ratio: 1 });
     }

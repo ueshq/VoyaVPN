@@ -36,8 +36,11 @@ describe("semantic settings tabs", () => {
   });
   it("offers capture mode and the system proxy only where the platform has them", () => {
     const { unmount } = render(<TabHarness Component={AdvancedTab} />);
-    expect(screen.getByRole("group", { name: "Traffic capture" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Traffic capture" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "System proxy" })).toBeInTheDocument();
+    const connection = render(<TabHarness Component={ConnectionTab} />);
+    expect(screen.getByRole("group", { name: "Traffic capture" })).toBeInTheDocument();
+    connection.unmount();
     // Per-app rules are edited on the Rules page, not reached from Settings.
     expect(screen.queryByRole("heading", { name: "Per-app proxy" })).not.toBeInTheDocument();
     unmount();

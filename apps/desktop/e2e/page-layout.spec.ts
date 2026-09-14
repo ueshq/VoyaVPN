@@ -122,6 +122,11 @@ test("populated pages keep scrolling inside panels and errors inside the page in
       ...state.connections.connections[0], id: `connection-${index}`, host: `host-${index}.test`,
     }));
     state.runtime = { ...state.runtime, state: "connected", mainPid: 4242, runningCoreType: "singBox" };
+    // A committed profile change invalidates the list, including the snapshot
+    // Home may already have cached before this fixture was populated.
+    window.__VOYA_SMOKE__.emit("invalidate-event", {
+      keys: [{ reason: "fixture", scope: { kind: "profiles" } }],
+    });
     window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "coreState", payload: state.runtime });
     for (let id = 0; id < 500; id++) {
       window.__VOYA_SMOKE__.emit("transient-stream-event", {

@@ -4,6 +4,7 @@ import {
   useId,
   type ComponentProps,
   type ReactNode,
+  type Ref,
 } from "react";
 
 import {
@@ -33,11 +34,13 @@ export function SettingsGroup({
   className,
   title,
   actions,
+  headingRef,
 }: {
   children: ReactNode;
   className?: string;
   title: string;
   actions?: ReactNode;
+  headingRef?: Ref<HTMLHeadingElement>;
 }) {
   const id = useId();
   return (
@@ -50,7 +53,7 @@ export function SettingsGroup({
       )}
     >
       <div className="flex min-h-11 flex-wrap items-end gap-2 px-4 pt-3">
-        <h2 className="text-section font-semibold" id={id}>
+        <h2 className="text-section font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" id={id} ref={headingRef} tabIndex={headingRef ? -1 : undefined}>
           {title}
         </h2>
         {actions ? (
@@ -161,6 +164,7 @@ export function NumberField({
     <TextField
       {...props}
       description={hint}
+      inputClassName="w-36 max-w-full"
       inputMode="numeric"
       onChange={(text) =>
         onChange(text.trim() ? Number(text) : (defaultValue ?? null))

@@ -55,7 +55,7 @@ test("source groups retain subscription settings and only Use connects", async (
   for (const name of ["Copy node", "Move to group"])
     await expect(page.getByRole("menuitem", { name, exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await local.getByRole("button", { name: "Use node", exact: true }).click();
+  await local.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByRole("button", { name: "In use", exact: true })).toBeVisible();
   await local.getByRole("menuitem", { name: "Actions for Node 3", exact: true }).click();
   await page.getByRole("menuitem", { name: "Delete", exact: true }).click();

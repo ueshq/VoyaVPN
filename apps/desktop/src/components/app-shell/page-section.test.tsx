@@ -2,6 +2,7 @@ import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { PageHeader, PageSection, PageTitle } from "./page-section";
+import { WindowChromeContext } from "./window-chrome-context";
 
 describe("PageSection primitives", () => {
   it("renders the shared section/header geometry with stable data-slots", () => {
@@ -38,6 +39,8 @@ describe("PageSection primitives", () => {
     const title = getByTestId("title");
     expect(title.dataset.slot).toBe("page-title");
     expect(title.className).toContain("min-[1100px]:px-page");
+    // Equal padding keeps the title as far from the top as from the content.
+    expect(title.className).toContain("py-4");
 
     const heading = getByRole("heading", { level: 1, name: "Nodes" });
     expect(heading.className).toContain("text-page");
@@ -45,5 +48,23 @@ describe("PageSection primitives", () => {
     expect(
       getByRole("button", { name: "New" }).parentElement?.className,
     ).toContain("ms-auto");
+  });
+
+  it("drags the window from the title row only under macOS chrome", () => {
+    const { getByTestId } = render(
+      <>
+        <WindowChromeContext value="macos">
+          <PageTitle data-testid="macos" title="Nodes" />
+        </WindowChromeContext>
+        <WindowChromeContext value="windows">
+          <PageTitle data-testid="windows" title="Rules" />
+        </WindowChromeContext>
+        <PageTitle data-testid="none" title="Settings" />
+      </>,
+    );
+
+    expect(getByTestId("macos")).toHaveAttribute("data-tauri-drag-region", "deep");
+    expect(getByTestId("windows")).not.toHaveAttribute("data-tauri-drag-region");
+    expect(getByTestId("none")).not.toHaveAttribute("data-tauri-drag-region");
   });
 });

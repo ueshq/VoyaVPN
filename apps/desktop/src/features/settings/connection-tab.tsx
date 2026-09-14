@@ -8,6 +8,7 @@ import {
   TextField,
 } from "./settings-form";
 import { SETTING_DEFAULTS } from "./settings-values";
+import { CaptureModeSetting } from "./capture-mode-setting";
 import type { AppSettingsFormController } from "./use-app-settings";
 
 /**
@@ -44,6 +45,7 @@ export function ConnectionTab({
 
   return (
     <div className="grid gap-4">
+      <CaptureModeSetting />
       <SettingsGroup title={t("settings.sections.killSwitch")}>
         {/* The tunnel's strict route is what keeps traffic from leaving
             around it, on every platform. Outside VPN mode there is nothing

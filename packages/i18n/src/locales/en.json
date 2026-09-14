@@ -21,9 +21,6 @@
     "settings": "Settings",
     "done": "Done"
   },
-  "app": {
-    "name": "VoyaVPN"
-  },
   "confirm": {
     "cancel": "Cancel",
     "deleteProfilesConfirm": "Delete",
@@ -73,7 +70,7 @@
     },
     "cleanupPending": "Tunnel cleanup pending",
     "retryDisconnect": "Retry disconnect",
-    "latency": "Latency",
+    "latency": "Last tested latency",
     "duration": "Connection time",
     "currentNodeLabel": "In use",
     "switchNode": "Switch node",
@@ -104,7 +101,16 @@
     "checkIpNeedsConnection": "Connect to check the exit IP",
     "checkIpRetry": "Check failed, try again",
     "shortcutHint": "Shortcut: {{shortcut}}",
-    "emptyGuide": "Add a subscription or paste a link to get started"
+    "emptyGuide": "Add a subscription or paste a link to get started",
+    "checkIpNotChecked": "Not checked",
+    "checkIpAction": "Check",
+    "mode": {
+      "current": "Current capture: {{mode}}",
+      "next": "Next connection: {{mode}}",
+      "captureInactive": "System traffic not captured",
+      "routing": "Routing setting: {{mode}}",
+      "rule": "Rules"
+    }
   },
   "logCodes": {
     "connected": "Core supervisor started",
@@ -269,7 +275,7 @@
       "empty": "No nodes",
       "emptyDescription": "Add a node or import one from a subscription to get started.",
       "export": {
-        "copied":"Copied export data for {{count}} node(s) to clipboard.",
+        "copied": "Copied export data for {{count}} node(s) to clipboard.",
         "export": "Export",
         "noProfiles": "There are no nodes to export.",
         "noSelection": "Select at least one node to export.",
@@ -426,7 +432,9 @@
         "details": "Details",
         "detailsTitle": "Node details",
         "openDetails": "Details for {{name}}",
-        "connect": "Connect"
+        "connect": "Connect",
+        "switch": "Switch",
+        "untested": "Not tested"
       },
       "cardFields": {
         "address": "Address",
@@ -448,7 +456,15 @@
         "sortByLatency": "Sort by latency",
         "hideUnreachable": "Hide unreachable nodes"
       },
-      "loadingNodes": "Loading nodes"
+      "loadingNodes": "Loading nodes",
+      "search": {
+        "placeholder": "Search node name, address or subscription",
+        "clear": "Clear search",
+        "count": "{{count}} of {{total}} nodes",
+        "empty": "No matching nodes",
+        "emptyHint": "Try another name or clear the search.",
+        "expanded": "Matching groups stay expanded while searching."
+      }
     },
     "proxyConnections": {
       "empty": "No active connections"
@@ -560,14 +576,15 @@
       },
       "trafficModeUnavailable": "The current mode could not be read",
       "reorderFailed": "Could not reorder the rules",
-      "loadingRules": "Loading rules"
+      "loadingRules": "Loading rules",
+      "editNamedRule": "Edit {{name}}"
     },
     "subscriptions": {
       "additionalUrl": "More URL",
-      "autoUpdateHint": "0 or empty disables automatic updates.",
+      "autoUpdateHint": "Update at this interval while VoyaVPN is running.",
       "autoUpdateInterval": "Auto-update interval (hours)",
       "convertTarget": "Convert target",
-      "enabled": "Enabled",
+      "enabled": "Automatic updates",
       "filter": "Filter",
       "remarks": "Remarks",
       "untitled": "Untitled",
@@ -745,7 +762,8 @@
         "vpnInactive": "This connection started without the VPN. Reconnect to use it.",
         "proxyActive": "The system proxy is set.",
         "proxyInactive": "The system proxy is not set, so apps are not being proxied."
-      }
+      },
+      "vpnOnly": "This platform uses VPN mode to capture system traffic."
     },
     "tabConnection": "Connection",
     "tabAdvanced": "Advanced",
@@ -762,7 +780,7 @@
     "killSwitch": {
       "label": "Block traffic outside the VPN",
       "hint": "While the VPN is on, apps cannot reach the internet around it, so a tunnel problem never exposes your real IP address.",
-      "vpnOnly": "Only works in VPN mode. Choose it under Advanced → Traffic capture."
+      "vpnOnly": "Available in VPN mode. Choose it under Connection → Traffic capture."
     },
     "logs": {
       "coreLogOff": "Detailed connection logging is off, so only VoyaVPN's own messages appear here. Turn on “Record detailed connection log” above for connection details."
@@ -977,7 +995,8 @@
     "clipboardUnavailable": "Clipboard write is unavailable in this context.",
     "none": "None",
     "dismiss": "Dismiss",
-    "waitForConnection": "Wait for the connection to settle, then try again"
+    "waitForConnection": "Wait for the connection to settle, then try again",
+    "more": "More"
   },
   "subscriptions": {
     "edit": "Subscription settings",
@@ -989,7 +1008,13 @@
     "deleteTitle": "Delete subscription “{{name}}”?",
     "deleteHint": "This also deletes its {{count}} nodes. If one is in use, the connection will stop and the selection will be cleared.",
     "empty": "No nodes yet. Update this subscription to fetch its nodes.",
-    "delete": "Delete subscription"
+    "delete": "Delete subscription",
+    "required": "Required",
+    "validation": {
+      "name": "Enter a subscription name.",
+      "url": "Enter a subscription URL starting with https:// or http://.",
+      "interval": "Enter an interval greater than 0 hours."
+    }
   },
   "closePrompt": {
     "title": "Close VoyaVPN?",

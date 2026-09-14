@@ -65,6 +65,8 @@ export function NodeGroupCard({
           className="node-group-toggle"
           aria-label={row.name}
           aria-expanded={row.expanded}
+          disabled={!!nodeGroups.search.trim()}
+          title={nodeGroups.search.trim() ? t("panes.profiles.search.expanded") : undefined}
           data-row-focus
           onClick={() => nodeGroups.toggle(row.groupKey)}
           type="button"
@@ -91,7 +93,7 @@ export function NodeGroupCard({
             </span>
             <span className="text-xs text-muted-foreground">
               {t("nodeGroups.membersCount", { count: row.members.length })}
-              {subscription && !subscription.enabled
+              {subscription && (!subscription.enabled || !subscription.autoUpdateIntervalMinutes)
                 ? ` · ${t("nodeGroups.autoUpdateOff")}`
                 : null}
             </span>

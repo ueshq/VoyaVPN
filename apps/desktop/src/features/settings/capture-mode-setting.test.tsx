@@ -110,6 +110,31 @@ describe("CaptureModeSetting", () => {
     expect(vpnButton()).toHaveAttribute("aria-pressed", "false");
   });
 
+  it("explains the single VPN mode on macOS without offering unavailable choices", () => {
+    useRuntimeEventStore.setState({
+      sysProxy: { ...automatic, management: "unsupported" },
+      tun: { ...processTun, backend: "macosPacketTunnel", enabled: true },
+    });
+    render(<CaptureModeSetting />);
+    expect(screen.getByRole("region", { name: "Traffic capture" })).toBeVisible();
+    expect(screen.getByText("This platform uses VPN mode to capture system traffic.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "System proxy" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "VPN mode" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { enabled: false, activeTunBackend: "process" as const, proxy: "forcedClear" as const, text: "The VPN is capturing system traffic." },
+    { enabled: true, activeTunBackend: null, proxy: "forcedChange" as const, text: "The system proxy is set." },
+  ])("shows actual capture when the saved choice differs ($text)", ({ enabled, activeTunBackend, proxy, text }) => {
+    useRuntimeEventStore.setState({
+      coreState: { ...disconnected, state: "connected", mainPid: 42, activeTunBackend },
+      tun: { ...processTun, enabled },
+      sysProxy: { ...automatic, effectiveMode: proxy },
+    });
+    render(<CaptureModeSetting />);
+    expect(screen.getByRole("status")).toHaveTextContent(text);
+  });
+
   it("enters VPN mode after the preflight and shows the backend-confirmed mode", async () => {
     const user = userEvent.setup();
     render(<CaptureModeSetting />);

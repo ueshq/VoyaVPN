@@ -76,7 +76,7 @@ describe("RoutingScreen", () => {
     expect(await within(card).findByText("App-based rules only take effect in VPN mode.")).toBeInTheDocument();
   });
 
-  it("adds a rule, then edits one on double click", async () => {
+  it("adds a rule, then edits one by clicking its name", async () => {
     const user = userEvent.setup();
     renderScreen();
     await screen.findByText("Office");
@@ -94,7 +94,7 @@ describe("RoutingScreen", () => {
     );
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
-    await user.dblClick(screen.getByText("Office"));
+    await user.click(screen.getByRole("button", { name: "Office" }));
     const edit = await screen.findByRole("dialog");
     expect(within(edit).getByRole("heading", { name: "Edit rule" })).toBeInTheDocument();
     expect(within(edit).getByLabelText("Name")).toHaveValue("Office");
@@ -116,7 +116,8 @@ describe("RoutingScreen", () => {
       expect(ipc.deleteRoutingRules).toHaveBeenCalledWith("route-active", ["rule-office"]),
     );
 
-    await user.click(screen.getByRole("button", { name: "Restore defaults" }));
+    await user.click(screen.getByRole("menuitem", { name: "More" }));
+    await user.click(screen.getByRole("menuitem", { name: "Restore defaults" }));
     const reset = await screen.findByRole("alertdialog");
     expect(within(reset).getByRole("heading", { name: "Restore default rules?" })).toBeInTheDocument();
     await user.click(within(reset).getByRole("button", { name: "Restore" }));
@@ -144,7 +145,7 @@ describe("RoutingScreen", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Switch to rule mode" })).not.toBeInTheDocument();
     await screen.findByText("Office");
-    for (const name of ["Add rule", "Restore defaults", "Edit"]) {
+    for (const name of ["Add rule", "Edit"]) {
       const button = screen.getByRole("button", { name });
       expect(button).toBeDisabled();
       expect(button.parentElement).toHaveAttribute(
@@ -155,8 +156,13 @@ describe("RoutingScreen", () => {
     expect(screen.getByRole("switch", { name: "Enable Office" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Reorder Office" })).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByRole("menuitem", { name: "Actions for Office" })).toBeDisabled();
-    await user.dblClick(screen.getByText("Office"));
+    await user.click(screen.getByRole("button", { name: "Office" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "More" }));
+    const restore = screen.getByRole("menuitem", { name: "Restore defaults" });
+    expect(restore).toHaveAttribute("aria-disabled", "true");
+    expect(restore).toHaveAttribute("title", "Rules don't apply in global mode. Switch to Rule to edit them.");
+    await user.keyboard("{Escape}");
 
     const rule = within(screen.getByRole("group", { name: "Traffic mode" })).getByRole("button", { name: "Rule" });
     await waitFor(() => expect(rule).toBeEnabled());
@@ -262,7 +268,9 @@ describe("RoutingScreen", () => {
 
     expect(await screen.findByText("No rule set is active.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add rule" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Restore defaults" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("menuitem", { name: "More" }));
+    expect(screen.getByRole("menuitem", { name: "Restore defaults" })).toHaveAttribute("aria-disabled", "true");
+    await userEvent.keyboard("{Escape}");
     expect(screen.getByRole("button", { name: "Edit" })).toBeDisabled();
   });
 

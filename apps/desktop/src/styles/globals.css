@@ -21,3 +21,15 @@
     user-select: text;
   }
 }
+
+[data-settings-highlight="true"] {
+  animation: settings-highlight 2s ease-out;
+  scroll-margin-top: 12px;
+}
+@keyframes settings-highlight {
+  from { box-shadow: inset 0 0 0 2px var(--ring); }
+  to { box-shadow: inset 0 0 0 2px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-settings-highlight="true"] { animation: none; }
+}

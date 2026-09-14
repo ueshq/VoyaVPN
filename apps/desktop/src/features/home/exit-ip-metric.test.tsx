@@ -50,7 +50,7 @@ describe("ExitIpMetric", () => {
   it("offers no lookup while disconnected", () => {
     renderMetric();
 
-    expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("—");
+    expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("Not checked");
     expect(screen.getByRole("button", { name: "Check exit IP" })).toBeDisabled();
     expect(ipc.checkConnectionIp).not.toHaveBeenCalled();
   });

@@ -25,13 +25,13 @@ static void assert_inset(NSWindow *window) {
   CGFloat previous = 0;
   for (NSButton *button in buttons) {
     NSRect rect = [button convertRect:button.bounds toView:nil];
-    assert(fabs(NSHeight(window.frame) - NSMaxY(rect) - 32) < 0.1);
+    assert(fabs(NSHeight(window.frame) - NSMaxY(rect) - 16) < 0.1);
     assert(NSMinX(rect) > previous);
     previous = NSMinX(rect);
     assert(!button.hidden);
   }
   NSRect close = [buttons[0] convertRect:buttons[0].bounds toView:nil];
-  assert(fabs(NSMinX(close) - 20) < 0.1);
+  assert(fabs(NSMinX(close) - 16) < 0.1);
 }
 
 int main(void) {
@@ -48,14 +48,14 @@ int main(void) {
     NSButton *close = [window standardWindowButton:NSWindowCloseButton];
     id target = close.target;
     SEL action = close.action;
-    voya_install_window_chrome((__bridge void *)window, 20, 32);
+    voya_install_window_chrome((__bridge void *)window, 16, 16);
     finish_layout();
     assert_inset(window);
     assert(close.target == target && close.action == action);
 
     // Reinstalling must reuse the window-owned observer, and resizing or AppKit
     // restoring its default button positions must not lose the requested inset.
-    voya_install_window_chrome((__bridge void *)window, 20, 32);
+    voya_install_window_chrome((__bridge void *)window, 16, 16);
     [window setContentSize:NSMakeSize(960, 640)];
     finish_layout();
     assert_inset(window);

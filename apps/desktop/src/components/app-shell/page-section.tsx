@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useShellStore } from "@/stores/shell-store";
+import { WindowChromeContext } from "@/components/app-shell/window-chrome-context";
 
 import { cn } from "@voya/ui/lib/utils";
 
@@ -29,6 +30,7 @@ function PageTitle({
 }) {
   const titleRef = React.useRef<HTMLHeadingElement>(null);
   const focusTitle = useShellStore((state) => state.focusPageTitle);
+  const windowChrome = React.use(WindowChromeContext);
   React.useEffect(() => {
     if (focusTitle) {
       titleRef.current?.focus();
@@ -38,10 +40,13 @@ function PageTitle({
   return (
     <div
       className={cn(
-        "flex min-w-0 shrink-0 items-center gap-3 px-4 pt-5 pb-4 min-[1100px]:px-page",
+        "flex min-w-0 shrink-0 items-center gap-3 px-4 py-4 min-[1100px]:px-page",
         className,
       )}
       data-slot="page-title"
+      // macOS pages have no titlebar strip: the title row shares the traffic
+      // lights' line and drags the window, while its controls stay clickable.
+      data-tauri-drag-region={windowChrome === "macos" ? "deep" : undefined}
       {...props}
     >
       <h1

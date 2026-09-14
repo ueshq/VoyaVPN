@@ -29,26 +29,35 @@ const OPTIONS = [
 
 /**
  * The Windows and Linux choice between the platform VPN and the system proxy.
- * It is independent of the traffic mode on Home, which decides where captured
+ * It is independent of the traffic mode on Rules, which decides where captured
  * traffic goes.
  */
 export function CaptureModeSetting() {
   const { t } = useI18n();
   const id = useId();
   const capture = useCaptureMode();
+  const vpnOnly = useRuntimeEventStore((state) => state.tun?.backend === "macosPacketTunnel");
   // The saved choice above, and here what the running connection really does.
   const statusKey = useRuntimeEventStore((state): TranslationKey => {
     if (state.coreState?.state !== "connected")
       return "settings.captureMode.status.disconnected";
+    if (state.coreState.activeTunBackend)
+      return "settings.captureMode.status.vpnActive";
+    if (state.sysProxy?.effectiveMode === "forcedChange")
+      return "settings.captureMode.status.proxyActive";
     if (state.tun?.enabled)
-      return state.coreState.activeTunBackend
-        ? "settings.captureMode.status.vpnActive"
-        : "settings.captureMode.status.vpnInactive";
-    return state.sysProxy?.effectiveMode === "forcedChange"
-      ? "settings.captureMode.status.proxyActive"
-      : "settings.captureMode.status.proxyInactive";
+      return "settings.captureMode.status.vpnInactive";
+    return "settings.captureMode.status.proxyInactive";
   });
-  if (!capture.available) return null;
+  if (!capture.available) return vpnOnly ? (
+    <SettingsGroup title={t("settings.sections.captureMode")}>
+      <div className="grid gap-1">
+        <p className="text-sm font-medium">{t("settings.captureMode.vpn")}</p>
+        <p className="text-xs text-muted-foreground">{t("settings.captureMode.vpnOnly")}</p>
+      </div>
+      <p className="text-xs text-muted-foreground" role="status">{t(statusKey)}</p>
+    </SettingsGroup>
+  ) : null;
 
   return (
     <SettingsGroup title={t("settings.sections.captureMode")}>

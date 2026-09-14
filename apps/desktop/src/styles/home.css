@@ -77,17 +77,18 @@
   min-height: 100%;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  gap: 24px;
   padding: clamp(32px, 8vh, 64px) 24px clamp(24px, 5vh, 40px);
 }
-/* The hero takes the space above the node card and centers in it. */
+/* Connection state, selected node and metrics form one centered cluster. */
 .home-hero {
   display: flex;
-  flex: 1;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   width: 100%;
-  margin-bottom: 32px;
+  margin-bottom: 0;
 }
 .home-power {
   position: relative;
@@ -254,23 +255,22 @@
   gap: 6px;
   min-width: 0;
 }
-/* A reminder, not a control: the traffic mode switch lives on the Rules page.
-   Foreground ink keeps the caption-sized text readable on the blue tint in both
-   themes; only the icon carries the brand color. */
+/* The routing summary links to the Rules page without changing its mode. */
 .home-mode-chip {
   display: inline-flex;
   flex: none;
   align-items: center;
   gap: 4px;
-  height: 20px;
-  padding: 0 8px;
+  min-height: 32px;
+  height: auto;
+  padding: 6px 10px;
   border: 0;
   border-radius: 9999px;
   background: var(--accent-blue-bg);
   color: var(--foreground);
   font-size: 12px;
   font-weight: 500;
-  line-height: 1;
+  line-height: 20px;
   cursor: pointer;
 }
 .home-mode-chip svg {
@@ -312,6 +312,7 @@
 }
 .home-details-button {
   display: inline-flex;
+  min-height: 32px;
   align-items: center;
   gap: 2px;
   color: var(--text-brand);
@@ -332,7 +333,6 @@
   min-width: 0;
   min-height: 0;
   height: 100%;
-  border-inline-end: 1px solid var(--border);
   background: var(--sidebar);
   color: var(--muted-foreground);
   transition: width var(--duration-medium) var(--ease-inout-bold);
@@ -342,51 +342,20 @@
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-end;
   height: 80px;
   padding: 0 22px;
   transition-property: height, padding-inline, padding-top;
-}
-/* Decoration only: pointer events fall through to the toolbar's drag region. */
-.sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  pointer-events: none;
-  user-select: none;
-}
-.brand-mark {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius);
-  background: var(--primary);
-  color: var(--primary-foreground);
-}
-.brand-mark svg {
-  width: 100%;
-  height: 100%;
-}
-.sidebar-brand-name {
-  overflow: hidden;
-  color: var(--foreground);
-  font-size: 14px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .sidebar-toggle {
   display: grid;
   flex-shrink: 0;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius);
-  color: var(--muted-foreground);
+  /* Window chrome icons use half-strength foreground in both themes. */
+  color: color-mix(in oklab, var(--foreground) 50%, transparent);
   cursor: pointer;
 }
 .sidebar-toggle:hover {
@@ -574,13 +543,8 @@
   width: var(--sidebar-collapsed-width);
 }
 .app-sidebar[data-collapsed="true"] .sidebar-toolbar {
-  justify-content: flex-end;
-  /* Centers the 32 px toggle in the narrow sidebar. */
-  padding-inline: calc((var(--sidebar-collapsed-width) - 1px - 32px) / 2);
-}
-/* The narrow sidebar cannot hold the brand beside the expand button; the button stays. */
-.app-sidebar[data-collapsed="true"] .sidebar-brand {
-  display: none;
+  /* Centers the 28 px toggle in the narrow sidebar. */
+  padding-inline: calc((var(--sidebar-collapsed-width) - 1px - 28px) / 2);
 }
 .app-sidebar[data-collapsed="true"] .sidebar-navigation {
   padding: 0 14px;
@@ -620,9 +584,6 @@
   .home-metrics {
     margin-top: 8px;
   }
-  .home-hero {
-    margin-bottom: 16px;
-  }
 }
 @media (max-width: 1050px) {
   .home-node-card {
@@ -642,3 +603,14 @@
 .home-node-card {
   max-width: 672px;
 }
+
+.home-mode-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px 8px;
+  max-width: 672px;
+  margin-top: 8px;
+}
+.home-content > .home-metrics { margin-top: 0; }

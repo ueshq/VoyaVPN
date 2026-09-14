@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Plus, RotateCcw, Route } from "lucide-react";
+import { MoreHorizontal, Plus, RotateCcw, Route } from "lucide-react";
+import { Menubar, MenubarMenu, MenubarTrigger, MenubarContent, MenubarItem } from "@voya/ui/components/menubar";
 
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -63,25 +64,22 @@ export function RoutingScreen() {
   return (
     <PageSection aria-label={t("tabs.rules")}>
       <PageTitle
-        // The page's primary action sits last in the title, as on the Nodes page;
-        // the mode and its reset stay side by side before it.
+        // Restore is a named secondary action, separate from the mode switch.
         actions={
           <>
             <TrafficModeSwitcher />
-            <span title={editBlockedReason}>
-              <Button
-                disabled={editBlockedReason !== undefined}
-                onClick={controller.requestResetRules}
-                size="sm"
-                title={resetLabel}
-                type="button"
-                variant="outline"
-              >
-                <RotateCcw className="size-4" aria-hidden="true" />
-                {/* A narrow window keeps the icon; the name stays for tooltips and screen readers. */}
-                <span className="max-[1099px]:sr-only">{resetLabel}</span>
-              </Button>
-            </span>
+            <Menubar bare>
+              <MenubarMenu>
+                <MenubarTrigger asChild className="min-h-8">
+                  <Button size="sm" variant="outline"><MoreHorizontal aria-hidden="true" className="size-4" />{t("common.more")}</Button>
+                </MenubarTrigger>
+                <MenubarContent align="end">
+                  <MenubarItem disabled={editBlockedReason !== undefined} onSelect={controller.requestResetRules} title={editBlockedReason}>
+                    <RotateCcw aria-hidden="true" className="size-4" />{resetLabel}
+                  </MenubarItem>
+                </MenubarContent>
+              </MenubarMenu>
+            </Menubar>
             <span title={editBlockedReason}>
               <Button
                 disabled={editBlockedReason !== undefined}
@@ -184,14 +182,13 @@ function RulesBody({
     );
   }
   if (controller.rules.length === 0) {
-    // "Add rule" and "Restore defaults" sit in the page title right above, so
-    // the empty state explains rather than repeating them.
     return (
       <EmptyState
         className="h-full content-center"
         description={t("panes.routing.emptyRulesHint")}
         icon={Route}
         title={t("panes.routing.emptyRules")}
+        actions={<Button disabled={locked} onClick={controller.requestResetRules} size="sm" variant="outline">{t("panes.routing.resetRules")}</Button>}
       />
     );
   }
