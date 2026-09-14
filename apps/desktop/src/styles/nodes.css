@@ -130,9 +130,10 @@
     opacity: 1;
   }
 }
-.profile-cards-screen button:focus-visible {
-  outline: 2px solid var(--text-brand);
-  outline-offset: 3px;
+/* Button primitives draw their own ring; plain buttons here get the same color and gap. */
+.profile-cards-screen button:not([data-slot="button"]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 /* Consecutive virtual rows form one continuous group panel. Only its last

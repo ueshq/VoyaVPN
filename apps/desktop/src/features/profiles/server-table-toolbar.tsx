@@ -90,7 +90,7 @@ export function ServerTableToolbar({
           running={speedtestRunning && (speedtestSource === null || speedtestSource === "all")}
         />
       </DisabledReason>
-      <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
+      <Menubar bare>
         <MenubarMenu>
           <MenubarTrigger asChild className="h-8">
             <Button size="sm" type="button" variant="outline">
@@ -149,7 +149,7 @@ export function ServerTableToolbar({
         {t("panes.profiles.toolbar.updateAllSubscriptions")}
       </Button>
       <Menubar
-        className="h-auto border-0 bg-transparent p-0 shadow-none"
+        bare
         value={addMenuOpen ? "add" : ""}
         onValueChange={(value) => {
           useShellStore.setState({ profilesAddMenuOpen: value === "add" });

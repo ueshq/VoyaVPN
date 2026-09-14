@@ -170,7 +170,7 @@ export function ProfileCardMenu({
     name: item.profile.remarks || item.profile.id,
   });
   return (
-    <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
+    <Menubar bare>
       <MenubarMenu>
         <MenubarTrigger asChild>
           <Button

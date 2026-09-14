@@ -31,7 +31,7 @@ function SegmentedControlItem({
     <button
       aria-pressed={pressed}
       className={cn(
-        "inline-flex h-full flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[5px] border border-transparent px-3 text-sm font-medium text-foreground transition-[color,box-shadow] disabled:pointer-events-none disabled:opacity-50 focus-visible:border-ring focus-visible:outline-1 focus-visible:outline-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 not-aria-pressed:hover:bg-background/50 aria-pressed:bg-background aria-pressed:shadow-sm dark:aria-pressed:border-input dark:aria-pressed:bg-input/30 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "inline-flex h-full flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[5px] border border-transparent px-3 text-sm font-medium text-foreground transition-[color,box-shadow] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring not-aria-pressed:hover:bg-background/50 aria-pressed:bg-background aria-pressed:shadow-sm dark:aria-pressed:border-input dark:aria-pressed:bg-input/30 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       data-slot="segmented-control-item"

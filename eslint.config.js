@@ -64,6 +64,14 @@ export default tseslint.config(
     },
   },
   {
+    // Plain browser scripts Vite copies as-is, such as the pre-render theme boot.
+    files: ["apps/desktop/public/**/*.js"],
+    languageOptions: {
+      globals: globals.browser,
+      sourceType: "script",
+    },
+  },
+  {
     // The type-aware tier. `projectService` above already builds the full
     // TypeScript program for every .ts/.tsx file, so these rules cost nothing
     // extra — and they are the only check for the failure mode an IPC-heavy app

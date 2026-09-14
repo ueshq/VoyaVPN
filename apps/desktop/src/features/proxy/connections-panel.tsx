@@ -270,7 +270,7 @@ export function ConnectionsPanel({
                 className={cn("size-4", connectionsQuery.isFetching && "animate-spin")}
               />
             </Button>
-            <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
+            <Menubar bare>
               <MenubarMenu>
                 <MenubarTrigger asChild>
                   <Button aria-label={moreLabel} size="icon-sm" title={moreLabel} type="button" variant="ghost">

@@ -317,11 +317,12 @@
   color: var(--text-brand);
   cursor: pointer;
 }
-.home-screen button:focus-visible,
+/* Button primitives draw their own ring; plain buttons get the same color and gap. */
+.home-screen button:not([data-slot="button"]):focus-visible,
 .sidebar-toggle:focus-visible,
 .sidebar-nav-item:focus-visible {
-  outline: 2px solid var(--text-brand);
-  outline-offset: 4px;
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 .app-sidebar {
   --sidebar-collapsed-width: 72px;

@@ -226,7 +226,7 @@ export function LogsPanel({
             <SelectItem value="all">{t("panes.logs.all")}</SelectItem>
           </SelectContent>
         </Select>
-        <Menubar className="ms-auto h-auto border-0 bg-transparent p-0 shadow-none">
+        <Menubar bare className="ms-auto">
           <MenubarMenu>
             <MenubarTrigger asChild>
               <Button
@@ -333,7 +333,7 @@ export function LogsPanel({
         </div>
         {!atBottom && filtered.length > 0 ? (
           <Button
-            className="absolute bottom-4 end-4 gap-2 shadow-md"
+            className="absolute bottom-4 end-4 gap-2 shadow-overlay"
             onClick={scrollToLatest}
             size="sm"
             type="button"

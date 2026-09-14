@@ -301,7 +301,7 @@ function SortableRuleRow({
           "border-0",
           striped ? dataTableRowEven : dataTableRowOdd,
           dataTableRowHover,
-          isDragging && "relative z-20 bg-surface-raised shadow-md",
+          isDragging && "relative z-20 bg-surface-raised shadow-overlay",
         )}
         onDoubleClick={locked ? undefined : () => onEdit(rule)}
         ref={setNodeRef}

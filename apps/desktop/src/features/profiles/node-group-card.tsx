@@ -137,7 +137,7 @@ export function NodeGroupCard({
             running={speedtestRunning && speedtestSource === source}
             variant="ghost"
           />
-          <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
+          <Menubar bare>
             <MenubarMenu>
               <MenubarTrigger asChild>
                 <Button

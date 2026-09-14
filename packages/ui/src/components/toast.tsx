@@ -26,8 +26,9 @@ function Toast({ className, ...props }: React.ComponentProps<typeof ToastPrimiti
     <ToastPrimitive.Root
       data-slot="toast"
       className={cn(
-        "pointer-events-auto relative grid w-full gap-1 overflow-hidden rounded-md border bg-background p-4 pe-10 text-foreground shadow-lg transition-all",
-        "data-[swipe=cancel]:translate-x-0 data-[swipe=cancel]:transition-[transform_200ms_ease-out] data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=end]:animate-out data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none",
+        // A toast floats above the page like a menu or dialog, so it shares their elevation.
+        "pointer-events-auto relative grid w-full gap-1 overflow-hidden rounded-md border bg-background p-4 pe-10 text-foreground shadow-overlay transition-all",
+        "data-[swipe=cancel]:translate-x-0 data-[swipe=cancel]:transition-transform data-[swipe=cancel]:duration-medium data-[swipe=cancel]:ease-out data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=end]:animate-out data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none",
         "data-[state=closed]:animate-out data-[state=closed]:fade-out-80 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className,
       )}
@@ -59,7 +60,7 @@ function ToastClose({
     <ToastPrimitive.Close
       data-slot="toast-close"
       className={cn(
-        "absolute end-2 top-2 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "absolute end-2 top-2 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       toast-close=""

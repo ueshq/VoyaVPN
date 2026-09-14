@@ -8,11 +8,21 @@ function MenubarMenu({ ...props }: React.ComponentProps<typeof MenubarPrimitive.
   return <MenubarPrimitive.Menu {...props} />;
 }
 
-function Menubar({ className, ...props }: React.ComponentProps<typeof MenubarPrimitive.Root>) {
+function Menubar({
+  bare = false,
+  className,
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.Root> & {
+  /** Hosts a single trigger button (a toolbar or row menu) without the bar's own frame. */
+  bare?: boolean;
+}) {
   return (
     <MenubarPrimitive.Root
       data-slot="menubar"
-      className={cn("flex h-9 items-center gap-1 rounded-md border bg-background p-1 shadow-xs", className)}
+      className={cn(
+        bare ? "flex items-center" : "flex h-9 items-center gap-1 rounded-md border bg-background p-1 shadow-xs",
+        className,
+      )}
       {...props}
     />
   );
@@ -23,7 +33,7 @@ function MenubarTrigger({ className, ...props }: React.ComponentProps<typeof Men
     <MenubarPrimitive.Trigger
       data-slot="menubar-trigger"
       className={cn(
-        "flex h-7 cursor-default select-none items-center rounded-sm px-2.5 py-1 text-sm font-medium outline-none transition-colors focus:bg-accent focus:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground",
+        "flex h-7 cursor-default select-none items-center rounded-sm px-2.5 py-1 text-sm font-medium outline-none transition-colors focus:bg-accent focus:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent data-[state=open]:text-accent-foreground",
         className,
       )}
       {...props}
@@ -31,8 +41,9 @@ function MenubarTrigger({ className, ...props }: React.ComponentProps<typeof Men
   );
 }
 
+// Menus float above the page, so they take the shared overlay elevation.
 const contentClasses =
-  "z-50 min-w-48 max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2";
+  "z-50 min-w-48 max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-overlay data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2";
 
 const itemClasses =
   "relative flex min-w-0 cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
