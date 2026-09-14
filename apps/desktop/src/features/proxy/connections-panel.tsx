@@ -198,6 +198,7 @@ export function ConnectionsPanel({
         <EmptyState
           className="min-h-0 flex-1 content-center"
           icon={disconnected ? Activity : LoaderCircle}
+          iconClassName={disconnected ? undefined : "animate-spin"}
           title={disconnected ? t("activity.connectToView") : waitingLabel}
           description={
             disconnected ? (
@@ -284,7 +285,7 @@ export function ConnectionsPanel({
             </div>
           ) : null}
           <div
-            className="min-h-0 flex-1 overflow-y-auto bg-surface-sunken"
+            className="min-h-0 flex-1 overflow-y-auto"
             ref={viewportRef}
             data-testid="connections-viewport"
           >

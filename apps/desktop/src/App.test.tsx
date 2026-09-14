@@ -496,7 +496,11 @@ describe("App", () => {
       expect(
         container.querySelector('[data-slot="titlebar-placeholder"]'),
       ).toBeNull();
-      expect(screen.queryByText("VoyaVPN")).not.toBeInTheDocument();
+      // The brand sits in the sidebar toolbar, never in a separate titlebar row.
+      expect(toolbar).toHaveTextContent("VoyaVPN");
+      expect(
+        container.querySelector('[data-slot="titlebar"]')?.textContent ?? "",
+      ).not.toContain("VoyaVPN");
     },
   );
 

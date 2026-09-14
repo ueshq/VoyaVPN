@@ -21,6 +21,7 @@ import { EmptyState } from "@voya/ui/components/empty-state";
 import { Input } from "@voya/ui/components/input";
 import { Label } from "@voya/ui/components/label";
 import { ScrollArea } from "@voya/ui/components/scroll-area";
+import { SegmentedControl, SegmentedControlItem } from "@voya/ui/components/segmented-control";
 import {
   connectionModeStatus,
   deleteRoutingRules,
@@ -32,7 +33,6 @@ import {
 import { queryKeys } from "@/ipc/query-keys";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
-import { cn } from "@voya/ui/lib/utils";
 
 import {
   buildPerAppRule,
@@ -217,30 +217,17 @@ export function PerAppProxyDialog({
             </Alert>
           ) : (
             <div className="grid gap-4">
-              <div
-                aria-label={t("panes.routing.perAppTitle")}
-                className="flex h-8 w-fit items-center rounded-lg bg-muted p-0.5"
-                role="group"
-              >
+              <SegmentedControl aria-label={t("panes.routing.perAppTitle")}>
                 {MODE_OPTIONS.map((option) => (
-                  <Button
+                  <SegmentedControlItem
                     key={option}
-                    aria-pressed={mode === option}
-                    className={cn(
-                      "h-7 rounded-md px-3 text-sm leading-none shadow-none focus-visible:relative focus-visible:z-10",
-                      mode === option
-                        ? "bg-background text-foreground hover:bg-background hover:text-foreground"
-                        : "text-subtlest hover:bg-background/60 hover:text-foreground",
-                    )}
                     onClick={() => setMode(option)}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
+                    pressed={mode === option}
                   >
                     {t(PER_APP_MODE_LABEL_KEYS[option])}
-                  </Button>
+                  </SegmentedControlItem>
                 ))}
-              </div>
+              </SegmentedControl>
               <p className="text-xs text-muted-foreground">
                 {t(MODE_HINT_KEYS[mode])}
               </p>
@@ -268,9 +255,10 @@ export function PerAppProxyDialog({
                             aria-label={t("panes.routing.perAppRemove", {
                               process,
                             })}
-                            className="size-4 rounded-full"
+                            // A 16px glyph with a 24px hit area, so the badge keeps its height.
+                            className="relative size-4 rounded-full after:absolute after:-inset-1"
                             onClick={() => toggleProcess(process)}
-                            size="icon"
+                            size="icon-xs"
                             type="button"
                             variant="ghost"
                           >

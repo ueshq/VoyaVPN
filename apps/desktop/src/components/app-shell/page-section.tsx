@@ -10,7 +10,7 @@ export const pageSurfaceClassName = "rounded-xl border-0 bg-surface-raised";
 function PageSection({ className, ...props }: React.ComponentProps<"section">) {
   return (
     <section
-      className={cn("flex h-full min-h-0 min-w-0 flex-col bg-background", className)}
+      className={cn("flex h-full min-h-0 min-w-0 flex-col bg-surface-canvas", className)}
       data-slot="page-section"
       {...props}
     />

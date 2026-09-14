@@ -17,6 +17,7 @@ import { useRuntimeStatusSeed } from "@/components/app-shell/use-runtime-status-
 import { useShellShortcuts } from "@/components/app-shell/use-shell-shortcuts";
 import { useWindowChrome } from "@/components/app-shell/use-window-chrome";
 import { useI18n } from "@voya/i18n/use-i18n";
+import { Skeleton } from "@voya/ui/components/skeleton";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { type ShellTab, useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
@@ -77,7 +78,7 @@ export function AppShell() {
   useAcrylicWindow(titleBarLayout === "windows");
 
   return (
-    <main className="bg-background text-foreground">
+    <main className="bg-surface-canvas text-foreground">
       <div className="app-shell" data-active-tab={activeTab} data-window-chrome={titleBarLayout}>
         <AppSidebar titleBarLayout={titleBarLayout} />
 
@@ -107,7 +108,13 @@ export function AppShell() {
 
 function ScreenFallback() {
   const { t } = useI18n();
-  return <div className="h-full animate-pulse bg-surface-raised/40" aria-label={t("status.loadingScreen")} />;
+  return (
+    <div aria-label={t("status.loadingScreen")} className="grid h-full content-start gap-4 p-page" role="status">
+      <Skeleton className="h-8 w-40" />
+      <Skeleton className="h-40 w-full rounded-xl" />
+      <Skeleton className="h-24 w-full rounded-xl" />
+    </div>
+  );
 }
 
 /**

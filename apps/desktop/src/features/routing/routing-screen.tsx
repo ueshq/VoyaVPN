@@ -119,7 +119,6 @@ export function RoutingScreen() {
           <ScrollArea
             className={cn(
               "min-h-0 min-w-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:block! [&_[data-slot=scroll-area-viewport]>div]:h-full",
-              controller.rules.length > 0 && "bg-surface-sunken",
             )}
           >
             <RulesBody

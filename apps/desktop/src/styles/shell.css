@@ -12,7 +12,7 @@
   position: relative;
   min-width: 0;
   min-height: 0;
-  background: var(--background);
+  background: var(--surface-canvas);
 }
 .shell-panel {
   height: 100%;
@@ -42,6 +42,13 @@
 }
 .app-shell[data-window-chrome="macos"] .app-sidebar {
   --sidebar-collapsed-width: 96px;
+}
+/* The traffic lights share the toolbar row (tauri.macos.conf.json places them at
+   x 20); the expanded brand starts after them. */
+.app-shell[data-window-chrome="macos"]
+  .app-sidebar:not([data-collapsed="true"])
+  .sidebar-toolbar {
+  padding-inline-start: 84px;
 }
 .app-shell[data-window-chrome="macos"]
   .app-sidebar[data-collapsed="true"]

@@ -237,14 +237,15 @@ export function HomeScreen() {
                 ) : null}
               </div>
             </div>
-            <button
-              className="home-switch-node"
+            <Button
+              className="shrink-0"
               onClick={navigateToNodes}
               type="button"
+              variant="outline"
             >
               {t("home.switchNode")}
               <ArrowRight aria-hidden="true" className="size-4" />
-            </button>
+            </Button>
           </div>
         ) : null}
       </div>

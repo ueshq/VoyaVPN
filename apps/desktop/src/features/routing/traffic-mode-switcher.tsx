@@ -1,6 +1,5 @@
 import { useI18n } from "@voya/i18n/use-i18n";
-import { Button } from "@voya/ui/components/button";
-import { cn } from "@voya/ui/lib/utils";
+import { SegmentedControl, SegmentedControlItem } from "@voya/ui/components/segmented-control";
 
 import { ModeInfo } from "./mode-info";
 import { useTrafficMode } from "./use-traffic-mode";
@@ -27,32 +26,21 @@ export function TrafficModeSwitcher() {
           label={t("panes.routing.trafficModeInfo")}
         />
       </span>
-      <div
+      <SegmentedControl
         aria-labelledby="routing-traffic-mode-label"
-        className="flex h-8 w-fit items-center rounded-lg bg-muted p-0.5"
-        role="group"
         title={disabled && disabledReason ? t(disabledReason) : undefined}
       >
         {MODES.map(({ value, labelKey }) => (
-          <Button
-            aria-pressed={mode === value}
-            className={cn(
-              "h-7 rounded-md px-3 text-sm leading-none text-foreground shadow-none focus-visible:relative focus-visible:z-10",
-              mode === value
-                ? "bg-background hover:bg-background"
-                : "hover:bg-background/60",
-            )}
+          <SegmentedControlItem
             disabled={disabled}
             key={value}
             onClick={() => selectMode(value)}
-            size="sm"
-            type="button"
-            variant="ghost"
+            pressed={mode === value}
           >
             {t(labelKey)}
-          </Button>
+          </SegmentedControlItem>
         ))}
-      </div>
+      </SegmentedControl>
     </div>
   );
 }

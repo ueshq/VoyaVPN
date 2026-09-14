@@ -8,12 +8,15 @@ function EmptyState({
   className,
   description,
   icon: Icon,
+  iconClassName,
   title,
   ...props
 }: React.ComponentProps<"div"> & {
   actions?: React.ReactNode;
   description?: React.ReactNode;
   icon?: LucideIcon;
+  /** Extra classes for the icon, e.g. `animate-spin` for a waiting state. */
+  iconClassName?: string;
   title: React.ReactNode;
 }) {
   return (
@@ -27,7 +30,10 @@ function EmptyState({
       {...props}
     >
       {Icon ? (
-        <Icon className="size-8 text-muted-foreground" aria-hidden="true" />
+        <Icon
+          className={cn("size-8 text-muted-foreground", iconClassName)}
+          aria-hidden="true"
+        />
       ) : null}
       <p className="text-sm font-medium text-foreground">{title}</p>
       {description ? (

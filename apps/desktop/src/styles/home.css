@@ -4,7 +4,7 @@
   isolation: isolate;
   height: 100%;
   overflow: auto;
-  background: var(--background);
+  background: var(--surface-canvas);
   color: var(--foreground);
 }
 .home-world-map {
@@ -65,6 +65,10 @@
   transform: translateY(-2px);
   box-shadow: var(--elevation-overlay);
 }
+/* Lifting a connected button must not trade its green glow for a neutral shadow. */
+.home-power-connected:hover:not(:disabled) {
+  box-shadow: var(--connected-glow), var(--elevation-overlay);
+}
 .home-power:disabled {
   cursor: wait;
   opacity: 0.75;
@@ -76,11 +80,6 @@
   border-top-color: var(--text-brand);
   border-radius: 50%;
   animation: spin 1.2s linear infinite;
-}
-.dark .home-power:not(.home-power-connected) {
-  border-color: var(--border);
-  background: var(--bg-selected);
-  color: var(--text-brand);
 }
 .home-metrics {
   display: flex;
@@ -157,22 +156,27 @@
   gap: 6px;
   min-width: 0;
 }
-/* A reminder, not a control: the traffic mode switch lives on the Rules page. */
+/* A reminder, not a control: the traffic mode switch lives on the Rules page.
+   Foreground ink keeps the caption-sized text readable on the blue tint in both
+   themes; only the icon carries the brand color. */
 .home-mode-chip {
   display: inline-flex;
   flex: none;
   align-items: center;
   gap: 4px;
-  height: 18px;
-  padding: 0 7px;
+  height: 20px;
+  padding: 0 8px;
   border: 0;
   border-radius: 9999px;
   background: var(--accent-blue-bg);
-  color: var(--primary);
-  font-size: 11px;
+  color: var(--foreground);
+  font-size: 12px;
   font-weight: 500;
   line-height: 1;
   cursor: pointer;
+}
+.home-mode-chip svg {
+  color: var(--text-brand);
 }
 .home-mode-chip:hover {
   text-decoration: underline;
@@ -216,7 +220,6 @@
   color: var(--text-brand);
   cursor: pointer;
 }
-.home-switch-node,
 .node-card-action {
   display: flex;
   align-items: center;
@@ -229,10 +232,11 @@
   font-size: 14px;
   cursor: pointer;
 }
-.home-switch-node:hover,
-.node-card-action:hover:not(:disabled) {
-  background: var(--background);
+.node-card-action:not(:disabled) {
   color: var(--text-brand);
+}
+.node-card-action:hover:not(:disabled) {
+  background: var(--bg-selected);
 }
 .home-screen button:focus-visible,
 .sidebar-toggle:focus-visible,
@@ -258,10 +262,42 @@
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  gap: 8px;
   height: 80px;
   padding: 0 22px;
   transition-property: height, padding-inline, padding-top;
+}
+/* Decoration only: pointer events fall through to the toolbar's drag region. */
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  pointer-events: none;
+  user-select: none;
+}
+.brand-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.brand-mark svg {
+  width: 100%;
+  height: 100%;
+}
+.sidebar-brand-name {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sidebar-toggle {
   display: grid;
@@ -310,7 +346,9 @@
 .sidebar-nav-item:hover {
   background: var(--surface-hovered);
 }
-.sidebar-nav-item-active {
+/* `:hover` outranks a bare class, so the selected tab restates its fill for hover. */
+.sidebar-nav-item-active,
+.sidebar-nav-item-active:hover {
   color: var(--text-brand);
   background: var(--bg-selected);
 }
@@ -347,7 +385,7 @@
   background: var(--connected);
 }
 .sidebar-footer[data-state="cleanupPending"] .sidebar-status-dot {
-  background: var(--warning);
+  background: var(--icon-warning);
 }
 /* A transition must not look like "disconnected". */
 .sidebar-footer[data-state="connecting"] .sidebar-status-dot,
@@ -455,7 +493,12 @@
   width: var(--sidebar-collapsed-width);
 }
 .app-sidebar[data-collapsed="true"] .sidebar-toolbar {
+  justify-content: flex-end;
   padding-inline: calc((var(--sidebar-collapsed-width) - 1px - 26px) / 2);
+}
+/* The narrow sidebar cannot hold the brand beside the expand button; the button stays. */
+.app-sidebar[data-collapsed="true"] .sidebar-brand {
+  display: none;
 }
 .app-sidebar[data-collapsed="true"] .sidebar-navigation {
   padding: 0 14px;
@@ -480,23 +523,23 @@
   opacity: 1;
 }
 @media (min-height: 760px) {
-  .home-node-card {
-    margin-top: auto;
-  }
   .home-hero {
     margin-bottom: 56px;
   }
 }
 @media (max-height: 700px) {
   .home-content {
-    padding-top: 36px;
+    padding: 16px;
   }
   .home-power {
-    width: 144px;
-    height: 144px;
+    width: 120px;
+    height: 120px;
+  }
+  .home-metrics {
+    margin-top: 8px;
   }
   .home-hero {
-    margin-bottom: 24px;
+    margin-bottom: 16px;
   }
 }
 @media (max-width: 1050px) {
@@ -613,6 +656,10 @@
 .node-group-segment .node-group-header {
   background: color-mix(in srgb, var(--background) 50%, var(--card));
 }
+/* Light panels are pure white, so an expanded header needs a hairline to end. */
+.node-group-start:not(.node-group-end) .node-group-header {
+  box-shadow: inset 0 -1px var(--border-subtle);
+}
 .node-group-heading {
   display: flex;
   align-items: center;
@@ -663,27 +710,4 @@
     width: 100%;
     justify-content: flex-end;
   }
-}
-
-@media (max-height: 700px) {
-  .home-content {
-    padding: 16px;
-  }
-  .home-power {
-    width: 120px;
-    height: 120px;
-  }
-  .home-metrics {
-    margin-top: 8px;
-  }
-  .home-hero {
-    margin-bottom: 16px;
-  }
-}
-
-.home-switch-node, .node-card-action:not(:disabled) {
-  color: var(--text-brand);
-}
-.home-switch-node:hover, .node-card-action:hover:not(:disabled) {
-  background: var(--bg-selected);
 }

@@ -259,7 +259,7 @@ export function LogsPanel({
       </PageHeader>
       <div className="relative min-h-0 flex-1">
         <div
-          className="h-full overflow-y-auto bg-surface-sunken"
+          className="h-full overflow-y-auto"
           onScroll={handleScroll}
           ref={viewportRef}
           data-testid="logs-viewport"
@@ -298,7 +298,7 @@ export function LogsPanel({
                   >
                     <button
                       type="button"
-                      className="grid h-full w-full grid-cols-[4.25rem_4.5rem_minmax(0,1fr)] items-center gap-3 px-4 text-start outline-none hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                      className="grid h-full w-full grid-cols-[4.25rem_4.5rem_minmax(0,1fr)] items-center gap-3 px-4 text-start outline-none hover:bg-accent-blue-light focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                       onClick={(event) => {
                         returnFocusRef.current = event.currentTarget;
                         setSelected(line);

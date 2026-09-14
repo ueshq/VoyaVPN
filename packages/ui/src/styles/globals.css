@@ -83,6 +83,9 @@
   --surface: var(--background);
   --surface-sunken: #f6f8fa;
   --surface-raised: #ffffff;
+  /* Page canvas behind content panels. Components keep --background as their white
+     fill; only page containers paint the canvas, so light panels read as raised cards. */
+  --surface-canvas: #f6f8fa;
   --surface-overlay: var(--popover);
   --surface-hovered: rgb(129 139 152 / 0.1);
   --surface-pressed: rgb(129 139 152 / 0.15);
@@ -235,6 +238,7 @@
   --surface: var(--background);
   --surface-sunken: #151b23;
   --surface-raised: var(--card);
+  --surface-canvas: var(--background);
   --surface-overlay: var(--popover);
   --surface-hovered: rgb(101 108 118 / 0.2);
   --surface-pressed: rgb(101 108 118 / 0.25);
@@ -335,7 +339,8 @@
    layer-on-layer and crush the chrome back to near-opaque. So every chrome surface
    paints nothing (--sidebar: transparent) and the shell root <main> is cleared, leaving
    the <body> as the only veil tinting the native Acrylic. The content viewport keeps its
-   own opaque --background and floats above the material. The veil alpha is the sole
+   own opaque --surface-canvas and floats above the material (the `#root > main` id
+   selector below still outranks main's bg-surface-canvas class). The veil alpha is the sole
    translucency control (lower → glassier, higher → solider) and stays in sync with the
    native tint in set_window_acrylic (window.rs). */
 html.voyavpn-acrylic {
@@ -479,6 +484,7 @@ html.voyavpn-acrylic.dark body {
   --color-surface: var(--surface);
   --color-surface-sunken: var(--surface-sunken);
   --color-surface-raised: var(--surface-raised);
+  --color-surface-canvas: var(--surface-canvas);
   --color-surface-overlay: var(--surface-overlay);
   --color-surface-hovered: var(--surface-hovered);
   --color-surface-pressed: var(--surface-pressed);
