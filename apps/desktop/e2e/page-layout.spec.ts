@@ -168,7 +168,7 @@ test("populated pages keep scrolling inside panels and errors inside the page in
     (window.__VOYA_SMOKE__.state as { failNextCommand: string | null }).failNextCommand = "save_dns_settings";
   });
   await settings.getByRole("tab", { name: "Connection", exact: true }).click();
-  await settings.getByRole("checkbox", { name: "FakeIP", exact: true }).check();
+  await settings.getByRole("switch", { name: "FakeIP", exact: true }).click();
   const error = settings.getByRole("alert");
   await expect(error).toBeVisible();
   const errorBox = (await error.boundingBox())!;

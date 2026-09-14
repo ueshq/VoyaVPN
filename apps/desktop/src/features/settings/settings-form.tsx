@@ -7,9 +7,9 @@ import {
 } from "react";
 
 import {
-  CheckboxField,
   FieldLayout,
   SelectField as SharedSelectField,
+  SwitchField,
   TextField as SharedTextField,
 } from "@voya/ui/components/form-fields";
 import { cn } from "@voya/ui/lib/utils";
@@ -49,7 +49,7 @@ export function SettingsGroup({
         className,
       )}
     >
-      <div className="flex min-h-12 flex-wrap items-center gap-2 px-4 py-3">
+      <div className="flex min-h-11 flex-wrap items-end gap-2 px-4 pt-3">
         <h2 className="text-section font-semibold" id={id}>
           {title}
         </h2>
@@ -57,7 +57,11 @@ export function SettingsGroup({
           <div className="ms-auto flex items-center gap-2">{actions}</div>
         ) : null}
       </div>
-      <div className="grid gap-4 p-4">{children}</div>
+      {/* One setting per row, divided by hairlines, so every control reads
+          with its own label in one shared control column. */}
+      <div className="grid divide-y divide-border-subtle px-4 pb-1 [&>*]:py-3">
+        {children}
+      </div>
     </section>
   );
 }
@@ -93,17 +97,18 @@ export function SettingsRow({
   );
 }
 
-export function SettingsCheckbox({
+/** An on/off setting that saves at once, shown as a switch at the row's end. */
+export function SettingsSwitch({
   field,
   onCheckedChange,
   ...props
-}: Omit<ComponentProps<typeof CheckboxField>, "onChange"> & {
+}: Omit<ComponentProps<typeof SwitchField>, "onChange"> & {
   field?: string;
   onCheckedChange: (checked: boolean) => void;
 }) {
   const errors = useContext(FieldErrors);
   return (
-    <CheckboxField
+    <SwitchField
       {...props}
       error={field ? errors[field] : undefined}
       onChange={onCheckedChange}

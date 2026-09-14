@@ -1,17 +1,17 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Input } from "@voya/ui/components/input";
-import { NumberField, SettingsCheckbox, SettingsFields, SettingsGroup, SettingsRow } from "./settings-form";
+import { NumberField, SettingsFields, SettingsGroup, SettingsRow, SettingsSwitch } from "./settings-form";
 import { useToastStore } from "@/stores/toast-store";
 
 describe("settings form", () => {
   it("associates row labels and groups with accessible controls", () => {
     render(<SettingsGroup title="Startup"><SettingsRow htmlFor="field" label="Name"><Input id="field" /></SettingsRow>
-      <SettingsFields errors={{ autostart: "Not allowed" }}><SettingsCheckbox field="autostart" checked label="Autostart" onCheckedChange={vi.fn()} /></SettingsFields>
+      <SettingsFields errors={{ autostart: "Not allowed" }}><SettingsSwitch field="autostart" checked label="Autostart" onCheckedChange={vi.fn()} /></SettingsFields>
     </SettingsGroup>);
     expect(screen.getByRole("region", { name: "Startup" })).toBeInTheDocument();
     expect(screen.getByLabelText("Name")).toHaveAttribute("id", "field");
-    expect(screen.getByLabelText("Autostart")).toHaveAccessibleDescription("Not allowed");
+    expect(screen.getByRole("switch", { name: "Autostart" })).toHaveAccessibleDescription("Not allowed");
   });
 
   it("retains invalid numeric text and only commits valid whole numbers", () => {

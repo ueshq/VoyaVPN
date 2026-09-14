@@ -57,7 +57,7 @@ export function SettingsApplyStatus({
     if (!saving && (!saved || failed)) return null;
     return (
       <p
-        className="inline-flex shrink-0 items-center gap-2 px-1 text-xs text-muted-foreground"
+        className="inline-flex shrink-0 items-center gap-2 px-4 text-xs text-muted-foreground"
         role="status"
       >
         {saving ? (

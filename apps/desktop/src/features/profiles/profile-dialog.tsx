@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Save, Server, Tag, TriangleAlert } from "lucide-react";
+import { Server, Tag, TriangleAlert } from "lucide-react";
 import { useForm, useWatch } from "react-hook-form";
 
 import { Alert, AlertDescription } from "@voya/ui/components/alert";
@@ -232,7 +232,6 @@ function ProfileDialogForm({
           {t("panes.profiles.dialog.cancel")}
         </Button>
         <Button disabled={isSubmitting} form="profile-form" type="submit">
-          <Save className="size-4" aria-hidden="true" />
           {t("panes.profiles.dialog.save")}
         </Button>
       </DialogFooter>

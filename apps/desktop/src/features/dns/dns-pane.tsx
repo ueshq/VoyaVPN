@@ -2,15 +2,15 @@ import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { Disclosure } from "@voya/ui/components/disclosure";
 import {
-  CheckboxField,
   SelectField,
+  SwitchField,
   TextAreaField,
   TextField,
 } from "@voya/ui/components/form-fields";
 import { cn } from "@voya/ui/lib/utils";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { SettingsGroup, SettingsRow } from "@/features/settings/settings-form";
+import { SettingsGroup } from "@/features/settings/settings-form";
 import type { DnsSettings } from "@/ipc/bindings";
 
 import { DNS_STRATEGIES } from "./dns-form-schema";
@@ -77,7 +77,7 @@ function SimpleDnsForm({
   const strategies = STRATEGY_OPTIONS.map((value) => ({ value, label: strategyLabels[value] ?? value }));
   return (
     <>
-      {/* The FakeIP checkbox below already shows the mode, so only errors get a badge. */}
+      {/* The FakeIP switch below already shows the mode, so only errors get a badge. */}
       <SettingsGroup
         actions={
           issueCount ? (
@@ -87,6 +87,14 @@ function SimpleDnsForm({
         title={t("settings.sections.dnsServers")}
       >
         <TextField
+          addon={
+            <DnsPresets
+              current={settings.direct}
+              label={t("panes.dns.presetsDirect")}
+              onPick={(direct) => updateSimple({ direct })}
+              presets={DIRECT_PRESETS}
+            />
+          }
           commitOnBlur
           error={errors.direct}
           label={t("panes.dns.directDns")}
@@ -94,25 +102,21 @@ function SimpleDnsForm({
           onChange={(direct) => updateSimple({ direct })}
           value={settings.direct ?? ""}
         />
-        <DnsPresetRow
-          current={settings.direct}
-          label={t("panes.dns.presetsDirect")}
-          onPick={(direct) => updateSimple({ direct })}
-          presets={DIRECT_PRESETS}
-        />
         <TextField
+          addon={
+            <DnsPresets
+              current={settings.remote}
+              label={t("panes.dns.presetsRemote")}
+              onPick={(remote) => updateSimple({ remote })}
+              presets={REMOTE_PRESETS}
+            />
+          }
           commitOnBlur
           error={errors.remote}
           label={t("panes.dns.remoteDns")}
           layout="row"
           onChange={(remote) => updateSimple({ remote })}
           value={settings.remote ?? ""}
-        />
-        <DnsPresetRow
-          current={settings.remote}
-          label={t("panes.dns.presetsRemote")}
-          onPick={(remote) => updateSimple({ remote })}
-          presets={REMOTE_PRESETS}
         />
         <TextField
           commitOnBlur
@@ -141,38 +145,35 @@ function SimpleDnsForm({
         />
       </SettingsGroup>
       <SettingsGroup title={t("settings.sections.dnsBehavior")}>
-        <div className="grid gap-3 @min-[42rem]:grid-cols-2">
-          <CheckboxField
-            checked={Boolean(settings.addCommonHosts)}
-            description={t("panes.dns.commonHostsHint")}
-            label={t("panes.dns.commonHosts")}
-            onChange={(addCommonHosts) => updateSimple({ addCommonHosts })}
-          />
-          <CheckboxField
-            checked={Boolean(settings.blockBindingQuery)}
-            description={t("panes.dns.blockBindingQueryHint")}
-            label={t("panes.dns.blockBindingQuery")}
-            onChange={(blockBindingQuery) =>
-              updateSimple({ blockBindingQuery })
-            }
-          />
-          <CheckboxField
-            checked={Boolean(settings.fakeIp)}
-            description={t("panes.dns.fakeIpHint")}
-            label={t("panes.dns.fakeIp")}
-            onChange={(fakeIp) => updateSimple({ fakeIp })}
-          />
-          <CheckboxField
-            checked={Boolean(settings.fakeIp && settings.globalFakeIp)}
-            disabled={!settings.fakeIp}
-            label={t("panes.dns.globalFakeIp")}
-              description={t("panes.dns.globalFakeIpHint")}
-            onChange={(globalFakeIp) => updateSimple({ globalFakeIp })}
-          />
-        </div>
+        <SwitchField
+          checked={Boolean(settings.addCommonHosts)}
+          description={t("panes.dns.commonHostsHint")}
+          label={t("panes.dns.commonHosts")}
+          onChange={(addCommonHosts) => updateSimple({ addCommonHosts })}
+        />
+        <SwitchField
+          checked={Boolean(settings.blockBindingQuery)}
+          description={t("panes.dns.blockBindingQueryHint")}
+          label={t("panes.dns.blockBindingQuery")}
+          onChange={(blockBindingQuery) =>
+            updateSimple({ blockBindingQuery })
+          }
+        />
+        <SwitchField
+          checked={Boolean(settings.fakeIp)}
+          description={t("panes.dns.fakeIpHint")}
+          label={t("panes.dns.fakeIp")}
+          onChange={(fakeIp) => updateSimple({ fakeIp })}
+        />
+        <SwitchField
+          checked={Boolean(settings.fakeIp && settings.globalFakeIp)}
+          disabled={!settings.fakeIp}
+          label={t("panes.dns.globalFakeIp")}
+          description={t("panes.dns.globalFakeIpHint")}
+          onChange={(globalFakeIp) => updateSimple({ globalFakeIp })}
+        />
       </SettingsGroup>
       <Disclosure
-        className="border-0 [&>div]:border-0"
         title={t("common.advanced")}
         invalid={!!errors.hosts || !!errors.directExpectedIps}
       >
@@ -202,8 +203,8 @@ function SimpleDnsForm({
   );
 }
 
-/** One-click servers for a DNS field; the field itself stays free text. */
-function DnsPresetRow({
+/** One-click servers right under their DNS field; the field itself stays free text. */
+function DnsPresets({
   current,
   label,
   onPick,
@@ -216,30 +217,26 @@ function DnsPresetRow({
 }) {
   const { t } = useI18n();
   return (
-    // Presets sit right under their field, whose label already names them.
-    <SettingsRow>
-      <div aria-label={label} className="flex flex-wrap gap-2" role="group">
-        {presets.map((preset) => {
-          const selected = current?.trim() === preset.value;
-          return (
-            <Button
-              aria-pressed={selected}
-              className={cn(
-                "h-8 px-3",
-                selected &&
-                  "border-primary bg-accent-blue-light text-brand hover:bg-accent-blue-light hover:text-brand",
-              )}
-              key={preset.value}
-              onClick={() => onPick(preset.value)}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              {t(preset.labelKey)}
-            </Button>
-          );
-        })}
-      </div>
-    </SettingsRow>
+    <div aria-label={label} className="flex flex-wrap gap-2" role="group">
+      {presets.map((preset) => {
+        const selected = current?.trim() === preset.value;
+        return (
+          <Button
+            aria-pressed={selected}
+            className={cn(
+              selected &&
+                "border-primary bg-accent-blue-light text-brand hover:bg-accent-blue-light hover:text-brand",
+            )}
+            key={preset.value}
+            onClick={() => onPick(preset.value)}
+            size="xs"
+            type="button"
+            variant="outline"
+          >
+            {t(preset.labelKey)}
+          </Button>
+        );
+      })}
+    </div>
   );
 }

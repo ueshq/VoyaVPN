@@ -61,8 +61,10 @@ describe("semantic settings tabs", () => {
     const user = userEvent.setup();
     const { container } = render(<TabHarness Component={CoreTab} />);
 
-    for (const checkbox of screen.getAllByRole("checkbox"))
-      await user.click(checkbox);
+    // On/off settings apply at once, so they are switches rather than checkboxes.
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    for (const toggle of screen.getAllByRole("switch"))
+      await user.click(toggle);
     for (const input of container.querySelectorAll<HTMLInputElement>(
       'input:not([type="checkbox"])',
     )) {
@@ -98,8 +100,8 @@ describe("semantic settings tabs", () => {
     const user = userEvent.setup();
     const { container } = render(<TabHarness Component={AdvancedTab} />);
 
-    for (const checkbox of screen.getAllByRole("checkbox"))
-      await user.click(checkbox);
+    for (const toggle of screen.getAllByRole("switch"))
+      await user.click(toggle);
     for (const input of container.querySelectorAll<HTMLInputElement>(
       'input:not([type="checkbox"])',
     )) {
@@ -121,10 +123,10 @@ describe("semantic settings tabs", () => {
     const { container } = render(<TabHarness Component={ConnectionTab} />);
 
     await user.click(
-      screen.getByRole("checkbox", { name: "Block traffic outside the VPN" }),
+      screen.getByRole("switch", { name: "Block traffic outside the VPN" }),
     );
     expect(
-      screen.getByRole("checkbox", {
+      screen.getByRole("switch", {
         checked: !initial,
         name: "Block traffic outside the VPN",
       }),
@@ -142,13 +144,13 @@ describe("semantic settings tabs", () => {
     const { container } = render(<TabHarness Component={ConnectionTab} />);
 
     expect(
-      screen.queryByRole("checkbox", { name: "Separate LAN port" }),
+      screen.queryByRole("switch", { name: "Separate LAN port" }),
     ).not.toBeInTheDocument();
     await user.click(
-      screen.getByRole("checkbox", { name: "Allow connections from the LAN" }),
+      screen.getByRole("switch", { name: "Allow connections from the LAN" }),
     );
     expect(container.querySelector("#rt-inbound-password")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("checkbox", { name: "Separate LAN port" }));
+    await user.click(screen.getByRole("switch", { name: "Separate LAN port" }));
 
     expect(container.querySelector("#rt-inbound-username")).toBeInTheDocument();
     expect(container.querySelector("#rt-inbound-password")).toHaveAttribute(
@@ -215,7 +217,7 @@ describe("semantic settings tabs", () => {
       "aria-pressed",
       "true",
     );
-    const autostart = screen.getByRole("checkbox", { name: "Autostart" });
+    const autostart = screen.getByRole("switch", { name: "Autostart" });
     expect(autostart).not.toBeChecked();
     await user.click(autostart);
     expect(autostart).toBeChecked();

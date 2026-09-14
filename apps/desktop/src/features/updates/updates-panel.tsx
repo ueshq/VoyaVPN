@@ -96,20 +96,17 @@ function AppUpdatePanel({
     <SettingsGroup title={t("updates.appUpdater")}>
       <div className="flex flex-wrap items-start gap-3">
         <div className="grid min-w-0 flex-1 gap-1">
+          {/* The version leads; a state badge appears only when the updater is not ready. */}
           <div className="flex flex-wrap items-center gap-2">
-            <Badge
-              variant={
-                appUpdaterStatus?.state === "ready" ? "secondary" : "outline"
-              }
-            >
-              {appUpdaterStatus
-                ? t(APP_UPDATER_STATE_TRANSLATION_KEYS[appUpdaterStatus.state])
-                : t("updates.waiting")}
-            </Badge>
             {currentVersion ? (
-              <span className="text-xs text-muted-foreground">
+              <span className="text-sm font-medium">
                 {t("updates.currentVersion", { version: currentVersion })}
               </span>
+            ) : null}
+            {appUpdaterStatus && appUpdaterStatus.state !== "ready" ? (
+              <Badge variant="outline">
+                {t(APP_UPDATER_STATE_TRANSLATION_KEYS[appUpdaterStatus.state])}
+              </Badge>
             ) : null}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -285,8 +282,9 @@ function RuleLibraryPanel({
 
   return (
     <SettingsGroup title={t("settings.sections.resources")}>
+      {/* Same row geometry as the app update above, so both actions line up. */}
       <section
-        className="flex flex-wrap items-start gap-3 p-3"
+        className="flex flex-wrap items-start gap-3"
         aria-label={title}
       >
         <Database

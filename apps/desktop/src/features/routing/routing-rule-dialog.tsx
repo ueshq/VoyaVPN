@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
 import type * as React from "react";
-import { Route, Save } from "lucide-react";
+import { Route } from "lucide-react";
 
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -268,7 +268,6 @@ export function RoutingRuleDialog({
             {t("actions.cancel")}
           </Button>
           <Button form="routing-rule-form" type="submit">
-            <Save className="size-4" aria-hidden="true" />
             {t("actions.save")}
           </Button>
         </DialogFooter>

@@ -1,13 +1,12 @@
 import { Monitor, Moon, Sun } from "lucide-react";
 
-import { Button } from "@voya/ui/components/button";
-import { cn } from "@voya/ui/lib/utils";
+import { SegmentedControl, SegmentedControlItem } from "@voya/ui/components/segmented-control";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
 import type { CloseAction } from "@/ipc/bindings";
 import type { ThemeMode } from "@/stores/preferences-store";
 
-import { SelectField, SettingsCheckbox, SettingsGroup, SettingsRow } from "./settings-form";
+import { SelectField, SettingsGroup, SettingsRow, SettingsSwitch } from "./settings-form";
 import type { AppSettingsFormController } from "./use-app-settings";
 
 const themeOptions: Array<{
@@ -27,9 +26,6 @@ const CLOSE_ACTION_LABELS: Record<CloseAction, TranslationKey> = {
   quit: "settings.closeActionOptions.quit",
 };
 
-const selectedOptionClass =
-  "border border-primary bg-accent-blue-light text-brand hover:bg-accent-blue-light hover:text-brand";
-
 export function GeneralTab({
   controller,
 }: {
@@ -47,19 +43,14 @@ export function GeneralTab({
   return (
     <div className="grid gap-4">
       <SettingsGroup title={t("settings.sections.appearance")}>
+        {/* Theme and language are the same kind of choice, so they are the same control. */}
         <SettingsRow label={t("modal.theme")}>
-          <div className="flex flex-wrap gap-2">
+          <SegmentedControl>
             {themeOptions.map((option) => {
               const Icon = option.icon;
-              const selected = settings.appearance.theme === option.value;
               return (
-                <Button
+                <SegmentedControlItem
                   key={option.value}
-                  aria-pressed={selected}
-                  className={cn(
-                    "h-8 min-w-0 px-3",
-                    selected && selectedOptionClass,
-                  )}
                   disabled={working}
                   onClick={() =>
                     setAppearance({
@@ -67,49 +58,39 @@ export function GeneralTab({
                       theme: option.value,
                     })
                   }
-                  type="button"
-                  variant={selected ? "secondary" : "outline"}
+                  pressed={settings.appearance.theme === option.value}
                 >
                   <Icon className="size-4" aria-hidden="true" />
                   <span className="truncate">{t(option.labelKey)}</span>
-                </Button>
+                </SegmentedControlItem>
               );
             })}
-          </div>
+          </SegmentedControl>
         </SettingsRow>
 
         <SettingsRow label={t("modal.language")}>
-          <div className="flex flex-wrap gap-2">
-            {localeOptions.map((locale) => {
-              const selected = selectedLanguage === locale.code;
-              return (
-                <Button
-                  key={locale.code}
-                  aria-pressed={selected}
-                  className={cn(
-                    "h-8 min-w-12 px-2 text-xs",
-                    selected && selectedOptionClass,
-                  )}
-                  disabled={working}
-                  onClick={() =>
-                    setAppearance({
-                      ...settings.appearance,
-                      language: locale.code,
-                    })
-                  }
-                  type="button"
-                  variant={selected ? "secondary" : "outline"}
-                >
-                  {locale.nativeName}
-                </Button>
-              );
-            })}
-          </div>
+          <SegmentedControl>
+            {localeOptions.map((locale) => (
+              <SegmentedControlItem
+                key={locale.code}
+                disabled={working}
+                onClick={() =>
+                  setAppearance({
+                    ...settings.appearance,
+                    language: locale.code,
+                  })
+                }
+                pressed={selectedLanguage === locale.code}
+              >
+                {locale.nativeName}
+              </SegmentedControlItem>
+            ))}
+          </SegmentedControl>
         </SettingsRow>
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.startup")}>
-        <SettingsCheckbox
+        <SettingsSwitch
           field="behavior.autostart"
           checked={settings.behavior.autostart}
           disabled={working}
@@ -121,7 +102,7 @@ export function GeneralTab({
             }))
           }
         />
-        <SettingsCheckbox
+        <SettingsSwitch
           field="behavior.startMinimized"
           checked={settings.behavior.startMinimized}
           description={t(
@@ -159,7 +140,7 @@ export function GeneralTab({
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.sections.behavior")}>
-        <SettingsCheckbox
+        <SettingsSwitch
           field="behavior.autoCheckIp"
           checked={settings.behavior.autoCheckIp}
           disabled={working}
@@ -171,7 +152,7 @@ export function GeneralTab({
             }))
           }
         />
-        <SettingsCheckbox
+        <SettingsSwitch
           field="behavior.autoCreateSubscriptionGroup"
           checked={settings.behavior.autoCreateSubscriptionGroup}
           description={t("options.autoCreateSubscriptionGroupHint")}

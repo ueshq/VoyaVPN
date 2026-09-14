@@ -130,7 +130,7 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Layers aria-hidden="true" className="size-5" />
+            <Layers aria-hidden="true" className="size-4" />
             {t(form.id ? "policyGroups.edit" : "policyGroups.new")}
           </DialogTitle>
           <DialogDescription>{t(POLICY_GROUP_STRATEGY_HINT_KEYS[form.strategy])}</DialogDescription>
@@ -285,7 +285,7 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
           ) : null}
         </DialogBody>
         <DialogFooter>
-          <Button disabled={pending} onClick={() => onOpenChange(false)} type="button" variant="ghost">
+          <Button disabled={pending} onClick={() => onOpenChange(false)} type="button" variant="outline">
             {t("actions.cancel")}
           </Button>
           <Button disabled={!canSave || pending} onClick={() => void submit()} type="button">

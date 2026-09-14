@@ -2,7 +2,11 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { cn } from "../lib/utils";
 
-/** Keeps drafts mounted while progressively disclosing advanced fields. */
+/**
+ * Keeps drafts mounted while progressively disclosing advanced fields. It has
+ * no border or fill of its own, so it reads as part of the panel or dialog it
+ * sits in instead of a card inside a card.
+ */
 export function Disclosure({
   title,
   children,
@@ -19,21 +23,15 @@ export function Disclosure({
     if (invalid && ref.current) ref.current.open = true;
   }, [invalid]);
   return (
-    <details
-      ref={ref}
-      className={cn(
-        "group/disclosure min-w-0 rounded-xl border bg-surface-raised",
-        className,
-      )}
-    >
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl p-4 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+    <details ref={ref} className={cn("group/disclosure min-w-0", className)}>
+      <summary className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-md py-1 text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
         <ChevronRight
           aria-hidden="true"
-          className="size-4 transition-transform duration-short group-open/disclosure:rotate-90"
+          className="size-4 text-muted-foreground transition-transform duration-short group-open/disclosure:rotate-90"
         />
         {title}
       </summary>
-      <div className="grid gap-4 border-t p-4">{children}</div>
+      <div className="grid gap-4 pt-3">{children}</div>
     </details>
   );
 }

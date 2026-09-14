@@ -11,9 +11,8 @@ import { CoreTab } from "./core-tab";
 import {
   NumberField,
   SelectField,
-  SettingsCheckbox,
   SettingsGroup,
-  SettingsRow,
+  SettingsSwitch,
   TextField,
 } from "./settings-form";
 import { SETTING_DEFAULTS } from "./settings-values";
@@ -88,28 +87,25 @@ export function AdvancedTab({
         title={t("settings.sections.tun")}
         actions={<TunDiagnosticsButton />}
       >
-        <div className="grid gap-3 @min-[42rem]:grid-cols-2">
-          <SettingsCheckbox
-            field="network.tun.autoRoute"
-            checked={settings.network.tun.autoRoute}
-            description={t("settings.network.tunAutoRouteHint")}
-            label={t("settings.network.tunAutoRoute")}
-            onCheckedChange={(autoRoute) =>
-              patchTun({ autoRoute: autoRoute === true })
-            }
-          />
-          <SettingsCheckbox
-            field="network.tun.ipv6Enabled"
-            checked={settings.network.tun.ipv6Enabled}
-            description={t("settings.network.enableIpv6Hint")}
-            label={t("settings.network.enableIpv6Address")}
-            onCheckedChange={(ipv6Enabled) =>
-              patchTun({ ipv6Enabled: ipv6Enabled === true })
-            }
-          />
-        </div>
+        <SettingsSwitch
+          field="network.tun.autoRoute"
+          checked={settings.network.tun.autoRoute}
+          description={t("settings.network.tunAutoRouteHint")}
+          label={t("settings.network.tunAutoRoute")}
+          onCheckedChange={(autoRoute) =>
+            patchTun({ autoRoute: autoRoute === true })
+          }
+        />
+        <SettingsSwitch
+          field="network.tun.ipv6Enabled"
+          checked={settings.network.tun.ipv6Enabled}
+          description={t("settings.network.enableIpv6Hint")}
+          label={t("settings.network.enableIpv6Address")}
+          onCheckedChange={(ipv6Enabled) =>
+            patchTun({ ipv6Enabled: ipv6Enabled === true })
+          }
+        />
         <Disclosure
-          className="border-0 [&>div]:border-0"
           title={t("common.advanced")}
           invalid={Object.keys(controller.fieldErrors).some((field) =>
             field.startsWith("network.tun"),
@@ -154,16 +150,14 @@ export function AdvancedTab({
 
       {systemProxyManaged ? (
         <SettingsGroup title={t("settings.sections.systemProxy")}>
-          <SettingsRow>
-            <SettingsCheckbox
-              field="network.systemProxy.bypassLocal"
-              checked={settings.network.systemProxy.bypassLocal}
-              label={t("settings.network.bypassLocalAddress")}
-              onCheckedChange={(bypassLocal) =>
-                patchSystemProxy({ bypassLocal: bypassLocal === true })
-              }
-            />
-          </SettingsRow>
+          <SettingsSwitch
+            field="network.systemProxy.bypassLocal"
+            checked={settings.network.systemProxy.bypassLocal}
+            label={t("settings.network.bypassLocalAddress")}
+            onCheckedChange={(bypassLocal) =>
+              patchSystemProxy({ bypassLocal: bypassLocal === true })
+            }
+          />
           <TextField
             field="network.systemProxy.exceptions"
             id="rt-sysproxy-exceptions"

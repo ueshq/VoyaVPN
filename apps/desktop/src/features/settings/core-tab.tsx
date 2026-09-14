@@ -1,12 +1,11 @@
 import { Disclosure } from "@voya/ui/components/disclosure";
 import { nullableText, SETTING_DEFAULTS } from "./settings-values";
 import {
-  SettingsCheckbox,
   NumberField,
   SelectField,
-  TextField,
   SettingsGroup,
-  SettingsRow,
+  SettingsSwitch,
+  TextField,
 } from "./settings-form";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -84,43 +83,41 @@ export function CoreTab({
   return (
     <div className="grid gap-4">
       <SettingsGroup title={t("settings.sections.coreBasics")}>
-        <div className="grid gap-3 @min-[42rem]:grid-cols-2">
-          <SettingsCheckbox
-            field="core.logEnabled"
-            checked={settings.core.logEnabled}
-            label={t("settings.core.logEnabled")}
-            onCheckedChange={(logEnabled) =>
-              patchCore({ logEnabled: logEnabled === true })
-            }
-          />
-          <SettingsCheckbox
-            field="core.defaultAllowInsecure"
-            checked={settings.core.defaultAllowInsecure}
-            description={t("settings.core.allowInsecureHint")}
-            label={t("settings.core.allowInsecure")}
-            onCheckedChange={(defaultAllowInsecure) =>
-              patchCore({ defaultAllowInsecure: defaultAllowInsecure === true })
-            }
-          />
-          <SettingsCheckbox
-            field="core.muxEnabled"
-            checked={settings.core.muxEnabled}
-            description={t("settings.core.muxEnabledHint")}
-            label={t("settings.core.muxEnabled")}
-            onCheckedChange={(muxEnabled) =>
-              patchCore({ muxEnabled: muxEnabled === true })
-            }
-          />
-          <SettingsCheckbox
-            field="core.cacheFileEnabled"
-            checked={settings.core.cacheFileEnabled}
-            description={t("settings.core.cacheFileHint")}
-            label={t("settings.core.cacheFileEnabled")}
-            onCheckedChange={(cacheFileEnabled) =>
-              patchCore({ cacheFileEnabled: cacheFileEnabled === true })
-            }
-          />
-        </div>
+        <SettingsSwitch
+          field="core.logEnabled"
+          checked={settings.core.logEnabled}
+          label={t("settings.core.logEnabled")}
+          onCheckedChange={(logEnabled) =>
+            patchCore({ logEnabled: logEnabled === true })
+          }
+        />
+        <SettingsSwitch
+          field="core.defaultAllowInsecure"
+          checked={settings.core.defaultAllowInsecure}
+          description={t("settings.core.allowInsecureHint")}
+          label={t("settings.core.allowInsecure")}
+          onCheckedChange={(defaultAllowInsecure) =>
+            patchCore({ defaultAllowInsecure: defaultAllowInsecure === true })
+          }
+        />
+        <SettingsSwitch
+          field="core.muxEnabled"
+          checked={settings.core.muxEnabled}
+          description={t("settings.core.muxEnabledHint")}
+          label={t("settings.core.muxEnabled")}
+          onCheckedChange={(muxEnabled) =>
+            patchCore({ muxEnabled: muxEnabled === true })
+          }
+        />
+        <SettingsSwitch
+          field="core.cacheFileEnabled"
+          checked={settings.core.cacheFileEnabled}
+          description={t("settings.core.cacheFileHint")}
+          label={t("settings.core.cacheFileEnabled")}
+          onCheckedChange={(cacheFileEnabled) =>
+            patchCore({ cacheFileEnabled: cacheFileEnabled === true })
+          }
+        />
         <SelectField
           field="core.logLevel"
           id="rt-loglevel"
@@ -162,7 +159,6 @@ export function CoreTab({
       </SettingsGroup>
 
       <Disclosure
-        className="border-0 [&>div]:border-0"
         title={t("common.advanced")}
         invalid={Object.keys(controller.fieldErrors).some((field) =>
           COLLAPSED_FIELDS.some((prefix) => field.startsWith(prefix)),
@@ -226,16 +222,14 @@ export function CoreTab({
             }
             value={settings.multiplexing.maxConnections}
           />
-          <SettingsRow>
-            <SettingsCheckbox
-              field="multiplexing.padding"
-              checked={settings.multiplexing.padding ?? false}
-              label={t("settings.fields.muxPadding")}
-              onCheckedChange={(padding) =>
-                patchMux({ padding: padding === true })
-              }
-            />
-          </SettingsRow>
+          <SettingsSwitch
+            field="multiplexing.padding"
+            checked={settings.multiplexing.padding ?? false}
+            label={t("settings.fields.muxPadding")}
+            onCheckedChange={(padding) =>
+              patchMux({ padding: padding === true })
+            }
+          />
         </SettingsGroup>
 
         <SettingsGroup title={t("settings.core.hysteriaBandwidth")}>

@@ -5,6 +5,7 @@ import { RotateCcw } from "lucide-react";
 import { PageContent, PageSection, PageTitle } from "@/components/app-shell/page-section";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
 import { Button } from "@voya/ui/components/button";
+import { Skeleton } from "@voya/ui/components/skeleton";
 import {
   Tabs,
   TabsContent,
@@ -145,11 +146,13 @@ function AppSettingsPane({
 }) {
   const { t } = useI18n();
   if (!controller.settings)
-    return (
-      <p className="text-sm text-muted-foreground" role="status">
-        {controller.working ? t("options.loading") : null}
-      </p>
-    );
+    // The groups' outline while settings load, so the page does not jump.
+    return controller.working ? (
+      <div aria-busy="true" aria-label={t("options.loading")} className="grid gap-4" role="status">
+        <Skeleton className="h-36 w-full rounded-xl" />
+        <Skeleton className="h-24 w-full rounded-xl" />
+      </div>
+    ) : null;
   const ready = { ...controller, settings: controller.settings };
   switch (tab) {
     case "general":

@@ -89,7 +89,7 @@ function DialogContent({
           <DialogPrimitive.Close
             aria-label={closeLabel}
             data-slot="dialog-close"
-            className="absolute end-3 top-3 grid size-8 place-items-center rounded-md opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="absolute end-3 top-3 grid size-8 place-items-center rounded-md opacity-70 ring-offset-background transition-opacity hover:opacity-100 outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
             <XIcon aria-hidden="true" />
             <span className="sr-only">{closeLabel}</span>

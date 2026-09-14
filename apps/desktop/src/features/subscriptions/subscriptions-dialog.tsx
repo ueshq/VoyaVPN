@@ -136,7 +136,7 @@ function SubscriptionEditor({
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Rss aria-hidden="true" className="size-5" />
+            <Rss aria-hidden="true" className="size-4" />
             {t(
               subscription ? "subscriptions.edit" : "home.subscriptionCard.add",
             )}

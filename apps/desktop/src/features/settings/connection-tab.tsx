@@ -3,8 +3,8 @@ import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 
 import {
   NumberField,
-  SettingsCheckbox,
   SettingsGroup,
+  SettingsSwitch,
   TextField,
 } from "./settings-form";
 import { SETTING_DEFAULTS } from "./settings-values";
@@ -48,7 +48,7 @@ export function ConnectionTab({
         {/* The tunnel's strict route is what keeps traffic from leaving
             around it, on every platform. Outside VPN mode there is nothing
             to protect, so it cannot be changed there. */}
-        <SettingsCheckbox
+        <SettingsSwitch
           checked={settings.network.tun.strictRoute}
           disabled={systemProxyMode}
           description={t(
@@ -91,54 +91,52 @@ export function ConnectionTab({
             }
             value={inbound.localPort}
           />
-          <div className="grid gap-3 @min-[42rem]:grid-cols-2">
-            <SettingsCheckbox
-              checked={inbound.sniffingEnabled}
-              description={t("settings.network.sniffingHint")}
-              field="network.inbounds.0.sniffingEnabled"
-              label={t("settings.network.sniffing")}
-              onCheckedChange={(sniffingEnabled) =>
-                patchInbound({ sniffingEnabled: sniffingEnabled === true })
-              }
-            />
-            <SettingsCheckbox
-              checked={inbound.secondaryPortEnabled}
-              description={t("settings.network.secondPortHint", {
-                port: inbound.localPort + 1,
+          <SettingsSwitch
+            checked={inbound.sniffingEnabled}
+            description={t("settings.network.sniffingHint")}
+            field="network.inbounds.0.sniffingEnabled"
+            label={t("settings.network.sniffing")}
+            onCheckedChange={(sniffingEnabled) =>
+              patchInbound({ sniffingEnabled: sniffingEnabled === true })
+            }
+          />
+          <SettingsSwitch
+            checked={inbound.secondaryPortEnabled}
+            description={t("settings.network.secondPortHint", {
+              port: inbound.localPort + 1,
+            })}
+            field="network.inbounds.0.secondaryPortEnabled"
+            label={t("settings.network.secondPort")}
+            onCheckedChange={(secondaryPortEnabled) =>
+              patchInbound({
+                secondaryPortEnabled: secondaryPortEnabled === true,
+              })
+            }
+          />
+          <SettingsSwitch
+            checked={inbound.lanConnectionsAllowed}
+            description={t("settings.network.allowLanHint")}
+            field="network.inbounds.0.lanConnectionsAllowed"
+            label={t("settings.network.allowLan")}
+            onCheckedChange={(lanConnectionsAllowed) =>
+              patchInbound({
+                lanConnectionsAllowed: lanConnectionsAllowed === true,
+              })
+            }
+          />
+          {inbound.lanConnectionsAllowed ? (
+            <SettingsSwitch
+              checked={inbound.separateLanPort}
+              description={t("settings.network.separateLanPortHint", {
+                port: inbound.localPort + 2,
               })}
-              field="network.inbounds.0.secondaryPortEnabled"
-              label={t("settings.network.secondPort")}
-              onCheckedChange={(secondaryPortEnabled) =>
-                patchInbound({
-                  secondaryPortEnabled: secondaryPortEnabled === true,
-                })
+              field="network.inbounds.0.separateLanPort"
+              label={t("settings.network.separateLanPort")}
+              onCheckedChange={(separateLanPort) =>
+                patchInbound({ separateLanPort: separateLanPort === true })
               }
             />
-            <SettingsCheckbox
-              checked={inbound.lanConnectionsAllowed}
-              description={t("settings.network.allowLanHint")}
-              field="network.inbounds.0.lanConnectionsAllowed"
-              label={t("settings.network.allowLan")}
-              onCheckedChange={(lanConnectionsAllowed) =>
-                patchInbound({
-                  lanConnectionsAllowed: lanConnectionsAllowed === true,
-                })
-              }
-            />
-            {inbound.lanConnectionsAllowed ? (
-              <SettingsCheckbox
-                checked={inbound.separateLanPort}
-                description={t("settings.network.separateLanPortHint", {
-                  port: inbound.localPort + 2,
-                })}
-                field="network.inbounds.0.separateLanPort"
-                label={t("settings.network.separateLanPort")}
-                onCheckedChange={(separateLanPort) =>
-                  patchInbound({ separateLanPort: separateLanPort === true })
-                }
-              />
-            ) : null}
-          </div>
+          ) : null}
           {inbound.lanConnectionsAllowed && inbound.separateLanPort ? (
             <>
               <TextField

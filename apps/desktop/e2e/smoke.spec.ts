@@ -138,9 +138,9 @@ test("automatically saves autostart and freely leaves settings", async ({
   );
   await expect(settings.getByText("Autostart", { exact: true })).toBeVisible();
 
-  const autostart = settings.getByRole("checkbox", { name: "Autostart" });
+  const autostart = settings.getByRole("switch", { name: "Autostart" });
   await expect(autostart).not.toBeChecked();
-  await autostart.check();
+  await autostart.click();
   await expect(autostart).toBeChecked();
 
   await page.getByRole("tab", { name: "Home" }).click();
@@ -640,7 +640,7 @@ test("edits routing and DNS settings without network or OS side effects", async 
   await expect(
     settings.getByRole("heading", { name: "DNS servers and strategies" }),
   ).toBeVisible();
-  await settings.getByRole("checkbox", { exact: true, name: "FakeIP" }).check();
+  await settings.getByRole("switch", { exact: true, name: "FakeIP" }).click();
   await settings.getByLabel("Remote DNS", { exact: true }).fill("https://dns.google/dns-query");
   await settings.getByLabel("Remote DNS", { exact: true }).blur();
 
