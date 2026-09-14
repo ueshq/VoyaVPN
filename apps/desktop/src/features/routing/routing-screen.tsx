@@ -24,7 +24,6 @@ import { InlinePageError } from "@/components/app-shell/inline-page-error";
 import {
   PageContent,
   PageHeader,
-  PageHeaderActions,
   PageSection,
   PageSurface,
   PageTitle,
@@ -61,10 +60,13 @@ export function RoutingScreen() {
     : activeRouting
       ? undefined
       : t("panes.routing.noActiveRouting");
+  const resetLabel = t("panes.routing.resetRules");
 
   return (
     <PageSection aria-label={t("tabs.rules")}>
       <PageTitle
+        // The page's primary action sits last in the title, as on the Nodes page;
+        // the mode and its reset stay side by side before it.
         actions={
           <>
             <TrafficModeSwitcher />
@@ -73,11 +75,24 @@ export function RoutingScreen() {
                 disabled={editBlockedReason !== undefined}
                 onClick={controller.requestResetRules}
                 size="sm"
+                title={resetLabel}
                 type="button"
                 variant="outline"
               >
                 <RotateCcw className="size-4" aria-hidden="true" />
-                {t("panes.routing.resetRules")}
+                {/* A narrow window keeps the icon; the name stays for tooltips and screen readers. */}
+                <span className="max-[1099px]:sr-only">{resetLabel}</span>
+              </Button>
+            </span>
+            <span title={editBlockedReason}>
+              <Button
+                disabled={editBlockedReason !== undefined}
+                onClick={controller.openCreateRule}
+                size="sm"
+                type="button"
+              >
+                <Plus className="size-4" aria-hidden="true" />
+                {t("panes.routing.addRule")}
               </Button>
             </span>
           </>
@@ -93,26 +108,13 @@ export function RoutingScreen() {
           routing={activeRouting}
         />
         <PageSurface className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <PageHeader className="min-h-14">
+          <PageHeader>
             <div className="grid min-w-0 flex-1 gap-0.5">
               <p className="text-sm text-muted-foreground">{t("panes.routing.ruleOrderHint")}</p>
               {connected ? (
                 <p className="text-xs text-muted-foreground">{t("panes.routing.reconnectHint")}</p>
               ) : null}
             </div>
-            <PageHeaderActions>
-              <span title={editBlockedReason}>
-                <Button
-                  disabled={editBlockedReason !== undefined}
-                  onClick={controller.openCreateRule}
-                  size="sm"
-                  type="button"
-                >
-                  <Plus className="size-4" aria-hidden="true" />
-                  {t("panes.routing.addRule")}
-                </Button>
-              </span>
-            </PageHeaderActions>
           </PageHeader>
           {/* Radix's intrinsic-width wrapper must not expand the panel to the
               table's minimum width; the table keeps its own horizontal scroll. */}
@@ -184,6 +186,8 @@ function RulesBody({
     );
   }
   if (controller.rules.length === 0) {
+    // "Add rule" and "Restore defaults" sit in the page title right above, so
+    // the empty state explains rather than repeating them.
     return (
       <EmptyState
         className="h-full content-center"

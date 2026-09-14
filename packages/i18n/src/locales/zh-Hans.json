@@ -962,7 +962,8 @@
     "ruleFinal": "未匹配任何规则（默认出站）",
     "statusLoading": "正在读取连接状态…",
     "loadingConnections": "正在加载连接",
-    "refreshNow": "立即刷新"
+    "refreshNow": "立即刷新",
+    "route": "线路"
   },
   "nodeGroups": {
     "local": "本地节点",

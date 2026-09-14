@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@voya/ui/components/dialog";
+import { cn } from "@voya/ui/lib/utils";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { listRoutings } from "@/ipc/commands";
@@ -17,6 +18,15 @@ import type { ProxyConnectionItem } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
 import { connectionBytes } from "./connection-display";
 import { connectionRuleText } from "./connection-rule";
+
+type Field = {
+  label: string;
+  value: string | null | undefined;
+  /** The whole value on hover when the shown one is shortened. */
+  full?: string | null;
+  /** Addresses and paths read better in a fixed-width face. */
+  mono?: boolean;
+};
 
 export function ConnectionDetails({
   connection,
@@ -51,24 +61,36 @@ export function ConnectionDetails({
     date && Number.isFinite(date.getTime())
       ? date.toLocaleString(language)
       : connection?.start;
-  const fields = connection
+  // What it is, where it went, how it got there, and how much went through.
+  const groups: Field[][] = connection
     ? [
-        [t("activity.target"), connection.host],
-        [t("activity.application"), connection.process],
-        [t("activity.processPath"), middleEllipsis(connection.processPath), connection.processPath],
-        [t("activity.sourceAddress"), connection.source],
-        [t("activity.destinationAddress"), connection.destination],
         [
-          t("activity.protocol"),
-          [connection.network, connection.connectionType]
-            .filter(Boolean)
-            .join(" / "),
+          { label: t("activity.target"), value: connection.host },
+          { label: t("activity.application"), value: connection.process },
+          {
+            full: connection.processPath,
+            label: t("activity.processPath"),
+            mono: true,
+            value: middleEllipsis(connection.processPath),
+          },
         ],
-        [t("activity.startedAt"), startedAt],
-        [t("activity.rule"), connectionRuleText(connection, activeRules, t)],
-        [t("activity.proxyChain"), chainText(connection.chains, t)],
-        [t("sidebar.upload"), connectionBytes(connection.upload)],
-        [t("sidebar.download"), connectionBytes(connection.download)],
+        [
+          { label: t("activity.rule"), value: connectionRuleText(connection, activeRules, t) },
+          { label: t("activity.proxyChain"), value: chainText(connection.chains, t) },
+        ],
+        [
+          { label: t("activity.sourceAddress"), mono: true, value: connection.source },
+          { label: t("activity.destinationAddress"), mono: true, value: connection.destination },
+          {
+            label: t("activity.protocol"),
+            value: [connection.network, connection.connectionType].filter(Boolean).join(" / "),
+          },
+          { label: t("activity.startedAt"), value: startedAt },
+        ],
+        [
+          { label: t("sidebar.upload"), value: connectionBytes(connection.upload) },
+          { label: t("sidebar.download"), value: connectionBytes(connection.download) },
+        ],
       ]
     : [];
 
@@ -82,6 +104,8 @@ export function ConnectionDetails({
       <DialogContent
         className="flex max-h-[85vh] flex-col sm:max-w-[560px]"
         closeLabel={t("actions.close")}
+        // The footer carries Close next to the destructive action.
+        showCloseButton={false}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           titleRef.current?.focus();
@@ -95,7 +119,8 @@ export function ConnectionDetails({
           <DialogTitle className="outline-none" tabIndex={-1} ref={titleRef}>
             {t("activity.connectionDetails")}
           </DialogTitle>
-          <DialogDescription>
+          {/* A live connection needs no subtitle; an ended or stale one says so. */}
+          <DialogDescription className={ended || stale ? undefined : "sr-only"}>
             {ended
               ? t("activity.ended")
               : stale
@@ -104,21 +129,38 @@ export function ConnectionDetails({
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
-          <dl className="select-text space-y-4 text-sm">
-            {fields.map(([label, value, fullText]) => (
-              <div
-                className="grid grid-cols-[7rem_minmax(0,1fr)] gap-4"
-                key={label}
-              >
-                <dt className="text-muted-foreground">{label}</dt>
-                <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]" title={fullText ?? undefined}>
-                  {value?.trim() || "—"}
-                </dd>
-              </div>
-            ))}
+          <dl className="grid select-text gap-3 text-sm">
+            {groups.flatMap((group, groupIndex) =>
+              group.map((field, fieldIndex) => (
+                <div
+                  className={cn(
+                    "grid grid-cols-[7rem_minmax(0,1fr)] gap-4",
+                    // Each group after the first starts under a hairline.
+                    groupIndex > 0 &&
+                      fieldIndex === 0 &&
+                      "mt-1 border-t border-border-subtle pt-4",
+                  )}
+                  key={field.label}
+                >
+                  <dt className="text-muted-foreground">{field.label}</dt>
+                  <dd
+                    className={cn(
+                      "whitespace-pre-wrap [overflow-wrap:anywhere]",
+                      field.mono && "font-mono text-xs leading-5",
+                    )}
+                    title={field.full ?? undefined}
+                  >
+                    {field.value?.trim() || "—"}
+                  </dd>
+                </div>
+              )),
+            )}
           </dl>
         </DialogBody>
         <DialogFooter>
+          <Button onClick={onClose} type="button" variant="outline">
+            {t("actions.close")}
+          </Button>
           <Button
             disabled={!canDisconnect || ended || pending}
             onClick={onDisconnect}

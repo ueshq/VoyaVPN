@@ -481,7 +481,7 @@ function OutboundBadge({
     case "missingGroup":
       return (
         <span className="flex min-w-0 flex-col items-start gap-1">
-          <Badge className="max-w-full bg-warning-bg text-warning" variant="outline">
+          <Badge className="max-w-full" variant="warning">
             <TriangleAlert aria-hidden="true" />
             <span className="truncate">
               {target.kind === "missingGroup"
@@ -491,10 +491,9 @@ function OutboundBadge({
           </Badge>
           {onFix ? (
             <Button
-              className="h-6 px-2 text-xs"
               disabled={locked}
               onClick={onFix}
-              size="sm"
+              size="xs"
               type="button"
               variant="ghost"
             >
@@ -518,12 +517,10 @@ function OutboundBadge({
       );
     default:
       return (
+        // Blocked traffic reads red here and in the connection list alike.
         <Badge
-          className={cn(
-            "bg-background",
-            target.kind === "block" && "border-danger-border text-danger",
-          )}
-          variant="outline"
+          className={cn(target.kind !== "block" && "bg-background")}
+          variant={target.kind === "block" ? "danger" : "outline"}
         >
           {t(OUTBOUND_LABEL_KEYS[target.kind])}
         </Badge>

@@ -574,7 +574,8 @@
 }
 .app-sidebar[data-collapsed="true"] .sidebar-toolbar {
   justify-content: flex-end;
-  padding-inline: calc((var(--sidebar-collapsed-width) - 1px - 26px) / 2);
+  /* Centers the 32 px toggle in the narrow sidebar. */
+  padding-inline: calc((var(--sidebar-collapsed-width) - 1px - 32px) / 2);
 }
 /* The narrow sidebar cannot hold the brand beside the expand button; the button stays. */
 .app-sidebar[data-collapsed="true"] .sidebar-brand {

@@ -154,6 +154,9 @@ for (const viewport of [
           await expect(
             table.getByRole("button", { name, exact: true }),
           ).toBeVisible();
+        // Where each connection went is a column of its own.
+        await expect(table.locator('[data-route="proxy"]')).toHaveText("Tokyo");
+        await expect(table.locator('[data-route="direct"]')).toHaveCount(1);
         await noHorizontalScroll(region);
         await noHorizontalScroll(table);
         await page.screenshot({

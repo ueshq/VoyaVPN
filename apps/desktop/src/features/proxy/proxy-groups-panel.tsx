@@ -5,6 +5,7 @@ import { Layers, LoaderCircle, Zap } from "lucide-react";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
+import { EmptyState } from "@voya/ui/components/empty-state";
 import { cn } from "@voya/ui/lib/utils";
 import { getErrorMessage } from "@voya/utils/error";
 import {
@@ -50,30 +51,30 @@ export function ProxyGroupsPanel() {
   const [testing, setTesting] = useState(false);
 
   if (!connected || !active) {
+    // The same empty state as the live connections tab beside it.
     return (
-      <div
-        className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center"
+      <EmptyState
+        actions={
+          connected ? (
+            <Button
+              onClick={() => setActiveTab("profiles")}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {t("proxy.groups.openNodes")}
+            </Button>
+          ) : (
+            <Button onClick={() => setActiveTab("home")} size="sm" type="button" variant="outline">
+              {t("activity.goHome")}
+            </Button>
+          )
+        }
+        className="h-full content-center"
         data-testid="proxy-groups-empty"
-      >
-        <Layers aria-hidden="true" className="size-8 text-muted-foreground" />
-        <p className="max-w-sm text-sm text-muted-foreground">
-          {t(connected ? "proxy.groups.noActiveGroup" : "proxy.groups.connectToView")}
-        </p>
-        {connected ? (
-          <Button
-            onClick={() => setActiveTab("profiles")}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {t("proxy.groups.openNodes")}
-          </Button>
-        ) : (
-          <Button onClick={() => setActiveTab("home")} size="sm" type="button" variant="outline">
-            {t("activity.goHome")}
-          </Button>
-        )}
-      </div>
+        icon={Layers}
+        title={t(connected ? "proxy.groups.noActiveGroup" : "proxy.groups.connectToView")}
+      />
     );
   }
 

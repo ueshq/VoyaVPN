@@ -16,6 +16,10 @@ const badgeVariants = cva(
         outline: "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
         connected:
           "border-transparent bg-connected text-connected-foreground [a&]:hover:bg-connected/90 focus-visible:ring-connected/40",
+        // Quiet status tints: feedback text on its own background token, AA in both themes.
+        warning: "border-transparent bg-warning-bg text-warning",
+        success: "border-transparent bg-success-bg text-success",
+        danger: "border-transparent bg-danger-bg text-danger",
       },
     },
     defaultVariants: {

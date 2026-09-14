@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownToLine,
   ClipboardCopy,
-  Ellipsis,
   FileDown,
+  MoreHorizontal,
   ScrollText,
   Search,
   Trash2,
@@ -229,9 +229,14 @@ export function LogsPanel({
         <Menubar className="ms-auto h-auto border-0 bg-transparent p-0 shadow-none">
           <MenubarMenu>
             <MenubarTrigger asChild>
-              <Button size="sm" type="button" variant="ghost">
-                <Ellipsis className="size-4" aria-hidden="true" />
-                {t("proxy.moreActions")}
+              <Button
+                aria-label={t("proxy.moreActions")}
+                size="icon-sm"
+                title={t("proxy.moreActions")}
+                type="button"
+                variant="ghost"
+              >
+                <MoreHorizontal className="size-4" aria-hidden="true" />
               </Button>
             </MenubarTrigger>
             <MenubarContent align="end">
@@ -386,10 +391,11 @@ function formatTimestamp(receivedAt: number) {
 
 function logLevelClassName(level: LogLevel) {
   switch (level) {
+    // The same quiet tints as the warning and danger badges elsewhere.
     case "warn":
-      return "border-warning-bold/30 bg-warning-bg text-warning";
+      return "border-transparent bg-warning-bg text-warning";
     case "error":
-      return "border-destructive/30 bg-destructive/10 text-danger";
+      return "border-transparent bg-danger-bg text-danger";
     default:
       return "border-transparent bg-transparent text-muted-foreground";
   }

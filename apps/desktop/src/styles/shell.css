@@ -50,6 +50,13 @@
   .sidebar-toolbar {
   padding-inline-start: 84px;
 }
+/* Windows draws its caption buttons in a 40 px band across the window. The
+   sidebar toolbar starts below that band too, so its toggle lines up with the
+   page titles instead of sitting in the caption row. */
+.app-shell[data-window-chrome="windows"] .sidebar-toolbar {
+  height: 120px;
+  padding-top: 40px;
+}
 .app-shell[data-window-chrome="macos"]
   .app-sidebar[data-collapsed="true"]
   .sidebar-toolbar {

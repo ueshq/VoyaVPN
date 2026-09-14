@@ -962,7 +962,8 @@
     "ruleFinal": "未符合任何規則（預設出站）",
     "statusLoading": "正在讀取連線狀態…",
     "loadingConnections": "正在載入連線",
-    "refreshNow": "立即重新整理"
+    "refreshNow": "立即重新整理",
+    "route": "線路"
   },
   "nodeGroups": {
     "local": "本地節點",

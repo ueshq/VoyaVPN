@@ -5,9 +5,10 @@
 // state. Row heights are deliberately NOT encoded here — they live with the
 // callers because each virtualizer's `estimateSize` depends on them.
 
-// Sticky header band: an opaque panel-colored surface with uppercase muted
-// labels — quieter than the body so the data leads.
-export const dataTableHeader = "bg-surface-raised text-xs font-semibold uppercase text-muted-foreground";
+// Sticky header band: an opaque panel-colored surface with small muted labels
+// in sentence case (all caps only ever changed Latin text) — quieter than the
+// body so the data leads.
+export const dataTableHeader = "bg-surface-raised text-xs font-semibold text-muted-foreground";
 
 // Zebra body rows. Even rows take a faint neutral tint that stays visible on
 // the white light panel and the dark card alike; odd rows stay clear.

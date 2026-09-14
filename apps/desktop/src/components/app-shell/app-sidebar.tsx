@@ -1,5 +1,5 @@
 import type * as React from "react";
-import { Activity, ArrowDown, ArrowUp, Home, PanelLeft, PanelRight, Route, Settings, Shield } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, Home, PanelLeft, PanelRight, Route, Server, Settings } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@voya/ui/lib/utils";
@@ -20,10 +20,11 @@ export const SHELL_PANEL_ID = "shell-tabpanel";
 
 type NavItem = { icon: LucideIcon; titleKey: TranslationKey; value: ShellTab };
 
-// Keep every existing destination reachable in both sidebar widths.
+// Keep every existing destination reachable in both sidebar widths. Nodes are
+// servers; a shield would read as "protected".
 const navItems: NavItem[] = [
   { icon: Home, titleKey: "tabs.home", value: "home" },
-  { icon: Shield, titleKey: "tabs.profiles", value: "profiles" },
+  { icon: Server, titleKey: "tabs.profiles", value: "profiles" },
   { icon: Route, titleKey: "tabs.rules", value: "rules" },
   { icon: Activity, titleKey: "tabs.connections", value: "connections" },
   { icon: Settings, titleKey: "tabs.settings", value: "settings" },

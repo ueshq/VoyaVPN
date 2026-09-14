@@ -962,7 +962,8 @@
     "ruleFinal": "No rule matched (default route)",
     "statusLoading": "Reading the connection state…",
     "loadingConnections": "Loading connections",
-    "refreshNow": "Refresh now"
+    "refreshNow": "Refresh now",
+    "route": "Route"
   },
   "nodeGroups": {
     "local": "Local nodes",

@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Activity, ArrowDown, ArrowUp, Ellipsis, Inbox, LoaderCircle, RefreshCw, Search, Unplug } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, Inbox, LoaderCircle, MoreHorizontal, RefreshCw, Search, Unplug } from "lucide-react";
 
 import {
   AlertDialog,
@@ -32,7 +32,7 @@ import {
 } from "@voya/ui/components/menubar";
 import { Badge } from "@voya/ui/components/badge";
 import { Skeleton } from "@voya/ui/components/skeleton";
-import type { TranslationKey } from "@voya/i18n";
+import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { proxyCloseConnection, proxyListConnections } from "@/ipc/commands";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
@@ -43,14 +43,36 @@ import { useShellStore } from "@/stores/shell-store";
 import { PageHeader } from "@/components/app-shell/page-section";
 import { ConnectionDetails } from "./connection-details";
 import { connectionBytes, connectionKey } from "./connection-display";
+import { connectionRoute, type ConnectionRoute } from "./connection-route";
 
-type SortColumn = "host" | "process" | "traffic";
+type SortColumn = "host" | "process" | "route" | "traffic";
 type Selection = { connection: ProxyConnectionItem; ended: boolean };
-const GRID = "grid grid-cols-[minmax(0,1fr)_minmax(0,0.6fr)_8rem] gap-4";
+const GRID = "grid grid-cols-[minmax(0,1fr)_minmax(0,0.6fr)_minmax(0,0.6fr)_7rem] gap-4";
 // Room at the end of every row for its own disconnect button.
 const ACTION_SLOT = "w-8 shrink-0";
 const ROW_HEIGHT = 56;
 const emptySnapshot: ProxyConnectionsSnapshot = { connections: [], downloadTotal: null, uploadTotal: null };
+
+// Where a connection went is the question this page answers, so it is colored:
+// blue through the proxy, neutral straight out, red when blocked.
+const ROUTE_CHIP_CLASSES: Record<Exclude<ConnectionRoute["kind"], "unknown">, string> = {
+  block: "bg-danger-bg text-danger",
+  direct: "bg-surface-hovered text-muted-foreground",
+  proxy: "bg-accent-blue-light text-brand",
+};
+
+function routeLabel(route: ConnectionRoute, t: TranslationFunction) {
+  switch (route.kind) {
+    case "block":
+      return t("panes.routing.outboundBlock");
+    case "direct":
+      return t("panes.routing.outboundDirect");
+    case "proxy":
+      return route.node ?? t("panes.routing.outboundProxy");
+    default:
+      return "";
+  }
+}
 
 export function ConnectionsPanel({
   filter,
@@ -119,10 +141,12 @@ export function ConnectionsPanel({
       const comparison =
         sort.column === "traffic"
           ? (a.upload ?? 0) + (a.download ?? 0) - (b.upload ?? 0) - (b.download ?? 0)
-          : (a[sort.column] ?? "").localeCompare(b[sort.column] ?? "");
+          : sort.column === "route"
+            ? routeLabel(connectionRoute(a), t).localeCompare(routeLabel(connectionRoute(b), t))
+            : (a[sort.column] ?? "").localeCompare(b[sort.column] ?? "");
       return sort.ascending ? comparison : -comparison;
     });
-  }, [snapshot.connections, filter, sort]);
+  }, [snapshot.connections, filter, sort, t]);
 
   // Keep the last received details when a connection ends. Search results do
   // not determine liveness, and a missing ID still supports read-only details.
@@ -170,8 +194,10 @@ export function ConnectionsPanel({
   const headings: { column: SortColumn; label: string }[] = [
     { column: "host", label: t("activity.target") },
     { column: "process", label: t("activity.application") },
+    { column: "route", label: t("activity.route") },
     { column: "traffic", label: t("activity.traffic") },
   ];
+  const moreLabel = t("proxy.moreActions");
   // Whether the table is live: the stream can stop or fall behind while connected.
   const monitorBadge: { key: TranslationKey; live: boolean } =
     monitor.state === "running" && !stale
@@ -196,17 +222,17 @@ export function ConnectionsPanel({
     <div className="flex h-full min-h-0 min-w-0 flex-col outline-none" ref={panelRef} tabIndex={-1}>
       {!connected ? (
         <EmptyState
-          className="min-h-0 flex-1 content-center"
-          icon={disconnected ? Activity : LoaderCircle}
-          iconClassName={disconnected ? undefined : "animate-spin"}
-          title={disconnected ? t("activity.connectToView") : waitingLabel}
-          description={
+          actions={
             disconnected ? (
               <Button onClick={() => useShellStore.getState().setActiveTab("home")} variant="outline" type="button">
                 {t("activity.goHome")}
               </Button>
             ) : undefined
           }
+          className="min-h-0 flex-1 content-center"
+          icon={disconnected ? Activity : LoaderCircle}
+          iconClassName={disconnected ? undefined : "animate-spin"}
+          title={disconnected ? t("activity.connectToView") : waitingLabel}
         />
       ) : (
         <>
@@ -247,9 +273,8 @@ export function ConnectionsPanel({
             <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
               <MenubarMenu>
                 <MenubarTrigger asChild>
-                  <Button size="sm" type="button" variant="ghost">
-                    <Ellipsis className="size-4" aria-hidden="true" />
-                    {t("proxy.moreActions")}
+                  <Button aria-label={moreLabel} size="icon-sm" title={moreLabel} type="button" variant="ghost">
+                    <MoreHorizontal className="size-4" aria-hidden="true" />
                   </Button>
                 </MenubarTrigger>
                 <MenubarContent align="end">
@@ -334,6 +359,7 @@ export function ConnectionsPanel({
                   if (!connection) return null;
                   const connectionId = connection.id;
                   const target = connection.host || connection.destination || "—";
+                  const route = connectionRoute(connection);
                   return (
                     <div
                       key={connectionKey(connection)}
@@ -358,6 +384,22 @@ export function ConnectionsPanel({
                     >
                       <span className="truncate font-medium">{connection.host || "—"}</span>
                       <span className="truncate text-muted-foreground">{connection.process || "—"}</span>
+                      <span className="min-w-0">
+                        {route.kind === "unknown" ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <span
+                            className={cn(
+                              "inline-flex h-5 max-w-full items-center rounded-md px-1.5 text-xs font-medium",
+                              ROUTE_CHIP_CLASSES[route.kind],
+                            )}
+                            data-route={route.kind}
+                            title={routeLabel(route, t)}
+                          >
+                            <span className="truncate">{routeLabel(route, t)}</span>
+                          </span>
+                        )}
+                      </span>
                       <span className="space-y-0.5 text-xs tabular-nums text-muted-foreground">
                         <span className="flex items-center gap-1.5">
                           <ArrowUp className="size-3" aria-hidden="true" />
@@ -375,10 +417,10 @@ export function ConnectionsPanel({
                       {connectionId ? (
                         <Button
                           aria-label={t("activity.disconnectRow", { target })}
-                          className="size-8 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                           disabled={closeMutation.isPending}
                           onClick={() => closeMutation.mutate(connectionId)}
-                          size="icon"
+                          size="icon-sm"
                           title={t("activity.disconnectRow", { target })}
                           type="button"
                           variant="ghost"
@@ -393,15 +435,15 @@ export function ConnectionsPanel({
               </div>
             ) : hasSnapshot ? (
               <EmptyState
-                icon={Inbox}
-                title={t(filter.trim() ? "activity.noMatches" : "panes.proxyConnections.empty")}
-                description={
+                actions={
                   filter.trim() ? (
                     <Button type="button" variant="outline" size="sm" onClick={() => onFilterChange("")}>
                       {t("activity.clearSearch")}
                     </Button>
                   ) : undefined
                 }
+                icon={Inbox}
+                title={t(filter.trim() ? "activity.noMatches" : "panes.proxyConnections.empty")}
               />
             ) : null}
           </div>

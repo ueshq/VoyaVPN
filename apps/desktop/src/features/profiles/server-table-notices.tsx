@@ -50,7 +50,7 @@ export function ServerTableNotices({ controller }: { controller: NodeNoticesCont
         </InlinePageError>
       ) : null}
       {operationMessage ? (
-        <PageSurface role="status" className="flex shrink-0 items-start gap-2 bg-connected/10 px-4 py-2 text-sm text-success">
+        <PageSurface role="status" className="flex shrink-0 items-start gap-2 bg-success-bg px-4 py-2 text-sm text-success">
           <span className="min-w-0 flex-1">{operationMessage}</span>
           <DismissButton label={t("common.dismiss")} onClick={() => setOperationMessage(null)} />
         </PageSurface>

@@ -361,6 +361,21 @@ describe("ConnectionsPanel", () => {
     expect(screen.queryByTestId("connections-summary")).not.toBeInTheDocument();
   });
 
+  it("shows where each connection went in a route column of its own", async () => {
+    seed([
+      connection(0, { chains: ["PROXY", "Tokyo"] }),
+      connection(1, { chains: ["DIRECT"] }),
+      connection(2, { chains: ["REJECT"] }),
+    ]);
+    renderConnections();
+    const [proxied, direct, blocked] = await screen.findAllByTestId("connection-row");
+    expect(screen.getByRole("button", { name: "Route" })).toBeInTheDocument();
+    // Through the proxy names the node it left from; the others name the outbound.
+    expect(proxied!.querySelector('[data-route="proxy"]')).toHaveTextContent("Tokyo");
+    expect(direct!.querySelector('[data-route="direct"]')).toHaveTextContent(/\S/);
+    expect(blocked!.querySelector('[data-route="block"]')).toHaveTextContent(/\S/);
+  });
+
   it("keeps thousands of connections virtualized", async () => {
     seed(Array.from({ length: 2000 }, (_, index) => connection(index)));
     renderConnections();
