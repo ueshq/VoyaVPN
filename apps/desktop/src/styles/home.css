@@ -7,18 +7,70 @@
   background: var(--surface-canvas);
   color: var(--foreground);
 }
-.home-world-map {
+/* The map fills the area above the node card and never adds scroll overflow;
+   its own gradient mask fades the southern edge away. */
+.home-map-layer {
   position: absolute;
   z-index: -1;
+  inset: 0 0 clamp(96px, 18vh, 150px);
+  overflow: hidden;
   pointer-events: none;
   user-select: none;
-  top: clamp(150px, 22vh, 180px);
-  left: 3%;
-  width: 94%;
-  height: auto;
 }
-.dark .home-world-map {
-  opacity: 0.09;
+.home-world-map {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(94%, 1100px);
+  aspect-ratio: 1078 / 466;
+  transform: translate(-50%, -44%);
+}
+.home-world-map::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--map-land);
+  -webkit-mask: url("../assets/world-map.svg") center / 100% 100% no-repeat;
+  mask: url("../assets/world-map.svg") center / 100% 100% no-repeat;
+}
+.home-map-marker {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 9999px;
+}
+.home-map-marker[data-state="connected"] {
+  background: var(--connected);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--connected) 25%, transparent);
+}
+.home-map-marker[data-state="connected"]::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border: 2px solid var(--connected);
+  border-radius: inherit;
+  opacity: 0;
+  animation: home-map-pulse 2.4s ease-out infinite;
+}
+.home-map-marker[data-state="selected"] {
+  border: 2px solid var(--primary);
+  background: var(--surface-canvas);
+}
+@keyframes home-map-pulse {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.4);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-map-marker[data-state="connected"]::after {
+    animation: none;
+  }
 }
 .home-content {
   display: flex;
@@ -27,12 +79,15 @@
   align-items: center;
   padding: clamp(32px, 8vh, 64px) 24px clamp(24px, 5vh, 40px);
 }
+/* The hero takes the space above the node card and centers in it. */
 .home-hero {
   display: flex;
+  flex: 1;
   flex-direction: column;
+  justify-content: center;
   align-items: center;
   width: 100%;
-  margin-bottom: 48px;
+  margin-bottom: 32px;
 }
 .home-power {
   position: relative;
@@ -43,17 +98,23 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 7px;
-  border: 4px solid var(--border);
+  gap: 8px;
+  border: 2px solid var(--primary);
   border-radius: 50%;
-  background: var(--bg-selected);
+  background: var(--card);
   color: var(--text-brand);
+  box-shadow: var(--elevation-overlay);
   font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
   transition:
     box-shadow var(--duration-medium),
     background var(--duration-medium),
     transform var(--duration-medium);
+}
+.home-power:hover:not(:disabled) {
+  transform: translateY(-2px);
+  background: var(--bg-selected);
 }
 .home-power-connected {
   border-color: var(--connected);
@@ -61,13 +122,14 @@
   background: var(--connected);
   box-shadow: var(--connected-glow);
 }
-.home-power:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: var(--elevation-overlay);
-}
-/* Lifting a connected button must not trade its green glow for a neutral shadow. */
+/* Lifting a connected button must not trade its green for the idle wash or its glow for a neutral shadow. */
 .home-power-connected:hover:not(:disabled) {
+  background: var(--connected);
   box-shadow: var(--connected-glow), var(--elevation-overlay);
+}
+.home-power-cleanup {
+  border-color: var(--icon-warning);
+  color: var(--text-warning);
 }
 .home-power:disabled {
   cursor: wait;
@@ -75,24 +137,60 @@
 }
 .home-power-progress {
   position: absolute;
-  inset: -5px;
+  inset: -6px;
   border: 3px solid transparent;
   border-top-color: var(--text-brand);
   border-radius: 50%;
   animation: spin 1.2s linear infinite;
 }
+.home-status {
+  margin-top: 20px;
+  color: var(--foreground);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  text-align: center;
+}
+.home-status[data-state="connected"] {
+  color: var(--text-success);
+}
+.home-status[data-state="cleanupPending"] {
+  color: var(--text-warning);
+}
+.home-status[data-state="connecting"],
+.home-status[data-state="disconnecting"] {
+  color: var(--muted-foreground);
+}
+.home-status[data-state="empty"] {
+  max-width: 360px;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+}
+/* One quiet strip, so the figures read as a group instead of floating on the map. */
 .home-metrics {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 18px 48px;
   margin-top: 16px;
+  padding: 8px 0;
+  border-radius: var(--radius-xl);
+  background: var(--card);
+  box-shadow: var(--elevation-raised);
   font-size: 14px;
 }
 .home-metrics > div {
   display: flex;
-  align-items: baseline;
-  gap: 9px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 140px;
+  min-height: 28px;
+  padding: 0 20px;
+}
+.home-metrics > div + div {
+  border-inline-start: 1px solid var(--border-subtle);
 }
 .home-metrics dt {
   color: var(--muted-foreground);
@@ -104,7 +202,7 @@
   font-variant-numeric: tabular-nums;
 }
 .home-diagnostic {
-  margin-top: 10px;
+  margin-top: 12px;
   max-width: 520px;
   color: var(--muted-foreground);
   font-size: 12px;
@@ -369,7 +467,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  margin: 0 0 12px;
+  margin: 0;
   color: var(--foreground);
   font-weight: 500;
   white-space: nowrap;
@@ -437,6 +535,7 @@
   grid-area: 2 / 1;
   min-width: 0;
   align-self: end;
+  margin-top: 12px;
   overflow: hidden;
   transition-property: opacity;
 }
@@ -449,13 +548,13 @@
 }
 .sidebar-traffic-title {
   color: var(--muted-foreground);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   white-space: nowrap;
 }
 .sidebar-traffic-row {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   margin-top: 6px;
 }
 .sidebar-traffic-row svg {
@@ -522,11 +621,6 @@
 .app-sidebar[data-collapsed="true"] .sidebar-traffic-collapsed {
   opacity: 1;
 }
-@media (min-height: 760px) {
-  .home-hero {
-    margin-bottom: 56px;
-  }
-}
 @media (max-height: 700px) {
   .home-content {
     padding: 16px;
@@ -534,6 +628,11 @@
   .home-power {
     width: 120px;
     height: 120px;
+  }
+  .home-status {
+    margin-top: 12px;
+    font-size: 16px;
+    line-height: 24px;
   }
   .home-metrics {
     margin-top: 8px;
@@ -559,7 +658,6 @@
 /* Both screens share the node surface; only Home constrains its width. */
 .home-node-card {
   max-width: 672px;
-  margin-top: auto;
 }
 .profile-card-list {
   container-type: inline-size;

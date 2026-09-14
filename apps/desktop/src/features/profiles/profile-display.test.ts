@@ -2,9 +2,19 @@ import { describe, expect, it } from "vitest";
 
 import type { ProfileTransport } from "@/ipc/bindings";
 
-import { profileNameWithoutFlag, profileTransportName } from "./profile-display";
+import { profileFlagCountryCode, profileNameWithoutFlag, profileTransportName } from "./profile-display";
 
 describe("profile display projections", () => {
+  it.each([
+    ["🇯🇵 Tokyo", "JP"],
+    ["Backup 🇺🇸 then 🇬🇧", "US"],
+    ["Tokyo", null],
+    ["", null],
+    [null, null],
+  ] as const)("reads the country hinted by a flag in %j", (name, expected) => {
+    expect(profileFlagCountryCode(name)).toBe(expected);
+  });
+
   it.each([
     ["🇯🇵 Tokyo", "Tokyo"],
     [" 🇯🇵 ", " 🇯🇵 "],

@@ -103,7 +103,8 @@
     "modePendingReason": "正在切换模式，请稍候",
     "checkIpNeedsConnection": "连接后可检测出口 IP",
     "checkIpRetry": "检测失败，点击重试",
-    "shortcutHint": "快捷键：{{shortcut}}"
+    "shortcutHint": "快捷键：{{shortcut}}",
+    "emptyGuide": "添加订阅或粘贴链接即可开始使用"
   },
   "logCodes": {
     "connected": "内核守护进程已启动",

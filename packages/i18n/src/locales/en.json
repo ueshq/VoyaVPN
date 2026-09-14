@@ -103,7 +103,8 @@
     "modePendingReason": "Switching modes, please wait",
     "checkIpNeedsConnection": "Connect to check the exit IP",
     "checkIpRetry": "Check failed, try again",
-    "shortcutHint": "Shortcut: {{shortcut}}"
+    "shortcutHint": "Shortcut: {{shortcut}}",
+    "emptyGuide": "Add a subscription or paste a link to get started"
   },
   "logCodes": {
     "connected": "Core supervisor started",

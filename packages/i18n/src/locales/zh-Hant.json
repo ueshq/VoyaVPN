@@ -103,7 +103,8 @@
     "modePendingReason": "正在切換模式，請稍候",
     "checkIpNeedsConnection": "連線後可檢測出口 IP",
     "checkIpRetry": "檢測失敗，點擊重試",
-    "shortcutHint": "快速鍵：{{shortcut}}"
+    "shortcutHint": "快速鍵：{{shortcut}}",
+    "emptyGuide": "新增訂閱或貼上連結即可開始使用"
   },
   "logCodes": {
     "connected": "核心守護程序已啟動",

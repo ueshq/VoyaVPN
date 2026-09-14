@@ -105,9 +105,16 @@ for (const { layout, language } of [
     await expect(page.getByTestId("home-connection-duration")).toContainText(
       "00:24:",
     );
-    await expect(page.locator(".home-world-map")).toHaveJSProperty(
-      "naturalWidth",
-      1078,
+    // The map is a themed mask, and it marks where the connection leaves.
+    expect(
+      await page.locator(".home-world-map").evaluate((element) => {
+        const land = getComputedStyle(element, "::before");
+        return land.maskImage || land.webkitMaskImage;
+      }),
+    ).toContain("world-map");
+    await expect(page.locator('.home-map-marker[data-country="JP"]')).toHaveAttribute(
+      "data-state",
+      "connected",
     );
     await page.evaluate(async () => {
       await document.fonts.ready;

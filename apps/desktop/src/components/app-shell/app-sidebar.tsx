@@ -6,11 +6,12 @@ import { cn } from "@voya/ui/lib/utils";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import type { CoreState, TitleBarLayout } from "@/ipc/bindings";
+import type { TitleBarLayout } from "@/ipc/bindings";
 import { formatBytesPerSecond } from "@voya/utils/formatting";
 import { type ShellTab, useShellStore } from "@/stores/shell-store";
 import { BrandMark } from "@/components/brand-mark";
 
+import { CORE_STATE_TRANSLATION_KEYS } from "./core-state-labels";
 import { pageShortcutAria, pageShortcutLabel } from "./use-shell-shortcuts";
 
 // `id` of the content `tabpanel` the nav controls. Exported so the shell can tag
@@ -27,14 +28,6 @@ const navItems: NavItem[] = [
   { icon: Activity, titleKey: "tabs.connections", value: "connections" },
   { icon: Settings, titleKey: "tabs.settings", value: "settings" },
 ];
-
-const CORE_STATE_TRANSLATION_KEYS = {
-  cleanupPending: "home.cleanupPending",
-  connected: "status.connected",
-  connecting: "status.connecting",
-  disconnected: "status.disconnected",
-  disconnecting: "status.disconnecting",
-} as const satisfies Record<CoreState, TranslationKey>;
 
 export function AppSidebar({ titleBarLayout }: { titleBarLayout: TitleBarLayout }) {
   const { t } = useI18n();
@@ -120,15 +113,16 @@ export function AppSidebar({ titleBarLayout }: { titleBarLayout: TitleBarLayout 
   );
 }
 
-// Always-mounted footer with the visible connection state and up/down rates,
-// absorbing what the removed bottom status bar used to show. Speeds read the
-// statistics transient stream and render 0 B/s while it is quiet or disabled.
+// Always-mounted footer with the visible connection state and, while connected,
+// the up/down rates from the statistics transient stream.
 function SidebarFooter() {
   const { t } = useI18n();
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const statistics = useRuntimeEventStore((state) => state.statistics);
 
   const state = coreState?.state ?? "disconnected";
+  // Rates only mean something on a live connection; otherwise the state says it all.
+  const connected = state === "connected";
   const upload = formatBytesPerSecond(statistics?.uploadBytesPerSecond ?? 0);
   const download = formatBytesPerSecond(statistics?.downloadBytesPerSecond ?? 0);
 
@@ -145,24 +139,28 @@ function SidebarFooter() {
         <span aria-hidden="true" className="sidebar-status-dot" />
         <span className="sidebar-status-label">{t(CORE_STATE_TRANSLATION_KEYS[state])}</span>
       </p>
-      <span className="sr-only">{t("status.upload", { speed: upload })}</span>
-      <span className="sr-only">{t("status.download", { speed: download })}</span>
-      {/* Overlapping layouts crossfade without moving the footer or duplicating its accessible text. */}
-      {(["expanded", "collapsed"] as const).map((layout) => (
-        <div aria-hidden="true" className={`sidebar-traffic-${layout}`} key={layout}>
-          {layout === "expanded" && <p className="sidebar-traffic-title">{t("sidebar.traffic")}</p>}
-          <div className="sidebar-traffic-row">
-            <ArrowUp aria-hidden="true" className="size-4" />
-            {layout === "expanded" && <span className="sidebar-traffic-label">{t("sidebar.upload")}{" "}</span>}
-            <span className="sidebar-traffic-value">{upload}</span>
-          </div>
-          <div className="sidebar-traffic-row">
-            <ArrowDown aria-hidden="true" className="size-4" />
-            {layout === "expanded" && <span className="sidebar-traffic-label">{t("sidebar.download")}{" "}</span>}
-            <span className="sidebar-traffic-value">{download}</span>
-          </div>
-        </div>
-      ))}
+      {connected ? (
+        <>
+          <span className="sr-only">{t("status.upload", { speed: upload })}</span>
+          <span className="sr-only">{t("status.download", { speed: download })}</span>
+          {/* Overlapping layouts crossfade without moving the footer or duplicating its accessible text. */}
+          {(["expanded", "collapsed"] as const).map((layout) => (
+            <div aria-hidden="true" className={`sidebar-traffic-${layout}`} key={layout}>
+              {layout === "expanded" && <p className="sidebar-traffic-title">{t("sidebar.traffic")}</p>}
+              <div className="sidebar-traffic-row">
+                <ArrowUp aria-hidden="true" className="size-4" />
+                {layout === "expanded" && <span className="sidebar-traffic-label">{t("sidebar.upload")}{" "}</span>}
+                <span className="sidebar-traffic-value">{upload}</span>
+              </div>
+              <div className="sidebar-traffic-row">
+                <ArrowDown aria-hidden="true" className="size-4" />
+                {layout === "expanded" && <span className="sidebar-traffic-label">{t("sidebar.download")}{" "}</span>}
+                <span className="sidebar-traffic-value">{download}</span>
+              </div>
+            </div>
+          ))}
+        </>
+      ) : null}
     </div>
   );
 }

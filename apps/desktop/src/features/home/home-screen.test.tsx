@@ -246,6 +246,47 @@ describe("HomeScreen", () => {
     expect(screen.queryByRole("group", { name: "Traffic mode" })).not.toBeInTheDocument();
   });
 
+  it("states the connection in words and marks where traffic leaves", async () => {
+    runtimeMock.state.coreState = connectedStatus;
+    mockProfileList([
+      makeActiveProfile({ id: "node-tokyo", remarks: "🇯🇵 Tokyo Edge" }),
+    ]);
+    const { container } = renderHome();
+    await screen.findByRole("heading", { name: "Tokyo Edge" });
+    const status = screen.getByTestId("home-status");
+    expect(status).toHaveAttribute("role", "status");
+    expect(status).toHaveTextContent("Connected");
+    // No country was measured, so the flag in the name places the marker.
+    expect(
+      container.querySelector('.home-map-marker[data-country="JP"]'),
+    ).toHaveAttribute("data-state", "connected");
+  });
+
+  it("marks the selected node's country before connecting", async () => {
+    mockProfileList([
+      makeActiveProfile({ id: "active", remarks: "🇸🇬 Singapore" }),
+    ]);
+    const { container } = renderHome();
+    await screen.findByRole("heading", { name: "Singapore" });
+    expect(screen.getByTestId("home-status")).toHaveTextContent("Disconnected");
+    expect(
+      container.querySelector('.home-map-marker[data-country="SG"]'),
+    ).toHaveAttribute("data-state", "selected");
+  });
+
+  it("guides an empty home without a status headline or a map marker", async () => {
+    mockProfileList([]);
+    const { container } = renderHome();
+    await waitFor(() => expect(connectButton()).toBeEnabled());
+    expect(screen.getByTestId("home-status")).toHaveTextContent(
+      "Add a subscription or paste a link to get started",
+    );
+    // Adding is not connecting, so the button does not show a power glyph.
+    expect(connectButton().querySelector(".lucide-plus")).not.toBeNull();
+    expect(connectButton().querySelector(".lucide-power")).toBeNull();
+    expect(container.querySelector(".home-map-marker")).toBeNull();
+  });
+
   it("points at the Rules page while global mode skips every rule", async () => {
     const user = userEvent.setup();
     const settings = makeAppSettings();
@@ -355,7 +396,8 @@ describe("HomeScreen", () => {
     runtimeMock.state.coreState = connectedStatus;
     const view = renderHome();
     expect(screen.queryByText("Protection status unknown")).not.toBeInTheDocument();
-    expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+    // Home states the connection itself, never a claim about protection.
+    expect(screen.getByTestId("home-status")).toHaveTextContent("Connected");
     expect(connectButton()).toHaveAccessibleName("Disconnect");
     expect(ipcMock.systemProxyStatus).not.toHaveBeenCalled();
     view.unmount();

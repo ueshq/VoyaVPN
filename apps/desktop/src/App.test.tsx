@@ -432,8 +432,8 @@ describe("App", () => {
       "Settings",
     ]);
     expect(footer).toHaveTextContent("Disconnected");
-    expect(footer).toHaveTextContent("Up 0 B/s");
-    expect(footer).toHaveTextContent("Down 0 B/s");
+    // Rates appear only while connected; a disconnected footer is just its state.
+    expect(footer).not.toHaveTextContent("B/s");
     expect(screen.queryByTestId("status-bar")).not.toBeInTheDocument();
     expect(
       within(sidebar).queryByRole("button", { name: "Settings" }),

@@ -1,4 +1,5 @@
-import { ArrowRight, Globe, Layers, Power, RotateCcw } from "lucide-react";
+import { ArrowRight, Globe, Layers, Plus, Power, RotateCcw, Server } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -6,20 +7,23 @@ import { Button } from "@voya/ui/components/button";
 import { cn } from "@voya/ui/lib/utils";
 import { getErrorMessage } from "@voya/utils/error";
 
-import worldMap from "@/assets/world-map.svg";
+import { CORE_STATE_TRANSLATION_KEYS } from "@/components/app-shell/core-state-labels";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
 import { DisabledReason } from "@/components/disabled-reason";
 import { connectionShortcutLabel } from "@/components/app-shell/use-shell-shortcuts";
 import { NodeCountryIcon } from "@/components/node-country-icon";
 import { getProtocolLabel } from "@/features/profiles/profile-constants";
-import { profileNameWithoutFlag } from "@/features/profiles/profile-display";
+import { profileFlagCountryCode, profileNameWithoutFlag } from "@/features/profiles/profile-display";
 import { POLICY_GROUP_STRATEGY_KEYS } from "@/features/profiles/policy-group-labels";
 import { useSavedTrafficMode } from "@/features/routing/use-traffic-mode";
+import type { ProfileListEntry } from "@/ipc/bindings";
 import { type RuntimeAction } from "@/stores/runtime-action-store";
 import { useShellStore } from "@/stores/shell-store";
 
 import { ConnectedInfo } from "./connected-info";
 import { ExitIpMetric } from "./exit-ip-metric";
+import { HomeWorldMap, type HomeMapMarker } from "./home-world-map";
+import { useConnectionIp } from "./use-connection-ip";
 import { useHomeRuntime } from "./use-home-runtime";
 
 const ACTION_FAILED_KEYS = {
@@ -28,9 +32,15 @@ const ACTION_FAILED_KEYS = {
   restart: "home.actionFailed.restart",
 } as const satisfies Record<RuntimeAction, TranslationKey>;
 
+/** A measured country first; a flag in the node name is only a provisional hint. */
+function entryCountry(entry: ProfileListEntry | null | undefined) {
+  return entry ? (entry.metrics.countryCode ?? profileFlagCountryCode(entry.profile.remarks)) : null;
+}
+
 export function HomeScreen() {
   const { t } = useI18n();
   const home = useHomeRuntime(t);
+  const { ipQuery } = useConnectionIp();
   const navigateToNodes = () =>
     useShellStore.getState().setActiveTab("profiles", true);
   const openLogs = () => useShellStore.getState().openSettings("advanced");
@@ -54,6 +64,9 @@ export function HomeScreen() {
         (member) => member.profileId === home.groupRuntime?.nowProfileId,
       ) ?? null)
     : null;
+  const groupNowEntry = groupNow
+    ? (home.profiles.find((entry) => entry.profile.id === groupNow.profileId) ?? null)
+    : null;
   const groupVia = groupNow
     ? t("home.groupVia", {
         node: profileNameWithoutFlag(groupNow.remarks) || groupNow.profileId,
@@ -73,6 +86,19 @@ export function HomeScreen() {
     : home.nodeEntry && home.nodeEntry.metrics.delayMs > 0
       ? home.nodeEntry.metrics.delayMs
       : null;
+  // While connected the map shows where traffic leaves (the checked exit IP
+  // wins); before that, where the selected node would take it. A group has no
+  // single country until one of its members is running.
+  const markerCountry = noNodes
+    ? null
+    : home.connected
+      ? (ipQuery.data?.countryCode ?? entryCountry(group ? groupNowEntry : home.nodeEntry))
+      : group
+        ? null
+        : entryCountry(home.nodeEntry);
+  const marker: HomeMapMarker | null = markerCountry
+    ? { countryCode: markerCountry, state: home.connected ? "connected" : "selected" }
+    : null;
 
   return (
     <section
@@ -80,12 +106,7 @@ export function HomeScreen() {
       className="home-screen"
       data-testid="home-screen"
     >
-      <img
-        alt=""
-        aria-hidden="true"
-        className="home-world-map"
-        src={worldMap}
-      />
+      <HomeWorldMap marker={marker} />
       <div className="home-content">
         <div className="home-hero">
           {/* The spinner explains a connect in progress; a mode switch needs words. */}
@@ -93,6 +114,7 @@ export function HomeScreen() {
             reason={home.modePending && !home.inProgress ? t("home.modePendingReason") : undefined}
           >
           <ConnectButton
+            icon={noNodes ? Plus : needsSelection ? Server : Power}
             label={
               noNodes
                 ? t("panes.profiles.toolbar.addNode")
@@ -116,6 +138,15 @@ export function HomeScreen() {
             cleanupPending={home.state === "cleanupPending"}
           />
           </DisabledReason>
+          {/* The button names an action; this line says where the connection stands. */}
+          <p
+            className="home-status"
+            data-state={noNodes ? "empty" : home.state}
+            data-testid="home-status"
+            role="status"
+          >
+            {noNodes ? t("home.emptyGuide") : t(CORE_STATE_TRANSLATION_KEYS[home.state])}
+          </p>
           {!noNodes ? (
             <ConnectedInfo delayMs={delayMs} t={t}>
               <ExitIpMetric t={t} />
@@ -254,6 +285,7 @@ export function HomeScreen() {
 }
 
 function ConnectButton({
+  icon: Icon,
   label,
   busy,
   cleanupPending = false,
@@ -262,6 +294,8 @@ function ConnectButton({
   onPrimaryAction,
   t,
 }: {
+  /** Power for connecting; Plus or Server when the button leads elsewhere. */
+  icon: LucideIcon;
   label?: string;
   busy: boolean;
   cleanupPending?: boolean;
@@ -282,7 +316,11 @@ function ConnectButton({
       aria-busy={busy || undefined}
       aria-label={action}
       aria-pressed={connected}
-      className={cn("home-power", connected && "home-power-connected")}
+      className={cn(
+        "home-power",
+        connected && "home-power-connected",
+        cleanupPending && "home-power-cleanup",
+      )}
       data-testid="home-connect-button"
       disabled={busy}
       onClick={onPrimaryAction}
@@ -293,7 +331,7 @@ function ConnectButton({
       {inProgress || busy ? (
         <span aria-hidden="true" className="home-power-progress" />
       ) : null}
-      <Power aria-hidden="true" className="size-11" strokeWidth={1.9} />
+      <Icon aria-hidden="true" className="size-11" strokeWidth={1.9} />
       <span>
         {connected && !cleanupPending ? t("home.disconnectLabel") : action}
       </span>

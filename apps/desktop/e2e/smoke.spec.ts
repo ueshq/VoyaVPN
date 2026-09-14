@@ -93,7 +93,8 @@ test("loads the app shell and opens in-shell settings", async ({ page }) => {
   await expect(page.getByTestId("sidebar-footer")).toContainText(
     "Disconnected",
   );
-  await expect(page.getByTestId("sidebar-footer")).toContainText("Up 0 B/s");
+  // Rates appear only while connected.
+  await expect(page.getByTestId("sidebar-footer")).not.toContainText("B/s");
   await expect(page.getByRole("tab", { name: "Home" })).toHaveAttribute(
     "aria-selected",
     "true",

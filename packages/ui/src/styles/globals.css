@@ -86,6 +86,8 @@
   /* Page canvas behind content panels. Components keep --background as their white
      fill; only page containers paint the canvas, so light panels read as raised cards. */
   --surface-canvas: #f6f8fa;
+  /* Home world map land: Primer base neutral-4, a step darker than the canvas. */
+  --map-land: #e0e6eb;
   --surface-overlay: var(--popover);
   --surface-hovered: rgb(129 139 152 / 0.1);
   --surface-pressed: rgb(129 139 152 / 0.15);
@@ -239,6 +241,8 @@
   --surface-sunken: #151b23;
   --surface-raised: var(--card);
   --surface-canvas: var(--background);
+  /* Home world map land: Primer base neutral-3 on the dark canvas. */
+  --map-land: #212830;
   --surface-overlay: var(--popover);
   --surface-hovered: rgb(101 108 118 / 0.2);
   --surface-pressed: rgb(101 108 118 / 0.25);
