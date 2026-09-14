@@ -226,11 +226,6 @@ impl ProfileProtocol {
     }
 
     #[must_use]
-    pub fn searchable_address(&self) -> &str {
-        self.server().map_or("", |server| server.address.as_str())
-    }
-
-    #[must_use]
     pub fn password(&self) -> &str {
         match self {
             Self::Vmess { uuid, .. } | Self::Vless { uuid, .. } => uuid,
@@ -410,7 +405,9 @@ impl ProfileItem {
 
     #[must_use]
     pub fn address(&self) -> &str {
-        self.protocol.searchable_address()
+        self.protocol
+            .server()
+            .map_or("", |server| server.address.as_str())
     }
 
     #[must_use]
@@ -486,8 +483,7 @@ pub struct SubMetadataItem {
     pub profile_title: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(default, rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ImportProfilesResult {
     pub imported: u32,
     pub updated: u32,
@@ -511,12 +507,7 @@ pub struct ImportProfilesResult {
 /// Why one line of imported text did not simply become a node. A code rather
 /// than an English sentence, so the import dialog can say it in the reader's
 /// language.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(
-    tag = "code",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase"
-)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportLineCode {
     /// The line was a subscription URL and was added as a source instead.
     SubscriptionSourceAdded,
@@ -534,15 +525,13 @@ pub enum ImportLineCode {
 }
 
 /// One reported line, numbered from 1 within the imported text.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportLineIssue {
     pub line: u32,
     pub code: ImportLineCode,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(default, rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SubscriptionUpdateResult {
     pub updated: u32,
     pub skipped: u32,
@@ -633,22 +622,17 @@ impl Default for RulesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
-#[serde(default, rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ProfileExItem {
     pub index_id: String,
     pub delay: i32,
     pub sort: i32,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub ip_info: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub country_code: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProfileListItem {
     pub profile: ProfileItem,
     pub profile_ex: ProfileExItem,
@@ -664,8 +648,7 @@ pub fn profile_items_match(left: &ProfileItem, right: &ProfileItem, compare_rema
         && (!compare_remarks || left.remarks == right.remarks)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(default, rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ServerStatItem {
     pub index_id: String,
     pub total_up: i64,

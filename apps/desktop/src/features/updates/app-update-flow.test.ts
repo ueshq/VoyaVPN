@@ -1,33 +1,25 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  checkAppUpdate,
-  installCheckedAppUpdate,
-  loadAppUpdaterStatus,
-  type AppUpdateFlowDeps,
-} from "@/features/updates/app-update-flow";
+const updater = vi.hoisted(() => ({
+  check: vi.fn(),
+  getVersion: vi.fn(),
+}));
+
+vi.mock("@/ipc/updater", () => updater);
+
+import { checkAppUpdate, installCheckedAppUpdate } from "@/features/updates/app-update-flow";
 
 describe("app update flow", () => {
-  it("loads the signed updater status", async () => {
-    const deps = makeDeps({
-      appUpdateStatus: vi.fn().mockResolvedValue({
-        currentVersion: "1.0.0",
-        message: null,
-        state: "ready",
-      }),
-    });
-
-    await expect(loadAppUpdaterStatus(deps)).resolves.toMatchObject({ state: "ready" });
-    expect(deps.appUpdateStatus).toHaveBeenCalledTimes(1);
+  beforeEach(() => {
+    updater.check.mockReset().mockResolvedValue(null);
+    updater.getVersion.mockReset().mockResolvedValue("1.0.0");
   });
 
   it("maps an available update to plain UI data and closes the updater resource", async () => {
     const close = vi.fn().mockResolvedValue(undefined);
-    const deps = makeDeps({
-      checkForAppUpdate: vi.fn().mockResolvedValue(makeTauriUpdate({ close })),
-    });
+    updater.check.mockResolvedValue(makeTauriUpdate({ close }));
 
-    await expect(checkAppUpdate(deps)).resolves.toEqual({
+    await expect(checkAppUpdate()).resolves.toEqual({
       currentVersion: "1.0.0",
       update: {
         body: null,
@@ -40,9 +32,7 @@ describe("app update flow", () => {
   });
 
   it("returns no update when the signed updater has no release", async () => {
-    const deps = makeDeps({ checkForAppUpdate: vi.fn().mockResolvedValue(null) });
-
-    await expect(checkAppUpdate(deps)).resolves.toEqual({
+    await expect(checkAppUpdate()).resolves.toEqual({
       currentVersion: "1.0.0",
       update: null,
     });
@@ -51,11 +41,9 @@ describe("app update flow", () => {
   it("installs an available app update and requires restart", async () => {
     const downloadAndInstall = vi.fn().mockResolvedValue(undefined);
     const close = vi.fn().mockResolvedValue(undefined);
-    const deps = makeDeps({
-      checkForAppUpdate: vi.fn().mockResolvedValue(makeTauriUpdate({ close, downloadAndInstall })),
-    });
+    updater.check.mockResolvedValue(makeTauriUpdate({ close, downloadAndInstall }));
 
-    await expect(installCheckedAppUpdate(deps)).resolves.toEqual({
+    await expect(installCheckedAppUpdate()).resolves.toEqual({
       currentVersion: "1.0.0",
       installedVersion: "2.1.0",
       restartRequired: true,
@@ -67,16 +55,14 @@ describe("app update flow", () => {
 
   it("closes the updater resource while preserving install failures", async () => {
     const close = vi.fn().mockResolvedValue(undefined);
-    const deps = makeDeps({
-      checkForAppUpdate: vi.fn().mockResolvedValue(
-        makeTauriUpdate({
-          close,
-          downloadAndInstall: vi.fn().mockRejectedValue(new Error("signature invalid")),
-        }),
-      ),
-    });
+    updater.check.mockResolvedValue(
+      makeTauriUpdate({
+        close,
+        downloadAndInstall: vi.fn().mockRejectedValue(new Error("signature invalid")),
+      }),
+    );
 
-    await expect(installCheckedAppUpdate(deps)).rejects.toThrow("signature invalid");
+    await expect(installCheckedAppUpdate()).rejects.toThrow("signature invalid");
     expect(close).toHaveBeenCalledTimes(1);
   });
 
@@ -87,12 +73,10 @@ describe("app update flow", () => {
       onEvent({ data: { chunkLength: 150 }, event: "Progress" });
       onEvent({ event: "Finished" });
     });
-    const deps = makeDeps({
-      checkForAppUpdate: vi.fn().mockResolvedValue(makeTauriUpdate({ downloadAndInstall })),
-    });
+    updater.check.mockResolvedValue(makeTauriUpdate({ downloadAndInstall }));
     const progress = vi.fn();
 
-    await installCheckedAppUpdate(deps, progress);
+    await installCheckedAppUpdate(progress);
 
     expect(progress.mock.calls.map(([value]) => value)).toEqual([
       { downloaded: 0, finished: false, total: 200 },
@@ -102,19 +86,6 @@ describe("app update flow", () => {
     ]);
   });
 });
-
-function makeDeps(overrides: Partial<AppUpdateFlowDeps> = {}): AppUpdateFlowDeps {
-  return {
-    appUpdateStatus: vi.fn().mockResolvedValue({
-      currentVersion: "1.0.0",
-      message: null,
-      state: "ready",
-    }),
-    checkForAppUpdate: vi.fn().mockResolvedValue(null),
-    getCurrentVersion: vi.fn().mockResolvedValue("1.0.0"),
-    ...overrides,
-  };
-}
 
 function makeTauriUpdate(overrides: Record<string, unknown> = {}) {
   return {

@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(target_os = "macos")]
 use std::process::Command;
 
 use thiserror::Error;
@@ -337,19 +337,6 @@ pub trait ProviderRegistrationResolver: Send + Sync {
 }
 
 #[derive(Debug, Default, Clone, Copy)]
-pub struct NoopProviderRegistrationResolver;
-
-impl ProviderRegistrationResolver for NoopProviderRegistrationResolver {
-    fn expected_provider_path(&self, _bundle_id: &str) -> Option<PathBuf> {
-        None
-    }
-
-    fn resolved_provider_paths(&self, _bundle_id: &str) -> Result<Vec<PathBuf>, NativeTunError> {
-        Ok(Vec::new())
-    }
-}
-
-#[derive(Debug, Default, Clone, Copy)]
 pub struct PlatformProviderRegistrationResolver;
 
 impl ProviderRegistrationResolver for PlatformProviderRegistrationResolver {
@@ -454,9 +441,9 @@ use macos::{
 // `self::` keeps this resolving to the module below even if the `windows`
 // crate is ever added as a dependency.
 mod windows;
-#[cfg(windows)]
-use self::windows::windows_command;
 use self::windows::{start_windows_tun_service, stop_windows_tun_service, windows_service_status};
+#[cfg(windows)]
+use crate::process::hidden_command;
 
 pub trait TunCleaner: Send + Sync {
     fn cleanup_before_start(&self) -> Result<(), TunCleanupError>;
@@ -483,7 +470,7 @@ impl TunCleaner for PlatformTunCleaner {
 #[cfg(windows)]
 fn platform_cleanup_before_start() -> Result<(), TunCleanupError> {
     for device in WINDOWS_TUN_DEVICES {
-        let output = windows_command(r"C:\Windows\System32\pnputil.exe")
+        let output = hidden_command(r"C:\Windows\System32\pnputil.exe")
             .args([
                 "/remove-device",
                 &format!(r"SWD\Wintun\{{{}}}", device.guid),

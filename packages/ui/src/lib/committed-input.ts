@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLatestRef } from "@voya/utils/use-latest-ref";
 
 /** Optional commit-on-blur input behavior; ordinary shared fields stay controlled. */
 export function useCommittedInput({ value, onChange, deferred, validate, onInvalid }: {
@@ -13,8 +14,7 @@ export function useCommittedInput({ value, onChange, deferred, validate, onInval
   const pending = useRef<string | null>(null);
   const composing = useRef(false);
   const blurredWhileComposing = useRef(false);
-  const latest = useRef({ onChange, validate, onInvalid });
-  useLayoutEffect(() => { latest.current = { onChange, validate, onInvalid }; });
+  const latest = useLatestRef({ onChange, validate, onInvalid });
 
   function commit(leaving = false) {
     const text = pending.current;
@@ -30,9 +30,8 @@ export function useCommittedInput({ value, onChange, deferred, validate, onInval
     if (!leaving) { setLocal(null); setError(undefined); }
   }
 
-  const flush = useRef(commit);
-  useLayoutEffect(() => { flush.current = commit; });
-  useEffect(() => () => { flush.current(true); }, []);
+  const flush = useLatestRef(commit);
+  useEffect(() => () => { flush.current(true); }, [flush]);
 
   return {
     value: local ?? value,

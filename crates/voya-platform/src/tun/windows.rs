@@ -11,24 +11,9 @@ use std::time::Duration;
 #[cfg(windows)]
 use std::time::Instant;
 
-/// Windows helper processes must not flash a console window: the shell is a
-/// GUI-subsystem binary, so every console child gets one unless
-/// `CREATE_NO_WINDOW` is set, and the native-TUN health watcher queries the
-/// service every few seconds while TUN is on.
-#[cfg(windows)]
-pub(super) fn windows_command(program: &str) -> Command {
-    use std::os::windows::process::CommandExt;
-
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-
-    let mut command = Command::new(program);
-    command.creation_flags(CREATE_NO_WINDOW);
-    command
-}
-
 #[cfg(windows)]
 pub(super) fn windows_service_status() -> NativeTunStatus {
-    let output = match windows_command(r"C:\Windows\System32\sc.exe")
+    let output = match hidden_command(r"C:\Windows\System32\sc.exe")
         .args(["query", WINDOWS_TUN_SERVICE_NAME])
         .output()
     {
@@ -115,7 +100,7 @@ pub(super) fn start_windows_tun_service(
     // the start, so settle the previous transition first.
     settle_windows_service_transition("start Windows tunnel service")?;
 
-    let output = windows_command(r"C:\Windows\System32\sc.exe")
+    let output = hidden_command(r"C:\Windows\System32\sc.exe")
         .arg("start")
         .arg(WINDOWS_TUN_SERVICE_NAME)
         .arg(request.main_config_path.to_string_lossy().as_ref())
@@ -149,7 +134,7 @@ pub(super) fn start_windows_tun_service(
 
 #[cfg(windows)]
 pub(super) fn stop_windows_tun_service() -> Result<(), NativeTunError> {
-    let output = windows_command(r"C:\Windows\System32\sc.exe")
+    let output = hidden_command(r"C:\Windows\System32\sc.exe")
         .args(["stop", WINDOWS_TUN_SERVICE_NAME])
         .output()
         .map_err(|source| NativeTunError::Command {

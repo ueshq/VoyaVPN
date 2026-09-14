@@ -24,15 +24,7 @@ function seedInstallResult(status: CoreSeedInstallStatus) {
  * dialog is the onboarding path every user meets.
  */
 function openMissingCoreModal() {
-  useModalStore.setState({
-    stack: [
-      {
-        id: "missing-core-1",
-        kind: "missingCore",
-        missingCore: { coreType: "singBox", message: "core missing" },
-      },
-    ],
-  });
+  useModalStore.getState().showMissingCore({ coreType: "singBox", message: "core missing" });
 }
 
 function renderModalHost() {
@@ -52,14 +44,14 @@ describe("ModalHost", () => {
     cleanup();
     vi.clearAllMocks();
     await changeLocale("en");
-    useModalStore.setState({ stack: [] });
+    useModalStore.setState({ missingCore: null });
     ipcMocks.connectActiveProfile.mockResolvedValue(undefined);
     ipcMocks.installCoreSeed.mockResolvedValue(seedInstallResult("installed"));
   });
 
   afterEach(() => {
     cleanup();
-    useModalStore.setState({ stack: [] });
+    useModalStore.setState({ missingCore: null });
   });
 
   it("does not expose the retired full config template surface", () => {
@@ -79,7 +71,7 @@ describe("ModalHost", () => {
 
     await user.click(screen.getByRole("button", { name: "Repair" }));
 
-    await waitFor(() => expect(useModalStore.getState().stack).toHaveLength(0));
+    await waitFor(() => expect(useModalStore.getState().missingCore).toBeNull());
     expect(ipcMocks.installCoreSeed).toHaveBeenCalledWith("singBox");
     expect(ipcMocks.connectActiveProfile).toHaveBeenCalledTimes(1);
   });
@@ -95,7 +87,7 @@ describe("ModalHost", () => {
     expect(await screen.findByText(/No bundled component is available to repair with/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Repair" })).not.toBeInTheDocument();
     expect(ipcMocks.connectActiveProfile).not.toHaveBeenCalled();
-    expect(useModalStore.getState().stack).toHaveLength(1);
+    expect(useModalStore.getState().missingCore).not.toBeNull();
   });
 
   it("keeps the modal open with the failure text when the install rejects", async () => {
@@ -109,6 +101,6 @@ describe("ModalHost", () => {
 
     expect(await screen.findByText("download failed")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Repair" })).toBeEnabled();
-    expect(useModalStore.getState().stack).toHaveLength(1);
+    expect(useModalStore.getState().missingCore).not.toBeNull();
   });
 });

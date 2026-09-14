@@ -17,13 +17,11 @@ type ProxyMonitorControllerOptions = {
    * caller owns the message (it is localized) and the store update.
    */
   onError: (error: unknown, phase: ProxyMonitorPhase) => void;
-  /** Debounce before starting, so a tab passed through does not open a socket. */
-  startDelayMs?: number;
-  /** Grace period before stopping, so switching between proxy tabs keeps it up. */
-  stopDelayMs?: number;
 };
 
+/** Debounce before starting, so a tab passed through does not open a socket. */
 const START_DELAY_MS = 100;
+/** Grace period before stopping, so switching between proxy tabs keeps it up. */
 const STOP_DELAY_MS = 2_000;
 
 /**
@@ -40,8 +38,6 @@ const STOP_DELAY_MS = 2_000;
  */
 export function createProxyMonitorController({
   onError,
-  startDelayMs = START_DELAY_MS,
-  stopDelayMs = STOP_DELAY_MS,
 }: ProxyMonitorControllerOptions): ProxyMonitorController {
   let startTimer: number | null = null;
   let stopTimer: number | null = null;
@@ -92,7 +88,7 @@ export function createProxyMonitorController({
         .finally(() => {
           starting = false;
         });
-    }, startDelayMs);
+    }, START_DELAY_MS);
   }
 
   function scheduleStop() {
@@ -118,7 +114,7 @@ export function createProxyMonitorController({
             scheduleStart();
           }
         });
-    }, stopDelayMs);
+    }, STOP_DELAY_MS);
   }
 
   return {
@@ -154,17 +150,4 @@ export function createProxyMonitorController({
       }
     },
   };
-}
-
-/** Best-effort message for a rejected monitor command. */
-export function proxyMonitorErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  if (typeof error === "string" && error) {
-    return error;
-  }
-
-  return fallback;
 }

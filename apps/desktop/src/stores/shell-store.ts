@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
+import { mergeValidated } from "./persisted";
+
 export type ShellTab =
   "home" | "profiles" | "settings" | "connections" | "rules";
 
@@ -22,12 +24,15 @@ type ShellState = {
   activeTab: ShellTab;
   setActiveTab: (tab: ShellTab, focusTitle?: boolean) => void;
   focusPageTitle: boolean;
+  /** The page has moved focus to its title, so the request is done. */
+  consumeFocusPageTitle: () => void;
   profilesAddMenuOpen: boolean;
   openProfilesAddMenu: () => void;
+  setProfilesAddMenuOpen: (open: boolean) => void;
   settingsTab: SettingsTab;
+  setSettingsTab: (tab: SettingsTab) => void;
   /** Opens Settings at one category, as a deep link does. */
   openSettings: (tab: SettingsTab) => void;
-  routingPerAppRequested: boolean;
   /** Active sub-view of the Connections page; survives leaving the page. */
   connectionsView: ConnectionsView;
   setConnectionsView: (view: ConnectionsView) => void;
@@ -49,10 +54,13 @@ export const useShellStore = create<ShellState>()(
         set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       activeTab: "home",
       focusPageTitle: false,
+      consumeFocusPageTitle: () => set({ focusPageTitle: false }),
       profilesAddMenuOpen: false,
       openProfilesAddMenu: () =>
         set({ activeTab: "profiles", focusPageTitle: false, profilesAddMenuOpen: true }),
+      setProfilesAddMenuOpen: (profilesAddMenuOpen) => set({ profilesAddMenuOpen }),
       settingsTab: "general",
+      setSettingsTab: (settingsTab) => set({ settingsTab }),
       openSettings: (settingsTab) =>
         set({
           activeTab: "settings",
@@ -60,7 +68,6 @@ export const useShellStore = create<ShellState>()(
           profilesAddMenuOpen: false,
           settingsTab,
         }),
-      routingPerAppRequested: false,
       setActiveTab: (activeTab, focusTitle = false) =>
         set({ activeTab, focusPageTitle: focusTitle, profilesAddMenuOpen: false }),
       connectionsView: "connections",
@@ -77,21 +84,12 @@ export const useShellStore = create<ShellState>()(
         activeTab: state.activeTab,
         sidebarCollapsed: state.sidebarCollapsed,
       }),
-      merge: (persisted, current) => mergePersistedShell(persisted, current),
+      // A stored value this build does not know falls back to the default.
+      merge: mergeValidated<ShellState>(({ activeTab, sidebarCollapsed }) => ({
+        ...(SHELL_TABS.includes(activeTab as ShellTab) ? { activeTab: activeTab as ShellTab } : {}),
+        ...(typeof sidebarCollapsed === "boolean" ? { sidebarCollapsed } : {}),
+      })),
       storage: createJSONStorage(() => window.localStorage),
     },
   ),
 );
-
-/** A stored value this build does not know falls back to the default. */
-function mergePersistedShell(persisted: unknown, current: ShellState): ShellState {
-  if (!persisted || typeof persisted !== "object") {
-    return current;
-  }
-  const { activeTab, sidebarCollapsed } = persisted as Record<string, unknown>;
-  return {
-    ...current,
-    activeTab: SHELL_TABS.includes(activeTab as ShellTab) ? (activeTab as ShellTab) : current.activeTab,
-    sidebarCollapsed: typeof sidebarCollapsed === "boolean" ? sidebarCollapsed : current.sidebarCollapsed,
-  };
-}

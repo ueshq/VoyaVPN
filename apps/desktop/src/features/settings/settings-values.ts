@@ -1,7 +1,3 @@
-export function nullableText(value: string): string | null {
-  return value.trim() ? value : null;
-}
-
 /**
  * What the backend seeds for each required number (voya-contracts
  * `settings.rs`). A cleared field restores it instead of inventing a value.

@@ -269,8 +269,7 @@
       "empty": "暂无节点",
       "emptyDescription": "新增节点，或从订阅导入一个以开始。",
       "export": {
-        "clipboardUnavailable": "当前环境不支持写入剪贴板。",
-        "copied": "已将 {{count}} 个节点的导出内容复制到剪贴板。",
+        "copied":"已将 {{count}} 个节点的导出内容复制到剪贴板。",
         "export": "导出",
         "noProfiles": "没有可导出的节点。",
         "noSelection": "请至少选择一个节点再导出。",
@@ -793,7 +792,6 @@
     "connecting": "连接中",
     "connectionModeChangeFailed": "连接模式切换失败",
     "copyTunDiagnostics": "复制 VPN 诊断",
-    "copyTunDiagnosticsClipboardUnavailable": "当前环境不支持写入剪贴板。",
     "copyTunDiagnosticsCopied": "VPN 诊断已复制到剪贴板。",
     "copyTunDiagnosticsFailed": "复制 VPN 诊断失败",
     "disconnected": "已断开",
@@ -976,6 +974,7 @@
   },
   "common": {
     "advanced": "更多参数",
+    "clipboardUnavailable": "当前环境不支持写入剪贴板。",
     "none": "无",
     "dismiss": "关闭提示",
     "waitForConnection": "连接状态变化中，稍后再试"
@@ -1011,7 +1010,6 @@
     "use": "使用此组",
     "inUse": "使用中",
     "active": "已选",
-    "delay": "{{ms}} ms",
     "name": "名称",
     "strategyLabel": "策略",
     "strategy": {

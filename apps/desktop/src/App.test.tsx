@@ -24,7 +24,6 @@ import {
 import type {
   ProxyConnectionItem,
   ProxyConnectionsSnapshot,
-  SpeedtestStatus,
 } from "@/ipc/bindings";
 import type {
   RuntimeEventState,
@@ -37,7 +36,9 @@ import { useToastStore } from "@/stores/toast-store";
 vi.mock("@/ipc/process", () => ({
   relaunch: vi.fn(() => Promise.resolve()),
 }));
-vi.mock("@/ipc/window", () => ({
+vi.mock("@/ipc/window", async (importOriginal) => ({
+  // The shell checks for Tauri through the real module; only the window plugin is faked.
+  isTauriRuntime: (await importOriginal<typeof import("@/ipc/window")>()).isTauriRuntime,
   closeWindow: vi.fn(() => Promise.resolve()),
   isWindowMaximized: vi.fn(() => Promise.resolve(false)),
   minimizeWindow: vi.fn(() => Promise.resolve()),
@@ -91,7 +92,6 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
       proxyMonitorStatus: initialMonitorStatus,
       coreState: null,
       coreStateReceivedAt: null,
-      lastTransientEvent: null,
       logLines: [],
       pushTransientEvent: vi.fn(),
       refreshSpeedtestStatus: vi.fn(() => Promise.resolve()),
@@ -107,14 +107,6 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
           message,
         );
       }),
-      setProxyMonitorRunning: vi.fn((message: string | null = null) => {
-        state.proxyMonitorStatus = makeMonitorStatus(
-          "running",
-          true,
-          false,
-          message,
-        );
-      }),
       setProxyMonitorStarting: vi.fn((message: string | null = null) => {
         state.proxyMonitorStatus = makeMonitorStatus(
           "starting",
@@ -126,20 +118,9 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
       setProxyMonitorStatus: vi.fn((status: TestProxyMonitorStatus) => {
         state.proxyMonitorStatus = status;
       }),
-      setProxyMonitorStopped: vi.fn((message: string | null = null) => {
-        state.proxyMonitorStatus = makeMonitorStatus(
-          "stopped",
-          false,
-          true,
-          message,
-        );
-      }),
       setCoreState: vi.fn(),
       setSpeedtestRunning: vi.fn((speedtestRunning: boolean) => {
         state.speedtestRunning = speedtestRunning;
-      }),
-      setSpeedtestStatus: vi.fn((status: SpeedtestStatus) => {
-        state.speedtestRunning = status.running;
       }),
       setSysProxy: vi.fn(),
       setTun: vi.fn(),
@@ -777,7 +758,12 @@ describe("App", () => {
   it("keeps the connection search between sub-tabs and after leaving the page", async () => {
     const user = userEvent.setup();
     runtimeStoreMock.getState().coreState = connectedCore();
-    runtimeStoreMock.getState().setProxyMonitorRunning();
+    runtimeStoreMock.getState().setProxyMonitorStatus({
+      message: null,
+      running: true,
+      stale: false,
+      state: "running",
+    });
     vi.mocked(proxyListConnections).mockResolvedValue({
       connections: makeConnections(2),
       downloadTotal: 2,

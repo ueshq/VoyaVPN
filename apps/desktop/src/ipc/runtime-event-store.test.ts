@@ -27,7 +27,6 @@ describe("runtime event store", () => {
     useRuntimeEventStore.setState({
       proxyConnections: null,
       proxyMonitorStatus: initialMonitorStatus,
-      lastTransientEvent: null,
       logLines: [],
       serverStatsByProfileId: {},
       speedtestResultsByProfileId: {},
@@ -55,7 +54,7 @@ describe("runtime event store", () => {
 
     expect(useRuntimeEventStore.getState().speedtestRunning).toBe(true);
 
-    useRuntimeEventStore.getState().setSpeedtestStatus({ running: false });
+    useRuntimeEventStore.getState().setSpeedtestRunning(false);
 
     expect(useRuntimeEventStore.getState().speedtestRunning).toBe(false);
   });
@@ -80,7 +79,6 @@ describe("runtime event store", () => {
       "profile-a": result,
     });
     expect(useRuntimeEventStore.getState().speedtestRunning).toBe(true);
-    expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("speedtestResult");
 
     useRuntimeEventStore.getState().clearSpeedtestResults();
     expect(useRuntimeEventStore.getState().speedtestResultsByProfileId).toEqual({});
@@ -88,9 +86,7 @@ describe("runtime event store", () => {
   });
 
   it("sets proxy monitor lifecycle state through store actions", () => {
-    useRuntimeEventStore.getState().setProxyMonitorRunning();
-
-    expect(useRuntimeEventStore.getState().proxyMonitorStatus).toEqual({
+    useRuntimeEventStore.getState().setProxyMonitorStatus({
       message: null,
       running: true,
       stale: false,
@@ -99,20 +95,12 @@ describe("runtime event store", () => {
 
     useRuntimeEventStore.getState().setProxyMonitorStarting("connecting");
 
+    // A restart keeps showing the data it already has as fresh.
     expect(useRuntimeEventStore.getState().proxyMonitorStatus).toEqual({
       message: "connecting",
       running: false,
       stale: false,
       state: "starting",
-    });
-
-    useRuntimeEventStore.getState().setProxyMonitorStopped();
-
-    expect(useRuntimeEventStore.getState().proxyMonitorStatus).toEqual({
-      message: null,
-      running: false,
-      stale: true,
-      state: "stopped",
     });
 
     useRuntimeEventStore.getState().setProxyMonitorFailed("start failed");
@@ -127,7 +115,12 @@ describe("runtime event store", () => {
 
   it("does not promote stopped monitor status when late proxy connections arrive", async () => {
     vi.useFakeTimers();
-    useRuntimeEventStore.getState().setProxyMonitorStopped("monitor stopped");
+    useRuntimeEventStore.getState().setProxyMonitorStatus({
+      message: "monitor stopped",
+      running: false,
+      stale: true,
+      state: "stopped",
+    });
 
     useRuntimeEventStore.getState().pushTransientEvent({
       kind: "proxyConnections",
@@ -143,7 +136,7 @@ describe("runtime event store", () => {
       stale: false,
       state: "stopped",
     });
-    expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("proxyConnections");
+    expect(useRuntimeEventStore.getState().proxyConnections?.connections[0]?.id).toBe("connection-1");
   });
 
   it("marks stopped monitor status stale while preserving proxy snapshots", () => {
@@ -165,7 +158,6 @@ describe("runtime event store", () => {
       stale: true,
       state: "stopped",
     });
-    expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("proxyMonitorStatus");
   });
 
   it("marks failed monitor status stale with a message while preserving proxy snapshots", () => {
@@ -183,7 +175,6 @@ describe("runtime event store", () => {
       stale: true,
       state: "failed",
     });
-    expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("proxyMonitorStatus");
   });
 
   it("coalesces proxy connection websocket events into the next frame", async () => {
@@ -215,7 +206,6 @@ describe("runtime event store", () => {
       stale: false,
       state: "failed",
     });
-    expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("proxyConnections");
   });
 
   it("coalesces log lines into one frame and stamps each at receipt", async () => {
@@ -261,7 +251,6 @@ describe("runtime event store", () => {
       },
     ]);
     now.mockRestore();
-    expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("logLine");
   });
 
   it("drops buffered log lines when the log is cleared before the frame runs", async () => {
@@ -320,7 +309,6 @@ describe("runtime event store", () => {
 
     expect(useRuntimeEventStore.getState().statistics).toBeNull();
     expect(useRuntimeEventStore.getState().serverStatsByProfileId).toEqual({});
-    expect(useRuntimeEventStore.getState().lastTransientEvent).toBeNull();
   });
 
   it("does not let invalid proxy connection payloads replace a queued valid frame", async () => {
@@ -343,7 +331,6 @@ describe("runtime event store", () => {
 
     expect(useRuntimeEventStore.getState().proxyConnections?.connections[0]?.host).toBe("valid.example.com:443");
     expect(useRuntimeEventStore.getState().proxyConnections?.downloadTotal).toBe(200);
-    expect(useRuntimeEventStore.getState().lastTransientEvent?.kind).toBe("proxyConnections");
   });
 });
 

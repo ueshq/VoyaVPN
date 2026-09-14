@@ -8,8 +8,7 @@ use std::{
 
 use thiserror::Error;
 use tokio::{net::TcpStream, time};
-
-const LOOPBACK_ADDR: &str = "127.0.0.1";
+use voya_core::LOOPBACK;
 
 mod country;
 pub use country::{IpLookupResult, DEFAULT_IP_LOOKUP_URL};
@@ -34,7 +33,7 @@ impl SocksHttpProbe {
     pub fn new(socks_port: u16) -> Result<Self> {
         let client = reqwest::Client::builder()
             .proxy(reqwest::Proxy::all(format!(
-                "socks5h://{LOOPBACK_ADDR}:{socks_port}"
+                "socks5h://{LOOPBACK}:{socks_port}"
             ))?)
             .build()?;
         Ok(Self { client })
@@ -74,7 +73,7 @@ impl SocksHttpProbe {
         }
     }
 
-    pub async fn optional_text(&self, url: &str, timeout: Duration) -> Option<String> {
+    async fn optional_text(&self, url: &str, timeout: Duration) -> Option<String> {
         self.client
             .get(url)
             .timeout(timeout)
@@ -102,7 +101,9 @@ fn check_cancelled(cancel: &CancellationFlag) -> Result<()> {
     }
 }
 
-fn is_cancelled(cancel: &CancellationFlag) -> bool {
+/// Whether the probe's owner has asked it to stop.
+#[must_use]
+pub fn is_cancelled(cancel: &CancellationFlag) -> bool {
     cancel.load(Ordering::SeqCst)
 }
 

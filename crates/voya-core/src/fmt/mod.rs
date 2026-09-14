@@ -14,16 +14,15 @@ use thiserror::Error;
 use url::Url;
 
 use crate::{
-    protocol_common::{nonempty_str, shadowsocks_plugin_for, RAW_HEADER_HTTP},
+    host::is_dns_label,
+    protocol_common::{shadowsocks_plugin_for, split_csv, DEFAULT_SECURITY, RAW_HEADER_HTTP},
+    text::{decode_base64_text, nonempty_str},
     ConfigType, ProfileItem, ProfileProtocol, ProfileTransport, ServerEndpoint, TlsMode,
-    TlsSettings,
+    TlsSettings, DEFAULT_NETWORK, STREAM_SECURITY_TLS,
 };
 
-const DEFAULT_SECURITY: &str = "auto";
-const DEFAULT_NETWORK: &str = "raw";
 const RAW_NETWORK_ALIAS: &str = "tcp";
 const NONE: &str = "none";
-const STREAM_SECURITY_TLS: &str = "tls";
 const STREAM_SECURITY_REALITY: &str = "reality";
 const GRPC_GUN_MODE: &str = "gun";
 const GRPC_MULTI_MODE: &str = "multi";
@@ -69,8 +68,7 @@ use common::*;
 use uri::*;
 
 pub use entry::{
-    export_share_link, export_share_link_with_options, parse_share_lines, parse_share_link,
-    parse_voya_profile_bundle, ShareLinkOptions,
+    export_share_link_with_options, parse_share_link, parse_voya_profile_bundle, ShareLinkOptions,
 };
 pub use shadowsocks::parse_ss_sip008;
 pub use wireguard::parse_wireguard_config;

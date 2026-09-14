@@ -269,8 +269,7 @@
       "empty": "No nodes",
       "emptyDescription": "Add a node or import one from a subscription to get started.",
       "export": {
-        "clipboardUnavailable": "Clipboard write is unavailable in this context.",
-        "copied": "Copied export data for {{count}} node(s) to clipboard.",
+        "copied":"Copied export data for {{count}} node(s) to clipboard.",
         "export": "Export",
         "noProfiles": "There are no nodes to export.",
         "noSelection": "Select at least one node to export.",
@@ -793,7 +792,6 @@
     "connecting": "Connecting",
     "connectionModeChangeFailed": "Failed to change connection mode",
     "copyTunDiagnostics": "Copy VPN diagnostics",
-    "copyTunDiagnosticsClipboardUnavailable": "Clipboard write is unavailable in this context.",
     "copyTunDiagnosticsCopied": "VPN diagnostics copied to clipboard.",
     "copyTunDiagnosticsFailed": "Failed to copy VPN diagnostics",
     "disconnected": "Disconnected",
@@ -976,6 +974,7 @@
   },
   "common": {
     "advanced": "More settings",
+    "clipboardUnavailable": "Clipboard write is unavailable in this context.",
     "none": "None",
     "dismiss": "Dismiss",
     "waitForConnection": "Wait for the connection to settle, then try again"
@@ -1011,7 +1010,6 @@
     "use": "Use this group",
     "inUse": "In use",
     "active": "Selected",
-    "delay": "{{ms}} ms",
     "name": "Name",
     "strategyLabel": "Strategy",
     "strategy": {

@@ -1,43 +1,49 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { TranslationFunction } from "@voya/i18n";
 import type { AppError, AppErrorKind, RuntimeStatusResponse } from "@/ipc/bindings";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { beginRuntimeRead } from "@/ipc/runtime-state-version";
+import { useModalStore } from "@/stores/modal-store";
+import { useRuntimeActionStore } from "@/stores/runtime-action-store";
+import { useToastStore } from "@/stores/toast-store";
 
-const ipcMocks = vi.hoisted(() => {
-  // A faithful stand-in for the real error: `runWithElevation` and
-  // `missingCorePayload` both branch on `appError.kind`, so a bare
-  // `class extends Error {}` would make every branch below unreachable. The
-  // real class also takes its `Error.message` straight from `appError.message`,
-  // which is what makes "the message no longer decides anything" testable.
-  class MockIpcCommandError extends Error {
-    readonly appError: AppError;
+const runtimeStatus = vi.hoisted(() => ({ refreshRuntimeStatusAndReport: vi.fn() }));
+vi.mock("@/ipc/runtime-status", () => runtimeStatus);
 
-    constructor(appError: AppError) {
-      super(appError.message);
-      this.appError = appError;
-      this.name = "IpcCommandError";
-    }
-  }
+const ipcMocks = vi.hoisted(() => ({
+  tunRequestElevation: vi.fn(),
+  connectActiveProfile: vi.fn(),
+  disconnectCore: vi.fn(),
+  restartCore: vi.fn(),
+}));
 
-  return {
-    IpcCommandError: MockIpcCommandError,
-    tunRequestElevation: vi.fn(),
-    connectActiveProfile: vi.fn(),
-    disconnectCore: vi.fn(),
-    restartCore: vi.fn(),
-  };
+// The real error class and kind check: `runWithElevation` and
+// `missingCorePayload` both branch on `appError.kind`, and the real class takes
+// its `Error.message` straight from `appError.message`, which is what makes
+// "the message no longer decides anything" testable.
+vi.mock("@/ipc/commands", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/ipc/commands")>();
+  return { ...ipcMocks, appErrorOfKind: actual.appErrorOfKind, IpcCommandError: actual.IpcCommandError };
 });
 
-vi.mock("@/ipc/commands", () => ipcMocks);
+import { IpcCommandError } from "@/ipc/commands";
+import {
+  activateSelection,
+  executeRuntimeAction,
+  missingCorePayload,
+  runRuntimeAction,
+  runWithElevation,
+} from "./runtime-action";
 
-import { executeRuntimeAction, missingCorePayload, runWithElevation } from "./runtime-action";
+// Keys stand in for text, so assertions do not depend on a locale.
+const t = ((key: string) => key) as unknown as TranslationFunction;
 
 function appError(kind: AppErrorKind, message = "ipc failed"): AppError {
   return { kind, message, subsystem: "runtime" };
 }
 
-const missingCoreError = new ipcMocks.IpcCommandError(
+const missingCoreError = new IpcCommandError(
   appError(
     {
       candidates: [],
@@ -52,6 +58,26 @@ const missingCoreError = new ipcMocks.IpcCommandError(
 
 function elevationStatus(elevationGranted: boolean) {
   return { elevationGranted };
+}
+
+function coreStatus(state: RuntimeStatusResponse["state"]): RuntimeStatusResponse {
+  const connected = state === "connected";
+  return {
+    activeProfileId: connected ? "node" : null,
+    activeTunBackend: null,
+    connectedDurationMs: null,
+    mainPid: connected ? 42 : null,
+    prePid: null,
+    runningCoreType: connected ? "singBox" : null,
+    state,
+  };
+}
+
+function resetStores() {
+  useRuntimeEventStore.setState({ coreState: null });
+  useRuntimeActionStore.setState({ lastError: null, modePending: false, pendingAction: null, switchingId: null });
+  useModalStore.setState({ missingCore: null });
+  useToastStore.setState({ toasts: [] });
 }
 
 describe("runtime command responses", () => {
@@ -123,7 +149,7 @@ describe("runWithElevation", () => {
   });
 
   it("requests authorization once and retries the action when it is granted", async () => {
-    const failure = new ipcMocks.IpcCommandError(
+    const failure = new IpcCommandError(
       appError(
         { type: "elevationRequired" },
         "system authorization is required before enabling TUN on Unix",
@@ -141,7 +167,7 @@ describe("runWithElevation", () => {
   // containing "authorization". Rewording — or translating — the backend text
   // must not change what happens.
   it("retries on the typed kind alone, whatever the message says", async () => {
-    const failure = new ipcMocks.IpcCommandError(
+    const failure = new IpcCommandError(
       appError({ type: "elevationRequired" }, "系统需要一次性授权"),
     );
     const action = vi.fn().mockRejectedValueOnce(failure).mockResolvedValue("connected");
@@ -157,7 +183,7 @@ describe("runWithElevation", () => {
   // the old substring match read it as "ask again", re-opening the dialog and
   // re-running the connect.
   it("does not prompt for a failure that merely mentions authorization", async () => {
-    const failure = new ipcMocks.IpcCommandError(
+    const failure = new IpcCommandError(
       appError({ type: "internal" }, "native authorization was cancelled"),
     );
     const action = vi.fn().mockRejectedValue(failure);
@@ -168,7 +194,7 @@ describe("runWithElevation", () => {
   });
 
   it("rethrows the original failure when the authorization dialog is cancelled", async () => {
-    const failure = new ipcMocks.IpcCommandError(appError({ type: "elevationRequired" }));
+    const failure = new IpcCommandError(appError({ type: "elevationRequired" }));
     const action = vi.fn().mockRejectedValue(failure);
     ipcMocks.tunRequestElevation.mockResolvedValue(elevationStatus(false));
 
@@ -179,13 +205,145 @@ describe("runWithElevation", () => {
   });
 
   it("propagates a retry that fails again", async () => {
-    const first = new ipcMocks.IpcCommandError(appError({ type: "elevationRequired" }));
+    const first = new IpcCommandError(appError({ type: "elevationRequired" }));
     const second = new Error("still refused");
     const action = vi.fn().mockRejectedValueOnce(first).mockRejectedValueOnce(second);
     ipcMocks.tunRequestElevation.mockResolvedValue(elevationStatus(true));
 
     await expect(runWithElevation(action)).rejects.toBe(second);
     expect(action).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("runRuntimeAction", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    resetStores();
+  });
+
+  it("guards the action while it runs and reads the status back afterwards", async () => {
+    ipcMocks.connectActiveProfile.mockResolvedValueOnce(coreStatus("connected"));
+
+    const running = runRuntimeAction("connect", t);
+    expect(useRuntimeActionStore.getState().pendingAction).toBe("connect");
+    await running;
+
+    expect(runtimeStatus.refreshRuntimeStatusAndReport).toHaveBeenCalledWith(t);
+    expect(useRuntimeActionStore.getState().pendingAction).toBeNull();
+  });
+
+  it("does nothing while another runtime action or a transition is under way", async () => {
+    useRuntimeActionStore.setState({ switchingId: "node" });
+    await runRuntimeAction("connect", t);
+    useRuntimeActionStore.setState({ switchingId: null });
+    useRuntimeEventStore.setState({ coreState: coreStatus("connecting") });
+    await runRuntimeAction("connect", t);
+
+    expect(ipcMocks.connectActiveProfile).not.toHaveBeenCalled();
+    expect(runtimeStatus.refreshRuntimeStatusAndReport).not.toHaveBeenCalled();
+  });
+
+  it("keeps a failure next to Home's button, and toasts it anywhere else", async () => {
+    ipcMocks.connectActiveProfile.mockRejectedValueOnce(new Error("core exited"));
+    await runRuntimeAction("connect", t, { inline: true });
+    expect(useRuntimeActionStore.getState()).toMatchObject({
+      lastError: { action: "connect", message: "core exited" },
+      pendingAction: null,
+    });
+
+    ipcMocks.connectActiveProfile.mockRejectedValueOnce(new Error("still offline"));
+    await runRuntimeAction("connect", t);
+    // Starting again drops the earlier inline failure.
+    expect(useRuntimeActionStore.getState().lastError).toBeNull();
+    expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
+      description: "still offline",
+      severity: "error",
+      title: "actions.connect",
+    });
+  });
+
+  it("opens the missing-core dialog instead of reporting the failure", async () => {
+    ipcMocks.connectActiveProfile.mockRejectedValueOnce(missingCoreError);
+
+    await runRuntimeAction("connect", t);
+
+    expect(useModalStore.getState().missingCore).toEqual({
+      coreType: "singBox",
+      message: "sing-box is not installed",
+    });
+    expect(useToastStore.getState().toasts).toHaveLength(0);
+  });
+
+  it("explains a declined authorization instead of the raw failure", async () => {
+    ipcMocks.connectActiveProfile.mockRejectedValue(
+      new IpcCommandError(appError({ type: "elevationRequired" }, "sudo helper refused")),
+    );
+    ipcMocks.tunRequestElevation.mockResolvedValue(elevationStatus(false));
+
+    await runRuntimeAction("connect", t, { inline: true });
+
+    expect(useRuntimeActionStore.getState().lastError).toEqual({
+      action: "connect",
+      message: "home.authorizationDeclined",
+    });
+  });
+});
+
+describe("activateSelection", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    resetStores();
+  });
+
+  it("saves the selection before connecting an idle core", async () => {
+    const select = vi.fn().mockResolvedValue(undefined);
+    ipcMocks.connectActiveProfile.mockResolvedValueOnce(coreStatus("connected"));
+
+    const switching = activateSelection("node", t, select);
+    expect(useRuntimeActionStore.getState().switchingId).toBe("node");
+
+    await expect(switching).resolves.toBe(true);
+    expect(select.mock.invocationCallOrder[0]!).toBeLessThan(
+      ipcMocks.connectActiveProfile.mock.invocationCallOrder[0]!,
+    );
+    expect(runtimeStatus.refreshRuntimeStatusAndReport).toHaveBeenCalledWith(t);
+    expect(useRuntimeActionStore.getState().switchingId).toBeNull();
+  });
+
+  it("restarts a running core with the new selection", async () => {
+    useRuntimeEventStore.setState({ coreState: coreStatus("connected") });
+    ipcMocks.restartCore.mockResolvedValueOnce(coreStatus("connected"));
+
+    await expect(activateSelection("group:work", t, vi.fn().mockResolvedValue(undefined))).resolves.toBe(true);
+
+    expect(ipcMocks.restartCore).toHaveBeenCalledOnce();
+    expect(ipcMocks.connectActiveProfile).not.toHaveBeenCalled();
+  });
+
+  it("changes nothing while the core cleans up or another action runs", async () => {
+    const select = vi.fn();
+    useRuntimeEventStore.setState({ coreState: coreStatus("cleanupPending") });
+    await expect(activateSelection("node", t, select)).resolves.toBe(false);
+
+    useRuntimeEventStore.setState({ coreState: null });
+    useRuntimeActionStore.setState({ modePending: true });
+    await expect(activateSelection("node", t, select)).resolves.toBe(false);
+
+    expect(select).not.toHaveBeenCalled();
+    expect(runtimeStatus.refreshRuntimeStatusAndReport).not.toHaveBeenCalled();
+  });
+
+  it("reports a selection that could not be saved and never starts the core", async () => {
+    const select = vi.fn().mockRejectedValue(new Error("node not found"));
+
+    await expect(activateSelection("node", t, select)).resolves.toBe(false);
+
+    expect(ipcMocks.connectActiveProfile).not.toHaveBeenCalled();
+    expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
+      description: "node not found",
+      title: "actions.connect",
+    });
+    expect(useRuntimeActionStore.getState().switchingId).toBeNull();
   });
 });
 
@@ -201,7 +359,7 @@ describe("missingCorePayload", () => {
     expect(missingCorePayload(new Error("core missing"))).toBeNull();
     expect(missingCorePayload("core missing")).toBeNull();
     expect(
-      missingCorePayload(new ipcMocks.IpcCommandError(appError({ type: "internal" }, "boom"))),
+      missingCorePayload(new IpcCommandError(appError({ type: "internal" }, "boom"))),
     ).toBeNull();
   });
 });

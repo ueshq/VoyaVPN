@@ -1,13 +1,13 @@
-use base64::{engine::general_purpose::STANDARD, Engine as _};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+use voya_core::text::{decode_base64_payload, nonempty_str};
 
 use crate::{
     is_denied_local_host, DownloadClient, DownloadError, DownloadRequest, DownloadResponse, Result,
     DEFAULT_TEXT_RESPONSE_LIMIT_BYTES,
 };
 
-pub const DEFAULT_SUB_CONVERT_URL: &str = "https://sub.xeton.dev/sub?url={0}";
-pub const DEFAULT_SUB_CONVERT_CONFIG: &str =
+const DEFAULT_SUB_CONVERT_URL: &str = "https://sub.xeton.dev/sub?url={0}";
+const DEFAULT_SUB_CONVERT_CONFIG: &str =
     "https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online.ini";
 const SUBSCRIPTION_RESPONSE_LIMIT_BYTES: usize = DEFAULT_TEXT_RESPONSE_LIMIT_BYTES;
 
@@ -99,22 +99,13 @@ impl SubscriptionClient {
         if main_url.trim() != raw_url {
             validate_subscription_url(&main_url, url_policy)?;
         }
+        let converted = nonempty_str(source.convert_target.as_deref()).is_some();
         let mut downloads = Vec::new();
         let main = self
             .download
-            .download_text(DownloadRequest {
-                url: main_url,
-                user_agent: nonempty(source.user_agent.clone()),
-                prefer_proxy: options.prefer_proxy,
-                proxy_url: options.proxy_url.clone(),
-                response_body_limit: Some(SUBSCRIPTION_RESPONSE_LIMIT_BYTES),
-            })
+            .download_text(text_request(main_url, source, options))
             .await?;
-        let mut content = if source
-            .convert_target
-            .as_deref()
-            .is_some_and(|value| !value.trim().is_empty())
-        {
+        let mut content = if converted {
             main.body.clone()
         } else {
             decode_base64_payload(&main.body).unwrap_or_else(|| main.body.clone())
@@ -122,11 +113,7 @@ impl SubscriptionClient {
         downloads.push(main);
 
         let mut failed_more_urls = Vec::new();
-        if source
-            .convert_target
-            .as_deref()
-            .is_some_and(|value| !value.trim().is_empty())
-        {
+        if converted {
             return Ok(SubscriptionFetchResult {
                 content,
                 downloads,
@@ -179,14 +166,23 @@ impl SubscriptionClient {
     ) -> Result<DownloadResponse> {
         validate_subscription_url(url, url_policy)?;
         self.download
-            .download_text(DownloadRequest {
-                url: url.to_string(),
-                user_agent: nonempty(source.user_agent.clone()),
-                prefer_proxy: options.prefer_proxy,
-                proxy_url: options.proxy_url.clone(),
-                response_body_limit: Some(SUBSCRIPTION_RESPONSE_LIMIT_BYTES),
-            })
+            .download_text(text_request(url.to_string(), source, options))
             .await
+    }
+}
+
+/// A subscription text download of `url`, sent with the source's user agent.
+fn text_request(
+    url: String,
+    source: &SubscriptionFetchSource,
+    options: &SubscriptionFetchOptions,
+) -> DownloadRequest {
+    DownloadRequest {
+        url,
+        user_agent: nonempty(source.user_agent.clone()),
+        prefer_proxy: options.prefer_proxy,
+        proxy_url: options.proxy_url.clone(),
+        response_body_limit: Some(SUBSCRIPTION_RESPONSE_LIMIT_BYTES),
     }
 }
 
@@ -225,7 +221,7 @@ fn forbidden_subscription_url(url: &str, reason: impl Into<String>) -> DownloadE
     }
 }
 
-pub fn build_subscription_url(
+fn build_subscription_url(
     raw_url: &str,
     convert_target: Option<&str>,
     sub_convert_url: Option<&str>,
@@ -269,36 +265,6 @@ pub fn build_subscription_url(
     drop(query);
 
     Ok(url.into())
-}
-
-#[must_use]
-pub fn decode_base64_payload(input: &str) -> Option<String> {
-    let mut normalized = input
-        .trim()
-        .chars()
-        .filter(|ch| !ch.is_whitespace())
-        .collect::<String>();
-    if normalized.is_empty()
-        || !normalized
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '+' | '/' | '_' | '-' | '='))
-    {
-        return None;
-    }
-
-    normalized = normalized.replace('_', "/").replace('-', "+");
-    if normalized.len() % 4 != 0 {
-        normalized.extend(std::iter::repeat_n('=', 4 - normalized.len() % 4));
-    }
-
-    let bytes = STANDARD.decode(normalized.as_bytes()).ok()?;
-    let decoded = String::from_utf8(bytes).ok()?;
-    let trimmed = decoded.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
 }
 
 fn nonempty(value: String) -> Option<String> {

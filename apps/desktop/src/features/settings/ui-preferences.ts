@@ -10,8 +10,7 @@ import {
 } from "@voya/i18n";
 import { loadUiPreferences } from "@/ipc/commands";
 import { queryKeys } from "@/ipc/query-keys";
-import { getErrorMessage } from "@voya/utils/error";
-import { useToastStore } from "@/stores/toast-store";
+import { toastError, useToastStore } from "@/stores/toast-store";
 import type { AppearanceSettings } from "@/ipc/bindings";
 import {
   isThemeMode,
@@ -32,7 +31,7 @@ export function previewUiPreferences(owner: symbol, preferences: AppearanceSetti
 }
 
 export function reportUiPreferencesError(error: unknown) {
-  useToastStore.getState().pushToast({ title: i18next.t("status.operationFailed"), description: getErrorMessage(error), severity: "error" });
+  toastError(i18next.t("status.operationFailed"), error);
 }
 
 /** Ends the owner's preview and returns what it was showing, if anything. */

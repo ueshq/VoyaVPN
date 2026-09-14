@@ -7,18 +7,11 @@
 //! `voya_app::contract_map::messages` alongside every other core → contract
 //! conversion.
 
-use serde::{Deserialize, Serialize};
-
 /// What a validator rejected, with the values that made it reject.
 ///
 /// One variant per message, carrying the interpolation parameters by name so
 /// the frontend can put them wherever its locale wants them.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(
-    tag = "code",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase"
-)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidationCode {
     // ---- node fields ----
     InvalidAddress,
@@ -40,20 +33,14 @@ pub enum ValidationCode {
 /// One hop of the path a validator walked to reach a finding.
 ///
 /// Routing findings identify the rule and the node it targets.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(
-    tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase"
-)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidationScope {
     RoutingRuleOutbound { rule: String, outbound: String },
     PolicyGroupMember { group: String, member: String },
 }
 
 /// One finding: what went wrong, and where the validator was when it did.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidationMessage {
     pub code: ValidationCode,
     /// Outermost hop first. Empty for a finding about the profile itself.

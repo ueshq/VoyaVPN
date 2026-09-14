@@ -42,23 +42,12 @@ impl SingboxConfig {
     #[must_use]
     pub fn sample() -> Self {
         Self {
-            log: Some(SingboxLog {
-                disabled: None,
-                level: "debug".to_string(),
-                output: None,
-                timestamp: Some(true),
-            }),
+            log: Some(SingboxLog::default()),
             dns: None,
             inbounds: Vec::new(),
             outbounds: vec![SingboxOutbound::direct()],
             endpoints: Vec::new(),
-            route: SingboxRoute {
-                default_domain_resolver: None,
-                auto_detect_interface: None,
-                rules: Vec::new(),
-                rule_set: None,
-                final_outbound: None,
-            },
+            route: SingboxRoute::default(),
             experimental: None,
         }
     }

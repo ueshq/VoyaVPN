@@ -52,28 +52,6 @@ impl<'executor> ServerStatRepository<'executor> {
         row.map(row_to_server_stat).transpose()
     }
 
-    pub async fn ensure(&self, index_id: &str, date_now: i64) -> Result<ServerStatItem> {
-        if let Some(mut item) = self.get(index_id).await? {
-            if item.date_now != date_now {
-                item.today_up = 0;
-                item.today_down = 0;
-                item.date_now = date_now;
-                self.upsert(&item).await?;
-            }
-
-            return Ok(item);
-        }
-
-        let item = ServerStatItem {
-            index_id: index_id.to_string(),
-            date_now,
-            ..ServerStatItem::default()
-        };
-        self.upsert(&item).await?;
-
-        Ok(item)
-    }
-
     pub async fn list(&self) -> Result<Vec<ServerStatItem>> {
         let rows = run_query!(
             self.executor,
@@ -121,8 +99,8 @@ impl<'executor> ServerStatRepository<'executor> {
     ///
     /// The statistics aggregator calls this every second for as long as a core
     /// is connected, so it is one statement rather than the read-modify-write it
-    /// used to be (`ensure`'s SELECT, its rollover upsert, then a second
-    /// upsert). Each of those was its own autocommit transaction on the pool,
+    /// used to be (a SELECT, a day-rollover upsert, then a second upsert). Each
+    /// of those was its own autocommit transaction on the pool,
     /// which meant two to three journalled commits per second just to bump four
     /// integers. Doing the arithmetic in SQL also makes the update atomic
     /// against any other writer.
@@ -130,7 +108,7 @@ impl<'executor> ServerStatRepository<'executor> {
     /// Unqualified column names in `DO UPDATE SET` are the row's values from
     /// before this insert, so the `CASE` compares the stored day against the
     /// sample's and starts the daily counters over when they differ — the day
-    /// rollover `ensure` performed with an extra statement.
+    /// rollover that used to take an extra statement.
     pub async fn add_traffic(
         &self,
         index_id: &str,

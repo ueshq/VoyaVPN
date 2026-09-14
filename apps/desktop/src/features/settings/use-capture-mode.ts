@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { TranslationFunction } from "@voya/i18n";
+import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import { isRuntimeTransitioning } from "@/features/home/runtime-action";
 import {
@@ -18,7 +19,8 @@ import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-ac
  * proxy. macOS only has its PacketTunnel VPN, so there is nothing to choose.
  * A refusal stays next to the control rather than in a passing toast.
  */
-export function useCaptureMode(t: TranslationFunction) {
+export function useCaptureMode() {
+  const { t } = useI18n();
   const available = useRuntimeEventStore(
     (state) => state.sysProxy?.management === "automatic",
   );
@@ -39,7 +41,8 @@ export function useCaptureMode(t: TranslationFunction) {
   async function selectMode(next: ConnectionMode) {
     if (busy || runtimeActionPending() || next === mode) return;
     setError(null);
-    useRuntimeActionStore.setState({ modePending: true });
+    const store = useRuntimeActionStore.getState();
+    store.setModePending(true);
     try {
       const blocked = next === "vpn" ? await vpnPreflight(t) : null;
       if (blocked) {
@@ -53,7 +56,7 @@ export function useCaptureMode(t: TranslationFunction) {
       try {
         await refreshRuntimeStatusAndReport(t);
       } finally {
-        useRuntimeActionStore.setState({ modePending: false });
+        store.setModePending(false);
       }
     }
   }

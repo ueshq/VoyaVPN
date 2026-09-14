@@ -33,6 +33,19 @@ describe("shell navigation", () => {
     });
   });
 
+  it("sets the Settings category and the Add menu, and clears a handled title focus", () => {
+    useShellStore.setState({ settingsTab: "general", profilesAddMenuOpen: false });
+    useShellStore.getState().setSettingsTab("connection");
+    useShellStore.getState().setProfilesAddMenuOpen(true);
+    expect(useShellStore.getState()).toMatchObject({ settingsTab: "connection", profilesAddMenuOpen: true });
+    useShellStore.getState().setProfilesAddMenuOpen(false);
+
+    useShellStore.getState().setActiveTab("rules", true);
+    expect(useShellStore.getState().focusPageTitle).toBe(true);
+    useShellStore.getState().consumeFocusPageTitle();
+    expect(useShellStore.getState()).toMatchObject({ activeTab: "rules", focusPageTitle: false, profilesAddMenuOpen: false });
+  });
+
   it("keeps the Network activity search while switching pages", () => {
     useShellStore.getState().setConnectionSearch("example.com");
     useShellStore.getState().setActiveTab("home");

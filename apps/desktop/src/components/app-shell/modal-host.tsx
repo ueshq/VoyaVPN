@@ -18,36 +18,29 @@ import { type MissingCorePayload, useModalStore } from "@/stores/modal-store";
 import { getErrorMessage } from "@voya/utils/error";
 
 export function ModalHost() {
-  const closeTopModal = useModalStore((state) => state.closeTopModal);
-  const stack = useModalStore((state) => state.stack);
-  const modal = stack.at(-1);
+  const closeMissingCore = useModalStore((state) => state.closeMissingCore);
+  const missingCore = useModalStore((state) => state.missingCore);
 
   return (
     <Dialog
-      open={Boolean(modal)}
-      onOpenChange={(open) => !open && closeTopModal()}
+      open={missingCore !== null}
+      onOpenChange={(open) => !open && closeMissingCore()}
     >
-      {modal?.kind === "missingCore" ? (
-        <MissingCoreDialog payload={modal.missingCore} />
-      ) : null}
+      {missingCore ? <MissingCoreDialog payload={missingCore} /> : null}
     </Dialog>
   );
 }
 
-function MissingCoreDialog({ payload }: { payload?: MissingCorePayload }) {
+function MissingCoreDialog({ payload }: { payload: MissingCorePayload }) {
   const { t } = useI18n();
-  const closeTopModal = useModalStore((state) => state.closeTopModal);
+  const closeMissingCore = useModalStore((state) => state.closeMissingCore);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [seedMissing, setSeedMissing] = useState(false);
 
-  const coreName = payload ? formatCoreType(payload.coreType) : "";
+  const coreName = formatCoreType(payload.coreType);
 
   async function installAndConnect() {
-    if (!payload) {
-      return;
-    }
-
     setBusy(true);
     setError(null);
     try {
@@ -59,7 +52,7 @@ function MissingCoreDialog({ payload }: { payload?: MissingCorePayload }) {
       }
 
       await connectActiveProfile();
-      closeTopModal();
+      closeMissingCore();
     } catch (error) {
       setError(getErrorMessage(error));
     } finally {
@@ -93,12 +86,12 @@ function MissingCoreDialog({ payload }: { payload?: MissingCorePayload }) {
       </DialogBody>
       <DialogFooter>
         {seedMissing ? (
-          <Button onClick={closeTopModal} type="button" variant="outline">
+          <Button onClick={closeMissingCore} type="button" variant="outline">
             {t("actions.close")}
           </Button>
         ) : (
           <Button
-            disabled={busy || !payload}
+            disabled={busy}
             onClick={() => void installAndConnect()}
             type="button"
           >

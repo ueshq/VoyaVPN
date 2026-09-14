@@ -19,9 +19,9 @@
 import type { InvalidationScope } from "./bindings";
 
 /**
- * Key roots, one per cache. Invalidating a root also invalidates every
- * parameterised key built from it — that is how one `profiles` scope reaches
- * all of {@link profilesQueryKey}'s filter slices.
+ * Key roots, one per cache. Invalidating a root also invalidates every key
+ * built under it — that is how one `profiles` scope reaches both the node list
+ * and the policy groups.
  *
  * `processCandidates`, `profileShareQr` and `connectionIp` deliberately have no
  * `InvalidationScope`: nothing the backend commits changes a running-process
@@ -39,6 +39,8 @@ export const queryKeys = {
   policyGroupRuntime: ["policy-group-runtime"],
   dns: ["dns"],
   processCandidates: ["process-candidates"],
+  /** The complete node list, shared by every screen that shows or resolves nodes. */
+  profileList: ["profiles", "list"],
   profileShareQr: ["profile-share-qr"],
   profiles: ["profiles"],
   proxyConnections: ["proxy-connections"],
@@ -49,11 +51,6 @@ export const queryKeys = {
 } as const;
 
 export type QueryKeyRoot = (typeof queryKeys)[keyof typeof queryKeys];
-
-/** One filter slice of the profile list. */
-export function profilesQueryKey(filter: string) {
-  return [...queryKeys.profiles, { filter }] as const;
-}
 
 /** The exit address of one connection (active node plus core process). */
 export function connectionIpQueryKey(connection: string | null) {
@@ -66,6 +63,25 @@ export function profileShareQrQueryKey(content: string) {
 }
 
 /**
+ * The key root each backend invalidation scope refreshes. `satisfies` is the
+ * exhaustiveness check: a new variant in `voya-contracts` stops compiling here
+ * until it is mapped, and a retired one until its entry is removed.
+ */
+const INVALIDATION_KEYS = {
+  appSettings: queryKeys.appSettings,
+  connectionMode: queryKeys.connectionMode,
+  dns: queryKeys.dns,
+  profiles: queryKeys.profiles,
+  proxyConnections: queryKeys.proxyConnections,
+  policyGroups: queryKeys.policyGroups,
+  policyGroupRuntime: queryKeys.policyGroupRuntime,
+  routings: queryKeys.routings,
+  subscriptionMetadata: queryKeys.subscriptionMetadata,
+  subscriptions: queryKeys.subscriptions,
+  uiPreferences: queryKeys.uiPreferences,
+} satisfies Record<InvalidationScope["kind"], QueryKeyRoot>;
+
+/**
  * Resolves a backend invalidation scope to the key the event bridge should
  * invalidate.
  *
@@ -76,33 +92,9 @@ export function profileShareQrQueryKey(content: string) {
 export function invalidationQueryKey(
   scope: InvalidationScope,
 ): QueryKeyRoot | null {
-  switch (scope.kind) {
-    case "appSettings":
-      return queryKeys.appSettings;
-    case "connectionMode":
-      return queryKeys.connectionMode;
-    case "dns":
-      return queryKeys.dns;
-    case "profiles":
-      return queryKeys.profiles;
-    case "proxyConnections":
-      return queryKeys.proxyConnections;
-    case "policyGroups":
-      return queryKeys.policyGroups;
-    case "policyGroupRuntime":
-      return queryKeys.policyGroupRuntime;
-    case "routings":
-      return queryKeys.routings;
-    case "subscriptionMetadata":
-      return queryKeys.subscriptionMetadata;
-    case "subscriptions":
-      return queryKeys.subscriptions;
-    case "uiPreferences":
-      return queryKeys.uiPreferences;
-    default:
-      // `satisfies never` is the exhaustiveness check: a new variant in
-      // `voya-contracts` stops compiling here until the switch maps it.
-      scope satisfies never;
-      return null;
-  }
+  // An own-property check, so an unknown kind such as `toString` cannot
+  // resolve through the prototype.
+  return Object.hasOwn(INVALIDATION_KEYS, scope.kind)
+    ? INVALIDATION_KEYS[scope.kind]
+    : null;
 }

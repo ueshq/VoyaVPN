@@ -83,7 +83,7 @@ impl ClashApiEndpoint {
     #[must_use]
     pub fn loopback(port: u16) -> Self {
         Self {
-            host: "127.0.0.1".to_string(),
+            host: voya_core::LOOPBACK.to_string(),
             port,
             secret: None,
         }
@@ -269,14 +269,14 @@ where
         self.request(ClashHttpMethod::Get, "/connections", None)
             .await
     }
-    pub async fn patch_configs(&self, body: Value) -> Result<()> {
-        self.request_value(ClashHttpMethod::Patch, "/configs", Some(body))
-            .await
-            .map(drop)
-    }
-
     pub async fn set_rule_mode(&self, mode: &str) -> Result<()> {
-        self.patch_configs(json!({ "mode": mode })).await
+        self.request_value(
+            ClashHttpMethod::Patch,
+            "/configs",
+            Some(json!({ "mode": mode })),
+        )
+        .await
+        .map(drop)
     }
     pub async fn close_connection(&self, connection_id: Option<&str>) -> Result<()> {
         let path = connection_id
@@ -540,13 +540,11 @@ pub enum ClashWebSocketEvent {
     Connections(ClashConnections),
 }
 
-#[must_use]
-pub fn decode_traffic_message(source: &str) -> Option<ClashTraffic> {
+fn decode_traffic_message(source: &str) -> Option<ClashTraffic> {
     serde_json::from_str(source).ok()
 }
 
-#[must_use]
-pub fn decode_connections_message(source: &str) -> Option<ClashConnections> {
+fn decode_connections_message(source: &str) -> Option<ClashConnections> {
     serde_json::from_str(source).ok()
 }
 

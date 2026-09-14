@@ -234,11 +234,7 @@ fn collect_platform_candidates() -> Vec<ProcessCandidate> {
 #[cfg(windows)]
 mod windows {
     use super::{parse_tasklist_csv_image_name, ProcessCandidate, ProcessCandidateSource};
-    use std::{os::windows::process::CommandExt, process::Command};
-
-    /// Console-subsystem children of a GUI-subsystem parent get their own visible
-    /// console window unless this flag is set.
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    use crate::process::hidden_command;
 
     const NOISE_IMAGES: [&str; 8] = [
         "system",
@@ -252,9 +248,8 @@ mod windows {
     ];
 
     pub(super) fn running_processes() -> Vec<ProcessCandidate> {
-        let Ok(output) = Command::new(r"C:\Windows\System32\tasklist.exe")
+        let Ok(output) = hidden_command(r"C:\Windows\System32\tasklist.exe")
             .args(["/fo", "csv", "/nh"])
-            .creation_flags(CREATE_NO_WINDOW)
             .output()
         else {
             return Vec::new();

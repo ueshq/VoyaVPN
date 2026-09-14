@@ -1,16 +1,14 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { formatDelay } from "@voya/utils/formatting";
+import { formatClock, formatDelay } from "@voya/utils/formatting";
 
 import type { TranslationFunction } from "@voya/i18n";
 
 function formatConnectionDuration(milliseconds: number | null) {
   if (milliseconds == null) return "—";
   const seconds = Math.floor(Math.max(0, milliseconds) / 1000);
-  return [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
-    .map((value) => String(value).padStart(2, "0"))
-    .join(":");
+  return formatClock(Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60);
 }
 
 /** The backend owns elapsed time; the renderer only interpolates between samples. */

@@ -68,12 +68,6 @@ fn process_core_log_level_comes_from_the_line_not_the_stream() {
     );
 }
 
-#[test]
-fn process_stdin_debug_does_not_expose_secret() {
-    let stdin = ProcessStdin::new(Zeroizing::new("secret-password".to_string()));
-    assert_eq!(format!("{stdin:?}"), "ProcessStdin(<redacted>)");
-}
-
 #[cfg(unix)]
 #[test]
 fn process_generated_script_rewrites_existing_file_and_locks_down_permissions() {
@@ -370,30 +364,6 @@ fn std_process_runner_drop_kills_tracked_children() {
 
     drop(runner);
 
-    assert!(!process_is_running(pid));
-}
-
-#[cfg(unix)]
-#[test]
-fn process_stdin_missing_pipe_fails_and_kills_child() {
-    let Some(sleep) = ["/bin/sleep", "/usr/bin/sleep"]
-        .into_iter()
-        .find(|path| Path::new(path).exists())
-    else {
-        return;
-    };
-
-    let mut child = Command::new(sleep)
-        .arg("30")
-        .stdin(Stdio::null())
-        .spawn()
-        .expect("spawn sleep without stdin pipe");
-    let pid = child.id();
-    let stdin = ProcessStdin::new(Zeroizing::new("secret-password".to_string()));
-
-    let error = write_child_stdin(&mut child, &stdin).expect_err("missing pipe should fail");
-
-    assert!(matches!(error, ProcessError::MissingStdinPipe));
     assert!(!process_is_running(pid));
 }
 

@@ -16,7 +16,6 @@ import { changeLocale } from "@voya/i18n";
 import { IpcCommandError } from "@/ipc/commands";
 import { useModalStore } from "@/stores/modal-store";
 import type {
-  AppError,
   ImportProfilesResult,
   Profile,
   ProfileListEntry,
@@ -65,17 +64,10 @@ const ipcMocks = vi.hoisted(() => ({
   updateSubscriptions: vi.fn(),
 }));
 
-vi.mock("@/ipc/commands", () => {
-  return {
-    ...ipcMocks,
-    IpcCommandError: class extends Error {
-      readonly appError: AppError;
-      constructor(appError: AppError) {
-        super(appError.message);
-        this.appError = appError;
-      }
-    },
-  };
+// The real error class and kind check, so a missing core opens its dialog.
+vi.mock("@/ipc/commands", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/ipc/commands")>();
+  return { ...ipcMocks, appErrorOfKind: actual.appErrorOfKind, IpcCommandError: actual.IpcCommandError };
 });
 
 // `listProfiles` answers with the rows plus the number of stored profiles this
@@ -200,7 +192,7 @@ describe("ProfilesScreen", () => {
     ipcMocks.listPolicyGroups.mockResolvedValue({ entries: [] });
     window.localStorage.removeItem("voyavpn.profileColumns");
     useToastStore.setState({ toasts: [] });
-    useModalStore.setState({ stack: [] });
+    useModalStore.setState({ missingCore: null });
     useRuntimeEventStore.setState({
       coreState: null,
       serverStatsByProfileId: {},
@@ -818,8 +810,8 @@ describe("ProfilesScreen", () => {
     await screen.findByText("Server 0");
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
     await waitFor(() =>
-      expect(useModalStore.getState().stack[0]).toMatchObject({
-        kind: "missingCore",
+      expect(useModalStore.getState().missingCore).toMatchObject({
+        message: "Core unavailable",
       }),
     );
     expect(useToastStore.getState().toasts).toHaveLength(0);

@@ -360,6 +360,7 @@ fn final_dns_uses_direct(context: &CoreConfigContext) -> bool {
 }
 
 mod address;
+pub use address::first_dns_address;
 pub(super) use address::*;
 
 fn fakeip_filter_rule() -> SingboxRule {

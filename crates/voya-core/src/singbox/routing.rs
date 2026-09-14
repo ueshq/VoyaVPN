@@ -13,32 +13,20 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
         config.route.auto_detect_interface = Some(true);
         config.route.rules.extend(tun_route_rules());
 
-        let dns_process_names = tun_dns_process_names();
-        if !dns_process_names.is_empty() {
-            config.route.rules.push(SingboxRule {
-                port: Some(vec![53]),
-                action: Some("hijack-dns".to_string()),
-                process_name: Some(dns_process_names),
-                ..SingboxRule::default()
-            });
-        }
-        let direct_process_names = tun_direct_process_names();
-        if !direct_process_names.is_empty() {
-            config.route.rules.push(SingboxRule {
-                outbound: Some(DIRECT_TAG.to_string()),
-                process_name: Some(direct_process_names),
-                ..SingboxRule::default()
-            });
-        }
-        match tun_icmp_routing(&context.app_config.tun_mode_item.icmp_routing) {
+        config.route.rules.push(SingboxRule {
+            outbound: Some(DIRECT_TAG.to_string()),
+            process_name: Some(vec!["sing-box".to_string()]),
+            ..SingboxRule::default()
+        });
+        let icmp_routing = tun_icmp_routing(&context.app_config.tun_mode_item.icmp_routing);
+        match icmp_routing {
             "direct" => config.route.rules.push(SingboxRule {
                 network: Some(vec!["icmp".to_string()]),
                 outbound: Some(DIRECT_TAG.to_string()),
                 ..SingboxRule::default()
             }),
             "unreachable" | "drop" | "reply" => {
-                let method = match tun_icmp_routing(&context.app_config.tun_mode_item.icmp_routing)
-                {
+                let method = match icmp_routing {
                     "unreachable" => "default",
                     "drop" => "drop",
                     _ => "reply",
@@ -147,16 +135,6 @@ fn tun_route_rules() -> Vec<SingboxRule> {
             ..SingboxRule::default()
         },
     ]
-}
-
-fn tun_dns_process_names() -> Vec<String> {
-    Vec::new()
-}
-
-fn tun_direct_process_names() -> Vec<String> {
-    let mut names = tun_dns_process_names();
-    names.push("sing-box".to_string());
-    names
 }
 
 fn tun_icmp_routing(value: &str) -> &str {
@@ -294,7 +272,11 @@ fn gen_routing_user_rule(
     // The macOS NetworkExtension tunnel cannot tell which app a packet came
     // from, so an app condition there would never match; leave it out rather
     // than emit a rule sing-box rejects or silently ignores.
-    if let Some(processes) = user_rule.process.as_ref().filter(|_| !context.is_macos()) {
+    if let Some(processes) = user_rule
+        .process
+        .as_ref()
+        .filter(|_| !context.platform.is_macos())
+    {
         let mut process_name_rule = rule.clone();
         let mut process_path_rule = rule.clone();
         for process in processes {
@@ -453,11 +435,10 @@ fn gen_routing_user_rule_outbound(
         return tag;
     }
 
-    let servers = build_proxy_servers(context, &node, &tag);
-    if servers.is_empty() {
+    let Some(server) = build_proxy_server(context, &node, &tag) else {
         return PROXY_TAG.to_string();
-    }
-    append_servers(config, servers);
+    };
+    append_servers(config, [server]);
     tag
 }
 

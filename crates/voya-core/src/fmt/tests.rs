@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, panic};
 
 use proptest::prelude::*;
 
-use super::*;
+use super::{entry::export_share_link, *};
 use crate::{generate_singbox_config_value, AppConfig, CoreConfigContext, CoreType, PROXY_TAG};
 
 #[test]

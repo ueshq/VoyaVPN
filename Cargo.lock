@@ -6268,7 +6268,6 @@ dependencies = [
  "tracing",
  "voya-core",
  "xcap",
- "zeroize",
 ]
 
 [[package]]

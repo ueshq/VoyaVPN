@@ -6,13 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
 import type {
-  AppError,
   ProfileListEntry,
   RuntimeStatusResponse,
   StatisticsSnapshot,
   SystemProxyStatusResponse,
   TunStatus,
 } from "@/ipc/bindings";
+import { IpcCommandError } from "@/ipc/commands";
 import { useModalStore } from "@/stores/modal-store";
 import { useRuntimeActionStore } from "@/stores/runtime-action-store";
 import { useToastStore } from "@/stores/toast-store";
@@ -52,22 +52,7 @@ const runtimeMock = vi.hoisted(() => {
 });
 
 const ipcMock = vi.hoisted(() => {
-  // Faithful stand-in for the real error class: `runWithElevation` and
-  // `missingCorePayload` branch on `appError.kind`, so a bare
-  // `class extends Error {}` makes the sudo-retry and missing-core paths
-  // unreachable from this suite.
-  class MockIpcCommandError extends Error {
-    readonly appError: AppError;
-
-    constructor(appError: AppError) {
-      super(appError.message);
-      this.appError = appError;
-      this.name = "IpcCommandError";
-    }
-  }
-
   return {
-    IpcCommandError: MockIpcCommandError,
     connectActiveProfile: vi.fn(),
     loadAppSettings: vi.fn(),
     disconnectCore: vi.fn(),
@@ -142,22 +127,28 @@ const missingTunnelMessages = {
     "当前运行的 VoyaVPN 缺少 VPN 扩展。请退出后从“应用程序”打开完整安装版；若仍提示缺失，请重新安装。",
 };
 
-vi.mock("@/ipc/commands", () => ({
-  connectActiveProfile: ipcMock.connectActiveProfile,
-  loadAppSettings: ipcMock.loadAppSettings,
-  disconnectCore: ipcMock.disconnectCore,
-  IpcCommandError: ipcMock.IpcCommandError,
-  listPolicyGroups: ipcMock.listPolicyGroups,
-  listProfiles: ipcMock.listProfiles,
-  policyGroupRuntime: ipcMock.policyGroupRuntime,
-  restartCore: ipcMock.restartCore,
-  runtimeStatus: ipcMock.runtimeStatus,
-  setActiveProfile: ipcMock.setActiveProfile,
-  setConnectionMode: ipcMock.setConnectionMode,
-  systemProxyStatus: ipcMock.systemProxyStatus,
-  tunRequestElevation: ipcMock.tunRequestElevation,
-  tunStatus: ipcMock.tunStatus,
-}));
+// The real error class and kind check: the sudo-retry and missing-core paths
+// branch on `appError.kind`.
+vi.mock("@/ipc/commands", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/ipc/commands")>();
+  return {
+    appErrorOfKind: actual.appErrorOfKind,
+    connectActiveProfile: ipcMock.connectActiveProfile,
+    loadAppSettings: ipcMock.loadAppSettings,
+    disconnectCore: ipcMock.disconnectCore,
+    IpcCommandError: actual.IpcCommandError,
+    listPolicyGroups: ipcMock.listPolicyGroups,
+    listProfiles: ipcMock.listProfiles,
+    policyGroupRuntime: ipcMock.policyGroupRuntime,
+    restartCore: ipcMock.restartCore,
+    runtimeStatus: ipcMock.runtimeStatus,
+    setActiveProfile: ipcMock.setActiveProfile,
+    setConnectionMode: ipcMock.setConnectionMode,
+    systemProxyStatus: ipcMock.systemProxyStatus,
+    tunRequestElevation: ipcMock.tunRequestElevation,
+    tunStatus: ipcMock.tunStatus,
+  };
+});
 vi.mock("@/ipc/runtime-event-store", () => ({ useRuntimeEventStore: runtimeMock.useRuntimeEventStore }));
 
 // `listProfiles` answers with the rows plus the number of stored profiles this
@@ -221,7 +212,7 @@ describe("HomeScreen", () => {
     ipcMock.tunRequestElevation.mockResolvedValue(tunStatusResponse);
     ipcMock.tunStatus.mockResolvedValue(tunStatusResponse);
     useToastStore.setState({ toasts: [] });
-    useModalStore.setState({ stack: [] });
+    useModalStore.setState({ missingCore: null });
   });
 
   afterEach(async () => {
@@ -439,7 +430,7 @@ describe("HomeScreen", () => {
       makeActiveProfile({ id: "tokyo", remarks: "Tokyo Edge" }),
     ]);
     ipcMock.connectActiveProfile.mockRejectedValue(
-      new ipcMock.IpcCommandError({
+      new IpcCommandError({
         kind: {
           candidates: [],
           coreType: "singBox",
@@ -458,14 +449,12 @@ describe("HomeScreen", () => {
     await waitFor(() => expect(connectButton()).toBeEnabled());
     await user.click(connectButton());
 
-    await waitFor(() => expect(useModalStore.getState().stack).toHaveLength(1));
-    expect(useModalStore.getState().stack[0]).toMatchObject({
-      kind: "missingCore",
-      missingCore: {
+    await waitFor(() =>
+      expect(useModalStore.getState().missingCore).toEqual({
         coreType: "singBox",
         message: "sing-box is not installed",
-      },
-    });
+      }),
+    );
     expect(useToastStore.getState().toasts).toHaveLength(0);
   });
 
@@ -475,7 +464,7 @@ describe("HomeScreen", () => {
     ]);
     ipcMock.connectActiveProfile
       .mockRejectedValueOnce(
-        new ipcMock.IpcCommandError({
+        new IpcCommandError({
           kind: { type: "elevationRequired" },
           message:
             "system authorization is required before enabling TUN on Unix",
@@ -499,7 +488,7 @@ describe("HomeScreen", () => {
     );
     expect(ipcMock.tunRequestElevation).toHaveBeenCalledTimes(1);
     expect(useToastStore.getState().toasts).toHaveLength(0);
-    expect(useModalStore.getState().stack).toHaveLength(0);
+    expect(useModalStore.getState().missingCore).toBeNull();
   });
 
   it("explains a declined authorization dialog instead of the raw failure", async () => {
@@ -507,7 +496,7 @@ describe("HomeScreen", () => {
       makeActiveProfile({ id: "tokyo", remarks: "Tokyo Edge" }),
     ]);
     ipcMock.connectActiveProfile.mockRejectedValue(
-      new ipcMock.IpcCommandError({
+      new IpcCommandError({
         kind: { type: "elevationRequired" },
         message: "sudo helper refused",
         subsystem: "tun",

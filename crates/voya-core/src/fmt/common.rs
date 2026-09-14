@@ -133,16 +133,7 @@ pub(super) fn valid_host(host: &str) -> bool {
     }
 
     let domain = host.trim_end_matches('.');
-    !domain.is_empty()
-        && domain.split('.').all(|label| {
-            !label.is_empty()
-                && label.len() <= 63
-                && !label.starts_with('-')
-                && !label.ends_with('-')
-                && label
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-        })
+    !domain.is_empty() && domain.split('.').all(is_dns_label)
 }
 
 pub(super) fn protocol_share(config_type: ConfigType) -> &'static str {
@@ -170,7 +161,9 @@ pub(super) fn item_network(item: &ProfileItem) -> &str {
 }
 
 pub(super) fn option_or(value: &Option<String>, default_value: &str) -> String {
-    nonempty_option(value).unwrap_or(default_value).to_string()
+    nonempty_str(value.as_deref())
+        .unwrap_or(default_value)
+        .to_string()
 }
 
 pub(super) fn nonempty(value: String) -> Option<String> {
@@ -181,12 +174,8 @@ pub(super) fn nonempty(value: String) -> Option<String> {
     }
 }
 
-pub(super) fn nonempty_option(value: &Option<String>) -> Option<&str> {
-    nonempty_str(value.as_deref())
-}
-
 pub(super) fn push_encoded_opt(query: &mut QueryPairs, key: &str, value: &Option<String>) {
-    if let Some(value) = nonempty_option(value) {
+    if let Some(value) = nonempty_str(value.as_deref()) {
         query.push((key.to_string(), url_encode(value)));
     }
 }
@@ -238,22 +227,7 @@ pub(super) fn base64_decode(input: &str, protocol: &'static str) -> Result<Strin
     if input.trim().len() > MAX_BASE64_DECODE_INPUT {
         return Err(ShareError::InvalidBase64 { protocol });
     }
-
-    let mut normalized = input
-        .trim()
-        .chars()
-        .filter(|ch| !ch.is_whitespace())
-        .collect::<String>()
-        .replace('_', "/")
-        .replace('-', "+");
-    if normalized.len() % 4 != 0 {
-        let pad = 4 - (normalized.len() % 4);
-        normalized.extend(std::iter::repeat_n('=', pad));
-    }
-    let bytes = STANDARD
-        .decode(normalized.as_bytes())
-        .map_err(|_| ShareError::InvalidBase64 { protocol })?;
-    String::from_utf8(bytes).map_err(|_| ShareError::InvalidBase64 { protocol })
+    decode_base64_text(input).ok_or(ShareError::InvalidBase64 { protocol })
 }
 
 pub(super) fn url_encode(input: &str) -> String {
@@ -271,18 +245,6 @@ pub(super) fn url_encode(input: &str) -> String {
 
 pub(super) fn url_decode(input: &str) -> String {
     percent_decode_str(input).decode_utf8_lossy().into_owned()
-}
-
-/// Comma-separated list with per-item trimming, matching
-/// `crate::singbox::support::split_csv` so an `alpn`/`pcs`/`ech` list parses
-/// the same way on both sides of a round trip.
-pub(super) fn split_csv(input: &str) -> Vec<String> {
-    input
-        .split(',')
-        .map(str::trim)
-        .filter(|item| !item.is_empty())
-        .map(str::to_string)
-        .collect::<Vec<_>>()
 }
 
 pub(super) fn starts_with_ci(value: &str, prefix: &str) -> bool {

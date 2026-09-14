@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, net::IpAddr};
 
 use crate::{
     singbox::support::{singbox_supports_config_type, state_port2},
+    text::nonempty_str,
     validation::{ValidationCode, ValidationMessage, ValidationScope},
     AppConfig, ConfigType, CoreType, InboundProtocol, ProfileItem, ProfileProtocol, RoutingItem,
     RulesItem, ServerEndpoint, SimpleDnsItem, TlsMode,
@@ -102,11 +103,6 @@ pub struct NodeValidatorResult {
 
 impl NodeValidatorResult {
     #[must_use]
-    pub fn empty() -> Self {
-        Self::default()
-    }
-
-    #[must_use]
     pub fn success(&self) -> bool {
         self.errors.is_empty()
     }
@@ -161,7 +157,6 @@ pub struct CoreConfigContext {
     pub simple_dns_item: SimpleDnsItem,
     pub all_proxies_map: BTreeMap<String, ProfileItem>,
     pub app_config: AppConfig,
-    pub server_test_item_map: BTreeMap<String, String>,
     pub is_tun_enabled: bool,
     pub protect_domain_list: Vec<String>,
     pub platform: CoreGenPlatform,
@@ -207,7 +202,6 @@ impl Default for CoreConfigContext {
             simple_dns_item: SimpleDnsItem::default(),
             all_proxies_map: BTreeMap::new(),
             app_config: AppConfig::default(),
-            server_test_item_map: BTreeMap::new(),
             is_tun_enabled: false,
             protect_domain_list: Vec::new(),
             platform: CoreGenPlatform::Linux,
@@ -229,16 +223,6 @@ impl CoreConfigContext {
             .map_or_else(|| vec![&self.node], |group| group.members.iter().collect())
     }
 
-    #[must_use]
-    pub fn is_windows(&self) -> bool {
-        self.platform.is_windows()
-    }
-
-    #[must_use]
-    pub fn is_macos(&self) -> bool {
-        self.platform.is_macos()
-    }
-
     /// Port this context's `experimental.clash_api.external_controller` binds.
     ///
     /// The pre-socks split gives the TUN process `api2 + 1` and leaves the main
@@ -251,7 +235,7 @@ impl CoreConfigContext {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct CoreConfigContextBuilderResult {
     pub context: CoreConfigContext,
     pub validator_result: NodeValidatorResult,
@@ -261,15 +245,6 @@ impl CoreConfigContextBuilderResult {
     #[must_use]
     pub fn success(&self) -> bool {
         self.validator_result.success()
-    }
-}
-
-impl Default for CoreConfigContextBuilderResult {
-    fn default() -> Self {
-        Self {
-            context: CoreConfigContext::default(),
-            validator_result: NodeValidatorResult::empty(),
-        }
     }
 }
 
@@ -355,7 +330,6 @@ where
             simple_dns_item: config.simple_dns_item.clone(),
             all_proxies_map: BTreeMap::new(),
             app_config: config.clone(),
-            server_test_item_map: BTreeMap::new(),
             is_tun_enabled: config.tun_mode_item.enable_tun,
             protect_domain_list: Vec::new(),
             platform: self.env.platform(),
@@ -365,16 +339,15 @@ where
             rule_policy_groups: Vec::new(),
         };
 
-        let (active_node, node_result) = self.resolve_node(&mut context, node);
+        let node_result = self.resolve_node(&mut context, node);
         if !node_result.success() {
             return CoreConfigContextBuilderResult {
                 context,
                 validator_result: node_result,
             };
         }
-        context.node = active_node;
 
-        let mut validator_result = NodeValidatorResult::empty();
+        let mut validator_result = NodeValidatorResult::default();
         validator_result.warnings.extend(node_result.warnings);
         self.resolve_rule_outbounds(&mut context, &mut validator_result);
 
@@ -423,28 +396,12 @@ where
         if !result.success() {
             return result;
         }
-        let mut usable = Vec::new();
-        for member in members {
-            let scope = ValidationScope::PolicyGroupMember {
-                group: group.name.clone(),
-                member: member.remarks.clone(),
-            };
-            let member_result = register_single_node(&mut result.context, member);
-            if member_result.success() {
-                usable.push(member.clone());
-                result
-                    .validator_result
-                    .extend_scoped(&scope, &member_result);
-            } else {
-                result.validator_result.warnings.extend(
-                    member_result
-                        .errors
-                        .iter()
-                        .chain(&member_result.warnings)
-                        .map(|finding| finding.clone().within(scope.clone())),
-                );
-            }
-        }
+        let usable = register_group_members(
+            &mut result.context,
+            &mut result.validator_result,
+            &group.name,
+            members,
+        );
         let Some(first) = usable.first().cloned() else {
             result
                 .validator_result
@@ -512,13 +469,12 @@ where
         &self,
         context: &mut CoreConfigContext,
         node: &ProfileItem,
-    ) -> (ProfileItem, NodeValidatorResult) {
+    ) -> NodeValidatorResult {
         if node.index_id.trim().is_empty() {
-            return (node.clone(), NodeValidatorResult::empty());
+            return NodeValidatorResult::default();
         }
 
-        let register_result = register_single_node(context, node);
-        (node.clone(), register_result)
+        register_single_node(context, node)
     }
 
     fn resolve_rule_outbounds(
@@ -546,7 +502,7 @@ where
         rule_item: &RulesItem,
     ) {
         let rule_name = rule_item.remarks.as_deref().unwrap_or_default();
-        let Some(outbound_tag) = rule_item.outbound_tag.as_deref().and_then(nonempty) else {
+        let Some(outbound_tag) = nonempty_str(rule_item.outbound_tag.as_deref()) else {
             validator_result.push_warning(ValidationCode::RoutingRuleWithoutOutbound {
                 rule: rule_name.to_string(),
             });
@@ -568,7 +524,7 @@ where
             return;
         };
 
-        let (active_rule_node, rule_result) = self.resolve_node(context, &rule_outbound_node);
+        let rule_result = self.resolve_node(context, &rule_outbound_node);
         let scope = ValidationScope::RoutingRuleOutbound {
             rule: rule_name.to_string(),
             outbound: outbound_tag.to_string(),
@@ -580,7 +536,7 @@ where
 
         context
             .all_proxies_map
-            .insert(format!("remark:{outbound_tag}"), active_rule_node);
+            .insert(format!("remark:{outbound_tag}"), rule_outbound_node);
     }
 
     /// A rule that sends traffic through a policy group. Members the generator
@@ -610,26 +566,8 @@ where
             });
             return;
         };
-        let mut usable = Vec::new();
-        for member in &group.members {
-            let scope = ValidationScope::PolicyGroupMember {
-                group: group.group.name.clone(),
-                member: member.remarks.clone(),
-            };
-            let member_result = register_single_node(context, member);
-            if member_result.success() {
-                usable.push(member.clone());
-                validator_result.extend_scoped(&scope, &member_result);
-            } else {
-                validator_result.warnings.extend(
-                    member_result
-                        .errors
-                        .iter()
-                        .chain(&member_result.warnings)
-                        .map(|finding| finding.clone().within(scope.clone())),
-                );
-            }
-        }
+        let usable =
+            register_group_members(context, validator_result, &group.group.name, &group.members);
         if usable.is_empty() {
             validator_result.push_error(ValidationCode::PolicyGroupWithoutValidMembers {
                 group: group.group.name.clone(),
@@ -693,6 +631,38 @@ fn register_single_node(
     }
 
     result
+}
+
+/// Registers every member of `group_name` that validates and returns those
+/// members in order. A member that fails is left out, with all of its findings
+/// reported as warnings scoped to that member.
+fn register_group_members(
+    context: &mut CoreConfigContext,
+    validator_result: &mut NodeValidatorResult,
+    group_name: &str,
+    members: &[ProfileItem],
+) -> Vec<ProfileItem> {
+    let mut usable = Vec::new();
+    for member in members {
+        let scope = ValidationScope::PolicyGroupMember {
+            group: group_name.to_string(),
+            member: member.remarks.clone(),
+        };
+        let member_result = register_single_node(context, member);
+        if member_result.success() {
+            usable.push(member.clone());
+            validator_result.extend_scoped(&scope, &member_result);
+        } else {
+            validator_result.warnings.extend(
+                member_result
+                    .errors
+                    .iter()
+                    .chain(&member_result.warnings)
+                    .map(|finding| finding.clone().within(scope.clone())),
+            );
+        }
+    }
+    usable
 }
 
 fn socks_profile(port: i32) -> ProfileItem {

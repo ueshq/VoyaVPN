@@ -5,7 +5,6 @@ import {
   connectionIpQueryKey,
   invalidationQueryKey,
   profileShareQrQueryKey,
-  profilesQueryKey,
   queryKeys,
 } from "@/ipc/query-keys";
 
@@ -49,7 +48,6 @@ const productionSources = Object.entries(sources).filter(
 const keyFactories = {
   connectionIpQueryKey: () => connectionIpQueryKey("profile:1"),
   profileShareQrQueryKey: () => profileShareQrQueryKey("share-link"),
-  profilesQueryKey: () => profilesQueryKey(""),
 };
 
 function invalidationScopeKinds(): string[] {
@@ -161,9 +159,10 @@ describe("query key registry", () => {
     expect(literals, "queryKey literals that bypass @/ipc/query-keys").toEqual([]);
   });
 
-  it("builds every parameterised key on top of its registry root", () => {
-    expect(profilesQueryKey("us")[0]).toBe(queryKeys.profiles[0]);
-    expect(profilesQueryKey("us")[1]).toEqual({ filter: "us" });
+  it("builds every nested key on top of its registry root", () => {
+    // A `profiles` invalidation has to reach the node list and the groups.
+    expect(queryKeys.profileList[0]).toBe(queryKeys.profiles[0]);
+    expect(queryKeys.policyGroups[0]).toBe(queryKeys.profiles[0]);
     expect(profileShareQrQueryKey("vmess://x")).toEqual([queryKeys.profileShareQr[0], "vmess://x"]);
     expect(connectionIpQueryKey("tokyo:42")).toEqual([queryKeys.connectionIp[0], "tokyo:42"]);
   });
@@ -173,6 +172,10 @@ describe("query key registry", () => {
     // the bridge relies on the null so it never throws in an event callback.
     expect(
       invalidationQueryKey({ kind: "somethingNewer" } as unknown as InvalidationScope),
+    ).toBeNull();
+    // Nor through a name every object inherits.
+    expect(
+      invalidationQueryKey({ kind: "toString" } as unknown as InvalidationScope),
     ).toBeNull();
   });
 });

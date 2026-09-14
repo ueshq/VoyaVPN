@@ -16,14 +16,19 @@ pub(crate) enum SingboxServer {
 }
 
 pub(super) fn gen_outbounds(config: &mut SingboxConfig, context: &CoreConfigContext) {
-    let servers = match &context.policy_group {
-        Some(active) => build_policy_group_servers(context, active, PROXY_TAG, None),
-        None => build_proxy_servers(context, &context.node, PROXY_TAG),
-    };
-    prepend_servers(config, servers);
+    match &context.policy_group {
+        Some(active) => prepend_servers(
+            config,
+            build_policy_group_servers(context, active, PROXY_TAG, None),
+        ),
+        None => prepend_servers(
+            config,
+            build_proxy_server(context, &context.node, PROXY_TAG),
+        ),
+    }
 }
 
-fn prepend_servers(config: &mut SingboxConfig, servers: Vec<SingboxServer>) {
+fn prepend_servers(config: &mut SingboxConfig, servers: impl IntoIterator<Item = SingboxServer>) {
     let mut outbounds = Vec::new();
     let mut endpoints = Vec::new();
     for server in servers {
@@ -36,7 +41,10 @@ fn prepend_servers(config: &mut SingboxConfig, servers: Vec<SingboxServer>) {
     config.endpoints.splice(0..0, endpoints);
 }
 
-pub(super) fn append_servers(config: &mut SingboxConfig, servers: Vec<SingboxServer>) {
+pub(super) fn append_servers(
+    config: &mut SingboxConfig,
+    servers: impl IntoIterator<Item = SingboxServer>,
+) {
     for server in servers {
         match server {
             SingboxServer::Outbound(outbound) => config.outbounds.push(*outbound),
@@ -59,12 +67,4 @@ pub(super) fn build_proxy_server(
     let mut outbound = build_outbound(context, node);
     outbound.tag = base_tag_name.to_string();
     Some(SingboxServer::Outbound(Box::new(outbound)))
-}
-
-pub(super) fn build_proxy_servers(
-    context: &CoreConfigContext,
-    node: &ProfileItem,
-    tag: &str,
-) -> Vec<SingboxServer> {
-    build_proxy_server(context, node, tag).into_iter().collect()
 }

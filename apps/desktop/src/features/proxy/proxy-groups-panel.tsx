@@ -7,7 +7,7 @@ import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { EmptyState } from "@voya/ui/components/empty-state";
 import { cn } from "@voya/ui/lib/utils";
-import { getErrorMessage } from "@voya/utils/error";
+import { formatDelay } from "@voya/utils/formatting";
 import {
   listPolicyGroups,
   policyGroupRuntime,
@@ -17,9 +17,9 @@ import {
 import { queryKeys } from "@/ipc/query-keys";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { POLICY_GROUP_STRATEGY_KEYS } from "@/features/profiles/policy-group-labels";
-import { profileNameWithoutFlag } from "@/features/profiles/profile-display";
+import { profileMemberName } from "@/features/profiles/profile-display";
 import { useShellStore } from "@/stores/shell-store";
-import { useToastStore } from "@/stores/toast-store";
+import { toastError } from "@/stores/toast-store";
 
 /** How often the running group's member and delays are read again while visible. */
 const RUNTIME_REFRESH_MS = 3_000;
@@ -35,7 +35,6 @@ export function ProxyGroupsPanel() {
   const connected = useRuntimeEventStore(
     (state) => state.coreState?.state === "connected",
   );
-  const pushToast = useToastStore((state) => state.pushToast);
   const setActiveTab = useShellStore((state) => state.setActiveTab);
   const groupsQuery = useQuery({
     queryFn: listPolicyGroups,
@@ -84,14 +83,6 @@ export function ProxyGroupsPanel() {
     runtime?.members.map((member) => [member.profileId, member.delayMs]) ?? [],
   );
 
-  function reportFailure(error: unknown) {
-    pushToast({
-      description: getErrorMessage(error),
-      severity: "error",
-      title: t("proxy.groups.actionFailed"),
-    });
-  }
-
   async function choose(profileId: string) {
     // The member switches at once; a failure puts the previous one back.
     const previous = queryClient.getQueryData(queryKeys.policyGroupRuntime);
@@ -102,7 +93,7 @@ export function ProxyGroupsPanel() {
       await selectPolicyGroupMember(group.id, profileId);
     } catch (error) {
       queryClient.setQueryData(queryKeys.policyGroupRuntime, previous);
-      reportFailure(error);
+      toastError(t("proxy.groups.actionFailed"), error);
     }
   }
 
@@ -113,7 +104,7 @@ export function ProxyGroupsPanel() {
       const measured = await testPolicyGroupDelay();
       if (measured) queryClient.setQueryData(queryKeys.policyGroupRuntime, measured);
     } catch (error) {
-      reportFailure(error);
+      toastError(t("proxy.groups.actionFailed"), error);
     } finally {
       setTesting(false);
     }
@@ -154,12 +145,12 @@ export function ProxyGroupsPanel() {
         {active.members.map((member) => {
           const current = member.profileId === runtime?.nowProfileId;
           const delay = delays.get(member.profileId);
-          const name = profileNameWithoutFlag(member.remarks) || member.profileId;
+          const name = profileMemberName(member.remarks, member.profileId);
           const content = (
             <>
               <span className="min-w-0 flex-1 truncate text-start">{name}</span>
               <span className="text-xs text-muted-foreground">
-                {delay ? t("policyGroups.delay", { ms: delay }) : "—"}
+                {formatDelay(delay) || "—"}
               </span>
             </>
           );

@@ -1,8 +1,7 @@
 import { MutationCache, QueryClient, type Mutation } from "@tanstack/react-query";
 
 import { i18next } from "@voya/i18n";
-import { redactOperationalError } from "@voya/utils/operational-redaction";
-import { useToastStore } from "@/stores/toast-store";
+import { toastError } from "@/stores/toast-store";
 
 /**
  * The single app-wide TanStack Query client.
@@ -28,11 +27,7 @@ export function createAppQueryClient() {
     },
     mutationCache: new MutationCache({
       onError: (error, _variables, _onMutateResult, mutation) => {
-        useToastStore.getState().pushToast({
-          description: redactOperationalError(error),
-          severity: "error",
-          title: mutationErrorTitle(mutation),
-        });
+        toastError(mutationErrorTitle(mutation), error);
       },
     }),
   });

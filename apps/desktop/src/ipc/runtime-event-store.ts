@@ -9,22 +9,18 @@ import type {
   RuntimeStatusResponse,
   ServerStatItem,
   SpeedtestResult,
-  SpeedtestStatus,
   StatisticsSnapshot,
   SystemProxyStatusResponse,
   TransientStreamEvent,
   TunStatus,
 } from "@/ipc/bindings";
 import { speedtestStatus } from "@/ipc/commands";
+import { isRecord } from "@voya/utils/guards";
 import { markRuntimeUpdate } from "./runtime-state-version";
 
-export type RuntimeProxyMonitorState = "starting" | ProxyMonitorState;
-
-export type RuntimeProxyMonitorStatus = {
-  message: string | null;
-  running: boolean;
-  stale: boolean;
-  state: RuntimeProxyMonitorState;
+/** The backend's monitor status, plus the `starting` state only the frontend knows. */
+export type RuntimeProxyMonitorStatus = Omit<ProxyMonitorStatus, "state"> & {
+  state: "starting" | ProxyMonitorState;
 };
 
 /**
@@ -51,7 +47,6 @@ export type RuntimeEventState = {
   proxyMonitorStatus: RuntimeProxyMonitorStatus;
   coreState: RuntimeStatusResponse | null;
   coreStateReceivedAt: number | null;
-  lastTransientEvent: TransientStreamEvent | null;
   logLines: StoredLogLine[];
   pushTransientEvent: (event: TransientStreamEvent) => void;
   refreshSpeedtestStatus: () => Promise<void>;
@@ -60,13 +55,10 @@ export type RuntimeEventState = {
   speedtestRunning: boolean;
   setProxyConnections: (snapshot: ProxyConnectionsSnapshot) => void;
   setProxyMonitorFailed: (message?: string | null) => void;
-  setProxyMonitorRunning: (message?: string | null) => void;
   setProxyMonitorStarting: (message?: string | null) => void;
   setProxyMonitorStatus: (status: ProxyMonitorStatus) => void;
-  setProxyMonitorStopped: (message?: string | null) => void;
   setCoreState: (event: RuntimeStatusResponse) => void;
   setSpeedtestRunning: (running: boolean) => void;
-  setSpeedtestStatus: (status: SpeedtestStatus) => void;
   setSysProxy: (event: SystemProxyStatusResponse) => void;
   setTun: (event: TunStatus) => void;
   statistics: StatisticsSnapshot | null;
@@ -74,18 +66,14 @@ export type RuntimeEventState = {
   tun: TunStatus | null;
 };
 
-type ProxyConnectionsEvent = Extract<TransientStreamEvent, { kind: "proxyConnections" }>;
-type LogLineTransientEvent = Extract<TransientStreamEvent, { kind: "logLine" }>;
-type StatisticsEvent = Extract<TransientStreamEvent, { kind: "statistics" }>;
 type FrameHandle = number | ReturnType<typeof setTimeout>;
 
 const MAX_LOG_LINES = 500;
 const MAX_PROXY_CONNECTIONS = 10_000;
 
-let pendingProxyConnectionsEvent: ProxyConnectionsEvent | null = null;
+let pendingProxyConnections: ProxyConnectionsSnapshot | null = null;
 let pendingProxyConnectionsFrame: FrameHandle | null = null;
 let pendingLogLines: StoredLogLine[] = [];
-let pendingLogLineEvent: LogLineTransientEvent | null = null;
 let pendingLogLinesFrame: FrameHandle | null = null;
 
 const payloadStringSchema = z.string().max(4096);
@@ -123,14 +111,12 @@ const initialProxyMonitorStatus: RuntimeProxyMonitorStatus = {
 export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
   clearLogs: () => {
     pendingLogLines = [];
-    pendingLogLineEvent = null;
     set({ logLines: [] });
   },
   proxyConnections: null,
   proxyMonitorStatus: initialProxyMonitorStatus,
   coreState: null,
   coreStateReceivedAt: null,
-  lastTransientEvent: null,
   logLines: [],
   pushTransientEvent: (event) => {
     if (event.kind === "proxyConnections") {
@@ -139,17 +125,18 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
         return;
       }
 
-      pendingProxyConnectionsEvent = { kind: "proxyConnections", payload };
+      pendingProxyConnections = payload;
       if (pendingProxyConnectionsFrame === null) {
         pendingProxyConnectionsFrame = scheduleFrame(() => {
-          const nextEvent = pendingProxyConnectionsEvent;
-          pendingProxyConnectionsEvent = null;
+          const snapshot = pendingProxyConnections;
+          pendingProxyConnections = null;
           pendingProxyConnectionsFrame = null;
-          if (nextEvent) {
+          if (snapshot) {
+            // Fresh data clears staleness only; the monitor state itself waits
+            // for a lifecycle event.
             set((state) => ({
-              proxyConnections: nextEvent.payload,
-              proxyMonitorStatus: markProxyDataFresh(state.proxyMonitorStatus),
-              lastTransientEvent: nextEvent,
+              proxyConnections: snapshot,
+              proxyMonitorStatus: { ...state.proxyMonitorStatus, stale: false },
             }));
           }
         });
@@ -166,20 +153,16 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
       if (pendingLogLines.length > MAX_LOG_LINES) {
         pendingLogLines = pendingLogLines.slice(-MAX_LOG_LINES);
       }
-      pendingLogLineEvent = event;
       if (pendingLogLinesFrame === null) {
         pendingLogLinesFrame = scheduleFrame(() => {
           const batch = pendingLogLines;
-          const nextEvent = pendingLogLineEvent;
           pendingLogLines = [];
-          pendingLogLineEvent = null;
           pendingLogLinesFrame = null;
-          if (batch.length === 0 || !nextEvent) {
+          if (batch.length === 0) {
             return;
           }
 
           set((state) => ({
-            lastTransientEvent: nextEvent,
             logLines: [...state.logLines, ...batch].slice(-MAX_LOG_LINES),
           }));
         });
@@ -191,20 +174,18 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
       switch (event.kind) {
         case "coreState":
           markRuntimeUpdate("coreState");
-          return { coreState: event.payload, coreStateReceivedAt: performance.now(), lastTransientEvent: event };
+          return { coreState: event.payload, coreStateReceivedAt: performance.now() };
         case "statistics": {
           const payload = parseStatisticsSnapshot(event.payload);
           if (!payload) {
             return {};
           }
 
-          const nextEvent: StatisticsEvent = { kind: "statistics", payload };
           if (!payload.serverStat?.indexId) {
-            return { lastTransientEvent: nextEvent, statistics: payload };
+            return { statistics: payload };
           }
 
           return {
-            lastTransientEvent: nextEvent,
             serverStatsByProfileId: {
               ...state.serverStatsByProfileId,
               [payload.serverStat.indexId]: payload.serverStat,
@@ -214,18 +195,14 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
         }
         case "sysProxyChanged":
           markRuntimeUpdate("sysProxy");
-          return { lastTransientEvent: event, sysProxy: event.payload };
+          return { sysProxy: event.payload };
         case "tunChanged":
           markRuntimeUpdate("tun");
-          return { lastTransientEvent: event, tun: event.payload };
+          return { tun: event.payload };
         case "proxyMonitorStatus":
-          return {
-            proxyMonitorStatus: toRuntimeProxyMonitorStatus(event.payload),
-            lastTransientEvent: event,
-          };
+          return { proxyMonitorStatus: event.payload };
         case "speedtestResult":
           return {
-            lastTransientEvent: event,
             speedtestResultsByProfileId: {
               ...state.speedtestResultsByProfileId,
               [event.payload.indexId]: event.payload,
@@ -245,24 +222,23 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
     }
   },
   setProxyMonitorFailed: (message = null) =>
-    set({ proxyMonitorStatus: makeProxyMonitorStatus("failed", false, true, message) }),
-  setProxyMonitorRunning: (message = null) =>
-    set({ proxyMonitorStatus: makeProxyMonitorStatus("running", true, false, message) }),
+    set({ proxyMonitorStatus: { message, running: false, stale: true, state: "failed" } }),
   setProxyMonitorStarting: (message = null) =>
     set((state) => ({
-      proxyMonitorStatus: makeProxyMonitorStatus("starting", false, state.proxyMonitorStatus.stale, message),
+      proxyMonitorStatus: {
+        message,
+        running: false,
+        stale: state.proxyMonitorStatus.stale,
+        state: "starting",
+      },
     })),
-  setProxyMonitorStatus: (proxyMonitorStatus) =>
-    set({ proxyMonitorStatus: toRuntimeProxyMonitorStatus(proxyMonitorStatus) }),
-  setProxyMonitorStopped: (message = null) =>
-    set({ proxyMonitorStatus: makeProxyMonitorStatus("stopped", false, true, message) }),
+  setProxyMonitorStatus: (proxyMonitorStatus) => set({ proxyMonitorStatus }),
   setCoreState: (coreState) => {
     markRuntimeUpdate("coreState");
     set({ coreState, coreStateReceivedAt: performance.now() });
   },
   setSpeedtestRunning: (speedtestRunning) => set({ speedtestRunning }),
   clearSpeedtestResults: () => set({ speedtestResultsByProfileId: {} }),
-  setSpeedtestStatus: (status) => set({ speedtestRunning: status.running }),
   setSysProxy: (sysProxy) => {
     markRuntimeUpdate("sysProxy");
     set({ sysProxy });
@@ -278,28 +254,6 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
   sysProxy: null,
   tun: null,
 }));
-
-function toRuntimeProxyMonitorStatus(status: ProxyMonitorStatus): RuntimeProxyMonitorStatus {
-  return {
-    message: status.message,
-    running: status.running,
-    stale: status.stale,
-    state: status.state,
-  };
-}
-
-function makeProxyMonitorStatus(
-  state: RuntimeProxyMonitorState,
-  running: boolean,
-  stale: boolean,
-  message: string | null,
-): RuntimeProxyMonitorStatus {
-  return { message, running, stale, state };
-}
-
-function markProxyDataFresh(status: RuntimeProxyMonitorStatus): RuntimeProxyMonitorStatus {
-  return { ...status, stale: false };
-}
 
 /**
  * Envelope-only validation. The snapshot is produced by the Rust side from the
@@ -327,10 +281,6 @@ function parseProxyConnectionsSnapshot(payload: unknown): ProxyConnectionsSnapsh
 function parseStatisticsSnapshot(payload: unknown): StatisticsSnapshot | null {
   const result = statisticsSnapshotSchema.safeParse(payload);
   return result.success ? result.data : null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isNullableNonnegativeFinite(value: unknown): boolean {

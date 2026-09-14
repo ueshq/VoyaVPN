@@ -32,7 +32,7 @@ function PageTitle({
   React.useEffect(() => {
     if (focusTitle) {
       titleRef.current?.focus();
-      useShellStore.setState({ focusPageTitle: false });
+      useShellStore.getState().consumeFocusPageTitle();
     }
   }, [focusTitle]);
   return (

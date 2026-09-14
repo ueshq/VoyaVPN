@@ -17,10 +17,7 @@ import { CheckboxField, TextField } from "@voya/ui/components/form-fields";
 import { saveSubscription, updateSubscriptions } from "@/ipc/commands";
 import type { Subscription } from "@/ipc/bindings";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
-import {
-  isSubscriptionUpdateFailure,
-  subscriptionUpdateMessages,
-} from "./subscription-update-result";
+import { assertSubscriptionUpdated } from "./subscription-update-result";
 
 type Props = {
   subscription?: Subscription | null;
@@ -103,12 +100,7 @@ function SubscriptionEditor({
       setForm(saved);
       if (create || needsUpdate) {
         setNeedsUpdate(true);
-        const result = await updateSubscriptions(saved.id, true, null);
-        if (isSubscriptionUpdateFailure(result))
-          throw new Error(
-            subscriptionUpdateMessages(result) ||
-              t("panes.subscriptions.updateNothingImported"),
-          );
+        assertSubscriptionUpdated(await updateSubscriptions(saved.id, true, null), t);
         setNeedsUpdate(false);
       }
       onOpenChange(false);

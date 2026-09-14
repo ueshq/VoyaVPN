@@ -2,8 +2,8 @@ import { useRef, useState, type RefObject } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { deleteProfiles, listProfiles, saveProfile } from "@/ipc/commands";
 import type { ImportProfilesResult, Profile, ProfileListEntry } from "@/ipc/bindings";
-import { profilesQueryKey } from "@/ipc/query-keys";
-import { useProfileActivation } from "@/features/home/use-profile-activation";
+import { queryKeys } from "@/ipc/query-keys";
+import { useProfileActivation } from "@/features/home/runtime-action";
 import { formatImportSummary } from "./server-table-actions";
 import type { DialogImportMethod } from "./import-methods";
 import type { TranslationFunction } from "@voya/i18n";
@@ -85,7 +85,7 @@ export function useNodeEditor(
       // Refresh the complete list after import. `import_profiles_from_text` still emits profiles +
       // subscriptions + subscriptionMetadata for every other cache.
       const refreshedProfiles = await listProfiles(null, null);
-      if (isActive()) queryClient.setQueryData(profilesQueryKey(""), refreshedProfiles);
+      if (isActive()) queryClient.setQueryData(queryKeys.profileList, refreshedProfiles);
     }
   }
 

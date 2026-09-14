@@ -1,4 +1,5 @@
 use super::*;
+use crate::host::strip_host_brackets;
 
 pub(crate) fn parse_direct_expected_ips(value: Option<&str>) -> (Vec<String>, Vec<String>, String) {
     let mut ip_cidr = Vec::new();
@@ -33,14 +34,14 @@ pub(crate) fn parse_dns_address_or_default(
 
 pub(crate) fn parse_dns_address(address: &str) -> Option<SingboxDnsServer> {
     let address_first = first_dns_address(address)?;
-    if matches!(address_first.as_str(), "local" | "localhost") {
+    if matches!(address_first, "local" | "localhost") {
         return Some(SingboxDnsServer {
             r#type: "local".to_string(),
             ..SingboxDnsServer::default()
         });
     }
 
-    let (domain, scheme, port, path) = parse_url_parts(&address_first)?;
+    let (domain, scheme, port, path) = parse_url_parts(address_first)?;
     if scheme.eq_ignore_ascii_case("dhcp") {
         // sing-box's DHCP server option is `interface`, not `server`.
         return Some(SingboxDnsServer {
@@ -66,13 +67,16 @@ pub(crate) fn parse_dns_address(address: &str) -> Option<SingboxDnsServer> {
     })
 }
 
-fn first_dns_address(address: &str) -> Option<String> {
+/// The resolver config generation uses from a DNS setting: the first entry of
+/// a comma-separated list, or of a semicolon-separated one when the value has
+/// no comma, trimmed.
+#[must_use]
+pub fn first_dns_address(address: &str) -> Option<&str> {
     let delimiter = if address.contains(',') { ',' } else { ';' };
     address
         .split(delimiter)
         .map(str::trim)
         .find(|item| !item.is_empty())
-        .map(str::to_string)
 }
 
 fn parse_url_parts(input: &str) -> Option<(String, String, Option<u16>, String)> {
@@ -154,12 +158,6 @@ fn parse_authority(authority: &str) -> Option<(String, Option<u16>)> {
 
 fn parse_authority_port(port: &str) -> Option<u16> {
     port.parse::<u16>().ok().filter(|port| *port > 0)
-}
-
-/// sing-box parses `dns.servers[].server` with `netip.ParseAddr`, which rejects
-/// the bracketed IPv6 authority form that URL parsing hands back.
-fn strip_host_brackets(host: &str) -> String {
-    host.trim_matches(['[', ']']).to_string()
 }
 
 pub(crate) fn domain_strategy4_sbox(strategy: Option<&str>) -> Option<String> {

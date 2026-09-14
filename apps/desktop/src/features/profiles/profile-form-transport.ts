@@ -1,6 +1,6 @@
 import type { ProfileTransport } from "@/ipc/bindings";
+import { trimToNull } from "@voya/utils/text";
 import { CONFIG_TYPES } from "./profile-constants";
-import { clean } from "./profile-form-text";
 import type { ParsedProfileFormValues } from "./profile-form-schema";
 export function formTransport(
   parsed: ParsedProfileFormValues,
@@ -11,40 +11,40 @@ export function formTransport(
     case "ws":
       return {
         kind: "websocket",
-        host: clean(options.host),
-        path: clean(options.path),
+        host: trimToNull(options.host),
+        path: trimToNull(options.path),
       };
     case "httpupgrade":
       return {
         kind: "httpUpgrade",
-        host: clean(options.host),
-        path: clean(options.path),
+        host: trimToNull(options.host),
+        path: trimToNull(options.path),
       };
     case "h2":
       return {
         kind: "http2",
-        host: clean(options.host),
-        path: clean(options.path),
+        host: trimToNull(options.host),
+        path: trimToNull(options.path),
       };
     case "grpc":
       return {
         kind: "grpc",
-        authority: clean(options.grpcAuthority),
-        serviceName: clean(options.grpcServiceName),
-        mode: clean(options.grpcMode),
+        authority: trimToNull(options.grpcAuthority),
+        serviceName: trimToNull(options.grpcServiceName),
+        mode: trimToNull(options.grpcMode),
       };
     case "quic":
       return {
         kind: "quic",
-        host: clean(options.host),
-        path: clean(options.path),
+        host: trimToNull(options.host),
+        path: trimToNull(options.path),
       };
     default:
       return {
         kind: "tcp",
-        header: clean(options.header),
-        host: clean(options.host),
-        path: clean(options.path),
+        header: trimToNull(options.header),
+        host: trimToNull(options.host),
+        path: trimToNull(options.path),
       };
   }
 }

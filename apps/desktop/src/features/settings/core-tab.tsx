@@ -1,5 +1,6 @@
 import { Disclosure } from "@voya/ui/components/disclosure";
-import { nullableText, SETTING_DEFAULTS } from "./settings-values";
+import { trimToNull } from "@voya/utils/text";
+import { SETTING_DEFAULTS } from "./settings-values";
 import {
   NumberField,
   SelectField,
@@ -88,7 +89,7 @@ export function CoreTab({
           checked={settings.core.logEnabled}
           label={t("settings.core.logEnabled")}
           onCheckedChange={(logEnabled) =>
-            patchCore({ logEnabled: logEnabled === true })
+            patchCore({ logEnabled })
           }
         />
         <SettingsSwitch
@@ -97,7 +98,7 @@ export function CoreTab({
           description={t("settings.core.allowInsecureHint")}
           label={t("settings.core.allowInsecure")}
           onCheckedChange={(defaultAllowInsecure) =>
-            patchCore({ defaultAllowInsecure: defaultAllowInsecure === true })
+            patchCore({ defaultAllowInsecure })
           }
         />
         <SettingsSwitch
@@ -106,7 +107,7 @@ export function CoreTab({
           description={t("settings.core.muxEnabledHint")}
           label={t("settings.core.muxEnabled")}
           onCheckedChange={(muxEnabled) =>
-            patchCore({ muxEnabled: muxEnabled === true })
+            patchCore({ muxEnabled })
           }
         />
         <SettingsSwitch
@@ -115,7 +116,7 @@ export function CoreTab({
           description={t("settings.core.cacheFileHint")}
           label={t("settings.core.cacheFileEnabled")}
           onCheckedChange={(cacheFileEnabled) =>
-            patchCore({ cacheFileEnabled: cacheFileEnabled === true })
+            patchCore({ cacheFileEnabled })
           }
         />
         <SelectField
@@ -184,7 +185,7 @@ export function CoreTab({
             id="rt-send-through"
             label={t("settings.core.sendThrough")}
             onChange={(sendThrough) =>
-              patchCore({ sendThrough: nullableText(sendThrough) })
+              patchCore({ sendThrough: trimToNull(sendThrough) })
             }
             value={settings.core.sendThrough ?? ""}
           />
@@ -193,7 +194,7 @@ export function CoreTab({
             id="rt-bind-interface"
             label={t("settings.core.bindInterface")}
             onChange={(bindInterface) =>
-              patchCore({ bindInterface: nullableText(bindInterface) })
+              patchCore({ bindInterface: trimToNull(bindInterface) })
             }
             value={settings.core.bindInterface ?? ""}
           />
@@ -227,7 +228,7 @@ export function CoreTab({
             checked={settings.multiplexing.padding ?? false}
             label={t("settings.fields.muxPadding")}
             onCheckedChange={(padding) =>
-              patchMux({ padding: padding === true })
+              patchMux({ padding })
             }
           />
         </SettingsGroup>

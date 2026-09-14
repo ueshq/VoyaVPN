@@ -1,4 +1,5 @@
 import type { RoutingRule, RoutingRuleScope } from "@/ipc/bindings";
+import { splitList, trimToNull } from "@voya/utils/text";
 
 export type RuleFormState = {
   id: string;
@@ -45,17 +46,17 @@ export function ruleToForm(rule: RoutingRule | null): RuleFormState {
 export function formToRule(form: RuleFormState): RoutingRule {
   return {
     id: form.id,
-    domain: textToList(form.domain),
+    domain: listOrNull(form.domain),
     enabled: form.enabled,
     inboundTags: form.inboundTags,
-    ip: textToList(form.ip),
+    ip: listOrNull(form.ip),
     kind: form.kind,
     network: [form.tcp && "tcp", form.udp && "udp"].filter(Boolean).join(",") || null,
-    outbound: emptyToNull(form.outbound),
-    port: emptyToNull(form.port),
-    process: textToList(form.process),
-    protocol: textToList(form.protocol),
-    remarks: emptyToNull(form.remarks),
+    outbound: trimToNull(form.outbound),
+    port: trimToNull(form.port),
+    process: listOrNull(form.process),
+    protocol: listOrNull(form.protocol),
+    remarks: trimToNull(form.remarks),
     scope: form.scope,
   };
 }
@@ -73,18 +74,9 @@ function listToText(values: string[] | null | undefined) {
   return values?.join("\n") ?? "";
 }
 
-function textToList(value: string) {
-  const list = value.split(/[\n,]/).flatMap((item) => {
-    const trimmed = item.trim();
-
-    return trimmed ? [trimmed] : [];
-  });
+/** The contract stores "no entries" as `null`, not as an empty list. */
+function listOrNull(value: string) {
+  const list = splitList(value);
 
   return list.length > 0 ? list : null;
-}
-
-function emptyToNull(value: string) {
-  const trimmed = value.trim();
-
-  return trimmed ? trimmed : null;
 }

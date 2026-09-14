@@ -1,6 +1,7 @@
 use sqlx::{sqlite::SqliteRow, Row};
 use voya_core::{ConfigType, ProfileExItem, ProfileItem};
 
+use super::decode_rows;
 use crate::{
     blob,
     executor::{delete_each, repository_constructors, run_query, RepositoryExecutor},
@@ -31,8 +32,8 @@ const PROFILE_LIST_QUERY: &str = r#"
 ///
 /// The count travels with the rows it is missing from rather than only reaching
 /// a log file: the profiles screen states it, so a short list is explained
-/// instead of looking like data loss. See [`decode_profile_rows`] for why the
-/// rows are skipped at all.
+/// instead of looking like data loss; a log line the user has no reason to open
+/// is not an explanation. See `decode_rows` for why the rows are skipped at all.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ProfileListing {
     pub items: Vec<(ProfileItem, ProfileExItem)>,
@@ -48,17 +49,7 @@ repository_constructors!(ProfileRepository);
 
 impl<'executor> ProfileRepository<'executor> {
     pub async fn upsert(&self, item: &ProfileItem) -> Result<()> {
-        let protocol = blob::profile_protocol_to_text(&item.protocol)?;
-        let transport = item
-            .transport
-            .as_ref()
-            .map(blob::profile_transport_to_text)
-            .transpose()?;
-        let tls = item
-            .tls
-            .as_ref()
-            .map(blob::tls_settings_to_text)
-            .transpose()?;
+        let (protocol, transport, tls) = blob::profile_blobs(item)?;
 
         run_query!(
             self.executor,
@@ -81,7 +72,7 @@ impl<'executor> ProfileRepository<'executor> {
             "#,
             )
             .bind(&item.index_id)
-            .bind(config_type_to_str(item.config_type()))
+            .bind(item.config_type().as_str())
             .bind(item.subscription_id.as_deref())
             .bind(item.display_log)
             .bind(&item.remarks)
@@ -160,7 +151,17 @@ impl<'executor> ProfileRepository<'executor> {
             fetch_all
         )?;
 
-        decode_profile_rows(&rows)
+        let (items, undecodable_rows) = decode_rows(
+            &rows,
+            "index_id",
+            "skipping a stored node this build cannot decode",
+            "some nodes were hidden because their stored payload could not be decoded",
+            |row| Ok((row_to_profile(row)?, row_to_profile_ex_joined(row)?)),
+        )?;
+        Ok(ProfileListing {
+            items,
+            undecodable_rows,
+        })
     }
 
     pub async fn exists(&self, index_id: &str) -> Result<bool> {
@@ -273,51 +274,6 @@ pub(crate) async fn normalize_retired_profile_blobs(pool: &sqlx::SqlitePool) -> 
     Ok(())
 }
 
-/// Decodes a listing's rows, dropping the ones this build cannot read.
-///
-/// The stored protocol/transport/TLS blobs are strict domain types with no
-/// version tag, so a row written by a newer build, or one whose `config_type`
-/// column disagrees with its blob, fails on its own. Propagating that would make
-/// every profile screen, the runtime's config generation, group resolution and
-/// subscription import fail together — the user could no longer see, connect to
-/// or even delete a server, and the only recovery would be deleting the database
-/// file. Bad rows are therefore logged and skipped, while genuine database
-/// faults (a missing column, a closed pool) still propagate.
-///
-/// The skip count is returned with the rows so the screens can say it out loud;
-/// a log line the user has no reason to open is not an explanation.
-fn decode_profile_rows(rows: &[SqliteRow]) -> Result<ProfileListing> {
-    let mut decoded = Vec::with_capacity(rows.len());
-    let mut skipped_rows = 0usize;
-
-    for row in rows {
-        match row_to_profile(row) {
-            Ok(profile) => decoded.push((profile, row_to_profile_ex_joined(row)?)),
-            Err(error) if error.is_row_payload() => {
-                skipped_rows += 1;
-                tracing::warn!(
-                    index_id = %row.try_get::<String, _>("index_id").unwrap_or_default(),
-                    error = %error,
-                    "skipping a stored node this build cannot decode"
-                );
-            }
-            Err(error) => return Err(error),
-        }
-    }
-
-    if skipped_rows > 0 {
-        tracing::warn!(
-            skipped_rows,
-            "some nodes were hidden because their stored payload could not be decoded"
-        );
-    }
-
-    Ok(ProfileListing {
-        items: decoded,
-        undecodable_rows: skipped_rows,
-    })
-}
-
 fn row_to_profile(row: &SqliteRow) -> Result<ProfileItem> {
     let config_type_value = row.try_get::<String, _>("config_type")?;
     let subscription_id = row.try_get::<Option<String>, _>("subscription_id")?;
@@ -332,7 +288,12 @@ fn row_to_profile(row: &SqliteRow) -> Result<ProfileItem> {
         .as_deref()
         .map(blob::tls_settings_from_text)
         .transpose()?;
-    let config_type = config_type_from_str(&config_type_value)?;
+    let Ok(config_type) = config_type_value.parse::<ConfigType>() else {
+        return Err(DbError::InvalidEnum {
+            enum_name: "ConfigType",
+            value: config_type_value,
+        });
+    };
     if protocol.config_type() != config_type {
         return Err(DbError::InvalidEnum {
             enum_name: "ProfileProtocol/config_type",
@@ -349,42 +310,6 @@ fn row_to_profile(row: &SqliteRow) -> Result<ProfileItem> {
         transport,
         tls,
     })
-}
-
-const fn config_type_to_str(value: ConfigType) -> &'static str {
-    match value {
-        ConfigType::VMess => "vmess",
-        ConfigType::Shadowsocks => "shadowsocks",
-        ConfigType::SOCKS => "socks",
-        ConfigType::VLESS => "vless",
-        ConfigType::Trojan => "trojan",
-        ConfigType::Hysteria2 => "hysteria2",
-        ConfigType::TUIC => "tuic",
-        ConfigType::WireGuard => "wireGuard",
-        ConfigType::HTTP => "http",
-        ConfigType::Anytls => "anytls",
-        ConfigType::Naive => "naive",
-    }
-}
-
-fn config_type_from_str(value: &str) -> Result<ConfigType> {
-    match value {
-        "vmess" => Ok(ConfigType::VMess),
-        "shadowsocks" => Ok(ConfigType::Shadowsocks),
-        "socks" => Ok(ConfigType::SOCKS),
-        "vless" => Ok(ConfigType::VLESS),
-        "trojan" => Ok(ConfigType::Trojan),
-        "hysteria2" => Ok(ConfigType::Hysteria2),
-        "tuic" => Ok(ConfigType::TUIC),
-        "wireGuard" => Ok(ConfigType::WireGuard),
-        "http" => Ok(ConfigType::HTTP),
-        "anytls" => Ok(ConfigType::Anytls),
-        "naive" => Ok(ConfigType::Naive),
-        _ => Err(DbError::InvalidEnum {
-            enum_name: "ConfigType",
-            value: value.to_string(),
-        }),
-    }
 }
 
 fn row_to_profile_ex_joined(row: &SqliteRow) -> Result<ProfileExItem> {

@@ -1,6 +1,6 @@
 use crate::{
-    AppConfig, ConfigType, InboundProtocol, ProfileItem, ProfileProtocol, ProfileTransport,
-    DEFAULT_LOCAL_PORT, STREAM_SECURITY_TLS,
+    text::nonempty_str, AppConfig, ConfigType, InboundProtocol, ProfileItem, ProfileProtocol,
+    ProfileTransport, STREAM_SECURITY_TLS,
 };
 
 pub(crate) const DEFAULT_SECURITY: &str = "auto";
@@ -226,8 +226,16 @@ pub(crate) fn split_list(value: &str) -> Option<Vec<String>> {
     )
 }
 
-pub(crate) fn nonempty_str(value: Option<&str>) -> Option<&str> {
-    value.map(str::trim).filter(|value| !value.is_empty())
+/// Comma-separated list with per-item trimming. The share-link parsers and the
+/// sing-box generator both use it, so an `alpn`/`pcs`/`ech` list parses the
+/// same way on both sides of a round trip.
+pub(crate) fn split_csv(input: &str) -> Vec<String> {
+    input
+        .split(',')
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 pub(crate) fn first_list_value(value: Option<&str>) -> String {
@@ -246,17 +254,11 @@ pub(crate) fn inbound_protocol_tag(protocol: InboundProtocol) -> &'static str {
         InboundProtocol::socks => "socks",
         InboundProtocol::socks2 => "socks2",
         InboundProtocol::socks3 => "socks3",
-        InboundProtocol::api => "api",
         InboundProtocol::api2 => "api2",
-        InboundProtocol::mixed => "mixed",
         InboundProtocol::speedtest => "speedtest",
     }
 }
 
 pub(crate) fn inbound_port(app_config: &AppConfig, protocol: InboundProtocol) -> i32 {
-    app_config
-        .inbound
-        .first()
-        .map_or(DEFAULT_LOCAL_PORT, |item| item.local_port)
-        + protocol.port_offset()
+    app_config.local_port() + protocol.port_offset()
 }

@@ -14,12 +14,13 @@ import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { buttonVariants } from "@voya/ui/components/button-variants";
 import { cn } from "@voya/ui/lib/utils";
+import { formatDelay } from "@voya/utils/formatting";
 import type { PolicyGroupEntry } from "@/ipc/bindings";
 
 import type { PolicyGroupsController } from "./node-controller-types";
 import { PolicyGroupDialog } from "./policy-group-dialog";
 import { POLICY_GROUP_STRATEGY_KEYS } from "./policy-group-labels";
-import { profileNameWithoutFlag } from "./profile-display";
+import { profileMemberName } from "./profile-display";
 import { SpeedtestButton } from "./server-table-menus";
 
 /**
@@ -254,12 +255,10 @@ function PolicyGroupCard({
         <div className="flex flex-wrap gap-2 px-5 pb-4">
           {members.map((member) => {
             const current = member.profileId === currentId;
-            const delay = delays.get(member.profileId);
-            const name = profileNameWithoutFlag(member.remarks) || member.profileId;
+            const delay = formatDelay(delays.get(member.profileId));
+            const name = profileMemberName(member.remarks, member.profileId);
             const detail = delay ? (
-              <span className="text-xs text-muted-foreground">
-                {t("policyGroups.delay", { ms: delay })}
-              </span>
+              <span className="text-xs text-muted-foreground">{delay}</span>
             ) : null;
             return group.strategy === "selector" ? (
               <Button

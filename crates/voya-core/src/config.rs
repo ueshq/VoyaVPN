@@ -62,6 +62,15 @@ pub enum ActiveTarget<'config> {
 }
 
 impl AppConfig {
+    /// The first inbound's local port, or [`DEFAULT_LOCAL_PORT`] when there is
+    /// no inbound.
+    #[must_use]
+    pub fn local_port(&self) -> i32 {
+        self.inbound
+            .first()
+            .map_or(DEFAULT_LOCAL_PORT, |inbound| inbound.local_port)
+    }
+
     #[must_use]
     pub fn active_target(&self) -> ActiveTarget<'_> {
         if !self.active_group_id.is_empty() {
@@ -253,17 +262,9 @@ impl Default for HysteriaItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProxyUiItem {
     pub traffic_mode: TrafficMode,
-}
-
-impl Default for ProxyUiItem {
-    fn default() -> Self {
-        Self {
-            traffic_mode: TrafficMode::Rule,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -325,16 +326,7 @@ pub struct SimpleDnsItem {
 
 impl Default for SimpleDnsItem {
     fn default() -> Self {
-        SimpleDnsDefaults::builtin()
-    }
-}
-
-pub struct SimpleDnsDefaults;
-
-impl SimpleDnsDefaults {
-    #[must_use]
-    pub fn builtin() -> SimpleDnsItem {
-        SimpleDnsItem {
+        Self {
             add_common_hosts: Some(true),
             fake_ip: Some(false),
             global_fake_ip: Some(true),

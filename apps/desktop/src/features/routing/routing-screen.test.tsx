@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeAppSettings } from "@/features/settings/app-settings.test-fixture";
 import type { CoreState, RoutingRule, Routing_Serialize } from "@/ipc/bindings";
 import { useRuntimeActionStore } from "@/stores/runtime-action-store";
-import { useShellStore } from "@/stores/shell-store";
 
 import { RoutingScreen } from "./routing-screen";
 
@@ -23,7 +22,10 @@ const ipc = vi.hoisted(() => ({
   resetRoutingRules: vi.fn(),
   saveRoutingRule: vi.fn(),
 }));
-vi.mock("@/ipc/commands", () => ipc);
+vi.mock("@/ipc/commands", async (importOriginal) => ({
+  ...ipc,
+  appErrorOfKind: (await importOriginal<typeof import("@/ipc/commands")>()).appErrorOfKind,
+}));
 
 const runtime = vi.hoisted(() => ({ state: "disconnected" as CoreState }));
 vi.mock("@/ipc/runtime-event-store", () => ({
@@ -50,7 +52,6 @@ describe("RoutingScreen", () => {
     ipc.saveRoutingRule.mockResolvedValue(activeRouting());
     ipc.deleteRoutingRules.mockResolvedValue(activeRouting());
     ipc.resetRoutingRules.mockResolvedValue(activeRouting());
-    useShellStore.setState({ routingPerAppRequested: false });
     useRuntimeActionStore.setState({ modePending: false, pendingAction: null, switchingId: null });
   });
 
@@ -172,7 +173,7 @@ describe("RoutingScreen", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens the per-app dialog from its card and from a settings deep link", async () => {
+  it("opens the per-app dialog from its card and closes it again", async () => {
     const user = userEvent.setup();
     renderScreen();
     await screen.findByText("Office");
@@ -180,9 +181,8 @@ describe("RoutingScreen", () => {
     await user.click(screen.getByRole("button", { name: "Edit" }));
     expect(await screen.findByRole("heading", { name: "Per-app proxy" , level: 2 })).toBeInTheDocument();
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
-    expect(useShellStore.getState().routingPerAppRequested).toBe(true);
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(useShellStore.getState().routingPerAppRequested).toBe(false));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
   it("reports a failed save inline", async () => {

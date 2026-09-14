@@ -152,7 +152,7 @@ export function ServerTableToolbar({
         bare
         value={addMenuOpen ? "add" : ""}
         onValueChange={(value) => {
-          useShellStore.setState({ profilesAddMenuOpen: value === "add" });
+          useShellStore.getState().setProfilesAddMenuOpen(value === "add");
         }}
       >
         <MenubarMenu value="add">

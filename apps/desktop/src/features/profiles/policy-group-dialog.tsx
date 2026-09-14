@@ -15,9 +15,9 @@ import {
 } from "@voya/ui/components/dialog";
 import { Disclosure } from "@voya/ui/components/disclosure";
 import { SelectField, TextField } from "@voya/ui/components/form-fields";
-import { getErrorMessage } from "@voya/utils/error";
+import { redactOperationalError } from "@voya/utils/operational-redaction";
 import type { PolicyGroup, ProfileListEntry, Subscription } from "@/ipc/bindings";
-import { IpcCommandError, savePolicyGroup } from "@/ipc/commands";
+import { appErrorOfKind, savePolicyGroup } from "@/ipc/commands";
 import { validationFieldErrors } from "@/ipc/messages";
 
 import {
@@ -25,7 +25,7 @@ import {
   POLICY_GROUP_STRATEGY_HINT_KEYS,
   POLICY_GROUP_STRATEGY_KEYS,
 } from "./policy-group-labels";
-import { profileNameWithoutFlag } from "./profile-display";
+import { profileMemberName } from "./profile-display";
 
 type Props = {
   group: PolicyGroup | null;
@@ -111,10 +111,11 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
       });
       onOpenChange(false);
     } catch (cause) {
-      if (cause instanceof IpcCommandError && cause.appError.kind.type === "validation") {
-        setFieldErrors(validationFieldErrors(t, cause.appError.kind.issues));
+      const validation = appErrorOfKind(cause, "validation");
+      if (validation) {
+        setFieldErrors(validationFieldErrors(t, validation.kind.issues));
       } else {
-        setError(getErrorMessage(cause));
+        setError(redactOperationalError(cause));
       }
     } finally {
       setPending(false);
@@ -190,7 +191,7 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
                       checked={form.memberIds.includes(id)}
                       onCheckedChange={(checked) => toggleMember(id, checked === true)}
                     />
-                    <span className="truncate">{profileNameWithoutFlag(entry.profile.remarks) || id}</span>
+                    <span className="truncate">{profileMemberName(entry.profile.remarks, id)}</span>
                   </label>
                 );
               })}
@@ -209,7 +210,7 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
               <ol aria-label={t("policyGroups.order")} className="grid gap-1 rounded-md border p-2">
                 {form.memberIds.map((id, index) => {
                   const remarks = nodes.find((entry) => entry.profile.id === id)?.profile.remarks ?? "";
-                  const name = profileNameWithoutFlag(remarks) || id;
+                  const name = profileMemberName(remarks, id);
                   return (
                     <li className="flex items-center gap-2 text-sm" key={id}>
                       <span className="w-5 text-end text-xs tabular-nums text-muted-foreground">

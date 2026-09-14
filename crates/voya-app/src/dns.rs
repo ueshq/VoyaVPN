@@ -26,14 +26,14 @@ impl<'db> DnsManager<'db> {
     #[must_use]
     pub fn new(database: &'db Database) -> Self {
         Self {
-            _database: DatabaseSession::from_database(database),
+            _database: DatabaseSession::Database(database),
         }
     }
 
     #[must_use]
     pub fn new_in(unit_of_work: &'db UnitOfWork) -> Self {
         Self {
-            _database: DatabaseSession::from_unit_of_work(unit_of_work),
+            _database: DatabaseSession::UnitOfWork(unit_of_work),
         }
     }
 

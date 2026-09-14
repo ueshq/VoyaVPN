@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { redactOperationalError } from "@voya/utils/operational-redaction";
 import type { AppNoticeLevel } from "@/ipc/bindings";
 
 type AppToast = {
@@ -29,3 +30,15 @@ export const useToastStore = create<ToastState>((set) => ({
   },
   toasts: [],
 }));
+
+/**
+ * Reports a failure as an error toast. Error text can carry subscription URLs
+ * and credentials, so the description is always redacted.
+ */
+export function toastError(title: string, error: unknown) {
+  useToastStore.getState().pushToast({
+    description: redactOperationalError(error),
+    severity: "error",
+    title,
+  });
+}

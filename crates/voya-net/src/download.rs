@@ -13,8 +13,8 @@ pub(crate) mod redirect;
 pub(crate) use redirect::is_denied_local_host;
 use redirect::redirect_policy;
 
-/// Shared user agent prefix for network clients.
-pub const USER_AGENT_PREFIX: &str = "VoyaVPN";
+/// The user agent a download sends when its request names none.
+pub(crate) const USER_AGENT_PREFIX: &str = "VoyaVPN";
 
 /// Whole-request deadline. It bounds the Clash REST client and text downloads, which are always
 /// small — subscriptions and routing templates are capped at `DEFAULT_TEXT_RESPONSE_LIMIT_BYTES`.
@@ -110,6 +110,7 @@ pub struct DownloadRequest {
 }
 
 impl DownloadRequest {
+    #[cfg(test)]
     #[must_use]
     pub fn direct(url: impl Into<String>) -> Self {
         Self {
@@ -121,6 +122,7 @@ impl DownloadRequest {
         }
     }
 
+    #[cfg(test)]
     #[must_use]
     pub fn with_response_body_limit(mut self, limit: usize) -> Self {
         self.response_body_limit = Some(limit);
@@ -157,26 +159,21 @@ pub struct DownloadBytesResponse {
 
 trait DownloadBody {
     fn byte_len(&self) -> usize;
-    fn is_empty(&self) -> bool;
+
+    fn is_empty(&self) -> bool {
+        self.byte_len() == 0
+    }
 }
 
 impl DownloadBody for String {
     fn byte_len(&self) -> usize {
         self.len()
     }
-
-    fn is_empty(&self) -> bool {
-        String::is_empty(self)
-    }
 }
 
 impl DownloadBody for Vec<u8> {
     fn byte_len(&self) -> usize {
         self.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        Vec::is_empty(self)
     }
 }
 
@@ -190,9 +187,24 @@ impl<T: DownloadBody> DownloadBody for BodyWithHeaders<T> {
     fn byte_len(&self) -> usize {
         self.body.byte_len()
     }
+}
 
-    fn is_empty(&self) -> bool {
-        self.body.is_empty()
+/// The record of one attempt: the bytes it received, and why it does not count
+/// as a download when it failed or came back empty.
+fn attempt<T: DownloadBody>(url: &str, via_proxy: bool, result: &Result<T>) -> DownloadAttempt {
+    let (bytes, error) = match result {
+        Ok(body) if body.is_empty() => (
+            body.byte_len(),
+            Some(EMPTY_RESPONSE_ATTEMPT_ERROR.to_string()),
+        ),
+        Ok(body) => (body.byte_len(), None),
+        Err(error) => (0, Some(error.to_string())),
+    };
+    DownloadAttempt {
+        url: url.to_string(),
+        via_proxy,
+        bytes,
+        error,
     }
 }
 
@@ -229,7 +241,7 @@ impl DownloadClient {
 
     /// Builds a client whose transfers are bounded by silence instead of by total elapsed time,
     /// so a slow multi-megabyte asset download can be exercised in milliseconds.
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(test)]
     #[must_use]
     pub fn with_read_timeout_for_tests(read_timeout: Duration) -> Self {
         Self::with_read_timeout(read_timeout)
@@ -297,123 +309,55 @@ impl DownloadClient {
                 .as_deref()
                 .filter(|value| !value.is_empty())
             {
-                match self.proxy_client(&request.url, proxy_url) {
+                let result = match self.proxy_client(&request.url, proxy_url) {
                     Ok(client) => {
-                        match request_body(
+                        request_body(
                             &client,
                             &request.url,
                             request.user_agent.as_deref(),
                             response_body_limit,
                         )
                         .await
-                        {
-                            Ok(body) if !body.is_empty() => {
-                                let bytes = body.byte_len();
-                                attempts.push(DownloadAttempt {
-                                    url: request.url.clone(),
-                                    via_proxy: true,
-                                    bytes,
-                                    error: None,
-                                });
-
-                                return Ok(DownloadOutput {
-                                    body,
-                                    used_proxy: true,
-                                    attempts,
-                                });
-                            }
-                            Ok(body) => attempts.push(DownloadAttempt {
-                                url: request.url.clone(),
-                                via_proxy: true,
-                                bytes: body.byte_len(),
-                                error: Some(EMPTY_RESPONSE_ATTEMPT_ERROR.to_string()),
-                            }),
-                            Err(error) => attempts.push(DownloadAttempt {
-                                url: request.url.clone(),
-                                via_proxy: true,
-                                bytes: 0,
-                                error: Some(error.to_string()),
-                            }),
-                        }
                     }
-                    Err(error) => attempts.push(DownloadAttempt {
-                        url: request.url.clone(),
-                        via_proxy: true,
-                        bytes: 0,
-                        error: Some(error.to_string()),
-                    }),
+                    Err(error) => Err(error),
+                };
+                attempts.push(attempt(&request.url, true, &result));
+                if let Ok(body) = result {
+                    if !body.is_empty() {
+                        return Ok(DownloadOutput {
+                            body,
+                            used_proxy: true,
+                            attempts,
+                        });
+                    }
                 }
             }
         }
 
-        let client = match self.direct_client(&request.url) {
-            Ok(client) => client,
-            Err(error) => {
-                attempts.push(DownloadAttempt {
-                    url: request.url.clone(),
-                    via_proxy: false,
-                    bytes: 0,
-                    error: Some(error.to_string()),
-                });
-                return Err(DownloadError::AttemptsFailed {
-                    url: request.url,
-                    attempts,
-                });
+        let result = match self.direct_client(&request.url) {
+            Ok(client) => {
+                request_body(
+                    &client,
+                    &request.url,
+                    request.user_agent.as_deref(),
+                    response_body_limit,
+                )
+                .await
             }
+            Err(error) => Err(error),
         };
-
-        match request_body(
-            &client,
-            &request.url,
-            request.user_agent.as_deref(),
-            response_body_limit,
-        )
-        .await
-        {
-            Ok(body) if !body.is_empty() => {
-                let bytes = body.byte_len();
-                attempts.push(DownloadAttempt {
-                    url: request.url.clone(),
-                    via_proxy: false,
-                    bytes,
-                    error: None,
-                });
-
-                Ok(DownloadOutput {
-                    body,
-                    used_proxy: false,
-                    attempts,
-                })
-            }
-            Ok(body) => {
-                attempts.push(DownloadAttempt {
-                    url: request.url.clone(),
-                    via_proxy: false,
-                    bytes: body.byte_len(),
-                    error: Some(EMPTY_RESPONSE_ATTEMPT_ERROR.to_string()),
-                });
-                Err(DownloadError::AttemptsFailed {
-                    url: request.url,
-                    attempts,
-                })
-            }
-            Err(error) => {
-                let response_too_large = matches!(&error, DownloadError::ResponseTooLarge { .. });
-                attempts.push(DownloadAttempt {
-                    url: request.url.clone(),
-                    via_proxy: false,
-                    bytes: 0,
-                    error: Some(error.to_string()),
-                });
-                if response_too_large {
-                    Err(error)
-                } else {
-                    Err(DownloadError::AttemptsFailed {
-                        url: request.url,
-                        attempts,
-                    })
-                }
-            }
+        attempts.push(attempt(&request.url, false, &result));
+        match result {
+            Ok(body) if !body.is_empty() => Ok(DownloadOutput {
+                body,
+                used_proxy: false,
+                attempts,
+            }),
+            Err(error @ DownloadError::ResponseTooLarge { .. }) => Err(error),
+            _ => Err(DownloadError::AttemptsFailed {
+                url: request.url,
+                attempts,
+            }),
         }
     }
 

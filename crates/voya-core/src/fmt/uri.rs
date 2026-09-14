@@ -220,7 +220,7 @@ pub(super) fn to_uri_query(
             };
             query.push((
                 "headerType".to_string(),
-                nonempty_option(header).unwrap_or(NONE).to_string(),
+                nonempty_str(header.as_deref()).unwrap_or(NONE).to_string(),
             ));
             push_encoded_opt(query, "host", host);
             push_encoded_opt(query, "path", path);
@@ -245,7 +245,7 @@ pub(super) fn to_uri_query(
                 }) => (authority, service_name, mode),
                 _ => return,
             };
-            if nonempty_option(service_name).is_none() {
+            if nonempty_str(service_name.as_deref()).is_none() {
                 return;
             }
             query.push((
@@ -256,7 +256,7 @@ pub(super) fn to_uri_query(
                 "serviceName".to_string(),
                 url_encode(service_name.as_deref().unwrap_or("")),
             ));
-            if let Some(mode) = nonempty_option(mode) {
+            if let Some(mode) = nonempty_str(mode.as_deref()) {
                 if mode == GRPC_GUN_MODE || mode == GRPC_MULTI_MODE {
                     query.push(("mode".to_string(), url_encode(mode)));
                 }

@@ -1,7 +1,9 @@
 use std::{
     collections::BTreeMap,
+    ffi::OsStr,
     fs, io,
     path::{Path, PathBuf},
+    process::Command,
     sync::Arc,
 };
 #[cfg(unix)]
@@ -11,7 +13,6 @@ use std::{
 };
 
 use thiserror::Error;
-use zeroize::Zeroizing;
 
 use crate::coreinfo::CoreLaunch;
 
@@ -48,27 +49,6 @@ impl ProcessHandle {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
-pub struct ProcessStdin(Zeroizing<String>);
-
-impl ProcessStdin {
-    #[must_use]
-    pub fn new(secret: Zeroizing<String>) -> Self {
-        Self(secret)
-    }
-
-    #[must_use]
-    pub fn expose_for_process(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-impl std::fmt::Debug for ProcessStdin {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str("ProcessStdin(<redacted>)")
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GeneratedScript {
     pub directory: PathBuf,
@@ -102,7 +82,6 @@ pub struct ProcessSpawn {
     pub working_dir: PathBuf,
     pub environment: BTreeMap<String, String>,
     pub display_log: bool,
-    pub stdin: Option<ProcessStdin>,
     pub generated_scripts: Vec<GeneratedScript>,
 }
 
@@ -116,7 +95,6 @@ impl ProcessSpawn {
             working_dir: PathBuf::new(),
             environment: BTreeMap::new(),
             display_log: true,
-            stdin: None,
             generated_scripts: Vec::new(),
         }
     }
@@ -133,7 +111,6 @@ impl ProcessSpawn {
             working_dir: launch.working_dir.clone(),
             environment: launch.environment.clone(),
             display_log,
-            stdin: None,
             generated_scripts: Vec::new(),
         })
     }
@@ -161,11 +138,6 @@ impl ProcessSpawn {
         self.generated_scripts.push(script);
         self
     }
-
-    #[must_use]
-    pub fn has_stdin(&self) -> bool {
-        self.stdin.is_some()
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -173,6 +145,14 @@ pub struct ProcessOutput {
     pub status_code: Option<i32>,
     pub stdout: String,
     pub stderr: String,
+}
+
+impl ProcessOutput {
+    /// Whether the process exited with status 0.
+    #[must_use]
+    pub fn success(&self) -> bool {
+        self.status_code == Some(0)
+    }
 }
 
 /// Supervises OS child processes.
@@ -226,10 +206,6 @@ pub enum ProcessError {
         executable: PathBuf,
         source: io::Error,
     },
-    #[error("failed to write process stdin: {0}")]
-    WriteStdin(io::Error),
-    #[error("process stdin pipe was unavailable")]
-    MissingStdinPipe,
     #[error("failed while waiting for process: {0}")]
     Wait(io::Error),
     #[error("failed to stop process: {0}")]
@@ -252,7 +228,7 @@ pub enum ProcessError {
     Job(String),
 }
 
-pub fn split_command_line(input: &str) -> Result<Vec<String>, ProcessError> {
+pub(crate) fn split_command_line(input: &str) -> Result<Vec<String>, ProcessError> {
     let mut args = Vec::new();
     let mut current = String::new();
     let mut quote = None;
@@ -328,4 +304,39 @@ pub fn command_output_text(stdout: &[u8], stderr: &[u8]) -> String {
     } else {
         format!("{stdout}\n{stderr}")
     }
+}
+
+/// A command for `program` that opens no console window.
+///
+/// Windows gives every console-subsystem child of a GUI-subsystem parent (the
+/// core, `reg`, `sc.exe`, `tasklist`) its own visible console, regardless of
+/// the child's redirected stdio, unless `CREATE_NO_WINDOW` is set.
+#[cfg(windows)]
+pub(crate) fn hidden_command(program: impl AsRef<OsStr>) -> Command {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    let mut command = Command::new(program);
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
+}
+
+/// A command for `program`; only Windows needs the console window suppressed.
+#[cfg(not(windows))]
+pub(crate) fn hidden_command(program: impl AsRef<OsStr>) -> Command {
+    Command::new(program)
+}
+
+/// `reg add` arguments that set `name` under `key` to `value` of `value_type`.
+pub(crate) fn reg_add_arguments(
+    key: &str,
+    name: &str,
+    value_type: &str,
+    value: &str,
+) -> Vec<String> {
+    ["add", key, "/v", name, "/t", value_type, "/d", value, "/f"]
+        .into_iter()
+        .map(str::to_string)
+        .collect()
 }

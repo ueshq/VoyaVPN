@@ -1,7 +1,8 @@
+use sqlx::SqliteConnection;
 use voya_contracts::{AppSettingsV1, CURRENT_SCHEMA_VERSION};
 
 use crate::{
-    executor::{repository_constructors, run_query, RepositoryExecutor},
+    executor::{repository_constructors, run_query, with_connection, RepositoryExecutor},
     AppStateRecord, DbError, Result,
 };
 
@@ -35,28 +36,21 @@ impl<'executor> SettingsRepository<'executor> {
             return Ok(None);
         };
         if version != i64::from(CURRENT_SCHEMA_VERSION) {
-            return Err(DbError::UnsupportedDatabaseSchema {
-                path: "app_settings".into(),
-                found: Some(version),
-                expected: i64::from(CURRENT_SCHEMA_VERSION),
-                manual_reset_command: settings_reset_command(),
-            });
+            return Err(schema_mismatch("app_settings", version));
         }
         let settings: AppSettingsV1 = serde_json::from_str(&payload).map_err(payload_error)?;
         if settings.schema_version != CURRENT_SCHEMA_VERSION {
-            return Err(DbError::UnsupportedDatabaseSchema {
-                path: "app_settings.payload".into(),
-                found: Some(i64::from(settings.schema_version)),
-                expected: i64::from(CURRENT_SCHEMA_VERSION),
-                manual_reset_command: settings_reset_command(),
-            });
+            return Err(schema_mismatch(
+                "app_settings.payload",
+                i64::from(settings.schema_version),
+            ));
         }
         Ok(Some(settings))
     }
 
     pub async fn save(&self, settings: &AppSettingsV1) -> Result<()> {
         let payload = validated_payload(settings)?;
-        save_settings(self.executor, &payload).await?;
+        run_query!(self.executor, settings_upsert_query(&payload), execute)?;
         Ok(())
     }
 
@@ -66,20 +60,19 @@ impl<'executor> SettingsRepository<'executor> {
         state: &AppStateRecord,
     ) -> Result<()> {
         let payload = validated_payload(settings)?;
-        match self.executor {
-            RepositoryExecutor::Pool(pool) => {
-                let mut transaction = pool.begin().await?;
-                save_settings_on(&mut *transaction, &payload).await?;
-                save_state_on(&mut *transaction, state).await?;
-                transaction.commit().await?;
-                Ok(())
-            }
-            RepositoryExecutor::Transaction(transaction) => {
-                let mut transaction = transaction.lock().await;
-                save_settings_on(&mut **transaction, &payload).await?;
-                save_state_on(&mut **transaction, state).await
-            }
-        }
+        with_connection(
+            self.executor,
+            &(payload.as_str(), state),
+            |connection, (payload, state)| {
+                Box::pin(async move {
+                    settings_upsert_query(payload)
+                        .execute(&mut *connection)
+                        .await?;
+                    save_state_on(connection, state).await
+                })
+            },
+        )
+        .await
     }
 }
 
@@ -229,24 +222,23 @@ fn json_at<'value>(
 
 fn validated_payload(settings: &AppSettingsV1) -> Result<String> {
     if settings.schema_version != CURRENT_SCHEMA_VERSION {
-        return Err(DbError::UnsupportedDatabaseSchema {
-            path: "app_settings.payload".into(),
-            found: Some(i64::from(settings.schema_version)),
-            expected: i64::from(CURRENT_SCHEMA_VERSION),
-            manual_reset_command: settings_reset_command(),
-        });
+        return Err(schema_mismatch(
+            "app_settings.payload",
+            i64::from(settings.schema_version),
+        ));
     }
-    let payload = serde_json::to_string(settings).map_err(payload_error)?;
-    Ok(payload)
+    serde_json::to_string(settings).map_err(payload_error)
 }
 
-fn settings_reset_command() -> String {
-    "remove the Voya database file reported at startup, then restart VoyaVPN".to_string()
-}
-
-async fn save_settings(executor: RepositoryExecutor<'_>, payload: &str) -> Result<()> {
-    run_query!(executor, settings_upsert_query(payload), execute)?;
-    Ok(())
+/// A stored or submitted settings version this build does not read.
+fn schema_mismatch(path: &str, found: i64) -> DbError {
+    DbError::UnsupportedDatabaseSchema {
+        path: path.into(),
+        found: Some(found),
+        expected: i64::from(CURRENT_SCHEMA_VERSION),
+        manual_reset_command:
+            "remove the Voya database file reported at startup, then restart VoyaVPN".to_string(),
+    }
 }
 
 fn settings_upsert_query(
@@ -265,23 +257,12 @@ fn settings_upsert_query(
     .bind(payload)
 }
 
-async fn save_settings_on<'executor, E>(executor: E, payload: &str) -> Result<()>
-where
-    E: sqlx::Executor<'executor, Database = sqlx::Sqlite>,
-{
-    settings_upsert_query(payload).execute(executor).await?;
-    Ok(())
-}
-
-async fn save_state_on<'executor, E>(executor: E, state: &AppStateRecord) -> Result<()>
-where
-    E: sqlx::Executor<'executor, Database = sqlx::Sqlite>,
-{
+async fn save_state_on(connection: &mut SqliteConnection, state: &AppStateRecord) -> Result<()> {
     sqlx::query("UPDATE app_state SET active_profile_id = ?, active_routing_id = ?, active_group_id = ? WHERE id = 1")
         .bind(state.active_profile_id.as_deref())
         .bind(state.active_routing_id.as_deref())
         .bind(state.active_group_id.as_deref())
-        .execute(executor)
+        .execute(connection)
         .await?;
     Ok(())
 }

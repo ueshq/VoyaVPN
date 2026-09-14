@@ -98,7 +98,7 @@ export function GeneralTab({
           onCheckedChange={(checked) =>
             update((current) => ({
               ...current,
-              behavior: { ...current.behavior, autostart: checked === true },
+              behavior: { ...current.behavior, autostart: checked },
             }))
           }
         />
@@ -115,7 +115,7 @@ export function GeneralTab({
           onCheckedChange={(checked) =>
             update((current) => ({
               ...current,
-              behavior: { ...current.behavior, startMinimized: checked === true },
+              behavior: { ...current.behavior, startMinimized: checked },
             }))
           }
         />
@@ -148,7 +148,7 @@ export function GeneralTab({
           onCheckedChange={(checked) =>
             update((current) => ({
               ...current,
-              behavior: { ...current.behavior, autoCheckIp: checked === true },
+              behavior: { ...current.behavior, autoCheckIp: checked },
             }))
           }
         />
@@ -163,7 +163,7 @@ export function GeneralTab({
               ...current,
               behavior: {
                 ...current.behavior,
-                autoCreateSubscriptionGroup: checked === true,
+                autoCreateSubscriptionGroup: checked,
               },
             }))
           }

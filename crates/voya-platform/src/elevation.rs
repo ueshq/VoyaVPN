@@ -33,13 +33,8 @@ pub const fn should_use_unix_sudo(
 /// this spawn succeeds without any stdin secret.
 #[must_use]
 pub fn wrap_spawn_with_unix_sudo_passwordless(base: ProcessSpawn, launcher: &Path) -> ProcessSpawn {
-    let mut arguments = vec![
-        "-n".to_string(),
-        "--".to_string(),
-        launcher.to_string_lossy().into_owned(),
-        "run".to_string(),
-        base.executable.to_string_lossy().into_owned(),
-    ];
+    let mut arguments = sudo_launcher_arguments(launcher, "run");
+    arguments.push(base.executable.to_string_lossy().into_owned());
     arguments.extend(base.arguments);
 
     ProcessSpawn {
@@ -49,9 +44,19 @@ pub fn wrap_spawn_with_unix_sudo_passwordless(base: ProcessSpawn, launcher: &Pat
         working_dir: base.working_dir,
         environment: base.environment,
         display_log: base.display_log,
-        stdin: None,
         generated_scripts: Vec::new(),
     }
+}
+
+/// `sudo` arguments that run `verb` of the root-owned `launcher` without a
+/// password prompt; the verb's own arguments follow.
+pub(crate) fn sudo_launcher_arguments(launcher: &Path, verb: &str) -> Vec<String> {
+    vec![
+        "-n".to_string(),
+        "--".to_string(),
+        launcher.to_string_lossy().into_owned(),
+        verb.to_string(),
+    ]
 }
 
 /// Build the passwordless `sudo -n` kill plan that drives the launcher's `kill`
@@ -68,13 +73,8 @@ pub fn unix_sudo_kill_spawn_passwordless(
     }
 
     let expected_names = expected_process_comm_names(expected_executable.as_ref())?;
-    let mut arguments = vec![
-        "-n".to_string(),
-        "--".to_string(),
-        launcher.to_string_lossy().into_owned(),
-        "kill".to_string(),
-        target_pid.to_string(),
-    ];
+    let mut arguments = sudo_launcher_arguments(launcher, "kill");
+    arguments.push(target_pid.to_string());
     arguments.extend(expected_names);
 
     Ok(ProcessSpawn::new(ProcessRole::SudoKill, SUDO_EXECUTABLE)
@@ -254,7 +254,7 @@ pub(crate) fn expected_process_comm_names(
 }
 
 #[must_use]
-pub fn quote_shell_arg(value: &str) -> String {
+pub(crate) fn quote_shell_arg(value: &str) -> String {
     if value.is_empty() {
         return "''".to_string();
     }
@@ -290,7 +290,6 @@ mod tests {
         let wrapped = wrap_spawn_with_unix_sudo_passwordless(base, &launcher);
 
         assert_eq!(wrapped.executable, PathBuf::from(SUDO_EXECUTABLE));
-        assert!(!wrapped.has_stdin());
         assert!(wrapped.generated_scripts.is_empty());
         assert_eq!(
             wrapped.arguments,
@@ -320,7 +319,6 @@ mod tests {
         .expect("linux kill plan");
 
         assert_eq!(spawn.executable, PathBuf::from(SUDO_EXECUTABLE));
-        assert!(!spawn.has_stdin());
         assert_eq!(
             spawn.arguments,
             vec![

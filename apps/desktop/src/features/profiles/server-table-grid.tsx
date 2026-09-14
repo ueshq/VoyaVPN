@@ -12,10 +12,11 @@ import { cn } from "@voya/ui/lib/utils";
 import { NodeGroupCard } from "./node-group-card";
 
 import {
-  profileFlagCountryCode,
+  entryCountry,
   profileLatency,
   profileLatencyTone,
   profileNameWithoutFlag,
+  profileTitle,
 } from "./profile-display";
 import { getProtocolLabel } from "./profile-constants";
 
@@ -125,7 +126,7 @@ export function ProfileCardList({
               const id = profile.id;
               const running = activation.runningId === id;
               const switching = activation.switchingId === id;
-              const rawName = profile.remarks || t("panes.profiles.untitled");
+              const rawName = profileTitle(profile.remarks, t);
               const name = profileNameWithoutFlag(rawName);
               const address = profile.protocol.server.address || "—";
               const tone = profileLatencyTone(item);
@@ -145,11 +146,7 @@ export function ProfileCardList({
                     >
                       <div aria-hidden="true" className="node-card-icon">
                         {/* A measured exit wins; a flag in the name is the provisional hint. */}
-                        <NodeCountryIcon
-                          countryCode={
-                            item.metrics.countryCode ?? profileFlagCountryCode(profile.remarks)
-                          }
-                        />
+                        <NodeCountryIcon countryCode={entryCountry(item)} />
                       </div>
                       <div className="node-card-content">
                         {/* The name opens the node's details, where it can also be used or tested. */}

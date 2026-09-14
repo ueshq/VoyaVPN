@@ -159,18 +159,6 @@ impl UnitOfWork {
     }
 }
 
-impl<'database> DatabaseSession<'database> {
-    #[must_use]
-    pub const fn from_database(database: &'database Database) -> Self {
-        Self::Database(database)
-    }
-
-    #[must_use]
-    pub const fn from_unit_of_work(unit_of_work: &'database UnitOfWork) -> Self {
-        Self::UnitOfWork(unit_of_work)
-    }
-}
-
 /// Declares the same repository accessor on all three session types.
 ///
 /// Every repository needs one accessor on [`Database`] (autocommit on the pool),

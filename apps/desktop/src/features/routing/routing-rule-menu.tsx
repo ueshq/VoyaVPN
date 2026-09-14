@@ -68,7 +68,8 @@ export function RuleRowMenuButton({
   label: string;
 }) {
   return (
-    <Menubar className="h-auto justify-end border-0 bg-transparent p-0 shadow-none">
+    // The 32 px trigger is wider than the cell's content box; it overhangs the leading padding.
+    <Menubar bare className="justify-end">
       <MenubarMenu>
         <MenubarTrigger asChild disabled={actions.locked}>
           <Button aria-label={label} size="icon-sm" type="button" variant="ghost">

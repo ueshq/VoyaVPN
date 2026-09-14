@@ -93,7 +93,7 @@ export function AdvancedTab({
           description={t("settings.network.tunAutoRouteHint")}
           label={t("settings.network.tunAutoRoute")}
           onCheckedChange={(autoRoute) =>
-            patchTun({ autoRoute: autoRoute === true })
+            patchTun({ autoRoute })
           }
         />
         <SettingsSwitch
@@ -102,7 +102,7 @@ export function AdvancedTab({
           description={t("settings.network.enableIpv6Hint")}
           label={t("settings.network.enableIpv6Address")}
           onCheckedChange={(ipv6Enabled) =>
-            patchTun({ ipv6Enabled: ipv6Enabled === true })
+            patchTun({ ipv6Enabled })
           }
         />
         <Disclosure
@@ -155,7 +155,7 @@ export function AdvancedTab({
             checked={settings.network.systemProxy.bypassLocal}
             label={t("settings.network.bypassLocalAddress")}
             onCheckedChange={(bypassLocal) =>
-              patchSystemProxy({ bypassLocal: bypassLocal === true })
+              patchSystemProxy({ bypassLocal })
             }
           />
           <TextField

@@ -20,6 +20,21 @@ export function isSubscriptionUpdateFailure(result: SubscriptionUpdateResult) {
 }
 
 /**
+ * Throws the per-source reasons when an update brought nothing in (see
+ * {@link isSubscriptionUpdateFailure}); a failure without a reason says so.
+ */
+export function assertSubscriptionUpdated(
+  result: SubscriptionUpdateResult,
+  t: TranslationFunction,
+) {
+  if (isSubscriptionUpdateFailure(result)) {
+    throw new Error(
+      subscriptionUpdateMessages(result) || t("panes.subscriptions.updateNothingImported"),
+    );
+  }
+}
+
+/**
  * The per-source reasons, one per line, ready for display. They are backend
  * `error.to_string()` values that can embed the subscription URL (and with it a
  * token), so every line goes through the shared redaction helper first.

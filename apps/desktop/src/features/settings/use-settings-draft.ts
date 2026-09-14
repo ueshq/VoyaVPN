@@ -6,12 +6,12 @@ import {
 } from "@tanstack/react-query";
 import { z } from "zod";
 
-import { IpcCommandError } from "@/ipc/commands";
+import { appErrorOfKind } from "@/ipc/commands";
 import { validationFieldErrors } from "@/ipc/messages";
 import { translateFieldErrors, zodIssuesToErrorMap } from "@/lib/zod-errors";
 import { i18next, type TranslationFunction } from "@voya/i18n";
-import { getErrorMessage } from "@voya/utils/error";
-import { useToastStore } from "@/stores/toast-store";
+import { redactOperationalError } from "@voya/utils/operational-redaction";
+import { toastError } from "@/stores/toast-store";
 
 import {
   applyChanges,
@@ -53,23 +53,14 @@ export function useSettingsDraft<T>({
             fields: translateFieldErrors(t, zodIssuesToErrorMap(error)),
           };
         }
+        const validation = appErrorOfKind(error, "validation");
         return {
-          message: getErrorMessage(error),
-          fields:
-            error instanceof IpcCommandError &&
-            error.appError.kind.type === "validation"
-              ? validationFieldErrors(t, error.appError.kind.issues)
-              : {},
+          message: redactOperationalError(error),
+          fields: validation ? validationFieldErrors(t, validation.kind.issues) : {},
         };
       },
       report: ({ message }) => {
-        useToastStore
-          .getState()
-          .pushToast({
-            title: t("settings.autosave.failed"),
-            description: message,
-            severity: "error",
-          });
+        toastError(t("settings.autosave.failed"), message);
       },
     });
     drafts.set(key, created);

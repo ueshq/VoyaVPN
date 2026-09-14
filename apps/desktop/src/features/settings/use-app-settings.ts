@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { loadAppSettings, saveAppSettings } from "@/ipc/commands";
 import type { AppSettingsV1, AppearanceSettings } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
 import { getErrorMessage } from "@voya/utils/error";
+import { useLatestRef } from "@voya/utils/use-latest-ref";
 
 import { applyChanges, changedFields } from "./settings-draft";
 import { useSettingsDraft } from "./use-settings-draft";
@@ -44,10 +45,7 @@ export function useAppSettings() {
     }
   }, [appearance, authoritative, previewOwner]);
 
-  const failed = useRef(false);
-  useEffect(() => {
-    failed.current = draft.error !== null;
-  });
+  const failed = useLatestRef(draft.error !== null);
 
   useEffect(() => () => {
     const previewed = endUiPreferencesPreview(previewOwner);
@@ -59,7 +57,7 @@ export function useAppSettings() {
       reportUiPreferencesReverted();
     }
     void applyUiPreferences(saved.appearance).catch(reportUiPreferencesError);
-  }, [client, previewOwner]);
+  }, [client, failed, previewOwner]);
 
   function setAppearance(preferences: AppearanceSettings) {
     previewUiPreferences(previewOwner, preferences);

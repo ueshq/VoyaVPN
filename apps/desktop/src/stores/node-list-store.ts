@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
+import { mergeValidated } from "./persisted";
+
 type NodeListView = {
   collapsedGroups: string[];
   hideUnreachable: boolean;
@@ -36,15 +38,13 @@ export const useNodeListStore = create<NodeListState>()(
         hideUnreachable,
         sortByLatency,
       }),
-      merge: (persisted, current) => ({ ...current, ...persistedView(persisted) }),
+      merge: mergeValidated<NodeListState>(persistedView),
       storage: createJSONStorage(() => window.localStorage),
     },
   ),
 );
 
-function persistedView(value: unknown): Partial<NodeListView> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const record = value as Record<string, unknown>;
+function persistedView(record: Record<string, unknown>): Partial<NodeListView> {
   const view: Partial<NodeListView> = {};
   if (Array.isArray(record.collapsedGroups)) {
     view.collapsedGroups = record.collapsedGroups.filter(

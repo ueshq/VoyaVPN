@@ -5,6 +5,7 @@ import { changeLocale, i18next } from "@voya/i18n";
 import type { SubscriptionUpdateResult } from "@/ipc/bindings";
 
 import {
+  assertSubscriptionUpdated,
   formatSubscriptionUpdateSummary,
   isSubscriptionUpdateFailure,
   subscriptionUpdateMessages,
@@ -43,6 +44,32 @@ describe("isSubscriptionUpdateFailure", () => {
 
   it("accepts a no-op update that reported nothing", () => {
     expect(isSubscriptionUpdateFailure(result())).toBe(false);
+  });
+});
+
+describe("assertSubscriptionUpdated", () => {
+  beforeEach(async () => {
+    await changeLocale("en", { persist: false });
+  });
+
+  it("accepts an update that brought something in", () => {
+    const t = i18next.t.bind(i18next);
+
+    expect(() => assertSubscriptionUpdated(result({ imported: 1, skipped: 1 }), t)).not.toThrow();
+  });
+
+  it("throws the redacted reasons, or that nothing was imported", () => {
+    const t = i18next.t.bind(i18next);
+
+    expect(() =>
+      assertSubscriptionUpdated(
+        result({ messages: ["Airport->request failed https://example.test/sub?token=private"] }),
+        t,
+      ),
+    ).toThrow("Airport->request failed [redacted URL]");
+    expect(() => assertSubscriptionUpdated(result({ skipped: 1 }), t)).toThrow(
+      t("panes.subscriptions.updateNothingImported"),
+    );
   });
 });
 

@@ -3,7 +3,8 @@ use voya_contracts::{SpeedtestOutcome, SpeedtestResult};
 use voya_core::{ProfileExItem, ProfileItem};
 
 use crate::{
-    executor::{repository_constructors, run_query, RepositoryExecutor},
+    blob,
+    executor::{repository_constructors, run_query, with_connection, RepositoryExecutor},
     Result,
 };
 
@@ -66,17 +67,7 @@ impl<'executor> ProfileExRepository<'executor> {
         profile: &ProfileItem,
         result: &SpeedtestResult,
     ) -> Result<bool> {
-        let protocol = crate::blob::profile_protocol_to_text(&profile.protocol)?;
-        let transport = profile
-            .transport
-            .as_ref()
-            .map(crate::blob::profile_transport_to_text)
-            .transpose()?;
-        let tls = profile
-            .tls
-            .as_ref()
-            .map(crate::blob::tls_settings_to_text)
-            .transpose()?;
+        let (protocol, transport, tls) = blob::profile_blobs(profile)?;
         let pending = matches!(
             result.outcome,
             SpeedtestOutcome::Waiting | SpeedtestOutcome::Testing
@@ -125,6 +116,7 @@ impl<'executor> ProfileExRepository<'executor> {
         Ok(item)
     }
 
+    #[cfg(test)]
     pub async fn list(&self) -> Result<Vec<ProfileExItem>> {
         let rows = run_query!(
             self.executor,
@@ -169,12 +161,10 @@ impl<'executor> ProfileExRepository<'executor> {
     /// pool autocommits — and therefore fsyncs — once per row, so reordering a
     /// large subscription paid hundreds of commits for one user gesture.
     ///
-    /// The dispatch mirrors `executor::delete_each`, for the reason
-    /// documented there: `run_query!` cannot express a multi-statement batch,
-    /// and the repository may only own — and therefore commit — a transaction
-    /// when it is driving the pool directly. Inside a [`crate::UnitOfWork`] the
-    /// batch joins the caller's transaction, so the caller still decides when to
-    /// commit and a mid-batch failure leaves the whole unit to roll back.
+    /// The batch runs through `executor::with_connection`, so inside a
+    /// [`crate::UnitOfWork`] it joins the caller's transaction: the caller still
+    /// decides when to commit and a mid-batch failure leaves the whole unit to
+    /// roll back.
     ///
     /// Entries are applied in the order given, so a caller that lists the same
     /// profile twice gets the last position it asked for, exactly as repeated
@@ -184,24 +174,10 @@ impl<'executor> ProfileExRepository<'executor> {
             return Ok(());
         }
 
-        match self.executor {
-            RepositoryExecutor::Pool(pool) => {
-                // A deferred transaction is enough because the batch only ever
-                // writes: SQLite refuses the busy handler when a transaction
-                // upgrades a read lock to a write lock, never when it takes the
-                // write lock with its first statement.
-                let mut transaction = pool.begin().await?;
-                set_sort_on(&mut transaction, entries).await?;
-                transaction.commit().await?;
-            }
-            RepositoryExecutor::Transaction(transaction) => {
-                let mut transaction = transaction.lock().await;
-                let connection: &mut SqliteConnection = &mut transaction;
-                set_sort_on(connection, entries).await?;
-            }
-        }
-
-        Ok(())
+        with_connection(self.executor, entries, |connection, entries| {
+            Box::pin(set_sort_on(connection, entries))
+        })
+        .await
     }
 
     pub async fn delete_orphans(&self) -> Result<u64> {

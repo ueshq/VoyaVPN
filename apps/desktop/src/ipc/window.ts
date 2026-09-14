@@ -11,6 +11,11 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 /** Unsubscribe handle returned by the window event listeners below. */
 export type WindowUnlisten = () => void;
 
+/** Whether the page runs inside the Tauri shell, rather than a plain browser or a test. */
+export function isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
 export function minimizeWindow(): Promise<void> {
   return getCurrentWindow().minimize();
 }

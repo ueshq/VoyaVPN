@@ -6,9 +6,9 @@ use std::{
 };
 
 use thiserror::Error;
-use voya_core::{RoutingItem, RulesItem};
+use voya_core::{text::nonempty_str, RoutingItem, RulesItem, DEFAULT_SINGBOX_RULESET_URL};
 
-use crate::{DownloadAttempt, DownloadClient, DownloadError, DownloadRequest, USER_AGENT_PREFIX};
+use crate::{DownloadAttempt, DownloadClient, DownloadError, DownloadRequest};
 
 const RULESET_ASSET_RESPONSE_LIMIT_BYTES: usize = 256 * 1024 * 1024;
 static STAGING_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -21,16 +21,13 @@ const MMDB_METADATA_MARKER: &[u8] = b"\xab\xcd\xefMaxMind.com";
 /// error page answers 200 with HTML, and none of the accepted asset formats begin like this.
 const TEXTUAL_BODY_PREFIXES: &[&[u8]] = &[b"<", b"\xef\xbb\xbf<", b"{", b"HTTP/"];
 
-pub const DEFAULT_GEO_SOURCE_URL: &str =
+const DEFAULT_GEO_SOURCE_URL: &str =
     "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/{0}.dat";
-pub const DEFAULT_SINGBOX_RULESET_URL: &str =
-    "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-{0}/{1}.srs";
-pub const OTHER_GEO_URLS: &[&str] = &[
+const OTHER_GEO_URLS: &[&str] = &[
     "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/geoip-only-cn-private.dat",
     "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country.mmdb",
 ];
-pub const DEFAULT_SRS_GEOSITE_TAGS: &[&str] =
-    &["google", "cn", "geolocation-cn", "category-ads-all"];
+const DEFAULT_SRS_GEOSITE_TAGS: &[&str] = &["google", "cn", "geolocation-cn", "category-ads-all"];
 
 #[derive(Debug, Error)]
 pub enum RulesetGeoError {
@@ -115,6 +112,53 @@ impl SrsAsset {
     }
 }
 
+/// What acquiring an asset needs to know about its kind.
+trait AssetSpec {
+    const KIND: AcquiredAssetKind;
+    /// Extensions a downloaded body of this kind may carry.
+    const EXTENSIONS: &'static [&'static str];
+
+    /// The name the acquired asset is reported under.
+    fn acquired_name(&self) -> &str;
+    fn file_name(&self) -> &str;
+    fn url(&self) -> &str;
+}
+
+impl AssetSpec for GeoAsset {
+    const KIND: AcquiredAssetKind = AcquiredAssetKind::Geo;
+    const EXTENSIONS: &'static [&'static str] = &["dat", "mmdb", "metadb"];
+
+    fn acquired_name(&self) -> &str {
+        &self.name
+    }
+
+    fn file_name(&self) -> &str {
+        &self.file_name
+    }
+
+    fn url(&self) -> &str {
+        &self.url
+    }
+}
+
+impl AssetSpec for SrsAsset {
+    const KIND: AcquiredAssetKind = AcquiredAssetKind::Ruleset;
+    const EXTENSIONS: &'static [&'static str] = &["srs"];
+
+    /// A rule set is reported by its tag (`geosite-cn`), not its bare name.
+    fn acquired_name(&self) -> &str {
+        &self.tag
+    }
+
+    fn file_name(&self) -> &str {
+        &self.file_name
+    }
+
+    fn url(&self) -> &str {
+        &self.url
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct RulesetGeoClient {
     download: DownloadClient,
@@ -133,40 +177,8 @@ impl RulesetGeoClient {
         target_dir: impl AsRef<Path>,
         options: &AssetAcquisitionOptions,
     ) -> Result<Vec<AcquiredRulesetGeoAsset>> {
-        let target_dir = target_dir.as_ref();
-        let staging = StagingDir::create(target_dir).await?;
-        let mut acquired = Vec::new();
-
-        for asset in assets {
-            let target = target_dir.join(&asset.file_name);
-            let staged = self
-                .stage_asset(
-                    &asset.url,
-                    &asset.file_name,
-                    staging.path(),
-                    &["dat", "mmdb", "metadb"],
-                    options,
-                )
-                .await?;
-            acquired.push(AcquiredRulesetGeoAsset {
-                kind: AcquiredAssetKind::Geo,
-                name: asset.name.clone(),
-                file_name: asset.file_name.clone(),
-                url: asset.url.clone(),
-                path: target,
-                bytes: staged.bytes,
-                used_proxy: staged.used_proxy,
-                attempts: staged.attempts,
-            });
-        }
-
-        staging
-            .commit(
-                target_dir,
-                assets.iter().map(|asset| asset.file_name.as_str()),
-            )
-            .await?;
-        Ok(acquired)
+        self.acquire_assets(assets, target_dir.as_ref(), options)
+            .await
     }
 
     pub async fn acquire_srs_assets(
@@ -175,27 +187,36 @@ impl RulesetGeoClient {
         target_dir: impl AsRef<Path>,
         options: &AssetAcquisitionOptions,
     ) -> Result<Vec<AcquiredRulesetGeoAsset>> {
-        let target_dir = target_dir.as_ref();
+        self.acquire_assets(assets, target_dir.as_ref(), options)
+            .await
+    }
+
+    /// Stages every asset, then publishes the whole batch or none of it.
+    async fn acquire_assets<A: AssetSpec>(
+        &self,
+        assets: &[A],
+        target_dir: &Path,
+        options: &AssetAcquisitionOptions,
+    ) -> Result<Vec<AcquiredRulesetGeoAsset>> {
         let staging = StagingDir::create(target_dir).await?;
         let mut acquired = Vec::new();
 
         for asset in assets {
-            let target = target_dir.join(&asset.file_name);
             let staged = self
                 .stage_asset(
-                    &asset.url,
-                    &asset.file_name,
+                    asset.url(),
+                    asset.file_name(),
                     staging.path(),
-                    &["srs"],
+                    A::EXTENSIONS,
                     options,
                 )
                 .await?;
             acquired.push(AcquiredRulesetGeoAsset {
-                kind: AcquiredAssetKind::Ruleset,
-                name: asset.tag.clone(),
-                file_name: asset.file_name.clone(),
-                url: asset.url.clone(),
-                path: target,
+                kind: A::KIND,
+                name: asset.acquired_name().to_string(),
+                file_name: asset.file_name().to_string(),
+                url: asset.url().to_string(),
+                path: target_dir.join(asset.file_name()),
                 bytes: staged.bytes,
                 used_proxy: staged.used_proxy,
                 attempts: staged.attempts,
@@ -203,10 +224,7 @@ impl RulesetGeoClient {
         }
 
         staging
-            .commit(
-                target_dir,
-                assets.iter().map(|asset| asset.file_name.as_str()),
-            )
+            .commit(target_dir, assets.iter().map(A::file_name))
             .await?;
         Ok(acquired)
     }
@@ -356,7 +374,7 @@ fn asset_io(path: &Path, source: std::io::Error) -> RulesetGeoError {
 }
 
 pub fn geo_assets(source_url: Option<&str>) -> Vec<GeoAsset> {
-    let source_url = nonempty(source_url);
+    let source_url = nonempty_str(source_url);
     let uses_default_source = source_url.is_none();
     let source_url = source_url.unwrap_or(DEFAULT_GEO_SOURCE_URL);
     let mut assets = ["geosite", "geoip"]
@@ -395,7 +413,7 @@ pub fn collect_singbox_ruleset_assets(
 
     geosite.extend(DEFAULT_SRS_GEOSITE_TAGS.iter().map(ToString::to_string));
 
-    let source_url = nonempty(source_url).unwrap_or(DEFAULT_SINGBOX_RULESET_URL);
+    let source_url = nonempty_str(source_url).unwrap_or(DEFAULT_SINGBOX_RULESET_URL);
     geoip
         .into_iter()
         .map(|name| SrsAsset::new(source_url, "geoip", &name))
@@ -426,11 +444,11 @@ pub fn discover_local_singbox_ruleset_paths(srs_dir: impl AsRef<Path>) -> BTreeM
         .collect()
 }
 
-pub fn format_geo_url(source_url: &str, name: &str) -> String {
+fn format_geo_url(source_url: &str, name: &str) -> String {
     source_url.replace("{0}", name).replace("{name}", name)
 }
 
-pub fn format_srs_url(source_url: &str, kind: &str, name: &str) -> String {
+fn format_srs_url(source_url: &str, kind: &str, name: &str) -> String {
     let tag = format!("{kind}-{name}");
     source_url
         .replace("{0}", kind)
@@ -441,7 +459,7 @@ pub fn format_srs_url(source_url: &str, kind: &str, name: &str) -> String {
 fn download_request(url: &str, options: &AssetAcquisitionOptions) -> DownloadRequest {
     DownloadRequest {
         url: url.to_string(),
-        user_agent: Some(USER_AGENT_PREFIX.to_string()),
+        user_agent: None,
         prefer_proxy: options.prefer_proxy,
         proxy_url: options.proxy_url.clone(),
         response_body_limit: Some(RULESET_ASSET_RESPONSE_LIMIT_BYTES),
@@ -530,26 +548,18 @@ fn collect_srs_from_rule(
 ) {
     if let Some(items) = &rule.ip {
         for item in items {
-            if let Some(value) = item.strip_prefix("geoip:").and_then(nonempty_value) {
+            if let Some(value) = nonempty_str(item.strip_prefix("geoip:")) {
                 geoip.insert(value.to_string());
             }
         }
     }
     if let Some(items) = &rule.domain {
         for item in items {
-            if let Some(value) = item.strip_prefix("geosite:").and_then(nonempty_value) {
+            if let Some(value) = nonempty_str(item.strip_prefix("geosite:")) {
                 geosite.insert(value.to_string());
             }
         }
     }
-}
-
-fn nonempty(value: Option<&str>) -> Option<&str> {
-    value.map(str::trim).filter(|value| !value.is_empty())
-}
-
-fn nonempty_value(value: &str) -> Option<&str> {
-    nonempty(Some(value))
 }
 
 #[cfg(test)]
@@ -563,8 +573,12 @@ mod tests {
     use tokio::sync::Mutex;
     use voya_core::{RoutingItem, RuleType, RulesItem};
 
-    use crate::download::test_support::{
-        spawn_http_bytes_fixture as spawn_http_fixture, spawn_raw_http_fixture, RawFixtureResponse,
+    use crate::download::{
+        test_support::{
+            spawn_http_bytes_fixture as spawn_http_fixture, spawn_raw_http_fixture,
+            RawFixtureResponse,
+        },
+        USER_AGENT_PREFIX,
     };
 
     use super::*;

@@ -3,16 +3,11 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
-import {
-  executeRuntimeAction,
-  isRuntimeTransitioning,
-  reportRuntimeActionError,
-} from "@/features/home/runtime-action";
+import { isRuntimeTransitioning, runRuntimeAction } from "@/features/home/runtime-action";
 import type { ProfileListing } from "@/ipc/bindings";
-import { profilesQueryKey } from "@/ipc/query-keys";
+import { queryKeys } from "@/ipc/query-keys";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { refreshRuntimeStatusAndReport } from "@/ipc/runtime-status";
-import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
+import { runtimeActionPending } from "@/stores/runtime-action-store";
 import { SHELL_TABS, useShellStore } from "@/stores/shell-store";
 
 function isApplePlatform() {
@@ -71,26 +66,13 @@ async function toggleConnection(t: TranslationFunction, queryClient: QueryClient
   const state = useRuntimeEventStore.getState().coreState?.state ?? "disconnected";
   if (runtimeActionPending() || isRuntimeTransitioning(state)) return;
   const action = state === "connected" || state === "cleanupPending" ? "disconnect" : "connect";
-  const profiles = queryClient.getQueryData<ProfileListing>(profilesQueryKey(""));
+  const profiles = queryClient.getQueryData<ProfileListing>(queryKeys.profileList);
   if (action === "connect" && profiles?.entries.length === 0) {
     // Nothing to connect with: go where a node gets added, as Home's button does.
     useShellStore.getState().openProfilesAddMenu();
     return;
   }
 
-  useRuntimeActionStore.setState({ pendingAction: action, lastError: null });
-  try {
-    await executeRuntimeAction(action);
-  } catch (error) {
-    // Home shows a failure next to its button; other pages need a toast.
-    reportRuntimeActionError(error, action, t, {
-      inline: useShellStore.getState().activeTab === "home",
-    });
-  } finally {
-    try {
-      await refreshRuntimeStatusAndReport(t);
-    } finally {
-      useRuntimeActionStore.setState({ pendingAction: null });
-    }
-  }
+  // Home shows a failure next to its button; other pages need a toast.
+  await runRuntimeAction(action, t, { inline: useShellStore.getState().activeTab === "home" });
 }

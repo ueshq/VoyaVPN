@@ -14,7 +14,7 @@ pub(crate) fn build_outbound(context: &CoreConfigContext, node: &ProfileItem) ->
             outbound.uuid = Some(uuid.clone());
             outbound.alter_id = Some(0);
             outbound.security = Some(vmess_security(&node.protocol));
-            fill_outbound_mux(&mut outbound, context, node);
+            fill_outbound_mux(&mut outbound, context);
             fill_outbound_transport(&mut outbound, context, node);
         }
         ProfileProtocol::Shadowsocks {
@@ -26,7 +26,7 @@ pub(crate) fn build_outbound(context: &CoreConfigContext, node: &ProfileItem) ->
             outbound.password = Some(password.clone());
             outbound.udp_over_tcp = (*udp_over_tcp).then_some(true);
             fill_shadowsocks_plugin(&mut outbound, node);
-            fill_outbound_mux(&mut outbound, context, node);
+            fill_outbound_mux(&mut outbound, context);
         }
         ProfileProtocol::Socks {
             username, password, ..
@@ -51,13 +51,13 @@ pub(crate) fn build_outbound(context: &CoreConfigContext, node: &ProfileItem) ->
             if let Some(flow) = nonempty_string(flow.as_deref()) {
                 outbound.flow = Some(flow);
             } else {
-                fill_outbound_mux(&mut outbound, context, node);
+                fill_outbound_mux(&mut outbound, context);
             }
             fill_outbound_transport(&mut outbound, context, node);
         }
         ProfileProtocol::Trojan { password, .. } => {
             outbound.password = Some(password.clone());
-            fill_outbound_mux(&mut outbound, context, node);
+            fill_outbound_mux(&mut outbound, context);
             fill_outbound_transport(&mut outbound, context, node);
         }
         ProfileProtocol::Hysteria2 {
@@ -208,11 +208,7 @@ fn fill_hysteria2_fields(
     outbound.hop_interval = Some(format!("{default_interval}s"));
 }
 
-fn fill_outbound_mux(
-    outbound: &mut SingboxOutbound,
-    context: &CoreConfigContext,
-    _node: &ProfileItem,
-) {
+fn fill_outbound_mux(outbound: &mut SingboxOutbound, context: &CoreConfigContext) {
     if !context.app_config.core_basic_item.mux_enabled {
         return;
     }

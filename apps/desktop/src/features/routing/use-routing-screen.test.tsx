@@ -3,9 +3,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ProfileListEntry, RoutingRule, Routing_Serialize } from "@/ipc/bindings";
+import type { ProfileListEntry, RoutingRule, Routing_Serialize, ValidationIssue } from "@/ipc/bindings";
+import { IpcCommandError } from "@/ipc/commands";
 import { queryKeys } from "@/ipc/query-keys";
-import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
 
 import { useRoutingScreen } from "./use-routing-screen";
@@ -20,7 +20,11 @@ const ipcMocks = vi.hoisted(() => ({
   saveRoutingRule: vi.fn(),
 }));
 
-vi.mock("@/ipc/commands", () => ipcMocks);
+// The real error class and kind check, so a refused rule keeps its issues.
+vi.mock("@/ipc/commands", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/ipc/commands")>();
+  return { ...ipcMocks, appErrorOfKind: actual.appErrorOfKind, IpcCommandError: actual.IpcCommandError };
+});
 
 const clients = new Set<QueryClient>();
 
@@ -33,7 +37,6 @@ describe("useRoutingScreen", () => {
       undecodableProfiles: 0,
     });
     ipcMocks.listPolicyGroups.mockResolvedValue({ entries: [] });
-    useShellStore.setState({ routingPerAppRequested: false });
   });
 
   it("offers policy groups as outbounds and points a broken outbound back at the proxy", async () => {
@@ -227,11 +230,9 @@ describe("useRoutingScreen", () => {
     expect(result.current.ruleSaveFailure).toEqual({ issues: [], message: "rule save failed" });
     expect(result.current.ruleDialog?.mode).toBe("edit");
 
-    const issues = [{ code: { code: "invalidPort" }, field: "port", scope: [] }];
+    const issues: ValidationIssue[] = [{ code: { code: "invalidPort" }, field: "port", scope: [] }];
     ipcMocks.saveRoutingRule.mockRejectedValueOnce(
-      Object.assign(new Error("invalid rule"), {
-        appError: { kind: { issues, type: "validation" }, message: "invalid rule", subsystem: "app" },
-      }),
+      new IpcCommandError({ kind: { issues, type: "validation" }, message: "invalid rule", subsystem: "app" }),
     );
     await act(() => result.current.saveRule(payload));
     expect(result.current.ruleSaveFailure).toEqual({ issues, message: "invalid rule" });
@@ -245,11 +246,11 @@ describe("useRoutingScreen", () => {
     await waitFor(() => expect(result.current.rules).toHaveLength(3));
 
     act(() => result.current.editRule(perApp()));
-    expect(useShellStore.getState().routingPerAppRequested).toBe(true);
+    expect(result.current.perAppOpen).toBe(true);
     expect(result.current.ruleDialog).toBeNull();
 
     act(() => result.current.setPerAppOpen(false));
-    expect(useShellStore.getState().routingPerAppRequested).toBe(false);
+    expect(result.current.perAppOpen).toBe(false);
   });
 
   it("deletes a rule and restores the defaults only after confirmation", async () => {

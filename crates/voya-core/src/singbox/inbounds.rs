@@ -91,7 +91,7 @@ fn build_tun_inbound(context: &CoreConfigContext, http_proxy_port: Option<i32>) 
 
 fn tun_addresses(context: &CoreConfigContext) -> Vec<String> {
     let mut address = vec!["172.18.0.1/30".to_string()];
-    if context.is_macos() || context.app_config.tun_mode_item.enable_ipv6_address {
+    if context.platform.is_macos() || context.app_config.tun_mode_item.enable_ipv6_address {
         address.push("fdfe:dcba:9876::1/126".to_string());
     }
     address
@@ -101,7 +101,7 @@ fn tun_platform(
     context: &CoreConfigContext,
     http_proxy_port: Option<i32>,
 ) -> Option<SingboxTunPlatform> {
-    if !context.is_macos() {
+    if !context.platform.is_macos() {
         return None;
     }
     let port = http_proxy_port?;
@@ -115,7 +115,7 @@ fn tun_platform(
 }
 
 fn tun_interface_name(context: &CoreConfigContext) -> Option<String> {
-    (!context.is_macos()).then(|| "singbox_tun".to_string())
+    (!context.platform.is_macos()).then(|| "singbox_tun".to_string())
 }
 
 fn tun_mtu(context: &CoreConfigContext) -> i32 {
@@ -124,7 +124,7 @@ fn tun_mtu(context: &CoreConfigContext) -> i32 {
     } else {
         WIREGUARD_DEFAULT_MTU
     };
-    if context.is_macos() && configured > MACOS_TUN_SAFE_MTU {
+    if context.platform.is_macos() && configured > MACOS_TUN_SAFE_MTU {
         MACOS_TUN_SAFE_MTU
     } else {
         configured
@@ -132,5 +132,5 @@ fn tun_mtu(context: &CoreConfigContext) -> i32 {
 }
 
 fn tun_strict_route(context: &CoreConfigContext) -> bool {
-    !context.is_macos() && context.app_config.tun_mode_item.strict_route
+    !context.platform.is_macos() && context.app_config.tun_mode_item.strict_route
 }

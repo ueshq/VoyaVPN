@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { exportProfileShareLinks, listProfiles } from "@/ipc/commands";
+import { writeClipboard } from "@/lib/clipboard";
 import { profilesByNodeGroup, type NodeSourceKey } from "./node-list-rows";
 import {
   supportsShareLinkExport,
@@ -23,10 +24,7 @@ export function useNodeExport(
       return;
     }
 
-    if (!navigator.clipboard?.writeText) {
-      throw new Error(t("panes.profiles.export.clipboardUnavailable"));
-    }
-    await navigator.clipboard.writeText(result.text);
+    await writeClipboard(result.text);
     setOperationMessage(
       t("panes.profiles.export.copied", { count: result.count }),
     );

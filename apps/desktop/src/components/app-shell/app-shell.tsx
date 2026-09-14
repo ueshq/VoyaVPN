@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 
 import { AppSidebar, SHELL_PANEL_ID } from "@/components/app-shell/app-sidebar";
 import { CloseRequestDialog } from "@/components/app-shell/close-request-dialog";
@@ -6,7 +6,6 @@ import { AppErrorBoundary } from "@/components/app-shell/error-boundary";
 import { ModalHost } from "@/components/app-shell/modal-host";
 import {
   createProxyMonitorController,
-  proxyMonitorErrorMessage,
   type ProxyMonitorController,
   type ProxyMonitorPhase,
 } from "@/components/app-shell/proxy-monitor-controller";
@@ -18,9 +17,13 @@ import { useShellShortcuts } from "@/components/app-shell/use-shell-shortcuts";
 import { useWindowChrome } from "@/components/app-shell/use-window-chrome";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Skeleton } from "@voya/ui/components/skeleton";
+import { getErrorMessage } from "@voya/utils/error";
+import { redactOperationalMessage } from "@voya/utils/operational-redaction";
+import { useLatestRef } from "@voya/utils/use-latest-ref";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { isTauriRuntime } from "@/ipc/window";
 import { type ShellTab, useShellStore } from "@/stores/shell-store";
-import { useToastStore } from "@/stores/toast-store";
+import { toastError } from "@/stores/toast-store";
 
 const HomeScreen = lazy(() =>
   import("@/features/home/home-screen").then(({ HomeScreen }) => ({ default: HomeScreen })),
@@ -124,28 +127,16 @@ function ScreenFallback() {
 function useProxyMonitorLifecycle(activeTab: ShellTab) {
   const coreConnected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
   const { t } = useI18n();
-  const pushToast = useToastStore((state) => state.pushToast);
-  const messages = useMemo(
-    () => ({
-      start: t("status.proxyMonitorStartFailed"),
-      stop: t("status.proxyMonitorStopFailed"),
-      title: t("status.proxyRuntime"),
-    }),
-    [t],
-  );
   // The controller is created once; this ref keeps its error path pointing at
-  // the current locale's messages without recreating the state machine.
-  const reportErrorRef = useRef<(error: unknown, phase: ProxyMonitorPhase) => void>(() => undefined);
+  // the current locale without recreating the state machine.
+  const reportErrorRef = useLatestRef((error: unknown, phase: ProxyMonitorPhase) => {
+    const fallback = t(phase === "start" ? "status.proxyMonitorStartFailed" : "status.proxyMonitorStopFailed");
+    const message = redactOperationalMessage(getErrorMessage(error, fallback));
+
+    useRuntimeEventStore.getState().setProxyMonitorFailed(message);
+    toastError(t("status.proxyRuntime"), message);
+  });
   const controllerRef = useRef<ProxyMonitorController | null>(null);
-
-  useEffect(() => {
-    reportErrorRef.current = (error, phase) => {
-      const message = proxyMonitorErrorMessage(error, phase === "start" ? messages.start : messages.stop);
-
-      useRuntimeEventStore.getState().setProxyMonitorFailed(message);
-      pushToast({ description: message, severity: "error", title: messages.title });
-    };
-  }, [messages, pushToast]);
 
   useEffect(() => {
     if (!isTauriRuntime()) {
@@ -161,15 +152,11 @@ function useProxyMonitorLifecycle(activeTab: ShellTab) {
       controllerRef.current = null;
       controller.dispose();
     };
-  }, []);
+  }, [reportErrorRef]);
 
   useEffect(() => {
     controllerRef.current?.setWanted(
       coreConnected && activeTab === "connections",
     );
   }, [activeTab, coreConnected]);
-}
-
-function isTauriRuntime() {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }

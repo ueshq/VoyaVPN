@@ -139,7 +139,7 @@ describe("PerAppProxyDialog", () => {
       remarks: "voya:per-app-proxy",
       scope: "routing",
     });
-    expect(ipcMocks.moveRoutingRule).toHaveBeenCalledWith("routing-1", "rule-new", "top");
+    expect(ipcMocks.moveRoutingRule).toHaveBeenCalledWith("routing-1", "rule-new", "top", null);
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 

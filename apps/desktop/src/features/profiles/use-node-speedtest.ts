@@ -46,7 +46,7 @@ export function useNodeSpeedtest({ runOperation }: NodeOperation) {
   async function handleCancelSpeedtest() {
     await runOperation(async () => {
       const status = await cancelSpeedtest();
-      useRuntimeEventStore.getState().setSpeedtestStatus(status);
+      setSpeedtestRunning(status.running);
     });
   }
 

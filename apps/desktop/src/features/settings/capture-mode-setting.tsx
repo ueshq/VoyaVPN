@@ -35,7 +35,7 @@ const OPTIONS = [
 export function CaptureModeSetting() {
   const { t } = useI18n();
   const id = useId();
-  const capture = useCaptureMode(t);
+  const capture = useCaptureMode();
   // The saved choice above, and here what the running connection really does.
   const statusKey = useRuntimeEventStore((state): TranslationKey => {
     if (state.coreState?.state !== "connected")

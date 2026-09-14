@@ -135,9 +135,11 @@ mod macos_packet_tunnel_bridge {
 }
 
 #[cfg(target_os = "macos")]
-pub(super) fn macos_packet_tunnel_bridge_status() -> Result<String, NativeTunError> {
-    macos_packet_tunnel_bridge::status()
-}
+pub(super) use macos_packet_tunnel_bridge::{
+    container_path as macos_packet_tunnel_bridge_container_path,
+    last_error as macos_packet_tunnel_bridge_last_error, start as macos_packet_tunnel_bridge_start,
+    status as macos_packet_tunnel_bridge_status, stop as macos_packet_tunnel_bridge_stop,
+};
 
 #[cfg(not(target_os = "macos"))]
 pub(super) fn macos_packet_tunnel_bridge_status() -> Result<String, NativeTunError> {
@@ -147,34 +149,9 @@ pub(super) fn macos_packet_tunnel_bridge_status() -> Result<String, NativeTunErr
     })
 }
 
-#[cfg(target_os = "macos")]
-pub(super) fn macos_packet_tunnel_bridge_start(
-    config_path: &str,
-    profile_id: Option<&str>,
-    timeout_ms: i64,
-    include_all_networks: bool,
-) -> Result<String, NativeTunError> {
-    macos_packet_tunnel_bridge::start(config_path, profile_id, timeout_ms, include_all_networks)
-}
-
-#[cfg(target_os = "macos")]
-pub(super) fn macos_packet_tunnel_bridge_stop() -> Result<String, NativeTunError> {
-    macos_packet_tunnel_bridge::stop()
-}
-
-#[cfg(target_os = "macos")]
-pub(super) fn macos_packet_tunnel_bridge_last_error() -> Result<String, NativeTunError> {
-    macos_packet_tunnel_bridge::last_error()
-}
-
 #[cfg(not(target_os = "macos"))]
 pub(super) fn macos_packet_tunnel_bridge_last_error() -> Result<String, NativeTunError> {
     Ok(String::new())
-}
-
-#[cfg(target_os = "macos")]
-pub(super) fn macos_packet_tunnel_bridge_container_path() -> Result<String, NativeTunError> {
-    macos_packet_tunnel_bridge::container_path()
 }
 
 #[cfg(not(target_os = "macos"))]

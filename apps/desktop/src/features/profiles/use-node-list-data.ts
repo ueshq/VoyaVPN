@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { listProfiles, listSubscriptions, listSubscriptionMetadata } from "@/ipc/commands";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { profilesQueryKey, queryKeys } from "@/ipc/query-keys";
+import { queryKeys } from "@/ipc/query-keys";
 import type { ProfileListEntry, SpeedtestResult } from "@/ipc/bindings";
 import type { TranslationFunction } from "@voya/i18n";
 import { metadataBySubscriptionId } from "@/features/subscriptions/subscription-usage";
@@ -41,7 +41,7 @@ export function useNodeListData(
   );
   const profilesQuery = useQuery({
     queryFn: () => listProfiles(null, null),
-    queryKey: profilesQueryKey(""),
+    queryKey: queryKeys.profileList,
   });
   const profiles = useMemo(
     () =>

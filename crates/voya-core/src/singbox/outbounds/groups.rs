@@ -91,11 +91,5 @@ pub(in crate::singbox) fn build_policy_group_servers(
 /// The outbound tag of a policy group a routing rule names: its name and the
 /// start of its id, so two groups with one name stay distinct.
 pub(in crate::singbox) fn rule_group_tag(group: &crate::PolicyGroupItem) -> String {
-    let id: String = group.id.chars().take(8).collect();
-    let name = group.name.trim();
-    if name.is_empty() {
-        format!("[{id}]")
-    } else {
-        format!("{name} [{id}]")
-    }
+    crate::groups::name_id_tag(&group.name, &group.id, Some(8))
 }

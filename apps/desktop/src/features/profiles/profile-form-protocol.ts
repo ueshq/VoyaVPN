@@ -1,6 +1,6 @@
 import type { ProfileProtocol } from "@/ipc/bindings";
+import { trimToNull } from "@voya/utils/text";
 import { CONFIG_TYPES } from "./profile-constants";
-import { clean } from "./profile-form-text";
 import type { ParsedProfileFormValues } from "./profile-form-schema";
 export function formProtocol(parsed: ParsedProfileFormValues): ProfileProtocol {
   const options = parsed.protocolOptions;
@@ -11,7 +11,7 @@ export function formProtocol(parsed: ParsedProfileFormValues): ProfileProtocol {
         kind: "vmess",
         server,
         uuid: parsed.password ?? "",
-        cipher: clean(options.vmessCipher),
+        cipher: trimToNull(options.vmessCipher),
       };
     case CONFIG_TYPES.Shadowsocks:
       return {
@@ -33,8 +33,8 @@ export function formProtocol(parsed: ParsedProfileFormValues): ProfileProtocol {
         kind: "vless",
         server,
         uuid: parsed.password ?? "",
-        flow: clean(options.flow),
-        encryption: clean(options.vlessEncryption),
+        flow: trimToNull(options.flow),
+        encryption: trimToNull(options.vlessEncryption),
       };
     case CONFIG_TYPES.Trojan:
       return { kind: "trojan", server, password: parsed.password ?? "" };
@@ -43,8 +43,8 @@ export function formProtocol(parsed: ParsedProfileFormValues): ProfileProtocol {
         kind: "hysteria2",
         server,
         password: parsed.password ?? "",
-        portHops: clean(options.portHops),
-        obfuscationPassword: clean(options.obfuscationPassword),
+        portHops: trimToNull(options.portHops),
+        obfuscationPassword: trimToNull(options.obfuscationPassword),
       };
     case CONFIG_TYPES.TUIC:
       return {
@@ -52,18 +52,18 @@ export function formProtocol(parsed: ParsedProfileFormValues): ProfileProtocol {
         server,
         uuid: parsed.username ?? "",
         password: parsed.password ?? "",
-        congestionControl: clean(options.congestionControl),
+        congestionControl: trimToNull(options.congestionControl),
       };
     case CONFIG_TYPES.WireGuard:
       return {
         kind: "wireGuard",
         server,
         privateKey: parsed.password ?? "",
-        peerPublicKey: clean(options.wireGuardPeerPublicKey),
-        presharedKey: clean(options.wireGuardPresharedKey),
-        interfaceAddress: clean(options.wireGuardInterfaceAddress),
-        allowedIps: clean(options.wireGuardAllowedIps),
-        reserved: clean(options.wireGuardReserved),
+        peerPublicKey: trimToNull(options.wireGuardPeerPublicKey),
+        presharedKey: trimToNull(options.wireGuardPresharedKey),
+        interfaceAddress: trimToNull(options.wireGuardInterfaceAddress),
+        allowedIps: trimToNull(options.wireGuardAllowedIps),
+        reserved: trimToNull(options.wireGuardReserved),
         mtu: options.wireGuardMtu ?? null,
       };
     case CONFIG_TYPES.HTTP:
@@ -82,7 +82,7 @@ export function formProtocol(parsed: ParsedProfileFormValues): ProfileProtocol {
         username: parsed.username ?? "",
         password: parsed.password ?? "",
         quic: options.naiveQuic === true,
-        congestionControl: clean(options.congestionControl),
+        congestionControl: trimToNull(options.congestionControl),
         insecureConcurrency: options.insecureConcurrency ?? null,
         udpOverTcp: options.udpOverTcp === true,
       };

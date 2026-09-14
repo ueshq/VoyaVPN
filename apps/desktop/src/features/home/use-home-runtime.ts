@@ -1,18 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 
 import type { TranslationFunction } from "@voya/i18n";
+import { useI18n } from "@voya/i18n/use-i18n";
 import { listPolicyGroups, listProfiles, policyGroupRuntime } from "@/ipc/commands";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { TunStatus } from "@/ipc/bindings";
-import { refreshRuntimeStatusAndReport } from "@/ipc/runtime-status";
-import { profilesQueryKey, queryKeys } from "@/ipc/query-keys";
-import {
-  runtimeActionPending,
-  type RuntimeAction,
-  useRuntimeActionStore,
-} from "@/stores/runtime-action-store";
+import { queryKeys } from "@/ipc/query-keys";
+import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
 
-import { executeRuntimeAction, isRuntimeTransitioning, reportRuntimeActionError } from "./runtime-action";
+import { isRuntimeTransitioning, runRuntimeAction } from "./runtime-action";
 import { tunProviderLabel, tunProviderPathMismatchDescription } from "./tun-provider-text";
 
 /**
@@ -23,7 +19,8 @@ import { tunProviderLabel, tunProviderPathMismatchDescription } from "./tun-prov
 /** How often the running group's current member is read again, as on the Nodes page. */
 const GROUP_RUNTIME_REFRESH_MS = 3_000;
 
-export function useHomeRuntime(t: TranslationFunction) {
+export function useHomeRuntime() {
+  const { t } = useI18n();
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const tun = useRuntimeEventStore((state) => state.tun);
   const pending = useRuntimeActionStore(runtimeActionPending);
@@ -33,7 +30,7 @@ export function useHomeRuntime(t: TranslationFunction) {
   // node's name here costs no extra fetch and stays in sync after a switch.
   const profilesQuery = useQuery({
     queryFn: () => listProfiles(null, null),
-    queryKey: profilesQueryKey(""),
+    queryKey: queryKeys.profileList,
   });
 
   const state = coreState?.state ?? "disconnected";
@@ -72,41 +69,18 @@ export function useHomeRuntime(t: TranslationFunction) {
       ? groupRuntimeQuery.data
       : null;
 
-  async function runRuntimeAction(action: RuntimeAction) {
-    if (busy || runtimeActionPending()) {
-      return;
-    }
-
-    useRuntimeActionStore.setState({ pendingAction: action, lastError: null });
-    try {
-      await executeRuntimeAction(action);
-    } catch (error) {
-      reportRuntimeActionError(error, action, t, { inline: true });
-    } finally {
-      try {
-        await refreshRuntimeStatusAndReport(t);
-      } finally {
-        useRuntimeActionStore.setState({ pendingAction: null });
-      }
-    }
-  }
-
   function handlePrimaryAction() {
-    if (connected || state === "cleanupPending") {
-      void runRuntimeAction("disconnect");
-
-      return;
-    }
-    void runRuntimeAction("connect");
+    const action = connected || state === "cleanupPending" ? "disconnect" : "connect";
+    void runRuntimeAction(action, t, { inline: true });
   }
 
   function restart() {
-    void runRuntimeAction("restart");
+    void runRuntimeAction("restart", t, { inline: true });
   }
 
   function retryLastAction() {
     const failed = useRuntimeActionStore.getState().lastError;
-    if (failed) void runRuntimeAction(failed.action);
+    if (failed) void runRuntimeAction(failed.action, t, { inline: true });
   }
 
   return {

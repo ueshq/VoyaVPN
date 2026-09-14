@@ -5,12 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import {
   checkAppUpdate,
   installCheckedAppUpdate,
-  loadAppUpdaterStatus,
   type AppUpdateCheckResult,
   type AppUpdateInstallResult,
   type AppUpdateProgress,
 } from "@/features/updates/app-update-flow";
-import { updateGeoAssets, updateSrsAssets } from "@/ipc/commands";
+import { appUpdateStatus, updateGeoAssets, updateSrsAssets } from "@/ipc/commands";
 import type { AppUpdaterStatus, ResourceUpdateFile } from "@/ipc/bindings";
 import { relaunch } from "@/ipc/process";
 import { usePreferencesStore } from "@/stores/preferences-store";
@@ -43,7 +42,7 @@ export function useCheckUpdateDialog() {
     const generation = ++statusGenerationRef.current;
     const isCurrent = () => mountedRef.current && generation === statusGenerationRef.current;
 
-    void loadAppUpdaterStatus()
+    void appUpdateStatus()
       .then((status) => {
         if (isCurrent()) {
           setAppUpdaterStatus(status);
@@ -82,7 +81,7 @@ export function useCheckUpdateDialog() {
     try {
       await queue.settled();
       setAppInstallResult(
-        await installCheckedAppUpdate(undefined, (progress) => {
+        await installCheckedAppUpdate((progress) => {
           if (mountedRef.current) setInstallProgress(progress);
         }),
       );

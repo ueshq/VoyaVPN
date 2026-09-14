@@ -11,11 +11,12 @@ use thiserror::Error;
 use crate::{
     context::SS_SECURITIES_IN_SINGBOX,
     protocol_common::{
-        first_list_value, inbound_port, inbound_protocol_tag, nonempty_str, parse_pem_chain,
+        first_list_value, inbound_port, inbound_protocol_tag, parse_pem_chain,
         parse_wireguard_reserved, protocol_name, raw_http_user_agent, shadowsocks_plugin_for,
-        split_list, wireguard_allowed_ips, wireguard_public_key, DEFAULT_SECURITY, RAW_HEADER_HTTP,
-        WIREGUARD_DEFAULT_ADDRESS, WIREGUARD_DEFAULT_MTU,
+        split_csv, split_list, wireguard_allowed_ips, wireguard_public_key, DEFAULT_SECURITY,
+        RAW_HEADER_HTTP, WIREGUARD_DEFAULT_ADDRESS, WIREGUARD_DEFAULT_MTU,
     },
+    text::{nonempty_str, nonempty_string},
     AppConfig, ConfigType, CoreConfigContext, InItem, InboundProtocol, ProfileItem,
     ProfileProtocol, ProfileTransport, RuleType, RulesItem, SpeedtestConfigEntry, TlsMode,
     TlsSettings, BLOCK_TAG, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS, DEFAULT_REMOTE_DNS,
@@ -39,7 +40,9 @@ const SINGBOX_HOSTS_DNS_TAG: &str = "hosts_dns";
 const SINGBOX_FAKE_DNS_TAG: &str = "fake_dns";
 const SINGBOX_FAKEIP_INET4_RANGE: &str = "198.18.0.0/15";
 const SINGBOX_FAKEIP_INET6_RANGE: &str = "fc00::/18";
-const SINGBOX_RULESET_URL: &str =
+/// Where a `geosite:`/`geoip:` rule set without a local file is downloaded
+/// from: `{0}` is the kind (`geosite` or `geoip`) and `{1}` the rule-set tag.
+pub const DEFAULT_SINGBOX_RULESET_URL: &str =
     "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-{0}/{1}.srs";
 const GEOIP_PREFIX: &str = "geoip:";
 const GEOSITE_PREFIX: &str = "geosite:";
@@ -74,6 +77,7 @@ mod routing;
 mod schema;
 pub(crate) mod support;
 
+pub use dns::first_dns_address;
 pub use entry::*;
 pub use schema::*;
 

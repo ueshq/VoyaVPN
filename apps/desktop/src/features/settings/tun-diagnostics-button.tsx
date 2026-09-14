@@ -5,9 +5,9 @@ import { Button } from "@voya/ui/components/button";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { tunProviderDiagnostics } from "@/ipc/commands";
 import type { TunProviderDiagnostics } from "@/ipc/bindings";
-import { getErrorMessage } from "@voya/utils/error";
+import { writeClipboard } from "@/lib/clipboard";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
-import { useToastStore } from "@/stores/toast-store";
+import { toastError, useToastStore } from "@/stores/toast-store";
 
 /**
  * Copies a structured TUN provider diagnostics report to the clipboard. Moved
@@ -28,23 +28,15 @@ export function TunDiagnosticsButton() {
 
     setCopying(true);
     try {
-      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
-        throw new Error(t("status.copyTunDiagnosticsClipboardUnavailable"));
-      }
-
       const diagnostics = await tunProviderDiagnostics();
-      await navigator.clipboard.writeText(formatTunDiagnosticsForClipboard(diagnostics));
+      await writeClipboard(formatTunDiagnosticsForClipboard(diagnostics));
       pushToast({
         description: t("status.copyTunDiagnosticsCopied"),
         severity: "info",
         title: label,
       });
     } catch (error) {
-      pushToast({
-        description: getErrorMessage(error),
-        severity: "error",
-        title: t("status.copyTunDiagnosticsFailed"),
-      });
+      toastError(t("status.copyTunDiagnosticsFailed"), error);
     } finally {
       if (mountedRef.current) {
         setCopying(false);

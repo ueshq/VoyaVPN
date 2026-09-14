@@ -29,6 +29,7 @@ const MISSING_COMPONENT_MESSAGE: &str = "PacketTunnel extension is not bundled i
 const SYSTEM_EXTENSION_APPROVAL_MESSAGE: &str =
     "Approve the VoyaVPN PacketTunnel system extension in System Settings, then enable TUN again.";
 const PACKAGING_MODE_SYSTEM_EXTENSION: &str = "systemExtension";
+const PACKAGING_MODE_APP_EXTENSION: &str = "appExtension";
 
 /// The OS-observable facts the macOS status decision table reads.
 ///
@@ -314,7 +315,7 @@ pub(super) fn macos_packet_tunnel_diagnostics() -> NativeTunDiagnostics {
 
     if let Some(message) = macos_packet_tunnel_packaging_error() {
         diagnostics.message = Some(message);
-    } else if diagnostics.packaging_mode.as_deref() == Some("systemExtension")
+    } else if diagnostics.packaging_mode.as_deref() == Some(PACKAGING_MODE_SYSTEM_EXTENSION)
         && !macos_system_extension_is_activated()
     {
         diagnostics.message = Some(
@@ -483,10 +484,10 @@ fn macos_packet_tunnel_packaging_mode() -> Option<&'static str> {
 
     *PACKAGING_MODE.get_or_init(|| {
         if macos_packet_tunnel_sysex_path().is_some_and(|path| path.exists()) {
-            return Some("systemExtension");
+            return Some(PACKAGING_MODE_SYSTEM_EXTENSION);
         }
         if macos_packet_tunnel_appex_path().is_some_and(|path| path.exists()) {
-            return Some("appExtension");
+            return Some(PACKAGING_MODE_APP_EXTENSION);
         }
         None
     })
@@ -504,7 +505,7 @@ fn macos_packet_tunnel_packaging_error() -> Option<String> {
 
 #[cfg(target_os = "macos")]
 fn probe_macos_packet_tunnel_packaging_error() -> Option<String> {
-    if macos_packet_tunnel_packaging_mode() != Some("appExtension") {
+    if macos_packet_tunnel_packaging_mode() != Some(PACKAGING_MODE_APP_EXTENSION) {
         return None;
     }
     let appex = macos_packet_tunnel_appex_path()?;
@@ -756,17 +757,13 @@ fn start_macos_packet_tunnel_with_bridge(
     })
 }
 
-pub(super) fn stop_macos_packet_tunnel() -> Result<(), NativeTunError> {
-    stop_macos_packet_tunnel_with_bridge()
-}
-
 #[cfg(target_os = "macos")]
-fn stop_macos_packet_tunnel_with_bridge() -> Result<(), NativeTunError> {
+pub(super) fn stop_macos_packet_tunnel() -> Result<(), NativeTunError> {
     parse_bridge_stop_output(&macos_packet_tunnel_bridge_stop()?)
 }
 
 #[cfg(not(target_os = "macos"))]
-fn stop_macos_packet_tunnel_with_bridge() -> Result<(), NativeTunError> {
+pub(super) fn stop_macos_packet_tunnel() -> Result<(), NativeTunError> {
     Ok(())
 }
 

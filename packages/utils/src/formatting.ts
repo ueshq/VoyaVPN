@@ -29,6 +29,11 @@ export function formatBytesPerSecond(value: number) {
   return formatScaledBinary(value, RATE_UNITS, false);
 }
 
+/** Zero-padded `HH:MM:SS`; the hours do not wrap, so a long duration keeps counting. */
+export function formatClock(hours: number, minutes: number, seconds: number) {
+  return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
+}
+
 /** A measured latency, or an empty string when no measurement is available. */
 export function formatDelay(delay: number | null | undefined) {
   if (typeof delay === "number" && delay > 0) {

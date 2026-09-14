@@ -2,52 +2,20 @@ import { create } from "zustand";
 
 import type { CoreType } from "@/ipc/bindings";
 
-export type ModalKind = "missingCore";
-
 export type MissingCorePayload = {
   coreType: CoreType;
   message: string;
 };
 
-type ModalEntry = {
-  id: string;
-  kind: ModalKind;
-  missingCore?: MissingCorePayload;
-};
-
-type ModalOptions = {
-  missingCore?: MissingCorePayload;
-};
-
 type ModalState = {
-  closeModal: (id: string) => void;
-  closeTopModal: () => void;
-  openModal: (kind: ModalKind, options?: ModalOptions) => string;
-  stack: ModalEntry[];
+  closeMissingCore: () => void;
+  /** What the missing-core dialog repairs; `null` while it is closed. */
+  missingCore: MissingCorePayload | null;
+  showMissingCore: (payload: MissingCorePayload) => void;
 };
-
-function createModalId(kind: ModalKind) {
-  return `${kind}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
 
 export const useModalStore = create<ModalState>((set) => ({
-  closeModal: (id) => set((state) => ({ stack: state.stack.filter((modal) => modal.id !== id) })),
-  closeTopModal: () => set((state) => ({ stack: state.stack.slice(0, -1) })),
-  openModal: (kind, options) => {
-    const id = createModalId(kind);
-
-    set((state) => ({
-      stack: [
-        ...state.stack,
-        {
-          id,
-          kind,
-          missingCore: options?.missingCore,
-        },
-      ],
-    }));
-
-    return id;
-  },
-  stack: [],
+  closeMissingCore: () => set({ missingCore: null }),
+  missingCore: null,
+  showMissingCore: (missingCore) => set({ missingCore }),
 }));

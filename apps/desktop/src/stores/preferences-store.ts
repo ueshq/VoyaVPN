@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
+import { mergeValidated } from "./persisted";
+
 export type ThemeMode = "system" | "light" | "dark";
 
 type PersistedPreferences = {
@@ -40,7 +42,12 @@ export const usePreferencesStore = create<PreferencesState>()(
         ruleLibraryUpdatedAt: state.ruleLibraryUpdatedAt,
         themeMode: state.themeMode,
       }),
-      merge: (persistedState, currentState) => mergePersistedPreferences(persistedState, currentState),
+      merge: mergeValidated<PreferencesState>(({ ruleLibraryUpdatedAt, themeMode }) => ({
+        ...(typeof ruleLibraryUpdatedAt === "number" && Number.isFinite(ruleLibraryUpdatedAt)
+          ? { ruleLibraryUpdatedAt }
+          : {}),
+        ...(isThemeMode(themeMode) ? { themeMode } : {}),
+      })),
       storage: createJSONStorage(() => window.localStorage),
     },
   ),
@@ -60,24 +67,4 @@ export function resolveThemeMode(themeMode: ThemeMode) {
 
 export function isThemeMode(value: unknown): value is ThemeMode {
   return value === "system" || value === "light" || value === "dark";
-}
-
-function mergePersistedPreferences(persistedState: unknown, currentState: PreferencesState): PreferencesState {
-  if (!isRecord(persistedState)) {
-    return currentState;
-  }
-
-  return {
-    ...currentState,
-    ruleLibraryUpdatedAt:
-      typeof persistedState.ruleLibraryUpdatedAt === "number"
-      && Number.isFinite(persistedState.ruleLibraryUpdatedAt)
-        ? persistedState.ruleLibraryUpdatedAt
-        : null,
-    themeMode: isThemeMode(persistedState.themeMode) ? persistedState.themeMode : "system",
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

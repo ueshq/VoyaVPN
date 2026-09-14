@@ -32,6 +32,16 @@ export function profileNameWithoutFlag(name: string) {
   return flag ? name.replace(flag, "").trim() || name : name;
 }
 
+/** A node's name without its flag; a node without a name goes by its id. */
+export function profileMemberName(remarks: string, id: string) {
+  return profileNameWithoutFlag(remarks) || id;
+}
+
+/** The name a node is listed under; one without a name says it is untitled. */
+export function profileTitle(remarks: string, t: TranslationFunction) {
+  return remarks || t("panes.profiles.untitled");
+}
+
 const REGIONAL_INDICATOR_A = 0x1f1e6;
 
 /**
@@ -44,4 +54,9 @@ export function profileFlagCountryCode(name: string | null | undefined) {
   return String.fromCharCode(
     ...Array.from(flag, (letter) => (letter.codePointAt(0) ?? REGIONAL_INDICATOR_A) - REGIONAL_INDICATOR_A + 65),
   );
+}
+
+/** A measured country first; a flag in the node name is only a provisional hint. */
+export function entryCountry(entry: ProfileListEntry | null | undefined) {
+  return entry ? (entry.metrics.countryCode ?? profileFlagCountryCode(entry.profile.remarks)) : null;
 }

@@ -102,20 +102,13 @@ impl ProcessRunner for FakeRunner {
         let mut next_pid = self.next_pid.lock().expect("next pid");
         let pid = *next_pid;
         *next_pid += 1;
-        self.events.push(format!(
-            "spawn:{:?}:pid={pid}:stdin={}",
-            request.role,
-            request.has_stdin()
-        ));
+        self.events
+            .push(format!("spawn:{:?}:pid={pid}", request.role));
         Ok(ProcessHandle::new(pid, request.role))
     }
 
     fn run_oneshot(&self, request: ProcessSpawn) -> Result<ProcessOutput, ProcessError> {
-        self.events.push(format!(
-            "oneshot:{:?}:stdin={}",
-            request.role,
-            request.has_stdin()
-        ));
+        self.events.push(format!("oneshot:{:?}", request.role));
         self.oneshot_requests
             .lock()
             .expect("oneshot requests")
@@ -429,8 +422,8 @@ async fn supervisor_stop_teardown_order_is_sudo_kill_main_pre() {
     assert_eq!(
         &events[2..],
         [
-            "oneshot:SudoKill:stdin=false",
-            "oneshot:SudoKill:stdin=false",
+            "oneshot:SudoKill",
+            "oneshot:SudoKill",
             "stop:Main:pid=100",
             "stop:Pre:pid=101"
         ]
@@ -484,9 +477,8 @@ async fn supervisor_sudo_kill_passes_expected_core_name_for_pid_validation() {
         ]
     );
     // The kill logic now lives in the root-owned launcher, not a generated
-    // user-owned script, and no admin password is piped in.
+    // user-owned script.
     assert!(requests[0].generated_scripts.is_empty());
-    assert!(!requests[0].has_stdin());
 }
 
 #[tokio::test]
@@ -542,10 +534,7 @@ async fn supervisor_sudo_kill_nonzero_status_is_typed_error() {
     assert_eq!(snapshot.connected_duration_ms, Some(7000));
     assert_eq!(
         events.lock().as_slice(),
-        [
-            "spawn:Main:pid=100:stdin=false",
-            "oneshot:SudoKill:stdin=false"
-        ]
+        ["spawn:Main:pid=100", "oneshot:SudoKill"]
     );
 }
 
@@ -582,8 +571,8 @@ fn supervisor_actor_drop_stops_running_core_with_sudo_kill() {
     assert_eq!(
         events.lock().as_slice(),
         [
-            "spawn:Main:pid=100:stdin=false",
-            "oneshot:SudoKill:stdin=false",
+            "spawn:Main:pid=100",
+            "oneshot:SudoKill",
             "stop:Main:pid=100"
         ]
     );
@@ -624,7 +613,7 @@ async fn supervisor_elevation_grant_gates_elevated_spawn() {
         .start(request)
         .await
         .expect("start with elevation grant");
-    assert_eq!(events.lock().as_slice(), ["spawn:Main:pid=100:stdin=false"]);
+    assert_eq!(events.lock().as_slice(), ["spawn:Main:pid=100"]);
 }
 
 #[tokio::test]
@@ -659,9 +648,9 @@ async fn supervisor_crash_restarts_serialized_lifecycle() {
     assert_eq!(
         events.lock().as_slice(),
         [
-            "spawn:Main:pid=100:stdin=false",
+            "spawn:Main:pid=100",
             "stop:Main:pid=100",
-            "spawn:Main:pid=101:stdin=false"
+            "spawn:Main:pid=101"
         ]
     );
 }
@@ -798,9 +787,9 @@ async fn supervisor_windows_non_tun_process_start_assigns_job() {
         events.lock().as_slice(),
         [
             "job:create",
-            "spawn:Main:pid=100:stdin=false",
+            "spawn:Main:pid=100",
             "job:assign:Main:pid=100",
-            "spawn:Pre:pid=101:stdin=false",
+            "spawn:Pre:pid=101",
             "job:assign:Pre:pid=101"
         ]
     );
@@ -957,10 +946,7 @@ async fn supervisor_tun_sudo_wraps_singbox() {
         .await
         .expect("sing-box start");
 
-    assert_eq!(
-        events.lock().as_slice(),
-        ["spawn:Main:pid=100:stdin=false",]
-    );
+    assert_eq!(events.lock().as_slice(), ["spawn:Main:pid=100",]);
 }
 
 #[tokio::test]
@@ -1001,9 +987,9 @@ async fn supervisor_tun_partial_start_failure_kills_elevated_main_before_returni
     assert_eq!(
         events.lock().as_slice(),
         [
-            "spawn:Main:pid=100:stdin=false",
+            "spawn:Main:pid=100",
             "spawn-fail:Pre",
-            "oneshot:SudoKill:stdin=false",
+            "oneshot:SudoKill",
             "stop:Main:pid=100"
         ]
     );
@@ -1154,11 +1140,11 @@ async fn supervisor_gives_up_after_the_crash_budget_is_spent() {
     assert_eq!(
         events.lock().as_slice(),
         [
-            "spawn:Main:pid=100:stdin=false",
+            "spawn:Main:pid=100",
             "stop:Main:pid=100",
-            "spawn:Main:pid=101:stdin=false",
+            "spawn:Main:pid=101",
             "stop:Main:pid=101",
-            "spawn:Main:pid=102:stdin=false",
+            "spawn:Main:pid=102",
             "stop:Main:pid=102",
         ]
     );
@@ -1202,7 +1188,7 @@ async fn supervisor_treats_a_clean_exit_as_intentional() {
     );
     assert_eq!(
         events.lock().as_slice(),
-        ["spawn:Main:pid=100:stdin=false", "stop:Main:pid=100"]
+        ["spawn:Main:pid=100", "stop:Main:pid=100"]
     );
     assert_eq!(
         sink.outcomes(),
@@ -1429,7 +1415,7 @@ async fn supervisor_start_precondition_failure_keeps_the_running_core() {
     let snapshot = supervisor.status().await.expect("status");
     assert_eq!(snapshot.state, SupervisorConnectionState::Connected);
     assert_eq!(snapshot.main_pid, Some(100));
-    assert_eq!(events.lock().as_slice(), ["spawn:Main:pid=100:stdin=false"]);
+    assert_eq!(events.lock().as_slice(), ["spawn:Main:pid=100"]);
 }
 
 #[tokio::test]
@@ -1477,9 +1463,9 @@ async fn supervisor_restart_stops_the_previous_core_before_spawning_a_new_one() 
     assert_eq!(
         events.lock().as_slice(),
         [
-            "spawn:Main:pid=100:stdin=false",
+            "spawn:Main:pid=100",
             "stop:Main:pid=100",
-            "spawn:Main:pid=101:stdin=false"
+            "spawn:Main:pid=101"
         ]
     );
 }
@@ -1588,12 +1574,12 @@ async fn supervisor_restarts_both_processes_when_the_pre_process_crashes() {
     assert_eq!(
         events.lock().as_slice(),
         [
-            "spawn:Main:pid=100:stdin=false",
-            "spawn:Pre:pid=101:stdin=false",
+            "spawn:Main:pid=100",
+            "spawn:Pre:pid=101",
             "stop:Main:pid=100",
             "stop:Pre:pid=101",
-            "spawn:Main:pid=102:stdin=false",
-            "spawn:Pre:pid=103:stdin=false"
+            "spawn:Main:pid=102",
+            "spawn:Pre:pid=103"
         ]
     );
 }

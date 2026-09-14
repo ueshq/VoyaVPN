@@ -179,7 +179,7 @@ export function PerAppProxyDialog({
         // per-app-proxy-rule.ts.
         const savedRule = findPerAppRule(saved);
         if (savedRule && saved.rules[0]?.id !== savedRule.id) {
-          await moveRoutingRule(saved.id, savedRule.id, "top");
+          await moveRoutingRule(saved.id, savedRule.id, "top", null);
         }
       }
       // The routing-rule commands emit the `routings` invalidation.

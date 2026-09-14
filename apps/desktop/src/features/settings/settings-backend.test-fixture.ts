@@ -1,15 +1,17 @@
 import { vi, type Mock } from "vitest";
-import type { AppError, AppSettingsV1, DnsSettings } from "@/ipc/bindings";
+import type { AppSettingsV1, DnsSettings } from "@/ipc/bindings";
 import { makeAppSettings } from "./app-settings.test-fixture";
 
-class MockIpcCommandError extends Error {
-  constructor(readonly appError: AppError) {
-    super(appError.message);
-  }
-}
+// The real error class and kind check, so a rejected save takes the app's own
+// validation path. `importActual`, because this module stands in for the
+// commands module itself.
+const { appErrorOfKind, IpcCommandError } =
+  await vi.importActual<typeof import("@/ipc/commands")>("@/ipc/commands");
+
 let settings = makeAppSettings();
 export const settingsIpc: {
-  IpcCommandError: typeof MockIpcCommandError;
+  appErrorOfKind: typeof appErrorOfKind;
+  IpcCommandError: typeof IpcCommandError;
 } & Record<
   | "getSettingsApplyStatus"
   | "applyPendingSettings"
@@ -25,7 +27,8 @@ export const settingsIpc: {
   | "listProcessCandidates",
   Mock
 > = {
-  IpcCommandError: MockIpcCommandError,
+  appErrorOfKind,
+  IpcCommandError,
   getSettingsApplyStatus: vi.fn(),
   applyPendingSettings: vi.fn(),
   loadAppSettings: vi.fn(),

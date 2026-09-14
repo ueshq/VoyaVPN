@@ -9,7 +9,7 @@ pub(super) fn apply_outbound_bind_interface(
     else {
         return;
     };
-    if !(context.is_tun_enabled || context.is_windows()) {
+    if !(context.is_tun_enabled || context.platform.is_windows()) {
         return;
     }
     for outbound in &mut config.outbounds {
@@ -108,19 +108,6 @@ pub(super) fn transport_host_for_tls(node: &ProfileItem) -> Option<String> {
     nonempty_string(Some(&first_host))
 }
 
-pub(super) fn split_csv(value: &str) -> Vec<String> {
-    value
-        .split(',')
-        .map(str::trim)
-        .filter(|item| !item.is_empty())
-        .map(str::to_string)
-        .collect()
-}
-
-pub(super) fn nonempty_string(value: Option<&str>) -> Option<String> {
-    nonempty_str(value).map(str::to_string)
-}
-
 pub(crate) fn state_port2(app_config: &AppConfig, is_tun_enabled: bool) -> i32 {
     inbound_port(app_config, InboundProtocol::api2) + i32::from(is_tun_enabled)
 }
@@ -140,8 +127,4 @@ fn is_loopback_address(address: &str) -> bool {
         || address
             .parse::<IpAddr>()
             .is_ok_and(|ip_address| ip_address.is_loopback())
-}
-
-pub(super) fn value_from_config(config: &SingboxConfig) -> Value {
-    serde_json::to_value(config).unwrap_or_else(|_| json!({}))
 }

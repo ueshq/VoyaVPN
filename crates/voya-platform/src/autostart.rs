@@ -1,5 +1,5 @@
 use std::{
-    fs, io,
+    io,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -8,7 +8,8 @@ use thiserror::Error;
 
 use crate::{
     coreinfo::TargetOs,
-    process::{ProcessError, ProcessRole, ProcessRunner, ProcessSpawn},
+    filesystem,
+    process::{reg_add_arguments, ProcessError, ProcessRole, ProcessRunner, ProcessSpawn},
 };
 
 pub const AUTOSTART_APP_NAME: &str = "VoyaVPN";
@@ -188,14 +189,7 @@ impl StdAutostartAdapter {
 
 impl AutostartAdapter for StdAutostartAdapter {
     fn write_file(&self, path: &Path, contents: &str) -> Result<(), AutostartError> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|source| AutostartError::Io {
-                operation: "create autostart directory",
-                path: parent.to_path_buf(),
-                source,
-            })?;
-        }
-        fs::write(path, contents).map_err(|source| AutostartError::Io {
+        filesystem::write_file_with_parent(path, contents).map_err(|source| AutostartError::Io {
             operation: "write autostart file",
             path: path.to_path_buf(),
             source,
@@ -203,15 +197,11 @@ impl AutostartAdapter for StdAutostartAdapter {
     }
 
     fn remove_file(&self, path: &Path) -> Result<(), AutostartError> {
-        match fs::remove_file(path) {
-            Ok(()) => Ok(()),
-            Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(()),
-            Err(source) => Err(AutostartError::Io {
-                operation: "remove autostart file",
-                path: path.to_path_buf(),
-                source,
-            }),
-        }
+        filesystem::remove_file_if_exists(path).map_err(|source| AutostartError::Io {
+            operation: "remove autostart file",
+            path: path.to_path_buf(),
+            source,
+        })
     }
 
     fn run_command(&self, executable: &Path, arguments: &[String]) -> Result<(), AutostartError> {
@@ -224,18 +214,11 @@ impl AutostartAdapter for StdAutostartAdapter {
         value_name: &str,
         value: &str,
     ) -> Result<(), AutostartError> {
-        let arguments = vec![
-            "add".to_string(),
-            key_path.to_string(),
-            "/v".to_string(),
-            value_name.to_string(),
-            "/t".to_string(),
-            "REG_SZ".to_string(),
-            "/d".to_string(),
-            value.to_string(),
-            "/f".to_string(),
-        ];
-        run_checked(&*self.runner, Path::new("reg"), &arguments)
+        run_checked(
+            &*self.runner,
+            Path::new("reg"),
+            &reg_add_arguments(key_path, value_name, "REG_SZ", value),
+        )
     }
 
     fn delete_windows_run_registry(
@@ -255,7 +238,7 @@ impl AutostartAdapter for StdAutostartAdapter {
 }
 
 #[must_use]
-pub fn plan_autostart(request: &AutostartRequest) -> AutostartPlan {
+pub(crate) fn plan_autostart(request: &AutostartRequest) -> AutostartPlan {
     let artifact = autostart_artifact(request);
     let actions = match request.target_os {
         TargetOs::Windows => windows_actions(request),
@@ -281,7 +264,7 @@ pub fn windows_value_name(app_name: &str, executable: &Path) -> String {
 }
 
 #[must_use]
-pub fn linux_desktop_entry(app_name: &str, executable: &Path) -> String {
+pub(crate) fn linux_desktop_entry(app_name: &str, executable: &Path) -> String {
     format!(
         "[Desktop Entry]\nType=Application\nExec={} {}\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nName[en_US]={app_name}\nName={app_name}\nComment[en_US]={app_name}\nComment={app_name}\n",
         desktop_entry_exec_argument(executable),
@@ -465,7 +448,7 @@ fn run_checked(
             .with_arguments(arguments.to_vec())
             .with_display_log(false),
     )?;
-    if output.status_code == Some(0) {
+    if output.success() {
         Ok(())
     } else {
         Err(AutostartError::CommandFailed {
@@ -504,8 +487,6 @@ fn shell_single_quote(value: &str) -> String {
 
 #[derive(Debug, Error)]
 pub enum AutostartError {
-    #[error("unsupported autostart target OS {0:?}")]
-    Unsupported(TargetOs),
     #[error("{operation} failed for {path}: {source}")]
     Io {
         operation: &'static str,

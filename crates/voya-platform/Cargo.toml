@@ -16,7 +16,6 @@ serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 voya-core.workspace = true
-zeroize.workspace = true
 xcap = "=0.9.8"
 sys-locale = "0.3"
 

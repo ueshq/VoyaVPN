@@ -38,7 +38,7 @@ import {
 } from "@voya/ui/components/select";
 import { useI18n } from "@voya/i18n/use-i18n";
 
-import { getErrorMessage } from "@voya/utils/error";
+import { formatClock } from "@voya/utils/formatting";
 import { exportLogs } from "@/ipc/commands";
 import { logLineText } from "@/ipc/messages";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
@@ -46,7 +46,8 @@ import type { StoredLogLine } from "@/ipc/runtime-event-store";
 import type { LogLevel } from "@/ipc/bindings";
 import { cn } from "@voya/ui/lib/utils";
 import { PageHeader } from "@/components/app-shell/page-section";
-import { useToastStore } from "@/stores/toast-store";
+import { writeClipboard } from "@/lib/clipboard";
+import { toastError, useToastStore } from "@/stores/toast-store";
 
 export type LogFilter = "standard" | "issues" | "all";
 const ROW_HEIGHT = 36;
@@ -101,21 +102,14 @@ export function LogsPanel({
 
   async function copyShown() {
     try {
-      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
-        throw new Error(t("status.copyTunDiagnosticsClipboardUnavailable"));
-      }
-      await navigator.clipboard.writeText(shownText());
+      await writeClipboard(shownText());
       pushToast({
         description: t("panes.logs.copied", { count: filtered.length }),
         severity: "info",
         title: t("panes.logs.copy"),
       });
     } catch (error) {
-      pushToast({
-        description: getErrorMessage(error),
-        severity: "error",
-        title: t("panes.logs.copyFailed"),
-      });
+      toastError(t("panes.logs.copyFailed"), error);
     }
   }
 
@@ -129,11 +123,7 @@ export function LogsPanel({
         });
       }
     } catch (error) {
-      pushToast({
-        description: getErrorMessage(error),
-        severity: "error",
-        title: t("panes.logs.exportFailed"),
-      });
+      toastError(t("panes.logs.exportFailed"), error);
     }
   }
 
@@ -385,8 +375,7 @@ export function LogsPanel({
 
 function formatTimestamp(receivedAt: number) {
   const date = new Date(receivedAt);
-  const pad = (value: number) => value.toString().padStart(2, "0");
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return formatClock(date.getHours(), date.getMinutes(), date.getSeconds());
 }
 
 function logLevelClassName(level: LogLevel) {

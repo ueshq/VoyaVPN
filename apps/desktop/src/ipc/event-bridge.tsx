@@ -7,14 +7,15 @@ import type {
   InvalidateEvent,
   NoticeCode,
   ShellTabTarget,
-  TransientStreamEvent,
 } from "@/ipc/bindings";
 import { noticeText } from "@/ipc/messages";
 import { notifyWhenHidden } from "@/ipc/notifications";
 import { invalidationQueryKey, queryKeys } from "@/ipc/query-keys";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { isTauriRuntime } from "@/ipc/window";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationFunction } from "@voya/i18n";
+import { useLatestRef } from "@voya/utils/use-latest-ref";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
 import { getErrorMessage } from "@voya/utils/error";
 import { type ConnectionsView, type ShellTab, useShellStore } from "@/stores/shell-store";
@@ -47,10 +48,7 @@ export function EventBridge() {
   // is resolved here. The ref keeps `t` out of the effect's deps: re-running it
   // on every language change would tear down and re-register every listener.
   const { t } = useI18n();
-  const translateRef = useRef(t);
-  useEffect(() => {
-    translateRef.current = t;
-  }, [t]);
+  const translateRef = useLatestRef(t);
 
   useEffect(() => {
     if (!isTauriRuntime()) {
@@ -81,7 +79,7 @@ export function EventBridge() {
       ),
       registerEventListener("transientStreamEvent", () =>
         events.transientStreamEvent.listen((event) => {
-          routeTransientStream(event.payload);
+          useRuntimeEventStore.getState().pushTransientEvent(event.payload);
           // Country flags use persisted query data, never a long-lived event
           // overlay: an old event must not resurrect a flag after a profile
           // edit. Coalesce batch results into at most one refresh per second.
@@ -128,7 +126,7 @@ export function EventBridge() {
       listenerGenerationRef.current += 1;
       drainUnlisteners(unlisteners);
     };
-  }, [mountedRef, queryClient]);
+  }, [mountedRef, queryClient, translateRef]);
 
   return null;
 }
@@ -185,10 +183,6 @@ function routeInvalidation(event: InvalidateEvent, queryClient: ReturnType<typeo
   });
 }
 
-function routeTransientStream(event: TransientStreamEvent) {
-  useRuntimeEventStore.getState().pushTransientEvent(event);
-}
-
 function routeAppEvent(event: AppEvent, t: TranslationFunction) {
   switch (event.kind) {
     case "notice": {
@@ -236,8 +230,4 @@ function toShellTarget(
     case "proxyConnections":
       return { tab: "connections", view: "connections" };
   }
-}
-
-function isTauriRuntime() {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }

@@ -2,9 +2,8 @@ import { useRef, useState } from "react";
 import { updateSubscriptions, deleteSubscriptions } from "@/ipc/commands";
 import type { Subscription } from "@/ipc/bindings";
 import {
+  assertSubscriptionUpdated,
   formatSubscriptionUpdateSummary,
-  isSubscriptionUpdateFailure,
-  subscriptionUpdateMessages,
 } from "@/features/subscriptions/subscription-update-result";
 import type { TranslationFunction } from "@voya/i18n";
 import type { NodeOperation } from "./use-node-operation";
@@ -47,11 +46,7 @@ export function useNodeSubscriptions(
     try {
       await runOperation(async () => {
         const result = await updateSubscriptions(id, true, null);
-        if (isSubscriptionUpdateFailure(result))
-          throw new Error(
-            subscriptionUpdateMessages(result) ||
-              t("panes.subscriptions.updateNothingImported"),
-          );
+        assertSubscriptionUpdated(result, t);
         setOperationMessage(formatSubscriptionUpdateSummary(result, t));
       });
     } finally {
@@ -66,11 +61,7 @@ export function useNodeSubscriptions(
     try {
       await runOperation(async () => {
         const result = await updateSubscriptions(null, true, null);
-        if (isSubscriptionUpdateFailure(result))
-          throw new Error(
-            subscriptionUpdateMessages(result) ||
-              t("panes.subscriptions.updateNothingImported"),
-          );
+        assertSubscriptionUpdated(result, t);
         setOperationMessage(formatSubscriptionUpdateSummary(result, t));
       });
     } finally {

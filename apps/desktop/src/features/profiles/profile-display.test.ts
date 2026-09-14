@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 
+import type { TranslationFunction } from "@voya/i18n";
 import type { ProfileListEntry, ProfileTransport } from "@/ipc/bindings";
 import { makeProfileFixture } from "@/test/profile-fixture";
 
 import {
+  entryCountry,
   profileFlagCountryCode,
   profileLatencyTone,
+  profileMemberName,
   profileNameWithoutFlag,
+  profileTitle,
   profileTransportName,
 } from "./profile-display";
 
@@ -48,6 +52,26 @@ describe("profile display projections", () => {
     ["Tokyo 🇯🇵 backup 🇺🇸", "Tokyo  backup 🇺🇸"],
   ])("preserves the node name when removing its first flag from %s", (name, expected) => {
     expect(profileNameWithoutFlag(name)).toBe(expected);
+  });
+
+  it("names a member without its flag, or by its id", () => {
+    expect(profileMemberName("🇯🇵 Tokyo", "node-1")).toBe("Tokyo");
+    expect(profileMemberName("", "node-1")).toBe("node-1");
+  });
+
+  it("titles a node without a name as untitled", () => {
+    const t = ((key: string) => `t:${key}`) as unknown as TranslationFunction;
+
+    expect(profileTitle("🇯🇵 Tokyo", t)).toBe("🇯🇵 Tokyo");
+    expect(profileTitle("", t)).toBe("t:panes.profiles.untitled");
+  });
+
+  it("prefers a measured country over the flag in the name", () => {
+    const entry = makeProfileFixture(0, { remarks: "🇯🇵 Tokyo" }, false);
+
+    expect(entryCountry({ ...entry, metrics: { ...entry.metrics, countryCode: "DE" } })).toBe("DE");
+    expect(entryCountry({ ...entry, metrics: { ...entry.metrics, countryCode: null } })).toBe("JP");
+    expect(entryCountry(null)).toBeNull();
   });
 
   it.each([

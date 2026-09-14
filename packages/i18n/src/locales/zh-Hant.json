@@ -269,8 +269,7 @@
       "empty": "尚無節點",
       "emptyDescription": "新增節點，或從訂閱匯入一個以開始。",
       "export": {
-        "clipboardUnavailable": "目前環境不支援寫入剪貼簿。",
-        "copied": "已將 {{count}} 個節點的匯出內容複製到剪貼簿。",
+        "copied":"已將 {{count}} 個節點的匯出內容複製到剪貼簿。",
         "export": "匯出",
         "noProfiles": "沒有可匯出的節點。",
         "noSelection": "請至少選擇一個節點再匯出。",
@@ -793,7 +792,6 @@
     "connecting": "連線中",
     "connectionModeChangeFailed": "連線模式切換失敗",
     "copyTunDiagnostics": "複製 VPN 診斷",
-    "copyTunDiagnosticsClipboardUnavailable": "目前環境不支援寫入剪貼簿。",
     "copyTunDiagnosticsCopied": "VPN 診斷已複製到剪貼簿。",
     "copyTunDiagnosticsFailed": "複製 VPN 診斷失敗",
     "disconnected": "已中斷連線",
@@ -976,6 +974,7 @@
   },
   "common": {
     "advanced": "更多參數",
+    "clipboardUnavailable": "目前環境不支援寫入剪貼簿。",
     "none": "無",
     "dismiss": "關閉提示",
     "waitForConnection": "連線狀態變化中，稍後再試"
@@ -1011,7 +1010,6 @@
     "use": "使用此組",
     "inUse": "使用中",
     "active": "已選",
-    "delay": "{{ms}} ms",
     "name": "名稱",
     "strategyLabel": "策略",
     "strategy": {

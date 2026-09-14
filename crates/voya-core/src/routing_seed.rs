@@ -161,7 +161,7 @@ pub fn default_rule_set() -> Vec<RulesItem> {
 
 /// Private destinations, reached directly.
 #[must_use]
-pub fn bypass_lan_rule() -> RulesItem {
+pub(crate) fn bypass_lan_rule() -> RulesItem {
     sentinel_rule(
         SENTINEL_BYPASS_LAN,
         DIRECT_TAG,

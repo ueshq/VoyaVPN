@@ -22,7 +22,7 @@ use thiserror::Error;
 
 use crate::{
     coreinfo::TargetOs,
-    elevation::{quote_shell_arg, unix_sudo_kill_body, SUDO_EXECUTABLE},
+    elevation::{quote_shell_arg, sudo_launcher_arguments, unix_sudo_kill_body, SUDO_EXECUTABLE},
     process::{ProcessRole, ProcessSpawn},
 };
 
@@ -165,12 +165,7 @@ pub fn build_install_plan(
 pub fn build_uninstall_spawn(os: TargetOs) -> Result<ProcessSpawn, PrivilegeError> {
     let launcher = elevate_launcher_path(os).ok_or(PrivilegeError::UnsupportedOs)?;
     Ok(ProcessSpawn::new(ProcessRole::SudoKill, SUDO_EXECUTABLE)
-        .with_arguments([
-            "-n".to_string(),
-            "--".to_string(),
-            launcher.to_string_lossy().into_owned(),
-            "uninstall".to_string(),
-        ])
+        .with_arguments(sudo_launcher_arguments(&launcher, "uninstall"))
         .with_display_log(false))
 }
 
@@ -180,7 +175,7 @@ pub fn build_uninstall_spawn(os: TargetOs) -> Result<ProcessSpawn, PrivilegeErro
 /// containing directory with `cd -P`/`pwd -P` (so symlinked directories cannot
 /// escape), and only then requires the resolved path to be a non-symlink regular
 /// file inside the resolved `bin_prefix`. The resolved path is what gets exec'd.
-pub fn launcher_script(os: TargetOs, bin_prefix: &Path) -> Result<String, PrivilegeError> {
+pub(crate) fn launcher_script(os: TargetOs, bin_prefix: &Path) -> Result<String, PrivilegeError> {
     let kill_body = unix_sudo_kill_body(os).map_err(|_| PrivilegeError::UnsupportedOs)?;
     let prefix = quote_shell_arg(&bin_prefix.to_string_lossy());
     let sudoers = quote_shell_arg(SUDOERS_DROP_IN_PATH);
@@ -251,7 +246,7 @@ esac
 
 /// Sudoers drop-in granting `username` passwordless use of exactly `launcher`.
 #[must_use]
-pub fn sudoers_drop_in(username: &str, launcher: &Path) -> String {
+pub(crate) fn sudoers_drop_in(username: &str, launcher: &Path) -> String {
     format!(
         "{username} ALL=(root) NOPASSWD: {}\n",
         launcher.to_string_lossy()

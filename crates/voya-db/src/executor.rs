@@ -1,3 +1,5 @@
+use std::{future::Future, pin::Pin};
+
 use sqlx::{Sqlite, SqliteConnection, SqlitePool, Transaction};
 use tokio::sync::Mutex;
 
@@ -51,7 +53,11 @@ macro_rules! repository_constructors {
     };
 }
 
-/// Runs one delete statement per id, all-or-nothing.
+/// A batch of statements that borrows one connection for its whole run.
+pub(crate) type ConnectionFuture<'connection, T> =
+    Pin<Box<dyn Future<Output = Result<T>> + Send + 'connection>>;
+
+/// Runs a multi-statement batch on one connection, all-or-nothing.
 ///
 /// `run_query!` cannot express this: every statement has to see the same
 /// connection, and the repository may only own — and therefore commit — a
@@ -59,24 +65,50 @@ macro_rules! repository_constructors {
 /// [`crate::UnitOfWork`] the batch joins the caller's transaction so the caller
 /// still decides when to commit, and a mid-batch failure leaves the whole unit
 /// to roll back.
+///
+/// Whatever the batch borrows travels in `input`: the connection handed to
+/// `work` lives shorter than the caller's data, so the closure cannot capture
+/// that data by reference itself.
+pub(crate) async fn with_connection<Input, T>(
+    executor: RepositoryExecutor<'_>,
+    input: &Input,
+    work: impl for<'connection> FnOnce(
+        &'connection mut SqliteConnection,
+        &'connection Input,
+    ) -> ConnectionFuture<'connection, T>,
+) -> Result<T>
+where
+    Input: ?Sized + Sync,
+{
+    match executor {
+        RepositoryExecutor::Pool(pool) => {
+            // A deferred transaction is enough because every batch run here
+            // only writes: SQLite refuses the busy handler when a transaction
+            // upgrades a read lock to a write lock, never when it takes the
+            // write lock with its first statement.
+            let mut transaction = pool.begin().await?;
+            let value = work(&mut transaction, input).await?;
+            transaction.commit().await?;
+            Ok(value)
+        }
+        RepositoryExecutor::Transaction(transaction) => {
+            let mut transaction = transaction.lock().await;
+            work(&mut transaction, input).await
+        }
+    }
+}
+
+/// Runs one delete statement per id as a single [`with_connection`] batch and
+/// returns how many rows it removed.
 pub(crate) async fn delete_each(
     executor: RepositoryExecutor<'_>,
     statement: &'static str,
     ids: &[String],
 ) -> Result<u64> {
-    match executor {
-        RepositoryExecutor::Pool(pool) => {
-            let mut transaction = pool.begin().await?;
-            let deleted = delete_each_on(&mut transaction, statement, ids).await?;
-            transaction.commit().await?;
-            Ok(deleted)
-        }
-        RepositoryExecutor::Transaction(transaction) => {
-            let mut transaction = transaction.lock().await;
-            let connection: &mut SqliteConnection = &mut transaction;
-            delete_each_on(connection, statement, ids).await
-        }
-    }
+    with_connection(executor, ids, |connection, ids| {
+        Box::pin(delete_each_on(connection, statement, ids))
+    })
+    .await
 }
 
 async fn delete_each_on(

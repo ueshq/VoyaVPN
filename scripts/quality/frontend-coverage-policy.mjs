@@ -41,7 +41,6 @@ export const criticalModules = [
   "apps/desktop/src/features/profiles/profile-form-protocol.ts",
   "apps/desktop/src/features/profiles/profile-form-transport.ts",
   "apps/desktop/src/features/profiles/profile-form-tls.ts",
-  "apps/desktop/src/features/profiles/profile-form-text.ts",
   "apps/desktop/src/features/profiles/virtual-list-keyboard.ts",
   "apps/desktop/src/features/routing/per-app-proxy-rule.ts",
   "apps/desktop/src/features/routing/routing-form-schema.ts",
@@ -51,6 +50,7 @@ export const criticalModules = [
   "apps/desktop/src/stores/shell-store.ts",
   "packages/utils/src/formatting.ts",
   "packages/utils/src/operational-redaction.ts",
+  "packages/utils/src/text.ts",
 ];
 
 export const runtimeModules = [
@@ -59,9 +59,10 @@ export const runtimeModules = [
   { path: "apps/desktop/src/ipc/runtime-event-store.ts", lines: 65, branches: 50 },
   // Connect/disconnect on the home screen.
   { path: "apps/desktop/src/features/home/use-home-runtime.ts", lines: 65, branches: 50 },
-  { path: "apps/desktop/src/features/home/runtime-action.ts", lines: 50, branches: 25 },
-  // Shared activation retains the guards and recovery paths extracted from Home.
-  { path: "apps/desktop/src/features/home/use-profile-activation.ts", lines: 80, branches: 75 },
+  // Runs every runtime action and node or group switch, with the shared guard
+  // and the elevation and missing-core recovery paths. Measured 97/98 when
+  // profile activation merged into it.
+  { path: "apps/desktop/src/features/home/runtime-action.ts", lines: 85, branches: 85 },
   { path: "apps/desktop/src/stores/runtime-action-store.ts", lines: 90, branches: 90 },
   // Proxy-monitor lifecycle.
   { path: "apps/desktop/src/components/app-shell/app-shell.tsx", lines: 75, branches: 55 },

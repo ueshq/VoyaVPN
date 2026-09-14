@@ -4,9 +4,8 @@ use regex::Regex;
 use std::collections::BTreeSet;
 use voya_core::{
     parse_share_link, parse_ss_sip008, parse_voya_profile_bundle, parse_wireguard_config,
-    ImportLineCode, ImportLineIssue, ProfileItem, ShareError,
+    text::decode_base64_payload, ImportLineCode, ImportLineIssue, ProfileItem, ShareError,
 };
-use voya_net::decode_base64_payload;
 
 #[derive(Debug, Default)]
 pub(super) struct ParsedImportText {

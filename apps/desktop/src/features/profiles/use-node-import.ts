@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { importProfilesFromText, readClipboardText, scanScreenQr } from "@/ipc/commands";
 import { importLineText } from "@/ipc/messages";
 import type { ImportProfilesResult, QrScanFailureReason } from "@/ipc/bindings";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
+import { useMountedRef } from "@voya/utils/use-mounted-ref";
 import type { DirectImportMethod } from "./import-methods";
 import type { NodeOperation } from "./use-node-operation";
 
@@ -55,11 +56,7 @@ export function useNodeImport(
 ) {
   const [directImportPending, setDirectImportPending] = useState<DirectImportMethod | "import" | null>(null);
   const pendingRef = useRef(false);
-  const activeRef = useRef(true);
-  useEffect(() => {
-    activeRef.current = true;
-    return () => { activeRef.current = false; };
-  }, []);
+  const activeRef = useMountedRef();
 
   async function handleDirectImport(method: DirectImportMethod) {
     if (pendingRef.current || !activeRef.current) return;

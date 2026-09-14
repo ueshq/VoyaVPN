@@ -13,10 +13,9 @@ import { DisabledReason } from "@/components/disabled-reason";
 import { connectionShortcutLabel } from "@/components/app-shell/use-shell-shortcuts";
 import { NodeCountryIcon } from "@/components/node-country-icon";
 import { getProtocolLabel } from "@/features/profiles/profile-constants";
-import { profileFlagCountryCode, profileNameWithoutFlag } from "@/features/profiles/profile-display";
+import { entryCountry, profileMemberName, profileNameWithoutFlag } from "@/features/profiles/profile-display";
 import { POLICY_GROUP_STRATEGY_KEYS } from "@/features/profiles/policy-group-labels";
 import { useSavedTrafficMode } from "@/features/routing/use-traffic-mode";
-import type { ProfileListEntry } from "@/ipc/bindings";
 import { type RuntimeAction } from "@/stores/runtime-action-store";
 import { useShellStore } from "@/stores/shell-store";
 
@@ -32,14 +31,9 @@ const ACTION_FAILED_KEYS = {
   restart: "home.actionFailed.restart",
 } as const satisfies Record<RuntimeAction, TranslationKey>;
 
-/** A measured country first; a flag in the node name is only a provisional hint. */
-function entryCountry(entry: ProfileListEntry | null | undefined) {
-  return entry ? (entry.metrics.countryCode ?? profileFlagCountryCode(entry.profile.remarks)) : null;
-}
-
 export function HomeScreen() {
   const { t } = useI18n();
-  const home = useHomeRuntime(t);
+  const home = useHomeRuntime();
   const { ipQuery } = useConnectionIp();
   const navigateToNodes = () =>
     useShellStore.getState().setActiveTab("profiles", true);
@@ -69,7 +63,7 @@ export function HomeScreen() {
     : null;
   const groupVia = groupNow
     ? t("home.groupVia", {
-        node: profileNameWithoutFlag(groupNow.remarks) || groupNow.profileId,
+        node: profileMemberName(groupNow.remarks, groupNow.profileId),
       })
     : null;
   const rawName =

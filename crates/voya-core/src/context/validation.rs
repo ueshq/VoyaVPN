@@ -1,7 +1,7 @@
 use super::*;
 
 pub fn validate_node(item: &ProfileItem, core_type: CoreType) -> NodeValidatorResult {
-    let mut result = NodeValidatorResult::empty();
+    let mut result = NodeValidatorResult::default();
 
     if item.address().trim().is_empty() {
         result.push_error(ValidationCode::InvalidAddress);
@@ -155,14 +155,6 @@ pub fn is_domain(candidate: &str) -> bool {
                 .chars()
                 .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
     }) && candidate.chars().any(|ch| ch.is_ascii_alphabetic())
-}
-pub(super) fn nonempty(value: &str) -> Option<&str> {
-    let value = value.trim();
-    if value.is_empty() {
-        None
-    } else {
-        Some(value)
-    }
 }
 
 #[cfg(test)]

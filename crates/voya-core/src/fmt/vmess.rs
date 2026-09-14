@@ -51,7 +51,7 @@ pub(super) fn export(item: &ProfileItem) -> Result<String, ShareError> {
         (
             "scy",
             Value::String(
-                nonempty_option(cipher)
+                nonempty_str(cipher.as_deref())
                     .unwrap_or(DEFAULT_SECURITY)
                     .to_string(),
             ),

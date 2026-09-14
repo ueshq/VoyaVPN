@@ -7,13 +7,10 @@
 
 use std::collections::BTreeSet;
 
-use serde::{Deserialize, Serialize};
-
 use crate::{ProfileItem, DEFAULT_SPEED_PING_TEST_URL};
 
 /// How a group picks the member traffic goes through.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum GroupStrategy {
     /// The user picks the member.
     #[default]
@@ -139,11 +136,17 @@ pub fn unique_member_tags(members: &[&ProfileItem]) -> Vec<String> {
 }
 
 fn member_tag(node: &ProfileItem, id_chars: Option<usize>) -> String {
+    name_id_tag(&node.remarks, &node.index_id, id_chars)
+}
+
+/// `name [id]`, or `[id]` for a blank name, keeping the first `id_chars`
+/// characters of the id (all of them for `None`).
+pub(crate) fn name_id_tag(name: &str, id: &str, id_chars: Option<usize>) -> String {
     let id: String = match id_chars {
-        Some(count) => node.index_id.chars().take(count).collect(),
-        None => node.index_id.clone(),
+        Some(count) => id.chars().take(count).collect(),
+        None => id.to_string(),
     };
-    let name = node.remarks.trim();
+    let name = name.trim();
     if name.is_empty() {
         format!("[{id}]")
     } else {

@@ -11,12 +11,11 @@ pub mod ruleset;
 pub use download::{
     DownloadAttempt, DownloadBytesResponse, DownloadClient, DownloadError, DownloadRequest,
     DownloadResponse, Result, DEFAULT_BINARY_RESPONSE_LIMIT_BYTES,
-    DEFAULT_TEXT_RESPONSE_LIMIT_BYTES, EMPTY_RESPONSE_ATTEMPT_ERROR, USER_AGENT_PREFIX,
+    DEFAULT_TEXT_RESPONSE_LIMIT_BYTES, EMPTY_RESPONSE_ATTEMPT_ERROR,
 };
 pub use subscription::{
-    build_subscription_url, decode_base64_payload, FailedSubscriptionSource, SubscriptionClient,
-    SubscriptionFetchOptions, SubscriptionFetchResult, SubscriptionFetchSource,
-    DEFAULT_SUB_CONVERT_CONFIG, DEFAULT_SUB_CONVERT_URL,
+    FailedSubscriptionSource, SubscriptionClient, SubscriptionFetchOptions,
+    SubscriptionFetchResult, SubscriptionFetchSource,
 };
 
 pub(crate) use download::{

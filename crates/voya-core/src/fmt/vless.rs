@@ -38,9 +38,11 @@ pub(super) fn export(item: &ProfileItem) -> Result<String, ShareError> {
     let mut query = Vec::new();
     query.push((
         "encryption".to_string(),
-        nonempty_option(encryption).unwrap_or(NONE).to_string(),
+        nonempty_str(encryption.as_deref())
+            .unwrap_or(NONE)
+            .to_string(),
     ));
-    if let Some(flow) = nonempty_option(flow) {
+    if let Some(flow) = nonempty_str(flow.as_deref()) {
         query.push(("flow".to_string(), flow.to_string()));
     }
     to_uri_query(item, Some(NONE), &mut query);

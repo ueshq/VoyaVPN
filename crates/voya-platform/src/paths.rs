@@ -7,12 +7,12 @@ use thiserror::Error;
 
 use crate::filesystem;
 
-pub const CONFIG_DIR_NAME: &str = "guiConfigs";
-pub const BIN_DIR_NAME: &str = "bin";
-pub const BIN_CONFIG_DIR_NAME: &str = "binConfigs";
-pub const LOG_DIR_NAME: &str = "guiLogs";
-pub const TEMP_DIR_NAME: &str = "guiTemps";
-pub const CORE_SEED_RESOURCE_DIR_NAME: &str = "core-seeds";
+pub(crate) const CONFIG_DIR_NAME: &str = "guiConfigs";
+pub(crate) const BIN_DIR_NAME: &str = "bin";
+pub(crate) const BIN_CONFIG_DIR_NAME: &str = "binConfigs";
+pub(crate) const LOG_DIR_NAME: &str = "guiLogs";
+pub(crate) const TEMP_DIR_NAME: &str = "guiTemps";
+pub(crate) const CORE_SEED_RESOURCE_DIR_NAME: &str = "core-seeds";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppPaths {

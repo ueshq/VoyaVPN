@@ -16,7 +16,7 @@ import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { ProfileListEntry } from "@/ipc/bindings";
 
 import { getProtocolLabel } from "./profile-constants";
-import { profileLatency, profileTransportName } from "./profile-display";
+import { profileLatency, profileTitle, profileTransportName } from "./profile-display";
 import type { NodeDetailsController } from "./node-controller-types";
 
 // Mounted only while open; the statistics selector watches this node alone.
@@ -42,10 +42,7 @@ export function ProfileDetailsDialog({
   const { profile, traffic } = item;
   const running = activation.runningId === profile.id;
   const rows: [TranslationKey, string | number][] = [
-    [
-      "panes.profiles.cardFields.remarks",
-      profile.remarks || t("panes.profiles.untitled"),
-    ],
+    ["panes.profiles.cardFields.remarks", profileTitle(profile.remarks, t)],
     ["panes.profiles.cardFields.address", profile.protocol.server.address || "—"],
     ["panes.profiles.cardFields.port", profile.protocol.server.port || "—"],
     [
@@ -95,7 +92,7 @@ export function ProfileDetailsDialog({
         <DialogHeader>
           <DialogTitle>{t("panes.profiles.card.detailsTitle")}</DialogTitle>
           <DialogDescription className="break-all">
-            {profile.remarks || t("panes.profiles.untitled")}
+            {profileTitle(profile.remarks, t)}
           </DialogDescription>
         </DialogHeader>
         <DialogBody>

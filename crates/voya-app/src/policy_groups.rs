@@ -69,12 +69,12 @@ pub struct PolicyGroupManager<'db> {
 impl<'db> PolicyGroupManager<'db> {
     #[must_use]
     pub fn new(database: &'db Database) -> Self {
-        Self::from_session(DatabaseSession::from_database(database))
+        Self::from_session(DatabaseSession::Database(database))
     }
 
     #[must_use]
     pub fn new_in(unit_of_work: &'db UnitOfWork) -> Self {
-        Self::from_session(DatabaseSession::from_unit_of_work(unit_of_work))
+        Self::from_session(DatabaseSession::UnitOfWork(unit_of_work))
     }
 
     #[must_use]

@@ -1,16 +1,16 @@
 import type { TlsSettings } from "@/ipc/bindings";
-import { clean, splitList } from "./profile-form-text";
+import { splitList, trimToNull } from "@voya/utils/text";
 import type { ParsedProfileFormValues } from "./profile-form-schema";
 export function formTls(parsed: ParsedProfileFormValues): TlsSettings | null {
   if (parsed.streamSecurity !== "tls" && parsed.streamSecurity !== "reality")
     return null;
   return {
     mode: parsed.streamSecurity,
-    serverName: clean(parsed.sni),
+    serverName: trimToNull(parsed.sni),
     alpn: splitList(parsed.alpn),
-    realityPublicKey: clean(parsed.publicKey),
-    realityShortId: clean(parsed.shortId),
-    certificatePem: clean(parsed.cert),
+    realityPublicKey: trimToNull(parsed.publicKey),
+    realityShortId: trimToNull(parsed.shortId),
+    certificatePem: trimToNull(parsed.cert),
     echConfig: splitList(parsed.echConfigList),
   };
 }

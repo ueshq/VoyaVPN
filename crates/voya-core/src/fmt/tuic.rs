@@ -41,7 +41,7 @@ pub(super) fn export(item: &ProfileItem) -> Result<String, ShareError> {
     };
     let mut query = Vec::new();
     to_uri_query_lite(item, &mut query);
-    if let Some(congestion) = nonempty_option(congestion_control) {
+    if let Some(congestion) = nonempty_str(congestion_control.as_deref()) {
         query.push(("congestion_control".to_string(), congestion.to_string()));
     }
     Ok(to_uri(

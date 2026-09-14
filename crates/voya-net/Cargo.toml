@@ -10,7 +10,6 @@ version.workspace = true
 test-utils = []
 
 [dependencies]
-base64 = "0.22"
 futures-util = "0.3"
 percent-encoding = "2.3"
 # `rustls-tls-native-roots` trusts the bundled webpki roots plus the OS trust store.
@@ -22,6 +21,9 @@ tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "time"
 tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
 tracing.workspace = true
 voya-core.workspace = true
+
+[dev-dependencies]
+base64 = "0.22"
 
 [lints]
 workspace = true

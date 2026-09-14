@@ -1,7 +1,6 @@
 import { useMemo, useSyncExternalStore } from "react";
 
 import {
-  changeLocale,
   i18next,
   localeOptions,
   type Locale,
@@ -30,7 +29,6 @@ export function useI18n() {
   return {
     language,
     localeOptions,
-    setLocale: changeLocale,
     t,
   };
 }

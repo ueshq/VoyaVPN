@@ -1,16 +1,15 @@
 use std::{net::IpAddr, path::PathBuf, sync::Arc};
 
 use thiserror::Error;
-use voya_core::{SysProxyType, SystemProxyItem};
+use voya_core::{host::is_dns_label, SysProxyType, SystemProxyItem, LOOPBACK};
 
 use crate::{
     coreinfo::TargetOs,
     process::{
-        GeneratedScript, ProcessError, ProcessOutput, ProcessRole, ProcessRunner, ProcessSpawn,
+        reg_add_arguments, GeneratedScript, ProcessError, ProcessOutput, ProcessRole,
+        ProcessRunner, ProcessSpawn,
     },
 };
-
-pub const LOOPBACK: &str = "127.0.0.1";
 
 const LOCAL_EXCEPTIONS: &str = "<local>";
 const WINDOWS_INTERNET_SETTINGS_REG_PATH: &str =
@@ -87,15 +86,8 @@ pub enum SystemProxyAction {
     Noop,
     WindowsSetProxy(WindowsProxySettings),
     WindowsClear,
-    LinuxSet {
-        script: ScriptInvocation,
-        host: String,
-        port: i32,
-        exceptions: String,
-    },
-    LinuxClear {
-        script: ScriptInvocation,
-    },
+    LinuxSet { script: ScriptInvocation },
+    LinuxClear { script: ScriptInvocation },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -136,8 +128,7 @@ impl SystemProxyService {
             SystemProxyAction::WindowsClear => {
                 apply_windows_clear(&*self.runner)?;
             }
-            SystemProxyAction::LinuxSet { script, .. }
-            | SystemProxyAction::LinuxClear { script } => {
+            SystemProxyAction::LinuxSet { script } | SystemProxyAction::LinuxClear { script } => {
                 run_script(&*self.runner, script)?;
             }
         }
@@ -154,7 +145,7 @@ impl SystemProxyService {
     }
 }
 
-pub fn plan_system_proxy(
+pub(crate) fn plan_system_proxy(
     request: &SystemProxyRequest,
 ) -> Result<SystemProxyPlan, SystemProxyError> {
     if request.socks_port <= 0 {
@@ -162,22 +153,19 @@ pub fn plan_system_proxy(
     }
 
     let exception_entries = validated_proxy_exceptions(&request.item.system_proxy_exceptions)?;
-    let normalized_exceptions = exceptions_to_csv(&exception_entries);
+    let normalized_exceptions = exception_entries.join(",");
     let effective_type = effective_type(request.item.sys_proxy_type, request.force_disable);
     let mut status = SystemProxyStatus::from_request_with_exceptions(
         request,
         effective_type,
         normalized_exceptions.clone(),
     );
-    if request.target_os == TargetOs::Macos {
-        // No mode to apply: the PacketTunnel VPN is the only capture path.
-        status.effective_type = SysProxyType::Unchanged;
-        return Ok(SystemProxyPlan {
-            action: SystemProxyAction::Noop,
-            status,
-        });
-    }
     let action = match (effective_type, request.target_os) {
+        // No mode to apply: the PacketTunnel VPN is the only capture path.
+        (_, TargetOs::Macos) => {
+            status.effective_type = SysProxyType::Unchanged;
+            SystemProxyAction::Noop
+        }
         (SysProxyType::ForcedChange, TargetOs::Windows) => {
             let settings = build_windows_proxy_settings_with_exceptions(
                 &request.item,
@@ -188,20 +176,13 @@ pub fn plan_system_proxy(
             status.exceptions.clone_from(&settings.exceptions);
             SystemProxyAction::WindowsSetProxy(settings)
         }
-        (SysProxyType::ForcedChange, TargetOs::Linux) => {
-            let exceptions = normalized_exceptions.clone();
-            SystemProxyAction::LinuxSet {
-                script: linux_script_invocation(
-                    request,
-                    "manual",
-                    Some((LOOPBACK, request.socks_port, &exceptions)),
-                ),
-                host: LOOPBACK.to_string(),
-                port: request.socks_port,
-                exceptions,
-            }
-        }
-        (_, TargetOs::Macos) => SystemProxyAction::Noop,
+        (SysProxyType::ForcedChange, TargetOs::Linux) => SystemProxyAction::LinuxSet {
+            script: linux_script_invocation(
+                request,
+                "manual",
+                Some((LOOPBACK, request.socks_port, &normalized_exceptions)),
+            ),
+        },
         (SysProxyType::ForcedChange, TargetOs::Other) => {
             return Err(SystemProxyError::UnsupportedPlatform(TargetOs::Other));
         }
@@ -359,35 +340,7 @@ fn is_valid_hostname(value: &str) -> bool {
         return false;
     }
 
-    hostname.split('.').all(is_valid_hostname_label)
-}
-
-fn is_valid_hostname_label(label: &str) -> bool {
-    if label.is_empty() || label.len() > 63 {
-        return false;
-    }
-
-    let mut bytes = label.bytes();
-    let Some(first) = bytes.next() else {
-        return false;
-    };
-    if !first.is_ascii_alphanumeric() {
-        return false;
-    }
-
-    let mut last = first;
-    for byte in bytes {
-        if !(byte.is_ascii_alphanumeric() || byte == b'-') {
-            return false;
-        }
-        last = byte;
-    }
-
-    last.is_ascii_alphanumeric()
-}
-
-fn exceptions_to_csv(entries: &[String]) -> String {
-    entries.join(",")
+    hostname.split('.').all(is_dns_label)
 }
 
 fn windows_exceptions(item: &SystemProxyItem, exception_entries: &[String]) -> String {
@@ -419,8 +372,6 @@ pub enum SystemProxyError {
         status_code: Option<i32>,
         stderr: String,
     },
-    #[error("lock poisoned: {0}")]
-    LockPoisoned(&'static str),
 }
 
 #[cfg(test)]
@@ -499,16 +450,9 @@ mod tests {
 
         let plan = plan_system_proxy(&request).expect("valid exceptions");
 
-        let SystemProxyAction::LinuxSet {
-            exceptions, script, ..
-        } = plan.action
-        else {
+        let SystemProxyAction::LinuxSet { script } = plan.action else {
             panic!("expected linux set");
         };
-        assert_eq!(
-            exceptions,
-            "localhost,example.internal,127.0.0.1,10.0.0.0/8,::1,fd00::/8"
-        );
         assert_eq!(
             script.arguments,
             [

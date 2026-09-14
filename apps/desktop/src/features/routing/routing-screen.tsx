@@ -29,7 +29,6 @@ import {
   PageTitle,
 } from "@/components/app-shell/page-section";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { useShellStore } from "@/stores/shell-store";
 
 import { PerAppProxyDialog } from "./per-app-proxy-dialog";
 import { PerAppSummaryCard } from "./per-app-summary-card";
@@ -45,14 +44,13 @@ import { useSavedTrafficMode } from "./use-traffic-mode";
 export function RoutingScreen() {
   const { t } = useI18n();
   const controller = useRoutingScreen();
-  const perAppOpen = useShellStore((state) => state.routingPerAppRequested);
   const processRulesSupported = useProcessRulesSupported();
   // Rules apply by restarting the core, which drops connections for a moment.
   const connected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
   // Global mode routes all captured traffic ahead of every rule, so none of
   // them can apply and the page locks them.
   const rulesLocked = useSavedTrafficMode().mode === "global";
-  const { activeRouting, ruleDialog } = controller;
+  const { activeRouting, perAppOpen, ruleDialog } = controller;
   const error = controller.operationError ?? controller.loadError;
   // A disabled button shows no tooltip of its own, so its wrapper says why.
   const editBlockedReason = rulesLocked

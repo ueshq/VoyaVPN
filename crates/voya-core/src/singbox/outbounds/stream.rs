@@ -11,17 +11,7 @@ pub(crate) fn fill_outbound_transport(
     match &node.transport {
         Some(ProfileTransport::Tcp { header, host, path }) => {
             if header.as_deref() == Some(RAW_HEADER_HTTP) {
-                transport.r#type = Some("http".to_string());
-                transport.host = split_list(host.as_deref().unwrap_or_default())
-                    .filter(|items| !items.is_empty())
-                    .map(|items| json!(items));
-                transport.path = nonempty_string(path.as_deref());
-                if !user_agent.is_empty() {
-                    transport.headers = Some(SingboxHeaders {
-                        host: None,
-                        user_agent: Some(user_agent),
-                    });
-                }
+                transport = http_transport(host.as_deref(), path.as_deref(), user_agent);
             }
         }
         Some(ProfileTransport::Websocket { host, path }) => {
@@ -45,12 +35,7 @@ pub(crate) fn fill_outbound_transport(
             transport.path = nonempty_string(path.as_deref());
             let host = first_list_value(host.as_deref());
             transport.host = nonempty_string(Some(&host)).map(Value::String);
-            if !user_agent.is_empty() {
-                transport.headers = Some(SingboxHeaders {
-                    host: None,
-                    user_agent: Some(user_agent),
-                });
-            }
+            transport.headers = ua_only_headers(user_agent);
         }
         Some(ProfileTransport::Grpc { service_name, .. }) => {
             transport.r#type = Some("grpc".to_string());
@@ -60,17 +45,7 @@ pub(crate) fn fill_outbound_transport(
             transport.permit_without_stream = Some(GRPC_PERMIT_WITHOUT_STREAM);
         }
         Some(ProfileTransport::Http2 { host, path }) => {
-            transport.r#type = Some("http".to_string());
-            transport.host = split_list(host.as_deref().unwrap_or_default())
-                .filter(|items| !items.is_empty())
-                .map(|items| json!(items));
-            transport.path = nonempty_string(path.as_deref());
-            if !user_agent.is_empty() {
-                transport.headers = Some(SingboxHeaders {
-                    host: None,
-                    user_agent: Some(user_agent),
-                });
-            }
+            transport = http_transport(host.as_deref(), path.as_deref(), user_agent);
         }
         Some(ProfileTransport::Quic { .. }) => {
             // sing-box's QUIC transport carries no host, path, or header options.
@@ -86,6 +61,27 @@ pub(crate) fn fill_outbound_transport(
     if node.config_type() == ConfigType::Shadowsocks {
         outbound.transport = None;
     }
+}
+
+/// sing-box's `http` transport, shared by HTTP/2 and the raw TCP HTTP header.
+fn http_transport(host: Option<&str>, path: Option<&str>, user_agent: String) -> SingboxTransport {
+    SingboxTransport {
+        r#type: Some("http".to_string()),
+        host: split_list(host.unwrap_or_default())
+            .filter(|items| !items.is_empty())
+            .map(|items| json!(items)),
+        path: nonempty_string(path),
+        headers: ua_only_headers(user_agent),
+        ..SingboxTransport::default()
+    }
+}
+
+/// A headers block carrying only the user agent, or none when it is empty.
+fn ua_only_headers(user_agent: String) -> Option<SingboxHeaders> {
+    (!user_agent.is_empty()).then_some(SingboxHeaders {
+        host: None,
+        user_agent: Some(user_agent),
+    })
 }
 
 fn parse_ws_early_data(path: &str) -> (String, Option<i32>, Option<String>) {
@@ -149,15 +145,8 @@ fn apply_outbound_tls(
     node: &ProfileItem,
     domain_tls: &TlsSettings,
 ) {
-    let transport_host = transport_host_for_tls(node);
-    let server_name = nonempty_string(domain_tls.server_name.as_deref()).or_else(|| {
-        split_list(transport_host.as_deref().unwrap_or_default()).and_then(|items| {
-            items
-                .into_iter()
-                .map(|item| item.trim().to_string())
-                .find(|item| !item.is_empty())
-        })
-    });
+    let server_name =
+        nonempty_string(domain_tls.server_name.as_deref()).or_else(|| transport_host_for_tls(node));
     let core = &context.app_config.core_basic_item;
     let split_hello = core.tls_fragment == crate::TlsFragmentMode::TlsHello;
     let mut tls = SingboxTls {

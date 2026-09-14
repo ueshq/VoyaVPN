@@ -36,11 +36,11 @@ pub(super) fn export(item: &ProfileItem) -> Result<String, ShareError> {
             actual: item.config_type(),
         });
     };
-    if let Some(pass) = nonempty_option(obfuscation_password) {
+    if let Some(pass) = nonempty_str(obfuscation_password.as_deref()) {
         query.push(("obfs".to_string(), "salamander".to_string()));
         query.push(("obfs-password".to_string(), url_encode(pass)));
     }
-    if let Some(ports) = nonempty_option(port_hops) {
+    if let Some(ports) = nonempty_str(port_hops.as_deref()) {
         query.push(("mport".to_string(), url_encode(&ports.replace(':', "-"))));
     }
     Ok(format!(

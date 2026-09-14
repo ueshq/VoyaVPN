@@ -65,7 +65,7 @@ export function ConnectionTab({
                 ...current.network,
                 tun: {
                   ...current.network.tun,
-                  strictRoute: strictRoute === true,
+                  strictRoute,
                 },
               },
             }))
@@ -97,7 +97,7 @@ export function ConnectionTab({
             field="network.inbounds.0.sniffingEnabled"
             label={t("settings.network.sniffing")}
             onCheckedChange={(sniffingEnabled) =>
-              patchInbound({ sniffingEnabled: sniffingEnabled === true })
+              patchInbound({ sniffingEnabled })
             }
           />
           <SettingsSwitch
@@ -108,9 +108,7 @@ export function ConnectionTab({
             field="network.inbounds.0.secondaryPortEnabled"
             label={t("settings.network.secondPort")}
             onCheckedChange={(secondaryPortEnabled) =>
-              patchInbound({
-                secondaryPortEnabled: secondaryPortEnabled === true,
-              })
+              patchInbound({ secondaryPortEnabled })
             }
           />
           <SettingsSwitch
@@ -119,9 +117,7 @@ export function ConnectionTab({
             field="network.inbounds.0.lanConnectionsAllowed"
             label={t("settings.network.allowLan")}
             onCheckedChange={(lanConnectionsAllowed) =>
-              patchInbound({
-                lanConnectionsAllowed: lanConnectionsAllowed === true,
-              })
+              patchInbound({ lanConnectionsAllowed })
             }
           />
           {inbound.lanConnectionsAllowed ? (
@@ -133,7 +129,7 @@ export function ConnectionTab({
               field="network.inbounds.0.separateLanPort"
               label={t("settings.network.separateLanPort")}
               onCheckedChange={(separateLanPort) =>
-                patchInbound({ separateLanPort: separateLanPort === true })
+                patchInbound({ separateLanPort })
               }
             />
           ) : null}

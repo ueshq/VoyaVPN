@@ -1,4 +1,5 @@
 import type { Profile } from "@/ipc/bindings";
+import { trimToNull } from "@voya/utils/text";
 import { CONFIG_TYPES, type ProfileProtocol as ProfileKind } from "./profile-constants";
 import {
   profileFormSchema,
@@ -9,7 +10,6 @@ import {
 import { formProtocol, protocolToFormFields, protocolToFormOptions } from "./profile-form-protocol";
 import { formTransport, transportToFormOptions, transportNetwork } from "./profile-form-transport";
 import { formTls, tlsToFormFields } from "./profile-form-tls";
-import { clean } from "./profile-form-text";
 
 export function createDefaultProfile(
   configType: ProfileKind = CONFIG_TYPES.VMess,
@@ -50,7 +50,7 @@ export function prepareProfileForSave(
 function parsedProfileToContract(parsed: ParsedProfileFormValues): Profile {
   return {
     id: parsed.indexId ?? "",
-    subscriptionId: clean(parsed.subscriptionId),
+    subscriptionId: trimToNull(parsed.subscriptionId),
     displayLog: parsed.displayLog,
     remarks: parsed.remarks,
     protocol: formProtocol(parsed),

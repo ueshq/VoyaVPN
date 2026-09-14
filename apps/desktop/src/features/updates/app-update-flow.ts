@@ -1,5 +1,3 @@
-import { appUpdateStatus } from "@/ipc/commands";
-import type { AppUpdaterStatus } from "@/ipc/bindings";
 import { check as checkForTauriUpdate, getVersion, type Update as TauriUpdate } from "@/ipc/updater";
 
 type AppUpdateInfo = {
@@ -32,39 +30,30 @@ type DownloadEvent = Parameters<
   NonNullable<Parameters<TauriUpdate["downloadAndInstall"]>[0]>
 >[0];
 
-export type AppUpdateFlowDeps = {
-  appUpdateStatus: typeof appUpdateStatus;
-  checkForAppUpdate: typeof checkForTauriUpdate;
-  getCurrentVersion: typeof getVersion;
-};
+export async function checkAppUpdate(): Promise<AppUpdateCheckResult> {
+  let update: TauriUpdate | null = null;
 
-const defaultAppUpdateFlowDeps: AppUpdateFlowDeps = {
-  appUpdateStatus,
-  checkForAppUpdate: checkForTauriUpdate,
-  getCurrentVersion: getVersion,
-};
+  try {
+    const currentVersion = await getVersion();
+    update = await checkForTauriUpdate();
 
-export async function loadAppUpdaterStatus(
-  deps: AppUpdateFlowDeps = defaultAppUpdateFlowDeps,
-): Promise<AppUpdaterStatus> {
-  return deps.appUpdateStatus();
-}
-
-export async function checkAppUpdate(
-  deps: AppUpdateFlowDeps = defaultAppUpdateFlowDeps,
-): Promise<AppUpdateCheckResult> {
-  return checkForAppUpdate(deps);
+    return {
+      currentVersion,
+      update: update ? appUpdateInfo(update, currentVersion) : null,
+    };
+  } finally {
+    await closeUpdate(update);
+  }
 }
 
 export async function installCheckedAppUpdate(
-  deps: AppUpdateFlowDeps = defaultAppUpdateFlowDeps,
   onProgress?: (progress: AppUpdateProgress) => void,
 ): Promise<AppUpdateInstallResult> {
   let update: TauriUpdate | null = null;
 
   try {
-    const currentVersion = await deps.getCurrentVersion();
-    update = await deps.checkForAppUpdate();
+    const currentVersion = await getVersion();
+    update = await checkForTauriUpdate();
 
     if (!update) {
       return {
@@ -92,24 +81,6 @@ export async function installCheckedAppUpdate(
       installedVersion,
       restartRequired: true,
       state: "installed",
-    };
-  } finally {
-    await closeUpdate(update);
-  }
-}
-
-async function checkForAppUpdate(
-  deps: AppUpdateFlowDeps,
-): Promise<AppUpdateCheckResult> {
-  let update: TauriUpdate | null = null;
-
-  try {
-    const currentVersion = await deps.getCurrentVersion();
-    update = await deps.checkForAppUpdate();
-
-    return {
-      currentVersion,
-      update: update ? appUpdateInfo(update, currentVersion) : null,
     };
   } finally {
     await closeUpdate(update);

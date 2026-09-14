@@ -1,5 +1,5 @@
 import { commands } from "@/ipc/bindings";
-import type { AppError, MoveAction } from "@/ipc/bindings";
+import type { AppError, AppErrorKind } from "@/ipc/bindings";
 
 type CommandResult<T> =
   { status: "ok"; data: T } | { status: "error"; error: AppError };
@@ -14,11 +14,25 @@ export class IpcCommandError extends Error {
   }
 }
 
+/** A rejected command's backend error when it is of the given kind, otherwise `null`. */
+export function appErrorOfKind<Type extends AppErrorKind["type"]>(
+  error: unknown,
+  type: Type,
+): (AppError & { kind: Extract<AppErrorKind, { type: Type }> }) | null {
+  return error instanceof IpcCommandError && error.appError.kind.type === type
+    ? (error.appError as AppError & { kind: Extract<AppErrorKind, { type: Type }> })
+    : null;
+}
+
 export const loadUiPreferences = wrapCommand(commands.loadUiPreferences);
 
 export const loadAppSettings = wrapCommand(commands.loadAppSettings);
 
 export const saveAppSettings = wrapCommand(commands.saveAppSettings);
+
+export const getSettingsApplyStatus = wrapCommand(commands.getSettingsApplyStatus);
+
+export const applyPendingSettings = wrapCommand(commands.applyPendingSettings);
 
 export const generateQrCode = wrapCommand(commands.generateQrCode);
 
@@ -49,10 +63,7 @@ export const loadDnsSettings = wrapCommand(commands.loadDnsSettings);
 
 export const saveDnsSettings = wrapCommand(commands.saveDnsSettings);
 
-export const listProfiles = wrapCommand(
-  (subscriptionId: string | null = null, filter: string | null = null) =>
-    commands.listProfiles(subscriptionId, filter),
-);
+export const listProfiles = wrapCommand(commands.listProfiles);
 
 export const saveProfile = wrapCommand(commands.saveProfile);
 
@@ -76,14 +87,7 @@ export const policyGroupRuntime = wrapCommand(commands.policyGroupRuntime);
 
 export const testPolicyGroupDelay = wrapCommand(commands.testPolicyGroupDelay);
 
-export const moveProfile = wrapCommand(
-  (
-    subscriptionId: string | null,
-    indexId: string,
-    action: MoveAction,
-    position: number | null = null,
-  ) => commands.moveProfile(subscriptionId, indexId, action, position),
-);
+export const moveProfile = wrapCommand(commands.moveProfile);
 
 export const listSubscriptions = wrapCommand(commands.listSubscriptions);
 
@@ -91,18 +95,9 @@ export const saveSubscription = wrapCommand(commands.saveSubscription);
 
 export const deleteSubscriptions = wrapCommand(commands.deleteSubscriptions);
 
-export const importProfilesFromText = wrapCommand(
-  (text: string, subscriptionId: string | null = null) =>
-    commands.importProfilesFromText(text, subscriptionId),
-);
+export const importProfilesFromText = wrapCommand(commands.importProfilesFromText);
 
-export const updateSubscriptions = wrapCommand(
-  (
-    subscriptionId: string | null = null,
-    preferProxy: boolean = true,
-    proxyUrl: string | null = null,
-  ) => commands.updateSubscriptions(subscriptionId, preferProxy, proxyUrl),
-);
+export const updateSubscriptions = wrapCommand(commands.updateSubscriptions);
 
 export const listSubscriptionMetadata = wrapCommand(commands.listSubscriptionMetadata);
 
@@ -124,20 +119,11 @@ export const deleteRoutingRules = wrapCommand(commands.deleteRoutingRules);
 
 export const resetRoutingRules = wrapCommand(commands.resetRoutingRules);
 
-export const moveRoutingRule = wrapCommand(
-  (
-    routingId: string,
-    ruleId: string,
-    action: MoveAction,
-    position: number | null = null,
-  ) => commands.moveRoutingRule(routingId, ruleId, action, position),
-);
+export const moveRoutingRule = wrapCommand(commands.moveRoutingRule);
 
 export const proxyListConnections = wrapCommand(commands.proxyListConnections);
 
-export const proxyCloseConnection = wrapCommand(
-  (connectionId: string | null = null) => commands.proxyCloseConnection(connectionId),
-);
+export const proxyCloseConnection = wrapCommand(commands.proxyCloseConnection);
 
 export const proxySetTrafficMode = wrapCommand(commands.proxySetTrafficMode);
 
@@ -176,12 +162,3 @@ function unwrapCommandResult<T>(result: CommandResult<T>): T {
 
   return result.data;
 }
-
-
-
-
-
-
-export const getSettingsApplyStatus = wrapCommand(commands.getSettingsApplyStatus);
-
-export const applyPendingSettings = wrapCommand(commands.applyPendingSettings);

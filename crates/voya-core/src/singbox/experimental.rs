@@ -51,7 +51,6 @@ pub(super) fn convert_geo_to_ruleset(
             .as_ref()
             .map(|routing| routing.custom_ruleset_path4_singbox.as_str()),
     )?;
-    let source_url = SINGBOX_RULESET_URL;
     config.route.rule_set = Some(
         unique_rule_sets
             .into_iter()
@@ -60,7 +59,7 @@ pub(super) fn convert_geo_to_ruleset(
                     .iter()
                     .find(|ruleset| ruleset.tag.as_deref() == Some(tag.as_str()))
                     .cloned()
-                    .unwrap_or_else(|| ruleset_for_tag(&tag, source_url, context))
+                    .unwrap_or_else(|| ruleset_for_tag(&tag, context))
             })
             .collect(),
     );
@@ -101,21 +100,9 @@ fn parse_inline_custom_rulesets(
     let rulesets = serde_json::from_str::<Vec<SingboxRuleset>>(value)
         .map_err(SingboxConfigError::CustomRulesetJson)?;
     for (index, ruleset) in rulesets.iter().enumerate() {
-        if ruleset
-            .tag
-            .as_deref()
-            .and_then(|value| nonempty_str(Some(value)))
-            .is_none()
-            || ruleset
-                .r#type
-                .as_deref()
-                .and_then(|value| nonempty_str(Some(value)))
-                .is_none()
-            || ruleset
-                .format
-                .as_deref()
-                .and_then(|value| nonempty_str(Some(value)))
-                .is_none()
+        if nonempty_str(ruleset.tag.as_deref()).is_none()
+            || nonempty_str(ruleset.r#type.as_deref()).is_none()
+            || nonempty_str(ruleset.format.as_deref()).is_none()
         {
             return Err(SingboxConfigError::CustomRulesetMissingRequiredFields { index });
         }
@@ -123,7 +110,7 @@ fn parse_inline_custom_rulesets(
     Ok(rulesets)
 }
 
-fn ruleset_for_tag(tag: &str, source_url: &str, context: &CoreConfigContext) -> SingboxRuleset {
+fn ruleset_for_tag(tag: &str, context: &CoreConfigContext) -> SingboxRuleset {
     if let Some(path) = context.singbox_ruleset_paths.get(tag) {
         return SingboxRuleset {
             tag: Some(tag.to_string()),
@@ -134,10 +121,10 @@ fn ruleset_for_tag(tag: &str, source_url: &str, context: &CoreConfigContext) -> 
         };
     }
 
-    remote_ruleset(tag, source_url)
+    remote_ruleset(tag)
 }
 
-fn remote_ruleset(tag: &str, source_url: &str) -> SingboxRuleset {
+fn remote_ruleset(tag: &str) -> SingboxRuleset {
     let kind = if tag.starts_with("geosite") {
         "geosite"
     } else {
@@ -148,7 +135,7 @@ fn remote_ruleset(tag: &str, source_url: &str) -> SingboxRuleset {
         r#type: Some("remote".to_string()),
         format: Some("binary".to_string()),
         url: Some(
-            source_url
+            DEFAULT_SINGBOX_RULESET_URL
                 .replace("{0}", kind)
                 .replace("{1}", tag)
                 .to_string(),

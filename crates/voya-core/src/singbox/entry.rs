@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn generate_singbox_config(
+pub(crate) fn generate_singbox_config(
     context: &CoreConfigContext,
 ) -> Result<SingboxConfig, SingboxConfigError> {
     validate_proxy_ports(context)?;
@@ -18,11 +18,13 @@ pub fn generate_singbox_config(
     Ok(config)
 }
 
-pub fn generate_singbox_config_value(
+/// The config as a JSON value. Going through [`Value`] (a sorted map without
+/// `preserve_order`) is what fixes the key order of the written config.
+pub(crate) fn generate_singbox_config_value(
     context: &CoreConfigContext,
 ) -> Result<Value, SingboxConfigError> {
     let config = generate_singbox_config(context)?;
-    Ok(value_from_config(&config))
+    serde_json::to_value(&config).map_err(SingboxConfigError::Serialize)
 }
 
 pub fn generate_singbox_config_json(
@@ -40,7 +42,7 @@ pub fn generate_singbox_speedtest_config_json(
 }
 
 #[must_use]
-pub fn generate_singbox_speedtest_config(entries: &[SpeedtestConfigEntry]) -> SingboxConfig {
+pub(crate) fn generate_singbox_speedtest_config(entries: &[SpeedtestConfigEntry]) -> SingboxConfig {
     let mut config = SingboxConfig::sample();
     config.inbounds.clear();
     config.outbounds.clear();
@@ -72,7 +74,7 @@ pub fn generate_singbox_speedtest_config(entries: &[SpeedtestConfigEntry]) -> Si
 
         append_servers(
             &mut config,
-            build_proxy_servers(&entry.context, &entry.context.node, &proxy_tag),
+            build_proxy_server(&entry.context, &entry.context.node, &proxy_tag),
         );
         config.route.rules.push(SingboxRule {
             inbound: Some(vec![inbound_tag]),
@@ -117,27 +119,20 @@ fn validate_active_wireguard(context: &CoreConfigContext) -> Result<(), SingboxC
 }
 
 fn validate_proxy_ports(context: &CoreConfigContext) -> Result<(), SingboxConfigError> {
-    let mut pending: Vec<ProfileItem> = context
+    // Searched from the last node back, the order the check has always used,
+    // so a group with several bad members keeps reporting the same one.
+    match context
         .active_outbound_nodes()
         .into_iter()
-        .cloned()
-        .collect();
-    let mut seen = BTreeSet::new();
-
-    while let Some(node) = pending.pop() {
-        if !node.index_id.is_empty() && !seen.insert(node.index_id.clone()) {
-            continue;
-        }
-        if !(1..=65535).contains(&node.port()) {
-            let port = node.port();
-            return Err(SingboxConfigError::InvalidNodePort {
-                remarks: node.remarks,
-                port,
-            });
-        }
+        .rev()
+        .find(|node| !(1..=65535).contains(&node.port()))
+    {
+        Some(node) => Err(SingboxConfigError::InvalidNodePort {
+            remarks: node.remarks.clone(),
+            port: node.port(),
+        }),
+        None => Ok(()),
     }
-
-    Ok(())
 }
 
 /// The `log.level` values sing-box accepts, per

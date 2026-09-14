@@ -56,7 +56,7 @@ export function useTrafficMode() {
           client.invalidateQueries({ queryKey: queryKeys.proxyConnections }),
         ]);
       } finally {
-        useRuntimeActionStore.setState({ modePending: false });
+        useRuntimeActionStore.getState().setModePending(false);
       }
     },
   });
@@ -72,7 +72,7 @@ export function useTrafficMode() {
 
   function selectMode(mode: TrafficMode) {
     if (disabled || runtimeActionPending()) return;
-    useRuntimeActionStore.setState({ modePending: true });
+    useRuntimeActionStore.getState().setModePending(true);
     mutation.mutate(mode);
   }
 

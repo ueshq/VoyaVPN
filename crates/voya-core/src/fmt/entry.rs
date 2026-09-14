@@ -38,7 +38,7 @@ pub fn parse_share_link(input: &str) -> Result<ProfileItem, ShareError> {
     }
 }
 
-pub fn export_share_link(item: &ProfileItem) -> Result<String, ShareError> {
+pub(crate) fn export_share_link(item: &ProfileItem) -> Result<String, ShareError> {
     match item.config_type() {
         ConfigType::VMess => vmess::export(item),
         ConfigType::Shadowsocks => shadowsocks::export(item),
@@ -153,15 +153,6 @@ fn inject_vmess_global_options(
         reason: error.to_string(),
     })?;
     Ok(format!("vmess://{}", base64_encode(&encoded, false)))
-}
-
-pub fn parse_share_lines(input: &str) -> Vec<Result<ProfileItem, ShareError>> {
-    input
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(parse_share_link)
-        .collect()
 }
 
 #[derive(Debug, serde::Deserialize)]

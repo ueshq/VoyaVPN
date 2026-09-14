@@ -1,12 +1,11 @@
-//! Spawn, own and reap subprocesses, including bounded stop and stdin delivery.
+//! Spawn, own and reap subprocesses, including bounded stop.
 use super::logging::drain_child_pipe;
 use super::{
-    write_generated_scripts, ProcessError, ProcessExit, ProcessExitHandler, ProcessHandle,
-    ProcessLogSink, ProcessOutput, ProcessOutputStream, ProcessRunner, ProcessSpawn, ProcessStdin,
+    hidden_command, write_generated_scripts, ProcessError, ProcessExit, ProcessExitHandler,
+    ProcessHandle, ProcessLogSink, ProcessOutput, ProcessOutputStream, ProcessRunner, ProcessSpawn,
 };
 use std::{
     collections::HashMap,
-    io::Write,
     process::{Child, Command, Stdio},
     sync::{mpsc, Arc, Mutex, Weak},
     thread,
@@ -27,11 +26,10 @@ impl StdProcessRunner {
 
     #[must_use]
     pub fn with_log_sink(log_sink: Arc<dyn ProcessLogSink>) -> Self {
-        Self {
-            children: Arc::new(Mutex::new(HashMap::new())),
-            exit_handler: Mutex::new(None),
-            log_sink: Some(log_sink),
-        }
+        // `Drop` rules out `..Self::default()`, so the field is set afterwards.
+        let mut runner = Self::default();
+        runner.log_sink = Some(log_sink);
+        runner
     }
 }
 
@@ -50,11 +48,7 @@ impl ProcessRunner for StdProcessRunner {
         write_generated_scripts(&request.generated_scripts)?;
 
         let mut command = build_command(&request);
-        if request.stdin.is_some() {
-            command.stdin(Stdio::piped());
-        } else {
-            command.stdin(Stdio::null());
-        }
+        command.stdin(Stdio::null());
 
         if request.display_log {
             command.stdout(Stdio::piped()).stderr(Stdio::piped());
@@ -66,10 +60,6 @@ impl ProcessRunner for StdProcessRunner {
             executable: request.executable.clone(),
             source,
         })?;
-
-        if let Some(stdin) = &request.stdin {
-            write_child_stdin(&mut child, stdin)?;
-        }
 
         if request.display_log {
             drain_child_pipe(
@@ -114,26 +104,12 @@ impl ProcessRunner for StdProcessRunner {
     fn run_oneshot(&self, request: ProcessSpawn) -> Result<ProcessOutput, ProcessError> {
         write_generated_scripts(&request.generated_scripts)?;
 
-        let mut command = build_command(&request);
-        if let Some(stdin) = &request.stdin {
-            command.stdin(Stdio::piped());
-            let mut child = command.spawn().map_err(|source| ProcessError::Spawn {
+        let output = build_command(&request)
+            .output()
+            .map_err(|source| ProcessError::Spawn {
                 executable: request.executable.clone(),
                 source,
             })?;
-            write_child_stdin(&mut child, stdin)?;
-            let output = child.wait_with_output().map_err(ProcessError::Wait)?;
-            return Ok(ProcessOutput {
-                status_code: output.status.code(),
-                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            });
-        }
-
-        let output = command.output().map_err(|source| ProcessError::Spawn {
-            executable: request.executable.clone(),
-            source,
-        })?;
         Ok(ProcessOutput {
             status_code: output.status.code(),
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
@@ -324,24 +300,6 @@ fn stop_child(child: &mut Child) -> Result<(), ProcessError> {
     }
 }
 
-fn write_child_stdin(child: &mut Child, stdin: &ProcessStdin) -> Result<(), ProcessError> {
-    let Some(mut child_stdin) = child.stdin.take() else {
-        if let Err(error) = stop_child(child) {
-            tracing::warn!(
-                ?error,
-                "failed to stop child process after stdin pipe was missing"
-            );
-            return Err(error);
-        }
-        return Err(ProcessError::MissingStdinPipe);
-    };
-
-    child_stdin
-        .write_all(stdin.expose_for_process().as_bytes())
-        .and_then(|_| child_stdin.write_all(b"\n"))
-        .map_err(ProcessError::WriteStdin)
-}
-
 fn remove_child_control(children: &Weak<Mutex<HashMap<u32, ChildControl>>>, process_id: u32) {
     let Some(children) = children.upgrade() else {
         return;
@@ -357,30 +315,14 @@ fn remove_child_control(children: &Weak<Mutex<HashMap<u32, ChildControl>>>, proc
 }
 
 fn build_command(request: &ProcessSpawn) -> Command {
-    let mut command = Command::new(&request.executable);
+    let mut command = hidden_command(&request.executable);
     command.args(&request.arguments);
     if !request.working_dir.as_os_str().is_empty() {
         command.current_dir(&request.working_dir);
     }
     command.envs(&request.environment);
-    apply_windows_creation_flags(&mut command);
     command
 }
-
-/// Keep console-subsystem children (the core, `reg`, helper tools) from opening
-/// a console window: Windows allocates one for every such child of a
-/// GUI-subsystem parent, regardless of the child's redirected stdio.
-#[cfg(windows)]
-fn apply_windows_creation_flags(command: &mut Command) {
-    use std::os::windows::process::CommandExt;
-
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-
-    command.creation_flags(CREATE_NO_WINDOW);
-}
-
-#[cfg(not(windows))]
-fn apply_windows_creation_flags(_command: &mut Command) {}
 
 #[cfg(test)]
 mod tests;

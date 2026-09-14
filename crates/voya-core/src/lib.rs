@@ -10,10 +10,12 @@ pub mod entities;
 pub mod enums;
 pub mod fmt;
 pub mod groups;
+pub mod host;
 pub(crate) mod protocol_common;
 pub mod routing_seed;
 pub mod singbox;
 pub mod subscription_userinfo;
+pub mod text;
 pub mod validation;
 
 pub use config::*;

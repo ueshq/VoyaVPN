@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  appErrorOfKind,
   deleteRoutingRules,
   listPolicyGroups,
   listProfiles,
@@ -11,17 +12,15 @@ import {
   saveRoutingRule,
 } from "@/ipc/commands";
 import type {
-  AppError,
   MoveAction,
   RoutingRule,
   Routing_Serialize,
   ValidationIssue,
 } from "@/ipc/bindings";
-import { profilesQueryKey, queryKeys } from "@/ipc/query-keys";
-import { useShellStore } from "@/stores/shell-store";
-import { useToastStore } from "@/stores/toast-store";
+import { queryKeys } from "@/ipc/query-keys";
+import { toastError } from "@/stores/toast-store";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { getErrorMessage } from "@voya/utils/error";
+import { redactOperationalError } from "@voya/utils/operational-redaction";
 
 import { nodeOutboundNames, type RuleGroupOutbound } from "./rule-outbound";
 import type { RoutingRulePayload } from "./routing-form-schema";
@@ -48,15 +47,10 @@ const NO_RULES: readonly RoutingRule[] = [];
 export type RuleSaveError = { issues: readonly ValidationIssue[]; message: string };
 
 function ruleSaveError(error: unknown): RuleSaveError {
-  const kind = (error as { appError?: AppError } | null)?.appError?.kind;
   return {
-    issues: kind?.type === "validation" ? kind.issues : [],
-    message: getErrorMessage(error),
+    issues: appErrorOfKind(error, "validation")?.kind.issues ?? [],
+    message: redactOperationalError(error),
   };
-}
-
-function setPerAppOpen(open: boolean) {
-  useShellStore.setState({ routingPerAppRequested: open });
 }
 
 /**
@@ -73,13 +67,14 @@ export function useRoutingScreen() {
   const [pendingToggles, setPendingToggles] = useState<ReadonlyMap<string, boolean>>(
     () => new Map(),
   );
+  const [perAppOpen, setPerAppOpen] = useState(false);
   const routingsQuery = useQuery({
     queryFn: listRoutings,
     queryKey: queryKeys.routings,
   });
   const profilesQuery = useQuery({
     queryFn: () => listProfiles(null, null),
-    queryKey: profilesQueryKey(""),
+    queryKey: queryKeys.profileList,
   });
   const policyGroupsQuery = useQuery({
     queryFn: listPolicyGroups,
@@ -119,7 +114,7 @@ export function useRoutingScreen() {
 
   async function runOperation(
     operation: (routingId: string) => Promise<Routing_Serialize>,
-    onError: (error: unknown) => void = (error) => setOperationError(getErrorMessage(error)),
+    onError: (error: unknown) => void = (error) => setOperationError(redactOperationalError(error)),
   ): Promise<boolean> {
     if (!activeRouting) {
       return false;
@@ -190,12 +185,7 @@ export function useRoutingScreen() {
     // error strip may be out of view above a long list.
     return runOperation(
       (routingId) => moveRoutingRule(routingId, ruleId, "position", position),
-      (error) =>
-        useToastStore.getState().pushToast({
-          description: getErrorMessage(error),
-          severity: "error",
-          title: t("panes.routing.reorderFailed"),
-        }),
+      (error) => toastError(t("panes.routing.reorderFailed"), error),
     );
   }
 
@@ -231,7 +221,7 @@ export function useRoutingScreen() {
     confirmPending,
     editRule,
     groupOutbounds,
-    loadError: routingsQuery.error ? getErrorMessage(routingsQuery.error) : null,
+    loadError: routingsQuery.error ? redactOperationalError(routingsQuery.error) : null,
     loading: routingsQuery.isPending,
     moveRule,
     nodeNames,
@@ -239,6 +229,7 @@ export function useRoutingScreen() {
     operationError,
     pendingConfirm,
     pendingToggles,
+    perAppOpen,
     reorderRule,
     requestDeleteRule: (rule: RoutingRule) => setPendingConfirm({ kind: "deleteRule", rule }),
     /** Points a rule whose node or group is gone back at the proxy, once confirmed. */

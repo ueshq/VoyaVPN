@@ -98,7 +98,6 @@ describe("TunDiagnosticsButton", () => {
         title: "Failed to copy VPN diagnostics",
       }),
     );
-    expect(ipcMocks.tunProviderDiagnostics).not.toHaveBeenCalled();
   });
 
   it("surfaces backend failures as an error toast and re-enables the button", async () => {

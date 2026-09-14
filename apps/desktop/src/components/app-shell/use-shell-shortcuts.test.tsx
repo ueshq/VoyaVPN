@@ -6,25 +6,20 @@ import { i18next } from "@voya/i18n";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProfileListing, RuntimeStatusResponse } from "@/ipc/bindings";
-import { profilesQueryKey } from "@/ipc/query-keys";
+import { queryKeys } from "@/ipc/query-keys";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useRuntimeActionStore } from "@/stores/runtime-action-store";
 import { useShellStore } from "@/stores/shell-store";
 
 import { connectionShortcutLabel, pageShortcutAria, pageShortcutLabel, useShellShortcuts } from "./use-shell-shortcuts";
 
+// The action itself, with its guard and failure reporting, is covered in runtime-action.test.
 const runtime = vi.hoisted(() => ({
-  executeRuntimeAction: vi.fn(),
-  refreshRuntimeStatusAndReport: vi.fn(),
-  reportRuntimeActionError: vi.fn(),
+  runRuntimeAction: vi.fn(),
 }));
 vi.mock("@/features/home/runtime-action", async (original) => ({
   ...(await original<typeof import("@/features/home/runtime-action")>()),
-  executeRuntimeAction: runtime.executeRuntimeAction,
-  reportRuntimeActionError: runtime.reportRuntimeActionError,
-}));
-vi.mock("@/ipc/runtime-status", () => ({
-  refreshRuntimeStatusAndReport: runtime.refreshRuntimeStatusAndReport,
+  runRuntimeAction: runtime.runRuntimeAction,
 }));
 
 function status(state: RuntimeStatusResponse["state"]): RuntimeStatusResponse {
@@ -47,7 +42,7 @@ function press(init: KeyboardEventInit) {
 
 function renderShortcuts(entries: number) {
   const client = new QueryClient();
-  client.setQueryData<ProfileListing>(profilesQueryKey(""), {
+  client.setQueryData<ProfileListing>(queryKeys.profileList, {
     entries: Array.from({ length: entries }, () => ({}) as ProfileListing["entries"][number]),
     undecodableProfiles: 0,
   });
@@ -59,9 +54,7 @@ function renderShortcuts(entries: number) {
 
 describe("useShellShortcuts", () => {
   beforeEach(() => {
-    Object.values(runtime).forEach((mock) => mock.mockReset());
-    runtime.executeRuntimeAction.mockResolvedValue(status("connected"));
-    runtime.refreshRuntimeStatusAndReport.mockResolvedValue(undefined);
+    runtime.runRuntimeAction.mockReset().mockResolvedValue(undefined);
     useShellStore.setState({ activeTab: "home", focusPageTitle: false, profilesAddMenuOpen: false });
     useRuntimeActionStore.setState({ lastError: null, modePending: false, pendingAction: null, switchingId: null });
     useRuntimeEventStore.setState({ coreState: status("disconnected") });
@@ -95,12 +88,15 @@ describe("useShellShortcuts", () => {
     renderShortcuts(1);
 
     press({ ctrlKey: true, key: "C", shiftKey: true });
-    await waitFor(() => expect(runtime.executeRuntimeAction).toHaveBeenCalledWith("connect"));
-    await waitFor(() => expect(useRuntimeActionStore.getState().pendingAction).toBeNull());
+    await waitFor(() =>
+      expect(runtime.runRuntimeAction).toHaveBeenCalledWith("connect", expect.any(Function), { inline: true }),
+    );
 
     act(() => useRuntimeEventStore.setState({ coreState: status("connected") }));
     press({ ctrlKey: true, key: "C", shiftKey: true });
-    await waitFor(() => expect(runtime.executeRuntimeAction).toHaveBeenLastCalledWith("disconnect"));
+    await waitFor(() =>
+      expect(runtime.runRuntimeAction).toHaveBeenLastCalledWith("disconnect", expect.any(Function), { inline: true }),
+    );
   });
 
   it("does nothing while a connection change is already under way", () => {
@@ -112,7 +108,7 @@ describe("useShellShortcuts", () => {
     useRuntimeActionStore.setState({ pendingAction: null });
     press({ ctrlKey: true, key: "c", shiftKey: true });
 
-    expect(runtime.executeRuntimeAction).not.toHaveBeenCalled();
+    expect(runtime.runRuntimeAction).not.toHaveBeenCalled();
   });
 
   it("opens the add menu instead of connecting without any node", () => {
@@ -120,26 +116,23 @@ describe("useShellShortcuts", () => {
 
     press({ ctrlKey: true, key: "c", shiftKey: true });
 
-    expect(runtime.executeRuntimeAction).not.toHaveBeenCalled();
+    expect(runtime.runRuntimeAction).not.toHaveBeenCalled();
     expect(useShellStore.getState()).toMatchObject({ activeTab: "profiles", profilesAddMenuOpen: true });
   });
 
-  it("reports a failed connect as a toast away from Home and inline on Home", async () => {
-    const failure = new Error("offline");
-    runtime.executeRuntimeAction.mockRejectedValue(failure);
+  it("reports a failure as a toast away from Home and inline on Home", async () => {
     renderShortcuts(1);
 
     useShellStore.setState({ activeTab: "rules" });
     press({ ctrlKey: true, key: "c", shiftKey: true });
     await waitFor(() =>
-      expect(runtime.reportRuntimeActionError).toHaveBeenCalledWith(failure, "connect", expect.any(Function), { inline: false }),
+      expect(runtime.runRuntimeAction).toHaveBeenCalledWith("connect", expect.any(Function), { inline: false }),
     );
-    await waitFor(() => expect(useRuntimeActionStore.getState().pendingAction).toBeNull());
 
     useShellStore.setState({ activeTab: "home" });
     press({ ctrlKey: true, key: "c", shiftKey: true });
     await waitFor(() =>
-      expect(runtime.reportRuntimeActionError).toHaveBeenLastCalledWith(failure, "connect", expect.any(Function), { inline: true }),
+      expect(runtime.runRuntimeAction).toHaveBeenLastCalledWith("connect", expect.any(Function), { inline: true }),
     );
   });
 });

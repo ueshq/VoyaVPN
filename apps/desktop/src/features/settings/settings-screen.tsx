@@ -1,5 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { RotateCcw } from "lucide-react";
 
 import { PageContent, PageSection, PageTitle } from "@/components/app-shell/page-section";
@@ -24,7 +23,6 @@ import { ConnectionTab } from "./connection-tab";
 import { GeneralTab } from "./general-tab";
 import { SettingsApplyStatus } from "./settings-apply-status";
 import { SettingsFields } from "./settings-form";
-import { settingsSaveQueue } from "./settings-save-queue";
 import { useAppSettings, type AppSettingsController } from "./use-app-settings";
 
 // Everyday choices first; anything that needs networking knowledge waits under
@@ -44,12 +42,8 @@ export function SettingsScreen() {
     () => new Set([tab]),
   );
   const dns = useDnsSettings(visited.has("connection"));
-  const queue = settingsSaveQueue(useQueryClient());
-  const saving = useSyncExternalStore(
-    queue.subscribe,
-    queue.isSaving,
-    queue.isSaving,
-  );
+  // App settings and DNS share one save queue, so either controller reports both.
+  const saving = controller.saving;
   const error = controller.error ?? dns.operationError;
 
   function changeTab(value: string) {
@@ -60,7 +54,7 @@ export function SettingsScreen() {
       document.activeElement instanceof HTMLTextAreaElement
     )
       document.activeElement.blur();
-    useShellStore.setState({ settingsTab: next });
+    useShellStore.getState().setSettingsTab(next);
     setVisited((current) => new Set(current).add(next));
   }
 

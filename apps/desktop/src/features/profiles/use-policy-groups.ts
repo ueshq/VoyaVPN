@@ -18,18 +18,13 @@ import {
   setActivePolicyGroup,
   testPolicyGroupDelay,
 } from "@/ipc/commands";
-import { profilesQueryKey, queryKeys } from "@/ipc/query-keys";
+import { queryKeys } from "@/ipc/query-keys";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { refreshRuntimeStatusAndReport } from "@/ipc/runtime-status";
-import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
+import { useRuntimeActionStore } from "@/stores/runtime-action-store";
 import { useToastStore } from "@/stores/toast-store";
-import {
-  executeRuntimeAction,
-  isRuntimeTransitioning,
-  reportRuntimeActionError,
-} from "@/features/home/runtime-action";
+import { activateSelection } from "@/features/home/runtime-action";
 
-import { profileNameWithoutFlag } from "./profile-display";
+import { profileMemberName } from "./profile-display";
 import type { NodeOperation } from "./use-node-operation";
 
 /** How often a running group's live member and delays are read again; the same everywhere a group shows. */
@@ -72,46 +67,25 @@ export function usePolicyGroups(
   }
 
   /** The same two steps as choosing a node: make it active, then connect or restart. */
-  async function activatePolicyGroup(id: string) {
-    const currentState = useRuntimeEventStore.getState().coreState?.state ?? "disconnected";
-    if (
-      runtimeActionPending() ||
-      isRuntimeTransitioning(currentState) ||
-      currentState === "cleanupPending"
-    ) {
-      return false;
-    }
-    useRuntimeActionStore.setState({ switchingId: `${GROUP_SWITCH_PREFIX}${id}` });
-    const action = currentState === "connected" ? "restart" : "connect";
-    try {
+  function activatePolicyGroup(id: string) {
+    return activateSelection(`${GROUP_SWITCH_PREFIX}${id}`, t, async () => {
       // A group replaces a node used on its own; say which one it set aside.
       const replacedNode = policyGroupEntries.some((entry) => entry.isActive)
         ? null
         : queryClient
-            .getQueryData<ProfileListing>(profilesQueryKey(""))
+            .getQueryData<ProfileListing>(queryKeys.profileList)
             ?.entries.find((entry) => entry.isActive)?.profile;
       await setActivePolicyGroup(id);
       if (replacedNode) {
         useToastStore.getState().pushToast({
           description: t("policyGroups.replacedNode", {
-            node: profileNameWithoutFlag(replacedNode.remarks) || replacedNode.id,
+            node: profileMemberName(replacedNode.remarks, replacedNode.id),
           }),
           severity: "info",
           title: t("policyGroups.switchedTitle"),
         });
       }
-      const status = await executeRuntimeAction(action);
-      return status.state === "connected";
-    } catch (error) {
-      reportRuntimeActionError(error, action, t);
-      return false;
-    } finally {
-      try {
-        await refreshRuntimeStatusAndReport(t);
-      } finally {
-        useRuntimeActionStore.setState({ switchingId: null });
-      }
-    }
+    });
   }
 
   /** The chip moves at once; the next runtime read confirms it and a failure puts it back. */

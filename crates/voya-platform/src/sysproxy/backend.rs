@@ -89,17 +89,12 @@ fn registry_set_string(name: &str, value: &str) -> ProcessSpawn {
 }
 
 fn registry_set(name: &str, value_type: &str, value: &str) -> ProcessSpawn {
-    ProcessSpawn::new(ProcessRole::SysProxy, "reg").with_arguments([
-        "add".to_string(),
-        WINDOWS_INTERNET_SETTINGS_REG_PATH.to_string(),
-        "/v".to_string(),
-        name.to_string(),
-        "/t".to_string(),
-        value_type.to_string(),
-        "/d".to_string(),
-        value.to_string(),
-        "/f".to_string(),
-    ])
+    ProcessSpawn::new(ProcessRole::SysProxy, "reg").with_arguments(reg_add_arguments(
+        WINDOWS_INTERNET_SETTINGS_REG_PATH,
+        name,
+        value_type,
+        value,
+    ))
 }
 
 #[cfg(windows)]
@@ -145,7 +140,7 @@ fn refresh_windows_internet_settings() {
 fn refresh_windows_internet_settings() {}
 
 fn ensure_success(output: ProcessOutput, context: &'static str) -> Result<(), SystemProxyError> {
-    if output.status_code == Some(0) {
+    if output.success() {
         Ok(())
     } else {
         Err(SystemProxyError::CommandFailed {

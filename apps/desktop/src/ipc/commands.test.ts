@@ -104,8 +104,8 @@ describe("typed IPC command facade", () => {
 
   // 100% coverage on this module proves every wrapper is reachable, not that it
   // forwards its arguments: several wrappers take multiple same-typed positional
-  // parameters (or defaulted ones) that tsc cannot tell apart, so a transposition
-  // would pass the loop above untouched.
+  // parameters that tsc cannot tell apart, so a transposition would pass the
+  // loop above untouched.
   it.each(forwardingCases())(
     "forwards %s to the generated binding positionally",
     async (name, args, expected) => {
@@ -128,6 +128,17 @@ describe("typed IPC command facade", () => {
     },
   );
 
+  it("narrows a rejected command to one backend error kind", () => {
+    const [validation, notFound] = appErrors().map(({ error }) => new ipc.IpcCommandError(error));
+
+    expect(ipc.appErrorOfKind(validation, "validation")?.kind.issues).toHaveLength(1);
+    expect(ipc.appErrorOfKind(validation, "notFound")).toBeNull();
+    expect(ipc.appErrorOfKind(notFound, "notFound")?.kind).toMatchObject({ entity: "profile" });
+    // Only the typed command error carries a kind; anything else never matches.
+    expect(ipc.appErrorOfKind(new Error("validation"), "validation")).toBeNull();
+    expect(ipc.appErrorOfKind("validation", "validation")).toBeNull();
+  });
+
   it.each(appErrors())("preserves and formats the $label backend error", async ({ error }) => {
     commandMocks.loadUiPreferences.mockResolvedValueOnce({ error, status: "error" });
 
@@ -147,18 +158,15 @@ function forwardingCases(): Array<[WrapperName, unknown[], unknown[]]> {
   const rule = { id: "rule-1", remarks: "Managed" };
 
   return [
-    // Defaulted parameters have to survive an argument-less call.
-    ["listProfiles", [], [null, null]],
     ["listProfiles", ["sub-1", "tokyo"], ["sub-1", "tokyo"]],
-    ["proxyCloseConnection", [], [null]],
-    ["updateSubscriptions", [], [null, true, null]],
+    ["proxyCloseConnection", [null], [null]],
     ["updateSubscriptions", ["sub-1", false, "http://proxy.test"], ["sub-1", false, "http://proxy.test"]],
-    ["importProfilesFromText", ["vmess://link"], ["vmess://link", null]],
+    ["importProfilesFromText", ["vmess://link", null], ["vmess://link", null]],
     ["setConnectionMode", ["vpn"], ["vpn"]],
     // Same-typed positional parameters: a transposition here is invisible to tsc.
-    ["moveProfile", ["sub-1", "index-1", "up"], ["sub-1", "index-1", "up", null]],
+    ["moveProfile", ["sub-1", "index-1", "up", null], ["sub-1", "index-1", "up", null]],
     ["moveProfile", ["sub-1", "index-1", "position", 3], ["sub-1", "index-1", "position", 3]],
-    ["moveRoutingRule", ["routing-1", "rule-1", "top"], ["routing-1", "rule-1", "top", null]],
+    ["moveRoutingRule", ["routing-1", "rule-1", "top", null], ["routing-1", "rule-1", "top", null]],
     ["moveRoutingRule", ["routing-1", "rule-1", "position", 2], ["routing-1", "rule-1", "position", 2]],
     ["deleteRoutingRules", ["routing-1", ["rule-1", "rule-2"]], ["routing-1", ["rule-1", "rule-2"]]],
     ["saveRoutingRule", ["routing-1", rule], ["routing-1", rule]],
