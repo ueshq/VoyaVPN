@@ -35,8 +35,9 @@ test("profile cards stay usable across themes, window sizes and a 5k node list",
   await expect(cards.first()).toContainText("A very long server name");
   const flag = cards.first().locator(".node-country-flag");
   await expect(flag).toHaveClass(/fi-us/); // Actual exit wins over the JP name emoji.
-  await expect(flag).toHaveCSS("width", "32px");
-  await expect(flag).toHaveCSS("height", "24px");
+  // Compact list rows use a smaller flag than Home's node card.
+  await expect(flag).toHaveCSS("width", "20px");
+  await expect(flag).toHaveCSS("height", "15px");
   await expect(cards.nth(1).locator(".node-card-icon svg")).toBeVisible();
   const source = await flag.evaluate((element) => getComputedStyle(element).backgroundImage.slice(5, -2));
   expect(source.startsWith("data:image/svg+xml") || new URL(source).origin === new URL(page.url()).origin).toBe(true);
@@ -81,12 +82,20 @@ test("profile cards stay usable across themes, window sizes and a 5k node list",
   await page.getByRole("button", { name: "收起侧栏" }).click();
   await expect.poll(() => viewport.evaluate((el) => el.scrollWidth - el.clientWidth)).toBe(0);
   await page.screenshot({ path: testInfo.outputPath("cards-sidebar-collapsed.png") });
-  const details = cards.first().getByRole("button", { name: "详情", exact: true });
+  // The node name opens its details; rows carry no separate "details" link.
+  await expect(cards.first().getByRole("button", { name: "详情", exact: true })).toHaveCount(0);
+  const details = cards.first().locator("button[data-row-focus]");
   await details.click();
   await expect(page.getByRole("dialog", { name: "节点详情" })).toContainText("node-0.example.test");
   await page.keyboard.press("Escape");
   await expect(details).toBeFocused();
-  await cards.nth(1).getByRole("button", { name: "使用节点", exact: true }).click();
+  // Only the chosen node keeps its action in view; other rows reveal theirs on hover.
+  const use = cards.nth(1).getByRole("button", { name: "使用节点", exact: true });
+  await page.mouse.move(0, 0);
+  await expect(use).toHaveCSS("opacity", "0");
+  await cards.nth(1).hover();
+  await expect(use).toHaveCSS("opacity", "1");
+  await use.click();
   await expect(cards.nth(1).getByRole("button", { name: "使用中", exact: true })).toBeDisabled();
   await expect(page.getByRole("heading", { name: "节点", exact: true })).toBeVisible();
   // Keep scrolling as estimated heights are replaced with measured card heights.
@@ -138,15 +147,16 @@ test("profile list shows its empty state when no saved nodes exist", async ({ pa
   await page.screenshot({ path: testInfo.outputPath("cards-empty.png") });
 });
 
-test("measured flags refresh on both screens and old events cannot restore cleared flags", async ({ page }) => {
+test("measured flags replace the name's flag on both screens and old events cannot restore cleared ones", async ({ page }) => {
   await installTauriSmokeMock(page);
   await page.addInitScript((profile) => {
     (window.__VOYA_SMOKE__.state as { profiles: ProfileListEntry[] }).profiles = [{ ...profile, metrics: { ...profile.metrics, countryCode: null } }];
   }, profiles[0]!);
   await page.goto("/");
-  await expect(page.locator(".home-node-icon svg")).toBeVisible();
+  // Unmeasured, the JP flag in the node name is the provisional country.
+  await expect(page.locator(".home-node-icon .fi-jp")).toBeVisible();
   await page.getByRole("tab", { name: "Nodes", exact: true }).click();
-  await expect(page.locator(".node-card-icon svg")).toBeVisible();
+  await expect(page.locator(".node-card-icon .fi-jp")).toBeVisible();
   await page.evaluate(() => {
     const entry = (window.__VOYA_SMOKE__.state as { profiles: ProfileListEntry[] }).profiles[0]!;
     entry.metrics.countryCode = "US";
@@ -166,8 +176,8 @@ test("measured flags refresh on both screens and old events cannot restore clear
       indexId: entry.profile.id, delay: 42, outcome: "completed", detail: null, ipInfo: null, countryCode: "US",
     } });
   });
-  await expect(page.locator(".home-node-icon svg")).toBeVisible();
+  await expect(page.locator(".home-node-icon .fi-jp")).toBeVisible();
   await page.getByRole("tab", { name: "Nodes", exact: true }).click();
-  await expect(page.locator(".node-card-icon svg")).toBeVisible();
-  await expect(page.locator(".node-card-icon .fi")).toHaveCount(0);
+  await expect(page.locator(".node-card-icon .fi-jp")).toBeVisible();
+  await expect(page.locator(".node-card-icon .fi-us")).toHaveCount(0);
 });

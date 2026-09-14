@@ -1,4 +1,6 @@
 
+import { Server } from "lucide-react";
+
 import { useI18n } from "@voya/i18n/use-i18n";
 
 import { CONFIG_TYPES, type ProfileProtocol } from "./profile-constants";
@@ -29,7 +31,7 @@ export function ProtocolPanel({
   const { t } = useI18n();
 
   return (
-    <Panel title={t("panes.profiles.panels.protocol")}>
+    <Panel icon={Server} title={t("panes.profiles.panels.protocol")}>
       <div className="grid gap-3 lg:grid-cols-3">
         {requiresUsername(configType) ? (
           <TextField

@@ -1,4 +1,4 @@
-import { Layers, LoaderCircle, Power, Settings, Trash2, Zap } from "lucide-react";
+import { Layers, LoaderCircle, Settings, Trash2, Zap } from "lucide-react";
 
 import {
   AlertDialog,
@@ -184,15 +184,16 @@ function PolicyGroupCard({
               disabled={testingPolicyGroup}
               onClick={() => void testRunningPolicyGroup()}
               size="sm"
+              title={t("nodeGroups.test")}
               type="button"
-              variant="outline"
+              variant="ghost"
             >
               {testingPolicyGroup ? (
                 <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
               ) : (
                 <Zap aria-hidden="true" className="size-4" />
               )}
-              {t("nodeGroups.test")}
+              <span data-slot="button-label">{t("nodeGroups.test")}</span>
             </Button>
           ) : (
             // Before the group runs, its test measures the member nodes directly.
@@ -209,28 +210,29 @@ function PolicyGroupCard({
               }
               progress={speedtestProgress}
               running={speedtestRunning && speedtestSource === speedtestKey}
+              variant="ghost"
             />
           )}
+          {/* The same outline "use" action as a node row. */}
           <span title={members.length === 0 ? t("nodeGroups.empty") : undefined}>
           <Button
             disabled={inUse || switchingPolicyGroupId !== null || members.length === 0}
             onClick={() => void activatePolicyGroup(group.id)}
             size="sm"
             type="button"
-            variant={inUse ? "secondary" : "default"}
+            variant={inUse ? "secondary" : "outline"}
           >
             {switchingPolicyGroupId === group.id ? (
               <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-            ) : (
-              <Power aria-hidden="true" className="size-4" />
-            )}
+            ) : null}
             {t(inUse ? "policyGroups.inUse" : "policyGroups.use")}
           </Button>
           </span>
           <Button
             aria-label={t("policyGroups.editNamed", { name: group.name })}
             onClick={() => openGroupEditor(group)}
-            size="icon"
+            size="icon-sm"
+            title={t("policyGroups.editNamed", { name: group.name })}
             type="button"
             variant="ghost"
           >
@@ -239,7 +241,8 @@ function PolicyGroupCard({
           <Button
             aria-label={t("policyGroups.deleteNamed", { name: group.name })}
             onClick={() => setDeletingPolicyGroup(entry)}
-            size="icon"
+            size="icon-sm"
+            title={t("policyGroups.deleteNamed", { name: group.name })}
             type="button"
             variant="ghost"
           >

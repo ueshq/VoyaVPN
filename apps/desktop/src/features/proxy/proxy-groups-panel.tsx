@@ -168,15 +168,17 @@ export function ProxyGroupsPanel() {
               className="justify-between"
               key={member.profileId}
               onClick={() => void choose(member.profileId)}
+              size="sm"
               type="button"
               variant={current ? "secondary" : "outline"}
             >
               {content}
             </Button>
           ) : (
+            // The same 32 px member chips as the Nodes page.
             <div
               className={cn(
-                "flex h-9 items-center gap-2 rounded-md border px-3 text-sm",
+                "flex h-8 items-center gap-2 rounded-md border px-3 text-sm",
                 current && "border-primary text-brand",
               )}
               data-current={current || undefined}

@@ -1,4 +1,5 @@
 import { useWatch } from "react-hook-form";
+import { Waypoints } from "lucide-react";
 
 import { useI18n } from "@voya/i18n/use-i18n";
 
@@ -30,7 +31,12 @@ export function TransportPanel({ control, register }: TransportPanelProps) {
     );
 
   return (
-    <Panel collapsible defaultOpen={hasSettings} title={t("panes.profiles.panels.transport")}>
+    <Panel
+      collapsible
+      defaultOpen={hasSettings}
+      icon={Waypoints}
+      title={t("panes.profiles.panels.transport")}
+    >
       <div className="grid gap-3 lg:grid-cols-4">
         <SelectField
           control={control}

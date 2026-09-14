@@ -572,14 +572,15 @@ describe("ProfilesScreen", () => {
     expect(ipcMocks.setActiveProfile).not.toHaveBeenCalled();
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(name).toHaveFocus());
-    const details = screen.getByRole("button", { name: "Details" });
-    await userEvent.click(details);
+    // The name is the only way into details; rows carry no separate "Details" link.
+    expect(screen.queryByRole("button", { name: "Details" })).not.toBeInTheDocument();
+    await userEvent.click(name);
     const dialog = screen.getByRole("dialog", { name: "Node details" });
     expect(dialog).toHaveTextContent("Tokyo IP");
     expect(dialog).toHaveTextContent("443");
     expect(dialog).toHaveTextContent("Travel");
     await userEvent.keyboard("{Escape}");
-    expect(details).toHaveFocus();
+    expect(name).toHaveFocus();
   });
 
   it("subscribes to live traffic only in the open node details", async () => {
@@ -601,7 +602,7 @@ describe("ProfilesScreen", () => {
       }),
     );
     expect(screen.queryByText("4.0 KB")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Details" }));
+    await userEvent.click(screen.getByRole("button", { name: "Details for Server 0" }));
     expect(screen.getByRole("dialog")).toHaveTextContent("4.0 KB");
     act(() =>
       useRuntimeEventStore.setState({
@@ -633,6 +634,26 @@ describe("ProfilesScreen", () => {
     expect(
       await screen.findByRole("dialog", { name: "Edit node" }),
     ).toBeInTheDocument();
+  });
+
+  it("keeps only the chosen node's action in view and bands latency by speed", async () => {
+    const [chosen, other] = makeProfiles(2);
+    other!.metrics.delayMs = 520;
+    mockProfileList([chosen!, other!]);
+    renderProfiles();
+    await screen.findByText("Server 0");
+    const [first, second] = screen.getAllByTestId("server-row");
+    // Every row offering the same button is noise; only the chosen node keeps it in view.
+    expect(
+      within(first!).getByRole("button", { name: "Connect" }),
+    ).not.toHaveClass("profile-node-action-idle");
+    expect(
+      within(second!).getByRole("button", { name: "Use node" }),
+    ).toHaveClass("profile-node-action-idle");
+    expect(second!.querySelector(".profile-node-latency")).toHaveAttribute(
+      "data-tone",
+      "poor",
+    );
   });
 
   it("connects the requested card, guards repeated activation and marks the running node", async () => {

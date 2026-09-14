@@ -28,7 +28,8 @@ import {
   SelectValue,
 } from "@voya/ui/components/select";
 import { cn } from "@voya/ui/lib/utils";
-import { ChevronDown, ShieldCheck } from "lucide-react";
+import { ChevronDown } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import type {
   ParsedProfileFormValues,
@@ -58,17 +59,20 @@ export function Panel({
   children,
   collapsible = false,
   defaultOpen = true,
+  icon: Icon,
   title,
 }: {
   children: React.ReactNode;
   /** A collapsible panel can start closed while it has nothing worth showing. */
   collapsible?: boolean;
   defaultOpen?: boolean;
+  /** Names what the section holds, so the editor's sections tell apart at a glance. */
+  icon: LucideIcon;
   title: string;
 }) {
   if (collapsible) {
     return (
-      <CollapsiblePanel defaultOpen={defaultOpen} title={title}>
+      <CollapsiblePanel defaultOpen={defaultOpen} icon={Icon} title={title}>
         {children}
       </CollapsiblePanel>
     );
@@ -77,10 +81,7 @@ export function Panel({
     <Card className="gap-3 rounded-xl bg-surface-raised p-3 shadow-raised">
       <CardHeader className="p-0">
         <CardTitle className="flex items-center gap-2 text-section font-semibold text-foreground">
-          <ShieldCheck
-            className="size-4 text-muted-foreground"
-            aria-hidden="true"
-          />
+          <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
           {title}
         </CardTitle>
       </CardHeader>
@@ -94,10 +95,12 @@ export function Panel({
 function CollapsiblePanel({
   children,
   defaultOpen,
+  icon: Icon,
   title,
 }: {
   children: React.ReactNode;
   defaultOpen: boolean;
+  icon: LucideIcon;
   title: string;
 }) {
   // Only the first render decides; filling the panel in never snaps it shut.
@@ -106,7 +109,7 @@ function CollapsiblePanel({
     <Card className="gap-3 rounded-xl bg-surface-raised p-3 shadow-raised">
       <details className="group/panel" open={initiallyOpen}>
         <summary className="flex cursor-pointer list-none items-center gap-2 text-section font-semibold text-foreground [&::-webkit-details-marker]:hidden">
-          <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
+          <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
           {title}
           <ChevronDown
             aria-hidden="true"

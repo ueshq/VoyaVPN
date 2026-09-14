@@ -68,6 +68,7 @@ export function SpeedtestButton({
   onRun,
   progress = null,
   running,
+  variant = "outline",
 }: {
   /** Another entry point started the running test; only that one can stop it. */
   busyElsewhere?: boolean;
@@ -77,6 +78,8 @@ export function SpeedtestButton({
   onRun: () => Promise<void>;
   progress?: { done: number; total: number } | null;
   running: boolean;
+  /** Page toolbars use outline; group headers repeat per group, so they stay quiet. */
+  variant?: "outline" | "ghost";
 }) {
   const { t } = useI18n();
 
@@ -90,18 +93,20 @@ export function SpeedtestButton({
       size="sm"
       title={running ? t("panes.profiles.speedtest.cancelTitle") : label}
       type="button"
-      variant="outline"
+      variant={variant}
     >
       {running ? (
         <Square className="size-4" aria-hidden="true" />
       ) : (
         <Zap className="size-4" aria-hidden="true" />
       )}
-      {running
-        ? progress
-          ? t("panes.profiles.speedtest.stopProgress", progress)
-          : t("panes.profiles.speedtest.stop")
-        : label}
+      <span data-slot="button-label">
+        {running
+          ? progress
+            ? t("panes.profiles.speedtest.stopProgress", progress)
+            : t("panes.profiles.speedtest.stop")
+          : label}
+      </span>
     </Button>
     </DisabledReason>
   );

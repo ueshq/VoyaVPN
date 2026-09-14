@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Save, Server, TriangleAlert } from "lucide-react";
+import { Save, Server, Tag, TriangleAlert } from "lucide-react";
 import { useForm, useWatch } from "react-hook-form";
 
 import { Alert, AlertDescription } from "@voya/ui/components/alert";
@@ -158,7 +158,7 @@ function ProfileDialogForm({
             onSubmit={(event) => void submit(event)}
           >
             <div className="grid gap-4">
-              <Panel title={t("panes.profiles.panels.profile")}>
+              <Panel icon={Tag} title={t("panes.profiles.panels.profile")}>
                 <div className="grid gap-3 lg:grid-cols-[14rem_1fr]">
                   <SelectField
                     control={form.control}

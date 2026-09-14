@@ -1,5 +1,6 @@
 @import "@voya/ui/globals.css";
 @import "./home.css";
+@import "./nodes.css";
 @import "./shell.css";
 
 @source "../";

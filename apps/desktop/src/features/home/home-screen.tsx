@@ -197,7 +197,7 @@ export function HomeScreen() {
               {group ? (
                 <Layers className="size-5" />
               ) : (
-                <NodeCountryIcon countryCode={home.nodeEntry?.metrics.countryCode} />
+                <NodeCountryIcon countryCode={entryCountry(home.nodeEntry)} />
               )}
             </div>
             <div className="home-node-content">

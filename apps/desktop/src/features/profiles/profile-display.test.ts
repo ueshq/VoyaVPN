@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import type { ProfileTransport } from "@/ipc/bindings";
+import type { ProfileListEntry, ProfileTransport } from "@/ipc/bindings";
+import { makeProfileFixture } from "@/test/profile-fixture";
 
-import { profileFlagCountryCode, profileNameWithoutFlag, profileTransportName } from "./profile-display";
+import {
+  profileFlagCountryCode,
+  profileLatencyTone,
+  profileNameWithoutFlag,
+  profileTransportName,
+} from "./profile-display";
+
+function withMetrics(metrics: Partial<ProfileListEntry["metrics"]>): ProfileListEntry {
+  const entry = makeProfileFixture(0, {}, false);
+  return { ...entry, metrics: { ...entry.metrics, ...metrics } };
+}
 
 describe("profile display projections", () => {
   it.each([
@@ -14,6 +25,21 @@ describe("profile display projections", () => {
   ] as const)("reads the country hinted by a flag in %j", (name, expected) => {
     expect(profileFlagCountryCode(name)).toBe(expected);
   });
+
+  it.each([
+    [{ delayMs: 42, outcome: null }, "good"],
+    [{ delayMs: 149, outcome: "completed" }, "good"],
+    [{ delayMs: 150, outcome: null }, "fair"],
+    [{ delayMs: 399, outcome: null }, "fair"],
+    [{ delayMs: 400, outcome: null }, "poor"],
+    [{ delayMs: 0, outcome: null }, "unknown"],
+    [{ delayMs: 0, outcome: "timeout" }, "poor"],
+  ] as Array<[Partial<ProfileListEntry["metrics"]>, string]>)(
+    "bands %j as %s",
+    (metrics, expected) => {
+      expect(profileLatencyTone(withMetrics(metrics))).toBe(expected);
+    },
+  );
 
   it.each([
     ["🇯🇵 Tokyo", "Tokyo"],

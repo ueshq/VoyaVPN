@@ -4,7 +4,10 @@ import "flag-icons/css/flag-icons.min.css";
 
 const supportedCodes = new Set(countries.map((country) => country.code).filter((code) => /^[a-z]{2}$/.test(code) && code !== "xx"));
 
-/** Only measured country codes reach this component; remarks are not evidence. */
+/**
+ * Callers pass the measured country when there is one, otherwise the
+ * provisional hint from a flag in the node name (see `profileFlagCountryCode`).
+ */
 export function NodeCountryIcon({ countryCode }: { countryCode: string | null | undefined }) {
   const code = countryCode?.trim().toLowerCase();
   return code && supportedCodes.has(code)

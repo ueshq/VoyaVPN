@@ -1,0 +1,236 @@
+/* Nodes page: the virtualized node list, its group panels and the policy groups
+   above it. The node surface pieces shared with Home's node card
+   (.node-card-surface, icon, name, meta) live in home.css; this sheet is imported
+   after it and compacts them for a list that may hold hundreds of nodes. */
+.profile-card-list {
+  container-type: inline-size;
+}
+.profile-node-card {
+  position: relative;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 20px;
+  transition: background var(--duration-short);
+}
+.profile-node-card .node-card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+.profile-node-card .node-country-flag.fi {
+  width: 20px;
+  height: 15px;
+  line-height: 15px;
+}
+.profile-node-card .node-card-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.profile-node-card .node-card-name {
+  font-size: 14px;
+  line-height: 20px;
+}
+.profile-node-card .node-card-meta {
+  margin-top: 0;
+  line-height: 16px;
+}
+.profile-node-card-selected {
+  background: color-mix(in srgb, var(--text-brand) 4%, var(--card));
+}
+/* A straight bar inside the row, so rounded group corners never bend it. */
+.profile-node-card-selected::before {
+  content: "";
+  position: absolute;
+  inset-block: 10px;
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--text-brand);
+}
+.node-card-select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  text-align: start;
+  cursor: pointer;
+}
+.node-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.node-card-title .node-card-name {
+  min-width: 0;
+}
+/* State sits beside the name, so every name starts on the same line. */
+.node-card-state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius);
+  background: var(--surface-hovered);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+.node-card-state[data-state="running"] {
+  background: var(--bg-success);
+  color: var(--text-success);
+}
+.profile-node-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+.profile-node-latency {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 120px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.profile-node-latency-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+}
+.profile-node-latency[data-tone="good"] .profile-node-latency-dot {
+  background: var(--icon-success);
+}
+.profile-node-latency[data-tone="fair"] .profile-node-latency-dot {
+  background: var(--icon-warning);
+}
+.profile-node-latency[data-tone="poor"] {
+  color: var(--text-danger);
+}
+.profile-node-latency[data-tone="poor"] .profile-node-latency-dot {
+  background: var(--icon-danger);
+}
+/* The same button on every row is noise: it appears where the pointer or focus
+   is. It keeps its place in the layout, so revealing it never shifts the row. */
+.profile-node-action-idle {
+  opacity: 0;
+  transition: opacity var(--duration-short);
+}
+.profile-node-card:hover .profile-node-action-idle,
+.profile-node-card:focus-within .profile-node-action-idle {
+  opacity: 1;
+}
+@media (hover: none) {
+  .profile-node-action-idle {
+    opacity: 1;
+  }
+}
+.profile-cards-screen button:focus-visible {
+  outline: 2px solid var(--text-brand);
+  outline-offset: 3px;
+}
+
+/* Consecutive virtual rows form one continuous group panel. Only its last
+   measured row includes the gap before the next group. */
+.node-group-segment .node-group-surface {
+  width: 100%;
+  border-radius: 0;
+  background: var(--card);
+  box-shadow: none;
+}
+.node-group-start .node-group-surface {
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+.node-group-end {
+  padding-bottom: 16px;
+}
+.node-group-end .node-group-surface {
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
+.node-group-start.node-group-end .node-group-surface {
+  border-radius: var(--radius-xl);
+}
+.node-group-segment .node-group-header {
+  background: color-mix(in srgb, var(--background) 50%, var(--card));
+}
+/* Light panels are pure white, so an expanded header needs a hairline to end. */
+.node-group-start:not(.node-group-end) .node-group-header {
+  box-shadow: inset 0 -1px var(--border-subtle);
+}
+.node-group-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 20px;
+}
+.node-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  border-radius: 6px;
+  text-align: start;
+  cursor: pointer;
+}
+.node-group-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+/* Sits under its header instead of floating centered in the panel. */
+.node-group-empty {
+  padding: 0 20px 16px;
+  color: var(--muted-foreground);
+  font-size: 14px;
+}
+.node-group-segment .profile-node-card:hover {
+  background: color-mix(in srgb, var(--text-brand) 3%, var(--card));
+}
+.node-group-segment .profile-node-card-selected {
+  background: color-mix(in srgb, var(--text-brand) 6%, var(--card));
+}
+@container (max-width: 700px) {
+  .node-group-heading {
+    padding: 8px 16px;
+  }
+  .profile-node-card {
+    padding-inline: 16px;
+  }
+  /* Header actions keep their row as icons; their names stay for tooltips and
+     assistive technology. */
+  .node-group-actions [data-slot="button-label"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+@container (max-width: 600px) {
+  .profile-node-card {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+  .profile-node-card .node-card-content {
+    flex-basis: calc(100% - 44px);
+  }
+  .profile-node-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .profile-node-latency {
+    margin-inline-end: auto;
+    margin-inline-start: 44px;
+    max-width: none;
+  }
+}

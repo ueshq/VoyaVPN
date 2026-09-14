@@ -51,6 +51,7 @@ export function NodeGroupCard({
     : null;
   const source = `group:${row.groupKey}`;
   const moreLabel = t("nodeGroups.moreFor", { name: row.name });
+  const updateLabel = t("home.subscriptionCard.update");
   const returnFocusTo = () => moreRef.current ?? document.body;
 
   return (
@@ -96,14 +97,16 @@ export function NodeGroupCard({
             </span>
           </span>
         </button>
-        {/* The everyday actions stay on the header; the rest sits behind the menu. */}
+        {/* The everyday actions stay on the header; the rest sits behind the menu.
+            They repeat for every group, so they are quiet ghost buttons. */}
         <div className="node-group-actions">
           {subscription ? (
             <Button
               size="sm"
-              variant="outline"
+              variant="ghost"
               disabled={controller.updatingSubscriptions.has(subscription.id)}
               onClick={() => void controller.updateSubscription(subscription.id)}
+              title={updateLabel}
             >
               <RefreshCw
                 aria-hidden="true"
@@ -113,7 +116,7 @@ export function NodeGroupCard({
                     : "size-4"
                 }
               />
-              {t("home.subscriptionCard.update")}
+              <span data-slot="button-label">{updateLabel}</span>
             </Button>
           ) : null}
           <SpeedtestButton
@@ -132,6 +135,7 @@ export function NodeGroupCard({
             }
             progress={speedtestProgress}
             running={speedtestRunning && speedtestSource === source}
+            variant="ghost"
           />
           <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
             <MenubarMenu>
@@ -139,7 +143,7 @@ export function NodeGroupCard({
                 <Button
                   aria-label={moreLabel}
                   ref={moreRef}
-                  size="icon"
+                  size="icon-sm"
                   title={moreLabel}
                   type="button"
                   variant="ghost"
@@ -203,7 +207,7 @@ export function NodeGroupCard({
           language={language}
           metadata={metadata}
           t={t}
-          className="px-4 pb-3"
+          className="px-5 pb-3"
         />
       ) : null}
       {row.expanded && !row.members.length ? (

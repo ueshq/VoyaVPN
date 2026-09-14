@@ -1,5 +1,5 @@
 import { navigateVirtualList } from "./virtual-list-keyboard";
-import { ChevronRight, Inbox, LoaderCircle, Plus } from "lucide-react";
+import { Inbox, LoaderCircle, Plus } from "lucide-react";
 import { Button } from "@voya/ui/components/button";
 import { useShellStore } from "@/stores/shell-store";
 import { NodeCountryIcon } from "@/components/node-country-icon";
@@ -11,7 +11,12 @@ import { cn } from "@voya/ui/lib/utils";
 
 import { NodeGroupCard } from "./node-group-card";
 
-import { profileLatency, profileNameWithoutFlag } from "./profile-display";
+import {
+  profileFlagCountryCode,
+  profileLatency,
+  profileLatencyTone,
+  profileNameWithoutFlag,
+} from "./profile-display";
 import { getProtocolLabel } from "./profile-constants";
 
 import { ProfileCardMenu, ProfileRowContextMenu } from "./server-table-menus";
@@ -54,38 +59,35 @@ export function ProfileCardList({
           <div
             aria-label={t("panes.profiles.loadingNodes")}
             aria-busy="true"
-            className="grid gap-3"
+            className="grid gap-2"
             role="status"
           >
-            {Array.from({ length: 6 }, (_, index) => (
-              <div className="node-card-surface" key={index}>
-                <Skeleton className="size-11 shrink-0 rounded-xl" />
+            {Array.from({ length: 8 }, (_, index) => (
+              <div className="node-card-surface profile-node-card" key={index}>
+                <Skeleton className="size-8 shrink-0 rounded-lg" />
                 <div className="grid flex-1 gap-2">
-                  <Skeleton className="h-3 w-24" />
-                  <Skeleton className="h-5 w-3/4" />
-                  <Skeleton className="h-3 w-1/2" />
+                  <Skeleton className="h-4 w-1/2" />
+                  <Skeleton className="h-3 w-1/3" />
                 </div>
-                <Skeleton className="h-9 w-24" />
+                <Skeleton className="h-8 w-20" />
               </div>
             ))}
           </div>
         ) : rows.length === 0 ? (
           <PageSurface className="h-full">
             <EmptyState
-              className="h-full content-center"
-              description={
-                <span className="grid justify-items-center gap-3">
-                  <span>{t("panes.profiles.emptyDescription")}</span>
-                  <Button
-                    onClick={() => useShellStore.getState().openProfilesAddMenu()}
-                    size="sm"
-                    type="button"
-                  >
-                    <Plus aria-hidden="true" className="size-4" />
-                    {t("panes.profiles.toolbar.addNode")}
-                  </Button>
-                </span>
+              actions={
+                <Button
+                  onClick={() => useShellStore.getState().openProfilesAddMenu()}
+                  size="sm"
+                  type="button"
+                >
+                  <Plus aria-hidden="true" className="size-4" />
+                  {t("panes.profiles.toolbar.addNode")}
+                </Button>
               }
+              className="h-full content-center"
+              description={t("panes.profiles.emptyDescription")}
               icon={Inbox}
               title={t("panes.profiles.empty")}
             />
@@ -126,6 +128,10 @@ export function ProfileCardList({
               const rawName = profile.remarks || t("panes.profiles.untitled");
               const name = profileNameWithoutFlag(rawName);
               const address = profile.protocol.server.address || "—";
+              const tone = profileLatencyTone(item);
+              // The chosen, running or switching node keeps its action in view;
+              // other rows reveal theirs where the pointer or keyboard focus is.
+              const actionPinned = running || switching || item.isActive;
               return (
                 <li key={row.key} {...rowProps}>
                   <ProfileRowContextMenu controller={controller} item={item}>
@@ -138,8 +144,11 @@ export function ProfileCardList({
                       data-testid="server-row"
                     >
                       <div aria-hidden="true" className="node-card-icon">
+                        {/* A measured exit wins; a flag in the name is the provisional hint. */}
                         <NodeCountryIcon
-                          countryCode={item.metrics.countryCode}
+                          countryCode={
+                            item.metrics.countryCode ?? profileFlagCountryCode(profile.remarks)
+                          }
                         />
                       </div>
                       <div className="node-card-content">
@@ -153,9 +162,12 @@ export function ProfileCardList({
                           onClick={(event) => openDetails(id, event.currentTarget)}
                           type="button"
                         >
-                          <span className="node-card-label">
+                          <span className="node-card-title">
+                            <span className="node-card-name" title={rawName}>
+                              {name}
+                            </span>
                             {running ? (
-                              <span className="node-card-state">
+                              <span className="node-card-state" data-state="running">
                                 <span
                                   aria-hidden="true"
                                   className="size-1.5 rounded-full bg-connected"
@@ -163,13 +175,10 @@ export function ProfileCardList({
                                 {t("panes.profiles.aria.activeProfile")}
                               </span>
                             ) : item.isActive ? (
-                              <span className="shrink-0">
+                              <span className="node-card-state">
                                 {t("panes.profiles.card.default")}
                               </span>
                             ) : null}
-                          </span>
-                          <span className="node-card-name" title={rawName}>
-                            {name}
                           </span>
                         </button>
                         <div className="node-card-meta">
@@ -177,34 +186,27 @@ export function ProfileCardList({
                             {address}
                           </span>
                           <span>{getProtocolLabel(profile.protocol.kind)}</span>
-                          <button
-                            className="node-card-details"
-                            onClick={(event) =>
-                              openDetails(id, event.currentTarget)
-                            }
-                            type="button"
-                          >
-                            {t("panes.profiles.card.details")}
-                            <ChevronRight
-                              aria-hidden="true"
-                              className="size-3"
-                            />
-                          </button>
                         </div>
                       </div>
                       <div className="profile-node-actions">
                         <span
                           className="profile-node-latency"
+                          data-tone={tone}
                           title={t("panes.profiles.cardFields.delay")}
                         >
+                          {tone === "unknown" ? null : (
+                            <span aria-hidden="true" className="profile-node-latency-dot" />
+                          )}
                           {profileLatency(item, t)}
                         </span>
-                        <button
+                        <Button
                           aria-busy={switching || undefined}
-                          className="node-card-action"
+                          className={cn(!actionPinned && "profile-node-action-idle")}
                           disabled={activation.busy || running}
                           onClick={() => void activation.activateProfile(id)}
+                          size="sm"
                           type="button"
+                          variant="outline"
                         >
                           {switching ? (
                             <LoaderCircle
@@ -220,7 +222,7 @@ export function ProfileCardList({
                                 ? // The chosen node while disconnected: this button connects.
                                   t("panes.profiles.card.connect")
                                 : t("panes.profiles.card.use")}
-                        </button>
+                        </Button>
                         <ProfileCardMenu controller={controller} item={item} />
                       </div>
                     </article>

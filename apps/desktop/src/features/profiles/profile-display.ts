@@ -8,6 +8,16 @@ export function profileLatency(item: ProfileListEntry, t: TranslationFunction) {
   return outcome && outcome !== "completed" ? speedtestOutcomeText(t, outcome) : formatDelay(delayMs) || "—";
 }
 
+export type LatencyTone = "good" | "fair" | "poor" | "unknown";
+
+/** The latency dot's band: under 150 ms good, under 400 ms fair, slower or failed poor. */
+export function profileLatencyTone(item: ProfileListEntry): LatencyTone {
+  const { delayMs, outcome } = item.metrics;
+  if (outcome && outcome !== "completed") return "poor";
+  if (!delayMs || delayMs <= 0) return "unknown";
+  return delayMs < 150 ? "good" : delayMs < 400 ? "fair" : "poor";
+}
+
 export function profileTransportName(transport: ProfileTransport | null) {
   switch (transport?.kind) {
     case "websocket": return "ws";

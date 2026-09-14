@@ -1,3 +1,5 @@
+import { ShieldCheck } from "lucide-react";
+
 import { Disclosure } from "@voya/ui/components/disclosure";
 import { Label } from "@voya/ui/components/label";
 import { Textarea } from "@voya/ui/components/textarea";
@@ -27,7 +29,7 @@ export function SecurityPanel({
   const reality = security === "reality";
 
   return (
-    <Panel title={t("panes.profiles.panels.security")}>
+    <Panel icon={ShieldCheck} title={t("panes.profiles.panels.security")}>
       <div className="grid gap-3 lg:grid-cols-4">
         <SelectField
           control={control}

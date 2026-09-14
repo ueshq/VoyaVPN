@@ -82,7 +82,8 @@ export function useNodeListData(
   );
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
-    estimateSize: () => 100,
+    // Compact rows are about 56 px and group headers a little taller.
+    estimateSize: () => 64,
     getItemKey: (index) => rows[index]!.key,
     getScrollElement: () => viewportRef.current,
     initialRect: { height: 520, width: 1200 },
@@ -95,7 +96,7 @@ export function useNodeListData(
       : rows.slice(0, 15).map((row, index) => ({
           index,
           key: row.key,
-          start: index * 100,
+          start: index * 64,
         }));
   function subscriptionName(item: ProfileListEntry) {
     return item.profile.subscriptionId
